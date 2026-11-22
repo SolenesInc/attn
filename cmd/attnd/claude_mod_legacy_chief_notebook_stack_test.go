@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 
+	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/crew"
-	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -30,7 +30,7 @@ func TestARingHeldThroughTheUpgradeReachesTheChiefOnceAfterItsNotebookComesBack(
 	s.Attn("crew", "start", "chief", "--json").JSON(t, &woken)
 	legacy := string(woken.SessionID)
 	run := s.Launched(legacy)
-	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	s.AwaitTimer(claudemod.PollHoldTimer)
 	run.Prompted()
 	running := testworld.AwaitSession(app, legacy, func(protocol.Session) bool { return true })
 	run.Reply("Ready. <!-- attn:state=idle -->")
@@ -76,7 +76,7 @@ func TestARingHeldThroughTheUpgradeReachesTheChiefOnceAfterItsNotebookComesBack(
 
 	s.Start()
 	app = s.TrustedApp()
-	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	s.AwaitTimer(claudemod.PollHoldTimer)
 	if returned := run.ModEsc(); len(returned) != 1 {
 		t.Fatalf("Esc returned %v, want the held Quick Capture", returned)
 	}
@@ -90,7 +90,7 @@ func TestARingHeldThroughTheUpgradeReachesTheChiefOnceAfterItsNotebookComesBack(
 	s.Start()
 	app = s.TrustedApp()
 	recreated := nextLaunch()
-	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	s.AwaitTimer(claudemod.PollHoldTimer)
 	recreated.Prompted()
 	recreated.Reply("Ready. <!-- attn:state=waiting_input -->")
 	if got := recreated.Prompted(); !strings.Contains(got, words) {

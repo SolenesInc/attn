@@ -3,8 +3,8 @@ package daemon_test
 import (
 	"testing"
 
+	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/client"
-	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
@@ -17,7 +17,7 @@ func moddedClaudeWithVerdicts(t *testing.T, w *world, app *testworld.Peer) (stri
 		m.Label = protocol.Ptr("deploy work")
 	})
 	run := w.Launched(session)
-	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
+	w.awaitTimer(claudemod.PollHoldTimer)
 	return session, run
 }
 
@@ -54,6 +54,23 @@ func TestAnAnnotationReturnedWhileWorkingReachesTheAgentWhenItParks(t *testing.T
 
 	if got := run.Prompted(); got != "check the rollout" {
 		t.Fatalf("the parked agent took %q, want the returned annotation", got)
+	}
+}
+
+func TestAReturnedAnnotationTheModReloadsBeforeAnsweringReachesTheNewInstance(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session, run := moddedClaudeWithVerdicts(t, w, app)
+	annotationReturnedWhileWorking(t, w, app, run, session)
+	arrived, release := run.ModHoldNextAck()
+
+	run.Reply("Done. <!-- attn:state=waiting_input -->")
+	arrived()
+	run.ModReload()
+	release()
+
+	if got := run.Prompted(); got != "check the rollout" || !run.ThroughMod {
+		t.Fatalf("the agent took %q (through the mod: %t), want the returned annotation through the new mod", got, run.ThroughMod)
 	}
 }
 

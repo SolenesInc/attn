@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
@@ -14,19 +15,32 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-type claudeHarness struct{ d *Daemon }
+type claudeHarness struct {
+	host harness.Host
+	mod  *claudeMod
+}
 
 //go:embed claude_logo.svg
 var claudeLogo string
 
 func init() {
-	harnessSources = append(harnessSources, func(d *Daemon) []harness.Harness { return []harness.Harness{claudeHarness{d: d}} })
+	harnessSources = append(harnessSources, func(_ *Daemon, host harness.Host) []harness.Harness {
+		return []harness.Harness{newClaudeHarness(host)}
+	})
 }
 
-func (claudeHarness) driver() agentdriver.Driver { return agentdriver.MustGet("claude") }
+func newClaudeHarness(host harness.Host) claudeHarness {
+	return claudeHarness{host: host, mod: newClaudeMod(host)}
+}
 
-func (h claudeHarness) Facts() harness.Facts {
-	facts := agentdriver.Facts(h.driver())
+func claudeDriver() agentdriver.Driver { return agentdriver.MustGet("claude") }
+
+func (claudeHarness) driver() agentdriver.Driver { return claudeDriver() }
+
+func (claudeHarness) Facts() harness.Facts { return claudeFacts() }
+
+func claudeFacts() harness.Facts {
+	facts := agentdriver.Facts(claudeDriver())
 	facts.Logo = harness.Logo{View: 1200, Body: claudeLogo}
 	facts.SkillDirs = func(_ func(string) string, homeDir string) ([]string, error) {
 		return []string{filepath.Join(homeDir, ".claude", "skills")}, nil
@@ -42,22 +56,12 @@ func (h claudeHarness) Facts() harness.Facts {
 }
 
 func (h claudeHarness) Reach(_ context.Context, s harness.SessionFacts) harness.Reach {
-	return harness.Reach{Up: h.d.claudeModReaches(s.Session)}
+	return harness.Reach{Up: h.mod.reachable(s.Terminal)}
 }
 
 func (claudeHarness) Terminal(harness.TerminalID, harness.TerminalEvent) {}
 
 func (claudeHarness) End(context.Context, harness.Ending) {}
-
-func (h claudeHarness) Launch(_ context.Context, req harness.LaunchRequest) (harness.Command, error) {
-	opts := h.d.launchSpawnOptions(req, h.Facts().ID)
-	if err := h.d.settleClaudeFolderTrust(&opts, req.Trust); err != nil {
-		return harness.Command{}, err
-	}
-	command, err := h.d.launchWithDriver(req, &opts, false, nil)
-	command.TitleSignals = h.Facts().Signals.Titles
-	return command, err
-}
 
 func (claudeHarness) TrustFolder(dir string) error { return trustClaudeFolder(claudeConfigPath(), dir) }
 
@@ -70,10 +74,10 @@ func (claudeHarness) Plan(req harness.LaunchRequest) (harness.Planned, error) {
 }
 
 func (h claudeHarness) Start(context.Context) error {
-	if h.d.noAgentSockets {
+	if !h.host.AgentSockets() {
 		return nil
 	}
-	if err := h.d.claudeMod().serve(); err != nil {
+	if err := h.mod.serve(); err != nil {
 		return fmt.Errorf("claude mod: live sessions are typed into: %w", err)
 	}
 	return nil
@@ -81,7 +85,7 @@ func (h claudeHarness) Start(context.Context) error {
 
 func (h claudeHarness) Recover(_ context.Context, point harness.RecoverPoint) {
 	if point == harness.RecoverMonitors {
-		h.d.claudeMod().expectModsToReconnect()
+		h.mod.expectModsToReconnect()
 	}
 }
 
@@ -89,46 +93,60 @@ func (claudeHarness) SettingChanged(string) {}
 
 func (claudeHarness) Released(string) {}
 
-func (h claudeHarness) Stop() { h.d.claudeMod().close() }
+func (h claudeHarness) Stop() { h.mod.close() }
 
 func (h claudeHarness) Conversations() harness.ConversationStore { return h }
 
 func (claudeHarness) Admit(harness.ConversationRef) error { return nil }
 
+func (h claudeHarness) resumable(id string) bool { return agentdriver.ResumeAvailable(h.driver(), id) }
+
 func (h claudeHarness) Check(_ context.Context, refs []harness.ConversationRef) map[harness.ConversationRef]harness.Availability {
-	return h.d.checkStoredConversations(h.driver(), refs)
+	return h.host.Files().Check(refs, h.resumable)
 }
 
 func (h claudeHarness) Prepare(_ context.Context, ref harness.ConversationRef) (bool, error) {
-	return h.d.conversationReady(h.driver(), ref.ID), nil
+	return h.host.Files().Ready(ref, h.resumable), nil
 }
 
 func (h claudeHarness) Health(context.Context) harness.Health {
-	return h.d.executableHealth(h.Facts(), true)
+	return h.host.ExecutableHealth(h.Facts(), true)
 }
 
 func (h claudeHarness) Page(ctx context.Context, ref harness.ConversationRef, cursor string, limit int) (transcript.EventPage, error) {
-	return fileConversations(h).Page(ctx, ref, cursor, limit)
+	return h.host.Files().Page(ctx, ref, cursor, limit)
 }
 
 func (h claudeHarness) LastReply(ctx context.Context, ref harness.ConversationRef, max int) (string, error) {
-	return fileConversations(h).LastReply(ctx, ref, max)
+	return h.host.Files().LastReply(ctx, ref, max)
 }
 
 func (h claudeHarness) Window(ctx context.Context, ref harness.ConversationRef) (harness.AssistantWindow, bool) {
-	return fileConversations(h).Window(ctx, ref)
+	return h.host.Files().Window(ctx, ref)
 }
 
 func (h claudeHarness) Activity(ctx context.Context, ref harness.ConversationRef, kind, cursor string) (protocol.TranscriptActivityResult, error) {
-	return fileConversations(h).Activity(ctx, ref, kind, cursor)
+	return h.host.Files().Activity(ctx, ref, kind, cursor)
 }
 
 func (h claudeHarness) Version(ref harness.ConversationRef) string {
-	return fileConversations(h).version(ref, transcript.ClaudeVersion)
+	path := h.host.Files().Path(ref)
+	if path == "" {
+		return ""
+	}
+	return transcript.ClaudeVersion(path)
 }
 
 func (h claudeHarness) Locate(ref harness.ConversationRef) string {
-	return h.d.locateTranscript(h.driver(), ref)
+	if ref.Path != "" {
+		return ref.Path
+	}
+	id := strings.TrimSpace(ref.ID)
+	finder, ok := agentdriver.GetTranscriptFinder(h.driver())
+	if id == "" || !ok {
+		return ""
+	}
+	return strings.TrimSpace(finder.FindTranscriptForResume(id))
 }
 
 func (h claudeHarness) IDFromPath(path string) string {

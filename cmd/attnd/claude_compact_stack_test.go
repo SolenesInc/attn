@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/victorarias/attn/internal/daemon"
+	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/fakeclaudeapi"
 	"github.com/victorarias/attn/internal/protocol"
@@ -53,7 +53,7 @@ func realModdedClaude(t *testing.T, vars ...string) (*testworld.Stack, *testworl
 			t.Logf("worker screen:\n%s", s.Attn("agent", "peek", worker).Stdout)
 		}
 	})
-	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	s.AwaitTimer(claudemod.PollHoldTimer)
 	return s, app, worker, model, configDir
 }
 
@@ -97,7 +97,7 @@ func TestARealClaudeSessionThatClosesCompactingCompactsItsConversationThroughThe
 	if reopened := s.Attn("session", "reopen", worker, "--action", string(protocol.SessionReopenActionReopen)); reopened.Code != 0 {
 		t.Fatalf("session reopen exited %d: %s%s", reopened.Code, reopened.Stdout, reopened.Stderr)
 	}
-	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	s.AwaitTimer(claudemod.PollHoldTimer)
 	mark := model.Mark()
 	const followUp = "what landed before the close"
 	if sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", worker, followUp}, Session: reviewer}); sent.Code != 0 {

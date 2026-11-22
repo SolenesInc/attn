@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/pausepoint"
@@ -243,7 +243,7 @@ func TestSeedMailReachesAResumedClaudeTenderThroughItsModAfterTheFirstPoll(t *te
 	session, seed := delegated.SessionID, delegated.SeedID
 	first := w.Launched(string(session))
 	first.Prompted()
-	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
+	w.awaitTimer(claudemod.PollHoldTimer)
 	onStandbyAndClosed(t, w, cli, delegated, first)
 
 	boot := w.HoldNextBoot()
@@ -276,15 +276,15 @@ func TestAResumedClaudeTenderWhoseModMissesItsFirstPollGetsNoTypedMail(t *testin
 	session, seed := delegated.SessionID, delegated.SeedID
 	first := w.Launched(string(session))
 	first.Prompted()
-	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
+	w.awaitTimer(claudemod.PollHoldTimer)
 	onStandbyAndClosed(t, w, cli, delegated, first)
 
 	boot := w.HoldNextBoot()
 	sendAgentMessage(t, cli, "sender", seed, "the pull request is approved")
 	boot.Await()
-	w.awaitTimer(daemon.ClaudeModFirstPollTimer)
+	w.awaitTimer(claudemod.FirstPollTimer)
 	beforeMiss := len(app.Log())
-	w.clock.Fire(daemon.ClaudeModFirstPollTimer)
+	w.clock.Fire(claudemod.FirstPollTimer)
 	testworld.AwaitSince(app, beforeMiss, protocol.EventNotificationsUpdated, func(protocol.NotificationsUpdatedMessage) bool { return true })
 	reason := "the mod in Claude Code " + fakeagent.ClaudeVersion + " never polled"
 	resumeBlockedNotice(t, app, cli, seed, reason)
@@ -313,7 +313,7 @@ func TestAnAnswerTheModHoldsKeepsTheSeedOnStandbyUntilClaudeTakesIt(t *testing.T
 	session, seed := string(delegated.SessionID), delegated.SeedID
 	run := w.Launched(session)
 	run.Prompted()
-	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
+	w.awaitTimer(claudemod.PollHoldTimer)
 	if _, err := standbyAs(t, cli, delegated, false); err != nil {
 		t.Fatalf("seed standby: %v", err)
 	}
@@ -354,7 +354,7 @@ func TestAnAnswerReturnedBeforeItsPlacementAnswersStaysUnreadOnStandby(t *testin
 	session, seed := string(delegated.SessionID), delegated.SeedID
 	run := w.Launched(session)
 	run.Prompted()
-	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
+	w.awaitTimer(claudemod.PollHoldTimer)
 	if _, err := standbyAs(t, cli, delegated, false); err != nil {
 		t.Fatalf("seed standby: %v", err)
 	}

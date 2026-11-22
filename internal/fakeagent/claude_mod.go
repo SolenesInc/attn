@@ -41,6 +41,9 @@ const (
 	methodModCompactArrived = "mod_compact_arrived"
 	methodModCompactRelease = "mod_compact_release"
 	methodModCompactReport  = "mod_compact_report"
+	methodModAckHold        = "mod_ack_hold"
+	methodModAckArrived     = "mod_ack_arrived"
+	methodModAckRelease     = "mod_ack_release"
 	methodModPause          = "mod_pause"
 	methodModResume         = "mod_resume"
 	methodModGiveBack       = "mod_give_back"
@@ -60,7 +63,7 @@ type ModCompactReport struct {
 	Reason  string `json:"reason"`
 }
 
-type fakeModCompactHold struct {
+type fakeModHold struct {
 	arrived chan struct{}
 	release chan struct{}
 	taken   bool
@@ -100,7 +103,8 @@ type fakeMod struct {
 	back     []fakeModMessage
 
 	nextCompact ModCompactReport
-	compactHold *fakeModCompactHold
+	compactHold *fakeModHold
+	ackHold     *fakeModHold
 	refused     bool
 	turnsEnded  int
 	newerTurn   bool
@@ -196,6 +200,17 @@ func (m *fakeMod) pausedUntil() chan struct{} {
 
 func (m *fakeMod) place(instance string, message fakeModMessage) {
 	m.mu.Lock()
+	if hold := m.ackHold; hold != nil && !hold.taken {
+		hold.taken = true
+		m.mu.Unlock()
+		close(hold.arrived)
+		<-hold.release
+		m.mu.Lock()
+		if m.instance != instance {
+			m.mu.Unlock()
+			return
+		}
+	}
 	switch {
 	case m.stopped:
 		m.mu.Unlock()
@@ -386,7 +401,7 @@ func (m *fakeMod) handle(a *agent, method string, params json.RawMessage) (any, 
 		return struct{}{}, nil
 	case methodModCompactHold:
 		m.mu.Lock()
-		m.compactHold = &fakeModCompactHold{arrived: make(chan struct{}), release: make(chan struct{})}
+		m.compactHold = &fakeModHold{arrived: make(chan struct{}), release: make(chan struct{})}
 		m.mu.Unlock()
 		return struct{}{}, nil
 	case methodModCompactArrived, methodModCompactRelease:
@@ -404,6 +419,24 @@ func (m *fakeMod) handle(a *agent, method string, params json.RawMessage) (any, 
 		return struct{}{}, nil
 	case methodModCompactReport:
 		return <-m.reports, nil
+	case methodModAckHold:
+		m.mu.Lock()
+		m.ackHold = &fakeModHold{arrived: make(chan struct{}), release: make(chan struct{})}
+		m.mu.Unlock()
+		return struct{}{}, nil
+	case methodModAckArrived, methodModAckRelease:
+		m.mu.Lock()
+		hold := m.ackHold
+		m.mu.Unlock()
+		if hold == nil {
+			return nil, fmt.Errorf("no message is held to answer %s", method)
+		}
+		if method == methodModAckArrived {
+			<-hold.arrived
+		} else {
+			close(hold.release)
+		}
+		return struct{}{}, nil
 	}
 	return nil, fmt.Errorf("unknown mod method %q", method)
 }
@@ -420,7 +453,7 @@ func (m *fakeMod) compact(instance, id string) {
 	m.mu.Lock()
 	running = m.working || m.newerTurn
 	var next ModCompactReport
-	var hold *fakeModCompactHold
+	var hold *fakeModHold
 	if !running {
 		next, m.nextCompact = m.nextCompact, ModCompactReport{}
 		if m.compactHold != nil && !m.compactHold.taken {

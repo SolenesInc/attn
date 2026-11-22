@@ -571,13 +571,20 @@ func (d *Daemon) copyConversation(agent string, conversation store.SessionConver
 func (d *Daemon) checkStoredConversations(driver agentdriver.Driver, refs []harness.ConversationRef) map[harness.ConversationRef]harness.Availability {
 	availability := make(map[harness.ConversationRef]harness.Availability, len(refs))
 	for _, ref := range refs {
-		if d.conversationKnown(driver, ref.ID) {
-			availability[ref] = harness.Availability{Resumable: true}
-		} else {
-			availability[ref] = harness.Availability{Reason: d.goneConversationReason(string(ref.Harness), ref.ID)}
-		}
+		availability[ref] = d.storedConversation(driver.Name(), resumableIn(driver), ref.ID)
 	}
 	return availability
+}
+
+func (d *Daemon) storedConversation(agent string, resumable func(id string) bool, resumeID string) harness.Availability {
+	if d.conversationKnown(agent, resumable, resumeID) {
+		return harness.Availability{Resumable: true}
+	}
+	return harness.Availability{Reason: d.goneConversationReason(agent, resumeID)}
+}
+
+func resumableIn(driver agentdriver.Driver) func(id string) bool {
+	return func(id string) bool { return agentdriver.ResumeAvailable(driver, id) }
 }
 
 func (d *Daemon) goneConversationReason(agent, resumeID string) string {
@@ -592,18 +599,18 @@ func (d *Daemon) goneConversationReason(agent, resumeID string) string {
 	return reason
 }
 
-func (d *Daemon) conversationKnown(driver agentdriver.Driver, resumeID string) bool {
+func (d *Daemon) conversationKnown(agent string, resumable func(id string) bool, resumeID string) bool {
 	if resumeID == "" {
 		return false
 	}
-	if agentdriver.ResumeAvailable(driver, resumeID) {
+	if resumable(resumeID) {
 		return true
 	}
 	if d.store == nil {
 		return false
 	}
-	kept, ok := d.store.KeptConversation(driver.Name(), resumeID)
-	if !ok || !kept.DeletedAt.IsZero() || kept.Agent != driver.Name() {
+	kept, ok := d.store.KeptConversation(agent, resumeID)
+	if !ok || !kept.DeletedAt.IsZero() || kept.Agent != agent {
 		return false
 	}
 	_, err := os.Stat(conversationArchive(kept.Agent, kept.ResumeID))
@@ -611,21 +618,25 @@ func (d *Daemon) conversationKnown(driver agentdriver.Driver, resumeID string) b
 }
 
 func (d *Daemon) conversationReady(driver agentdriver.Driver, resumeID string) bool {
+	return d.conversationReadyIn(driver.Name(), resumableIn(driver), resumeID)
+}
+
+func (d *Daemon) conversationReadyIn(agent string, resumable func(id string) bool, resumeID string) bool {
 	if resumeID == "" {
 		return false
 	}
 	if d.store == nil {
-		return agentdriver.ResumeAvailable(driver, resumeID)
+		return resumable(resumeID)
 	}
-	kept, ok := d.store.KeptConversation(driver.Name(), resumeID)
-	if !ok || !kept.DeletedAt.IsZero() || kept.Agent != driver.Name() {
-		return agentdriver.ResumeAvailable(driver, resumeID)
+	kept, ok := d.store.KeptConversation(agent, resumeID)
+	if !ok || !kept.DeletedAt.IsZero() || kept.Agent != agent {
+		return resumable(resumeID)
 	}
 	if err := d.restoreConversationArchive(conversationArchive(kept.Agent, kept.ResumeID), kept.Agent, kept.ResumeID, time.Now()); err != nil {
 		d.logf("conversation keep: restore %s/%s: %v", kept.Agent, kept.ResumeID, err)
 		return false
 	}
-	return agentdriver.ResumeAvailable(driver, resumeID)
+	return resumable(resumeID)
 }
 
 func appendMissingConversationEntries(dst *tar.Writer, path string, keeper harness.Keeper, agent, resumeID string, writtenNames map[string]bool) error {

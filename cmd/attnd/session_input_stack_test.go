@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/victorarias/attn/internal/daemon"
+	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
@@ -26,10 +26,10 @@ func TestWhatTheUserTypesWhileAttnRingsTheDoorbellStaysInTheirDraft(t *testing.T
 	claude.Reply("Waiting. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, recipient, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
 	app.Watch(recipient)
-	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	s.AwaitTimer(claudemod.PollHoldTimer)
 	claude.ModStopPolling()
-	s.AwaitTimer(daemon.ClaudeModReachTimer)
-	s.FirePending(daemon.ClaudeModReachTimer)
+	s.AwaitTimer(claudemod.ReachTimer)
+	s.FirePending(claudemod.ReachTimer)
 
 	sent := s.Launch(testworld.Invocation{Args: []string{"agent", "msg", recipient, "the build is green"}, Session: reviewer})
 	gap.Await()

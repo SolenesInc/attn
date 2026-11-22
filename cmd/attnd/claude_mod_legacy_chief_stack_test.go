@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/victorarias/attn/internal/daemon"
+	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -24,7 +24,7 @@ func TestARingAModHeldThroughTheUpgradeToChiefMembersComesBackToTheChiefOnce(t *
 	s.Attn("crew", "start", "chief", "--json").JSON(t, &woken)
 	chief := string(woken.SessionID)
 	run := s.Launched(chief)
-	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	s.AwaitTimer(claudemod.PollHoldTimer)
 	run.Prompted()
 	running := testworld.AwaitSession(app, chief, func(protocol.Session) bool { return true })
 	run.Reply("Ready. <!-- attn:state=idle -->")
@@ -56,7 +56,7 @@ func TestARingAModHeldThroughTheUpgradeToChiefMembersComesBackToTheChiefOnce(t *
 	s.Stop()
 	s.Start()
 	app = s.TrustedApp()
-	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	s.AwaitTimer(claudemod.PollHoldTimer)
 
 	if returned := run.ModEsc(); len(returned) != 1 {
 		t.Fatalf("Esc returned %v, want the held Quick Capture", returned)

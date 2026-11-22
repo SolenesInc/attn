@@ -93,7 +93,7 @@ On a `fakeagent.Run`:
   held it, refused it as stopped, or lost its poll to a newer one.
   `ModToolBoundary` appends what it holds, `ModEsc` stops the session and returns
   what it held, `ModReload` draws a new instance id, and `ModStopPolling` stops
-  its polls. Wait for `daemon.ClaudeModPollHoldTimer` to know a poll is open.
+  its polls. Wait for `claudemod.PollHoldTimer` to know a poll is open.
   The mod answers a compact request with `busy` while a turn runs, as real
   Claude does for a compacting close asked during the agent's turn, and sends
   `ready` when its next turn completes. Otherwise it answers `compacted` after
@@ -104,7 +104,9 @@ On a `fakeagent.Run`:
   the mod refuses every compact until a turn completes. `ModHoldNextCompact`
   holds the next answer (`arrived` returns once the compact is under way,
   `release` lets it finish),
-  `ModCompactions` counts the compacts the mod ran, and `ModNextCompactReport`
+  `ModHoldNextAck` holds the next message the mod takes before it answers
+  (`arrived`, `release`), and drops it at release when `ModReload` came
+  between, `ModCompactions` counts the compacts the mod ran, and `ModNextCompactReport`
   returns the next answer once the daemon has accepted it.
 - Headless tasks, the one-shot model calls such as titles and turn verdicts,
   are off unless the test sets `ATTN_HEADLESS_TASKS=on`. When they are on,

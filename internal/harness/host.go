@@ -6,6 +6,7 @@ import (
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
+	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
@@ -28,12 +29,28 @@ type Host interface {
 	Files() FileConversations
 	Terminals() HostTerminals
 	Records() ServerRecords
+	Clock() Clock
+	// AgentSockets: attn serves the sockets its agents reach it on. Only tests turn them off.
+	AgentSockets() bool
+	// Executable resolves the harness's executable on this machine: configured, else its setting, else its login-environment variable, else its default.
+	Executable(facts Facts, configured string) (string, error)
+	RepositoryOrigin(repository string) string
+	DataDir() string
+	DaemonSocket() string
 }
 
 type Life interface {
 	// Go runs fn until attn stops, or reports false when attn is stopping.
 	Go(name string, fn func()) bool
+	// Do runs fn on the calling goroutine unless attn is stopping, and reports whether it ran.
+	Do(name string, fn func()) bool
 	Context() context.Context
+}
+
+// Clock makes timers a test can step by name.
+type Clock interface {
+	NewTimer(name stepclock.Name, d time.Duration) stepclock.Timer
+	AfterFunc(name stepclock.Name, d time.Duration, f func()) stepclock.Timer
 }
 
 type AgentTools struct {
@@ -51,6 +68,10 @@ type HostSessions interface {
 	// Remote: the session runs on another machine, so its conversation is not this machine's to run.
 	Remote(id SessionID) bool
 	PrimaryTerminal(id SessionID) TerminalID
+	// Showing is the session terminal t shows.
+	Showing(t TerminalID) (SessionID, bool)
+	// ChannelUp asks the machine that runs the session whether its harness's channel reaches it.
+	ChannelUp(id SessionID) bool
 	// Evidence is what the session's monitor holds, and false when no monitor watches the session.
 	Evidence(id SessionID) (SessionEvidence, bool)
 	// TraceClaim records the status a server claimed for a session; quiet claims come from the server's silence, not a report.
@@ -116,4 +137,10 @@ type FileConversations interface {
 	LastReply(ctx context.Context, ref ConversationRef, max int) (string, error)
 	Window(ctx context.Context, ref ConversationRef) (AssistantWindow, bool)
 	Activity(ctx context.Context, ref ConversationRef, kind, cursor string) (protocol.TranscriptActivityResult, error)
+	// Path is the transcript file of ref's session, or "" when attn has none to read.
+	Path(ref ConversationRef) string
+	// Check says which of refs can resume: resumable reads the harness's own storage, and attn's kept copies count too.
+	Check(refs []ConversationRef, resumable func(id string) bool) map[ConversationRef]Availability
+	// Ready restores attn's kept copy of ref when the harness lost it, and reports whether ref can resume.
+	Ready(ref ConversationRef, resumable func(id string) bool) bool
 }

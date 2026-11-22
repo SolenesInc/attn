@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/victorarias/attn/internal/daemon"
+	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -29,7 +29,7 @@ func TestACaptureWaitsForTheFolderTrustAnswerAcrossADaemonRestart(t *testing.T) 
 	s.Stop()
 	s.Start()
 	app = s.TrustedApp()
-	s.AwaitTimer(daemon.ClaudeModReachTimer)
+	s.AwaitTimer(claudemod.ReachTimer)
 	s.Advance(5 * time.Second)
 	if after := queriedSession(t, s.Client(), id); !atQuestion(after) {
 		t.Fatalf("after restart the session reads %s/%s, want it still at the folder-trust question", after.State, protocol.Deref(after.StateReason))

@@ -4,19 +4,20 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
 type claudeConversation struct {
-	d     *Daemon
+	host  harness.Host
+	mod   *claudeMod
 	facts harness.SessionFacts
 }
 
 func (h claudeHarness) Conversation(facts harness.SessionFacts) harness.Conversation {
-	return claudeConversation{d: h.d, facts: facts}
+	return claudeConversation{host: h.host, mod: h.mod, facts: facts}
 }
 
 func (c claudeConversation) Deliver(ctx context.Context, in harness.Input) harness.Custody {
@@ -28,14 +29,14 @@ func (c claudeConversation) Compact(ctx context.Context, in harness.Input) harne
 }
 
 func (c claudeConversation) CanCompact() error {
-	if c.d.claudeModReaches(c.facts.Session) {
+	if c.host.Sessions().ChannelUp(c.facts.Session) {
 		return nil
 	}
-	return protocol.Refuse(protocol.RefusalWrongState, "this Claude session does not run with attn's Claude mod, so attn has no way to compact it; reload the session so it loads the mod ({attn agent reload %s}), or close without --compact", shortSessionID(c.facts.Session))
+	return protocol.Refuse(protocol.RefusalWrongState, "this Claude session does not run with attn's Claude mod, so attn has no way to compact it; reload the session so it loads the mod ({attn agent reload %s}), or close without --compact", claudeShortSession(c.facts.Session))
 }
 
 func (c claudeConversation) hand(ctx context.Context, in harness.Input, compact bool) harness.Custody {
-	mod, terminal := c.d.claudeMod(), c.facts.Terminal
+	mod, terminal := c.mod, c.facts.Terminal
 	if !mod.reachable(terminal) || (in.PendingApproval && !in.AskedInTurn) {
 		return harness.Custody{Outcome: harness.NotMine}
 	}
@@ -44,7 +45,7 @@ func (c claudeConversation) hand(ctx context.Context, in harness.Input, compact 
 	if !mod.enqueue(terminal, delivery) {
 		return harness.Custody{Reason: fmt.Sprintf("claude mod: terminal %s stopped polling before taking input %s, send it again", terminal, in.ID)}
 	}
-	tripwire := c.d.clock.NewTimer(ClaudeModAckTimer, claudeModAckWait)
+	tripwire := c.host.Clock().NewTimer(claudemod.AckTimer, claudeModAckWait)
 	defer tripwire.Stop()
 	select {
 	case custody := <-delivery.answer:
@@ -84,56 +85,4 @@ func (m *claudeMod) forget(terminal harness.TerminalID, delivery *claudeModDeliv
 			return
 		}
 	}
-}
-
-func (m *claudeMod) placeReturned(session protocol.SessionID) {
-	m.mu.Lock()
-	pending := len(m.returned[session]) > 0
-	m.mu.Unlock()
-	if pending {
-		m.d.life.Go("claudeModPlaceReturned", func() { m.placeReturnedNow(session) })
-	}
-}
-
-func (m *claudeMod) placeReturnedNow(session protocol.SessionID) {
-	for {
-		m.mu.Lock()
-		queue := m.returned[session]
-		m.mu.Unlock()
-		if len(queue) == 0 {
-			return
-		}
-		head := queue[0]
-		if m.d.store.Get(session) == nil {
-			m.mu.Lock()
-			delete(m.returned, session)
-			m.mu.Unlock()
-			return
-		}
-		attempt := m.d.placeDelivery(context.Background(), session, head)
-		if attempt.Stage != sessionmonitor.Placed {
-			if delay, retry := sessionmonitor.RetryDelay(attempt.Err); retry {
-				m.d.life.AfterFunc("claudeModPlaceReturned", delay, func() { m.placeReturnedNow(session) })
-			} else {
-				m.d.logf("claude mod: returned input %s waits for session %s to change state: %v", head.ID, session, attempt.Err)
-				pausepoint.At(pausepoint.ClaudeModReturnWaits)
-			}
-			return
-		}
-		m.dropReturned(session, head)
-	}
-}
-
-func (m *claudeMod) dropReturned(session protocol.SessionID, placed sessionmonitor.Delivery) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	queue := m.returned[session]
-	if len(queue) > 0 && queue[0].ID == placed.ID {
-		queue = queue[1:]
-	}
-	if len(queue) == 0 {
-		delete(m.returned, session)
-		return
-	}
-	m.returned[session] = queue
 }

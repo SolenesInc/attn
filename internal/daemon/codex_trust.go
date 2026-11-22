@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"github.com/victorarias/attn/internal/harness"
@@ -53,7 +52,7 @@ func assessCodexFolderTrust(path string, config *codexTrustConfig, workedDirecto
 }
 
 func repositoryWorktrees(path string) []string {
-	if top := repositoryTop(path); top != "" {
+	if top := git.RepositoryTop(path); top != "" {
 		return git.RepositoryWorktrees(top)
 	}
 	return nil
@@ -81,29 +80,8 @@ func workedInRepository(repository string, workedDirectories []string, originOf 
 	return false
 }
 
-func (d *Daemon) repositoryOrigin(task gitTask, repository string) string {
-	origin, err := gitValue(context.Background(), d.gitExecution(), task, func(ctx context.Context, client *git.Client) (string, error) {
-		return client.RepositoryOrigin(ctx, repository), nil
-	})
-	if err != nil {
-		return ""
-	}
-	return origin
-}
-
 func (d *Daemon) automationRepositoryOrigin(repository string) string {
 	return d.repositoryOrigin(gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, repository)
-}
-
-func repositoryTop(path string) string {
-	for dir := filepath.Clean(path); ; dir = filepath.Dir(dir) {
-		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
-			return dir
-		}
-		if filepath.Dir(dir) == dir {
-			return ""
-		}
-	}
 }
 
 func (t codexFolderTrust) known() bool {

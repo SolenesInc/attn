@@ -12,7 +12,7 @@ import (
 func (h claudeHarness) cli() *agentdriver.Claude { return h.driver().(*agentdriver.Claude) }
 
 func (h claudeHarness) Run(ctx context.Context, req harness.OneShotRequest) (harness.OneShotResult, error) {
-	executable, err := h.d.machineAgentExecutable(h.Facts().ID, "")
+	executable, err := h.host.Executable(h.Facts(), "")
 	if err != nil {
 		return harness.OneShotResult{}, fmt.Errorf("resolve claude executable: %w", err)
 	}
@@ -20,7 +20,7 @@ func (h claudeHarness) Run(ctx context.Context, req harness.OneShotRequest) (har
 }
 
 func (h claudeHarness) Models(ctx context.Context) (harness.Models, error) {
-	executable, err := h.d.machineAgentExecutable(h.Facts().ID, "")
+	executable, err := h.host.Executable(h.Facts(), "")
 	if err != nil {
 		return harness.Models{}, err
 	}
@@ -28,7 +28,7 @@ func (h claudeHarness) Models(ctx context.Context) (harness.Models, error) {
 }
 
 func (h claudeHarness) StartSpare(ctx context.Context) (harness.Spare, error) {
-	executable, err := h.d.machineAgentExecutable(h.Facts().ID, "")
+	executable, err := h.host.Executable(h.Facts(), "")
 	if err != nil {
 		return nil, fmt.Errorf("claude executable was not found: %w", err)
 	}

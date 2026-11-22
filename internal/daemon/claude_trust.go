@@ -3,16 +3,22 @@ package daemon
 import (
 	"cmp"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/victorarias/attn/internal/harness"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/toolhome"
 )
+
+const claudeConfigLockWait = 2 * time.Second
 
 type claudeProject struct {
 	HasTrustDialogAccepted bool `json:"hasTrustDialogAccepted"`
@@ -23,20 +29,21 @@ type claudeCheckout struct {
 	repository string
 }
 
-func (d *Daemon) settleClaudeFolderTrust(opts *ptybackend.SpawnOptions, trust *harness.RepositoryTrust) error {
-	if opts.Agent != string(protocol.SessionAgentClaude) || trust == nil {
+func (h claudeHarness) settleFolderTrust(req harness.LaunchRequest) error {
+	trust := req.Trust
+	if trust == nil {
 		return nil
 	}
-	unattended := !opts.UnattendedLaunch.IsZero()
-	cwd := git.CanonicalizePath(opts.CWD)
+	unattended := !req.Unattended.IsZero()
+	cwd := git.CanonicalizePath(req.Dir)
 	checkout := readClaudeCheckout(cwd)
 	config := claudeConfigPath()
 	projects, err := readClaudeProjects(config)
 	if err != nil {
 		if unattended {
-			return fmt.Errorf("an automation cannot check whether Claude trusts %s: %w", opts.CWD, err)
+			return fmt.Errorf("an automation cannot check whether Claude trusts %s: %w", req.Dir, err)
 		}
-		d.logf("delegation launch: Claude may ask whether to trust %s: %v", opts.CWD, err)
+		h.host.Logf("delegation launch: Claude may ask whether to trust %s: %v", req.Dir, err)
 		return nil
 	}
 	if claudeHasTrust(projects, cwd, checkout) {
@@ -44,12 +51,12 @@ func (d *Daemon) settleClaudeFolderTrust(opts *ptybackend.SpawnOptions, trust *h
 	}
 	origin := ""
 	if checkout.repository != "" {
-		origin = d.repositoryOrigin(gitTask{Kind: gitTaskSessionIdentity, Lane: gitInteractive}, checkout.repository)
+		origin = h.host.RepositoryOrigin(checkout.repository)
 	}
 	if origin == "" || !slices.Contains(trust.KnownOrigins, origin) {
 		if unattended {
 			return &harness.FixableError{
-				Message: fmt.Sprintf("no agent has started a conversation in the repository of %s in this profile, on any machine, and Claude does not trust it, so an automation will not trust it for you; open Claude there once and choose to trust it", opts.CWD),
+				Message: fmt.Sprintf("no agent has started a conversation in the repository of %s in this profile, on any machine, and Claude does not trust it, so an automation will not trust it for you; open Claude there once and choose to trust it", req.Dir),
 				Fix:     harness.Fix{Harness: string(protocol.SessionAgentClaude), Dir: cmp.Or(checkout.repository, cwd)},
 			}
 		}
@@ -59,15 +66,15 @@ func (d *Daemon) settleClaudeFolderTrust(opts *ptybackend.SpawnOptions, trust *h
 		if unattended {
 			return fmt.Errorf("record Claude's trust for %s: %w", checkout.repository, err)
 		}
-		d.logf("delegation launch: Claude may ask whether to trust %s: %v", checkout.repository, err)
+		h.host.Logf("delegation launch: Claude may ask whether to trust %s: %v", checkout.repository, err)
 		return nil
 	}
-	d.logf("agent launch: saved %s as trusted in Claude's config %s, since an agent session started a conversation in %s", checkout.repository, config, origin)
+	h.host.Logf("agent launch: saved %s as trusted in Claude's config %s, since an agent session started a conversation in %s", checkout.repository, config, origin)
 	return nil
 }
 
 func readClaudeCheckout(cwd string) claudeCheckout {
-	top := repositoryTop(cwd)
+	top := git.RepositoryTop(cwd)
 	if top == "" {
 		return claudeCheckout{}
 	}
@@ -76,7 +83,6 @@ func readClaudeCheckout(cwd string) claudeCheckout {
 	}
 	return claudeCheckout{top: top, repository: top}
 }
-
 func readClaudeProjects(path string) (map[string]claudeProject, error) {
 	if path == "" {
 		return nil, fmt.Errorf("cannot find Claude Code's config: no CLAUDE_CONFIG_DIR and no home directory")
@@ -106,4 +112,108 @@ func claudeHasTrust(projects map[string]claudeProject, cwd string, checkout clau
 			return false
 		}
 	}
+}
+
+func claudeConfigPath() string {
+	if dir := strings.TrimSpace(os.Getenv("CLAUDE_CONFIG_DIR")); dir != "" {
+		return filepath.Join(dir, ".claude.json")
+	}
+	home, err := toolhome.Dir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".claude.json")
+}
+
+func trustClaudeFolder(path, folder string) error {
+	if path == "" {
+		return errors.New("cannot find Claude Code's config: no CLAUDE_CONFIG_DIR and no home directory")
+	}
+	if resolved, err := filepath.EvalSymlinks(folder); err == nil {
+		folder = resolved
+	}
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	unlock, err := lockClaudeConfig(path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return addClaudeTrust(path, folder)
+}
+
+func lockClaudeConfig(path string) (unlock func(), err error) {
+	lock := path + ".lock"
+	deadline := time.Now().Add(claudeConfigLockWait)
+	for {
+		err := os.Mkdir(lock, 0o700)
+		if err == nil {
+			return func() { _ = os.Remove(lock) }, nil
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			return nil, fmt.Errorf("lock Claude Code's config: %w", err)
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("%s stayed held past the %s limit", lock, claudeConfigLockWait)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func addClaudeTrust(path, folder string) error {
+	target, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return err
+	}
+	raw, err := os.ReadFile(target)
+	if err != nil {
+		return err
+	}
+	var config map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &config); err != nil {
+		return fmt.Errorf("parse Claude Code's config %s: %w", target, err)
+	}
+	projects := map[string]map[string]json.RawMessage{}
+	if stored, ok := config["projects"]; ok {
+		if err := json.Unmarshal(stored, &projects); err != nil {
+			return fmt.Errorf("parse the projects in Claude Code's config %s: %w", target, err)
+		}
+	}
+	project := projects[folder]
+	if string(project["hasTrustDialogAccepted"]) == "true" {
+		return nil
+	}
+	if project == nil {
+		project = map[string]json.RawMessage{}
+	}
+	project["hasTrustDialogAccepted"] = json.RawMessage("true")
+	projects[folder] = project
+	if config["projects"], err = json.Marshal(projects); err != nil {
+		return err
+	}
+	updated, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		return err
+	}
+	temp, err := os.CreateTemp(filepath.Dir(target), filepath.Base(target)+".attn-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(temp.Name())
+	if _, err := temp.Write(append(updated, '\n')); err != nil {
+		_ = temp.Close()
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(temp.Name(), info.Mode().Perm()); err != nil {
+		return err
+	}
+	return os.Rename(temp.Name(), target)
 }

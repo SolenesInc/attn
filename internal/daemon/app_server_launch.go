@@ -6,7 +6,11 @@ import (
 )
 
 func (d *Daemon) adapt() {
-	d.appServer = appserver.New(d.host(appServerTerminalOwner))
-	d.builtins = builtin.All(d.host(appServerTerminalOwner), d.appServer)
-	d.pluginHarnesses = builtin.Plugins(d.host(appServerTerminalOwner), d.appServer, pluginHost{d})
+	host := d.host(appServerTerminalOwner)
+	d.appServer = appserver.New(host)
+	d.builtins = builtin.All(host, d.appServer)
+	for _, source := range harnessSources {
+		d.builtins = append(d.builtins, source(d, host)...)
+	}
+	d.pluginHarnesses = builtin.Plugins(host, d.appServer, pluginHost{d})
 }

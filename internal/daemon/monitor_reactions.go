@@ -37,7 +37,7 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 		d.enqueueSessionActivity(session)
 	}
 	if returnedInputMayPlace(previous, view) {
-		d.claudeMod().placeReturned(session)
+		d.placeReturned(session)
 	}
 	if compactingCloseMayPlace(previous, view) {
 		d.kickCompactingClose(session)

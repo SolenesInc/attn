@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/victorarias/attn/internal/daemon"
+	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/fakeclaudeapi"
 	"github.com/victorarias/attn/internal/protocol"
@@ -50,7 +50,7 @@ func TestAgentMessageReachesRealClaudeThroughTheMod(t *testing.T) {
 			t.Logf("recipient screen:\n%s", s.Attn("agent", "peek", recipient).Stdout)
 		}
 	})
-	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	s.AwaitTimer(claudemod.PollHoldTimer)
 
 	mark := len(app.Log())
 	if sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", recipient, "the discount is applied after tax"}, Session: reviewer}); sent.Code != 0 {
@@ -115,7 +115,7 @@ func TestRefusingAPermissionQuestionLeavesRealClaudeFreeToTakeMessages(t *testin
 					t.Logf("recipient screen:\n%s", s.Attn("agent", "peek", recipient).Stdout)
 				}
 			})
-			s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+			s.AwaitTimer(claudemod.PollHoldTimer)
 
 			app.TypeLine(recipient, fakeclaudeapi.ToolPrompt)
 			testworld.AwaitSession(app, recipient, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
@@ -270,7 +270,7 @@ func TestMailFromHomeReachesRealClaudeOnAnOutpostThroughTheMod(t *testing.T) {
 			t.Logf("recipient screen:\n%s", home.Attn("agent", "peek", recipient).Stdout)
 		}
 	})
-	outpost.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	outpost.AwaitTimer(claudemod.PollHoldTimer)
 
 	const ring = "attn agent inbox"
 	originOfRing := func(rings int, mail string) (string, string) {
@@ -340,7 +340,7 @@ func realClaudeRunningATool(t *testing.T) (*testworld.Stack, *testworld.Peer, *f
 			t.Logf("recipient screen:\n%s", s.Attn("agent", "peek", recipient).Stdout)
 		}
 	})
-	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	s.AwaitTimer(claudemod.PollHoldTimer)
 
 	const longTask = "run the long task"
 	fifo := makeFifo(t, filepath.Join(work, "tool.fifo"))
@@ -386,7 +386,7 @@ func TestAQuickCaptureRealClaudesModHoldsThroughADaemonRestartComesBackUnreadAtE
 	s.Stop()
 	s.Start()
 	app = s.TrustedApp()
-	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	s.AwaitTimer(claudemod.PollHoldTimer)
 
 	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal(recipient)), Data: "\x1b"})
 	testworld.Await(app, protocol.EventQuickCaptureUnread, func(m protocol.QuickCaptureUnreadMessage) bool { return m.CaptureID == capture })

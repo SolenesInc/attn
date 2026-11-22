@@ -339,3 +339,13 @@ func (e *coordinatedGitExecutor) Close(cause error) {
 	}
 	e.mu.Unlock()
 }
+
+func (d *Daemon) repositoryOrigin(task gitTask, repository string) string {
+	origin, err := gitValue(context.Background(), d.gitExecution(), task, func(ctx context.Context, client *attngit.Client) (string, error) {
+		return client.RepositoryOrigin(ctx, repository), nil
+	})
+	if err != nil {
+		return ""
+	}
+	return origin
+}

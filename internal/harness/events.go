@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioncost"
 )
 
@@ -120,6 +121,14 @@ type Events interface {
 	Moved(r Reporter, m Move) (wait func(context.Context) error)
 	// Compaction answers a Conversation.Compact, matched by its input id.
 	Compaction(session SessionID, c Compaction)
+	// Returned gives back the user's words the harness took but did not place, so attn places them again.
+	Returned(session SessionID, id, text string)
+	// Settled says how a ring the harness held ended: placed, or given back. done runs once the home has the report.
+	Settled(delivery string, ring protocol.InboxRingRecord, placed bool, done func())
+	// Reach says the harness's channel into the session came up or went down.
+	Reach(session SessionID, r Reach)
+	// Reloaded says the harness's instance in this session was replaced; anything handed to the old one may need placing again.
+	Reloaded(session SessionID)
 }
 
 type CompactionResult uint8
@@ -129,6 +138,8 @@ const (
 	CompactionFailed
 	// CompactionBusy: the compact met a running turn; attn places it again at the turn's end.
 	CompactionBusy
+	// CompactionReady: the turn a busy compact met has ended, so attn places the compact again now.
+	CompactionReady
 )
 
 type Compaction struct {

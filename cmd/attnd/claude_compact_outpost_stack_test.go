@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/bridge"
+	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/fakeclaudeapi"
@@ -72,7 +73,7 @@ func newRealOutpostClaude(t *testing.T, willClose bool, vars ...string) *realOut
 			t.Logf("worker screen:\n%s", home.Attn("agent", "peek", c.session).Stdout)
 		}
 	})
-	outpost.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	outpost.AwaitTimer(claudemod.PollHoldTimer)
 	return c
 }
 
@@ -361,7 +362,7 @@ func TestAnOutpostSessionStaysOpenAndTakesMailWhenTheOutpostRestartsDuringItsCom
 	m.outpost.Stop()
 	m.outpost.Start()
 	outpostStateOnConnect(m.app, "outpost", protocol.OutpostStateConnected)
-	m.outpost.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	m.outpost.AwaitTimer(claudemod.PollHoldTimer)
 	release()
 	report := m.run.ModNextCompactReport()
 	for report.Outcome == fakeagent.ModCompactBusy {

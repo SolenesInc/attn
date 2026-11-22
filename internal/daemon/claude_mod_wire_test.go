@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
@@ -33,15 +34,15 @@ func moddedClaude(t *testing.T, w *world, app *testworld.Peer) (string, *fakeage
 	t.Helper()
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	run := w.Launched(session)
-	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
+	w.awaitTimer(claudemod.PollHoldTimer)
 	return session, run
 }
 
 func typedClaude(w *world, run *fakeagent.Run) {
 	w.T.Helper()
-	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
+	w.awaitTimer(claudemod.PollHoldTimer)
 	run.ModStopPolling()
-	w.awaitTimer(daemon.ClaudeModReachTimer)
+	w.awaitTimer(claudemod.ReachTimer)
 	w.advance(claudeModReachWindow)
 }
 
@@ -143,7 +144,7 @@ func TestAMessageToAWorkingClaudeIsHeldThenAppendedAtTheToolBoundary(t *testing.
 	}
 
 	run.ModReload()
-	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
+	w.awaitTimer(claudemod.PollHoldTimer)
 	nothingElsePrompted(t, app, run, session)
 }
 
@@ -375,7 +376,7 @@ func keepPassingTheReachWindow(w *world) {
 	go func() {
 		defer close(done)
 		for {
-			if _, armed := w.clock.AwaitTimer(ctx, daemon.ClaudeModReachTimer); !armed {
+			if _, armed := w.clock.AwaitTimer(ctx, claudemod.ReachTimer); !armed {
 				return
 			}
 			w.clock.Advance(claudeModReachWindow)
@@ -392,7 +393,7 @@ func TestWithTheModNotPollingAMessageIsTyped(t *testing.T) {
 	app := w.App()
 	session, run := moddedClaude(t, w, app)
 	run.ModStopPolling()
-	w.awaitTimer(daemon.ClaudeModReachTimer)
+	w.awaitTimer(claudemod.ReachTimer)
 	w.advance(claudeModReachWindow)
 
 	delivered(t, app, session, "check the rounding")
@@ -404,10 +405,10 @@ func TestAMessageWaitingWhenTheModIsLostFailsLoudlyAndTheNextIsTyped(t *testing.
 	app := w.App()
 	session, run := moddedClaude(t, w, app)
 	run.ModStopPolling()
-	w.awaitTimer(daemon.ClaudeModReachTimer)
+	w.awaitTimer(claudemod.ReachTimer)
 
 	waiting := sendFeedback(app, session, "check the rounding")
-	w.awaitTimer(daemon.ClaudeModAckTimer)
+	w.awaitTimer(claudemod.AckTimer)
 	w.advance(claudeModReachWindow)
 	if result := feedbackResult(app, waiting); result.Success || !strings.Contains(protocol.Deref(result.Error), "reach_window=5s") {
 		t.Fatalf("the feedback was answered %+v, want a failure naming the reach window", result)
@@ -619,7 +620,7 @@ func TestAMessageDuringATurnsQuestionIsNotTypedWithoutTheMod(t *testing.T) {
 	session, run := moddedClaude(t, w, app)
 	workingOn(t, app, run, session, "write the essay")
 	run.ModStopPolling()
-	w.awaitTimer(daemon.ClaudeModReachTimer)
+	w.awaitTimer(claudemod.ReachTimer)
 	w.advance(claudeModReachWindow)
 	permissionQuestion(t, w, app, session)
 
@@ -763,13 +764,13 @@ func TestARingTheModNeverTookLeavesTheUsersTurnOwedThroughAnUnrelatedRun(t *test
 	}
 
 	run.ModStopPolling()
-	w.awaitTimer(daemon.ClaudeModReachTimer)
+	w.awaitTimer(claudemod.ReachTimer)
 	returned := make(chan struct{})
 	go func() {
 		defer close(returned)
 		sendAgentMessage(t, cli, "reviewer", session, "a review arrived")
 	}()
-	w.awaitTimer(daemon.ClaudeModAckTimer)
+	w.awaitTimer(claudemod.AckTimer)
 	if err := cli.UpdateState(protocol.TerminalID(w.Terminal(session)), protocol.StateWorking); err != nil {
 		t.Fatalf("the background agent finishes: %v", err)
 	}

@@ -31,6 +31,7 @@ import (
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/unixsock"
 )
 
 const (
@@ -136,7 +137,7 @@ func (r *codexShared) dir() string {
 }
 
 func (r *codexShared) ensureDir() error {
-	return ensurePrivateSocketDir(r.dir())
+	return unixsock.EnsurePrivateDir(r.dir())
 }
 
 func (r *codexShared) viewSocket(t harness.TerminalID) string {
@@ -532,7 +533,7 @@ func (r *codexShared) openView(t harness.TerminalID, profile string) (string, er
 		return "", err
 	}
 	v := &codexView{terminal: t, profile: profile, socket: r.viewSocket(t), proxies: make(map[*codexProxy]bool)}
-	listener, err := listenUnixAtomically(v.socket)
+	listener, err := unixsock.ListenAtomically(v.socket)
 	if err != nil {
 		return "", fmt.Errorf("open the Codex proxy of terminal %s: %w", t, err)
 	}

@@ -11,18 +11,14 @@ import (
 	"github.com/victorarias/attn/internal/sessionstate"
 )
 
-var harnessSources []func(*Daemon) []harness.Harness
+var harnessSources []func(*Daemon, harness.Host) []harness.Harness
 
 func (d *Daemon) harnesses() []harness.Harness {
 	return append(d.builtinHarnesses(), d.pluginHarnesses.Harnesses()...)
 }
 
 func (d *Daemon) builtinHarnesses() []harness.Harness {
-	all := slices.Clone(d.builtins)
-	for _, source := range harnessSources {
-		all = append(all, source(d)...)
-	}
-	return all
+	return slices.Clone(d.builtins)
 }
 
 func (d *Daemon) harness(id string) (harness.Harness, error) {
@@ -45,9 +41,27 @@ func (d *Daemon) hasChannel(agent harness.ID) bool {
 }
 
 func (d *Daemon) channelUp(sessionID protocol.SessionID) bool {
+	result, err := Call[protocol.ClaudeModReachResult](d.life.Context(), d.router(), protocol.ClaudeModReachMessage{Cmd: protocol.CmdClaudeModReach, SessionID: sessionID})
+	return err == nil && result.Reachable
+}
+
+func (d *Daemon) localChannelUp(ctx context.Context, sessionID protocol.SessionID) bool {
 	facts := d.sessionFacts(sessionID)
 	channel, ok := harness.As[harness.Channel](d.harnessOf(facts.Harness))
-	return ok && channel.Reach(d.life.Context(), facts).Up
+	return ok && channel.Reach(ctx, facts).Up
+}
+
+func (d *Daemon) readClaudeModReach(ctx context.Context, msg protocol.ClaudeModReachMessage) (protocol.ClaudeModReachResult, error) {
+	return protocol.ClaudeModReachResult{Reachable: d.localChannelUp(ctx, msg.SessionID)}, nil
+}
+
+func (d *Daemon) receiveClaudeModReachReport(_ context.Context, msg protocol.ClaudeModReachReportMessage) (struct{}, error) {
+	if msg.Change == protocol.ClaudeModReachChangeFirstPollMissed {
+		d.tenderResumeModMissed(msg.SessionID, protocol.Deref(msg.Reason))
+	} else {
+		d.kickSessionInboxAddresses(msg.SessionID)
+	}
+	return struct{}{}, nil
 }
 
 func (d *Daemon) sessionFacts(sessionID protocol.SessionID) harness.SessionFacts {

@@ -20,7 +20,7 @@ type codexHarness struct{ d *Daemon }
 var codexLogo string
 
 func init() {
-	harnessSources = append(harnessSources, func(d *Daemon) []harness.Harness { return []harness.Harness{codexHarness{d: d}} })
+	harnessSources = append(harnessSources, func(d *Daemon, _ harness.Host) []harness.Harness { return []harness.Harness{codexHarness{d: d}} })
 }
 
 func (codexHarness) driver() agentdriver.Driver { return agentdriver.MustGet("codex") }

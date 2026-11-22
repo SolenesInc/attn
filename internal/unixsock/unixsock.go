@@ -1,4 +1,5 @@
-package daemon
+// Package unixsock opens the Unix sockets attn serves on.
+package unixsock
 
 import (
 	"errors"
@@ -8,7 +9,7 @@ import (
 	"syscall"
 )
 
-func ensurePrivateSocketDir(dir string) error {
+func EnsurePrivateDir(dir string) error {
 	if err := os.Mkdir(dir, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
 		return err
 	}
@@ -22,7 +23,7 @@ func ensurePrivateSocketDir(dir string) error {
 	return os.Chmod(dir, 0o700)
 }
 
-func listenUnixAtomically(path string) (net.Listener, error) {
+func ListenAtomically(path string) (net.Listener, error) {
 	staging := path + ".listen"
 	os.Remove(staging)
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: staging, Net: "unix"})

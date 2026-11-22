@@ -56,6 +56,7 @@ import (
 	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/unixsock"
 	"github.com/victorarias/attn/internal/who"
 )
 
@@ -216,10 +217,10 @@ type Daemon struct {
 	routes                   *Router
 	terminalState            *terminalRegistry
 	noAgentSockets           bool
-	claudeModOnce            sync.Once
 	tenderResumes            tenderResumeLedger
 	compactions              compactionLedger
-	claudeModState           *claudeMod
+	homeReports              homeReportQueue
+	returned                 returnedInputs
 	codexSharedOnce          sync.Once
 	codexSharedState         *codexShared
 	appServer                *appserver.Client
@@ -748,7 +749,7 @@ func (d *Daemon) Start() error {
 	previousRunSessions := d.storedSessionIDs()
 	d.noticeCommandsCutByRestart()
 	if d.listener == nil {
-		unixListener, err := listenUnixAtomically(d.socketPath)
+		unixListener, err := unixsock.ListenAtomically(d.socketPath)
 		if err != nil {
 			return err
 		}
@@ -1005,7 +1006,7 @@ func (d *Daemon) sessionConversationSurvives(session *protocol.Session, intent s
 		if readiness.Known {
 			return true
 		}
-	} else if d.conversationKnown(driver, resumeID) {
+	} else if d.conversationKnown(session.Agent, resumableIn(driver), resumeID) {
 		return true
 	}
 	return d.store.GetAgentDriverRun(session.ID).RunID != "" ||

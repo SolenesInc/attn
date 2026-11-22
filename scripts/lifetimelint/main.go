@@ -84,8 +84,14 @@ func isUnownedGoCall(call *ast.CallExpr) bool {
 	if !ok || sel.Sel.Name != "Go" {
 		return false
 	}
-	owner, ok := sel.X.(*ast.SelectorExpr)
-	return !ok || owner.Sel.Name != "life"
+	switch owner := sel.X.(type) {
+	case *ast.SelectorExpr:
+		return owner.Sel.Name != "life"
+	case *ast.CallExpr:
+		life, ok := owner.Fun.(*ast.SelectorExpr)
+		return !ok || life.Sel.Name != "Life" || len(owner.Args) != 0
+	}
+	return true
 }
 
 func funcDeclName(fn *ast.FuncDecl) string {

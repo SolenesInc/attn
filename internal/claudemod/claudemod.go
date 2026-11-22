@@ -10,12 +10,21 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"github.com/victorarias/attn/internal/stepclock"
 )
 
 //go:embed all:mod
 var embedded embed.FS
 
 const socketName = "claude-mod.sock"
+
+const (
+	PollHoldTimer  stepclock.Name = "claude-mod-poll-hold"
+	ReachTimer     stepclock.Name = "claude-mod-reach"
+	AckTimer       stepclock.Name = "claude-mod-ack"
+	FirstPollTimer stepclock.Name = "claude-mod-first-poll"
+)
 
 func Dir(dataDir string) string { return filepath.Join(dataDir, "claude-mod") }
 

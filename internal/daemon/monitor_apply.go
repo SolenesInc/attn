@@ -80,7 +80,7 @@ func (h *monitorHome) apply(view sessionmonitor.View, save bool) bool {
 		}
 		r.applyMu.Unlock()
 		if returnedInputMayPlace(previous, view) {
-			d.claudeMod().placeReturned(session)
+			d.placeReturned(session)
 		}
 		if compactingCloseMayPlace(previous, view) {
 			d.kickCompactingClose(session)

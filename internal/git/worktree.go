@@ -284,3 +284,14 @@ func (c *Client) RepositoryRoot(ctx context.Context, dir string) (string, error)
 		current = parent
 	}
 }
+
+func RepositoryTop(path string) string {
+	for dir := filepath.Clean(path); ; dir = filepath.Dir(dir) {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return dir
+		}
+		if filepath.Dir(dir) == dir {
+			return ""
+		}
+	}
+}

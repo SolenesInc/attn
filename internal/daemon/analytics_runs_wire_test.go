@@ -14,8 +14,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/analytics"
+	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/client"
-	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -292,7 +292,7 @@ func TestAUserSteeringARunTheAgentStartedKeepsItsStartCause(t *testing.T) {
 			app := w.App()
 			setAnalyticsEnabled(app, "true")
 			session, agent, idle := claudeAtIdle(w, app)
-			w.awaitTimer(daemon.ClaudeModPollHoldTimer)
+			w.awaitTimer(claudemod.PollHoldTimer)
 			app.TypeLine(session, "")
 			screenSnapshot(app, session)
 
@@ -441,7 +441,7 @@ func TestACrewHeartbeatThroughTheModRecordsAHeartbeatRun(t *testing.T) {
 	setAnalyticsEnabled(app, "true")
 	session := string(startCrew(t, cli, "trellis", "").SessionID)
 	agent := w.Launched(session)
-	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
+	w.awaitTimer(claudemod.PollHoldTimer)
 	agent.Prompted()
 	agent.Reply("Ready. <!-- attn:state=idle -->")
 	idle := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })

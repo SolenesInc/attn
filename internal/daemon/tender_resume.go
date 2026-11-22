@@ -384,7 +384,7 @@ func (d *Daemon) tenderResumeText(delivery *tenderResumeDelivery) string {
 	})
 }
 
-func (d *Daemon) tenderResumeModMissed(session protocol.SessionID, claudeVersion string) {
+func (d *Daemon) tenderResumeModMissed(session protocol.SessionID, reason string) {
 	addresses, err := d.inboxAddressesOf(session)
 	if err != nil {
 		d.logf("tender resume: addresses of %s: %v", session, err)
@@ -392,12 +392,12 @@ func (d *Daemon) tenderResumeModMissed(session protocol.SessionID, claudeVersion
 	}
 	for _, a := range addresses {
 		if _, seedMail := a.TenderOf(); seedMail {
-			d.blockClaudeResumeWithoutMod(a, session, claudeVersion)
+			d.blockResumeWithoutChannel(a, session, reason)
 		}
 	}
 }
 
-func (d *Daemon) blockClaudeResumeWithoutMod(a who.Address, session protocol.SessionID, claudeVersion string) {
+func (d *Daemon) blockResumeWithoutChannel(a who.Address, session protocol.SessionID, reason string) {
 	state := d.lockInboxState(a)
 	defer state.unlock()
 	delivery := state.tenderResume
@@ -409,5 +409,5 @@ func (d *Daemon) blockClaudeResumeWithoutMod(a who.Address, session protocol.Ses
 		d.logf("tender resume: %s: %v", delivery.seedID, err)
 		return
 	}
-	d.blockTenderResume(a, seed, fmt.Sprintf("attn resumed Claude session %s, but the mod in %s never polled within %s, so attn did not type the mail into it; the mail is delivered if the mod polls later. If this Claude Code version broke the mod, attn needs a fix for that version", shortSessionID(session), claudeVersion, claudeModFirstPollTripwire))
+	d.blockTenderResume(a, seed, reason)
 }

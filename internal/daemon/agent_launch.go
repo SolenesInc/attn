@@ -43,14 +43,10 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, req harness.L
 		return fmt.Errorf("unknown agent %q", opts.Agent)
 	}
 	launch, awareness, initialPrompt := req.Guidance, req.AwarenessDirs, req.InitialPrompt
-	claudeMod := d.claudeModForLaunch(terminal, driver.Name())
 	if !req.Direct {
 		var env []string
 		if opts.CodexRemote != "" {
 			env = append(env, "ATTN_CODEX_REMOTE="+opts.CodexRemote)
-		}
-		if claudeMod != (agentdriver.ClaudeMod{}) {
-			env = append(env, agentdriver.ClaudeModDirEnv+"="+claudeMod.Dir, agentdriver.ClaudeModSocketEnv+"="+claudeMod.Socket)
 		}
 		if launch.Crew != "" {
 			env = append(env, "ATTN_CREW_MEMBER=1")
@@ -89,7 +85,6 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, req harness.L
 		CrewPriming: launch.Crew, AwarenessDirs: awareness,
 		SelfReportPullRequests: launch.SelfReportPullRequests,
 		CodexRemote:            opts.CodexRemote,
-		ClaudeMod:              claudeMod,
 		AgentTools:             tools,
 		SharedAgentTools:       shared,
 	}

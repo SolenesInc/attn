@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/client"
-	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -127,11 +127,11 @@ func TestACompactingCloseWhoseTurnParksBeforeItsSilentModIsLostClosesOnceTheModI
 	workingOn(t, app, run, session, "deploy to staging")
 
 	closeCompactingDuringTheTurn(t, cli, run, session)
-	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
+	w.awaitTimer(claudemod.PollHoldTimer)
 	run.ModStopPolling()
-	w.awaitTimer(daemon.ClaudeModReachTimer)
+	w.awaitTimer(claudemod.ReachTimer)
 	parkOnBackgroundWork(t, w, cli, run, session)
-	w.awaitTimer(daemon.ClaudeModAckTimer)
+	w.awaitTimer(claudemod.AckTimer)
 	stillOpen(t, cli, session, "while the compact waits for the silent mod")
 	w.advance(claudeModReachWindow)
 
@@ -231,7 +231,7 @@ func TestACompactingCloseOfAClaudeSessionWithoutTheModIsRefusedAskingForAReload(
 	app, cli := w.App(), w.Client()
 	session, run := moddedClaude(t, w, app)
 	run.ModStopPolling()
-	w.awaitTimer(daemon.ClaudeModReachTimer)
+	w.awaitTimer(claudemod.ReachTimer)
 	w.advance(claudeModReachWindow)
 
 	_, err := cli.AgentCloseCompacting(protocol.SessionID(session), compactReason)

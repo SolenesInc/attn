@@ -176,6 +176,20 @@ func (r *Run) ModHoldNextCompact() (arrived, release func()) {
 	return arrived, release
 }
 
+func (r *Run) ModHoldNextAck() (arrived, release func()) {
+	r.t.Helper()
+	r.call(methodModAckHold, struct{}{}, nil)
+	arrived = func() {
+		r.t.Helper()
+		r.call(methodModAckArrived, struct{}{}, nil)
+	}
+	release = func() {
+		r.t.Helper()
+		r.call(methodModAckRelease, struct{}{}, nil)
+	}
+	return arrived, release
+}
+
 func (r *Run) ModCompactions() int {
 	r.fake.mu.Lock()
 	defer r.fake.mu.Unlock()

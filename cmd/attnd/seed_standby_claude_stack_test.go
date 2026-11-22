@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/victorarias/attn/internal/daemon"
+	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/fakeclaudeapi"
 	"github.com/victorarias/attn/internal/protocol"
@@ -47,7 +47,7 @@ func TestSeedMailResumesARealClaudeTenderOnStandbyThroughTheMod(t *testing.T) {
 			t.Logf("tender screen:\n%s", s.Attn("agent", "peek", tender).Stdout)
 		}
 	})
-	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	s.AwaitTimer(claudemod.PollHoldTimer)
 	var seed protocol.Seed
 	s.Run(testworld.Invocation{Args: []string{"seed", "plant", "Merge the discount field", "--json"}, Session: tender}).JSON(t, &seed)
 	if tend := s.Run(testworld.Invocation{Args: []string{"seed", "tend", seed.ID}, Session: tender}); tend.Code != 0 {

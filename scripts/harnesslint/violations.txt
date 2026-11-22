@@ -6,17 +6,8 @@ internal/automation/automation.go	StarterDefinition	names "codex"
 internal/automation/automation.go	refuseCodexExecutable	names "codex"
 internal/crew/crew.go	(Member).LaunchAgent	names "claude"
 internal/crew/crew.go	DefaultAgent	names "claude"
-internal/daemon/agent_close_compact.go	(*Daemon).closeAfterCompact	reaches callHome (internal/daemon/claude_mod.go)
-internal/daemon/agent_close_compact.go	(*Daemon).compactingCloseCanceled	reaches callHome (internal/daemon/claude_mod.go)
-internal/daemon/agent_close_compact.go	(*Daemon).reopenCompactingCloseInput	reaches Daemon.claudeMod (internal/daemon/claude_mod.go)
-internal/daemon/agent_close_compact.go	(*Daemon).reopenCompactingCloseInput	reaches claudeMod (internal/daemon/claude_mod.go)
-internal/daemon/agent_close_compact.go	(*Daemon).reopenCompactingCloseInput	reaches claudeMod.report (internal/daemon/claude_mod.go)
-internal/daemon/agent_launch.go	(*Daemon).prepareAgentLaunch	reaches Daemon.claudeModForLaunch (internal/daemon/claude_mod.go)
 internal/daemon/bus.go	buildWireProjections	reaches Daemon.projectSharedCodex (internal/daemon/codex_versions.go)
 internal/daemon/chief_member.go	(*Daemon).prefillChiefFromLegacySession	names "claude"
-internal/daemon/code_nav.go	(*Daemon).codeNavDefinitions	reaches Daemon.repositoryOrigin (internal/daemon/codex_trust.go)
-internal/daemon/code_nav.go	(*Daemon).defineCodeNav	reaches Daemon.repositoryOrigin (internal/daemon/codex_trust.go)
-internal/daemon/code_nav.go	(*Daemon).runNavStatus	reaches Daemon.repositoryOrigin (internal/daemon/codex_trust.go)
 internal/daemon/code_nav_setup.go	(*Daemon).newSessionAgent	names "claude"
 internal/daemon/crew_folder_trust.go	(*Daemon).trustCodexFolder	reaches codexConfigPath (internal/daemon/codex_trust.go)
 internal/daemon/crew_folder_trust.go	(*Daemon).trustCodexFolder	reaches codexTrustConfig (internal/daemon/codex_trust.go)
@@ -25,24 +16,14 @@ internal/daemon/crew_folder_trust.go	(*Daemon).trustCodexFolder	reaches codexTru
 internal/daemon/crew_folder_trust.go	(*Daemon).trustCodexFolder	reaches readCodexTrust (internal/daemon/codex_trust.go)
 internal/daemon/daemon.go	(*Daemon).handleConnectionContext	reaches Daemon.handleCodexStatus (internal/daemon/codex_update.go)
 internal/daemon/daemon.go	(*Daemon).handleConnectionContext	reaches Daemon.handleRestartSharedCodexCLI (internal/daemon/codex_update.go)
-internal/daemon/daemon.go	Daemon	reaches claudeMod (internal/daemon/claude_mod.go)
 internal/daemon/daemon.go	Daemon	reaches codexShared (internal/daemon/codex_shared.go)
 internal/daemon/delegate.go	delegationAgentName	names "codex"
 internal/daemon/garden_advisor_config.go	(*Daemon).parseGardenAdvisorConfig	names "codex"
 internal/daemon/garden_advisor_config.go	gardenAdvisorDefaultAgent	names "codex"
-internal/daemon/garden_continuation.go	(*Daemon).continuationOnItsMachine	reaches bridgeAnswered (internal/daemon/claude_mod.go)
 internal/daemon/markdown_annotation_payload.go	formatQuestionPayload	reaches shellQuote (internal/daemon/codex_update.go)
 internal/daemon/markdown_annotation_payload.go	formatReviewPayload	reaches shellQuote (internal/daemon/codex_update.go)
-internal/daemon/monitor_apply.go	(*monitorHome).apply	reaches Daemon.claudeMod (internal/daemon/claude_mod.go)
-internal/daemon/monitor_apply.go	(*monitorHome).apply	reaches claudeMod (internal/daemon/claude_mod.go)
-internal/daemon/monitor_apply.go	(*monitorHome).apply	reaches claudeMod.placeReturned (internal/daemon/claude_mod_link.go)
 internal/daemon/monitor_home_calls.go	(*Daemon).classifierHarness	names "claude"
-internal/daemon/monitor_leaves.go	(*Daemon).registerMonitorParts	reaches Daemon.readClaudeModReach (internal/daemon/claude_mod.go)
-internal/daemon/monitor_leaves.go	(*Daemon).registerMonitorParts	reaches Daemon.receiveClaudeModReachReport (internal/daemon/claude_mod.go)
 internal/daemon/monitor_leaves.go	(*Daemon).renameLink	reaches Daemon.renameLinkedConversation (internal/daemon/link_runtime.go)
-internal/daemon/monitor_reactions.go	(*Daemon).reactMonitorView	reaches Daemon.claudeMod (internal/daemon/claude_mod.go)
-internal/daemon/monitor_reactions.go	(*Daemon).reactMonitorView	reaches claudeMod (internal/daemon/claude_mod.go)
-internal/daemon/monitor_reactions.go	(*Daemon).reactMonitorView	reaches claudeMod.placeReturned (internal/daemon/claude_mod_link.go)
 internal/daemon/profiles.go	(*Daemon).sendProfileSnapshots	reaches Daemon.codexShared (internal/daemon/codex_shared.go)
 internal/daemon/profiles.go	(*Daemon).sendProfileSnapshots	reaches codexShared (internal/daemon/codex_shared.go)
 internal/daemon/profiles.go	(*Daemon).sendProfileSnapshots	reaches codexShared.changedMessage (internal/daemon/codex_versions.go)
@@ -50,8 +31,6 @@ internal/daemon/session_instructions.go	(*Daemon).runSessionInstructions	names "
 internal/daemon/session_instructions.go	(daemonSessionInstructionsModel).Run	names "codex"
 internal/daemon/session_title.go	(*Daemon).titleProviderAgent	names "claude"
 internal/daemon/session_title.go	(*Daemon).titleProviderAgent	names "codex"
-internal/daemon/tender_resume.go	(*Daemon).blockClaudeResumeWithoutMod	reaches claudeModFirstPollTripwire (internal/daemon/claude_mod.go)
-internal/daemon/terminal_machine.go	(*Daemon).startTerminal	reaches Daemon.repositoryOrigin (internal/daemon/codex_trust.go)
 internal/daemon/websocket.go	(*Daemon).handleClientMessage	reaches Daemon.handleInstallCodexUpdate (internal/daemon/codex_update.go)
 internal/daemon/websocket.go	(*Daemon).handleClientMessage	reaches Daemon.handleRestartSharedCodex (internal/daemon/codex_restart.go)
 internal/daemon/websocket.go	(*Daemon).sendInitialState	reaches Daemon.codexShared (internal/daemon/codex_shared.go)

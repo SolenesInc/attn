@@ -100,6 +100,8 @@ func (e harnessEvents) Turn(r harness.Reporter, at time.Time, event harness.Turn
 func (e harnessEvents) Compaction(session protocol.SessionID, c harness.Compaction) {
 	d := e.daemon
 	switch c.Result {
+	case harness.CompactionReady:
+		d.kickCompactingClose(session)
 	case harness.CompactionBusy:
 		d.compactions.retryAfterBusy(d, session, c.Input, c.Reason)
 	case harness.CompactionFailed:
@@ -207,4 +209,33 @@ func (e harnessEvents) Moved(r harness.Reporter, m harness.Move) func(context.Co
 		return nil
 	}
 	return receipt.Wait
+}
+
+func (e harnessEvents) Returned(session protocol.SessionID, id, text string) {
+	e.daemon.returnInput(session, id, text)
+}
+
+func (e harnessEvents) Settled(delivery string, ring protocol.InboxRingRecord, placed bool, done func()) {
+	outcome := protocol.InboxRingOutcomeReturned
+	if placed {
+		outcome = protocol.InboxRingOutcomePlaced
+	}
+	e.daemon.enqueueHomeReport(protocol.InboxRingSettleMessage{Cmd: protocol.CmdInboxRingSettle, DeliveryID: delivery, Outcome: outcome, Ring: ring}, done)
+}
+
+func (e harnessEvents) Reloaded(session protocol.SessionID) {
+	e.daemon.placeReturned(session)
+}
+
+func (e harnessEvents) Reach(session protocol.SessionID, r harness.Reach) {
+	d := e.daemon
+	if !r.Up && r.Reason != "" {
+		d.enqueueHomeReport(protocol.ClaudeModReachReportMessage{Cmd: protocol.CmdClaudeModReachReport, SessionID: session, Change: protocol.ClaudeModReachChangeFirstPollMissed, Reason: protocol.Ptr(r.Reason)}, nil)
+		return
+	}
+	d.enqueueHomeReport(protocol.ClaudeModReachReportMessage{Cmd: protocol.CmdClaudeModReachReport, SessionID: session, Change: protocol.ClaudeModReachChangeChanged}, nil)
+	if !r.Up {
+		d.placeReturned(session)
+		d.kickCompactingClose(session)
+	}
 }

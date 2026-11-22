@@ -15,51 +15,47 @@ import (
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
-	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/stepclock"
+	"github.com/victorarias/attn/internal/unixsock"
+	"os/exec"
 )
 
 const (
-	ClaudeModPollHoldTimer     stepclock.Name = "claude-mod-poll-hold"
-	ClaudeModReachTimer        stepclock.Name = "claude-mod-reach"
-	ClaudeModAckTimer          stepclock.Name = "claude-mod-ack"
-	ClaudeModFirstPollTimer    stepclock.Name = "claude-mod-first-poll"
-	ClaudeModReportRetryTimer  stepclock.Name = "claude-mod-report-retry"
-	claudeModPollHold                         = 25 * time.Second
-	claudeModFirstPollTripwire                = 30 * time.Second
-	claudeModReachWindow                      = 5 * time.Second
-	claudeModAckWait                          = 10 * time.Second
-	claudeModPollPath                         = "/claude/next"
-	claudeModAckPath                          = "/claude/ack"
-	claudeModReturnPath                       = "/claude/return"
-	claudeModCompactedPath                    = "/claude/compacted"
-	claudeModOutcomeHeld                      = "held"
-	claudeModOutcomeAppended                  = "appended"
-	claudeModOutcomeSubmitted                 = "submitted"
-	claudeModOutcomeStopped                   = "stopped"
-	claudeModOutcomeRefused                   = "refused"
-	claudeModCompactCompacted                 = "compacted"
-	claudeModCompactSkipped                   = "skipped"
-	claudeModCompactBusy                      = "busy"
-	claudeModCompactReady                     = "ready"
-	claudeModCompactFailed                    = "failed"
-	claudeVersionUnknown                      = "Claude Code of unknown version"
+	claudeModPollHold          = 25 * time.Second
+	claudeModFirstPollTripwire = 30 * time.Second
+	claudeModReachWindow       = 5 * time.Second
+	claudeModAckWait           = 10 * time.Second
+	claudeVersionLimit         = 5 * time.Second
+	claudeModPollPath          = "/claude/next"
+	claudeModAckPath           = "/claude/ack"
+	claudeModReturnPath        = "/claude/return"
+	claudeModCompactedPath     = "/claude/compacted"
+	claudeModOutcomeHeld       = "held"
+	claudeModOutcomeAppended   = "appended"
+	claudeModOutcomeSubmitted  = "submitted"
+	claudeModOutcomeStopped    = "stopped"
+	claudeModOutcomeRefused    = "refused"
+	claudeModCompactCompacted  = "compacted"
+	claudeModCompactSkipped    = "skipped"
+	claudeModCompactBusy       = "busy"
+	claudeModCompactReady      = "ready"
+	claudeModCompactFailed     = "failed"
+	claudeVersionUnknown       = "Claude Code of unknown version"
+	claudeShortSessionLength   = 8
 )
 
+var errClaudeModStopping = errors.New("the daemon is stopping; retry once it is back")
+
 type claudeMod struct {
-	d         *Daemon
+	host      harness.Host
 	mu        sync.Mutex
 	server    *http.Server
 	closed    bool
 	terminals map[harness.TerminalID]*claudeModTerminal
 	firstPoll map[harness.TerminalID]stepclock.Timer
-	returned  map[protocol.SessionID][]sessionmonitor.Delivery
-	reports   []protocol.Placed
-	reporting bool
 	settling  map[string]bool
 }
 
@@ -111,36 +107,32 @@ type claudeModHeld struct {
 	accepted uint64
 }
 
-func (d *Daemon) claudeMod() *claudeMod {
-	d.claudeModOnce.Do(func() {
-		d.claudeModState = &claudeMod{
-			d:         d,
-			terminals: make(map[harness.TerminalID]*claudeModTerminal),
-			firstPoll: make(map[harness.TerminalID]stepclock.Timer),
-			returned:  make(map[protocol.SessionID][]sessionmonitor.Delivery),
-			settling:  make(map[string]bool),
-		}
-	})
-	return d.claudeModState
+func newClaudeMod(host harness.Host) *claudeMod {
+	return &claudeMod{
+		host:      host,
+		terminals: make(map[harness.TerminalID]*claudeModTerminal),
+		firstPoll: make(map[harness.TerminalID]stepclock.Timer),
+		settling:  make(map[string]bool),
+	}
 }
 
-func (d *Daemon) claudeModForLaunch(terminal harness.TerminalID, agent string) agentdriver.ClaudeMod {
-	if agent != string(protocol.SessionAgentClaude) || d.noAgentSockets {
+func (m *claudeMod) forLaunch(terminal harness.TerminalID) agentdriver.ClaudeMod {
+	if !m.host.AgentSockets() {
 		return agentdriver.ClaudeMod{}
 	}
-	d.claudeMod().awaitFirstPoll(terminal)
-	if err := d.claudeMod().serve(); err != nil {
-		d.logf("claude mod: this session is typed into: %v", err)
+	m.awaitFirstPoll(terminal)
+	if err := m.serve(); err != nil {
+		m.host.Logf("claude mod: this session is typed into: %v", err)
 		return agentdriver.ClaudeMod{}
 	}
-	return agentdriver.ClaudeMod{Dir: claudemod.Dir(d.dataRoot), Socket: claudemod.SocketPath(d.dataRoot)}
+	return agentdriver.ClaudeMod{Dir: claudemod.Dir(m.host.DataDir()), Socket: claudemod.SocketPath(m.host.DataDir())}
 }
 
 func (m *claudeMod) serve() error {
 	if err := m.listen(); err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
-	dir := claudemod.Dir(m.d.dataRoot)
+	dir := claudemod.Dir(m.host.DataDir())
 	if err := claudemod.Install(dir); err != nil {
 		return fmt.Errorf("install in %s: %w", dir, err)
 	}
@@ -154,8 +146,8 @@ func (m *claudeMod) awaitFirstPoll(terminal harness.TerminalID) {
 		earlier.Stop()
 	}
 	var timer stepclock.Timer
-	timer = m.d.clock.AfterFunc(ClaudeModFirstPollTimer, claudeModFirstPollTripwire, func() {
-		m.d.life.Do("claudeModFirstPollMissed", func() { m.firstPollMissed(terminal, &timer) })
+	timer = m.host.Clock().AfterFunc(claudemod.FirstPollTimer, claudeModFirstPollTripwire, func() {
+		m.host.Life().Do("claudeModFirstPollMissed", func() { m.firstPollMissed(terminal, &timer) })
 	})
 	m.firstPoll[terminal] = timer
 }
@@ -171,22 +163,35 @@ func (m *claudeMod) firstPollMissed(terminal harness.TerminalID, timer *stepcloc
 		return
 	}
 	claude := m.claudeVersionLabel()
-	if session, ok := m.d.shownIn(terminal); ok {
-		m.report(protocol.ClaudeModReachReportMessage{Cmd: protocol.CmdClaudeModReachReport, SessionID: session, Change: protocol.ClaudeModReachChangeFirstPollMissed, ClaudeVersion: protocol.Ptr(claude)})
+	if session, ok := m.host.Sessions().Showing(terminal); ok {
+		m.host.Events().Reach(session, harness.Reach{Reason: claudeModMissedReason(session, claude)})
 	}
-	if m.d.terminalLive(terminal) {
-		m.d.logf("claude mod: first_poll_tripwire=%s; %s in terminal %s launched with the mod but never polled, attn types into this session", claudeModFirstPollTripwire, claude, terminal)
+	if _, live := m.host.Terminals().Live(context.Background())[terminal]; live {
+		m.host.Logf("claude mod: first_poll_tripwire=%s; %s in terminal %s launched with the mod but never polled, attn types into this session", claudeModFirstPollTripwire, claude, terminal)
 	}
 }
 
+func claudeModMissedReason(session protocol.SessionID, claude string) string {
+	return fmt.Sprintf("attn resumed Claude session %s, but the mod in %s never polled within %s, so attn did not type the mail into it; the mail is delivered if the mod polls later. If this Claude Code version broke the mod, attn needs a fix for that version", claudeShortSession(session), claude, claudeModFirstPollTripwire)
+}
+
+func claudeShortSession(id protocol.SessionID) string {
+	if len(id) <= claudeShortSessionLength {
+		return string(id)
+	}
+	return string(id[:claudeShortSessionLength])
+}
+
 func (m *claudeMod) claudeVersionLabel() string {
-	binary, err := m.d.machineAgentExecutable(string(protocol.SessionAgentClaude), "")
+	binary, err := m.host.Executable(claudeFacts(), "")
 	if err != nil {
 		return claudeVersionUnknown
 	}
-	ctx, cancel := context.WithTimeout(m.d.life.Context(), agentVersionLimit)
+	ctx, cancel := context.WithTimeout(m.host.Life().Context(), claudeVersionLimit)
 	defer cancel()
-	out, err := m.d.runAgentBinary(ctx, binary, "--version")
+	cmd := exec.CommandContext(ctx, binary, "--version")
+	cmd.Env = append(os.Environ(), m.host.LoginEnv()...)
+	out, err := cmd.Output()
 	version, ok := strings.CutSuffix(strings.TrimSpace(string(out)), " (Claude Code)")
 	if err != nil || !ok {
 		return claudeVersionUnknown
@@ -201,13 +206,13 @@ func (m *claudeMod) listen() error {
 		return nil
 	}
 	if m.closed {
-		return errDaemonStopping
+		return errClaudeModStopping
 	}
-	if err := ensurePrivateSocketDir(claudemod.SocketDir(m.d.dataRoot)); err != nil {
+	if err := unixsock.EnsurePrivateDir(claudemod.SocketDir(m.host.DataDir())); err != nil {
 		return err
 	}
-	socket := claudemod.SocketPath(m.d.dataRoot)
-	listener, err := listenUnixAtomically(socket)
+	socket := claudemod.SocketPath(m.host.DataDir())
+	listener, err := unixsock.ListenAtomically(socket)
 	if err != nil {
 		return err
 	}
@@ -217,10 +222,10 @@ func (m *claudeMod) listen() error {
 	mux.HandleFunc("POST "+claudeModReturnPath, m.serveReturn)
 	mux.HandleFunc("POST "+claudeModCompactedPath, m.serveCompacted)
 	server := &http.Server{Handler: mux}
-	if !m.d.life.Go("claudeModServer", func() { _ = server.Serve(listener) }) {
+	if !m.host.Life().Go("claudeModServer", func() { _ = server.Serve(listener) }) {
 		_ = listener.Close()
 		_ = os.Remove(socket)
-		return errDaemonStopping
+		return errClaudeModStopping
 	}
 	m.server = server
 	return nil
@@ -235,7 +240,7 @@ func (m *claudeMod) close() {
 		return
 	}
 	_ = server.Close()
-	socket := claudemod.SocketPath(m.d.dataRoot)
+	socket := claudemod.SocketPath(m.host.DataDir())
 	_ = os.Remove(socket)
 	_ = os.Remove(filepath.Dir(socket))
 }
@@ -258,7 +263,7 @@ func (m *claudeMod) servePoll(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
-	hold := m.d.clock.NewTimer(ClaudeModPollHoldTimer, claudeModPollHold)
+	hold := m.host.Clock().NewTimer(claudemod.PollHoldTimer, claudeModPollHold)
 	defer hold.Stop()
 	select {
 	case <-poll.given:
@@ -267,7 +272,7 @@ func (m *claudeMod) servePoll(w http.ResponseWriter, r *http.Request) {
 		return
 	case <-hold.C():
 	case <-r.Context().Done():
-	case <-m.d.life.Done():
+	case <-m.host.Life().Context().Done():
 	}
 	delivery := m.closePoll(t, poll, r.Context().Err() != nil)
 	if delivery == nil {
@@ -311,9 +316,9 @@ func (m *claudeMod) connectLocked(terminal harness.TerminalID, instance string) 
 	t := m.terminals[terminal]
 	if t == nil {
 		t = m.addTerminalLocked(terminal)
-		m.d.life.Go("claudeModReachable", func() {
-			if session, ok := m.d.shownIn(terminal); ok {
-				m.reportReachChanged(session)
+		m.host.Life().Go("claudeModReachable", func() {
+			if session, ok := m.host.Sessions().Showing(terminal); ok {
+				m.host.Events().Reach(session, harness.Reach{Up: true})
 			}
 		})
 	}
@@ -331,26 +336,34 @@ func (m *claudeMod) connectLocked(terminal harness.TerminalID, instance string) 
 			m.failCompactingLocked(t, "the Claude mod reloaded before it reported the compact")
 			if session := t.refusedCompact; session != "" {
 				t.refusedCompact = ""
-				m.d.life.Go("claudeModCompactRetry", func() { m.d.kickCompactingClose(session) })
+				m.host.Life().Go("claudeModCompactRetry", func() { m.compactReady(session) })
 			}
+			m.host.Life().Go("claudeModReloaded", func() {
+				if session, ok := m.host.Sessions().Showing(terminal); ok {
+					m.host.Events().Reloaded(session)
+				}
+			})
 		}
 		t.instance = instance
-		for session := range m.returned {
-			m.d.life.Go("claudeModPlaceReturned", func() { m.placeReturnedNow(session) })
-		}
 	}
 	return t
 }
 
 func (m *claudeMod) expectModsToReconnect() {
-	if m.d.noAgentSockets {
+	if !m.host.AgentSockets() {
 		return
 	}
-	live := m.d.localLiveTerminals(context.Background())
-	for _, monitor := range m.d.monitors().each() {
-		session, _ := monitor.TitleTarget()
-		terminal := monitor.SessionFacts().Terminal
-		if _, running := live[terminal]; running && session.Agent == protocol.SessionAgentClaude {
+	sessions := m.host.Sessions()
+	live := m.host.Terminals().Live(context.Background())
+	for _, session := range sessions.List() {
+		if session.Agent != protocol.SessionAgentClaude || sessions.Remote(session.ID) {
+			continue
+		}
+		if _, watched := sessions.Evidence(session.ID); !watched {
+			continue
+		}
+		terminal := sessions.PrimaryTerminal(session.ID)
+		if _, running := live[terminal]; running {
 			m.expectModToReconnect(terminal)
 		}
 	}
@@ -405,7 +418,7 @@ func (m *claudeMod) armReachLocked(t *claudeModTerminal) {
 		t.reach.Stop()
 	}
 	var timer stepclock.Timer
-	timer = m.d.clock.AfterFunc(ClaudeModReachTimer, claudeModReachWindow, func() { m.reachLost(t, &timer) })
+	timer = m.host.Clock().AfterFunc(claudemod.ReachTimer, claudeModReachWindow, func() { m.reachLost(t, &timer) })
 	t.reach = timer
 }
 
@@ -413,10 +426,8 @@ func (m *claudeMod) reachLost(t *claudeModTerminal, timer *stepclock.Timer) {
 	if !m.dropUnreachable(t, timer) {
 		return
 	}
-	if session, ok := m.d.shownIn(t.id); ok {
-		m.reportReachChanged(session)
-		m.placeReturned(session)
-		m.d.kickCompactingClose(session)
+	if session, ok := m.host.Sessions().Showing(t.id); ok {
+		m.host.Events().Reach(session, harness.Reach{})
 	}
 }
 
@@ -432,7 +443,7 @@ func (m *claudeMod) dropUnreachable(t *claudeModTerminal, timer *stepclock.Timer
 	}
 	delete(m.terminals, t.id)
 	if t.instance == "" {
-		m.d.logf("claude mod: reach_window=%s; terminal %s did not reconnect after the daemon started, attn types into it", claudeModReachWindow, t.id)
+		m.host.Logf("claude mod: reach_window=%s; terminal %s did not reconnect after the daemon started, attn types into it", claudeModReachWindow, t.id)
 	}
 	for _, delivery := range t.queued {
 		delivery.answer <- harness.Custody{Reason: "claude mod: reach_window=" + claudeModReachWindow.String() + "; the mod stopped polling before taking input " + delivery.input.ID + ", send it again"}
@@ -484,7 +495,7 @@ func (m *claudeMod) acknowledge(ack claudeModAck) {
 		return
 	}
 	if ack.Ring != nil && (t == nil || t.held[ack.ID] == nil) {
-		m.reportLocked(protocol.InboxRingSettleMessage{Cmd: protocol.CmdInboxRingSettle, DeliveryID: ack.ID, Outcome: protocol.InboxRingOutcomePlaced, Ring: *ack.Ring})
+		m.settledLocked(ack.ID, *ack.Ring, true)
 	}
 	if t == nil {
 		return
@@ -528,7 +539,7 @@ func (m *claudeMod) serveReturn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	session, shown := m.d.shownIn(ret.Terminal)
+	session, shown := m.host.Sessions().Showing(ret.Terminal)
 	m.mu.Lock()
 	settled := m.takeReturnsLocked(ret, session, shown)
 	m.mu.Unlock()
@@ -547,7 +558,6 @@ func (m *claudeMod) takeReturnsLocked(ret claudeModReturn, session protocol.Sess
 	}
 	settled := []string{}
 	var known []string
-	placeUserWords := false
 	for _, back := range ret.Returns {
 		held := t.held[back.ID] != nil
 		switch {
@@ -561,25 +571,21 @@ func (m *claudeMod) takeReturnsLocked(ret claudeModReturn, session protocol.Sess
 				if held {
 					known = append(known, back.ID)
 				} else {
-					m.reportLocked(protocol.InboxRingSettleMessage{Cmd: protocol.CmdInboxRingSettle, DeliveryID: back.ID, Outcome: protocol.InboxRingOutcomeReturned, Ring: *back.Ring})
+					m.settledLocked(back.ID, *back.Ring, false)
 				}
 			}
 		case held:
 			known = append(known, back.ID)
 			settled = append(settled, back.ID)
 		case back.UserWords && shown:
-			m.returned[session] = append(m.returned[session], sessionmonitor.ReturnedUserInput(back.ID, back.Text))
-			placeUserWords = true
+			m.host.Events().Returned(session, back.ID, back.Text)
 			settled = append(settled, back.ID)
 		case !back.UserWords:
-			m.d.logf("claude mod: dropped returned input %s; the next one replaces it", back.ID)
+			m.host.Logf("claude mod: dropped returned input %s; the next one replaces it", back.ID)
 			settled = append(settled, back.ID)
 		}
 	}
 	m.returnHeldLocked(t, known)
-	if placeUserWords {
-		m.d.life.Go("claudeModReturn", func() { m.placeReturnedNow(session) })
-	}
 	return settled
 }
 
@@ -592,24 +598,15 @@ func (m *claudeMod) returnHeldLocked(t *claudeModTerminal, ids []string) {
 		}
 	}
 	slices.SortFunc(back, func(a, b *claudeModHeld) int { return cmp.Compare(a.accepted, b.accepted) })
-	sessions := map[protocol.SessionID]bool{}
 	for _, held := range back {
 		switch {
 		case held.input.Ring != nil:
-			m.reportLocked(protocol.InboxRingSettleMessage{Cmd: protocol.CmdInboxRingSettle, DeliveryID: held.input.ID, Outcome: protocol.InboxRingOutcomeReturned, Ring: *held.input.Ring})
+			m.settledLocked(held.input.ID, *held.input.Ring, false)
 		case held.input.Voice == harness.VoiceUser:
-			m.returned[held.session] = append(m.returned[held.session], sessionmonitor.ReturnedUserInput(held.input.ID, held.input.Text))
-			sessions[held.session] = true
+			m.host.Events().Returned(held.session, held.input.ID, held.input.Text)
 		default:
-			m.d.logf("claude mod: dropped returned input %s; the next one replaces it", held.input.ID)
+			m.host.Logf("claude mod: dropped returned input %s; the next one replaces it", held.input.ID)
 		}
-	}
-	if len(sessions) > 0 {
-		m.d.life.Go("claudeModReturn", func() {
-			for session := range sessions {
-				m.placeReturnedNow(session)
-			}
-		})
 	}
 }
 
@@ -617,104 +614,24 @@ func (m *claudeMod) typedLocked(t *claudeModTerminal, id string) {
 	held := t.held[id]
 	delete(t.held, id)
 	if held != nil && held.input.Ring != nil {
-		m.reportLocked(protocol.InboxRingSettleMessage{Cmd: protocol.CmdInboxRingSettle, DeliveryID: id, Outcome: protocol.InboxRingOutcomePlaced, Ring: *held.input.Ring})
+		m.settledLocked(id, *held.input.Ring, true)
 	}
 }
 
-func (m *claudeMod) reportReachChanged(session protocol.SessionID) {
-	m.report(protocol.ClaudeModReachReportMessage{Cmd: protocol.CmdClaudeModReachReport, SessionID: session, Change: protocol.ClaudeModReachChangeChanged})
+func (m *claudeMod) settledLocked(id string, ring protocol.InboxRingRecord, placed bool) {
+	m.host.Events().Settled(id, ring, placed, func() { m.reported(id) })
 }
 
-func (m *claudeMod) report(msg protocol.Placed) {
+func (m *claudeMod) reported(id string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.reportLocked(msg)
-}
-
-func (m *claudeMod) reportLocked(msg protocol.Placed) {
-	m.reports = append(m.reports, msg)
-	if !m.reporting {
-		m.reporting = m.d.life.Go("claudeModReports", m.sendReports)
+	if _, askedByMod := m.settling[id]; askedByMod {
+		m.settling[id] = true
 	}
 }
 
-func (m *claudeMod) sendReports() {
-	for {
-		m.mu.Lock()
-		if len(m.reports) == 0 {
-			m.reporting = false
-			m.mu.Unlock()
-			return
-		}
-		next := m.reports[0]
-		m.mu.Unlock()
-		_, err := callHome[struct{}](m.d, next)
-		if errors.Is(err, errDaemonStopping) {
-			return
-		}
-		if err != nil {
-			m.d.logf("claude mod: the home refused %s; dropped it: %v", next.CommandName(), err)
-		}
-		m.mu.Lock()
-		m.reports = m.reports[1:]
-		if settle, ok := next.(protocol.InboxRingSettleMessage); ok {
-			if _, askedByMod := m.settling[settle.DeliveryID]; askedByMod {
-				m.settling[settle.DeliveryID] = true
-			}
-		}
-		m.mu.Unlock()
-	}
-}
-
-func callHome[R any](d *Daemon, msg protocol.Placed) (R, error) {
-	unreachable := false
-	for {
-		answer, err := Call[R](d.life.Context(), d.router(), msg)
-		if err == nil || d.homeAnswered(err) {
-			return answer, err
-		}
-		if !unreachable {
-			d.logf("%s waits for the home, trying every %s: %v", msg.CommandName(), bridge.ReconnectInterval, err)
-		}
-		unreachable = true
-		retry := d.clock.NewTimer(ClaudeModReportRetryTimer, bridge.ReconnectInterval)
-		select {
-		case <-retry.C():
-		case <-d.life.Done():
-			retry.Stop()
-			return answer, errDaemonStopping
-		}
-	}
-}
-
-func (d *Daemon) homeAnswered(err error) bool {
-	return d.enrollmentStatus().IsHome() || bridgeAnswered(err)
-}
-
-func bridgeAnswered(err error) bool {
-	var rejected *bridge.CallRejected
-	if !errors.As(err, &rejected) {
-		return false
-	}
-	return !strings.Contains(rejected.Reason, errOutpostBridgeReplaced.Error()) && !strings.Contains(rejected.Reason, "daemon is stopping")
-}
-
-func (d *Daemon) claudeModReaches(session protocol.SessionID) bool {
-	result, err := Call[protocol.ClaudeModReachResult](d.life.Context(), d.router(), protocol.ClaudeModReachMessage{Cmd: protocol.CmdClaudeModReach, SessionID: session})
-	return err == nil && result.Reachable
-}
-
-func (d *Daemon) readClaudeModReach(_ context.Context, msg protocol.ClaudeModReachMessage) (protocol.ClaudeModReachResult, error) {
-	return protocol.ClaudeModReachResult{Reachable: d.claudeMod().reachable(d.primaryTerminal(msg.SessionID))}, nil
-}
-
-func (d *Daemon) receiveClaudeModReachReport(_ context.Context, msg protocol.ClaudeModReachReportMessage) (struct{}, error) {
-	if msg.Change == protocol.ClaudeModReachChangeFirstPollMissed {
-		d.tenderResumeModMissed(msg.SessionID, protocol.Deref(msg.ClaudeVersion))
-	} else {
-		d.kickSessionInboxAddresses(msg.SessionID)
-	}
-	return struct{}{}, nil
+func (m *claudeMod) compactReady(session protocol.SessionID) {
+	m.host.Events().Compaction(session, harness.Compaction{Result: harness.CompactionReady})
 }
 
 type claudeModCompacted struct {
@@ -765,12 +682,12 @@ func (m *claudeMod) serveCompacted(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case session == "":
 	case compacted.Outcome == claudeModCompactBusy:
-		m.d.events().Compaction(session, harness.Compaction{Input: compacted.ID, Result: harness.CompactionBusy, Reason: compacted.Reason})
+		m.host.Events().Compaction(session, harness.Compaction{Input: compacted.ID, Result: harness.CompactionBusy, Reason: compacted.Reason})
 	case compacted.Outcome == claudeModCompactReady:
-		m.d.kickCompactingClose(session)
+		m.compactReady(session)
 	default:
 		outcome.Input = compacted.ID
-		m.d.events().Compaction(session, outcome)
+		m.host.Events().Compaction(session, outcome)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -778,8 +695,8 @@ func (m *claudeMod) serveCompacted(w http.ResponseWriter, r *http.Request) {
 func (m *claudeMod) failCompactingLocked(t *claudeModTerminal, why string) {
 	for id, session := range t.compacting {
 		delete(t.compacting, id)
-		m.d.life.Go("claudeModCompactLost", func() {
-			m.d.events().Compaction(session, harness.Compaction{Input: id, Result: harness.CompactionFailed, Reason: why})
+		m.host.Life().Go("claudeModCompactLost", func() {
+			m.host.Events().Compaction(session, harness.Compaction{Input: id, Result: harness.CompactionFailed, Reason: why})
 		})
 	}
 }

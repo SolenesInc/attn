@@ -87,7 +87,7 @@ func newOutpostModPrepared(t *testing.T, prepare func(home, outpost *testworld.S
 	m.terminal = protocol.TerminalID(pair.App.Terminal(m.session))
 	m.run = outpost.LaunchedCarrying(string(m.terminal))
 	m.run.SessionID = m.session
-	outpost.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	outpost.AwaitTimer(claudemod.PollHoldTimer)
 	return m
 }
 
@@ -98,7 +98,7 @@ func (m *outpostMod) restartOutpost(t *testing.T, app *testworld.Peer) {
 	m.outpost.Start()
 	m.home.FireTimers(bridge.RetryTimer)
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
-	m.outpost.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	m.outpost.AwaitTimer(claudemod.PollHoldTimer)
 	m.outpost.FireTimers(daemon.ClaudeModReportRetryTimer)
 }
 
@@ -241,7 +241,7 @@ func TestARingQueuedOnAnOutpostSurvivesItsRestartWhileTheHomeIsAway(t *testing.T
 	if err := m.outpost.Client().UpdateState(m.terminal, protocol.StateWaitingInput); err != nil {
 		t.Fatal(err)
 	}
-	m.outpost.AwaitTimer(daemon.ClaudeModAckTimer)
+	m.outpost.AwaitTimer(claudemod.AckTimer)
 	resumeMod()
 	m.modEvent(t, fakeagent.ModEventHeld, "attn agent inbox")
 }
@@ -277,7 +277,7 @@ func newHomeMod(t *testing.T, prepare func(s *testworld.Stack)) (*outpostMod, *t
 	session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
 	terminal := protocol.TerminalID(app.Terminal(session))
 	run := s.LaunchedCarrying(string(terminal))
-	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	s.AwaitTimer(claudemod.PollHoldTimer)
 	return &outpostMod{home: s, outpost: s, session: session, terminal: terminal, run: run, app: app}, app
 }
 
@@ -290,7 +290,7 @@ func TestARingTheModReturnsAfterTheHomeDaemonRestartsIsUnread(t *testing.T) {
 	m.home.Stop()
 	m.home.Start()
 	app = m.home.App()
-	m.home.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	m.home.AwaitTimer(claudemod.PollHoldTimer)
 	mark := len(app.Log())
 	m.escEveryHeldRing(t)
 	m.awaitStopped(app, mark)
@@ -318,7 +318,7 @@ func TestARingIsNotTypedWhenTheDaemonDiesBeforeRecordingWhatTheModHolds(t *testi
 	<-mailed
 	m.home.Start()
 	app = m.home.App()
-	m.home.AwaitTimer(daemon.ClaudeModAckTimer)
+	m.home.AwaitTimer(claudemod.AckTimer)
 	resumeMod()
 	answering.Await()
 	m.modEvent(t, fakeagent.ModEventHeld, "attn agent inbox")
@@ -346,7 +346,7 @@ func TestMailArrivingWhileAnOutpostModRedialsAfterARestartWaitsForTheMod(t *test
 	if err := m.outpost.Client().UpdateState(m.terminal, protocol.StateWaitingInput); err != nil {
 		t.Fatal(err)
 	}
-	m.outpost.AwaitTimer(daemon.ClaudeModAckTimer)
+	m.outpost.AwaitTimer(claudemod.AckTimer)
 	resumeMod()
 	m.modEvent(t, fakeagent.ModEventHeld, "attn agent inbox")
 }
@@ -359,11 +359,11 @@ func TestAClaudeWhoseModNeverComesBackAfterARestartIsTypedInto(t *testing.T) {
 
 	m.home.Stop()
 	m.home.Start()
-	m.home.AwaitTimer(daemon.ClaudeModReachTimer)
+	m.home.AwaitTimer(claudemod.ReachTimer)
 	if err := m.home.Client().UpdateState(m.terminal, protocol.StateWaitingInput); err != nil {
 		t.Fatal(err)
 	}
-	m.home.FirePending(daemon.ClaudeModReachTimer)
+	m.home.FirePending(claudemod.ReachTimer)
 	if got := m.run.Prompted(); m.run.ThroughMod || !strings.Contains(got, "attn agent inbox") {
 		t.Fatalf("the agent took %q (through the mod: %t), want the ring typed", got, m.run.ThroughMod)
 	}
@@ -378,12 +378,12 @@ func TestARingCaughtWhileTheModDropsAfterARestartIsTypedInto(t *testing.T) {
 	m.home.Stop()
 	enqueuing := m.home.PauseAt(pausepoint.ClaudeModEnqueuing)
 	m.home.Start()
-	m.home.AwaitTimer(daemon.ClaudeModReachTimer)
+	m.home.AwaitTimer(claudemod.ReachTimer)
 	if err := m.home.Client().UpdateState(m.terminal, protocol.StateWaitingInput); err != nil {
 		t.Fatal(err)
 	}
 	enqueuing.Await()
-	m.home.FirePending(daemon.ClaudeModReachTimer)
+	m.home.FirePending(claudemod.ReachTimer)
 	enqueuing.Release()
 	if got := m.run.Prompted(); m.run.ThroughMod || !strings.Contains(got, "attn agent inbox") {
 		t.Fatalf("the agent took %q (through the mod: %t), want the ring typed", got, m.run.ThroughMod)

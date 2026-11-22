@@ -281,7 +281,7 @@ func (l *compactionLedger) takeLocked(p *pendingCompactClose) bool {
 
 func (d *Daemon) reopenCompactingCloseInput(p *pendingCompactClose) {
 	p.monitor.ReopenInput()
-	d.claudeMod().report(protocol.SessionInputReopenedMessage{Cmd: protocol.CmdSessionInputReopened, SessionID: p.session})
+	d.enqueueHomeReport(protocol.SessionInputReopenedMessage{Cmd: protocol.CmdSessionInputReopened, SessionID: p.session}, nil)
 }
 
 func (d *Daemon) compactingCloseCanceled(p *pendingCompactClose) string {

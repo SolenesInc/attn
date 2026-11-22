@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/setting"
+	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -31,6 +32,28 @@ func (h adapterHost) Sessions() harness.HostSessions    { return hostSessions(h)
 func (h adapterHost) Files() harness.FileConversations  { return fileConversations{h.d} }
 func (h adapterHost) Terminals() harness.HostTerminals  { return hostTerminals(h) }
 func (h adapterHost) Records() harness.ServerRecords    { return hostRecords(h) }
+func (h adapterHost) Clock() harness.Clock              { return hostClock(h) }
+func (h adapterHost) AgentSockets() bool                { return !h.d.noAgentSockets }
+func (h adapterHost) DataDir() string                   { return h.d.dataRoot }
+func (h adapterHost) DaemonSocket() string              { return h.d.socketPath }
+
+func (h adapterHost) Executable(facts harness.Facts, configured string) (string, error) {
+	return h.d.machineExecutableOf(facts, configured)
+}
+
+func (h adapterHost) RepositoryOrigin(repository string) string {
+	return h.d.repositoryOrigin(gitTask{Kind: gitTaskSessionIdentity, Lane: gitInteractive}, repository)
+}
+
+type hostClock adapterHost
+
+func (c hostClock) NewTimer(name stepclock.Name, d time.Duration) stepclock.Timer {
+	return c.d.clock.NewTimer(name, d)
+}
+
+func (c hostClock) AfterFunc(name stepclock.Name, d time.Duration, f func()) stepclock.Timer {
+	return c.d.clock.AfterFunc(name, d, f)
+}
 
 func (h adapterHost) ServerTools(subject string) (harness.AgentTools, bool) {
 	tools := h.d.agentToolsFor(agentCredential{kind: credentialServer, name: subject})
@@ -77,6 +100,8 @@ func (h hostSessions) Remote(id harness.SessionID) bool         { return h.d.ses
 func (h hostSessions) PrimaryTerminal(id harness.SessionID) harness.TerminalID {
 	return h.d.primaryTerminal(id)
 }
+func (h hostSessions) Showing(t harness.TerminalID) (harness.SessionID, bool) { return h.d.shownIn(t) }
+func (h hostSessions) ChannelUp(id harness.SessionID) bool                    { return h.d.channelUp(id) }
 
 func (h hostSessions) Evidence(id harness.SessionID) (harness.SessionEvidence, bool) {
 	monitor := h.d.sessionMonitor(id)

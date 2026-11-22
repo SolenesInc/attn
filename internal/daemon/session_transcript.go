@@ -187,10 +187,26 @@ func (f fileConversations) Activity(_ context.Context, ref harness.ConversationR
 	return result, nil
 }
 
+func (f fileConversations) Path(ref harness.ConversationRef) string {
+	return f.d.inspectableTranscriptPath(ref.Session, string(ref.Harness))
+}
+
 func (f fileConversations) version(ref harness.ConversationRef, read func(path string) string) string {
-	path := f.d.inspectableTranscriptPath(ref.Session, string(ref.Harness))
+	path := f.Path(ref)
 	if path == "" {
 		return ""
 	}
 	return read(path)
+}
+
+func (f fileConversations) Check(refs []harness.ConversationRef, resumable func(id string) bool) map[harness.ConversationRef]harness.Availability {
+	availability := make(map[harness.ConversationRef]harness.Availability, len(refs))
+	for _, ref := range refs {
+		availability[ref] = f.d.storedConversation(string(ref.Harness), resumable, ref.ID)
+	}
+	return availability
+}
+
+func (f fileConversations) Ready(ref harness.ConversationRef, resumable func(id string) bool) bool {
+	return f.d.conversationReadyIn(string(ref.Harness), resumable, ref.ID)
 }
