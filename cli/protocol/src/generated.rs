@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "948201f9f88d";
+pub const PROTOCOL_VERSION: &str = "a59fdf987366";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -5373,6 +5373,10 @@ impl GitOperationStartedMessage {
 pub type GitOperationStatus = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Harness {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activity_effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub advisor_effort: Option<String>,
     pub discovery: bool,
     pub effort_pin: bool,
     pub id: String,
@@ -5505,10 +5509,14 @@ impl HarnessModelsResultMessage {
 pub struct HarnessOptions {
     pub activity: bool,
     pub auto_approve: bool,
+    pub auto_approve_unreviewed: bool,
+    pub automation_executable: bool,
     pub context_cap: bool,
+    pub discovery: bool,
     pub effort_pin: bool,
     pub executable_setting: bool,
     pub initial_prompt: bool,
+    pub keeps_conversations: bool,
     pub launch_instructions: bool,
     pub model_pin: bool,
     pub one_shot: bool,

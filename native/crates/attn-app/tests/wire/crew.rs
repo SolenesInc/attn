@@ -13,7 +13,7 @@ use attn_protocol::{
     CrewHandoffsGetResultMessage, CrewMember, CrewRenameResult, CrewRenameResultMessage,
     CrewSetResultMessage, CrewStartResultMessage, CrewUpdatedMessage, Desktop, DesktopPane,
     InitialStateMessage, LaunchDesktopResultMessage, LaunchDesktopSetting, OpenSeedResultMessage,
-    PartyView, Profile, ProfileArrangementChangedMessage, Seed, Session, SettingsUpdatedMessage,
+    PartyView, Profile, ProfileArrangementChangedMessage, Seed, Session,
 };
 use attn_testkit::{Answer, Daemon, Request, Target, World, message, tree};
 use rune::{Key, KeyEvent, Mods};
@@ -512,9 +512,11 @@ fn the_harness_list_marks_an_unavailable_harness_and_follows_availability_withou
         vec![session("s1", "claude")],
         Vec::new(),
     ));
-    world.daemon.emit(SettingsUpdatedMessage {
-        settings: Some([("claude_available".to_owned(), "false".to_owned())].into()),
-        ..SettingsUpdatedMessage::new()
+    let mut claude_missing = attn_testkit::built_in_harnesses();
+    claude_missing[0].installation = "missing".into();
+    world.daemon.emit(attn_protocol::HarnessCatalogMessage {
+        harnesses: claude_missing,
+        ..attn_protocol::HarnessCatalogMessage::new()
     });
     world.settle();
     open(&mut world);
@@ -526,14 +528,19 @@ fn the_harness_list_marks_an_unavailable_harness_and_follows_availability_withou
             .map(|(_, _, enabled)| enabled)
     };
     assert_eq!(claude(&world), Some(false));
-    world.daemon.emit(SettingsUpdatedMessage {
-        settings: Some([("claude_available".to_owned(), "true".to_owned())].into()),
-        ..SettingsUpdatedMessage::new()
+    world.daemon.emit(attn_protocol::HarnessCatalogMessage {
+        harnesses: attn_testkit::built_in_harnesses(),
+        ..attn_protocol::HarnessCatalogMessage::new()
     });
     world.settle();
     assert_eq!(claude(&world), Some(true));
     assert!(world.daemon.sent_of("crew_set").is_empty());
-    assert_eq!(world.daemon.sent_of("delegation_preferences_get").len(), 1);
+    assert!(
+        world
+            .daemon
+            .sent_of("delegation_preferences_get")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -2161,9 +2168,11 @@ fn an_unavailable_stored_route_stays_visible() {
     let current = routed(member("trellis", 1), "codex", "gpt-6-astra", "high");
     let d = daemon(vec![current], vec![session("s1", "claude")], Vec::new());
     let mut world = World::start(d);
-    world.daemon.emit(SettingsUpdatedMessage {
-        settings: Some([("codex_available".to_owned(), "false".to_owned())].into()),
-        ..SettingsUpdatedMessage::new()
+    let mut codex_missing = attn_testkit::built_in_harnesses();
+    codex_missing[1].installation = "missing".into();
+    world.daemon.emit(attn_protocol::HarnessCatalogMessage {
+        harnesses: codex_missing,
+        ..attn_protocol::HarnessCatalogMessage::new()
     });
     world.settle();
     open(&mut world);
@@ -2420,21 +2429,25 @@ fn the_roster_stays_navigable_while_the_harness_list_is_read() {
         vec![member("alder", 2), member("keel", 3)],
         vec![session("s1", "claude")],
         Vec::new(),
-    );
-    d.answer_in_turn("delegation_preferences_get", [Answer::Hold]);
+    )
+    .without_harness_catalog();
     let mut world = World::start(d);
     open(&mut world);
     click(&mut world, "crew.roster.keel");
     assert_eq!(heading(&world).as_deref(), Some("Keel"));
-    let read = world.daemon.sent_of("delegation_preferences_get").remove(0);
-    world.daemon.reply_to(
-        &read,
-        preferences_result(vec![harness("claude", "Claude Code")]),
-    );
+    world.daemon.emit(attn_protocol::HarnessCatalogMessage {
+        harnesses: vec![harness("claude", "Claude Code")],
+        ..attn_protocol::HarnessCatalogMessage::new()
+    });
     world.settle();
     assert!(enabled(&world, "settings.route.crew.keel"));
     assert_eq!(heading(&world).as_deref(), Some("Keel"));
-    assert_eq!(world.daemon.sent_of("delegation_preferences_get").len(), 1);
+    assert!(
+        world
+            .daemon
+            .sent_of("delegation_preferences_get")
+            .is_empty()
+    );
 }
 
 #[test]

@@ -89,10 +89,10 @@ pub(crate) fn resting(state: &State, member: &str) -> Resting {
     }
 }
 
-fn idle_lead(harness: Option<&str>, t: &Tokens) -> El {
+fn idle_lead(state: &State, harness: Option<&str>, t: &Tokens) -> El {
     match harness {
         Some(harness) => system::icon(
-            super::harness_icon::of(harness),
+            crate::harness::logo::of(state, harness),
             IconSize::Regular,
             t.state_idle,
         ),
@@ -198,7 +198,7 @@ pub(crate) const QUEUE_ROW: &str = "queue-crew.member";
 pub(crate) const CLASSIC_ROW: &str = "sidebar.crew";
 
 /// A member between sessions: pressing the row or its sun starts the member in two clicks.
-pub(crate) fn row_view(key: String, m: &Resting, t: &Tokens) -> El {
+pub(crate) fn row_view(state: &State, key: String, m: &Resting, t: &Tokens) -> El {
     let armed = m.phase == Some(Phase::Armed);
     let start_label = if armed {
         format!("Start {} — click again to confirm", m.name)
@@ -263,7 +263,7 @@ pub(crate) fn row_view(key: String, m: &Resting, t: &Tokens) -> El {
     let row = ListRow::new(key.clone(), start_label)
         .role("listitem")
         .unfocusable()
-        .lead(idle_lead(m.harness.as_deref(), t))
+        .lead(idle_lead(state, m.harness.as_deref(), t))
         .title_el(
             Inline::joined()
                 .grow(1.0)
@@ -304,6 +304,7 @@ pub(crate) fn row_view(key: String, m: &Resting, t: &Tokens) -> El {
 /// The Chief's slot before it has a session: Set up opens its setup, and the slot says when
 /// the Chief is starting.
 pub(crate) fn chief_setup_row(
+    state: &State,
     key: String,
     chief: &crate::chief::View,
     logos: bool,
@@ -322,6 +323,7 @@ pub(crate) fn chief_setup_row(
     };
     let row = ListRow::new(key.clone(), format!("Set up {}", chief.name))
         .lead(idle_lead(
+            state,
             logos.then_some(chief.agent.as_deref().unwrap_or_default()),
             t,
         ))

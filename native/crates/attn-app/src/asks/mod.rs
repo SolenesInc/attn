@@ -550,7 +550,12 @@ impl<'a> Lists<'a> {
             Item {
                 ask,
                 holder,
-                from: from(ask, holder, standby.as_ref().map(|s| s.tender)),
+                from: from(
+                    ask,
+                    holder,
+                    standby.as_ref().map(|s| s.tender),
+                    &facts.harnesses,
+                ),
                 standby,
                 questions: questions(ask).count(),
                 snoozed_until: None,
@@ -685,7 +690,12 @@ fn standby_tender<'a>(ask: &Ask, facts: &'a Facts) -> Option<Standby<'a>> {
     })
 }
 
-fn from(ask: &Ask, holder: Option<&Session>, standby: Option<&StandbyTender>) -> String {
+fn from(
+    ask: &Ask,
+    holder: Option<&Session>,
+    standby: Option<&StandbyTender>,
+    harnesses: &[attn_protocol::Harness],
+) -> String {
     if holder.is_some_and(|s| s.chief_of_staff == Some(true)) {
         return "Chief".into();
     }
@@ -699,11 +709,11 @@ fn from(ask: &Ask, holder: Option<&Session>, standby: Option<&StandbyTender>) ->
     if let (None, Some(tender)) = (holder, standby) {
         return format!(
             "{} · on standby",
-            crate::desktop::chain::dormant_name(tender)
+            crate::desktop::chain::dormant_name(tender, harnesses)
         );
     }
     match (holder, &ask.seed_id) {
-        (Some(session), _) => crate::sidebar::display_name(session),
+        (Some(session), _) => crate::sidebar::display_name(session, harnesses),
         (None, Some(seed)) => format!("waiting for {}", next_tender_of(seed, ask)),
         (None, None) => "Closed agent".into(),
     }
@@ -719,18 +729,21 @@ fn next_tender_of(seed: &str, ask: &Ask) -> String {
 fn follow_up_notice(ask: &Ask, holder: Option<&str>, facts: &Facts) -> String {
     if let Some(id) = holder {
         return match facts.sessions.iter().find(|s| s.id == id) {
-            Some(session) => format!("Follow-up sent to {}", from(ask, Some(session), None)),
+            Some(session) => format!(
+                "Follow-up sent to {}",
+                from(ask, Some(session), None, &facts.harnesses)
+            ),
             None => "Follow-up sent".into(),
         };
     }
     let waits_for = match (standby_tender(ask, facts), &ask.crew_member, &ask.seed_id) {
         (Some(standby), _, _) if standby.resumes => {
-            let name = crate::desktop::chain::dormant_name(standby.tender);
+            let name = crate::desktop::chain::dormant_name(standby.tender, &facts.harnesses);
             return format!("Follow-up resumes {name}");
         }
         (Some(standby), _, _) => format!(
             "{} · on standby",
-            crate::desktop::chain::dormant_name(standby.tender)
+            crate::desktop::chain::dormant_name(standby.tender, &facts.harnesses)
         ),
         (None, Some(member), _) => format!("{}'s next session", crew_display_name(member)),
         (None, None, Some(seed)) => next_tender_of(seed, ask),
@@ -1294,7 +1307,7 @@ pub(crate) fn toggle_snooze(state: &mut State, tx: &mut Tx) {
         crate::sidebar::wake(state, &holder.id);
         return;
     }
-    let name = from(ask, Some(&holder), None);
+    let name = from(ask, Some(&holder), None, &state.facts.harnesses);
     crate::sidebar::snooze::open(state, &holder.id, name, Some(view::SNOOZE.into()), tx);
 }
 

@@ -228,7 +228,25 @@ impl World {
 
     /// [`World::start`] with a window `size` points wide and tall.
     pub fn start_sized(daemon: Daemon, size: (f32, f32)) -> World {
-        World::start_with(daemon, size, attn_app::whats_new::seen_prefs(), INSTANCE)
+        World::start_with(
+            daemon,
+            size,
+            attn_app::whats_new::seen_prefs(),
+            INSTANCE,
+            None,
+        )
+    }
+
+    /// [`World::start`] keeping its instance data under `data_dir`, so a later world on the same
+    /// folder sees what an earlier run cached on disk.
+    pub fn start_with_data_dir(daemon: Daemon, data_dir: std::path::PathBuf) -> World {
+        World::start_with(
+            daemon,
+            VIEWPORT,
+            attn_app::whats_new::seen_prefs(),
+            INSTANCE,
+            Some(data_dir),
+        )
     }
 
     /// [`World::start`] for an app of `instance`, against a daemon of the same instance.
@@ -238,13 +256,14 @@ impl World {
             VIEWPORT,
             attn_app::whats_new::seen_prefs(),
             instance,
+            None,
         )
     }
 
     /// [`World::start`] for someone whose app settings are `prefs`, such as a first launch's
     /// empty store or a file an earlier world saved to.
     pub fn start_with_prefs(daemon: Daemon, prefs: rune::prefs::Prefs) -> World {
-        World::start_with(daemon, VIEWPORT, prefs, INSTANCE)
+        World::start_with(daemon, VIEWPORT, prefs, INSTANCE, None)
     }
 
     /// [`World::start_with_prefs`] with a window `size` points wide and tall.
@@ -253,7 +272,7 @@ impl World {
         size: (f32, f32),
         prefs: rune::prefs::Prefs,
     ) -> World {
-        World::start_with(daemon, size, prefs, INSTANCE)
+        World::start_with(daemon, size, prefs, INSTANCE, None)
     }
 
     fn start_with(
@@ -261,6 +280,7 @@ impl World {
         size: (f32, f32),
         prefs: rune::prefs::Prefs,
         instance: &str,
+        custom_data_dir: Option<std::path::PathBuf>,
     ) -> World {
         crate::machine::settle();
         attn_app::use_prefs(prefs);
@@ -354,7 +374,7 @@ impl World {
             });
             runtime.update(move |state, _| state.open_tile_windows(opener, main));
         }
-        let data_dir = files.path().join("data");
+        let data_dir = custom_data_dir.unwrap_or_else(|| files.path().join("data"));
         let capture = crate::capture::CaptureRuntime::start(
             &store,
             link.commands(),
@@ -368,6 +388,7 @@ impl World {
             runtime.update(move |state, _| {
                 state.use_quick_capture(window, &data_dir);
                 state.quick_capture_runs();
+                state.cache_logos_in(data_dir.join("cache").join("harness-logos"));
                 state.log_input_to(&data_dir.join("debug"));
             });
         }
@@ -622,6 +643,7 @@ impl World {
                 && self.terminals.is_empty()
                 && self.replies.is_empty()
                 && !self.runtime.state().pictures.decoding()
+                && !self.runtime.state().logos.loading()
             {
                 return;
             }

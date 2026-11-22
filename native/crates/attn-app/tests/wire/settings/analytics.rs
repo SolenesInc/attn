@@ -969,7 +969,7 @@ fn new_vents_list_before_done_ones_and_the_selected_vent_shows_its_context() {
     );
     assert_eq!(
         named(&world, "settings.analytics.vent.agent"),
-        "Claude 2.4.1 · claude-opus-5-5 (requested opus)"
+        "Claude Code 2.4.1 · claude-opus-5-5 (requested opus)"
     );
     assert_eq!(
         named(&world, "settings.analytics.vent.destination"),

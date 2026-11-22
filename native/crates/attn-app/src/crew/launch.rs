@@ -277,7 +277,7 @@ fn inherited(state: &State, shown: &Shown) -> Option<Route> {
 pub(crate) fn route(state: &State, member: &str) -> Option<(Route, Rules)> {
     let shown = shown(state, member)?;
     let rules = Rules {
-        harnesses: crate::settings::listed_harnesses(state)
+        harnesses: crate::settings::harnesses::listed(state)
             .iter()
             .map(RouteHarness::from)
             .collect(),

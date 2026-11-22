@@ -276,10 +276,11 @@ pub(crate) fn inspector(state: &State, selected: Option<&KeptConversationRow>, t
     let mut fields = Vec::new();
     if confirming {
         let bytes = r.kept.as_ref().map_or(0, |c| c.bytes);
+        let agent = crate::harness::catalog::name(&state.facts.harnesses, &r.agent);
         fields.push(
             value(
                 format!(
-                    "Delete attn’s copy of {name} ({})? Claude’s own files are not touched.",
+                    "Delete attn’s copy of {name} ({})? {agent}’s own files are not touched.",
                     amount(bytes)
                 ),
                 t,

@@ -473,6 +473,7 @@ pub(crate) fn follow_title(state: &mut State, tx: &mut Tx) {
                 Node::Leaf(leaf) => Some(super::view::leaf_title(
                     d,
                     &state.facts.sessions,
+                    &state.facts.harnesses,
                     &state.facts.tile_contents,
                     crate::garden::seeds(state),
                     leaf,

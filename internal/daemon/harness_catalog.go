@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	harnessapi "github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -33,22 +34,32 @@ func harnessRecord(ctx context.Context, h harnessapi.Harness) protocol.Harness {
 		Offered:      health.Offered,
 		Installation: installationOnWire[health.Installation],
 		Options: protocol.HarnessOptions{
-			Resume:             facts.Options.Resume,
-			Yolo:               facts.Options.Yolo,
-			AutoApprove:        facts.Options.AutoApprove,
-			InitialPrompt:      facts.Options.InitialPrompt,
-			LaunchInstructions: facts.Options.LaunchInstructions,
-			ModelPin:           facts.Options.ModelPin,
-			EffortPin:          facts.Options.EffortPin,
-			ContextCap:         facts.Options.ContextCap,
-			Provider:           facts.Options.Provider,
-			ExecutableSetting:  facts.Executable.Default != "",
-			OneShot:            oneShot,
-			Activity:           facts.Activity,
+			Resume:                facts.Options.Resume,
+			Yolo:                  facts.Options.Yolo,
+			AutoApprove:           facts.Options.AutoApprove,
+			AutoApproveUnreviewed: facts.Options.AutoApprove && facts.Options.AutoApproveUnreviewed,
+			AutomationExecutable:  facts.Options.AutomationExecutable,
+			InitialPrompt:         facts.Options.InitialPrompt,
+			LaunchInstructions:    facts.Options.LaunchInstructions,
+			ModelPin:              facts.Options.ModelPin,
+			EffortPin:             facts.Options.EffortPin,
+			Discovery:             facts.ModelDiscovery,
+			ContextCap:            facts.Options.ContextCap,
+			Provider:              facts.Options.Provider,
+			ExecutableSetting:     facts.Executable.Default != "",
+			OneShot:               oneShot,
+			Activity:              facts.Activity,
+			KeepsConversations:    keepsConversations(h),
 		},
 		ModelPin:  facts.Options.ModelPin,
 		EffortPin: facts.Options.EffortPin,
 		Discovery: facts.ModelDiscovery,
+	}
+	if effort := facts.Tiers[modeltiers.Light].Effort; effort != "" {
+		record.ActivityEffort = protocol.Ptr(effort)
+	}
+	if effort := facts.Advisor.Effort; effort != "" {
+		record.AdvisorEffort = protocol.Ptr(effort)
 	}
 	if hash := facts.Logo.Hash(); hash != "" {
 		record.Logo = protocol.Ptr(hash)

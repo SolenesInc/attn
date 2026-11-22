@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use attn_protocol::{
     DelegationChoice, DelegationFallback, DelegationPreferences,
     DelegationPreferencesChangedMessage, DelegationPreferencesResultMessage, DelegationRole,
-    DelegationSelection, Harness, HarnessModelsResultMessage, SettingsUpdatedMessage, TierDefaults,
+    DelegationSelection, Harness, HarnessModelsResultMessage, TierDefaults,
 };
 use attn_testkit::{Request, Target, World, message};
 use rune::Key;
@@ -54,11 +54,24 @@ fn codex() -> Harness {
         id: "codex".into(),
         name: "Codex".into(),
         installation: "installed".into(),
-        model_pin: true,
-        effort_pin: true,
-        discovery: true,
+        offered: true,
+        options: attn_protocol::HarnessOptions {
+            initial_prompt: true,
+            model_pin: true,
+            effort_pin: true,
+            discovery: true,
+            ..attn_protocol::HarnessOptions::default()
+        },
         ..Harness::default()
     }
+}
+
+fn push_harnesses(world: &mut World, harnesses: Vec<Harness>) {
+    world.daemon.emit(attn_protocol::HarnessCatalogMessage {
+        harnesses,
+        ..attn_protocol::HarnessCatalogMessage::new()
+    });
+    world.settle();
 }
 
 fn selection(harness: &str, provider: &str, model: &str, effort: &str) -> DelegationSelection {
@@ -284,6 +297,8 @@ fn everyday_catalog() -> HarnessModelsResultMessage {
 fn on_delegation(spec: Spec) -> (World, Server) {
     let (daemon, _) = accepting(&[]);
     let enabled = spec.enabled.unwrap_or(!spec.roles.is_empty());
+    let initial_harnesses = spec.harnesses.unwrap_or_else(|| vec![codex()]);
+    daemon.set_harnesses(initial_harnesses.clone());
     let server = Server(Arc::new(Mutex::new(Table {
         preferences: DelegationPreferences {
             enabled,
@@ -296,7 +311,7 @@ fn on_delegation(spec: Spec) -> (World, Server) {
         expanded: spec
             .expanded
             .unwrap_or_else(|| Box::new(|roles| roles.to_vec())),
-        harnesses: spec.harnesses.unwrap_or_else(|| vec![codex()]),
+        harnesses: initial_harnesses,
         holding_saves: false,
         held_saves: Vec::new(),
         holding_loads: false,
@@ -1006,15 +1021,17 @@ fn the_fallback_row_stays_when_the_table_has_no_roles() {
 }
 
 #[test]
-fn showing_the_section_again_reloads_the_table_and_its_harnesses() {
+fn showing_the_section_again_reloads_the_table_and_pushed_harnesses_appear() {
     let (mut world, server) = on_delegation(Spec::default());
     assert_eq!(loads(&world), 1);
-    server.table().harnesses.push(Harness {
-        id: "plug".into(),
-        name: "Plug".into(),
-        discovery: false,
-        ..codex()
-    });
+    let mut plug = codex();
+    plug.id = "plug".into();
+    plug.name = "Plug".into();
+    plug.options.discovery = false;
+    plug.options.provider = true;
+    server.table().harnesses.push(plug);
+    let updated = server.table().harnesses.clone();
+    push_harnesses(&mut world, updated);
     show_section_again(&mut world);
     assert_eq!(loads(&world), 2);
     open_route(&mut world, "Model for anything else");
@@ -1073,26 +1090,28 @@ fn making_an_alternative_the_default_keeps_the_former_default_as_an_alternative(
 }
 
 fn picker_harnesses() -> Vec<Harness> {
+    let mut house = codex();
+    house.id = "house".into();
+    house.name = "House".into();
+    house.options.model_pin = false;
+    house.options.effort_pin = false;
+    house.options.discovery = false;
+    house.options.provider = true;
+
+    let mut plug = codex();
+    plug.id = "plug".into();
+    plug.name = "Plug".into();
+    plug.options.discovery = false;
+    plug.options.provider = true;
+
     vec![
         Harness {
             id: "claude".into(),
             name: "Claude".into(),
             ..codex()
         },
-        Harness {
-            id: "house".into(),
-            name: "House".into(),
-            model_pin: false,
-            effort_pin: false,
-            discovery: false,
-            ..codex()
-        },
-        Harness {
-            id: "plug".into(),
-            name: "Plug".into(),
-            discovery: false,
-            ..codex()
-        },
+        house,
+        plug,
     ]
 }
 
@@ -1193,16 +1212,14 @@ const BUILD_CHIP: &str = "settings.route.delegation.build/default";
 #[test]
 fn an_unavailable_harness_stays_pickable_and_marked_without_reading_the_table_again() {
     let (mut world, _, _) = picker(selection("claude", "", "", ""), false);
-    let availability = |world: &mut World, on: &str| {
-        world.daemon.emit(SettingsUpdatedMessage {
-            settings: Some([("claude_available".to_owned(), on.to_owned())].into()),
-            ..SettingsUpdatedMessage::new()
-        });
-        world.settle();
+    let availability = |world: &mut World, installation: &str| {
+        let mut list = picker_harnesses();
+        list[0].installation = installation.into();
+        push_harnesses(world, list);
     };
-    availability(&mut world, "true");
+    availability(&mut world, "installed");
     let reads = loads(&world);
-    availability(&mut world, "false");
+    availability(&mut world, "missing");
     let claude = world
         .screen()
         .get(Target::key("settings.route-picker.harness.claude"));
@@ -1212,31 +1229,6 @@ fn an_unavailable_harness_stays_pickable_and_marked_without_reading_the_table_ag
         Some("Unavailable on this daemon")
     );
     assert_eq!(loads(&world), reads);
-    rest(&mut world);
-}
-
-#[test]
-fn a_failed_capability_refresh_keeps_the_confirmed_harnesses() {
-    let (mut world, server, _) = picker(selection("claude", "", "opus", "high"), false);
-    server.fail_loads("Harness refresh unavailable");
-    world.daemon.emit(SettingsUpdatedMessage {
-        settings: Some([("claude_cap_model_discovery".to_owned(), "false".to_owned())].into()),
-        ..SettingsUpdatedMessage::new()
-    });
-    world.settle();
-    assert!(
-        options(&world, "harnesses")
-            .iter()
-            .any(|(name, _, _)| name.starts_with("Plug"))
-    );
-    preview_harness(&mut world, "Plug");
-    assert!(saves(&world).is_empty());
-    enter_model(&mut world, "openai/gpt-next", None);
-    let s = server.preferences().roles[0].choices[0].selection.clone();
-    assert_eq!(
-        (s.harness, s.provider, s.model, s.effort),
-        route_of("plug", "openai", "gpt-next", "")
-    );
     rest(&mut world);
 }
 
@@ -1336,11 +1328,10 @@ fn a_known_unsupported_manual_model_is_refused_while_an_unknown_provider_is_acce
         (false, "blocked"),
         (true, "blocked"),
     ] {
-        let house = Harness {
-            id: "house".into(),
-            name: "House".into(),
-            ..codex()
-        };
+        let mut house = codex();
+        house.id = "house".into();
+        house.name = "House".into();
+        house.options.provider = true;
         let (mut world, _) = on_delegation(Spec {
             roles: vec![build_on(selection("house", "", "", ""))],
             harnesses: Some(vec![house]),
@@ -1431,13 +1422,12 @@ fn a_harness_that_chooses_its_model_commits_only_when_its_default_row_is_chosen(
 #[test]
 fn a_plugin_that_discovers_but_cannot_pin_offers_only_its_default() {
     for stored in ["locked", ""] {
-        let house = Harness {
-            id: "house".into(),
-            name: "House".into(),
-            model_pin: false,
-            effort_pin: false,
-            ..codex()
-        };
+        let mut house = codex();
+        house.id = "house".into();
+        house.name = "House".into();
+        house.options.model_pin = false;
+        house.options.effort_pin = false;
+        house.options.provider = true;
         let (mut world, _) = on_delegation(Spec {
             roles: vec![build_on(selection("house", "", stored, "high"))],
             harnesses: Some(vec![house]),
@@ -1486,11 +1476,10 @@ fn a_plugin_that_discovers_but_cannot_pin_offers_only_its_default() {
 #[test]
 fn effort_stays_free_when_the_harness_chooses_the_model() {
     for alias in [false, true] {
-        let house = Harness {
-            id: "house".into(),
-            name: "House".into(),
-            ..codex()
-        };
+        let mut house = codex();
+        house.id = "house".into();
+        house.name = "House".into();
+        house.options.provider = true;
         let (mut world, _) = on_delegation(Spec {
             roles: vec![build_on(selection("house", "", "pinned", "high"))],
             harnesses: Some(vec![house]),

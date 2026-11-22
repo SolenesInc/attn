@@ -5972,6 +5972,12 @@ const GitOperationStatusRunning GitOperationStatus = "running"
 const GitOperationStatusSucceeded GitOperationStatus = "succeeded"
 
 type Harness struct {
+	// ActivityEffort corresponds to the JSON schema field "activity_effort".
+	ActivityEffort *string `json:"activity_effort,omitempty,omitzero"`
+
+	// AdvisorEffort corresponds to the JSON schema field "advisor_effort".
+	AdvisorEffort *string `json:"advisor_effort,omitempty,omitzero"`
+
 	// Discovery corresponds to the JSON schema field "discovery".
 	Discovery bool `json:"discovery"`
 
@@ -6135,8 +6141,19 @@ type HarnessOptions struct {
 	// AutoApprove corresponds to the JSON schema field "auto_approve".
 	AutoApprove bool `json:"auto_approve"`
 
+	// AutoApproveUnreviewed corresponds to the JSON schema field
+	// "auto_approve_unreviewed".
+	AutoApproveUnreviewed bool `json:"auto_approve_unreviewed"`
+
+	// AutomationExecutable corresponds to the JSON schema field
+	// "automation_executable".
+	AutomationExecutable bool `json:"automation_executable"`
+
 	// ContextCap corresponds to the JSON schema field "context_cap".
 	ContextCap bool `json:"context_cap"`
+
+	// Discovery corresponds to the JSON schema field "discovery".
+	Discovery bool `json:"discovery"`
 
 	// EffortPin corresponds to the JSON schema field "effort_pin".
 	EffortPin bool `json:"effort_pin"`
@@ -6146,6 +6163,9 @@ type HarnessOptions struct {
 
 	// InitialPrompt corresponds to the JSON schema field "initial_prompt".
 	InitialPrompt bool `json:"initial_prompt"`
+
+	// KeepsConversations corresponds to the JSON schema field "keeps_conversations".
+	KeepsConversations bool `json:"keeps_conversations"`
 
 	// LaunchInstructions corresponds to the JSON schema field "launch_instructions".
 	LaunchInstructions bool `json:"launch_instructions"`

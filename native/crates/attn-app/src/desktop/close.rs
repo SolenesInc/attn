@@ -37,7 +37,7 @@ pub(crate) fn request(state: &mut State, desktop_id: &str, tx: &mut Tx) {
                 .crew_member
                 .as_deref()
                 .is_some_and(|m| !m.is_empty())
-                .then(|| model::display_name(session))
+                .then(|| model::display_name(session, &state.facts.harnesses))
         })
         .collect();
     let sessions: Vec<String> = desktop.panes.iter().map(|p| p.session_id.clone()).collect();

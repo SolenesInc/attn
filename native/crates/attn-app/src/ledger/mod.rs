@@ -697,7 +697,7 @@ fn row<'a>(state: &State, entry: &'a SessionLedgerEntry) -> Row<'a> {
     if entry.host.is_none() && entry.is_worktree.unwrap_or_default() && !directory_missing {
         verbs.push(Verb::ShowWorktree);
     }
-    if keeps_conversation(entry) {
+    if keeps_conversation(&state.facts.harnesses, entry) {
         verbs.push(Verb::Keep(entry.conversation_pinned_at.is_none()));
     }
     let shell_name = live_session
@@ -729,9 +729,14 @@ fn row<'a>(state: &State, entry: &'a SessionLedgerEntry) -> Row<'a> {
     }
 }
 
-/// attn keeps copies of Claude Code conversations that ran at the home.
-pub(crate) fn keeps_conversation(entry: &SessionLedgerEntry) -> bool {
-    entry.agent == "claude" && entry.host.is_none()
+/// Whether attn keeps copies of this entry's conversations at the home.
+pub(crate) fn keeps_conversation(
+    harnesses: &[attn_protocol::Harness],
+    entry: &SessionLedgerEntry,
+) -> bool {
+    entry.host.is_none()
+        && crate::harness::catalog::options(harnesses, &entry.agent)
+            .is_some_and(|o| o.keeps_conversations)
 }
 
 /// The row the inspector reads and the keys act on: the one chosen, or the first.

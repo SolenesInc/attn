@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use attn_client::Desktop;
 use attn_client::Facts;
-use attn_protocol::{OutpostInfo, Session};
+use attn_protocol::{Harness, OutpostInfo, Session};
 use serde_json::Value;
 
 /// Desktops 1 to 9 have their own shortcut slot; the rest number on from 10.
@@ -62,6 +62,7 @@ impl AgentState {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct AgentRow {
     pub id: String,
+    pub agent: String,
     pub name: String,
     pub harness: String,
     pub state: AgentState,
@@ -105,11 +106,17 @@ impl Settling {
 }
 
 impl AgentRow {
-    pub fn of(session: &Session, outposts: &[OutpostInfo], selected: bool) -> AgentRow {
+    pub fn of(
+        session: &Session,
+        harnesses: &[Harness],
+        outposts: &[OutpostInfo],
+        selected: bool,
+    ) -> AgentRow {
         AgentRow {
             id: session.id.clone(),
-            name: display_name(session),
-            harness: harness_label(&session.agent),
+            agent: session.agent.clone(),
+            name: display_name(session, harnesses),
+            harness: harness_label(harnesses, &session.agent),
             state: AgentState::parse(&session.state),
             priority: session.priority == Some(true),
             owed: session.turn_owed == Some(true),
@@ -413,34 +420,18 @@ impl Line {
     }
 }
 
-pub fn display_name(session: &Session) -> String {
+pub fn display_name(session: &Session, harnesses: &[Harness]) -> String {
     if !session.label.is_empty() {
         return session.label.clone();
     }
     match session.title.as_deref() {
         Some(title) if !title.is_empty() => title.to_owned(),
-        _ => harness_label(&session.agent),
+        _ => harness_label(harnesses, &session.agent),
     }
 }
 
-pub fn harness_label(agent: &str) -> String {
-    match agent.trim().to_lowercase().as_str() {
-        "" => "Unknown harness".into(),
-        "claude" => "Claude".into(),
-        "codex" => "Codex".into(),
-        other => other
-            .split(['-', '_', ' '])
-            .filter(|part| !part.is_empty())
-            .map(|part| {
-                let mut chars = part.chars();
-                chars
-                    .next()
-                    .map(|c| c.to_uppercase().chain(chars).collect::<String>())
-                    .unwrap_or_default()
-            })
-            .collect::<Vec<_>>()
-            .join(" "),
-    }
+pub fn harness_label(harnesses: &[Harness], agent: &str) -> String {
+    crate::harness::catalog::name(harnesses, agent)
 }
 
 /// The selected profile's desktops in their order, the order the daemon's `order_key` gives.
@@ -625,7 +616,7 @@ fn agent_line(
     on_screen: &[String],
 ) -> Line {
     let selected = shown && active == Some(session.id.as_str());
-    let row = AgentRow::of(session, &facts.outposts, selected)
+    let row = AgentRow::of(session, &facts.harnesses, &facts.outposts, selected)
         .asking(facts, session)
         .chained(session, facts);
     Line::Agent {

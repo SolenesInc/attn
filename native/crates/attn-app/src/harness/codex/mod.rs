@@ -155,7 +155,7 @@ fn name_of(state: &State, session: &str) -> (String, bool) {
         .find(|s| s.id == session)
         .map_or((session.to_owned(), false), |s| {
             (
-                crate::sidebar::model::display_name(s),
+                crate::sidebar::model::display_name(s, &state.facts.harnesses),
                 s.hidden == Some(true),
             )
         })
@@ -234,6 +234,37 @@ pub(crate) fn poll(state: &mut State, tx: &mut Tx) -> bool {
         }
     }
     changed
+}
+
+pub(crate) fn installing(state: &State) -> bool {
+    state.window.shared_codex.installing
+}
+
+pub(crate) fn install_notifying(state: &mut State, tx: &mut Tx) {
+    let Some(desktop_id) = state.facts.current_desktop().map(|d| d.id.clone()) else {
+        return;
+    };
+    let window = &mut state.window.shared_codex;
+    if window.installing {
+        return;
+    }
+    window.installing = true;
+    state.ask(
+        |request_id| InstallCodexUpdateMessage {
+            desktop_id,
+            request_id: Some(request_id),
+            ..InstallCodexUpdateMessage::new()
+        },
+        |state, answer, tx| {
+            state.window.shared_codex.installing = false;
+            if let Err(why) = answer.outcome() {
+                state
+                    .window
+                    .notify(format!("Could not install the Codex update: {why}"), tx);
+            }
+        },
+        tx,
+    );
 }
 
 pub(crate) fn install(state: &mut State, tx: &mut Tx) {

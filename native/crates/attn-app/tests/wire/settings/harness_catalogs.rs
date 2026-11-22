@@ -11,13 +11,46 @@ use serde_json::{Value, json};
 use super::{Settings, click};
 
 pub(crate) fn harness(id: &str, name: &str) -> Harness {
+    let builtin = matches!(id, "claude" | "codex" | "sigma");
+    let mut options = attn_protocol::HarnessOptions {
+        resume: true,
+        yolo: builtin,
+        auto_approve: builtin,
+        initial_prompt: true,
+        launch_instructions: builtin,
+        model_pin: true,
+        effort_pin: true,
+        discovery: true,
+        executable_setting: builtin,
+        one_shot: builtin,
+        activity: true,
+        ..attn_protocol::HarnessOptions::default()
+    };
+    if id == "claude" || id == "codex" {
+        options.context_cap = true;
+    }
+    if id == "claude" || id == "sigma" {
+        options.automation_executable = true;
+    }
+    if id == "claude" {
+        options.keeps_conversations = true;
+    }
+    if id == "sigma" {
+        options.provider = true;
+        options.auto_approve_unreviewed = true;
+    }
     Harness {
         id: id.into(),
         name: name.into(),
         installation: "installed".into(),
-        model_pin: true,
-        effort_pin: true,
-        discovery: true,
+        offered: true,
+        activity_effort: (id == "codex").then(|| "low".into()),
+        advisor_effort: match id {
+            "claude" => Some("medium".into()),
+            "codex" => Some("xhigh".into()),
+            _ => None,
+        },
+        options,
         ..Harness::default()
     }
 }
@@ -182,6 +215,7 @@ pub(crate) fn preferences_result(harnesses: Vec<Harness>) -> DelegationPreferenc
 
 /// Answers the harness list with `harnesses` and each catalog read from [`catalog`].
 pub(crate) fn serve(daemon: &Daemon, settings: &Settings, harnesses: Vec<Harness>) {
+    daemon.set_harnesses(harnesses.clone());
     daemon.on("delegation_preferences_get", move |_| {
         message(preferences_result(harnesses.clone()))
     });

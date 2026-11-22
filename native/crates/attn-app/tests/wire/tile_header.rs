@@ -1458,7 +1458,7 @@ fn a_header_without_a_label_goes_by_its_harness() {
         },
     );
     let rename = world.screen().get(Target::key("tile.a.rename"));
-    assert_eq!(rename.name.as_deref(), Some("Rename session Claude"));
+    assert_eq!(rename.name.as_deref(), Some("Rename session Claude Code"));
     rest(&mut world);
 }
 

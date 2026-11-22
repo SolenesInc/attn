@@ -36,6 +36,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         (
             std::sync::Arc::as_ptr(&facts.garden) as usize,
             std::sync::Arc::as_ptr(&facts.outposts) as usize,
+            std::sync::Arc::as_ptr(&facts.harnesses) as usize,
         ),
         window.now_ms,
         window.follow_next_turn,

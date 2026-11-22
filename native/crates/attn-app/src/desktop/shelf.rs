@@ -107,6 +107,7 @@ pub(crate) fn title(
         Some(Node::Leaf(l)) => super::view::leaf_title(
             desktop,
             &facts.sessions,
+            &facts.harnesses,
             &facts.tile_contents,
             facts.garden.of(&facts.profiles.selected),
             l,

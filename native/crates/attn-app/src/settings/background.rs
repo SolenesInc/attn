@@ -227,22 +227,6 @@ fn config(state: &State, key: &str) -> Config {
     draft_config(state.window.settings.autosave.draft(key))
 }
 
-fn activity_agents(state: &State) -> Vec<String> {
-    let configured = parse_activity(
-        state
-            .facts
-            .settings
-            .get(ACTIVITY_CONFIG)
-            .map(String::as_str),
-    );
-    harnesses::headless_agents(&state.facts.settings, &configured.agent)
-}
-
-fn advisor_agents(state: &State) -> Vec<String> {
-    let configured = parse_advisor(state.facts.settings.get(GARDEN_ADVISOR).map(String::as_str));
-    harnesses::headless_agents(&state.facts.settings, &configured.agent)
-}
-
 fn route_of(config: Config) -> Route {
     Route::stored(&config.agent, &config.model, &config.effort)
 }
@@ -261,34 +245,37 @@ const ADVISOR_ROUTE: &str = "garden-advisor";
 
 fn read_route(state: &State, id: &str) -> Option<(Route, Rules)> {
     match id {
-        ACTIVITY_ROUTE => Some((
-            route_of(config(state, ACTIVITY_CONFIG)),
-            Rules {
-                harnesses: harnesses::headless(state, &activity_agents(state)),
-                allow_none: true,
-                require_available: true,
-                effort: Some(|harness| harness != "claude"),
-                tier: Some("light"),
-                default_effort: Some(|_| "low"),
-                one_shot: true,
-                ..Rules::default()
-            },
-        )),
-        ADVISOR_ROUTE => Some((
-            route_of(config(state, GARDEN_ADVISOR)),
-            Rules {
-                harnesses: harnesses::headless(state, &advisor_agents(state)),
-                require_available: true,
-                tier: Some("light"),
-                default_effort: Some(|harness| match harness {
-                    "codex" => "xhigh",
-                    "claude" => "medium",
-                    _ => "",
-                }),
-                one_shot: true,
-                ..Rules::default()
-            },
-        )),
+        ACTIVITY_ROUTE => {
+            let current = config(state, ACTIVITY_CONFIG);
+            Some((
+                route_of(current.clone()),
+                Rules {
+                    harnesses: harnesses::headless(state, &current.agent, |h| {
+                        h.activity_effort.as_deref()
+                    }),
+                    allow_none: true,
+                    require_available: true,
+                    tier: Some("light"),
+                    one_shot: true,
+                    ..Rules::default()
+                },
+            ))
+        }
+        ADVISOR_ROUTE => {
+            let current = config(state, GARDEN_ADVISOR);
+            Some((
+                route_of(current.clone()),
+                Rules {
+                    harnesses: harnesses::headless(state, &current.agent, |h| {
+                        h.advisor_effort.as_deref()
+                    }),
+                    require_available: true,
+                    tier: Some("light"),
+                    one_shot: true,
+                    ..Rules::default()
+                },
+            ))
+        }
         _ => None,
     }
 }
@@ -409,7 +396,18 @@ fn session_activity(state: &State, t: &Tokens) -> Block {
             )
             .build(t),
         );
-    if activity_agents(state).is_empty() {
+    let saved = parse_activity(
+        state
+            .facts
+            .settings
+            .get(ACTIVITY_CONFIG)
+            .map(String::as_str),
+    );
+    if state.facts.harnesses_loaded
+        && saved.agent.is_empty()
+        && !crate::harness::catalog::offered(&state.facts.harnesses)
+            .any(|h| h.available() && h.options.one_shot)
+    {
         section = section.push(
             Notice::warn(
                 "settings.activity.no-agents",
@@ -419,7 +417,6 @@ fn session_activity(state: &State, t: &Tokens) -> Block {
         );
     }
     section
-        .push_all(harnesses::failure_notice(state, "activity", t))
         .push(Block::custom(
             "settings.route.activity.block",
             route::field_chip(
@@ -445,13 +442,9 @@ fn session_activity(state: &State, t: &Tokens) -> Block {
 }
 
 fn garden_advisor(state: &State, t: &Tokens) -> Block {
-    let settings = &state.facts.settings;
     let agent = config(state, GARDEN_ADVISOR).agent;
-    let runs_here = |suffix: &str| {
-        settings
-            .get(&format!("{agent}_{suffix}"))
-            .is_none_or(|v| v != "false")
-    };
+    let can_run = crate::harness::catalog::by_id(&state.facts.harnesses, &agent)
+        .is_some_and(|h| h.offered && h.available() && h.options.one_shot);
     let mut section = Section::new("settings.block.garden-advisor", "Garden advisor")
         .description("Classifies seeds during Review garden and can draft a handoff. It runs in the background with this saved agent and cannot change a seed.");
     if agent.is_empty() {
@@ -462,20 +455,19 @@ fn garden_advisor(state: &State, t: &Tokens) -> Block {
             )
             .build(t),
         );
-    } else if !(runs_here("available") && runs_here("cap_headless_task")) {
+    } else if state.facts.harnesses_loaded && !can_run {
         section = section.push(
             Notice::warn(
                 "settings.garden-advisor.unavailable",
                 format!(
                     "{} is saved for Garden review but cannot run headless tasks here.",
-                    crate::picker::agents::label(&agent)
+                    crate::harness::catalog::name(&state.facts.harnesses, &agent)
                 ),
             )
             .build(t),
         );
     }
     section
-        .push_all(harnesses::failure_notice(state, "garden-advisor", t))
         .push(Block::custom(
             "settings.route.garden-advisor.block",
             route::field_chip(state, t, target(ADVISOR_ROUTE), "Garden advisor model"),

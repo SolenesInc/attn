@@ -585,7 +585,10 @@ fn vent_detail(
     let context = &vent.context;
     let model = items::model_label(context.model.as_deref(), context.model_requested.as_deref());
     let mut agent = [
-        Some(crate::sidebar::model::harness_label(&context.harness)),
+        Some(crate::sidebar::model::harness_label(
+            &state.facts.harnesses,
+            &context.harness,
+        )),
         context.harness_version.clone(),
     ]
     .into_iter()

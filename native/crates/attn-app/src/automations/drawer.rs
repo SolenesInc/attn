@@ -19,7 +19,7 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
     let automations = &state.window.automations;
     let body = match &automations.form {
         Some(form) => form::view(state, form, t),
-        None => list(automations, t),
+        None => list(automations, &state.facts.harnesses, t),
     };
     col()
         .key(DRAWER)
@@ -57,7 +57,7 @@ fn new_button(key: &str, t: &Tokens) -> El {
         .into()
 }
 
-fn list(automations: &Automations, t: &Tokens) -> El {
+fn list(automations: &Automations, harnesses: &[attn_protocol::Harness], t: &Tokens) -> El {
     let mut sheet = Sheet::new("automations.sheet", "Automations")
         .body_key("automations.body")
         .aside(new_button("automations.new", t))
@@ -69,7 +69,7 @@ fn list(automations: &Automations, t: &Tokens) -> El {
         automations.loaded && automations.error.is_none() && automations.definitions.is_empty();
     let mut definitions = List::new("automations.list", "Automations").card();
     for definition in &automations.definitions {
-        let (row, under) = definition_row(automations, definition, t);
+        let (row, under) = definition_row(automations, definition, harnesses, t);
         definitions = definitions.row_with(row, under);
     }
     if shows_empty {
@@ -109,6 +109,7 @@ fn note(key: String, said: String, t: &Tokens) -> Block {
 fn definition_row(
     automations: &Automations,
     definition: &AutomationDefinitionSummary,
+    harnesses: &[attn_protocol::Harness],
     t: &Tokens,
 ) -> (ListRow, Vec<Block>) {
     let id = definition.id;
@@ -211,7 +212,7 @@ fn definition_row(
         }
         if let Some(fix) = &run.fix {
             let fix = fix.clone();
-            let harness = crate::picker::agents::label(&fix.agent);
+            let harness = crate::harness::catalog::name(harnesses, &fix.agent);
             let help = fix.directory.clone();
             under.push(
                 Actions::new("automations.trust.actions")

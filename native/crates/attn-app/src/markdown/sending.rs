@@ -103,6 +103,7 @@ fn name_at_most(room: Room) -> f32 {
 pub(crate) fn controls(
     (drafts, readings): (&super::Drafts, &super::Readings),
     sessions: &[Session],
+    harnesses: &[attn_protocol::Harness],
     desktop: &Desktop,
     tile: &str,
     uri: &str,
@@ -116,7 +117,7 @@ pub(crate) fn controls(
     let to = destination(readings, desktop, sessions, tile, kind.bound());
     let name = to.map_or_else(
         || "No session".to_owned(),
-        crate::sidebar::model::display_name,
+        |s| crate::sidebar::model::display_name(s, harnesses),
     );
     let any = !desktop_sessions(desktop, sessions).is_empty();
     let noting = matches!(kind, Kind::Seed { tender: None, .. });
@@ -607,6 +608,7 @@ pub(crate) fn layers(state: &State, cx: &Cx<State>, t: &Tokens) -> Vec<El> {
                     menu(
                         tile,
                         desktop_sessions(desktop, &state.facts.sessions),
+                        &state.facts.harnesses,
                         current.as_deref(),
                         t,
                     )
@@ -636,10 +638,16 @@ pub(crate) fn layers(state: &State, cx: &Cx<State>, t: &Tokens) -> Vec<El> {
 
 /// The desktop's sessions to send tile `tile`'s marks to, beside its header controls, with
 /// `current` checked.
-fn menu(tile: &str, sessions: Vec<&Session>, current: Option<&str>, t: &Tokens) -> Vec<El> {
+fn menu(
+    tile: &str,
+    sessions: Vec<&Session>,
+    harnesses: &[attn_protocol::Harness],
+    current: Option<&str>,
+    t: &Tokens,
+) -> Vec<El> {
     let items = sessions.into_iter().enumerate().map(|(i, s)| {
         let (pressed, session) = (tile.to_owned(), s.id.clone());
-        let item = MenuItem::new(crate::sidebar::model::display_name(s))
+        let item = MenuItem::new(crate::sidebar::model::display_name(s, harnesses))
             .key(key(tile, &format!("send.menu.{i}")))
             .checked(current == Some(s.id.as_str()))
             .on_select_tx(move |state: &mut State, tx: &mut Tx| {

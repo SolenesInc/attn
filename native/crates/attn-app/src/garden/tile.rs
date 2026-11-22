@@ -39,7 +39,7 @@ pub(crate) fn body(
     let view = format!("{prefix}.viewport");
     let (document, error) = super::reading(reads.garden, id);
     let held = reads.seeds.iter().find(|s| s.id == id);
-    let names = model::session_names(reads.sessions);
+    let names = model::session_names(reads.sessions, reads.harnesses);
     let sheet = Sheet {
         prefix,
         view: view.clone(),

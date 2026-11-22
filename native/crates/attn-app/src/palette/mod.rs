@@ -341,7 +341,7 @@ pub(crate) fn listing(state: &State) -> Listing {
     if let (Some(snoozing), Some(agent)) = (&search.snoozing, snoozed_agent(state)) {
         return Listing {
             mode: Mode::Snooze {
-                name: display_name(agent),
+                name: display_name(agent, &state.facts.harnesses),
             },
             rows: CHOICES
                 .iter()

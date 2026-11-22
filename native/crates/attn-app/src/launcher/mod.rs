@@ -435,7 +435,7 @@ impl Launcher {
 
     /// The harnesses on offer: this machine's, and those any outpost has installed.
     pub(crate) fn agents(&self, state: &State) -> Agents {
-        Agents::from_settings(&state.facts.settings)
+        Agents::from_catalog(&state.facts.harnesses)
             .with_installed(self.catalogs.values().flatten().flatten().cloned())
     }
 
@@ -451,7 +451,7 @@ impl Launcher {
                 .catalogs
                 .values()
                 .any(Option::is_some)
-                .then(|| Agents::from_settings(&state.facts.settings).installed()),
+                .then(|| Agents::from_catalog(&state.facts.harnesses).installed()),
         }
     }
 
@@ -516,7 +516,7 @@ impl Launcher {
             };
             Problem::from(format!(
                 "{} is not installed on {name}. Pick another harness ({keys}) or machine.",
-                agents::label(agent)
+                agents::named(&state.facts.harnesses, agent)
             ))
         })
     }

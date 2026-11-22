@@ -173,6 +173,7 @@ mod wire {
     mod field_keys;
     mod frame_cost;
     mod garden;
+    mod harness_logos;
     mod home;
     mod home_pull_requests;
     mod keys;

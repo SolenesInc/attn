@@ -336,17 +336,18 @@ type Executable struct {
 
 // Options are the launch options a harness takes.
 type Options struct {
-	Resume               bool
-	Yolo                 bool
-	AutoApprove          bool
-	AutomationExecutable bool
-	InitialPrompt        bool
-	LaunchInstructions   bool
-	ModelPin             bool
-	EffortPin            bool
-	ContextCap           bool
-	Picker               bool
-	Provider             bool
+	Resume                bool
+	Yolo                  bool
+	AutoApprove           bool
+	AutoApproveUnreviewed bool
+	AutomationExecutable  bool
+	InitialPrompt         bool
+	LaunchInstructions    bool
+	ModelPin              bool
+	EffortPin             bool
+	ContextCap            bool
+	Picker                bool
+	Provider              bool
 }
 
 // Request is the launch options a caller asks of a harness.

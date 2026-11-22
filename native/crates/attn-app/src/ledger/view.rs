@@ -590,7 +590,7 @@ fn inspector(state: &State, selected: Option<&Row<'_>>, t: &Tokens) -> El {
     if closed {
         shown = shown.push(reopen_verdict(state, r, t));
     }
-    if super::keeps_conversation(entry) {
+    if super::keeps_conversation(&state.facts.harnesses, entry) {
         let keep = entry.conversation_pinned_at.is_none();
         let verb = Verb::Keep(keep);
         let id = entry.id.clone();

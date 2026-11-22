@@ -1,52 +1,48 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-pub(crate) const TERMINAL: &str = "shell";
+use attn_protocol::Harness;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Availability {
-    Available,
-    Checking,
-    Unavailable,
+pub(crate) use crate::harness::catalog::{Availability, TERMINAL};
+
+/// Which harnesses this machine offers, from the daemon's pushed catalog, with Terminal always
+/// there and in the daemon's catalog order.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Agents {
+    availability: BTreeMap<String, Availability>,
+    order: Vec<String>,
 }
 
-/// Which harnesses this machine has, from the daemon's `<harness>_available` settings, with
-/// Terminal always there.
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct Agents(BTreeMap<String, Availability>);
-
 impl Agents {
-    pub(crate) fn from_settings(settings: &BTreeMap<String, String>) -> Agents {
-        let mut agents: BTreeMap<String, Availability> = [
-            ("codex".to_owned(), Availability::Available),
-            ("claude".to_owned(), Availability::Available),
-        ]
-        .into();
-        for (key, value) in settings {
-            let key = key.trim().to_lowercase();
-            let Some(agent) = key.strip_suffix("_available").map(str::trim) else {
-                continue;
-            };
-            if agent.is_empty() {
+    pub(crate) fn from_catalog(harnesses: &[Harness]) -> Agents {
+        let mut availability = BTreeMap::new();
+        let mut order = Vec::new();
+        for h in crate::harness::catalog::offered(harnesses) {
+            let id = crate::harness::catalog::normalize(&h.id);
+            if id.is_empty() || id == TERMINAL {
                 continue;
             }
-            let availability = match value.trim().to_lowercase().as_str() {
-                "true" => Availability::Available,
-                "false" => Availability::Unavailable,
-                "checking" => Availability::Checking,
-                _ => continue,
-            };
-            agents.insert(agent.to_owned(), availability);
+            if !availability.contains_key(&id) {
+                order.push(id.clone());
+            }
+            availability.insert(id, crate::harness::catalog::availability(h));
         }
-        agents.insert(TERMINAL.into(), Availability::Available);
-        Agents(agents)
+        availability.insert(TERMINAL.into(), Availability::Available);
+        Agents {
+            availability,
+            order,
+        }
     }
 
     /// These agents with the harnesses another machine has installed offered too, except
     /// those this machine is still checking for.
     pub(crate) fn with_installed(mut self, installed: impl IntoIterator<Item = String>) -> Agents {
         for agent in installed {
-            if self.of(&agent) != Availability::Checking {
-                self.0.insert(agent, Availability::Available);
+            let id = crate::harness::catalog::normalize(&agent);
+            if id.is_empty() {
+                continue;
+            }
+            if self.of(&id) != Availability::Checking {
+                self.availability.insert(id, Availability::Available);
             }
         }
         self
@@ -54,12 +50,12 @@ impl Agents {
 
     /// Every harness these agents know of, Terminal among them.
     pub(crate) fn ids(&self) -> impl Iterator<Item = &String> {
-        self.0.keys()
+        self.availability.keys()
     }
 
     /// The harnesses that are there or still being checked for.
-    pub(crate) fn installed(&self) -> std::collections::BTreeSet<String> {
-        self.0
+    pub(crate) fn installed(&self) -> BTreeSet<String> {
+        self.availability
             .keys()
             .filter(|id| self.selectable(id))
             .cloned()
@@ -67,8 +63,8 @@ impl Agents {
     }
 
     pub(crate) fn of(&self, agent: &str) -> Availability {
-        self.0
-            .get(agent)
+        self.availability
+            .get(&crate::harness::catalog::normalize(agent))
             .copied()
             .unwrap_or(Availability::Unavailable)
     }
@@ -78,16 +74,19 @@ impl Agents {
     }
 
     /// The agents the picker lists: Terminal, then the harness catalog in the daemon's order,
-    /// then the other harnesses the daemon reports, by name. Before the catalog arrives, only
-    /// Terminal.
-    pub(crate) fn listed(&self, catalog: Option<&[String]>) -> Vec<String> {
+    /// then any outpost-only harnesses by name. Before the catalog arrives, only Terminal.
+    pub(crate) fn listed(&self, loaded: bool) -> Vec<String> {
         let mut listed = vec![TERMINAL.to_owned()];
-        let Some(catalog) = catalog else {
+        if !loaded {
             return listed;
-        };
-        let mut rest: Vec<&String> = self.0.keys().filter(|k| !catalog.contains(k)).collect();
+        }
+        let mut rest: Vec<&String> = self
+            .availability
+            .keys()
+            .filter(|k| *k != TERMINAL && !self.order.contains(k))
+            .collect();
         rest.sort();
-        for agent in catalog.iter().chain(rest) {
+        for agent in self.order.iter().chain(rest) {
             if !listed.contains(agent) {
                 listed.push(agent.clone());
             }
@@ -97,7 +96,7 @@ impl Agents {
 
     /// The agent the picker starts on: `preferred` while it is there, else none.
     pub(crate) fn resolve(&self, preferred: &str) -> String {
-        let preferred = normalize(preferred);
+        let preferred = crate::harness::catalog::normalize(preferred);
         if self.selectable(&preferred) {
             preferred
         } else {
@@ -116,53 +115,20 @@ pub(crate) fn choose_one() -> String {
     format!("Choose a harness ({keys})")
 }
 
-fn normalize(agent: &str) -> String {
-    agent.trim().to_lowercase()
-}
-
-pub(crate) fn label(agent: &str) -> String {
-    match normalize(agent).as_str() {
-        TERMINAL => "Terminal".into(),
-        "claude" => "Claude".into(),
-        "codex" => "Codex".into(),
-        other => other
-            .split(['-', '_', ' '])
-            .filter(|part| !part.is_empty())
-            .map(|part| {
-                let mut chars = part.chars();
-                chars
-                    .next()
-                    .map(|first| first.to_uppercase().chain(chars).collect::<String>())
-                    .unwrap_or_default()
-            })
-            .collect::<Vec<_>>()
-            .join(" "),
+pub(crate) fn named(harnesses: &[Harness], agent: &str) -> String {
+    if crate::harness::catalog::normalize(agent) == TERMINAL {
+        "Terminal".into()
+    } else {
+        crate::harness::catalog::name(harnesses, agent)
     }
 }
 
-/// "Claude", "Codex", or a plugin harness's id in words, unless the daemon names it.
-pub(crate) fn named(settings: &BTreeMap<String, String>, agent: &str) -> String {
-    settings
-        .get(&format!("{agent}_display_name"))
-        .map(|n| n.trim().to_owned())
-        .filter(|n| !n.is_empty())
-        .unwrap_or_else(|| label(agent))
-}
-
 /// What the YOLO switch says for `agent`, a harness without the mode.
-pub(crate) fn no_yolo(agent: &str) -> String {
-    let name = if agent == TERMINAL {
-        "Shell".into()
-    } else {
-        label(agent)
-    };
-    format!("{name} does not support yolo mode")
-}
-
-pub(crate) fn supports_yolo(settings: &BTreeMap<String, String>, agent: &str) -> bool {
-    settings
-        .get(&format!("{agent}_cap_yolo"))
-        .is_some_and(|v| v.trim().eq_ignore_ascii_case("true"))
+pub(crate) fn no_yolo(harnesses: &[Harness], agent: &str) -> String {
+    format!(
+        "{} does not support yolo mode",
+        crate::harness::catalog::name(harnesses, agent)
+    )
 }
 
 /// Whether the user last left YOLO on.

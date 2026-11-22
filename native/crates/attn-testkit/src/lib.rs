@@ -9,7 +9,8 @@ pub mod tree;
 mod world;
 
 pub use daemon::{
-    Answer, CLIENT_TOKEN, Daemon, INSTANCE, IntoReplies, Marker, Request, Traffic, message,
+    Answer, CLIENT_TOKEN, Daemon, INSTANCE, IntoReplies, Marker, Request, Traffic,
+    built_in_harnesses, message,
 };
 pub use machine::{mac, platform};
 pub use screen::{Node, Screen, Target};

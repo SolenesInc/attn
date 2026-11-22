@@ -22,6 +22,7 @@ mod editor;
 mod frame;
 pub mod frame_recorder;
 pub mod garden;
+mod harness;
 mod harness_menu;
 pub mod headless;
 mod home;
@@ -50,7 +51,6 @@ mod review;
 pub mod screen;
 mod sender_pairing;
 mod settings;
-mod shared_codex;
 mod shell;
 mod shortcut_editor;
 pub mod sidebar;
@@ -129,6 +129,7 @@ pub struct State {
     pub window: Window,
     pub terminals: Terminals,
     pub pictures: markdown::Pictures,
+    pub logos: harness::logo::Logos,
     pub drafts: markdown::Drafts,
     pub readings: markdown::Readings,
     pub opener: opener::Opener,
@@ -160,6 +161,10 @@ impl State {
     pub fn log_input_to(&mut self, debug_dir: &std::path::Path) {
         self.terminals.latency.log_to(debug_dir);
         self.terminals.trace.lock().unwrap().log_to(debug_dir);
+    }
+
+    pub fn cache_logos_in(&mut self, dir: std::path::PathBuf) {
+        self.logos.cache_in(dir);
     }
 
     pub(crate) fn wall_ms(&self) -> i64 {
@@ -226,7 +231,8 @@ pub fn bind(
     let woken = deliver.clone();
     let wake: rune::Waker = Arc::new(move || woken(Box::new(|_, _| {})));
     deliver(Box::new(move |state, _| {
-        state.pictures.start(wake);
+        state.pictures.start(wake.clone());
+        state.logos.start(wake);
         state
             .terminals
             .trace
@@ -256,6 +262,7 @@ pub fn bind(
             state.facts = facts;
             if was && !is {
                 requests::forget(state, tx);
+                harness::logo::disconnected(state);
                 settings::disconnected(state);
             }
             if !was && is {
@@ -295,6 +302,7 @@ pub fn bind(
             notifications::follow(state, was, tx);
             update_run::follow(state, tx);
             outpost_updates::follow(state, tx);
+            harness::logo::follow(state, tx);
             settings::follow(state, changed, tx);
             shortcut_editor::follow(state);
             quick_capture::shortcut::follow(state);
@@ -376,7 +384,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         | launch_desktop::poll(state, tx)
         | launcher::follow_highlight(state, answered, tx);
     let browsed = browsed | opener::browse_due(state, tx);
-    let pictured = markdown::follow_images(state, now, tx);
+    let pictured = markdown::follow_images(state, now, tx) | harness::logo::poll(state, tx);
     let reviewed = review::follow(state, tx);
     let noted = notebook::follow(state, now, tx);
     let drafted = markdown::drafts::follow(state, now, tx)
@@ -401,7 +409,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         settings::poll(state, now, tx) | crew::poll(state, now, tx) | chief::poll(state, tx);
     let updating = update_run::poll(state, now, tx)
         | outpost_updates::poll(state, now, tx)
-        | shared_codex::poll(state, tx)
+        | harness::codex::poll(state, tx)
         | shell::follow_details(state)
         | home::pull_requests::poll(state, now);
     let automated = automations::poll(state, now, tx);

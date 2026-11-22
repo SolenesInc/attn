@@ -1,12 +1,13 @@
 use std::sync::{Arc, Mutex};
 
-use attn_protocol::SettingsUpdatedMessage;
+use attn_protocol::{Harness, HarnessCatalogMessage, HarnessOptions, SettingsUpdatedMessage};
 use attn_testkit::{Daemon, Node, Request, Target, World};
 use rune::Key;
 use serde_json::json;
 
 use super::harness_catalogs::{
-    enter_model, harnesses, open_route, options, pick_effort, pick_model, picker_open, serve,
+    enter_model, harness, harnesses, open_route, options, pick_effort, pick_model, picker_open,
+    serve,
 };
 use super::{
     Settings, accepting, click, field, keeping, open, press, rest, retype, state, tab_to, value,
@@ -14,14 +15,18 @@ use super::{
 };
 
 const LAST_PICK: (&str, &str) = ("new_session_agent", "claude");
-const BOTH: &[(&str, &str)] = &[
-    ("claude_available", "true"),
-    ("codex_available", "true"),
-    LAST_PICK,
-];
+const BOTH: &[(&str, &str)] = &[LAST_PICK];
+
+fn default_harnesses() -> Vec<Harness> {
+    vec![harness("claude", "Claude"), harness("codex", "Codex")]
+}
 
 fn on_agents_with(daemon: Daemon, stored: &Settings) -> World {
-    serve(&daemon, stored, harnesses());
+    on_agents_with_harnesses(daemon, stored, default_harnesses())
+}
+
+fn on_agents_with_harnesses(daemon: Daemon, stored: &Settings, listed: Vec<Harness>) -> World {
+    serve(&daemon, stored, listed);
     let mut world = World::start(daemon);
     open(&mut world);
     click(&mut world, "settings.nav.agents");
@@ -30,9 +35,21 @@ fn on_agents_with(daemon: Daemon, stored: &Settings) -> World {
     world
 }
 
-fn on_agents(settings: &[(&str, &str)]) -> World {
+fn on_agents_catalog(settings: &[(&str, &str)], listed: Vec<Harness>) -> World {
     let (daemon, stored) = accepting(settings);
-    on_agents_with(daemon, &stored)
+    on_agents_with_harnesses(daemon, &stored, listed)
+}
+
+fn on_agents(settings: &[(&str, &str)]) -> World {
+    on_agents_catalog(settings, default_harnesses())
+}
+
+fn push_harnesses(world: &mut World, harnesses: Vec<Harness>) {
+    world.daemon.emit(HarnessCatalogMessage {
+        harnesses,
+        ..HarnessCatalogMessage::new()
+    });
+    world.settle();
 }
 
 fn both<'a>(settings: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
@@ -428,14 +445,12 @@ fn a_refused_context_cap_keeps_its_group_open_and_the_dialog_with_it() {
 
 #[test]
 fn sigma_shows_its_executable_and_default_route_and_no_context_cap_it_cannot_apply() {
-    let mut world = on_agents(&both(&[
-        ("sigma_available", "true"),
-        ("sigma_cap_executable_setting", "true"),
-        ("sigma_cap_model_pin", "true"),
-        ("sigma_cap_effort_pin", "true"),
-        ("sigma_cap_context_window_cap", "false"),
-        ("sigma_executable", "/opt/sigma/bin/sigma"),
-    ]));
+    let mut listed = default_harnesses();
+    listed.push(harness("sigma", "Sigma"));
+    let mut world = on_agents_catalog(
+        &both(&[("sigma_executable", "/opt/sigma/bin/sigma")]),
+        listed,
+    );
     assert!(groups(&world).contains(&"Sigma".to_owned()));
     open_advanced(&mut world, "sigma");
     assert!(shows(&world, "settings.route.default-sigma"));
@@ -471,20 +486,36 @@ fn auto_approve_says_sigma_approves_every_call_without_review_only_while_sigma_i
     let world = on_agents(BOTH);
     assert!(!says_unreviewed(&world));
     rest(&mut { world });
-    let world = on_agents(&both(&[
-        ("sigma_available", "true"),
-        ("sigma_cap_executable_setting", "true"),
-    ]));
+    let mut listed = default_harnesses();
+    listed.push(harness("sigma", "Sigma"));
+    let world = on_agents_catalog(BOTH, listed);
     assert!(says_unreviewed(&world));
     rest(&mut { world });
 }
 
 #[test]
 fn a_plugin_agent_lists_its_capabilities_without_an_executable_field() {
-    let mut world = on_agents(&[("snipe_available", "true"), ("snipe_cap_resume", "true")]);
+    let mut listed = default_harnesses();
+    listed.push(Harness {
+        id: "snipe".into(),
+        name: "Snipe".into(),
+        installation: "installed".into(),
+        offered: true,
+        options: HarnessOptions {
+            resume: true,
+            ..HarnessOptions::default()
+        },
+        ..Harness::default()
+    });
+    let mut world = on_agents_catalog(&[], listed);
     assert!(groups(&world).contains(&"Snipe".to_owned()));
     open_advanced(&mut world, "snipe");
-    assert_eq!(capabilities(&world, "snipe"), ["Resume Supported"]);
+    let caps = capabilities(&world, "snipe");
+    assert!(caps.contains(&"Resume Supported".to_owned()), "{caps:?}");
+    assert!(
+        caps.contains(&"Custom executable Unavailable".to_owned()),
+        "{caps:?}"
+    );
     let list = world
         .screen()
         .get(Target::role("list").name("Capabilities"));
@@ -633,11 +664,11 @@ fn a_default_agent_reversal_made_while_the_first_choice_saves_is_kept() {
 
 #[test]
 fn an_agent_being_checked_reads_checking_until_the_daemon_knows() {
-    let mut world = on_agents(&[
-        ("new_session_agent", "claude"),
-        ("claude_available", "checking"),
-        ("codex_available", "checking"),
-    ]);
+    let mut checking = default_harnesses();
+    for h in &mut checking {
+        h.installation = "checking".into();
+    }
+    let mut world = on_agents_catalog(&[("new_session_agent", "claude")], checking);
     let claude = "settings.default-agent.claude";
     assert!(said_with(&world, "settings.agent.claude.toggle").ends_with(", Checking"));
     assert!(!node(&world, claude).is("disabled"));
@@ -649,18 +680,7 @@ fn an_agent_being_checked_reads_checking_until_the_daemon_knows() {
     assert!(shows(&world, "settings.default-agent.claude.checking"));
     assert!(!shows(&world, "settings.agents.none"));
 
-    world.daemon.emit(SettingsUpdatedMessage {
-        settings: Some(
-            [
-                ("new_session_agent".to_owned(), "claude".to_owned()),
-                ("claude_available".to_owned(), "true".to_owned()),
-                ("codex_available".to_owned(), "true".to_owned()),
-            ]
-            .into(),
-        ),
-        ..SettingsUpdatedMessage::new()
-    });
-    world.settle();
+    push_harnesses(&mut world, default_harnesses());
     assert!(said_with(&world, "settings.agent.claude.toggle").ends_with(", Available"));
     assert!(
         node(&world, claude)
@@ -673,7 +693,11 @@ fn an_agent_being_checked_reads_checking_until_the_daemon_knows() {
 
 #[test]
 fn an_agent_missing_from_path_cannot_be_the_default_and_none_found_says_so() {
-    let mut world = on_agents(&[("claude_available", "false"), ("codex_available", "false")]);
+    let mut missing = default_harnesses();
+    for h in &mut missing {
+        h.installation = "missing".into();
+    }
+    let mut world = on_agents_catalog(&[], missing);
     let claude = node(&world, "settings.default-agent.claude");
     assert!(claude.is("disabled"));
     assert_eq!(
@@ -689,11 +713,9 @@ fn an_agent_missing_from_path_cannot_be_the_default_and_none_found_says_so() {
 
 #[test]
 fn a_missing_agent_says_why_under_the_pointer_and_takes_no_press_or_tab_stop() {
-    let mut world = on_agents(&[
-        ("new_session_agent", "codex"),
-        ("claude_available", "false"),
-        ("codex_available", "true"),
-    ]);
+    let mut listed = default_harnesses();
+    listed[0].installation = "missing".into();
+    let mut world = on_agents_catalog(&[("new_session_agent", "codex")], listed);
     let claude = "settings.default-agent.claude";
     assert!(node(&world, claude).is("disabled"));
     assert!(!shows(&world, "settings.agents.none"));
@@ -741,17 +763,24 @@ fn a_missing_agent_says_why_under_the_pointer_and_takes_no_press_or_tab_stop() {
     rest(&mut world);
 }
 
+fn long_plugin_harnesses(installation: &str) -> Vec<Harness> {
+    let mut listed = default_harnesses();
+    listed.push(Harness {
+        id: "snipe".into(),
+        name: "Engineering observability staging review agent with a long name".into(),
+        installation: installation.into(),
+        offered: true,
+        ..Harness::default()
+    });
+    listed
+}
+
 #[test]
 fn a_long_plugin_name_stacks_the_default_agent_in_the_smallest_window_and_down_still_chooses() {
-    let mut world = on_agents(&both(&[
-        ("uiScale", "1.5"),
-        ("new_session_agent", "claude"),
-        ("snipe_available", "true"),
-        (
-            "snipe_display_name",
-            "Engineering observability staging review agent with a long name",
-        ),
-    ]));
+    let mut world = on_agents_catalog(
+        &both(&[("uiScale", "1.5"), ("new_session_agent", "claude")]),
+        long_plugin_harnesses("installed"),
+    );
     let agents = ["claude", "codex", "snipe"].map(|a| format!("settings.default-agent.{a}"));
     let bounds = |world: &World| {
         agents
@@ -796,17 +825,7 @@ fn a_long_plugin_name_stacks_the_default_agent_in_the_smallest_window_and_down_s
     rest(&mut world);
 }
 
-const LONG_PLUGIN: &[(&str, &str)] = &[
-    ("uiScale", "1.5"),
-    ("claude_available", "true"),
-    ("codex_available", "true"),
-    ("new_session_agent", "claude"),
-    ("snipe_available", "true"),
-    (
-        "snipe_display_name",
-        "Engineering observability staging review agent with a long name",
-    ),
-];
+const LONG_PLUGIN: &[(&str, &str)] = &[("uiScale", "1.5"), ("new_session_agent", "claude")];
 
 const DEFAULT_AGENTS: [&str; 3] = [
     "settings.default-agent.claude",
@@ -851,12 +870,10 @@ fn options_by_frame(rec: &rune::motion_gate::Recording) -> Vec<Vec<[f32; 4]>> {
 #[test]
 fn a_cut_missing_agent_says_its_whole_name_and_why_it_is_off_in_one_tooltip() {
     let long = "Engineering observability staging review agent with a long name";
-    let mut world = on_agents(&both(&[
-        ("uiScale", "1.5"),
-        ("new_session_agent", "claude"),
-        ("snipe_available", "false"),
-        ("snipe_display_name", long),
-    ]));
+    let mut world = on_agents_catalog(
+        &both(&[("uiScale", "1.5"), ("new_session_agent", "claude")]),
+        long_plugin_harnesses("missing"),
+    );
     world.resize((800.0, 600.0));
     let snipe = "settings.default-agent.snipe";
     assert!(node(&world, snipe).is("disabled"));
@@ -881,7 +898,7 @@ fn a_cut_missing_agent_says_its_whole_name_and_why_it_is_off_in_one_tooltip() {
 #[test]
 fn the_default_agent_is_stacked_from_the_first_frame_the_smallest_window_draws_it() {
     let (daemon, stored) = accepting(LONG_PLUGIN);
-    serve(&daemon, &stored, harnesses());
+    serve(&daemon, &stored, long_plugin_harnesses("installed"));
     let mut world = World::start_sized(daemon, (800.0, 600.0));
     open(&mut world);
     let rec = world.record(60.0, 0.5, |_, app| {
@@ -906,7 +923,7 @@ fn the_default_agent_switches_once_at_one_width_and_holds_still_either_side() {
         .filter(|(k, _)| *k != "uiScale")
         .collect();
     let (daemon, stored) = accepting(&at_full_text);
-    serve(&daemon, &stored, harnesses());
+    serve(&daemon, &stored, long_plugin_harnesses("installed"));
     let mut world = World::start_sized(daemon, (800.0, 600.0));
     open(&mut world);
     click(&mut world, "settings.nav.agents");
@@ -958,46 +975,61 @@ fn the_default_agent_switches_once_at_one_width_and_holds_still_either_side() {
 
 #[test]
 fn a_plugin_agent_shows_its_declared_name() {
-    let mut world = on_agents(&[
-        ("snipe_available", "true"),
-        ("snipe_display_name", "Xirp Agent"),
-    ]);
+    let mut listed = default_harnesses();
+    listed.push(Harness {
+        id: "snipe".into(),
+        name: "Xirp Agent".into(),
+        installation: "installed".into(),
+        offered: true,
+        ..Harness::default()
+    });
+    let mut world = on_agents_catalog(&[], listed);
     assert!(groups(&world).contains(&"Xirp Agent".to_owned()));
     rest(&mut world);
 }
 
 #[test]
 fn the_preferred_agent_comes_first_with_what_each_agent_supports() {
-    let mut world = on_agents(&[
-        ("new_session_agent", "plug"),
-        ("plug_available", "true"),
-        ("mistral_available", "true"),
-        ("codex_cap_transcript_watcher", "true"),
-        ("codex_cap_classifier", "false"),
-        ("plug_cap_custom_cap", "true"),
-    ]);
+    let mut listed = vec![
+        harness("codex", "Codex"),
+        harness("claude", "Claude"),
+        Harness {
+            id: "plug".into(),
+            name: "Plug".into(),
+            installation: "installed".into(),
+            offered: true,
+            options: HarnessOptions {
+                resume: true,
+                activity: true,
+                ..HarnessOptions::default()
+            },
+            ..Harness::default()
+        },
+        Harness {
+            id: "mistral".into(),
+            name: "Mistral".into(),
+            installation: "installed".into(),
+            offered: true,
+            ..Harness::default()
+        },
+    ];
+    listed[0].options.activity = true;
+    listed[1].options.activity = false;
+    let mut world = on_agents_catalog(&[("new_session_agent", "plug")], listed);
     assert_eq!(groups(&world), ["Plug", "Codex", "Claude", "Mistral"]);
     for agent in ["plug", "codex", "claude", "mistral"] {
         open_advanced(&mut world, agent);
     }
-    assert_eq!(capabilities(&world, "plug"), ["custom cap Supported"]);
-    let built_in = [
-        "Automations Supported",
-        "Context cap Supported",
-        "Effort pin Supported",
-        "Custom executable Supported",
-        "Model pin Supported",
-    ];
-    assert_eq!(
-        capabilities(&world, "codex"),
-        [
-            &["Transcript watch Supported", "Classifier Unavailable"][..],
-            &built_in[..]
-        ]
-        .concat()
+    assert!(capabilities(&world, "plug").contains(&"Resume Supported".to_owned()));
+    assert!(capabilities(&world, "plug").contains(&"Activity Supported".to_owned()));
+    assert!(capabilities(&world, "plug").contains(&"YOLO Unavailable".to_owned()));
+    assert!(capabilities(&world, "codex").contains(&"Activity Supported".to_owned()));
+    assert!(capabilities(&world, "claude").contains(&"Activity Unavailable".to_owned()));
+    assert!(
+        capabilities(&world, "mistral")
+            .iter()
+            .all(|c| c.ends_with(" Unavailable"))
     );
-    assert_eq!(capabilities(&world, "claude"), built_in);
-    assert!(capabilities(&world, "mistral").is_empty());
     rest(&mut world);
 }
 

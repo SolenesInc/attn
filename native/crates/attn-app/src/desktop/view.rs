@@ -85,9 +85,12 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
     let sublines = desktop.map_or_else(Vec::new, |d| sublines(d, facts, desk, keep.as_deref()));
     let focus_style = super::FocusStyle::chosen();
     let reads = (
-        version(&facts.desktops),
-        version(&facts.profiles),
-        version(&facts.settings),
+        (
+            version(&facts.desktops),
+            version(&facts.profiles),
+            version(&facts.settings),
+            version(&facts.harnesses),
+        ),
         holder.clone(),
         desk.shown_row.clone(),
         composing,
@@ -109,7 +112,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
             d.panes
                 .iter()
                 .filter_map(|p| facts.sessions.iter().find(|s| s.id == p.session_id))
-                .map(|s| crate::sidebar::AgentRow::of(s, &facts.outposts, false))
+                .map(|s| crate::sidebar::AgentRow::of(s, &facts.harnesses, &facts.outposts, false))
                 .collect()
         })
         .unwrap_or_default();
@@ -324,7 +327,11 @@ fn sublines(
         .filter_map(|p| {
             let s = facts.sessions.iter().find(|s| s.id == p.session_id)?;
             let mut sub = Subline {
-                seed: super::seed_chip::of(s, seeds, &crate::sidebar::display_name(s)),
+                seed: super::seed_chip::of(
+                    s,
+                    seeds,
+                    &crate::sidebar::display_name(s, &facts.harnesses),
+                ),
                 role: super::chain::trigger(s, facts),
                 host: super::host::name(s, &facts.outposts),
                 usage: super::usage::badge(s),
@@ -833,6 +840,7 @@ pub(super) fn share(child: El, ratio: f32) -> El {
 pub(crate) fn leaf_title(
     desktop: &Desktop,
     sessions: &[Session],
+    harnesses: &[attn_protocol::Harness],
     contents: &attn_client::TileContents,
     seeds: &[std::sync::Arc<attn_protocol::Seed>],
     leaf: &Leaf,
@@ -853,7 +861,7 @@ pub(crate) fn leaf_title(
         LeafKind::Pane => {
             let pane = pane_of(desktop, &leaf.id);
             pane.and_then(|p| sessions.iter().find(|s| s.id == p.session_id))
-                .map(crate::sidebar::display_name)
+                .map(|s| crate::sidebar::display_name(s, harnesses))
                 .or_else(|| pane.map(|p| p.title.clone()).filter(|t| !t.is_empty()))
                 .unwrap_or_else(|| "Terminal".into())
         }
@@ -905,7 +913,14 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
     let desktop = cx.desktop;
     let active = leaf.id == desktop.active_pane_id;
     let held = cx.holder.is_some_and(|h| h.pane == leaf.id);
-    let title = leaf_title(desktop, cx.sessions, cx.contents, cx.seeds.seeds, leaf);
+    let title = leaf_title(
+        desktop,
+        cx.sessions,
+        cx.seeds.harnesses,
+        cx.contents,
+        cx.seeds.seeds,
+        leaf,
+    );
     let holder = Holder {
         desktop: desktop.id.clone(),
         pane: leaf.id.clone(),
@@ -1164,6 +1179,7 @@ fn document_controls(leaf: &Leaf, cx: &TileCx) -> Option<El> {
     Some(crate::markdown::sending::controls(
         cx.marks,
         cx.sessions,
+        cx.seeds.harnesses,
         cx.desktop,
         &leaf.id,
         &uri,
@@ -1297,7 +1313,7 @@ fn header(leaf: &Leaf, title: &str, look: &super::tile_look::Look, cx: &TileCx) 
     let header = match session {
         Some(s) => header.mark(crate::sidebar::state_mark(
             &key,
-            &crate::sidebar::AgentRow::of(s, cx.outposts, false),
+            &crate::sidebar::AgentRow::of(s, &cx.facts.harnesses, cx.outposts, false),
             attn_ui::system::DotSize::Small,
             t,
         )),

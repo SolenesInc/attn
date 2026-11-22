@@ -165,7 +165,6 @@ fn show(state: &mut State, tx: &mut Tx) {
     panel.opener = None;
     state.window.layer = Some(Layer::Crew);
     launch::follow(state);
-    crate::settings::crew_opened(state);
     entered(state, tx);
 }
 

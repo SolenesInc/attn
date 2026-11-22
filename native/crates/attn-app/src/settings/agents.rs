@@ -17,8 +17,8 @@ use rune::{El, Tx, text};
 
 use super::autosave::{self, Codec, PLAIN, TRIMMED};
 use super::controls::{SettingField, feature, feature_note, feature_switch, segmented};
-use super::harnesses::{self, Availability};
 use super::route::{self, Route, RouteHarness, Rules, Target, TierInfo};
+use crate::harness::catalog::{self, Availability};
 use crate::{State, setting};
 
 const DEFAULT_AGENT: &str = "new_session_agent";
@@ -28,24 +28,6 @@ const DIRECT_LAUNCH: &str = "direct_agent_launch_enabled";
 const SHARED_HOST: &str = "pty_shared_host_enabled";
 const TENDER_RESUME: &str = "garden.tender_resume";
 const OWN_PR_COMMENTS: &str = "pull_requests.own_comments";
-
-const CAPABILITY_ORDER: &[(&str, &str)] = &[
-    ("yolo", "YOLO"),
-    ("resume", "Resume"),
-    ("hooks", "Hooks"),
-    ("transcript", "Transcript"),
-    ("transcript_watcher", "Transcript watch"),
-    ("classifier", "Classifier"),
-    ("headless_task", "Headless task"),
-];
-
-const CAPABILITY_LABELS: &[(&str, &str)] = &[
-    ("executable_setting", "Custom executable"),
-    ("model_pin", "Model pin"),
-    ("effort_pin", "Effort pin"),
-    ("context_window_cap", "Context cap"),
-    ("automation", "Automations"),
-];
 
 const RESUME_CHOICES: &[(&str, &str)] = &[
     ("any", "Any mail"),
@@ -85,56 +67,60 @@ fn executable_key(agent: &str) -> String {
 }
 
 const DEFAULT_AGENT_CODEC: Codec = Codec {
-    actual: |settings, _| harnesses::picked_default(settings),
+    actual: |settings, key| {
+        settings
+            .get(key)
+            .map_or(String::new(), |v| catalog::normalize(v))
+    },
     serialize: |_, draft| Ok(draft.to_owned()),
 };
 
-fn ordered(settings: &BTreeMap<String, String>) -> Vec<String> {
-    let availability = harnesses::availability(settings);
-    let preferred = harnesses::picked_default(settings);
-    harnesses::ordered(&availability, Some(&preferred))
+fn ordered(state: &State) -> Vec<attn_protocol::Harness> {
+    let preferred = catalog::picked_default(&state.facts.settings, &state.facts.harnesses);
+    catalog::ordered(&state.facts.harnesses, Some(&preferred))
+        .into_iter()
+        .cloned()
+        .collect()
 }
 
-/// The built-in agents whose model, effort and context cap the page sets: those this machine
-/// has, and any with one of them stored.
-fn override_agents(settings: &BTreeMap<String, String>) -> Vec<String> {
-    let availability = harnesses::availability(settings);
-    let mut list: Vec<String> = ordered(settings)
-        .into_iter()
-        .filter(|a| pins_route(settings, a) && harnesses::selectable(&availability, a))
+/// The harnesses whose model, effort and context cap the page sets: those this machine
+/// has that take a pin, and any offered harness with one of them stored.
+fn override_agents(state: &State) -> Vec<String> {
+    let settings = &state.facts.settings;
+    let listed = ordered(state);
+    let mut list: Vec<String> = listed
+        .iter()
+        .filter(|h| (h.options.model_pin || h.options.effort_pin) && h.available())
+        .map(|h| h.id.clone())
         .collect();
-    for agent in ordered(settings) {
-        let stored = [model_key(&agent), effort_key(&agent), cap_key(&agent)]
+    for h in &listed {
+        let stored = [model_key(&h.id), effort_key(&h.id), cap_key(&h.id)]
             .iter()
             .any(|k| settings.get(k).is_some_and(|v| !v.trim().is_empty()));
-        if stored && !list.contains(&agent) {
-            list.push(agent);
+        if stored && !list.contains(&h.id) {
+            list.push(h.id.clone());
         }
     }
     list
 }
 
-fn pins_route(settings: &BTreeMap<String, String>, agent: &str) -> bool {
-    harnesses::has(settings, agent, "model_pin") || harnesses::has(settings, agent, "effort_pin")
-}
-
-fn executable_agents(settings: &BTreeMap<String, String>) -> Vec<String> {
-    ordered(settings)
+fn executable_agents(state: &State) -> Vec<String> {
+    ordered(state)
         .into_iter()
-        .filter(|a| harnesses::builtin(settings, a))
+        .filter(|h| h.options.executable_setting)
+        .map(|h| h.id)
         .collect()
 }
 
 /// The page's fields, with how each reads and saves.
 pub(super) fn fields(state: &State) -> Vec<(String, Codec)> {
-    let settings = &state.facts.settings;
     let mut fields = vec![(DEFAULT_AGENT.to_owned(), DEFAULT_AGENT_CODEC)];
-    for agent in override_agents(settings) {
+    for agent in override_agents(state) {
         fields.push((model_key(&agent), TRIMMED));
         fields.push((effort_key(&agent), PLAIN));
         fields.push((cap_key(&agent), TRIMMED));
     }
-    for agent in executable_agents(settings) {
+    for agent in executable_agents(state) {
         fields.push((executable_key(&agent), PLAIN));
     }
     fields.extend(pricing::fields(state));
@@ -164,8 +150,7 @@ fn target(agent: &str) -> Target {
 
 fn rules(state: &State, agent: &str) -> Rules {
     Rules {
-        harnesses: harnesses::listed(state)
-            .iter()
+        harnesses: catalog::offered(&state.facts.harnesses)
             .filter(|h| h.id == agent)
             .map(RouteHarness::from)
             .collect(),
@@ -203,7 +188,7 @@ fn write_route(state: &mut State, id: &str, route: Route, tx: &mut Tx) {
 
 /// The harnesses the page's default-model fields show, whose models it discovers.
 pub(super) fn wanted(state: &State) -> Vec<(String, bool)> {
-    override_agents(&state.facts.settings)
+    override_agents(state)
         .iter()
         .filter_map(|agent| route::wanted(state, &target(agent)))
         .collect()
@@ -239,15 +224,14 @@ fn refused(state: &State, key: &str) -> bool {
 }
 
 fn default_agent(state: &State, t: &Tokens) -> Control {
-    let settings = &state.facts.settings;
-    let availability = harnesses::availability(settings);
     let chosen = state.window.settings.autosave.draft(DEFAULT_AGENT);
-    let options = ordered(settings).into_iter().map(|agent| {
-        let label = crate::picker::agents::named(settings, &agent);
-        let status = harnesses::of(&availability, &agent);
+    let options = ordered(state).into_iter().map(|harness| {
+        let agent = harness.id.clone();
+        let label = catalog::name(&state.facts.harnesses, &agent);
+        let status = catalog::availability(&harness);
         let unavailable = status == Availability::Unavailable;
         let mut option = Segment::new(format!("settings.default-agent.{agent}"), &label)
-            .chosen(chosen == agent)
+            .chosen(!unavailable && chosen == agent)
             .disabled(unavailable);
         if status == Availability::Checking {
             option = option.trailing(
@@ -266,10 +250,9 @@ fn default_agent(state: &State, t: &Tokens) -> Control {
         if let Some(help) = help {
             option = option.help(help);
         }
-        let picked = agent.clone();
+        let picked = agent;
         option.on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            let availability = harnesses::availability(&state.facts.settings);
-            if harnesses::selectable(&availability, &picked) {
+            if catalog::by_id(&state.facts.harnesses, &picked).is_some_and(catalog::selectable) {
                 autosave::apply(state, DEFAULT_AGENT, &picked, tx);
             }
         })
@@ -279,17 +262,30 @@ fn default_agent(state: &State, t: &Tokens) -> Control {
         .build(t)
 }
 
+fn auto_approve_description(harnesses: &[attn_protocol::Harness]) -> String {
+    let unreviewed: Vec<&str> = catalog::offered(harnesses)
+        .filter(|h| h.options.auto_approve && h.options.auto_approve_unreviewed)
+        .map(|h| h.name.as_str())
+        .filter(|name| !name.is_empty())
+        .collect();
+    if unreviewed.is_empty() {
+        "Review approval requests automatically. On by default for new sessions; YOLO sessions already bypass approval.".into()
+    } else {
+        let names = unreviewed.join(" and ");
+        format!(
+            "Review approval requests automatically. {names} has no reviewer, so with this on a new {names} conversation starts with every tool call approved without review. On by default for new sessions; YOLO sessions already bypass approval."
+        )
+    }
+}
+
 fn session_defaults(state: &State, t: &Tokens) -> Block {
     let settings = &state.facts.settings;
-    let availability = harnesses::availability(settings);
-    let any = ordered(settings)
-        .iter()
-        .any(|a| harnesses::selectable(&availability, a));
+    let any = ordered(state).iter().any(catalog::selectable);
     let migrating = settings
         .get("pty_backend_mode")
         .is_some_and(|m| m.to_lowercase() == "migrating");
     let mut section = Section::new("settings.block.session-defaults", "Session defaults");
-    if !any {
+    if state.facts.harnesses_loaded && !any {
         section = section.push(
             Notice::warn(
                 "settings.agents.none",
@@ -313,11 +309,7 @@ fn session_defaults(state: &State, t: &Tokens) -> Block {
             SettingRow::new(
                 "settings.row.auto-approve",
                 "Auto-approve",
-                if harnesses::builtin(settings, "sigma") {
-                    "Let Claude and Codex review approval requests automatically. Sigma has no reviewer, so with this on a new Sigma conversation starts with every tool call approved without review. On by default for new sessions; YOLO sessions already bypass approval."
-                } else {
-                    "Let Claude and Codex review approval requests automatically. On by default for new sessions; YOLO sessions already bypass approval."
-                },
+                auto_approve_description(&state.facts.harnesses),
                 setting_toggle(AUTO_APPROVE, "Auto-approve", false, t, state),
             )
             .build(t),
@@ -493,38 +485,38 @@ fn route_badge(state: &State, agent: &str) -> String {
     .join(" ")
 }
 
-fn capability_label(capability: &str) -> String {
-    CAPABILITY_ORDER
-        .iter()
-        .chain(CAPABILITY_LABELS)
-        .find(|(key, _)| *key == capability)
-        .map_or_else(
-            || capability.replace(['_', '-'], " "),
-            |(_, l)| (*l).to_owned(),
-        )
-}
-
-fn capabilities(agent: &str, caps: Option<&BTreeMap<String, bool>>, t: &Tokens) -> Block {
-    let empty = BTreeMap::new();
-    let caps = caps.unwrap_or(&empty);
-    let known = CAPABILITY_ORDER
-        .iter()
-        .map(|(key, _)| *key)
-        .filter(|key| caps.contains_key(*key));
-    let other = caps
-        .keys()
-        .map(String::as_str)
-        .filter(|key| !CAPABILITY_ORDER.iter().any(|(k, _)| k == key));
-    known
-        .chain(other)
+fn capabilities(harness: &attn_protocol::Harness, t: &Tokens) -> Block {
+    let options = &harness.options;
+    let list = [
+        ("yolo", "YOLO", options.yolo),
+        ("resume", "Resume", options.resume),
+        ("activity", "Activity", options.activity),
+        ("one_shot", "Headless task", options.one_shot),
+        ("initial_prompt", "Initial prompt", options.initial_prompt),
+        (
+            "launch_instructions",
+            "Launch instructions",
+            options.launch_instructions,
+        ),
+        (
+            "executable_setting",
+            "Custom executable",
+            options.executable_setting,
+        ),
+        ("model_pin", "Model pin", options.model_pin),
+        ("effort_pin", "Effort pin", options.effort_pin),
+        ("context_cap", "Context cap", options.context_cap),
+        ("auto_approve", "Automations", options.auto_approve),
+        ("discovery", "Model discovery", options.discovery),
+    ];
+    list.into_iter()
         .fold(
-            Facts::new(format!("settings.agent.{agent}.capabilities")).list("Capabilities"),
-            |facts, cap| {
-                let supported = caps[cap];
+            Facts::new(format!("settings.agent.{}.capabilities", harness.id)).list("Capabilities"),
+            |facts, (cap, label, supported)| {
                 facts
                     .fact(
-                        format!("settings.agent.{agent}.capability.{cap}"),
-                        capability_label(cap),
+                        format!("settings.agent.{}.capability.{cap}", harness.id),
+                        label,
                         if supported {
                             "Supported"
                         } else {
@@ -537,7 +529,14 @@ fn capabilities(agent: &str, caps: Option<&BTreeMap<String, bool>>, t: &Tokens) 
         .build(t)
 }
 
-fn advanced(state: &State, agent: &str, overrides: bool, open: bool, t: &Tokens) -> Block {
+fn advanced(
+    state: &State,
+    harness: &attn_protocol::Harness,
+    overrides: bool,
+    open: bool,
+    t: &Tokens,
+) -> Block {
+    let agent = harness.id.as_str();
     let toggled = agent.to_owned();
     let mut part = Disclosure::new(
         format!("settings.agent.{agent}.advanced"),
@@ -550,7 +549,7 @@ fn advanced(state: &State, agent: &str, overrides: bool, open: bool, t: &Tokens)
             }
         },
     );
-    if harnesses::builtin(&state.facts.settings, agent) {
+    if harness.options.executable_setting {
         part = part.push(
             SettingField::new(executable_key(agent), "Executable")
                 .placeholder(agent)
@@ -558,7 +557,7 @@ fn advanced(state: &State, agent: &str, overrides: bool, open: bool, t: &Tokens)
                 .build(state, t),
         );
     }
-    if overrides && harnesses::has(&state.facts.settings, agent, "context_window_cap") {
+    if overrides && harness.options.context_cap {
         part = part.push(
             SettingField::new(cap_key(agent), "Context cap (tokens)")
                 .placeholder("Agent default")
@@ -567,25 +566,22 @@ fn advanced(state: &State, agent: &str, overrides: bool, open: bool, t: &Tokens)
                 .build(state, t),
         );
     }
-    let all = harnesses::capabilities(&state.facts.settings);
-    part.push(capabilities(agent, all.get(agent), t)).build(t)
+    part.push(capabilities(harness, t)).build(t)
 }
 
-fn agent_group(state: &State, agent: &str, t: &Tokens) -> Block {
-    let settings = &state.facts.settings;
+fn agent_group(state: &State, harness: &attn_protocol::Harness, t: &Tokens) -> Block {
+    let agent = harness.id.as_str();
     let page = &state.window.settings.agents;
-    let label = crate::picker::agents::named(settings, agent);
-    let status = harnesses::of(&harnesses::availability(settings), agent);
-    let overrides = override_agents(settings).iter().any(|a| a == agent);
-    let executable = harnesses::builtin(settings, agent);
+    let label = catalog::name(&state.facts.harnesses, agent);
+    let status = catalog::availability(harness);
+    let overrides = override_agents(state).iter().any(|a| a == agent);
+    let executable = harness.options.executable_setting;
     let refusal_inside = (executable && refused(state, &executable_key(agent)))
         || (overrides && refused(state, &cap_key(agent)));
     let open = refusal_inside
-        || page
-            .shown
-            .get(agent)
-            .copied()
-            .unwrap_or_else(|| harnesses::picked_default(settings) == agent);
+        || page.shown.get(agent).copied().unwrap_or_else(|| {
+            catalog::picked_default(&state.facts.settings, &state.facts.harnesses) == agent
+        });
     let toggled = agent.to_owned();
     let mut group = Disclosure::new(
         format!("settings.agent.{agent}.toggle"),
@@ -599,7 +595,10 @@ fn agent_group(state: &State, agent: &str, t: &Tokens) -> Block {
                 .shown
                 .get(&toggled)
                 .copied()
-                .unwrap_or_else(|| harnesses::picked_default(&state.facts.settings) == toggled);
+                .unwrap_or_else(|| {
+                    catalog::picked_default(&state.facts.settings, &state.facts.harnesses)
+                        == toggled
+                });
             state
                 .window
                 .settings
@@ -632,15 +631,15 @@ fn agent_group(state: &State, agent: &str, t: &Tokens) -> Block {
     };
     let advanced_open = refusal_inside || page.advanced.contains(agent);
     group
-        .push(advanced(state, agent, overrides, advanced_open, t))
+        .push(advanced(state, harness, overrides, advanced_open, t))
         .build(t)
 }
 
 pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
-    let agents = ordered(&state.facts.settings);
+    let agents = ordered(state);
     let groups = agents.iter().fold(
         Section::new("settings.block.agents", "Agents"),
-        |section, agent| section.push(agent_group(state, agent, t)),
+        |section, harness| section.push(agent_group(state, harness, t)),
     );
     vec![
         session_defaults(state, t),

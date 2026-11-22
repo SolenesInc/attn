@@ -7,8 +7,7 @@ mod view;
 
 use attn_protocol::{
     BrowseDirectoryMessage, BrowseDirectoryResultMessage, CreateWorktreeMessage,
-    CreateWorktreeResultMessage, DelegationPreferencesGetMessage,
-    DelegationPreferencesResultMessage, GetRecentLocationsMessage, GetRepoInfoMessage,
+    CreateWorktreeResultMessage, GetRecentLocationsMessage, GetRepoInfoMessage,
     GetRepoInfoResultMessage, InspectPathMessage, InspectPathResultMessage, RecentLocation,
     RecentLocationsResultMessage, SessionPlacement, SetSettingMessage, SpawnResultMessage,
     SpawnSessionMessage,
@@ -65,14 +64,6 @@ impl Which {
             Which::Inline => "launcher",
         }
     }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum Catalog {
-    Unasked,
-    Loading,
-    Loaded(Vec<String>),
-    Failed(String),
 }
 
 /// One opening of a new-session launcher: the classic picker, or Launcher 2.0 while the
@@ -141,7 +132,7 @@ impl Opened {
     /// outposts have.
     pub(crate) fn offered(&self, state: &State) -> Agents {
         match self {
-            Opened::Classic(_) => Agents::from_settings(&state.facts.settings),
+            Opened::Classic(_) => Agents::from_catalog(&state.facts.harnesses),
             Opened::Launcher(l) => l.agents(state),
         }
     }
@@ -168,7 +159,7 @@ impl Offer {
     /// This machine's harnesses.
     pub(crate) fn here(state: &State) -> Offer {
         Offer {
-            agents: Agents::from_settings(&state.facts.settings),
+            agents: Agents::from_catalog(&state.facts.harnesses),
             missing: None,
             outpost: false,
         }
@@ -201,7 +192,7 @@ impl Choice {
 
     /// The agent a launch starts: the wanted one while this machine has it, else none.
     pub(crate) fn agent(&self, state: &State) -> String {
-        self.agent_among(&Agents::from_settings(&state.facts.settings))
+        self.agent_among(&Agents::from_catalog(&state.facts.harnesses))
     }
 
     /// The agent a launch starts among the harnesses `agents` offers.
@@ -211,7 +202,9 @@ impl Choice {
 
     /// Whether a launch of `agent` starts in YOLO mode: chosen, and the agent supports it.
     pub(crate) fn yolo_for(&self, state: &State, agent: &str) -> bool {
-        self.yolo && agents::supports_yolo(&state.facts.settings, agent)
+        self.yolo
+            && crate::harness::catalog::options(&state.facts.harnesses, agent)
+                .is_some_and(|o| o.yolo)
     }
 
     /// Whether a launch starts in YOLO mode: chosen, and the agent supports it.
@@ -221,6 +214,7 @@ impl Choice {
 }
 
 /// What the new-session pickers share, and remember between openings.
+#[derive(Default)]
 pub struct Launching {
     pub(crate) dialog: Option<Opened>,
     /// The launcher of an empty desktop, kept while that desktop stays empty so a pick the
@@ -231,7 +225,6 @@ pub struct Launching {
     shown_on: Option<String>,
     pub(crate) home: String,
     pub(crate) recents: Vec<RecentLocation>,
-    pub(crate) catalog: Catalog,
     pub(crate) worktree: Option<repo::Setup>,
     openings: u64,
 }
@@ -257,22 +250,6 @@ impl Launching {
         self.starting
             .as_ref()
             .filter(|s| self.shown_on.as_deref() == Some(s.desktop.as_str()))
-    }
-}
-
-impl Default for Launching {
-    fn default() -> Self {
-        Launching {
-            dialog: None,
-            inline: None,
-            starting: None,
-            shown_on: None,
-            home: String::new(),
-            recents: Vec::new(),
-            catalog: Catalog::Unasked,
-            worktree: None,
-            openings: 0,
-        }
     }
 }
 
@@ -539,15 +516,9 @@ fn focus_key(picker: &Picker) -> String {
     }
 }
 
-/// Asks what a newly opened picker shows: this machine's recents and, until it has them, the
-/// harness catalog. A typed starting path browses once typing would.
+/// Asks what a newly opened picker shows: this machine's recents. A typed starting path browses
+/// once typing would.
 fn opened(state: &mut State, which: Which, tx: &mut Tx) {
-    if matches!(
-        state.window.launching.catalog,
-        Catalog::Unasked | Catalog::Failed(_)
-    ) {
-        ask_catalog(state, tx);
-    }
     show_agent(state, which, tx);
     if state
         .window
@@ -599,50 +570,11 @@ fn opened(state: &mut State, which: Which, tx: &mut Tx) {
 /// Asks again what the open pickers show, after the connection that would have answered them
 /// ended.
 pub(crate) fn reconnected(state: &mut State, tx: &mut Tx) {
-    if state.window.launching.catalog == Catalog::Loading {
-        state.window.launching.catalog = Catalog::Unasked;
-    }
     for which in [Which::Dialog, Which::Inline] {
         if state.window.launching.slot(which).is_some() {
             opened(state, which, tx);
         }
     }
-}
-
-fn ask_catalog(state: &mut State, tx: &mut Tx) {
-    state.window.launching.catalog = Catalog::Loading;
-    state.ask(
-        |id| DelegationPreferencesGetMessage {
-            request_id: id,
-            ..DelegationPreferencesGetMessage::new()
-        },
-        |state, reply, tx| {
-            let result: Option<DelegationPreferencesResultMessage> = reply.parse();
-            state.window.launching.catalog = match result {
-                Some(r) if r.success && r.preferences.is_some() => Catalog::Loaded(
-                    r.harnesses
-                        .unwrap_or_default()
-                        .into_iter()
-                        .map(|h| h.id)
-                        .collect(),
-                ),
-                Some(r) => Catalog::Failed(
-                    r.error
-                        .filter(|e| !e.is_empty())
-                        .unwrap_or_else(|| "Failed to load harnesses".into()),
-                ),
-                None => Catalog::Failed("Failed to load harnesses".into()),
-            };
-            for which in [Which::Dialog, Which::Inline] {
-                show_agent(state, which, tx);
-            }
-        },
-        tx,
-    );
-}
-
-pub(crate) fn retry_catalog(state: &mut State, tx: &mut Tx) {
-    ask_catalog(state, tx);
 }
 
 fn highlight_top_recent(state: &mut State, which: Which) {
@@ -915,7 +847,7 @@ pub(crate) fn agent_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut
         say_agent(state, which, tx);
         return true;
     }
-    let numbered = numbered(&agents, &state.window.launching.catalog);
+    let numbered = numbered(&agents, state.facts.harnesses_loaded);
     for (n, agent) in numbered.iter().enumerate().take(9) {
         if pressed(&format!("alt+{}", n + 1)) {
             if agents.selectable(agent) {
@@ -947,7 +879,7 @@ fn say_agent(state: &State, which: Which, tx: &mut Tx) {
     if let Some(picker) = state.window.launching.slot(which) {
         let agent = picker.agent(state);
         tx.announce(
-            agents::named(&state.facts.settings, &agent),
+            agents::named(&state.facts.harnesses, &agent),
             LiveRegion::Polite,
         );
     }
@@ -960,8 +892,10 @@ fn say_yolo(state: &State, which: Which, tx: &mut Tx) {
         return;
     };
     let agent = picker.agent(state);
-    let words = if !agents::supports_yolo(&state.facts.settings, &agent) {
-        agents::no_yolo(&agent)
+    let words = if !crate::harness::catalog::options(&state.facts.harnesses, &agent)
+        .is_some_and(|o| o.yolo)
+    {
+        agents::no_yolo(&state.facts.harnesses, &agent)
     } else if picker.choice().yolo {
         "YOLO on".to_owned()
     } else {
@@ -970,24 +904,16 @@ fn say_yolo(state: &State, which: Which, tx: &mut Tx) {
     tx.announce(words, LiveRegion::Polite);
 }
 
-/// The agents ⌥1 to ⌥9 pick, in list order, once the catalog says the order.
-pub(crate) fn numbered(agents: &Agents, catalog: &Catalog) -> Vec<String> {
-    match catalog {
-        Catalog::Loaded(order) => agents
-            .listed(Some(order))
-            .into_iter()
-            .filter(|a| a != TERMINAL)
-            .collect(),
-        _ => Vec::new(),
+/// The agents ⌥1 to ⌥9 pick, in list order, once the catalog arrives.
+pub(crate) fn numbered(agents: &Agents, loaded: bool) -> Vec<String> {
+    if !loaded {
+        return Vec::new();
     }
-}
-
-pub(crate) fn listed(agents: &Agents, catalog: &Catalog) -> Vec<String> {
-    match catalog {
-        Catalog::Loaded(order) => agents.listed(Some(order)),
-        Catalog::Failed(_) => agents.listed(Some(&[])),
-        Catalog::Unasked | Catalog::Loading => agents.listed(None),
-    }
+    agents
+        .listed(true)
+        .into_iter()
+        .filter(|a| a != TERMINAL)
+        .collect()
 }
 
 pub(crate) fn choose_agent(state: &mut State, which: Which, agent: &str) {
@@ -1008,11 +934,10 @@ pub(crate) fn choose_agent(state: &mut State, which: Which, agent: &str) {
 }
 
 pub(crate) fn toggle_yolo(state: &mut State, which: Which) {
-    let supported = state
-        .window
-        .launching
-        .slot(which)
-        .is_some_and(|p| agents::supports_yolo(&state.facts.settings, &p.agent(state)));
+    let supported = state.window.launching.slot(which).is_some_and(|p| {
+        crate::harness::catalog::options(&state.facts.harnesses, &p.agent(state))
+            .is_some_and(|o| o.yolo)
+    });
     let Some(choice) = state
         .window
         .launching

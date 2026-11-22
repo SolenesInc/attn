@@ -450,7 +450,7 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
         .turns
         .iter()
         .take(3)
-        .map(|r| super::model::display_name(r.session))
+        .map(|r| super::model::display_name(r.session, &state.facts.harnesses))
         .collect();
     let more = bands.turns.len().saturating_sub(crumbs.len());
     use super::crowding::{GivenUp, Part};

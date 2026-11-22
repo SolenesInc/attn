@@ -230,7 +230,7 @@ fn deduped(entries: &[String]) -> Vec<String> {
         .collect()
 }
 
-fn launch(values: &Values) -> Value {
+fn launch(values: &Values, takes_executable: bool) -> Value {
     let mut launch = Map::new();
     launch.insert("driver".into(), json!(values.agent));
     let model = values.model.trim();
@@ -241,7 +241,7 @@ fn launch(values: &Values) -> Value {
     if !values.effort.is_empty() {
         launch.insert("effort".into(), json!(values.effort));
     }
-    if !executable.is_empty() && values.agent != "codex" {
+    if !executable.is_empty() && takes_executable {
         launch.insert("executable".into(), json!(executable));
     }
     Value::Object(launch)
@@ -320,7 +320,7 @@ fn location(values: &Values) -> Value {
 }
 
 /// The definition `values` make, as the daemon reads it.
-pub(crate) fn spec(values: &Values) -> Value {
+pub(crate) fn spec(values: &Values, takes_executable: bool) -> Value {
     let mut spec = Map::new();
     spec.insert("api_version".into(), json!(API_VERSION));
     if values.id != 0 {
@@ -329,7 +329,7 @@ pub(crate) fn spec(values: &Values) -> Value {
     spec.insert("name".into(), json!(values.name));
     spec.insert("trigger".into(), trigger(values));
     spec.insert("prompt".into(), json!(values.prompt));
-    spec.insert("launch".into(), launch(values));
+    spec.insert("launch".into(), launch(values, takes_executable));
     spec.insert("location".into(), location(values));
     Value::Object(spec)
 }
@@ -463,9 +463,9 @@ mod tests {
     }
 
     fn round_trip(values: &Values) -> Value {
-        let written = spec(values);
+        let written = spec(values, false);
         let back = values_of(&written.to_string(), "UTC").expect("reads back");
-        assert_eq!(spec(&back), written, "spec survives a round trip");
+        assert_eq!(spec(&back, false), written, "spec survives a round trip");
         written
     }
 
@@ -503,7 +503,7 @@ mod tests {
             repository: "GitHub.com/Acme/Widgets".into(),
             path: "/src/widgets".into(),
         }];
-        let written = spec(&values);
+        let written = spec(&values, false);
         assert_eq!(
             written["trigger"]["repositories"],
             json!({"include": ["github.com/acme/widgets"], "exclude": ["github.com/acme/legacy"]})
@@ -516,7 +516,7 @@ mod tests {
         values.include.clear();
         values.exclude.clear();
         assert!(
-            super::spec(&values)["trigger"]
+            super::spec(&values, false)["trigger"]
                 .get("repositories")
                 .is_none()
         );
@@ -599,7 +599,7 @@ mod tests {
             values.model = model.into();
             values.effort = effort.into();
             assert!(validate(&values).is_empty());
-            let launch = &spec(&values)["launch"];
+            let launch = &spec(&values, false)["launch"];
             assert_eq!(launch["model"].as_str().unwrap_or(""), model);
             assert_eq!(launch["effort"].as_str().unwrap_or(""), effort);
         }

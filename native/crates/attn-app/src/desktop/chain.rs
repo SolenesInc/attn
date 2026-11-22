@@ -107,7 +107,10 @@ pub(crate) fn trigger(session: &Session, facts: &Facts) -> Option<Trigger> {
         return None;
     }
     let role = session.delegation_role.as_ref().map(|r| r.name.clone());
-    let chain = format!("Show delegation chain for {}", display_name(session));
+    let chain = format!(
+        "Show delegation chain for {}",
+        display_name(session, &facts.harnesses)
+    );
     let role_of = session.delegation_role.as_ref();
     Some(Trigger {
         label: match &role {
@@ -293,10 +296,25 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
             rows.iter()
                 .enumerate()
                 .map(|(i, (link, depth))| match link {
-                    Link::Live(session) => agent_row(pop, i, session, *depth, i == picked, t),
-                    Link::Dormant(seed, tender) => {
-                        dormant_row(pop, i, (seed, tender), now_ms, *depth, i == picked, t)
-                    }
+                    Link::Live(session) => agent_row(
+                        pop,
+                        i,
+                        session,
+                        &state.facts.harnesses,
+                        *depth,
+                        i == picked,
+                        t,
+                    ),
+                    Link::Dormant(seed, tender) => dormant_row(
+                        pop,
+                        i,
+                        (seed, tender),
+                        &state.facts.harnesses,
+                        now_ms,
+                        *depth,
+                        i == picked,
+                        t,
+                    ),
                 }),
         );
     let mut blocks = Vec::new();
@@ -363,13 +381,21 @@ pub(crate) fn reveal(pop: &Pop, picked: usize, tx: &mut Tx) {
     tx.scroll_into_view_in(body_key(pop), row_key(pop, picked));
 }
 
-fn agent_row(pop: &Pop, i: usize, session: &Session, depth: usize, picked: bool, t: &Tokens) -> El {
-    let name = display_name(session);
+fn agent_row(
+    pop: &Pop,
+    i: usize,
+    session: &Session,
+    harnesses: &[attn_protocol::Harness],
+    depth: usize,
+    picked: bool,
+    t: &Tokens,
+) -> El {
+    let name = display_name(session, harnesses);
     let kind = session
         .delegation_role
         .as_ref()
         .map(|r| r.name.clone())
-        .unwrap_or_else(|| harness_label(&session.agent));
+        .unwrap_or_else(|| harness_label(harnesses, &session.agent));
     let current = session.id == pop.session;
     let label = format!("{name} · {kind}{}", if current { " · current" } else { "" });
     let agent_state = AgentState::parse(&session.state);
@@ -390,16 +416,18 @@ fn agent_row(pop: &Pop, i: usize, session: &Session, depth: usize, picked: bool,
 
 /// The row of a closed agent that tends a seed on standby: its name, "on standby" and what it
 /// waits for. Activating it opens the seed.
+#[allow(clippy::too_many_arguments)]
 fn dormant_row(
     pop: &Pop,
     i: usize,
     (seed, tender): (&Seed, &StandbyTender),
+    harnesses: &[attn_protocol::Harness],
     now_ms: i64,
     depth: usize,
     picked: bool,
     t: &Tokens,
 ) -> El {
-    let name = dormant_name(tender);
+    let name = dormant_name(tender, harnesses);
     let kind = std::iter::once("on standby".to_owned())
         .chain(
             crate::garden::model::standby_of(seed, now_ms)
@@ -420,9 +448,9 @@ fn dormant_row(
 }
 
 /// How attn names a closed agent on standby.
-pub(crate) fn dormant_name(tender: &StandbyTender) -> String {
+pub(crate) fn dormant_name(tender: &StandbyTender, harnesses: &[attn_protocol::Harness]) -> String {
     if tender.label.is_empty() {
-        harness_label(&tender.agent)
+        harness_label(harnesses, &tender.agent)
     } else {
         tender.label.clone()
     }

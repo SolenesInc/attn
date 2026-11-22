@@ -1,8 +1,6 @@
 //! The context cap prompt: the token budget an agent compacts at, which
 //! the daemon applies by reloading the agent.
 
-use std::collections::BTreeMap;
-
 use attn_protocol::{SessionContextWindowCapResultMessage, SetSessionContextWindowCapMessage};
 use attn_ui::blocks::{Actions, Field};
 use attn_ui::system::{Button, FieldState, Look, Part, Said, line_box};
@@ -24,11 +22,6 @@ pub(crate) struct ContextCap {
     saving: bool,
 }
 
-/// Whether `agent` launches with a context-window cap.
-pub(crate) fn takes_cap(settings: &BTreeMap<String, String>, agent: &str) -> bool {
-    crate::settings::harnesses::has(settings, &agent.to_lowercase(), "context_window_cap")
-}
-
 pub(crate) fn open(state: &mut State, session: &str, tx: &mut Tx) {
     let Some(found) = state.facts.sessions.iter().find(|s| s.id == session) else {
         return;
@@ -42,7 +35,7 @@ pub(crate) fn open(state: &mut State, session: &str, tx: &mut Tx) {
     edit.anchor = 0;
     state.window.context_cap = Some(ContextCap {
         session: session.to_owned(),
-        name: display_name(found),
+        name: display_name(found, &state.facts.harnesses),
         current,
         edit,
         refused: None,

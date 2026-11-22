@@ -325,7 +325,7 @@ fn session_label(state: &State, id: &str) -> Option<String> {
         .sessions
         .iter()
         .find(|s| s.id == id)
-        .map(crate::sidebar::model::display_name)
+        .map(|s| crate::sidebar::model::display_name(s, &state.facts.harnesses))
 }
 
 pub(crate) fn row_menu(state: &State, t: &Tokens) -> Vec<El> {

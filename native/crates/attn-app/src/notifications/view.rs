@@ -289,7 +289,9 @@ fn action(state: &State, n: &Notification, label: &str, act: Act, t: &Tokens) ->
     let panel = &state.window.notifications;
     let (label, busy) = match &act {
         Act::Retry { .. } if panel.retrying.contains(&n.id) => ("Retrying…".to_owned(), true),
-        Act::InstallCodexUpdate if panel.installing_codex => ("Installing…".to_owned(), true),
+        Act::InstallCodexUpdate if crate::harness::codex::installing(state) => {
+            ("Installing…".to_owned(), true)
+        }
         _ => (label.to_owned(), false),
     };
     Button::new(label)

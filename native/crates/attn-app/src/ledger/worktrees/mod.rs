@@ -151,7 +151,7 @@ pub(crate) fn live_sessions(state: &State, path: &str) -> Vec<LiveSession> {
         .filter(|s| s.directory == path || s.directory.starts_with(&inside))
         .map(|s| LiveSession {
             id: s.id.clone(),
-            name: crate::sidebar::model::display_name(s),
+            name: crate::sidebar::model::display_name(s, &state.facts.harnesses),
         })
         .collect()
 }

@@ -91,7 +91,7 @@ struct Place {
 impl Place {
     fn of(state: &State) -> Place {
         let index = index(state);
-        let names = model::session_names(&state.facts.sessions);
+        let names = model::session_names(&state.facts.sessions, &state.facts.harnesses);
         let trail = super::living_trail(state);
         let garden = &state.window.garden;
         let query = search::parse(&garden.query.text);

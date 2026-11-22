@@ -1,4 +1,4 @@
-use rune::{Color, El, Icon};
+use rune::{Color, El};
 
 use super::door;
 
@@ -25,7 +25,7 @@ impl IconSize {
 }
 
 /// `glyph` at `size` in `ink`.
-pub fn icon(glyph: &'static Icon, size: IconSize, ink: Color) -> El {
+pub fn icon(glyph: impl Into<rune::IconSource>, size: IconSize, ink: Color) -> El {
     door::icon(glyph, size).color(ink)
 }
 

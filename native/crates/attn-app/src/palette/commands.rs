@@ -90,7 +90,7 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         .and_then(|id| facts.sessions.iter().find(|s| s.id == id));
     let turn_actions = on_screen.map(|s| queue::actions(facts, s, state.window.now_ms));
     let mut commands = chief_commands(state);
-    commands.extend(crate::shared_codex::commands(state));
+    commands.extend(crate::harness::codex::commands(state));
     commands.extend(tile_window_command(state));
     commands.extend([
         Command::new(
@@ -560,10 +560,10 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             } else {
                 "Show harness logos in the sidebar"
             },
-            &["harness", "logo", "icon", "sidebar", "claude", "codex", "sigma"],
+            &["harness", "logo", "icon", "sidebar"],
             set(crate::sidebar::HARNESS_LOGOS, !logos_on),
         )
-        .describe("The Claude, Codex or Sigma mark beside each agent"),
+        .describe("Each harness's mark beside its agent"),
     ]);
     let focus_style = FocusStyle::chosen();
     commands.extend(FocusStyle::ALL.map(|style| {
@@ -609,7 +609,7 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         );
     }
     if let Some(session) = on_screen {
-        let name = model::display_name(session);
+        let name = model::display_name(session, &state.facts.harnesses);
         commands.push(Command {
             id: "toggle-session-priority".into(),
             title: if session.priority.unwrap_or(false) {
@@ -675,7 +675,9 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
                 .pin(),
             );
         }
-        if crate::context_cap::takes_cap(&state.facts.settings, &session.agent) {
+        if crate::harness::catalog::options(&state.facts.harnesses, &session.agent)
+            .is_some_and(|o| o.context_cap)
+        {
             commands.push(context_cap_command(session, &name));
         }
         if crate::desktop::seed_chip::shown(session, &state.facts) {

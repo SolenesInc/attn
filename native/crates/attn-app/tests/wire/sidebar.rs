@@ -141,7 +141,7 @@ fn the_desktop_sidebar_lists_each_desktop_with_its_agents_in_layout_order() {
             .get(Target::key("sidebar.session.side-b.state"))
             .name
             .as_deref(),
-        Some("Claude · waiting input")
+        Some("Claude Code · waiting input")
     );
     assert_eq!(
         screen
@@ -690,7 +690,7 @@ fn an_agent_row_leads_with_its_harness_logo_until_the_user_turns_logos_off() {
             .unwrap();
         (node.name.unwrap_or_default(), w, h)
     };
-    assert_eq!(lead(&world), ("Claude · working".into(), 16.0, 16.0));
+    assert_eq!(lead(&world), ("Claude Code · working".into(), 16.0, 16.0));
     let name_x = |world: &World| {
         world
             .screen()
@@ -707,7 +707,7 @@ fn an_agent_row_leads_with_its_harness_logo_until_the_user_turns_logos_off() {
         ..attn_protocol::SettingsUpdatedMessage::new()
     });
     world.settle();
-    assert_eq!(lead(&world), ("Claude · working".into(), 8.0, 8.0));
+    assert_eq!(lead(&world), ("Claude Code · working".into(), 8.0, 8.0));
     assert_eq!(
         name_x(&world),
         with_logo,
@@ -939,7 +939,7 @@ fn an_agent_row_names_its_pull_request_and_marks_the_chief_and_what_the_chief_de
 #[test]
 fn each_agent_row_names_its_harness_with_fallbacks_for_a_plugin_and_a_missing_one_and_its_state() {
     let rows = [
-        ("claude", "claude", "Claude", "scheduled"),
+        ("claude", "claude", "Claude Code", "scheduled"),
         ("codex", "codex", "Codex", "idle"),
         ("sigma", "sigma", "Sigma", "idle"),
         ("shell", "shell", "Shell", "idle"),
@@ -982,10 +982,10 @@ fn an_agent_row_says_its_harness_on_hover_and_explains_an_unknown_state_the_daem
     let cases = [
         (
             "stuck",
-            "Claude · Stuck — the agent has stopped reporting anything at all",
+            "Claude Code · Stuck — the agent has stopped reporting anything at all",
         ),
-        ("no_evidence", "Claude · No signal from this agent yet"),
-        ("some_future_clause", "Claude · unknown"),
+        ("no_evidence", "Claude Code · No signal from this agent yet"),
+        ("some_future_clause", "Claude Code · unknown"),
     ];
     for (reason, said) in cases {
         let agent = Session {

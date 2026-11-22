@@ -1,4 +1,4 @@
-use attn_protocol::{DelegationPreferencesResultMessage, HarnessModel};
+use attn_protocol::HarnessModel;
 use attn_testkit::{Daemon, Target, World, message};
 
 use super::harness_catalogs::{
@@ -6,11 +6,6 @@ use super::harness_catalogs::{
     picker_open, preview_harness, reported, route_value, serve,
 };
 use super::{accepting, click, field, keeping, open, press, rest, retype, state, value, writes};
-
-const HEADLESS: &[(&str, &str)] = &[
-    ("codex_cap_headless_task", "true"),
-    ("claude_cap_headless_task", "true"),
-];
 
 const ACTIVITY: &str = "settings.route.activity";
 const ADVISOR: &str = "settings.route.garden-advisor";
@@ -20,8 +15,7 @@ fn on_background(settings: &[(&str, &str)]) -> World {
 }
 
 fn serving(settings: &[(&str, &str)]) -> Daemon {
-    let all: Vec<(&str, &str)> = HEADLESS.iter().chain(settings).copied().collect();
-    let (daemon, stored) = accepting(&all);
+    let (daemon, stored) = accepting(settings);
     serve(&daemon, &stored, harnesses());
     daemon
 }
@@ -155,8 +149,25 @@ fn a_refresh_outside_its_range_is_refused_beside_the_fields_without_a_write() {
 }
 
 #[test]
-fn claude_activity_hides_effort_and_recommends_light_over_a_deep_pick() {
-    let mut world = on_background(&[("activity.config", r#"{"agent":"claude","model":"opus"}"#)]);
+fn claude_activity_recommends_light_over_a_deep_pick_and_default_effort_labels_follow_the_catalog()
+{
+    let effort_first = |world: &World| {
+        world
+            .screen()
+            .descendants(Target::key("settings.route-picker.effort"))
+            .into_iter()
+            .find(|n| n.role == "radio-button")
+            .and_then(|n| n.name)
+    };
+    let mut listed = harnesses();
+    listed.push(harness("sigma", "Sigma"));
+    let (daemon, stored) =
+        accepting(&[("activity.config", r#"{"agent":"claude","model":"opus"}"#)]);
+    serve(&daemon, &stored, listed);
+    let mut world = World::start(daemon);
+    open(&mut world);
+    click(&mut world, "settings.nav.backgroundAgents");
+    world.settle();
     assert!(
         world
             .screen()
@@ -164,11 +175,10 @@ fn claude_activity_hides_effort_and_recommends_light_over_a_deep_pick() {
             .is_some()
     );
     open_route(&mut world, "Session activity model");
-    assert!(
-        world
-            .screen()
-            .find(Target::key("settings.route-picker.effort"))
-            .is_none()
+    assert_eq!(
+        effort_first(&world).as_deref(),
+        Some("default"),
+        "Claude activity has no shipped activity effort override"
     );
     assert!(
         world
@@ -177,6 +187,19 @@ fn claude_activity_hides_effort_and_recommends_light_over_a_deep_pick() {
             .iter()
             .any(|n| n.name.as_deref() == Some("Light recommended"))
     );
+    preview_harness(&mut world, "Codex");
+    assert_eq!(
+        effort_first(&world).as_deref(),
+        Some("default (low)"),
+        "Codex activity labels its low tier default"
+    );
+    preview_harness(&mut world, "Sigma");
+    assert_eq!(
+        effort_first(&world).as_deref(),
+        Some("default"),
+        "Sigma activity has no low-effort override (s-hd06eq)"
+    );
+    preview_harness(&mut world, "Claude");
     pick_model(&mut world, "Haiku 5.5");
     assert!(
         world
@@ -184,6 +207,17 @@ fn claude_activity_hides_effort_and_recommends_light_over_a_deep_pick() {
             .find(Target::key(format!("{ACTIVITY}.recommended")))
             .is_none()
     );
+    if picker_open(&world) {
+        press(&mut world, rune::Key::Escape);
+    }
+    open_route(&mut world, "Garden advisor model");
+    preview_harness(&mut world, "Claude");
+    assert_eq!(effort_first(&world).as_deref(), Some("default (medium)"));
+    preview_harness(&mut world, "Codex");
+    assert_eq!(effort_first(&world).as_deref(), Some("default (xhigh)"));
+    preview_harness(&mut world, "Sigma");
+    assert_eq!(effort_first(&world).as_deref(), Some("default"));
+    press(&mut world, rune::Key::Escape);
     rest(&mut world);
 }
 
@@ -307,86 +341,18 @@ fn the_advisor_saves_an_explicit_model_and_effort_and_shows_the_model_s_tier() {
 }
 
 #[test]
-fn a_failed_harness_list_keeps_each_route_editable_and_retry_reads_it_again() {
-    for (setting, block, label) in [
-        ("activity.config", "activity", "Session activity model"),
-        ("garden.advisor", "garden-advisor", "Garden advisor model"),
-    ] {
-        let all: Vec<(&str, &str)> = HEADLESS
-            .iter()
-            .copied()
-            .chain([(
-                setting,
-                r#"{"agent":"codex","model":"saved-model","effort":"low"}"#,
-            )])
-            .collect();
-        let (daemon, stored) = accepting(&all);
-        serve(&daemon, &stored, harnesses());
-        daemon.on("delegation_preferences_get", |_| {
-            message(DelegationPreferencesResultMessage {
-                success: false,
-                error: Some("Harness list unavailable".into()),
-                ..DelegationPreferencesResultMessage::new()
-            })
-        });
-        let mut world = World::start(daemon);
-        open(&mut world);
-        click(&mut world, "settings.nav.backgroundAgents");
-        world.settle();
-        let alert = world
-            .screen()
-            .get(Target::key(format!("settings.{block}.harness-error")));
-        assert_eq!(alert.name.as_deref(), Some("Harness list unavailable"));
-        open_route(&mut world, label);
-        enter_model(&mut world, "manual-model", None);
-        let saved: serde_json::Value =
-            serde_json::from_str(&writes(&world).last().unwrap().1).unwrap();
-        assert_eq!(saved["model"], "manual-model");
-        preview_harness(&mut world, "Claude");
-        pick_model(&mut world, "Light default");
-        if picker_open(&world) {
-            press(&mut world, rune::Key::Escape);
-        }
-        let saved: serde_json::Value =
-            serde_json::from_str(&writes(&world).last().unwrap().1).unwrap();
-        assert_eq!(saved["agent"], "claude");
-
-        serve(&world.daemon, &stored, harnesses());
-        click(&mut world, &format!("settings.{block}.harness-retry"));
-        assert!(
-            world
-                .screen()
-                .find(Target::key(format!("settings.{block}.harness-error")))
-                .is_none()
-        );
-        assert!(
-            route_value(
-                &world,
-                &format!(
-                    "settings.route.{}",
-                    if block == "activity" {
-                        "activity"
-                    } else {
-                        "garden-advisor"
-                    }
-                )
-            )
-            .starts_with("Claude")
-        );
-        assert_eq!(world.daemon.sent_of("delegation_preferences_get").len(), 2);
-        rest(&mut world);
-    }
-}
-
-#[test]
 fn an_unavailable_saved_advisor_stays_shown_and_cannot_be_picked() {
-    let mut world = on_background(&[
-        ("codex_available", "false"),
-        (
-            "garden.advisor",
-            r#"{"agent":"codex","model":"saved-model"}"#,
-        ),
-    ]);
+    let mut listed = harnesses();
+    listed[1].installation = "missing".into();
+    let (daemon, stored) = accepting(&[(
+        "garden.advisor",
+        r#"{"agent":"codex","model":"saved-model"}"#,
+    )]);
+    serve(&daemon, &stored, listed);
+    let mut world = World::start(daemon);
+    open(&mut world);
+    click(&mut world, "settings.nav.backgroundAgents");
+    world.settle();
     open_route(&mut world, "Garden advisor model");
     let codex = options(&world, "harnesses")
         .into_iter()
@@ -449,8 +415,7 @@ fn background_agents_have_their_own_page_with_no_save_and_no_reviewer_model() {
 
 #[test]
 fn a_refused_advisor_pick_shows_why_and_keeps_settings_open_on_it() {
-    let all: Vec<(&str, &str)> = HEADLESS.to_vec();
-    let (daemon, stored) = keeping(&all, |key, _| {
+    let (daemon, stored) = keeping(&[], |key, _| {
         (key == "garden.advisor").then(|| "garden.advisor is not writable".to_owned())
     });
     serve(&daemon, &stored, harnesses());
@@ -518,12 +483,6 @@ fn a_refused_refresh_window_keeps_both_windows_where_they_are_on_every_frame() {
     rest(&mut world);
 }
 
-const SIGMA_HEADLESS: &[(&str, &str)] = &[
-    ("sigma_available", "true"),
-    ("sigma_cap_executable_setting", "true"),
-    ("sigma_cap_headless_task", "true"),
-];
-
 fn sigma_model(provider: &str, id: &str, name: &str, one_shot: &str) -> HarnessModel {
     HarnessModel {
         provider: provider.into(),
@@ -533,13 +492,7 @@ fn sigma_model(provider: &str, id: &str, name: &str, one_shot: &str) -> HarnessM
 }
 
 fn on_sigma_background(settings: &[(&str, &str)]) -> World {
-    let all: Vec<(&str, &str)> = HEADLESS
-        .iter()
-        .chain(SIGMA_HEADLESS)
-        .chain(settings)
-        .copied()
-        .collect();
-    let (daemon, stored) = accepting(&all);
+    let (daemon, stored) = accepting(settings);
     let mut listed = harnesses();
     listed.push(harness("sigma", "Sigma"));
     serve(&daemon, &stored, listed);

@@ -220,7 +220,7 @@ fn fields(state: &State, f: &Form, t: &Tokens) -> Vec<Block> {
     }
     out.extend(launch(state, f, t));
     out.push(prompt(f, t));
-    out.push(advanced(f, t));
+    out.push(advanced(state, f, t));
     out
 }
 
@@ -387,20 +387,20 @@ pub(super) fn route_target() -> RouteTarget {
     }
 }
 
-fn overridden(f: &Form) -> bool {
-    f.agent != "codex" && !f.executable.text.trim().is_empty()
+fn overridden(state: &State, f: &Form) -> bool {
+    crate::harness::catalog::options(&state.facts.harnesses, &f.agent)
+        .is_some_and(|o| o.automation_executable)
+        && !f.executable.text.trim().is_empty()
 }
 
 fn read_route(state: &State, _: &str) -> Option<(Route, Rules)> {
     let f = form(state).filter(|f| f.load == Load::Ready)?;
-    let settings = &state.facts.settings;
-    let automation =
-        |id: &str| id == f.agent || crate::settings::harnesses::has(settings, id, "automation");
-    let overridden = overridden(f);
+    let overridden = overridden(state, f);
     let mut harnesses: Vec<RouteHarness> = Vec::new();
-    for h in crate::settings::listed_harnesses(state) {
-        if automation(&h.id) && !harnesses.iter().any(|o| o.id == h.id) {
-            let mut h = RouteHarness::from(&h);
+    for h in state.facts.harnesses.iter() {
+        let keep = h.id == f.agent || (h.offered && h.options.auto_approve);
+        if keep && !harnesses.iter().any(|o| o.id == h.id) {
+            let mut h = RouteHarness::from(h);
             h.discovery &= !overridden;
             harnesses.push(h);
         }
@@ -441,7 +441,7 @@ fn launch(state: &State, f: &Form, t: &Tokens) -> Vec<Block> {
     let mut hint =
         "Automation sessions always run unattended with the agent's automatic approval mode."
             .to_owned();
-    if overridden(f) {
+    if overridden(state, f) {
         hint.push_str(" Use model and effort IDs accepted by the executable override.");
     }
     vec![
@@ -503,7 +503,7 @@ fn segments<T: Copy + PartialEq + 'static>(
     .self_start()
 }
 
-fn advanced_chips(f: &Form) -> Vec<String> {
+fn advanced_chips(state: &State, f: &Form) -> Vec<String> {
     let mut chips = Vec::new();
     if f.trigger == Starts::Scheduled && f.continuity == Continuity::Singleton {
         chips.push("Same agent".into());
@@ -522,13 +522,13 @@ fn advanced_chips(f: &Form) -> Vec<String> {
             format!("{clones} local clones")
         });
     }
-    if overridden(f) {
+    if overridden(state, f) {
         chips.push("Custom executable".into());
     }
     chips
 }
 
-fn advanced(f: &Form, t: &Tokens) -> Block {
+fn advanced(state: &State, f: &Form, t: &Tokens) -> Block {
     let failed = f.errors.keys().any(|field| {
         matches!(
             field,
@@ -545,7 +545,7 @@ fn advanced(f: &Form, t: &Tokens) -> Block {
             }
         },
     )
-    .tags(advanced_chips(f))
+    .tags(advanced_chips(state, f))
     .failed(failed);
     if f.trigger == Starts::Scheduled {
         part = part
@@ -619,7 +619,9 @@ fn advanced(f: &Form, t: &Tokens) -> Block {
     if f.values().uses_worktree() {
         part = part.push(overrides(f, t));
     }
-    if f.agent != "codex" {
+    if crate::harness::catalog::options(&state.facts.harnesses, &f.agent)
+        .is_some_and(|o| o.automation_executable)
+    {
         part = part.push(
             FieldBlock::new(key("executable"), "Executable")
                 .control(input(

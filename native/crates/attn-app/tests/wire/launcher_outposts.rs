@@ -241,6 +241,7 @@ fn profile(current: &str) -> Profile {
 /// the outposts attached, and what the sandbox has installed.
 struct Setup {
     settings: Vec<(String, String)>,
+    local_harnesses: Option<Vec<Harness>>,
     outposts: Vec<OutpostInfo>,
     sandbox_harnesses: Vec<&'static str>,
     current: &'static str,
@@ -251,12 +252,23 @@ impl Default for Setup {
     fn default() -> Setup {
         Setup {
             settings: Vec::new(),
+            local_harnesses: None,
             outposts: vec![sandbox(), field_lab()],
             sandbox_harnesses: vec!["claude", "codex"],
             current: "d1",
             window: None,
         }
     }
+}
+
+fn local_with(overrides: &[(&str, &str)]) -> Vec<Harness> {
+    let mut list = attn_testkit::built_in_harnesses();
+    for (id, installation) in overrides {
+        if let Some(h) = list.iter_mut().find(|h| h.id == *id) {
+            h.installation = (*installation).into();
+        }
+    }
+    list
 }
 
 /// A desktop with an agent, Launcher 2.0 on and `setup`'s outposts attached; ⌘N not pressed.
@@ -283,6 +295,9 @@ fn world(setup: Setup) -> World {
     let disks = Arc::new(disks());
     let (browse_disks, inspect_disks) = (disks.clone(), disks);
     let daemon = Daemon::scripted().state(state);
+    if let Some(local) = setup.local_harnesses {
+        daemon.set_harnesses(local);
+    }
     daemon
         .on("set_setting", move |r| {
             let mut settings = kept.lock().unwrap();
@@ -802,12 +817,12 @@ fn a_harness_the_target_machine_lacks_reads_as_missing_and_is_refused() {
     });
     assert_eq!(
         harness(&world, "claude").description.as_deref(),
-        Some("Claude is not installed on ai-sandbox")
+        Some("Claude Code is not installed on ai-sandbox")
     );
 
     press(&mut world, Key::Enter);
     assert!(
-        alert(&world).is_some_and(|a| a.starts_with("Claude is not installed on ai-sandbox.")),
+        alert(&world).is_some_and(|a| a.starts_with("Claude Code is not installed on ai-sandbox.")),
         "{:?}",
         alert(&world)
     );
@@ -846,7 +861,10 @@ fn a_harness_the_target_machine_lacks_is_drawn_struck_through_until_the_target_h
         sandbox_harnesses: vec!["codex"],
         ..Setup::default()
     });
-    assert_eq!(struck_in(&world, "new-session.agent.claude"), ["Claude"]);
+    assert_eq!(
+        struck_in(&world, "new-session.agent.claude"),
+        ["Claude Code"]
+    );
     assert!(struck_in(&world, "new-session.agent.codex").is_empty());
 
     down(&mut world, 1);
@@ -870,7 +888,7 @@ fn yolo_caption(world: &World) -> (f32, f32) {
 fn clicking_the_yolo_caption_flips_the_switch_and_the_start_follows_it() {
     for (w, current) in [("new-session", "d1"), ("launcher", "d2")] {
         for was_on in [false, true] {
-            let mut settings = vec![("claude_cap_yolo".to_owned(), "true".to_owned())];
+            let mut settings = Vec::new();
             if was_on {
                 settings.push(("new_session_yolo_local".into(), "true".into()));
             }
@@ -917,7 +935,7 @@ fn clicking_the_yolo_caption_flips_the_switch_and_the_start_follows_it() {
 #[test]
 fn a_harness_only_an_outpost_has_can_be_picked_there_and_is_refused_on_this_mac() {
     let mut world = open(Setup {
-        settings: vec![("codex_available".into(), "false".into())],
+        local_harnesses: Some(local_with(&[("codex", "missing")])),
         ..Setup::default()
     });
     let codex = harness(&world, "codex");
@@ -949,7 +967,7 @@ fn a_harness_only_an_outpost_has_can_be_picked_there_and_is_refused_on_this_mac(
 #[test]
 fn a_harness_reads_as_being_checked_only_while_this_mac_is_the_target() {
     let mut world = open(Setup {
-        settings: vec![("claude_available".into(), "checking".into())],
+        local_harnesses: Some(local_with(&[("claude", "checking")])),
         ..Setup::default()
     });
     let mut seen = Vec::new();
@@ -962,7 +980,7 @@ fn a_harness_reads_as_being_checked_only_while_this_mac_is_the_target() {
             down(&mut world, 1);
         }
     }
-    let checking = Some("Checking for Claude on this machine".to_owned());
+    let checking = Some("Checking for Claude Code on this machine".to_owned());
     assert_eq!(
         seen,
         [
@@ -984,30 +1002,25 @@ fn a_harness_reads_as_being_checked_only_while_this_mac_is_the_target() {
 #[test]
 fn a_harness_an_outpost_lacks_reads_as_missing_there_while_this_mac_checks_for_it() {
     let mut world = open(Setup {
-        settings: vec![("claude_available".into(), "checking".into())],
+        local_harnesses: Some(local_with(&[("claude", "checking")])),
         outposts: vec![sandbox()],
         sandbox_harnesses: vec!["codex"],
         ..Setup::default()
     });
     assert_eq!(
         harness(&world, "claude").description.as_deref(),
-        Some("Claude is not installed on ai-sandbox")
+        Some("Claude Code is not installed on ai-sandbox")
     );
     assert!(!checking_mark(&world, "claude"));
 
     down(&mut world, 1);
     assert_eq!(
         harness(&world, "claude").description.as_deref(),
-        Some("Checking for Claude on this machine")
+        Some("Checking for Claude Code on this machine")
     );
-    world.daemon.emit(SettingsUpdatedMessage {
-        settings: Some(BTreeMap::from([
-            ("new_session_launcher_enabled".to_owned(), "true".to_owned()),
-            ("new_session_agent".to_owned(), "claude".to_owned()),
-            ("outposts_enabled".to_owned(), "true".to_owned()),
-            ("claude_available".to_owned(), "false".to_owned()),
-        ])),
-        ..SettingsUpdatedMessage::new()
+    world.daemon.emit(attn_protocol::HarnessCatalogMessage {
+        harnesses: local_with(&[("claude", "missing")]),
+        ..attn_protocol::HarnessCatalogMessage::new()
     });
     world.settle();
 
@@ -1015,7 +1028,7 @@ fn a_harness_an_outpost_lacks_reads_as_missing_there_while_this_mac_checks_for_i
     assert!(claude.is("disabled"));
     assert_eq!(
         claude.description.as_deref(),
-        Some("Claude is not available on this machine")
+        Some("Claude Code is not available on this machine")
     );
     rest(&mut world);
 }
@@ -1106,10 +1119,8 @@ fn a_start_left_to_the_background_lands_on_the_desktop_it_was_picked_on() {
 fn without_outposts_the_launcher_says_this_mac_is_checking_and_asks_nothing_of_machines() {
     for (outposts, enabled) in [(vec![], "true"), (vec![sandbox()], "false")] {
         let mut world = open(Setup {
-            settings: vec![
-                ("outposts_enabled".into(), enabled.into()),
-                ("claude_available".into(), "checking".into()),
-            ],
+            settings: vec![("outposts_enabled".into(), enabled.into())],
+            local_harnesses: Some(local_with(&[("claude", "checking")])),
             outposts,
             ..Setup::default()
         });
@@ -1127,7 +1138,7 @@ fn without_outposts_the_launcher_says_this_mac_is_checking_and_asks_nothing_of_m
         assert!(!claude.is("disabled"));
         assert_eq!(
             claude.description.as_deref(),
-            Some("Checking for Claude on this machine")
+            Some("Checking for Claude Code on this machine")
         );
         assert!(
             world
@@ -1566,7 +1577,7 @@ fn an_outpost_that_becomes_reachable_is_asked_for_the_folder_the_text_browses() 
 #[test]
 fn an_outpost_that_becomes_reachable_is_asked_once_for_its_harnesses_and_offers_them() {
     let mut world = open(Setup {
-        settings: vec![("codex_available".into(), "false".into())],
+        local_harnesses: Some(local_with(&[("codex", "missing")])),
         outposts: vec![OutpostInfo {
             state: "connecting".into(),
             ..field_lab()
@@ -1605,7 +1616,7 @@ fn an_outpost_that_failed_to_say_its_harnesses_is_asked_again_when_it_is_reachab
         ..field_lab()
     };
     let mut world = open(Setup {
-        settings: vec![("codex_available".into(), "false".into())],
+        local_harnesses: Some(local_with(&[("codex", "missing")])),
         outposts: vec![field_lab()],
         ..Setup::default()
     });

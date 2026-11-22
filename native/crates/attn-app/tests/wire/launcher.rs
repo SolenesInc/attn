@@ -782,7 +782,7 @@ fn new_terminal_picks_terminal_for_one_opening_in_either_launcher() {
         assert!(checked(&world, "Terminal"), "{enabled}");
         press(&mut world, Key::Escape);
         press_action(&mut world, &Action::SessionNew);
-        assert!(checked(&world, "Claude"), "{enabled}");
+        assert!(checked(&world, "Claude Code"), "{enabled}");
         assert!(world.daemon.sent_of("set_setting").is_empty(), "{enabled}");
         rest(&mut world);
     }
@@ -2254,16 +2254,6 @@ fn smallest_at_largest_text(launcher: bool, opening: Opening, plugins: &[&'stati
     settings.retain(|(key, _)| key != LAUNCHER.0);
     settings.push((LAUNCHER.0.to_owned(), launcher.to_string()));
     settings.push(("uiScale".to_owned(), "1.5".to_owned()));
-    for id in ["claude", "codex"] {
-        settings.push((format!("{id}_cap_yolo"), "true".to_owned()));
-    }
-    for (n, id) in plugins.iter().enumerate() {
-        settings.push((format!("{id}_available"), "true".to_owned()));
-        settings.push((
-            format!("{id}_display_name"),
-            format!("Engineering observability staging review agent {n}"),
-        ));
-    }
     let desktops = match opening {
         Opening::Dialog => vec![desktop("d1", "Desktop 1", vec![pane("d1", "p1")])],
         Opening::EmptyDesktop => {
@@ -2273,28 +2263,17 @@ fn smallest_at_largest_text(launcher: bool, opening: Opening, plugins: &[&'stati
         }
     };
     let daemon = machine(&PLACES, shop("origin/main"), &settings, desktops);
-    let harnesses: Vec<&str> = ["claude", "codex"]
-        .into_iter()
-        .chain(plugins.iter().copied())
-        .collect();
-    daemon.on("delegation_preferences_get", move |_| {
-        message(DelegationPreferencesResultMessage {
-            success: true,
-            preferences: Some(DelegationPreferences::default()),
-            harnesses: Some(
-                harnesses
-                    .iter()
-                    .map(|id| Harness {
-                        id: (*id).into(),
-                        name: (*id).into(),
-                        installation: "installed".into(),
-                        ..Harness::default()
-                    })
-                    .collect(),
-            ),
-            ..DelegationPreferencesResultMessage::new()
-        })
-    });
+    let mut catalog = attn_testkit::built_in_harnesses();
+    for (n, id) in plugins.iter().enumerate() {
+        catalog.push(Harness {
+            id: (*id).into(),
+            name: format!("Engineering observability staging review agent {n}"),
+            installation: "installed".into(),
+            offered: true,
+            ..Harness::default()
+        });
+    }
+    daemon.set_harnesses(catalog);
     let mut world = World::start_sized(daemon, (800.0, 600.0));
     world.open_desktop();
     if let Opening::Dialog = opening {

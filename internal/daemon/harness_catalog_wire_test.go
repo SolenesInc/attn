@@ -32,12 +32,21 @@ func TestTheAppGetsEveryHarnessAtConnectIncludingOneThatIsInstalledButNotOffered
 	if !listed {
 		t.Fatalf("the catalog at connect lists %+v, want Sigma although sigma_enabled is off", catalog.Harnesses)
 	}
-	if sigma.Offered || sigma.Installation != protocol.HarnessInstallationInstalled {
-		t.Fatalf("Sigma at connect = offered %v, installation %q; want installed but not offered", sigma.Offered, sigma.Installation)
+	if sigma.Offered || sigma.Installation != protocol.HarnessInstallationInstalled ||
+		!sigma.Options.AutoApproveUnreviewed || !sigma.Options.AutomationExecutable || sigma.Options.KeepsConversations ||
+		protocol.Deref(sigma.ActivityEffort) != "" || protocol.Deref(sigma.AdvisorEffort) != "" {
+		t.Fatalf("Sigma at connect = %+v; want installed, unoffered, unreviewed auto-approve, automation executable, no default efforts", sigma)
 	}
 	claude, _ := catalogEntry(catalog, "claude")
-	if !claude.Offered || !claude.Options.ExecutableSetting || !claude.Options.Resume || !claude.Options.InitialPrompt || !claude.Discovery {
-		t.Fatalf("Claude Code at connect = %+v, want offered, with an executable setting, resume, initial prompts and model discovery", claude)
+	if !claude.Offered || !claude.Options.ExecutableSetting || !claude.Options.Resume || !claude.Options.InitialPrompt ||
+		!claude.Options.Discovery || !claude.Options.AutomationExecutable || !claude.Options.KeepsConversations || claude.Options.AutoApproveUnreviewed ||
+		protocol.Deref(claude.ActivityEffort) != "" || protocol.Deref(claude.AdvisorEffort) != "medium" {
+		t.Fatalf("Claude Code at connect = %+v, want offered, executable setting, resume, initial prompts, discovery, automation executable, keeps conversations, advisor effort medium", claude)
+	}
+	codex, _ := catalogEntry(catalog, "codex")
+	if !codex.Offered || !codex.Options.Discovery || codex.Options.AutomationExecutable || codex.Options.KeepsConversations || codex.Options.AutoApproveUnreviewed ||
+		protocol.Deref(codex.ActivityEffort) != "low" || protocol.Deref(codex.AdvisorEffort) != "xhigh" {
+		t.Fatalf("Codex at connect = %+v, want offered, discovery, no automation executable, activity effort low, advisor effort xhigh", codex)
 	}
 
 	mark := len(app.Log())
@@ -110,5 +119,19 @@ func TestAPluginLogoIsRefusedOnlyWhenItWouldBreakAttn(t *testing.T) {
 	}
 	if err := register("loud", 24, strings.Repeat("x", 64<<10)); err != nil {
 		t.Fatalf("a 64 KiB logo in any colors was refused: %v", err)
+	}
+}
+
+func TestGetSettingsRefreshesTheHarnessCatalog(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	testworld.Await(app, protocol.EventHarnessCatalog, func(protocol.HarnessCatalogMessage) bool { return true })
+
+	mark := len(app.Log())
+	app.Send(protocol.GetSettingsMessage{Cmd: protocol.CmdGetSettings})
+	refreshed := testworld.AwaitSince(app, mark, protocol.EventHarnessCatalog, func(protocol.HarnessCatalogMessage) bool { return true })
+	claude, listed := catalogEntry(refreshed, "claude")
+	if !listed || claude.Installation != protocol.HarnessInstallationInstalled {
+		t.Fatalf("get_settings catalog = %+v, want claude installed", refreshed.Harnesses)
 	}
 }

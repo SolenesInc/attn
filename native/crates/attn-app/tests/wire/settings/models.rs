@@ -116,7 +116,7 @@ fn shows_reported_order_flags_untiered_models_and_names_live_light_and_deep_defa
         named(&world, &format!("{}.tier", row("codex", "gpt-6-luna"))),
         None
     );
-    assert_eq!(preference_reads(&world), 1);
+    assert_eq!(preference_reads(&world), 0);
     assert_eq!(discovered(&world), ["claude", "codex", "plug"]);
     rest(&mut world);
 }
@@ -200,14 +200,9 @@ fn delete_resets_a_model_without_changing_its_neighbors() {
 
 #[test]
 fn an_override_for_a_known_harness_without_discovery_can_be_removed() {
-    let listed = vec![
-        harness("claude", "Claude"),
-        harness("codex", "Codex"),
-        Harness {
-            discovery: false,
-            ..harness("plug", "Plug")
-        },
-    ];
+    let mut plug = harness("plug", "Plug");
+    plug.options.discovery = false;
+    let listed = vec![harness("claude", "Claude"), harness("codex", "Codex"), plug];
     let (mut world, _) = on_models(
         &[(
             OVERRIDES,
@@ -245,9 +240,11 @@ fn saved_overrides_stay_removable_when_model_discovery_fails() {
         &[
             (OVERRIDES, overrides),
             ("codex_executable", "/missing/codex"),
-            ("codex_available", "false"),
         ],
     );
+    let mut listed = harnesses();
+    listed[1].installation = "missing".into();
+    push_harnesses(&mut world, listed);
     assert_eq!(
         said(&world, "settings.models.codex.orphans"),
         "Saved overrides"
@@ -292,54 +289,38 @@ fn a_new_executable_rediscovers_the_harness_models() {
     rest(&mut world);
 }
 
+fn push_harnesses(world: &mut World, harnesses: Vec<Harness>) {
+    world.daemon.emit(attn_protocol::HarnessCatalogMessage {
+        harnesses,
+        ..attn_protocol::HarnessCatalogMessage::new()
+    });
+    world.settle();
+}
+
 #[test]
 fn a_driver_registering_on_a_connected_plugin_joins_the_harness_list() {
-    let (mut world, stored) = on_models(&[], harnesses());
-    let reads = preference_reads(&world);
+    let (mut world, _) = on_models(&[], harnesses());
     let mut listed = harnesses();
-    listed.push(Harness {
-        discovery: false,
-        ..harness("new-driver", "New driver")
-    });
-    serve(&world.daemon, &stored, listed);
-    change_settings(
-        &mut world,
-        &[
-            ("new-driver_available", "true"),
-            ("new-driver_cap_model_pin", "true"),
-        ],
-    );
+    let mut driver = harness("new-driver", "New driver");
+    driver.options.discovery = false;
+    listed.push(driver);
+    push_harnesses(&mut world, listed);
     assert!(region(&world, "New driver"));
-    assert_eq!(preference_reads(&world), reads + 1);
-    change_settings(
-        &mut world,
-        &[
-            ("new-driver_available", "true"),
-            ("new-driver_cap_model_pin", "true"),
-            ("new-driver_display_name", "Renamed"),
-        ],
-    );
-    assert_eq!(
-        preference_reads(&world),
-        reads + 1,
-        "a setting outside the registry reads nothing"
-    );
+    assert_eq!(preference_reads(&world), 0);
     rest(&mut world);
 }
 
 #[test]
 fn a_driver_losing_initial_prompt_support_leaves_the_harness_list() {
-    let (mut world, stored) = on_models(
-        &[
-            ("plug_available", "true"),
-            ("plug_cap_initial_prompt", "true"),
-        ],
-        harnesses(),
-    );
+    let (mut world, _) = on_models(&[], harnesses());
     assert!(region(&world, "Plug"));
-    let listed: Vec<Harness> = harnesses().into_iter().filter(|h| h.id != "plug").collect();
-    serve(&world.daemon, &stored, listed);
-    change_settings(&mut world, &[("plug_cap_initial_prompt", "false")]);
+    let mut listed = harnesses();
+    for h in &mut listed {
+        if h.id == "plug" {
+            h.options.initial_prompt = false;
+        }
+    }
+    push_harnesses(&mut world, listed);
     assert!(!region(&world, "Plug"));
     rest(&mut world);
 }
@@ -354,8 +335,8 @@ fn plugins_now(world: &mut World, plugins: Vec<PluginInfo>) {
 }
 
 #[test]
-fn a_plugin_change_reads_the_harnesses_again_and_a_health_timestamp_does_not() {
-    let (mut world, stored) = on_models(&[], harnesses());
+fn a_catalog_push_updates_harnesses_and_a_plugin_health_timestamp_triggers_no_rediscovery() {
+    let (mut world, _) = on_models(&[], harnesses());
     let plugin = PluginInfo {
         name: "demo".into(),
         dir: "/tmp/demo".into(),
@@ -367,14 +348,13 @@ fn a_plugin_change_reads_the_harnesses_again_and_a_health_timestamp_does_not() {
         ..PluginInfo::default()
     };
     let mut listed = harnesses();
-    listed.push(Harness {
-        discovery: false,
-        ..harness("demo", "Demo")
-    });
-    serve(&world.daemon, &stored, listed);
-    plugins_now(&mut world, vec![plugin.clone()]);
+    let mut demo = harness("demo", "Demo");
+    demo.options.discovery = false;
+    listed.push(demo);
+    push_harnesses(&mut world, listed);
     assert!(region(&world, "Demo"));
-    let reads = preference_reads(&world);
+    let before = discovered(&world).len();
+    plugins_now(&mut world, vec![plugin.clone()]);
     plugins_now(
         &mut world,
         vec![PluginInfo {
@@ -382,10 +362,9 @@ fn a_plugin_change_reads_the_harnesses_again_and_a_health_timestamp_does_not() {
             ..plugin
         }],
     );
-    assert_eq!(preference_reads(&world), reads);
-    serve(&world.daemon, &stored, harnesses());
-    plugins_now(&mut world, Vec::new());
+    assert_eq!(discovered(&world).len(), before);
+    assert_eq!(preference_reads(&world), 0);
+    push_harnesses(&mut world, harnesses());
     assert!(!region(&world, "Demo"));
-    assert_eq!(preference_reads(&world), reads + 1);
     rest(&mut world);
 }

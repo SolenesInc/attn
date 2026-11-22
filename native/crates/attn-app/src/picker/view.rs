@@ -1,8 +1,8 @@
 use attn_ui::blocks::{Actions, Block, DialogSize, Field as FieldBlock, Inline, Notice, Stack};
 use attn_ui::finder::{self, FinderSize, Hint};
 use attn_ui::system::{
-    GroupHead, IconSize, ListRow, Look, Part, Said, Segment, Segmented, Size, Type, icon,
-    icon_button, press_area, words,
+    GroupHead, IconSize, ListRow, Part, Said, Segment, Segmented, Type, icon, icon_button,
+    press_area, words,
 };
 use attn_ui::{Dialog, Tokens, glyph};
 use rune::{El, Tx, col, el};
@@ -10,7 +10,7 @@ use rune_kit::ScrollBar;
 use rune_kit::TextInput;
 
 use super::repo::{self, Chooser, Delete, Start, Zone};
-use super::{Catalog, Choice, Offer, Opened, Picker, Which, agents, listed, numbered, paths};
+use super::{Choice, Offer, Opened, Picker, Which, agents, numbered, paths};
 use crate::State;
 
 /// The New Session dialog over the app: its backdrop and the dialog, each a layer of its own.
@@ -129,14 +129,15 @@ pub(crate) struct AgentOption {
 }
 
 pub(crate) fn agent_options(state: &State, choice: &Choice, offer: &Offer) -> Vec<AgentOption> {
-    let launching = &state.window.launching;
     let agents = &offer.agents;
     let current = choice.agent_among(agents);
-    let numbered = numbered(agents, &launching.catalog);
-    listed(agents, &launching.catalog)
+    let loaded = state.facts.harnesses_loaded;
+    let numbered = numbered(agents, loaded);
+    agents
+        .listed(loaded)
         .into_iter()
         .map(|agent| {
-            let label = agents::named(&state.facts.settings, &agent);
+            let label = agents::named(&state.facts.harnesses, &agent);
             let availability = agents.of(&agent);
             let selectable = availability != agents::Availability::Unavailable;
             let key = if !selectable {
@@ -189,14 +190,15 @@ pub(crate) struct Yolo {
 
 pub(crate) fn yolo(state: &State, choice: &Choice, offer: &Offer) -> Yolo {
     let current = choice.agent_among(&offer.agents);
-    let supported = agents::supports_yolo(&state.facts.settings, &current);
+    let supported =
+        crate::harness::catalog::options(&state.facts.harnesses, &current).is_some_and(|o| o.yolo);
     Yolo {
         on: choice.yolo_for(state, &current),
         supported,
         title: if supported {
             "Run the agent without asking for permission".to_owned()
         } else {
-            agents::no_yolo(&current)
+            agents::no_yolo(&state.facts.harnesses, &current)
         },
     }
 }
@@ -296,33 +298,14 @@ fn spoken(spec: &str) -> String {
         .label_on(rune::Platform::current())
 }
 
-/// What the toggle says while the harness list loads or after it failed to.
+/// What the toggle says while the harness catalog has not arrived yet.
 pub(crate) fn catalog_note(state: &State, which: Which, t: &Tokens) -> Option<El> {
     let w = which.key();
-    match &state.window.launching.catalog {
-        Catalog::Unasked | Catalog::Loading => Some(
-            words("Loading harnesses…", Type::Small, t.text_tertiary)
-                .key(format!("{w}.agents.loading"))
-                .role("status"),
-        ),
-        Catalog::Failed(error) => Some(
-            Inline::tight()
-                .key(format!("{w}.agents.error"))
-                .role("alert")
-                .label(error.clone())
-                .child(words(error.clone(), Type::Small, t.text_secondary).a11y_hidden())
-                .child(
-                    attn_ui::system::Button::new("Retry")
-                        .look(Look::Quiet)
-                        .size(Size::Compact)
-                        .on_press_tx(super::retry_catalog)
-                        .build(t)
-                        .key(format!("{w}.agents.retry"))
-                        .into(),
-                ),
-        ),
-        Catalog::Loaded(_) => None,
-    }
+    (!state.facts.harnesses_loaded).then(|| {
+        words("Loading harnesses…", Type::Small, t.text_tertiary)
+            .key(format!("{w}.agents.loading"))
+            .role("status")
+    })
 }
 
 /// The classic picker's two bars, the agent's and the chief's: each names its control at the

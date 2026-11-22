@@ -2,7 +2,7 @@
 //! other module, in this crate and in the app, names a token and comes through here.
 #![allow(clippy::disallowed_methods)]
 
-use rune::{El, Icon, Span, TextStyle};
+use rune::{El, Span, TextStyle};
 
 use super::{IconSize, Radius, Space, Type};
 
@@ -31,7 +31,7 @@ pub(crate) const fn serif(style: TextStyle) -> TextStyle {
     ))
 }
 
-pub(crate) fn icon(glyph: &'static Icon, size: IconSize) -> El {
+pub(crate) fn icon(glyph: impl Into<rune::IconSource>, size: IconSize) -> El {
     rune::icon(glyph, size.pt())
 }
 

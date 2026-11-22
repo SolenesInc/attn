@@ -1765,12 +1765,18 @@ fn settings_agents(dark: bool) {
 /// The Agents page with Claude missing and Codex installed, the pointer resting on the dimmed
 /// Claude option until its tooltip says why it is unavailable.
 fn settings_agents_missing_hovered(dark: bool) {
-    let missing = [
-        ("new_session_agent", "codex"),
-        ("claude_available", "false"),
-        ("codex_available", "true"),
-    ];
-    let mut world = settings_world(dark, "agents", "agents", &missing, |_| {}, |_| {});
+    let mut world = settings_world(
+        dark,
+        "agents",
+        "agents",
+        &[("new_session_agent", "codex")],
+        |_| {},
+        |daemon| {
+            let mut list = attn_testkit::built_in_harnesses();
+            list[0].installation = "missing".into();
+            daemon.set_harnesses(list);
+        },
+    );
     world.gesture(|app| {
         let claude = app
             .runtime
@@ -2253,7 +2259,6 @@ fn launcher_state(dark: bool, empty: bool, launcher_2: bool) -> InitialStateMess
                 if launcher_2 { "true" } else { "false" },
             ),
             ("new_session_agent", "claude"),
-            ("claude_cap_yolo", "true"),
             ("projects_directory", "/home/me/projects"),
             (
                 "new_session_destination_local_/home/me/projects/shop",
@@ -2974,25 +2979,7 @@ fn settings_connectivity(dark: bool) {
 /// Models with one harness reporting a model attn gives no tier.
 fn settings_models(dark: bool) {
     settings_section(dark, "models", "models", &[], |daemon| {
-        daemon.on("delegation_preferences_get", |r: &Request| {
-            message(DelegationPreferencesResultMessage {
-                request_id: r["request_id"].as_str().unwrap_or_default().into(),
-                success: true,
-                preferences: Some(DelegationPreferences::default()),
-                harnesses: Some(vec![Harness {
-                    id: "claude".into(),
-                    name: "Claude Code".into(),
-                    installation: "installed".into(),
-                    model_pin: true,
-                    effort_pin: true,
-                    discovery: true,
-                    ..Harness::default()
-                }]),
-                templates: Some(Vec::new()),
-                expanded_roles: Some(Vec::new()),
-                ..DelegationPreferencesResultMessage::new()
-            })
-        });
+        daemon.set_harnesses(vec![attn_testkit::built_in_harnesses().remove(0)]);
         daemon.on("harness_models", |r: &Request| {
             message(HarnessModelsResultMessage {
                 request_id: r["request_id"].as_str().unwrap_or_default().into(),
@@ -3607,16 +3594,8 @@ fn delegation_scene(
 }
 
 fn delegation_preferences(daemon: &Daemon, enabled: bool, failure: Option<&'static str>) {
+    daemon.set_harnesses(attn_testkit::built_in_harnesses());
     daemon.on("delegation_preferences_get", move |r: &Request| {
-        let harness = |id: &str, name: &str| Harness {
-            id: id.into(),
-            name: name.into(),
-            installation: "installed".into(),
-            model_pin: true,
-            effort_pin: true,
-            discovery: true,
-            ..Harness::default()
-        };
         let roles = delegation_roles();
         message(DelegationPreferencesResultMessage {
             request_id: r["request_id"].as_str().unwrap_or_default().into(),
@@ -3632,10 +3611,7 @@ fn delegation_preferences(daemon: &Daemon, enabled: bool, failure: Option<&'stat
                     selection: route("claude", "sonnet", "medium"),
                 },
             }),
-            harnesses: Some(vec![
-                harness("claude", "Claude Code"),
-                harness("codex", "Codex"),
-            ]),
+            harnesses: Some(attn_testkit::built_in_harnesses()),
             templates: Some(vec![roles[0].clone()]),
             expanded_roles: Some(roles),
             workflow_skill_paths: Some(Vec::new()),
@@ -3973,29 +3949,7 @@ fn settings_route_picker(dark: bool) {
             scale,
             |_| {},
             |daemon| {
-                daemon.on("delegation_preferences_get", |r: &Request| {
-                    let harness = |id: &str, name: &str| Harness {
-                        id: id.into(),
-                        name: name.into(),
-                        installation: "installed".into(),
-                        model_pin: true,
-                        effort_pin: true,
-                        discovery: true,
-                        ..Harness::default()
-                    };
-                    message(DelegationPreferencesResultMessage {
-                        request_id: r["request_id"].as_str().unwrap_or_default().into(),
-                        success: true,
-                        preferences: Some(DelegationPreferences::default()),
-                        harnesses: Some(vec![
-                            harness("claude", "Claude Code"),
-                            harness("codex", "Codex"),
-                        ]),
-                        templates: Some(Vec::new()),
-                        expanded_roles: Some(Vec::new()),
-                        ..DelegationPreferencesResultMessage::new()
-                    })
-                });
+                daemon.set_harnesses(attn_testkit::built_in_harnesses());
                 daemon.on("harness_models", |r: &Request| {
                     let model = |id: &str, name: &str, tier: &str| HarnessModel {
                         harness: "claude".into(),
@@ -4043,19 +3997,7 @@ fn settings_route_picker(dark: bool) {
 /// a query that matches some, an exact model id, and one that matches nothing.
 fn route_picker_callers(dark: bool) {
     let settings = |section: &'static str, search: &'static str| {
-        move || {
-            settings_world(
-                dark,
-                section,
-                search,
-                &[
-                    ("claude_cap_headless_task", "true"),
-                    ("codex_cap_headless_task", "true"),
-                ],
-                |_| {},
-                delegation_answers,
-            )
-        }
+        move || settings_world(dark, section, search, &[], |_| {}, delegation_answers)
     };
     picker_states(
         dark,
@@ -4554,48 +4496,31 @@ fn settings_smallest_pages(dark: bool) {
         dark,
         "agents",
         "agents",
-        &[
-            ("claude_available", "checking"),
-            ("codex_available", "false"),
-            (
-                "default_model_claude",
-                "anthropic.claude-opus-5-5-20261101-v1:0-with-extended-thinking-eu-north-1",
-            ),
-            ("snipe_available", "true"),
-            (
-                "snipe_display_name",
-                "Engineering observability staging review agent with a long name",
-            ),
-        ],
+        &[(
+            "default_model_claude",
+            "anthropic.claude-opus-5-5-20261101-v1:0-with-extended-thinking-eu-north-1",
+        )],
         |_| {},
         |daemon| {
-            daemon.on("delegation_preferences_get", |r: &Request| {
-                let harness = |id: &str, name: &str| Harness {
-                    id: id.into(),
-                    name: name.into(),
-                    installation: "installed".into(),
+            let mut list = attn_testkit::built_in_harnesses();
+            list[0].installation = "checking".into();
+            list[1].installation = "missing".into();
+            list.push(Harness {
+                id: "snipe".into(),
+                name: "Engineering observability staging review agent with a long name".into(),
+                installation: "installed".into(),
+                offered: true,
+                options: attn_protocol::HarnessOptions {
+                    initial_prompt: true,
                     model_pin: true,
                     effort_pin: true,
                     discovery: true,
-                    ..Harness::default()
-                };
-                message(DelegationPreferencesResultMessage {
-                    request_id: r["request_id"].as_str().unwrap_or_default().into(),
-                    success: true,
-                    preferences: Some(DelegationPreferences::default()),
-                    harnesses: Some(vec![
-                        harness("claude", "Claude Code"),
-                        harness("codex", "Codex"),
-                        harness(
-                            "snipe",
-                            "Engineering observability staging review agent with a long name",
-                        ),
-                    ]),
-                    templates: Some(Vec::new()),
-                    expanded_roles: Some(Vec::new()),
-                    ..DelegationPreferencesResultMessage::new()
-                })
+                    provider: true,
+                    ..attn_protocol::HarnessOptions::default()
+                },
+                ..Harness::default()
             });
+            daemon.set_harnesses(list);
         },
     );
     settings_smallest_page(
@@ -4739,30 +4664,23 @@ fn settings_smallest_pages(dark: bool) {
         )],
         |_| {},
         |daemon| {
-            daemon.on("delegation_preferences_get", |r: &Request| {
-                let harness = |id: &str, name: &str| Harness {
-                    id: id.into(),
-                    name: name.into(),
-                    installation: "installed".into(),
+            let mut list = attn_testkit::built_in_harnesses();
+            list.push(Harness {
+                id: "plug".into(),
+                name: "Build `東京` _staging_ *driver*".into(),
+                installation: "installed".into(),
+                offered: true,
+                options: attn_protocol::HarnessOptions {
+                    initial_prompt: true,
                     model_pin: true,
                     effort_pin: true,
                     discovery: true,
-                    ..Harness::default()
-                };
-                message(DelegationPreferencesResultMessage {
-                    request_id: r["request_id"].as_str().unwrap_or_default().into(),
-                    success: true,
-                    preferences: Some(DelegationPreferences::default()),
-                    harnesses: Some(vec![
-                        harness("claude", "Claude Code"),
-                        harness("codex", "Codex"),
-                        harness("plug", "Build `東京` _staging_ *driver*"),
-                    ]),
-                    templates: Some(Vec::new()),
-                    expanded_roles: Some(Vec::new()),
-                    ..DelegationPreferencesResultMessage::new()
-                })
+                    provider: true,
+                    ..attn_protocol::HarnessOptions::default()
+                },
+                ..Harness::default()
             });
+            daemon.set_harnesses(list);
             daemon.on("harness_models", |r: &Request| {
                 let request_id: String = r["request_id"].as_str().unwrap_or_default().into();
                 if r["harness"] == "plug" {
@@ -5062,10 +4980,6 @@ fn chief_setup(dark: bool) {
     }]);
     if let Some(settings) = state.settings.as_mut() {
         for (key, value) in [
-            ("claude_available", "true"),
-            ("codex_available", "true"),
-            ("claude_cap_launch_instructions", "true"),
-            ("codex_cap_launch_instructions", "true"),
             ("new_session_agent", "claude"),
             ("queue_mode_enabled", "true"),
             ("notebook.root.effective", "/home/me/attn-notebook"),
@@ -5074,29 +4988,7 @@ fn chief_setup(dark: bool) {
         }
     }
     let daemon = scripted().state(state);
-    daemon.on("delegation_preferences_get", |r: &Request| {
-        let harness = |id: &str, name: &str| Harness {
-            id: id.into(),
-            name: name.into(),
-            installation: "installed".into(),
-            model_pin: true,
-            effort_pin: true,
-            discovery: true,
-            ..Harness::default()
-        };
-        message(DelegationPreferencesResultMessage {
-            request_id: r["request_id"].as_str().unwrap_or_default().into(),
-            success: true,
-            preferences: Some(DelegationPreferences::default()),
-            harnesses: Some(vec![
-                harness("claude", "Claude Code"),
-                harness("codex", "Codex"),
-            ]),
-            templates: Some(Vec::new()),
-            expanded_roles: Some(Vec::new()),
-            ..DelegationPreferencesResultMessage::new()
-        })
-    });
+    daemon.set_harnesses(attn_testkit::built_in_harnesses());
     daemon.on("harness_models", |r: &Request| {
         let model = |id: &str, name: &str, tier: &str| HarnessModel {
             harness: "claude".into(),
@@ -6393,37 +6285,11 @@ fn crew_page_with(dark: bool, smallest: bool) -> World {
             .collect(),
     );
     if let Some(settings) = state.settings.as_mut() {
-        for (key, value) in [
-            ("claude_available", "true"),
-            ("codex_available", "true"),
-            ("default_model_claude", "fable"),
-        ] {
-            settings.insert(key.into(), value.into());
-        }
+        settings.insert("default_model_claude".into(), "fable".into());
     }
     let daemon = scripted().state(state);
+    daemon.set_harnesses(attn_testkit::built_in_harnesses());
     daemon
-        .on("delegation_preferences_get", |_: &Request| {
-            message(DelegationPreferencesResultMessage {
-                success: true,
-                preferences: Some(DelegationPreferences::default()),
-                harnesses: Some(
-                    [("claude", "Claude Code"), ("codex", "Codex")]
-                        .iter()
-                        .map(|(id, name)| Harness {
-                            id: (*id).into(),
-                            name: (*name).into(),
-                            installation: "installed".into(),
-                            model_pin: true,
-                            effort_pin: true,
-                            discovery: true,
-                            ..Harness::default()
-                        })
-                        .collect(),
-                ),
-                ..DelegationPreferencesResultMessage::new()
-            })
-        })
         .on("crew_charter_get", |r: &Request| {
             message(CrewCharterGetResultMessage {
                 success: true,

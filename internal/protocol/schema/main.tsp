@@ -1205,6 +1205,8 @@ model Harness {
   installation: HarnessInstallation;
   logo?: string;                       // the logo's content hash, for harness_logo; absent draws the generic mark
   options: HarnessOptions;
+  activity_effort?: string;            // the harness's default effort for light-tier background tasks, when it sets one
+  advisor_effort?: string;             // the harness's default effort for the Garden advisor, when it sets one
   model_pin: boolean;
   effort_pin: boolean;
   discovery: boolean;
@@ -1215,15 +1217,19 @@ model HarnessOptions {
   resume: boolean;
   yolo: boolean;
   auto_approve: boolean;
+  auto_approve_unreviewed: boolean;    // auto-approve accepts tool calls without a reviewer
+  automation_executable: boolean;      // an automation may name its own executable for this harness
   initial_prompt: boolean;
   launch_instructions: boolean;
   model_pin: boolean;
   effort_pin: boolean;
+  discovery: boolean;                  // exposes model discovery
   context_cap: boolean;
   provider: boolean;                   // its model names carry a provider, as provider/model
   executable_setting: boolean;         // the user can name its program in the <id>_executable setting
   one_shot: boolean;                   // answers headless tasks and model calls
   activity: boolean;                   // attn reads its conversations for activity lines
+  keeps_conversations: boolean;        // attn keeps copies of this harness's conversations at the home
 }
 
 // Every harness of the home, sent after initial_state and again when one changes.

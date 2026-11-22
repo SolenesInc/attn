@@ -94,6 +94,12 @@ fn main() -> ExitCode {
     let waker = handle.clone();
     let wall = attn_app::WallClock::system();
     let main = handle.clone();
+    let logo_cache_dir = launch.instance.data_dir.join("cache").join("harness-logos");
+    main.update(Box::new(
+        move |state: &mut attn_app::State, _: &mut rune::Tx| {
+            state.cache_logos_in(logo_cache_dir);
+        },
+    ));
     let (link, _window) = attn_app::connect(
         &store,
         |terminals, replies| launch.link_config(terminals, replies, performance),

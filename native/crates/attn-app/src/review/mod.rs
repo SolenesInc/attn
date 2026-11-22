@@ -1007,11 +1007,10 @@ pub(crate) fn body(
             let carried: Vec<&attn_protocol::MarkdownAnnotation> = draft.iter().collect();
             let to = destination.as_ref().map(|d| match d {
                 crate::markdown::drafts::To::Session(id) => marks::Recipient::Session(
-                    servers
-                        .sessions
-                        .iter()
-                        .find(|s| &s.id == id)
-                        .map_or_else(|| id.clone(), crate::sidebar::model::display_name),
+                    servers.sessions.iter().find(|s| &s.id == id).map_or_else(
+                        || id.clone(),
+                        |s| crate::sidebar::model::display_name(s, servers.harnesses),
+                    ),
                 ),
                 crate::markdown::drafts::To::Seed(seed) => marks::Recipient::Seed(seed.clone()),
             });

@@ -57,13 +57,13 @@ pub(super) fn card(
         .of(&facts.profiles.selected)
         .iter()
         .find(|s| s.id == card.seed)?;
-    let names = crate::garden::model::session_names(&facts.sessions);
+    let names = crate::garden::model::session_names(&facts.sessions, &facts.harnesses);
     let tender = crate::garden::model::tender_of(seed, &names);
     let updated = crate::garden::model::ago(&seed.updated_at, now_ms);
     let excerpt = super::seed_chip::excerpt(&seed.body, EXCERPT_CHARS);
     let surface = key(&card.runtime);
     let go = agent(seed, &facts.sessions, &card.session).map(|session| {
-        let name = crate::sidebar::model::display_name(session);
+        let name = crate::sidebar::model::display_name(session, &facts.harnesses);
         let id = session.id.clone();
         El::from(
             Button::new(format!("Go to {name}"))

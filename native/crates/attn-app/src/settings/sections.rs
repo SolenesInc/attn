@@ -100,7 +100,7 @@ pub(crate) const GROUPS: &[Group] = &[
                 Section::Agents,
                 "Agents and models",
                 "Defaults for new sessions, with configuration for each agent.",
-                "agents executables claude codex default asks questions answer decisions drawer capabilities model effort pricing context window cap tokens compaction auto-approve unattended direct agent launches memory shared terminal host pty backend rust workers seeds standby pull request pr comments ring quiet",
+                "agents executables default asks questions answer decisions drawer capabilities model effort pricing context window cap tokens compaction auto-approve unattended direct agent launches memory shared terminal host pty backend rust workers seeds standby pull request pr comments ring quiet",
             ),
             item(
                 Section::Models,
@@ -231,19 +231,24 @@ impl Section {
 }
 
 impl Item {
-    fn matches(&self, query: &str) -> bool {
-        let experimental = if self.section == Section::Experimental {
+    fn matches(&self, query: &str, harnesses: &[attn_protocol::Harness]) -> bool {
+        let extra = if self.section == Section::Experimental {
             FEATURES
                 .iter()
                 .filter(|f| f.stage == "experimental")
                 .map(|f| format!("{} {}", f.name, f.search))
                 .collect::<Vec<_>>()
                 .join(" ")
+        } else if self.section == Section::Agents {
+            crate::harness::catalog::offered(harnesses)
+                .map(|h| format!("{} {}", h.id, h.name))
+                .collect::<Vec<_>>()
+                .join(" ")
         } else {
             String::new()
         };
         format!(
-            "{} {} {} {experimental}",
+            "{} {} {} {extra}",
             self.label, self.description, self.keywords
         )
         .to_lowercase()
@@ -252,7 +257,10 @@ impl Item {
 }
 
 /// The nav groups the search leaves, each with the items whose words hold the whole query.
-pub(crate) fn filtered(search: &str) -> Vec<(&'static str, Vec<&'static Item>)> {
+pub(crate) fn filtered(
+    search: &str,
+    harnesses: &[attn_protocol::Harness],
+) -> Vec<(&'static str, Vec<&'static Item>)> {
     let query = search.trim().to_lowercase();
     GROUPS
         .iter()
@@ -260,7 +268,7 @@ pub(crate) fn filtered(search: &str) -> Vec<(&'static str, Vec<&'static Item>)> 
             let items = group
                 .items
                 .iter()
-                .filter(|item| query.is_empty() || item.matches(&query))
+                .filter(|item| query.is_empty() || item.matches(&query, harnesses))
                 .collect::<Vec<_>>();
             (group.label, items)
         })

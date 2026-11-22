@@ -75,6 +75,8 @@ pub struct Facts {
     pub settings: Arc<BTreeMap<String, String>>,
     /// Every harness the home can run a session on, offered or not, as the daemon last sent it.
     pub harnesses: Arc<Vec<Harness>>,
+    /// Whether the daemon has pushed its harness catalog on this connection.
+    pub harnesses_loaded: bool,
     /// The machines that host remote sessions, by the id a session's `host` names.
     pub outposts: Arc<Vec<OutpostInfo>>,
     /// The build the home daemon runs, which an outpost on another build is offered.
@@ -632,6 +634,7 @@ impl Store {
     pub(crate) fn set_harnesses(&self, harnesses: Vec<Harness>) {
         self.change(|facts| {
             facts.harnesses = Arc::new(harnesses);
+            facts.harnesses_loaded = true;
             Slices::HARNESSES
         });
     }

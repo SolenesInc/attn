@@ -185,6 +185,7 @@ fn agent(
         agent: {
             let row = AgentRow::of(
                 session,
+                &state.facts.harnesses,
                 &state.facts.outposts,
                 state.window.on_screen(&state.facts).as_deref() == Some(session.id.as_str()),
             )
@@ -231,11 +232,11 @@ pub(super) fn chief_slot(state: &State, t: &Tokens) -> Option<El> {
     let line = chief_line(state, &on_screen, &bands, chief);
     let key = line.key();
     Some(match &line {
-        QLine::Agent(agent) => queue_row(key, agent, false, super::logos(state), t),
+        QLine::Agent(agent) => queue_row(state, key, agent, false, super::logos(state), t),
         QLine::ChiefSetup(chief) => {
-            super::crew::chief_setup_row(key, chief, super::logos(state), t)
+            super::crew::chief_setup_row(state, key, chief, super::logos(state), t)
         }
-        QLine::Member(member) => super::crew::row_view(key, member, t),
+        QLine::Member(member) => super::crew::row_view(state, key, member, t),
         _ => return None,
     })
 }
@@ -377,7 +378,10 @@ pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
         lines.push(QLine::Filter);
         let filter = window.agent_filter.text.to_lowercase();
         let matches = |r: &&QueueRow<'_>| {
-            filter.is_empty() || display_name(r.session).to_lowercase().contains(&filter)
+            filter.is_empty()
+                || display_name(r.session, &state.facts.harnesses)
+                    .to_lowercase()
+                    .contains(&filter)
         };
         let working: Vec<_> = working.into_iter().filter(matches).collect();
         let snoozed: Vec<_> = snoozed.into_iter().filter(matches).collect();
@@ -483,6 +487,8 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
             std::sync::Arc::as_ptr(&facts.garden) as usize,
             std::sync::Arc::as_ptr(&facts.outposts) as usize,
             std::sync::Arc::as_ptr(&facts.crew) as usize,
+            std::sync::Arc::as_ptr(&facts.harnesses) as usize,
+            state.logos.revision(),
             window.crew_rows.armed(),
             crate::chief::view(state),
         ),
@@ -585,9 +591,10 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
         _ => None,
     };
     let logos = super::logos(state);
+    let logo_rev = if logos { state.logos.revision() } else { 0 };
     memo(
         key.clone(),
-        (line, draining, cursor, keys.clone(), logos, *t),
+        (line, draining, cursor, keys.clone(), logos, logo_rev, *t),
         || {
             ROWS_BUILT.with(|n| n.set(n.get() + 1));
             match line {
@@ -610,11 +617,13 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
                 }
                 QLine::Agent(agent) => {
                     let bar = super::settling_bar(state, &key, &agent.agent, t);
-                    queue_row(key, agent, cursor, logos, t).children(bar)
+                    queue_row(state, key, agent, cursor, logos, t).children(bar)
                 }
                 QLine::CrewRule => crew_rule(key, t),
-                QLine::Member(member) => super::crew::row_view(key, member, t),
-                QLine::ChiefSetup(chief) => super::crew::chief_setup_row(key, chief, logos, t),
+                QLine::Member(member) => super::crew::row_view(state, key, member, t),
+                QLine::ChiefSetup(chief) => {
+                    super::crew::chief_setup_row(state, key, chief, logos, t)
+                }
                 QLine::RunsHead { runs, needing } => runs_head(key, *runs, *needing, keys, t),
                 QLine::RunGroup(group) => run_group(key, group, t),
                 QLine::Filter => unreachable!("the filter is built above"),
@@ -823,7 +832,14 @@ fn filter(state: &State, key: String, t: &Tokens) -> El {
         .child(El::from(system::search_field(input, t)))
 }
 
-fn queue_row(key: String, a: &QueueAgent, cursor: bool, logos: bool, t: &Tokens) -> El {
+fn queue_row(
+    state: &State,
+    key: String,
+    a: &QueueAgent,
+    cursor: bool,
+    logos: bool,
+    t: &Tokens,
+) -> El {
     let id = a.agent.id.clone();
     let trailing = if a.closing {
         "closing".to_owned()
@@ -842,7 +858,7 @@ fn queue_row(key: String, a: &QueueAgent, cursor: bool, logos: bool, t: &Tokens)
         .role("listitem")
         .unfocusable()
         .cursor(cursor)
-        .lead(badged_lead(&key, a, logos, t))
+        .lead(badged_lead(state, &key, a, logos, t))
         .title_el(name)
         .in_view(a.agent.selected)
         .tint(a.agent.offline.then_some(t.error))
@@ -869,7 +885,7 @@ fn queue_row(key: String, a: &QueueAgent, cursor: bool, logos: bool, t: &Tokens)
 
 /// A queue row's lead with its desktop's slot tucked under its lower right corner: it takes no
 /// room in the row.
-fn badged_lead(key: &str, a: &QueueAgent, logos: bool, t: &Tokens) -> El {
+fn badged_lead(state: &State, key: &str, a: &QueueAgent, logos: bool, t: &Tokens) -> El {
     let ground = if a.agent.selected {
         t.bg_elevated
     } else {
@@ -877,7 +893,7 @@ fn badged_lead(key: &str, a: &QueueAgent, logos: bool, t: &Tokens) -> El {
     };
     row()
         .center()
-        .child(lead(key, &a.agent, logos, t))
+        .child(lead(state, key, &a.agent, logos, t))
         .children((!a.slot.is_empty()).then(|| {
             system::slot_badge(format!("{key}.slot"), a.slot.clone(), ground, t).pin(
                 None,

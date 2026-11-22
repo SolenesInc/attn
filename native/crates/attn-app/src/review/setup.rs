@@ -90,7 +90,7 @@ pub(crate) fn reads(facts: &attn_client::Facts, desktop: &str, now_ms: i64) -> V
         .filter_map(|(_, c)| c.message.review.as_ref())
         .flat_map(|b| &b.navigation)
         .filter_map(|n| match setting_up(n, &facts.sessions) {
-            Some(s) => Some(crate::sidebar::model::display_name(s)),
+            Some(s) => Some(crate::sidebar::model::display_name(s, &facts.harnesses)),
             None => n
                 .started_at
                 .as_deref()
@@ -136,7 +136,7 @@ pub(crate) fn states(
             let session = agent.id.clone();
             return label(format!(
                 "{language} setting up in {}",
-                crate::sidebar::model::display_name(agent)
+                crate::sidebar::model::display_name(agent, servers.harnesses)
             ))
             .color(t.text_secondary)
             .role("button")
@@ -185,7 +185,10 @@ pub(crate) fn states(
                 toggle_offer(s, tile, tx);
             };
             let set_up = match crate::harness_menu::last_pick(servers.settings, servers.harnesses) {
-                Some(agent) => format!("set up with {}", crate::picker::agents::label(&agent)),
+                Some(agent) => format!(
+                    "set up with {}",
+                    crate::harness::catalog::name(servers.harnesses, &agent)
+                ),
                 None => "set up".to_owned(),
             };
             if offering {

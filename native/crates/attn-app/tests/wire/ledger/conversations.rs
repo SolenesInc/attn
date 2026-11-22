@@ -200,7 +200,7 @@ fn forgetting_a_crew_copy_names_the_letters_that_lose_their_transcript_first() {
     );
     assert_eq!(
         name(&world, "ledger.inspector.confirm"),
-        "Delete attn’s copy of Trellis yesterday (4.2 KB)? Claude’s own files are not touched."
+        "Delete attn’s copy of Trellis yesterday (4.2 KB)? Claude Code’s own files are not touched."
     );
     click(&mut world, "ledger.inspector.action.0");
     assert!(!has(&world, "ledger.inspector.confirm"));

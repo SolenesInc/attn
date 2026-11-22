@@ -424,8 +424,14 @@ fn header(state: &State, item: &Item<'_>, t: &Tokens) -> El {
         .w_full()
         .children(item.holder.map(|s| {
             crate::sidebar::lead(
+                state,
                 "asks.from",
-                &crate::sidebar::AgentRow::of(s, &state.facts.outposts, false),
+                &crate::sidebar::AgentRow::of(
+                    s,
+                    &state.facts.harnesses,
+                    &state.facts.outposts,
+                    false,
+                ),
                 crate::sidebar::logos(state),
                 t,
             )
@@ -595,7 +601,7 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
     let note_placeholder = match (item.holder, &item.standby, &ask.seed_id) {
         (None, Some(standby), _) => format!(
             "Anything else for {}?",
-            crate::desktop::chain::dormant_name(standby.tender)
+            crate::desktop::chain::dormant_name(standby.tender, &state.facts.harnesses)
         ),
         (None, None, Some(_)) => "Anything else for its next tender?".to_owned(),
         _ => format!("Anything else for {}?", item.from),

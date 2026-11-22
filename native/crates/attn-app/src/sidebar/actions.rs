@@ -261,7 +261,7 @@ pub(crate) fn snooze_key(state: &mut State, tx: &mut Tx) {
         return;
     };
     if queue::actions(&state.facts, agent, now_ms).snooze {
-        let name = super::model::display_name(agent);
+        let name = super::model::display_name(agent, &state.facts.harnesses);
         let under = row.map(|row| format!("{row}.snooze"));
         super::snooze::open(state, &id, name, under, tx);
     }

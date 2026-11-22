@@ -9,9 +9,8 @@ use std::time::Duration;
 use attn_app::Action;
 use attn_protocol::{
     CrewCloseResultMessage, CrewMember, CrewSetResultMessage, CrewStartResultMessage,
-    CrewUpdatedMessage, DelegationPreferencesResultMessage, HarnessModelsResultMessage,
-    InitialStateMessage, ProfileArrangementChangedMessage, Session, SessionsUpdatedMessage,
-    SettingsUpdatedMessage,
+    CrewUpdatedMessage, HarnessModelsResultMessage, InitialStateMessage,
+    ProfileArrangementChangedMessage, Session, SessionsUpdatedMessage, SettingsUpdatedMessage,
 };
 use attn_testkit::{Answer, Daemon, Request, Target, World, message};
 use rune::{Key, KeyEvent, Mods};
@@ -48,12 +47,6 @@ fn bound(mut member: CrewMember, session: &str) -> CrewMember {
 
 fn settings(queue: bool) -> BTreeMap<String, String> {
     [
-        ("claude_available", "true"),
-        ("codex_available", "true"),
-        ("plug_available", "true"),
-        ("claude_cap_launch_instructions", "true"),
-        ("codex_cap_launch_instructions", "true"),
-        ("plug_cap_launch_instructions", "false"),
         ("new_session_agent", "claude"),
         ("queue_mode_enabled", if queue { "true" } else { "false" }),
         ("notebook.root.effective", "~/attn-notebook-work"),
@@ -276,8 +269,8 @@ fn a_first_setup_opens_on_its_own_and_saves_the_recommended_route_then_starts_th
     );
     assert_eq!(focused(&world).as_deref(), Some(PRIMARY));
     assert_eq!(named(&world, PRIMARY).as_deref(), Some("Start Captain"));
-    assert_eq!(radios(&world, "harness"), ["Claude", "Codex"]);
-    assert_eq!(checked(&world, "harness"), ["Claude"]);
+    assert_eq!(radios(&world, "harness"), ["Claude Code", "Codex"]);
+    assert_eq!(checked(&world, "harness"), ["Claude Code"]);
     assert_eq!(checked(&world, "model"), ["Opus 5.5 · recommended"]);
     assert!(
         !radios(&world, "model")
@@ -464,7 +457,7 @@ fn with_no_harness_picked_yet_the_first_setup_chooses_none_and_starts_once_one_i
     unpicked.remove("new_session_agent");
     first.settings = Some(unpicked);
     let mut world = start(first);
-    assert_eq!(radios(&world, "harness"), ["Claude", "Codex"]);
+    assert_eq!(radios(&world, "harness"), ["Claude Code", "Codex"]);
     assert!(checked(&world, "harness").is_empty());
     assert_eq!(value(&world, PRIMARY).as_deref(), Some("unavailable"));
     click(&mut world, PRIMARY);
@@ -481,11 +474,14 @@ fn with_no_harness_picked_yet_the_first_setup_chooses_none_and_starts_once_one_i
 fn settings_from_the_chief_setup_open_on_agents_and_record_only_that_section() {
     let mut first = initial(true, chief(false), Vec::new());
     let mut none = settings(true);
-    none.insert("claude_available".into(), "false".into());
-    none.insert("codex_available".into(), "false".into());
     none.insert("analytics.enabled".into(), "true".into());
     first.settings = Some(none);
-    let mut world = start(first);
+    let mut missing = attn_testkit::built_in_harnesses();
+    for h in &mut missing {
+        h.installation = "missing".into();
+    }
+    let mut world = World::start(daemon(first).harnesses(missing));
+    world.settle();
 
     click(&mut world, "chief-setup.settings");
 
@@ -500,12 +496,12 @@ fn settings_from_the_chief_setup_open_on_agents_and_record_only_that_section() {
 
 #[test]
 fn with_no_harness_for_the_chief_check_again_reads_them_and_the_one_last_picked_hides_the_choice() {
-    let mut first = initial(true, chief(false), Vec::new());
-    let mut none = settings(true);
-    none.insert("claude_available".into(), "false".into());
-    none.insert("codex_available".into(), "false".into());
-    first.settings = Some(none);
-    let held = daemon(first);
+    let first = initial(true, chief(false), Vec::new());
+    let mut missing = attn_testkit::built_in_harnesses();
+    for h in &mut missing {
+        h.installation = "missing".into();
+    }
+    let held = daemon(first).harnesses(missing);
     held.on("harness_models", |_: &Request| Value::Null);
     let mut world = World::start(held);
     world.settle();
@@ -517,13 +513,20 @@ fn with_no_harness_for_the_chief_check_again_reads_them_and_the_one_last_picked_
     assert!(shows(&world, "chief-setup.settings"));
     assert!(!shows(&world, PRIMARY));
     let mut codex_only = settings(true);
-    codex_only.insert("claude_available".into(), "false".into());
     codex_only.insert("new_session_agent".into(), "codex".into());
+    let mut catalog_codex = attn_testkit::built_in_harnesses();
+    catalog_codex[0].installation = "missing".into();
     world.daemon.on("get_settings", move |_| {
-        message(SettingsUpdatedMessage {
-            settings: Some(codex_only.clone()),
-            ..SettingsUpdatedMessage::new()
-        })
+        vec![
+            message(SettingsUpdatedMessage {
+                settings: Some(codex_only.clone()),
+                ..SettingsUpdatedMessage::new()
+            }),
+            message(attn_protocol::HarnessCatalogMessage {
+                harnesses: catalog_codex.clone(),
+                ..attn_protocol::HarnessCatalogMessage::new()
+            }),
+        ]
     });
     click(&mut world, "chief-setup.recheck");
     assert_eq!(sent(&world, "get_settings").len(), 1);
@@ -540,21 +543,15 @@ fn with_no_harness_for_the_chief_check_again_reads_them_and_the_one_last_picked_
 fn with_sigma_last_picked_and_the_only_harness_here_that_takes_launch_instructions_the_chief_starts_on_sigma()
  {
     let mut first = initial(true, chief(false), Vec::new());
-    let mut sigma = settings(true);
-    sigma.insert("claude_available".into(), "false".into());
-    sigma.insert("codex_available".into(), "false".into());
-    sigma.insert("sigma_available".into(), "true".into());
-    sigma.insert("sigma_cap_launch_instructions".into(), "true".into());
-    sigma.insert("new_session_agent".into(), "sigma".into());
-    first.settings = Some(sigma);
-    let daemon = daemon(first);
-    daemon.on("delegation_preferences_get", |_| {
-        message(preferences_result(vec![
-            harness("claude", "Claude"),
-            harness("codex", "Codex"),
-            harness("sigma", "Sigma"),
-        ]))
-    });
+    let mut sigma_settings = settings(true);
+    sigma_settings.insert("new_session_agent".into(), "sigma".into());
+    first.settings = Some(sigma_settings);
+    let mut listed = attn_testkit::built_in_harnesses();
+    for h in &mut listed {
+        h.installation = "missing".into();
+    }
+    listed.push(harness("sigma", "Sigma"));
+    let daemon = daemon(first).harnesses(listed);
     let mut world = World::start(daemon);
     world.settle();
     assert!(!shows(&world, "chief-setup.empty"));
@@ -570,23 +567,9 @@ fn with_sigma_last_picked_and_the_only_harness_here_that_takes_launch_instructio
 }
 
 #[test]
-fn a_failed_harness_or_model_lookup_says_why_and_check_again_retries_before_start() {
+fn a_failed_model_lookup_says_why_and_check_again_retries_before_start() {
     let mut world = World::start({
         let daemon = daemon(initial(true, chief(false), Vec::new()));
-        daemon.answer_in_turn(
-            "delegation_preferences_get",
-            [
-                Answer::Reply(message(DelegationPreferencesResultMessage {
-                    success: false,
-                    error: Some("Harness lookup failed".into()),
-                    ..DelegationPreferencesResultMessage::new()
-                })),
-                Answer::Reply(message(preferences_result(vec![
-                    harness("claude", "Claude"),
-                    harness("codex", "Codex"),
-                ]))),
-            ],
-        );
         daemon.answer_in_turn(
             "harness_models",
             [
@@ -605,12 +588,6 @@ fn a_failed_harness_or_model_lookup_says_why_and_check_again_retries_before_star
         daemon
     });
     world.settle();
-    assert_eq!(
-        named(&world, "chief-setup.alert").as_deref(),
-        Some("Harness lookup failed")
-    );
-    assert!(!shows(&world, PRIMARY));
-    click(&mut world, "chief-setup.recheck");
     assert_eq!(
         named(&world, "chief-setup.alert").as_deref(),
         Some("Model lookup failed")

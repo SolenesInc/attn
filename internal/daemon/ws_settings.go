@@ -25,6 +25,7 @@ func (d *Daemon) handleGetSettingsWS(client *wsClient) {
 		Event:    protocol.EventSettingsUpdated,
 		Settings: d.settingsSnapshot(d.profileForClient(client)),
 	})
+	d.sendToClient(client, d.harnessCatalogMessage())
 }
 
 func (d *Daemon) handleSetSettingWS(client *wsClient, msg *protocol.SetSettingMessage) {

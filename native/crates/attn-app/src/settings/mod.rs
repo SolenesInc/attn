@@ -64,29 +64,8 @@ pub(crate) fn close_route_picker(state: &mut State, tx: &mut Tx) {
     }
 }
 
-/// The harnesses the daemon offers, as last read.
-pub(crate) fn listed_harnesses(state: &State) -> Vec<attn_protocol::Harness> {
-    harnesses::listed(state)
-}
-
-/// Why the harnesses could not be read, when they could not.
-pub(crate) fn harnesses_error(state: &State) -> Option<String> {
-    state.window.settings.harnesses.error.clone()
-}
-
-pub(crate) fn read_harnesses(state: &mut State, tx: &mut Tx) {
-    harnesses::read(state, tx);
-}
-
-/// The crew panel opened: it reads the harnesses as the dialog does.
-pub(crate) fn crew_opened(state: &mut State) {
-    harnesses::opened(state);
-}
-
-/// While the crew panel shows: the harnesses read when the daemon says they changed, and the
-/// models of its route chip and open picker discovered; whether a read went out.
+/// While the crew panel shows: discovers the models of its route chip and open picker.
 pub(crate) fn crew_poll(state: &mut State, tx: &mut Tx) -> bool {
-    let read = harnesses::ensure(state, tx);
     let wanted = crate::crew::selected(state)
         .map(|m| m.id.clone())
         .and_then(|member| {
@@ -99,39 +78,12 @@ pub(crate) fn crew_poll(state: &mut State, tx: &mut Tx) -> bool {
             let h = rules.harnesses.iter().find(|h| h.id == harness)?;
             Some((h.id.clone(), h.discovery))
         });
-    read | route::discover_wanted(state, wanted.into_iter().collect(), tx)
+    route::discover_wanted(state, wanted.into_iter().collect(), tx)
 }
 
-/// The harnesses the daemon offers as the Chief's setup reads them: whether a read is on its
-/// way, whether one has answered, and why the last one failed.
-pub(crate) struct HarnessRead {
-    pub(crate) listed: Vec<attn_protocol::Harness>,
-    pub(crate) loading: bool,
-    pub(crate) answered: bool,
-    pub(crate) error: Option<String>,
-}
-
-pub(crate) fn harness_read(state: &State) -> HarnessRead {
-    let harnesses = &state.window.settings.harnesses;
-    HarnessRead {
-        listed: harnesses::listed(state),
-        loading: harnesses.loading,
-        answered: harnesses.read.is_some(),
-        error: harnesses.error.clone(),
-    }
-}
-
-/// While the Chief's setup shows: reads the harnesses and discovers the models of `wanted`.
+/// While the Chief's setup shows: discovers the models of `wanted`.
 pub(crate) fn chief_poll(state: &mut State, wanted: Option<(String, bool)>, tx: &mut Tx) -> bool {
-    harnesses::ensure(state, tx) | route::discover_wanted(state, wanted.into_iter().collect(), tx)
-}
-
-/// Reads the harnesses again, and asks `harness` for its models again.
-pub(crate) fn recheck_harnesses(state: &mut State, harness: Option<&str>, tx: &mut Tx) {
-    harnesses::read(state, tx);
-    if let Some(harness) = harness {
-        catalogs::discover(state, harness, true, tx);
-    }
+    route::discover_wanted(state, wanted.into_iter().collect(), tx)
 }
 
 /// Asks `harness` for its models again.
@@ -237,17 +189,6 @@ pub(crate) fn discover_routes(state: &mut State, targets: &[RouteTarget], tx: &m
         .filter_map(|target| route::wanted(state, target))
         .collect();
     route::discover_wanted(state, wanted, tx)
-}
-
-/// Reads the harnesses a route offers when nothing has read them yet.
-pub(crate) fn want_harnesses(state: &mut State, tx: &mut Tx) {
-    let h = &state.window.settings.harnesses;
-    if h.read.is_none()
-        && !h.loading
-        && state.facts.connection == attn_client::Connection::Connected
-    {
-        harnesses::read(state, tx);
-    }
 }
 
 /// Has the page brought up to date before the next frame.
@@ -373,9 +314,16 @@ pub(crate) fn disconnected(state: &mut State) {
 /// Takes the daemon's settings into the fields the user has not changed, and reads the tasks
 /// again when they changed under the Task runner page.
 pub(crate) fn follow(state: &mut State, changed: Slices, tx: &mut Tx) {
-    let listed = Slices::SETTINGS | Slices::PLUGINS | Slices::DELEGATION | Slices::CONNECTION;
+    let listed = Slices::SETTINGS
+        | Slices::HARNESSES
+        | Slices::PLUGINS
+        | Slices::DELEGATION
+        | Slices::CONNECTION;
     if changed.intersects(listed) {
         invalidate(state);
+    }
+    if changed.intersects(Slices::HARNESSES) {
+        harnesses::follow_catalog(state);
     }
     let settings = state.facts.settings.clone();
     state.window.settings.autosave.sync(&settings);

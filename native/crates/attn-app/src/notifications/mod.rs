@@ -6,9 +6,8 @@ mod view;
 use std::collections::BTreeSet;
 
 use attn_protocol::{
-    DeclineUpdateMessage, InstallCodexUpdateMessage, Notification, NotificationListMessage,
-    NotificationListResultMessage, NotificationMarkReadMessage, StartUpdateMessage,
-    TaskRetryMessage,
+    DeclineUpdateMessage, Notification, NotificationListMessage, NotificationListResultMessage,
+    NotificationMarkReadMessage, StartUpdateMessage, TaskRetryMessage,
 };
 use rune::Tx;
 
@@ -30,7 +29,6 @@ pub(crate) struct Panel {
     expanded: Option<String>,
     diagnostic: bool,
     retrying: BTreeSet<String>,
-    installing_codex: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -257,7 +255,12 @@ pub(crate) fn run(state: &mut State, act: Act, tx: &mut Tx) {
             close(state, tx);
             crate::asks::open_seed(state, &seed, tx);
         }
-        Act::InstallCodexUpdate => install_codex_update(state, tx),
+        Act::InstallCodexUpdate => {
+            if !crate::harness::codex::installing(state) {
+                close(state, tx);
+                crate::harness::codex::install_notifying(state, tx);
+            }
+        }
         Act::StartUpdate(update) => state.act(
             |request_id| StartUpdateMessage {
                 request_id: Some(request_id),
@@ -279,31 +282,4 @@ pub(crate) fn run(state: &mut State, act: Act, tx: &mut Tx) {
             tx,
         ),
     }
-}
-
-fn install_codex_update(state: &mut State, tx: &mut Tx) {
-    let Some(desktop) = state.facts.current_desktop().map(|d| d.id.clone()) else {
-        return;
-    };
-    if state.window.notifications.installing_codex {
-        return;
-    }
-    close(state, tx);
-    state.window.notifications.installing_codex = true;
-    state.ask(
-        |request_id| InstallCodexUpdateMessage {
-            request_id: Some(request_id),
-            desktop_id: desktop,
-            ..InstallCodexUpdateMessage::new()
-        },
-        |state, answer, tx| {
-            state.window.notifications.installing_codex = false;
-            if let Err(why) = answer.outcome() {
-                state
-                    .window
-                    .notify(format!("Could not install the Codex update: {why}"), tx);
-            }
-        },
-        tx,
-    );
 }

@@ -193,7 +193,7 @@ impl List<'_> {
         if !self.seen.insert(session.id.clone()) {
             return;
         }
-        let name = model::display_name(session);
+        let name = model::display_name(session, &self.state.facts.harnesses);
         let automation = session
             .automation
             .as_ref()
@@ -219,7 +219,12 @@ impl List<'_> {
             key: format!("agent:{}", session.id),
             label: name,
             look: Look::Agent {
-                agent: Box::new(AgentRow::of(session, &state.facts.outposts, false)),
+                agent: Box::new(AgentRow::of(
+                    session,
+                    &state.facts.harnesses,
+                    &state.facts.outposts,
+                    false,
+                )),
                 crew: !crew.is_empty() && session.chief_of_staff != Some(true),
                 status: status(
                     session,

@@ -1806,21 +1806,26 @@ fn a_capped_agent_offers_to_change_its_cap_and_a_shell_offers_none() {
     world.gesture(|app| app.type_text("context window"));
     assert!(titles(&world).is_empty());
 
-    let mut sigma = initial(
+    let sigma = initial(
         vec![desktop("d1", "work", 1, vec![agent_pane("sg")])],
         vec![Session {
             agent: "sigma".into(),
             ..session("sg")
         }],
     );
-    sigma.settings = Some(BTreeMap::from([
-        ("sigma_available".to_owned(), "true".to_owned()),
-        (
-            "sigma_cap_context_window_cap".to_owned(),
-            "false".to_owned(),
-        ),
-    ]));
-    let mut world = World::start(daemon(sigma, vec![]));
+    let mut harnesses = attn_testkit::built_in_harnesses();
+    harnesses.push(attn_protocol::Harness {
+        id: "sigma".into(),
+        name: "Sigma".into(),
+        installation: "installed".into(),
+        offered: true,
+        options: attn_protocol::HarnessOptions {
+            context_cap: false,
+            ..attn_protocol::HarnessOptions::default()
+        },
+        ..attn_protocol::Harness::default()
+    });
+    let mut world = World::start(daemon(sigma, vec![]).harnesses(harnesses));
     world.open_desktop();
     press_action(&mut world, Action::UiCommandPalette);
     world.gesture(|app| app.type_text("context window"));

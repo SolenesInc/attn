@@ -184,10 +184,18 @@ pub(crate) fn progress_words(seed: &Seed) -> String {
 /// The sessions' names by id, as a seed's tender and log name a session.
 pub(crate) type SessionNames = HashMap<String, String>;
 
-pub(crate) fn session_names(sessions: &[Session]) -> SessionNames {
+pub(crate) fn session_names(
+    sessions: &[Session],
+    harnesses: &[attn_protocol::Harness],
+) -> SessionNames {
     sessions
         .iter()
-        .map(|s| (s.id.clone(), crate::sidebar::model::display_name(s)))
+        .map(|s| {
+            (
+                s.id.clone(),
+                crate::sidebar::model::display_name(s, harnesses),
+            )
+        })
         .collect()
 }
 

@@ -97,6 +97,11 @@ func (d *Daemon) keeperOf(agent string) (harness.Keeper, bool) {
 	return harness.As[harness.Keeper](d.harnessOf(harness.ID(agent)))
 }
 
+func keepsConversations(h harness.Harness) bool {
+	_, ok := harness.As[harness.Keeper](h)
+	return ok
+}
+
 func (d *Daemon) readKeptConversationArchive(agent, resumeID string) (store.KeptConversation, error) {
 	keeper, keeps := d.keeperOf(agent)
 	if !keeps {

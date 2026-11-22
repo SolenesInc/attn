@@ -91,7 +91,7 @@ pub struct Window {
     pub(crate) update_run: crate::update_run::Banner,
     pub(crate) warnings: crate::warnings::Warnings,
     pub(crate) outpost_updates: crate::outpost_updates::Banner,
-    pub(crate) shared_codex: crate::shared_codex::SharedCodex,
+    pub(crate) shared_codex: crate::harness::codex::SharedCodex,
     pub(crate) settings: crate::settings::Dialog,
     pub(crate) crew: crate::crew::Panel,
     pub(crate) crew_rows: crate::sidebar::crew::Rows,
@@ -197,7 +197,7 @@ fn message(state: &State, band: Band) -> Option<u64> {
     let identity = match band {
         Band::UpdateRun => crate::update_run::identity(state),
         Band::OutpostUpdates => crate::outpost_updates::identity(state),
-        Band::SharedCodex => crate::shared_codex::identity(state),
+        Band::SharedCodex => crate::harness::codex::identity(state),
         Band::Warnings => crate::warnings::identity(state),
         Band::Connection => crate::connection::identity(state),
     }?;
@@ -226,7 +226,7 @@ fn banner_details(state: &State, band: Band, shown: u64, t: &Tokens, layers: &mu
     let banner = match band {
         Band::UpdateRun => crate::update_run::said(state),
         Band::OutpostUpdates => crate::outpost_updates::said(state),
-        Band::SharedCodex => crate::shared_codex::said(state),
+        Band::SharedCodex => crate::harness::codex::said(state),
         Band::Warnings => crate::warnings::said(state),
         Band::Connection => crate::connection::said(state),
     };
@@ -561,7 +561,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         .then(|| crate::outpost_updates::banner(state, &t, cx))
         .flatten();
     let shared_codex = bands
-        .then(|| crate::shared_codex::banner(state, &t, cx))
+        .then(|| crate::harness::codex::banner(state, &t, cx))
         .flatten();
     let root = col()
         .key("window")
@@ -869,7 +869,7 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::DiagnosticReport) => crate::diagnostic_report::dialog(state, t, &mut layers),
         Some(Layer::Notebook) => layers.push(crate::notebook::fullscreen(state, t)),
         Some(Layer::Crew) => crate::crew::overlays(state, t, &mut layers),
-        Some(Layer::SharedCodex) => crate::shared_codex::confirm(state, t, &mut layers),
+        Some(Layer::SharedCodex) => crate::harness::codex::confirm(state, t, &mut layers),
         Some(Layer::Asks) => layers.push(crate::asks::sheet(state, t)),
         Some(Layer::BannerDetails(band, shown)) => {
             banner_details(state, band, shown, t, &mut layers)

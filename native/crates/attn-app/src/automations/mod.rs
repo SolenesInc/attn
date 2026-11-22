@@ -498,6 +498,6 @@ pub(crate) fn automation_state(state: &State) -> serde_json::Value {
         "runs": automations.selected.and_then(|id| automations.runs.get(&id)),
         "runErrors": automations.run_errors,
         "toggleErrors": automations.toggle_errors,
-        "form": automations.form.as_ref().map(|f| f.automation_state()),
+        "form": automations.form.as_ref().map(|f| f.automation_state(&state.facts.harnesses)),
     })
 }

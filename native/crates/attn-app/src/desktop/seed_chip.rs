@@ -262,7 +262,7 @@ pub(crate) fn of(session: &Session, seeds: &[Arc<Seed>], title: &str) -> Option<
 /// The chip of `session` from what the window knows.
 fn of_facts(session: &str, facts: &Facts) -> Option<Chip> {
     let session = facts.sessions.iter().find(|s| s.id == session)?;
-    let title = crate::sidebar::display_name(session);
+    let title = crate::sidebar::display_name(session, &facts.harnesses);
     of(session, facts.garden.of(&facts.profiles.selected), &title)
 }
 

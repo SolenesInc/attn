@@ -4,7 +4,6 @@ mod chips;
 pub(crate) mod crew;
 pub(crate) mod crowding;
 pub(crate) mod dock;
-mod harness_icon;
 pub(crate) mod model;
 pub(crate) mod queue;
 mod queue_view;
@@ -211,13 +210,19 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
         .map(|m| crew::resting(state, &m.id))
         .collect();
     let reads = (
-        std::sync::Arc::as_ptr(&facts.sessions) as usize,
-        std::sync::Arc::as_ptr(&facts.desktops) as usize,
-        std::sync::Arc::as_ptr(&facts.profiles) as usize,
-        facts.tile_contents.revision,
-        std::sync::Arc::as_ptr(&facts.asks) as usize,
-        std::sync::Arc::as_ptr(&facts.garden) as usize,
-        std::sync::Arc::as_ptr(&facts.outposts) as usize,
+        (
+            std::sync::Arc::as_ptr(&facts.sessions) as usize,
+            std::sync::Arc::as_ptr(&facts.desktops) as usize,
+            std::sync::Arc::as_ptr(&facts.profiles) as usize,
+            facts.tile_contents.revision,
+        ),
+        (
+            std::sync::Arc::as_ptr(&facts.asks) as usize,
+            std::sync::Arc::as_ptr(&facts.garden) as usize,
+            std::sync::Arc::as_ptr(&facts.outposts) as usize,
+            std::sync::Arc::as_ptr(&facts.harnesses) as usize,
+            state.logos.revision(),
+        ),
         home,
         on_screen.clone(),
         width::of(state).to_bits(),
@@ -272,7 +277,12 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                             .child(queue_view::crew_rule("sidebar.rule.crew".into(), &t))
                             .children(queue_view::chief_slot(state, &t))
                             .children(resting.iter().map(|m| {
-                                crew::row_view(format!("{}.{}", crew::CLASSIC_ROW, m.member), m, &t)
+                                crew::row_view(
+                                    state,
+                                    format!("{}.{}", crew::CLASSIC_ROW, m.member),
+                                    m,
+                                    &t,
+                                )
                             }))
                     }))
                     .child(overview_row(overview_keys.clone(), &t))
@@ -362,6 +372,7 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
         .as_ref()
         .and_then(|d| d.desktop_mark(line.desktop()));
     let logos = logos(state);
+    let logo_rev = if logos { state.logos.revision() } else { 0 };
     let keys = match line {
         Line::Desktop(desktop) => Action::desktop_select(desktop.number)
             .and_then(|select| crate::palette::label_of(state, &select)),
@@ -369,7 +380,16 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
     };
     memo(
         key.clone(),
-        (line, draining, seam, mark, logos, keys.clone(), *t),
+        (
+            line,
+            draining,
+            seam,
+            mark,
+            logos,
+            logo_rev,
+            keys.clone(),
+            *t,
+        ),
         || {
             ROWS_BUILT.with(|n| n.set(n.get() + 1));
             let row = match line {
@@ -381,7 +401,7 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
                         .then(|| settle_button(&key, row))
                         .into_iter()
                         .chain([actions_button(&key, row)]);
-                    agent_row(key.clone(), row, logos, controls.collect(), t).children(bar)
+                    agent_row(state, key.clone(), row, logos, controls.collect(), t).children(bar)
                 }
                 Line::Tile(tile) => tile_row(key.clone(), tile, t),
             };
@@ -482,6 +502,7 @@ const NAME_MIN_W: f32 = 64.0;
 
 /// An agent's row, its hover controls laid over its end.
 fn agent_row(
+    state: &State,
     key: String,
     agent: &AgentRow,
     logos: bool,
@@ -497,7 +518,7 @@ fn agent_row(
             .shrink(),
     );
     let mut row = ListRow::new(key.clone(), format!("Open {}", agent.name))
-        .lead(lead(&key, agent, logos, t))
+        .lead(lead(state, &key, agent, logos, t))
         .title_el(name)
         .in_view(agent.selected)
         .tint(agent.offline.then_some(t.error))
@@ -732,7 +753,7 @@ pub(crate) fn logos(state: &State) -> bool {
     crate::setting::on(&state.facts.settings, HARNESS_LOGOS)
 }
 
-pub(crate) fn lead(row_key: &str, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
+pub(crate) fn lead(state: &State, row_key: &str, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
     if logos && agent.state == AgentState::Launching && !agent.offline {
         return rune::row()
             .key(format!("{row_key}.state"))
@@ -756,7 +777,7 @@ pub(crate) fn lead(row_key: &str, agent: &AgentRow, logos: bool, t: &Tokens) -> 
             .child(state_mark(row_key, agent, DotSize::Regular, t));
     }
     system::icon(
-        harness_icon::of(&agent.harness),
+        crate::harness::logo::of(state, &agent.agent),
         IconSize::Regular,
         state_color(agent.state, t),
     )
@@ -942,7 +963,7 @@ pub(crate) fn row_source(state: &State, session: &str) -> Option<crate::desktop:
     Some(crate::desktop::drag::Source::Row {
         desktop,
         leaf,
-        label: model::display_name(found),
+        label: model::display_name(found, &state.facts.harnesses),
     })
 }
 

@@ -6,7 +6,9 @@ use std::task::{Context, Poll};
 use std::thread::JoinHandle;
 
 use attn_client::Pulse;
-use attn_protocol::{InitialStateMessage, PROTOCOL_VERSION};
+use attn_protocol::{
+    Harness, HarnessCatalogMessage, HarnessOptions, InitialStateMessage, PROTOCOL_VERSION,
+};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
@@ -85,6 +87,7 @@ struct Connection {
 
 struct Script {
     initial_state: InitialStateMessage,
+    harnesses: Option<Vec<Harness>>,
     instance: String,
     client_token: String,
     refusing: bool,
@@ -138,6 +141,7 @@ impl Daemon {
         let shared = Arc::new(Shared {
             script: Mutex::new(Script {
                 initial_state: InitialStateMessage::new(),
+                harnesses: Some(built_in_harnesses()),
                 instance: INSTANCE.into(),
                 client_token: CLIENT_TOKEN.into(),
                 refusing: false,
@@ -210,6 +214,24 @@ impl Daemon {
     /// state answers the next connection.
     pub fn answer_hello_with(&self, initial_state: InitialStateMessage) {
         self.shared.script.lock().unwrap().initial_state = initial_state;
+    }
+
+    /// The harness catalog pushed right after `initial_state` on `client_hello`.
+    pub fn harnesses(self, harnesses: Vec<Harness>) -> Daemon {
+        self.set_harnesses(harnesses);
+        self
+    }
+
+    /// Replaces the harness catalog pushed on future `client_hello`s.
+    pub fn set_harnesses(&self, harnesses: Vec<Harness>) {
+        self.shared.script.lock().unwrap().harnesses = Some(harnesses);
+    }
+
+    /// Omits the automatic `harness_catalog` push after `initial_state`, for tests checking the
+    /// window before the catalog arrives.
+    pub fn without_harness_catalog(self) -> Daemon {
+        self.shared.script.lock().unwrap().harnesses = None;
+        self
     }
 
     /// Passes every message this daemon sends through `rewrite` first, as a daemon whose data
@@ -611,7 +633,16 @@ fn receive(shared: &Shared, id: usize, text: &str) {
                 log.connections[at].greeted = true;
                 replies = match script.handlers.get("client_hello") {
                     Some(handler) => handler(&request),
-                    None => vec![initial_state(&script)],
+                    None => {
+                        let mut out = vec![initial_state(&script)];
+                        if let Some(harnesses) = &script.harnesses {
+                            out.push(message(HarnessCatalogMessage {
+                                harnesses: harnesses.clone(),
+                                ..HarnessCatalogMessage::new()
+                            }));
+                        }
+                        out
+                    }
                 };
             } else {
                 replies.push(json!({
@@ -657,6 +688,60 @@ fn receive(shared: &Shared, id: usize, text: &str) {
     }
     drop(log);
     shared.pulse.beat();
+}
+
+pub fn built_in_harnesses() -> Vec<Harness> {
+    vec![
+        Harness {
+            id: "claude".into(),
+            name: "Claude Code".into(),
+            installation: "installed".into(),
+            offered: true,
+            advisor_effort: Some("medium".into()),
+            options: HarnessOptions {
+                resume: true,
+                yolo: true,
+                auto_approve: true,
+                initial_prompt: true,
+                launch_instructions: true,
+                model_pin: true,
+                effort_pin: true,
+                discovery: true,
+                context_cap: true,
+                automation_executable: true,
+                executable_setting: true,
+                one_shot: true,
+                activity: true,
+                keeps_conversations: true,
+                ..HarnessOptions::default()
+            },
+            ..Harness::default()
+        },
+        Harness {
+            id: "codex".into(),
+            name: "Codex".into(),
+            installation: "installed".into(),
+            offered: true,
+            activity_effort: Some("low".into()),
+            advisor_effort: Some("xhigh".into()),
+            options: HarnessOptions {
+                resume: true,
+                yolo: true,
+                auto_approve: true,
+                initial_prompt: true,
+                launch_instructions: true,
+                model_pin: true,
+                effort_pin: true,
+                discovery: true,
+                context_cap: true,
+                executable_setting: true,
+                one_shot: true,
+                activity: true,
+                ..HarnessOptions::default()
+            },
+            ..Harness::default()
+        },
+    ]
 }
 
 fn initial_state(script: &Script) -> Value {

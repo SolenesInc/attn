@@ -35,7 +35,7 @@ pub(super) fn fields() -> Vec<(String, Codec)> {
 pub(super) fn wanted(state: &State) -> Vec<(String, bool)> {
     harnesses::listed(state)
         .into_iter()
-        .map(|h| (h.id, h.discovery))
+        .map(|h| (h.id, h.options.discovery))
         .collect()
 }
 
@@ -246,7 +246,7 @@ fn default_name(
 }
 
 fn harness_block(state: &State, harness: &Harness, entries: &[TierOverride], t: &Tokens) -> Block {
-    let found = catalogs::of(state, &harness.id, harness.discovery);
+    let found = catalogs::of(state, &harness.id, harness.options.discovery);
     let models: &[HarnessModel] = found.catalog.map_or(&[], |c| c.models.as_slice());
     let key = format!("settings.models.{}", harness.id);
     let mut section = Section::new(key.clone(), harness.name.clone())
@@ -265,7 +265,7 @@ fn harness_block(state: &State, harness: &Harness, entries: &[TierOverride], t: 
                 )
                 .build(t),
         );
-    if harness.discovery {
+    if harness.options.discovery {
         let id = harness.id.clone();
         section = section.push(
             Actions::new(format!("{key}.actions"))
@@ -284,7 +284,7 @@ fn harness_block(state: &State, harness: &Harness, entries: &[TierOverride], t: 
     if let Some(error) = found.error {
         section = section.push(Notice::warn(format!("{key}.error"), error.to_owned()).build(t));
     }
-    if !harness.discovery {
+    if !harness.options.discovery {
         section = section.push(
             Prose::hint(
                 format!("{key}.no-catalog"),
@@ -304,7 +304,7 @@ fn harness_block(state: &State, harness: &Harness, entries: &[TierOverride], t: 
                 .build(t),
         );
     }
-    let shows_orphans = !harness.discovery
+    let shows_orphans = !harness.options.discovery
         || found.catalog.is_some()
         || found.error.is_some()
         || !harness.available();
@@ -392,8 +392,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let listed = harnesses::listed(state);
     let entries = entries(state);
     let mut out = Vec::new();
-    out.extend(harnesses::failure_notice(state, "models", t));
-    if harnesses::first_loading(state) {
+    if !state.facts.harnesses_loaded {
         out.push(Status::new("settings.models.loading", "Loading harnesses…", true).build(t));
     }
     out.extend(

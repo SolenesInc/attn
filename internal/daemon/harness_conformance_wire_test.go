@@ -34,7 +34,7 @@ func TestEveryHarnessAnswersTheContractWithItsFake(t *testing.T) {
 	codexOptions := terminalOptions
 	codexOptions.AutomationExecutable = false
 	sigmaOptions := terminalOptions
-	sigmaOptions.ContextCap, sigmaOptions.Provider = false, true
+	sigmaOptions.ContextCap, sigmaOptions.Provider, sigmaOptions.AutoApproveUnreviewed = false, true, true
 	home := conformance.Home
 	conformance.Run(t, w.daemon.Harnesses(), []conformance.Row{
 		{

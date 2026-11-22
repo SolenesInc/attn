@@ -369,8 +369,13 @@ impl Form {
         self.saving || (self.trigger == Trigger::Scheduled && self.preview.refused)
     }
 
-    pub(crate) fn automation_state(&self) -> serde_json::Value {
+    pub(crate) fn automation_state(
+        &self,
+        harnesses: &[attn_protocol::Harness],
+    ) -> serde_json::Value {
         let values = self.values();
+        let takes_executable = crate::harness::catalog::options(harnesses, &values.agent)
+            .is_some_and(|o| o.automation_executable);
         serde_json::json!({
             "present": true,
             "mode": self.mode(),
@@ -382,7 +387,7 @@ impl Form {
                 Load::Failed(_) => "load-error",
             },
             "loadError": match &self.load { Load::Failed(e) => e.as_str(), _ => "" },
-            "spec": model::spec(&values),
+            "spec": model::spec(&values, takes_executable),
             "errors": self.errors.iter().map(|(f, m)| (f.path(), m.clone())).collect::<BTreeMap<_, _>>(),
             "saving": self.saving,
             "saveBlocked": self.save_blocked(),
@@ -416,7 +421,6 @@ pub(crate) fn open(state: &mut State, definition: Option<i64>, tx: &mut Tx) {
     let opening = state.window.automations.issue();
     state.window.automations.form = Some(Form::new(definition, profile, opening));
     state.window.automations.pull_request = None;
-    crate::settings::want_harnesses(state, tx);
     match definition {
         Some(id) => read(state, id, false, tx),
         None => place_keyboard(state, tx),
@@ -532,11 +536,14 @@ pub(crate) fn save(state: &mut State, tx: &mut Tx) {
     f.saving = true;
     f.save_error = None;
     f.stale = false;
-    let spec = model::spec(&f.values()).to_string();
+    let values = f.values();
     let (expected_id, expected_revision) = (f.id.unwrap_or(0), f.revision);
     let launch_desktop = f.launch_desktop.clone();
     let profile = Some(f.profile.clone()).filter(|p| !p.is_empty());
     let opening = f.opening;
+    let takes_executable = crate::harness::catalog::options(&state.facts.harnesses, &values.agent)
+        .is_some_and(|o| o.automation_executable);
+    let spec = model::spec(&values, takes_executable).to_string();
     state.ask(
         |request_id| AutomationApplyMessage {
             request_id: Some(request_id),

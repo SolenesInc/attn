@@ -60,6 +60,7 @@ pub(crate) struct RouteHarness {
     pub(crate) model_pin: bool,
     pub(crate) effort_pin: bool,
     pub(crate) discovery: bool,
+    pub(crate) default_effort: String,
 }
 
 impl From<&attn_protocol::Harness> for RouteHarness {
@@ -67,10 +68,11 @@ impl From<&attn_protocol::Harness> for RouteHarness {
         RouteHarness {
             id: h.id.clone(),
             name: h.name.clone(),
-            available: h.available(),
-            model_pin: h.model_pin,
-            effort_pin: h.effort_pin,
-            discovery: h.discovery,
+            available: h.offered && h.available(),
+            model_pin: h.options.model_pin,
+            effort_pin: h.options.effort_pin,
+            discovery: h.options.discovery,
+            default_effort: String::new(),
         }
     }
 }
@@ -82,11 +84,8 @@ pub(crate) struct Rules {
     pub(crate) allow_none: bool,
     pub(crate) fixed_harness: bool,
     pub(crate) require_available: bool,
-    /// Whether the harness takes an effort here; every harness does without it.
-    pub(crate) effort: Option<fn(&str) -> bool>,
     /// The tier the work needs: the route without a model runs the harness's default for it.
     pub(crate) tier: Option<&'static str>,
-    pub(crate) default_effort: Option<fn(&str) -> &'static str>,
     /// What the route without a harness is called, when not "None".
     pub(crate) none_label: Option<&'static str>,
     /// What the route without a harness runs, whose models it may still pin; its model and
@@ -318,10 +317,7 @@ pub(crate) fn view<'a>(state: &'a State, input: &Route, rules: &'a Rules) -> Vie
     } else {
         selected
     };
-    let effort_mode = if effective.is_empty()
-        || harness.is_some_and(|h| !h.effort_pin)
-        || rules.effort.is_some_and(|takes| !takes(&effective))
-    {
+    let effort_mode = if effective.is_empty() || harness.is_some_and(|h| !h.effort_pin) {
         EffortMode::Hidden
     } else if (value.model.is_empty() && rules.tier.is_none() && inherited_model.is_empty())
         || harness.is_none_or(|h| !h.discovery)
@@ -344,11 +340,11 @@ pub(crate) fn view<'a>(state: &'a State, input: &Route, rules: &'a Rules) -> Vie
         (Some(want), Some(got)) => tier_rank(got) > tier_rank(want),
         _ => false,
     };
-    let surface = match (rules.default_effort, inherited) {
-        (Some(f), _) => f(&effective),
-        (None, Some(i)) => i.effort.as_str(),
-        (None, None) => "",
-    };
+    let surface = harness
+        .map(|h| h.default_effort.as_str())
+        .filter(|e| !e.is_empty())
+        .or_else(|| inherited.map(|i| i.effort.as_str()))
+        .unwrap_or("");
     let default_effort = if value.effort.is_empty()
         && (effort_levels.iter().any(|l| l == surface) || effort_mode == EffortMode::Free)
     {
@@ -686,7 +682,9 @@ fn trigger(
 /// its tier, and the effort when it has one.
 pub(crate) fn badge(state: &State, t: &Tokens, value: &Route) -> El {
     let rules = Rules {
-        harnesses: crate::settings::listed_harnesses(state)
+        harnesses: state
+            .facts
+            .harnesses
             .iter()
             .map(RouteHarness::from)
             .collect(),
@@ -955,20 +953,21 @@ fn pick_harness(state: &mut State, id: String, tx: &mut Tx) {
     super::invalidate(state);
 }
 
-fn has_provider(harness: &str) -> bool {
-    !matches!(harness, "codex" | "claude")
+fn has_provider(state: &State, harness: &str) -> bool {
+    crate::harness::catalog::options(&state.facts.harnesses, harness).is_some_and(|o| o.provider)
 }
 
 /// The model and provider typed into the filter, and whether the catalog refuses them.
 fn manual(state: &State) -> Option<(String, String, bool)> {
     let (p, shown, rules) = current(state)?;
+    let takes_provider = has_provider(state, &shown.harness);
     let mut model = p.query.trim().to_owned();
-    let mut provider = if has_provider(&shown.harness) {
+    let mut provider = if takes_provider {
         p.provider.trim().to_owned()
     } else {
         String::new()
     };
-    if has_provider(&shown.harness)
+    if takes_provider
         && provider.is_empty()
         && let Some((pre, post)) = model.clone().split_once('/')
     {
@@ -1019,7 +1018,7 @@ fn submit_filter(state: &mut State, tx: &mut Tx) {
     if unsupported {
         return;
     }
-    if has_provider(&shown.harness) && !p.provider.trim().is_empty() {
+    if has_provider(state, &shown.harness) && !p.provider.trim().is_empty() {
         use_manual(state, tx);
         return;
     }
@@ -1255,7 +1254,7 @@ fn main(state: &State, p: &Picker, view: &View, t: &Tokens) -> El {
     let query = p.query.text.trim().to_owned();
     if view.can_pin_model && !query.is_empty() {
         let unsupported = manual(state).is_some_and(|(_, _, u)| u);
-        let provider = has_provider(&view.effective).then(|| {
+        let provider = has_provider(state, &view.effective).then(|| {
             El::from(line_box(
                 TextInput::new(&p.provider)
                     .key(PROVIDER)

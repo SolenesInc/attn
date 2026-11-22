@@ -63,7 +63,7 @@ fn search(state: &State, t: &Tokens) -> El {
 
 fn nav(state: &State, t: &Tokens) -> El {
     let dialog = &state.window.settings;
-    let groups = sections::filtered(&dialog.search.text);
+    let groups = sections::filtered(&dialog.search.text, &state.facts.harnesses);
     let nav = col()
         .key("settings.nav")
         .role("navigation")

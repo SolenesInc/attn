@@ -427,7 +427,7 @@ fn launch_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<Block> {
         let harness = if running.is_empty() {
             "Harness not reported".to_owned()
         } else {
-            harness_name(state, &running)
+            crate::harness::catalog::name(&state.facts.harnesses, &running)
         };
         let short: String = session.chars().take(8).collect();
         let said = format!("{harness} · Model not reported · Effort not reported · {short}");
@@ -444,15 +444,13 @@ fn launch_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<Block> {
                 .build(t),
         );
     }
-    let catalog_error = crate::settings::harnesses_error(state);
     let follows = launch::harness(&shown);
-    let unavailable = !follows.is_empty()
-        && !crate::settings::listed_harnesses(state)
+    let unavailable = state.facts.harnesses_loaded
+        && !follows.is_empty()
+        && !crate::settings::harnesses::listed(state)
             .iter()
             .any(|h| h.id == follows && h.available());
-    let warning = catalog_error
-        .clone()
-        .or_else(|| unavailable.then(|| "This harness is unavailable on this daemon.".to_owned()));
+    let warning = unavailable.then(|| "This harness is unavailable on this daemon.".to_owned());
     let id = member.id.clone();
     let ack = &shown.acknowledged;
     let (agent, model, effort) = (
@@ -516,16 +514,7 @@ fn launch_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<Block> {
                 .build(t),
         );
     if let Some(warning) = warning {
-        let mut notice = Notice::warn("crew.launch.warning", warning);
-        if catalog_error.is_some() {
-            notice = notice.action(
-                Button::new("Retry harness discovery")
-                    .size(Size::Compact)
-                    .on_press_tx(crate::settings::read_harnesses)
-                    .build(t)
-                    .key("crew.launch.rediscover"),
-            );
-        }
+        let notice = Notice::warn("crew.launch.warning", warning);
         launch_section = launch_section.push(notice.build(t));
     }
     launch_section = launch_section.push(Block::custom(
@@ -645,20 +634,11 @@ fn route_target(member: &str) -> RouteTarget {
     }
 }
 
-fn harness_name(state: &State, id: &str) -> String {
-    crate::settings::listed_harnesses(state)
-        .into_iter()
-        .find(|h| h.id == id)
-        .map(|h| h.name)
-        .filter(|n| !n.is_empty())
-        .unwrap_or_else(|| id.to_owned())
-}
-
 fn route_words(state: &State, agent: &str, model: &str, effort: &str) -> String {
     let harness = if agent.is_empty() {
         "Harness not reported".to_owned()
     } else {
-        harness_name(state, agent)
+        crate::harness::catalog::name(&state.facts.harnesses, agent)
     };
     let model = if model.is_empty() {
         "default".to_owned()

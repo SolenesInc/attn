@@ -85,7 +85,6 @@ struct Form {
     busy: bool,
     checking: bool,
     no_harness: bool,
-    harness_error: Option<String>,
     harnesses: Vec<Choice>,
     models: Vec<Choice>,
     model_error: Option<String>,
@@ -99,27 +98,35 @@ struct Form {
 }
 
 fn chief_harnesses(state: &State) -> Vec<RouteHarness> {
-    crate::settings::harness_read(state)
-        .listed
-        .iter()
-        .filter(|h| {
-            h.available()
-                && state
-                    .facts
-                    .settings
-                    .get(&format!("{}_cap_launch_instructions", h.id))
-                    .is_some_and(|v| v == "true")
+    crate::harness::catalog::offered(&state.facts.harnesses)
+        .filter(|h| h.available() && h.options.initial_prompt && h.options.launch_instructions)
+        .map(|h| {
+            let mut route = RouteHarness::from(h);
+            route.default_effort = "low".into();
+            route
         })
-        .map(RouteHarness::from)
         .collect()
 }
 
-fn low(_: &str) -> &'static str {
-    "low"
+fn missing_chief_copy(harnesses: &[attn_protocol::Harness]) -> String {
+    let names: Vec<&str> = crate::harness::catalog::offered(harnesses)
+        .filter(|h| !h.available() && h.options.initial_prompt && h.options.launch_instructions)
+        .map(|h| h.name.trim())
+        .filter(|n| !n.is_empty())
+        .collect();
+    match names.as_slice() {
+        [] => "No harness here can run the Chief. Install an agent harness to start it.".into(),
+        [only] => format!("No harness here can run the Chief. Install {only} to start it."),
+        [a, b] => format!("No harness here can run the Chief. Install {a} or {b} to start it."),
+        [head @ .., last] => format!(
+            "No harness here can run the Chief. Install {}, or {last} to start it.",
+            head.join(", ")
+        ),
+    }
 }
 
 fn form(state: &State, draft: &Draft, busy: bool) -> Form {
-    let read = crate::settings::harness_read(state);
+    let loaded = state.facts.harnesses_loaded;
     let harnesses = chief_harnesses(state);
     let preferred = state.facts.settings.get("new_session_agent");
     let default = harnesses.iter().find(|h| Some(&h.id) == preferred);
@@ -140,7 +147,6 @@ fn form(state: &State, draft: &Draft, busy: bool) -> Form {
         harnesses: harnesses.clone(),
         require_available: true,
         tier: Some("deep"),
-        default_effort: Some(low),
         ..Rules::default()
     };
     let view = crate::settings::route_view(state, &route, &rules);
@@ -246,16 +252,14 @@ fn form(state: &State, draft: &Draft, busy: bool) -> Form {
     let can_save = !busy
         && harness.is_some()
         && !value.model.is_empty()
-        && !read.loading
-        && read.error.is_none()
+        && loaded
         && !models_loading
         && model_error.is_none()
         && (!draft.first_run || !folder.trim().is_empty());
     Form {
         busy,
-        checking: !read.answered && read.error.is_none(),
+        checking: !loaded,
         no_harness: harnesses.is_empty(),
-        harness_error: read.error,
         harnesses: harness_choices,
         models,
         model_error,
@@ -279,7 +283,7 @@ impl Form {
     }
 
     fn shows_route(&self) -> bool {
-        !self.checking && !self.no_harness && self.harness_error.is_none()
+        !self.checking && !self.no_harness
     }
 
     /// Where the setup puts the focus it owes: the checked radio of `group` while that group is
@@ -438,7 +442,6 @@ fn pick(state: &mut State, pick: &Pick) {
                 harnesses: chief_harnesses(state),
                 require_available: true,
                 tier: Some("deep"),
-                default_effort: Some(low),
                 ..Rules::default()
             };
             let value = form(state, draft, view.busy).value;
@@ -477,7 +480,9 @@ fn recheck(state: &mut State, tx: &mut Tx) {
     };
     let harness = form(state, draft, view.busy).harness.map(|(h, _)| h);
     let _ = state.daemon.send(&GetSettingsMessage::new());
-    crate::settings::recheck_harnesses(state, harness.as_deref(), tx);
+    if let Some(harness) = harness {
+        crate::settings::rediscover_models(state, &harness, tx);
+    }
 }
 
 fn recheck_models(state: &mut State, tx: &mut Tx) {
@@ -608,14 +613,13 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         popover = popover
             .push(Status::new(format!("{POP}.checking"), "Checking harnesses…", true).build(t));
     } else if !form.shows_route() {
-        popover = popover.push(match &form.harness_error {
-            Some(why) => alert(why, t),
-            None => Prose::lead(
+        popover = popover.push(
+            Prose::lead(
                 format!("{POP}.empty"),
-                "No harness here can run the Chief. Install Claude Code or Codex to start it.",
+                missing_chief_copy(&state.facts.harnesses),
             )
             .build(t),
-        });
+        );
         popover = popover.push(
             Actions::new(format!("{POP}.empty-actions"))
                 .push(link(RECHECK, "Check again", t, recheck))

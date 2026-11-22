@@ -4,9 +4,8 @@ use std::time::Duration;
 
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
-    BrowseDirectoryResultMessage, CreateWorktreeResultMessage, DelegationPreferences,
-    DelegationPreferencesResultMessage, DeleteWorktreeResultMessage, Desktop, DesktopPane,
-    DirectoryEntry, GetRepoInfoResultMessage, Harness, InitialStateMessage,
+    BrowseDirectoryResultMessage, CreateWorktreeResultMessage, DeleteWorktreeResultMessage,
+    Desktop, DesktopPane, DirectoryEntry, GetRepoInfoResultMessage, Harness, InitialStateMessage,
     InspectPathResultMessage, PathInspection, Profile, ProfileArrangementChangedMessage,
     RecentLocation, RecentLocationsResultMessage, RepoInfo, SettingsUpdatedMessage,
     SpawnResultMessage, Worktree,
@@ -80,23 +79,26 @@ fn recent(path: &str) -> RecentLocation {
     }
 }
 
-fn catalog(harnesses: &[&str]) -> Value {
-    message(DelegationPreferencesResultMessage {
-        success: true,
-        preferences: Some(DelegationPreferences::default()),
-        harnesses: Some(
-            harnesses
-                .iter()
-                .map(|id| Harness {
-                    id: (*id).into(),
-                    name: (*id).into(),
-                    installation: "installed".into(),
-                    ..Harness::default()
-                })
-                .collect(),
-        ),
-        ..DelegationPreferencesResultMessage::new()
-    })
+fn harness_item(id: &str, name: &str, installation: &str, yolo: bool) -> Harness {
+    Harness {
+        id: id.into(),
+        name: name.into(),
+        installation: installation.into(),
+        offered: true,
+        options: attn_protocol::HarnessOptions {
+            yolo,
+            ..attn_protocol::HarnessOptions::default()
+        },
+        ..Harness::default()
+    }
+}
+
+fn push_harnesses(world: &mut World, harnesses: Vec<Harness>) {
+    world.daemon.emit(attn_protocol::HarnessCatalogMessage {
+        harnesses,
+        ..attn_protocol::HarnessCatalogMessage::new()
+    });
+    world.settle();
 }
 
 fn recents(paths: &[&str]) -> Value {
@@ -170,9 +172,6 @@ fn daemon(state: InitialStateMessage, recent: &'static [&'static str]) -> Daemon
                 settings: Some(settings.clone()),
                 ..SettingsUpdatedMessage::new()
             })
-        })
-        .on("delegation_preferences_get", |_| {
-            catalog(&["claude", "codex"])
         })
         .on("get_recent_locations", move |_| recents(recent))
         .on("browse_directory", |r| {
@@ -722,16 +721,21 @@ fn an_inspection_answered_after_the_user_typed_another_path_is_dropped() {
 #[test]
 fn with_no_harness_ever_picked_none_is_chosen_and_enter_starts_nothing_until_one_is() {
     let mut world = on_busy_desktop(never_picked(busy(), &[]), &[]);
-    world.daemon.on("delegation_preferences_get", |_| {
-        catalog(&["claude", "codex", "plug"])
-    });
+    push_harnesses(
+        &mut world,
+        vec![
+            harness_item("claude", "Claude Code", "installed", true),
+            harness_item("codex", "Codex", "installed", true),
+            harness_item("plug", "Plug", "missing", false),
+        ],
+    );
     open_dialog(&mut world);
 
     assert_eq!(
         agents(&world),
         [
             ("Terminal".into(), false, false),
-            ("Claude".into(), false, false),
+            ("Claude Code".into(), false, false),
             ("Codex".into(), false, false),
             ("Plug".into(), false, true),
         ]
@@ -742,7 +746,7 @@ fn with_no_harness_ever_picked_none_is_chosen_and_enter_starts_nothing_until_one
     assert_eq!(asks_for_harness(&world, "new-session"), Some(choose_one()));
 
     world.gesture(|app| app.press("alt+1"));
-    assert_eq!(chosen(&world), "Claude");
+    assert_eq!(chosen(&world), "Claude Code");
     assert_eq!(asks_for_harness(&world, "new-session"), None);
     press(&mut world, Key::Enter);
     let spawned = spawns(&world);
@@ -754,24 +758,23 @@ fn with_no_harness_ever_picked_none_is_chosen_and_enter_starts_nothing_until_one
 
 #[test]
 fn offers_the_agents_the_daemon_advertises_and_chooses_none_when_the_last_pick_is_missing() {
-    let mut world = busy_desktop_with(
-        &[],
-        &[
-            ("claude_available", "false"),
-            ("gemini-cli_available", "true"),
-            ("plug_available", "true"),
+    let mut world = busy_desktop_with(&[], &[]);
+    push_harnesses(
+        &mut world,
+        vec![
+            harness_item("claude", "Claude Code", "missing", true),
+            harness_item("codex", "Codex", "installed", true),
+            harness_item("gemini-cli", "Gemini Cli", "installed", false),
+            harness_item("plug", "Plug", "installed", false),
         ],
     );
-    world.daemon.on("delegation_preferences_get", |_| {
-        catalog(&["claude", "codex", "gemini-cli"])
-    });
     open_dialog(&mut world);
 
     assert_eq!(
         agents(&world),
         [
             ("Terminal".into(), false, false),
-            ("Claude".into(), false, true),
+            ("Claude Code".into(), false, true),
             ("Codex".into(), false, false),
             ("Gemini Cli".into(), false, false),
             ("Plug".into(), false, false),
@@ -783,17 +786,14 @@ fn offers_the_agents_the_daemon_advertises_and_chooses_none_when_the_last_pick_i
             .get(Target::key("new-session.agent.claude"))
             .description
             .as_deref(),
-        Some("Claude is not available on this machine")
+        Some("Claude Code is not available on this machine")
     );
     rest(&mut world);
 }
 
 #[test]
 fn each_harness_and_yolo_shows_its_keys_as_keycaps() {
-    let mut world = busy_desktop_with(&[], &[("claude_cap_yolo", "true")]);
-    world.daemon.on("delegation_preferences_get", |_| {
-        catalog(&["claude", "codex"])
-    });
+    let mut world = busy_desktop_with(&[], &[]);
     open_dialog(&mut world);
 
     let caps = |world: &World, key: &str| {
@@ -822,18 +822,22 @@ fn each_harness_and_yolo_shows_its_keys_as_keycaps() {
 #[test]
 fn many_harnesses_wrap_inside_a_760_wide_dialog() {
     let mut world = busy_desktop(&[]);
-    world.daemon.on("delegation_preferences_get", |_| {
-        catalog(&[
-            "claude",
-            "codex",
-            "opencode",
-            "gemini-cli",
-            "plug",
-            "snipe",
-            "pi",
-            "amp",
-        ])
-    });
+    push_harnesses(
+        &mut world,
+        [
+            ("claude", "Claude Code"),
+            ("codex", "Codex"),
+            ("opencode", "OpenCode"),
+            ("gemini-cli", "Gemini CLI"),
+            ("plug", "Plug"),
+            ("snipe", "Snipe"),
+            ("pi", "Pi"),
+            ("amp", "Amp"),
+        ]
+        .into_iter()
+        .map(|(id, name)| harness_item(id, name, "installed", false))
+        .collect(),
+    );
     open_dialog(&mut world);
 
     let screen = world.screen();
@@ -859,13 +863,10 @@ fn many_harnesses_wrap_inside_a_760_wide_dialog() {
 
 #[test]
 fn a_plugin_display_name_is_shown_on_its_stored_harness_control() {
-    let mut world = busy_desktop_with(
-        &[],
-        &[
-            ("snipe_available", "true"),
-            ("snipe_display_name", "Xirp Agent"),
-        ],
-    );
+    let mut world = busy_desktop_with(&[], &[]);
+    let mut listed = attn_testkit::built_in_harnesses();
+    listed.push(harness_item("snipe", "Xirp Agent", "installed", false));
+    push_harnesses(&mut world, listed);
     open_dialog(&mut world);
     assert!(agent_names(&world).contains(&"Xirp Agent".into()));
     let _ = world.screen().get(Target::key("new-session.agent.snipe"));
@@ -874,13 +875,13 @@ fn a_plugin_display_name_is_shown_on_its_stored_harness_control() {
 
 #[test]
 fn a_last_pick_that_is_missing_chooses_neither_another_harness_nor_terminal() {
-    let mut world = busy_desktop_with(
-        &[],
-        &[
-            ("new_session_agent", "claude"),
-            ("claude_available", "false"),
-            ("codex_available", "false"),
-            ("plug_available", "true"),
+    let mut world = busy_desktop_with(&[], &[("new_session_agent", "claude")]);
+    push_harnesses(
+        &mut world,
+        vec![
+            harness_item("claude", "Claude Code", "missing", true),
+            harness_item("codex", "Codex", "missing", true),
+            harness_item("plug", "Plug", "installed", false),
         ],
     );
     open_dialog(&mut world);
@@ -891,12 +892,13 @@ fn a_last_pick_that_is_missing_chooses_neither_another_harness_nor_terminal() {
     assert_eq!(asks_for_harness(&world, "new-session"), Some(choose_one()));
     rest(&mut world);
 
-    let mut world = on_busy_desktop(
-        never_picked(
-            busy(),
-            &[("claude_available", "false"), ("codex_available", "false")],
-        ),
-        &[],
+    let mut world = on_busy_desktop(never_picked(busy(), &[]), &[]);
+    push_harnesses(
+        &mut world,
+        vec![
+            harness_item("claude", "Claude Code", "missing", true),
+            harness_item("codex", "Codex", "missing", true),
+        ],
     );
     open_dialog(&mut world);
     assert_eq!(chosen(&world), "");
@@ -904,12 +906,20 @@ fn a_last_pick_that_is_missing_chooses_neither_another_harness_nor_terminal() {
 }
 
 #[test]
-fn launches_an_available_plugin_the_harness_catalog_does_not_list() {
-    let mut world = busy_desktop_with(&[], &[("interactive_available", "true")]);
+fn launches_an_available_interactive_plugin_offered_in_the_catalog() {
+    let mut world = busy_desktop_with(&[], &[]);
+    let mut listed = attn_testkit::built_in_harnesses();
+    listed.push(harness_item(
+        "interactive",
+        "Interactive",
+        "installed",
+        false,
+    ));
+    push_harnesses(&mut world, listed);
     open_dialog(&mut world);
     assert_eq!(
         agent_names(&world),
-        ["Terminal", "Claude", "Codex", "Interactive"]
+        ["Terminal", "Claude Code", "Codex", "Interactive"]
     );
 
     world.gesture(|app| app.press("alt+3"));
@@ -937,11 +947,12 @@ fn remembers_the_agent_the_user_picks_for_the_next_picker() {
 
 #[test]
 fn alt_and_a_digit_switch_agents_but_never_to_one_that_is_not_there() {
-    let mut world = busy_desktop_with(
-        &[],
-        &[
-            ("claude_available", "false"),
-            ("new_session_agent", "codex"),
+    let mut world = busy_desktop_with(&[], &[("new_session_agent", "codex")]);
+    push_harnesses(
+        &mut world,
+        vec![
+            harness_item("claude", "Claude Code", "missing", true),
+            harness_item("codex", "Codex", "installed", true),
         ],
     );
     open_dialog(&mut world);
@@ -980,7 +991,7 @@ fn terminal_on_alt_t_launches_a_shell_without_a_label_or_becoming_the_saved_agen
 
 #[test]
 fn yolo_turns_on_with_alt_q_or_a_click_is_remembered_and_launches_with_it() {
-    let mut world = busy_desktop_with(&[], &[("claude_cap_yolo", "true")]);
+    let mut world = busy_desktop_with(&[], &[]);
     open_dialog(&mut world);
     assert!(!yolo(&world).is("checked"));
     assert_eq!(
@@ -1009,12 +1020,19 @@ fn yolo_turns_on_with_alt_q_or_a_click_is_remembered_and_launches_with_it() {
 #[test]
 fn yolo_stays_off_for_an_agent_that_does_not_support_it_whatever_was_remembered() {
     let mut world = busy_desktop_with(&[], &[("new_session_yolo_local", "true")]);
+    push_harnesses(
+        &mut world,
+        vec![
+            harness_item("claude", "Claude Code", "installed", false),
+            harness_item("codex", "Codex", "installed", true),
+        ],
+    );
     open_dialog(&mut world);
     assert!(yolo(&world).is("disabled"));
     assert!(!yolo(&world).is("checked"));
     assert_eq!(
         yolo(&world).description.as_deref(),
-        Some("Claude does not support yolo mode")
+        Some("Claude Code does not support yolo mode")
     );
 
     world.gesture(|app| app.press("alt+q"));
@@ -1027,8 +1045,9 @@ fn yolo_stays_off_for_an_agent_that_does_not_support_it_whatever_was_remembered(
 
 #[test]
 fn agent_shortcuts_wait_for_the_harness_order() {
-    let mut world = busy_desktop_with(&[], &[("plug_available", "true")]);
-    let asked = hold(&world, "delegation_preferences_get");
+    let daemon = daemon(initial(busy(), &[]), &[]).without_harness_catalog();
+    let mut world = World::start(daemon);
+    world.open_desktop();
     open_dialog(&mut world);
     assert_eq!(
         world
@@ -1042,74 +1061,41 @@ fn agent_shortcuts_wait_for_the_harness_order() {
     world.gesture(|app| app.press("alt+1"));
     assert_eq!(chosen(&world), "");
 
-    let request = asked.lock().unwrap().remove(0);
-    world
-        .daemon
-        .reply_to(&request, catalog(&["plug", "claude", "codex"]));
-    world.settle();
+    push_harnesses(
+        &mut world,
+        vec![
+            harness_item("plug", "Plug", "installed", false),
+            harness_item("claude", "Claude Code", "installed", true),
+            harness_item("codex", "Codex", "installed", true),
+        ],
+    );
     world.gesture(|app| app.press("alt+1"));
 
-    assert_eq!(agent_names(&world), ["Terminal", "Plug", "Claude", "Codex"]);
+    assert_eq!(
+        agent_names(&world),
+        ["Terminal", "Plug", "Claude Code", "Codex"]
+    );
     assert_eq!(chosen(&world), "Plug");
     rest(&mut world);
 }
 
 #[test]
-fn a_catalog_error_keeps_agents_selectable_without_numbers_until_retry_loads_it() {
-    let mut world = busy_desktop(&[]);
-    let asked = hold(&world, "delegation_preferences_get");
-    open_dialog(&mut world);
-    let first = asked.lock().unwrap().remove(0);
-    world.daemon.reply_to(
-        &first,
-        message(DelegationPreferencesResultMessage {
-            success: false,
-            error: Some("catalog unreachable".into()),
-            ..DelegationPreferencesResultMessage::new()
-        }),
-    );
-    world.settle();
-    assert_eq!(
-        world
-            .screen()
-            .get(Target::key("new-session.agents.error"))
-            .name
-            .as_deref(),
-        Some("catalog unreachable")
-    );
-    world.gesture(|app| app.click(Target::key("new-session.agent.codex")));
-    world.gesture(|app| app.press("alt+1"));
-    assert_eq!(chosen(&world), "Codex");
-
-    world.gesture(|app| app.click(Target::key("new-session.agents.retry")));
-    let second = asked.lock().unwrap().remove(0);
-    world
-        .daemon
-        .reply_to(&second, catalog(&["claude", "codex"]));
-    world.settle();
-    assert_eq!(chosen(&world), "Codex");
-    world.gesture(|app| app.press("alt+1"));
-
-    assert!(
-        world
-            .screen()
-            .find(Target::key("new-session.agents.error"))
-            .is_none()
-    );
-    assert_eq!(chosen(&world), "Claude");
-    rest(&mut world);
-}
-
-#[test]
 fn a_harness_being_checked_stays_selectable_then_leaves_nothing_chosen_once_it_turns_out_missing() {
-    let mut world = busy_desktop_with(&[], &[("claude_available", "checking")]);
+    let mut world = busy_desktop_with(&[], &[]);
+    push_harnesses(
+        &mut world,
+        vec![
+            harness_item("claude", "Claude Code", "checking", true),
+            harness_item("codex", "Codex", "installed", true),
+        ],
+    );
     open_dialog(&mut world);
     let claude = world.screen().get(Target::key("new-session.agent.claude"));
     assert!(!claude.is("disabled"));
     assert!(claude.is("checked"));
     assert_eq!(
         claude.description.as_deref(),
-        Some("Checking for Claude on this machine")
+        Some("Checking for Claude Code on this machine")
     );
     assert!(
         world
@@ -1118,17 +1104,19 @@ fn a_harness_being_checked_stays_selectable_then_leaves_nothing_chosen_once_it_t
             .is_some()
     );
 
-    world.daemon.emit(SettingsUpdatedMessage {
-        settings: Some([("claude_available".to_owned(), "false".to_owned())].into()),
-        ..SettingsUpdatedMessage::new()
-    });
-    world.settle();
+    push_harnesses(
+        &mut world,
+        vec![
+            harness_item("claude", "Claude Code", "missing", true),
+            harness_item("codex", "Codex", "installed", true),
+        ],
+    );
 
     let claude = world.screen().get(Target::key("new-session.agent.claude"));
     assert!(claude.is("disabled"));
     assert_eq!(
         claude.description.as_deref(),
-        Some("Claude is not available on this machine")
+        Some("Claude Code is not available on this machine")
     );
     assert_eq!(chosen(&world), "");
 
@@ -1141,7 +1129,7 @@ fn a_harness_being_checked_stays_selectable_then_leaves_nothing_chosen_once_it_t
     assert!(
         world
             .screen()
-            .find(Target::role("tooltip").name("Claude is not available on this machine"))
+            .find(Target::role("tooltip").name("Claude Code is not available on this machine"))
             .is_some(),
         "the missing harness says why under the pointer:\n{}",
         world.screen()
@@ -2628,7 +2616,7 @@ fn the_ghost_completion_follows_the_typed_text() {
 
 #[test]
 fn a_screen_reader_hears_the_harness_and_yolo_the_option_keys_choose() {
-    let mut world = busy_desktop_with(&[], &[("claude_cap_yolo", "true")]);
+    let mut world = busy_desktop_with(&[], &[]);
     open_dialog(&mut world);
     let said = |world: &World| world.screen().announced().unwrap_or_default();
 

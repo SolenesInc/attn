@@ -455,7 +455,7 @@ fn cancel_compose(state: &mut State, tx: &mut Tx) {
 /// Sends the composed move. Harvest and wither keep the words on the seed as its reason and a
 /// park keeps them as its comment; a replant writes them on the log first, as a note.
 fn commit(state: &mut State, tx: &mut Tx) {
-    let names = model::session_names(&state.facts.sessions);
+    let names = model::session_names(&state.facts.sessions, &state.facts.harnesses);
     let walk = board(state);
     let Some(compose) = walk.compose.as_ref().filter(|_| !walk.busy) else {
         return;
@@ -786,7 +786,7 @@ fn under(path: Option<&str>) -> (Option<Column>, Option<Verb>) {
 pub(super) fn view(state: &State, t: &Tokens) -> El {
     let place = Place::of(state);
     let walk = &state.window.garden.board_walk;
-    let names = model::session_names(&state.facts.sessions);
+    let names = model::session_names(&state.facts.sessions, &state.facts.harnesses);
     let seeds = super::seeds(state);
     let total = state.facts.garden.total_of(&state.facts.profiles.selected);
     let mut page = col()
