@@ -318,20 +318,17 @@ pub(crate) fn ordered(
     ordered
 }
 
-/// The agent new sessions start: the stored one while it is there, else the first that is.
-pub(crate) fn resolved_default(settings: &BTreeMap<String, String>) -> String {
-    let availability = availability(settings);
+/// The agent the user picked for new sessions while it is there, else none.
+pub(crate) fn picked_default(settings: &BTreeMap<String, String>) -> String {
     let preferred = normalize(
         settings.get("new_session_agent").map_or("", String::as_str),
-        "claude",
+        "",
     );
-    if selectable(&availability, &preferred) {
-        return preferred;
+    if selectable(&availability(settings), &preferred) {
+        preferred
+    } else {
+        String::new()
     }
-    ordered(&availability, None)
-        .into_iter()
-        .find(|a| selectable(&availability, a))
-        .unwrap_or_else(|| "codex".into())
 }
 
 /// Each agent's capabilities, from its `<agent>_cap_<capability>` settings.
@@ -419,7 +416,7 @@ pub(crate) fn headless_agents(
 ) -> Vec<String> {
     let availability = availability(settings);
     let capabilities = capabilities(settings);
-    let preferred = resolved_default(settings);
+    let preferred = picked_default(settings);
     let mut eligible: Vec<String> = ordered(&availability, Some(&preferred))
         .into_iter()
         .filter(|a| {

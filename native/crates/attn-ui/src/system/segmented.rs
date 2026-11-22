@@ -14,6 +14,7 @@ pub struct Segmented {
     options: Vec<Segment>,
     disabled: bool,
     tab_stops: bool,
+    needed: bool,
 }
 
 /// One option of a [`Segmented`].
@@ -195,7 +196,14 @@ impl Segmented {
             options: Vec::new(),
             disabled: false,
             tab_stops: true,
+            needed: false,
         }
+    }
+
+    /// Nothing is chosen and something waits on a choice: the track wears the accent edge.
+    pub fn needed(mut self, needed: bool) -> Self {
+        self.needed = needed;
+        self
     }
 
     /// The keys that choose live elsewhere, such as Alt and a letter beside each name, so no
@@ -235,7 +243,10 @@ impl Segmented {
             .label(self.label)
             .focus_group()
             .fill(t.bg_input)
-            .border(1.0, t.border)
+            .border(
+                if self.needed { 2.0 } else { 1.0 },
+                if self.needed { t.accent } else { t.border },
+            )
             .children(
                 self.options
                     .into_iter()

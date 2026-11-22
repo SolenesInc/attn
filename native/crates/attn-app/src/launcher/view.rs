@@ -76,6 +76,7 @@ fn controls(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> E
         state,
         which,
         agent_options(state, &launcher.choice, &offer),
+        launcher.choice.asked,
         t,
     );
     let yolo = (!terminal).then(|| {

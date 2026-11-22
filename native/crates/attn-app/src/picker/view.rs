@@ -203,14 +203,17 @@ pub(crate) fn yolo(state: &State, choice: &Choice, offer: &Offer) -> Yolo {
 
 /// The harness toggle: the harnesses as segments, each with the letter that picks it with
 /// Alt, the Alt before them, and what the toggle says while the list loads or after it failed
-/// to. The letters choose, so the segments take no Tab stop.
+/// to. The letters choose, so the segments take no Tab stop. Once a start found none chosen
+/// (`asked`), the toggle wears the accent edge and says how to choose one.
 pub(crate) fn harness_toggle(
     state: &State,
     which: Which,
     options: Vec<AgentOption>,
+    asked: bool,
     t: &Tokens,
 ) -> El {
     let w = which.key();
+    let needed = asked && !options.iter().any(|o| o.chosen);
     let legend = rune::Chord::parse("alt+t")
         .expect("the Alt chord parses")
         .keycaps_on(rune::Platform::current())
@@ -249,10 +252,17 @@ pub(crate) fn harness_toggle(
         .child(
             Segmented::new(format!("{w}.agents"), "Session agent")
                 .without_tab_stops()
+                .needed(needed)
                 .options(segments)
                 .build(t)
                 .into(),
         )
+        .children(needed.then(|| {
+            words(agents::choose_one(), Type::Small, t.accent)
+                .key(format!("{w}.agents.needed"))
+                .role("status")
+                .label(agents::choose_one())
+        }))
 }
 
 /// The YOLO switch and the keys that flip it. Its keys flip it, so it takes no Tab stop.
@@ -318,7 +328,13 @@ pub(crate) fn catalog_note(state: &State, which: Which, t: &Tokens) -> Option<El
 /// The classic picker's two bars, the agent's and the chief's: each names its control at the
 /// left and holds it at the right edge.
 fn controls(state: &State, which: Which, choice: &Choice, offer: &Offer, t: &Tokens) -> El {
-    let toggle = harness_toggle(state, which, agent_options(state, choice, offer), t);
+    let toggle = harness_toggle(
+        state,
+        which,
+        agent_options(state, choice, offer),
+        choice.asked,
+        t,
+    );
     let yolo = yolo_control(which, &yolo(state, choice, offer), spoken("alt+q"), t);
     attn_ui::finder::bar(t, format!("{}.controls", which.key()), vec![toggle, yolo])
 }

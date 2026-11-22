@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 
 pub(crate) const TERMINAL: &str = "shell";
-const FALLBACK: &str = "codex";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Availability {
@@ -96,47 +95,25 @@ impl Agents {
         listed
     }
 
-    /// The agent the picker starts on or falls back to: Terminal only when asked for or when
-    /// no harness is there, else `preferred` when it is there, else the first harness that is.
+    /// The agent the picker starts on: `preferred` while it is there, else none.
     pub(crate) fn resolve(&self, preferred: &str) -> String {
-        if preferred == TERMINAL && self.selectable(TERMINAL) {
-            return TERMINAL.into();
-        }
-        let harnesses = Agents(
-            self.0
-                .iter()
-                .filter(|(agent, _)| *agent != TERMINAL)
-                .map(|(a, v)| (a.clone(), *v))
-                .collect(),
-        );
-        if harnesses.0.keys().any(|agent| harnesses.selectable(agent)) {
-            return harnesses.preferred_or_first(preferred);
-        }
-        if self.selectable(TERMINAL) {
-            return TERMINAL.into();
-        }
-        self.preferred_or_first(preferred)
-    }
-
-    fn preferred_or_first(&self, preferred: &str) -> String {
         let preferred = normalize(preferred);
-        if !preferred.is_empty() && self.selectable(&preferred) {
-            return preferred;
+        if self.selectable(&preferred) {
+            preferred
+        } else {
+            String::new()
         }
-        let mut ordered: Vec<String> = vec![FALLBACK.into(), "claude".into()];
-        let mut rest: Vec<String> = self
-            .0
-            .keys()
-            .filter(|k| !ordered.contains(k))
-            .cloned()
-            .collect();
-        rest.sort();
-        ordered.extend(rest);
-        ordered
-            .into_iter()
-            .find(|agent| self.selectable(agent))
-            .unwrap_or_else(|| FALLBACK.into())
     }
+}
+
+/// What the harness toggle says once a start found no harness chosen, with the keys that choose one.
+pub(crate) fn choose_one() -> String {
+    let keys = if rune::Platform::current() == rune::Platform::Mac {
+        "⌥1–⌥9"
+    } else {
+        "Alt+1–Alt+9"
+    };
+    format!("Choose a harness ({keys})")
 }
 
 fn normalize(agent: &str) -> String {

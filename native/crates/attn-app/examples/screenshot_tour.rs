@@ -2640,6 +2640,36 @@ fn picker_dialog(dark: bool) {
     snap(&mut world, "picker-dialog", dark);
 }
 
+/// The classic picker with no harness ever picked, after Enter: the toggle asks for one.
+fn picker_no_harness(dark: bool) {
+    let mut state = launcher_state(dark, false, false);
+    if let Some(settings) = state.settings.as_mut() {
+        settings.remove("new_session_agent");
+    }
+    let daemon = launcher_serving(state);
+    daemon.on("inspect_path", |r: &Request| {
+        let path = r["path"].as_str().unwrap_or_default().to_owned();
+        message(InspectPathResultMessage {
+            success: true,
+            inspection: Some(PathInspection {
+                exists: true,
+                is_directory: true,
+                input_path: path.clone(),
+                resolved_path: path,
+                home_path: Some("/home/me".into()),
+                ..PathInspection::default()
+            }),
+            ..InspectPathResultMessage::new()
+        })
+    });
+    let mut world = start(daemon);
+    press(&mut world, Action::SessionNew);
+    world.settle();
+    world.gesture(|app| app.press("enter"));
+    world.settle();
+    snap(&mut world, "picker-no-harness", dark);
+}
+
 /// The classic picker an empty desktop shows in place of its tiles: no Esc hint.
 fn picker_empty_desktop(dark: bool) {
     let mut world = start(launcher_daemon_with(dark, true, false));
@@ -8290,6 +8320,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("automation_hour", || automation_hour(dark));
         scene("automation_time_zones", || automation_time_zones(dark));
         scene("picker_dialog", || picker_dialog(dark));
+        scene("picker_no_harness", || picker_no_harness(dark));
         scene("picker_start_from", || picker_start_from(dark, 0));
         scene("picker_start_from_worktrees", || picker_start_from(dark, 4));
         scene("launcher_yolo_caption", || launcher_yolo_caption(dark));

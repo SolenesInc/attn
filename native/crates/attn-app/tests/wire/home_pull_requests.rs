@@ -714,13 +714,19 @@ fn home_mutes_every_pr_by_an_author_from_one_of_their_prs() {
     );
 }
 
-fn with_projects(mut state: InitialStateMessage) -> InitialStateMessage {
+/// The harness the user picked in an earlier new-session picker.
+const LAST_PICK: (&str, &str) = ("new_session_agent", "claude");
+
+fn with_projects(state: InitialStateMessage) -> InitialStateMessage {
+    with_projects_and(state, &[LAST_PICK])
+}
+
+fn with_projects_and(mut state: InitialStateMessage, more: &[(&str, &str)]) -> InitialStateMessage {
     state.settings = Some(
-        [(
-            "projects_directory".to_owned(),
-            "/home/me/projects/".to_owned(),
-        )]
-        .into(),
+        std::iter::once(("projects_directory", "/home/me/projects/"))
+            .chain(more.iter().copied())
+            .map(|(k, v)| (k.to_owned(), v.to_owned()))
+            .collect(),
     );
     state
 }
@@ -794,6 +800,33 @@ fn a_new_worktree_session_from_home_checks_out_the_prs_branch_and_starts_the_age
     assert_eq!(spawned[0]["label"], "attn#10");
     assert_eq!(spawned[0]["agent"], "claude");
     assert_eq!(spawned[0]["placement"]["desktop_id"], "d1");
+    assert!(!has(&world, "worktree-setup"));
+}
+
+#[test]
+fn a_new_worktree_session_with_no_harness_picked_yet_says_to_pick_one_and_starts_nothing() {
+    let mut world = start(
+        with_projects_and(one_desktop(vec![]), &[]),
+        vec![PR {
+            head_branch: Some("feature".into()),
+            ..pr("r1", 10, "reviewer", "review this")
+        }],
+    );
+
+    click(&mut world, "home.pr.r1.new");
+
+    assert_eq!(
+        name(&world, "notice.text").as_deref(),
+        Some("Choose a harness in a new session first: this starts the one you last picked.")
+    );
+    for cmd in [
+        "fetch_pr_details",
+        "ensure_repo",
+        "create_worktree_from_branch",
+        "spawn_session",
+    ] {
+        assert!(world.daemon.sent_of(cmd).is_empty(), "{cmd}");
+    }
     assert!(!has(&world, "worktree-setup"));
 }
 

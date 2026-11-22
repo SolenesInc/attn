@@ -62,8 +62,9 @@ try {
   await runner.step('launch_app', () => launchFreshAppAndConnect(client, observer));
 
   await runner.step('fresh_profile_opens_setup', async () => {
-    for (const key of ['queue_mode_enabled', 'model_tier_overrides']) queueDaemonSettingRestore(observer, key);
+    for (const key of ['queue_mode_enabled', 'model_tier_overrides', 'new_session_agent']) queueDaemonSettingRestore(observer, key);
     observer.send({ cmd: 'set_setting', key: 'queue_mode_enabled', value: 'true' });
+    observer.send({ cmd: 'set_setting', key: 'new_session_agent', value: 'claude' });
     observer.send({ cmd: 'set_setting', key: 'model_tier_overrides', value: JSON.stringify([{ harness: 'claude', provider: '', model: MOCK_AGENT_MODEL, tier: 'deep' }]) });
     home = observer.profileId;
     profile = (await observer.profileCommand('profile_create', { name: `Chief slot ${runner.runId}` })).profile;

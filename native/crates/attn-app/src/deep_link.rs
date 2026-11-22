@@ -5,7 +5,7 @@ use crate::State;
 use crate::picker::{self, Direction, Spawn};
 
 /// An agent a `spawn` link asks for: the one already working in `cwd` in this profile, or a
-/// new Claude there named `label`.
+/// new one there named `label`, on the harness the user last picked.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Link {
     cwd: String,
@@ -41,13 +41,17 @@ fn follow(state: &mut State, link: Link, tx: &mut Tx) {
         .iter()
         .find(|s| s.directory == link.cwd && &s.profile_id == profile)
         .map(|s| s.id.clone());
+    let picked = picker::Choice::new(None, &state.facts.settings).agent(state);
     match working {
         Some(session) => crate::sidebar::open_agent(state, &session, tx),
+        None if picked.is_empty() || picked == picker::TERMINAL => {
+            picker::new_session_at(state, &link.cwd, tx)
+        }
         None => picker::spawn(
             state,
             Spawn {
                 path: link.cwd,
-                agent: "claude".into(),
+                agent: picked,
                 yolo: false,
                 desktop: None,
                 anchor: None,

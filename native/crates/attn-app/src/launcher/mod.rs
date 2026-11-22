@@ -1361,7 +1361,7 @@ fn replaced(edit: &TextEdit, text: String) -> TextEdit {
     new
 }
 
-fn set_query(state: &mut State, which: Which, text: String, tx: &mut Tx) {
+pub(crate) fn set_query(state: &mut State, which: Which, text: String, tx: &mut Tx) {
     let Some(launcher) = state.window.launching.launcher_mut(which) else {
         return;
     };
@@ -1808,6 +1808,10 @@ fn launch(
     } else {
         launcher.agent(state)
     };
+    if agent.is_empty() {
+        crate::picker::ask_for_harness(state, which, tx);
+        return;
+    }
     if let Some(refused) = launcher.refusal(state, host.as_deref(), &agent) {
         let launcher = state.window.launching.launcher_mut(which).expect("open");
         launcher.problem = Some(refused);

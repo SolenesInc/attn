@@ -43,12 +43,13 @@ pub(crate) fn open_in_worktree(state: &mut State, pr: &PR, tx: &mut Tx) {
         .get(SAVED_AGENT)
         .map(String::as_str)
         .filter(|a| *a != TERMINAL)
-        .unwrap_or("claude");
+        .unwrap_or_default();
     let agent = Agents::from_settings(settings).resolve(preferred);
-    if agent == TERMINAL {
-        state
-            .window
-            .notify("No supported agent CLI found in PATH.".into(), tx);
+    if agent.is_empty() {
+        state.window.notify(
+            "Choose a harness in a new session first: this starts the one you last picked.".into(),
+            tx,
+        );
         return;
     }
     let Some(projects) = settings.get(PROJECTS).map(|dir| dir.trim_end_matches('/')) else {
