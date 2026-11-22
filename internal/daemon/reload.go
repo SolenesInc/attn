@@ -222,7 +222,7 @@ func (d *Daemon) reloadSessionAgent(sessionID protocol.SessionID) {
 		d.logf("reload: cannot reconstruct launch params for %s: %v; aborting (live worker preserved)", sessionID, err)
 		return
 	}
-	complete, err = d.executePreparedSessionReload(sessionID, opts, nil)
+	complete, err = d.executePreparedSessionReload(sessionID, opts)
 	if err != nil {
 		d.logf("reload: %v", err)
 	}
@@ -270,7 +270,7 @@ func (d *Daemon) reloadLiveOrPlanResume(sessionID protocol.SessionID, cols, rows
 		if err != nil {
 			return nil, err
 		}
-		complete, err = d.executePreparedSessionReload(sessionID, opts, nil)
+		complete, err = d.executePreparedSessionReload(sessionID, opts)
 		return nil, err
 	}
 
@@ -323,7 +323,7 @@ func (d *Daemon) handleReloadSession(client *wsClient, msg *protocol.ReloadSessi
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts ptybackend.SpawnOptions, pluginReload *preparedPluginReload) (launchCompletion, error) {
+func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) (launchCompletion, error) {
 	var name *string
 	if host := d.sessionHost(sessionID); host != "" {
 		_, hostName, err := d.outpostConn(host)
@@ -334,15 +334,10 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	}
 	var agent *AgentLaunch
 	if opts.Agent != protocol.AgentShellValue {
-		if pluginReload != nil {
-			agent = pluginReload.launch
-		} else {
-			session := d.store.Get(sessionID)
-			var err error
-			agent, err = d.buildAgentReloadLaunch(session, &opts)
-			if err != nil {
-				return nil, err
-			}
+		var err error
+		agent, err = d.buildAgentReloadLaunch(d.store.Get(sessionID), &opts)
+		if err != nil {
+			return nil, err
 		}
 	}
 	launch, err := encodeLaunch(opts)
@@ -362,12 +357,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	if opts.Agent != protocol.AgentShellValue {
 		d.persistReloadedConversation(sessionID, opts)
 	}
-	if pluginReload != nil {
-		_, err = d.restartPreparedTerminal(context.Background(), msg, opts, pluginReload)
-	} else {
-		_, err = Call[struct{}](context.Background(), d.router(), msg)
-	}
-	if err != nil {
+	if _, err = Call[struct{}](context.Background(), d.router(), msg); err != nil {
 		stillRunning()
 		return nil, err
 	}
@@ -540,39 +530,6 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 		return ptybackend.SpawnOptions{}, err
 	}
 	return opts, nil
-}
-
-type preparedPluginReload struct {
-	d          *Daemon
-	sessionID  protocol.SessionID
-	pluginName string
-	runID      string
-	route      string
-	completed  bool
-	launch     *AgentLaunch
-}
-
-func (p *preparedPluginReload) abort() {
-	if p == nil || p.completed {
-		return
-	}
-	p.completed = true
-	p.d.abortLaunch(p.sessionID)
-}
-
-func (p *preparedPluginReload) commit() error {
-	if p == nil || p.completed {
-		return nil
-	}
-	oldRun := p.d.store.GetAgentDriverRun(p.sessionID)
-	if !p.d.beginAgentDriverRun(p.sessionID, p.pluginName, p.runID, p.route) {
-		return fmt.Errorf("initialize plugin driver run cursor")
-	}
-	p.completed = true
-	if oldRun.RunID != "" && oldRun.RunID != p.runID {
-		p.d.runEnded(p.d.agentOf(p.sessionID), harness.RunEnd{Session: p.sessionID, Terminal: p.d.primaryTerminal(p.sessionID), Owner: oldRun.PluginName, Run: oldRun.RunID, Reason: harness.RunReloaded})
-	}
-	return nil
 }
 
 func pluginReloadCapabilityError(reg pluginDriverRegistration) error {

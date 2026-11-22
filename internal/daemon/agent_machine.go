@@ -83,33 +83,32 @@ func (d *Daemon) agentLaunchContext(sessionID protocol.SessionID, agent string) 
 	return &AgentLaunch{Context: launch, AwarenessDirs: awareness, Direct: d.on(setting.DirectAgentLaunchEnabled)}, nil
 }
 
-func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptybackend.SpawnOptions, launch *AgentLaunch, reload bool) (*preparedPluginReload, error) {
+func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptybackend.SpawnOptions, launch *AgentLaunch, reload bool) error {
 	if launch == nil {
-		return nil, nil
+		return nil
 	}
 	if launch.InstallWorkflowSkill {
 		if err := d.ensureDelegationWorkflowSkill(opts.Agent, launch.RequireWorkflowSkill); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	if launch.Plugin != nil {
 		p := launch.Plugin
 		reg, ok := d.ensurePluginRegistry().driver(opts.Agent)
 		if !ok || reg.PluginName != p.Plugin {
-			return nil, fmt.Errorf("agent %q is not available on this machine", opts.Agent)
+			return fmt.Errorf("agent %q is not available on this machine", opts.Agent)
 		}
 		p.Params.Executable = configuredLaunchExecutable(nil, opts)
 		if p.Params.Executable == "" {
 			p.Params.Executable = strings.TrimSpace(d.setting(executableSetting(opts.Agent)))
 		}
 		serverBound := reg.Capabilities["server_binding"]
-		var prepared *preparedPluginReload
 		p.Params.AgentTools = nil
 		if serverBound {
 			l := d.serverLinkFor(opts.Agent)
 			p.Params.Executable = l.executable(opts)
 			if err := d.prepareLinkedLaunch(opts, launch, reload); err != nil {
-				return nil, err
+				return err
 			}
 			if reg.Capabilities["agent_tools"] {
 				if tools := l.clientAgentTools(); tools != nil {
@@ -120,28 +119,27 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 			if reg.Capabilities["agent_tools"] {
 				p.Params.AgentTools = d.pluginAgentTools(opts.ID)
 			}
-			d.sessionMonitor(sessionID).BeginLaunch(p.Plugin, p.Params.RunID)
-			prepared = &preparedPluginReload{d: d, sessionID: sessionID, pluginName: p.Plugin, runID: p.Params.RunID, route: pluginDriverRoute(reg)}
+			d.sessionMonitor(sessionID).BeginLaunch(p.Plugin, p.Params.RunID, pluginDriverRoute(reg))
 		}
 		if p.LaunchInstructions {
 			p.Params.Instructions = renderPluginLaunchInstructions(launch.Context, launch.Profile, p.Params.AgentTools != nil)
 		}
 		result, err := d.resolvePluginDriverLaunch(reg, p.Params, p.Resume)
 		if err != nil {
-			prepared.abort()
-			return nil, err
+			d.abortLaunch(sessionID)
+			return err
 		}
 		env, err := pluginCommandEnv(result.Env)
 		if err != nil {
-			prepared.abort()
-			return nil, err
+			d.abortLaunch(sessionID)
+			return err
 		}
 		externalCWD := strings.TrimSpace(result.CWD)
 		if externalCWD != "" {
 			externalCWD, err = d.validateCrewBoundLaunchDir(sessionID, externalCWD)
 			if err != nil {
-				prepared.abort()
-				return nil, err
+				d.abortLaunch(sessionID)
+				return err
 			}
 		}
 		if serverBound {
@@ -149,34 +147,31 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 			env = append(env, l.homeEnv())
 		}
 		opts.LifecycleID, opts.AgentArgv, opts.AgentEnv, opts.ExternalCWD = p.Params.RunID, append([]string(nil), result.Argv...), env, externalCWD
-		if reload && !serverBound {
-			opts.ResumeSessionID = ""
-		}
-		return prepared, nil
+		return nil
 	}
 	driver := agentdriver.Get(opts.Agent)
 	if driver == nil {
-		return nil, fmt.Errorf("unknown agent %q", opts.Agent)
+		return fmt.Errorf("unknown agent %q", opts.Agent)
 	}
 	if opts.LaunchExecutable == "" && configuredLaunchExecutable(driver, opts) == "" {
 		opts.LaunchExecutable = strings.TrimSpace(d.setting(executableSetting(opts.Agent)))
 	}
 	if err := d.refuseUnknownCodexFolder(opts, launch.Profile); err != nil {
-		return nil, err
+		return err
 	}
 	if err := d.settleClaudeFolderTrust(opts, launch.RepositoryTrust); err != nil {
-		return nil, err
+		return err
 	}
 	if err := d.prepareLinkedLaunch(opts, launch, reload); err != nil {
-		return nil, err
+		return err
 	}
 	if err := d.prepareAgentLaunch(opts, launch); err != nil {
-		return nil, fmt.Errorf("prepare %s launch: %w", opts.Agent, err)
+		return fmt.Errorf("prepare %s launch: %w", opts.Agent, err)
 	}
 	if l, server := d.linkFor(opts.Agent, launch.Lifetime).(*serverLink); server {
 		opts.AgentEnv = append(opts.AgentEnv, l.homeEnv())
 	}
-	return nil, nil
+	return nil
 }
 
 func (d *Daemon) seedAgentMonitor(session *protocol.Session, opts ptybackend.SpawnOptions, launch *AgentLaunch) {

@@ -144,13 +144,13 @@ func (d *Daemon) startTerminal(ctx context.Context, msg protocol.TerminalStartMe
 	}
 	applyBranchInfo(&session, branchInfo)
 	d.seedAgentMonitor(&session, opts, agent)
-	plugin, err := d.prepareMachineAgent(session.ID, &opts, agent, false)
-	if err != nil {
+	if err := d.prepareMachineAgent(session.ID, &opts, agent, false); err != nil {
 		return struct{}{}, err
 	}
-	if plugin != nil && !d.beginAgentDriverRun(session.ID, plugin.pluginName, plugin.runID, plugin.route) {
-		plugin.abort()
-		return struct{}{}, fmt.Errorf("initialize plugin driver run cursor")
+	run, _, err := d.sessionMonitor(session.ID).ActivateLaunch()
+	if err != nil {
+		d.abortLaunch(session.ID)
+		return struct{}{}, err
 	}
 	if agent != nil && agent.AddedTerminal {
 		err = d.startTerminalRuntime(opts)
@@ -162,10 +162,10 @@ func (d *Daemon) startTerminal(ctx context.Context, msg protocol.TerminalStartMe
 			err = fmt.Errorf("launch directory %s is unavailable; the worktree sweep may have removed it before launch: %w", session.Directory, err)
 		}
 		d.sessionMonitor(session.ID).ForgetInitialPrompt()
-		if plugin != nil {
+		if run.ID != "" {
 			d.endAgentDriverRun(session.ID)
-			plugin.abort()
 		}
+		d.abortLaunch(session.ID)
 		return struct{}{}, err
 	}
 	d.agentStarted(session.ID, agent)
@@ -198,24 +198,26 @@ func (d *Daemon) restartTerminal(ctx context.Context, msg protocol.TerminalResta
 	if err != nil {
 		return struct{}{}, err
 	}
-	plugin, err := d.prepareMachineAgent(msg.SessionID, &opts, agent, true)
-	if err != nil {
+	if err := d.prepareMachineAgent(msg.SessionID, &opts, agent, true); err != nil {
 		return struct{}{}, err
 	}
-	return d.restartPreparedTerminal(ctx, msg, opts, plugin)
+	return d.restartPreparedTerminal(ctx, msg, opts)
 }
 
-func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.TerminalRestartMessage, opts ptybackend.SpawnOptions, plugin *preparedPluginReload) (struct{}, error) {
-	if plugin != nil {
-		defer plugin.abort()
-	}
+func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.TerminalRestartMessage, opts ptybackend.SpawnOptions) (struct{}, error) {
+	terminal, sessionID := msg.TerminalID, msg.SessionID
+	activated := false
+	defer func() {
+		if !activated {
+			d.abortLaunch(sessionID)
+		}
+	}()
 	loginEnv, err := d.launchEnv(ctx)
 	if err != nil {
 		return struct{}{}, err
 	}
 	opts.LoginShellEnv = loginEnv
 	opts.HostName = protocol.Deref(msg.HostName)
-	terminal, sessionID := msg.TerminalID, msg.SessionID
 	d.sessionMonitor(sessionID).FenceInput()
 	unlockEnds := d.replaceRuntime(sessionID, terminal)
 	opts = withLifecycleID(opts)
@@ -240,18 +242,21 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 		})
 		return struct{}{}, fmt.Errorf("respawn failed for %s: %w", sessionID, spawnErr)
 	}
-	if plugin != nil {
-		if err := plugin.commit(); err != nil {
-			d.markReplaced(terminal, opts.LifecycleID)
-			_ = d.ptyBackend.Kill(ctx, terminal, syscall.SIGTERM)
-			_ = d.ptyBackend.Remove(ctx, terminal)
-			unlockEnds()
-			d.endRun(sessionID, harness.RunReloadFailed, nil, "")
-			d.life.Go("handleFailedPluginRestart", func() {
-				d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1, LifecycleID: opts.LifecycleID})
-			})
-			return struct{}{}, fmt.Errorf("activate plugin run failed for %s: %w", sessionID, err)
-		}
+	run, previous, err := d.sessionMonitor(sessionID).ActivateLaunch()
+	if err != nil {
+		d.markReplaced(terminal, opts.LifecycleID)
+		_ = d.ptyBackend.Kill(ctx, terminal, syscall.SIGTERM)
+		_ = d.ptyBackend.Remove(ctx, terminal)
+		unlockEnds()
+		d.endRun(sessionID, harness.RunReloadFailed, nil, "")
+		d.life.Go("handleFailedLaunchActivation", func() {
+			d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1, LifecycleID: opts.LifecycleID})
+		})
+		return struct{}{}, fmt.Errorf("activate the reloaded run for %s: %w", sessionID, err)
+	}
+	activated = true
+	if run.ID != "" && previous.ID != "" && previous.ID != run.ID {
+		d.runEnded(d.agentOf(sessionID), harness.RunEnd{Session: sessionID, Terminal: d.primaryTerminal(sessionID), Owner: previous.Owner, Run: previous.ID, Reason: harness.RunReloaded})
 	}
 	unlockEnds()
 	d.sessionMonitor(sessionID).ResetInput()

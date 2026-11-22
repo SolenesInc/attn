@@ -1,6 +1,7 @@
 package sessionmonitor
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -141,13 +142,29 @@ func (m *Monitor) ReportRunPath(run, path string) bool {
 	return m.publish(view)
 }
 
-func (m *Monitor) BeginLaunch(plugin, run string) {
+func (m *Monitor) BeginLaunch(owner, run, route string) {
 	if m == nil {
 		return
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.launchGate = &launchGate{owner: plugin, run: run}
+	m.launchGate = &launchGate{owner: owner, run: run, route: route}
+}
+
+func (m *Monitor) ActivateLaunch() (activated, previous RunRecord, err error) {
+	if m == nil {
+		return RunRecord{}, RunRecord{}, nil
+	}
+	m.mu.Lock()
+	gate, previous := m.launchGate, m.runRecord
+	m.mu.Unlock()
+	if gate == nil {
+		return RunRecord{}, previous, nil
+	}
+	if !m.BeginRun(gate.owner, gate.run, gate.route) {
+		return RunRecord{}, previous, errors.New("record the launch's run")
+	}
+	return RunRecord{Owner: gate.owner, ID: gate.run, Route: gate.route}, previous, nil
 }
 
 func (m *Monitor) QueueDuringLaunch(plugin, run string, replay func(), whileQueued func()) bool {

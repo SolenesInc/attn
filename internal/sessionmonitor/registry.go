@@ -439,6 +439,7 @@ func (r *Registry) Close() {
 type launchGate struct {
 	owner   string
 	run     string
+	route   string
 	replays []func()
 	exit    *ptybackend.ExitInfo
 }

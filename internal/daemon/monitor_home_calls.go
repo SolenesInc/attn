@@ -262,10 +262,6 @@ func (d *Daemon) writeTerminalPTY(ctx context.Context, terminal harness.Terminal
 
 var errNoPTYBackend = errors.New("session has no PTY backend")
 
-func (d *Daemon) beginAgentDriverRun(session protocol.SessionID, plugin, run, route string) bool {
-	return d.sessionMonitor(session).BeginRun(plugin, run, route)
-}
-
 func (d *Daemon) endAgentDriverRun(session protocol.SessionID) store.AgentDriverReportCursor {
 	ended := d.sessionMonitor(session).EndRun()
 	return store.AgentDriverReportCursor{PluginName: ended.Owner, RunID: ended.ID, Seq: ended.Sequence, Route: ended.Route}
