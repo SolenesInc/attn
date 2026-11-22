@@ -83,7 +83,7 @@ const baseEnv = (): NodeJS.ProcessEnv => {
     ...withoutAttnEnv(),
     ATTN_INSTANCE: instance,
     ATTN_HEADLESS_TASKS: "off",
-    ...(toolHome ? { ATTN_TOOL_HOME: toolHome, CLAUDE_CONFIG_DIR: join(toolHome, ".claude"), CODEX_HOME: join(toolHome, ".codex") } : {}),
+    ...(toolHome ? { ATTN_TOOL_HOME: toolHome, CLAUDE_CONFIG_DIR: join(toolHome, ".claude"), CODEX_HOME: join(toolHome, ".codex"), SIGMA_HOME: join(toolHome, ".sigma") } : {}),
   }
 }
 let daemonEnv = baseEnv()

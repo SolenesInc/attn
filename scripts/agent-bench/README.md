@@ -31,11 +31,12 @@ Each run keeps `transcript.jsonl`, `calls.json`, `screen.txt` and `result.json` 
 
 ### Harness homes
 
-By default, the agents run with your own `~/.claude` and `~/.codex`. Your global `CLAUDE.md`, plugins and MCP servers then add to every Claude Code prompt, which raises input tokens, and Claude Code adds an entry for each run's folder to your `~/.claude.json`, as it does for any folder it runs in. To measure attn alone, make a bench home once and pass `--tool-home <dir>`. The driver then starts the daemon with `CLAUDE_CONFIG_DIR=<dir>/.claude`, `CODEX_HOME=<dir>/.codex` and `ATTN_TOOL_HOME=<dir>`. To make the home, sign each harness in:
+By default, the agents run with your own `~/.claude`, `~/.codex` and `~/.sigma`. Your global `CLAUDE.md`, plugins and MCP servers then add to every Claude Code prompt, which raises input tokens, and Claude Code adds an entry for each run's folder to your `~/.claude.json`, as it does for any folder it runs in. To measure attn alone, make a bench home once and pass `--tool-home <dir>`. The driver then starts the daemon with `CLAUDE_CONFIG_DIR=<dir>/.claude`, `CODEX_HOME=<dir>/.codex`, `SIGMA_HOME=<dir>/.sigma` and `ATTN_TOOL_HOME=<dir>`. To make the home, sign each harness in:
 
 ```sh
 CLAUDE_CONFIG_DIR=~/attn-agent-bench-home/.claude claude    # then /login
 CODEX_HOME=~/attn-agent-bench-home/.codex codex login
+SIGMA_HOME=~/attn-agent-bench-home/.sigma sigma login openai    # for Sigma's own loop
 ```
 
 Codex asks once per folder whether to trust it. The driver answers that screen for the folders it makes, and at the end it removes those folders' entries from the home's `config.toml`.
