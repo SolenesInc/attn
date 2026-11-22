@@ -92,11 +92,17 @@ pub(crate) struct Rules {
     /// What the route without a harness runs, whose models it may still pin; its model and
     /// effort are what the route without them runs on that harness.
     pub(crate) inherited: Option<Route>,
+    /// The route runs one-shot calls, so a model that cannot answer one is refused.
+    pub(crate) one_shot: bool,
 }
 
 impl Rules {
     fn none_label(&self) -> &'static str {
         self.none_label.unwrap_or("None")
+    }
+
+    fn refuses(&self, m: &HarnessModel) -> bool {
+        m.access == "unsupported" || (self.one_shot && m.one_shot == "unsupported")
     }
 }
 
@@ -215,6 +221,9 @@ pub(crate) fn view<'a>(state: &'a State, input: &Route, rules: &'a Rules) -> Vie
         value.provider = m.provider.clone();
     }
     let default_model = match (rules.tier, inherited) {
+        (Some(tier), _) if rules.one_shot => models.iter().find(|m| {
+            m.tier.as_deref() == Some(tier) && m.tier_source != "alias" && !rules.refuses(m)
+        }),
         (Some(tier), _) => catalog.and_then(|c| c.tier_default(tier)).and_then(|id| {
             models.iter().find(|m| {
                 m.id == id && m.tier.as_deref() == Some(tier) && m.access != "unsupported"
@@ -970,7 +979,7 @@ fn manual(state: &State) -> Option<(String, String, bool)> {
     let unsupported = view.discovered.catalog.is_some_and(|c| {
         c.models
             .iter()
-            .any(|m| m.id == model && m.provider == provider && m.access == "unsupported")
+            .any(|m| m.id == model && m.provider == provider && rules.refuses(m))
     });
     Some((model, provider, unsupported))
 }
@@ -1018,7 +1027,7 @@ fn submit_filter(state: &mut State, tx: &mut Tx) {
     let first = view
         .options(&p.query)
         .into_iter()
-        .find_map(|o| o.model.filter(|m| m.access != "unsupported"));
+        .find_map(|o| o.model.filter(|m| !rules.refuses(m)));
     match first {
         Some(model) => {
             let next = view.with_model(Some(&model));
@@ -1384,7 +1393,7 @@ fn model_list(p: &Picker, view: &View, t: &Tokens) -> El {
                 .join(" · ");
                 (
                     m.id == view.value.model && m.provider == view.value.provider,
-                    m.access == "unsupported",
+                    view.rules.refuses(m),
                     mark,
                     detail,
                     view.with_model(Some(m)),
@@ -1670,7 +1679,7 @@ fn model_keys(p: &Picker, view: &View) -> Vec<(String, bool)> {
         index += 1;
     }
     for o in view.options(&p.query.text) {
-        let enabled = o.model.as_ref().is_none_or(|m| m.access != "unsupported");
+        let enabled = o.model.as_ref().is_none_or(|m| !view.rules.refuses(m));
         keys.push((format!("settings.route-picker.model.{index}"), enabled));
         index += 1;
     }

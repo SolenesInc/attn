@@ -31,6 +31,7 @@ const (
 	methodServerFakeReply  = "attn-fake/reply"
 	methodAwaitInterrupt   = "await_interrupt"
 	methodFailRun          = "fail_run"
+	methodSignIn           = "sign_in"
 	methodServerStarted    = "started"
 	methodLoseNextSubmit   = "lose_next_submit"
 	methodSubmissions      = "submissions"
@@ -187,15 +188,34 @@ type ServerProviderModels struct {
 	Models   []ServerModel `json:"models"`
 }
 
+// ServerProvider is one provider of the fake server's home, as models/list and providers/list answer it.
+// Status is ready, signed_out or unavailable; a nil Ephemeral is left out, as a Sigma from before ephemeral was listed.
+type ServerProvider struct {
+	ID        string        `json:"id"`
+	Models    []ServerModel `json:"models"`
+	Status    string        `json:"status"`
+	Ephemeral *bool         `json:"ephemeral,omitempty"`
+}
+
+func (p ServerProvider) ephemeralRefusal() string {
+	switch {
+	case p.Status != "ready":
+		return "not signed in to " + p.ID
+	case p.Ephemeral != nil && !*p.Ephemeral:
+		return p.ID + " cannot answer an ephemeral run"
+	}
+	return ""
+}
+
 type ServerModel struct {
 	ID      string   `json:"id"`
 	Name    string   `json:"name"`
 	Efforts []string `json:"efforts"`
 }
 
-var ServerModels = []ServerProviderModels{
-	{Provider: "claude", Models: []ServerModel{{ID: "opus", Name: "Opus", Efforts: []string{"low", "medium", "high"}}}},
-	{Provider: "openai", Models: []ServerModel{{ID: "gpt-5.5", Name: "GPT-5.5", Efforts: []string{"low", "high"}}, {ID: "gpt-image", Name: "Image", Efforts: []string{}}}},
+var serverProviders = []ServerProvider{
+	{ID: "claude", Status: "ready", Models: []ServerModel{{ID: "opus", Name: "Opus", Efforts: []string{"low", "medium", "high"}}}},
+	{ID: "openai", Status: "ready", Models: []ServerModel{{ID: "gpt-5.5", Name: "GPT-5.5", Efforts: []string{"low", "high"}}, {ID: "gpt-image", Name: "Image", Efforts: []string{}}}},
 }
 
 type ServerTarget struct {
@@ -269,6 +289,7 @@ type appServer struct {
 	watchers    []*serverWatcher
 	refuseMCP   string
 	answers     int
+	providers   []ServerProvider
 	ephemeral   map[ephemeralKey]*rpcPeer
 }
 
@@ -292,6 +313,10 @@ func runAppServer(cfg config, flavor appServerFlavor) int {
 		return boot.Code
 	}
 	s.answers = boot.Protocol
+	s.providers = serverProviders
+	if boot.Providers != nil {
+		s.providers = boot.Providers
+	}
 	home := os.Getenv(flavor.homeVariable)
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		fmt.Fprintf(os.Stderr, "fake %s serve: %v\n", flavor.harness, err)
@@ -457,7 +482,21 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		s.mu.Unlock()
 		return hello, ""
 	case "models/list":
-		return ServerModels, ""
+		models := []ServerProviderModels{}
+		for _, p := range s.providers {
+			models = append(models, ServerProviderModels{Provider: p.ID, Models: p.Models})
+		}
+		return models, ""
+	case "providers/list":
+		snapshots := []map[string]any{}
+		for _, p := range s.providers {
+			snapshot := map[string]any{"id": p.ID, "driver": p.ID, "signIn": []string{}, "health": map[string]any{"status": p.Status, "checkedAt": 0}}
+			if p.Ephemeral != nil {
+				snapshot["ephemeral"] = *p.Ephemeral
+			}
+			snapshots = append(snapshots, snapshot)
+		}
+		return snapshots, ""
 	case "targets/list":
 		return ServerTargets(p.Cwd), ""
 	case "conversation/start", "conversation/open":
@@ -689,6 +728,16 @@ func (s *appServer) handleKit(_ *rpcPeer, method string, raw json.RawMessage) (a
 		}
 	case methodReply:
 		return struct{}{}, failure(s.end(p.ThreadID, map[string]any{"outcome": "answered", "said": p.Text}))
+	case methodSignIn:
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for i := range s.providers {
+			if s.providers[i].ID == p.Text {
+				s.providers[i].Status = "ready"
+				return struct{}{}, nil
+			}
+		}
+		return nil, fmt.Errorf("no provider %s", p.Text)
 	case methodFailRun:
 		return struct{}{}, failure(s.end(p.ThreadID, map[string]any{"outcome": "failed", "message": p.Text}))
 	case methodReplyWorkerWaits:
@@ -834,6 +883,11 @@ func (s *AppServer) Reply(conversation, text string) {
 func (s *AppServer) ReplyWhileAWorkerWaits(conversation, text string) {
 	s.t.Helper()
 	s.call(methodReplyWorkerWaits, serverThreadParams{ThreadID: conversation, Text: text}, nil)
+}
+
+func (s *AppServer) SignIn(provider string) {
+	s.t.Helper()
+	s.call(methodSignIn, serverThreadParams{Text: provider}, nil)
 }
 
 func (s *AppServer) Fail(conversation, message string) {

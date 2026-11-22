@@ -165,18 +165,22 @@ func (l *serverLink) harnessModels(ctx context.Context) (harness.Models, error) 
 	return harness.Models{List: models, Detail: "Models of the providers the " + l.b.name + " server has."}, nil
 }
 
-func (l *serverLink) models(ctx context.Context) ([]protocol.HarnessModel, error) {
+func (l *serverLink) call(ctx context.Context, method string, params, answer any) error {
 	p, err := l.connection()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	c, release, err := p.borrow(ctx, l, true)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer release()
+	return c.Call(ctx, method, params, answer)
+}
+
+func (l *serverLink) models(ctx context.Context) ([]protocol.HarnessModel, error) {
 	var providers []serverProviderModels
-	if err := c.Call(ctx, "models/list", map[string]any{}, &providers); err != nil {
+	if err := l.call(ctx, "models/list", map[string]any{}, &providers); err != nil {
 		return nil, err
 	}
 	var models []protocol.HarnessModel
@@ -186,24 +190,15 @@ func (l *serverLink) models(ctx context.Context) ([]protocol.HarnessModel, error
 			if len(m.Efforts) > 0 {
 				effort = protocol.ModelCapabilitySupportSupported
 			}
-			models = append(models, protocol.HarnessModel{Harness: l.b.agent, Provider: p.Provider, ID: m.ID, Name: m.Name, Description: m.Description, EffortSupport: effort, EffortLevels: append([]string{}, m.Efforts...), Access: protocol.ModelCapabilitySupportUnknown})
+			models = append(models, protocol.HarnessModel{Harness: l.b.agent, Provider: p.Provider, ID: m.ID, Name: m.Name, Description: m.Description, EffortSupport: effort, EffortLevels: append([]string{}, m.Efforts...), Access: protocol.ModelCapabilitySupportUnknown, OneShot: protocol.ModelCapabilitySupportUnknown})
 		}
 	}
 	return models, nil
 }
 
 func (l *serverLink) targets(ctx context.Context, cwd string) ([]protocol.ExecutionTarget, error) {
-	p, err := l.connection()
-	if err != nil {
-		return nil, err
-	}
-	c, release, err := p.borrow(ctx, l, true)
-	if err != nil {
-		return nil, err
-	}
-	defer release()
 	targets := []protocol.ExecutionTarget{}
-	if err := c.Call(ctx, "targets/list", map[string]any{"cwd": cwd}, &targets); err != nil {
+	if err := l.call(ctx, "targets/list", map[string]any{"cwd": cwd}, &targets); err != nil {
 		return nil, err
 	}
 	return targets, nil

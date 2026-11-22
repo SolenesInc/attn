@@ -273,7 +273,7 @@ func (d *Daemon) answerModelCall(ctx context.Context, profile string, msg *proto
 		result, err := spare.Answer(ctx, request)
 		if !errors.Is(err, harness.ErrSpareUnusable) {
 			result, err = modelCallAnswer(result, err)
-			return modelCallOutcome{target: target, result: result, err: err}
+			return answeredBy(target, resolved, result, err)
 		}
 		bySpare.Store(false)
 		d.logf("model call: the %s spare could not answer, so the call runs cold: %v", target.harness, err)
@@ -281,6 +281,14 @@ func (d *Daemon) answerModelCall(ctx context.Context, profile string, msg *proto
 	result, err := modelCallAnswer(target.oneShot.Run(ctx, request))
 	if err != nil {
 		err = fmt.Errorf("%s: %w", target.harness, err)
+	}
+	return answeredBy(target, resolved, result, err)
+}
+
+func answeredBy(target modelCallTarget, resolved *atomic.Pointer[modelCallTarget], result harness.OneShotResult, err error) modelCallOutcome {
+	if target.model == "" && result.Model != "" {
+		target.model = result.Model
+		resolved.Store(&target)
 	}
 	return modelCallOutcome{target: target, result: result, err: err}
 }

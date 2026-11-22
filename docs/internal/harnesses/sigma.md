@@ -49,8 +49,9 @@ measurement uses that one.
   match the schema), `UnknownProvider`, `UnknownEffort` or `ReadOnlyServer`.
   These shapes were probed on 43ebbba with the `script` provider. Without
   `provider`, the home's default provider answers
-  (`packages/sigma/src/ephemeral.ts`). Runs at once each answer their own
-  prompt (`ephemeral-concurrent` in `packages/sigma/test`).
+  (`packages/sigma/src/ephemeral.ts`), and the answer's `provider` and `model`
+  name the model that answered. Runs at once each answer their own prompt
+  (`ephemeral-concurrent` in `packages/sigma/test`).
 - `conversation/compact {conversation, author, instructions?}` answers once the
   compaction has ended, with `outcome` `compacted`, `nothing_to_compact`,
   `failed` (with a `message`) or `stopped`. Behind a run in flight it waits for
@@ -85,6 +86,14 @@ measurement uses that one.
   `~/`) or an `env.CLAUDE_CONFIG_DIR` that becomes that Claude Code's config
   folder (`packages/sigma/src/config.ts`, `providers.ts`).
 - `models/list` answers each provider's models, with the efforts each takes.
+  It lists a provider you are not signed in to as well.
+- `providers/list` answers each provider's `health.status`, `ready`,
+  `signed_out` or `unavailable`, and from 30eaeca `ephemeral`, whether its
+  driver answers `ephemeral/run`: every driver but `agy` does
+  (`ephemeral-listed` in `packages/sigma/test/providers.test.ts`). Measured
+  2026-11-22 on 30eaeca with a scratch home: the bundled `openai` with no
+  sign-in was `signed_out`, an `openai-work` signed in to a fake ChatGPT was
+  `ready`, and `claude` and `agy` with missing executables were `unavailable`.
 - `status/watch` opens with the busy conversation trees and then sends one
   status per change of a tree (working, waiting on an approval, idle), with
   how its root's run ended. Subagents are part of their root's tree.

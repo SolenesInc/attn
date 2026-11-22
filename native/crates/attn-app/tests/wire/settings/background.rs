@@ -1,9 +1,9 @@
-use attn_protocol::DelegationPreferencesResultMessage;
+use attn_protocol::{DelegationPreferencesResultMessage, HarnessModel};
 use attn_testkit::{Daemon, Target, World, message};
 
 use super::harness_catalogs::{
-    enter_model, harnesses, open_route, options, pick_effort, pick_model, picker_open,
-    preview_harness, route_value, serve,
+    catalog, enter_model, harness, harnesses, model, open_route, options, pick_effort, pick_model,
+    picker_open, preview_harness, reported, route_value, serve,
 };
 use super::{accepting, click, field, keeping, open, press, rest, retype, state, value, writes};
 
@@ -507,4 +507,100 @@ fn a_refused_refresh_window_keeps_both_windows_where_they_are_on_every_frame() {
         }
     }
     rest(&mut world);
+}
+
+const SIGMA_HEADLESS: &[(&str, &str)] = &[
+    ("sigma_available", "true"),
+    ("sigma_cap_executable_setting", "true"),
+    ("sigma_cap_headless_task", "true"),
+];
+
+fn sigma_model(provider: &str, id: &str, name: &str, one_shot: &str) -> HarnessModel {
+    HarnessModel {
+        provider: provider.into(),
+        one_shot: one_shot.into(),
+        ..model("sigma", id, name, Some("light"), &["low", "high"])
+    }
+}
+
+fn on_sigma_background(settings: &[(&str, &str)]) -> World {
+    let all: Vec<(&str, &str)> = HEADLESS
+        .iter()
+        .chain(SIGMA_HEADLESS)
+        .chain(settings)
+        .copied()
+        .collect();
+    let (daemon, stored) = accepting(&all);
+    let mut listed = harnesses();
+    listed.push(harness("sigma", "Sigma"));
+    serve(&daemon, &stored, listed);
+    daemon.on("harness_models", move |r| {
+        let harness = r["harness"].as_str().unwrap_or_default().to_owned();
+        let models = if harness == "sigma" {
+            vec![
+                sigma_model("agy", "gemini-4-neon", "Gemini 4 Neon", "unsupported"),
+                sigma_model("openai", "gpt-6-luna", "Luna", "supported"),
+                sigma_model("openai-work", "gpt-6-luna", "Work Luna", "supported"),
+            ]
+        } else {
+            catalog(&harness)
+        };
+        message(reported(&harness, &stored, models))
+    });
+    to_background(World::start(daemon))
+}
+
+#[test]
+fn a_sigma_activity_model_saves_and_reads_back_with_its_provider() {
+    let mut world = on_sigma_background(&[]);
+    open_route(&mut world, "Session activity model");
+    preview_harness(&mut world, "Sigma");
+    pick_model(&mut world, "Work Luna");
+    let saved: serde_json::Value = serde_json::from_str(&writes(&world).last().unwrap().1).unwrap();
+    assert_eq!(saved["agent"], "sigma");
+    assert_eq!(saved["model"], "openai-work/gpt-6-luna");
+    rest(&mut world);
+
+    let mut world = on_sigma_background(&[(
+        "activity.config",
+        r#"{"agent":"sigma","model":"openai-work/gpt-6-luna"}"#,
+    )]);
+    open_route(&mut world, "Session activity model");
+    let selected: Vec<String> = options(&world, "models")
+        .into_iter()
+        .filter(|(_, selected, _)| *selected)
+        .map(|(name, _, _)| name)
+        .collect();
+    assert!(
+        selected.len() == 1 && selected[0].starts_with("Work Luna"),
+        "{selected:?}"
+    );
+    assert!(writes(&world).is_empty());
+    rest(&mut world);
+}
+
+#[test]
+fn the_background_routes_disable_a_sigma_model_that_cannot_answer_a_one_shot_call() {
+    for label in ["Session activity model", "Garden advisor model"] {
+        let mut world = on_sigma_background(&[]);
+        open_route(&mut world, label);
+        preview_harness(&mut world, "Sigma");
+        let enabled = |name: &str| {
+            options(&world, "models")
+                .into_iter()
+                .find(|(shown, _, _)| shown.starts_with(name))
+                .unwrap_or_else(|| panic!("{label} lists {name}"))
+                .2
+        };
+        assert!(!enabled("Gemini 4 Neon"), "{label} disables agy's model");
+        assert!(enabled("Work Luna"), "{label} offers openai-work's model");
+        assert!(
+            options(&world, "models")
+                .iter()
+                .any(|(name, _, _)| name.starts_with("Light default → Luna")),
+            "{label} defaults to the first light model that answers: {:?}",
+            options(&world, "models")
+        );
+        rest(&mut world);
+    }
 }

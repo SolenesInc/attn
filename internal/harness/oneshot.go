@@ -33,6 +33,7 @@ type Bound struct {
 }
 
 type OneShotResult struct {
+	Model         string
 	Text          string
 	Structured    json.RawMessage
 	Diagnostics   string

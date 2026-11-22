@@ -1,7 +1,13 @@
 package testworld
 
+import "github.com/victorarias/attn/internal/fakeagent"
+
 func (w *World) AnswerProtocolAtNextBoot(version int) {
 	w.kit.AnswerProtocolAtNextBoot(version)
+}
+
+func (w *World) ServeProvidersAtNextBoot(providers ...fakeagent.ServerProvider) {
+	w.kit.ServeProvidersAtNextBoot(providers...)
 }
 
 func (w *World) ExitAtNextBoot(code int, screen string) {

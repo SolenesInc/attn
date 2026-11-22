@@ -6069,6 +6069,9 @@ type HarnessModel struct {
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
 
+	// OneShot corresponds to the JSON schema field "one_shot".
+	OneShot ModelCapabilitySupport `json:"one_shot"`
+
 	// Provider corresponds to the JSON schema field "provider".
 	Provider string `json:"provider"`
 

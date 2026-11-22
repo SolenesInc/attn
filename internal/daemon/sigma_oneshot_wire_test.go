@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -21,16 +22,159 @@ func sigmaOnlyWorld(t *testing.T) (*world, *testworld.Peer) {
 
 func sigmaTask(t *testing.T, w *world, asks string) *fakeagent.HeadlessTask {
 	t.Helper()
-	return sigmaTaskAt(t, w, "low", asks)
+	return sigmaTaskOn(t, w, "", asks)
 }
 
-func sigmaTaskAt(t *testing.T, w *world, effort, asks string) *fakeagent.HeadlessTask {
+func sigmaTaskOn(t *testing.T, w *world, model, asks string) *fakeagent.HeadlessTask {
 	t.Helper()
 	task := w.HeadlessTask()
-	if task.Harness != fakeagent.Sigma || task.Model != "openai/gpt-6-luna" || task.Effort != effort || !strings.Contains(task.Prompt, asks) {
-		t.Fatalf("the daemon asked %s %q at effort %q: %q, want Sigma's light default openai/gpt-6-luna at %q asked about %q", task.Harness, task.Model, task.Effort, task.Prompt, effort, asks)
+	if task.Harness != fakeagent.Sigma || task.Model != model || task.Effort != "" || !strings.Contains(task.Prompt, asks) {
+		t.Fatalf("the daemon asked %s %q at effort %q: %q, want %q at the model's own effort asked about %q", task.Harness, task.Model, task.Effort, task.Prompt, model, asks)
 	}
 	return task
+}
+
+var (
+	sigmaAnswers       = protocol.Ptr(true)
+	sigmaCannotAnswer  = protocol.Ptr(false)
+	sigmaChatGPTModels = []fakeagent.ServerModel{{ID: "gpt-6.1-sol", Name: "GPT-6.1 Sol", Efforts: []string{"low", "high"}}, {ID: "gpt-6-luna", Name: "GPT-6 Luna", Efforts: []string{"low", "high"}}}
+	sigmaClaudeModels  = []fakeagent.ServerModel{{ID: "opus", Name: "Opus", Efforts: []string{"low", "high"}}, {ID: "haiku", Name: "Haiku", Efforts: []string{}}}
+)
+
+func sigmaDictation(t *testing.T, w *world, app *testworld.Peer, input string) *json.Decoder {
+	t.Helper()
+	token := pairSenderInApp(t, w.Client(), app, "Dictation")
+	conn, err := w.DialUnix()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	if err := conn.SetDeadline(time.Now().Add(fakeagent.HangGuard)); err != nil {
+		t.Fatal(err)
+	}
+	call := protocol.SenderModelCallMessage{
+		Cmd: protocol.CmdSenderModelCall, Input: input, LimitMs: int(fakeagent.HangGuard.Milliseconds()), Harness: protocol.Ptr("sigma"),
+		Purpose: "dictation", SenderToken: token.Token, System: "Clean up the dictated text.", Tier: protocol.Ptr(protocol.ModelTierLight),
+	}
+	if err := json.NewEncoder(conn).Encode(call); err != nil {
+		t.Fatal(err)
+	}
+	return json.NewDecoder(conn)
+}
+
+func TestASigmaModelCallStartsSigmasServerWhenNoneRuns(t *testing.T) {
+	w, app := sigmaOnlyWorld(t)
+	setSetting(t, app, "model_calls.agent", "sigma")
+	if running := w.AppServers(fakeagent.Sigma); running != 0 {
+		t.Fatalf("%d Sigma servers run before any session or call", running)
+	}
+	answers := sigmaDictation(t, w, app, "so um fix the the login bug")
+	sigmaTask(t, w, "so um fix the the login bug").Answer("Fix the login bug.")
+	var response protocol.Response
+	if err := answers.Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if answer := response.SenderModelCallResult; !response.Ok || answer == nil || protocol.Deref(answer.Text) != "Fix the login bug." {
+		t.Fatalf("the call with no Sigma server running answered %+v", response)
+	}
+}
+
+func TestWhenTheBundledOpenAIProviderIsSignedOutSigmaTitlesStopsAndLightCallsGoToTheProviderThatIsSignedIn(t *testing.T) {
+	for _, home := range []struct {
+		name  string
+		ready string
+		model string
+	}{
+		{"a named OpenAI instance", "openai-work", "openai-work/gpt-6-luna"},
+		{"Claude", "claude", "claude/haiku"},
+	} {
+		t.Run(home.name, func(t *testing.T) {
+			w := newTitlingWorld(t, fakeagent.Sigma)
+			status := func(id string) string {
+				if id == home.ready {
+					return "ready"
+				}
+				return "signed_out"
+			}
+			w.ServeProvidersAtNextBoot(
+				fakeagent.ServerProvider{ID: "openai", Status: status("openai"), Models: sigmaChatGPTModels, Ephemeral: sigmaAnswers},
+				fakeagent.ServerProvider{ID: "claude", Status: status("claude"), Models: sigmaClaudeModels, Ephemeral: sigmaAnswers},
+				fakeagent.ServerProvider{ID: "openai-work", Status: status("openai-work"), Models: sigmaChatGPTModels, Ephemeral: sigmaAnswers},
+			)
+			app := w.TrustedApp()
+			setSetting(t, app, "sigma_enabled", "true")
+			setSetting(t, app, "model_calls.agent", "sigma")
+			session, view, server := appServerSession(t, w, app, fakeagent.Sigma)
+			promptUntilWorking(app, session, view, server, "the login form rejects valid passwords")
+			sigmaTaskOn(t, w, home.model, "the login form rejects valid passwords").Answer("Fix login flow")
+			awaitLabel(app, session, "Fix login flow")
+
+			server.Reply(view.ConversationID, "The fix is ready. Should I deploy it to staging?")
+			sigmaTaskOn(t, w, home.model, "Should I deploy it to staging?").Answer(`{"verdict":"WAITING"}`)
+			testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+
+			answers := sigmaDictation(t, w, app, "so um fix the the login bug")
+			sigmaTaskOn(t, w, home.model, "so um fix the the login bug").Answer("Fix the login bug.")
+			var response protocol.Response
+			if err := answers.Decode(&response); err != nil {
+				t.Fatal(err)
+			}
+			if answer := response.SenderModelCallResult; !response.Ok || answer == nil || protocol.Deref(answer.Text) != "Fix the login bug." || answer.Model != home.model {
+				t.Fatalf("the light call answered %+v, want %s's answer", response, home.model)
+			}
+		})
+	}
+}
+
+func TestSettingsRefuseASigmaModelWhoseProviderCannotAnswerABackgroundCall(t *testing.T) {
+	w := newTitlingWorld(t, fakeagent.Sigma)
+	w.ServeProvidersAtNextBoot(
+		fakeagent.ServerProvider{ID: "agy", Status: "ready", Models: []fakeagent.ServerModel{{ID: "gemini-4-neon", Name: "Gemini 4 Neon", Efforts: []string{}}}, Ephemeral: sigmaCannotAnswer},
+		fakeagent.ServerProvider{ID: "openai", Status: "ready", Models: sigmaChatGPTModels, Ephemeral: sigmaAnswers},
+	)
+	app := w.TrustedApp()
+	setSetting(t, app, "sigma_enabled", "true")
+	catalog := harnessCatalog(app, "sigma", false)
+	oneShot := map[string]protocol.ModelCapabilitySupport{}
+	for _, m := range catalog.Models {
+		oneShot[m.Provider+"/"+m.ID] = m.OneShot
+	}
+	if oneShot["agy/gemini-4-neon"] != protocol.ModelCapabilitySupportUnsupported || oneShot["openai/gpt-6-luna"] != protocol.ModelCapabilitySupportSupported {
+		t.Fatalf("Sigma's catalog says of background calls %v, want agy unable and openai able", oneShot)
+	}
+	for _, key := range []string{"activity.config", "garden.advisor"} {
+		requestID := uuid.NewString()
+		refused := testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: key, Value: `{"agent":"sigma","model":"agy/gemini-4-neon"}`, RequestID: protocol.Ptr(requestID)},
+			protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == requestID })
+		if protocol.Deref(refused.Success) || !strings.Contains(protocol.Deref(refused.Error), "agy/gemini-4-neon cannot answer a background call") {
+			t.Errorf("%s with agy's model = success %v, error %q; want it refused naming the model", key, protocol.Deref(refused.Success), protocol.Deref(refused.Error))
+		}
+		setSetting(t, app, key, `{"agent":"sigma","model":"openai/gpt-6-luna"}`)
+	}
+}
+
+func TestAProviderSignedInAfterSigmaListedItsModelsAnswersBackgroundCalls(t *testing.T) {
+	w := newTitlingWorld(t, fakeagent.Sigma)
+	w.ServeProvidersAtNextBoot(
+		fakeagent.ServerProvider{ID: "claude", Status: "ready", Models: sigmaClaudeModels, Ephemeral: sigmaAnswers},
+		fakeagent.ServerProvider{ID: "openai-work", Status: "signed_out", Models: sigmaChatGPTModels, Ephemeral: sigmaAnswers},
+	)
+	app := w.TrustedApp()
+	setSetting(t, app, "sigma_enabled", "true")
+	requestID := uuid.NewString()
+	refused := testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "activity.config", Value: `{"agent":"sigma","model":"openai-work/gpt-6-luna"}`, RequestID: protocol.Ptr(requestID)},
+		protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == requestID })
+	if protocol.Deref(refused.Success) {
+		t.Fatal("the activity line took a model of a provider that is signed out")
+	}
+
+	w.AppServer(fakeagent.Sigma).SignIn("openai-work")
+	setSetting(t, app, "activity.config", `{"agent":"sigma","model":"openai-work/gpt-6-luna"}`)
+	for _, m := range harnessCatalog(app, "sigma", false).Models {
+		if m.Provider == "openai-work" && m.Access == protocol.ModelCapabilitySupportUnsupported {
+			t.Fatalf("after signing in, Sigma's catalog still refuses %s/%s", m.Provider, m.ID)
+		}
+	}
 }
 
 func TestOnAHomeWithOnlySigmaASigmaSessionIsTitledAndItsStopClassifiedBySigma(t *testing.T) {
@@ -98,7 +242,7 @@ func TestSettingsOfferSigmaForBackgroundCallsAndAnAbandonedDictationStopsItsSigm
 	if err := json.NewEncoder(conn).Encode(call); err != nil {
 		t.Fatal(err)
 	}
-	sigmaTaskAt(t, w, "", "so um fix the the login bug").Answer("Fix the login bug.")
+	sigmaTask(t, w, "so um fix the the login bug").Answer("Fix the login bug.")
 	var response protocol.Response
 	if err := json.NewDecoder(conn).Decode(&response); err != nil {
 		t.Fatal(err)
@@ -115,7 +259,7 @@ func TestSettingsOfferSigmaForBackgroundCallsAndAnAbandonedDictationStopsItsSigm
 	if err := json.NewEncoder(abandoning).Encode(call); err != nil {
 		t.Fatal(err)
 	}
-	abandoned := sigmaTaskAt(t, w, "", "and the uh signup page")
+	abandoned := sigmaTask(t, w, "and the uh signup page")
 	_ = abandoning.Close()
 	abandoned.AwaitExited()
 }

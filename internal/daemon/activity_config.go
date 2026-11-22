@@ -56,9 +56,6 @@ func (d *Daemon) parseActivityConfig(raw string) (activityConfig, error) {
 		return activityConfig{}, d.activityAgentUnset()
 	}
 
-	if config.Model == "" && d.factsOrNone(config.Agent).Tiers[modeltiers.Light].Model == "" {
-		return activityConfig{}, fmt.Errorf("session activity requires a model for agent %s", config.Agent)
-	}
 	if config.Effort == "" {
 		config.Effort = d.factsOrNone(config.Agent).Tiers[modeltiers.Light].Effort
 	}
@@ -86,6 +83,9 @@ func (d *Daemon) validateActivitySetting(raw string) error {
 	}
 	if _, err := d.machineAgentExecutable(config.Agent, ""); err != nil {
 		return fmt.Errorf("session activity executable for %s was not found: %w", config.Agent, err)
+	}
+	if err := d.oneShotModelRefused(d.life.Context(), config.Agent, config.Model); err != nil {
+		return fmt.Errorf("session activity model %w", err)
 	}
 	return nil
 }

@@ -254,18 +254,13 @@ fn advisor_agents(state: &State) -> Vec<String> {
 }
 
 fn route_of(config: Config) -> Route {
-    Route {
-        harness: config.agent,
-        provider: String::new(),
-        model: config.model,
-        effort: config.effort,
-    }
+    Route::stored(&config.agent, &config.model, &config.effort)
 }
 
 fn write(state: &mut State, key: &str, route: Route, tx: &mut Tx) {
     let next = draft(&Config {
+        model: route.stored_model(),
         agent: route.harness,
-        model: route.model,
         effort: route.effort,
     });
     autosave::apply(state, key, &next, tx);
@@ -285,6 +280,7 @@ fn read_route(state: &State, id: &str) -> Option<(Route, Rules)> {
                 effort: Some(|harness| harness != "claude"),
                 tier: Some("light"),
                 default_effort: Some(|_| "low"),
+                one_shot: true,
                 ..Rules::default()
             },
         )),
@@ -299,6 +295,7 @@ fn read_route(state: &State, id: &str) -> Option<(Route, Rules)> {
                     "claude" => "medium",
                     _ => "",
                 }),
+                one_shot: true,
                 ..Rules::default()
             },
         )),

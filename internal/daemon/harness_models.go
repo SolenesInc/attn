@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -51,7 +52,7 @@ func (d *Daemon) loadHarnessModels(ctx context.Context, harness string, refresh 
 			}
 			reachable := h.Health(d.life.Context()).Installation != harnessapi.Missing
 			entry.Catalog, entry.Err = d.queryHarnessModels(harness, h)
-			if reachable {
+			if reachable && !awaitsSignIn(entry.Catalog) {
 				d.harnessModelCatalogs.Store(key, entry)
 			}
 		}) {
@@ -95,6 +96,9 @@ func (d *Daemon) queryHarnessModels(id string, h harnessapi.Harness) (harnessMod
 		}
 		if m.Access != "supported" && m.Access != "unsupported" {
 			m.Access = protocol.ModelCapabilitySupportUnknown
+		}
+		if m.OneShot != "supported" && m.OneShot != "unsupported" {
+			m.OneShot = protocol.ModelCapabilitySupportUnknown
 		}
 		if m.EffortLevels == nil {
 			m.EffortLevels = []string{}
@@ -160,13 +164,45 @@ func (d *Daemon) resolveTierModel(ctx context.Context, harness string, tier mode
 		d.logf("%s %s model discovery failed: %v; using fallback %q", harness, tier, err, fallback)
 		return fallback
 	}
-	if model, ok := modeltiers.FirstOf(catalog.Models, tier); ok {
+	if model, ok := modeltiers.FirstOf(oneShotModels(catalog.Models), tier); ok {
 		if model.Provider != "" {
 			return model.Provider + "/" + model.ID
 		}
 		return model.ID
 	}
 	return fallback
+}
+
+func awaitsSignIn(catalog harnessModelCatalog) bool {
+	return slices.ContainsFunc(catalog.Models, func(m protocol.HarnessModel) bool {
+		return m.Access == protocol.ModelCapabilitySupportUnsupported
+	})
+}
+
+func oneShotModels(models []protocol.HarnessModel) []protocol.HarnessModel {
+	return slices.DeleteFunc(slices.Clone(models), func(m protocol.HarnessModel) bool {
+		return m.OneShot == protocol.ModelCapabilitySupportUnsupported
+	})
+}
+
+func (d *Daemon) oneShotModelRefused(ctx context.Context, agent, model string) error {
+	if model == "" {
+		return nil
+	}
+	catalog, err := d.harnessModels(ctx, agent, false)
+	if err != nil {
+		return nil
+	}
+	provider, id, qualified := strings.Cut(model, "/")
+	if !qualified {
+		provider, id = "", model
+	}
+	for _, m := range catalog.Models {
+		if m.ID == id && m.Provider == provider && (m.OneShot == protocol.ModelCapabilitySupportUnsupported || m.Access == protocol.ModelCapabilitySupportUnsupported) {
+			return fmt.Errorf("%s cannot answer a background call; choose a model of another provider", model)
+		}
+	}
+	return nil
 }
 
 func (d *Daemon) handleHarnessModels(client *wsClient, msg *protocol.HarnessModelsMessage) {

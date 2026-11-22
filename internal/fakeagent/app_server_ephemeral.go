@@ -33,6 +33,15 @@ type ephemeralRun struct {
 func (s *appServer) runEphemeral(c *appServerConn, id uint64, raw json.RawMessage) {
 	var run ephemeralRun
 	_ = json.Unmarshal(raw, &run)
+	for _, p := range s.providers {
+		if refused := p.ephemeralRefusal(); p.ID == run.Provider && refused != "" {
+			c.send(map[string]any{"jsonrpc": "2.0", "id": id, "error": map[string]any{
+				"_tag": "Cause", "code": 0, "message": refused,
+				"data": []any{map[string]any{"_tag": "Fail", "error": map[string]any{"_tag": "EphemeralFailed", "message": refused}}},
+			}})
+			return
+		}
+	}
 	process, err := dialControl(s.cfg, nil)
 	if err != nil {
 		c.send(map[string]any{"jsonrpc": "2.0", "id": id, "error": map[string]any{"_tag": "Cause", "code": 0, "message": err.Error()}})

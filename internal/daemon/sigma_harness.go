@@ -13,7 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/headless"
-	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/transcript"
@@ -38,8 +37,6 @@ func (h sigmaHarness) Facts() harness.Facts {
 	facts.Signals.Heartbeat = 500 * time.Millisecond
 	facts.Recovery = harness.ByServer
 	facts.ModelDiscovery = true
-	facts.Tiers = map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "openai/gpt-6-luna", Effort: "low"}, modeltiers.Standard: {Model: "openai/gpt-5.6-terra"}, modeltiers.Deep: {Model: "openai/gpt-6.1-sol"}}
-	facts.Advisor = harness.ModelChoice{Model: "openai/gpt-5.6-luna", Effort: "xhigh"}
 	facts.Activity = h.d.serverLinkFor(facts.ID).watchesConversations()
 	facts.ServerTerminal = h.d.serverTerminalOf(facts.ID)
 	return facts
@@ -114,11 +111,52 @@ func (h sigmaHarness) End(_ context.Context, e harness.Ending) {
 	}
 }
 
+type sigmaProvider struct {
+	ID     string `json:"id"`
+	Health struct {
+		Status string `json:"status"`
+	} `json:"health"`
+	Ephemeral *bool `json:"ephemeral"`
+}
+
 func (h sigmaHarness) Models(ctx context.Context) (harness.Models, error) {
-	if server := h.d.serverLinkFor(h.Facts().ID); server != nil {
-		return server.harnessModels(ctx)
+	server := h.d.serverLinkFor(h.Facts().ID)
+	if server == nil {
+		return noModelDiscovery, nil
 	}
-	return noModelDiscovery, nil
+	models, err := server.harnessModels(ctx)
+	if err != nil {
+		return harness.Models{}, err
+	}
+	var providers []sigmaProvider
+	if err := server.call(ctx, "providers/list", map[string]any{}, &providers); err != nil {
+		return harness.Models{}, err
+	}
+	byID := map[string]sigmaProvider{}
+	for _, p := range providers {
+		byID[p.ID] = p
+	}
+	for i := range models.List {
+		model := &models.List[i]
+		provider, listed := byID[model.Provider]
+		if !listed {
+			continue
+		}
+		if provider.Health.Status != "ready" {
+			model.Access = protocol.ModelCapabilitySupportUnsupported
+		}
+		if provider.Ephemeral != nil {
+			model.OneShot = supportOf(*provider.Ephemeral)
+		}
+	}
+	return models, nil
+}
+
+func supportOf(supported bool) protocol.ModelCapabilitySupport {
+	if supported {
+		return protocol.ModelCapabilitySupportSupported
+	}
+	return protocol.ModelCapabilitySupportUnsupported
 }
 
 func (h sigmaHarness) Health(context.Context) harness.Health {
@@ -164,10 +202,12 @@ type sigmaEphemeralRun struct {
 }
 
 type sigmaEphemeralAnswer struct {
-	Text   string          `json:"text"`
-	Output json.RawMessage `json:"output"`
-	Turns  int             `json:"turns"`
-	Usage  struct {
+	Provider string          `json:"provider"`
+	Model    string          `json:"model"`
+	Text     string          `json:"text"`
+	Output   json.RawMessage `json:"output"`
+	Turns    int             `json:"turns"`
+	Usage    struct {
 		Input  int `json:"input"`
 		Output int `json:"output"`
 		Cost   struct {
@@ -179,25 +219,23 @@ type sigmaEphemeralAnswer struct {
 func (h sigmaHarness) Run(ctx context.Context, req harness.OneShotRequest) (harness.OneShotResult, error) {
 	run := sigmaEphemeralRun{Prompt: req.Input, System: req.System, Schema: req.Schema, Effort: req.Effort, MaxTurns: req.Bound.MaxTurns}
 	run.Provider, run.Model = agentdriver.SigmaModel(req.Model)
-	link := h.d.serverLinkFor(h.driver().Name())
-	connection, err := link.connection()
-	if err != nil {
-		return harness.OneShotResult{}, err
-	}
-	client, release, err := connection.borrow(ctx, link, true)
-	if err != nil {
-		return harness.OneShotResult{}, err
-	}
-	defer release()
 	var answer sigmaEphemeralAnswer
-	if err := client.Call(ctx, "ephemeral/run", run, &answer); err != nil {
+	if err := h.d.serverLinkFor(h.driver().Name()).call(ctx, "ephemeral/run", run, &answer); err != nil {
 		return sigmaEphemeralFailure(err)
 	}
 	return harness.OneShotResult{
+		Model:      sigmaQualified(answer.Provider, answer.Model),
 		Text:       answer.Text,
 		Structured: answer.Output,
 		Usage:      harness.OneShotUsage{In: answer.Usage.Input, Out: answer.Usage.Output, CostUSD: answer.Usage.Cost.Total, Turns: answer.Turns},
 	}, nil
+}
+
+func sigmaQualified(provider, model string) string {
+	if provider == "" {
+		return model
+	}
+	return provider + "/" + model
 }
 
 func sigmaEphemeralFailure(err error) (harness.OneShotResult, error) {

@@ -58,6 +58,9 @@ func (d *Daemon) validateGardenAdvisorSetting(raw string) error {
 	if _, err := d.machineAgentExecutable(config.Agent, ""); err != nil {
 		return fmt.Errorf("garden advisor executable for %s was not found: %w", config.Agent, err)
 	}
+	if err := d.oneShotModelRefused(d.life.Context(), config.Agent, config.Model); err != nil {
+		return fmt.Errorf("garden advisor model %w", err)
+	}
 	return nil
 }
 

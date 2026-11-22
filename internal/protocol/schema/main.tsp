@@ -1188,6 +1188,7 @@ model HarnessModel {
   effort_support: ModelCapabilitySupport;
   effort_levels: string[];
   access: ModelCapabilitySupport;
+  one_shot: ModelCapabilitySupport;
   detail: string;
   tier?: ModelTier;
   tier_source: ModelTierSource;

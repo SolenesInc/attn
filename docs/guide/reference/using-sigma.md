@@ -50,7 +50,8 @@ refuses its registration, because Attn has the harness of that name.
   stops the launch until you make the folder absolute; `config_dir` may start
   with `~/`.
 - The model pickers list the models of every provider the Sigma server has, as
-  `provider/model`. To list the models, Attn starts the server if none runs.
+  `provider/model`. The models of a provider you are not signed in to show
+  disabled. To list the models, Attn starts the server if none runs.
   Attn stops using the server when no Sigma session is open.
 - Attn starts the Sigma server with `sigma serve` in a terminal of its own the
   first time a session needs the server, so the server keeps running through
@@ -131,9 +132,13 @@ no conversation and no usage. Attn starts the server for a call if none runs.
 While Sigma is off in **Settings → Experimental**, Attn offers it for none of
 these choices, and its open sessions are still titled and judged by Sigma.
 
-Unless you choose a model, a call uses the first light model that the Sigma
-server lists, such as `claude/haiku` or `openai/gpt-6-luna`. When Attn
-cannot read the server's list, the call uses `openai/gpt-6-luna`.
+Unless you choose a model, a call uses the first light model of a provider
+that can answer it, such as `claude/haiku` or `openai/gpt-6-luna`: one you are
+signed in to, and not `agy`, whose models answer only in a conversation. When
+Attn cannot read the server's list, the call goes to Sigma's default model,
+and `attn model log` names the model that answered. Settings refuse a model
+that cannot answer for the activity line or the Garden advisor, and their
+pickers show it disabled.
 
 ## Messages
 
