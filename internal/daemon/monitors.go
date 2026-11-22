@@ -351,8 +351,8 @@ func (h monitorHost) Conversation(facts harness.SessionFacts) harness.Conversati
 	return h.daemon.conversationFor(facts)
 }
 
-func (h monitorHost) LinkTranscriptPath(agent string, lifetime harness.Lifetime, path string) string {
-	return h.daemon.linkedTranscriptPath(agent, lifetime, path)
+func (h monitorHost) LocateTranscript(ref harness.ConversationRef) string {
+	return h.daemon.harnessOf(ref.Harness).Conversations().Locate(ref)
 }
 
 func (h monitorHost) NoteKey(terminal harness.TerminalID, at time.Time) {

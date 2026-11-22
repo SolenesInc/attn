@@ -113,3 +113,15 @@ func (h claudeHarness) Window(ctx context.Context, ref harness.ConversationRef) 
 func (h claudeHarness) Activity(ctx context.Context, ref harness.ConversationRef, kind, cursor string) (protocol.TranscriptActivityResult, error) {
 	return fileConversations(h).Activity(ctx, ref, kind, cursor)
 }
+
+func (h claudeHarness) Version(ref harness.ConversationRef) string {
+	return fileConversations(h).version(ref, transcript.ClaudeVersion)
+}
+
+func (h claudeHarness) Locate(ref harness.ConversationRef) string {
+	return h.d.locateTranscript(h.driver(), ref)
+}
+
+func (h claudeHarness) IDFromPath(path string) string {
+	return agentdriver.ResumeSessionIDFromTranscriptPath(h.driver(), path)
+}

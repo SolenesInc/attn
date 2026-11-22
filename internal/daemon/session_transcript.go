@@ -14,7 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
@@ -97,7 +96,7 @@ func (d *Daemon) inspectableTranscriptPath(sessionID protocol.SessionID, agent s
 	if _, keeps := d.keeperOf(agent); keeps && !d.conversationReady(driver, binding.NativeID) {
 		return ""
 	}
-	path := sessionmonitor.FindTranscriptForResume(agent, binding.NativeID)
+	path := d.harnessOf(harness.ID(agent)).Conversations().Locate(harness.ConversationRef{Harness: harness.ID(agent), ID: binding.NativeID})
 	if path == "" {
 		return ""
 	}
@@ -186,4 +185,12 @@ func (f fileConversations) Activity(_ context.Context, ref harness.ConversationR
 		return result, fmt.Errorf("unknown transcript activity read %q", kind)
 	}
 	return result, nil
+}
+
+func (f fileConversations) version(ref harness.ConversationRef, read func(path string) string) string {
+	path := f.d.inspectableTranscriptPath(ref.Session, string(ref.Harness))
+	if path == "" {
+		return ""
+	}
+	return read(path)
 }

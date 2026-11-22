@@ -13,25 +13,20 @@ const (
 	firstLineSizeLimit = 1 << 20
 )
 
-func HarnessVersion(path, agent string) string {
-	switch agent {
-	case "claude":
-		return lastClaudeVersion(path)
-	case "codex":
-		var line struct {
-			Type    string `json:"type"`
-			Payload struct {
-				CLIVersion string `json:"cli_version"`
-			} `json:"payload"`
-		}
-		if readFirstLine(path, &line) && line.Type == "session_meta" {
-			return line.Payload.CLIVersion
-		}
+func CodexVersion(path string) string {
+	var line struct {
+		Type    string `json:"type"`
+		Payload struct {
+			CLIVersion string `json:"cli_version"`
+		} `json:"payload"`
+	}
+	if readFirstLine(path, &line) && line.Type == "session_meta" {
+		return line.Payload.CLIVersion
 	}
 	return ""
 }
 
-func lastClaudeVersion(path string) string {
+func ClaudeVersion(path string) string {
 	file, err := os.Open(path)
 	if err != nil {
 		return ""

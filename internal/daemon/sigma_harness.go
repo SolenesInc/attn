@@ -126,3 +126,15 @@ func (h sigmaHarness) Window(ctx context.Context, ref harness.ConversationRef) (
 func (h sigmaHarness) Activity(ctx context.Context, ref harness.ConversationRef, kind, cursor string) (protocol.TranscriptActivityResult, error) {
 	return linkedConversations(h).Activity(ctx, ref, kind, cursor)
 }
+
+func (h sigmaHarness) Version(ref harness.ConversationRef) string {
+	return linkedConversations(h).Version(ref)
+}
+
+func (h sigmaHarness) Locate(ref harness.ConversationRef) string {
+	return h.d.locateTranscript(h.driver(), ref)
+}
+
+func (h sigmaHarness) IDFromPath(path string) string {
+	return agentdriver.ResumeSessionIDFromTranscriptPath(h.driver(), path)
+}

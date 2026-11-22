@@ -43,7 +43,7 @@ type Host interface {
 	Input(ctx context.Context, terminal harness.TerminalID, data []byte) error
 	PlaceInput(ctx context.Context, terminal harness.TerminalID, data []byte, within time.Duration) error
 	Conversation(harness.SessionFacts) harness.Conversation
-	LinkTranscriptPath(agent string, lifetime harness.Lifetime, path string) string
+	LocateTranscript(ref harness.ConversationRef) string
 	NoteKey(terminal harness.TerminalID, at time.Time)
 	LastKey(terminal harness.TerminalID) time.Time
 	EnqueueTitle(m *Monitor, conversation, source string) error

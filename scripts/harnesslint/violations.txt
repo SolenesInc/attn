@@ -83,7 +83,6 @@ internal/daemon/monitor_leaves.go	(*Daemon).renameLink	reaches Daemon.renameLink
 internal/daemon/monitor_reactions.go	(*Daemon).reactMonitorView	reaches Daemon.claudeMod (internal/daemon/claude_mod.go)
 internal/daemon/monitor_reactions.go	(*Daemon).reactMonitorView	reaches claudeMod (internal/daemon/claude_mod.go)
 internal/daemon/monitor_reactions.go	(*Daemon).reactMonitorView	reaches claudeMod.placeReturned (internal/daemon/claude_mod_link.go)
-internal/daemon/monitors.go	(monitorHost).LinkTranscriptPath	reaches Daemon.linkedTranscriptPath (internal/daemon/link_runtime.go)
 internal/daemon/plugin_rpc.go	(*Daemon).handlePluginConnection	reaches Daemon.activePluginRuns (internal/daemon/plugin_driver.go)
 internal/daemon/plugin_rpc.go	(*Daemon).handlePluginMethod	reaches Daemon.handlePluginClassifyStop (internal/daemon/plugin_driver.go)
 internal/daemon/plugin_rpc.go	(*Daemon).handlePluginMethod	reaches Daemon.handlePluginDriverMethod (internal/daemon/plugin_driver.go)
@@ -168,9 +167,6 @@ internal/daemon/spawn_pipeline.go	(*Daemon).validateSpawnPrelock	reaches pluginR
 internal/daemon/spawn_pipeline.go	spawnRequest	reaches pluginDriverRegistration (internal/daemon/plugin_driver.go)
 internal/daemon/tender_resume.go	(*Daemon).blockClaudeResumeWithoutMod	reaches claudeModFirstPollTripwire (internal/daemon/claude_mod.go)
 internal/daemon/terminal_machine.go	(*Daemon).startTerminal	reaches Daemon.repositoryOrigin (internal/daemon/codex_trust.go)
-internal/daemon/vents.go	(*Daemon).ventContext	reaches Daemon.serverLinkFor (internal/daemon/server_binding.go)
-internal/daemon/vents.go	(*Daemon).ventContext	reaches serverLink (internal/daemon/server_link.go)
-internal/daemon/vents.go	(*Daemon).ventContext	reaches serverLink.serverVersion (internal/daemon/server_connection.go)
 internal/daemon/websocket.go	(*Daemon).handleClientMessage	reaches Daemon.handleInstallCodexUpdate (internal/daemon/codex_update.go)
 internal/daemon/websocket.go	(*Daemon).handleClientMessage	reaches Daemon.handleRestartSharedCodex (internal/daemon/codex_restart.go)
 internal/daemon/websocket.go	(*Daemon).sendInitialState	reaches Daemon.codexShared (internal/daemon/codex_shared.go)
@@ -214,8 +210,6 @@ internal/transcript/usage.go	(*UsageExtractor).Observe	names "codex"
 internal/transcript/usage.go	(*UsageExtractor).seedCodexUsageBefore	names "codex"
 internal/transcript/usage.go	SupportsUsage	names "claude"
 internal/transcript/usage.go	SupportsUsage	names "codex"
-internal/transcript/version.go	HarnessVersion	names "claude"
-internal/transcript/version.go	HarnessVersion	names "codex"
 native/crates/attn-app/src/automations/form/model.rs		names "codex"
 native/crates/attn-app/src/automations/form/model.rs		names "codex"
 native/crates/attn-app/src/automations/form/view.rs		names "codex"

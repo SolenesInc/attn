@@ -161,6 +161,12 @@ type ConversationStore interface {
 	Window(ctx context.Context, ref ConversationRef) (AssistantWindow, bool)
 	// Activity answers the activity line's reads: kind is head, modified or events.
 	Activity(ctx context.Context, ref ConversationRef, kind, cursor string) (protocol.TranscriptActivityResult, error)
+	// Version is the harness version that wrote the conversation, or "".
+	Version(ref ConversationRef) string
+	// Locate is the conversation's transcript file: ref.Path resolved, else found by ref.ID; "" when the harness keeps none.
+	Locate(ref ConversationRef) string
+	// IDFromPath is the conversation a transcript file holds, or "".
+	IDFromPath(path string) string
 }
 
 // AssistantWindow is a conversation's recent assistant messages.
@@ -179,6 +185,7 @@ type ConversationRef struct {
 	Dir        string
 	DirMissing bool
 	ID         string
+	Path       string
 	Lifetime   Lifetime
 }
 

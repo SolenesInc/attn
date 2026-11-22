@@ -276,3 +276,15 @@ func (s pluginConversationStore) Window(ctx context.Context, ref harness.Convers
 func (s pluginConversationStore) Activity(ctx context.Context, ref harness.ConversationRef, kind, cursor string) (protocol.TranscriptActivityResult, error) {
 	return linkedConversations{s.d}.Activity(ctx, ref, kind, cursor)
 }
+
+func (s pluginConversationStore) Version(ref harness.ConversationRef) string {
+	return linkedConversations{s.d}.Version(ref)
+}
+
+func (s pluginConversationStore) Locate(ref harness.ConversationRef) string {
+	return s.d.locateTranscript(agentdriver.Get(string(ref.Harness)), ref)
+}
+
+func (pluginConversationStore) IDFromPath(string) string {
+	return ""
+}

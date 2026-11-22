@@ -2,7 +2,9 @@ package daemon
 
 import (
 	"context"
+	"strings"
 
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -121,4 +123,16 @@ func (d *Daemon) linkProcess(t harness.TerminalID) bool {
 	}
 	_, server := d.appServerProcess(d.life.Context(), t)
 	return server
+}
+
+func (d *Daemon) locateTranscript(driver agentdriver.Driver, ref harness.ConversationRef) string {
+	if ref.Path != "" {
+		return d.linkedTranscriptPath(string(ref.Harness), ref.Lifetime, ref.Path)
+	}
+	id := strings.TrimSpace(ref.ID)
+	finder, ok := agentdriver.GetTranscriptFinder(driver)
+	if id == "" || !ok {
+		return ""
+	}
+	return strings.TrimSpace(finder.FindTranscriptForResume(id))
 }

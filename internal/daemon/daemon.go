@@ -3260,8 +3260,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 
 	if monitor != nil {
 		target, _ := monitor.TitleTarget()
-		driver := agentdriver.Get(string(target.Agent))
-		native := agentdriver.ResumeSessionIDFromTranscriptPath(driver, msg.TranscriptPath)
+		native := d.harnessOf(target.Agent).Conversations().IDFromPath(msg.TranscriptPath)
 		if native != "" {
 			monitor.ProposeConversation(sessionmonitor.ConversationObservation{NativeID: native, TranscriptPath: msg.TranscriptPath}, sessionmonitor.ConversationObserved, "", "")
 		}

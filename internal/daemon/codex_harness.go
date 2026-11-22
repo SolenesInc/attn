@@ -138,3 +138,15 @@ func (h codexHarness) Window(ctx context.Context, ref harness.ConversationRef) (
 func (h codexHarness) Activity(ctx context.Context, ref harness.ConversationRef, kind, cursor string) (protocol.TranscriptActivityResult, error) {
 	return fileConversations(h).Activity(ctx, ref, kind, cursor)
 }
+
+func (h codexHarness) Version(ref harness.ConversationRef) string {
+	return fileConversations(h).version(ref, transcript.CodexVersion)
+}
+
+func (h codexHarness) Locate(ref harness.ConversationRef) string {
+	return h.d.locateTranscript(h.driver(), ref)
+}
+
+func (h codexHarness) IDFromPath(path string) string {
+	return agentdriver.ResumeSessionIDFromTranscriptPath(h.driver(), path)
+}

@@ -303,3 +303,7 @@ func (l *serverLink) conversationIDs(ctx context.Context) (known map[string]bool
 	}
 	return known, true, nil
 }
+
+func (c linkedConversations) Version(ref harness.ConversationRef) string {
+	return c.d.serverLinkFor(string(ref.Harness)).serverVersion()
+}

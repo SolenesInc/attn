@@ -12,12 +12,12 @@ import (
 
 	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/shortid"
 	"github.com/victorarias/attn/internal/store"
-	"github.com/victorarias/attn/internal/transcript"
 	"github.com/victorarias/attn/internal/who"
 )
 
@@ -254,11 +254,9 @@ func (d *Daemon) ventContext(session *protocol.Session) protocol.VentContext {
 		if info, err := os.Stat(path); err == nil {
 			context.Transcript = &protocol.VentTranscript{Path: path, Bytes: int(info.Size())}
 		}
-		if version := transcript.HarnessVersion(path, session.Agent); version != "" {
-			context.HarnessVersion = &version
-		}
 	}
-	if version := d.serverLinkFor(string(session.Agent)).serverVersion(); version != "" {
+	ref := harness.ConversationRef{Harness: session.Agent, Session: session.ID}
+	if version := d.harnessOf(session.Agent).Conversations().Version(ref); version != "" {
 		context.HarnessVersion = &version
 	}
 	return context

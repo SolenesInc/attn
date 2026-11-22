@@ -147,7 +147,7 @@ func (w *transcriptWatcher) resolveExactPath() string {
 			continue
 		}
 		agent, lifetime := m.agentLifetime()
-		path = m.registry.host.LinkTranscriptPath(agent, lifetime, path)
+		path = m.registry.host.LocateTranscript(harness.ConversationRef{Harness: agent, Lifetime: lifetime, Path: path})
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}
@@ -155,20 +155,8 @@ func (w *transcriptWatcher) resolveExactPath() string {
 	return ""
 }
 
-func FindTranscriptForResume(agent protocol.SessionAgent, resumeID string) string {
-	resumeID = strings.TrimSpace(resumeID)
-	if resumeID == "" {
-		return ""
-	}
-	tf, ok := agentdriver.GetTranscriptFinder(agentdriver.Get(string(agent)))
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(tf.FindTranscriptForResume(resumeID))
-}
-
 func (w *transcriptWatcher) discover() string {
-	path := FindTranscriptForResume(w.agent, w.monitor.boundConversation().NativeID)
+	path := w.monitor.registry.host.LocateTranscript(harness.ConversationRef{Harness: w.agent, ID: w.monitor.boundConversation().NativeID})
 	if path == "" {
 		return ""
 	}
