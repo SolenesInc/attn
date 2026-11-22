@@ -479,7 +479,8 @@ local mock API, launched with attn's environment, `--settings` hooks and
 - `$.session.append({ message: { type: "user", content: [text block] } })`
   during a tool call adds the text, bare, to the running turn's next model
   request, after the tool result. The transcript keeps it as an `isMeta` user
-  row with the plugin's origin. The screen does not show it.
+  row with the plugin's origin. The screen does not show it. From 2.1.328 the
+  text is no longer bare: see the 2.1.328 finding below.
 - A permission question replaces the prompt, and the `AbovePrompt` band is not
   drawn until the question closes (2.1.318). Refusing the question, with Esc or
   with "No", leaves `next.signal.aborted` true in that `tool.call` hook and ends
@@ -561,6 +562,13 @@ Measured on 2.1.318 through attn's mod, with the real binary and a mock API:
 - A tool result followed by several appended rows reaches the model as one user
   message, each row a text block. Every block but the last gains a trailing
   newline.
+- From 2.1.328, rows appended after a tool result no longer join the tool
+  result's user message. The request carries them after it as one
+  `role: "system"` message. Each row becomes a note that opens with "Note from
+  the attn plugin, not from the user:", and a blank line separates the notes.
+  The row's line breaks survive. Probed through attn's mod against a mock API:
+  one append on 2.1.328, 2.1.329 and 2.1.330, two appends on 2.1.330. 2.1.319
+  to 2.1.327 were not probed.
 - On a fresh config, the first launch asks "Make auto mode your default
   permission mode?". attn reports the session as needing approval until the user
   answers, so a delivery waits. `hasSeenAutoDefaultNotice` alone does not skip it

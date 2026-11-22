@@ -47,6 +47,11 @@ type bashStep struct {
 	background     bool
 }
 
+type message struct {
+	Role    string          `json:"role"`
+	Content json.RawMessage `json:"content"`
+}
+
 type tool struct {
 	Name string `json:"name"`
 }
@@ -203,13 +208,10 @@ func (m *Model) usage() map[string]any {
 
 func (m *Model) answer(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Model    string `json:"model"`
-		Stream   bool   `json:"stream"`
-		Tools    []tool `json:"tools"`
-		Messages []struct {
-			Role    string          `json:"role"`
-			Content json.RawMessage `json:"content"`
-		} `json:"messages"`
+		Model    string    `json:"model"`
+		Stream   bool      `json:"stream"`
+		Tools    []tool    `json:"tools"`
+		Messages []message `json:"messages"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -221,11 +223,7 @@ func (m *Model) answer(w http.ResponseWriter, r *http.Request) {
 	callsTool, compacts, suggests := false, false, false
 	bash := slices.Contains(body.Tools, tool{Name: "Bash"})
 	var step bashStep
-	for i := len(body.Messages) - 1; i >= 0; i-- {
-		if body.Messages[i].Role != "user" {
-			continue
-		}
-		prompt := ContentText(body.Messages[i].Content)
+	if prompt, asked := textSinceLastReply(body.Messages); asked {
 		callsTool = strings.Contains(prompt, ToolPrompt)
 		compacts = strings.Contains(prompt, CompactPrompt)
 		suggests = strings.Contains(prompt, SuggestionPrompt)
@@ -235,7 +233,6 @@ func (m *Model) answer(w http.ResponseWriter, r *http.Request) {
 		}
 		m.mu.Unlock()
 		m.record(prompt, ContentText(body.Messages[0].Content))
-		break
 	}
 	usage := m.usage()
 	say := "Noted."
@@ -318,6 +315,20 @@ func writeBashToolUse(w http.ResponseWriter, model string, step bashStep, usage 
 	send("content_block_stop", map[string]any{"index": 0})
 	send("message_delta", map[string]any{"delta": map[string]any{"stop_reason": "tool_use", "stop_sequence": nil}, "usage": map[string]int{"output_tokens": 20}})
 	send("message_stop", map[string]any{})
+}
+
+func textSinceLastReply(messages []message) (string, bool) {
+	start := 0
+	for i, m := range messages {
+		if m.Role == "assistant" {
+			start = i + 1
+		}
+	}
+	parts := make([]string, 0, len(messages)-start)
+	for _, m := range messages[start:] {
+		parts = append(parts, ContentText(m.Content))
+	}
+	return strings.Join(parts, "\n"), len(parts) > 0
 }
 
 func ContentText(content json.RawMessage) string {
