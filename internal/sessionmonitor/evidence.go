@@ -4,8 +4,8 @@ import (
 	"strings"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/classifier"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/sessionstate"
@@ -283,15 +283,15 @@ func (m *Monitor) Begin(launch Launch) {
 	m.publish(view)
 }
 
-func ReportsTurnStarts(agent string) bool {
-	return agentdriver.EffectiveCapabilities(agentdriver.Get(agent)).HasHooks
-}
-
 func (m *Monitor) HarnessStarting(agent string) {
-	if m == nil || !ReportsTurnStarts(agent) {
+	if m == nil {
 		return
 	}
 	m.mu.Lock()
+	if m.policy.Signals.TurnStarts != harness.TurnStartsReported {
+		m.mu.Unlock()
+		return
+	}
 	m.awaitingHarness = true
 	m.watchFolderTrustQuestionLocked(agent)
 	view := m.viewLocked()
@@ -528,7 +528,7 @@ func (m *Monitor) endCompaction(e *Evidence, now time.Time) {
 	e.Compacting = false
 	if e.IdleCompaction {
 		e.LastBusyAt = e.BusyAtStop
-		e.IdleCompaction = !sessionstate.Parked(e.TerminalEvidence, e.ConversationEvidence, sessionstate.PolicyFor(m.agent), now)
+		e.IdleCompaction = !sessionstate.Parked(e.TerminalEvidence, e.ConversationEvidence, sessionstate.PolicyFor(m.policy.Signals), now)
 	}
 }
 
@@ -635,7 +635,7 @@ func (m *Monitor) publishResolution(current protocol.SessionState, resolution se
 func (m *Monitor) linkOwnsState() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.driver.Run != "" && m.policy.DriverReportsState
+	return m.driver.Run != "" && m.policy.Signals.StateAuthority == harness.StateByHarness
 }
 
 func resolutionDetail(resolution sessionstate.Resolution) string {

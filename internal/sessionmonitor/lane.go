@@ -535,7 +535,7 @@ func (l *lane) observePhaseLocked(phase protocol.SessionState) {
 		l.ensureRunLocked()
 		return
 	}
-	if previous == protocol.SessionStateWorking && !ReportsTurnStarts(string(l.monitor.agent)) {
+	if previous == protocol.SessionStateWorking && l.monitor.policy.Signals.TurnStarts != harness.TurnStartsReported {
 		l.userSubmit = false
 	}
 	if l.run != nil {

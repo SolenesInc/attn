@@ -1013,14 +1013,6 @@ func (d *Daemon) sessionConversationSurvives(session *protocol.Session, intent s
 		strings.TrimSpace(d.store.GetAgentMetadata(session.ID)) != ""
 }
 
-func (d *Daemon) pluginDriverReportsState(agent protocol.SessionAgent) bool {
-	if d.plugins == nil {
-		return false
-	}
-	driver, ok := d.plugins.driver(string(agent))
-	return ok && driver.Capabilities["state_reporting"]
-}
-
 func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[protocol.SessionID]struct{}, recoveryStartedAt time.Time) {
 
 	recoveryReport, recoverErr := d.recoverPTYBackend(10 * time.Second)
@@ -1301,7 +1293,7 @@ func (d *Daemon) resumeMonitor(existing *protocol.Session, live liveTerminal) (s
 		return false
 	}
 	if run := d.store.GetAgentDriverRun(sessionID); run.RunID != "" &&
-		(d.pluginDriverReportsState(existing.Agent) ||
+		(d.signalsOf(existing.Agent).StateAuthority == harness.StateByHarness ||
 			existing.State == protocol.SessionStateWaitingInput ||
 			existing.State == protocol.SessionStatePendingApproval) {
 		return false
@@ -2350,7 +2342,7 @@ func (d *Daemon) handlePTYState(terminal harness.TerminalID, obs pty.Observation
 		d.traceStateVeto(sessionID, origin, state, "session_not_found")
 		return
 	}
-	if d.linkOwnsState(sessionID) {
+	if d.harnessOwnsState(sessionID) {
 		d.traceStateVeto(sessionID, origin, state, "link_owns_state")
 		return
 	}
@@ -2363,7 +2355,7 @@ func (d *Daemon) handlePTYState(terminal harness.TerminalID, obs pty.Observation
 		return
 	}
 	agent := session.Agent
-	if sessionmonitor.ReportsTurnStarts(string(agent)) {
+	if d.signalsOf(agent).TurnStarts == harness.TurnStartsReported {
 		d.traceStateVeto(sessionID, origin, state, "harness_reports_its_own_start")
 		return
 	}

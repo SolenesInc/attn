@@ -7,17 +7,16 @@ import (
 
 	"pgregory.net/rapid"
 
-	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/sessionstate"
 )
 
 var nextChangeBase = time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
 
 var policies = []sessionstate.Policy{
-	sessionstate.PolicyFor(string(protocol.SessionAgentClaude)),
-	sessionstate.PolicyFor(string(protocol.SessionAgentCodex)),
-	sessionstate.PolicyFor(string(protocol.SessionAgentShell)),
-	sessionstate.PolicyFor(""),
+	sessionstate.PolicyFor(harness.Signals{Heartbeat: 1500 * time.Millisecond}),
+	sessionstate.PolicyFor(harness.Signals{Heartbeat: 500 * time.Millisecond, ReviewerDwell: time.Minute}),
+	sessionstate.PolicyFor(sessionstate.Shell),
 }
 
 func policyLifetimes(p sessionstate.Policy) []time.Duration {

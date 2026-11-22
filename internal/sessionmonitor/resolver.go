@@ -81,9 +81,8 @@ func (m *Monitor) resolve(now time.Time) time.Time {
 	m.mu.Unlock()
 	evidence, _ := m.Evidence()
 	m.mu.Lock()
-	agent, current := m.agent, m.state.State
+	current, policy := m.state.State, sessionstate.PolicyFor(m.policy.Signals)
 	m.mu.Unlock()
-	policy := sessionstate.PolicyFor(agent)
 	resolution := sessionstate.Resolve(evidence.TerminalEvidence, evidence.ConversationEvidence, policy, now)
 	if sessionstate.ClassifierVerdictPending(evidence.ConversationEvidence, policy, now) {
 		completion = 0

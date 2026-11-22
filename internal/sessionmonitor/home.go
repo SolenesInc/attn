@@ -36,8 +36,8 @@ type Policy struct {
 	AutoSettle         AutoSettleSettings
 	Headless           bool
 	TitlesAllowed      bool
-	DriverReportsState bool
 	QuietNotifications bool
+	Signals            harness.Signals
 }
 
 type Launch struct {

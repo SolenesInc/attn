@@ -773,7 +773,7 @@ func (d *Daemon) ensureConfirmedAutomationSession(req automation.WorkRequest, ru
 }
 
 func (d *Daemon) confirmsFirstTurn(launch automation.EffectiveLaunch) bool {
-	if launch.Agent == string(protocol.SessionAgentCodex) {
+	if d.factsOrNone(launch.Agent).Signals.ConfirmsFirstTurn {
 		return true
 	}
 	link := d.serverLinkFor(launch.Agent)

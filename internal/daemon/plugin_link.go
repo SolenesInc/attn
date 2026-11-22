@@ -81,11 +81,3 @@ func (l pluginLink) request(_ context.Context, method string, in harness.Input) 
 	}
 	return harness.Custody{Taken: true, At: time.Now()}
 }
-
-func (d *Daemon) linkOwnsState(sessionID protocol.SessionID) bool {
-	if d.store.GetAgentDriverRun(sessionID).RunID == "" {
-		return false
-	}
-	session := d.store.Get(sessionID)
-	return session != nil && d.pluginDriverReportsState(session.Agent)
-}

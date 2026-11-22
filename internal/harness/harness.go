@@ -28,7 +28,38 @@ type Facts struct {
 	Tiers       map[modeltiers.Tier]string
 	Advisor     ModelChoice
 	CrewModel   string
+	Signals     Signals
 }
+
+// Signals are what a harness tells attn about its turns, and how long its terminal's signals stay fresh.
+type Signals struct {
+	TurnStarts     TurnStarts
+	StateAuthority StateAuthority
+	// Heartbeat is how long the terminal's last sign of work counts as working.
+	Heartbeat time.Duration
+	// ReviewerDwell holds a settled state while a reviewer in the loop may still answer.
+	ReviewerDwell time.Duration
+	// ReportsTools: the harness reports its tool use, so the agent is not asked to report its pull requests.
+	ReportsTools bool
+	// ConfirmsFirstTurn: an automation waits for the harness's first report before it counts as delivered.
+	ConfirmsFirstTurn bool
+}
+
+// TurnStarts says whether the harness announces a turn's start or attn infers it.
+type TurnStarts uint8
+
+const (
+	TurnStartsInferred TurnStarts = iota
+	TurnStartsReported
+)
+
+// StateAuthority says who sets a session's state while its harness runs.
+type StateAuthority uint8
+
+const (
+	StateByResolver StateAuthority = iota
+	StateByHarness
+)
 
 // ModelChoice is a model and the effort it runs at.
 type ModelChoice struct {

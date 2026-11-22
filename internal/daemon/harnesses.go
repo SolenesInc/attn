@@ -6,6 +6,8 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionstate"
 )
 
 var harnessSources []func(*Daemon) []harness.Harness
@@ -64,7 +66,33 @@ func builtinFacts(driver agentdriver.Driver) harness.Facts {
 			Provider:           declaresServer,
 		},
 		Executable: harness.Executable{Default: driver.DefaultExecutable(), Env: driver.ExecutableEnvVar()},
+		Signals:    hookSignals(caps.HasHooks),
 	}
+}
+
+func hookSignals(hooks bool) harness.Signals {
+	if !hooks {
+		return harness.Signals{}
+	}
+	return harness.Signals{TurnStarts: harness.TurnStartsReported, ReportsTools: true}
+}
+
+func (d *Daemon) signalsOf(agent protocol.SessionAgent) harness.Signals {
+	if agent == protocol.SessionAgentShell {
+		return sessionstate.Shell
+	}
+	if h, err := d.harness(string(agent)); err == nil {
+		return h.Facts().Signals
+	}
+	return sessionstate.Unregistered
+}
+
+func (d *Daemon) harnessOwnsState(sessionID protocol.SessionID) bool {
+	if d.store.GetAgentDriverRun(sessionID).RunID == "" {
+		return false
+	}
+	session := d.store.Get(sessionID)
+	return session != nil && d.signalsOf(session.Agent).StateAuthority == harness.StateByHarness
 }
 
 func (d *Daemon) executableHealth(facts harness.Facts, offered bool) harness.Health {

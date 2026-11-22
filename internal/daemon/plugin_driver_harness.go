@@ -42,7 +42,16 @@ func (h pluginHarness) Facts() harness.Facts {
 			return resolvePluginSkillsDirs(h.reg.SkillDirs, lookupEnv, homeDir), nil
 		},
 		CacheTTL: crewCacheTTLDefault * time.Second,
+		Signals:  pluginSignals(declared),
 	}
+}
+
+func pluginSignals(declared map[string]bool) harness.Signals {
+	signals := harness.Signals{Heartbeat: 500 * time.Millisecond, ReviewerDwell: time.Minute, ReportsTools: declared["pull_request_reporting"]}
+	if declared["state_reporting"] {
+		signals.StateAuthority = harness.StateByHarness
+	}
+	return signals
 }
 
 func (h pluginHarness) Health(context.Context) harness.Health {

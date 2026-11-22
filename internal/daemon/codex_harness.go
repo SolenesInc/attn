@@ -26,6 +26,8 @@ func (h codexHarness) Facts() harness.Facts {
 	facts.CacheTTL = 30 * time.Minute
 	facts.Tiers = map[modeltiers.Tier]string{modeltiers.Light: "gpt-6-luna", modeltiers.Standard: "gpt-5.6-terra", modeltiers.Deep: "gpt-6.1-sol"}
 	facts.Advisor = harness.ModelChoice{Model: "gpt-5.6-luna", Effort: "xhigh"}
+	facts.Signals.Heartbeat, facts.Signals.ReviewerDwell = 500*time.Millisecond, time.Minute
+	facts.Signals.ConfirmsFirstTurn = true
 	return facts
 }
 

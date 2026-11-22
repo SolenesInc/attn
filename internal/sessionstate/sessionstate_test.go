@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -949,41 +950,20 @@ func TestDwellFor(t *testing.T) {
 	}
 }
 
-func TestPolicyForUsesTheMeasuredPerAgentTTL(t *testing.T) {
-	claude := PolicyFor(string(protocol.SessionAgentClaude))
-	codex := PolicyFor(string(protocol.SessionAgentCodex))
-
-	if claude.HeartbeatTTL <= codex.HeartbeatTTL {
-		t.Fatalf("claude TTL %s must exceed codex's %s: claude repaints ~1Hz, codex ~10Hz",
-			claude.HeartbeatTTL, codex.HeartbeatTTL)
-	}
-	if got := PolicyFor("plugin-agent"); got.HeartbeatTTL > claude.HeartbeatTTL {
-		t.Fatalf("unknown agent TTL %s, want no more than claude's %s", got.HeartbeatTTL, claude.HeartbeatTTL)
-	}
-	if claude.ReviewerDwell != 0 {
-		t.Fatalf("claude ReviewerDwell %s, want 0: its classifier decides before it asks", claude.ReviewerDwell)
-	}
-	for _, policy := range []Policy{codex, PolicyFor("plugin-agent")} {
-		if policy.ReviewerDwell <= 0 {
-			t.Fatalf("policy has no reviewer dwell: %+v", policy)
-		}
-	}
-	for _, policy := range []Policy{claude, codex, PolicyFor("plugin-agent")} {
-		if policy.StaleAfter <= 0 || policy.StuckAfter <= 0 {
-			t.Fatalf("policy has an unset window: %+v", policy)
-		}
+func TestPolicyForKeepsEveryWindowPastTheHeartbeat(t *testing.T) {
+	for _, signals := range []harness.Signals{{Heartbeat: 1500 * time.Millisecond}, {Heartbeat: 500 * time.Millisecond, ReviewerDwell: time.Minute}, Shell} {
+		policy := PolicyFor(signals)
 		if policy.StaleAfter <= policy.HeartbeatTTL {
 			t.Fatalf("StaleAfter %s must exceed HeartbeatTTL %s", policy.StaleAfter, policy.HeartbeatTTL)
 		}
 		if policy.HeartbeatSettleAfter <= policy.HeartbeatTTL {
-			t.Fatalf("HeartbeatSettleAfter %s must exceed HeartbeatTTL %s",
-				policy.HeartbeatSettleAfter, policy.HeartbeatTTL)
+			t.Fatalf("HeartbeatSettleAfter %s must exceed HeartbeatTTL %s", policy.HeartbeatSettleAfter, policy.HeartbeatTTL)
 		}
 	}
 }
 
 func TestShellLifecycleResolvesOnTheForegroundHeartbeatAlone(t *testing.T) {
-	policy := PolicyFor(string(protocol.SessionAgentShell))
+	policy := PolicyFor(Shell)
 
 	if policy.HeartbeatTTL <= time.Second {
 		t.Fatalf("shell HeartbeatTTL %s must exceed the 1s poll interval", policy.HeartbeatTTL)

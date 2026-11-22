@@ -257,7 +257,7 @@ func (m *Monitor) runAutoSettleLocked(phase, resume autoSettlePhase, armedRun ru
 	if !cfg.Enabled {
 		return "disabled"
 	}
-	if sessionstate.ClassifierVerdictPending(m.evidence, sessionstate.PolicyFor(m.agent), time.Now()) {
+	if sessionstate.ClassifierVerdictPending(m.evidence, sessionstate.PolicyFor(m.policy.Signals), time.Now()) {
 		return "classifying"
 	}
 	if m.state.State != protocol.SessionStateWorking {

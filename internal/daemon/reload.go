@@ -617,6 +617,5 @@ func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptyback
 		params.Metadata = json.RawMessage(metadata)
 	}
 	launch.Plugin = &AgentPluginLaunch{Plugin: reg.PluginName, Resume: true, Params: params, LaunchInstructions: reg.Capabilities["launch_instructions"]}
-	launch.Context.SelfReportPullRequests = !reg.Capabilities["pull_request_reporting"]
 	return launch, nil
 }

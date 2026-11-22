@@ -148,7 +148,6 @@ internal/daemon/agent_tools.go	(*Daemon).sharedCodexCaller	reaches codexShared (
 internal/daemon/agent_tools.go	(*Daemon).sharedCodexCaller	reaches codexShared.resolveCaller (internal/daemon/codex_shared.go)
 internal/daemon/analytics_quiet_stops.go	(*Daemon).askQuietStopVerdict	names "codex"
 internal/daemon/approval_route.go	(*Daemon).recoveredApprovalRoute	reaches Daemon.terminalCarriesLaunch (internal/daemon/link_runtime.go)
-internal/daemon/automations_deliver.go	(*Daemon).confirmsFirstTurn	names "codex"
 internal/daemon/automations_deliver.go	(*Daemon).confirmsFirstTurn	reaches Daemon.serverLinkFor (internal/daemon/server_binding.go)
 internal/daemon/automations_deliver.go	(*Daemon).confirmsFirstTurn	reaches serverLink (internal/daemon/server_link.go)
 internal/daemon/automations_deliver.go	(*Daemon).confirmsFirstTurn	reaches serverLink.runsLaunch (internal/daemon/server_link.go)
@@ -188,15 +187,11 @@ internal/daemon/daemon.go	(*Daemon).handlePTYExit	reaches Daemon.linkProcess (in
 internal/daemon/daemon.go	(*Daemon).handlePTYExit	reaches Daemon.linkTerminalExited (internal/daemon/link_runtime.go)
 internal/daemon/daemon.go	(*Daemon).handlePTYExit	reaches Daemon.queueExitDuringPluginLaunch (internal/daemon/plugin_driver.go)
 internal/daemon/daemon.go	(*Daemon).handlePTYState	reaches Daemon.codexShared (internal/daemon/codex_shared.go)
-internal/daemon/daemon.go	(*Daemon).handlePTYState	reaches Daemon.linkOwnsState (internal/daemon/plugin_link.go)
 internal/daemon/daemon.go	(*Daemon).handlePTYState	reaches codexShared (internal/daemon/codex_shared.go)
 internal/daemon/daemon.go	(*Daemon).handlePTYState	reaches codexShared.checkWorkingSoon (internal/daemon/codex_stale_working.go)
 internal/daemon/daemon.go	(*Daemon).performStartupPTYRecovery	reaches Daemon.recoverLinkProcesses (internal/daemon/link_runtime.go)
 internal/daemon/daemon.go	(*Daemon).performStartupPTYRecovery	reaches Daemon.recoverLinkViews (internal/daemon/link_runtime.go)
 internal/daemon/daemon.go	(*Daemon).placedLiveTerminals	reaches Daemon.linkProcess (internal/daemon/link_runtime.go)
-internal/daemon/daemon.go	(*Daemon).pluginDriverReportsState	reaches field Capabilities (internal/daemon/plugin_driver.go)
-internal/daemon/daemon.go	(*Daemon).pluginDriverReportsState	reaches pluginDriverRegistration (internal/daemon/plugin_driver.go)
-internal/daemon/daemon.go	(*Daemon).pluginDriverReportsState	reaches pluginRegistry.driver (internal/daemon/plugin_driver.go)
 internal/daemon/daemon.go	(*Daemon).pruneRuntimesWithoutSession	reaches Daemon.linkProcess (internal/daemon/link_runtime.go)
 internal/daemon/daemon.go	(*Daemon).pruneSessionsWithoutPTY	reaches Daemon.hidden (internal/daemon/link_runtime.go)
 internal/daemon/daemon.go	(*Daemon).pruneSessionsWithoutPTY	reaches Daemon.linkOf (internal/daemon/link_runtime.go)
@@ -579,8 +574,6 @@ internal/pty/manager.go	normalizeAgent	names "codex"
 internal/ptyworker/debug_capture.go	shouldEnableDebugCapture	names "claude"
 internal/ptyworker/debug_capture.go	shouldEnableDebugCapture	names "codex"
 internal/sessioninstructions/service.go	(Service).Ask	names "codex"
-internal/sessionstate/sessionstate.go	PolicyFor	names "claude"
-internal/sessionstate/sessionstate.go	PolicyFor	names "sigma"
 internal/store/store.go	(*Store).addCheckedLocked	names "codex"
 internal/transcript/events.go	parseEventLine	names "claude"
 internal/transcript/events.go	parseEventLine	names "codex"

@@ -21,6 +21,7 @@ func (h sigmaHarness) Facts() harness.Facts {
 	facts := builtinFacts(h.driver())
 	facts.SkillDirs = h.driver().(*agentdriver.Sigma).SkillDirs
 	facts.CacheTTL = time.Hour
+	facts.Signals.Heartbeat = 500 * time.Millisecond
 	return facts
 }
 

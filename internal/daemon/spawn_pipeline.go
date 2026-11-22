@@ -747,7 +747,6 @@ func (d *Daemon) buildAgentSpawnLaunch(req *spawnRequest, plan *spawnPlan) (*Age
 			params.Metadata = json.RawMessage(metadata)
 		}
 		launch.Plugin = &AgentPluginLaunch{Plugin: req.pluginDriver.PluginName, Params: params, Resume: req.pluginDriver.Capabilities["resume"] && (req.existingSession != nil || params.ResumeSessionID != ""), LaunchInstructions: req.pluginDriver.Capabilities["launch_instructions"]}
-		launch.Context.SelfReportPullRequests = !req.pluginDriver.Capabilities["pull_request_reporting"]
 	}
 	return launch, nil
 }

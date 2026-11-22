@@ -15,7 +15,7 @@ import (
 func TestEveryHarnessAnswersTheContractWithItsFake(t *testing.T) {
 	t.Setenv(fakeagent.PlugAgentEnv, "house")
 	t.Setenv("ATTN_FAKE_PLUG_DISPLAY_NAME", "House")
-	t.Setenv(fakeagent.PlugCapabilitiesEnv, "resume,model_pin,effort_pin,yolo,launch_instructions")
+	t.Setenv(fakeagent.PlugCapabilitiesEnv, "resume,model_pin,effort_pin,yolo,launch_instructions,state_reporting,pull_request_reporting")
 	t.Setenv(fakeagent.PlugSkillDirsEnv, `[{"home_env":"HOUSE_HOME","default_home":".house"}]`)
 	w := newWorld(t, fakeagent.Claude, fakeagent.Codex, fakeagent.Sigma, fakeagent.Plug)
 	app := w.App()
@@ -35,22 +35,26 @@ func TestEveryHarnessAnswersTheContractWithItsFake(t *testing.T) {
 	home := conformance.Home
 	conformance.Run(t, w.daemon.Harnesses(), []conformance.Row{
 		{
-			Facts:     harness.Facts{ID: "claude", DisplayName: "Claude Code", Options: terminalOptions, Executable: harness.Executable{Default: "claude", Env: "ATTN_CLAUDE_EXECUTABLE"}, CacheTTL: time.Hour, Tiers: map[modeltiers.Tier]string{modeltiers.Light: "haiku", modeltiers.Standard: "sonnet", modeltiers.Deep: "opus"}, Advisor: harness.ModelChoice{Model: "sonnet", Effort: "medium"}, CrewModel: "fable"},
+			Facts: harness.Facts{ID: "claude", DisplayName: "Claude Code", Options: terminalOptions, Executable: harness.Executable{Default: "claude", Env: "ATTN_CLAUDE_EXECUTABLE"}, CacheTTL: time.Hour, Tiers: map[modeltiers.Tier]string{modeltiers.Light: "haiku", modeltiers.Standard: "sonnet", modeltiers.Deep: "opus"}, Advisor: harness.ModelChoice{Model: "sonnet", Effort: "medium"}, CrewModel: "fable",
+				Signals: harness.Signals{TurnStarts: harness.TurnStartsReported, ReportsTools: true, Heartbeat: 1500 * time.Millisecond}},
 			SkillDirs: []string{home + "/.claude/skills"},
 			Offered:   true,
 		},
 		{
-			Facts:     harness.Facts{ID: "codex", DisplayName: "Codex", Options: terminalOptions, Executable: harness.Executable{Default: "codex", Env: "ATTN_CODEX_EXECUTABLE"}, CacheTTL: 30 * time.Minute, Tiers: map[modeltiers.Tier]string{modeltiers.Light: "gpt-6-luna", modeltiers.Standard: "gpt-5.6-terra", modeltiers.Deep: "gpt-6.1-sol"}, Advisor: harness.ModelChoice{Model: "gpt-5.6-luna", Effort: "xhigh"}},
+			Facts: harness.Facts{ID: "codex", DisplayName: "Codex", Options: terminalOptions, Executable: harness.Executable{Default: "codex", Env: "ATTN_CODEX_EXECUTABLE"}, CacheTTL: 30 * time.Minute, Tiers: map[modeltiers.Tier]string{modeltiers.Light: "gpt-6-luna", modeltiers.Standard: "gpt-5.6-terra", modeltiers.Deep: "gpt-6.1-sol"}, Advisor: harness.ModelChoice{Model: "gpt-5.6-luna", Effort: "xhigh"},
+				Signals: harness.Signals{TurnStarts: harness.TurnStartsReported, ReportsTools: true, Heartbeat: 500 * time.Millisecond, ReviewerDwell: time.Minute, ConfirmsFirstTurn: true}},
 			SkillDirs: []string{home + "/.agents/skills"},
 			Offered:   true,
 		},
 		{
-			Facts:     harness.Facts{ID: "sigma", DisplayName: "Sigma", Options: sigmaOptions, Executable: harness.Executable{Default: "sigma", Env: "ATTN_SIGMA_EXECUTABLE"}, CacheTTL: time.Hour},
+			Facts: harness.Facts{ID: "sigma", DisplayName: "Sigma", Options: sigmaOptions, Executable: harness.Executable{Default: "sigma", Env: "ATTN_SIGMA_EXECUTABLE"}, CacheTTL: time.Hour,
+				Signals: harness.Signals{Heartbeat: 500 * time.Millisecond}},
 			SkillDirs: []string{home + "/.sigma/skills", home + "/.claude/skills"},
 			Offered:   true,
 		},
 		{
-			Facts:     harness.Facts{ID: "house", DisplayName: "House", Options: harness.Options{Resume: true, Yolo: true, InitialPrompt: true, LaunchInstructions: true, ModelPin: true, EffortPin: true, Provider: true}, CacheTTL: time.Hour},
+			Facts: harness.Facts{ID: "house", DisplayName: "House", Options: harness.Options{Resume: true, Yolo: true, InitialPrompt: true, LaunchInstructions: true, ModelPin: true, EffortPin: true, Provider: true}, CacheTTL: time.Hour,
+				Signals: harness.Signals{StateAuthority: harness.StateByHarness, ReportsTools: true, Heartbeat: 500 * time.Millisecond, ReviewerDwell: time.Minute}},
 			SkillDirs: []string{home + "/.house/skills"},
 			Offered:   true,
 		},

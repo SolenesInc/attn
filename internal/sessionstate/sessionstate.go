@@ -4,6 +4,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -84,41 +85,31 @@ type Policy struct {
 }
 
 const (
-	claudeHeartbeatTTL          = 1500 * time.Millisecond
-	codexHeartbeatTTL           = 500 * time.Millisecond
 	defaultHeartbeatSettleAfter = 5 * time.Second
 	defaultStaleAfter           = 60 * time.Second
 	defaultStuckAfter           = 90 * time.Second
-	reviewerDwell               = 60 * time.Second
 	defaultSettleGrace          = 4 * time.Second
 	defaultClassifierTimeout    = 30 * time.Second
 	defaultParkedAfter          = 30 * time.Minute
-	shellHeartbeatTTL           = 2500 * time.Millisecond
 )
 
-func PolicyFor(agent string) Policy {
-	policy := Policy{
-		HeartbeatTTL:         codexHeartbeatTTL,
-		HeartbeatSettleAfter: defaultHeartbeatSettleAfter,
+// Shell is the signals of a shell session, which runs no harness.
+var Shell = harness.Signals{Heartbeat: 2500 * time.Millisecond, ReviewerDwell: 60 * time.Second}
 
-		StaleAfter:        defaultStaleAfter,
-		StuckAfter:        defaultStuckAfter,
-		ReviewerDwell:     reviewerDwell,
-		SettleGrace:       defaultSettleGrace,
-		ClassifierTimeout: defaultClassifierTimeout,
-		ParkedAfter:       defaultParkedAfter,
+// Unregistered is the signals of a session whose harness has not registered, such as a plugin's before it connects.
+var Unregistered = harness.Signals{Heartbeat: 500 * time.Millisecond, ReviewerDwell: 60 * time.Second}
+
+func PolicyFor(signals harness.Signals) Policy {
+	return Policy{
+		HeartbeatTTL:         signals.Heartbeat,
+		HeartbeatSettleAfter: defaultHeartbeatSettleAfter,
+		StaleAfter:           defaultStaleAfter,
+		StuckAfter:           defaultStuckAfter,
+		ReviewerDwell:        signals.ReviewerDwell,
+		SettleGrace:          defaultSettleGrace,
+		ClassifierTimeout:    defaultClassifierTimeout,
+		ParkedAfter:          defaultParkedAfter,
 	}
-	if agent == string(protocol.SessionAgentClaude) {
-		policy.HeartbeatTTL = claudeHeartbeatTTL
-		policy.ReviewerDwell = 0
-	}
-	if agent == string(protocol.SessionAgentSigma) {
-		policy.ReviewerDwell = 0
-	}
-	if agent == string(protocol.SessionAgentShell) {
-		policy.HeartbeatTTL = shellHeartbeatTTL
-	}
-	return policy
 }
 
 type Reason string

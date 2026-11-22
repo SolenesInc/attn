@@ -41,9 +41,10 @@ func (d *Daemon) monitorPolicyFrom(sources monitorPolicySources, sessionID proto
 	policy := sessionmonitor.Policy{AutoSettle: sources.autoSettle, Headless: sources.headless, QuietNotifications: sources.quiet}
 	session := d.store.Get(sessionID)
 	if session == nil {
+		policy.Signals = d.signalsOf("")
 		return policy
 	}
-	policy.DriverReportsState = d.pluginDriverReportsState(session.Agent)
+	policy.Signals = d.signalsOf(session.Agent)
 	policy.ChiefOfStaff = session.ProfileID != "" && sources.chiefs[session.ProfileID] == sessionID
 	policy.TitlesAllowed = sources.titles && !sources.crewBound[sessionID] &&
 		d.store.SessionLabels(sessionID).UserLabel == "" &&

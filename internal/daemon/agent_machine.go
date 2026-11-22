@@ -76,8 +76,7 @@ func decodeAgentLaunch(raw *string) (*AgentLaunch, error) {
 }
 
 func (d *Daemon) agentLaunchContext(sessionID protocol.SessionID, agent string) (*AgentLaunch, error) {
-	caps := agentdriver.EffectiveCapabilities(agentdriver.Get(agent))
-	launch, awareness, err := d.prepareLaunchContext(sessionID, !caps.HasHooks)
+	launch, awareness, err := d.prepareLaunchContext(sessionID, !d.signalsOf(protocol.SessionAgent(agent)).ReportsTools)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +189,7 @@ func (d *Daemon) seedAgentMonitor(session *protocol.Session, opts ptybackend.Spa
 	if launch.AddedTerminal {
 		return
 	}
-	fresh.InitialPromptOwed = strings.TrimSpace(launch.InitialPrompt) != "" && sessionmonitor.ReportsTurnStarts(opts.Agent)
+	fresh.InitialPromptOwed = strings.TrimSpace(launch.InitialPrompt) != "" && d.signalsOf(protocol.SessionAgent(opts.Agent)).TurnStarts == harness.TurnStartsReported
 	seed := d.monitorLaunch(session.ID)
 	if !d.store.HasSessionRuntime(session.ID) {
 		seed = launch.Monitor
