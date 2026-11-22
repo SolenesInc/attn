@@ -31,7 +31,7 @@ func (c claudeConversation) CanCompact() error {
 	if c.d.claudeModReaches(c.facts.Session) {
 		return nil
 	}
-	return fmt.Errorf("this Claude session does not run with attn's Claude mod, so attn has no way to compact it; reload the session so it loads the mod (attn agent reload %s), or close without --compact", shortSessionID(c.facts.Session))
+	return protocol.Refuse(protocol.RefusalWrongState, "this Claude session does not run with attn's Claude mod, so attn has no way to compact it; reload the session so it loads the mod ({attn agent reload %s}), or close without --compact", shortSessionID(c.facts.Session))
 }
 
 func (c claudeConversation) hand(ctx context.Context, in harness.Input, compact bool) harness.Custody {

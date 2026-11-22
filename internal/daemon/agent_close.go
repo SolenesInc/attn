@@ -102,7 +102,7 @@ func (d *Daemon) beginAgentClose(msg *agentCloseRequest) (*protocol.AgentCloseRe
 	}
 	if compact {
 		if err := d.conversation(target.ID).CanCompact(); err != nil {
-			return nil, sessionCloseInFlight{}, &agentCloseRefusal{"compact_unavailable", err.Error()}
+			return nil, sessionCloseInFlight{}, &agentCloseRefusal{"compact_unavailable", protocol.MentionedText(err)}
 		}
 	}
 	if rule == protocol.AgentCloseRuleSelf {
