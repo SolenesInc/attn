@@ -8,16 +8,19 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 )
 
-type sigmaSessionLink struct{ serverSessionLink }
-
-func (sigmaSessionLink) SafeDuringQuestion(bool) bool { return true }
-
 type sigmaCompaction struct {
 	Outcome string `json:"outcome"`
 	Message string `json:"message"`
 }
 
-func (s sigmaSessionLink) Compact(ctx context.Context, in harness.Input) harness.Custody {
+func (h sigmaHarness) Conversation(facts harness.SessionFacts) harness.Conversation {
+	if l, ok := h.d.linkNamed(facts.Link).(*serverLink); ok {
+		return l.conversation(facts)
+	}
+	return typedConversation{refusal: noCompaction(h.Facts().ID)}
+}
+
+func (s serverConversation) compactSigma(ctx context.Context, in harness.Input) harness.Custody {
 	l, session := s.link, s.session
 	conversation := l.d.linkConversation(session)
 	if conversation == "" {
@@ -29,7 +32,7 @@ func (s sigmaSessionLink) Compact(ctx context.Context, in harness.Input) harness
 	c, err := l.ensureServer(ctx, nil)
 	if err != nil {
 		l.d.compactions.report(l.d, session, in.ID, sigmaCompaction{}.outcome(err))
-		return harness.Custody{Taken: true, At: time.Now()}
+		return harness.Custody{Outcome: harness.Taken, At: time.Now()}
 	}
 	params := map[string]any{"conversation": conversation, "author": l.author(harness.VoiceAttn)}
 	started := l.d.life.Go(l.b.agent+"Compact", func() {
@@ -42,7 +45,7 @@ func (s sigmaSessionLink) Compact(ctx context.Context, in harness.Input) harness
 	if !started {
 		return harness.Custody{Reason: "the daemon is stopping"}
 	}
-	return harness.Custody{Taken: true, At: time.Now()}
+	return harness.Custody{Outcome: harness.Taken, At: time.Now()}
 }
 
 func (c sigmaCompaction) outcome(err error) compactOutcome {

@@ -10,38 +10,50 @@ import (
 	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
-type claudeModLink struct {
-	mod      *claudeMod
-	terminal harness.TerminalID
-	session  protocol.SessionID
+type claudeConversation struct {
+	d     *Daemon
+	facts harness.SessionFacts
 }
 
-func (claudeModLink) SafeDuringQuestion(askedInTurn bool) bool { return askedInTurn }
-
-func (l claudeModLink) Deliver(ctx context.Context, in harness.Input) harness.Custody {
-	return l.hand(ctx, &claudeModDelivery{session: l.session, input: in, answer: make(chan harness.Custody, 1)})
+func (h claudeHarness) Conversation(facts harness.SessionFacts) harness.Conversation {
+	return claudeConversation{d: h.d, facts: facts}
 }
 
-func (l claudeModLink) Compact(ctx context.Context, in harness.Input) harness.Custody {
-	return l.hand(ctx, &claudeModDelivery{session: l.session, input: in, compact: true, answer: make(chan harness.Custody, 1)})
+func (c claudeConversation) Deliver(ctx context.Context, in harness.Input) harness.Custody {
+	return c.hand(ctx, in, false)
 }
 
-func (l claudeModLink) hand(ctx context.Context, delivery *claudeModDelivery) harness.Custody {
-	in := delivery.input
-	pausepoint.At(pausepoint.ClaudeModEnqueuing)
-	if !l.mod.enqueue(l.terminal, delivery) {
-		return harness.Custody{Reason: fmt.Sprintf("claude mod: terminal %s stopped polling before taking input %s, send it again", l.terminal, in.ID)}
+func (c claudeConversation) Compact(ctx context.Context, in harness.Input) harness.Custody {
+	return c.hand(ctx, in, true)
+}
+
+func (c claudeConversation) CanCompact() error {
+	if c.d.claudeModReaches(c.facts.Session) {
+		return nil
 	}
-	tripwire := l.mod.d.clock.NewTimer(ClaudeModAckTimer, claudeModAckWait)
+	return fmt.Errorf("this Claude session does not run with attn's Claude mod, so attn has no way to compact it; reload the session so it loads the mod (attn agent reload %s), or close without --compact", shortSessionID(c.facts.Session))
+}
+
+func (c claudeConversation) hand(ctx context.Context, in harness.Input, compact bool) harness.Custody {
+	mod, terminal := c.d.claudeMod(), c.facts.Terminal
+	if !mod.reachable(terminal) || (in.PendingApproval && !in.AskedInTurn) {
+		return harness.Custody{Outcome: harness.NotMine}
+	}
+	delivery := &claudeModDelivery{session: c.facts.Session, input: in, compact: compact, answer: make(chan harness.Custody, 1)}
+	pausepoint.At(pausepoint.ClaudeModEnqueuing)
+	if !mod.enqueue(terminal, delivery) {
+		return harness.Custody{Reason: fmt.Sprintf("claude mod: terminal %s stopped polling before taking input %s, send it again", terminal, in.ID)}
+	}
+	tripwire := c.d.clock.NewTimer(ClaudeModAckTimer, claudeModAckWait)
 	defer tripwire.Stop()
 	select {
 	case custody := <-delivery.answer:
 		return custody
 	case <-tripwire.C():
-		l.mod.forget(l.terminal, delivery)
+		mod.forget(terminal, delivery)
 		return harness.Custody{Reason: fmt.Sprintf("claude mod: max_ack_wait=%s; no answer for input %s", claudeModAckWait, in.ID)}
 	case <-ctx.Done():
-		l.mod.forget(l.terminal, delivery)
+		mod.forget(terminal, delivery)
 		return harness.Custody{Reason: fmt.Sprintf("claude mod: input %s: %v", in.ID, ctx.Err())}
 	}
 }

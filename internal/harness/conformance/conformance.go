@@ -55,6 +55,13 @@ func Run(t *testing.T, registered []harness.Harness, table []Row) {
 			if health.Offered != row.Offered {
 				t.Errorf("the adapter %q reports offered %v, want %v", facts.ID, health.Offered, row.Offered)
 			}
+			unreached := h.Conversation(harness.SessionFacts{Harness: facts.ID})
+			if custody := unreached.Deliver(context.Background(), harness.Input{ID: "conformance"}); custody.Outcome != harness.NotMine {
+				t.Errorf("the adapter %q takes input for a session it has no channel to: %+v", facts.ID, custody)
+			}
+			if err := unreached.CanCompact(); err == nil || err.Error() == "" {
+				t.Errorf("the adapter %q offers to compact a session it has no channel to, or refuses with no sentence", facts.ID)
+			}
 		})
 	}
 	for id := range rows {

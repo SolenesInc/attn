@@ -351,20 +351,40 @@ func (l *serverLink) observe(sessionID protocol.SessionID, source, status string
 	}
 }
 
-type serverSessionLink struct {
+type serverConversation struct {
 	link    *serverLink
 	session protocol.SessionID
 }
 
-func (s serverSessionLink) Deliver(ctx context.Context, in harness.Input) harness.Custody {
-	in.Session = s.session
-	return s.link.Deliver(ctx, in)
+func (l *serverLink) conversation(facts harness.SessionFacts) harness.Conversation {
+	return serverConversation{link: l, session: facts.Session}
 }
 
-func (l *serverLink) Deliver(ctx context.Context, in harness.Input) harness.Custody {
-	conversation := l.d.linkConversation(in.Session)
+func (s serverConversation) Deliver(ctx context.Context, in harness.Input) harness.Custody {
+	if in.PendingApproval && !s.link.speaksSigma() {
+		return harness.Custody{Outcome: harness.NotMine}
+	}
+	return s.link.deliver(ctx, s.session, in)
+}
+
+func (s serverConversation) Compact(ctx context.Context, in harness.Input) harness.Custody {
+	if !s.link.speaksSigma() {
+		return harness.Custody{Outcome: harness.NotMine}
+	}
+	return s.compactSigma(ctx, in)
+}
+
+func (s serverConversation) CanCompact() error {
+	if s.link.speaksSigma() {
+		return nil
+	}
+	return noCompaction(s.link.b.agent)
+}
+
+func (l *serverLink) deliver(ctx context.Context, session protocol.SessionID, in harness.Input) harness.Custody {
+	conversation := l.d.linkConversation(session)
 	if conversation == "" {
-		return harness.Custody{Reason: fmt.Sprintf("session %s holds no %s conversation", in.Session, l.b.name)}
+		return harness.Custody{Reason: fmt.Sprintf("session %s holds no %s conversation", session, l.b.name)}
 	}
 	params := map[string]any{"conversation": conversation, "requestId": in.ID, "author": l.author(in.Voice), "text": in.Text}
 	if l.speaksSigma() {
@@ -379,7 +399,7 @@ func (l *serverLink) Deliver(ctx context.Context, in harness.Input) harness.Cust
 	if err != nil {
 		return harness.Custody{Reason: fmt.Sprintf("deliver to %s conversation %s: %v", l.b.name, conversation, err)}
 	}
-	return harness.Custody{Taken: true, At: time.Now()}
+	return harness.Custody{Outcome: harness.Taken, At: time.Now()}
 }
 
 type serverAuthorRef struct {

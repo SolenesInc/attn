@@ -15,12 +15,15 @@ type codexCompaction struct {
 	active   bool
 }
 
-func (l codexMonitorLink) Compact(_ context.Context, in harness.Input) harness.Custody {
-	r, target := l.shared, l.target
-	conversation := target.Conversation.NativeID
+func (c codexConversation) Compact(_ context.Context, in harness.Input) harness.Custody {
+	if in.PendingApproval {
+		return harness.Custody{Outcome: harness.NotMine}
+	}
+	r, target := c.shared, c.facts
+	conversation := target.Conversation
 	failed := func(err error) harness.Custody {
 		r.d.compactions.report(r.d, target.Session, in.ID, compactOutcome{failed: err.Error(), turnUnknown: true})
-		return harness.Custody{Taken: true, At: time.Now()}
+		return harness.Custody{Outcome: harness.Taken, At: time.Now()}
 	}
 	if conversation == "" {
 		return failed(fmt.Errorf("the shared Codex session has no conversation yet"))
@@ -50,7 +53,7 @@ func (l codexMonitorLink) Compact(_ context.Context, in harness.Input) harness.C
 	case busy:
 		return harness.Custody{Reason: fmt.Sprintf("busy: shared Codex conversation %s is running a turn", conversation)}
 	}
-	return harness.Custody{Taken: true, At: time.Now()}
+	return harness.Custody{Outcome: harness.Taken, At: time.Now()}
 }
 
 func (s *codexServer) armCompaction(conversation string, session protocol.SessionID, delivery string) {

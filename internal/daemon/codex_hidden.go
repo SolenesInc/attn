@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -51,39 +52,46 @@ func (r *codexShared) control(ctx context.Context, profile string) (*codexServer
 	return s, client, nil
 }
 
-type codexMonitorLink struct {
-	shared  *codexShared
-	monitor *sessionmonitor.Monitor
-	target  sessionmonitor.LinkTarget
+type codexConversation struct {
+	shared *codexShared
+	facts  harness.SessionFacts
 }
 
-func (r *codexShared) Deliver(ctx context.Context, in harness.Input) harness.Custody {
-	monitor := r.d.sessionMonitor(in.Session)
-	if monitor == nil {
-		return harness.Custody{Reason: fmt.Sprintf("session %s has no monitor", in.Session)}
+func (h codexHarness) Conversation(facts harness.SessionFacts) harness.Conversation {
+	if facts.Link != codexLinkKind {
+		return typedConversation{refusal: errors.New("this Codex session started before Codex sessions ran on the shared app server, so attn has no way to compact it. Close without --compact instead")}
 	}
-	return (codexMonitorLink{shared: r, monitor: monitor, target: monitor.LinkTarget()}).Deliver(ctx, in)
+	return codexConversation{shared: h.d.codexShared(), facts: facts}
 }
 
-func (l codexMonitorLink) Deliver(_ context.Context, in harness.Input) harness.Custody {
-	r, target := l.shared, l.target
-	conversation := target.Conversation.NativeID
+func (codexConversation) CanCompact() error { return nil }
+
+func (c codexConversation) Deliver(_ context.Context, in harness.Input) harness.Custody {
+	if in.PendingApproval {
+		return harness.Custody{Outcome: harness.NotMine}
+	}
+	r, facts := c.shared, c.facts
+	conversation := facts.Conversation
 	if conversation == "" {
 		return harness.Custody{Reason: "shared Codex monitor has no conversation yet"}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), codexServerStartLimit)
 	defer cancel()
-	s, client, err := r.control(ctx, target.Profile)
+	s, client, err := r.control(ctx, facts.Profile)
 	if err == nil {
-		err = r.startTurn(ctx, client, target.Session, conversation, in.Text)
+		err = r.startTurn(ctx, client, facts.Session, conversation, in.Text)
 	}
-	if err == nil && target.Session != "" {
-		s.events.run(r.d, func() { l.monitor.EnsureTranscriptWatcher(target.Conversation.TranscriptPath) })
+	if err == nil && facts.Session != "" {
+		s.events.run(r.d, func() {
+			if monitor := r.d.sessionMonitor(facts.Session); monitor != nil {
+				monitor.EnsureTranscriptWatcher(facts.Path)
+			}
+		})
 	}
 	if err != nil {
 		return harness.Custody{Reason: fmt.Sprintf("deliver to shared Codex conversation %s: %v", conversation, err)}
 	}
-	return harness.Custody{Taken: true, At: time.Now()}
+	return harness.Custody{Outcome: harness.Taken, At: time.Now()}
 }
 
 func (r *codexShared) startTurn(ctx context.Context, client *codexshared.Client, sessionID protocol.SessionID, conversation, text string) error {

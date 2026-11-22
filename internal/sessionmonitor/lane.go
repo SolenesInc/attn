@@ -317,7 +317,7 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	epochAtPlacing := l.epoch
 	var attempt Attempt
 	handled := false
-	attempt, handled = l.placeOverLinkLocked(ctx, delivery, duringQuestion)
+	attempt, handled = l.placeOverConversationLocked(ctx, delivery, duringQuestion)
 	if !handled && duringQuestion {
 		return deferred(ErrBlockedByApproval)
 	}
@@ -385,44 +385,37 @@ func (l *lane) unlockedWhilePlacing(work func()) {
 	l.placementEnded.Broadcast()
 }
 
-func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, duringQuestion bool) (Attempt, bool) {
+func (l *lane) placeOverConversationLocked(ctx context.Context, delivery Delivery, duringQuestion bool) (Attempt, bool) {
 	voice := delivery.origin.voice()
 	if delivery.UserWords {
 		voice = harness.VoiceUser
 	}
-	var link harness.Link
+	in := harness.Input{ID: delivery.ID.String(), Text: delivery.Text, Voice: voice, Ring: delivery.Ring, PendingApproval: duringQuestion, AskedInTurn: l.questionInTurn}
+	facts := l.monitor.sessionFactsLocked()
 	var custody harness.Custody
-	askedInTurn := l.questionInTurn
 	l.unlockedWhilePlacing(func() {
-		link = l.monitor.registry.host.Link(l.monitor, voice)
-		if safe, ok := link.(harness.QuestionSafeLink); duringQuestion && !(ok && safe.SafeDuringQuestion(askedInTurn)) {
-			link = nil
-		}
-		in := harness.Input{ID: delivery.ID.String(), Text: delivery.Text, Voice: voice, Ring: delivery.Ring, ExpectedDriverRun: delivery.ExpectedDriverRun, ExpectedConversation: delivery.ExpectedConversation}
-		if compactor, ok := link.(harness.Compactor); delivery.Compact && ok {
-			custody = compactor.Compact(ctx, in)
-		} else if delivery.Compact {
-			link = nil
-		} else if link != nil {
-			custody = link.Deliver(ctx, in)
+		conversation := l.monitor.registry.host.Conversation(facts)
+		if delivery.Compact {
+			custody = conversation.Compact(ctx, in)
+		} else {
+			custody = conversation.Deliver(ctx, in)
 		}
 	})
-	if link == nil {
+	switch custody.Outcome {
+	case harness.NotMine:
 		return Attempt{}, false
-	}
-	if custody.Stopped {
+	case harness.Stopped:
 		if delivery.origin.kind == originUserConversation {
 			return Attempt{}, false
 		}
 		return Attempt{Stage: Deferred, Err: ErrSessionStopped}, true
-	}
-	if custody.Rejected {
+	case harness.Rejected:
 		return Attempt{Stage: Failed, Err: errors.New(custody.Reason)}, true
-	}
-	if !custody.Taken {
+	case harness.Deferred:
 		return Attempt{Stage: Deferred, Err: errors.New(custody.Reason), Uncertain: custody.Uncertain}, true
 	}
-	return Attempt{Stage: Placed, At: custody.At, Held: custody.Held, steered: custody.Held}, true
+	held := custody.Outcome == harness.Held
+	return Attempt{Stage: Placed, At: custody.At, Held: held, steered: held}, true
 }
 
 // tookLocked credits the user's words to the run going, or to the next turn start when none runs.

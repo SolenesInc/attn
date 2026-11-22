@@ -456,23 +456,22 @@ func (m *Monitor) ObserveResumeID(nativeID string) (*ConversationReceipt, bool) 
 
 func (r *Registry) Monitors() []*Monitor { return r.each() }
 
-type LinkTarget struct {
-	Session      protocol.SessionID
-	Profile      string
-	Kind         string
-	Conversation ConversationObservation
-	Terminal     harness.TerminalID
-	Driver       DriverMetadata
-}
-
-func (m *Monitor) LinkTarget() LinkTarget {
+func (m *Monitor) SessionFacts() harness.SessionFacts {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.sessionFactsLocked()
+}
+
+func (m *Monitor) sessionFactsLocked() harness.SessionFacts {
 	conversation := m.conversationInput.ConversationObservation
 	if m.conversation != "" {
 		conversation.NativeID = m.conversation
 	}
-	return LinkTarget{Session: m.session, Profile: m.profile, Kind: m.link, Conversation: conversation, Terminal: m.primaryTerminalLocked(), Driver: m.driver}
+	return harness.SessionFacts{
+		Session: m.session, Harness: string(m.agent), Profile: m.profile, Link: m.link, Terminal: m.primaryTerminalLocked(),
+		Conversation: conversation.NativeID, Path: conversation.TranscriptPath,
+		Run: m.driver.Run, RunOwner: m.driver.Plugin, Route: m.driver.Route,
+	}
 }
 
 func (m *Monitor) AdoptDropped(candidate *Monitor) {

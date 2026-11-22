@@ -42,7 +42,7 @@ type Host interface {
 	ViewOwner(harness.TerminalID) string
 	Input(ctx context.Context, terminal harness.TerminalID, data []byte) error
 	PlaceInput(ctx context.Context, terminal harness.TerminalID, data []byte, within time.Duration) error
-	Link(*Monitor, harness.Voice) harness.Link
+	Conversation(harness.SessionFacts) harness.Conversation
 	LinkTranscriptPath(link, path string) string
 	NoteKey(terminal harness.TerminalID, at time.Time)
 	LastKey(terminal harness.TerminalID) time.Time

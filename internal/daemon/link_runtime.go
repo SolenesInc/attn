@@ -14,7 +14,6 @@ import (
 )
 
 type linkRuntime interface {
-	harness.Link
 	kind() string
 
 	canRun(req *spawnRequest) bool

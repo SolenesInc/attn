@@ -52,36 +52,6 @@ type pendingCompactClose struct {
 	tripwire     stepclock.Timer
 }
 
-func (d *Daemon) compactPathRefusal(target *protocol.Session) *agentCloseRefusal {
-	run := d.store.GetAgentDriverRun(target.ID)
-	if run.Route == "direct" {
-		reg, conn := d.ensurePluginRegistry().driverConnection(target.Agent, run.PluginName)
-		if conn != nil && reg.Capabilities["compaction"] {
-			return nil
-		}
-	}
-
-	if d.codexShared().launchedShared(target.ID) {
-		return nil
-	}
-	if l, ok := d.linkOf(target.ID).(*serverLink); ok && l.speaksSigma() {
-		return nil
-	}
-	switch target.Agent {
-	case string(protocol.SessionAgentCodex):
-		return &agentCloseRefusal{"compact_unavailable",
-			"this Codex session started before Codex sessions ran on the shared app server, so attn has no way to compact it. Close without --compact instead"}
-	case string(protocol.SessionAgentClaude):
-		if d.claudeModReaches(target.ID) {
-			return nil
-		}
-		return &agentCloseRefusal{"compact_unavailable", fmt.Sprintf(
-			"this Claude session does not run with attn's Claude mod, so attn has no way to compact it; reload the session so it loads the mod (attn agent reload %s), or close without --compact", shortSessionID(target.ID))}
-	}
-	return &agentCloseRefusal{"compact_unavailable", fmt.Sprintf(
-		"attn has no way to compact a %s session; close without --compact", target.Agent)}
-}
-
 func (d *Daemon) beginCompactingClose(_ context.Context, msg protocol.CompactingCloseBeginMessage) (struct{}, error) {
 	session := msg.SessionID
 	monitor := d.sessionMonitor(session)

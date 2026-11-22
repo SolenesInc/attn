@@ -101,8 +101,8 @@ func (d *Daemon) beginAgentClose(msg *agentCloseRequest) (*protocol.AgentCloseRe
 			"--compact compacts the conversation of the session that closes itself, so it only goes with --self"}
 	}
 	if compact {
-		if refusal := d.compactPathRefusal(target); refusal != nil {
-			return nil, sessionCloseInFlight{}, refusal
+		if err := d.conversation(target.ID).CanCompact(); err != nil {
+			return nil, sessionCloseInFlight{}, &agentCloseRefusal{"compact_unavailable", err.Error()}
 		}
 	}
 	if rule == protocol.AgentCloseRuleSelf {

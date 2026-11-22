@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -28,6 +29,44 @@ func (d *Daemon) harness(id string) (harness.Harness, error) {
 		}
 	}
 	return nil, fmt.Errorf("agent %q is not available", id)
+}
+
+var unconnectedHarness func(d *Daemon, id harness.ID) harness.Harness
+
+func (d *Daemon) conversation(sessionID protocol.SessionID) harness.Conversation {
+	facts := harness.SessionFacts{Session: sessionID, Link: d.store.SessionLink(sessionID), Terminal: d.primaryTerminal(sessionID)}
+	if session := d.store.Get(sessionID); session != nil {
+		facts.Harness, facts.Profile = session.Agent, session.ProfileID
+	}
+	conversation := d.store.GetSessionConversation(sessionID)
+	facts.Conversation, facts.Path = conversation.NativeID, conversation.TranscriptPath
+	run := d.store.GetAgentDriverRun(sessionID)
+	facts.Run, facts.RunOwner, facts.Route = run.RunID, run.PluginName, run.Route
+	return d.conversationFor(facts)
+}
+
+func (d *Daemon) conversationFor(facts harness.SessionFacts) harness.Conversation {
+	h, err := d.harness(facts.Harness)
+	if err != nil {
+		h = unconnectedHarness(d, facts.Harness)
+	}
+	return h.Conversation(facts)
+}
+
+type typedConversation struct{ refusal error }
+
+func (typedConversation) Deliver(context.Context, harness.Input) harness.Custody {
+	return harness.Custody{Outcome: harness.NotMine}
+}
+
+func (typedConversation) Compact(context.Context, harness.Input) harness.Custody {
+	return harness.Custody{Outcome: harness.NotMine}
+}
+
+func (c typedConversation) CanCompact() error { return c.refusal }
+
+func noCompaction(agent string) error {
+	return fmt.Errorf("attn has no way to compact a %s session; close without --compact", agent)
 }
 
 func (d *Daemon) knowsHarness(id string) bool {

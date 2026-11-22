@@ -353,31 +353,8 @@ func (h monitorHost) PlaceInput(ctx context.Context, terminal harness.TerminalID
 	return h.daemon.ptyBackend.PlaceInput(ctx, terminal, data, within)
 }
 
-func (h monitorHost) Link(monitor *sessionmonitor.Monitor, voice harness.Voice) harness.Link {
-	target := monitor.LinkTarget()
-	if target.Kind == codexLinkKind {
-		return codexMonitorLink{shared: h.daemon.codexShared(), monitor: monitor, target: target}
-	}
-	if l, ok := h.daemon.linkNamed(target.Kind).(*serverLink); ok {
-		link := serverSessionLink{link: l, session: target.Session}
-		if l.speaksSigma() {
-			return sigmaSessionLink{link}
-		}
-		return link
-	}
-	if target.Driver.Run != "" && target.Driver.Route != "terminal" {
-		targetSession, _ := monitor.TitleTarget()
-		reg, conn := h.daemon.ensurePluginRegistry().driverConnection(targetSession.Agent, target.Driver.Plugin)
-		link := pluginLink{daemon: h.daemon, terminal: target.Terminal, session: target.Session, plugin: target.Driver.Plugin, run: target.Driver.Run, conversation: target.Conversation, registration: reg, connection: conn, route: target.Driver.Route}
-		if conn != nil && reg.Capabilities["safe_during_question"] {
-			return questionSafePluginLink{link}
-		}
-		return link
-	}
-	if h.daemon.claudeMod().reachable(target.Terminal) {
-		return claudeModLink{mod: h.daemon.claudeMod(), terminal: target.Terminal, session: target.Session}
-	}
-	return nil
+func (h monitorHost) Conversation(facts harness.SessionFacts) harness.Conversation {
+	return h.daemon.conversationFor(facts)
 }
 
 func (h monitorHost) LinkTranscriptPath(link, path string) string {

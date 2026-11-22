@@ -349,7 +349,7 @@ func (m *claudeMod) expectModsToReconnect() {
 	live := m.d.localLiveTerminals(context.Background())
 	for _, monitor := range m.d.monitors().each() {
 		session, _ := monitor.TitleTarget()
-		terminal := monitor.LinkTarget().Terminal
+		terminal := monitor.SessionFacts().Terminal
 		if _, running := live[terminal]; running && session.Agent == protocol.SessionAgentClaude {
 			m.expectModToReconnect(terminal)
 		}
@@ -381,7 +381,7 @@ func (m *claudeMod) closePoll(t *claudeModTerminal, poll *claudeModPoll, clientG
 	case delivery.compact:
 		delete(t.handed, delivery.input.ID)
 		t.compacting[delivery.input.ID] = delivery.session
-		delivery.answer <- harness.Custody{Taken: true, At: time.Now()}
+		delivery.answer <- harness.Custody{Outcome: harness.Taken, At: time.Now()}
 	}
 	return delivery
 }
@@ -496,21 +496,21 @@ func (m *claudeMod) acknowledge(ack claudeModAck) {
 			delivery.answer <- custody
 		}
 	}
-	taken := harness.Custody{Taken: true, At: time.Now()}
+	taken := harness.Custody{Outcome: harness.Taken, At: time.Now()}
 	switch ack.Outcome {
 	case claudeModOutcomeHeld:
 		if delivery != nil {
 			t.accepted++
 			t.held[ack.ID] = &claudeModHeld{session: delivery.session, input: delivery.input, accepted: t.accepted}
 		}
-		answer(harness.Custody{Taken: true, At: taken.At, Held: true})
+		answer(harness.Custody{Outcome: harness.Held, At: taken.At})
 	case claudeModOutcomeSubmitted:
 		m.typedLocked(t, ack.ID)
 		answer(taken)
 	case claudeModOutcomeAppended:
 		m.typedLocked(t, ack.ID)
 	case claudeModOutcomeStopped:
-		answer(harness.Custody{Stopped: true})
+		answer(harness.Custody{Outcome: harness.Stopped})
 	case claudeModOutcomeRefused:
 		answer(harness.Custody{Reason: "claude mod: Claude refused input " + ack.ID + ": " + ack.Reason})
 	}

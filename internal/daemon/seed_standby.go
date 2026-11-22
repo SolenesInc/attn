@@ -66,7 +66,7 @@ func (d *Daemon) seedStandbyRequest(msg *seedStandbyRequest, setter who.Actor) (
 		SourceSessionID: caller.ID,
 		TargetSessionID: string(caller.ID),
 		Reason:          garden.TrimReason(fmt.Sprintf("On standby for %s: %s", seed.ID, note)),
-		Compact:         protocol.Ptr(d.compactPathRefusal(caller) == nil),
+		Compact:         protocol.Ptr(d.conversation(caller.ID).CanCompact() == nil),
 	}, nil
 }
 

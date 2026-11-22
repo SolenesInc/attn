@@ -15,6 +15,7 @@ type ID = string
 type Harness interface {
 	Facts() Facts
 	Health(ctx context.Context) Health
+	Conversation(s SessionFacts) Conversation
 }
 
 // Facts are what a harness is, constant for a built-in and fixed by the registration for a plugin.
