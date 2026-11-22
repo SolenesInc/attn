@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/github"
+	"github.com/victorarias/attn/internal/harness/appserver"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
@@ -52,6 +53,7 @@ func NewForTesting(socketPath string) *Daemon {
 	d.loginEnv = newLoginEnv(&d.life, d.logf)
 	d.pluginStartEnded = make(chan struct{})
 	d.codeNav = d.newCodeNavigation()
+	d.appServer = appserver.New(d.host(appServerTerminalOwner))
 	return d
 }
 
