@@ -164,6 +164,13 @@ func (w *World) App() *Peer {
 	return w.AppOn("")
 }
 
+func (w *World) AppOfAnotherBuild() *Peer {
+	w.T.Helper()
+	p := w.Connect(w.appHello(), nil)
+	p.Initial = Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
+	return p
+}
+
 func (w *World) AppOn(profileID string) *Peer {
 	w.T.Helper()
 	hello := w.appHello()

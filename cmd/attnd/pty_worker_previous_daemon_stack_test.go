@@ -17,7 +17,7 @@ func TestATerminalThePreviousDaemonReloadsDuringAnUpdateRunsOnTheInstalledWorker
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex), testworld.OnPTYBackend(testworld.WorkerPTY))
 	s.InstallBuild(previous, "")
 	s.StartBinary(filepath.Join(s.Dir, "install", "attnd"))
-	app := s.App()
+	app := s.AppOfAnotherBuild()
 	turn := func(session string, run *fakeagent.Run, state protocol.SessionState) {
 		t.Helper()
 		app.TypeLine(session, "add a note to checkout")

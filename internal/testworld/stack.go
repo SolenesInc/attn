@@ -161,7 +161,7 @@ func (s *Stack) start(vars ...string) {
 
 func (s *Stack) checkStarted() {
 	s.T.Helper()
-	probe := s.App()
+	probe := s.AppOfAnotherBuild()
 	for _, warning := range probe.Initial.Warnings {
 		if strings.HasPrefix(warning.Code, "pty_backend_") {
 			s.T.Fatalf("the daemon started on a fallback PTY backend: %s: %s", warning.Code, warning.Message)
