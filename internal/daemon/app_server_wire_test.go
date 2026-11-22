@@ -96,6 +96,22 @@ func TestAnAppServerRunThatFailsWaitsForTheUser(t *testing.T) {
 	})
 }
 
+func TestAnAppServerRunAnsweredWithoutWordsSettlesOnItsAnswer(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app := w.App()
+		session, view, server := appServerSession(t, w, app, h)
+		promptUntilWorking(app, session, view, server, "record the result without a summary")
+		mark := len(app.Log())
+		server.Reply(view.ConversationID, "")
+		testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+		stateExplainShows(t, stateExplainOf(t, w.Client(), session).Observations,
+			stateExplainRow{source: "classifier", claim: "idle", outcome: "observed", detail: "empty_last_message"},
+			stateExplainRow{source: "resolver", claim: "idle", outcome: "applied", cause: "resolver_observation", detail: "classifier_verdict"},
+		)
+	})
+}
+
 func TestFeedbackReachesAnAppServerSessionAsAFollowUpFromAttn(t *testing.T) {
 	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
 		w := newWorld(t, h)

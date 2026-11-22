@@ -48,8 +48,9 @@ type TurnEvent struct {
 	Stop *Stop
 	// Completion counts the server's finished runs, so a run that ended while attn was away is seen once.
 	Completion int64
-	// Said is the answer the turn ended with, classified for the state it leaves.
-	Said string
+	// Said is the answer the turn ended with, classified for the state it leaves. An answer can have no words, and
+	// nil is no answer.
+	Said *string
 }
 
 // Stop is a turn's end as the harness reported it.

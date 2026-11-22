@@ -89,8 +89,8 @@ func (e harnessEvents) Turn(r harness.Reporter, at time.Time, event harness.Turn
 	if event.Completion != 0 {
 		monitor.RecordServerCompletion(event.Completion)
 	}
-	if said := event.Said; said != "" {
-		e.daemon.life.Go("classifyServerAnswer", func() { monitor.ClassifyMessage(said) })
+	if said := event.Said; said != nil {
+		e.daemon.life.Go("classifyServerAnswer", func() { monitor.ClassifyMessage(*said) })
 	}
 }
 

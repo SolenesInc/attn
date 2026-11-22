@@ -338,7 +338,7 @@ func (l *serverLink) observe(sessionID protocol.SessionID, source, status string
 		case ended == nil:
 			turn(harness.TurnEvent{Turn: harness.TurnEnded, Status: true})
 		case answered:
-			turn(harness.TurnEvent{Turn: harness.TurnEnded, Status: true, Completion: ended.Completion, Said: ended.Said})
+			turn(harness.TurnEvent{Turn: harness.TurnEnded, Status: true, Completion: ended.Completion, Said: &ended.Said})
 		case ended.Outcome == "interrupted":
 			turn(harness.TurnEvent{Turn: harness.TurnEnded, Status: true})
 			turn(harness.TurnEvent{Turn: harness.TurnAborted, Detail: "the " + l.b.name + " run was interrupted", Completion: ended.Completion})
