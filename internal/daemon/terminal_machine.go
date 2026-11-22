@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -247,7 +248,7 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 			_ = d.ptyBackend.Kill(ctx, terminal, syscall.SIGTERM)
 			_ = d.ptyBackend.Remove(ctx, terminal)
 			unlockEnds()
-			d.closePluginDriverSession(sessionID, "reload_failed", nil, "")
+			d.endRun(sessionID, harness.RunReloadFailed, nil, "")
 			d.life.Go("handleFailedPluginRestart", func() {
 				d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1, LifecycleID: opts.LifecycleID})
 			})
@@ -352,7 +353,7 @@ func (d *Daemon) killTerminal(ctx context.Context, msg protocol.TerminalKillMess
 	terminal, stop := msg.TerminalID, protocol.Deref(msg.Stop)
 	ending := protocol.Deref(msg.EndingSessionID)
 	stoppedSession, _ := d.shownIn(terminal)
-	driver := d.sessionMonitor(stoppedSession).Driver()
+	driver := d.sessionMonitor(stoppedSession).RunRecord()
 	if stop {
 		d.markTerminalExitIntent(terminal, terminalExitStop)
 	}
@@ -369,8 +370,8 @@ func (d *Daemon) killTerminal(ctx context.Context, msg protocol.TerminalKillMess
 	if err != nil && ending != "" {
 		d.terminals().takeEnding(terminal)
 	}
-	if errors.Is(err, pty.ErrSessionNotFound) && stop && d.sessionMonitor(stoppedSession).RetireDriver(driver.Run) {
-		d.notifyPluginDriverSessionClosed(driver.Plugin, terminal, driver.Run, "killed", nil, msg.Signal)
+	if errors.Is(err, pty.ErrSessionNotFound) && stop && d.sessionMonitor(stoppedSession).RetireRun(driver.ID) {
+		d.runEnded(d.agentOf(stoppedSession), harness.RunEnd{Session: stoppedSession, Terminal: terminal, Owner: driver.Owner, Run: driver.ID, Reason: harness.RunKilled, Signal: msg.Signal})
 	}
 	return struct{}{}, err
 }

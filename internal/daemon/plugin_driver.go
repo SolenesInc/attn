@@ -277,7 +277,7 @@ func (d *Daemon) resolvePluginDriverRoutes(plugin, agent string) {
 	for _, run := range d.store.ListAgentDriverRuns(plugin) {
 		session := d.store.Get(run.SessionID)
 		if session != nil && session.Agent == agent {
-			d.sessionMonitor(run.SessionID).ResolveDriverRoute(plugin, run.RunID, pluginDriverRoute(reg))
+			d.sessionMonitor(run.SessionID).ResolveRoute(plugin, run.RunID, pluginDriverRoute(reg))
 			d.kickSessionInboxAddresses(run.SessionID)
 			d.kickCompactingClose(run.SessionID)
 		}
@@ -605,7 +605,7 @@ func (d *Daemon) applyPluginReportedStop(params pluginReportStopParams) {
 
 func (d *Daemon) applyPluginReportedMetadata(params pluginReportMetadataParams) conversationWait {
 	d.notePluginDriverReport(params.SessionID)
-	if !d.sessionMonitor(params.SessionID).ReportDriverMetadata(params.RunID, params.Seq, string(params.Metadata)) {
+	if !d.sessionMonitor(params.SessionID).ReportRunNote(params.RunID, params.Seq, string(params.Metadata)) {
 		d.logf("plugin metadata report discarded: session=%s run=%s seq=%d", params.SessionID, params.RunID, params.Seq)
 		return nil
 	}
@@ -617,14 +617,14 @@ func (d *Daemon) applyPluginReportedMetadata(params pluginReportMetadataParams) 
 
 func (d *Daemon) applyPluginReportedTranscriptPath(params pluginReportTranscriptPathParams) {
 	d.notePluginDriverReport(params.SessionID)
-	if !d.sessionMonitor(params.SessionID).ReportDriverTranscript(params.RunID, params.Path) {
+	if !d.sessionMonitor(params.SessionID).ReportRunPath(params.RunID, params.Path) {
 		d.logf("plugin transcript path report discarded: session=%s run=%s", params.SessionID, params.RunID)
 	}
 }
 
 func (d *Daemon) queueReportDuringPluginLaunch(plugin *pluginConnection, sessionID protocol.SessionID, report pendingPluginReport) bool {
 	var watch *launchWatch
-	queued := d.sessionMonitor(sessionID).QueueDuringDriverLaunch(plugin.name, report.runID(), func() { d.replayPluginReport(report) }, func() {
+	queued := d.sessionMonitor(sessionID).QueueDuringLaunch(plugin.name, report.runID(), func() { d.replayPluginReport(report) }, func() {
 		if report.State != nil || report.Stop != nil {
 			watch = d.claimLaunchWatch(sessionID)
 		}
@@ -657,7 +657,7 @@ func (d *Daemon) replayPluginReport(report pendingPluginReport) {
 
 func (d *Daemon) queueExitDuringPluginLaunch(sessionID protocol.SessionID, info ptybackend.ExitInfo) bool {
 	var watch *launchWatch
-	queued := d.sessionMonitor(sessionID).QueueExitDuringDriverLaunch(info, func() {
+	queued := d.sessionMonitor(sessionID).QueueExitDuringLaunch(info, func() {
 		d.logf("deferring plugin PTY exit until launch completes: session=%s run=%s", sessionID, info.LifecycleID)
 		watch = d.claimLaunchWatch(sessionID)
 	})
@@ -667,14 +667,6 @@ func (d *Daemon) queueExitDuringPluginLaunch(sessionID protocol.SessionID, info 
 	exit := d.holdExit(sessionID, info)
 	watch.settle(launchOutcome{exit: d.exitScreenOrBare(sessionID, exit)})
 	return true
-}
-
-func (d *Daemon) abortPluginSessionLaunch(sessionID protocol.SessionID, reason string) {
-	plugin, run, launching := d.sessionMonitor(sessionID).AbortDriverLaunch()
-	if !launching {
-		return
-	}
-	d.notifyPluginDriverSessionClosed(plugin, d.primaryTerminal(sessionID), run, reason, nil, "")
 }
 
 func (r pendingPluginReport) runID() string {
@@ -690,21 +682,6 @@ func (r pendingPluginReport) runID() string {
 	default:
 		return ""
 	}
-}
-
-func (d *Daemon) closePluginDriverSession(sessionID protocol.SessionID, reason string, exitCode *int, signal string) {
-	session := d.store.Get(sessionID)
-	if session == nil {
-		d.logf("plugin session close skipped: session=%s reason=%s no longer in store", sessionID, reason)
-		return
-	}
-	run := d.endAgentDriverRun(sessionID)
-	if run.RunID == "" {
-		d.logf("plugin session close skipped: session=%s reason=%s has no active driver run", sessionID, reason)
-		return
-	}
-	d.sessionMonitor(sessionID).ResolveSoon()
-	d.notifyPluginDriverSessionClosed(run.PluginName, d.primaryTerminal(sessionID), run.RunID, reason, exitCode, signal)
 }
 
 // notifyPluginDriverSessionClosed addresses the run by the terminal the driver launched it in.

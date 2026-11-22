@@ -28,7 +28,6 @@ type linkRuntime interface {
 	serverTerminal(profile string) harness.TerminalID
 
 	profileReleased(profile string)
-	sessionClosed(sessionID protocol.SessionID, profile, released string)
 
 	terminalDropped(t harness.TerminalID)
 	terminalExited(t harness.TerminalID)

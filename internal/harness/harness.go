@@ -16,6 +16,8 @@ type Harness interface {
 	Facts() Facts
 	Health(ctx context.Context) Health
 	Conversation(s SessionFacts) Conversation
+	// End runs once after a close commits, for a session whose conversation lives in the harness's server.
+	End(ctx context.Context, e Ending)
 }
 
 // Facts are what a harness is, constant for a built-in and fixed by the registration for a plugin.

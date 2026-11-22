@@ -176,13 +176,10 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 	}
 	monitor.SetTerminals(string(sessionID), d.terminals().Of(sessionID))
 	d.reportTerminalTitle(sessionID)
-	driver := monitor.Driver()
-	if driver.Run != "" && driver.Route == "" {
-		if session := d.store.Get(sessionID); session != nil {
-			reg, conn := d.ensurePluginRegistry().driverConnection(session.Agent, driver.Plugin)
-			if conn != nil {
-				monitor.ResolveDriverRoute(driver.Plugin, driver.Run, pluginDriverRoute(reg))
-			}
+	driver := monitor.RunRecord()
+	if driver.ID != "" && driver.Route == "" {
+		if route, ok := d.runRoute(harness.SessionFacts{Session: sessionID, Harness: d.agentOf(sessionID), Run: driver.ID, RunOwner: driver.Owner}); ok {
+			monitor.ResolveRoute(driver.Owner, driver.ID, route)
 		}
 	}
 	monitor.Arm()
@@ -229,7 +226,7 @@ func (d *Daemon) monitorLaunch(sessionID protocol.SessionID) sessionmonitor.Laun
 		LastModelRequestAt: protocol.Timestamp(protocol.Deref(session.LastModelRequestAt)).Time(),
 		Turn: sessionmonitor.TurnStamps{OpenedAt: stamps.OpenedAt, SettledAt: stamps.SettledAt, SnoozedUntil: stamps.SnoozedUntil,
 			AgentAt: stamps.AgentAt, RequestedAt: stamps.RequestedAt},
-		Driver:               d.driverInputFromRecord(sessionID),
+		RunRecord:            d.driverInputFromRecord(sessionID),
 		Conversation:         sessionmonitor.ConversationObservation{NativeID: conversation.NativeID, TranscriptPath: conversation.TranscriptPath},
 		LastSeen:             protocol.Timestamp(session.LastSeen).Time(),
 		PendingConversations: decodePendingConversations(records.PendingConversations),
@@ -255,10 +252,10 @@ func branchFromSession(session *protocol.Session) attngit.BranchInfo {
 		MainRepo: protocol.Deref(session.MainRepo), Repository: protocol.Deref(session.Repository), Origin: protocol.Deref(session.RepositoryOrigin)}
 }
 
-func (d *Daemon) driverInputFromRecord(session protocol.SessionID) sessionmonitor.DriverMetadata {
+func (d *Daemon) driverInputFromRecord(session protocol.SessionID) sessionmonitor.RunRecord {
 	cursor := d.store.GetAgentDriverRun(session)
-	return sessionmonitor.DriverMetadata{Plugin: cursor.PluginName, Run: cursor.RunID, Sequence: cursor.Seq, Route: cursor.Route,
-		Metadata: d.store.GetAgentMetadata(session), TranscriptPath: d.store.GetAgentDriverTranscriptPath(session)}
+	return sessionmonitor.RunRecord{Owner: cursor.PluginName, ID: cursor.RunID, Sequence: cursor.Seq, Route: cursor.Route,
+		Note: d.store.GetAgentMetadata(session), Path: d.store.GetAgentDriverTranscriptPath(session)}
 }
 
 func (d *Daemon) forgetMonitor(sessionID protocol.SessionID) {

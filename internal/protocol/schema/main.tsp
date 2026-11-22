@@ -3426,6 +3426,7 @@ model AgentLaunchCloseMessage {
   cmd: "agent_launch_close";
   session_id: SessionID;
   phase: "prepare" | "cancel" | "drain" | "committed" | "released" | "notify";
+  agent?: string;
   driver?: string;
   terminal_id?: TerminalID;
   signal?: string;

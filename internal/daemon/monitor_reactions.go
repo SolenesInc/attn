@@ -42,7 +42,7 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 	if compactingCloseMayPlace(previous, view) {
 		d.kickCompactingClose(session)
 	}
-	broadcast := view.Driver.V.TranscriptPath != previous.Driver.V.TranscriptPath
+	broadcast := view.RunRecord.V.Path != previous.RunRecord.V.Path
 	if stateChanged && !state.Quiet {
 		d.kickSessionInbox(session, string(state.State))
 		broadcast = broadcast || state.Broadcast
@@ -50,7 +50,7 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 	if !stateChanged && (turn != previous.Turn.V || view.AutoSettle.V != previous.AutoSettle.V || state.Reason != previous.State.V.Reason) {
 		broadcast = true
 	}
-	if becamePromptReadyByReason(previous, view) || harnessJustStarted(previous, view) || previous.Driver.V.Run != view.Driver.V.Run || previous.Conversation.V.NativeID != view.Conversation.V.NativeID {
+	if becamePromptReadyByReason(previous, view) || harnessJustStarted(previous, view) || previous.RunRecord.V.ID != view.RunRecord.V.ID || previous.Conversation.V.NativeID != view.Conversation.V.NativeID {
 		d.kickSessionInboxAddresses(session)
 	}
 	if broadcast {

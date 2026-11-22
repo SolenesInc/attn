@@ -1736,9 +1736,9 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	if d.queueExitDuringPluginLaunch(sessionID, info) {
 		return false
 	}
-	if d.sessionMonitor(sessionID).SupersededExitDuringDriverLaunch(info) {
+	if d.sessionMonitor(sessionID).SupersededExitDuringLaunch(info) {
 		if activeRun := d.store.GetAgentDriverRun(sessionID); activeRun.RunID == info.LifecycleID {
-			d.closePluginDriverSession(sessionID, "exited", &info.ExitCode, info.Signal)
+			d.endRun(sessionID, harness.RunExited, &info.ExitCode, info.Signal)
 		}
 		return false
 	}
@@ -1777,11 +1777,11 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	}
 	monitor.FenceInput()
 	monitor.StopTranscriptWatchers()
-	reason := "exited"
+	reason := harness.RunExited
 	if stopped {
-		reason = "killed"
+		reason = harness.RunKilled
 	}
-	d.closePluginDriverSession(sessionID, reason, &info.ExitCode, info.Signal)
+	d.endRun(sessionID, reason, &info.ExitCode, info.Signal)
 	d.noteLaunchExited(sessionID, exit)
 	if err := d.removePTYSession(info.ID); err != nil {
 		d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
@@ -1816,7 +1816,7 @@ func (d *Daemon) bringBackLostRuntime(sessionID protocol.SessionID, info ptyback
 	monitor := d.sessionMonitor(sessionID)
 	monitor.ResetInput()
 	monitor.StopTranscriptWatchers()
-	d.closePluginDriverSession(sessionID, "exited", &info.ExitCode, info.Signal)
+	d.endRun(sessionID, harness.RunExited, &info.ExitCode, info.Signal)
 	if err := d.removePTYSession(info.ID); err != nil {
 		d.logf("pty backend remove on lost runtime failed for %s: %v", info.ID, err)
 	}
@@ -2001,7 +2001,7 @@ func (d *Daemon) terminateSessionChecked(sessionID protocol.SessionID, sig sysca
 		}
 		return err
 	}
-	d.closePluginDriverSession(sessionID, "killed", nil, signalName(sig))
+	d.endRun(sessionID, harness.RunKilled, nil, signalName(sig))
 	return nil
 }
 
@@ -2050,14 +2050,14 @@ func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionT
 			return nil, err
 		}
 	}
-	var retired sessionmonitor.DriverMetadata
+	var retired sessionmonitor.RunRecord
 	if prepared.Driver != nil {
 		if err := json.Unmarshal([]byte(*prepared.Driver), &retired); err != nil {
 			lifecycleLock.Unlock()
 			return nil, err
 		}
 	}
-	driverRun, err := d.store.PrepareSessionTeardown(sessionID, d.primaryTerminal(sessionID), store.AgentDriverReportCursor{PluginName: retired.Plugin, RunID: retired.Run, Seq: retired.Sequence, Route: retired.Route}, time.Now())
+	driverRun, err := d.store.PrepareSessionTeardown(sessionID, d.primaryTerminal(sessionID), store.AgentDriverReportCursor{PluginName: retired.Owner, RunID: retired.ID, Seq: retired.Sequence, Route: retired.Route}, time.Now())
 	if err != nil {
 		_, _ = d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "cancel", Driver: prepared.Driver})
 		lifecycleLock.Unlock()
@@ -2077,7 +2077,7 @@ func (d *Daemon) cancelSessionTeardown(sessionID protocol.SessionID, teardown *s
 		d.sessionMonitor(sessionID).ClearForcedStop()
 	} else {
 		run := teardown.driverRun
-		raw, _ := json.Marshal(sessionmonitor.DriverMetadata{Plugin: run.PluginName, Run: run.RunID, Sequence: run.Seq, Route: run.Route})
+		raw, _ := json.Marshal(sessionmonitor.RunRecord{Owner: run.PluginName, ID: run.RunID, Sequence: run.Seq, Route: run.Route})
 		if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "cancel", Driver: protocol.Ptr(string(raw))}); err != nil {
 			d.logf("cancel machine teardown: %v", err)
 		}
@@ -2127,8 +2127,8 @@ func (d *Daemon) notifyPreparedPluginDriverSessionClosed(sessionID protocol.Sess
 	}
 	if claimed {
 		if run.TerminalID != "" {
-			raw, _ := json.Marshal(sessionmonitor.DriverMetadata{Plugin: run.PluginName, Run: run.RunID, Sequence: run.Seq, Route: run.Route})
-			if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "notify", TerminalID: protocol.Ptr(run.TerminalID), Driver: protocol.Ptr(string(raw)), Signal: protocol.Ptr(signalName(sig))}); err != nil {
+			raw, _ := json.Marshal(sessionmonitor.RunRecord{Owner: run.PluginName, ID: run.RunID, Sequence: run.Seq, Route: run.Route})
+			if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "notify", Agent: protocol.Ptr(d.closedAgent(sessionID, teardown)), TerminalID: protocol.Ptr(run.TerminalID), Driver: protocol.Ptr(string(raw)), Signal: protocol.Ptr(signalName(sig))}); err != nil {
 				d.logf("notify machine teardown: %v", err)
 				return false
 			}
@@ -2137,6 +2137,16 @@ func (d *Daemon) notifyPreparedPluginDriverSessionClosed(sessionID protocol.Sess
 		}
 	}
 	return true
+}
+
+func (d *Daemon) closedAgent(sessionID protocol.SessionID, teardown *sessionTeardown) string {
+	if teardown.session != nil {
+		return teardown.session.Agent
+	}
+	if entry := d.store.SessionLedgerEntry(sessionID); entry != nil {
+		return entry.Agent
+	}
+	return ""
 }
 
 func (d *Daemon) sessionTeardownInFlight(sessionID protocol.SessionID) bool {
@@ -2240,7 +2250,7 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 			if len(d.store.OpenSessionsHolding(released)) > 0 {
 				released = ""
 			}
-			if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "released", Link: protocol.Ptr(link.kind()), Profile: protocol.Ptr(profile), Conversation: protocol.Ptr(released)}); err != nil {
+			if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "released", Agent: protocol.Ptr(session.Agent), Link: protocol.Ptr(link.kind()), Profile: protocol.Ptr(profile), Conversation: protocol.Ptr(released)}); err != nil {
 				d.logf("machine close release: %v", err)
 			}
 			pausepoint.At(pausepoint.SessionCloseReleased)

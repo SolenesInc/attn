@@ -265,8 +265,8 @@ func (m *Monitor) Begin(launch Launch) {
 	if !launch.LastModelRequestAt.IsZero() {
 		m.lastModelRequestAt = launch.LastModelRequestAt
 	}
-	if launch.Driver.Run != "" {
-		m.driver = launch.Driver
+	if launch.RunRecord.ID != "" {
+		m.runRecord = launch.RunRecord
 	}
 	if !launch.LastSeen.IsZero() {
 		m.touchedAt = launch.LastSeen
@@ -636,7 +636,7 @@ func (m *Monitor) publishResolution(current protocol.SessionState, resolution se
 func (m *Monitor) linkOwnsState() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.driver.Run != "" && m.policy.Signals.StateAuthority == harness.StateByHarness
+	return m.runRecord.ID != "" && m.policy.Signals.StateAuthority == harness.StateByHarness
 }
 
 func resolutionDetail(resolution sessionstate.Resolution) string {

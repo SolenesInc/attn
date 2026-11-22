@@ -46,6 +46,24 @@ func (h pluginHarness) Facts() harness.Facts {
 	}
 }
 
+func (h pluginHarness) RunEnded(e harness.RunEnd) {
+	h.d.notifyPluginDriverSessionClosed(e.Owner, e.Terminal, e.Run, string(e.Reason), e.ExitCode, e.Signal)
+}
+
+func (h pluginHarness) Route(facts harness.SessionFacts) (string, bool) {
+	reg, conn := h.d.ensurePluginRegistry().driverConnection(facts.Harness, facts.RunOwner)
+	if conn == nil {
+		return "", false
+	}
+	return pluginDriverRoute(reg), true
+}
+
+func (h pluginHarness) End(_ context.Context, e harness.Ending) {
+	if l := h.d.serverLinkFor(h.reg.Agent); l != nil {
+		l.sessionClosed(e.Session, e.Profile, e.Released)
+	}
+}
+
 func pluginSignals(declared map[string]bool) harness.Signals {
 	signals := harness.Signals{Heartbeat: 500 * time.Millisecond, ReviewerDwell: time.Minute, ReportsTools: declared["pull_request_reporting"]}
 	if declared["state_reporting"] {

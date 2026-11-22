@@ -364,7 +364,7 @@ func (m *Monitor) deliveryTargetMatchesLocked(delivery Delivery) bool {
 	if native == "" {
 		native = m.conversationInput.NativeID
 	}
-	return delivery.ExpectedDriverRun == "" || (m.driver.Run == delivery.ExpectedDriverRun && (delivery.ExpectedConversation == "" || native == delivery.ExpectedConversation))
+	return delivery.ExpectedDriverRun == "" || (m.runRecord.ID == delivery.ExpectedDriverRun && (delivery.ExpectedConversation == "" || native == delivery.ExpectedConversation))
 }
 
 func (l *lane) notificationTookLocked(source Maintenance, epochAtPlacing uint64) {

@@ -25,7 +25,7 @@ func (m *Monitor) ArmDriverSilence(run, plugin string) {
 
 func (m *Monitor) declareDriverSilent(run, plugin string) {
 	m.mu.Lock()
-	state, current := m.state.State, m.driver.Run
+	state, current := m.state.State, m.runRecord.ID
 	label := m.label
 	m.mu.Unlock()
 	if current != run || !pluginDriverDeclaredStates[state] {

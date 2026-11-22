@@ -50,6 +50,10 @@ const adapterPackages = "/internal/harness/internal/"
 
 var adapterImporters = []string{"/internal/harness/builtin", "/internal/harness/conformance"}
 
+var leakOneParts = []string{"Keeper", "SpareStarter", "Targets", "ScreenReader", "Renamer", "Runs", "Channel"}
+
+var sharedParts = []string{"OneShot", "Trust", "CallerResolver"}
+
 var appRoots = []string{"pty-host", "native", "cli", "mobile"}
 
 var appSkippedDirs = map[string]bool{"node_modules": true, "target": true, "dist": true, "build": true, ".git": true, "Pods": true, "DerivedData": true}
@@ -58,7 +62,7 @@ var appExtensions = map[string]bool{".rs": true, ".ts": true, ".tsx": true, ".js
 
 var appHarnessLiteral = regexp.MustCompile("[\"'](" + strings.Join(builtinHarnessIDs, "|") + ")[\"']")
 
-type finding struct{ path, fn, what string }
+type finding struct{ path, fn, what, part string }
 
 func (f finding) key() string { return f.path + "\t" + f.fn + "\t" + f.what }
 
@@ -204,6 +208,12 @@ type allowList []allowEntry
 func (a allowList) match(f finding) (allowEntry, bool) {
 	for _, entry := range a {
 		inPath := entry.path == f.path || strings.HasSuffix(entry.path, "/") && strings.HasPrefix(f.path, entry.path)
+		if strings.HasPrefix(entry.fn, "As[") {
+			if inPath && entry.fn == f.part {
+				return entry, true
+			}
+			continue
+		}
 		if inPath && (entry.fn == "*" || entry.fn == f.fn) {
 			return entry, true
 		}
@@ -414,6 +424,9 @@ func (c *checker) visit(node ast.Node) bool {
 		c.report(fmt.Sprintf("names %q", id))
 		return false
 	}
+	if index, ok := expr.(*ast.IndexExpr); ok {
+		c.checkAs(index)
+	}
 	if ident, ok := expr.(*ast.Ident); ok {
 		if obj := c.info.Uses[ident]; obj != nil && c.declaredInAdapter(obj.Pos()) {
 			c.report("reaches " + objectName(obj) + " (" + c.rel(c.fset.Position(obj.Pos())) + ")")
@@ -425,6 +438,43 @@ func (c *checker) visit(node ast.Node) bool {
 		}
 	}
 	return true
+}
+
+func (c *checker) checkAs(index *ast.IndexExpr) {
+	var name *ast.Ident
+	switch fn := index.X.(type) {
+	case *ast.Ident:
+		name = fn
+	case *ast.SelectorExpr:
+		name = fn.Sel
+	default:
+		return
+	}
+	fn, ok := c.info.Uses[name].(*types.Func)
+	if !ok || fn.Name() != "As" || fn.Pkg() == nil || !strings.HasSuffix(fn.Pkg().Path(), "/internal/harness") {
+		return
+	}
+	part := "?"
+	if tv, ok := c.info.Types[index.Index]; ok {
+		if named := namedType(tv.Type); named != nil {
+			part = named.Obj().Name()
+		}
+	}
+	switch {
+	case slices.Contains(sharedParts, part):
+	case slices.Contains(leakOneParts, part):
+		c.reportPart("asks harness.As["+part+"] outside the files "+allowFile+" names for it", "As["+part+"]")
+	default:
+		c.report("asks harness.As[" + part + "], which is no optional part")
+	}
+}
+
+func (c *checker) reportPart(what, part string) {
+	if c.seen[c.fn+"\t"+what] {
+		return
+	}
+	c.seen[c.fn+"\t"+what] = true
+	c.found = append(c.found, finding{path: c.path, fn: c.fn, what: what, part: part})
 }
 
 func (c *checker) harnessID(expr ast.Expr) (string, bool) {

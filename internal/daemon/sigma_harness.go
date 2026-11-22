@@ -25,6 +25,12 @@ func (h sigmaHarness) Facts() harness.Facts {
 	return facts
 }
 
+func (h sigmaHarness) End(_ context.Context, e harness.Ending) {
+	if l := h.d.serverLinkFor(h.Facts().ID); l != nil {
+		l.sessionClosed(e.Session, e.Profile, e.Released)
+	}
+}
+
 func (h sigmaHarness) Health(context.Context) harness.Health {
 	return h.d.executableHealth(h.Facts(), h.d.on(setting.SigmaEnabled))
 }

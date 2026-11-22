@@ -65,13 +65,13 @@ type AutoSettleView struct {
 	DismissArmed bool
 }
 
-type DriverMetadata struct {
-	Route          string
-	Plugin         string
-	Run            string
-	Sequence       uint64
-	Metadata       string
-	TranscriptPath string
+type RunRecord struct {
+	Route    string
+	Owner    string
+	ID       string
+	Sequence uint64
+	Note     string
+	Path     string
 }
 
 type ConversationObservation struct {
@@ -132,7 +132,7 @@ type View struct {
 	Turn                Value[TurnStamps]                          `fact:"session.state.changed"`
 	AutoSettle          Value[AutoSettleView]                      `fact:"session.state.changed"`
 	LastModelRequestAt  Value[time.Time]                           `fact:"session.model_request.started"`
-	Driver              Value[DriverMetadata]                      `fact:"session.state.changed"`
+	RunRecord           Value[RunRecord]                           `fact:"session.state.changed"`
 	Branch              Value[attngit.BranchInfo]                  `fact:"session.branch.changed"`
 	PullRequests        KeyedSet[string, PullRequest]              `fact:"session.pull_request.changed"`
 	SentFiles           KeyedSet[string, FileReport]               `fact:"-"`
@@ -179,7 +179,7 @@ func (m *Monitor) snapshotLocked() View {
 		Turn:                Value[TurnStamps]{m.turn},
 		AutoSettle:          Value[AutoSettleView]{auto},
 		LastModelRequestAt:  Value[time.Time]{m.lastModelRequestAt},
-		Driver:              Value[DriverMetadata]{m.driver},
+		RunRecord:           Value[RunRecord]{m.runRecord},
 		FirstReportAt:       Value[time.Time]{m.firstReportAt},
 		AwaitingHarness:     Value[bool]{m.awaitingHarness},
 		Run:                 Value[uint64]{m.input.epoch},
@@ -210,10 +210,10 @@ func (m *Monitor) keyLocked() Key {
 
 func (m *Monitor) changeStateLocked(state string, cause Cause, request, now time.Time) bool {
 	if driver, ok := cause.(LinkTurn); ok {
-		if driver.Run == "" || driver.Seq == 0 || m.driver.Run != driver.Run || m.driver.Sequence >= driver.Seq {
+		if driver.Run == "" || driver.Seq == 0 || m.runRecord.ID != driver.Run || m.runRecord.Sequence >= driver.Seq {
 			return false
 		}
-		m.driver.Sequence = driver.Seq
+		m.runRecord.Sequence = driver.Seq
 		if request.After(m.lastModelRequestAt) {
 			m.lastModelRequestAt = request
 		}

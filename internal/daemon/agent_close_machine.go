@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
@@ -16,7 +17,7 @@ func (d *Daemon) closeAgentMachine(_ context.Context, msg protocol.AgentLaunchCl
 	switch msg.Phase {
 	case "prepare":
 		monitor.MarkForcedStop()
-		driver := monitor.EndDriverRun()
+		driver := monitor.EndRun()
 		raw, err := json.Marshal(driver)
 		if err != nil {
 			return result, err
@@ -27,13 +28,13 @@ func (d *Daemon) closeAgentMachine(_ context.Context, msg protocol.AgentLaunchCl
 		monitor.ResumeUsage()
 		monitor.ResetInput()
 		monitor.EnsureTranscriptWatcher(d.store.GetSessionConversation(msg.SessionID).TranscriptPath)
-		var driver sessionmonitor.DriverMetadata
+		var driver sessionmonitor.RunRecord
 		if msg.Driver != nil {
 			if err := json.Unmarshal([]byte(*msg.Driver), &driver); err != nil {
 				return result, err
 			}
-			if driver.Run != "" {
-				monitor.RestoreDriverRun(driver)
+			if driver.ID != "" {
+				monitor.RestoreRun(driver)
 			}
 		}
 	case "drain":
@@ -55,18 +56,16 @@ func (d *Daemon) closeAgentMachine(_ context.Context, msg protocol.AgentLaunchCl
 	case "committed":
 		d.forgetMonitor(msg.SessionID)
 	case "released":
-		if l := d.linkNamed(protocol.Deref(msg.Link)); l != nil {
-			l.sessionClosed(msg.SessionID, protocol.Deref(msg.Profile), protocol.Deref(msg.Conversation))
-		}
+		d.harnessOf(protocol.Deref(msg.Agent)).End(d.life.Context(), harness.Ending{Session: msg.SessionID, Profile: protocol.Deref(msg.Profile), Released: protocol.Deref(msg.Conversation)})
 	case "notify":
-		var driver sessionmonitor.DriverMetadata
+		var driver sessionmonitor.RunRecord
 		if msg.Driver != nil {
 			if err := json.Unmarshal([]byte(*msg.Driver), &driver); err != nil {
 				return result, err
 			}
 		}
-		if driver.Run != "" {
-			d.notifyPluginDriverSessionClosed(driver.Plugin, protocol.Deref(msg.TerminalID), driver.Run, "killed", nil, protocol.Deref(msg.Signal))
+		if driver.ID != "" {
+			d.runEnded(protocol.Deref(msg.Agent), harness.RunEnd{Session: msg.SessionID, Terminal: protocol.Deref(msg.TerminalID), Owner: driver.Owner, Run: driver.ID, Reason: harness.RunKilled, Signal: protocol.Deref(msg.Signal)})
 		}
 	default:
 		return result, fmt.Errorf("unknown agent close phase %q", msg.Phase)

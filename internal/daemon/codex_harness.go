@@ -31,6 +31,10 @@ func (h codexHarness) Facts() harness.Facts {
 	return facts
 }
 
+func (h codexHarness) End(_ context.Context, e harness.Ending) {
+	h.d.codexShared().sessionClosed(e.Session, e.Profile, e.Released)
+}
+
 func (h codexHarness) Health(context.Context) harness.Health {
 	return h.d.executableHealth(h.Facts(), true)
 }

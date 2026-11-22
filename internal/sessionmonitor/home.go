@@ -54,7 +54,7 @@ type Launch struct {
 	StateUpdated         time.Time
 	LastModelRequestAt   time.Time
 	Turn                 TurnStamps
-	Driver               DriverMetadata
+	RunRecord            RunRecord
 	Cost                 sessioncost.Checkpoint
 	Exit                 *Exit
 	Conversation         ConversationObservation

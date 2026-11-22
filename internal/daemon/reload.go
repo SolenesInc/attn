@@ -557,7 +557,7 @@ func (p *preparedPluginReload) abort() {
 		return
 	}
 	p.completed = true
-	p.d.abortPluginSessionLaunch(p.sessionID, "launch_failed")
+	p.d.abortLaunch(p.sessionID)
 }
 
 func (p *preparedPluginReload) commit() error {
@@ -570,7 +570,7 @@ func (p *preparedPluginReload) commit() error {
 	}
 	p.completed = true
 	if oldRun.RunID != "" && oldRun.RunID != p.runID {
-		p.d.notifyPluginDriverSessionClosed(oldRun.PluginName, p.d.primaryTerminal(p.sessionID), oldRun.RunID, "reloaded", nil, "")
+		p.d.runEnded(p.d.agentOf(p.sessionID), harness.RunEnd{Session: p.sessionID, Terminal: p.d.primaryTerminal(p.sessionID), Owner: oldRun.PluginName, Run: oldRun.RunID, Reason: harness.RunReloaded})
 	}
 	return nil
 }

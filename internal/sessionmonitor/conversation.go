@@ -167,7 +167,7 @@ func (m *Monitor) candidate(proposed Conversation) *Monitor {
 	now := time.Now()
 	candidate := &Monitor{registry: m.registry, watch: w, epoch: rand.Text(), conversation: proposed.NativeID,
 		conversationInput: proposed, agent: m.agent, profile: m.profile, link: m.link, startedAt: now, directory: m.directory, branch: m.branch,
-		policy: m.policy, initialized: true, driver: m.driver,
+		policy: m.policy, initialized: true, runRecord: m.runRecord,
 		state: StateView{State: protocol.SessionStateIdle, Since: now, Updated: now}}
 	if proposed.Terminal != "" && proposed.NativeID != m.conversationInput.NativeID {
 		candidate.policy.TitlesAllowed = true
@@ -470,7 +470,7 @@ func (m *Monitor) sessionFactsLocked() harness.SessionFacts {
 	return harness.SessionFacts{
 		Session: m.session, Harness: string(m.agent), Profile: m.profile, Link: m.link, Terminal: m.primaryTerminalLocked(),
 		Conversation: conversation.NativeID, Path: conversation.TranscriptPath,
-		Run: m.driver.Run, RunOwner: m.driver.Plugin, Route: m.driver.Route,
+		Run: m.runRecord.ID, RunOwner: m.runRecord.Owner, Route: m.runRecord.Route,
 	}
 }
 

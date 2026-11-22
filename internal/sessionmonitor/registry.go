@@ -86,7 +86,7 @@ type Monitor struct {
 	epoch                string
 	revision             uint64
 	state                StateView
-	driver               DriverMetadata
+	runRecord            RunRecord
 	turn                 TurnStamps
 	lastModelRequestAt   time.Time
 	firstReportAt        time.Time
@@ -139,7 +139,7 @@ type Monitor struct {
 	titleAttempted       bool
 	titleInitialPrompt   *[sha256.Size]byte
 	owedInitialPrompt    string
-	driverLaunch         *driverLaunch
+	launchGate           *launchGate
 	touchedAt            time.Time
 	views                atomic.Pointer[terminalViews]
 	link                 string
@@ -331,7 +331,7 @@ func (m *Monitor) initializeLocked(start Start) {
 	m.state = StateView{State: launch.State, Since: launch.StateSince, Updated: launch.StateUpdated}
 	m.lastModelRequestAt = launch.LastModelRequestAt
 	m.turn = launch.Turn
-	m.driver = launch.Driver
+	m.runRecord = launch.RunRecord
 	m.loadCostLocked(launch.Cost)
 	m.exit = launch.Exit
 	m.conversationInput = Conversation{ConversationObservation: launch.Conversation}
@@ -436,8 +436,8 @@ func (r *Registry) Close() {
 	}
 }
 
-type driverLaunch struct {
-	plugin  string
+type launchGate struct {
+	owner   string
 	run     string
 	replays []func()
 	exit    *ptybackend.ExitInfo

@@ -46,11 +46,56 @@ func (d *Daemon) conversation(sessionID protocol.SessionID) harness.Conversation
 }
 
 func (d *Daemon) conversationFor(facts harness.SessionFacts) harness.Conversation {
-	h, err := d.harness(facts.Harness)
-	if err != nil {
-		h = unconnectedHarness(d, facts.Harness)
+	return d.harnessOf(facts.Harness).Conversation(facts)
+}
+
+func (d *Daemon) harnessOf(id harness.ID) harness.Harness {
+	if h, err := d.harness(id); err == nil {
+		return h
 	}
-	return h.Conversation(facts)
+	return unconnectedHarness(d, id)
+}
+
+func (d *Daemon) agentOf(sessionID protocol.SessionID) harness.ID {
+	if session := d.store.Get(sessionID); session != nil {
+		return session.Agent
+	}
+	return ""
+}
+
+func (d *Daemon) runEnded(agent harness.ID, e harness.RunEnd) {
+	if runs, ok := harness.As[harness.Runs](d.harnessOf(agent)); ok {
+		runs.RunEnded(e)
+	}
+}
+
+func (d *Daemon) runRoute(facts harness.SessionFacts) (string, bool) {
+	if runs, ok := harness.As[harness.Runs](d.harnessOf(facts.Harness)); ok {
+		return runs.Route(facts)
+	}
+	return "", false
+}
+
+func (d *Daemon) endRun(sessionID protocol.SessionID, reason harness.RunEndReason, exitCode *int, signal string) {
+	session := d.store.Get(sessionID)
+	if session == nil {
+		d.logf("run end skipped: session=%s reason=%s no longer in store", sessionID, reason)
+		return
+	}
+	run := d.endAgentDriverRun(sessionID)
+	if run.RunID == "" {
+		d.logf("run end skipped: session=%s reason=%s has no active run", sessionID, reason)
+		return
+	}
+	d.sessionMonitor(sessionID).ResolveSoon()
+	d.runEnded(session.Agent, harness.RunEnd{Session: sessionID, Terminal: d.primaryTerminal(sessionID), Owner: run.PluginName, Run: run.RunID, Reason: reason, ExitCode: exitCode, Signal: signal})
+}
+
+func (d *Daemon) abortLaunch(sessionID protocol.SessionID) {
+	owner, run, launching := d.sessionMonitor(sessionID).AbortLaunch()
+	if launching {
+		d.runEnded(d.agentOf(sessionID), harness.RunEnd{Session: sessionID, Terminal: d.primaryTerminal(sessionID), Owner: owner, Run: run, Reason: harness.RunLaunchFailed})
+	}
 }
 
 type typedConversation struct{ refusal error }

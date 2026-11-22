@@ -31,6 +31,8 @@ func (h claudeHarness) Facts() harness.Facts {
 	return facts
 }
 
+func (claudeHarness) End(context.Context, harness.Ending) {}
+
 func (h claudeHarness) Health(context.Context) harness.Health {
 	return h.d.executableHealth(h.Facts(), true)
 }

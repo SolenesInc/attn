@@ -120,7 +120,7 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 			if reg.Capabilities["agent_tools"] {
 				p.Params.AgentTools = d.pluginAgentTools(opts.ID)
 			}
-			d.sessionMonitor(sessionID).BeginDriverLaunch(p.Plugin, p.Params.RunID)
+			d.sessionMonitor(sessionID).BeginLaunch(p.Plugin, p.Params.RunID)
 			prepared = &preparedPluginReload{d: d, sessionID: sessionID, pluginName: p.Plugin, runID: p.Params.RunID, route: pluginDriverRoute(reg)}
 		}
 		if p.LaunchInstructions {
@@ -250,7 +250,7 @@ func (d *Daemon) commitAgentLaunch(_ context.Context, msg protocol.LaunchCommitt
 	if !ok {
 		return struct{}{}, nil
 	}
-	if exit := d.sessionMonitor(sessionID).FinishDriverLaunch(protocol.Deref(msg.RunID)); exit != nil {
+	if exit := d.sessionMonitor(sessionID).FinishLaunch(protocol.Deref(msg.RunID)); exit != nil {
 		d.life.Go("handlePTYExitAfterPluginLaunch", func() { d.handlePTYExit(*exit) })
 	}
 	return struct{}{}, nil
@@ -266,7 +266,7 @@ func (complete launchCompletion) finish() {
 
 func (d *Daemon) abortMachineAgent(sessionID protocol.SessionID, terminal harness.TerminalID) {
 	d.sessionMonitor(sessionID).ForgetInitialPrompt()
-	d.abortPluginSessionLaunch(sessionID, "launch_failed")
+	d.abortLaunch(sessionID)
 	d.linkTerminalDropped(terminal)
 }
 
