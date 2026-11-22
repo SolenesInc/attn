@@ -212,16 +212,19 @@ func TestAnInstalledServerPluginKeepsConversationOwnershipThroughRegistrationAnd
 			if closed.Code != 0 {
 				t.Fatalf("close: %s%s", closed.Stdout, closed.Stderr)
 			}
+			server.AwaitStopped()
+			launched := s.AppServers(fakeagent.SampleServer)
 			resumed := testworld.Request(app, protocol.SessionReopenMessage{Cmd: protocol.CmdSessionReopen, SessionID: protocol.SessionID(session), RequestID: protocol.Ptr("resume-server")}, protocol.EventSessionReopenResult, func(r protocol.SessionReopenResultMessage) bool { return r.RequestID == "resume-server" })
 			if !resumed.Success {
 				t.Fatalf("ledger resume: %+v", resumed)
 			}
 			again = s.Launched(session)
+			server = s.AppServerAfter(fakeagent.SampleServer, launched)
 			if again.ConversationID != conversation || server.Started(conversation).Target != "devvm" {
 				t.Fatalf("ledger resume changed conversation/target: %+v", again)
 			}
 
-			t.Logf("reload and ledger resume kept native conversation %s and target devvm", conversation)
+			t.Logf("reload, and a ledger resume on a server attn started after the last one let go, kept native conversation %s and target devvm", conversation)
 			terminal := s.Terminal(session)
 			if err := s.Client().ObserveAgentConversation(protocol.TerminalID(terminal), "view-moved-on", ""); err != nil {
 				t.Fatal(err)
@@ -287,7 +290,7 @@ func TestAnInstalledServerPluginKeepsConversationOwnershipThroughRegistrationAnd
 			control = accept()
 			direct("hidden while plugin restarts")
 			register(control)
-			if n := s.AppServers(fakeagent.SampleServer); n != 1 {
+			if n := s.AppServers(fakeagent.SampleServer) - launched; n != 1 {
 				t.Fatalf("recovery started %d servers", n)
 			}
 			t.Logf("plugin restart, late registration after live-view and zero-view daemon restarts: same session %s and profile %s, one server, direct request IDs", session, profile)
