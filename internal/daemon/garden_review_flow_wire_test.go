@@ -17,7 +17,7 @@ import (
 )
 
 func TestAGardenReviewFreezesItsCandidatesAndRecipe(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 	writeCrewCharter(t, w, "trellis")
 	app, cli := w.App(), w.Client()
 	tender := gardenReviewConversationTending(t, w, app, cli, "interrupted work")
