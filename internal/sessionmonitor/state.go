@@ -115,9 +115,6 @@ func (m *Monitor) ApplyState(change Change) bool {
 		if effects, _ := EffectsOf(change.Cause); effects.Touch {
 			m.touchedAt = time.Now()
 		}
-		if m.firstReportAt.IsZero() && HarnessReportedState(change.Origin.Source) {
-			m.firstReportAt = time.Now()
-		}
 		deadline := m.turn.SnoozedUntil
 		stop := runStop{quiet: m.policy.QuietNotifications && m.notificationStopLocked()}
 		stop.openedTurn = m.openTurnLocked(time.Now(), m.evidence.IdleCompaction || stop.quiet)

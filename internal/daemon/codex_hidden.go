@@ -219,6 +219,7 @@ func (r *codexShared) traceServerStatus(sessionID protocol.SessionID, status str
 func (r *codexShared) report(sessionID protocol.SessionID, session *protocol.Session, status string) {
 	now := time.Now()
 	r.traceServerStatus(sessionID, status, now)
+	reporter := harness.FromSession(sessionID)
 	if status == pty.ProgramIdle {
 		evidence, _ := r.d.sessionMonitor(sessionID).Evidence()
 		bracketOpen := evidence.TurnOpen || evidence.ToolOpen
@@ -226,10 +227,17 @@ func (r *codexShared) report(sessionID protocol.SessionID, session *protocol.Ses
 			return
 		}
 		if bracketOpen {
-			r.d.sessionMonitor(sessionID).RecordTurnAborted("the shared Codex app-server ended the turn", now, now)
+			r.d.events().Turn(reporter, now, harness.TurnEvent{Turn: harness.TurnAborted, Inferred: true, Detail: "the shared Codex app-server ended the turn"})
 		}
 	}
-	r.d.sessionMonitor(sessionID).RecordServerStatus(status, now)
+	r.d.events().Turn(reporter, now, harness.TurnEvent{Turn: appServerTurns[status], Inferred: true, Status: true})
+}
+
+var appServerTurns = map[string]harness.Turn{
+	pty.ProgramWorking:           harness.TurnRunning,
+	pty.ProgramBlockedPermission: harness.TurnApproval,
+	pty.ProgramBlockedQuestion:   harness.TurnQuestion,
+	pty.ProgramIdle:              harness.TurnEnded,
 }
 
 func inTurn(state protocol.SessionState) bool {

@@ -11,7 +11,6 @@ const (
 	StateSourceHook            = "hook_state"
 	StateSourceStopHook        = "hook_stop"
 	StateSourceClassifier      = "classifier"
-	StateSourceTranscript      = "transcript_watcher"
 	StateSourcePluginDriver    = "plugin_driver"
 	StateSourceLink            = "link"
 	StateSourceServerReport    = "server_report"
@@ -23,13 +22,20 @@ const (
 	StateSourceResolver        = "resolver"
 )
 
-func HarnessReportedState(source string) bool {
-	switch source {
-	case StateSourceHook, StateSourceStopHook, StateSourceHookNotify, StateSourceHookStopFailure,
-		StateSourceHookCompaction, StateSourceTranscript, StateSourcePluginDriver, StateSourceLink, StateSourceServerReport:
-		return true
+// Reported records the harness's first report of this launch.
+func (m *Monitor) Reported() {
+	if m == nil {
+		return
 	}
-	return false
+	m.mu.Lock()
+	if !m.firstReportAt.IsZero() {
+		m.mu.Unlock()
+		return
+	}
+	m.firstReportAt = time.Now()
+	view := m.viewLocked()
+	m.mu.Unlock()
+	m.publish(view)
 }
 
 func Stamped(obs statetrace.Observation) statetrace.Observation {
@@ -47,19 +53,10 @@ func (m *Monitor) Trace(obs statetrace.Observation) {
 		return
 	}
 	obs = Stamped(obs)
-	var report *View
 	m.mu.Lock()
 	m.recordLocked(obs)
-	if m.firstReportAt.IsZero() && HarnessReportedState(obs.Source) {
-		m.firstReportAt = obs.RecordedAt
-		view := m.viewLocked()
-		report = &view
-	}
 	m.mu.Unlock()
 	m.logf("%s", obs.LogLine(protocol.SessionID(m.Label())))
-	if report != nil {
-		m.publish(*report)
-	}
 }
 
 func (m *Monitor) traceApplied(view View) {

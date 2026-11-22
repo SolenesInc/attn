@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"github.com/victorarias/attn/internal/harness"
 	"strings"
 	"time"
 
@@ -412,7 +413,7 @@ func (f *serverFeed) reportCompactions() {
 	if len(compactions) > 0 {
 		trigger = compactions[0].Trigger
 	}
-	monitor.RecordCompaction(len(compactions) > 0, trigger)
+	f.p.d.events().Compacting(harness.FromSession(f.session), len(compactions) > 0, trigger)
 }
 
 func decodeJSON(raw json.RawMessage) any {

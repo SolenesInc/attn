@@ -3166,13 +3166,20 @@ func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage
 	}
 }
 
+var hookTurns = map[string]harness.Turn{
+	protocol.StateWorking:         harness.TurnRunning,
+	protocol.StatePendingApproval: harness.TurnApproval,
+	protocol.StateWaitingInput:    harness.TurnQuestion,
+	protocol.StateIdle:            harness.TurnEnded,
+}
+
 func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 	sessionID := d.sessionInTerminal(msg.ID)
 	monitor := d.monitorInTerminal(msg.ID, sessionID)
 	d.logf("hook evidence: id=%s state=%s", sessionID, msg.State)
 	d.tracePermissionMode(sessionID, protocol.Deref(msg.PermissionMode))
 	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHook}, msg.State)
-	monitor.RecordBracket(msg.State)
+	d.events().Turn(harness.FromTerminal(msg.ID), time.Now(), harness.TurnEvent{Turn: hookTurns[msg.State]})
 	if strings.EqualFold(strings.TrimSpace(protocol.Deref(msg.HookEvent)), "user_prompt_submit") &&
 		strings.TrimSpace(protocol.Deref(msg.Prompt)) != "" {
 		typed := monitor.ObservePromptSubmitted(time.Now())
@@ -3215,8 +3222,13 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 	if classifies {
 		monitor.CancelAutoSettle("stop judged")
 	}
-	monitor.RecordStopFacts(!relaxBackgroundWork && hasActiveBackgroundTask(msg), hasPendingSessionCron(msg))
-	if stopIsNonTerminal(msg, relaxBackgroundWork) {
+	stop := &harness.Stop{
+		Left:       &harness.Left{BackgroundWork: !relaxBackgroundWork && hasActiveBackgroundTask(msg), PendingCron: hasPendingSessionCron(msg)},
+		Yielded:    stopIsNonTerminal(msg, relaxBackgroundWork),
+		Classifies: classifies,
+	}
+	d.events().Turn(harness.FromTerminal(msg.ID), time.Now(), harness.TurnEvent{Turn: harness.TurnEnded, Stop: stop})
+	if stop.Yielded {
 		tasks := describeBackgroundTasks(msg)
 		d.logf(
 			"handleStop: non-terminal stop session=%s pending_crons=%d background_tasks=[%s]",
@@ -3240,7 +3252,6 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		return
 	}
 
-	monitor.RecordTurnEnded(classifies)
 	if monitor.Session() != "" {
 		monitor.EnsureTranscriptWatcher(msg.TranscriptPath)
 	}

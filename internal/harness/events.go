@@ -2,11 +2,11 @@ package harness
 
 import "time"
 
-// Turn is where a session's turn stands after a link's report.
+// Turn is where a session's turn stands after a report.
 type Turn uint8
 
 const (
-	// TurnUnknown is a link that cannot tell, such as one whose harness went quiet.
+	// TurnUnknown is a report that cannot tell, such as one whose harness went quiet.
 	TurnUnknown Turn = iota
 	// TurnRunning is a turn that started, or went on after an approval or a question.
 	TurnRunning
@@ -16,19 +16,69 @@ const (
 	TurnQuestion
 	// TurnEnded leaves the agent at its prompt.
 	TurnEnded
+	// TurnPromptIdle: the harness says its prompt has waited a while for the user.
+	TurnPromptIdle
+	// TurnAborted: the turn stopped before it finished.
+	TurnAborted
+	// TurnFailed: the turn ended in an error.
+	TurnFailed
 )
 
-// TurnEvent is one report on a session's turn. Epoch (one launch of the harness) and Seq order
-// a link's reports that can arrive reordered: core drops one from another epoch or not after the last.
+// TurnEvent is one report on a session's turn.
 type TurnEvent struct {
-	Turn  Turn
+	Turn Turn
+	// Epoch (one launch of the harness) and Seq order the reports of a harness that sets state itself, which can
+	// arrive reordered: core drops one from another epoch or not after the last. A report with an epoch sets the state.
 	Epoch string
 	Seq   uint64
 	// Restated repeats the harness's state after a reconnect; core takes it only while it cannot tell.
 	Restated bool
+	// Inferred: attn read the report from what the harness did not say, so it does not show that a launch started.
+	Inferred bool
+	// Status: a server's program status, which holds until its next one.
+	Status bool
+	// Detail is the harness's words for an approval, an aborted turn or a failure.
+	Detail string
+	// Stop is what the harness said as its turn stopped.
+	Stop *Stop
+	// Completion counts the server's finished runs, so a run that ended while attn was away is seen once.
+	Completion int64
+	// Said is the answer the turn ended with, classified for the state it leaves.
+	Said string
 }
 
-// Events is core's side of a link: what the harness tells attn, addressed by session.
+// Stop is a turn's end as the harness reported it.
+type Stop struct {
+	// Left is what the harness's stop hook says it left running.
+	Left *Left
+	// Yielded: work goes on in the background, so the stop ends no turn.
+	Yielded    bool
+	Classifies bool
+}
+
+// Left is the work a stopped turn left behind.
+type Left struct {
+	BackgroundWork bool
+	PendingCron    bool
+}
+
+// Reporter is where an event came from: a session, or a hook's terminal, which can show a conversation that is not
+// yet its session's.
+type Reporter struct {
+	session  SessionID
+	terminal TerminalID
+}
+
+func FromSession(s SessionID) Reporter { return Reporter{session: s} }
+
+func FromTerminal(t TerminalID) Reporter { return Reporter{terminal: t} }
+
+func (r Reporter) Session() SessionID { return r.session }
+
+func (r Reporter) Terminal() TerminalID { return r.terminal }
+
+// Events is core's side of a harness: everything the harness tells attn arrives here.
 type Events interface {
-	Turn(s SessionID, at time.Time, e TurnEvent)
+	Turn(r Reporter, at time.Time, e TurnEvent)
+	Compacting(r Reporter, active bool, trigger string)
 }

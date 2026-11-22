@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/command"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/statetrace"
@@ -23,9 +24,6 @@ func (d *Daemon) recordStateObservation(sessionID protocol.SessionID, obs statet
 	}
 	obs = sessionmonitor.Stamped(obs)
 	d.logf("%s", obs.LogLine(sessionID))
-	if sessionmonitor.HarnessReportedState(obs.Source) {
-		d.noteLaunchStarted(sessionID)
-	}
 }
 
 func (d *Daemon) traceStateVeto(sessionID protocol.SessionID, origin sessionmonitor.Origin, claim, reason string) {
@@ -114,7 +112,7 @@ func (d *Daemon) handleHookNotification(conn net.Conn, msg *protocol.HookNotific
 	}
 	message := strings.TrimSpace(protocol.Deref(msg.Message))
 	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHookNotify, Detail: message}, kind)
-	d.monitorInTerminal(msg.ID, sessionID).RecordNotification(kind, message)
+	d.events().Turn(harness.FromTerminal(msg.ID), time.Now(), notificationTurn(kind, message))
 	d.sendOK(conn)
 }
 
@@ -127,7 +125,7 @@ func (d *Daemon) handleHookStopFailure(conn net.Conn, msg *protocol.HookStopFail
 	}
 	message := strings.TrimSpace(protocol.Deref(msg.ErrorMessage))
 	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHookStopFailure, Detail: message}, errorType)
-	d.monitorInTerminal(msg.ID, sessionID).RecordStopFailure(errorType, message)
+	d.events().Turn(harness.FromTerminal(msg.ID), time.Now(), harness.TurnEvent{Turn: harness.TurnFailed, Detail: stopFailureDetail(errorType, message)})
 	d.sendOK(conn)
 }
 
@@ -139,8 +137,18 @@ func (d *Daemon) handleHookCompaction(conn net.Conn, msg *protocol.HookCompactio
 	}
 	trigger := strings.TrimSpace(protocol.Deref(msg.Trigger))
 	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHookCompaction, Detail: trigger}, phase)
-	d.monitorInTerminal(msg.ID, sessionID).RecordCompaction(msg.Active, trigger)
+	d.events().Compacting(harness.FromTerminal(msg.ID), msg.Active, trigger)
 	d.sendOK(conn)
+}
+
+func notificationTurn(kind, message string) harness.TurnEvent {
+	switch kind {
+	case "permission_prompt":
+		return harness.TurnEvent{Turn: harness.TurnApproval, Detail: message}
+	case "idle_prompt":
+		return harness.TurnEvent{Turn: harness.TurnPromptIdle}
+	}
+	return harness.TurnEvent{Turn: harness.TurnUnknown}
 }
 
 func (d *Daemon) tracePermissionMode(sessionID protocol.SessionID, mode string) {
@@ -149,4 +157,12 @@ func (d *Daemon) tracePermissionMode(sessionID protocol.SessionID, mode string) 
 		return
 	}
 	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourcePermissionMode}, mode)
+}
+
+func stopFailureDetail(errorType, message string) string {
+	detail := strings.TrimSpace(errorType)
+	if message = strings.TrimSpace(message); message != "" {
+		detail += ": " + message
+	}
+	return detail
 }

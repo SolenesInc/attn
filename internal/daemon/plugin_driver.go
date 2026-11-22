@@ -582,7 +582,7 @@ func validatePluginReportCursor(runID string, seq uint64) error {
 
 func (d *Daemon) applyPluginReportedState(params pluginReportStateParams) {
 	d.notePluginDriverReport(params.SessionID)
-	d.linkEvents().Turn(params.SessionID, time.Now(), harness.TurnEvent{
+	d.events().Turn(harness.FromSession(params.SessionID), time.Now(), harness.TurnEvent{
 		Turn:     pluginReportedTurns[strings.TrimSpace(params.State)],
 		Epoch:    params.RunID,
 		Seq:      params.Seq,

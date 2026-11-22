@@ -463,31 +463,32 @@ func (m *Monitor) RecordReviewer(inLoop bool) {
 }
 
 const (
-	notifyPermissionPrompt = "permission_prompt"
-	notifyIdlePrompt       = "idle_prompt"
-	compactionTriggerAuto  = "auto"
+	compactionTriggerAuto = "auto"
 )
 
-func (m *Monitor) RecordNotification(notificationType string, message string) {
+func (m *Monitor) RecordApproval(detail string) {
 	if m == nil {
 		return
 	}
 	at := time.Now()
-	switch strings.TrimSpace(notificationType) {
-	case notifyPermissionPrompt:
-		m.RecordEvidence(at, func(e *Evidence) {
-			e.LastHarnessEvent = &sessionstate.Observation{
-				Source:     sessionstate.SourceHarnessEvent,
-				Claim:      sessionstate.ClaimApprovalPending,
-				Detail:     message,
-				ObservedAt: at,
-			}
-		})
-	case notifyIdlePrompt:
-		m.RecordEvidence(at, func(e *Evidence) {
-			e.PromptIdleAt = at
-		})
+	m.RecordEvidence(at, func(e *Evidence) {
+		e.LastHarnessEvent = &sessionstate.Observation{
+			Source:     sessionstate.SourceHarnessEvent,
+			Claim:      sessionstate.ClaimApprovalPending,
+			Detail:     detail,
+			ObservedAt: at,
+		}
+	})
+}
+
+func (m *Monitor) RecordPromptIdle() {
+	if m == nil {
+		return
 	}
+	at := time.Now()
+	m.RecordEvidence(at, func(e *Evidence) {
+		e.PromptIdleAt = at
+	})
 }
 
 func (m *Monitor) RecordStopFailure(errorType string, message string) {

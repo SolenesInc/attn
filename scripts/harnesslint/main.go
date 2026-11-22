@@ -38,7 +38,6 @@ var adapterFilePatterns = []string{
 	"internal/daemon/plugin_launch_instructions*.go",
 	"internal/daemon/plugin_skill_dirs*.go",
 	"internal/daemon/link_runtime*.go",
-	"internal/daemon/link_events*.go",
 	"internal/agent/claude.go",
 	"internal/agent/claude_models.go",
 	"internal/agent/claude_spare.go",

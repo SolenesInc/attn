@@ -316,33 +316,38 @@ func (l *serverLink) observe(sessionID protocol.SessionID, source, status string
 	now := time.Now()
 	l.d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: source, ObservedAt: now}, status)
 	evidence, _ := monitor.Evidence()
+	reporter, inferred := harness.FromSession(sessionID), source == sessionmonitor.StateSourceServerQuiet
+	turn := func(e harness.TurnEvent) {
+		e.Inferred = inferred
+		l.d.events().Turn(reporter, time.Now(), e)
+	}
 	switch status {
 	case "working":
 		if !evidence.TurnOpen {
-			monitor.RecordBracket(protocol.StateWorking)
+			turn(harness.TurnEvent{Turn: harness.TurnRunning})
 		}
-		monitor.RecordServerStatus(pty.ProgramWorking, time.Now())
+		turn(harness.TurnEvent{Turn: harness.TurnRunning, Status: true})
 	case "waiting":
-		monitor.RecordServerStatus(pty.ProgramBlockedPermission, now)
+		turn(harness.TurnEvent{Turn: harness.TurnApproval, Status: true})
 	case "idle":
 		answered := ended != nil && ended.Outcome == "answered"
 		if evidence.TurnOpen || evidence.ToolOpen || ended != nil {
-			monitor.RecordTurnEnded(answered)
+			turn(harness.TurnEvent{Turn: harness.TurnEnded, Stop: &harness.Stop{Classifies: answered}})
 		}
-		monitor.RecordServerStatus(pty.ProgramIdle, now)
 		switch {
 		case ended == nil:
+			turn(harness.TurnEvent{Turn: harness.TurnEnded, Status: true})
 		case answered:
-			said := ended.Said
-			monitor.RecordServerCompletion(ended.Completion)
-			l.d.life.Go(l.b.agent+"Classify", func() { monitor.ClassifyMessage(said) })
+			turn(harness.TurnEvent{Turn: harness.TurnEnded, Status: true, Completion: ended.Completion, Said: ended.Said})
 		case ended.Outcome == "interrupted":
-			monitor.RecordTurnAborted("the "+l.b.name+" run was interrupted", time.Now(), time.Now())
-			monitor.RecordServerCompletion(ended.Completion)
+			turn(harness.TurnEvent{Turn: harness.TurnEnded, Status: true})
+			turn(harness.TurnEvent{Turn: harness.TurnAborted, Detail: "the " + l.b.name + " run was interrupted", Completion: ended.Completion})
 		default:
-			monitor.RecordStopFailure(ended.Outcome, ended.Message)
-			monitor.RecordServerCompletion(ended.Completion)
+			turn(harness.TurnEvent{Turn: harness.TurnEnded, Status: true})
+			turn(harness.TurnEvent{Turn: harness.TurnFailed, Detail: stopFailureDetail(ended.Outcome, ended.Message), Completion: ended.Completion})
 		}
+	default:
+		turn(harness.TurnEvent{Turn: harness.TurnUnknown})
 	}
 }
 
