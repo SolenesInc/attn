@@ -23,7 +23,7 @@ pub(crate) struct Handover {
     branch: TextEdit,
     from: TextEdit,
     path: TextEdit,
-    agent: TextEdit,
+    agent: String,
     share: bool,
 }
 
@@ -102,7 +102,7 @@ impl Handover {
             },
             cwd: TextEdit::new(cwd),
             branch: TextEdit::new(c.branch.clone().unwrap_or_default()),
-            agent: TextEdit::new(c.agent.clone()),
+            agent: c.agent.clone(),
             ..Handover::default()
         }
     }
@@ -209,7 +209,27 @@ impl Sheet<'_> {
                     .key(spot.key("share")),
             ));
         }
-        form = form.push(field.line("agent", "Agent", "codex", &draft.agent, |h| &mut h.agent));
+        let harnesses = self.harnesses.iter().filter(|h| h.offered).map(|harness| {
+            let id = harness.id.clone();
+            let spot = spot.clone();
+            attn_ui::system::Segment::new(spot.key(&format!("agent.{id}")), harness.name.clone())
+                .chosen(draft.agent == harness.id)
+                .on_press_tx(move |state: &mut State, _: &mut Tx| {
+                    if let Some(draft) = spot.handover_mut(state) {
+                        draft.agent = id.clone();
+                    }
+                    state.window.garden.revision += 1;
+                })
+        });
+        form = form.push(
+            FieldBlock::new(spot.key("agent-field"), "Harness")
+                .control(
+                    attn_ui::system::Segmented::new(spot.key("agent"), "Harness")
+                        .options(harnesses)
+                        .build(t),
+                )
+                .build(t),
+        );
         if let Some(failure) = shown.failure {
             form = form.push(Block::custom(
                 spot.key("error.block"),
@@ -332,6 +352,8 @@ fn hand_over(spot: &Spot, state: &mut State, tx: &mut Tx) {
         Some("Branch")
     } else if draft.checkout == Checkout::NewWorktree && from.is_empty() {
         Some("Start from")
+    } else if draft.agent.is_empty() {
+        Some("Harness")
     } else {
         None
     };
@@ -346,7 +368,7 @@ fn hand_over(spot: &Spot, state: &mut State, tx: &mut Tx) {
         from: (draft.checkout == Checkout::NewWorktree).then_some(from),
         path: (draft.checkout.worktree() && !path.is_empty()).then_some(path),
     });
-    let agent = Some(words(&draft.agent)).filter(|a| !a.is_empty());
+    let agent = Some(draft.agent.clone());
     let share = draft.share.then_some(true);
     let request = draft.request.clone();
     let note = Some(spot.words(state)).filter(|n| !n.is_empty());

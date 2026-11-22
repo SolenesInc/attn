@@ -313,6 +313,7 @@ fn body(state: &State, t: &Tokens) -> El {
             pictures: &state.pictures,
             drafts: None,
             now_ms: state.window.now_ms,
+            harnesses: &state.facts.harnesses,
             t,
         };
         let full = super::mode(state) == Mode::Full;
@@ -1115,6 +1116,7 @@ fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Token
         pictures: &state.pictures,
         drafts: None,
         now_ms: state.window.now_ms,
+        harnesses: &state.facts.harnesses,
         t,
     };
     let mut actions = vec![open_as_tile(&here.id, t)];

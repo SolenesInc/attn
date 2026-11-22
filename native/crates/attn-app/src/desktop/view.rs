@@ -1101,6 +1101,7 @@ fn seed_reads(state: &State) -> crate::garden::TileReads<'_> {
         readings: &state.readings,
         pictures: &state.pictures,
         now_ms: state.window.now_ms,
+        harnesses: &state.facts.harnesses,
         chief: crate::garden::model::has_chief(
             &state.facts.sessions,
             &state.facts.profiles.selected,
