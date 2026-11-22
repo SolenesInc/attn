@@ -7,7 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
+
+	"github.com/victorarias/attn/internal/stepclock"
 )
+
+const WorkingCheckTimer stepclock.Name = "codex-working-check"
 
 func SocketDir(dataDir string) string {
 	sum := sha256.Sum256([]byte(dataDir))

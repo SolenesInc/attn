@@ -13,28 +13,25 @@ import (
 	"github.com/victorarias/attn/internal/codexshared"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
-	"github.com/victorarias/attn/internal/sessionmonitor"
-	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
 const codexLinkKind = "codex-app-server"
 
 func (r *codexShared) launchedShared(sessionID protocol.SessionID) bool {
-	agent, lifetime := r.d.store.SessionLifetime(sessionID)
-	return lifetime == harness.InServer && r.serves(agent)
+	agent, lifetime := r.host.Sessions().Lifetime(sessionID)
+	return lifetime == harness.InServer && agent == codexID
 }
 
 func (r *codexShared) conversation(sessionID protocol.SessionID) string {
 	if !r.launchedShared(sessionID) {
 		return ""
 	}
-	return r.d.store.GetSessionConversation(sessionID).NativeID
+	return r.host.Sessions().Conversation(sessionID)
 }
 
 func (r *codexShared) holder(profile, conversation string) protocol.SessionID {
-	sessionID := r.d.store.OpenSessionHolding(profile, conversation)
+	sessionID := r.host.Sessions().Holder(profile, conversation)
 	if sessionID == "" || !r.launchedShared(sessionID) {
 		return ""
 	}
@@ -62,7 +59,7 @@ func (h codexHarness) Conversation(facts harness.SessionFacts) harness.Conversat
 	if facts.Lifetime != harness.InServer {
 		return harness.TypedConversation(errors.New("this Codex session started before Codex sessions ran on the shared app server, so attn has no way to compact it. Close without --compact instead"))
 	}
-	return codexConversation{shared: h.d.codexShared(), facts: facts}
+	return codexConversation{shared: h.shared, facts: facts}
 }
 
 func (codexConversation) CanCompact() error { return nil }
@@ -83,10 +80,8 @@ func (c codexConversation) Deliver(_ context.Context, in harness.Input) harness.
 		err = r.startTurn(ctx, client, facts.Session, conversation, in.Text)
 	}
 	if err == nil && facts.Session != "" {
-		s.events.run(r.d, func() {
-			if monitor := r.d.sessionMonitor(facts.Session); monitor != nil {
-				monitor.EnsureTranscriptWatcher(facts.Path)
-			}
+		s.events.run(r.host, func() {
+			r.host.Sessions().EnsureTranscriptWatcher(facts.Session, facts.Path)
 		})
 	}
 	if err != nil {
@@ -134,12 +129,13 @@ func (r *codexShared) withResumed(ctx context.Context, client *codexshared.Clien
 			Status codexThreadStatus `json:"status"`
 		} `json:"thread"`
 	}
+	info := r.host.Sessions().LaunchInfo(sessionID, codexID)
 	config := make(map[string]any)
-	if session := r.d.store.Get(sessionID); session != nil {
-		r.loadConfig(config, sessionID, string(session.ProfileID))
+	if session := r.host.Sessions().Get(sessionID); session != nil {
+		r.loadConfig(config, info.ContextCap, string(session.ProfileID))
 	}
 	resume := map[string]any{"threadId": conversation, "excludeTurns": true, "config": config}
-	r.grantApprovals(resume, sessionID)
+	grantCodexApprovals(resume, info.ApprovalRoute)
 	if err := call("thread/resume", resume, &resumed); err != nil {
 		return err
 	}
@@ -154,20 +150,20 @@ type codexThreadStatus struct {
 	ActiveFlags []string `json:"activeFlags"`
 }
 
-func (st codexThreadStatus) programStatus() (string, bool) {
+func (st codexThreadStatus) turn() (harness.Turn, bool) {
 	switch st.Type {
 	case "idle", "notLoaded":
-		return pty.ProgramIdle, true
+		return harness.TurnEnded, true
 	case "active":
 		switch {
 		case slices.Contains(st.ActiveFlags, "waitingOnApproval"):
-			return pty.ProgramBlockedPermission, true
+			return harness.TurnApproval, true
 		case slices.Contains(st.ActiveFlags, "waitingOnUserInput"):
-			return pty.ProgramBlockedQuestion, true
+			return harness.TurnQuestion, true
 		}
-		return pty.ProgramWorking, true
+		return harness.TurnRunning, true
 	}
-	return "", false
+	return 0, false
 }
 
 type linkEvents struct {
@@ -176,7 +172,7 @@ type linkEvents struct {
 	running bool
 }
 
-func (q *linkEvents) run(d *Daemon, f func()) {
+func (q *linkEvents) run(host harness.Host, f func()) {
 	q.mu.Lock()
 	q.queue = append(q.queue, f)
 	if q.running {
@@ -199,54 +195,43 @@ func (q *linkEvents) run(d *Daemon, f func()) {
 			next()
 		}
 	}
-	if !d.life.Go("codexServerEvents", drain) {
+	if !host.Life().Go("codexServerEvents", drain) {
 		q.mu.Lock()
 		q.queue, q.running = nil, false
 		q.mu.Unlock()
 	}
 }
 
-func (r *codexShared) observe(sessionID protocol.SessionID, status string) {
-	session := r.d.store.Get(sessionID)
+func (r *codexShared) observe(sessionID protocol.SessionID, turn harness.Turn) {
+	session := r.host.Sessions().Get(sessionID)
 	if session == nil {
 		return
 	}
-	if r.d.hidden(sessionID) || r.followsServer(sessionID) {
-		r.report(sessionID, session, status)
+	if r.host.Sessions().Hidden(sessionID) || r.followsServer(sessionID) {
+		r.report(sessionID, session, turn)
 		return
 	}
-	r.traceServerStatus(sessionID, status, time.Now())
-	if status == pty.ProgramIdle && r.terminalClaimsWorking(sessionID) {
+	r.host.Sessions().TraceServerStatus(sessionID, turn, time.Now())
+	if turn == harness.TurnEnded && r.terminalClaimsWorking(sessionID) {
 		r.checkWorkingSoon(sessionID)
 	}
 }
 
-func (r *codexShared) traceServerStatus(sessionID protocol.SessionID, status string, at time.Time) {
-	r.d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: string(sessionstate.SourceAppServer), ObservedAt: at}, status)
-}
-
-func (r *codexShared) report(sessionID protocol.SessionID, session *protocol.Session, status string) {
+func (r *codexShared) report(sessionID protocol.SessionID, session *protocol.Session, turn harness.Turn) {
 	now := time.Now()
-	r.traceServerStatus(sessionID, status, now)
+	r.host.Sessions().TraceServerStatus(sessionID, turn, now)
 	reporter := harness.FromSession(sessionID)
-	if status == pty.ProgramIdle {
-		evidence, _ := r.d.sessionMonitor(sessionID).Evidence()
+	if turn == harness.TurnEnded {
+		evidence, _ := r.host.Sessions().Evidence(sessionID)
 		bracketOpen := evidence.TurnOpen || evidence.ToolOpen
 		if !bracketOpen && !inTurn(session.State) {
 			return
 		}
 		if bracketOpen {
-			r.d.events().Turn(reporter, now, harness.TurnEvent{Turn: harness.TurnAborted, Inferred: true, Detail: "the shared Codex app-server ended the turn"})
+			r.host.Events().Turn(reporter, now, harness.TurnEvent{Turn: harness.TurnAborted, Inferred: true, Detail: "the shared Codex app-server ended the turn"})
 		}
 	}
-	r.d.events().Turn(reporter, now, harness.TurnEvent{Turn: appServerTurns[status], Inferred: true, Status: true})
-}
-
-var appServerTurns = map[string]harness.Turn{
-	pty.ProgramWorking:           harness.TurnRunning,
-	pty.ProgramBlockedPermission: harness.TurnApproval,
-	pty.ProgramBlockedQuestion:   harness.TurnQuestion,
-	pty.ProgramIdle:              harness.TurnEnded,
+	r.host.Events().Turn(reporter, now, harness.TurnEvent{Turn: turn, Inferred: true, Status: true})
 }
 
 func inTurn(state protocol.SessionState) bool {
@@ -266,25 +251,25 @@ func (r *codexShared) observeStatus(s *codexServer, m codexshared.Message) {
 		return
 	}
 	if compacted := s.compactionStepLocked(p.ThreadID, p.Status.Type); compacted != nil {
-		r.d.events().Compaction(compacted.session, harness.Compaction{Input: compacted.delivery, Result: harness.Compacted})
+		r.host.Events().Compaction(compacted.session, harness.Compaction{Input: compacted.delivery, Result: harness.Compacted})
 	}
-	status, ok := p.Status.programStatus()
+	turn, ok := p.Status.turn()
 	if !ok {
 		return
 	}
-	s.events.run(r.d, func() {
+	s.events.run(r.host, func() {
 		holder := r.holder(s.profile, p.ThreadID)
-		r.observe(holder, status)
-		if status == pty.ProgramIdle {
-			r.d.kickCompactingClose(holder)
+		r.observe(holder, turn)
+		if turn == harness.TurnEnded {
+			r.host.Events().Compaction(holder, harness.Compaction{Result: harness.CompactionReady})
 		}
 	})
 }
 
 func (r *codexShared) hiddenSessions(profile string) []protocol.SessionID {
 	var hidden []protocol.SessionID
-	for _, session := range r.d.store.List("") {
-		if session.ProfileID == profile && r.launchedShared(session.ID) && r.d.hidden(session.ID) {
+	for _, session := range r.host.Sessions().List() {
+		if session.ProfileID == profile && r.launchedShared(session.ID) && r.host.Sessions().Hidden(session.ID) {
 			hidden = append(hidden, session.ID)
 		}
 	}
@@ -293,7 +278,7 @@ func (r *codexShared) hiddenSessions(profile string) []protocol.SessionID {
 
 func (r *codexShared) readHidden(s *codexServer, client *codexshared.Client) {
 	for _, sessionID := range r.hiddenSessions(s.profile) {
-		ctx, cancel := context.WithTimeout(r.d.life.Context(), codexServerCallLimit)
+		ctx, cancel := context.WithTimeout(r.host.Life().Context(), codexServerCallLimit)
 		raw, err := client.Call(ctx, "thread/read", map[string]any{"threadId": r.conversation(sessionID)})
 		cancel()
 		var read struct {
@@ -302,11 +287,11 @@ func (r *codexShared) readHidden(s *codexServer, client *codexshared.Client) {
 			} `json:"thread"`
 		}
 		if err != nil || json.Unmarshal(raw, &read) != nil {
-			r.d.logf("shared Codex: reading the turn of hidden session %s: %v", sessionID, err)
+			r.host.Logf("shared Codex: reading the turn of hidden session %s: %v", sessionID, err)
 			continue
 		}
-		if status, ok := read.Thread.Status.programStatus(); ok {
-			r.observe(sessionID, status)
+		if turn, ok := read.Thread.Status.turn(); ok {
+			r.observe(sessionID, turn)
 		}
 	}
 }
@@ -317,9 +302,9 @@ func (r *codexShared) serverGone(profile string) {
 		return
 	}
 	s := r.server(profile)
-	s.events.run(r.d, func() {
+	s.events.run(r.host, func() {
 		for _, sessionID := range hidden {
-			r.observe(sessionID, pty.ProgramIdle)
+			r.observe(sessionID, harness.TurnEnded)
 		}
 	})
 }
@@ -334,7 +319,7 @@ func (r *codexShared) archiveConversation(profile string, closed protocol.Sessio
 		cancelCall()
 	}
 	if err != nil {
-		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: %v", conversation, closed, err)
+		r.host.Logf("shared Codex: conversation %s of closed session %s stays unarchived: %v", conversation, closed, err)
 	}
 }
 
@@ -381,7 +366,7 @@ func (r *codexShared) unarchiveForResume(profile string, m *codexshared.Message)
 		return
 	}
 	if err := r.restore(profile, p.ThreadID); err != nil {
-		r.d.logf("shared Codex: conversation %s stays archived: %v", p.ThreadID, err)
+		r.host.Logf("shared Codex: conversation %s stays archived: %v", p.ThreadID, err)
 	}
 }
 
@@ -398,19 +383,19 @@ func (r *codexShared) observeName(s *codexServer, m codexshared.Message) {
 		return
 	}
 	name := strings.TrimSpace(*p.ThreadName)
-	s.events.run(r.d, func() {
+	s.events.run(r.host, func() {
 		sessionID := r.holder(s.profile, p.ThreadID)
-		session := r.d.store.Get(sessionID)
+		session := r.host.Sessions().Get(sessionID)
 		if session == nil || name == "" {
 			return
 		}
-		r.d.events().Named(sessionID, name)
+		r.host.Events().Named(sessionID, name)
 	})
 }
 
 func (r *codexShared) renamed(sessionID protocol.SessionID, label string) {
 	conversation := r.conversation(sessionID)
-	session := r.d.store.Get(sessionID)
+	session := r.host.Sessions().Get(sessionID)
 	if conversation == "" || session == nil {
 		return
 	}
@@ -420,15 +405,15 @@ func (r *codexShared) renamed(sessionID protocol.SessionID, label string) {
 	if s == nil {
 		return
 	}
-	s.events.run(r.d, func() {
+	s.events.run(r.host, func() {
 		client := s.client()
 		if client == nil {
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.d.life.Context(), codexServerCallLimit)
+		ctx, cancel := context.WithTimeout(r.host.Life().Context(), codexServerCallLimit)
 		defer cancel()
 		if _, err := client.Call(ctx, "thread/name/set", map[string]any{"threadId": conversation, "name": label}); err != nil {
-			r.d.logf("shared Codex: naming conversation %s %q: %v", conversation, label, err)
+			r.host.Logf("shared Codex: naming conversation %s %q: %v", conversation, label, err)
 		}
 	})
 }
@@ -446,7 +431,7 @@ func (r *codexShared) profileReleased(profile string) {
 		return
 	}
 	r.stop(s, codexServerReleaseGrace)
-	r.d.logf("shared Codex: stopped the app-server of profile %s; nothing uses it", profile)
+	r.host.Logf("shared Codex: stopped the app-server of profile %s; nothing uses it", profile)
 }
 
 func (r *codexShared) needed(profile string) bool {
@@ -462,7 +447,7 @@ func (r *codexShared) needed(profile string) bool {
 		}
 	}
 	r.mu.Unlock()
-	for _, session := range r.d.store.List("") {
+	for _, session := range r.host.Sessions().List() {
 		if session.ProfileID == profile && session.Agent == protocol.SessionAgentCodex && r.launchedShared(session.ID) {
 			return true
 		}
@@ -493,5 +478,5 @@ func (r *codexShared) idleSoon(profile string) {
 	if profile == "" {
 		return
 	}
-	r.d.life.Go("codexServerIdle", func() { r.profileReleased(profile) })
+	r.host.Life().Go("codexServerIdle", func() { r.profileReleased(profile) })
 }

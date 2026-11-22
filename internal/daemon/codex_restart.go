@@ -17,9 +17,8 @@ import (
 
 	"github.com/victorarias/attn/internal/codexshared"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/launchenv"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
-	"github.com/victorarias/attn/internal/ptybackend"
 )
 
 const (
@@ -102,15 +101,14 @@ func (r *codexShared) stop(s *codexServer, grace time.Duration) {
 	defer r.forget(s)
 	exited := s.exitSignal()
 	ctx := context.Background()
-	provider, ok := r.d.ptyBackend.(ptybackend.SessionInfoProvider)
-	if !ok {
-		r.d.logf("shared Codex: the PTY backend reports no process ids; killing the app-server of profile %s", s.profile)
+	info, supported, err := r.terminals.Info(ctx, s.terminal)
+	if !supported {
+		r.host.Logf("shared Codex: the PTY backend reports no process ids; killing the app-server of profile %s", s.profile)
 		r.kill(ctx, s)
 		return
 	}
-	info, err := provider.SessionInfo(ctx, s.terminal)
-	if err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
-		r.d.logf("shared Codex: reading the process of the app-server of profile %s: %v; killing it", s.profile, err)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		r.host.Logf("shared Codex: reading the process of the app-server of profile %s: %v; killing it", s.profile, err)
 		r.kill(ctx, s)
 		return
 	}
@@ -118,7 +116,7 @@ func (r *codexShared) stop(s *codexServer, grace time.Duration) {
 		return
 	}
 	if err := syscall.Kill(info.PID, syscall.SIGTERM); err != nil && !errors.Is(err, syscall.ESRCH) {
-		r.d.logf("shared Codex: signalling the app-server of profile %s (pid %d): %v", s.profile, info.PID, err)
+		r.host.Logf("shared Codex: signalling the app-server of profile %s (pid %d): %v", s.profile, info.PID, err)
 	}
 	timer := time.NewTimer(grace)
 	defer timer.Stop()
@@ -126,16 +124,16 @@ func (r *codexShared) stop(s *codexServer, grace time.Duration) {
 	case <-exited:
 		return
 	case <-timer.C:
-		r.d.logf("shared Codex: the app-server of profile %s still ran %s after SIGTERM; killing it", s.profile, grace)
-	case <-r.d.life.Done():
-		r.d.logf("shared Codex: attn is stopping while the app-server of profile %s drains; killing it", s.profile)
+		r.host.Logf("shared Codex: the app-server of profile %s still ran %s after SIGTERM; killing it", s.profile, grace)
+	case <-r.host.Life().Context().Done():
+		r.host.Logf("shared Codex: attn is stopping while the app-server of profile %s drains; killing it", s.profile)
 	}
 	r.kill(ctx, s)
 }
 
 func (r *codexShared) kill(ctx context.Context, s *codexServer) {
-	if err := r.d.ptyBackend.Kill(ctx, s.terminal, syscall.SIGKILL); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
-		r.d.logf("shared Codex: killing the app-server of profile %s: %v", s.profile, err)
+	if err := r.terminals.Kill(ctx, s.terminal, syscall.SIGKILL); err != nil && !errors.Is(err, os.ErrNotExist) {
+		r.host.Logf("shared Codex: killing the app-server of profile %s: %v", s.profile, err)
 	}
 }
 
@@ -233,7 +231,7 @@ func (r *codexShared) viewsChanged(profile string) {
 	s := r.servers[profile]
 	r.mu.Unlock()
 	if s != nil {
-		s.events.run(r.d, func() { r.blockersChanged(s) })
+		s.events.run(r.host, func() { r.blockersChanged(s) })
 	}
 }
 
@@ -251,7 +249,7 @@ func (r *codexShared) restartAllWhenQuiet() {
 
 func (r *codexShared) beginRestart(s *codexServer, now bool) {
 	r.versionsChanged(s.profile)
-	if !r.d.life.Go("codexRestart", func() { r.restart(s, now) }) {
+	if !r.host.Life().Go("codexRestart", func() { r.restart(s, now) }) {
 		s.mu.Lock()
 		s.restart.swapping = false
 		s.mu.Unlock()
@@ -272,7 +270,7 @@ func (r *codexShared) restart(s *codexServer, now bool) {
 		err = fmt.Errorf("it starts as Codex %s, not the installed %s", version, installed)
 	}
 	if err != nil {
-		r.d.logf("shared Codex: the app-server of profile %s keeps running %s: %s at %s refused to start: %v", s.profile, s.versionRunning(), installed, binary, err)
+		r.host.Logf("shared Codex: the app-server of profile %s keeps running %s: %s at %s refused to start: %v", s.profile, s.versionRunning(), installed, binary, err)
 		r.refused(s, installed, err)
 		return
 	}
@@ -311,19 +309,19 @@ func (r *codexShared) swap(s *codexServer, binary, installed string, now bool) (
 	defer s.ensureMu.Unlock()
 	client := s.client()
 	if client == nil {
-		r.d.logf("shared Codex: the app-server of profile %s went away before its restart; the next connection starts the installed Codex", s.profile)
+		r.host.Logf("shared Codex: the app-server of profile %s went away before its restart; the next connection starts the installed Codex", s.profile)
 		s.mu.Lock()
 		s.restart.requested = false
 		s.mu.Unlock()
 		return nil
 	}
 	if blockers, quiet := r.waitingOn(s); !now && !quiet {
-		r.d.logf("shared Codex: the restart of the app-server of profile %s waits on %v", s.profile, blockers)
+		r.host.Logf("shared Codex: the restart of the app-server of profile %s waits on %v", s.profile, blockers)
 		return nil
 	}
 	starting := r.startingViews(s.profile)
 	r.dropViews(s.profile, starting)
-	ctx := r.d.life.Context()
+	ctx := r.host.Life().Context()
 	if now {
 		r.interruptWaiting(ctx, s, client)
 		s.mu.Lock()
@@ -331,12 +329,12 @@ func (r *codexShared) swap(s *codexServer, binary, installed string, now bool) (
 		s.mu.Unlock()
 		r.versionsChanged(s.profile)
 	} else if busy := r.busy(ctx, s, client); busy != "" {
-		r.d.logf("shared Codex: the restart of the app-server of profile %s waits: %s", s.profile, busy)
+		r.host.Logf("shared Codex: the restart of the app-server of profile %s waits: %s", s.profile, busy)
 		return nil
 	}
 	previous := s.versionRunning()
 	r.stop(s, codexRestartGrace)
-	if r.d.life.Ended() {
+	if r.host.Life().Context().Err() != nil {
 		return nil
 	}
 	err := r.startServer(ctx, s, binary)
@@ -347,12 +345,12 @@ func (r *codexShared) swap(s *codexServer, binary, installed string, now bool) (
 	s.restart.requested = false
 	s.mu.Unlock()
 	if err != nil {
-		r.d.logf("shared Codex: restarting the app-server of profile %s on %s: %v", s.profile, binary, err)
+		r.host.Logf("shared Codex: restarting the app-server of profile %s on %s: %v", s.profile, binary, err)
 		s.startFailed(err)
 		r.refused(s, installed, err)
 		return starting
 	}
-	r.d.logf("shared Codex: restarted the app-server of profile %s from %s on %s", s.profile, previous, s.versionRunning())
+	r.host.Logf("shared Codex: restarted the app-server of profile %s from %s on %s", s.profile, previous, s.versionRunning())
 	return starting
 }
 
@@ -360,20 +358,19 @@ func (r *codexShared) relaunchStarting(starting codexStarting) {
 	if starting.session == "" {
 		return
 	}
-	provider, ok := r.d.ptyBackend.(ptybackend.SessionInfoProvider)
-	if !ok {
+	info, supported, err := r.terminals.Info(context.Background(), starting.terminal)
+	if !supported {
 		return
 	}
-	info, err := provider.SessionInfo(context.Background(), starting.terminal)
 	if err == nil {
-		err = r.d.reloadSession(starting.session, int(info.Cols), int(info.Rows))
+		err = r.host.Sessions().Reload(starting.session, int(info.Cols), int(info.Rows))
 	}
 	if err != nil {
-		r.d.logf("shared Codex: relaunching terminal %s, whose Codex showed no conversation when its app-server restarted: %v", starting.terminal, err)
-		r.d.resolveLaunchWatch(starting.session, launchOutcome{unconfirmed: fmt.Sprintf("restarting shared Codex could not relaunch its terminal: %v", err)})
+		r.host.Logf("shared Codex: relaunching terminal %s, whose Codex showed no conversation when its app-server restarted: %v", starting.terminal, err)
+		r.host.Sessions().LaunchUnconfirmed(starting.session, fmt.Sprintf("restarting shared Codex could not relaunch its terminal: %v", err))
 		return
 	}
-	r.d.logf("shared Codex: relaunched terminal %s, whose Codex showed no conversation when its app-server restarted", starting.terminal)
+	r.host.Logf("shared Codex: relaunched terminal %s, whose Codex showed no conversation when its app-server restarted", starting.terminal)
 }
 
 func (r *codexShared) startingViews(profile string) []codexStarting {
@@ -388,7 +385,7 @@ func (r *codexShared) startingViews(profile string) []codexStarting {
 	slices.Sort(terminals)
 	starting := make([]codexStarting, 0, len(terminals))
 	for _, t := range terminals {
-		session, _ := r.d.terminals().Showing(t)
+		session, _ := r.host.Sessions().Showing(t)
 		starting = append(starting, codexStarting{terminal: t, session: protocol.SessionID(session)})
 	}
 	return starting
@@ -480,7 +477,7 @@ func (r *codexShared) interruptWaiting(ctx context.Context, s *codexServer, clie
 		}
 		cancel()
 		if err != nil {
-			r.d.logf("shared Codex: stopping the turn of conversation %s, which waits on an answer nobody can give during the restart: %v", conversation, err)
+			r.host.Logf("shared Codex: stopping the turn of conversation %s, which waits on an answer nobody can give during the restart: %v", conversation, err)
 		}
 	}
 }
@@ -509,7 +506,7 @@ func (r *codexShared) preflight(s *codexServer, binary string) (string, error) {
 	defer os.Remove(socket)
 	cmd := exec.Command(binary, r.serverArgs(s.profile, socket)...)
 	cmd.Dir = r.dir()
-	cmd.Env = pty.MergeEnvironment(pty.MergeEnvironment(pty.MergeEnvironment(os.Environ(), r.d.latestLoginEnv()), codexServerAgentEnv), r.d.spawnRoutingEnv())
+	cmd.Env = launchenv.MergeEnvironment(launchenv.MergeEnvironment(launchenv.MergeEnvironment(os.Environ(), r.host.LoginEnv()), codexServerAgentEnv), r.host.SpawnRoutingEnv())
 	refusal := &tailBuffer{limit: codexRefusalLimit}
 	cmd.Stdout, cmd.Stderr = nil, refusal
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -517,11 +514,11 @@ func (r *codexShared) preflight(s *codexServer, binary string) (string, error) {
 		return "", err
 	}
 	exited := make(chan error, 1)
-	if !r.d.life.Go("codexPreflightWait", func() { exited <- cmd.Wait() }) {
+	if !r.host.Life().Go("codexPreflightWait", func() { exited <- cmd.Wait() }) {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		return "", errDaemonStopping
+		return "", errCodexStopping
 	}
-	ctx, cancel := context.WithTimeout(r.d.life.Context(), codexServerStartLimit)
+	ctx, cancel := context.WithTimeout(r.host.Life().Context(), codexServerStartLimit)
 	defer cancel()
 	version := ""
 	for {
@@ -587,13 +584,14 @@ func (b *tailBuffer) String() string {
 	return b.buf.String()
 }
 
-func (d *Daemon) handleRestartSharedCodex(client *wsClient, msg *protocol.RestartSharedCodexMessage) {
-	err := d.codexShared().requestRestart(msg.ProfileID, msg.Now)
+func (h codexHarness) handleRestartSharedCodex(_ string, raw any) any {
+	msg := raw.(*protocol.RestartSharedCodexMessage)
+	err := h.shared.requestRestart(msg.ProfileID, msg.Now)
 	result := protocol.RestartSharedCodexResultMessage{Event: protocol.EventRestartSharedCodexResult, RequestID: msg.RequestID, ProfileID: msg.ProfileID, Success: err == nil}
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 	}
-	d.sendToClient(client, result)
+	return result
 }
 
 func (r *codexShared) requestRestart(profile string, now bool) error {

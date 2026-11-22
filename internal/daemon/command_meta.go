@@ -165,9 +165,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdPtyResize:                  commandMetadata(true, true),
 	protocol.CmdKillSession:                commandMetadata(true, true),
 	protocol.CmdReloadSession:              commandMetadata(true, true),
-	protocol.CmdRestartSharedCodex:         commandMetadata(true, true),
-	protocol.CmdInstallCodexUpdate:         commandMetadata(true, true),
-	protocol.CmdCodexStatus:                commandMetadata(false, true),
 	protocol.CmdProfileCreate:              commandMetadata(false, true),
 	protocol.CmdProfileRename:              commandMetadata(false, true),
 	protocol.CmdProfileDelete:              commandMetadata(false, true),
@@ -219,18 +216,22 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdDocSubscribe:               commandMetadata(false, true),
 }
 
-func shouldLogWSCommand(cmd string) bool {
-	meta, ok := CommandMeta[cmd]
-	if !ok {
+func (d *Daemon) shouldLogWSCommand(cmd string) bool {
+	if meta, ok := CommandMeta[cmd]; ok {
+		return meta.Log
+	}
+	if _, ok := d.clientCommands[cmd]; ok {
 		return true
 	}
-	return meta.Log
+	return true
 }
 
-func blocksDuringRecovery(cmd string) bool {
-	meta, ok := CommandMeta[cmd]
-	if !ok {
-		return false
+func (d *Daemon) blocksDuringRecovery(cmd string) bool {
+	if meta, ok := CommandMeta[cmd]; ok {
+		return meta.BlocksDuringRecovery
 	}
-	return meta.BlocksDuringRecovery
+	if h, ok := d.clientCommands[cmd]; ok {
+		return h.blocksDuringRecovery
+	}
+	return false
 }

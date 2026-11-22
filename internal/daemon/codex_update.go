@@ -2,92 +2,49 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
-	"os"
 	"strings"
-	"time"
 
-	"github.com/google/uuid"
-
-	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
-	"github.com/victorarias/attn/internal/store"
 )
 
 const (
 	notificationKindCodexUpdate = "codex_update_available"
 	notificationActionInstall   = "install_codex_update"
+	notificationSeverityInfo    = "info"
 )
 
-func (d *Daemon) handleInstallCodexUpdate(client *wsClient, msg *protocol.InstallCodexUpdateMessage) {
-	profile := client.selectedProfile()
-	err := d.installCodexUpdate(profile, msg.DesktopID)
-	result := protocol.InstallCodexUpdateResultMessage{Event: protocol.EventInstallCodexUpdateResult, RequestID: msg.RequestID, Success: err == nil, ProfileID: profile, SharedCodex: d.codexShared().wireState(profile)}
+func (h codexHarness) handleInstallCodexUpdate(profile string, raw any) any {
+	msg := raw.(*protocol.InstallCodexUpdateMessage)
+	err := h.shared.installUpdate(profile, msg.DesktopID)
+	result := protocol.InstallCodexUpdateResultMessage{Event: protocol.EventInstallCodexUpdateResult, RequestID: msg.RequestID, Success: err == nil, ProfileID: profile, SharedCodex: h.shared.wireState(profile)}
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 	}
-	d.sendToClient(client, result)
+	return result
 }
 
-func (d *Daemon) installCodexUpdate(profileID, desktopID string) error {
-	r := d.codexShared()
+func (r *codexShared) installUpdate(profileID, desktopID string) error {
 	binary, err := r.binary("")
 	if err != nil {
 		return err
 	}
 	command := codexShellQuote(binary) + " update"
-	shell := pty.GetUserLoginShell()
-	if !pty.ShellIntegrationExpected(shell, pty.MergeEnvironment(os.Environ(), d.latestLoginEnv())) {
-		return fmt.Errorf("your shell %s gives attn no command marks, so attn can't run Codex's update and tell when it finishes; run attn codex update in a terminal instead", shell)
+	ran, err := r.host.RunInShellTile(r.host.Life().Context(), profileID, desktopID, "Codex update", command)
+	if ran {
+		r.refreshInstalled()
 	}
-	provider, err := d.terminalText()
-	if err != nil {
-		return err
+	var noMarks harness.NoShellMarksError
+	if errors.As(err, &noMarks) {
+		return fmt.Errorf("your shell %s gives attn no command marks, so attn can't run Codex's update and tell when it finishes; run attn codex update in a terminal instead", noMarks.Shell)
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
+	var exited harness.ShellExitError
+	if errors.As(err, &exited) {
+		return fmt.Errorf("the update exited %d; its output is in the tile", exited.Code)
 	}
-	id := protocol.SessionID(uuid.NewString())
-	spawn := &protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: id, ProfileID: profileID, Agent: protocol.AgentShellValue, Cwd: home, Cols: 80, Rows: 24, Label: protocol.Ptr("Codex update")}
-	policy := internalSpawnPolicy{launchPlacement: &launchPlacement{desktopID: desktopID, direction: layouttree.DirectionVertical}, userStarted: true}
-	if rejection := d.runSpawnPipeline(spawn, policy); rejection != nil {
-		return fmt.Errorf("open a terminal tile for Codex's update: %w", rejection.reason())
-	}
-	terminal := d.primaryTerminal(id)
-	defer r.refreshInstalled()
-
-	ctx, cancel := context.WithTimeout(d.life.Context(), terminalFirstPromptTripwire)
-	first, err := provider.WaitBlock(ctx, terminal, pty.WaitBlockParams{Until: "prompt", FirstPrompt: true})
-	cancel()
-	switch {
-	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		return fmt.Errorf("the shell in the new tile showed no prompt within limit=%s (%s); nothing was typed, so run %s there yourself", terminalFirstPromptTripwire, terminalFirstPromptReceipt, command)
-	case err != nil:
-		return fmt.Errorf("wait for the new tile's prompt: %w", err)
-	case first.Exited:
-		return errors.New("the new tile's shell exited before its first prompt")
-	}
-	state, err := provider.ReadText(d.life.Context(), terminal, "screen", 0)
-	if err != nil {
-		return err
-	}
-	last := state.LastBlockID
-	if err := d.writeTerminalPTY(d.life.Context(), terminal, []byte(command+"\r"), "agent"); err != nil {
-		return fmt.Errorf("type Codex's update into the new tile: %w", err)
-	}
-	finished, err := provider.WaitBlock(d.life.Context(), terminal, pty.WaitBlockParams{Until: "prompt", AfterBlockID: &last})
-	switch {
-	case err != nil || finished.Exited:
-		return errors.New("the tile closed before Codex's update finished")
-	case finished.Block != nil && finished.Block.ExitCode != nil && *finished.Block.ExitCode != 0:
-		return fmt.Errorf("the update exited %d; its output is in the tile", *finished.Block.ExitCode)
-	}
-	return nil
+	return err
 }
 
 func codexShellQuote(s string) string {
@@ -98,9 +55,6 @@ func codexShellQuote(s string) string {
 }
 
 func (r *codexShared) offerUpdate() {
-	if r.d.store == nil {
-		return
-	}
 	r.mu.Lock()
 	installed, latest := r.installed, r.latest
 	r.mu.Unlock()
@@ -108,9 +62,9 @@ func (r *codexShared) offerUpdate() {
 	if codexOlder(installed, latest) {
 		offered = latest
 	}
-	existing, err := r.d.store.ListNotifications("")
+	existing, err := r.host.Notifications().List()
 	if err != nil {
-		r.d.logf("shared Codex: list notifications: %v", err)
+		r.host.Logf("shared Codex: list notifications: %v", err)
 		return
 	}
 	for _, n := range existing {
@@ -119,63 +73,52 @@ func (r *codexShared) offerUpdate() {
 		if n.Kind != notificationKindCodexUpdate || !(installedIt || replaced) {
 			continue
 		}
-		resolved, err := r.d.store.ResolveNotification(n.ID, time.Now())
-		if err != nil {
-			r.d.logf("shared Codex: resolve the Codex %s update notification: %v", n.SourceID, err)
-			continue
-		}
-		if resolved {
-			r.d.publishFact(FactNotificationRead, n.ID, nil)
+		if err := r.host.Notifications().Resolve(n.ID); err != nil {
+			r.host.Logf("shared Codex: resolve the Codex %s update notification: %v", n.SourceID, err)
 		}
 	}
 	if offered == "" {
 		return
 	}
 	impact := "Install runs codex update in a terminal tile. Shared Codex moves to it once your agents are idle."
-	record, created, err := r.d.store.EnsureNotification(store.NotificationRecord{
+	if err := r.host.Notifications().Ensure(harness.Notification{
 		ID:         notificationKindCodexUpdate + ":" + offered,
 		Kind:       notificationKindCodexUpdate,
-		Severity:   store.NotificationInfo,
+		Severity:   notificationSeverityInfo,
 		Title:      "Codex " + offered + " is available",
 		Body:       impact,
 		Trigger:    "The daily codex doctor check found a newer Codex than the installed " + installed + ".",
 		Impact:     impact,
-		Actions:    []store.NotificationAction{{Kind: notificationActionInstall, Label: "Install"}},
-		SourceKind: "codex",
+		Actions:    []harness.NotificationAction{{Kind: notificationActionInstall, Label: "Install"}},
+		SourceKind: codexID,
 		SourceID:   offered,
-	}, time.Now())
-	if err != nil {
-		r.d.logf("shared Codex: notify about Codex %s: %v", offered, err)
-		return
-	}
-	if created {
-		r.d.publishFact(FactNotificationCreated, record.ID, nil)
+	}); err != nil {
+		r.host.Logf("shared Codex: notify about Codex %s: %v", offered, err)
 	}
 }
 
-func (d *Daemon) handleCodexStatus(conn net.Conn, msg *protocol.CodexStatusMessage) {
-	profile, err := d.resolveGardenProfile(protocol.Deref(msg.CallerSessionID), protocol.Deref(msg.Profile), "")
+func (h codexHarness) handleCodexStatus(_ context.Context, raw any) protocol.Response {
+	msg := raw.(*protocol.CodexStatusMessage)
+	profileID, profileName, err := h.host.Profiles().Resolve(protocol.Deref(msg.CallerSessionID), protocol.Deref(msg.Profile))
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return protocol.Response{Ok: false, Error: protocol.Ptr(err.Error())}
 	}
-	r := d.codexShared()
 	if protocol.Deref(msg.Refresh) {
-		r.refreshInstalled()
+		h.shared.refreshInstalled()
 	}
-	binary, _ := r.binary("")
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, CodexStatusResult: &protocol.CodexStatusResult{
-		ProfileID:   profile.ID,
-		ProfileName: profile.Name,
+	binary, _ := h.shared.binary("")
+	return protocol.Response{Ok: true, CodexStatusResult: &protocol.CodexStatusResult{
+		ProfileID:   profileID,
+		ProfileName: profileName,
 		Executable:  binary,
-		SharedCodex: r.wireState(profile.ID),
-	}})
+		SharedCodex: h.shared.wireState(profileID),
+	}}
 }
 
-func (d *Daemon) handleRestartSharedCodexCLI(conn net.Conn, msg *protocol.RestartSharedCodexMessage) {
-	if err := d.codexShared().requestRestart(msg.ProfileID, msg.Now); err != nil {
-		d.sendError(conn, err.Error())
-		return
+func (h codexHarness) handleRestartSharedCodexCLI(_ context.Context, raw any) protocol.Response {
+	msg := raw.(*protocol.RestartSharedCodexMessage)
+	if err := h.shared.requestRestart(msg.ProfileID, msg.Now); err != nil {
+		return protocol.Response{Ok: false, Error: protocol.Ptr(err.Error())}
 	}
-	d.sendOK(conn)
+	return protocol.Response{Ok: true}
 }

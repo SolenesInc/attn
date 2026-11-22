@@ -1,20 +1,6 @@
-internal/daemon/bus.go	buildWireProjections	reaches Daemon.projectSharedCodex (internal/daemon/codex_versions.go)
-internal/daemon/daemon.go	(*Daemon).handleConnectionContext	reaches Daemon.handleCodexStatus (internal/daemon/codex_update.go)
-internal/daemon/daemon.go	(*Daemon).handleConnectionContext	reaches Daemon.handleRestartSharedCodexCLI (internal/daemon/codex_update.go)
-internal/daemon/daemon.go	Daemon	reaches codexShared (internal/daemon/codex_shared.go)
 internal/daemon/monitor_home_calls.go	(*Daemon).classifierHarness	names "claude"
-internal/daemon/profiles.go	(*Daemon).sendProfileSnapshots	reaches Daemon.codexShared (internal/daemon/codex_shared.go)
-internal/daemon/profiles.go	(*Daemon).sendProfileSnapshots	reaches codexShared (internal/daemon/codex_shared.go)
-internal/daemon/profiles.go	(*Daemon).sendProfileSnapshots	reaches codexShared.changedMessage (internal/daemon/codex_versions.go)
-internal/daemon/session_instructions.go	(*Daemon).runSessionInstructions	names "codex"
-internal/daemon/session_instructions.go	(daemonSessionInstructionsModel).Run	names "codex"
 internal/daemon/session_title.go	(*Daemon).titleProviderAgent	names "claude"
 internal/daemon/session_title.go	(*Daemon).titleProviderAgent	names "codex"
-internal/daemon/websocket.go	(*Daemon).handleClientMessage	reaches Daemon.handleInstallCodexUpdate (internal/daemon/codex_update.go)
-internal/daemon/websocket.go	(*Daemon).handleClientMessage	reaches Daemon.handleRestartSharedCodex (internal/daemon/codex_restart.go)
-internal/daemon/websocket.go	(*Daemon).sendInitialState	reaches Daemon.codexShared (internal/daemon/codex_shared.go)
-internal/daemon/websocket.go	(*Daemon).sendInitialState	reaches codexShared (internal/daemon/codex_shared.go)
-internal/daemon/websocket.go	(*Daemon).sendInitialState	reaches codexShared.wireState (internal/daemon/codex_versions.go)
 internal/daemon/ws_pty.go	legacyExecutableFromSpawnMessage	names "claude"
 internal/daemon/ws_pty.go	legacyExecutableFromSpawnMessage	names "codex"
 internal/hooks/codex.go	GenerateCodexServerConfigOverrides	names "codex"

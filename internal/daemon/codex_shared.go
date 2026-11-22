@@ -18,23 +18,20 @@ import (
 
 	"nhooyr.io/websocket"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/codexshared"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/launchenv"
 	"github.com/victorarias/attn/internal/pausepoint"
-	profilespkg "github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
-	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/unixsock"
 )
 
 const (
+	codexID                   = "codex"
+	codexSharedTerminalOwner  = "codex-shared"
 	codexServerTerminalPrefix = "codex-server-"
 	codexServerAgent          = "codex-app-server"
 	codexClientName           = "codex-tui"
@@ -43,6 +40,8 @@ const (
 	codexOpeningNoteLimit     = 60 * time.Second
 )
 
+var errCodexStopping = errors.New("daemon stopping")
+
 const codexServerLaunchScript = `
 ulimit -Sn "$1"
 shift
@@ -50,7 +49,13 @@ exec "$@"
 `
 
 type codexShared struct {
-	d         *Daemon
+	host               harness.Host
+	terminals          harness.HostTerminals
+	facts              func() harness.Facts
+	trust              *sync.Mutex
+	notifySnapshot     func(profiles ...string)
+	enqueueUpdateCheck func()
+
 	mu        sync.Mutex
 	servers   map[string]*codexServer
 	views     map[harness.TerminalID]*codexView
@@ -107,16 +112,27 @@ type codexView struct {
 	unprompted map[string]bool
 }
 
-func (d *Daemon) codexShared() *codexShared {
-	d.codexSharedOnce.Do(func() {
-		r := &codexShared{d: d, servers: make(map[string]*codexServer), views: make(map[harness.TerminalID]*codexView), archivingAfterClose: make(map[string]int)}
-		d.codexSharedState = r
-		d.life.Go("codexSharedStop", func() {
-			<-d.life.Done()
-			r.close()
-		})
+func newCodexShared(host harness.Host, facts func() harness.Facts, trust *sync.Mutex) *codexShared {
+	r := &codexShared{
+		host:                host,
+		terminals:           host.Terminals(),
+		facts:               facts,
+		trust:               trust,
+		servers:             make(map[string]*codexServer),
+		views:               make(map[harness.TerminalID]*codexView),
+		archivingAfterClose: make(map[string]int),
+	}
+	r.notifySnapshot = host.RegisterProfileSnapshot(harness.ProfileSnapshot{
+		Fact:     factSharedCodexChanged,
+		Snapshot: snapshotSharedCodex,
+		Initial: func(profile string, msg *protocol.InitialStateMessage) {
+			msg.SharedCodex = r.wireState(profile)
+		},
+		Changed: func(profile string) any {
+			return r.changedMessage(profile)
+		},
 	})
-	return d.codexSharedState
+	return r
 }
 
 func codexProfileKey(profile string) string {
@@ -133,7 +149,7 @@ func (r *codexShared) runsLink(t harness.TerminalID) bool {
 }
 
 func (r *codexShared) dir() string {
-	return codexshared.SocketDir(r.d.dataRoot)
+	return codexshared.SocketDir(r.host.DataDir())
 }
 
 func (r *codexShared) ensureDir() error {
@@ -143,10 +159,6 @@ func (r *codexShared) ensureDir() error {
 func (r *codexShared) viewSocket(t harness.TerminalID) string {
 	sum := sha256.Sum256([]byte(t))
 	return filepath.Join(r.dir(), "t-"+hex.EncodeToString(sum[:8])+".sock")
-}
-
-func (r *codexShared) serverTerminal(profile string) harness.TerminalID {
-	return codexServerTerminal(profile)
 }
 
 func (r *codexShared) server(profile string) *codexServer {
@@ -173,14 +185,6 @@ func (s *codexServer) client() *codexshared.Client {
 	return nil
 }
 
-func (r *codexShared) kind() string { return codexLinkKind }
-
-func (r *codexShared) serves(agent string) bool { return agent == string(protocol.SessionAgentCodex) }
-
-func (r *codexShared) canRun(harness.LaunchRequest) bool { return true }
-
-func (r *codexShared) enabledForNewLaunches() bool { return !r.d.noAgentSockets }
-
 func (r *codexShared) admit(profile, conversation string) error {
 	if other := r.loadedElsewhere(profile, conversation); conversation != "" && other != "" {
 		return fmt.Errorf("conversation %s is open in the shared Codex of profile %s; it can open here once that profile lets it go, about a minute after no terminal shows it", conversation, other)
@@ -188,40 +192,33 @@ func (r *codexShared) admit(profile, conversation string) error {
 	return nil
 }
 
-func dropRetiredAutomationExecutable(opts *ptybackend.SpawnOptions) {
-	opts.UnattendedLaunch.Executable = ""
-}
-
-func (r *codexShared) prepareLaunch(opts *ptybackend.SpawnOptions, profile string) error {
-	dropRetiredAutomationExecutable(opts)
-	remote, err := r.openView(opts.ID, profile)
+func (r *codexShared) prepareLaunch(terminal harness.TerminalID, cwd, profile string, unattended bool, configured string) (remote, launchExecutable string, err error) {
+	remote, err = r.openView(terminal, profile)
 	if err != nil {
-		return err
+		return "", "", err
 	}
-	installed, err := r.binary(configuredLaunchExecutable(opts))
+	installed, err := r.binary(configured)
 	if err != nil {
-		return err
+		return "", "", err
 	}
-	if _, err := r.ensureServer(r.d.life.Context(), profile, installed); err != nil {
-		return err
+	if _, err := r.ensureServer(r.host.Life().Context(), profile, installed); err != nil {
+		return "", "", err
 	}
-	r.answerTrustIfKnown(opts, profile)
-	opts.CodexRemote = remote
-	opts.LaunchExecutable = r.terminalBinary(profile, installed)
+	r.answerTrustIfKnown(terminal, cwd, profile, unattended)
 	r.refreshInstalledSoon()
-	return nil
+	return remote, r.terminalBinary(profile, installed), nil
 }
 
-func (r *codexShared) answerTrustIfKnown(opts *ptybackend.SpawnOptions, profile string) {
-	if opts.UnattendedLaunch.IsZero() {
-		if trust, err := r.d.readCodexFolderTrust(opts.CWD, profile); err != nil || !trust.known() {
+func (r *codexShared) answerTrustIfKnown(terminal harness.TerminalID, cwd, profile string, unattended bool) {
+	if !unattended {
+		if trust, err := r.readCodexFolderTrust(cwd, profile); err != nil || !trust.known() {
 			return
 		}
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if v := r.views[opts.ID]; v != nil {
-		v.trusted = opts.CWD
+	if v := r.views[terminal]; v != nil {
+		v.trusted = cwd
 	}
 }
 
@@ -233,7 +230,7 @@ func (r *codexShared) ensureServer(ctx context.Context, profile, executable stri
 		return s, nil
 	}
 	if r.serverRunning(ctx, s.terminal) {
-		r.d.adoptAdapterTerminal(ctx, codexSharedTerminalOwner, s.terminal)
+		r.terminals.Adopt(ctx, s.terminal)
 		r.recallBinary(ctx, s)
 	} else {
 		if err := s.cooledDown(); err != nil {
@@ -253,18 +250,17 @@ func (r *codexShared) ensureServer(ctx context.Context, profile, executable stri
 }
 
 func (r *codexShared) serverRunning(ctx context.Context, t harness.TerminalID) bool {
-	if _, live := r.d.liveTerminals(ctx)[t]; !live {
+	if _, live := r.terminals.Live(ctx)[t]; !live {
 		return false
 	}
-	if provider, ok := r.d.ptyBackend.(ptybackend.SessionInfoProvider); ok {
-		info, err := provider.SessionInfo(ctx, t)
+	if info, supported, err := r.terminals.Info(ctx, t); supported {
 		return err == nil && info.Running
 	}
 	return true
 }
 
 func (r *codexShared) startServer(ctx context.Context, s *codexServer, executable string) error {
-	if err := r.d.ptyBackend.Remove(ctx, s.terminal); err != nil && !errors.Is(err, pty.ErrSessionNotFound) && !errors.Is(err, os.ErrNotExist) {
+	if err := r.terminals.Remove(ctx, s.terminal); err != nil {
 		return fmt.Errorf("clear the exited Codex app-server: %w", err)
 	}
 	if err := r.ensureDir(); err != nil {
@@ -281,32 +277,28 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 	if err != nil {
 		return err
 	}
-	loginEnv, err := r.d.launchEnv(ctx)
-	if err != nil {
-		return fmt.Errorf("start the shared Codex app-server: %w", err)
-	}
 	command := append([]string{"/bin/sh", "-c", codexServerLaunchScript, "attn-codex-server", strconv.FormatUint(files.Cur, 10), binary}, r.serverArgs(s.profile, s.socket)...)
-	opts := ptybackend.SpawnOptions{
-		ID: s.terminal, Agent: codexServerAgent, Label: "Codex app-server", CWD: r.dir(), Cols: 80, Rows: 24,
-		Executable:    resolvedBinary(binary),
-		AgentArgv:     command,
-		AgentEnv:      codexServerAgentEnv,
-		LoginShellEnv: loginEnv,
-		DaemonEnv:     r.d.spawnRoutingEnv(),
-	}
-	if err := r.d.startAdapterTerminal(ctx, codexSharedTerminalOwner, opts); err != nil {
+	resolved := resolvedBinary(binary)
+	if err := r.terminals.Start(ctx, harness.TerminalSpec{
+		ID:         s.terminal,
+		Agent:      codexServerAgent,
+		Label:      "Codex app-server",
+		Dir:        r.dir(),
+		Executable: resolved,
+		Argv:       command,
+	}); err != nil {
 		return fmt.Errorf("start the shared Codex app-server: %w", err)
 	}
 	s.mu.Lock()
-	s.binary = opts.Executable
+	s.binary = resolved
 	s.mu.Unlock()
-	r.d.logf("shared Codex: started the app-server of profile %s in terminal %s with an open-file limit of %d", s.profile, s.terminal, files.Cur)
+	r.host.Logf("shared Codex: started the app-server of profile %s in terminal %s with an open-file limit of %d", s.profile, s.terminal, files.Cur)
 	return nil
 }
 
 func (r *codexShared) serverArgs(profile, socket string) []string {
 	args := []string{"app-server"}
-	for _, override := range hooks.GenerateCodexServerConfigOverrides(r.d.wrapperPath(), r.d.socketPath, profile) {
+	for _, override := range hooks.GenerateCodexServerConfigOverrides(launchenv.ActiveAttnExecutable(), r.host.DaemonSocket(), profile) {
 		args = append(args, "-c", override)
 	}
 	return append(args, "--listen", "unix://"+socket)
@@ -360,13 +352,13 @@ func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 			s.mu.Unlock()
 			r.lose(s, gone)
 			r.versionsChanged(s.profile)
-			if !r.d.life.Go("codexServerControl", func() { r.watchControl(s, client) }) {
+			if !r.host.Life().Go("codexServerControl", func() { r.watchControl(s, client) }) {
 				client.Close()
-				return errDaemonStopping
+				return errCodexStopping
 			}
 			r.readLoaded(s, client, held)
-			s.events.run(r.d, func() { r.readHidden(s, client) })
-			s.events.run(r.d, func() {
+			s.events.run(r.host, func() { r.readHidden(s, client) })
+			s.events.run(r.host, func() {
 				r.refreshInstalled()
 				r.restartWhenQuiet(s)
 			})
@@ -391,7 +383,9 @@ func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 
 func (r *codexShared) watchControl(s *codexServer, client *codexshared.Client) {
 	select {
-	case <-r.d.life.Done():
+	case <-r.host.Life().Context().Done():
+		client.Close()
+		<-client.Done()
 	case <-client.Done():
 	}
 	s.mu.Lock()
@@ -403,14 +397,14 @@ func (r *codexShared) watchControl(s *codexServer, client *codexshared.Client) {
 }
 
 func (r *codexShared) reconnect(s *codexServer) {
-	ctx := r.d.life.Context()
+	ctx := r.host.Life().Context()
 	s.ensureMu.Lock()
 	defer s.ensureMu.Unlock()
 	if ctx.Err() != nil || s.client() != nil || !r.serverRunning(ctx, s.terminal) {
 		return
 	}
 	if err := r.connect(ctx, s); err != nil {
-		r.d.logf("shared Codex: reconnecting to the app-server of profile %s: %v", s.profile, err)
+		r.host.Logf("shared Codex: reconnecting to the app-server of profile %s: %v", s.profile, err)
 	}
 }
 
@@ -432,7 +426,7 @@ func (s *codexServer) hold(loaded []string) []string {
 
 func (r *codexShared) lose(s *codexServer, conversations []string) {
 	for _, conversation := range conversations {
-		s.events.run(r.d, func() { r.lost(s, conversation) })
+		s.events.run(r.host, func() { r.lost(s, conversation) })
 	}
 }
 
@@ -460,7 +454,7 @@ func (r *codexShared) observeServer(s *codexServer, a *codexAttempt, m codexshar
 	s.mu.Unlock()
 	r.lose(s, gone)
 	if tracked {
-		s.events.run(r.d, func() {
+		s.events.run(r.host, func() {
 			if discovered != "" {
 				if client := s.client(); client != nil {
 					r.readLoaded(s, client, []string{discovered})
@@ -516,11 +510,11 @@ func (r *codexShared) lost(s *codexServer, conversation string) {
 	_, again := s.held[conversation]
 	s.mu.Unlock()
 	sessionID := r.holder(s.profile, conversation)
-	if again || r.d.store.Get(sessionID) == nil {
+	if again || r.host.Sessions().Get(sessionID) == nil {
 		return
 	}
-	r.d.sessionMonitor(sessionID).FinishUsage()()
-	r.observe(sessionID, pty.ProgramIdle)
+	r.host.Sessions().FinishUsage(sessionID)
+	r.observe(sessionID, harness.TurnEnded)
 }
 
 func (r *codexShared) openView(t harness.TerminalID, profile string) (string, error) {
@@ -538,15 +532,15 @@ func (r *codexShared) openView(t harness.TerminalID, profile string) (string, er
 		return "", fmt.Errorf("open the Codex proxy of terminal %s: %w", t, err)
 	}
 	v.server = &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) { r.serveView(v, w, req) })}
-	if err := r.d.store.SaveTerminalView(store.TerminalView{TerminalID: string(t), Link: codexLinkKind, ProfileID: profile}); err != nil {
+	if err := r.host.Records().SaveTerminalView(harness.TerminalView{Terminal: t, Kind: codexLinkKind, Profile: profile}); err != nil {
 		_ = listener.Close()
 		_ = os.Remove(v.socket)
 		return "", err
 	}
-	if !r.d.life.Go("codexView", func() { _ = v.server.Serve(listener) }) {
+	if !r.host.Life().Go("codexView", func() { _ = v.server.Serve(listener) }) {
 		_ = listener.Close()
 		_ = os.Remove(v.socket)
-		return "", errDaemonStopping
+		return "", errCodexStopping
 	}
 	r.views[t] = v
 	return "unix://" + v.socket, nil
@@ -558,7 +552,7 @@ func (r *codexShared) terminalDropped(t harness.TerminalID) {
 	r.mu.Unlock()
 	if v != nil {
 		r.closeView(t)
-		r.d.life.Go("codexServerIdle", func() {
+		r.host.Life().Go("codexServerIdle", func() {
 			r.profileReleased(v.profile)
 			pausepoint.At(pausepoint.CodexViewReleaseChecked)
 		})
@@ -575,8 +569,8 @@ func (r *codexShared) closeView(t harness.TerminalID) {
 		_ = os.Remove(v.socket)
 		r.versionsChanged(v.profile)
 	}
-	if err := r.d.store.DeleteTerminalView(string(t)); err != nil {
-		r.d.logf("shared Codex: %v", err)
+	if err := r.host.Records().DeleteTerminalView(t); err != nil {
+		r.host.Logf("shared Codex: %v", err)
 	}
 }
 
@@ -603,7 +597,7 @@ func (r *codexShared) close() {
 }
 
 func (r *codexShared) serveView(v *codexView, w http.ResponseWriter, req *http.Request) {
-	release, admitted := r.d.life.Hold("codexViewConnection")
+	release, admitted := r.host.Life().Hold("codexViewConnection")
 	if !admitted {
 		http.Error(w, "attn is stopping", http.StatusServiceUnavailable)
 		return
@@ -611,12 +605,12 @@ func (r *codexShared) serveView(v *codexView, w http.ResponseWriter, req *http.R
 	defer release()
 	ctx, proxy := r.proxying(v)
 	defer r.proxied(v, proxy)
-	s, err := r.ensureServer(r.d.life.Context(), v.profile, "")
+	s, err := r.ensureServer(r.host.Life().Context(), v.profile, "")
 	if err == nil && ctx.Err() != nil {
 		err = fmt.Errorf("attn restarted the shared Codex app-server of profile %s while this connection waited; connect again", v.profile)
 	}
 	if err != nil {
-		r.d.logf("shared Codex: terminal %s cannot reach its app-server: %v", v.terminal, err)
+		r.host.Logf("shared Codex: terminal %s cannot reach its app-server: %v", v.terminal, err)
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
@@ -655,7 +649,7 @@ func (r *codexShared) forwardsToView(s *codexServer, proxy *codexProxy, m codexs
 	}
 	forwards, lastStarted := proxy.mcpStartup.record(p.ThreadID, p.Name, p.Status)
 	if lastStarted {
-		s.events.run(r.d, func() { r.checkWorkingSoon(r.holder(s.profile, p.ThreadID)) })
+		s.events.run(r.host, func() { r.checkWorkingSoon(r.holder(s.profile, p.ThreadID)) })
 	}
 	return forwards
 }
@@ -736,7 +730,7 @@ func (t *codexViewMCPStartup) starting(conversation string) bool {
 }
 
 func (r *codexShared) proxying(v *codexView) (context.Context, *codexProxy) {
-	ctx, drop := context.WithCancel(r.d.life.Context())
+	ctx, drop := context.WithCancel(r.host.Life().Context())
 	proxy := &codexProxy{drop: drop}
 	r.mu.Lock()
 	v.proxies[proxy] = true
@@ -758,7 +752,9 @@ func (r *codexShared) identifySideConversationTools(m *codexshared.Message, para
 		config = make(map[string]any)
 	}
 	config["shell_environment_policy.set.ATTN_TERMINAL_ID"] = terminal
-	offerAgentTools(config, r.d.agentTools(terminal))
+	if tools, ok := r.host.TerminalTools(terminal); ok {
+		offerCodexAgentTools(config, tools)
+	}
 	params["config"] = config
 	raw, err := json.Marshal(params)
 	if err != nil {
@@ -794,29 +790,31 @@ func (r *codexShared) prepare(connection context.Context, v *codexView, m *codex
 		return nil, nil
 	}
 	sessionID, launchAs := r.launching(v, method, params)
+	info := r.host.Sessions().LaunchInfo(sessionID, codexID)
 	config, _ := params["config"].(map[string]any)
 	if config == nil {
 		config = make(map[string]any)
 	}
-	r.loadConfig(config, sessionID, v.profile)
-	if _, bound := r.d.crewMemberForSession(sessionID); bound {
+	r.loadConfig(config, info.ContextCap, v.profile)
+	if info.CrewBound {
 		config["features.memories"] = false
 		config["memories.generate_memories"] = false
 	}
-	r.grantApprovals(params, sessionID)
+	grantCodexApprovals(params, info.ApprovalRoute)
 	if method != "thread/resume" {
-		if instructions := r.instructions(launchAs, v.profile); instructions != "" {
+		_, hasTools := r.host.ServerTools(sharedCodexServerPrefix + v.profile)
+		if instructions := r.host.Sessions().Instructions(launchAs, hasTools); instructions != "" {
 			prior, _ := params["developerInstructions"].(string)
 			params["developerInstructions"] = strings.TrimSpace(prior + "\n\n" + instructions)
 		}
 		if cwd, _ := params["cwd"].(string); cwd == "" {
-			if session := r.d.store.Get(sessionID); session != nil {
+			if session := r.host.Sessions().Get(sessionID); session != nil {
 				params["cwd"] = session.Directory
 			}
 		}
-		if member, ok := r.d.crewMemberForSession(sessionID); ok && len(member.AwarenessDirs) > 0 {
+		if len(info.AwarenessDirs) > 0 {
 			cwd, _ := params["cwd"].(string)
-			params["runtimeWorkspaceRoots"] = append([]string{cwd}, member.AwarenessDirs...)
+			params["runtimeWorkspaceRoots"] = append([]string{cwd}, info.AwarenessDirs...)
 		}
 	}
 	params["config"] = config
@@ -852,13 +850,13 @@ func (r *codexShared) prepare(connection context.Context, v *codexView, m *codex
 			}
 			if err != nil {
 				established = false
-				r.d.logf("shared Codex: refused conversation %s, which could not be written: %v", thread.ID, err)
+				r.host.Logf("shared Codex: refused conversation %s, which could not be written: %v", thread.ID, err)
 				reply.Result = nil
 				reply.Error, _ = json.Marshal(map[string]any{"code": -32603, "message": "attn could not write the new conversation to disk: " + err.Error()})
 			}
 		}
 		if established && thread.Parent == "" && !opened {
-			r.d.mirrorLabel(r.holder(v.profile, thread.ID))
+			r.host.Sessions().MirrorLabel(r.holder(v.profile, thread.ID))
 		}
 		v.replies.Lock()
 		defer v.replies.Unlock()
@@ -872,7 +870,7 @@ func (r *codexShared) prepare(connection context.Context, v *codexView, m *codex
 		default:
 			r.show(v, thread.ID, opened)
 			if !firstOfItsSession {
-				r.d.conversationIn(v.terminal, agentConversationObservation{NativeID: thread.ID, TranscriptPath: thread.Path})
+				r.host.Events().Moved(harness.FromTerminal(v.terminal), harness.Move{Conversation: thread.ID, Path: thread.Path, ServerConfirmed: true})
 			}
 		}
 		return func() {
@@ -952,11 +950,14 @@ func (r *codexShared) answerTrust(v *codexView) func(*codexshared.Message) func(
 }
 
 func (r *codexShared) launching(v *codexView, method string, params map[string]any) (session, launchAs protocol.SessionID) {
-	session = r.d.sessionInTerminal(v.terminal)
+	session, ok := r.host.Sessions().Showing(v.terminal)
+	if !ok {
+		session = protocol.SessionID(v.terminal)
+	}
 	if conversation, _ := params["threadId"].(string); method == "thread/resume" && conversation != "" {
 		if holder := r.holder(v.profile, conversation); holder != "" {
 			session = holder
-		} else if owner := r.d.store.ConversationOwner(session, conversation); owner != "" {
+		} else if owner := r.host.Sessions().ConversationOwner(session, conversation); owner != "" {
 			session = owner
 		}
 	}
@@ -966,43 +967,28 @@ func (r *codexShared) launching(v *codexView, method string, params map[string]a
 	return session, session
 }
 
-func (r *codexShared) capContext(config map[string]any, sessionID protocol.SessionID) {
-	if limit := r.d.launchContextWindowCap(sessionID, string(protocol.SessionAgentCodex)); limit > 0 {
-		config["model_auto_compact_token_limit"] = limit
+func (r *codexShared) loadConfig(config map[string]any, contextCap int, profile string) {
+	if contextCap > 0 {
+		config["model_auto_compact_token_limit"] = contextCap
+	}
+	if tools, ok := r.host.ServerTools(sharedCodexServerPrefix + profile); ok {
+		offerCodexAgentTools(config, tools)
 	}
 }
 
-func (r *codexShared) loadConfig(config map[string]any, sessionID protocol.SessionID, profile string) {
-	r.capContext(config, sessionID)
-	offerAgentTools(config, r.d.sharedCodexAgentTools(profile))
-}
-
-func offerAgentTools(config map[string]any, tools *agentdriver.AgentTools) {
-	if tools != nil {
-		for _, setting := range hooks.CodexAgentToolServers(tools.URL, hooks.CodexSetting{Key: "http_headers.Authorization", Value: "Bearer " + tools.Credential}) {
-			config[setting.Key] = setting.Value
-		}
+func offerCodexAgentTools(config map[string]any, tools harness.AgentTools) {
+	for _, s := range hooks.CodexAgentToolServers(tools.URL, hooks.CodexSetting{Key: "http_headers.Authorization", Value: "Bearer " + tools.Credential}) {
+		config[s.Key] = s.Value
 	}
 }
 
-func (r *codexShared) grantApprovals(params map[string]any, sessionID protocol.SessionID) {
-	route, _ := r.d.intendedApprovalRoute(sessionID)
+func grantCodexApprovals(params map[string]any, route launchcontract.ApprovalRoute) {
 	switch route {
 	case launchcontract.ApprovalRouteBypass:
 		params["approvalPolicy"], params["sandbox"] = "never", "danger-full-access"
 	case launchcontract.ApprovalRouteReviewer:
 		params["approvalPolicy"], params["approvalsReviewer"] = "on-request", "auto_review"
 	}
-}
-
-func (r *codexShared) instructions(sessionID protocol.SessionID, profile string) string {
-	launch, _, err := r.d.prepareLaunchContext(sessionID, false)
-	if err != nil {
-		r.d.logf("shared Codex: no attn instructions for session %s: %v", sessionID, err)
-		return ""
-	}
-	launch.AgentTools = r.d.sharedCodexAgentTools(profile) != nil
-	return launch.Instructions()
 }
 
 func (r *codexShared) materialize(connection context.Context, terminal protocol.TerminalID, profile, conversation string) error {
@@ -1014,7 +1000,7 @@ func (r *codexShared) materialize(connection context.Context, terminal protocol.
 		client = s.client()
 	}
 	if client == nil {
-		r.d.logf("shared Codex materialize: terminal=%s profile=%s conversation=%s op=thread/inject_items outcome=no_connection", terminal, profile, conversation)
+		r.host.Logf("shared Codex materialize: terminal=%s profile=%s conversation=%s op=thread/inject_items outcome=no_connection", terminal, profile, conversation)
 		return errors.New("no connection to its app-server")
 	}
 	ctx, cancel := context.WithTimeout(connection, codexOpeningNoteLimit)
@@ -1031,7 +1017,7 @@ func (r *codexShared) materialize(connection context.Context, terminal protocol.
 	if connection.Err() != nil {
 		err = connection.Err()
 	}
-	r.d.logf("shared Codex materialize: terminal=%s profile=%s conversation=%s op=thread/inject_items elapsed=%s deadline=%s outcome=%s",
+	r.host.Logf("shared Codex materialize: terminal=%s profile=%s conversation=%s op=thread/inject_items elapsed=%s deadline=%s outcome=%s",
 		terminal, profile, conversation, time.Since(started).Round(time.Millisecond), codexOpeningNoteLimit, codexCallOutcome(err))
 	if errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("its app-server did not answer thread/inject_items within %s", codexOpeningNoteLimit)
@@ -1083,26 +1069,22 @@ func (r *codexShared) terminalShowing(profile, conversation string) (harness.Ter
 	return found.terminal, true
 }
 
-func (r *codexShared) relaunch(opts *ptybackend.SpawnOptions) error {
-	dropRetiredAutomationExecutable(opts)
-	installed, err := r.binary(configuredLaunchExecutable(opts))
+func (r *codexShared) relaunch(terminal harness.TerminalID, cwd string, unattended bool, configured string) (remote, launchExecutable string, err error) {
+	installed, err := r.binary(configured)
 	if err != nil {
-		return err
+		return "", "", err
 	}
 	r.mu.Lock()
-	v := r.views[opts.ID]
+	v := r.views[terminal]
 	r.mu.Unlock()
 	if v == nil {
-		opts.LaunchExecutable = installed
-		return nil
+		return "", installed, nil
 	}
-	opts.CodexRemote = "unix://" + v.socket
-	r.answerTrustIfKnown(opts, v.profile)
-	if _, err := r.ensureServer(r.d.life.Context(), v.profile, ""); err != nil {
-		r.d.logf("shared Codex: relaunching terminal %s before its app-server answers: %v", opts.ID, err)
+	r.answerTrustIfKnown(terminal, cwd, v.profile, unattended)
+	if _, err := r.ensureServer(r.host.Life().Context(), v.profile, ""); err != nil {
+		r.host.Logf("shared Codex: relaunching terminal %s before its app-server answers: %v", terminal, err)
 	}
-	opts.LaunchExecutable = r.terminalBinary(v.profile, installed)
-	return nil
+	return "unix://" + v.socket, r.terminalBinary(v.profile, installed), nil
 }
 
 func (r *codexShared) retireConnections(t harness.TerminalID) {
@@ -1144,80 +1126,77 @@ func (r *codexShared) terminalExited(t harness.TerminalID) {
 		return
 	}
 	if exited != nil {
-		r.d.logf("shared Codex: the app-server of profile %s exited; the next connection starts it again", exited.profile)
+		r.host.Logf("shared Codex: the app-server of profile %s exited; the next connection starts it again", exited.profile)
 		r.forget(exited)
 	}
-	if err := r.d.removePTYSession(t); err != nil {
-		r.d.logf("pty backend remove on exit failed for %s: %v", t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	err := r.terminals.Remove(ctx, t)
+	cancel()
+	if err != nil {
+		r.host.Logf("pty backend remove on exit failed for %s: %v", t, err)
 	}
 	pausepoint.At(pausepoint.CodexServerExitHandled)
 }
 
 func (r *codexShared) recoverProcesses(ctx context.Context) {
-	live := r.d.liveTerminals(ctx)
-	profiles, err := r.d.store.ListProfiles(false)
+	live := r.terminals.Live(ctx)
+	profiles, err := r.host.Profiles().List()
 	if err != nil {
-		r.d.logf("shared Codex: %v", err)
+		r.host.Logf("shared Codex: %v", err)
 		return
 	}
 	known := make(map[string]bool, len(profiles))
 	for _, profile := range profiles {
-		known[profile.ID] = true
+		known[profile] = true
 	}
-	for _, session := range r.d.store.List("") {
+	for _, session := range r.host.Sessions().List() {
 		if !known[session.ProfileID] && r.launchedShared(session.ID) {
-			profiles = append(profiles, profilespkg.Profile{ID: session.ProfileID})
+			profiles = append(profiles, session.ProfileID)
 			known[session.ProfileID] = true
 		}
 	}
 	owned := make(map[harness.TerminalID]bool, len(profiles))
 	for _, profile := range profiles {
-		owned[codexServerTerminal(profile.ID)] = true
-		if _, running := live[codexServerTerminal(profile.ID)]; !running {
-			r.serverGone(profile.ID)
+		owned[codexServerTerminal(profile)] = true
+		if _, running := live[codexServerTerminal(profile)]; !running {
+			r.serverGone(profile)
 			continue
 		}
 		connectCtx, cancel := context.WithTimeout(ctx, codexServerCallLimit)
-		if _, err := r.ensureServer(connectCtx, profile.ID, ""); err != nil {
-			r.d.logf("shared Codex: reconnect to the app-server of profile %s: %v", profile.ID, err)
+		if _, err := r.ensureServer(connectCtx, profile, ""); err != nil {
+			r.host.Logf("shared Codex: reconnect to the app-server of profile %s: %v", profile, err)
 		}
 		cancel()
 	}
-	adapters, err := r.d.store.AdapterTerminals()
-	if err != nil {
-		r.d.logf("shared Codex: %v", err)
-		return
-	}
-	for terminal := range r.d.localLiveTerminals(ctx) {
-		if adapters[string(terminal)] == codexSharedTerminalOwner && !owned[terminal] {
-			if err := r.d.removePTYSession(terminal); err != nil {
-				r.d.logf("shared Codex: remove app-server %s without an owning profile: %v", terminal, err)
+	for terminal := range r.terminals.LocalLive(ctx) {
+		if r.terminals.Owned(terminal) && !owned[terminal] {
+			if err := r.terminals.Remove(ctx, terminal); err != nil {
+				r.host.Logf("shared Codex: remove app-server %s without an owning profile: %v", terminal, err)
 			}
 		}
 	}
 }
 
 func (r *codexShared) recoverViews(ctx context.Context) {
-	live := r.d.liveTerminals(ctx)
-	terminals, err := r.d.store.TerminalViews(codexLinkKind)
+	live := r.terminals.Live(ctx)
+	terminals, err := r.host.Records().TerminalViews(codexLinkKind)
 	if err != nil {
-		r.d.logf("shared Codex: %v", err)
+		r.host.Logf("shared Codex: %v", err)
 		return
 	}
 	for _, t := range terminals {
-		id := harness.TerminalID(t.TerminalID)
-		if _, running := live[id]; !running {
-			if err := r.d.store.DeleteTerminalView(t.TerminalID); err != nil {
-				r.d.logf("shared Codex: %v", err)
+		if _, running := live[t.Terminal]; !running {
+			if err := r.host.Records().DeleteTerminalView(t.Terminal); err != nil {
+				r.host.Logf("shared Codex: %v", err)
 			}
 			continue
 		}
-		if _, err := r.openView(id, t.ProfileID); err != nil {
-			r.d.logf("shared Codex: %v", err)
+		if _, err := r.openView(t.Terminal, t.Profile); err != nil {
+			r.host.Logf("shared Codex: %v", err)
 			continue
 		}
 		r.mu.Lock()
-		if v := r.views[id]; v != nil {
+		if v := r.views[t.Terminal]; v != nil {
 			v.started = true
 		}
 		r.mu.Unlock()
@@ -1235,7 +1214,7 @@ func (r *codexShared) recoverViews(ctx context.Context) {
 
 func (r *codexShared) readLoaded(s *codexServer, client *codexshared.Client, loaded []string) {
 	for _, id := range loaded {
-		ctx, cancel := context.WithTimeout(r.d.life.Context(), codexServerCallLimit)
+		ctx, cancel := context.WithTimeout(r.host.Life().Context(), codexServerCallLimit)
 		raw, err := client.Call(ctx, "thread/read", map[string]any{"threadId": id})
 		cancel()
 		var read struct {
@@ -1248,7 +1227,7 @@ func (r *codexShared) readLoaded(s *codexServer, client *codexshared.Client, loa
 			err = json.Unmarshal(raw, &read)
 		}
 		if err != nil {
-			r.d.logf("shared Codex: reading conversation %s from the app-server of profile %s: %v", id, s.profile, err)
+			r.host.Logf("shared Codex: reading conversation %s from the app-server of profile %s: %v", id, s.profile, err)
 			continue
 		}
 		s.mu.Lock()
@@ -1313,7 +1292,7 @@ func (r *codexShared) resolveCaller(c harness.ServerCaller) (protocol.SessionID,
 	view, _ := r.terminalShowing(profile, conversation)
 	for range 8 {
 		if shown, ok := r.terminalShowing(profile, conversation); ok {
-			if s, ok := r.d.terminals().Showing(shown); ok {
+			if s, ok := r.host.Sessions().Showing(shown); ok {
 				return s, view, true
 			}
 		}
@@ -1325,8 +1304,4 @@ func (r *codexShared) resolveCaller(c harness.ServerCaller) (protocol.SessionID,
 		}
 	}
 	return "", view, true
-}
-
-func (d *Daemon) wrapperPath() string {
-	return launchenv.ActiveAttnExecutable()
 }

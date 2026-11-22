@@ -49,10 +49,10 @@ func codexUserMCPServers() ([]string, error) {
 }
 
 func (h codexHarness) Run(ctx context.Context, req harness.OneShotRequest) (harness.OneShotResult, error) {
-	if socket := h.d.codexShared().runningSocket(req.Profile); socket != "" {
+	if socket := h.shared.runningSocket(req.Profile); socket != "" {
 		return runOneShotOnSharedCodex(ctx, socket, req)
 	}
-	executable, err := h.d.machineAgentExecutable(h.Facts().ID, "")
+	executable, err := h.host.Executable(h.Facts(), "")
 	if err != nil {
 		return harness.OneShotResult{}, fmt.Errorf("resolve codex executable: %w", err)
 	}
@@ -60,7 +60,7 @@ func (h codexHarness) Run(ctx context.Context, req harness.OneShotRequest) (harn
 }
 
 func (h codexHarness) Models(ctx context.Context) (harness.Models, error) {
-	executable, err := h.d.machineAgentExecutable(h.Facts().ID, "")
+	executable, err := h.host.Executable(h.Facts(), "")
 	if err != nil {
 		return harness.Models{}, err
 	}

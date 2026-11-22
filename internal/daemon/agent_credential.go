@@ -119,12 +119,6 @@ func (d *Daemon) agentTools(t harness.TerminalID) *agentdriver.AgentTools {
 	return d.agentToolsFor(agentCredential{kind: credentialTerminal, name: string(protocol.TrimID(protocol.TerminalID(t)))})
 }
 
-const sharedCodexServerPrefix = "codex:"
-
-func (d *Daemon) sharedCodexAgentTools(profile string) *agentdriver.AgentTools {
-	return d.agentToolsFor(agentCredential{kind: credentialServer, name: sharedCodexServerPrefix + profile})
-}
-
 func (d *Daemon) agentToolsServed() bool {
 	return d.on(setting.AgentToolsEnabled) && d.agentKey.err == nil
 }

@@ -31,7 +31,7 @@ func TestSessionStateFromRecoveredInfo(t *testing.T) {
 		{
 			name:    "codex waiting input is no opinion",
 			info:    ptybackend.SessionInfo{Running: true, State: protocol.StateWaitingInput},
-			signals: codexHarness{}.Facts().Signals,
+			signals: harness.Signals{ForgetsRecoveredClaim: true},
 		},
 		{
 			name:   "claude pending approval",

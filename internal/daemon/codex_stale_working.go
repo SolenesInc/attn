@@ -6,13 +6,9 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/codexshared"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
-	"github.com/victorarias/attn/internal/sessionstate"
-	"github.com/victorarias/attn/internal/stepclock"
 )
-
-const CodexWorkingCheckTimer stepclock.Name = "codex-working-check"
 
 // A healthy TUI and its server agree within 103 ms of a turn starting and 30 ms of it ending, measured on Codex 0.164.0.
 const codexWorkingCheckAfter = 5 * time.Second
@@ -21,13 +17,13 @@ func (r *codexShared) checkWorkingSoon(sessionID protocol.SessionID) {
 	if !r.launchedShared(sessionID) {
 		return
 	}
-	r.d.clock.AfterFunc(CodexWorkingCheckTimer, codexWorkingCheckAfter, func() {
-		r.d.life.Go("codexWorkingCheck", func() { r.checkWorking(sessionID) })
+	r.host.Clock().AfterFunc(codexshared.WorkingCheckTimer, codexWorkingCheckAfter, func() {
+		r.host.Life().Go("codexWorkingCheck", func() { r.checkWorking(sessionID) })
 	})
 }
 
 func (r *codexShared) checkWorking(sessionID protocol.SessionID) {
-	session := r.d.store.Get(sessionID)
+	session := r.host.Sessions().Get(sessionID)
 	if session == nil || !r.terminalClaimsWorking(sessionID) {
 		return
 	}
@@ -39,28 +35,27 @@ func (r *codexShared) checkWorking(sessionID protocol.SessionID) {
 	conversation := r.conversation(sessionID)
 	idle, err := r.idleWithoutBackgroundTerminals(client, conversation)
 	if err != nil {
-		r.d.logf("shared Codex: checking the working terminal of session %s: %v", sessionID, err)
+		r.host.Logf("shared Codex: checking the working terminal of session %s: %v", sessionID, err)
 		return
 	}
 	if !idle {
 		return
 	}
-	s.events.run(r.d, func() {
+	s.events.run(r.host, func() {
 		if r.terminalClaimsWorking(sessionID) && !r.mcpServerStarting(conversation) {
-			r.report(sessionID, session, pty.ProgramIdle)
+			r.report(sessionID, session, harness.TurnEnded)
 		}
 	})
 }
 
 func (r *codexShared) terminalClaimsWorking(sessionID protocol.SessionID) bool {
-	evidence, _ := r.d.sessionMonitor(sessionID).Evidence()
-	status := evidence.ProgramStatus
-	return status != nil && status.Source == sessionstate.SourceProgramStatus && status.Claim == sessionstate.ClaimBusy
+	evidence, _ := r.host.Sessions().Evidence(sessionID)
+	return evidence.TerminalClaimsWorking
 }
 
 func (r *codexShared) followsServer(sessionID protocol.SessionID) bool {
-	evidence, _ := r.d.sessionMonitor(sessionID).Evidence()
-	return evidence.ProgramStatus != nil && evidence.ProgramStatus.Source == sessionstate.SourceAppServer
+	evidence, _ := r.host.Sessions().Evidence(sessionID)
+	return evidence.FollowsServer
 }
 
 func (r *codexShared) idleWithoutBackgroundTerminals(client *codexshared.Client, conversation string) (bool, error) {
@@ -85,7 +80,7 @@ func (r *codexShared) idleWithoutBackgroundTerminals(client *codexshared.Client,
 }
 
 func (r *codexShared) callControl(client *codexshared.Client, method, conversation string, result any) error {
-	ctx, cancel := context.WithTimeout(r.d.life.Context(), codexServerCallLimit)
+	ctx, cancel := context.WithTimeout(r.host.Life().Context(), codexServerCallLimit)
 	defer cancel()
 	raw, err := client.Call(ctx, method, map[string]any{"threadId": conversation})
 	if err != nil {

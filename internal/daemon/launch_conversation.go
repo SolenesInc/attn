@@ -7,13 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func resumedOrCleared(req harness.LaunchRequest) harness.LaunchConversation {
-	if req.Conversation != "" {
-		return harness.ConversationIs(req.Conversation)
-	}
-	return harness.ConversationCleared
-}
-
 func (d *Daemon) resumeTarget(agent string, session protocol.SessionID, requested string) string {
 	requested = strings.TrimSpace(requested)
 	if !d.factsOrNone(agent).Options.Resume {

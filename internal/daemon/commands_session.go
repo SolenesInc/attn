@@ -17,12 +17,11 @@ import (
 
 func (d *Daemon) sessionCommands() map[string]command.Handler {
 	return map[string]command.Handler{
-		"session instructions": command.Typed(d.runSessionInstructions),
-		"session transcript":   command.Typed(d.runSessionTranscript),
-		"session list":         command.Typed(d.runSessionList),
-		"session show":         command.Typed(d.runSessionShow),
-		"session priority":     command.Typed(d.runSessionPriority),
-		"session snooze":       command.Typed(d.runSessionSnooze),
+		"session transcript": command.Typed(d.runSessionTranscript),
+		"session list":       command.Typed(d.runSessionList),
+		"session show":       command.Typed(d.runSessionShow),
+		"session priority":   command.Typed(d.runSessionPriority),
+		"session snooze":     command.Typed(d.runSessionSnooze),
 		"session unsnooze": command.Typed(func(ctx context.Context, c command.Caller, a command.SessionUnsnoozeArgs) (any, error) {
 			return d.snoozeEach(c, a.Ids, nil), nil
 		}),

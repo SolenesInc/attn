@@ -9,6 +9,8 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 )
 
+const sharedCodexServerPrefix = "codex:"
+
 func (codexHarness) OwnsCredential(subject string) bool {
 	return strings.HasPrefix(subject, sharedCodexServerPrefix)
 }
@@ -28,7 +30,7 @@ func (h codexHarness) IdentifyCall(subject string, meta json.RawMessage) (harnes
 		return "", "shared Codex of profile " + profile, &harness.Refusal{Code: "no_conversation", Message: "the call's _meta names no Codex conversation in threadId", Fix: "Call the tool from a Codex conversation; Codex names it in _meta.threadId."}
 	}
 	who := "shared Codex conversation " + conversation
-	session, _, _ := h.d.codexShared().resolveCaller(harness.ServerCaller{Variable: harness.CodexThreadEnv, Scope: profile, Conversation: conversation})
+	session, _, _ := h.shared.resolveCaller(harness.ServerCaller{Variable: harness.CodexThreadEnv, Scope: profile, Conversation: conversation})
 	if session == "" {
 		return "", who, &harness.Refusal{Code: "no_session", Message: fmt.Sprintf("no session of profile %s holds Codex conversation %s", profile, conversation), Fix: "Call the tool from a conversation that an attn session shows."}
 	}
@@ -40,6 +42,6 @@ func (h codexHarness) ResolveCaller(caller string) (harness.SessionID, harness.T
 	if !ok || c.Variable != harness.CodexThreadEnv || c.Scope == "" {
 		return "", "", "", false
 	}
-	session, view, _ := h.d.codexShared().resolveCaller(c)
+	session, view, _ := h.shared.resolveCaller(c)
 	return session, view, c.Scope, true
 }

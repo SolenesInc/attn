@@ -52,6 +52,10 @@ func refused(err error) func(context.Context) error {
 
 func (d *Daemon) conversationMoved(terminal protocol.TerminalID, m harness.Move) func(context.Context) error {
 	observation := agentConversationObservation{NativeID: m.Conversation, TranscriptPath: m.Path, Run: m.Run}
+	if m.ServerConfirmed {
+		d.conversationIn(terminal, observation)
+		return nil
+	}
 	if _, view, _, ours := d.resolveCaller(terminal); ours {
 		if view == "" {
 			d.logf("agent conversation: no terminal shows the conversation of %s", terminal)

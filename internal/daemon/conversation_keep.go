@@ -568,14 +568,6 @@ func (d *Daemon) copyConversation(agent string, conversation store.SessionConver
 	return err
 }
 
-func (d *Daemon) checkStoredConversations(driver agentdriver.Driver, refs []harness.ConversationRef) map[harness.ConversationRef]harness.Availability {
-	availability := make(map[harness.ConversationRef]harness.Availability, len(refs))
-	for _, ref := range refs {
-		availability[ref] = d.storedConversation(driver.Name(), resumableIn(driver), ref.ID)
-	}
-	return availability
-}
-
 func (d *Daemon) storedConversation(agent string, resumable func(id string) bool, resumeID string) harness.Availability {
 	if d.conversationKnown(agent, resumable, resumeID) {
 		return harness.Availability{Resumable: true}

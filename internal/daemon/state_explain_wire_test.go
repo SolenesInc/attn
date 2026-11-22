@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/client"
-	"github.com/victorarias/attn/internal/daemon"
+	"github.com/victorarias/attn/internal/codexshared"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -203,7 +203,7 @@ func TestSharedCodexTileSettlesWhenItsTerminalSticksOnWorkingWhileItsConversatio
 	codex.ProgramStatus("state=working:app=codex")
 	awaitStateSince(app, mark, checkout, protocol.SessionStateWorking)
 	mark = len(app.Log())
-	w.awaitTimer(daemon.CodexWorkingCheckTimer)
+	w.awaitTimer(codexshared.WorkingCheckTimer)
 	w.advance(5 * time.Second)
 	awaitStateSince(app, mark, checkout, protocol.SessionStateIdle)
 
@@ -225,7 +225,7 @@ func TestSharedCodexTileKeepsWorkingWhileABackgroundTerminalRunsInItsIdleConvers
 	mark := len(app.Log())
 	codex.ProgramStatus("state=working:app=codex")
 	awaitStateSince(app, mark, checkout, protocol.SessionStateWorking)
-	w.awaitTimer(daemon.CodexWorkingCheckTimer)
+	w.awaitTimer(codexshared.WorkingCheckTimer)
 	w.advance(5 * time.Second)
 	w.CodexServer().AwaitBackgroundTerminalsListed(codex.ConversationID)
 	mark = len(app.Log())
@@ -249,7 +249,7 @@ func TestSharedCodexTileKeepsWorkingWhileAnMCPServerStartsThenOpensATurnWhenItIs
 	mark = len(app.Log())
 	w.CodexServer().ReportMCPStartup(codex.ConversationID, "oven", "starting")
 	awaitStateSince(app, mark, checkout, protocol.SessionStateWorking)
-	w.awaitTimer(daemon.CodexWorkingCheckTimer)
+	w.awaitTimer(codexshared.WorkingCheckTimer)
 	w.advance(5 * time.Second)
 	w.CodexServer().AwaitBackgroundTerminalsListed(codex.ConversationID)
 	mark = len(app.Log())
@@ -275,13 +275,13 @@ func TestSharedCodexTileSettlesAfterAnMCPServerFinishesStartingWhenItsTerminalSt
 	mark := len(app.Log())
 	w.CodexServer().ReportMCPStartup(codex.ConversationID, "codex_apps", "starting")
 	awaitStateSince(app, mark, checkout, protocol.SessionStateWorking)
-	w.awaitTimer(daemon.CodexWorkingCheckTimer)
+	w.awaitTimer(codexshared.WorkingCheckTimer)
 	w.advance(5 * time.Second)
 	w.CodexServer().AwaitBackgroundTerminalsListed(codex.ConversationID)
 
 	mark = len(app.Log())
 	w.CodexServer().ReportMCPStartup(codex.ConversationID, "codex_apps", "ready")
-	w.awaitTimer(daemon.CodexWorkingCheckTimer)
+	w.awaitTimer(codexshared.WorkingCheckTimer)
 	w.advance(5 * time.Second)
 	awaitStateSince(app, mark, checkout, protocol.SessionStateIdle)
 }

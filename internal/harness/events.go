@@ -103,9 +103,10 @@ type ToolUse struct {
 
 // Move is a conversation the harness now runs for its reporter.
 type Move struct {
-	Conversation string
-	Path         string
-	Run          string
+	Conversation    string
+	Path            string
+	Run             string
+	ServerConfirmed bool
 }
 
 // Events is core's side of a harness: everything the harness tells attn arrives here.

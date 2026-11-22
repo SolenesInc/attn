@@ -8,10 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-const (
-	appServerTerminalOwner   = "appserver"
-	codexSharedTerminalOwner = "codex-shared"
-)
+const appServerTerminalOwner = "appserver"
 
 func (d *Daemon) adapterTerminal(t harness.TerminalID) bool {
 	_, owned := d.adapterTerminalOwner(t)

@@ -93,8 +93,6 @@ const (
 
 	FactVentChanged = "vent.changed"
 
-	FactSharedCodexChanged = "shared_codex.changed"
-
 	FactPhonesChanged = "phones.changed"
 
 	FactSendersChanged = "senders.changed"
@@ -413,10 +411,6 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, _ bus.Event) { d.projectVents() },
 		},
 		{
-			filter: bus.Filter{FactSharedCodexChanged},
-			apply:  func(d *Daemon, _ bus.Event) { d.projectSharedCodex() },
-		},
-		{
 			filter: bus.Filter{FactPhonesChanged},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectPhones() },
 		},
@@ -487,6 +481,11 @@ func (d *Daemon) projectToClients(ev bus.Event) {
 	for _, p := range wireProjections() {
 		if p.filter.Matches(ev.Name) {
 			p.apply(d, ev)
+		}
+	}
+	for _, snap := range d.profileSnapshots {
+		if snap.Fact == ev.Name {
+			d.projectProfileSnapshot(snap)
 		}
 	}
 }
@@ -581,7 +580,6 @@ const (
 	snapshotGarden         = "garden_seeds_updated"
 	snapshotAsks           = "asks_updated"
 	snapshotVents          = "vents_updated"
-	snapshotSharedCodex    = "shared_codex_changed"
 	snapshotPhones         = "phones_updated"
 	snapshotSenders        = "senders_updated"
 	snapshotCrew           = "crew_updated"

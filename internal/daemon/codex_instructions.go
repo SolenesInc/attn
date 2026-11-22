@@ -17,46 +17,56 @@ import (
 
 const sessionInstructionsTimeout = 45 * time.Second
 
-func (d *Daemon) runSessionInstructions(ctx context.Context, c command.Caller, a command.SessionInstructionsArgs) (any, error) {
+func (h codexHarness) runSessionInstructions(ctx context.Context, c command.Caller, a command.SessionInstructionsArgs) (any, error) {
 	if strings.TrimSpace(a.Question) == "" {
 		return nil, command.Usage("{question} is required")
 	}
-	if entry := d.store.SessionLedgerEntry(protocol.SessionID(strings.TrimSpace(a.ID))); entry != nil {
-		if !c.Sees(entry.ProfileID) {
-			return nil, command.Refuse("session_not_found", "%s", SessionInstructionsErrorMessage("session_not_found"))
-		}
+	target := protocol.SessionID(strings.TrimSpace(a.ID))
+	if profile, ok := h.host.Sessions().LedgerProfile(target); ok && !c.Sees(profile) {
+		return nil, command.Refuse("session_not_found", "%s", sessionInstructionsErrorMessage("session_not_found"))
 	}
 	service := sessioninstructions.Service{
-		Store:  d.store,
-		Finder: agentdriver.Get("codex").(agentdriver.TranscriptFinder),
-		Model:  daemonSessionInstructionsModel{daemon: d},
+		Store:  codexInstructionsStore{sessions: h.host.Sessions()},
+		Finder: h.driver().(agentdriver.TranscriptFinder),
+		Model:  codexInstructionsModel{harness: h},
 	}
 	ctx, cancel := context.WithTimeout(ctx, sessionInstructionsTimeout)
 	defer cancel()
-	result, err := service.Ask(ctx, sessioninstructions.Request{TargetSessionID: protocol.SessionID(strings.TrimSpace(a.ID)), Question: strings.TrimSpace(a.Question)})
+	result, err := service.Ask(ctx, sessioninstructions.Request{TargetSessionID: target, Question: strings.TrimSpace(a.Question)})
 	if err != nil {
 		code := "model_unavailable"
 		var sessionErr *sessioninstructions.Error
 		if errors.As(err, &sessionErr) {
 			code = sessionErr.Code
 		}
-		return nil, command.Refuse(code, "%s", SessionInstructionsErrorMessage(code))
+		return nil, command.Refuse(code, "%s", sessionInstructionsErrorMessage(code))
 	}
 	return result, nil
 }
 
-type daemonSessionInstructionsModel struct{ daemon *Daemon }
+type codexInstructionsStore struct{ sessions harness.HostSessions }
 
-func (m daemonSessionInstructionsModel) Run(ctx context.Context, request sessioninstructions.ModelRequest) (sessioninstructions.ModelAnswer, error) {
-	if m.daemon.headlessTaskRefused("session_instructions") {
+func (s codexInstructionsStore) Get(id protocol.SessionID) *protocol.Session {
+	return s.sessions.Get(id)
+}
+
+func (s codexInstructionsStore) GetResumeSessionID(id protocol.SessionID) string {
+	conversation, _ := s.sessions.StoredConversation(id)
+	return conversation
+}
+
+func (s codexInstructionsStore) GetSessionTranscriptPath(id protocol.SessionID) string {
+	_, path := s.sessions.StoredConversation(id)
+	return path
+}
+
+type codexInstructionsModel struct{ harness codexHarness }
+
+func (m codexInstructionsModel) Run(ctx context.Context, request sessioninstructions.ModelRequest) (sessioninstructions.ModelAnswer, error) {
+	if m.harness.host.HeadlessRefused("session_instructions") {
 		return sessioninstructions.ModelAnswer{}, headless.Refusal("session_instructions")
 	}
-	oneShot, err := m.daemon.oneShot("codex")
-	if err != nil {
-		m.daemon.logf("session instructions model failed: %v", err)
-		return sessioninstructions.ModelAnswer{}, err
-	}
-	result, err := oneShot.Run(ctx, harness.OneShotRequest{
+	result, err := m.harness.Run(ctx, harness.OneShotRequest{
 		Model:  sessioninstructions.ModelName,
 		Effort: request.Effort,
 		Input:  sessioninstructions.Prompt(request),
@@ -67,13 +77,13 @@ func (m daemonSessionInstructionsModel) Run(ctx context.Context, request session
 		if diagnostic == "" {
 			diagnostic = "unknown headless failure"
 		}
-		m.daemon.logf("session instructions model failed: %s", diagnostic)
+		m.harness.host.Logf("session instructions model failed: %s", diagnostic)
 		return sessioninstructions.ModelAnswer{}, err
 	}
 	return sessioninstructions.ParseModelAnswer(result.Text)
 }
 
-func SessionInstructionsErrorMessage(code string) string {
+func sessionInstructionsErrorMessage(code string) string {
 	switch strings.TrimSpace(code) {
 	case "session_not_found":
 		return "The target session was not found"

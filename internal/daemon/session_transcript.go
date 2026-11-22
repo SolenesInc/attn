@@ -195,14 +195,6 @@ func (f fileConversations) Path(ref harness.ConversationRef) string {
 	return f.d.inspectableTranscriptPath(ref.Session, string(ref.Harness))
 }
 
-func (f fileConversations) version(ref harness.ConversationRef, read func(path string) string) string {
-	path := f.Path(ref)
-	if path == "" {
-		return ""
-	}
-	return read(path)
-}
-
 func (f fileConversations) Check(refs []harness.ConversationRef, resumable func(id string) bool) map[harness.ConversationRef]harness.Availability {
 	availability := make(map[harness.ConversationRef]harness.Availability, len(refs))
 	for _, ref := range refs {

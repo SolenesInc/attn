@@ -110,3 +110,30 @@ func FirstExecutablePath(candidates []string) (string, bool) {
 	}
 	return "", false
 }
+
+func MergeEnvironment(base, overlay []string) []string {
+	if len(overlay) == 0 {
+		return append([]string(nil), base...)
+	}
+	merged := make([]string, 0, len(base)+len(overlay))
+	index := make(map[string]int, len(base)+len(overlay))
+	add := func(entry string) {
+		key := entry
+		if idx := strings.Index(entry, "="); idx >= 0 {
+			key = entry[:idx]
+		}
+		if pos, ok := index[key]; ok {
+			merged[pos] = entry
+			return
+		}
+		index[key] = len(merged)
+		merged = append(merged, entry)
+	}
+	for _, entry := range base {
+		add(entry)
+	}
+	for _, entry := range overlay {
+		add(entry)
+	}
+	return merged
+}

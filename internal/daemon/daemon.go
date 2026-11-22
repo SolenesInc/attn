@@ -194,7 +194,6 @@ type Daemon struct {
 	delegationCheckoutMu        sync.Mutex
 	delegationWaitsForFirstTurn bool
 	launchWatchMu               sync.Mutex
-	codexTrustMu                sync.Mutex
 	launchWatches               map[protocol.SessionID]*launchWatch
 	recoveredLaunches           map[protocol.SessionID]*launchWatch
 	typedCommands               sync.Map
@@ -221,8 +220,10 @@ type Daemon struct {
 	compactions              compactionLedger
 	homeReports              homeReportQueue
 	returned                 returnedInputs
-	codexSharedOnce          sync.Once
-	codexSharedState         *codexShared
+	clientCommands           map[string]registeredClientCommand
+	socketCommands           map[string]func(ctx context.Context, msg any) protocol.Response
+	catalogCommands          map[string]command.Handler
+	profileSnapshots         []harness.ProfileSnapshot
 	appServer                *appserver.Client
 	builtins                 []harness.Harness
 	pluginHarnesses          builtin.PluginHarnesses
@@ -3017,10 +3018,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.sendError(conn, "only the attn app can start or decline an update; run `attn update request` to ask the user")
 	case protocol.CmdSessionReopen:
 		d.handleSessionReopen(conn, msg.(*protocol.SessionReopenMessage))
-	case protocol.CmdCodexStatus:
-		d.handleCodexStatus(conn, msg.(*protocol.CodexStatusMessage))
-	case protocol.CmdRestartSharedCodex:
-		d.handleRestartSharedCodexCLI(conn, msg.(*protocol.RestartSharedCodexMessage))
 	case protocol.CmdDropOutpostCopy:
 		if err := d.dropStaleCopy(); err != nil {
 			d.sendError(conn, err.Error())
@@ -3151,6 +3148,10 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdWorktreeRefresh:
 		d.handleWorktreeRefresh(conn, msg.(*protocol.WorktreeRefreshMessage))
 	default:
+		if h, ok := d.socketCommands[cmd]; ok {
+			_ = json.NewEncoder(conn).Encode(h(ctx, msg))
+			return
+		}
 		d.sendError(conn, "unknown command")
 	}
 }

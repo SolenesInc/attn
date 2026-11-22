@@ -10,8 +10,8 @@ import (
 )
 
 // All are the built-in harnesses, their servers bound on servers.
-func All(host harness.Host, servers *appserver.Client) []harness.Harness {
-	return []harness.Harness{sigma.New(host, servers), claude.New(host)}
+func All(host func(owner string) harness.Host, servers *appserver.Client) []harness.Harness {
+	return []harness.Harness{sigma.New(host(""), servers), claude.New(host(""))}
 }
 
 // PluginHarnesses are the harnesses of the agents plugins register.

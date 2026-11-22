@@ -11,7 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/sessionstate"
 )
 
-var harnessSources []func(*Daemon, harness.Host) []harness.Harness
+var harnessSources []func(*Daemon, func(string) harness.Host) []harness.Harness
 
 func (d *Daemon) harnesses() []harness.Harness {
 	return append(d.builtinHarnesses(), d.pluginHarnesses.Harnesses()...)

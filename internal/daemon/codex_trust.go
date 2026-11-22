@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/victorarias/attn/internal/harness"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -14,8 +13,8 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/toolhome"
 )
 
@@ -28,12 +27,12 @@ type codexFolderTrust struct {
 	worked     bool
 }
 
-func (d *Daemon) readCodexFolderTrust(path, profile string) (codexFolderTrust, error) {
+func (r *codexShared) readCodexFolderTrust(path, profile string) (codexFolderTrust, error) {
 	config, err := readCodexTrust(codexConfigPath())
 	if err != nil {
 		return codexFolderTrust{}, err
 	}
-	return assessCodexFolderTrust(path, config, d.store.StartedConversationDirectories(profile)), nil
+	return assessCodexFolderTrust(path, config, r.host.Sessions().StartedDirectories(profile)), nil
 }
 
 func assessCodexFolderTrust(path string, config *codexTrustConfig, workedDirectories []string) codexFolderTrust {
@@ -80,17 +79,13 @@ func workedInRepository(repository string, workedDirectories []string, originOf 
 	return false
 }
 
-func (d *Daemon) automationRepositoryOrigin(repository string) string {
-	return d.repositoryOrigin(gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, repository)
-}
-
 func (t codexFolderTrust) known() bool {
 	return t.saved == codexTrusted || t.saved == "" && t.worked
 }
 
-func (d *Daemon) trustCodexFolder(folder string) error {
-	d.codexTrustMu.Lock()
-	defer d.codexTrustMu.Unlock()
+func (h codexHarness) trustCodexFolder(folder string) error {
+	h.trust.Lock()
+	defer h.trust.Unlock()
 	config, err := readCodexTrust(codexConfigPath())
 	if err != nil {
 		return err
@@ -101,17 +96,14 @@ func (d *Daemon) trustCodexFolder(folder string) error {
 	return config.addTrusted(folder)
 }
 
-func (d *Daemon) refuseUnknownCodexFolder(opts *ptybackend.SpawnOptions, profile string) error {
-	if opts.Agent != string(protocol.SessionAgentCodex) || opts.UnattendedLaunch.IsZero() {
-		return nil
-	}
-	d.codexTrustMu.Lock()
-	defer d.codexTrustMu.Unlock()
+func (h codexHarness) refuseUnknownCodexFolder(cwd, profile string) error {
+	h.trust.Lock()
+	defer h.trust.Unlock()
 	config, err := readCodexTrust(codexConfigPath())
 	if err != nil {
 		return err
 	}
-	return checkUnattendedCodexFolder(opts.CWD, config, d.store.StartedConversationDirectories(profile), d.automationRepositoryOrigin)
+	return checkUnattendedCodexFolder(cwd, config, h.host.Sessions().StartedDirectories(profile), h.host.RepositoryOrigin)
 }
 
 func checkUnattendedCodexFolder(path string, config *codexTrustConfig, workedDirectories []string, originOf func(repository string) string) error {

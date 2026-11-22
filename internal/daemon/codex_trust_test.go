@@ -2,12 +2,29 @@ package daemon
 
 import (
 	"fmt"
-	"github.com/victorarias/attn/internal/git"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/victorarias/attn/internal/git"
 )
+
+func runCodexTrustGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=Test",
+		"GIT_AUTHOR_EMAIL=test@example.com",
+		"GIT_COMMITTER_NAME=Test",
+		"GIT_COMMITTER_EMAIL=test@example.com",
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v in %s: %v\n%s", args, dir, err, out)
+	}
+}
 
 func TestAnUnattendedCodexRunTrustsOnlyAFolderTheUserIsKnownToTrust(t *testing.T) {
 	root, err := filepath.EvalSymlinks(t.TempDir())
@@ -25,10 +42,10 @@ func TestAnUnattendedCodexRunTrustsOnlyAFolderTheUserIsKnownToTrust(t *testing.T
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		runGitDaemon(t, dir, "init", "-b", "main")
-		runGitDaemon(t, dir, "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "start")
+		runCodexTrustGit(t, dir, "init", "-b", "main")
+		runCodexTrustGit(t, dir, "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "start")
 	}
-	runGitDaemon(t, filepath.Join(root, "shop"), "worktree", "add", "-b", "nightly", filepath.Join(root, "shop--nightly"))
+	runCodexTrustGit(t, filepath.Join(root, "shop"), "worktree", "add", "-b", "nightly", filepath.Join(root, "shop--nightly"))
 	for _, dir := range []string{"shop/pkg1", "shop/pkg2", "notes"} {
 		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
 			t.Fatal(err)

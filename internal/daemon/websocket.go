@@ -556,9 +556,11 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Crew:                   state.Crew,
 		Asks:                   d.asksSnapshot(client.selectedProfile(), d.asks()).Asks,
 		Vents:                  d.ventsSnapshot(client.selectedProfile()).Vents,
-		SharedCodex:            d.codexShared().wireState(client.selectedProfile()),
 		Outposts:               d.outpostsUpdatedMessage().Outposts,
 		UpdateRun:              d.latestUpdateRunForApp(),
+	}
+	for _, snap := range d.profileSnapshots {
+		snap.Initial(client.selectedProfile(), event)
 	}
 	pausepoint.At(pausepoint.DaemonInitialStateBuilt)
 	d.sendInitialArrangement(client, event)
@@ -746,7 +748,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.sendCommandError(client, peek.Cmd, err.Error())
 		return
 	}
-	if shouldLogWSCommand(cmd) {
+	if d.shouldLogWSCommand(cmd) {
 		d.logf("WebSocket parsed cmd: %s", cmd)
 	}
 	if cmd != protocol.CmdClientHello && !client.hasSaidHello() {
@@ -758,7 +760,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		}
 		return
 	}
-	if d.isRecovering() && blocksDuringRecovery(cmd) {
+	if d.isRecovering() && d.blocksDuringRecovery(cmd) {
 		d.sendCommandError(client, cmd, "daemon_recovering")
 		if unregister, ok := msg.(*protocol.UnregisterMessage); ok {
 			d.answerSessionClose(client, unregister.ID, errors.New("daemon_recovering"))
@@ -1274,10 +1276,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		} else {
 			d.life.Go("handleReloadSession", func() { d.handleReloadSession(client, reload) })
 		}
-	case protocol.CmdRestartSharedCodex:
-		d.life.Go("handleRestartSharedCodex", func() { d.handleRestartSharedCodex(client, msg.(*protocol.RestartSharedCodexMessage)) })
-	case protocol.CmdInstallCodexUpdate:
-		d.life.Go("handleInstallCodexUpdate", func() { d.handleInstallCodexUpdate(client, msg.(*protocol.InstallCodexUpdateMessage)) })
 	case protocol.CmdStartUpdate:
 		d.handleStartUpdate(client, msg.(*protocol.StartUpdateMessage))
 	case protocol.CmdDeclineUpdate:
@@ -1338,6 +1336,14 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		rename := msg.(*protocol.RenameSessionMessage)
 		d.inSessionOrder(client, rename.SessionID, func() { d.handleRenameSession(client, rename) })
 	default:
+		if h, ok := d.clientCommands[cmd]; ok {
+			d.life.Go("handleClientCommand:"+cmd, func() {
+				if reply := h.run(client.selectedProfile(), msg); reply != nil {
+					d.sendToClient(client, reply)
+				}
+			})
+			return
+		}
 		d.sendCommandError(client, cmd, "unsupported command")
 	}
 }

@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -15,10 +13,7 @@ import (
 
 	"github.com/victorarias/attn/internal/codexshared"
 	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
-	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/setting"
 )
 
@@ -26,26 +21,12 @@ const (
 	codexUpdateCheckKind     = "codex_update_check"
 	codexUpdateCheckInterval = 24 * time.Hour
 	agentVersionLimit        = 5 * time.Second
+	factSharedCodexChanged   = "shared_codex.changed"
+	snapshotSharedCodex      = "shared_codex_changed"
 )
 
 func (r *codexShared) binary(configured string) (string, error) {
-	return r.d.machineAgentExecutable(string(protocol.SessionAgentCodex), configured)
-}
-
-func (d *Daemon) runAgentBinary(ctx context.Context, binary string, args ...string) ([]byte, error) {
-	loginEnv := d.loginEnv.Latest(ctx)
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	cmd := exec.CommandContext(ctx, binary, args...)
-	cmd.Env = pty.MergeEnvironment(os.Environ(), loginEnv)
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return out, fmt.Errorf("%s %s: %w: %s", binary, strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
-	}
-	return out, nil
+	return r.host.Executable(r.facts(), configured)
 }
 
 func codexReleaseVersion(version string) bool {
@@ -67,7 +48,7 @@ func (r *codexShared) installedVersion(ctx context.Context) (string, error) {
 func (r *codexShared) versionOf(ctx context.Context, binary string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, agentVersionLimit)
 	defer cancel()
-	out, err := r.d.runAgentBinary(ctx, binary, "--version")
+	out, err := r.host.RunBinary(ctx, binary, "--version")
 	if err != nil {
 		return "", err
 	}
@@ -89,17 +70,22 @@ func (r *codexShared) recallBinary(ctx context.Context, s *codexServer) {
 	s.mu.Lock()
 	known := s.binary != ""
 	s.mu.Unlock()
-	provider, ok := r.d.ptyBackend.(ptybackend.SessionLaunchParamsProvider)
-	if known || !ok {
+	if known {
 		return
 	}
-	params, err := provider.SessionLaunchParams(ctx, s.terminal)
+	info, supported, err := r.terminals.Info(ctx, s.terminal)
+	if !supported {
+		return
+	}
 	if err != nil {
-		r.d.logf("shared Codex: reading which Codex the app-server of profile %s runs: %v", s.profile, err)
+		r.host.Logf("shared Codex: reading which Codex the app-server of profile %s runs: %v", s.profile, err)
+		return
+	}
+	if info.Executable == "" {
 		return
 	}
 	s.mu.Lock()
-	s.binary = params.Executable
+	s.binary = info.Executable
 	s.mu.Unlock()
 }
 
@@ -116,30 +102,30 @@ func (r *codexShared) terminalBinary(profile, installed string) string {
 	if binary == "" || running == "" || binary == resolvedBinary(installed) {
 		return installed
 	}
-	version, err := r.versionOf(r.d.life.Context(), binary)
+	version, err := r.versionOf(r.host.Life().Context(), binary)
 	if err == nil && version != running {
 		err = fmt.Errorf("it reports Codex %s", version)
 	}
 	if err != nil {
-		r.d.logf("shared Codex: new terminals of profile %s run %s, not the app-server's Codex %s at %s: %v", profile, installed, running, binary, err)
+		r.host.Logf("shared Codex: new terminals of profile %s run %s, not the app-server's Codex %s at %s: %v", profile, installed, running, binary, err)
 		return installed
 	}
-	r.d.logf("shared Codex: a new terminal of profile %s runs the app-server's Codex at %s instead of %s", profile, binary, installed)
+	r.host.Logf("shared Codex: a new terminal of profile %s runs the app-server's Codex at %s instead of %s", profile, binary, installed)
 	return binary
 }
 
 func (r *codexShared) refreshInstalled() {
 	r.probing.Lock()
 	defer r.probing.Unlock()
-	version, err := r.installedVersion(r.d.life.Context())
+	version, err := r.installedVersion(r.host.Life().Context())
 	if err != nil {
-		r.d.logf("shared Codex: reading the installed version: %v", err)
+		r.host.Logf("shared Codex: reading the installed version: %v", err)
 	}
 	r.learn(&version, nil)
 }
 
 func (r *codexShared) refreshInstalledSoon() {
-	r.d.life.Go("codexInstalledVersion", r.refreshInstalled)
+	r.host.Life().Go("codexInstalledVersion", r.refreshInstalled)
 }
 
 func (r *codexShared) learnTUI(v *codexView, params json.RawMessage) {
@@ -187,24 +173,19 @@ func (r *codexShared) learn(installed, latest *string) {
 	}
 }
 
-func (d *Daemon) queueCodexUpdateCheck() {
-	queue := d.jobQueueRef()
-	if queue == nil {
-		return
-	}
-	if _, err := queue.Enqueue(codexUpdateCheckKind, jobs.EnqueueOptions{UniqueKey: jobs.CronKey, RunNow: true}); err != nil {
-		d.logf("shared Codex: queue the update check: %v", err)
-	}
+func (r *codexShared) setEnqueueUpdateCheck(fn func()) {
+	r.mu.Lock()
+	r.enqueueUpdateCheck = fn
+	r.mu.Unlock()
 }
 
-func (d *Daemon) codexUpdateCheckHandler(ctx context.Context, _ *jobs.Job) (any, error) {
-	r := d.codexShared()
+func (r *codexShared) runUpdateCheck(ctx context.Context) error {
 	binary, err := r.binary("")
 	if err != nil {
-		r.d.logf("shared Codex: no update check: %v", err)
-		return nil, nil
+		r.host.Logf("shared Codex: no update check: %v", err)
+		return nil
 	}
-	out, err := r.d.runAgentBinary(ctx, binary, "doctor", "--json")
+	out, err := r.host.RunBinary(ctx, binary, "doctor", "--json")
 	var report struct {
 		Checks map[string]struct {
 			Details map[string]any `json:"details"`
@@ -214,39 +195,32 @@ func (d *Daemon) codexUpdateCheckHandler(ctx context.Context, _ *jobs.Job) (any,
 		if err == nil {
 			err = parseErr
 		}
-		return nil, fmt.Errorf("codex doctor --json: %w", err)
+		return fmt.Errorf("codex doctor --json: %w", err)
 	}
 	r.refreshInstalled()
 	latest, _ := report.Checks["updates.status"].Details["latest version"].(string)
 	if !codexReleaseVersion(latest) {
-		return nil, fmt.Errorf("codex doctor --json reported no latest version: %q", latest)
+		return fmt.Errorf("codex doctor --json reported no latest version: %q", latest)
 	}
 	r.learn(nil, &latest)
-	return nil, nil
+	return nil
 }
 
 func (r *codexShared) versionsChanged(profiles ...string) {
-	if len(profiles) == 0 {
-		all, err := r.d.store.ListProfiles(false)
-		if err != nil {
-			r.d.logf("shared Codex: %v", err)
-			return
-		}
-		for _, profile := range all {
-			profiles = append(profiles, profile.ID)
-		}
+	if r.notifySnapshot != nil {
+		r.notifySnapshot(profiles...)
 	}
-	r.d.coalesceSnapshots(func() {
-		for _, profile := range profiles {
-			r.d.publishFact(FactSharedCodexChanged, profile, nil)
-		}
-	})
 }
 
 func (r *codexShared) settingChanged(key string) {
 	if key == setting.CodexExecutable.Key {
 		r.refreshInstalledSoon()
-		r.d.queueCodexUpdateCheck()
+		r.mu.Lock()
+		enqueue := r.enqueueUpdateCheck
+		r.mu.Unlock()
+		if enqueue != nil {
+			enqueue()
+		}
 	}
 }
 
@@ -301,7 +275,7 @@ func (r *codexShared) wireState(profile string) *protocol.SharedCodexState {
 		if !codexOlder(version, running) {
 			continue
 		}
-		if session, ok := r.d.terminals().Showing(terminal); ok && !slices.Contains(state.StaleSessions, protocol.SessionID(session)) {
+		if session, ok := r.host.Sessions().Showing(terminal); ok && !slices.Contains(state.StaleSessions, protocol.SessionID(session)) {
 			state.StaleSessions = append(state.StaleSessions, protocol.SessionID(session))
 		}
 	}
@@ -318,30 +292,4 @@ func optionalVersion(version string) *string {
 
 func (r *codexShared) changedMessage(profile string) *protocol.SharedCodexChangedMessage {
 	return &protocol.SharedCodexChangedMessage{Event: protocol.EventSharedCodexChanged, ProfileID: profile, SharedCodex: r.wireState(profile)}
-}
-
-func (d *Daemon) projectSharedCodex() {
-	if d.store == nil || d.wsHub == nil {
-		return
-	}
-	r := d.codexShared()
-	d.projectSnapshot(snapshotSharedCodex, func() {
-		snapshots := map[string][]byte{}
-		d.wsHub.ForEachClient(func(client *wsClient) {
-			profile := client.selectedProfile()
-			if profile == "" {
-				return
-			}
-			data, ok := snapshots[profile]
-			if !ok {
-				var err error
-				if data, err = json.Marshal(r.changedMessage(profile)); err != nil {
-					d.logf("shared Codex snapshot: %v", err)
-					return
-				}
-				snapshots[profile] = data
-			}
-			d.sendOutbound(client, outboundMessage{kind: messageKindText, payload: data})
-		})
-	})
 }

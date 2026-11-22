@@ -806,6 +806,8 @@ func (d *Daemon) sendProfileSnapshots(client *wsClient) {
 	d.sendToClient(client, d.ventsSnapshot(profileID))
 	d.sendToClient(client, d.notificationsUpdated(profileID))
 	if profileID != "" {
-		d.sendToClient(client, d.codexShared().changedMessage(profileID))
+		for _, snap := range d.profileSnapshots {
+			d.sendToClient(client, snap.Changed(profileID))
+		}
 	}
 }
