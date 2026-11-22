@@ -2097,6 +2097,10 @@ model InspectCallerPathsMessage {
   paths?: CallerPath[];
   evidence?: string[];
   commit?: string;
+  // The caller's Git variables that select the repository the commit resolves
+  // in, as the CLI's run_command carries them.
+  @extension("goJSONSchema", #{ type: "map[string]string", nillable: true })
+  git_environment?: Record<string>;
 }
 
 // A path a command argument names. When the caller's session folder resolves
@@ -6853,6 +6857,11 @@ model RunCommandMessage {
   // Without it they resolve against the folder the caller's session started
   // in.
   directory?: string;
+  // The CLI's Git variables that choose the repository its commit resolves
+  // in: those git(1) lists under The Git Repository that select a repository,
+  // its objects or its refs, such as GIT_DIR and GIT_WORK_TREE.
+  @extension("goJSONSchema", #{ type: "map[string]string", nillable: true })
+  git_environment?: Record<string>;
 }
 
 // CommandRefusal is why a command did not run. code is a refusal class

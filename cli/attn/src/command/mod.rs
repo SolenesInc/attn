@@ -2,8 +2,10 @@ use crate::client::{Client, Reply, SendError};
 use crate::commands::{Run, Stop};
 use attn::go::flag::{Flag, FlagDefault, FlagError, FlagSet, Value as FlagValue};
 use attn::go::quote::quote;
+use attn_protocol::go_values::GIT_REPOSITORY_ENV;
 use attn_protocol::{CommandRefusal, RunCommandMessage};
 use serde_json::{Map, Value as Json};
+use std::collections::BTreeMap;
 use std::io::Read;
 use std::sync::Once;
 use std::time::Instant;
@@ -785,6 +787,11 @@ pub fn send(
     message.session_id = (!parsed.session.is_empty()).then(|| parsed.session.clone());
     message.profile_id = (!parsed.profile.is_empty()).then(|| parsed.profile.clone());
     message.directory = crate::commands::working_directory().ok();
+    let git_environment: BTreeMap<String, String> = GIT_REPOSITORY_ENV
+        .iter()
+        .filter_map(|name| Some((name.to_string(), std::env::var(name).ok()?)))
+        .collect();
+    message.git_environment = (!git_environment.is_empty()).then_some(git_environment);
     let deadline = family.deadline(cmd, parsed);
     match Client::new(run.paths, "", &run.terminal).call_command(&message, deadline) {
         Err(error) if error.unconnected && cmd.runs_without_daemon => {

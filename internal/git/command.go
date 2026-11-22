@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -73,6 +74,27 @@ func (c *Client) combinedWithHTTPAuthorization(ctx context.Context, op Operation
 
 func (c *Client) Output(ctx context.Context, op Operation, dir string, args ...string) ([]byte, error) {
 	return launchGit(ctx, op, defaultTimeout(op), gitProcess{dir: dir}, args...)
+}
+
+var RepositoryEnv = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE", "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM"}
+
+func (c *Client) OutputInRepository(ctx context.Context, op Operation, dir string, repository map[string]string, args ...string) ([]byte, error) {
+	return launchGit(ctx, op, defaultTimeout(op), gitProcess{dir: dir, env: repositorySelectedBy(repository)}, args...)
+}
+
+func repositorySelectedBy(repository map[string]string) []string {
+	env := []string{}
+	for _, entry := range os.Environ() {
+		if name, _, _ := strings.Cut(entry, "="); !slices.Contains(RepositoryEnv, name) {
+			env = append(env, entry)
+		}
+	}
+	for _, name := range RepositoryEnv {
+		if value, ok := repository[name]; ok {
+			env = append(env, name+"="+value)
+		}
+	}
+	return env
 }
 
 func (c *Client) Combined(ctx context.Context, op Operation, dir string, args ...string) ([]byte, error) {

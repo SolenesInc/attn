@@ -271,6 +271,14 @@ func TestAClaudeOnAnOutpostRunsHomeToolsAtTheHomeAsItsSessionAndHereToolsWithout
 	if got := reportedCommit(); got != full {
 		t.Errorf("C1's report names commit %q after the CLI named %s in %s, want %s", got, full[:9], sub, full)
 	}
+	other := o.outpost.Path("other")
+	otherHead := repoWithOwnHead(t, other)
+	if ran := o.outpost.Run(testworld.Invocation{Args: []string{"seed", "check", "report", o.seed, "C1", "-m", "Passed in other", "--evidence", "https://example.test/run", "--commit", "HEAD"}, Terminal: o.pair.App.Terminal(session), Dir: sub, Env: []string{"GIT_DIR=" + filepath.Join(other, ".git")}}); ran.Code != 0 {
+		t.Fatalf("attn seed check report in %s with GIT_DIR naming %s exited %d: %s", sub, other, ran.Code, ran.Stderr)
+	}
+	if got := reportedCommit(); got != otherHead {
+		t.Errorf("C1's report names commit %q after the outpost's CLI in %s named HEAD with GIT_DIR naming %s, want %s", got, sub, other, otherHead)
+	}
 	for name, kept := range map[string]bool{"tool-copy.md": true, "cli-move.md": false, "cli-copy.md": true} {
 		if _, err := os.Stat(filepath.Join(shop, name)); (err == nil) != kept {
 			t.Errorf("%s on the outpost after its attach: %v, want it kept %v", name, err, kept)

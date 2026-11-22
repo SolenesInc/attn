@@ -13,10 +13,11 @@ import (
 )
 
 type Caller struct {
-	Session   protocol.SessionID
-	Profile   string
-	Terminal  protocol.TerminalID
-	Directory string
+	Session        protocol.SessionID
+	Profile        string
+	Terminal       protocol.TerminalID
+	Directory      string
+	GitEnvironment map[string]string
 }
 
 func (c Caller) Sees(profile string) bool {

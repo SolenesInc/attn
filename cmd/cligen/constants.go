@@ -10,6 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
@@ -118,6 +119,7 @@ func writeConstants(out *strings.Builder) {
 		{"ROUTING_OVERRIDE_ENV", config.RoutingOverrideEnv()},
 		{"ENTRY_KINDS", garden.EntryKinds},
 		{"CHECK_VERBS", checkVerbs},
+		{"GIT_REPOSITORY_ENV", attngit.RepositoryEnv},
 	} {
 		items := make([]string, len(c.value))
 		for i, item := range c.value {

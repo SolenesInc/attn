@@ -64,6 +64,9 @@ func (d *Daemon) askCallersMachine(ctx context.Context, c command.Caller, ask ca
 	}
 	folder, sessionFolder := d.callerFolder(c)
 	msg := protocol.InspectCallerPathsMessage{Cmd: protocol.CmdInspectCallerPaths, Folder: folder, SessionFolder: optionalTrue(sessionFolder), Paths: ask.paths, Evidence: ask.evidence, Commit: optionalText(ask.commit)}
+	if ask.commit != "" {
+		msg.GitEnvironment = c.GitEnvironment
+	}
 	if origin, remote := OriginOf(ctx); remote {
 		msg.Host = protocol.Ptr(origin.Host)
 	}
@@ -224,7 +227,9 @@ func (w *callerPathsHere) commit(rev string) *string {
 		w.problem("{commit} %q resolves in the session's repository, and this caller has no session folder", rev)
 		return nil
 	}
-	out, err := w.d.gitOutput(w.ctx, gitTask{Kind: gitTaskSeedArtifact, Lane: gitInteractive}, attngit.OpMetadata, w.msg.Folder, "rev-parse", "--verify", rev+"^{commit}")
+	out, err := gitValue(w.ctx, w.d.gitExecution(), gitTask{Kind: gitTaskSeedArtifact, Lane: gitInteractive}, func(ctx context.Context, client *attngit.Client) ([]byte, error) {
+		return client.OutputInRepository(ctx, attngit.OpMetadata, w.msg.Folder, w.msg.GitEnvironment, "rev-parse", "--verify", rev+"^{commit}")
+	})
 	if err != nil {
 		w.problem("{commit} %q is not a commit in the repository of %s (git rev-parse): %v", rev, w.where, err)
 		return nil

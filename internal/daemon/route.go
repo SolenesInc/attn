@@ -190,6 +190,7 @@ func (d *Daemon) forwardCommand(c command.Caller, name string, args json.RawMess
 	if c.Directory != "" {
 		msg.Directory = protocol.Ptr(c.Directory)
 	}
+	msg.GitEnvironment = c.GitEnvironment
 	frame, err := json.Marshal(msg)
 	if err != nil {
 		return nil, command.AsRefusal(err)

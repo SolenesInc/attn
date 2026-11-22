@@ -84,6 +84,7 @@ pub const LINKABLE_KINDS: &[&str] = &["blocks", "part-of", "discovered-from"];
 pub const ROUTING_OVERRIDE_ENV: &[&str] = &["ATTN_DATA_DIR", "ATTN_HARNESS_DATA_DIR", "ATTN_HARNESS_NOTEBOOK_ROOT", "ATTN_SOCKET_PATH", "ATTN_DB_PATH", "ATTN_CONFIG_PATH", "ATTN_PLUGIN_DIR", "ATTN_WS_PORT"];
 pub const ENTRY_KINDS: &[&str] = &["note", "handoff", "attach", "detach", "check", "edit", "move", "link", "answer", "authorization"];
 pub const CHECK_VERBS: &[&str] = &["add", "edit", "remove", "restore", "report", "confirm", "reject", "uncheck", "reopen"];
+pub const GIT_REPOSITORY_ENV: &[&str] = &["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE", "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM"];
 
 pub struct Setting {
     pub key: &'static str,

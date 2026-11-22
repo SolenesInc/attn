@@ -6300,6 +6300,9 @@ type InspectCallerPathsMessage struct {
 	// Folder corresponds to the JSON schema field "folder".
 	Folder string `json:"folder"`
 
+	// GitEnvironment corresponds to the JSON schema field "git_environment".
+	GitEnvironment InspectCallerPathsMessageGitEnvironment `json:"git_environment,omitempty,omitzero"`
+
 	// Host corresponds to the JSON schema field "host".
 	Host *string `json:"host,omitempty,omitzero"`
 
@@ -6309,6 +6312,8 @@ type InspectCallerPathsMessage struct {
 	// SessionFolder corresponds to the JSON schema field "session_folder".
 	SessionFolder *bool `json:"session_folder,omitempty,omitzero"`
 }
+
+type InspectCallerPathsMessageGitEnvironment map[string]string
 
 type InspectPathMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
@@ -9955,12 +9960,17 @@ type RunCommandMessage struct {
 	// Directory corresponds to the JSON schema field "directory".
 	Directory *string `json:"directory,omitempty,omitzero"`
 
+	// GitEnvironment corresponds to the JSON schema field "git_environment".
+	GitEnvironment RunCommandMessageGitEnvironment `json:"git_environment,omitempty,omitzero"`
+
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 }
+
+type RunCommandMessageGitEnvironment map[string]string
 
 type RuntimeRespawnedMessage struct {
 	// Event corresponds to the JSON schema field "event".

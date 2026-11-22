@@ -76,6 +76,7 @@ func (d *Daemon) serveRunCommand(ctx context.Context, conn net.Conn, msg *protoc
 func (d *Daemon) callerFromFrame(ctx context.Context, msg *protocol.RunCommandMessage) (command.Caller, error) {
 	c, err := d.framedCaller(ctx, msg)
 	c.Directory = strings.TrimSpace(protocol.Deref(msg.Directory))
+	c.GitEnvironment = msg.GitEnvironment
 	return c, err
 }
 

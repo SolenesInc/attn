@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "822460ca750b";
+pub const PROTOCOL_VERSION: &str = "ad82526ac70c";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -5676,6 +5676,8 @@ pub struct InspectCallerPathsMessage {
     pub evidence: Option<Vec<String>>,
     pub folder: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_environment: Option<BTreeMap<String, String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub paths: Option<Vec<CallerPath>>,
@@ -8954,6 +8956,8 @@ pub struct RunCommandMessage {
     pub command: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub directory: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_environment: Option<BTreeMap<String, String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
