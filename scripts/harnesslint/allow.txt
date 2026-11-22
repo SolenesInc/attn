@@ -8,6 +8,9 @@ internal/daemon/harnesses.go As[Runs] leak 1: a plugin driver's runs; generic co
 internal/daemon/conversation_keep.go As[Keeper] leak 1: attn keeps copies of Claude Code's conversations and the files that travel with them, then restores and forgets them
 internal/daemon/model_call_spare.go As[SpareStarter] leak 1: a Claude Code process started ahead of a model call; the spare that keeps one ready for the default model-call harness
 internal/daemon/harness_targets.go As[Targets] leak 1: a plugin server's execution targets; listing them, checking a spawn's target and the execution_target setting
+internal/sessionmonitor/folder_trust.go As[ScreenReader] leak 1: Claude Code's folder-trust question, read off its screen while a launch waits for its first report
+internal/daemon/launch_watch.go As[ScreenReader] leak 1: a delegation that reported no first turn names the folder-trust question its screen shows
+internal/daemon/agent_peek.go As[ScreenReader] leak 1: peek marks the composer suggestion Claude Code draws on its screen
 
 internal/fakeagent/ * fake harness binaries for tests: naming the harness each one fakes is its job
 internal/probetui/ * a TUI probe that draws the screens of the harnesses it imitates

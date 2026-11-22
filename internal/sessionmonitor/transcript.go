@@ -2,14 +2,13 @@ package sessionmonitor
 
 import (
 	"errors"
-	"github.com/victorarias/attn/internal/harness"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/victorarias/attn/internal/activity"
-	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/transcript"
@@ -36,7 +35,7 @@ type transcriptWatcher struct {
 	cwd           string
 	startedAt     time.Time
 	preferredPath string
-	behavior      agentdriver.TranscriptWatcherBehavior
+	behavior      harness.TranscriptWatcher
 	usageTracker  *usageTracker
 	stopCh        chan struct{}
 	doneCh        chan struct{}
@@ -50,7 +49,7 @@ type transcriptWatcher struct {
 
 type AssistantWindow = harness.AssistantWindow
 
-func newTranscriptWatcher(monitor *Monitor, agent protocol.SessionAgent, cwd string, startedAt time.Time, behavior agentdriver.TranscriptWatcherBehavior) *transcriptWatcher {
+func newTranscriptWatcher(monitor *Monitor, agent protocol.SessionAgent, cwd string, startedAt time.Time, behavior harness.TranscriptWatcher) *transcriptWatcher {
 	return &transcriptWatcher{
 		monitor:   monitor,
 		agent:     agent,
@@ -125,19 +124,8 @@ func isDuplicateAssistantEvent(lastContent string, lastAt time.Time, content str
 	return content == lastContent && !lastAt.IsZero() && now.Sub(lastAt) <= assistantDedupWindow
 }
 
-func IsTranscriptWatchedAgent(agent protocol.SessionAgent) bool {
-	d := agentdriver.Get(string(agent))
-	if d == nil {
-		return false
-	}
-	caps := agentdriver.EffectiveCapabilities(d)
-	if !caps.HasTranscript || !caps.HasTranscriptWatcher {
-		return false
-	}
-	if _, ok := agentdriver.GetTranscriptFinder(d); !ok {
-		return false
-	}
-	return true
+func (m *Monitor) transcriptPart(agent protocol.SessionAgent) (harness.Transcript, bool) {
+	return harness.As[harness.Transcript](m.registry.host.Harness(agent))
 }
 
 func (w *transcriptWatcher) resolveExactPath() string {
@@ -190,14 +178,8 @@ func (m *Monitor) EnsureTranscriptWatcher(transcriptPath string) {
 	m.startTranscriptWatcher(transcriptPath, false)
 }
 
-func transcriptBootstrapBytesForAgent(agent protocol.SessionAgent) int64 {
-	if tf, ok := agentdriver.GetTranscriptFinder(agentdriver.Get(string(agent))); ok {
-		if n := tf.BootstrapBytes(); n > 0 {
-			return n
-		}
-	}
-	return 0
-}
+// transcriptBootstrapBytes is how much of a transcript's tail a new watcher reads back: 256 KiB, as both transcript harnesses asked.
+const transcriptBootstrapBytes = 256 * 1024
 
 func (m *Monitor) StartTranscriptWatcher(transcriptPath string) {
 	m.startTranscriptWatcher(transcriptPath, true)
@@ -214,11 +196,12 @@ func (m *Monitor) startTranscriptWatcher(transcriptPath string, replaceCurrent b
 	m.mu.Lock()
 	agent, cwd, startedAt := m.agent, m.directory, m.startedAt
 	m.mu.Unlock()
-	if !IsTranscriptWatchedAgent(agent) {
+	part, ok := m.transcriptPart(agent)
+	if !ok {
 		return
 	}
-	behavior, ok := agentdriver.GetTranscriptWatcherBehavior(agentdriver.Get(string(agent)))
-	if !ok {
+	behavior := part.Watcher()
+	if behavior == nil {
 		return
 	}
 	if startedAt.IsZero() {
@@ -541,7 +524,7 @@ func (w *transcriptWatcher) run(predecessorDone <-chan struct{}) {
 				return
 			}
 			startOffset := info.Size()
-			bootstrapBytes := transcriptBootstrapBytesForAgent(w.agent)
+			bootstrapBytes := int64(transcriptBootstrapBytes)
 			if bootstrapBytes > 0 && info.Size() > bootstrapBytes {
 				startOffset = info.Size() - bootstrapBytes
 			} else if bootstrapBytes > 0 {

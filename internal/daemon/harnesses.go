@@ -249,9 +249,14 @@ func builtinFacts(driver agentdriver.Driver) harness.Facts {
 			Provider:           declaresServer,
 		},
 		Executable:            harness.Executable{Default: driver.DefaultExecutable(), Env: driver.ExecutableEnvVar()},
-		Signals:               withTitles(hookSignals(caps.HasHooks), caps.HarnessSignals),
+		Signals:               stopSignals(withTitles(hookSignals(caps.HasHooks), caps.HarnessSignals), caps),
 		ConversationIsSession: caps.ConversationIsSession,
 	}
+}
+
+func stopSignals(s harness.Signals, caps agentdriver.Capabilities) harness.Signals {
+	s.StopsReadable, s.StopsClassified = caps.HasTranscript, caps.HasClassifier
+	return s
 }
 
 func withTitles(s harness.Signals, titles harness.TitleKind) harness.Signals {

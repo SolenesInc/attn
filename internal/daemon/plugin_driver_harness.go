@@ -218,7 +218,7 @@ func (h pluginHarness) End(_ context.Context, e harness.Ending) {
 }
 
 func pluginSignals(declared map[string]bool) harness.Signals {
-	signals := harness.Signals{Heartbeat: 500 * time.Millisecond, ReviewerDwell: time.Minute, ReportsTools: declared["pull_request_reporting"]}
+	signals := harness.Signals{Heartbeat: 500 * time.Millisecond, ReviewerDwell: time.Minute, ReportsTools: declared["pull_request_reporting"], StopsReadable: true, StopsClassified: true}
 	if declared["state_reporting"] {
 		signals.StateAuthority = harness.StateByHarness
 	}

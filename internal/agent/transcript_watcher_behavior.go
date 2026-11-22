@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -11,35 +12,17 @@ import (
 const claudeHookStaleThreshold = 2 * time.Minute
 
 type TranscriptWatcherBehaviorProvider interface {
-	NewTranscriptWatcherBehavior() TranscriptWatcherBehavior
+	NewTranscriptWatcherBehavior() harness.TranscriptWatcher
 }
 
-type TranscriptWatcherBehavior interface {
-	HandleLine(line []byte) WatcherLineResult
-
-	DeduplicateAssistantEvents() bool
-
-	QuietSince(lastAssistantAt time.Time) time.Time
-
-	SkipClassification(sessionState protocol.SessionState, lastSeen string, now time.Time) (bool, string)
-}
-
-type WatcherLineResult struct {
-	Log string
-
-	Aborted     bool
-	AbortDetail string
-	AbortAt     time.Time
-}
-
-func newDefaultTranscriptWatcherBehavior() TranscriptWatcherBehavior {
+func newDefaultTranscriptWatcherBehavior() harness.TranscriptWatcher {
 	return &defaultTranscriptWatcherBehavior{}
 }
 
 type defaultTranscriptWatcherBehavior struct{}
 
-func (b *defaultTranscriptWatcherBehavior) HandleLine(line []byte) WatcherLineResult {
-	return WatcherLineResult{}
+func (b *defaultTranscriptWatcherBehavior) HandleLine(line []byte) harness.WatcherLine {
+	return harness.WatcherLine{}
 }
 
 func (b *defaultTranscriptWatcherBehavior) DeduplicateAssistantEvents() bool { return true }
@@ -54,16 +37,16 @@ func (b *defaultTranscriptWatcherBehavior) SkipClassification(sessionState proto
 
 type claudeTranscriptWatcherBehavior struct{}
 
-func (b *claudeTranscriptWatcherBehavior) HandleLine(line []byte) WatcherLineResult {
+func (b *claudeTranscriptWatcherBehavior) HandleLine(line []byte) harness.WatcherLine {
 	if abort, ok := transcript.ClaudeTurnAborted(line); ok {
-		return WatcherLineResult{
+		return harness.WatcherLine{
 			Aborted:     true,
 			AbortDetail: abort.Reason,
 			AbortAt:     abort.At,
 			Log:         "transcript watcher: claude turn aborted by user",
 		}
 	}
-	return WatcherLineResult{}
+	return harness.WatcherLine{}
 }
 
 func (b *claudeTranscriptWatcherBehavior) DeduplicateAssistantEvents() bool { return false }
@@ -91,17 +74,17 @@ func (b *claudeTranscriptWatcherBehavior) SkipClassification(sessionState protoc
 
 type codexTranscriptWatcherBehavior struct{}
 
-func (b *codexTranscriptWatcherBehavior) HandleLine(line []byte) WatcherLineResult {
+func (b *codexTranscriptWatcherBehavior) HandleLine(line []byte) harness.WatcherLine {
 	abort, ok := transcript.CodexTurnAborted(line)
 	if !ok {
-		return WatcherLineResult{}
+		return harness.WatcherLine{}
 	}
 	if !abort.UserHalt {
-		return WatcherLineResult{
+		return harness.WatcherLine{
 			Log: fmt.Sprintf("transcript watcher: codex turn aborted without a user halt reason=%s", abort.Reason),
 		}
 	}
-	return WatcherLineResult{
+	return harness.WatcherLine{
 		Aborted:     true,
 		AbortDetail: abort.Reason,
 		AbortAt:     abort.At,

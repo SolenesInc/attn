@@ -44,6 +44,8 @@ type Host interface {
 	PlaceInput(ctx context.Context, terminal harness.TerminalID, data []byte, within time.Duration) error
 	Conversation(harness.SessionFacts) harness.Conversation
 	LocateTranscript(ref harness.ConversationRef) string
+	// Harness is the session's harness, never nil: an unknown id answers as a harness with no parts.
+	Harness(harness.ID) harness.Harness
 	NoteKey(terminal harness.TerminalID, at time.Time)
 	LastKey(terminal harness.TerminalID) time.Time
 	EnqueueTitle(m *Monitor, conversation, source string) error

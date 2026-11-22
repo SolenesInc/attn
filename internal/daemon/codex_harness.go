@@ -30,6 +30,7 @@ func (h codexHarness) Facts() harness.Facts {
 	facts.Advisor = harness.ModelChoice{Model: "gpt-5.6-luna", Effort: "xhigh"}
 	facts.Signals.Heartbeat, facts.Signals.ReviewerDwell = 500*time.Millisecond, time.Minute
 	facts.Signals.ConfirmsFirstTurn = true
+	facts.Signals.ForgetsRecoveredClaim = true
 	facts.ModelDiscovery = true
 	facts.Activity = true
 	facts.ServerTerminal = codexServerTerminal

@@ -3,16 +3,18 @@ package daemon
 import (
 	"testing"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
 func TestSessionStateFromRecoveredInfo(t *testing.T) {
 	tests := []struct {
-		name   string
-		info   ptybackend.SessionInfo
-		want   protocol.SessionState
-		wantOK bool
+		name    string
+		info    ptybackend.SessionInfo
+		signals harness.Signals
+		want    protocol.SessionState
+		wantOK  bool
 	}{
 		{
 			name:   "not running is idle",
@@ -27,8 +29,9 @@ func TestSessionStateFromRecoveredInfo(t *testing.T) {
 			wantOK: true,
 		},
 		{
-			name: "codex waiting input is no opinion",
-			info: ptybackend.SessionInfo{Running: true, Agent: string(protocol.SessionAgentCodex), State: protocol.StateWaitingInput},
+			name:    "codex waiting input is no opinion",
+			info:    ptybackend.SessionInfo{Running: true, State: protocol.StateWaitingInput},
+			signals: codexHarness{}.Facts().Signals,
 		},
 		{
 			name:   "claude pending approval",
@@ -51,7 +54,7 @@ func TestSessionStateFromRecoveredInfo(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := sessionStateFromRecoveredInfo(tt.info)
+			got, ok := sessionStateFromRecoveredInfo(tt.info, tt.signals)
 			if ok != tt.wantOK {
 				t.Fatalf("sessionStateFromRecoveredInfo() ok = %v, want %v", ok, tt.wantOK)
 			}

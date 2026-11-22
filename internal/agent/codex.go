@@ -15,7 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/hooks"
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/toolhome"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -24,7 +23,6 @@ type Codex struct{}
 
 var _ Driver = (*Codex)(nil)
 var _ TranscriptFinder = (*Codex)(nil)
-var _ RecoveredStatePolicyProvider = (*Codex)(nil)
 var _ ConfigOverrideProvider = (*Codex)(nil)
 var _ ResumePolicyProvider = (*Codex)(nil)
 var _ headless.TaskProvider = (*Codex)(nil)
@@ -369,20 +367,12 @@ func (c *Codex) ResumeAvailable(resumeID string) bool {
 	return transcript.FindCodexTranscriptForResume(resumeID) != ""
 }
 
-func (c *Codex) BootstrapBytes() int64 {
-	return 256 * 1024
-}
-
 func (c *Codex) NewTranscriptUsageSourceResolver(rootPath string) transcript.UsageSourceResolver {
 	return transcript.NewCodexUsageSourceResolver(rootPath)
 }
 
-func (c *Codex) NewTranscriptWatcherBehavior() TranscriptWatcherBehavior {
+func (c *Codex) NewTranscriptWatcherBehavior() harness.TranscriptWatcher {
 	return &codexTranscriptWatcherBehavior{}
-}
-
-func (c *Codex) RecoveredRunningState(ptyState string) (protocol.SessionState, bool) {
-	return "", false
 }
 
 func (c *Codex) ResolveSpawnResumeSessionID(existingSessionID, requestedResumeID, storedResumeID string) string {

@@ -1,19 +1,10 @@
 package agent
 
 import (
-	"errors"
 	"strings"
-	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/transcript"
 )
-
-var ErrNoNewAssistantTurn = errors.New("no new assistant turn")
-
-type RecoveredStatePolicyProvider interface {
-	RecoveredRunningState(ptyState string) (protocol.SessionState, bool)
-}
 
 type ResumePolicyProvider interface {
 	ResolveSpawnResumeSessionID(existingSessionID, requestedResumeID, storedResumeID string) string
@@ -23,33 +14,6 @@ type ResumePolicyProvider interface {
 
 type ResumeAvailabilityProvider interface {
 	ResumeAvailable(resumeID string) bool
-}
-
-type TranscriptClassificationExtractor interface {
-	ExtractLastAssistantForClassification(
-		transcriptPath string,
-		maxChars int,
-		classificationStart time.Time,
-		lastClassifiedTurnID string,
-	) (content string, turnID string, err error)
-}
-
-func RecoveredRunningSessionState(d Driver, ptyState string) (protocol.SessionState, bool) {
-	if p, ok := d.(RecoveredStatePolicyProvider); ok {
-		return p.RecoveredRunningState(ptyState)
-	}
-	return recoveredStateFromPTYClaim(ptyState)
-}
-
-func recoveredStateFromPTYClaim(ptyState string) (protocol.SessionState, bool) {
-	switch ptyState {
-	case protocol.StateWaitingInput:
-		return protocol.SessionStateWaitingInput, true
-	case protocol.StatePendingApproval:
-		return protocol.SessionStatePendingApproval, true
-	default:
-		return "", false
-	}
 }
 
 func ResolveSpawnResumeSessionID(d Driver, existingSessionID protocol.SessionID, requestedResumeID string, storedResumeID string) string {
@@ -92,25 +56,6 @@ func ResumeSessionIDFromTranscriptPath(d Driver, transcriptPath string) string {
 		return strings.TrimSpace(p.ResumeSessionIDFromTranscriptPath(transcriptPath))
 	}
 	return ""
-}
-
-func ExtractLastAssistantForClassification(
-	d Driver,
-	transcriptPath string,
-	maxChars int,
-	classificationStart time.Time,
-	lastClassifiedTurnID string,
-) (content string, turnID string, err error) {
-	if p, ok := d.(TranscriptClassificationExtractor); ok {
-		return p.ExtractLastAssistantForClassification(
-			transcriptPath,
-			maxChars,
-			classificationStart,
-			lastClassifiedTurnID,
-		)
-	}
-	content, err = transcript.ExtractLastAssistantMessage(transcriptPath, maxChars)
-	return content, "", err
 }
 
 // ConversationKeeper is implemented by harnesses that prune their own conversations.

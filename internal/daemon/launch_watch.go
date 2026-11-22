@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
@@ -181,7 +181,7 @@ func (d *Daemon) noteDelegatedStallOnSeed(agent string, sessionID protocol.Sessi
 		}
 	}
 	var b strings.Builder
-	if agentdriver.ShowsFolderTrustQuestion(agent, screen) {
+	if reader, ok := harness.As[harness.ScreenReader](d.harnessOf(agent)); ok && reader.ShowsFolderTrustQuestion(screen) {
 		unconfirmed = fmt.Sprintf("%s is waiting at its folder-trust question and starts only after someone answers it in session %s; %s", agent, shortSessionID(sessionID), unconfirmed)
 		fmt.Fprintf(&b, "The delegated agent (%s) is stopped at its folder-trust question, so nothing here is being worked on. Answer the question in session %s to start it.", agent, sessionID)
 	} else {

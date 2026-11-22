@@ -52,7 +52,7 @@ var adapterImporters = []string{"/internal/harness/builtin", "/internal/harness/
 
 var leakOneParts = []string{"Keeper", "SpareStarter", "Targets", "ScreenReader", "Renamer", "Runs", "Channel"}
 
-var sharedParts = []string{"OneShot", "Trust", "CallerResolver"}
+var sharedParts = []string{"OneShot", "Trust", "CallerResolver", "Transcript"}
 
 var appRoots = []string{"pty-host", "native", "cli", "mobile"}
 

@@ -3,12 +3,14 @@ package agent
 import (
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/harness"
 )
 
 func TestWatcherBehaviorsDetectAHaltedTurn(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
-		behavior   TranscriptWatcherBehavior
+		behavior   harness.TranscriptWatcher
 		abort      string
 		wantDetail string
 		wantAt     string

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/classifier"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -79,7 +79,7 @@ func TestClassifyPostTranscript(t *testing.T) {
 	}{
 		{
 			name:       "no new assistant turn writes nothing",
-			err:        fmt.Errorf("wrapped: %w", agentdriver.ErrNoNewAssistantTurn),
+			err:        fmt.Errorf("wrapped: %w", harness.ErrNoNewAssistantTurn),
 			wantAction: classifySkip,
 			wantReason: "no_new_assistant_turn",
 		},

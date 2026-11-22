@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/sessioncost"
 	"github.com/victorarias/attn/internal/transcript"
@@ -26,12 +25,11 @@ type trackedUsageSource struct {
 }
 
 func newUsageTracker(w *transcriptWatcher, rootPath string) *usageTracker {
-	driver := agentdriver.Get(string(w.agent))
-	provider, ok := agentdriver.GetTranscriptUsageSourceProvider(driver)
+	part, ok := w.monitor.transcriptPart(w.agent)
 	if !ok || !transcript.SupportsUsage(string(w.agent)) {
 		return nil
 	}
-	resolver := provider.NewTranscriptUsageSourceResolver(rootPath)
+	resolver := part.UsageSources(rootPath)
 	if resolver == nil {
 		return nil
 	}

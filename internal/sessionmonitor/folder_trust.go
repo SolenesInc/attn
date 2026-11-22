@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/stepclock"
@@ -18,7 +17,7 @@ const (
 )
 
 func (m *Monitor) watchFolderTrustQuestionLocked(agent string) {
-	if _, reads := agentdriver.Get(agent).(agentdriver.FolderTrustQuestionReader); !reads {
+	if _, reads := m.screenReader(agent); !reads {
 		return
 	}
 	m.stopFolderTrustReadLocked()
@@ -65,7 +64,12 @@ func (m *Monitor) screenShowsFolderTrustQuestion(agent string, terminal harness.
 		m.registry.host.Logf("folder trust read failed: session=%s err=%v", m.session, err)
 		return false
 	}
-	return agentdriver.ShowsFolderTrustQuestion(agent, screen)
+	reader, reads := m.screenReader(agent)
+	return reads && reader.ShowsFolderTrustQuestion(screen)
+}
+
+func (m *Monitor) screenReader(agent string) (harness.ScreenReader, bool) {
+	return harness.As[harness.ScreenReader](m.registry.host.Harness(agent))
 }
 
 func (m *Monitor) recordFolderTrustQuestion() {

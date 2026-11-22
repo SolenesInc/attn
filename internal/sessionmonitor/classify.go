@@ -6,13 +6,14 @@ import (
 	"strings"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/classifier"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/statemarker"
 	"github.com/victorarias/attn/internal/statetrace"
+	"github.com/victorarias/attn/internal/transcript"
 )
 
 type classifyAction int
@@ -50,7 +51,7 @@ func classifyPreTranscript(transcriptEnabled, classifierEnabled bool, stop StopC
 
 func classifyPostTranscript(lastMessage string, err error, stop StopClassification) classifyDecision {
 	if err != nil {
-		if errors.Is(err, agentdriver.ErrNoNewAssistantTurn) {
+		if errors.Is(err, harness.ErrNoNewAssistantTurn) {
 			return classifyDecision{action: classifySkip, reason: "no_new_assistant_turn"}
 		}
 		if stop.Yielded {
@@ -93,13 +94,8 @@ func (m *Monitor) ClassifyStop(transcriptPath string, stop StopClassification) {
 
 	m.recordClassifierStarted(classificationStartTime)
 
-	transcriptEnabled := true
-	classifierEnabled := true
-	if driver := agentdriver.Get(string(agent)); driver != nil {
-		caps := agentdriver.EffectiveCapabilities(driver)
-		transcriptEnabled = caps.HasTranscript
-		classifierEnabled = caps.HasClassifier
-	}
+	signals := m.registry.host.Harness(agent).Facts().Signals
+	transcriptEnabled, classifierEnabled := signals.StopsReadable, signals.StopsClassified
 
 	decision := classifyPreTranscript(transcriptEnabled, classifierEnabled, stop)
 	if decision.action != classifyReadTranscript {
@@ -206,20 +202,21 @@ func ClassifyFromMarker(logf func(string, ...any), label, text string) (string, 
 }
 
 func (m *Monitor) extractLastAssistantMessage(agent protocol.SessionAgent, transcriptPath string, maxChars int, classificationStart time.Time) (string, string, error) {
-	driver := agentdriver.Get(string(agent))
-	lastMessage, turnID, err := agentdriver.ExtractLastAssistantForClassification(
-		driver,
-		transcriptPath,
-		maxChars,
-		classificationStart,
-		m.classifiedTurnID(),
-	)
+	lastMessage, turnID, err := m.lastAssistantMessage(agent, transcriptPath, maxChars, classificationStart)
 	if err != nil {
 		return "", "", err
 	}
 	turnID = strings.TrimSpace(turnID)
 	if turnID != "" && !m.beginClassifyingTurn(turnID) {
-		return "", "", agentdriver.ErrNoNewAssistantTurn
+		return "", "", harness.ErrNoNewAssistantTurn
 	}
 	return lastMessage, turnID, nil
+}
+
+func (m *Monitor) lastAssistantMessage(agent protocol.SessionAgent, transcriptPath string, maxChars int, classificationStart time.Time) (string, string, error) {
+	if part, ok := m.transcriptPart(agent); ok {
+		return part.LastAssistant(transcriptPath, maxChars, classificationStart, m.classifiedTurnID())
+	}
+	content, err := transcript.ExtractLastAssistantMessage(transcriptPath, maxChars)
+	return content, "", err
 }

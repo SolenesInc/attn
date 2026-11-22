@@ -32,7 +32,6 @@ internal/daemon/agent_machine.go	(*AgentLaunch).driverRunID	reaches field RunID 
 internal/daemon/agent_machine.go	(*AgentLaunch).driverRunID	reaches pluginDriverSpawnParams (internal/daemon/plugin_driver.go)
 internal/daemon/agent_machine.go	(*Daemon).agentLaunchContext	reaches Daemon.prepareLaunchContext (internal/daemon/plugin_launch_instructions.go)
 internal/daemon/agent_machine.go	AgentPluginLaunch	reaches pluginDriverSpawnParams (internal/daemon/plugin_driver.go)
-internal/daemon/agent_peek.go	(*Daemon).agentPeekScreen	names "claude"
 internal/daemon/agent_skills.go	(*Daemon).ensureEnabledWorkflowSkillsFor	reaches Daemon.workflowSkillsDirs (internal/daemon/plugin_skill_dirs.go)
 internal/daemon/automations_deliver.go	(*Daemon).confirmsFirstTurn	reaches Daemon.serverLinkFor (internal/daemon/server_binding.go)
 internal/daemon/automations_deliver.go	(*Daemon).confirmsFirstTurn	reaches serverLink (internal/daemon/server_link.go)

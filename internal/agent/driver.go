@@ -10,10 +10,8 @@ import (
 	"sync"
 
 	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/protocol"
-
 	"github.com/victorarias/attn/internal/hooks"
-	"github.com/victorarias/attn/internal/transcript"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 type Driver interface {
@@ -32,15 +30,6 @@ type Driver interface {
 	BuildEnv(opts SpawnOpts) []string
 
 	Capabilities() Capabilities
-}
-
-type FolderTrustQuestionReader interface {
-	ShowsFolderTrustQuestion(screen string) bool
-}
-
-func ShowsFolderTrustQuestion(agent, screen string) bool {
-	reader, ok := Get(agent).(FolderTrustQuestionReader)
-	return ok && reader.ShowsFolderTrustQuestion(screen)
 }
 
 type Capabilities struct {
@@ -290,12 +279,6 @@ type ConfigOverrideProvider interface {
 
 type TranscriptFinder interface {
 	FindTranscriptForResume(resumeID string) string
-
-	BootstrapBytes() int64
-}
-
-type TranscriptUsageSourceProvider interface {
-	NewTranscriptUsageSourceResolver(rootPath string) transcript.UsageSourceResolver
 }
 
 type LaunchPreparer interface {
@@ -365,15 +348,7 @@ func GetTranscriptFinder(d Driver) (TranscriptFinder, bool) {
 	return tf, ok
 }
 
-func GetTranscriptUsageSourceProvider(d Driver) (TranscriptUsageSourceProvider, bool) {
-	if d == nil || !EffectiveCapabilities(d).HasTranscript {
-		return nil, false
-	}
-	provider, ok := d.(TranscriptUsageSourceProvider)
-	return provider, ok
-}
-
-func GetTranscriptWatcherBehavior(d Driver) (TranscriptWatcherBehavior, bool) {
+func GetTranscriptWatcherBehavior(d Driver) (harness.TranscriptWatcher, bool) {
 	if d == nil {
 		return nil, false
 	}

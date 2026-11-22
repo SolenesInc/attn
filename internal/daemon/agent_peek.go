@@ -2,14 +2,12 @@ package daemon
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
-	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/victorarias/attn/internal/command"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -18,11 +16,6 @@ const agentPeekMessageMaxChars = annotatableMessageMaxChars
 const agentShortIDLength = 8
 
 const agentPeekSnapshotTimeout = 3 * time.Second
-
-var claudeSuggestionCells = sync.OnceValue(func() *regexp.Regexp {
-	const sgr = `\x1b\[[0-9;]*m`
-	return regexp.MustCompile(`❯[ \x{a0}](?:` + sgr + `)*\x1b\[(?:[0-9;]*;)?7m[^\x1b](?:` + sgr + `)*\x1b\[(?:[0-9;]*;)?2m`)
-})
 
 func (d *Daemon) runAgentPeek(ctx context.Context, c command.Caller, a command.AgentPeekArgs) (any, error) {
 	session, errCode := d.resolveAgentPeekTarget(crewAsker{session: c.Session, profileID: c.Profile}, a.Target)
@@ -165,15 +158,10 @@ func (d *Daemon) agentPeekScreen(session *protocol.Session) *protocol.AgentPeekS
 		Cols: protocol.Deref(snapshot.Cols),
 		Rows: protocol.Deref(snapshot.Rows),
 	}
-	if session.Agent == protocol.SessionAgentClaude && snapshotShowsClaudeSuggestion(snapshot) {
+	if reader, ok := harness.As[harness.ScreenReader](d.harnessOf(session.Agent)); ok && reader.ShowsComposerSuggestion(snapshot) {
 		screen.ComposerSuggestion = protocol.Ptr(true)
 	}
 	return screen
-}
-
-func snapshotShowsClaudeSuggestion(snapshot protocol.GetScreenSnapshotResultMessage) bool {
-	cells, err := base64.StdEncoding.DecodeString(protocol.Deref(snapshot.ScreenSnapshot))
-	return err == nil && claudeSuggestionCells().Match(cells)
 }
 
 func (d *Daemon) sendTerminalReadTextWSResult(client *wsClient, msg *protocol.TerminalReadTextMessage) {

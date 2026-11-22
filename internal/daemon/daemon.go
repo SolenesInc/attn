@@ -1295,7 +1295,7 @@ func (d *Daemon) resumeMonitor(existing *protocol.Session, live liveTerminal) (s
 			existing.State == protocol.SessionStatePendingApproval) {
 		return false
 	}
-	nextState, ok := sessionStateFromRecoveredInfo(live.info)
+	nextState, ok := sessionStateFromRecoveredInfo(live.info, d.signalsOf(normalizeSpawnAgent(live.info.Agent)))
 	if !ok && !sessionmonitor.ResolverOwnedStates[existing.State] {
 		nextState, ok = protocol.SessionStateLaunching, true
 	}
@@ -1469,7 +1469,7 @@ func (d *Daemon) adoptLiveTerminal(sessionID protocol.SessionID, live liveTermin
 		label = string(sessionID)
 	}
 
-	state, ok := sessionStateFromRecoveredInfo(info)
+	state, ok := sessionStateFromRecoveredInfo(info, d.signalsOf(normalizeSpawnAgent(info.Agent)))
 	if !ok {
 		state = protocol.SessionStateLaunching
 	}
@@ -1623,12 +1623,18 @@ func sessionUpdatedAfter(session *protocol.Session, cutoff time.Time) bool {
 	return updatedAt.After(cutoff)
 }
 
-func sessionStateFromRecoveredInfo(info ptybackend.SessionInfo) (protocol.SessionState, bool) {
-	if !info.Running {
+func sessionStateFromRecoveredInfo(info ptybackend.SessionInfo, signals harness.Signals) (protocol.SessionState, bool) {
+	switch {
+	case !info.Running:
 		return protocol.SessionStateIdle, true
+	case signals.ForgetsRecoveredClaim:
+		return "", false
+	case info.State == protocol.StateWaitingInput:
+		return protocol.SessionStateWaitingInput, true
+	case info.State == protocol.StatePendingApproval:
+		return protocol.SessionStatePendingApproval, true
 	}
-	agent := normalizeSpawnAgent(info.Agent)
-	return agentdriver.RecoveredRunningSessionState(agentdriver.Get(string(agent)), info.State)
+	return "", false
 }
 
 func (d *Daemon) Stop() {

@@ -17,7 +17,6 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/hooks"
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/toolhome"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -29,12 +28,9 @@ var _ HookProvider = (*Claude)(nil)
 var _ TranscriptFinder = (*Claude)(nil)
 var _ TranscriptWatcherBehaviorProvider = (*Claude)(nil)
 var _ LaunchPreparer = (*Claude)(nil)
-var _ RecoveredStatePolicyProvider = (*Claude)(nil)
 var _ ResumePolicyProvider = (*Claude)(nil)
 var _ ResumeAvailabilityProvider = (*Claude)(nil)
-var _ TranscriptClassificationExtractor = (*Claude)(nil)
 var _ headless.TaskProvider = (*Claude)(nil)
-var _ FolderTrustQuestionReader = (*Claude)(nil)
 
 const (
 	claudeTranscriptRetryWindow   = 2 * time.Second
@@ -445,20 +441,12 @@ func (c *Claude) ResumeAvailable(resumeID string) bool {
 	return transcript.FindClaudeTranscript(resumeID) != ""
 }
 
-func (c *Claude) BootstrapBytes() int64 {
-	return 256 * 1024
-}
-
 func (c *Claude) NewTranscriptUsageSourceResolver(rootPath string) transcript.UsageSourceResolver {
 	return transcript.NewClaudeUsageSourceResolver(rootPath)
 }
 
-func (c *Claude) NewTranscriptWatcherBehavior() TranscriptWatcherBehavior {
+func (c *Claude) NewTranscriptWatcherBehavior() harness.TranscriptWatcher {
 	return &claudeTranscriptWatcherBehavior{}
-}
-
-func (c *Claude) RecoveredRunningState(ptyState string) (protocol.SessionState, bool) {
-	return recoveredStateFromPTYClaim(ptyState)
 }
 
 func (c *Claude) ResolveSpawnResumeSessionID(existingSessionID, requestedResumeID, storedResumeID string) string {
@@ -524,14 +512,14 @@ func (c *Claude) extractLastAssistantForClassification(
 		if turnErr == nil && strings.TrimSpace(turn.Content) != "" {
 			turnUUID := strings.TrimSpace(turn.UUID)
 			if turnUUID != "" && turnUUID == lastClassified {
-				turnErr = ErrNoNewAssistantTurn
+				turnErr = harness.ErrNoNewAssistantTurn
 			} else {
 				return turn.Content, turnUUID, nil
 			}
 		}
 		if !time.Now().Before(deadline) {
 			if turnErr == nil {
-				turnErr = ErrNoNewAssistantTurn
+				turnErr = harness.ErrNoNewAssistantTurn
 			}
 			return "", "", turnErr
 		}

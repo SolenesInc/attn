@@ -351,6 +351,8 @@ func (h monitorHost) Conversation(facts harness.SessionFacts) harness.Conversati
 	return h.daemon.conversationFor(facts)
 }
 
+func (h monitorHost) Harness(id harness.ID) harness.Harness { return h.daemon.harnessOf(id) }
+
 func (h monitorHost) LocateTranscript(ref harness.ConversationRef) string {
 	return h.daemon.harnessOf(ref.Harness).Conversations().Locate(ref)
 }

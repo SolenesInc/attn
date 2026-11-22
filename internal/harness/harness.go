@@ -250,6 +250,12 @@ type Signals struct {
 	ConfirmsFirstTurn bool
 	// Titles is which of attn's title parsers reads the terminal's titles.
 	Titles TitleKind
+	// StopsReadable: a stop's last assistant message can be read from the harness's transcript.
+	StopsReadable bool
+	// StopsClassified: attn's classifier judges a stop whose verdict the harness does not state.
+	StopsClassified bool
+	// ForgetsRecoveredClaim: after a daemon restart, the terminal's last waiting or approval claim says nothing.
+	ForgetsRecoveredClaim bool
 }
 
 // TitleKind names one of attn's terminal-title parsers; TitlesNone reads no titles.
