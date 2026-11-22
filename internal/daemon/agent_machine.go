@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/pausepoint"
@@ -238,24 +237,29 @@ func (d *Daemon) launchCommitted(terminal harness.TerminalID, committed bool, pr
 	}
 }
 
-func (d *Daemon) readConversationReadiness(_ context.Context, msg protocol.ConversationReadinessMessage) (protocol.ConversationReadinessResult, error) {
-	if l := d.serverLinkFor(msg.Agent); l != nil {
-		return protocol.ConversationReadinessResult{Known: msg.Conversation != "", Ready: msg.Conversation != ""}, nil
-	}
-	driver := agentdriver.Get(msg.Agent)
-	if driver == nil {
+func (d *Daemon) readConversationReadiness(ctx context.Context, msg protocol.ConversationReadinessMessage) (protocol.ConversationReadinessResult, error) {
+	h, err := d.harness(msg.Agent)
+	if err != nil {
 		return protocol.ConversationReadinessResult{}, fmt.Errorf("unknown agent %q", msg.Agent)
 	}
+	if msg.Conversation == "" {
+		return protocol.ConversationReadinessResult{}, nil
+	}
+	if h.Facts().Recovery == harness.ByServer {
+		return protocol.ConversationReadinessResult{Known: true, Ready: true}, nil
+	}
+	ref := harness.ConversationRef{Harness: h.Facts().ID, Profile: msg.Profile, ID: msg.Conversation, Lifetime: harness.Lifetime(msg.Lifetime)}
+	conversations := h.Conversations()
 	if msg.Restore {
-		if err := d.restoreConversation(msg.Agent, harness.Lifetime(msg.Lifetime), msg.Profile, msg.Conversation); err != nil {
+		ready, err := conversations.Prepare(ctx, ref)
+		if err != nil {
 			return protocol.ConversationReadinessResult{}, err
 		}
+		if ready {
+			return protocol.ConversationReadinessResult{Known: true, Ready: true}, nil
+		}
 	}
-	result := protocol.ConversationReadinessResult{Known: d.conversationKnown(driver, msg.Conversation)}
-	if msg.Restore {
-		result.Ready = d.conversationReady(driver, msg.Conversation)
-	}
-	return result, nil
+	return protocol.ConversationReadinessResult{Known: conversations.Check(ctx, []harness.ConversationRef{ref})[ref].Resumable}, nil
 }
 
 func (d *Daemon) placedConversationReadiness(session protocol.SessionID, host, agent, profile, conversation string, restore bool) (protocol.ConversationReadinessResult, error) {

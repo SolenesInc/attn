@@ -8,9 +8,9 @@ import (
 	"os"
 	"strings"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/garden"
 	attngit "github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -245,48 +245,16 @@ func (d *Daemon) reopenConversation(execution garden.Execution, resumeID string,
 	if resumeID == "" {
 		return false, "no conversation id was saved for this session, so there is nothing to resume"
 	}
-	// A missing worktree can hide project storage settings; inspect after recreation.
-	if directoryMissing {
-		if driver, ok := d.ensurePluginRegistry().driver(strings.TrimSpace(execution.Agent)); ok && driver.Capabilities["resume"] && driver.Capabilities["resume_availability"] {
-			return true, ""
-		}
-	}
-	availability := d.conversationResumable(strings.TrimSpace(execution.Agent), resumeID, execution.Cwd)
-	return availability.Available, availability.Reason
+	availability := d.conversationResumable(harness.ConversationRef{Harness: harness.ID(strings.TrimSpace(execution.Agent)), ID: resumeID, Dir: execution.Cwd, DirMissing: directoryMissing})
+	return availability.Resumable, availability.Reason
 }
 
-func (d *Daemon) conversationResumable(agentName, resumeID, cwd string) conversationAvailability {
-	plugin, isPlugin := d.ensurePluginRegistry().driver(agentName)
-	if isPlugin && !plugin.Capabilities["resume"] {
-		return conversationAvailability{Reason: fmt.Sprintf("agent %q does not resume conversations, so conversation %s cannot be picked up", agentName, resumeID)}
-	}
-	if l := d.serverLinkFor(agentName); l.watchesConversations() {
-		conversation := pluginResumeConversation{Agent: agentName, CWD: cwd, ResumeSessionID: resumeID}
-		return l.conversationsResumable([]pluginResumeConversation{conversation})[conversation]
-	}
-	if isPlugin {
-		return d.pluginConversationResumable(plugin, resumeID, cwd)
-	}
-	driver := agentdriver.Get(agentName)
-	if driver == nil {
-		return conversationAvailability{Reason: fmt.Sprintf("agent %q is not installed here, so its conversation cannot be resumed", agentName)}
-	}
-	readiness, err := d.readConversationReadiness(context.Background(), protocol.ConversationReadinessMessage{Agent: agentName, Conversation: resumeID})
+func (d *Daemon) conversationResumable(ref harness.ConversationRef) harness.Availability {
+	h, err := d.harness(string(ref.Harness))
 	if err != nil {
-		return conversationAvailability{Reason: err.Error()}
+		return harness.Availability{Reason: fmt.Sprintf("agent %q is not installed here, so its conversation cannot be resumed", ref.Harness)}
 	}
-	if !readiness.Known {
-		reason := fmt.Sprintf("conversation %s is no longer in %s's storage", resumeID, agentName)
-		if kept, ok := d.store.KeptConversation(agentName, resumeID); ok && !kept.DeletedAt.IsZero() {
-			if kept.DeletedBy == "user" {
-				reason += fmt.Sprintf("; you deleted attn's copy of conversation %s on %s", resumeID, kept.DeletedAt.UTC().Format("2006-01-02"))
-			} else {
-				reason += fmt.Sprintf("; attn deleted its copy of conversation %s on %s, %d days after no open seed pointed at it", resumeID, kept.DeletedAt.UTC().Format("2006-01-02"), int(conversationKeepGrace().Hours()/24))
-			}
-		}
-		return conversationAvailability{Reason: reason}
-	}
-	return conversationAvailability{Available: true}
+	return h.Conversations().Check(context.Background(), []harness.ConversationRef{ref})[ref]
 }
 
 type sessionReopenOutcome struct {

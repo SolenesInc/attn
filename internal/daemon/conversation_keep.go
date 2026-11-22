@@ -20,6 +20,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -553,6 +554,30 @@ func (d *Daemon) copyConversation(agent string, conversation store.SessionConver
 		}
 	}
 	return err
+}
+
+func (d *Daemon) checkStoredConversations(driver agentdriver.Driver, refs []harness.ConversationRef) map[harness.ConversationRef]harness.Availability {
+	availability := make(map[harness.ConversationRef]harness.Availability, len(refs))
+	for _, ref := range refs {
+		if d.conversationKnown(driver, ref.ID) {
+			availability[ref] = harness.Availability{Resumable: true}
+		} else {
+			availability[ref] = harness.Availability{Reason: d.goneConversationReason(string(ref.Harness), ref.ID)}
+		}
+	}
+	return availability
+}
+
+func (d *Daemon) goneConversationReason(agent, resumeID string) string {
+	reason := fmt.Sprintf("conversation %s is no longer in %s's storage", resumeID, agent)
+	if kept, ok := d.store.KeptConversation(agent, resumeID); ok && !kept.DeletedAt.IsZero() {
+		if kept.DeletedBy == "user" {
+			reason += fmt.Sprintf("; you deleted attn's copy of conversation %s on %s", resumeID, kept.DeletedAt.UTC().Format("2006-01-02"))
+		} else {
+			reason += fmt.Sprintf("; attn deleted its copy of conversation %s on %s, %d days after no open seed pointed at it", resumeID, kept.DeletedAt.UTC().Format("2006-01-02"), int(conversationKeepGrace().Hours()/24))
+		}
+	}
+	return reason
 }
 
 func (d *Daemon) conversationKnown(driver agentdriver.Driver, resumeID string) bool {

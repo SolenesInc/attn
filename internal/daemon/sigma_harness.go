@@ -25,6 +25,7 @@ func (h sigmaHarness) Facts() harness.Facts {
 	facts.CacheTTL = time.Hour
 	facts.Signals.Heartbeat = 500 * time.Millisecond
 	facts.Recovery = harness.ByServer
+	facts.ModelDiscovery = true
 	facts.ServerTerminal = h.d.serverTerminalOf(facts.ID)
 	return facts
 }
@@ -77,6 +78,17 @@ func (h sigmaHarness) Conversations() harness.ConversationStore { return h }
 
 func (h sigmaHarness) Admit(ref harness.ConversationRef) error {
 	return h.d.admitToServer(h.Facts().ID, ref)
+}
+
+func (h sigmaHarness) Check(_ context.Context, refs []harness.ConversationRef) map[harness.ConversationRef]harness.Availability {
+	if l := h.d.serverLinkFor(h.Facts().ID); l.watchesConversations() {
+		return l.conversationsResumable(refs)
+	}
+	return h.d.checkStoredConversations(h.driver(), refs)
+}
+
+func (sigmaHarness) Prepare(_ context.Context, ref harness.ConversationRef) (bool, error) {
+	return ref.ID != "", nil
 }
 
 func (h sigmaHarness) End(_ context.Context, e harness.Ending) {

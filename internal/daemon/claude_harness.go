@@ -28,6 +28,7 @@ func (h claudeHarness) Facts() harness.Facts {
 	facts.Tiers = map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "haiku"}, modeltiers.Standard: {Model: "sonnet"}, modeltiers.Deep: {Model: "opus"}}
 	facts.Advisor = harness.ModelChoice{Model: "sonnet", Effort: "medium"}
 	facts.CrewModel = "fable"
+	facts.ModelDiscovery = true
 	facts.Signals.Heartbeat = 1500 * time.Millisecond
 	return facts
 }
@@ -81,6 +82,14 @@ func (h claudeHarness) Stop() { h.d.claudeMod().close() }
 func (h claudeHarness) Conversations() harness.ConversationStore { return h }
 
 func (claudeHarness) Admit(harness.ConversationRef) error { return nil }
+
+func (h claudeHarness) Check(_ context.Context, refs []harness.ConversationRef) map[harness.ConversationRef]harness.Availability {
+	return h.d.checkStoredConversations(h.driver(), refs)
+}
+
+func (h claudeHarness) Prepare(_ context.Context, ref harness.ConversationRef) (bool, error) {
+	return h.d.conversationReady(h.driver(), ref.ID), nil
+}
 
 func (h claudeHarness) Health(context.Context) harness.Health {
 	return h.d.executableHealth(h.Facts(), true)

@@ -41,10 +41,6 @@ type sharedConversationLink interface {
 	transcriptPath(path string) string
 }
 
-func (d *Daemon) restoreConversation(agent string, lifetime harness.Lifetime, profile, conversation string) error {
-	return d.restoreConversationIn(d.linkFor(agent, lifetime), profile, conversation)
-}
-
 func (d *Daemon) restoreConversationIn(l linkRuntime, profile, conversation string) error {
 	if shared, ok := l.(sharedConversationLink); ok {
 		return shared.restore(profile, conversation)

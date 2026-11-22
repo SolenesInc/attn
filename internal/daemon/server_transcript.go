@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/activity"
 	"github.com/victorarias/attn/internal/effectrpc"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/statemarker"
@@ -211,19 +212,19 @@ func (l *serverLink) assistantWindow(ctx context.Context, conversation string) (
 	return sessionmonitor.AssistantWindow{Status: protocol.SessionMessageWindowStatusReady, Messages: messages, Report: report}, true
 }
 
-func (l *serverLink) conversationsResumable(conversations []pluginResumeConversation) map[pluginResumeConversation]conversationAvailability {
+func (l *serverLink) conversationsResumable(refs []harness.ConversationRef) map[harness.ConversationRef]harness.Availability {
 	known, running, err := l.conversationIDs(l.d.life.Context())
-	availability := make(map[pluginResumeConversation]conversationAvailability, len(conversations))
-	for _, conversation := range conversations {
+	availability := make(map[harness.ConversationRef]harness.Availability, len(refs))
+	for _, ref := range refs {
 		switch {
 		case !running:
-			availability[conversation] = conversationAvailability{Available: true}
+			availability[ref] = harness.Availability{Resumable: true}
 		case err != nil:
-			availability[conversation] = conversationAvailability{CheckFailed: true, Reason: fmt.Sprintf("cannot check conversation %s on %s's server: %v", conversation.ResumeSessionID, conversation.Agent, err)}
-		case !known[conversation.ResumeSessionID] && l.d.store.ServerConversationSeen(conversation.ResumeSessionID):
-			availability[conversation] = conversationAvailability{Reason: fmt.Sprintf("conversation %s is no longer on %s's server", conversation.ResumeSessionID, conversation.Agent)}
+			availability[ref] = harness.Availability{CheckFailed: true, Reason: fmt.Sprintf("cannot check conversation %s on %s's server: %v", ref.ID, ref.Harness, err)}
+		case !known[ref.ID] && l.d.store.ServerConversationSeen(ref.ID):
+			availability[ref] = harness.Availability{Reason: fmt.Sprintf("conversation %s is no longer on %s's server", ref.ID, ref.Harness)}
 		default:
-			availability[conversation] = conversationAvailability{Available: true}
+			availability[ref] = harness.Availability{Resumable: true}
 		}
 	}
 	return availability

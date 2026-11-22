@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	attngit "github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -518,19 +519,19 @@ func (d *Daemon) continuationOnItsMachine(seed garden.Seed) *seedContinuation {
 		}
 		return directoryPresent, nil
 	}
-	checkResume := func(agentName, resumeID, _ string) conversationAvailability {
+	checkResume := func(ref harness.ConversationRef) harness.Availability {
 		profile := ""
 		if entry := d.store.SessionLedgerEntry(execution.SessionID); entry != nil {
 			profile = entry.ProfileID
 		}
-		readiness, err := d.placedConversationReadiness(execution.SessionID, host, agentName, profile, resumeID, false)
+		readiness, err := d.placedConversationReadiness(execution.SessionID, host, string(ref.Harness), profile, ref.ID, false)
 		if err != nil {
-			return conversationAvailability{Reason: err.Error(), CheckFailed: true, OutpostLost: !bridgeAnswered(err)}
+			return harness.Availability{Reason: err.Error(), CheckFailed: true, OutpostLost: !bridgeAnswered(err)}
 		}
 		if !readiness.Known {
-			return conversationAvailability{Reason: fmt.Sprintf("conversation %s is no longer in %s's storage on outpost %q", resumeID, agentName, d.outpostName(host))}
+			return harness.Availability{Reason: fmt.Sprintf("conversation %s is no longer in %s's storage on outpost %q", ref.ID, ref.Harness, d.outpostName(host))}
 		}
-		return conversationAvailability{Available: true}
+		return harness.Availability{Resumable: true}
 	}
 	return d.continuationWithChecks(seed, continuationMachine{
 		outpost:          d.outpostName(host),
@@ -540,7 +541,7 @@ func (d *Daemon) continuationOnItsMachine(seed garden.Seed) *seedContinuation {
 	})
 }
 
-func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResume func(string, string, string) conversationAvailability) *seedContinuation {
+func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResume func(harness.ConversationRef) harness.Availability) *seedContinuation {
 	execution, _, _ := d.normalizedSeedContinuation(seed)
 	if host, _ := d.executionMachine(execution); host != "" {
 		return d.continuationWithChecks(seed, d.uncheckedOutpost(host))
@@ -551,7 +552,7 @@ func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResum
 	})
 }
 
-func (d *Daemon) continuationIgnoringReach(seed garden.Seed, checkResume func(string, string, string) conversationAvailability) *seedContinuation {
+func (d *Daemon) continuationIgnoringReach(seed garden.Seed, checkResume func(harness.ConversationRef) harness.Availability) *seedContinuation {
 	execution, _, _ := d.normalizedSeedContinuation(seed)
 	if host, _ := d.executionMachine(execution); host != "" {
 		return d.continuationWithChecks(seed, d.outpostAssumedReachable(host))
@@ -582,8 +583,8 @@ func (d *Daemon) outpostAssumedReachable(host string) continuationMachine {
 			}
 			return directoryUnchecked, nil
 		},
-		checkResume: func(string, string, string) conversationAvailability {
-			return conversationAvailability{Available: true}
+		checkResume: func(harness.ConversationRef) harness.Availability {
+			return harness.Availability{Resumable: true}
 		},
 	}
 }
@@ -599,7 +600,7 @@ type continuationMachine struct {
 	outpost          string
 	unreachable      string
 	inspectDirectory func(garden.Execution) (string, error)
-	checkResume      func(string, string, string) conversationAvailability
+	checkResume      func(harness.ConversationRef) harness.Availability
 }
 
 func (m continuationMachine) onIt() string {
@@ -689,7 +690,7 @@ func (d *Daemon) continuationWithChecks(seed garden.Seed, machine continuationMa
 		continuation.ResumeReason = "the original conversation identity is unavailable"
 		return continuation
 	}
-	if availability := machine.checkResume(agentName, resumeID, execution.Cwd); !availability.Available {
+	if availability := machine.checkResume(harness.ConversationRef{Harness: harness.ID(agentName), ID: resumeID, Dir: execution.Cwd}); !availability.Resumable {
 		continuation.ResumeReason = "the original conversation is unavailable: " + availability.Reason
 		continuation.ResumeCheckFailed = availability.CheckFailed
 		continuation.OutpostLost = availability.OutpostLost

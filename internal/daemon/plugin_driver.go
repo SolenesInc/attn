@@ -108,15 +108,9 @@ type pluginResumeAvailableParams struct {
 type pluginResumeAvailableResult struct {
 	Availability []struct {
 		pluginResumeConversation
-		conversationAvailability
+		Available bool   `json:"available"`
+		Reason    string `json:"reason,omitempty"`
 	} `json:"availability"`
-}
-
-type conversationAvailability struct {
-	Available   bool   `json:"available"`
-	Reason      string `json:"reason,omitempty"`
-	CheckFailed bool   `json:"-"`
-	OutpostLost bool   `json:"-"`
 }
 
 type pluginReportStateParams struct {
@@ -711,40 +705,34 @@ func (d *Daemon) notifyPluginDriverSessionClosed(pluginName string, terminal har
 	})
 }
 
-func (d *Daemon) pluginConversationResumable(reg pluginDriverRegistration, resumeID, cwd string) conversationAvailability {
-	if !reg.Capabilities["resume_availability"] {
-		return conversationAvailability{Available: true}
-	}
-	conversation := pluginResumeConversation{Agent: reg.Agent, CWD: cwd, ResumeSessionID: resumeID}
-	return d.pluginConversationsResumable(reg, []pluginResumeConversation{conversation})[conversation]
-}
-
-func (d *Daemon) pluginConversationsResumable(reg pluginDriverRegistration, conversations []pluginResumeConversation) map[pluginResumeConversation]conversationAvailability {
-	if l := d.serverLinkFor(reg.Agent); l.watchesConversations() {
-		return l.conversationsResumable(conversations)
+func (d *Daemon) pluginConversationsResumable(plugin string, refs []harness.ConversationRef) map[harness.ConversationRef]harness.Availability {
+	conversations := make([]pluginResumeConversation, len(refs))
+	for i, ref := range refs {
+		conversations[i] = pluginResumeConversation{Agent: string(ref.Harness), CWD: ref.Dir, ResumeSessionID: ref.ID}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), pluginResumeAvailabilityTimeout)
 	defer cancel()
 	var result pluginResumeAvailableResult
-	err := d.callPlugin(ctx, reg.PluginName, "driver.resume_available", pluginResumeAvailableParams{Conversations: conversations}, &result)
-	reported := make(map[pluginResumeConversation]conversationAvailability, len(result.Availability))
+	err := d.callPlugin(ctx, plugin, "driver.resume_available", pluginResumeAvailableParams{Conversations: conversations}, &result)
+	reported := make(map[pluginResumeConversation]harness.Availability, len(result.Availability))
 	for _, answer := range result.Availability {
-		reported[answer.pluginResumeConversation] = answer.conversationAvailability
+		reported[answer.pluginResumeConversation] = harness.Availability{Resumable: answer.Available, Reason: answer.Reason}
 	}
-	availability := make(map[pluginResumeConversation]conversationAvailability, len(conversations))
-	for _, conversation := range conversations {
+	availability := make(map[harness.ConversationRef]harness.Availability, len(refs))
+	for i, ref := range refs {
+		conversation := conversations[i]
 		answer, found := reported[conversation]
 		switch {
 		case errors.Is(err, context.DeadlineExceeded):
-			answer = conversationAvailability{CheckFailed: true, Reason: fmt.Sprintf("cannot check conversation %s in %s's storage: resume_availability_timeout=%s exceeded; the driver did not answer", conversation.ResumeSessionID, conversation.Agent, pluginResumeAvailabilityTimeout)}
+			answer = harness.Availability{CheckFailed: true, Reason: fmt.Sprintf("cannot check conversation %s in %s's storage: resume_availability_timeout=%s exceeded; the driver did not answer", conversation.ResumeSessionID, conversation.Agent, pluginResumeAvailabilityTimeout)}
 		case err != nil:
-			answer = conversationAvailability{CheckFailed: true, Reason: fmt.Sprintf("cannot check conversation %s in %s's storage: %v", conversation.ResumeSessionID, conversation.Agent, err)}
+			answer = harness.Availability{CheckFailed: true, Reason: fmt.Sprintf("cannot check conversation %s in %s's storage: %v", conversation.ResumeSessionID, conversation.Agent, err)}
 		case !found:
-			answer = conversationAvailability{Reason: fmt.Sprintf("driver %s omitted resume availability for conversation %s in %s", conversation.Agent, conversation.ResumeSessionID, conversation.CWD)}
-		case !answer.Available && strings.TrimSpace(answer.Reason) == "":
+			answer = harness.Availability{Reason: fmt.Sprintf("driver %s omitted resume availability for conversation %s in %s", conversation.Agent, conversation.ResumeSessionID, conversation.CWD)}
+		case !answer.Resumable && strings.TrimSpace(answer.Reason) == "":
 			answer.Reason = fmt.Sprintf("conversation %s is no longer in %s's storage", conversation.ResumeSessionID, conversation.Agent)
 		}
-		availability[conversation] = answer
+		availability[ref] = answer
 	}
 	return availability
 }

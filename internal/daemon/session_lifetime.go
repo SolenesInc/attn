@@ -52,7 +52,7 @@ func (d *Daemon) admitConversation(session *protocol.Session, conversation strin
 	if !d.serverOwns(session.ID) {
 		return nil
 	}
-	return d.harnessOf(session.Agent).Conversations().Admit(harness.ConversationRef{Session: session.ID, Profile: session.ProfileID, ID: conversation, Lifetime: harness.InServer})
+	return d.harnessOf(session.Agent).Conversations().Admit(harness.ConversationRef{Harness: harness.ID(session.Agent), Session: session.ID, Profile: session.ProfileID, ID: conversation, Lifetime: harness.InServer})
 }
 
 func (d *Daemon) released(agent, profile string) {

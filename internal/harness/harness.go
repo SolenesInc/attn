@@ -129,16 +129,31 @@ const (
 
 // ConversationStore is where a harness keeps its conversations.
 type ConversationStore interface {
+	// Check answers for each conversation whether a resume could pick it up.
+	Check(ctx context.Context, refs []ConversationRef) map[ConversationRef]Availability
+	// Prepare readies a conversation for a resume; ready means a resume can read it now.
+	Prepare(ctx context.Context, ref ConversationRef) (ready bool, err error)
 	// Admit refuses a conversation that another profile or harness holds open.
 	Admit(ref ConversationRef) error
 }
 
 // ConversationRef names one conversation of a session.
 type ConversationRef struct {
-	Session  SessionID
-	Profile  string
-	ID       string
-	Lifetime Lifetime
+	Harness    ID
+	Session    SessionID
+	Profile    string
+	Dir        string
+	DirMissing bool
+	ID         string
+	Lifetime   Lifetime
+}
+
+// Availability is whether a resume could pick a conversation up, and why not.
+type Availability struct {
+	Resumable   bool
+	Reason      string
+	CheckFailed bool
+	OutpostLost bool
 }
 
 // Facts are what a harness is, constant for a built-in and fixed by the registration for a plugin.
@@ -154,6 +169,8 @@ type Facts struct {
 	CrewModel   string
 	Signals     Signals
 	Recovery    Recovery
+	// ModelDiscovery is whether the harness can list the models it offers.
+	ModelDiscovery bool
 	// ServerTerminal is the terminal a session's monitor is anchored on while its conversation runs in the harness's server. Nil for a harness with no server.
 	ServerTerminal func(profile string) TerminalID
 }

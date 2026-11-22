@@ -28,6 +28,7 @@ func (h codexHarness) Facts() harness.Facts {
 	facts.Advisor = harness.ModelChoice{Model: "gpt-5.6-luna", Effort: "xhigh"}
 	facts.Signals.Heartbeat, facts.Signals.ReviewerDwell = 500*time.Millisecond, time.Minute
 	facts.Signals.ConfirmsFirstTurn = true
+	facts.ModelDiscovery = true
 	facts.ServerTerminal = codexServerTerminal
 	return facts
 }
@@ -96,6 +97,19 @@ func (h codexHarness) Admit(ref harness.ConversationRef) error {
 		return nil
 	}
 	return h.d.codexShared().admit(ref.Profile, ref.ID)
+}
+
+func (h codexHarness) Check(_ context.Context, refs []harness.ConversationRef) map[harness.ConversationRef]harness.Availability {
+	return h.d.checkStoredConversations(h.driver(), refs)
+}
+
+func (h codexHarness) Prepare(_ context.Context, ref harness.ConversationRef) (bool, error) {
+	if ref.Lifetime == harness.InServer {
+		if err := h.d.codexShared().restore(ref.Profile, ref.ID); err != nil {
+			return false, err
+		}
+	}
+	return h.d.conversationReady(h.driver(), ref.ID), nil
 }
 
 func (h codexHarness) End(_ context.Context, e harness.Ending) {

@@ -18,10 +18,6 @@ import (
 )
 
 func (d *Daemon) delegationHarnesses() []protocol.Harness {
-	declared := map[string]map[string]bool{}
-	for _, driver := range d.ensurePluginRegistry().registeredDrivers() {
-		declared[driver.Agent] = driver.Capabilities
-	}
 	result := []protocol.Harness{}
 	for _, h := range d.harnesses() {
 		facts := h.Facts()
@@ -32,11 +28,7 @@ func (d *Daemon) delegationHarnesses() []protocol.Harness {
 		if !health.Offered {
 			continue
 		}
-		discovery := supportsModelDiscovery(agentdriver.Get(facts.ID)) || d.serverLinkFor(facts.ID) != nil
-		if capabilities, plugin := declared[facts.ID]; plugin {
-			discovery = capabilities["model_discovery"] || capabilities["server_binding"]
-		}
-		result = append(result, protocol.Harness{ID: facts.ID, Name: facts.DisplayName, Available: health.Installation != harness.Missing, ModelPin: facts.Options.ModelPin, EffortPin: facts.Options.EffortPin, Discovery: discovery})
+		result = append(result, protocol.Harness{ID: facts.ID, Name: facts.DisplayName, Available: health.Installation != harness.Missing, ModelPin: facts.Options.ModelPin, EffortPin: facts.Options.EffortPin, Discovery: facts.ModelDiscovery})
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
 	return result
@@ -162,11 +154,6 @@ func (d *Daemon) projectDelegationPreferencesChanged() {
 		}
 		d.broadcastMessage(protocol.DelegationPreferencesChangedMessage{Event: protocol.EventDelegationPreferencesChanged, Revision: cfg.Revision})
 	})
-}
-
-func supportsModelDiscovery(driver agentdriver.Driver) bool {
-	_, ok := driver.(agentdriver.ModelDiscoverer)
-	return ok
 }
 
 func (d *Daemon) selectsProviders(id string) bool {

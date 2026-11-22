@@ -10,6 +10,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
+	"maps"
 )
 
 func init() {
@@ -62,6 +63,7 @@ func (h pluginHarness) Facts() harness.Facts {
 		CacheTTL:       crewCacheTTLDefault * time.Second,
 		Signals:        pluginSignals(declared),
 		Recovery:       h.recovery(),
+		ModelDiscovery: declared["model_discovery"] || declared["server_binding"],
 		ServerTerminal: h.d.serverTerminalOf(h.reg.Agent),
 	}
 }
@@ -146,10 +148,51 @@ func (h pluginHarness) Released(string) { h.d.releaseServer(h.reg.Agent) }
 
 func (pluginHarness) Stop() {}
 
-func (h pluginHarness) Conversations() harness.ConversationStore { return h }
+func (h pluginHarness) Conversations() harness.ConversationStore {
+	return pluginConversationStore{d: h.d, plugin: h.reg.PluginName}
+}
 
-func (h pluginHarness) Admit(ref harness.ConversationRef) error {
-	return h.d.admitToServer(h.reg.Agent, ref)
+type pluginConversationStore struct {
+	d      *Daemon
+	plugin string
+}
+
+func (s pluginConversationStore) Admit(ref harness.ConversationRef) error {
+	return s.d.admitToServer(string(ref.Harness), ref)
+}
+
+func (pluginConversationStore) Prepare(context.Context, harness.ConversationRef) (bool, error) {
+	return true, nil
+}
+
+func (s pluginConversationStore) Check(_ context.Context, refs []harness.ConversationRef) map[harness.ConversationRef]harness.Availability {
+	availability := make(map[harness.ConversationRef]harness.Availability, len(refs))
+	onServer := map[*serverLink][]harness.ConversationRef{}
+	var asked []harness.ConversationRef
+	for _, ref := range refs {
+		reg, ok := s.d.ensurePluginRegistry().driver(string(ref.Harness))
+		switch l := s.d.serverLinkFor(reg.Agent); {
+		case !ok:
+			availability[ref] = harness.Availability{Reason: fmt.Sprintf("agent %q is not installed here, so its conversation cannot be resumed", ref.Harness)}
+		case !reg.Capabilities["resume"]:
+			availability[ref] = harness.Availability{Reason: fmt.Sprintf("agent %q does not resume conversations, so conversation %s cannot be picked up", ref.Harness, ref.ID)}
+		case ref.DirMissing && reg.Capabilities["resume_availability"]:
+			availability[ref] = harness.Availability{Resumable: true}
+		case l.watchesConversations():
+			onServer[l] = append(onServer[l], ref)
+		case !reg.Capabilities["resume_availability"]:
+			availability[ref] = harness.Availability{Resumable: true}
+		default:
+			asked = append(asked, ref)
+		}
+	}
+	for l, refs := range onServer {
+		maps.Copy(availability, l.conversationsResumable(refs))
+	}
+	if len(asked) > 0 {
+		maps.Copy(availability, s.d.pluginConversationsResumable(s.plugin, asked))
+	}
+	return availability
 }
 
 func (h pluginHarness) RunEnded(e harness.RunEnd) {

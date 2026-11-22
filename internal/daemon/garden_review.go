@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -127,21 +128,21 @@ func (d *Daemon) judgeGardenReview(profileID ...string) (gardenReviewCapture, er
 }
 
 func (d *Daemon) probeGardenReviewContinuations(observations []garden.ReviewObservation, indexOf map[string]int, judged []string) {
-	type pendingInspection struct {
-		seedIndex    int
-		conversation pluginResumeConversation
+	type pendingCheck struct {
+		seedIndex int
+		ref       harness.ConversationRef
 	}
-	pending := make(map[string][]pendingInspection)
-	registrations := make(map[string]pluginDriverRegistration)
+	pending := make(map[harness.ConversationStore][]pendingCheck)
 	for _, id := range judged {
 		seedIndex := indexOf[id]
-		checkResume := func(agentName, resumeID, cwd string) conversationAvailability {
-			if reg, ok := d.ensurePluginRegistry().driver(agentName); ok && reg.Capabilities["resume"] && reg.Capabilities["resume_availability"] {
-				pending[reg.PluginName] = append(pending[reg.PluginName], pendingInspection{seedIndex, pluginResumeConversation{Agent: agentName, CWD: cwd, ResumeSessionID: resumeID}})
-				registrations[reg.PluginName] = reg
-				return conversationAvailability{}
+		checkResume := func(ref harness.ConversationRef) harness.Availability {
+			h, err := d.harness(string(ref.Harness))
+			if err != nil {
+				return d.conversationResumable(ref)
 			}
-			return d.conversationResumable(agentName, resumeID, cwd)
+			conversations := h.Conversations()
+			pending[conversations] = append(pending[conversations], pendingCheck{seedIndex, ref})
+			return harness.Availability{}
 		}
 		continuation := d.continuationIgnoringReach(observations[seedIndex].Seed, checkResume)
 		if continuation == nil {
@@ -154,28 +155,28 @@ func (d *Daemon) probeGardenReviewContinuations(observations []garden.ReviewObse
 		observation.DirectoryNote = outpostDirectoryEvidence(continuation)
 	}
 
-	type inspectionResult struct {
-		checks       []pendingInspection
-		availability map[pluginResumeConversation]conversationAvailability
+	type checkResult struct {
+		checks       []pendingCheck
+		availability map[harness.ConversationRef]harness.Availability
 	}
-	results := make([]inspectionResult, len(pending))
+	results := make([]checkResult, 0, len(pending))
 	tasks := make([]func(), 0, len(pending))
-	for key, checks := range pending {
-		reg := registrations[key]
-		index := len(tasks)
+	for conversations, checks := range pending {
+		index := len(results)
+		results = append(results, checkResult{checks: checks})
 		tasks = append(tasks, func() {
-			conversations := make([]pluginResumeConversation, len(checks))
+			refs := make([]harness.ConversationRef, len(checks))
 			for i, check := range checks {
-				conversations[i] = check.conversation
+				refs[i] = check.ref
 			}
-			results[index] = inspectionResult{checks, d.pluginConversationsResumable(reg, conversations)}
+			results[index].availability = conversations.Check(d.life.Context(), refs)
 		})
 	}
-	// Resolve independent plugin checks before any candidate observes availability.
+	// Resolve independent stores' checks before any candidate observes availability.
 	runJoined(tasks...)
 	for _, result := range results {
 		for _, check := range result.checks {
-			observations[check.seedIndex].ResumeAvailable = result.availability[check.conversation].Available
+			observations[check.seedIndex].ResumeAvailable = result.availability[check.ref].Resumable
 		}
 	}
 }
