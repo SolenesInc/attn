@@ -31,9 +31,6 @@ internal/daemon/agent_machine.go	(*AgentLaunch).driverRunID	reaches pluginDriver
 internal/daemon/agent_machine.go	(*Daemon).agentLaunchContext	reaches Daemon.prepareLaunchContext (internal/daemon/plugin_launch_instructions.go)
 internal/daemon/agent_machine.go	AgentPluginLaunch	reaches pluginDriverSpawnParams (internal/daemon/plugin_driver.go)
 internal/daemon/agent_skills.go	(*Daemon).ensureEnabledWorkflowSkillsFor	reaches Daemon.workflowSkillsDirs (internal/daemon/plugin_skill_dirs.go)
-internal/daemon/automations_deliver.go	(*Daemon).confirmsFirstTurn	reaches Daemon.serverLinkFor (internal/daemon/server_binding.go)
-internal/daemon/automations_deliver.go	(*Daemon).confirmsFirstTurn	reaches serverLink (internal/daemon/server_link.go)
-internal/daemon/automations_deliver.go	(*Daemon).confirmsFirstTurn	reaches serverLink.runsLaunch (internal/daemon/server_link.go)
 internal/daemon/bus.go	buildWireProjections	reaches Daemon.projectSharedCodex (internal/daemon/codex_versions.go)
 internal/daemon/chief_member.go	(*Daemon).prefillChiefFromLegacySession	names "claude"
 internal/daemon/code_nav.go	(*Daemon).codeNavDefinitions	reaches Daemon.repositoryOrigin (internal/daemon/codex_trust.go)
@@ -140,9 +137,6 @@ internal/daemon/spawn_pipeline.go	(*Daemon).buildAgentSpawnLaunch	reaches plugin
 internal/daemon/spawn_pipeline.go	(*Daemon).buildAgentSpawnLaunch	reaches pluginDriverSpawnParams (internal/daemon/plugin_driver.go)
 internal/daemon/spawn_pipeline.go	(*Daemon).executeSpawn	reaches field Capabilities (internal/daemon/plugin_driver.go)
 internal/daemon/spawn_pipeline.go	(*Daemon).executeSpawn	reaches pluginDriverRegistration (internal/daemon/plugin_driver.go)
-internal/daemon/spawn_pipeline.go	(*Daemon).runSpawnPipelineProtected	reaches Daemon.serverLinkFor (internal/daemon/server_binding.go)
-internal/daemon/spawn_pipeline.go	(*Daemon).runSpawnPipelineProtected	reaches serverLink (internal/daemon/server_link.go)
-internal/daemon/spawn_pipeline.go	(*Daemon).runSpawnPipelineProtected	reaches serverLink.admit (internal/daemon/server_link.go)
 internal/daemon/spawn_pipeline.go	(*Daemon).validateSpawnPrelock	reaches field Agent (internal/daemon/plugin_driver.go)
 internal/daemon/spawn_pipeline.go	(*Daemon).validateSpawnPrelock	reaches pluginDriverRegistration (internal/daemon/plugin_driver.go)
 internal/daemon/spawn_pipeline.go	(*Daemon).validateSpawnPrelock	reaches pluginRegistry.driver (internal/daemon/plugin_driver.go)
@@ -167,13 +161,11 @@ internal/daemon/ws_plugins.go	(*Daemon).uninstallPlugin	reaches serverLink.conne
 internal/daemon/ws_pty.go	legacyExecutableFromSpawnMessage	names "claude"
 internal/daemon/ws_pty.go	legacyExecutableFromSpawnMessage	names "codex"
 internal/daemon/ws_pty.go	normalizeSpawnAgent	names "codex"
-internal/daemon/ws_settings.go	(*Daemon).daemonSettingsSnapshot	reaches Daemon.serverLinkFor (internal/daemon/server_binding.go)
 internal/daemon/ws_settings.go	(*Daemon).daemonSettingsSnapshot	reaches field Agent (internal/daemon/plugin_driver.go)
 internal/daemon/ws_settings.go	(*Daemon).daemonSettingsSnapshot	reaches field Capabilities (internal/daemon/plugin_driver.go)
 internal/daemon/ws_settings.go	(*Daemon).daemonSettingsSnapshot	reaches field DisplayName (internal/daemon/plugin_driver.go)
 internal/daemon/ws_settings.go	(*Daemon).daemonSettingsSnapshot	reaches pluginDriverRegistration (internal/daemon/plugin_driver.go)
 internal/daemon/ws_settings.go	(*Daemon).daemonSettingsSnapshot	reaches pluginRegistry.registeredDrivers (internal/daemon/plugin_driver.go)
-internal/daemon/ws_settings.go	(*Daemon).daemonSettingsSnapshot	reaches serverLink (internal/daemon/server_link.go)
 internal/daemon/ws_settings.go	isAgentExecutableSettingKey	reaches normalizePluginAgent (internal/daemon/plugin_driver.go)
 internal/hooks/codex.go	GenerateCodexServerConfigOverrides	names "codex"
 internal/preflight/preflight.go	resolveLaunch	names "codex"

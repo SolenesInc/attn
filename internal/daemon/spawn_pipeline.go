@@ -636,8 +636,9 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 	if rejection != nil {
 		return placementOutcome{}, rejection
 	}
-	if l := d.serverLinkFor(req.agent); l != nil {
-		if err := l.admit(req.profile.ID, protocol.Deref(msg.ResumeSessionID)); err != nil {
+	if h := d.harnessOf(harness.ID(req.agent)); !req.isShell && h.Facts().Recovery == harness.ByServer {
+		ref := harness.ConversationRef{Harness: h.Facts().ID, Profile: req.profile.ID, ID: protocol.Deref(msg.ResumeSessionID), Lifetime: harness.InServer}
+		if err := h.Conversations().Admit(ref); err != nil {
 			return placementOutcome{}, &spawnRejection{err: err}
 		}
 	}

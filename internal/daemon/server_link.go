@@ -11,7 +11,6 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -59,11 +58,7 @@ func (l *serverLink) holds(sessionID protocol.SessionID) bool {
 	return lifetime == harness.InServer && l.serves(agent)
 }
 
-func (l *serverLink) canRun(req harness.LaunchRequest) bool { return l.runsLaunch(req.Unattended) }
-
-func (l *serverLink) runsLaunch(launch launchcontract.UnattendedLaunchSpec) bool {
-	return launch.Executable == ""
-}
+func (l *serverLink) canRun(req harness.LaunchRequest) bool { return req.Unattended.Executable == "" }
 
 func (l *serverLink) enabledForNewLaunches() bool {
 	if l.b.plugin == "" {

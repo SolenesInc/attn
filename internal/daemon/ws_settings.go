@@ -283,7 +283,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 		settings[capabilitySettingKey(name, "effort_pin")] = strconv.FormatBool(caps.HasEffortPin)
 		settings[capabilitySettingKey(name, "context_window_cap")] = strconv.FormatBool(caps.HasContextWindowCap)
 		settings[capabilitySettingKey(name, "automation")] = strconv.FormatBool(caps.HasAutoApprove)
-		if l := d.serverLinkFor(name); l != nil {
+		if h.Facts().Recovery == harness.ByServer {
 			_, targets := d.targetsOf(name)
 			settings[capabilitySettingKey(name, "execution_target")] = strconv.FormatBool(targets)
 			settings[capabilitySettingKey(name, "model_discovery")] = "true"
@@ -294,7 +294,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 		if driver.DisplayName != "" {
 			settings[driver.Agent+"_display_name"] = driver.DisplayName
 		}
-		if l := d.serverLinkFor(driver.Agent); l != nil {
+		if d.harnessOf(driver.Agent).Facts().Recovery == harness.ByServer {
 			_, targets := d.targetsOf(driver.Agent)
 			settings[capabilitySettingKey(driver.Agent, "execution_target")] = strconv.FormatBool(targets)
 			settings[capabilitySettingKey(driver.Agent, "model_discovery")] = "true"

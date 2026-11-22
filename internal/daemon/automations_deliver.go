@@ -770,8 +770,8 @@ func (d *Daemon) confirmsFirstTurn(launch automation.EffectiveLaunch) bool {
 	if d.factsOrNone(launch.Agent).Signals.ConfirmsFirstTurn {
 		return true
 	}
-	link := d.serverLinkFor(launch.Agent)
-	return link != nil && link.runsLaunch(launch)
+	planned, err := d.harnessOf(harness.ID(launch.Agent)).Plan(harness.LaunchRequest{Lifetime: harness.InServer, Unattended: launch})
+	return err == nil && planned.Lifetime == harness.InServer
 }
 
 func (d *Daemon) launchReported(sessionID protocol.SessionID) bool {
