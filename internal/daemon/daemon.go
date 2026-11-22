@@ -3204,8 +3204,9 @@ func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 	if strings.EqualFold(strings.TrimSpace(protocol.Deref(msg.HookEvent)), "user_prompt_submit") &&
 		strings.TrimSpace(protocol.Deref(msg.Prompt)) != "" {
 		d.events().Prompt(harness.FromTerminal(msg.ID), time.Now(), harness.Prompt{Text: protocol.Deref(msg.Prompt), Live: true, Titles: true})
+	} else {
+		d.touchSession(sessionID)
 	}
-	d.touchSession(sessionID)
 	d.sendOK(conn)
 }
 
