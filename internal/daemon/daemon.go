@@ -1827,7 +1827,7 @@ func (d *Daemon) lostRuntimeCanComeBack(sessionID protocol.SessionID) bool {
 	if session == nil || d.copiedSession(sessionID) || !d.canReviveSession(session) {
 		return false
 	}
-	if session.Agent != protocol.AgentShellValue && !d.agentAvailable(string(session.Agent)) {
+	if session.Agent != protocol.AgentShellValue && !d.knowsHarness(string(session.Agent)) {
 		return false
 	}
 	intent, _ := d.store.LaunchIntent(sessionID)

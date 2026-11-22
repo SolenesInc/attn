@@ -11,6 +11,7 @@ import (
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/bridge/memnet"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/outpostbuild"
 	"github.com/victorarias/attn/internal/outpostssh"
@@ -26,6 +27,8 @@ type WireDaemon struct {
 	d       *Daemon
 	stopped chan error
 }
+
+func (w *WireDaemon) Harnesses() []harness.Harness { return w.d.harnesses() }
 
 func StartWireDaemonWithTerminals(socketPath string, unix, ws, diag net.Listener, terminals ptybackend.Backend, nativeWatch bool, clock *stepclock.Clock, gardenClock func() time.Time) (*WireDaemon, error) {
 	d := New(socketPath)

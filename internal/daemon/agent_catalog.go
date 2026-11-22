@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/harness"
 )
 
 func (d *Daemon) handleAgents(w http.ResponseWriter, r *http.Request) {
@@ -14,55 +15,39 @@ func (d *Daemon) handleAgents(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{"agents": d.agentCatalog()})
 }
 
+var descriptorHealth = map[harness.Installation]string{
+	harness.Installed: agentdriver.HealthHealthy,
+	harness.Missing:   agentdriver.HealthUnhealthy,
+	harness.Unknown:   agentdriver.HealthUnknown,
+}
+
 func (d *Daemon) agentCatalog() []agentdriver.Descriptor {
-	agents := make([]agentdriver.Descriptor, 0, len(agentdriver.List()))
-	for _, name := range agentdriver.List() {
-		if !d.agentOffered(name) {
+	providers := map[string]string{}
+	for _, driver := range d.ensurePluginRegistry().registeredDrivers() {
+		providers[driver.Agent] = driver.PluginName
+	}
+	all := d.harnesses()
+	agents := make([]agentdriver.Descriptor, 0, len(all))
+	for _, h := range all {
+		health := h.Health(d.life.Context())
+		if !health.Offered {
 			continue
 		}
-		driver := agentdriver.Get(name)
-		caps := agentdriver.EffectiveCapabilities(driver)
-		if d.harnessAvailability(driver) == harnessChecking {
-			agents = append(agents, agentdriver.Descriptor{
-				Name:       name,
-				Executable: driver.DefaultExecutable(),
-				ModelPin:   caps.HasModelPin,
-				EffortPin:  caps.HasEffortPin,
-				Health:     agentdriver.HealthUnknown,
-				Detail:     "checking the login environment for " + driver.DisplayName(),
-			})
-			continue
-		}
-		executable, err := d.machineAgentExecutable(driver, "")
+		facts := h.Facts()
 		entry := agentdriver.Descriptor{
-			Name:       name,
-			Executable: executable,
-			ModelPin:   caps.HasModelPin,
-			EffortPin:  caps.HasEffortPin,
+			Name:        facts.ID,
+			DisplayName: facts.DisplayName,
+			Plugin:      providers[facts.ID],
+			Executable:  health.Executable,
+			Health:      descriptorHealth[health.Installation],
+			Detail:      health.Reason,
+			ModelPin:    facts.Options.ModelPin,
+			EffortPin:   facts.Options.EffortPin,
 		}
-		if err != nil {
-			entry.Health, entry.Detail = agentdriver.HealthUnhealthy, err.Error()
-		} else {
-			entry.Health, entry.Detail = agentdriver.HealthHealthy, executable
+		if health.Installation == harness.Installed && entry.Detail == "" {
+			entry.Detail = health.Executable
 		}
 		agents = append(agents, entry)
-	}
-	registry := d.ensurePluginRegistry()
-	for _, driver := range registry.registeredDrivers() {
-		plugin := registry.get(driver.PluginName)
-		if plugin == nil {
-			continue
-		}
-		health, detail, _ := plugin.healthSnapshot()
-		agents = append(agents, agentdriver.Descriptor{
-			Name:        driver.Agent,
-			DisplayName: driver.displayName(),
-			Plugin:      driver.PluginName,
-			Health:      health,
-			Detail:      detail,
-			ModelPin:    driver.Capabilities["model_pin"],
-			EffortPin:   driver.Capabilities["effort_pin"],
-		})
 	}
 	sort.Slice(agents, func(i, j int) bool { return agents[i].Name < agents[j].Name })
 	return agents

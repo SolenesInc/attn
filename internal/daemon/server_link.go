@@ -61,7 +61,7 @@ func (l *serverLink) runsLaunch(launch launchcontract.UnattendedLaunchSpec) bool
 
 func (l *serverLink) enabledForNewLaunches() bool {
 	if l.b.plugin == "" {
-		return l.d.builtInOffered(l.b.agent)
+		return l.d.offered(l.b.agent)
 	}
 	reg, conn := l.d.ensurePluginRegistry().driverConnection(l.b.agent, l.b.plugin)
 	return l.b.declaration.Load() != nil && conn != nil && reg.Capabilities["server_binding"]

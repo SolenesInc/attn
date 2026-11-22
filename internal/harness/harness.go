@@ -1,0 +1,49 @@
+package harness
+
+import "context"
+
+// ID names a harness: a built-in's name, or the agent a plugin registered.
+type ID = string
+
+// Harness is one adapter: everything attn knows about a harness and asks of it.
+type Harness interface {
+	Facts() Facts
+	Health(ctx context.Context) Health
+}
+
+// Facts are what a harness is, constant for a built-in and fixed by the registration for a plugin.
+type Facts struct {
+	ID          ID
+	DisplayName string
+	Options     Options
+}
+
+// Options are the launch options a harness takes.
+type Options struct {
+	Resume             bool
+	Yolo               bool
+	AutoApprove        bool
+	InitialPrompt      bool
+	LaunchInstructions bool
+	ModelPin           bool
+	EffortPin          bool
+	ContextCap         bool
+}
+
+// Installation says whether the harness can run on this machine now.
+type Installation uint8
+
+const (
+	// Unknown: attn cannot tell yet, as while the login environment is captured.
+	Unknown Installation = iota
+	Installed
+	Missing
+)
+
+// Health is whether the harness can start a session now, and whether attn offers it for new ones.
+type Health struct {
+	Installation Installation
+	Offered      bool
+	Executable   string
+	Reason       string
+}

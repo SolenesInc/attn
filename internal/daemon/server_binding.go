@@ -14,7 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/setting"
 )
 
 type serverBinding struct {
@@ -68,18 +67,6 @@ func (d *Daemon) appServerLinks() []*serverLink {
 	}
 	sort.Slice(links, func(i, j int) bool { return links[i].b.agent < links[j].b.agent })
 	return links
-}
-
-var builtInFeatures = map[string]*setting.Setting{"sigma": setting.SigmaEnabled}
-
-func (d *Daemon) builtInOffered(agent string) bool {
-	feature, gated := builtInFeatures[agent]
-	return !gated || d.on(feature)
-}
-
-func (d *Daemon) agentOffered(agent string) bool {
-	l := d.serverLinkFor(agent)
-	return l == nil || l.enabledForNewLaunches()
 }
 
 func (l *serverLink) home() string {

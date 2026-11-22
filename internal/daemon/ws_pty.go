@@ -458,7 +458,7 @@ func (d *Daemon) reviveRecoverableAgents(host string) {
 		if d.stopping() {
 			return
 		}
-		if protocol.Deref(session.Host) != host || session.Agent == protocol.AgentShellValue || !d.agentAvailable(string(session.Agent)) {
+		if protocol.Deref(session.Host) != host || session.Agent == protocol.AgentShellValue || !d.knowsHarness(string(session.Agent)) {
 			continue
 		}
 		if err := d.reviveSession(session.ID, 80, 24); err != nil {

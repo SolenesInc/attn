@@ -113,20 +113,15 @@ func delegationAgentName(sourceAgent string, requested *string) string {
 
 func (d *Daemon) resolveDelegationAgent(sourceAgent string, requested *string) (string, error) {
 	agent := delegationAgentName(sourceAgent, requested)
-	if pluginDriver, ok := d.ensurePluginRegistry().driver(agent); ok {
-		if !pluginDriver.Capabilities["initial_prompt"] {
-			return "", fmt.Errorf("agent %q does not support initial prompts", agent)
-		}
-		return pluginDriver.Agent, nil
+	h, err := d.harness(agent)
+	if err != nil {
+		return "", err
 	}
-	driver := agentdriver.Get(agent)
-	if driver == nil {
-		return "", fmt.Errorf("agent %q is not available", agent)
-	}
-	if !agentdriver.EffectiveCapabilities(driver).HasInitialPrompt {
+	facts := h.Facts()
+	if !facts.Options.InitialPrompt {
 		return "", fmt.Errorf("agent %q does not support initial prompts", agent)
 	}
-	return driver.Name(), nil
+	return facts.ID, nil
 }
 
 func (d *Daemon) validateHarnessModelEffort(agent, model, effort string) error {

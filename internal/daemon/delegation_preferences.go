@@ -11,31 +11,32 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/delegationprefs"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
 
 func (d *Daemon) delegationHarnesses() []protocol.Harness {
-	result := []protocol.Harness{}
-	for _, name := range agentdriver.List() {
-		driver := agentdriver.Get(name)
-		caps := agentdriver.EffectiveCapabilities(driver)
-		if !caps.HasInitialPrompt || !d.agentOffered(name) {
-			continue
-		}
-		result = append(result, protocol.Harness{ID: name, Name: driver.DisplayName(), Available: d.harnessAvailability(driver) != harnessMissing, ModelPin: caps.HasModelPin, EffortPin: caps.HasEffortPin, Discovery: supportsModelDiscovery(driver) || d.serverLinkFor(name) != nil})
-	}
+	declared := map[string]map[string]bool{}
 	for _, driver := range d.ensurePluginRegistry().registeredDrivers() {
-		if !driver.Capabilities["initial_prompt"] {
+		declared[driver.Agent] = driver.Capabilities
+	}
+	result := []protocol.Harness{}
+	for _, h := range d.harnesses() {
+		facts := h.Facts()
+		if !facts.Options.InitialPrompt {
 			continue
 		}
-		plugin := d.ensurePluginRegistry().get(driver.PluginName)
-		if plugin == nil {
+		health := h.Health(d.life.Context())
+		if !health.Offered {
 			continue
 		}
-		health, _, _ := plugin.healthSnapshot()
-		result = append(result, protocol.Harness{ID: driver.Agent, Name: driver.displayName(), Available: health != agentdriver.HealthUnhealthy, ModelPin: driver.Capabilities["model_pin"], EffortPin: driver.Capabilities["effort_pin"], Discovery: driver.Capabilities["model_discovery"] || driver.Capabilities["server_binding"]})
+		discovery := supportsModelDiscovery(agentdriver.Get(facts.ID)) || d.serverLinkFor(facts.ID) != nil
+		if capabilities, plugin := declared[facts.ID]; plugin {
+			discovery = capabilities["model_discovery"] || capabilities["server_binding"]
+		}
+		result = append(result, protocol.Harness{ID: facts.ID, Name: facts.DisplayName, Available: health.Installation != harness.Missing, ModelPin: facts.Options.ModelPin, EffortPin: facts.Options.EffortPin, Discovery: discovery})
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
 	return result

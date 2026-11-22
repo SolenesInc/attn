@@ -25,6 +25,14 @@ func TestTheAgentCatalogListsBuiltInAgentsAndThoseAConnectedPluginOffers(t *test
 		t.Fatal(err)
 	}
 	setSetting(t, app, "codex_executable", nightly)
+	gone := w.Path("tools", "claude-gone")
+	if err := os.WriteFile(gone, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	setSetting(t, app, "claude_executable", gone)
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
 	healthy := testworld.Request(app, protocol.ListPluginsMessage{Cmd: protocol.CmdListPlugins}, protocol.EventPluginsUpdated, func(m protocol.PluginsUpdatedMessage) bool {
 		for _, plugin := range m.Plugins {
 			if plugin.Name == "attn-plug" && protocol.Deref(plugin.HealthStatus) == agentdriver.HealthHealthy {
@@ -42,8 +50,8 @@ func TestTheAgentCatalogListsBuiltInAgentsAndThoseAConnectedPluginOffers(t *test
 	if codex.Executable != nightly || codex.Health != agentdriver.HealthHealthy || codex.Plugin != "" || !codex.ModelPin || !codex.EffortPin {
 		t.Errorf("codex = %+v, want the configured executable, healthy, built in, with pins", codex)
 	}
-	if _, ok := catalog["claude"]; !ok {
-		t.Errorf("the catalog is missing the built-in claude: %+v", catalog)
+	if claude := catalog["claude"]; claude.Executable != gone || claude.Health != agentdriver.HealthUnhealthy {
+		t.Errorf("claude = %+v, want the configured executable named while it is missing, unhealthy", claude)
 	}
 	plug, ok := catalog["plug"]
 	var plugHealth string

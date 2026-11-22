@@ -28,12 +28,9 @@ internal/daemon/activity.go	(*Daemon).sessionGeneratesActivity	reaches serverLin
 internal/daemon/activity.go	(*Daemon).sessionGeneratesActivity	reaches serverLink.watchesConversations (internal/daemon/server_feed.go)
 internal/daemon/activity_config.go	parseActivityConfig	names "claude"
 internal/daemon/activity_config.go	parseActivityConfig	names "codex"
-internal/daemon/agent_catalog.go	(*Daemon).agentCatalog	reaches Daemon.agentOffered (internal/daemon/server_binding.go)
 internal/daemon/agent_catalog.go	(*Daemon).agentCatalog	reaches field Agent (internal/daemon/plugin_driver.go)
-internal/daemon/agent_catalog.go	(*Daemon).agentCatalog	reaches field Capabilities (internal/daemon/plugin_driver.go)
 internal/daemon/agent_catalog.go	(*Daemon).agentCatalog	reaches field PluginName (internal/daemon/plugin_driver.go)
 internal/daemon/agent_catalog.go	(*Daemon).agentCatalog	reaches pluginDriverRegistration (internal/daemon/plugin_driver.go)
-internal/daemon/agent_catalog.go	(*Daemon).agentCatalog	reaches pluginDriverRegistration.displayName (internal/daemon/plugin_driver.go)
 internal/daemon/agent_catalog.go	(*Daemon).agentCatalog	reaches pluginRegistry.registeredDrivers (internal/daemon/plugin_driver.go)
 internal/daemon/agent_close_compact.go	(*Daemon).closeAfterCompact	reaches callHome (internal/daemon/claude_mod.go)
 internal/daemon/agent_close_compact.go	(*Daemon).compactPathRefusal	names "claude"
@@ -237,21 +234,14 @@ internal/daemon/daemon.go	Daemon	reaches serverLink (internal/daemon/server_link
 internal/daemon/delegate.go	(*Daemon).defaultDelegationEffort	reaches field Capabilities (internal/daemon/plugin_driver.go)
 internal/daemon/delegate.go	(*Daemon).defaultDelegationEffort	reaches pluginDriverRegistration (internal/daemon/plugin_driver.go)
 internal/daemon/delegate.go	(*Daemon).defaultDelegationEffort	reaches pluginRegistry.driver (internal/daemon/plugin_driver.go)
-internal/daemon/delegate.go	(*Daemon).resolveDelegationAgent	reaches field Agent (internal/daemon/plugin_driver.go)
-internal/daemon/delegate.go	(*Daemon).resolveDelegationAgent	reaches field Capabilities (internal/daemon/plugin_driver.go)
-internal/daemon/delegate.go	(*Daemon).resolveDelegationAgent	reaches pluginDriverRegistration (internal/daemon/plugin_driver.go)
-internal/daemon/delegate.go	(*Daemon).resolveDelegationAgent	reaches pluginRegistry.driver (internal/daemon/plugin_driver.go)
 internal/daemon/delegate.go	(*Daemon).validateHarnessModelEffort	reaches field Capabilities (internal/daemon/plugin_driver.go)
 internal/daemon/delegate.go	(*Daemon).validateHarnessModelEffort	reaches pluginDriverRegistration (internal/daemon/plugin_driver.go)
 internal/daemon/delegate.go	(*Daemon).validateHarnessModelEffort	reaches pluginRegistry.driver (internal/daemon/plugin_driver.go)
 internal/daemon/delegate.go	delegationAgentName	names "codex"
-internal/daemon/delegation_preferences.go	(*Daemon).delegationHarnesses	reaches Daemon.agentOffered (internal/daemon/server_binding.go)
 internal/daemon/delegation_preferences.go	(*Daemon).delegationHarnesses	reaches Daemon.serverLinkFor (internal/daemon/server_binding.go)
 internal/daemon/delegation_preferences.go	(*Daemon).delegationHarnesses	reaches field Agent (internal/daemon/plugin_driver.go)
 internal/daemon/delegation_preferences.go	(*Daemon).delegationHarnesses	reaches field Capabilities (internal/daemon/plugin_driver.go)
-internal/daemon/delegation_preferences.go	(*Daemon).delegationHarnesses	reaches field PluginName (internal/daemon/plugin_driver.go)
 internal/daemon/delegation_preferences.go	(*Daemon).delegationHarnesses	reaches pluginDriverRegistration (internal/daemon/plugin_driver.go)
-internal/daemon/delegation_preferences.go	(*Daemon).delegationHarnesses	reaches pluginDriverRegistration.displayName (internal/daemon/plugin_driver.go)
 internal/daemon/delegation_preferences.go	(*Daemon).delegationHarnesses	reaches pluginRegistry.registeredDrivers (internal/daemon/plugin_driver.go)
 internal/daemon/delegation_preferences.go	(*Daemon).delegationHarnesses	reaches serverLink (internal/daemon/server_link.go)
 internal/daemon/delegation_preferences.go	(*Daemon).ensureDelegationWorkflowSkill	reaches Daemon.workflowSkillsDirs (internal/daemon/plugin_skill_dirs.go)
@@ -493,7 +483,6 @@ internal/daemon/session_title.go	titleProviderAgent	names "claude"
 internal/daemon/session_title.go	titleProviderAgent	names "codex"
 internal/daemon/shared_conversation.go	(*Daemon).projectSharedConversations	reaches Daemon.conversationShowsInManyTerminals (internal/daemon/link_runtime.go)
 internal/daemon/spawn_pipeline.go	(*Daemon).addsTerminal	reaches Daemon.linkConversation (internal/daemon/link_runtime.go)
-internal/daemon/spawn_pipeline.go	(*Daemon).agentAvailable	reaches pluginRegistry.driver (internal/daemon/plugin_driver.go)
 internal/daemon/spawn_pipeline.go	(*Daemon).buildAgentSpawnLaunch	reaches Daemon.linkConversation (internal/daemon/link_runtime.go)
 internal/daemon/spawn_pipeline.go	(*Daemon).buildAgentSpawnLaunch	reaches field Agent (internal/daemon/plugin_driver.go)
 internal/daemon/spawn_pipeline.go	(*Daemon).buildAgentSpawnLaunch	reaches field CWD (internal/daemon/plugin_driver.go)
@@ -536,9 +525,7 @@ internal/daemon/spawn_pipeline.go	(*Daemon).runSpawnPipelineProtected	reaches Da
 internal/daemon/spawn_pipeline.go	(*Daemon).runSpawnPipelineProtected	reaches serverLink (internal/daemon/server_link.go)
 internal/daemon/spawn_pipeline.go	(*Daemon).runSpawnPipelineProtected	reaches serverLink.admit (internal/daemon/server_link.go)
 internal/daemon/spawn_pipeline.go	(*Daemon).showHolderProtected	reaches Daemon.spawnShowing (internal/daemon/link_runtime.go)
-internal/daemon/spawn_pipeline.go	(*Daemon).validateSpawnPrelock	reaches Daemon.agentOffered (internal/daemon/server_binding.go)
 internal/daemon/spawn_pipeline.go	(*Daemon).validateSpawnPrelock	reaches field Agent (internal/daemon/plugin_driver.go)
-internal/daemon/spawn_pipeline.go	(*Daemon).validateSpawnPrelock	reaches field Capabilities (internal/daemon/plugin_driver.go)
 internal/daemon/spawn_pipeline.go	(*Daemon).validateSpawnPrelock	reaches pluginDriverRegistration (internal/daemon/plugin_driver.go)
 internal/daemon/spawn_pipeline.go	(*Daemon).validateSpawnPrelock	reaches pluginRegistry.driver (internal/daemon/plugin_driver.go)
 internal/daemon/spawn_pipeline.go	spawnRequest	reaches linkRuntime (internal/daemon/link_runtime.go)
@@ -593,7 +580,6 @@ internal/daemon/ws_pty.go	(*Daemon).reviveSession	reaches serverLink (internal/d
 internal/daemon/ws_pty.go	legacyExecutableFromSpawnMessage	names "claude"
 internal/daemon/ws_pty.go	legacyExecutableFromSpawnMessage	names "codex"
 internal/daemon/ws_pty.go	normalizeSpawnAgent	names "codex"
-internal/daemon/ws_settings.go	(*Daemon).daemonSettingsSnapshot	reaches Daemon.agentOffered (internal/daemon/server_binding.go)
 internal/daemon/ws_settings.go	(*Daemon).daemonSettingsSnapshot	reaches Daemon.serverLinkFor (internal/daemon/server_binding.go)
 internal/daemon/ws_settings.go	(*Daemon).daemonSettingsSnapshot	reaches field Agent (internal/daemon/plugin_driver.go)
 internal/daemon/ws_settings.go	(*Daemon).daemonSettingsSnapshot	reaches field Capabilities (internal/daemon/plugin_driver.go)
@@ -606,7 +592,6 @@ internal/daemon/ws_settings.go	(*Daemon).settingChanged	reaches Daemon.codexShar
 internal/daemon/ws_settings.go	(*Daemon).settingChanged	reaches Daemon.reconcileAgentTools (internal/daemon/server_connection.go)
 internal/daemon/ws_settings.go	(*Daemon).settingChanged	reaches codexShared (internal/daemon/codex_shared.go)
 internal/daemon/ws_settings.go	(*Daemon).settingChanged	reaches codexShared.settingChanged (internal/daemon/codex_versions.go)
-internal/daemon/ws_settings.go	(*Daemon).validateNewSessionAgent	reaches pluginRegistry.driver (internal/daemon/plugin_driver.go)
 internal/daemon/ws_settings.go	isAgentExecutableSettingKey	reaches normalizePluginAgent (internal/daemon/plugin_driver.go)
 internal/hooks/codex.go	GenerateCodexServerConfigOverrides	names "codex"
 internal/preflight/preflight.go	resolveLaunch	names "codex"

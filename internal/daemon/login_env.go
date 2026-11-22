@@ -8,6 +8,7 @@ import (
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -270,8 +271,8 @@ func (d *Daemon) awaitHarness(agent string) {
 		return
 	}
 	d.latestLoginEnv()
-	if driver := agentdriver.Get(agent); driver != nil {
-		if _, err := d.machineAgentExecutable(driver, ""); err != nil && d.loginEnvFailed() {
+	if h, err := d.harness(agent); err == nil {
+		if h.Health(d.life.Context()).Installation == harness.Unknown && d.loginEnvFailed() {
 			_, _ = d.launchEnv(d.life.Context())
 		}
 		return

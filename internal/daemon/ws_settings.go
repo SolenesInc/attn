@@ -13,6 +13,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -257,11 +258,15 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 
 	for _, name := range agentdriver.List() {
 		driver := agentdriver.Get(name)
-		if driver == nil || !d.agentOffered(name) {
+		h, err := d.harness(name)
+		if err != nil {
 			continue
 		}
-		available := d.harnessAvailability(driver)
-		settings[availabilitySettingKey(name)] = string(available)
+		health := h.Health(d.life.Context())
+		if !health.Offered {
+			continue
+		}
+		settings[availabilitySettingKey(name)] = availabilitySetting[health.Installation]
 
 		caps := agentdriver.EffectiveCapabilities(driver)
 		settings[capabilitySettingKey(name, "hooks")] = strconv.FormatBool(caps.HasHooks)
@@ -361,26 +366,7 @@ func (d *Daemon) ptyBackendMode() string {
 	return "unknown"
 }
 
-type harnessAvailability string
-
-const (
-	harnessAvailable harnessAvailability = "true"
-	harnessMissing   harnessAvailability = "false"
-	harnessChecking  harnessAvailability = "checking"
-)
-
-func (d *Daemon) harnessAvailability(driver agentdriver.Driver) harnessAvailability {
-	if d.capturingLoginEnv() {
-		return harnessChecking
-	}
-	if _, err := d.machineAgentExecutable(driver, ""); err != nil {
-		if d.loginEnvFailed() {
-			return harnessChecking
-		}
-		return harnessMissing
-	}
-	return harnessAvailable
-}
+var availabilitySetting = map[harness.Installation]string{harness.Installed: "true", harness.Missing: "false", harness.Unknown: "checking"}
 
 func settingShapesCrewLaunch(key string) bool {
 	return setting.DefaultModel.Matches(key) || setting.DefaultEffort.Matches(key)
@@ -656,12 +642,7 @@ func (d *Daemon) validateNewSessionAgent(value string) error {
 	if agent == "" {
 		return nil
 	}
-	if agentdriver.Get(agent) == nil {
-		if d.plugins != nil {
-			if _, ok := d.plugins.driver(agent); ok {
-				return nil
-			}
-		}
+	if !d.knowsHarness(agent) {
 		return fmt.Errorf("unknown agent: %s", value)
 	}
 	return nil

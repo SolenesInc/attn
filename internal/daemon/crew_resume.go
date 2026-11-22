@@ -18,7 +18,7 @@ func (d *Daemon) reviveMembersInterruptedSession(memberID string) bool {
 		return false
 	}
 	d.awaitHarness(string(session.Agent))
-	if !d.agentAvailable(string(session.Agent)) {
+	if !d.knowsHarness(string(session.Agent)) {
 		return false
 	}
 	if err := d.reviveSession(latest, 80, 24); err != nil {

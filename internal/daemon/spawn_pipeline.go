@@ -106,13 +106,6 @@ func (plan *spawnPlan) rollback(d *Daemon, sessionID protocol.SessionID) {
 	}
 }
 
-func (d *Daemon) agentAvailable(agent string) bool {
-	if _, plugin := d.ensurePluginRegistry().driver(agent); plugin {
-		return true
-	}
-	return agentdriver.Get(agent) != nil
-}
-
 func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (*spawnRequest, *spawnRejection) {
 	requestedAgent := strings.TrimSpace(strings.ToLower(msg.Agent))
 	pluginDriver, hasPluginDriver := d.ensurePluginRegistry().driver(requestedAgent)
@@ -120,7 +113,7 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 	startsSession := policy.fromLedger || d.store.Get(msg.ID) == nil
 	if hasPluginDriver {
 		agent = pluginDriver.Agent
-	} else if requestedAgent != "" && requestedAgent != protocol.AgentShellValue && (!d.agentAvailable(requestedAgent) || startsSession && !d.agentOffered(requestedAgent)) {
+	} else if requestedAgent != "" && requestedAgent != protocol.AgentShellValue && (!d.knowsHarness(requestedAgent) || startsSession && !d.offered(requestedAgent)) {
 		return nil, &spawnRejection{err: fmt.Errorf("agent %q is not available", requestedAgent)}
 	}
 	isShell := agent == protocol.AgentShellValue
@@ -154,14 +147,8 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 		return nil, &spawnRejection{err: errors.New("shell sessions do not accept an initial prompt")}
 	}
 	if strings.TrimSpace(initialPrompt) != "" {
-		if hasPluginDriver && !pluginDriver.Capabilities["initial_prompt"] {
-			return nil, &spawnRejection{err: fmt.Errorf("agent %q does not support initial prompts", requestedAgent)}
-		}
-		if !hasPluginDriver {
-			driver := agentdriver.Get(agent)
-			if driver == nil || !agentdriver.EffectiveCapabilities(driver).HasInitialPrompt {
-				return nil, &spawnRejection{err: fmt.Errorf("agent %q does not support initial prompts", agent)}
-			}
+		if h, err := d.harness(agent); err != nil || !h.Facts().Options.InitialPrompt {
+			return nil, &spawnRejection{err: fmt.Errorf("agent %q does not support initial prompts", agent)}
 		}
 	}
 	profile, err := d.liveLaunchProfile(msg.ProfileID)
