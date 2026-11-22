@@ -25,10 +25,11 @@ live-author repair silently blocks `main`, and every landed repair is verified
 and recorded.
 
 - Fetch `origin/main` (`git fetch origin main`).
-- Review each finished delegate on your plot (`attn seed ls --plot <your seed>`):
-  check its landed commits and check reports against its brief, report only P0
-  and P1 findings, and say when you and the delegate ran on one model or two
-  models from one vendor. Record check verdicts with
+- Review each finished delegate on your plot (`attn seed ls --plot <your seed>`)
+  and any delegate recorded on an open Branch health issue from an earlier
+  Sheriff run: check its landed commits and check reports against its brief,
+  report only P0 and P1 findings, and say when you and the delegate ran on one
+  model or two models from one vendor. Record check verdicts with
   `attn seed check confirm <seed> <C#>` or
   `attn seed check reject <seed> <C#> -m "<what would prove it>" --ring`. Once
   every check is confirmed (or when abandoning the delegate), record the landed
@@ -212,6 +213,20 @@ seeds that keep landings fast.
 - **Recurring classes**: when the exact same failure mechanism repeats, follow
   [Corrected failure classes](corrected-classes.md). Never dispatch unsolicited
   Pathfinders to propose slower landing gates.
+
+### 6. Wrap up when the pass is settled
+
+**Outcome**: finished Sheriff runs do not pile up as open sessions. Run this
+step even when the pass stops early in Step 1 or Step 2.
+
+- If you escalated to the user (`attn turn open` or an unanswered `attn ask`),
+  stay open until the user answers.
+- If a delegate you dispatched in this run is still working, end your turn and
+  wait for its ring. When the ring arrives, run Step 0 to review and close the
+  delegate and record its repair SHA.
+- Once no delegate of this run remains open and nothing waits on the user,
+  harvest your seed (`attn seed harvest <your seed> -m "<summary>"`) and close
+  yourself (`attn agent close --self -m "<what you settled>"`).
 
 ## Asking the user
 
