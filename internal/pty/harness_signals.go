@@ -6,7 +6,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/harness"
 )
 
 const (
@@ -36,13 +36,13 @@ type harnessSignalObserver struct {
 	lastEmit  time.Time
 }
 
-func newHarnessSignalObserver(kind agentdriver.HarnessSignalKind) *harnessSignalObserver {
+func newHarnessSignalObserver(kind harness.TitleKind) *harnessSignalObserver {
 	switch kind {
-	case agentdriver.HarnessSignalsClaude:
+	case harness.TitlesClaude:
 		return &harnessSignalObserver{policy: harnessSignalPolicy{
 			classifyTitle: classifyClaudeTitle,
 		}}
-	case agentdriver.HarnessSignalsCodex:
+	case harness.TitlesCodex:
 		return &harnessSignalObserver{policy: harnessSignalPolicy{
 			classifyTitle: classifyCodexTitle,
 		}}

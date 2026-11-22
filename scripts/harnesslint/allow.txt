@@ -26,3 +26,4 @@ cli/attn/src/commands/top_level_generated.rs * generated from the catalog; the `
 cli/attn/src/commands/codex.rs * leak 2: shared Codex's update and restart command, `attn codex`
 cli/attn/src/commands/model.rs * an example reply in the command's help text
 internal/daemon/reload.go recordedLegacyExecutable reads the claude_executable or codex_executable a terminal recorded before launches wrote executable alone
+pty-host/src/handover.rs * reads the agent a handoff from a host older than stage 5 names, because such a handoff carries no title_signals; goes once every supported upgrade starts from a release that includes stage 5d

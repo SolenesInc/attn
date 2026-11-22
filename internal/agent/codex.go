@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/victorarias/attn/internal/harness"
 	"os/exec"
 	"slices"
 	"strconv"
@@ -47,7 +48,7 @@ func (c *Codex) Capabilities() Capabilities {
 		HasTranscript:         true,
 		HasTranscriptWatcher:  true,
 		HasClassifier:         true,
-		HarnessSignals:        HarnessSignalsCodex,
+		HarnessSignals:        harness.TitlesCodex,
 		HasResume:             true,
 		HasYolo:               true,
 		HasAutoApprove:        true,

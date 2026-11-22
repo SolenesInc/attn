@@ -6,7 +6,9 @@ import (
 	"syscall"
 	"time"
 
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/ghosttyvt"
+	"github.com/victorarias/attn/internal/harness"
 )
 
 const quiesceTimeout = 2 * time.Second
@@ -21,6 +23,7 @@ type HandoffState struct {
 	SessionID      string
 	CWD            string
 	Agent          string
+	TitleSignals   *harness.TitleKind
 
 	ChildPID     int
 	PendingInput []byte
@@ -113,6 +116,7 @@ func (s *Session) handoff() (HandoffState, error) {
 		PromptExpected: s.promptExpected,
 		CWD:            s.cwd,
 		Agent:          s.agent,
+		TitleSignals:   &s.titleSignals,
 		ChildPID:       s.child.processID(),
 		Carryover:      s.handoffCarryover,
 		StartedAt:      s.startedAt,
@@ -170,6 +174,20 @@ func (s *Session) handoff() (HandoffState, error) {
 	return state, nil
 }
 
+func titleSignalsOf(st HandoffState) harness.TitleKind {
+	if st.TitleSignals != nil {
+		return *st.TitleSignals
+	}
+	return titleSignalsOfPre5dHandoff(st.Agent)
+}
+
+func titleSignalsOfPre5dHandoff(agent string) harness.TitleKind {
+	if d := agentdriver.Get(agent); d != nil {
+		return agentdriver.EffectiveCapabilities(d).HarnessSignals
+	}
+	return harness.TitlesNone
+}
+
 func (m *Manager) Adopt(st HandoffState) error {
 	if st.SessionID == "" {
 		return errors.New("missing session id")
@@ -204,6 +222,7 @@ func (m *Manager) Adopt(st HandoffState) error {
 		promptExpected: st.PromptExpected,
 		cwd:            st.CWD,
 		agent:          st.Agent,
+		titleSignals:   titleSignalsOf(st),
 		cols:           st.Cols,
 		rows:           st.Rows,
 		cellW:          st.CellW,

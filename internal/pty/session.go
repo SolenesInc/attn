@@ -18,6 +18,7 @@ import (
 
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/ghosttyvt"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pausepoint"
 )
 
@@ -54,10 +55,11 @@ type terminalQueries struct {
 }
 
 type Session struct {
-	id          string
-	lifecycleID string
-	cwd         string
-	agent       string
+	id           string
+	lifecycleID  string
+	cwd          string
+	agent        string
+	titleSignals harness.TitleKind
 
 	resizeMu     sync.Mutex
 	metaMu       sync.RWMutex

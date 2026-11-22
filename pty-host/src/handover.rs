@@ -66,6 +66,8 @@ pub struct SessionHandoff {
     pub pending_input: String,
     pub next_block_id: u64,
     pub program_status_reported: bool,
+    #[serde(default)]
+    pub title_signals: Option<String>,
     pub shell: ShellState,
     #[serde(default)]
     pub title: crate::title::ShellTitle,
@@ -77,6 +79,23 @@ pub struct SessionHandoff {
     pub state_observed_at: String,
     pub exit_code: Option<i32>,
     pub exit_signal: Option<String>,
+}
+
+impl SessionHandoff {
+    pub fn title_signals(&self) -> &str {
+        match &self.title_signals {
+            Some(kind) => kind,
+            None => title_signals_of_pre_5d_handoff(&self.agent),
+        }
+    }
+}
+
+fn title_signals_of_pre_5d_handoff(agent: &str) -> &'static str {
+    match agent.trim().to_ascii_lowercase().as_str() {
+        "claude" | "claude-code" => crate::signals::CLAUDE_TITLES,
+        "codex" => crate::signals::CODEX_TITLES,
+        _ => "",
+    }
 }
 
 impl HostHandoff {

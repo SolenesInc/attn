@@ -107,6 +107,7 @@ func runPTYWorker() {
 	fs.StringVar(&cfg.CodexExecutable, "codex-executable", "", "codex executable override")
 	var unattendedLaunchJSON string
 	fs.BoolVar(&cfg.AgentLoginShell, "agent-login-shell", false, "run the prepared agent through a login shell")
+	fs.StringVar(&cfg.TitleSignals, "title-signals", "", "title parser for the harness's terminal titles")
 	fs.Func("agent-arg", "prepared agent argument (repeat for each argument)", func(value string) error { cfg.AgentArgv = append(cfg.AgentArgv, value); return nil })
 	fs.StringVar(&unattendedLaunchJSON, "unattended-launch-json", "", "immutable unattended launch contract as JSON")
 	fs.StringVar(&cfg.ExternalCWD, "external-cwd", "", "external plugin driver working directory")

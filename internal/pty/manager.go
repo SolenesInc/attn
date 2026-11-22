@@ -21,6 +21,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/ghosttyvt"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchenv"
 	"github.com/victorarias/attn/internal/pausepoint"
 )
@@ -49,6 +50,7 @@ type SpawnOptions struct {
 	Rows uint16
 
 	AgentLoginShell bool
+	TitleSignals    harness.TitleKind
 	AgentArgv       []string
 	AgentEnv        []string
 	ExternalCWD     string
@@ -181,13 +183,6 @@ func (m *Manager) Title(sessionID string) string {
 	return s.shellSignals.title.Title()
 }
 
-func agentHarnessSignals(agent string) agentdriver.HarnessSignalKind {
-	if d := agentdriver.Get(agent); d != nil {
-		return agentdriver.EffectiveCapabilities(d).HarnessSignals
-	}
-	return agentdriver.HarnessSignalsNone
-}
-
 func (m *Manager) Spawn(opts SpawnOptions) error {
 	if opts.ID == "" {
 		return errors.New("missing session id")
@@ -275,6 +270,7 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 		promptExpected: ShellIntegrationExpected(usedShell, cmd.Env),
 		cwd:            opts.CWD,
 		agent:          prepared.Agent,
+		titleSignals:   opts.TitleSignals,
 		cols:           opts.Cols,
 		rows:           opts.Rows,
 		ptmx:           ptmx,
@@ -333,7 +329,7 @@ func (m *Manager) start(session *Session, lifecycleID string) {
 	onTitle := m.onTitle
 	m.mu.Unlock()
 
-	session.harnessSignals = newHarnessSignalObserver(agentHarnessSignals(session.agent))
+	session.harnessSignals = newHarnessSignalObserver(session.titleSignals)
 	isShellPane := session.agent == "shell"
 	session.programStatus = newProgramStatusObserver(session.lastSignal)
 	if onState != nil {

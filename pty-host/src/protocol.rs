@@ -81,6 +81,8 @@ pub struct SpawnParams {
     #[serde(default)]
     #[serde(rename = "lifecycle_id")]
     pub _lifecycle_id: String,
+    #[serde(default)]
+    pub title_signals: String,
     pub cols: u16,
     pub rows: u16,
     #[serde(default)]

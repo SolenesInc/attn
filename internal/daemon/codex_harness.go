@@ -58,7 +58,9 @@ func (h codexHarness) Launch(_ context.Context, req harness.LaunchRequest) (harn
 			return harness.Command{}, err
 		}
 	}
-	return h.d.launchWithDriver(req, &opts, false, nil)
+	command, err := h.d.launchWithDriver(req, &opts, false, nil)
+	command.TitleSignals = h.Facts().Signals.Titles
+	return command, err
 }
 
 func (h codexHarness) TrustFolder(dir string) error { return h.d.trustCodexFolder(dir) }

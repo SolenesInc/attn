@@ -584,13 +584,14 @@ func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) erro
 		return err
 	}
 	params := ptyhost.SpawnParams{
-		SessionID:   string(opts.ID),
-		Agent:       prepared.Agent,
-		CWD:         opts.CWD,
-		Label:       opts.Label,
-		LifecycleID: opts.LifecycleID,
-		Cols:        opts.Cols,
-		Rows:        opts.Rows,
+		SessionID:    string(opts.ID),
+		Agent:        prepared.Agent,
+		CWD:          opts.CWD,
+		Label:        opts.Label,
+		LifecycleID:  opts.LifecycleID,
+		TitleSignals: string(opts.TitleSignals),
+		Cols:         opts.Cols,
+		Rows:         opts.Rows,
 		Theme: ptyworker.SetThemeParams{
 			Foreground:  opts.Theme.Foreground,
 			Background:  opts.Theme.Background,

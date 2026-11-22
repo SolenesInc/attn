@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/victorarias/attn/internal/harness"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -76,7 +77,7 @@ func (c *Claude) Capabilities() Capabilities {
 		HasTranscript:         true,
 		HasTranscriptWatcher:  true,
 		HasClassifier:         true,
-		HarnessSignals:        HarnessSignalsClaude,
+		HarnessSignals:        harness.TitlesClaude,
 		HasResume:             true,
 		HasYolo:               true,
 		HasAutoApprove:        true,

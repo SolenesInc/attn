@@ -19,6 +19,7 @@ import (
 	"github.com/victorarias/attn/internal/stepclock"
 
 	"github.com/victorarias/attn/internal/buildinfo"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/pty"
@@ -106,6 +107,7 @@ type Config struct {
 	ClaudeExecutable string
 	CodexExecutable  string
 	AgentLoginShell  bool
+	TitleSignals     string
 	AgentArgv        []string
 	AgentEnv         []string
 	ExternalCWD      string
@@ -327,6 +329,7 @@ func (r *Runtime) run(ctx context.Context) error {
 			ANSIPalette: r.cfg.ThemeANSIPalette,
 		},
 		AgentLoginShell: r.cfg.AgentLoginShell,
+		TitleSignals:    harness.TitleKind(r.cfg.TitleSignals),
 		AgentArgv:       r.cfg.AgentArgv,
 		AgentEnv:        r.cfg.AgentEnv,
 		ExternalCWD:     r.cfg.ExternalCWD,

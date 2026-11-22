@@ -104,7 +104,7 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 		}
 	}
 	opts.AgentArgv, opts.AgentEnv, opts.ExternalCWD = command.Argv, command.Env, command.Dir
-	opts.AgentLoginShell, opts.LaunchExecutable = command.LoginShell, command.Executable
+	opts.AgentLoginShell, opts.LaunchExecutable, opts.TitleSignals = command.LoginShell, command.Executable, command.TitleSignals
 	return nil
 }
 

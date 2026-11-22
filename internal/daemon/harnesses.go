@@ -230,8 +230,13 @@ func builtinFacts(driver agentdriver.Driver) harness.Facts {
 			Provider:           declaresServer,
 		},
 		Executable: harness.Executable{Default: driver.DefaultExecutable(), Env: driver.ExecutableEnvVar()},
-		Signals:    hookSignals(caps.HasHooks),
+		Signals:    withTitles(hookSignals(caps.HasHooks), caps.HarnessSignals),
 	}
+}
+
+func withTitles(s harness.Signals, titles harness.TitleKind) harness.Signals {
+	s.Titles = titles
+	return s
 }
 
 func hookSignals(hooks bool) harness.Signals {

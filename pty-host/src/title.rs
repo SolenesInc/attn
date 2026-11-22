@@ -176,7 +176,7 @@ mod tests {
             }
             let corpus: Corpus = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
             for bytewise in [false, true] {
-                let mut observer = SignalObserver::new("shell", &corpus.folder);
+                let mut observer = SignalObserver::new("shell", "", &corpus.folder);
                 let mut titles = vec![observer.title.title()];
                 for event in &corpus.events {
                     if let Some(foreign) = event.foreign {

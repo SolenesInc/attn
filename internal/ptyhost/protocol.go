@@ -31,13 +31,14 @@ type HandoverResult struct {
 }
 
 type SpawnParams struct {
-	SessionID   string `json:"session_id"`
-	Agent       string `json:"agent"`
-	CWD         string `json:"cwd"`
-	Label       string `json:"label,omitempty"`
-	LifecycleID string `json:"lifecycle_id,omitempty"`
-	Cols        uint16 `json:"cols"`
-	Rows        uint16 `json:"rows"`
+	SessionID    string `json:"session_id"`
+	Agent        string `json:"agent"`
+	CWD          string `json:"cwd"`
+	Label        string `json:"label,omitempty"`
+	LifecycleID  string `json:"lifecycle_id,omitempty"`
+	TitleSignals string `json:"title_signals,omitempty"`
+	Cols         uint16 `json:"cols"`
+	Rows         uint16 `json:"rows"`
 
 	Theme ptyworker.SetThemeParams `json:"theme"`
 

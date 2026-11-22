@@ -83,10 +83,11 @@ type RepositoryTrust struct {
 
 // Command is what the terminal runs. Dir is the folder the harness asks for, or "" for the session's.
 type Command struct {
-	Argv, Env  []string
-	Dir        string
-	LoginShell bool
-	Executable string
+	Argv, Env    []string
+	Dir          string
+	LoginShell   bool
+	Executable   string
+	TitleSignals TitleKind
 }
 
 // FixableError is a launch refusal the user can fix in the named folder, as an automation shows it.
@@ -183,7 +184,18 @@ type Signals struct {
 	ReportsTools bool
 	// ConfirmsFirstTurn: an automation waits for the harness's first report before it counts as delivered.
 	ConfirmsFirstTurn bool
+	// Titles is which of attn's title parsers reads the terminal's titles.
+	Titles TitleKind
 }
+
+// TitleKind names one of attn's terminal-title parsers; TitlesNone reads no titles.
+type TitleKind string
+
+const (
+	TitlesNone   TitleKind = ""
+	TitlesClaude TitleKind = "claude-titles"
+	TitlesCodex  TitleKind = "codex-titles"
+)
 
 // TurnStarts says whether the harness announces a turn's start or attn infers it.
 type TurnStarts uint8

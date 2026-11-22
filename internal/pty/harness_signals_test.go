@@ -1,10 +1,9 @@
 package pty
 
 import (
+	"github.com/victorarias/attn/internal/harness"
 	"testing"
 	"time"
-
-	agentdriver "github.com/victorarias/attn/internal/agent"
 )
 
 func title(text string) []byte {
@@ -28,7 +27,7 @@ func onlySignal(t *testing.T, got []Observation) Observation {
 }
 
 func TestNoObserverForAnAgentWithoutHarnessSignals(t *testing.T) {
-	if got := newHarnessSignalObserver(agentdriver.HarnessSignalsNone); got != nil {
+	if got := newHarnessSignalObserver(harness.TitlesNone); got != nil {
 		t.Fatalf("got %+v, want nil", got)
 	}
 	var nilObserver *harnessSignalObserver
@@ -52,7 +51,7 @@ func TestClaudeTitleHeartbeat(t *testing.T) {
 		{name: "asterisk is not busy", title: "✳ Run background sleep command", claim: claimNotBusy, summary: "Run background sleep command"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			o := newHarnessSignalObserver(agentdriver.HarnessSignalsClaude)
+			o := newHarnessSignalObserver(harness.TitlesClaude)
 			got := onlySignal(t, observeAt(o, now, title(tc.title)))
 			if got.Source != SourceHeartbeat || got.Claim != tc.claim {
 				t.Fatalf("got %+v, want %s/%s", got, SourceHeartbeat, tc.claim)
@@ -68,7 +67,7 @@ func TestClaudeTitleHeartbeat(t *testing.T) {
 }
 
 func TestClaudeReportsAForeignTitleAsLivenessOnly(t *testing.T) {
-	o := newHarnessSignalObserver(agentdriver.HarnessSignalsClaude)
+	o := newHarnessSignalObserver(harness.TitlesClaude)
 	now := time.Now()
 	for i, foreign := range []string{"victor@mac: ~", "htop"} {
 		got := onlySignal(t, observeAt(o, now.Add(time.Duration(i)*2*time.Second), title(foreign)))
@@ -79,7 +78,7 @@ func TestClaudeReportsAForeignTitleAsLivenessOnly(t *testing.T) {
 }
 
 func TestClaudeIgnoresAnEmptyTitle(t *testing.T) {
-	o := newHarnessSignalObserver(agentdriver.HarnessSignalsClaude)
+	o := newHarnessSignalObserver(harness.TitlesClaude)
 	if got := observeAt(o, time.Now(), title("")); got != nil {
 		t.Fatalf("empty title produced %+v", got)
 	}
@@ -87,7 +86,7 @@ func TestClaudeIgnoresAnEmptyTitle(t *testing.T) {
 
 func TestCodexTitleHeartbeat(t *testing.T) {
 	now := time.Now()
-	o := newHarnessSignalObserver(agentdriver.HarnessSignalsCodex)
+	o := newHarnessSignalObserver(harness.TitlesCodex)
 	got := onlySignal(t, observeAt(o, now, title("⠸ attn--fix-state-detec...")))
 	if got.Claim != claimBusy {
 		t.Fatalf("got %+v, want busy", got)
@@ -102,7 +101,7 @@ func TestCodexTitleHeartbeat(t *testing.T) {
 
 func TestHeartbeatRateLimitsAnUnchangedLevel(t *testing.T) {
 	start := time.Now()
-	o := newHarnessSignalObserver(agentdriver.HarnessSignalsClaude)
+	o := newHarnessSignalObserver(harness.TitlesClaude)
 
 	if got := observeAt(o, start, title("⠐ working")); len(got) != 1 {
 		t.Fatalf("first frame produced %d observations", len(got))
@@ -121,7 +120,7 @@ func TestHeartbeatRateLimitsAnUnchangedLevel(t *testing.T) {
 
 func TestHeartbeatAlwaysReportsAChange(t *testing.T) {
 	start := time.Now()
-	o := newHarnessSignalObserver(agentdriver.HarnessSignalsClaude)
+	o := newHarnessSignalObserver(harness.TitlesClaude)
 	observeAt(o, start, title("⠐ working"))
 
 	got := onlySignal(t, observeAt(o, start.Add(time.Millisecond), title("✳ done")))
@@ -145,7 +144,7 @@ func TestHeartbeatSurvivesEverySplitPoint(t *testing.T) {
 	const stream = "\x1b]0;⠐ working\x07output\x1b]0;✳ done\x07"
 	start := time.Now()
 	for split := range len(stream) + 1 {
-		o := newHarnessSignalObserver(agentdriver.HarnessSignalsClaude)
+		o := newHarnessSignalObserver(harness.TitlesClaude)
 		got := append(
 			o.Observe([]byte(stream[:split]), start),
 			o.Observe([]byte(stream[split:]), start.Add(time.Millisecond))...,
@@ -161,7 +160,7 @@ func TestHeartbeatSurvivesEverySplitPoint(t *testing.T) {
 
 func TestHeartbeatDetailIsStableAcrossSpinnerFrames(t *testing.T) {
 	start := time.Now()
-	o := newHarnessSignalObserver(agentdriver.HarnessSignalsClaude)
+	o := newHarnessSignalObserver(harness.TitlesClaude)
 
 	var details []string
 	for i, frame := range []string{"⠐", "⠸", "⠿", "⠇", "⠏"} {
@@ -181,7 +180,7 @@ func TestHeartbeatDetailIsStableAcrossSpinnerFrames(t *testing.T) {
 }
 
 func TestHeartbeatDetailIsEmptyForAGlyphOnlyTitle(t *testing.T) {
-	o := newHarnessSignalObserver(agentdriver.HarnessSignalsClaude)
+	o := newHarnessSignalObserver(harness.TitlesClaude)
 	if got := onlySignal(t, observeAt(o, time.Now(), title("⠐"))); got.Detail != "" {
 		t.Fatalf("detail %q, want empty", got.Detail)
 	}

@@ -45,6 +45,7 @@ type SpawnOptions struct {
 	CodexExecutable  string
 	CodexRemote      string
 	AgentLoginShell  bool
+	TitleSignals     harness.TitleKind
 	AgentArgv        []string
 	AgentEnv         []string
 	ExternalCWD      string

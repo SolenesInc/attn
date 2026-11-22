@@ -36,13 +36,13 @@ func TestEveryHarnessAnswersTheContractWithItsFake(t *testing.T) {
 	conformance.Run(t, w.daemon.Harnesses(), []conformance.Row{
 		{
 			Facts: harness.Facts{ID: "claude", DisplayName: "Claude Code", Options: terminalOptions, Executable: harness.Executable{Default: "claude", Env: "ATTN_CLAUDE_EXECUTABLE"}, CacheTTL: time.Hour, Tiers: map[modeltiers.Tier]string{modeltiers.Light: "haiku", modeltiers.Standard: "sonnet", modeltiers.Deep: "opus"}, Advisor: harness.ModelChoice{Model: "sonnet", Effort: "medium"}, CrewModel: "fable",
-				Signals: harness.Signals{TurnStarts: harness.TurnStartsReported, ReportsTools: true, Heartbeat: 1500 * time.Millisecond}},
+				Signals: harness.Signals{TurnStarts: harness.TurnStartsReported, ReportsTools: true, Heartbeat: 1500 * time.Millisecond, Titles: harness.TitlesClaude}},
 			SkillDirs: []string{home + "/.claude/skills"},
 			Offered:   true,
 		},
 		{
 			Facts: harness.Facts{ID: "codex", DisplayName: "Codex", Options: terminalOptions, Executable: harness.Executable{Default: "codex", Env: "ATTN_CODEX_EXECUTABLE"}, CacheTTL: 30 * time.Minute, Tiers: map[modeltiers.Tier]string{modeltiers.Light: "gpt-6-luna", modeltiers.Standard: "gpt-5.6-terra", modeltiers.Deep: "gpt-6.1-sol"}, Advisor: harness.ModelChoice{Model: "gpt-5.6-luna", Effort: "xhigh"},
-				Signals: harness.Signals{TurnStarts: harness.TurnStartsReported, ReportsTools: true, Heartbeat: 500 * time.Millisecond, ReviewerDwell: time.Minute, ConfirmsFirstTurn: true}},
+				Signals: harness.Signals{TurnStarts: harness.TurnStartsReported, ReportsTools: true, Heartbeat: 500 * time.Millisecond, ReviewerDwell: time.Minute, ConfirmsFirstTurn: true, Titles: harness.TitlesCodex}},
 			SkillDirs:      []string{home + "/.agents/skills"},
 			ServerTerminal: "codex-server-6c1d6ced",
 			Offered:        true,

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"github.com/victorarias/attn/internal/harness"
 	"os"
 	"os/exec"
 	"regexp"
@@ -53,7 +54,7 @@ type Capabilities struct {
 
 	HasClassifier bool
 
-	HarnessSignals HarnessSignalKind
+	HarnessSignals harness.TitleKind
 
 	HasResume bool
 
@@ -73,14 +74,6 @@ type Capabilities struct {
 
 	ConversationIsSession bool
 }
-
-type HarnessSignalKind string
-
-const (
-	HarnessSignalsNone   HarnessSignalKind = ""
-	HarnessSignalsClaude HarnessSignalKind = "claude"
-	HarnessSignalsCodex  HarnessSignalKind = "codex"
-)
 
 var capabilityEnvNameSanitizer = sync.OnceValue(func() *regexp.Regexp {
 	return regexp.MustCompile(`[^A-Za-z0-9]+`)
@@ -106,7 +99,7 @@ func EffectiveCapabilities(d Driver) Capabilities {
 		caps.HasClassifier = v
 	}
 	if v, ok := boolEnv(prefix + "HARNESS_SIGNALS"); ok && !v {
-		caps.HarnessSignals = HarnessSignalsNone
+		caps.HarnessSignals = harness.TitlesNone
 	}
 	if v, ok := boolEnv(prefix + "RESUME"); ok {
 		caps.HasResume = v

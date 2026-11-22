@@ -343,7 +343,7 @@ impl Session {
                 model: Model {
                     wire: WireFeeder::new(terminal, mint_epoch()),
                     prompt_expected: integration_expected(&params.attempts[attempt_index]),
-                    signals: SignalObserver::new(&params.agent, &params.cwd),
+                    signals: SignalObserver::new(&params.agent, &params.title_signals, &params.cwd),
                     queries: TerminalQueryStream::default(),
                     theme,
                     reported_scheme,
@@ -519,6 +519,7 @@ impl Session {
             prompt_expected: model.prompt_expected,
             next_block_id: model.wire.next_block_id(),
             program_status_reported: model.signals.program_status_reported(),
+            title_signals: Some(model.signals.title_signals().to_owned()),
             shell: model.signals.shell_state(),
             title: model.signals.title.clone(),
             running: lifecycle.running,
@@ -545,7 +546,8 @@ impl Session {
             &handoff.blocks,
             handoff.next_block_id,
         )?;
-        let mut signals = SignalObserver::new(&handoff.agent, &handoff.cwd);
+        let mut signals =
+            SignalObserver::new(&handoff.agent, handoff.title_signals(), &handoff.cwd);
         signals.restore_program_status(handoff.program_status_reported);
         signals.restore_shell_state(handoff.shell);
         signals.title = handoff.title.clone();

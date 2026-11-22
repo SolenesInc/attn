@@ -12,6 +12,7 @@ func (opts SpawnOptions) PTY() pty.SpawnOptions {
 		Rows:            opts.Rows,
 		Theme:           opts.Theme,
 		AgentLoginShell: opts.AgentLoginShell,
+		TitleSignals:    opts.TitleSignals,
 		AgentArgv:       opts.AgentArgv,
 		AgentEnv:        opts.AgentEnv,
 		ExternalCWD:     opts.ExternalCWD,

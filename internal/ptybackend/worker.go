@@ -542,6 +542,9 @@ func (b *WorkerBackend) spawnArgs(opts SpawnOptions, session *workerSession) ([]
 	if opts.AgentLoginShell {
 		args = append(args, "--agent-login-shell")
 	}
+	if opts.TitleSignals != harness.TitlesNone {
+		args = append(args, "--title-signals", string(opts.TitleSignals))
+	}
 	for _, arg := range opts.AgentArgv {
 		args = append(args, "--agent-arg", arg)
 	}

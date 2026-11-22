@@ -45,7 +45,9 @@ func (h claudeHarness) Launch(_ context.Context, req harness.LaunchRequest) (har
 	if err := h.d.settleClaudeFolderTrust(&opts, req.Trust); err != nil {
 		return harness.Command{}, err
 	}
-	return h.d.launchWithDriver(req, &opts, false, nil)
+	command, err := h.d.launchWithDriver(req, &opts, false, nil)
+	command.TitleSignals = h.Facts().Signals.Titles
+	return command, err
 }
 
 func (claudeHarness) TrustFolder(dir string) error { return trustClaudeFolder(claudeConfigPath(), dir) }
