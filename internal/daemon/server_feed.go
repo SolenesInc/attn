@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/harness/appserver"
 	"strings"
 	"time"
 
@@ -69,7 +69,7 @@ func (l *serverLink) watchesConversations() bool {
 	if l == nil {
 		return false
 	}
-	return l.can(agentdriver.AbilityWatch)
+	return l.can(appserver.AbilityWatch)
 }
 
 func (p *serverConnection) openFeeds(c *effectrpc.Client, conversations map[string]bool, live bool) {
@@ -311,9 +311,6 @@ func (f *serverFeed) observe(ctx context.Context, entry transcript.ServerEntry, 
 	switch entry.Kind {
 	case serverPrompt:
 		f.p.d.events().Prompt(harness.FromSession(f.session), time.Now(), harness.Prompt{Text: entry.Text(), Live: live, Titles: !f.titledFromHistory})
-		if live {
-			f.p.d.touchSession(f.session)
-		}
 	case "pi.assistant":
 		for _, call := range entry.ToolCalls() {
 			f.calls[call.ID] = serverToolCall{name: call.Name, input: call.Arguments}

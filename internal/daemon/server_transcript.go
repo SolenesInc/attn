@@ -216,7 +216,7 @@ func (l *serverLink) activity(ctx context.Context, conversation, kind, cursor st
 			return l.transcriptPageFrom(ctx, false, conversation, cursor, limit)
 		})
 		if err != nil {
-			kind := transcriptReadErrorKind(err)
+			kind := transcript.ReadErrorKind(err)
 			if errors.Is(err, activity.ErrDeltaTooLarge) {
 				kind = "delta_too_large"
 			}

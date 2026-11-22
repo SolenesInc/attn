@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/harness/appserver"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -348,7 +348,11 @@ func (l *serverLink) observe(sessionID protocol.SessionID, source, status string
 	case "idle":
 		answered := ended != nil && ended.Outcome == "answered"
 		if evidence.TurnOpen || evidence.ToolOpen || ended != nil {
-			turn(harness.TurnEvent{Turn: harness.TurnEnded, Stop: &harness.Stop{Classifies: answered}})
+			stop := harness.TurnEvent{Turn: harness.TurnEnded, Stop: &harness.Stop{Classifies: answered}}
+			if ended != nil {
+				stop.Said = &ended.Said
+			}
+			turn(stop)
 		}
 		switch {
 		case ended == nil:
@@ -377,24 +381,24 @@ func (l *serverLink) conversation(facts harness.SessionFacts) harness.Conversati
 }
 
 func (s serverConversation) Deliver(ctx context.Context, in harness.Input) harness.Custody {
-	if in.PendingApproval && !s.link.can(agentdriver.AbilityQuestionSafe) {
+	if in.PendingApproval && !s.link.can(appserver.AbilityQuestionSafe) {
 		return harness.Custody{Outcome: harness.NotMine}
 	}
 	return s.link.deliver(ctx, s.session, in)
 }
 
 func (s serverConversation) Compact(ctx context.Context, in harness.Input) harness.Custody {
-	if !s.link.can(agentdriver.AbilityCompact) {
+	if !s.link.can(appserver.AbilityCompact) {
 		return harness.Custody{Outcome: harness.NotMine}
 	}
 	return s.compact(ctx, in)
 }
 
 func (s serverConversation) CanCompact() error {
-	if s.link.can(agentdriver.AbilityCompact) {
+	if s.link.can(appserver.AbilityCompact) {
 		return nil
 	}
-	return noCompaction(s.link.b.agent)
+	return harness.NoCompaction(s.link.b.agent)
 }
 
 func (l *serverLink) deliver(ctx context.Context, session protocol.SessionID, in harness.Input) harness.Custody {
@@ -403,7 +407,7 @@ func (l *serverLink) deliver(ctx context.Context, session protocol.SessionID, in
 		return harness.Custody{Reason: fmt.Sprintf("session %s holds no %s conversation", session, l.b.name)}
 	}
 	params := map[string]any{"conversation": conversation, "requestId": in.ID, "author": l.author(in.Voice), "text": in.Text}
-	if l.can(agentdriver.AbilitySteer) {
+	if l.can(appserver.AbilitySteer) {
 		params["steer"] = true
 	}
 	c, err := l.ensureServer(ctx, nil)
@@ -431,7 +435,7 @@ func (l *serverLink) author(voice harness.Voice) serverAuthorRef {
 	return serverAuthorRef{ID: name, Name: name}
 }
 
-func (l *serverLink) can(ability agentdriver.ServerAbility) bool {
+func (l *serverLink) can(ability appserver.Ability) bool {
 	return l.b.declaration.Load().Can(ability)
 }
 

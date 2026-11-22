@@ -9,6 +9,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/harness/appserver"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/transcript"
 	"maps"
@@ -20,7 +21,7 @@ func init() {
 		all := make([]harness.Harness, 0, len(registered))
 		for _, reg := range registered {
 			h := pluginHarness{d: d, reg: reg}
-			if l := d.serverLinkFor(reg.Agent); l != nil && l.can(agentdriver.AbilityTargets) {
+			if l := d.serverLinkFor(reg.Agent); l != nil && l.can(appserver.AbilityTargets) {
 				all = append(all, pluginTargetsHarness{pluginHarness: h, link: l})
 				continue
 			}

@@ -190,25 +190,12 @@ func (d *Daemon) readMonitorTranscriptPage(ctx context.Context, msg protocol.Mon
 	}
 	page, err := d.transcriptPage(ctx, session, protocol.Deref(msg.Cursor))
 	if err != nil {
-		result.ErrorKind = protocol.Ptr(protocol.MonitorReadErrorKind(transcriptReadErrorKind(err)))
+		result.ErrorKind = protocol.Ptr(protocol.MonitorReadErrorKind(transcript.ReadErrorKind(err)))
 		return result, nil
 	}
 	encoded, err := json.Marshal(page)
 	result.Page = protocol.Ptr(string(encoded))
 	return result, err
-}
-
-func transcriptReadErrorKind(err error) string {
-	switch {
-	case errors.Is(err, transcript.ErrInvalidCursor):
-		return "invalid_cursor"
-	case errors.Is(err, transcript.ErrCursorMismatch):
-		return "cursor_mismatch"
-	case errors.Is(err, transcript.ErrCursorPastEnd):
-		return "cursor_past_end"
-	default:
-		return "transcript_unavailable"
-	}
 }
 
 func (d *Daemon) readMonitorLastAssistant(ctx context.Context, msg protocol.MonitorLastAssistantMessage) (protocol.MonitorLastAssistantResult, error) {

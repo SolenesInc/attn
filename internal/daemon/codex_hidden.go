@@ -266,7 +266,7 @@ func (r *codexShared) observeStatus(s *codexServer, m codexshared.Message) {
 		return
 	}
 	if compacted := s.compactionStepLocked(p.ThreadID, p.Status.Type); compacted != nil {
-		r.d.compactions.report(r.d, compacted.session, compacted.delivery, compactOutcome{})
+		r.d.events().Compaction(compacted.session, harness.Compaction{Input: compacted.delivery, Result: harness.Compacted})
 	}
 	status, ok := p.Status.programStatus()
 	if !ok {

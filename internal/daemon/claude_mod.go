@@ -725,16 +725,16 @@ type claudeModCompacted struct {
 	Reason   string             `json:"reason"`
 }
 
-func (c claudeModCompacted) outcome() (compactOutcome, bool) {
+func (c claudeModCompacted) outcome() (harness.Compaction, bool) {
 	switch c.Outcome {
 	case claudeModCompactCompacted:
-		return compactOutcome{}, true
+		return harness.Compaction{Result: harness.Compacted}, true
 	case claudeModCompactSkipped:
-		return compactOutcome{failed: "Claude skipped it: " + c.Reason}, true
+		return harness.Compaction{Result: harness.CompactionFailed, Reason: "Claude skipped it: " + c.Reason}, true
 	case claudeModCompactFailed:
-		return compactOutcome{failed: c.Reason}, true
+		return harness.Compaction{Result: harness.CompactionFailed, Reason: c.Reason}, true
 	}
-	return compactOutcome{}, false
+	return harness.Compaction{Result: harness.Compacted}, false
 }
 
 func (m *claudeMod) serveCompacted(w http.ResponseWriter, r *http.Request) {
@@ -765,11 +765,12 @@ func (m *claudeMod) serveCompacted(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case session == "":
 	case compacted.Outcome == claudeModCompactBusy:
-		m.d.compactions.retryAfterBusy(m.d, session, compacted.ID, compacted.Reason)
+		m.d.events().Compaction(session, harness.Compaction{Input: compacted.ID, Result: harness.CompactionBusy, Reason: compacted.Reason})
 	case compacted.Outcome == claudeModCompactReady:
 		m.d.kickCompactingClose(session)
 	default:
-		m.d.compactions.report(m.d, session, compacted.ID, outcome)
+		outcome.Input = compacted.ID
+		m.d.events().Compaction(session, outcome)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -777,6 +778,8 @@ func (m *claudeMod) serveCompacted(w http.ResponseWriter, r *http.Request) {
 func (m *claudeMod) failCompactingLocked(t *claudeModTerminal, why string) {
 	for id, session := range t.compacting {
 		delete(t.compacting, id)
-		m.d.life.Go("claudeModCompactLost", func() { m.d.compactions.report(m.d, session, id, compactOutcome{failed: why}) })
+		m.d.life.Go("claudeModCompactLost", func() {
+			m.d.events().Compaction(session, harness.Compaction{Input: id, Result: harness.CompactionFailed, Reason: why})
+		})
 	}
 }

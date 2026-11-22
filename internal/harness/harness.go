@@ -382,3 +382,7 @@ type Health struct {
 	Executable   string
 	Reason       string
 }
+
+func NoCompaction(id ID) error {
+	return fmt.Errorf("attn has no way to compact a %s session; close without --compact", id)
+}

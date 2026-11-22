@@ -190,10 +190,6 @@ func (typedConversation) Compact(context.Context, harness.Input) harness.Custody
 
 func (c typedConversation) CanCompact() error { return c.refusal }
 
-func noCompaction(agent string) error {
-	return fmt.Errorf("attn has no way to compact a %s session; close without --compact", agent)
-}
-
 func (d *Daemon) oneShot(id harness.ID) (harness.OneShot, error) {
 	h, err := d.harness(id)
 	if err != nil {

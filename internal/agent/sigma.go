@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/victorarias/attn/internal/harness/appserver"
 )
 
 type Sigma struct{}
@@ -42,16 +44,16 @@ func (s *Sigma) Capabilities() Capabilities {
 	}
 }
 
-func (s *Sigma) Server() ServerDeclaration {
-	return ServerDeclaration{
-		Protocol:                 ServerProtocol,
+func (s *Sigma) Server() appserver.Declaration {
+	return appserver.Declaration{
+		Protocol:                 appserver.Protocol,
 		Executable:               s.DefaultExecutable(),
 		ExecutableEnv:            s.ExecutableEnvVar(),
 		ServeArgs:                []string{"serve"},
 		HomeEnv:                  "SIGMA_HOME",
 		DefaultHome:              ".sigma",
 		SocketName:               "sigma.sock",
-		Abilities:                []ServerAbility{AbilityCompact, AbilityWatch, AbilitySteer, AbilityQuestionSafe},
+		Abilities:                []appserver.Ability{appserver.AbilityCompact, appserver.AbilityWatch, appserver.AbilitySteer, appserver.AbilityQuestionSafe},
 		CallerConversationEnv:    "SIGMA_ROOT_CONVERSATION",
 		CallerConversationHeader: "Sigma-Root-Conversation",
 		OnClose:                  "interrupt",

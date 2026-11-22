@@ -22,7 +22,7 @@ func (c codexConversation) Compact(_ context.Context, in harness.Input) harness.
 	r, target := c.shared, c.facts
 	conversation := target.Conversation
 	failed := func(err error) harness.Custody {
-		r.d.compactions.report(r.d, target.Session, in.ID, compactOutcome{failed: err.Error(), turnUnknown: true})
+		r.d.events().Compaction(target.Session, harness.Compaction{Input: in.ID, Result: harness.CompactionFailed, Reason: err.Error(), TurnUnknown: true})
 		return harness.Custody{Outcome: harness.Taken, At: time.Now()}
 	}
 	if conversation == "" {
@@ -43,7 +43,7 @@ func (c codexConversation) Compact(_ context.Context, in harness.Input) harness.
 		s.armCompaction(conversation, target.Session, in.ID)
 		if err := call("thread/compact/start", map[string]any{"threadId": conversation}, nil); err != nil {
 			s.disarmCompaction(conversation)
-			r.d.compactions.report(r.d, target.Session, in.ID, compactOutcome{failed: fmt.Sprintf("thread/compact/start: %v", err)})
+			r.d.events().Compaction(target.Session, harness.Compaction{Input: in.ID, Result: harness.CompactionFailed, Reason: fmt.Sprintf("thread/compact/start: %v", err)})
 		}
 		return nil
 	})

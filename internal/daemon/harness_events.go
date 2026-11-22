@@ -61,6 +61,9 @@ func (e harnessEvents) Turn(r harness.Reporter, at time.Time, event harness.Turn
 		e.fencedTurn(session, at, event)
 		return
 	}
+	if said := event.Said; said != nil && !event.Status {
+		monitor.RecordRunAnswer(*said)
+	}
 	switch {
 	case event.Status:
 		monitor.RecordServerStatus(programStatusOfTurn[event.Turn], at)
@@ -89,8 +92,20 @@ func (e harnessEvents) Turn(r harness.Reporter, at time.Time, event harness.Turn
 	if event.Completion != 0 {
 		monitor.RecordServerCompletion(event.Completion)
 	}
-	if said := event.Said; said != nil {
+	if said := event.Said; said != nil && event.Status {
 		e.daemon.life.Go("classifyServerAnswer", func() { monitor.ClassifyMessage(*said) })
+	}
+}
+
+func (e harnessEvents) Compaction(session protocol.SessionID, c harness.Compaction) {
+	d := e.daemon
+	switch c.Result {
+	case harness.CompactionBusy:
+		d.compactions.retryAfterBusy(d, session, c.Input, c.Reason)
+	case harness.CompactionFailed:
+		d.compactions.report(d, session, c.Input, compactOutcome{failed: c.Reason, turnUnknown: c.TurnUnknown})
+	default:
+		d.compactions.report(d, session, c.Input, compactOutcome{})
 	}
 }
 
@@ -129,6 +144,7 @@ func (e harnessEvents) Prompt(r harness.Reporter, at time.Time, p harness.Prompt
 	if p.Live {
 		e.reported(session, false)
 		typed = monitor.ObservePromptSubmitted(at)
+		monitor.Touch(at)
 	}
 	if p.Titles {
 		text, user := p.Text, typed || p.History

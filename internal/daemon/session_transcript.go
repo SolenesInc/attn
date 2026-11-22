@@ -169,7 +169,7 @@ func (f fileConversations) Activity(_ context.Context, ref harness.ConversationR
 	case "events":
 		window, err := monitor.TranscriptEvents(cursor)
 		if err != nil {
-			kind := transcriptReadErrorKind(err)
+			kind := transcript.ReadErrorKind(err)
 			if errors.Is(err, activity.ErrDeltaTooLarge) {
 				kind = "delta_too_large"
 			}

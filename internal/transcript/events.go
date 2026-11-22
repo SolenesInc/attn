@@ -703,3 +703,16 @@ func firstNonEmpty(values ...string) string {
 	}
 	return ""
 }
+
+func ReadErrorKind(err error) string {
+	switch {
+	case errors.Is(err, ErrInvalidCursor):
+		return "invalid_cursor"
+	case errors.Is(err, ErrCursorMismatch):
+		return "cursor_mismatch"
+	case errors.Is(err, ErrCursorPastEnd):
+		return "cursor_past_end"
+	default:
+		return "transcript_unavailable"
+	}
+}

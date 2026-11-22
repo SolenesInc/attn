@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/harness/appserver"
 	"github.com/victorarias/attn/internal/pty"
 )
 
@@ -17,10 +17,10 @@ type pluginSkillDir struct {
 }
 
 func (s pluginSkillDir) validate() error {
-	if s.HomeEnv != "" && !agentdriver.ValidEnvironmentName(s.HomeEnv) {
+	if s.HomeEnv != "" && !appserver.ValidEnvironmentName(s.HomeEnv) {
 		return fmt.Errorf("skill_dirs home_env %q must be a valid variable name", s.HomeEnv)
 	}
-	if s.DefaultHome == "" || !filepath.IsAbs(s.DefaultHome) && !agentdriver.StaysInside(s.DefaultHome) {
+	if s.DefaultHome == "" || !filepath.IsAbs(s.DefaultHome) && !appserver.StaysInside(s.DefaultHome) {
 		return fmt.Errorf("skill_dirs default_home %q must be absolute or relative to the user's home", s.DefaultHome)
 	}
 	return nil

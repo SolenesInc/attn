@@ -474,9 +474,6 @@ func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 			continue
 		}
 		ended = l.unseen(id, ended)
-		if ended != nil && tree.Status == "idle" {
-			p.d.sessionMonitor(id).RecordRunAnswer(ended.Said)
-		}
 		l.observe(id, sessionmonitor.StateSourceServerReport, tree.Status, ended)
 	}
 }

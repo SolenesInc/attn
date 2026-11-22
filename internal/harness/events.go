@@ -118,4 +118,23 @@ type Events interface {
 	Named(session SessionID, title string)
 	// Moved returns what to wait on until the move is recorded, or nil when nothing is to wait on.
 	Moved(r Reporter, m Move) (wait func(context.Context) error)
+	// Compaction answers a Conversation.Compact, matched by its input id.
+	Compaction(session SessionID, c Compaction)
+}
+
+type CompactionResult uint8
+
+const (
+	Compacted CompactionResult = iota
+	CompactionFailed
+	// CompactionBusy: the compact met a running turn; attn places it again at the turn's end.
+	CompactionBusy
+)
+
+type Compaction struct {
+	Input  string
+	Result CompactionResult
+	Reason string
+	// TurnUnknown: the compact failed before the harness could say whether the turn ended.
+	TurnUnknown bool
 }

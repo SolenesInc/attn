@@ -26,7 +26,7 @@ func (h pluginHarness) Conversation(facts harness.SessionFacts) harness.Conversa
 		return l.conversation(facts)
 	}
 	if facts.Run == "" || facts.Route == "terminal" {
-		return typedConversation{refusal: noCompaction(facts.Harness)}
+		return typedConversation{refusal: harness.NoCompaction(facts.Harness)}
 	}
 	reg, conn := h.d.ensurePluginRegistry().driverConnection(facts.Harness, facts.RunOwner)
 	return pluginConversation{daemon: h.d, facts: facts, registration: reg, connection: conn}
@@ -44,7 +44,7 @@ func (c pluginConversation) CanCompact() error {
 	if c.facts.Route == "direct" && c.connection != nil && c.registration.Capabilities["compaction"] {
 		return nil
 	}
-	return noCompaction(c.facts.Harness)
+	return harness.NoCompaction(c.facts.Harness)
 }
 
 func (c pluginConversation) questionSafe(in harness.Input) bool {

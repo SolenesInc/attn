@@ -12,6 +12,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/harness/appserver"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -32,12 +33,12 @@ type pluginDriverRegistration struct {
 }
 
 type pluginDriverRegisterParams struct {
-	Agent        string                         `json:"agent"`
-	DisplayName  string                         `json:"display_name,omitempty"`
-	Capabilities map[string]bool                `json:"capabilities,omitempty"`
-	Server       *agentdriver.ServerDeclaration `json:"server,omitempty"`
-	SkillDirs    []pluginSkillDir               `json:"skill_dirs,omitempty"`
-	Logo         *pluginLogo                    `json:"logo,omitempty"`
+	Agent        string                 `json:"agent"`
+	DisplayName  string                 `json:"display_name,omitempty"`
+	Capabilities map[string]bool        `json:"capabilities,omitempty"`
+	Server       *appserver.Declaration `json:"server,omitempty"`
+	SkillDirs    []pluginSkillDir       `json:"skill_dirs,omitempty"`
+	Logo         *pluginLogo            `json:"logo,omitempty"`
 }
 
 type pluginLogo struct {
@@ -408,15 +409,15 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		}
 		switch params.Outcome {
 		case "busy":
-			d.compactions.retryAfterBusy(d, session, params.InputID, params.Reason)
+			d.events().Compaction(session, harness.Compaction{Input: params.InputID, Result: harness.CompactionBusy, Reason: params.Reason})
 		case "completed":
-			d.compactions.report(d, session, params.InputID, compactOutcome{})
+			d.events().Compaction(session, harness.Compaction{Input: params.InputID, Result: harness.Compacted})
 		case "failed":
 			reason := params.Reason
 			if reason == "" {
 				reason = "plugin compaction failed"
 			}
-			d.compactions.report(d, session, params.InputID, compactOutcome{failed: reason})
+			d.events().Compaction(session, harness.Compaction{Input: params.InputID, Result: harness.CompactionFailed, Reason: reason})
 		default:
 			return nil, true, fmt.Errorf("unsupported compaction outcome %q", params.Outcome)
 		}

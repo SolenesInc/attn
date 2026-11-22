@@ -12,13 +12,14 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/harness/appserver"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
 type serverBinding struct {
 	plugin         string
-	declaration    atomic.Pointer[agentdriver.ServerDeclaration]
+	declaration    atomic.Pointer[appserver.Declaration]
 	agent          string
 	name           string
 	kind           string
@@ -26,7 +27,7 @@ type serverBinding struct {
 	conversationOf func(harness.TerminalID) (string, bool)
 }
 
-func newServerBinding(agent, plugin string, declaration *agentdriver.ServerDeclaration) *serverBinding {
+func newServerBinding(agent, plugin string, declaration *appserver.Declaration) *serverBinding {
 	b := &serverBinding{agent: agent, name: agent, kind: agent + "-server", terminal: harness.TerminalID(agent + "-server"), plugin: plugin,
 		conversationOf: func(t harness.TerminalID) (string, bool) {
 			conversation, ok := strings.CutPrefix(string(t), "server:"+agent+":")
@@ -203,7 +204,7 @@ func (l *serverLink) connect(ctx context.Context, socket, client, version string
 		return nil, effectrpc.ServerInfo{}, err
 	}
 	var hello effectrpc.ServerInfo
-	err = c.Call(ctx, "initialize", map[string]any{"client": client, "version": version, "protocol": agentdriver.ServerProtocolVersion}, &hello)
+	err = c.Call(ctx, "initialize", map[string]any{"client": client, "version": version, "protocol": appserver.ProtocolVersion}, &hello)
 	if err == nil {
 		err = l.validateServerInfo(hello, socket, c.PeerPID())
 	}
@@ -250,13 +251,13 @@ func (l *serverLink) validateServerInfo(hello effectrpc.ServerInfo, socket strin
 	if hello.Protocol == 1 {
 		return refuseHandshake(server, l.protocolOneRefusal(p, socket, pid))
 	}
-	if hello.Protocol != agentdriver.ServerProtocolVersion {
-		return refuseHandshake(server, fmt.Sprintf("server at %s is %q %s speaking protocol %d; binding requires protocol %d", socket, hello.Server, hello.Version, hello.Protocol, agentdriver.ServerProtocolVersion))
+	if hello.Protocol != appserver.ProtocolVersion {
+		return refuseHandshake(server, fmt.Sprintf("server at %s is %q %s speaking protocol %d; binding requires protocol %d", socket, hello.Server, hello.Version, hello.Protocol, appserver.ProtocolVersion))
 	}
 	return nil
 }
 
-func (l *serverLink) serverName(p *agentdriver.ServerDeclaration) string {
+func (l *serverLink) serverName(p *appserver.Declaration) string {
 	if p.Initialize.Server != "" {
 		return p.Initialize.Server
 	}
@@ -270,12 +271,12 @@ func (l *serverLink) displayName() string {
 	return l.b.agent
 }
 
-func (l *serverLink) protocolOneRefusal(p *agentdriver.ServerDeclaration, socket string, pid int) string {
+func (l *serverLink) protocolOneRefusal(p *appserver.Declaration, socket string, pid int) string {
 	name := l.displayName()
 	process := "that server process"
 	if pid > 0 {
 		process = fmt.Sprintf("pid %d", pid)
 	}
 	command := strings.Join(append([]string{l.executable(nil)}, p.ServeArgs...), " ")
-	return fmt.Sprintf("the %s server at %s speaks attn-app-server protocol 1, and this attn speaks only protocol %d. Stop %s (%s, %s) and update %s if it is still on protocol 1; attn starts a new one on next use", name, socket, agentdriver.ServerProtocolVersion, process, command, l.homeEnv(), name)
+	return fmt.Sprintf("the %s server at %s speaks attn-app-server protocol 1, and this attn speaks only protocol %d. Stop %s (%s, %s) and update %s if it is still on protocol 1; attn starts a new one on next use", name, socket, appserver.ProtocolVersion, process, command, l.homeEnv(), name)
 }
