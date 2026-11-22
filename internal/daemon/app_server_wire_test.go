@@ -456,6 +456,28 @@ func TestAServerThatAnswersProtocolOneIsRefusedWithTheProcessToStop(t *testing.T
 	})
 }
 
+func TestAReloadOfAServerSessionWhoseServerAnswersProtocolOneFailsWithTheRefusalAndKeepsItsTerminal(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app := w.App()
+		session, view, server := appServerSession(t, w, app, h)
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+		launched := w.AppServers(h)
+		w.AnswerProtocolAtNextBoot(1)
+		server.Crash()
+
+		reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30},
+			protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session })
+		refusing := w.AppServerAfter(h, launched)
+		reason := protocol.Deref(reloaded.Error)
+		if reloaded.Success || !strings.Contains(reason, "protocol 1") || !strings.Contains(reason, fmt.Sprintf("Stop pid %d", refusing.PID())) {
+			t.Fatalf("reloading against a server answering protocol 1 answered success %t, error %q, want the refusal naming pid %d", reloaded.Success, reason, refusing.PID())
+		}
+		view.Input("are you still there")
+		app.AwaitScreen(session, "are you still there")
+	})
+}
+
 func serverUsage(tokens int) map[string]any {
 	return map[string]any{"input": tokens - 20, "output": 20, "cacheRead": 0, "cacheWrite": 0, "totalTokens": tokens, "cost": map[string]any{"total": 0.01}}
 }

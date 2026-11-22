@@ -98,7 +98,12 @@ func (l *serverLink) prepareLaunch(opts *ptybackend.SpawnOptions, profile string
 }
 
 func (l *serverLink) relaunch(opts *ptybackend.SpawnOptions) error {
-	if _, err := l.ensureServer(l.d.life.Context(), opts); err != nil {
+	_, err := l.ensureServer(l.d.life.Context(), opts)
+	var refused *serverHandshakeRefusal
+	if errors.As(err, &refused) {
+		return err
+	}
+	if err != nil {
 		l.logf("relaunching terminal %s before its server answers: %v", opts.ID, err)
 	}
 	return nil

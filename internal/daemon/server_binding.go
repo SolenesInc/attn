@@ -228,6 +228,16 @@ func (l *serverLink) callerConversationHeader() string {
 	return ""
 }
 
+type serverHandshakeRefusal struct{ refusal *effectrpc.Error }
+
+func (r *serverHandshakeRefusal) Error() string { return r.refusal.Error() }
+
+func (r *serverHandshakeRefusal) Unwrap() error { return r.refusal }
+
+func refuseHandshake(server, message string) error {
+	return &serverHandshakeRefusal{refusal: &effectrpc.Error{Server: server, Method: "initialize", Message: message}}
+}
+
 func (l *serverLink) validateServerInfo(hello effectrpc.ServerInfo, socket string, pid int) error {
 	p := l.b.declaration.Load()
 	if p == nil {
@@ -235,13 +245,13 @@ func (l *serverLink) validateServerInfo(hello effectrpc.ServerInfo, socket strin
 	}
 	want, server := p.Initialize, l.serverName(p)
 	if want.Server != "" && hello.Server != want.Server {
-		return &effectrpc.Error{Server: server, Method: "initialize", Message: fmt.Sprintf("server at %s is %q %s; binding requires identity %q", socket, hello.Server, hello.Version, want.Server)}
+		return refuseHandshake(server, fmt.Sprintf("server at %s is %q %s; binding requires identity %q", socket, hello.Server, hello.Version, want.Server))
 	}
 	if hello.Protocol == 1 {
-		return &effectrpc.Error{Server: server, Method: "initialize", Message: l.protocolOneRefusal(p, socket, pid)}
+		return refuseHandshake(server, l.protocolOneRefusal(p, socket, pid))
 	}
 	if hello.Protocol != agentdriver.ServerProtocolVersion {
-		return &effectrpc.Error{Server: server, Method: "initialize", Message: fmt.Sprintf("server at %s is %q %s speaking protocol %d; binding requires protocol %d", socket, hello.Server, hello.Version, hello.Protocol, agentdriver.ServerProtocolVersion)}
+		return refuseHandshake(server, fmt.Sprintf("server at %s is %q %s speaking protocol %d; binding requires protocol %d", socket, hello.Server, hello.Version, hello.Protocol, agentdriver.ServerProtocolVersion))
 	}
 	return nil
 }
