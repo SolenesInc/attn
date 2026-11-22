@@ -12,22 +12,24 @@ export type DriverLaunchInstructions = {
   profile_id?: string;
 };
 
+/** What a server can do beyond the base protocol. attn sends a request for an ability only to a server that declares it. */
+export type ServerAbility = "compact" | "watch" | "targets" | "steer" | "question_safe";
+
 export type ServerBinding = {
- protocol: "attn-app-server-v1";
+ protocol: "attn-app-server-v2";
  executable: string;
  executableEnv?: string;
  serveArgs: string[];
  homeEnv: string;
  defaultHome: string;
  socketName: string;
- initialize: { server?: string; protocol: { exact: number; min?: never } | { min: number; exact?: never } };
+ initialize?: { server?: string };
  callerConversationEnv: `${string}_ROOT_CONVERSATION`;
  /** The HTTP header the server names the calling root conversation in on each request to attn's MCP server. With `agentTools`, attn registers its MCP server with the server (`mcp/register`). */
  callerConversationHeader?: string;
  onClose: "interrupt" | "leave-running";
  recovery: "last-run" | "numbered-completions";
- targets?: boolean;
- conversationWatch?: boolean;
+ abilities?: ServerAbility[];
 };
 
 /** A home whose `skills` folder the harness reads user skills from: `$homeEnv`, or else `defaultHome`, absolute or relative to the user's home. */
@@ -45,10 +47,9 @@ export function serverRegistration(server: ServerBinding | undefined): Record<st
  return {
   protocol: server.protocol, executable: server.executable, executable_env: server.executableEnv,
   serve_args: server.serveArgs, home_env: server.homeEnv, default_home: server.defaultHome,
-  socket_name: server.socketName, initialize: server.initialize,
+  socket_name: server.socketName, initialize: server.initialize ?? {},
   caller_conversation_env: server.callerConversationEnv, caller_conversation_header: server.callerConversationHeader, on_close: server.onClose,
-  recovery: server.recovery, targets: server.targets,
-  conversation_watch: server.conversationWatch,
+  recovery: server.recovery, abilities: server.abilities,
  };
 }
 
@@ -281,7 +282,7 @@ export function driverCapabilities(definition: DriverDefinition): Record<string,
 /** Turns the daemon's "unsupported driver capability" refusal into an upgrade instruction. */
 export function explainRegistrationError(error: Error): Error {
   const unsupported = /unsupported driver capability "([a-z_]+)"/.exec(error.message)?.[1];
-  if (unsupported === "server_binding") { return new Error("this attn daemon does not support server_binding; upgrade attn to a build supporting attn-app-server-v1"); }
+  if (unsupported === "server_binding") { return new Error("this attn daemon does not support server_binding; upgrade attn to a build supporting attn-app-server-v2"); }
   const minimum = unsupported && minimumDaemonBuilds[unsupported];
   if (!minimum) {
     return error;

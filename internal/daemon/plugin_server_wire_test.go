@@ -16,11 +16,11 @@ const serverPluginAgent = "other-server-harness"
 
 func serverDriverDeclaration(w *world) map[string]any {
 	return map[string]any{
-		"protocol": "attn-app-server-v1", "executable": filepath.Join(w.Dir, "bin", "sample-server"),
+		"protocol": "attn-app-server-v2", "executable": filepath.Join(w.Dir, "bin", "sample-server"),
 		"serve_args": []string{"serve"}, "home_env": "SAMPLE_SERVER_HOME", "default_home": ".sample-server", "socket_name": "sample-server.sock",
-		"initialize":              map[string]any{"server": "sample-server", "protocol": map[string]int{"exact": 1}},
-		"caller_conversation_env": "SAMPLE_SERVER_ROOT_CONVERSATION", "on_close": "leave-running", "recovery": "numbered-completions", "targets": true,
-		"conversation_watch": true,
+		"initialize":              map[string]any{"server": "sample-server"},
+		"caller_conversation_env": "SAMPLE_SERVER_ROOT_CONVERSATION", "on_close": "leave-running", "recovery": "numbered-completions",
+		"abilities": []string{"targets", "watch"},
 	}
 }
 
@@ -165,11 +165,11 @@ func TestAPluginServerHandshakeMismatchFailsBeforeLaunchingAView(t *testing.T) {
 	w := newWorld(t, fakeagent.SampleServer)
 	app := w.App()
 	declaration := serverDriverDeclaration(w)
-	declaration["initialize"] = map[string]any{"server": "sample-server", "protocol": map[string]int{"exact": 99}}
-	registerServerDriver(t, w, "wrong-protocol", declaration)
+	declaration["initialize"] = map[string]any{"server": "another-server"}
+	registerServerDriver(t, w, "wrong-server", declaration)
 	awaitDriverAvailable(app, serverPluginAgent)
 	result := testworld.Request(app, protocol.HarnessModelsMessage{Cmd: protocol.CmdHarnessModels, Harness: serverPluginAgent, RequestID: "wrong"}, protocol.EventHarnessModelsResult, func(r protocol.HarnessModelsResultMessage) bool { return r.RequestID == "wrong" })
-	if result.Success || !strings.Contains(protocol.Deref(result.Error), "protocol") {
+	if result.Success || !strings.Contains(protocol.Deref(result.Error), `identity "another-server"`) {
 		t.Fatalf("incompatible server: %+v", result)
 	}
 }

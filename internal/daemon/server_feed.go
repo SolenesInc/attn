@@ -3,6 +3,8 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"strings"
 	"time"
@@ -67,8 +69,7 @@ func (l *serverLink) watchesConversations() bool {
 	if l == nil {
 		return false
 	}
-	declaration := l.b.declaration.Load()
-	return declaration != nil && declaration.ConversationWatch
+	return l.can(agentdriver.AbilityWatch)
 }
 
 func (p *serverConnection) openFeeds(c *effectrpc.Client, conversations map[string]bool, live bool) {

@@ -51,13 +51,11 @@ func (s *Sigma) Server() ServerDeclaration {
 		HomeEnv:                  "SIGMA_HOME",
 		DefaultHome:              ".sigma",
 		SocketName:               "sigma.sock",
-		Initialize:               ServerHandshake{Protocol: ServerProtocolVersion{Min: 1}},
+		Abilities:                []ServerAbility{AbilityCompact, AbilityWatch, AbilitySteer, AbilityQuestionSafe},
 		CallerConversationEnv:    "SIGMA_ROOT_CONVERSATION",
 		CallerConversationHeader: "Sigma-Root-Conversation",
 		OnClose:                  "interrupt",
 		Recovery:                 "last-run",
-		SigmaWire:                true,
-		ConversationWatch:        true,
 	}
 }
 

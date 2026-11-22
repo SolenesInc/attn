@@ -284,7 +284,8 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 		settings[capabilitySettingKey(name, "context_window_cap")] = strconv.FormatBool(caps.HasContextWindowCap)
 		settings[capabilitySettingKey(name, "automation")] = strconv.FormatBool(caps.HasAutoApprove)
 		if l := d.serverLinkFor(name); l != nil {
-			settings[capabilitySettingKey(name, "execution_target")] = strconv.FormatBool(l.hasTargets())
+			_, targets := d.targetsOf(name)
+			settings[capabilitySettingKey(name, "execution_target")] = strconv.FormatBool(targets)
 			settings[capabilitySettingKey(name, "model_discovery")] = "true"
 		}
 	}
@@ -294,7 +295,8 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 			settings[driver.Agent+"_display_name"] = driver.DisplayName
 		}
 		if l := d.serverLinkFor(driver.Agent); l != nil {
-			settings[capabilitySettingKey(driver.Agent, "execution_target")] = strconv.FormatBool(l.hasTargets())
+			_, targets := d.targetsOf(driver.Agent)
+			settings[capabilitySettingKey(driver.Agent, "execution_target")] = strconv.FormatBool(targets)
 			settings[capabilitySettingKey(driver.Agent, "model_discovery")] = "true"
 		}
 		for capability, enabled := range driver.Capabilities {

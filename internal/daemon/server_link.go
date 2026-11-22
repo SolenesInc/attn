@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
@@ -368,21 +369,21 @@ func (l *serverLink) conversation(facts harness.SessionFacts) harness.Conversati
 }
 
 func (s serverConversation) Deliver(ctx context.Context, in harness.Input) harness.Custody {
-	if in.PendingApproval && !s.link.speaksSigma() {
+	if in.PendingApproval && !s.link.can(agentdriver.AbilityQuestionSafe) {
 		return harness.Custody{Outcome: harness.NotMine}
 	}
 	return s.link.deliver(ctx, s.session, in)
 }
 
 func (s serverConversation) Compact(ctx context.Context, in harness.Input) harness.Custody {
-	if !s.link.speaksSigma() {
+	if !s.link.can(agentdriver.AbilityCompact) {
 		return harness.Custody{Outcome: harness.NotMine}
 	}
-	return s.compactSigma(ctx, in)
+	return s.compact(ctx, in)
 }
 
 func (s serverConversation) CanCompact() error {
-	if s.link.speaksSigma() {
+	if s.link.can(agentdriver.AbilityCompact) {
 		return nil
 	}
 	return noCompaction(s.link.b.agent)
@@ -394,7 +395,7 @@ func (l *serverLink) deliver(ctx context.Context, session protocol.SessionID, in
 		return harness.Custody{Reason: fmt.Sprintf("session %s holds no %s conversation", session, l.b.name)}
 	}
 	params := map[string]any{"conversation": conversation, "requestId": in.ID, "author": l.author(in.Voice), "text": in.Text}
-	if l.speaksSigma() {
+	if l.can(agentdriver.AbilitySteer) {
 		params["steer"] = true
 	}
 	c, err := l.ensureServer(ctx, nil)
@@ -414,20 +415,16 @@ type serverAuthorRef struct {
 	Name string `json:"name"`
 }
 
-func (l *serverLink) author(voice harness.Voice) any {
+func (l *serverLink) author(voice harness.Voice) serverAuthorRef {
 	name := "attn"
 	if voice == harness.VoiceUser {
 		name = userName()
 	}
-	if l.speaksSigma() {
-		return serverAuthorRef{ID: name, Name: name}
-	}
-	return name
+	return serverAuthorRef{ID: name, Name: name}
 }
 
-func (l *serverLink) speaksSigma() bool {
-	declaration := l.b.declaration.Load()
-	return declaration != nil && declaration.SigmaWire
+func (l *serverLink) can(ability agentdriver.ServerAbility) bool {
+	return l.b.declaration.Load().Can(ability)
 }
 
 func userName() string {
@@ -456,10 +453,7 @@ func (l *serverLink) sessionClosed(sessionID protocol.SessionID, _ string, relea
 		return
 	}
 	defer release()
-	params := map[string]any{"conversation": released}
-	if declaration.SigmaWire {
-		params["author"] = l.author(harness.VoiceAttn)
-	}
+	params := map[string]any{"conversation": released, "author": l.author(harness.VoiceAttn)}
 	if err := c.Call(ctx, "conversation/interrupt", params, nil); err != nil {
 		l.logf("interrupting conversation %s of closed session %s: %v", released, sessionID, err)
 	}

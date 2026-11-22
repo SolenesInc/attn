@@ -5,6 +5,7 @@
 
 internal/daemon/harnesses.go As[Channel] leak 1: the Claude mod's reach; a resumed tender's mail waits for a channel the harness has instead of being typed
 internal/daemon/harnesses.go As[Runs] leak 1: a plugin driver's runs; generic code tells the harness a run ended and asks a run's route
+internal/daemon/harness_targets.go As[Targets] leak 1: a plugin server's execution targets; listing them, checking a spawn's target and the execution_target setting
 
 internal/fakeagent/ * fake harness binaries for tests: naming the harness each one fakes is its job
 internal/probetui/ * a TUI probe that draws the screens of the harnesses it imitates

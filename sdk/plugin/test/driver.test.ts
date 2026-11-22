@@ -102,11 +102,11 @@ describe("AttnPluginClient driver", () => {
     const definition: DriverDefinition = {
       ...baseDriver,
       server: {
-        protocol: "attn-app-server-v1", executable: "sample", serveArgs: ["serve"],
+        protocol: "attn-app-server-v2", executable: "sample", serveArgs: ["serve"],
         homeEnv: "SAMPLE_HOME", defaultHome: ".sample", socketName: "sample.sock",
-        initialize: { server: "sample", protocol: { exact: 1 } },
+        initialize: { server: "sample" },
         callerConversationEnv: "SAMPLE_ROOT_CONVERSATION", callerConversationHeader: "Sample-Root-Conversation", onClose: "leave-running",
-        recovery: "numbered-completions", targets: true, conversationWatch: true,
+        recovery: "numbered-completions", abilities: ["targets", "watch"],
       },
     };
     client.driver(definition);
@@ -115,21 +115,21 @@ describe("AttnPluginClient driver", () => {
     expect(registered?.params).toEqual({
       agent: "sample", capabilities: { server_binding: true },
       server: {
-        protocol: "attn-app-server-v1", executable: "sample", serve_args: ["serve"],
+        protocol: "attn-app-server-v2", executable: "sample", serve_args: ["serve"],
         home_env: "SAMPLE_HOME", default_home: ".sample", socket_name: "sample.sock",
-        initialize: { server: "sample", protocol: { exact: 1 } },
+        initialize: { server: "sample" },
         caller_conversation_env: "SAMPLE_ROOT_CONVERSATION", caller_conversation_header: "Sample-Root-Conversation", on_close: "leave-running",
-        recovery: "numbered-completions", targets: true, conversation_watch: true,
+        recovery: "numbered-completions", abilities: ["targets", "watch"],
       },
     });
     const legacyDaemon = await startDaemon({ "driver.register": new Error('unsupported driver capability "server_binding"') });
     const legacyClient = connectable(legacyDaemon);
     legacyClient.driver(definition);
-    await expect(legacyClient.connect()).rejects.toThrow(/does not support server_binding.*attn-app-server-v1/);
+    await expect(legacyClient.connect()).rejects.toThrow(/does not support server_binding.*attn-app-server-v2/);
     expect(() => connectable(daemon).driver({ ...baseDriver, server: {
-      protocol: "attn-app-server-v1", executable: "sample", serveArgs: ["serve"],
+      protocol: "attn-app-server-v2", executable: "sample", serveArgs: ["serve"],
       homeEnv: "SAMPLE_HOME", defaultHome: ".sample", socketName: "sample.sock",
-      initialize: { protocol: { min: 7 } }, callerConversationEnv: "SAMPLE_ROOT_CONVERSATION",
+      callerConversationEnv: "SAMPLE_ROOT_CONVERSATION",
       onClose: "interrupt", recovery: "last-run",
     }, deliver: () => accepted() })).toThrow("server binding supplies");
   });

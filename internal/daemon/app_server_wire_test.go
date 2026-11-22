@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -430,6 +431,31 @@ func TestADelegationToAnAppServerHarnessConfirmsItsFirstTurnOnceTheServerReports
 	})
 }
 
+func TestAServerThatAnswersProtocolOneIsRefusedWithTheProcessToStop(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app := w.App()
+		offerAppServer(t, w, app, h)
+		models := func(id string) protocol.HarnessModelsResultMessage {
+			return testworld.Request(app, protocol.HarnessModelsMessage{Cmd: protocol.CmdHarnessModels, Harness: string(h), RequestID: id, Refresh: protocol.Ptr(true)}, protocol.EventHarnessModelsResult, func(r protocol.HarnessModelsResultMessage) bool { return r.RequestID == id })
+		}
+		w.AnswerProtocolAtNextBoot(1)
+		refused := models("old")
+		reason := protocol.Deref(refused.Error)
+		if refused.Success {
+			t.Fatal("a server answering protocol 1 listed models, want it refused")
+		}
+		for _, want := range []string{string(h) + " initialize: ", "protocol 1", "only protocol 2", fmt.Sprintf("Stop pid %d", w.AppServer(h).PID()), filepath.Join(w.Dir, "bin", string(h)) + " serve"} {
+			if !strings.Contains(reason, want) {
+				t.Errorf("the refusal %q does not say %q", reason, want)
+			}
+		}
+		if n := w.AppServers(h); n != 1 {
+			t.Errorf("attn started %d servers beside the old one, want none", n-1)
+		}
+	})
+}
+
 func serverUsage(tokens int) map[string]any {
 	return map[string]any{"input": tokens - 20, "output": 20, "cacheRead": 0, "cacheWrite": 0, "totalTokens": tokens, "cost": map[string]any{"total": 0.01}}
 }
@@ -556,7 +582,7 @@ func TestAPluginServerThatDoesNotDeclareConversationWatchGetsNoFeed(t *testing.T
 	w := newWorld(t, fakeagent.SampleServer)
 	app := w.App()
 	declaration := serverDriverDeclaration(w)
-	delete(declaration, "conversation_watch")
+	declaration["abilities"] = []string{"targets"}
 	registerSampleServerDriverDeclaring(t, w, app, declaration)
 	session := w.Spawn(app, fakeagent.SampleServer, w.Path("shop"))
 	view, server := w.Launched(session), w.AppServer(fakeagent.SampleServer)

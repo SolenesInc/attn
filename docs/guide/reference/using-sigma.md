@@ -13,9 +13,10 @@ Attn runs the `sigma` that `attn settings set sigma_executable <path>` names,
 else the one `ATTN_SIGMA_EXECUTABLE` names, else the `sigma` on your login
 shell's PATH. When Attn finds none, Sigma shows as unavailable. Attn uses `SIGMA_HOME` from your login shell as the Sigma home, by
 default `~/.sigma`. The bare `sigma` uses the same home, so Attn and your
-terminal see the same conversations, sign-ins and config. Attn needs Sigma
-protocol 1 or later, built at or after the commit that gave every change an
-author with an id and a name.
+terminal see the same conversations, sign-ins and config. Attn needs a Sigma
+that speaks protocol 2. A Sigma server that started before you updated Sigma
+still speaks protocol 1: Attn refuses it, with a message that names the server
+process to stop, and starts a new server once that one has stopped.
 
 Sigma used to be a plugin. If you installed the `sigma` plugin, close its
 sessions and run `attn plugin uninstall sigma`: while it is installed, Attn

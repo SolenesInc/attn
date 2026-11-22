@@ -8,6 +8,7 @@ type bootingResult struct {
 	Screen       string `json:"screen,omitempty"`
 	WaitForEnter bool   `json:"wait_for_enter,omitempty"`
 	FolderTrust  bool   `json:"folder_trust,omitempty"`
+	Protocol     int    `json:"protocol,omitempty"`
 }
 
 const claudeFolderTrustScreen = "Quick safety check: Is this a project you created or one you trust?\r\n\r\n" +
@@ -23,6 +24,13 @@ func (k *Kit) RequireEnterAtNextBoot(screen string) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	k.nextBootResult = &bootingResult{WaitForEnter: true, Screen: screen}
+}
+
+// AnswerProtocolAtNextBoot makes the next app server that starts answer every initialize with this protocol version, as an older server would.
+func (k *Kit) AnswerProtocolAtNextBoot(version int) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.nextBootResult = &bootingResult{Protocol: version}
 }
 
 func (k *Kit) AskFolderTrustAtNextBoot() {

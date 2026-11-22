@@ -113,8 +113,11 @@ or `{name, description}` for the view of a shared server that declares
 
 ## Bind a shared app-server
 
-With SDK 0.3.0, `client.driver({ id, spawn, resume, server })` can bind a harness
-speaking `attn-app-server-v1`. The daemon handles direct input, status and model
+With SDK 0.7.0, `client.driver({ id, spawn, resume, server })` binds a harness
+speaking `attn-app-server-v2`, the only server protocol attn speaks. SDK 0.7.0
+breaks 0.3.0 to 0.6.0 declarations: `protocol` is `"attn-app-server-v2"`,
+`initialize` keeps only `server`, and `abilities` replaces `targets` and
+`conversationWatch`. The daemon handles direct input, status and model
 discovery. The plugin prepares native terminal views with the host's
 `conversation_id` and optional `execution_target`. A server view does not use
 `DriverRun` reports, `sessionClosed` or `recover`; the server owns the conversation.
@@ -127,7 +130,7 @@ does not change API 7 for existing plugins.
 `attn guide writing-harness-plugins` describes the declaration, RPC contract
 and install recipe.
 `examples/plugins/sample-server` prepares views of a server speaking
-`attn-app-server-v1` and runs
+`attn-app-server-v2` and runs
 against the repository's fake app-server in the stack verification.
 
 A plugin disconnect leaves an established server binding usable. After a daemon

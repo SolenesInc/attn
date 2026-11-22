@@ -213,8 +213,9 @@ handler. Attn joins a running server or starts one for its home, submits input
 directly and follows the server's status. The plugin prepares terminal views.
 An open conversation can keep receiving input after its last view moves on.
 
-The declaration needs SDK 0.3.0 and a daemon supporting `server_binding`.
-An older daemon refuses that capability. To make your own from the sample:
+The declaration needs SDK 0.7.0, which speaks `attn-app-server-v2`, and a
+daemon that speaks it too. A daemon without `server_binding` refuses that
+capability, and a daemon on v2 refuses a declaration of `attn-app-server-v1`. To make your own from the sample:
 
 ```bash
 cp -R examples/plugins/sample-server /tmp/my-server-plugin
@@ -222,7 +223,7 @@ cp -R examples/plugins/sample-server /tmp/my-server-plugin
 attn plugin install --path /tmp/my-server-plugin
 ```
 
-The sample expects an executable speaking `attn-app-server-v1`, supplied by
+The sample expects an executable speaking `attn-app-server-v2`, supplied by
 `ATTN_SAMPLE_SERVER_EXECUTABLE` or `sample-server` on PATH. Set `SAMPLE_SERVER_HOME` in the
 daemon's environment to select an existing server home. The default is
 `~/.sample-server`. The isolated stack check supplies the fake app-server,
@@ -236,33 +237,41 @@ The server declaration in the sample is:
 
 ```ts
 server: {
-  protocol: "attn-app-server-v1",
+  protocol: "attn-app-server-v2",
   executable: "sample-server",
   executableEnv: "ATTN_SAMPLE_SERVER_EXECUTABLE",
   serveArgs: ["serve"],
   homeEnv: "SAMPLE_SERVER_HOME",
   defaultHome: ".sample-server",
   socketName: "sample-server.sock",
-  initialize: { server: "sample-server", protocol: { exact: 1 } },
+  initialize: { server: "sample-server" },
   callerConversationEnv: "SAMPLE_SERVER_ROOT_CONVERSATION",
   onClose: "leave-running",
   recovery: "numbered-completions",
-  targets: true,
-  conversationWatch: true,
+  abilities: ["targets", "watch"],
 }
 ```
 
-`protocol` selects Attn's RPC contract. `initialize.server`, when set, checks
-the server's identity. `initialize.protocol` accepts either `{ exact: N }` or
-`{ min: N }`. A mismatched identity or protocol refuses the operation before a
-view starts. Use `onClose: "interrupt"` to interrupt a conversation when its
-last owning session closes, or `"leave-running"` to leave the server's run going.
-`recovery` is `"last-run"` or `"numbered-completions"`. Set
-`conversationWatch: true` when the server answers `conversation/watch` and
-`conversation/entries`. Attn then follows each open session's conversation, as
-the watching binding below describes. Without it, a server session has no
-transcript, last reply, activity line, title from its prompt, usage, recent
-files or pull requests from its tools.
+`protocol` selects Attn's RPC contract, and `attn-app-server-v2` is the only
+one. `initialize.server`, when set, checks the server's identity. A server
+that answers `initialize` with another identity or protocol refuses the
+operation before a view starts. Use `onClose: "interrupt"` to interrupt a
+conversation when its last owning session closes, or `"leave-running"` to
+leave the server's run going. `recovery` is `"last-run"` or
+`"numbered-completions"`.
+
+`abilities` lists what the server can do beyond the required calls. Attn reads
+them from the declaration, before any server runs, and never sends a request
+for an ability the declaration leaves out. An ability Attn does not know is
+ignored.
+
+| Ability | The server answers | Attn then |
+|---|---|---|
+| `watch` | `conversation/watch` and `conversation/entries` | follows each open session's conversation, as the watching binding below describes. Without it, a server session has no transcript, last reply, activity line, title from its prompt, usage, recent files or pull requests from its tools |
+| `targets` | `targets/list` | offers execution targets at launch |
+| `compact` | `conversation/compact` | compacts the conversation when an agent closes with `--compact` or stands by |
+| `steer` | `steer: true` on `conversation/submit` | sends input into the run in flight at its next step instead of after the run |
+| `question_safe` | input while a call waits on an approval or a question | delivers input during that wait instead of holding it until the wait ends |
 
 The executable, optional executable override, home variable and default home
 resolve in the daemon's machine and login environment. `socketName` is a filename
@@ -284,8 +293,9 @@ view. A target-capable plugin forwards the target on both launch and resume.
 An invalid target must fail without creating a replacement conversation or
 falling back to another target.
 
-A server binding supplies delivery, models and state. Leave out `deliver`,
-`compact`, `models`, `stateReporting`, `attributedInput` and `safeDuringQuestion`.
+A server binding supplies delivery, models and state, and its abilities
+supply compaction and input during a question. Leave out `deliver`, `compact`,
+`models`, `stateReporting`, `attributedInput` and `safeDuringQuestion`.
 The terminal-driver reports described above do not apply to server views.
 A server view has no active terminal driver run to recover. Attn owns the
 session and view associations, and the server owns its native conversation.
@@ -334,11 +344,25 @@ and `result` or `error`. A streamed response has `chunk: true` and a `result`
 array. The client acknowledges each chunk with `@effect/rpc/Ack` and
 `{ requestId }`.
 
-The required calls are `initialize {client, version, protocol}`,
-`conversation/submit {conversation, author, requestId, text}`, `models/list`,
-`status/watch` and `conversation/list`. An interrupting binding also supports
-`conversation/interrupt {conversation}`. A target-capable binding supports
-`targets/list {cwd}` returning `[{id, name, available, detail}]`. A binding
+The required calls are `initialize`, `status/watch`, `conversation/list`,
+`conversation/submit`, `conversation/interrupt` and `models/list`:
+
+- `initialize {client, version, protocol: 2}` answers `{protocol: 2}`, and
+  `server` when the declaration checks the identity. The answer carries the
+  version only: abilities come from the declaration. Attn refuses a server
+  that answers protocol 1 with a message that names the server process to
+  stop. Attn never restarts a server that is running, so the user stops it and
+  Attn starts a new one when it next needs one.
+- `conversation/submit {conversation, requestId, author: {id, name}, text,
+  steer?: true}`. `steer` comes only to a server that declares `steer`.
+- `conversation/interrupt {conversation, author: {id, name}}`, sent when the
+  last session holding a conversation closes and `onClose` is `"interrupt"`.
+
+A server that declares `compact` answers
+`conversation/compact {conversation, author: {id, name}}` once the compaction
+has ended, with `outcome` `compacted`, `nothing_to_compact`, `failed` with a
+`message`, or `stopped`. A server that declares `targets` answers
+`targets/list {cwd}` with `[{id, name, available, detail}]`. A binding
 with `caller_conversation_header` supports `mcp/register {name, url, headers}`,
 a stream whose first item `{name}` confirms the registration. The registration
 lasts while the stream does: attn ends it with `@effect/rpc/Interrupt`, and
@@ -347,7 +371,8 @@ closing the connection ends it too. `conversation/start` then takes
 
 `conversation/submit` takes durable custody before replying. Repeating its
 `requestId` must return the original admission without submitting twice.
-The `author` is the user's name for user input and `"attn"` for notices.
+The `author` is the user's name, as both `id` and `name`, for user input, and
+`{id: "attn", name: "attn"}` for notices.
 `models/list` returns providers with `provider` and `models`, where each model
 has `id`, `name`, `description` and `efforts`.
 
@@ -360,8 +385,8 @@ conversations, then streams `{conversation, status, ended?}` changes.
 Numbered recovery accepts `status/watch {after: {conversation: completion}}`
 and replays newer idle completions. Completion numbers ascend per conversation.
 
-A watching binding also supports `conversation/watch` and
-`conversation/entries`. Attn then judges resume from `conversation/list`
+A watching binding, one that declares `watch`, also supports
+`conversation/watch` and `conversation/entries`. Attn then judges resume from `conversation/list`
 instead of `driver.resume_available`: a conversation attn has seen entries of
 and the list of a running server no longer holds cannot be resumed.
 
@@ -437,7 +462,7 @@ A shared-server registration adds `capabilities: {"server_binding": true}` and
 `server` to `driver.register`. Its keys are `protocol`, `executable`, optional
 `executable_env`, `serve_args`, `home_env`, `default_home`, `socket_name`,
 `initialize`, `caller_conversation_env`, `on_close`, `recovery`, and optional
-`caller_conversation_header`, `targets` and `conversation_watch`. Their values
+`caller_conversation_header` and `abilities`. Their values
 match the SDK declaration above. The SDK translates camel case option names to
 these snake case wire names. `server_binding` and `message_delivery` are
 mutually exclusive. The server supplies models and state without

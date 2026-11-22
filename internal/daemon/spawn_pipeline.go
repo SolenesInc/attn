@@ -326,7 +326,7 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 		}
 	}
 	if target := strings.TrimSpace(protocol.Deref(msg.ExecutionTarget)); target != "" {
-		if l := d.serverLinkFor(req.agent); l == nil || !l.hasTargets() {
+		if _, ok := d.targetsOf(req.agent); !ok {
 			plan.rollback(d, msg.ID)
 			return nil, &spawnRejection{err: fmt.Errorf("agent %q has no execution targets", req.agent)}
 		}

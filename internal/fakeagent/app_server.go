@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"os/exec"
@@ -47,21 +48,22 @@ type appServerFlavor struct {
 	socket       func(home string) string
 	hello        map[string]any
 	completions  bool
-	sigmaWire    bool
+	steers       bool
+	compacts     bool
 	callerHeader string
 }
 
 var appServerFlavors = map[Harness]appServerFlavor{
 	Sigma: {
 		harness: Sigma, role: "sigma-server", homeVariable: "SIGMA_HOME", homeDir: "sg", rootVariable: "SIGMA_ROOT_CONVERSATION",
-		socket:    func(home string) string { return filepath.Join(home, "sigma.sock") },
-		hello:     map[string]any{"version": "fake", "protocol": 1},
-		sigmaWire: true, callerHeader: "Sigma-Root-Conversation",
+		socket: func(home string) string { return filepath.Join(home, "sigma.sock") },
+		hello:  map[string]any{"version": "fake", "protocol": 2},
+		steers: true, compacts: true, callerHeader: "Sigma-Root-Conversation",
 	},
 	SampleServer: {
 		harness: SampleServer, role: "sample-server-server", homeVariable: "SAMPLE_SERVER_HOME", homeDir: "ss", rootVariable: "SAMPLE_SERVER_ROOT_CONVERSATION",
 		socket:      func(home string) string { return filepath.Join(home, "sample-server.sock") },
-		hello:       map[string]any{"server": "sample-server", "version": "fake", "protocol": 1},
+		hello:       map[string]any{"server": "sample-server", "version": "fake", "protocol": 2},
 		completions: true, callerHeader: "Sample-Server-Root-Conversation",
 	},
 }
@@ -126,7 +128,7 @@ func (n *serverView) begin(*terminal) error {
 	}
 	if name := n.args.value("--mcp-server"); name != "" {
 		description := n.args.value("--mcp-description")
-		if n.flavor.sigmaWire {
+		if n.flavor.harness == Sigma {
 			name, description, _ = strings.Cut(name, "=")
 		}
 		start["mcpServers"] = []ServerMCPServer{{Name: name, Description: description}}
@@ -135,7 +137,7 @@ func (n *serverView) begin(*terminal) error {
 }
 
 func (n *serverView) submit(prompt string) error {
-	return n.call("conversation/submit", map[string]any{"conversation": n.conversation, "requestId": uuid.NewString(), "author": n.flavor.wireAuthor("you"), "text": prompt})
+	return n.call("conversation/submit", map[string]any{"conversation": n.conversation, "requestId": uuid.NewString(), "author": ServerAuthor{ID: "you", Name: "you"}, "text": prompt})
 }
 
 func (n *serverView) reply(text string, _ bool) error {
@@ -159,35 +161,15 @@ type ServerAuthor struct {
 	Name string `json:"name"`
 }
 
-func (f appServerFlavor) wireAuthor(name string) any {
-	if f.sigmaWire {
-		return ServerAuthor{ID: name, Name: name}
-	}
-	return name
-}
-
-func (f appServerFlavor) parseAuthor(method string, raw json.RawMessage) (ServerAuthor, string) {
+func parseAuthor(method string, raw json.RawMessage) (ServerAuthor, string) {
 	if method != "conversation/submit" && method != "conversation/interrupt" && method != "conversation/compact" {
 		return ServerAuthor{}, ""
 	}
-	if f.sigmaWire {
-		var author ServerAuthor
-		if err := json.Unmarshal(raw, &author); err != nil || author.ID == "" || author.Name == "" {
-			return ServerAuthor{}, "InvalidParams: author {id, name} is required"
-		}
-		return author, ""
+	var author ServerAuthor
+	if err := json.Unmarshal(raw, &author); err != nil || author.ID == "" || author.Name == "" {
+		return ServerAuthor{}, "InvalidParams: author {id, name} is required"
 	}
-	if method == "conversation/interrupt" {
-		if raw != nil {
-			return ServerAuthor{}, "InvalidParams: conversation/interrupt takes no author"
-		}
-		return ServerAuthor{}, ""
-	}
-	var name string
-	if err := json.Unmarshal(raw, &name); err != nil || name == "" {
-		return ServerAuthor{}, "InvalidParams: author must be a name"
-	}
-	return ServerAuthor{Name: name}, ""
+	return author, ""
 }
 
 type ServerSubmission struct {
@@ -284,6 +266,7 @@ type appServer struct {
 	nextCall    int
 	watchers    []*serverWatcher
 	refuseMCP   string
+	answers     int
 }
 
 func runAppServer(cfg config, flavor appServerFlavor) int {
@@ -305,6 +288,7 @@ func runAppServer(cfg config, flavor appServerFlavor) int {
 	if boot.Exit {
 		return boot.Code
 	}
+	s.answers = boot.Protocol
 	home := os.Getenv(flavor.homeVariable)
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		fmt.Fprintf(os.Stderr, "fake %s serve: %v\n", flavor.harness, err)
@@ -438,10 +422,10 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		Steer        *bool            `json:"steer"`
 	}
 	_ = json.Unmarshal(raw, &p)
-	if p.Steer != nil && !s.flavor.sigmaWire {
+	if p.Steer != nil && !s.flavor.steers {
 		return nil, "InvalidParams: conversation/submit takes no steer"
 	}
-	author, refused := s.flavor.parseAuthor(method, p.Author)
+	author, refused := parseAuthor(method, p.Author)
 	if refused != "" {
 		return nil, refused
 	}
@@ -457,7 +441,13 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		if offline != nil && c.client == "attn" {
 			<-offline
 		}
-		return s.flavor.hello, ""
+		hello := maps.Clone(s.flavor.hello)
+		s.mu.Lock()
+		if s.answers != 0 {
+			hello["protocol"] = s.answers
+		}
+		s.mu.Unlock()
+		return hello, ""
 	case "models/list":
 		return ServerModels, ""
 	case "targets/list":
@@ -538,7 +528,7 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		s.interruptsOf(p.Conversation) <- struct{}{}
 		return nil, ""
 	case "conversation/compact":
-		if !s.flavor.sigmaWire {
+		if !s.flavor.compacts {
 			return nil, "UnknownMethod"
 		}
 		s.mu.Lock()
@@ -951,7 +941,7 @@ func (f appServerFlavor) connect(ctx context.Context, socket string) (*effectrpc
 		return nil, err
 	}
 	var hello effectrpc.ServerInfo
-	if err := c.Call(ctx, "initialize", map[string]any{"client": string(f.harness) + "-tui", "version": "fake", "protocol": 1}, &hello); err != nil {
+	if err := c.Call(ctx, "initialize", map[string]any{"client": string(f.harness) + "-tui", "version": "fake", "protocol": 2}, &hello); err != nil {
 		c.Close()
 		return nil, err
 	}

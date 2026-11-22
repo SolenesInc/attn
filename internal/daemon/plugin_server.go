@@ -40,6 +40,9 @@ func (d *Daemon) registerPluginDriver(plugin *pluginConnection, params pluginDri
 		if err := params.Server.Validate(); err != nil {
 			return err
 		}
+		for _, ability := range params.Server.UnknownAbilities() {
+			d.logf("plugin %s declares server ability %q for %s, which attn does not know; ignoring it", plugin.name, ability, agent)
+		}
 	} else if params.Capabilities["server_binding"] {
 		return fmt.Errorf("server_binding requires a server declaration")
 	}
@@ -105,11 +108,6 @@ func (d *Daemon) pluginServerSessions(plugin string) int {
 		}
 	}
 	return count
-}
-
-func (l *serverLink) hasTargets() bool {
-	p := l.b.declaration.Load()
-	return p != nil && p.Targets
 }
 
 func reservedPluginAgent(agent string) bool {

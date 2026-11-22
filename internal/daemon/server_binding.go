@@ -170,14 +170,14 @@ func (l *serverLink) connect(ctx context.Context, socket, client, version string
 	if p == nil {
 		return nil, effectrpc.ServerInfo{}, &effectrpc.Error{Server: l.b.agent, Method: "initialize", Message: "server binding unavailable until plugin " + l.b.plugin + " registers"}
 	}
-	c, err := effectrpc.Dial(ctx, socket, p.Initialize.Server)
+	c, err := effectrpc.Dial(ctx, socket, l.serverName(p))
 	if err != nil {
 		return nil, effectrpc.ServerInfo{}, err
 	}
 	var hello effectrpc.ServerInfo
-	err = c.Call(ctx, "initialize", map[string]any{"client": client, "version": version, "protocol": p.Initialize.Protocol.Requested()}, &hello)
+	err = c.Call(ctx, "initialize", map[string]any{"client": client, "version": version, "protocol": agentdriver.ServerProtocolVersion}, &hello)
 	if err == nil {
-		err = l.validateServerInfo(hello, socket)
+		err = l.validateServerInfo(hello, socket, c.PeerPID())
 	}
 	if err != nil {
 		c.Close()
@@ -200,14 +200,44 @@ func (l *serverLink) callerConversationHeader() string {
 	return ""
 }
 
-func (l *serverLink) validateServerInfo(hello effectrpc.ServerInfo, socket string) error {
+func (l *serverLink) validateServerInfo(hello effectrpc.ServerInfo, socket string, pid int) error {
 	p := l.b.declaration.Load()
 	if p == nil {
 		return fmt.Errorf("server binding unavailable until plugin %s registers", l.b.plugin)
 	}
-	want := p.Initialize
-	if (want.Server != "" && hello.Server != want.Server) || (want.Protocol.Exact > 0 && hello.Protocol != want.Protocol.Exact) || hello.Protocol < want.Protocol.Requested() {
-		return &effectrpc.Error{Server: want.Server, Method: "initialize", Message: fmt.Sprintf("server at %s is %q %s speaking protocol %d; binding requires identity %q and protocol %+v", socket, hello.Server, hello.Version, hello.Protocol, want.Server, want.Protocol)}
+	want, server := p.Initialize, l.serverName(p)
+	if want.Server != "" && hello.Server != want.Server {
+		return &effectrpc.Error{Server: server, Method: "initialize", Message: fmt.Sprintf("server at %s is %q %s; binding requires identity %q", socket, hello.Server, hello.Version, want.Server)}
+	}
+	if hello.Protocol == 1 {
+		return &effectrpc.Error{Server: server, Method: "initialize", Message: l.protocolOneRefusal(p, socket, pid)}
+	}
+	if hello.Protocol != agentdriver.ServerProtocolVersion {
+		return &effectrpc.Error{Server: server, Method: "initialize", Message: fmt.Sprintf("server at %s is %q %s speaking protocol %d; binding requires protocol %d", socket, hello.Server, hello.Version, hello.Protocol, agentdriver.ServerProtocolVersion)}
 	}
 	return nil
+}
+
+func (l *serverLink) serverName(p *agentdriver.ServerDeclaration) string {
+	if p.Initialize.Server != "" {
+		return p.Initialize.Server
+	}
+	return l.b.agent
+}
+
+func (l *serverLink) displayName() string {
+	if name := l.d.factsOrNone(l.b.agent).DisplayName; name != "" {
+		return name
+	}
+	return l.b.agent
+}
+
+func (l *serverLink) protocolOneRefusal(p *agentdriver.ServerDeclaration, socket string, pid int) string {
+	name := l.displayName()
+	process := "that server process"
+	if pid > 0 {
+		process = fmt.Sprintf("pid %d", pid)
+	}
+	command := strings.Join(append([]string{l.executable(nil)}, p.ServeArgs...), " ")
+	return fmt.Sprintf("the %s server at %s speaks attn-app-server protocol 1, and this attn speaks only protocol %d. Stop %s (%s, %s) and update %s if it is still on protocol 1; attn starts a new one on next use", name, socket, agentdriver.ServerProtocolVersion, process, command, l.homeEnv(), name)
 }

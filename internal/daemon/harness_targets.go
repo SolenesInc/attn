@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -19,15 +20,19 @@ func (d *Daemon) handleHarnessTargets(client *wsClient, msg *protocol.HarnessTar
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) harnessTargets(harness, cwd string) ([]protocol.ExecutionTarget, error) {
+func (d *Daemon) harnessTargets(id, cwd string) ([]protocol.ExecutionTarget, error) {
 	if cwd == "" {
 		return nil, fmt.Errorf("harness_targets needs a cwd")
 	}
-	server := d.serverLinkFor(harness)
-	if server == nil || !server.hasTargets() {
-		return nil, fmt.Errorf("agent %q has no execution targets", harness)
+	targets, ok := d.targetsOf(id)
+	if !ok {
+		return nil, fmt.Errorf("agent %q has no execution targets", id)
 	}
 	ctx, cancel := context.WithTimeout(d.life.Context(), harnessModelDiscoveryTimeout)
 	defer cancel()
-	return server.targets(ctx, cwd)
+	return targets.Targets(ctx, cwd)
+}
+
+func (d *Daemon) targetsOf(id string) (harness.Targets, bool) {
+	return harness.As[harness.Targets](d.harnessOf(id))
 }

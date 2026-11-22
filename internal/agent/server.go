@@ -3,10 +3,24 @@ package agent
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
-const ServerProtocol = "attn-app-server-v1"
+const (
+	ServerProtocol        = "attn-app-server-v2"
+	ServerProtocolVersion = 2
+)
+
+type ServerAbility string
+
+const (
+	AbilityCompact      ServerAbility = "compact"
+	AbilityWatch        ServerAbility = "watch"
+	AbilityTargets      ServerAbility = "targets"
+	AbilitySteer        ServerAbility = "steer"
+	AbilityQuestionSafe ServerAbility = "question_safe"
+)
 
 type ServerDeclaration struct {
 	Protocol                 string          `json:"protocol"`
@@ -16,31 +30,32 @@ type ServerDeclaration struct {
 	HomeEnv                  string          `json:"home_env"`
 	DefaultHome              string          `json:"default_home"`
 	SocketName               string          `json:"socket_name"`
-	Initialize               ServerHandshake `json:"initialize"`
+	Initialize               ServerHandshake `json:"initialize,omitzero"`
 	CallerConversationEnv    string          `json:"caller_conversation_env"`
 	CallerConversationHeader string          `json:"caller_conversation_header,omitempty"`
 	OnClose                  string          `json:"on_close"`
 	Recovery                 string          `json:"recovery"`
-	Targets                  bool            `json:"targets,omitempty"`
-	SigmaWire                bool            `json:"-"`
-	ConversationWatch        bool            `json:"conversation_watch,omitempty"`
+	Abilities                []ServerAbility `json:"abilities,omitempty"`
 }
 
 type ServerHandshake struct {
-	Server   string                `json:"server,omitempty"`
-	Protocol ServerProtocolVersion `json:"protocol"`
+	Server string `json:"server,omitempty"`
 }
 
-type ServerProtocolVersion struct {
-	Exact int `json:"exact,omitempty"`
-	Min   int `json:"min,omitempty"`
-}
+var knownAbilities = []ServerAbility{AbilityCompact, AbilityWatch, AbilityTargets, AbilitySteer, AbilityQuestionSafe}
 
-func (v ServerProtocolVersion) Requested() int {
-	if v.Exact > 0 {
-		return v.Exact
+func (p *ServerDeclaration) UnknownAbilities() []ServerAbility {
+	var unknown []ServerAbility
+	for _, ability := range p.Abilities {
+		if !slices.Contains(knownAbilities, ability) {
+			unknown = append(unknown, ability)
+		}
 	}
-	return v.Min
+	return unknown
+}
+
+func (p *ServerDeclaration) Can(ability ServerAbility) bool {
+	return p != nil && slices.Contains(p.Abilities, ability)
 }
 
 type ServerDeclarer interface {
@@ -93,10 +108,6 @@ func (p *ServerDeclaration) Validate() error {
 	}
 	if p.SocketName == "" || filepath.Base(p.SocketName) != p.SocketName || p.SocketName == "." || p.SocketName == ".." {
 		return fmt.Errorf("server socket_name must be a filename")
-	}
-	v := p.Initialize.Protocol
-	if (v.Exact > 0) == (v.Min > 0) || v.Exact < 0 || v.Min < 0 {
-		return fmt.Errorf("server initialize.protocol requires either a positive exact or min version")
 	}
 	if p.OnClose != "interrupt" && p.OnClose != "leave-running" {
 		return fmt.Errorf("unsupported server on_close %q", p.OnClose)

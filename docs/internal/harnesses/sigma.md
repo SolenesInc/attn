@@ -14,8 +14,10 @@ measurement uses that one.
   over `SIGMA_HOME/sigma.sock`, and the home defaults to `~/.sigma`.
   `sigma serve` refuses a home another server already serves
   (`packages/sigma/src/main.ts`).
-- `initialize` answers `{version, protocol, readOnly}` with protocol 1, and no
-  server name (`packages/protocol/src/index.ts`).
+- `initialize` answers `{version, protocol, readOnly}` with protocol 2 to a
+  client that asks for 1 or 2, and no server name (43ebbba,
+  `packages/protocol/src/index.ts`). A server started from an older build
+  answers protocol 1.
 - The TUI and `sigma exec` start a detached server when none answers. A server
   exits 30 seconds after its last client leaves and its last run settles.
 - `sigma --conversation <id>` opens that conversation, and starts a

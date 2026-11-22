@@ -1,5 +1,9 @@
 package testworld
 
+func (w *World) AnswerProtocolAtNextBoot(version int) {
+	w.kit.AnswerProtocolAtNextBoot(version)
+}
+
 func (w *World) ExitAtNextBoot(code int, screen string) {
 	w.kit.ExitAtNextBoot(code, screen)
 }

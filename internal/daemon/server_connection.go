@@ -100,7 +100,7 @@ func (p *serverConnection) peers() []*serverLink {
 		if err != nil || socket != p.socket {
 			continue
 		}
-		if info.Protocol > 0 && l.validateServerInfo(info, p.socket) != nil {
+		if info.Protocol > 0 && l.validateServerInfo(info, p.socket, 0) != nil {
 			continue
 		}
 		peers = append(peers, l)
@@ -146,7 +146,7 @@ func (p *serverConnection) ensureLocked(ctx context.Context, l *serverLink, opts
 	c, info := p.control, p.info
 	p.mu.Unlock()
 	if c != nil {
-		if err := l.validateServerInfo(info, p.socket); err != nil {
+		if err := l.validateServerInfo(info, p.socket, 0); err != nil {
 			return nil, err
 		}
 		p.registerAgentToolsLocked(c)

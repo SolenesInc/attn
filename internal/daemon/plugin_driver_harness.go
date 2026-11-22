@@ -6,6 +6,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func init() {
@@ -13,7 +14,12 @@ func init() {
 		registered := d.ensurePluginRegistry().registeredDrivers()
 		all := make([]harness.Harness, 0, len(registered))
 		for _, reg := range registered {
-			all = append(all, pluginHarness{d: d, reg: reg})
+			h := pluginHarness{d: d, reg: reg}
+			if l := d.serverLinkFor(reg.Agent); l != nil && l.can(agentdriver.AbilityTargets) {
+				all = append(all, pluginTargetsHarness{pluginHarness: h, link: l})
+				continue
+			}
+			all = append(all, h)
 		}
 		return all
 	})
@@ -22,6 +28,15 @@ func init() {
 type pluginHarness struct {
 	d   *Daemon
 	reg pluginDriverRegistration
+}
+
+type pluginTargetsHarness struct {
+	pluginHarness
+	link *serverLink
+}
+
+func (h pluginTargetsHarness) Targets(ctx context.Context, cwd string) ([]protocol.ExecutionTarget, error) {
+	return h.link.targets(ctx, cwd)
 }
 
 func (h pluginHarness) Facts() harness.Facts {

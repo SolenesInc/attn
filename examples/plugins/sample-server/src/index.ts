@@ -32,20 +32,19 @@ client.driver({
   launchInstructions: true,
   agentTools: true,
   server: {
-    protocol: "attn-app-server-v1",
+    protocol: "attn-app-server-v2",
     executable,
     executableEnv: "ATTN_SAMPLE_SERVER_EXECUTABLE",
     serveArgs: ["serve"],
     homeEnv: "SAMPLE_SERVER_HOME",
     defaultHome: ".sample-server",
     socketName: "sample-server.sock",
-    initialize: { server: "sample-server", protocol: { exact: 1 } },
+    initialize: { server: "sample-server" },
     callerConversationEnv: "SAMPLE_SERVER_ROOT_CONVERSATION",
     callerConversationHeader: "Sample-Server-Root-Conversation",
     onClose: "leave-running",
     recovery: "numbered-completions",
-    targets: true,
-    conversationWatch: true,
+    abilities: ["targets", "watch"],
   },
 });
 await client.connect();
