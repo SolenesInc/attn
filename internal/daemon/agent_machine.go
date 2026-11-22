@@ -287,11 +287,6 @@ func (d *Daemon) launchCommitted(terminal harness.TerminalID, committed bool, pr
 
 func (d *Daemon) readConversationReadiness(_ context.Context, msg protocol.ConversationReadinessMessage) (protocol.ConversationReadinessResult, error) {
 	if l := d.serverLinkFor(msg.Agent); l != nil {
-		if msg.Restore {
-			if err := l.restore(msg.Profile, msg.Conversation); err != nil {
-				return protocol.ConversationReadinessResult{}, err
-			}
-		}
 		return protocol.ConversationReadinessResult{Known: msg.Conversation != "", Ready: msg.Conversation != ""}, nil
 	}
 	driver := agentdriver.Get(msg.Agent)
@@ -299,10 +294,8 @@ func (d *Daemon) readConversationReadiness(_ context.Context, msg protocol.Conve
 		return protocol.ConversationReadinessResult{}, fmt.Errorf("unknown agent %q", msg.Agent)
 	}
 	if msg.Restore {
-		if l := d.linkNamed(msg.Link); l != nil {
-			if err := l.restore(msg.Profile, msg.Conversation); err != nil {
-				return protocol.ConversationReadinessResult{}, err
-			}
+		if err := d.restoreLinkedConversation(msg.Link, msg.Profile, msg.Conversation); err != nil {
+			return protocol.ConversationReadinessResult{}, err
 		}
 	}
 	result := protocol.ConversationReadinessResult{Known: d.conversationKnown(driver, msg.Conversation)}
@@ -364,7 +357,7 @@ func (d *Daemon) prepareLinkedLaunch(opts *ptybackend.SpawnOptions, launch *Agen
 			return err
 		}
 		if opts.ResumeSessionID != "" {
-			if err := l.restore(launch.Profile, opts.ResumeSessionID); err != nil {
+			if err := d.restoreLinkedConversation(launch.Link, launch.Profile, opts.ResumeSessionID); err != nil {
 				return err
 			}
 		}

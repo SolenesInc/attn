@@ -1761,20 +1761,6 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.endClosedSessionsRun(sessionID, owner, info)
 		return true
 	}
-	if session := d.store.Get(sessionID); session != nil {
-		driver := agentdriver.Get(session.Agent)
-		if driver != nil && !agentdriver.EffectiveCapabilities(driver).HasHooks {
-			if finder, ok := agentdriver.GetTranscriptFinder(driver); ok {
-				path := finder.FindTranscriptForResume(d.store.GetResumeSessionID(sessionID))
-				receipt, accepted := d.observeStoppedConversation(sessionID, d.resolveStopTranscriptPath(session, path))
-				if accepted {
-					if err := receipt.Wait(d.life.Context()); err != nil {
-						d.logf("exit conversation: session=%s: %v", sessionID, err)
-					}
-				}
-			}
-		}
-	}
 	unlockEnds := d.lockTerminalEnds(sessionID)
 	if d.exitOfSupersededRuntime(info) {
 		unlockEnds()
@@ -3272,11 +3258,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		driver := agentdriver.Get(string(target.Agent))
 		native := agentdriver.ResumeSessionIDFromTranscriptPath(driver, msg.TranscriptPath)
 		if native != "" {
-			proposal := sessionmonitor.ConversationObserved
-			if !agentdriver.EffectiveCapabilities(driver).HasHooks {
-				proposal = sessionmonitor.ConversationReported
-			}
-			monitor.ProposeConversation(sessionmonitor.ConversationObservation{NativeID: native, TranscriptPath: msg.TranscriptPath}, proposal, "", "")
+			monitor.ProposeConversation(sessionmonitor.ConversationObservation{NativeID: native, TranscriptPath: msg.TranscriptPath}, sessionmonitor.ConversationObserved, "", "")
 		}
 	}
 	monitor.Touch(time.Now())
@@ -3289,22 +3271,6 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 
 	d.life.Go("classifySessionState", func() { monitor.ClassifyStop(msg.TranscriptPath, sessionmonitor.StopClassification{}) })
 	d.life.Go("maybeGenerateSessionTitle", func() { monitor.TitleFromTranscript(msg.TranscriptPath) })
-}
-
-func (d *Daemon) observeStoppedConversation(sessionID protocol.SessionID, transcriptPath string) (*sessionmonitor.ConversationReceipt, bool) {
-	if session := d.store.Get(sessionID); session != nil {
-		driver := agentdriver.Get(session.Agent)
-		resumeSessionID := agentdriver.ResumeSessionIDFromTranscriptPath(driver, transcriptPath)
-		observation := agentConversationObservation{SessionID: sessionID, NativeID: resumeSessionID, TranscriptPath: transcriptPath}
-		switch {
-		case resumeSessionID == "":
-		case agentdriver.EffectiveCapabilities(driver).HasHooks:
-			return d.proposeMonitorConversation(observation, sessionmonitor.ConversationObserved, "")
-		default:
-			return d.claimAgentConversation(observation)
-		}
-	}
-	return nil, false
 }
 
 func (d *Daemon) resolveStopTranscriptPath(session *protocol.Session, reported string) string {

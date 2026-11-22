@@ -25,7 +25,7 @@ func launchGuidance(t *testing.T, w *world, run *fakeagent.Run) string {
 	return ""
 }
 
-func TestEachHarnessReadsAttnsGuidanceMarkedSoItsHooksAddNoneAndLeavesItsPullRequestsToItsHooks(t *testing.T) {
+func TestEachHarnessReadsAttnsGuidanceAndLeavesItsPullRequestsToItsHooks(t *testing.T) {
 	for _, direct := range []bool{false, true} {
 		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
 			w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
@@ -35,10 +35,6 @@ func TestEachHarnessReadsAttnsGuidanceMarkedSoItsHooksAddNoneAndLeavesItsPullReq
 			}
 			yolo := map[fakeagent.Harness]string{
 				fakeagent.Claude: "--dangerously-skip-permissions",
-			}
-			marker := map[fakeagent.Harness]string{
-				fakeagent.Claude: "append_system_prompt",
-				fakeagent.Codex:  "developer_instructions",
 			}
 			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 				run := w.Launched(w.Spawn(app, h, w.Path(string(h)), func(m *protocol.SpawnSessionMessage) {
@@ -54,9 +50,6 @@ func TestEachHarnessReadsAttnsGuidanceMarkedSoItsHooksAddNoneAndLeavesItsPullReq
 				guidance := launchGuidance(t, w, run)
 				if !strings.Contains(guidance, agentGuidanceLead) {
 					t.Errorf("%s launched without attn's agent guidance:\n%s", h, guidance)
-				}
-				if got, _ := envEntry(run.Env, "ATTN_AGENT_GUIDANCE"); got != marker[h] {
-					t.Errorf("%s runs with ATTN_AGENT_GUIDANCE=%q, want %q", h, got, marker[h])
 				}
 				if strings.Contains(guidance, "attn pr record") {
 					t.Errorf("%s, whose hooks report its pull requests, is told to record them itself", h)

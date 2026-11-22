@@ -28,11 +28,8 @@ type linkRuntime interface {
 	runsLink(t harness.TerminalID) bool
 	serverTerminal(profile string) harness.TerminalID
 
-	renamed(sessionID protocol.SessionID, label string)
 	profileReleased(profile string)
 	sessionClosed(sessionID protocol.SessionID, profile, released string)
-	restore(profile, conversation string) error
-	transcriptPath(path string) string
 
 	terminalDropped(t harness.TerminalID)
 	terminalExited(t harness.TerminalID)
@@ -46,6 +43,32 @@ func (d *Daemon) links() []linkRuntime {
 		links = append(links, l)
 	}
 	return links
+}
+
+type sharedConversationLink interface {
+	renamed(sessionID protocol.SessionID, label string)
+	restore(profile, conversation string) error
+	transcriptPath(path string) string
+}
+
+func (d *Daemon) restoreLinkedConversation(kind, profile, conversation string) error {
+	if l, ok := d.linkNamed(kind).(sharedConversationLink); ok {
+		return l.restore(profile, conversation)
+	}
+	return nil
+}
+
+func (d *Daemon) linkedTranscriptPath(kind, path string) string {
+	if l, ok := d.linkNamed(kind).(sharedConversationLink); ok {
+		return l.transcriptPath(path)
+	}
+	return path
+}
+
+func (d *Daemon) renameLinkedConversation(sessionID protocol.SessionID, label string) {
+	if l, ok := d.linkOf(sessionID).(sharedConversationLink); ok {
+		l.renamed(sessionID, label)
+	}
 }
 
 func (d *Daemon) linkNamed(kind string) linkRuntime {

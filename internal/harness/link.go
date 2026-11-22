@@ -8,7 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Voice says whose words an input carries; a link declares the voices it can deliver.
+// Voice says whose words an input carries.
 type Voice uint8
 
 const (
@@ -42,7 +42,6 @@ type Custody struct {
 
 // Link delivers input to a harness without going through its terminal.
 type Link interface {
-	Voices() []Voice
 	Deliver(ctx context.Context, in Input) Custody
 }
 

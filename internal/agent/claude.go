@@ -152,7 +152,6 @@ func (c *Claude) BuildEnv(opts SpawnOpts) []string {
 	if opts.CrewPriming != "" {
 		env = append(env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1")
 	}
-	env = append(env, "ATTN_AGENT_GUIDANCE=append_system_prompt")
 	if opts.AgentTools != nil {
 		env = append(env, AgentCredentialEnv+"="+opts.AgentTools.Credential)
 	}

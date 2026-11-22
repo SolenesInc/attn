@@ -16,10 +16,6 @@ type claudeModLink struct {
 	session  protocol.SessionID
 }
 
-func (claudeModLink) Voices() []harness.Voice {
-	return []harness.Voice{harness.VoiceUser, harness.VoiceAttn}
-}
-
 func (claudeModLink) SafeDuringQuestion(askedInTurn bool) bool { return askedInTurn }
 
 func (l claudeModLink) Deliver(ctx context.Context, in harness.Input) harness.Custody {

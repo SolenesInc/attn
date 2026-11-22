@@ -35,12 +35,12 @@ func TestEveryHarnessAnswersTheContractWithItsFake(t *testing.T) {
 	home := conformance.Home
 	conformance.Run(t, w.daemon.Harnesses(), []conformance.Row{
 		{
-			Facts:     harness.Facts{ID: "claude", DisplayName: "Claude Code", Options: terminalOptions, Executable: harness.Executable{Default: "claude", Env: "ATTN_CLAUDE_EXECUTABLE"}, CacheTTL: time.Hour, Tiers: map[modeltiers.Tier]string{modeltiers.Light: "haiku", modeltiers.Standard: "sonnet", modeltiers.Deep: "opus"}, CrewModel: "fable"},
+			Facts:     harness.Facts{ID: "claude", DisplayName: "Claude Code", Options: terminalOptions, Executable: harness.Executable{Default: "claude", Env: "ATTN_CLAUDE_EXECUTABLE"}, CacheTTL: time.Hour, Tiers: map[modeltiers.Tier]string{modeltiers.Light: "haiku", modeltiers.Standard: "sonnet", modeltiers.Deep: "opus"}, Advisor: harness.ModelChoice{Model: "sonnet", Effort: "medium"}, CrewModel: "fable"},
 			SkillDirs: []string{home + "/.claude/skills"},
 			Offered:   true,
 		},
 		{
-			Facts:     harness.Facts{ID: "codex", DisplayName: "Codex", Options: terminalOptions, Executable: harness.Executable{Default: "codex", Env: "ATTN_CODEX_EXECUTABLE"}, CacheTTL: 30 * time.Minute, Tiers: map[modeltiers.Tier]string{modeltiers.Light: "gpt-6-luna", modeltiers.Standard: "gpt-5.6-terra", modeltiers.Deep: "gpt-6.1-sol"}},
+			Facts:     harness.Facts{ID: "codex", DisplayName: "Codex", Options: terminalOptions, Executable: harness.Executable{Default: "codex", Env: "ATTN_CODEX_EXECUTABLE"}, CacheTTL: 30 * time.Minute, Tiers: map[modeltiers.Tier]string{modeltiers.Light: "gpt-6-luna", modeltiers.Standard: "gpt-5.6-terra", modeltiers.Deep: "gpt-6.1-sol"}, Advisor: harness.ModelChoice{Model: "gpt-5.6-luna", Effort: "xhigh"}},
 			SkillDirs: []string{home + "/.agents/skills"},
 			Offered:   true,
 		},

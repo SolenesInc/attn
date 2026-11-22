@@ -114,12 +114,6 @@ func (l *serverLink) runsLink(t harness.TerminalID) bool { return t == l.b.termi
 
 func (l *serverLink) serverTerminal(string) harness.TerminalID { return l.b.terminal }
 
-func (l *serverLink) renamed(protocol.SessionID, string) {}
-
-func (l *serverLink) restore(string, string) error { return nil }
-
-func (l *serverLink) transcriptPath(path string) string { return path }
-
 func (l *serverLink) terminalDropped(t harness.TerminalID) {
 	if err := l.d.store.DeleteTerminalView(string(t)); err != nil {
 		l.logf("%v", err)
@@ -352,16 +346,10 @@ func (l *serverLink) observe(sessionID protocol.SessionID, source, status string
 	}
 }
 
-func (l *serverLink) Voices() []harness.Voice {
-	return []harness.Voice{harness.VoiceUser, harness.VoiceAttn}
-}
-
 type serverSessionLink struct {
 	link    *serverLink
 	session protocol.SessionID
 }
-
-func (s serverSessionLink) Voices() []harness.Voice { return s.link.Voices() }
 
 func (s serverSessionLink) Deliver(ctx context.Context, in harness.Input) harness.Custody {
 	in.Session = s.session

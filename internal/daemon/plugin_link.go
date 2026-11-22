@@ -24,10 +24,6 @@ type questionSafePluginLink struct{ pluginLink }
 
 func (questionSafePluginLink) SafeDuringQuestion(askedInTurn bool) bool { return askedInTurn }
 
-func (pluginLink) Voices() []harness.Voice {
-	return []harness.Voice{harness.VoiceUser, harness.VoiceAttn}
-}
-
 func (l pluginLink) Deliver(ctx context.Context, in harness.Input) harness.Custody {
 	return l.request(ctx, "driver.deliver_message", in)
 }

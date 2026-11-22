@@ -202,10 +202,6 @@ func (d *Daemon) observeAgentConversation(observation agentConversationObservati
 	d.proposeMonitorConversation(observation, sessionmonitor.ConversationObserved, "")
 }
 
-func (d *Daemon) claimAgentConversation(observation agentConversationObservation) (*sessionmonitor.ConversationReceipt, bool) {
-	return d.proposeMonitorConversation(observation, sessionmonitor.ConversationReported, "")
-}
-
 func (d *Daemon) applyAgentConversation(observation agentConversationObservation, transition func(sessionID protocol.SessionID, nativeID string, transcriptPath string) (bool, error)) bool {
 	changed, err := transition(observation.SessionID, observation.NativeID, observation.TranscriptPath)
 	if errors.Is(err, store.ErrConversationClaimed) {

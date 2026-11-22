@@ -154,9 +154,7 @@ func (d *Daemon) saveSessionPullRequest(ctx context.Context, msg protocol.Sessio
 }
 
 func (d *Daemon) renameLink(_ context.Context, msg protocol.LinkRenameMessage) (struct{}, error) {
-	if link := d.linkOf(msg.SessionID); link != nil {
-		link.renamed(msg.SessionID, msg.Label)
-	}
+	d.renameLinkedConversation(msg.SessionID, msg.Label)
 	return struct{}{}, nil
 }
 

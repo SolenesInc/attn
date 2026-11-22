@@ -381,10 +381,7 @@ func (h monitorHost) Link(monitor *sessionmonitor.Monitor, voice harness.Voice) 
 }
 
 func (h monitorHost) LinkTranscriptPath(link, path string) string {
-	if l := h.daemon.linkNamed(link); l != nil {
-		return l.transcriptPath(path)
-	}
-	return path
+	return h.daemon.linkedTranscriptPath(link, path)
 }
 
 func (h monitorHost) NoteKey(terminal harness.TerminalID, at time.Time) {

@@ -26,7 +26,14 @@ type Facts struct {
 	SkillDirs   func(lookupEnv func(string) string, homeDir string) ([]string, error)
 	CacheTTL    time.Duration
 	Tiers       map[modeltiers.Tier]string
+	Advisor     ModelChoice
 	CrewModel   string
+}
+
+// ModelChoice is a model and the effort it runs at.
+type ModelChoice struct {
+	Model  string
+	Effort string
 }
 
 // Executable is how attn finds a harness's program when no setting names one: an env variable, then a default name. Empty for a harness that resolves its own.

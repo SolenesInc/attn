@@ -51,17 +51,11 @@ func (r *codexShared) control(ctx context.Context, profile string) (*codexServer
 	return s, client, nil
 }
 
-func (r *codexShared) Voices() []harness.Voice {
-	return []harness.Voice{harness.VoiceUser, harness.VoiceAttn}
-}
-
 type codexMonitorLink struct {
 	shared  *codexShared
 	monitor *sessionmonitor.Monitor
 	target  sessionmonitor.LinkTarget
 }
-
-func (l codexMonitorLink) Voices() []harness.Voice { return l.shared.Voices() }
 
 func (r *codexShared) Deliver(ctx context.Context, in harness.Input) harness.Custody {
 	monitor := r.d.sessionMonitor(in.Session)

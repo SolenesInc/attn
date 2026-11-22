@@ -25,6 +25,7 @@ func (h claudeHarness) Facts() harness.Facts {
 	}
 	facts.CacheTTL = time.Hour
 	facts.Tiers = map[modeltiers.Tier]string{modeltiers.Light: "haiku", modeltiers.Standard: "sonnet", modeltiers.Deep: "opus"}
+	facts.Advisor = harness.ModelChoice{Model: "sonnet", Effort: "medium"}
 	facts.CrewModel = "fable"
 	return facts
 }

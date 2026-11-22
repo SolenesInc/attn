@@ -13,13 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/setting"
 )
 
-const (
-	gardenAdvisorDefaultAgent        = "codex"
-	gardenAdvisorCodexDefaultModel   = "gpt-5.6-luna"
-	gardenAdvisorCodexDefaultEffort  = "xhigh"
-	gardenAdvisorClaudeDefaultModel  = "sonnet"
-	gardenAdvisorClaudeDefaultEffort = "medium"
-)
+const gardenAdvisorDefaultAgent = "codex"
 
 type gardenAdvisorConfig struct {
 	Agent  string `json:"agent"`
@@ -101,15 +95,10 @@ func (d *Daemon) gardenAdvisorConfig(ctx context.Context) (gardenAdvisorConfig, 
 	if err != nil {
 		return gardenAdvisorConfig{}, err
 	}
-	fallback := gardenAdvisorCodexDefaultModel
-	defaultEffort := gardenAdvisorCodexDefaultEffort
-	switch config.Agent {
-	case "claude":
-		fallback = gardenAdvisorClaudeDefaultModel
-		defaultEffort = gardenAdvisorClaudeDefaultEffort
-	}
+	advisor := d.factsOrNone(config.Agent).Advisor
+	fallback := advisor.Model
 	if config.Effort == "" {
-		config.Effort = defaultEffort
+		config.Effort = advisor.Effort
 	}
 	if !headless.Enabled() {
 		if config.Model == "" {
