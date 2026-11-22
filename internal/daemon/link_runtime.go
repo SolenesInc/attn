@@ -6,7 +6,6 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
@@ -33,7 +32,6 @@ func (d *Daemon) links() []linkRuntime {
 }
 
 type sharedConversationLink interface {
-	renamed(sessionID protocol.SessionID, label string)
 	restore(profile, conversation string) error
 	transcriptPath(path string) string
 }
@@ -53,20 +51,6 @@ func (d *Daemon) linkedTranscriptPath(agent string, lifetime harness.Lifetime, p
 		return l.transcriptPath(path)
 	}
 	return path
-}
-
-func (d *Daemon) renameLinkedConversation(sessionID protocol.SessionID, label string) {
-	if l, ok := d.linkOf(sessionID).(sharedConversationLink); ok {
-		l.renamed(sessionID, label)
-	}
-}
-
-func (d *Daemon) linkOf(sessionID protocol.SessionID) linkRuntime {
-	agent, lifetime := d.store.SessionLifetime(sessionID)
-	if lifetime != harness.InServer {
-		return nil
-	}
-	return d.linkServing(agent)
 }
 
 func (d *Daemon) linkFor(agent string, lifetime harness.Lifetime) linkRuntime {

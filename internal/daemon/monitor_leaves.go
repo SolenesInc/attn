@@ -152,7 +152,9 @@ func (d *Daemon) saveSessionPullRequest(ctx context.Context, msg protocol.Sessio
 }
 
 func (d *Daemon) renameLink(_ context.Context, msg protocol.LinkRenameMessage) (struct{}, error) {
-	d.renameLinkedConversation(msg.SessionID, msg.Label)
+	if renamer, ok := harness.As[harness.Renamer](d.harnessOf(d.agentOf(msg.SessionID))); ok {
+		renamer.Rename(msg.SessionID, msg.Label)
+	}
 	return struct{}{}, nil
 }
 

@@ -12,19 +12,14 @@ import (
 	"github.com/victorarias/attn/internal/automation"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/launchcontract"
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
 
 func testAutomationLaunch(agent string) automation.EffectiveLaunch {
-	driverMode := launchcontract.ApprovalAuto
-	if agent == string(protocol.SessionAgentCodex) {
-		driverMode = launchcontract.ApprovalAutoReview
-	}
 	return automation.EffectiveLaunch{
 		Agent: agent, Model: "review-model", Effort: "high",
 		ApprovalProductMode: launchcontract.ApprovalAuto,
-		ApprovalDriverMode:  driverMode,
+		ApprovalDriverMode:  launchcontract.ApprovalAuto,
 		DirectoryTrust:      launchcontract.TrustConfiguredDirectory,
 		Recovery:            launchcontract.RecoveryAdoptOrRestartFresh,
 	}

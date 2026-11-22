@@ -12,7 +12,7 @@ import (
 
 type usageTracker struct {
 	monitor  *Monitor
-	agent    string
+	format   transcript.Format
 	resolver transcript.UsageSourceResolver
 	rootPath string
 	sources  map[string]*trackedUsageSource
@@ -26,14 +26,14 @@ type trackedUsageSource struct {
 
 func newUsageTracker(w *transcriptWatcher, rootPath string) *usageTracker {
 	part, ok := w.monitor.transcriptPart(w.agent)
-	if !ok || !transcript.SupportsUsage(string(w.agent)) {
+	if !ok || !part.Format().SupportsUsage() {
 		return nil
 	}
 	resolver := part.UsageSources(rootPath)
 	if resolver == nil {
 		return nil
 	}
-	return &usageTracker{monitor: w.monitor, agent: string(w.agent), resolver: resolver, rootPath: rootPath, sources: make(map[string]*trackedUsageSource)}
+	return &usageTracker{monitor: w.monitor, format: part.Format(), resolver: resolver, rootPath: rootPath, sources: make(map[string]*trackedUsageSource)}
 }
 
 func (t *usageTracker) Reconcile() {
@@ -89,7 +89,7 @@ func (t *usageTracker) reconcile() (changed bool) {
 		}
 		if tracked == nil {
 			tracked = &trackedUsageSource{source: source}
-			tracked.follower, err = usageFollowerAt(source.Path, t.agent, sourceState.Cursor)
+			tracked.follower, err = usageFollowerAt(source.Path, t.format, sourceState.Cursor)
 			if err != nil {
 				if !isUsageCursorError(err) {
 					t.monitor.logf("transcript watcher: usage follower init failed session=%s path=%s err=%v", t.monitor.Label(), source.Path, err)
@@ -116,11 +116,11 @@ func (t *usageTracker) reconcile() (changed bool) {
 	return changed
 }
 
-func usageFollowerAt(path, agent, cursor string) (*transcript.Follower, error) {
+func usageFollowerAt(path string, format transcript.Format, cursor string) (*transcript.Follower, error) {
 	if strings.TrimSpace(cursor) == "" {
-		return transcript.NewFollower(path, agent, 0)
+		return transcript.NewFollower(path, format, 0)
 	}
-	return transcript.NewFollowerAfterCursor(path, agent, cursor)
+	return transcript.NewFollowerAfterCursor(path, format, cursor)
 }
 
 func (t *usageTracker) readIfMoved(tracked *trackedUsageSource) (changed bool) {
@@ -191,7 +191,7 @@ func (t *usageTracker) resetAtHead(tracked *trackedUsageSource) (changed, ok boo
 		return changed, false
 	}
 	changed = t.monitor.markCostSource(tracked.source.ID, true, false, &cursor) || changed
-	tracked.follower, err = usageFollowerAt(tracked.source.Path, t.agent, cursor)
+	tracked.follower, err = usageFollowerAt(tracked.source.Path, t.format, cursor)
 	tracked.info = nil
 	return changed, err == nil
 }

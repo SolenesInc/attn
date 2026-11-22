@@ -8,6 +8,8 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
+func (codexHarness) Format() transcript.Format { return transcript.FormatCodex }
+
 func (h codexHarness) Watcher() harness.TranscriptWatcher {
 	watcher, _ := agentdriver.GetTranscriptWatcherBehavior(h.driver())
 	return watcher

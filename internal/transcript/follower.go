@@ -23,7 +23,7 @@ type FollowBatch struct {
 
 type Follower struct {
 	path             string
-	agent            string
+	format           Format
 	offset           int64
 	fingerprint      string
 	previousEvent    Event
@@ -32,7 +32,7 @@ type Follower struct {
 	contextRead      bool
 }
 
-func NewFollower(path, agent string, startOffset int64) (*Follower, error) {
+func NewFollower(path string, format Format, startOffset int64) (*Follower, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -55,15 +55,15 @@ func NewFollower(path, agent string, startOffset int64) (*Follower, error) {
 	}
 	return &Follower{
 		path:        path,
-		agent:       agent,
+		format:      format,
 		offset:      startOffset,
 		fingerprint: fingerprint,
-		usage:       NewUsageExtractor(agent),
+		usage:       NewUsageExtractor(format),
 	}, nil
 }
 
 func (f *Follower) readContextBefore(file *os.File) error {
-	previous, hasPrevious, err := previousNormalizedEvent(file, f.agent, f.offset)
+	previous, hasPrevious, err := previousNormalizedEvent(file, f.format, f.offset)
 	if err != nil {
 		return err
 	}
@@ -74,10 +74,10 @@ func (f *Follower) readContextBefore(file *os.File) error {
 	return nil
 }
 
-func NewFollowerAfterCursor(path, agent, cursor string) (*Follower, error) {
+func NewFollowerAfterCursor(path string, format Format, cursor string) (*Follower, error) {
 	cursor = strings.TrimSpace(cursor)
 	if cursor == "" {
-		return NewFollower(path, agent, 0)
+		return NewFollower(path, format, 0)
 	}
 	expectedFingerprint, offset, eventIndex, err := decodeEventCursor(cursor)
 	if err != nil || eventIndex != 0 {
@@ -109,7 +109,7 @@ func NewFollowerAfterCursor(path, agent, cursor string) (*Follower, error) {
 			return nil, ErrInvalidCursor
 		}
 	}
-	return NewFollower(path, agent, offset)
+	return NewFollower(path, format, offset)
 }
 
 func (f *Follower) Cursor() string {
@@ -167,7 +167,7 @@ func (f *Follower) Read() (FollowBatch, error) {
 		f.offset += int64(len(record))
 		raw := bytes.TrimSpace(record)
 		allEvents, previousEvent, hasPreviousEvent := decodeEventRecord(
-			f.agent,
+			f.format,
 			raw,
 			f.previousEvent,
 			f.hasPreviousEvent,

@@ -27,6 +27,7 @@ func (codexHarness) driver() agentdriver.Driver { return agentdriver.MustGet("co
 
 func (h codexHarness) Facts() harness.Facts {
 	facts := agentdriver.Facts(h.driver())
+	facts.Options.AutomationExecutable = false
 	facts.Logo = harness.Logo{View: 24, Body: codexLogo}
 	facts.SkillDirs = func(_ func(string) string, homeDir string) ([]string, error) {
 		return []string{filepath.Join(homeDir, ".agents", "skills")}, nil
@@ -78,6 +79,10 @@ func (h codexHarness) Launch(_ context.Context, req harness.LaunchRequest) (harn
 }
 
 func (h codexHarness) TrustFolder(dir string) error { return h.d.trustCodexFolder(dir) }
+
+func (h codexHarness) Rename(session harness.SessionID, label string) {
+	h.d.codexShared().renamed(session, label)
+}
 
 func (h codexHarness) Plan(req harness.LaunchRequest) (harness.Planned, error) {
 	planned := planOn(h.d.codexShared(), req)

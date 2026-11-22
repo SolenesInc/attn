@@ -28,7 +28,7 @@ func codexFollowerResponseMessage(text string) string {
 
 func TestFollowerReadsCompleteRecordsOnceAndWaitsForPartialFinalRecord(t *testing.T) {
 	path := writeFollowerTranscript(t, codexFollowerEventMessage("first"))
-	follower, err := NewFollower(path, "codex", 0)
+	follower, err := NewFollower(path, FormatCodex, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestFollowerReadsCompleteRecordsOnceAndWaitsForPartialFinalRecord(t *testin
 
 func TestFollowerDeduplicatesCodexPairedAssistantRecords(t *testing.T) {
 	path := writeFollowerTranscript(t, codexFollowerEventMessage("same answer"), codexFollowerResponseMessage("same answer"))
-	follower, err := NewFollower(path, "codex", 0)
+	follower, err := NewFollower(path, FormatCodex, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestFollowerDeduplicatesCodexPairedAssistantRecords(t *testing.T) {
 
 func TestFollowerRejectsTranscriptReplacement(t *testing.T) {
 	path := writeFollowerTranscript(t, codexFollowerEventMessage("original"))
-	follower, err := NewFollower(path, "codex", 0)
+	follower, err := NewFollower(path, FormatCodex, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestFollowerCursorResumesUsageAfterRestart(t *testing.T) {
 		`{"type":"turn_context","payload":{"model":"gpt-test"}}`,
 		`{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":10,"cached_input_tokens":4,"output_tokens":2}}}}`,
 	)
-	follower, err := NewFollower(path, "codex", 0)
+	follower, err := NewFollower(path, FormatCodex, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestFollowerCursorResumesUsageAfterRestart(t *testing.T) {
 	appendEventTranscript(t, path,
 		`{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":12,"cached_input_tokens":5,"output_tokens":3}}}}`,
 	)
-	resumed, err := NewFollowerAfterCursor(path, "codex", cursor)
+	resumed, err := NewFollowerAfterCursor(path, FormatCodex, cursor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestFollowerCursorResumesUsageAfterRestart(t *testing.T) {
 
 func TestFollowerCursorStopsBeforePartialRecord(t *testing.T) {
 	path := writeFollowerTranscript(t, `{"type":"session_meta","payload":{"id":"native-id"}}`)
-	follower, err := NewFollower(path, "codex", 0)
+	follower, err := NewFollower(path, FormatCodex, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestNewFollowerAfterCursorRejectsTranscriptRotation(t *testing.T) {
 		`{"type":"session_meta","payload":{"id":"original"}}`,
 		codexFollowerEventMessage("first"),
 	)
-	follower, err := NewFollower(path, "codex", 0)
+	follower, err := NewFollower(path, FormatCodex, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestNewFollowerAfterCursorRejectsTranscriptRotation(t *testing.T) {
 	}, "\n")+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewFollowerAfterCursor(path, "codex", cursor); !errors.Is(err, ErrCursorMismatch) {
+	if _, err := NewFollowerAfterCursor(path, FormatCodex, cursor); !errors.Is(err, ErrCursorMismatch) {
 		t.Fatalf("rotation error = %v, want ErrCursorMismatch", err)
 	}
 }
@@ -190,7 +190,7 @@ func TestNewFollowerAfterCursorRejectsTranscriptRotation(t *testing.T) {
 func TestNewFollowerAfterCursorRejectsTruncation(t *testing.T) {
 	firstRecord := `{"type":"session_meta","payload":{"id":"native-id"}}`
 	path := writeFollowerTranscript(t, firstRecord, codexFollowerEventMessage("second"))
-	follower, err := NewFollower(path, "codex", 0)
+	follower, err := NewFollower(path, FormatCodex, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +201,7 @@ func TestNewFollowerAfterCursorRejectsTruncation(t *testing.T) {
 	if err := os.WriteFile(path, []byte(firstRecord+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewFollowerAfterCursor(path, "codex", cursor); !errors.Is(err, ErrCursorPastEnd) {
+	if _, err := NewFollowerAfterCursor(path, FormatCodex, cursor); !errors.Is(err, ErrCursorPastEnd) {
 		t.Fatalf("truncation error = %v, want ErrCursorPastEnd", err)
 	}
 }

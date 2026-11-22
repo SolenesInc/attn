@@ -32,7 +32,7 @@ func (u TokenUsage) HasTokens() bool {
 }
 
 type UsageExtractor struct {
-	agent             string
+	format            Format
 	codexModel        string
 	codexFastMode     bool
 	codexTurnFastMode bool
@@ -41,26 +41,17 @@ type UsageExtractor struct {
 	hasLast           bool
 }
 
-func NewUsageExtractor(agent string) *UsageExtractor {
-	return &UsageExtractor{agent: strings.ToLower(strings.TrimSpace(agent))}
-}
-
-func SupportsUsage(agent string) bool {
-	switch strings.ToLower(strings.TrimSpace(agent)) {
-	case "claude", "codex":
-		return true
-	default:
-		return false
-	}
+func NewUsageExtractor(format Format) *UsageExtractor {
+	return &UsageExtractor{format: format}
 }
 
 func (e *UsageExtractor) Observe(line []byte, sourceKey string) (TokenUsage, bool) {
 	var usage TokenUsage
 	var ok bool
-	switch e.agent {
-	case "claude":
+	switch e.format {
+	case FormatClaude:
 		usage, ok = extractClaudeUsage(line)
-	case "codex":
+	case FormatCodex:
 		usage, ok = e.extractCodexUsage(line, sourceKey)
 	default:
 		return TokenUsage{}, false
@@ -81,7 +72,7 @@ func (e *UsageExtractor) setCodexModel(model string) {
 }
 
 func (e *UsageExtractor) seedCodexUsageBefore(f *os.File, before int64) error {
-	if e.agent != "codex" {
+	if e.format != FormatCodex {
 		return nil
 	}
 	var records [][]byte

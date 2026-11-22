@@ -113,7 +113,7 @@ func offsetAfterLastNewline(f *os.File, size int64) (int64, error) {
 	return 0, nil
 }
 
-func ReadEventPage(path, agent, cursor string, maxEvents int) (EventPage, error) {
+func ReadEventPage(path string, format Format, cursor string, maxEvents int) (EventPage, error) {
 	if maxEvents <= 0 {
 		maxEvents = defaultEventPageSize
 	}
@@ -159,7 +159,7 @@ func ReadEventPage(path, agent, cursor string, maxEvents int) (EventPage, error)
 	if _, err := f.Seek(offset, io.SeekStart); err != nil {
 		return EventPage{}, err
 	}
-	previousEvent, hasPreviousEvent, err := previousNormalizedEvent(f, agent, offset)
+	previousEvent, hasPreviousEvent, err := previousNormalizedEvent(f, format, offset)
 	if err != nil {
 		return EventPage{}, err
 	}
@@ -181,7 +181,7 @@ func ReadEventPage(path, agent, cursor string, maxEvents int) (EventPage, error)
 		nextOffset := offset + int64(len(record))
 		line := bytes.TrimSpace(record)
 		allEvents, nextPreviousEvent, nextHasPreviousEvent := decodeEventRecord(
-			agent,
+			format,
 			line,
 			previousEvent,
 			hasPreviousEvent,
@@ -225,7 +225,7 @@ func ReadEventPage(path, agent, cursor string, maxEvents int) (EventPage, error)
 	}
 }
 
-func previousNormalizedEvent(f *os.File, agent string, before int64) (Event, bool, error) {
+func previousNormalizedEvent(f *os.File, format Format, before int64) (Event, bool, error) {
 	for before > 0 {
 		line, start, ok, err := previousCompleteLine(f, before)
 		if err != nil {
@@ -234,7 +234,7 @@ func previousNormalizedEvent(f *os.File, agent string, before int64) (Event, boo
 		if !ok {
 			return Event{}, false, nil
 		}
-		parsed := parseEventLine(agent, bytes.TrimSpace(line))
+		parsed := parseEventLine(format, bytes.TrimSpace(line))
 		if len(parsed.events) > 0 {
 			return parsed.events[len(parsed.events)-1], true, nil
 		}
@@ -355,7 +355,7 @@ type parsedEventLine struct {
 	assistantEchoCandidate bool
 }
 
-func parseEventLine(agent string, line []byte) parsedEventLine {
+func parseEventLine(format Format, line []byte) parsedEventLine {
 	if len(line) == 0 {
 		return parsedEventLine{}
 	}
@@ -365,10 +365,10 @@ func parseEventLine(agent string, line []byte) parsedEventLine {
 	}
 
 	var parsed parsedEventLine
-	switch strings.ToLower(strings.TrimSpace(agent)) {
-	case "claude":
+	switch format {
+	case FormatClaude:
 		parsed.events = parseClaudeEvent(envelope)
-	case "codex":
+	case FormatCodex:
 		parsed.events = parseCodexEvent(envelope)
 		parsed.assistantEchoCandidate = envelope.Type == "response_item"
 	}
@@ -399,8 +399,8 @@ func isDuplicateAssistantEcho(parsed parsedEventLine, previous Event, hasPreviou
 		previous.Text == parsed.events[0].Text
 }
 
-func decodeEventRecord(agent string, line []byte, previous Event, hasPrevious bool) ([]Event, Event, bool) {
-	parsed := parseEventLine(agent, line)
+func decodeEventRecord(format Format, line []byte, previous Event, hasPrevious bool) ([]Event, Event, bool) {
+	parsed := parseEventLine(format, line)
 	events := parsed.events
 	if isDuplicateAssistantEcho(parsed, previous, hasPrevious) {
 		events = nil

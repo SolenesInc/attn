@@ -27,6 +27,9 @@ func codexAutomationWorld(t *testing.T) (*world, *testworld.Peer) {
 
 func TestACodexAutomationThatNamesItsOwnExecutableIsRefusedNamingTheSetting(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
+	if err := os.MkdirAll(w.Path("check"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	spec := strings.Replace(manualCodexAutomationIn(w.Path("check")), "driver: codex", "driver: codex, executable: /opt/codex", 1)
 	_, err := w.Client().AutomationApply(spec)
 	if err == nil || !strings.Contains(err.Error(), "launch.executable") || !strings.Contains(err.Error(), "codex_executable") {

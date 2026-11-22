@@ -12,6 +12,8 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
+func (claudeHarness) Format() transcript.Format { return transcript.FormatClaude }
+
 func (h claudeHarness) Watcher() harness.TranscriptWatcher {
 	watcher, _ := agentdriver.GetTranscriptWatcherBehavior(h.driver())
 	return watcher

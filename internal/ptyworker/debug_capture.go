@@ -84,12 +84,8 @@ func shouldEnableDebugCapture(agent string) bool {
 		return false
 	case "1", "true", "on", "yes", "all":
 		return true
-	case "codex":
-		return normalized == "codex"
-	case "claude":
-		return normalized == "claude"
 	default:
-		return false
+		return normalized == raw
 	}
 }
 

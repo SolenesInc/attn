@@ -56,9 +56,9 @@ const MaxPages = 50
 
 var ErrDeltaTooLarge = fmt.Errorf("activity: delta exceeds %d pages of %d events", MaxPages, MaxEvents)
 
-func Read(path, agent, cursor string) (Window, error) {
+func Read(path string, format transcript.Format, cursor string) (Window, error) {
 	return ReadPages(cursor, func(at string, limit int) (transcript.EventPage, error) {
-		return transcript.ReadEventPage(path, agent, at, limit)
+		return transcript.ReadEventPage(path, format, at, limit)
 	})
 }
 

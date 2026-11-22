@@ -17,7 +17,7 @@ func usageFixture(t *testing.T, name string) string {
 }
 
 func TestFollowerExtractsClaudeUsageFromCapturedTranscript(t *testing.T) {
-	follower, err := NewFollower(usageFixture(t, "claude-2.1.233.jsonl"), "claude", 0)
+	follower, err := NewFollower(usageFixture(t, "claude-2.1.233.jsonl"), FormatClaude, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestFollowerExtractsClaudeUsageFromCapturedTranscript(t *testing.T) {
 }
 
 func TestFollowerExtractsCodexLastUsageWithCachedAndReasoningSubsets(t *testing.T) {
-	follower, err := NewFollower(usageFixture(t, "codex-0.147.0.jsonl"), "codex", 0)
+	follower, err := NewFollower(usageFixture(t, "codex-0.147.0.jsonl"), FormatCodex, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestFollowerRestoresCodexModelBeforeBootstrapOffset(t *testing.T) {
 	if offset < 0 {
 		t.Fatal("captured token_count line not found")
 	}
-	follower, err := NewFollower(path, "codex", int64(offset))
+	follower, err := NewFollower(path, FormatCodex, int64(offset))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestFollowerRestoresCodexModelBeforeBootstrapOffset(t *testing.T) {
 }
 
 func TestUsageExtractorEmitsRevisedClaudeSnapshotWithTheSameKey(t *testing.T) {
-	extractor := NewUsageExtractor("claude")
+	extractor := NewUsageExtractor(FormatClaude)
 	firstLine := []byte(`{"type":"assistant","message":{"id":"msg-progress","model":"model-x","usage":{"input_tokens":10,"output_tokens":0}}}`)
 	revisedLine := []byte(`{"type":"assistant","message":{"id":"msg-progress","model":"model-x","usage":{"input_tokens":12,"output_tokens":3}}}`)
 	first, ok := extractor.Observe(firstLine, "ignored")
@@ -127,7 +127,7 @@ func TestUsageExtractorReadsClaudeSpeed(t *testing.T) {
 		{`{"iterations":[{"input_tokens":2,"output_tokens":5}],"speed":"fast"}`, true},
 	} {
 		line := []byte(`{"type":"assistant","message":{"id":"msg","model":"claude-fable-5-2","usage":` + c.usage + `}}`)
-		usage, ok := NewUsageExtractor("claude").Observe(line, "ignored")
+		usage, ok := NewUsageExtractor(FormatClaude).Observe(line, "ignored")
 		if !ok || usage.FastMode != c.fast || usage.OutputTokens != 5 {
 			t.Errorf("%s: usage = %+v, ok=%v; want FastMode=%v", c.usage, usage, ok, c.fast)
 		}
@@ -135,7 +135,7 @@ func TestUsageExtractorReadsClaudeSpeed(t *testing.T) {
 }
 
 func TestUsageExtractorRejectsImpossibleCodexCacheSubset(t *testing.T) {
-	extractor := NewUsageExtractor("codex")
+	extractor := NewUsageExtractor(FormatCodex)
 	_, _ = extractor.Observe([]byte(`{"type":"turn_context","payload":{"model":"gpt-test"}}`), "context")
 	line := []byte(`{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":4,"cached_input_tokens":5,"output_tokens":1}}}}`)
 	if usage, ok := extractor.Observe(line, "record"); ok {
@@ -144,7 +144,7 @@ func TestUsageExtractorRejectsImpossibleCodexCacheSubset(t *testing.T) {
 }
 
 func TestUsageExtractorPreservesUnclassifiedClaudeCacheWrites(t *testing.T) {
-	extractor := NewUsageExtractor("claude")
+	extractor := NewUsageExtractor(FormatClaude)
 	line := []byte(`{"type":"assistant","message":{"id":"old-shape","model":"claude-test","usage":{"input_tokens":2,"cache_creation_input_tokens":17,"cache_read_input_tokens":3,"output_tokens":5}}}`)
 	usage, ok := extractor.Observe(line, "ignored")
 	if !ok || usage.CacheWriteUnclassifiedTokens != 17 || usage.CacheWrite5mTokens != 0 || usage.CacheWrite1hTokens != 0 {
@@ -153,15 +153,13 @@ func TestUsageExtractorPreservesUnclassifiedClaudeCacheWrites(t *testing.T) {
 }
 
 func TestSupportsUsage(t *testing.T) {
-	for _, agent := range []string{"claude", " CODEX "} {
-		if !SupportsUsage(agent) {
-			t.Fatalf("SupportsUsage(%q) = false", agent)
+	for _, format := range []Format{FormatClaude, FormatCodex} {
+		if !format.SupportsUsage() {
+			t.Fatalf("%v.SupportsUsage() = false", format)
 		}
 	}
-	for _, agent := range []string{"shell", "plugin-driver", ""} {
-		if SupportsUsage(agent) {
-			t.Fatalf("SupportsUsage(%q) = true", agent)
-		}
+	if FormatNone.SupportsUsage() {
+		t.Fatalf("FormatNone.SupportsUsage() = true")
 	}
 }
 func TestFollowerRestoresCodexFastSettingsAcrossTurnsAndOffsets(t *testing.T) {
@@ -180,7 +178,7 @@ func TestFollowerRestoresCodexFastSettingsAcrossTurnsAndOffsets(t *testing.T) {
 	}
 	wantFast := []bool{true, true, false, true, false}
 	for start, offset := range append([]int64{0}, offsets...) {
-		follower, err := NewFollower(path, "codex", offset)
+		follower, err := NewFollower(path, FormatCodex, offset)
 		if err != nil {
 			t.Fatal(err)
 		}

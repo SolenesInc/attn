@@ -88,6 +88,19 @@ func (t codexFolderTrust) known() bool {
 	return t.saved == codexTrusted || t.saved == "" && t.worked
 }
 
+func (d *Daemon) trustCodexFolder(folder string) error {
+	d.codexTrustMu.Lock()
+	defer d.codexTrustMu.Unlock()
+	config, err := readCodexTrust(codexConfigPath())
+	if err != nil {
+		return err
+	}
+	if config.level(folder) != "" {
+		return nil
+	}
+	return config.addTrusted(folder)
+}
+
 func (d *Daemon) refuseUnknownCodexFolder(opts *ptybackend.SpawnOptions, profile string) error {
 	if opts.Agent != string(protocol.SessionAgentCodex) || opts.UnattendedLaunch.IsZero() {
 		return nil

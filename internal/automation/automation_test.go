@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/victorarias/attn/internal/launchcontract"
 )
 
 func TestDefinitionPersistsCanonicalDirectory(t *testing.T) {
@@ -139,7 +141,7 @@ location: {type: directory, path: PATH}
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snapshot.Launch.ApprovalProductMode != "auto" || snapshot.Launch.ApprovalDriverMode != "auto_review" {
+	if snapshot.Launch.ApprovalProductMode != "auto" || snapshot.Launch.ApprovalDriverMode != "auto" {
 		t.Fatalf("effective launch=%#v", snapshot.Launch)
 	}
 	if snapshot.Launch.Agent != "codex" || snapshot.Launch.DirectoryTrust != "configured_directory" || snapshot.Launch.Recovery != "adopt_or_restart_fresh" {
@@ -538,5 +540,21 @@ func TestOnlyScheduledTriggersAcceptGuard(t *testing.T) {
 				t.Fatalf("guard validation = %v, want the trigger named in the refusal", err)
 			}
 		})
+	}
+}
+
+func TestContinuationContractTreatsLegacyAutoReviewAsAuto(t *testing.T) {
+	loc := LocationSpec{Type: "directory", Path: t.TempDir()}
+	legacy := NewContinuationContract("Review.", EffectiveLaunch{
+		Agent:               "codex",
+		ApprovalProductMode: launchcontract.ApprovalAuto,
+		ApprovalDriverMode:  launchcontract.ApprovalAutoReview,
+		DirectoryTrust:      launchcontract.TrustConfiguredDirectory,
+		Recovery:            launchcontract.RecoveryAdoptOrRestartFresh,
+	}, loc)
+	current := legacy
+	current.Launch.ApprovalDriverMode = launchcontract.ApprovalAuto
+	if !legacy.Equal(current) || !current.Equal(legacy) {
+		t.Fatal("stored auto_review snapshot should match current auto continuation contract")
 	}
 }

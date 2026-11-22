@@ -42,7 +42,7 @@ func (d *Daemon) validateAutomationSpec(raw string) (automation.DefinitionSpec, 
 	if err := d.validateHarnessModelEffort(spec.Launch.Driver, spec.Launch.Model, spec.Launch.Effort); err != nil {
 		return spec, nil, err
 	}
-	if err := d.factsOrNone(spec.Launch.Driver).Accept(harness.Request{AutoApprove: true}); err != nil {
+	if err := d.factsOrNone(spec.Launch.Driver).Accept(harness.Request{AutoApprove: true, AutomationExecutable: spec.Launch.Executable != ""}); err != nil {
 		return spec, nil, err
 	}
 	for identity, source := range spec.Location.RepositorySources.Overrides {

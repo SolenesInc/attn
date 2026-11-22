@@ -130,7 +130,11 @@ func (f fileConversations) Page(_ context.Context, ref harness.ConversationRef, 
 	if path == "" {
 		return transcript.EventPage{}, harness.ErrTranscriptUnavailable
 	}
-	return transcript.ReadEventPage(path, ref.Harness, cursor, limit)
+	var format transcript.Format
+	if t, ok := harness.As[harness.Transcript](f.d.harnessOf(ref.Harness)); ok {
+		format = t.Format()
+	}
+	return transcript.ReadEventPage(path, format, cursor, limit)
 }
 
 func (f fileConversations) LastReply(_ context.Context, ref harness.ConversationRef, max int) (string, error) {

@@ -43,7 +43,7 @@ func TestReadEventPageCodexNormalizesAndRedacts(t *testing.T) {
 		`{"timestamp":"2026-07-19T10:00:05Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-2","output":"Process exited with code 2"}}`,
 	)
 
-	page, err := ReadEventPage(path, "codex", "", 100)
+	page, err := ReadEventPage(path, FormatCodex, "", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestReadEventPageCodexPaginatedRolloutShowsUserMessages(t *testing.T) {
 		`{"timestamp":"2026-11-17T01:31:52Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Reading the seed."}]}}`,
 	)
 
-	page, err := ReadEventPage(path, "codex", "", 10)
+	page, err := ReadEventPage(path, FormatCodex, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestReadEventPageCodexResponseItemAssistantOnly(t *testing.T) {
 		`{"timestamp":"2026-07-19T10:00:01Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"First output."},{"type":"output_text","text":"Second output."}]}}`,
 	)
 
-	page, err := ReadEventPage(path, "codex", "", 10)
+	page, err := ReadEventPage(path, FormatCodex, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestReadEventPageCodexDeduplicatesPairedAssistantAcrossFollowPoll(t *testin
 		`{"timestamp":"2026-07-19T10:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"checking now"}}`,
 	)
 
-	first, err := ReadEventPage(path, "codex", "", 10)
+	first, err := ReadEventPage(path, FormatCodex, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestReadEventPageCodexDeduplicatesPairedAssistantAcrossFollowPoll(t *testin
 		`{"timestamp":"2026-07-19T10:00:01Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"checking now"}]}}`,
 	)
 
-	second, err := ReadEventPage(path, "codex", first.NextCursor, 10)
+	second, err := ReadEventPage(path, FormatCodex, first.NextCursor, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +157,7 @@ func TestReadEventPageCursorResumesWithoutDuplicates(t *testing.T) {
 		`{"type":"event_msg","payload":{"type":"agent_message","message":"two"}}`,
 	)
 
-	first, err := ReadEventPage(path, "codex", "", 1)
+	first, err := ReadEventPage(path, FormatCodex, "", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestReadEventPageCursorResumesWithoutDuplicates(t *testing.T) {
 		t.Fatalf("first page = %#v", first)
 	}
 
-	second, err := ReadEventPage(path, "codex", first.NextCursor, 10)
+	second, err := ReadEventPage(path, FormatCodex, first.NextCursor, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,21 +181,21 @@ func TestReadEventPageCursorResumesWithinMultiEventRecord(t *testing.T) {
 	path := writeEventTranscript(t,
 		`{"type":"assistant","message":{"content":[{"type":"text","text":"working"},{"type":"tool_use","id":"tool-1","name":"Read","input":{"file_path":"/tmp/x"}}]}}`,
 	)
-	first, err := ReadEventPage(path, "claude", "", 1)
+	first, err := ReadEventPage(path, FormatClaude, "", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(first.Events) != 1 || first.Events[0].Kind != EventKindAssistant {
 		t.Fatalf("first page = %#v", first)
 	}
-	second, err := ReadEventPage(path, "claude", first.NextCursor, 1)
+	second, err := ReadEventPage(path, FormatClaude, first.NextCursor, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(second.Events) != 1 || second.Events[0].Kind != EventKindToolCall {
 		t.Fatalf("second page = %#v", second)
 	}
-	third, err := ReadEventPage(path, "claude", second.NextCursor, 1)
+	third, err := ReadEventPage(path, FormatClaude, second.NextCursor, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestReadEventPageWaitsForCompleteFinalRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	first, err := ReadEventPage(path, "codex", "", 10)
+	first, err := ReadEventPage(path, FormatCodex, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +223,7 @@ func TestReadEventPageWaitsForCompleteFinalRecord(t *testing.T) {
 	if err := os.WriteFile(path, []byte(prefix+partial+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	second, err := ReadEventPage(path, "codex", first.NextCursor, 10)
+	second, err := ReadEventPage(path, FormatCodex, first.NextCursor, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,11 +241,11 @@ func TestReadEventPageRejectsCursorFromAnotherTranscript(t *testing.T) {
 		`{"type":"session_meta","payload":{"id":"two"}}`,
 		`{"type":"event_msg","payload":{"type":"user_message","message":"two"}}`,
 	)
-	first, err := ReadEventPage(firstPath, "codex", "", 1)
+	first, err := ReadEventPage(firstPath, FormatCodex, "", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = ReadEventPage(secondPath, "codex", first.NextCursor, 1)
+	_, err = ReadEventPage(secondPath, FormatCodex, first.NextCursor, 1)
 	if !errors.Is(err, ErrCursorMismatch) {
 		t.Fatalf("error = %v, want ErrCursorMismatch", err)
 	}
@@ -259,7 +259,7 @@ func TestReadEventPageClaude(t *testing.T) {
 			`{"timestamp":"2026-07-19T11:00:02Z","type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tool-1","content":"done","is_error":false}]}}`,
 			`{"timestamp":"2026-07-19T11:00:03Z","type":"result","is_error":true,"result":"runtime failed"}`,
 		)
-		page, err := ReadEventPage(path, "claude", "", 10)
+		page, err := ReadEventPage(path, FormatClaude, "", 10)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -297,7 +297,7 @@ func TestReadEventPageExtractsThinking(t *testing.T) {
 		`{"timestamp":"2026-08-07T10:00:00Z","type":"assistant","message":{"content":[{"type":"thinking","thinking":"The migration is failing because token=super-secret-value is stale."},{"type":"text","text":"Fixing the migration."},{"type":"tool_use","id":"t1","name":"Edit","input":{"file":"m.sql"}}]}}`,
 		`{"timestamp":"2026-08-07T10:00:01Z","type":"assistant","message":{"content":[{"type":"thinking","thinking":"   "}]}}`,
 	)
-	page, err := ReadEventPage(path, "claude", "", 50)
+	page, err := ReadEventPage(path, FormatClaude, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +326,7 @@ func TestReadEventPageExtractsCodexAgentReasoning(t *testing.T) {
 		`{"timestamp":"2026-08-07T10:00:00Z","type":"event_msg","payload":{"type":"agent_reasoning","text":"**Preparing workspace and researching CVEs**"}}`,
 		`{"timestamp":"2026-08-07T10:00:01Z","type":"response_item","payload":{"type":"reasoning","summary":[],"encrypted_content":"gAAAAAB..."}}`,
 	)
-	page, err := ReadEventPage(path, "codex", "", 50)
+	page, err := ReadEventPage(path, FormatCodex, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -351,7 +351,7 @@ func TestHeadCursorSkipsEverythingAlreadyWritten(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HeadCursor: %v", err)
 	}
-	page, err := ReadEventPage(path, "claude", cursor, 10)
+	page, err := ReadEventPage(path, FormatClaude, cursor, 10)
 	if err != nil {
 		t.Fatalf("ReadEventPage: %v", err)
 	}
@@ -360,7 +360,7 @@ func TestHeadCursorSkipsEverythingAlreadyWritten(t *testing.T) {
 	}
 
 	appendEventTranscript(t, path, `{"type":"assistant","message":{"content":[{"type":"text","text":"third"}]}}`)
-	page, err = ReadEventPage(path, "claude", cursor, 10)
+	page, err = ReadEventPage(path, FormatClaude, cursor, 10)
 	if err != nil {
 		t.Fatalf("ReadEventPage after append: %v", err)
 	}
@@ -385,7 +385,7 @@ func TestHeadCursorLeavesAPartialRecordUnread(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HeadCursor: %v", err)
 	}
-	page, err := ReadEventPage(path, "claude", cursor, 10)
+	page, err := ReadEventPage(path, FormatClaude, cursor, 10)
 	if err != nil {
 		t.Fatalf("ReadEventPage: %v", err)
 	}
@@ -416,7 +416,7 @@ func TestReadEventPageHidesStateMarkers(t *testing.T) {
 		`{"timestamp":"2026-07-19T10:00:03Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"<!-- attn:state=idle -->"}]}}`,
 	)
 
-	page, err := ReadEventPage(path, "codex", "", 10)
+	page, err := ReadEventPage(path, FormatCodex, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}

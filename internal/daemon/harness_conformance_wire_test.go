@@ -30,7 +30,9 @@ func TestEveryHarnessAnswersTheContractWithItsFake(t *testing.T) {
 		return true
 	})
 
-	terminalOptions := harness.Options{Resume: true, Yolo: true, AutoApprove: true, InitialPrompt: true, LaunchInstructions: true, ModelPin: true, EffortPin: true, ContextCap: true, Picker: true}
+	terminalOptions := harness.Options{Resume: true, Yolo: true, AutoApprove: true, AutomationExecutable: true, InitialPrompt: true, LaunchInstructions: true, ModelPin: true, EffortPin: true, ContextCap: true, Picker: true}
+	codexOptions := terminalOptions
+	codexOptions.AutomationExecutable = false
 	sigmaOptions := terminalOptions
 	sigmaOptions.ContextCap, sigmaOptions.Provider = false, true
 	home := conformance.Home
@@ -43,7 +45,7 @@ func TestEveryHarnessAnswersTheContractWithItsFake(t *testing.T) {
 			OneShot:   true,
 		},
 		{
-			Facts: harness.Facts{ID: "codex", DisplayName: "Codex", Logo: adapterLogo(t, 24, "codex_logo.svg"), Options: terminalOptions, Executable: harness.Executable{Default: "codex", Env: "ATTN_CODEX_EXECUTABLE"}, CacheTTL: 30 * time.Minute, Tiers: map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "gpt-6-luna", Effort: "low"}, modeltiers.Standard: {Model: "gpt-5.6-terra"}, modeltiers.Deep: {Model: "gpt-6.1-sol"}}, Advisor: harness.ModelChoice{Model: "gpt-5.6-luna", Effort: "xhigh"}, ModelDiscovery: true, Activity: true, ConversationIsSession: true,
+			Facts: harness.Facts{ID: "codex", DisplayName: "Codex", Logo: adapterLogo(t, 24, "codex_logo.svg"), Options: codexOptions, Executable: harness.Executable{Default: "codex", Env: "ATTN_CODEX_EXECUTABLE"}, CacheTTL: 30 * time.Minute, Tiers: map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "gpt-6-luna", Effort: "low"}, modeltiers.Standard: {Model: "gpt-5.6-terra"}, modeltiers.Deep: {Model: "gpt-6.1-sol"}}, Advisor: harness.ModelChoice{Model: "gpt-5.6-luna", Effort: "xhigh"}, ModelDiscovery: true, Activity: true, ConversationIsSession: true,
 				Signals: harness.Signals{TurnStarts: harness.TurnStartsReported, ReportsTools: true, Heartbeat: 500 * time.Millisecond, ReviewerDwell: time.Minute, ConfirmsFirstTurn: true, Titles: harness.TitlesCodex, StopsReadable: true, StopsClassified: true, ForgetsRecoveredClaim: true}},
 			SkillDirs:      []string{home + "/.agents/skills"},
 			ServerTerminal: "codex-server-6c1d6ced",

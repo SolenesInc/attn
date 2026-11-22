@@ -1,18 +1,8 @@
-internal/automation/automation.go	Effective	names "codex"
-internal/automation/automation.go	refuseCodexExecutable	names "codex"
 internal/daemon/bus.go	buildWireProjections	reaches Daemon.projectSharedCodex (internal/daemon/codex_versions.go)
-internal/daemon/crew_folder_trust.go	(*Daemon).trustCodexFolder	reaches codexConfigPath (internal/daemon/codex_trust.go)
-internal/daemon/crew_folder_trust.go	(*Daemon).trustCodexFolder	reaches codexTrustConfig (internal/daemon/codex_trust.go)
-internal/daemon/crew_folder_trust.go	(*Daemon).trustCodexFolder	reaches codexTrustConfig.addTrusted (internal/daemon/codex_trust.go)
-internal/daemon/crew_folder_trust.go	(*Daemon).trustCodexFolder	reaches codexTrustConfig.level (internal/daemon/codex_trust.go)
-internal/daemon/crew_folder_trust.go	(*Daemon).trustCodexFolder	reaches readCodexTrust (internal/daemon/codex_trust.go)
 internal/daemon/daemon.go	(*Daemon).handleConnectionContext	reaches Daemon.handleCodexStatus (internal/daemon/codex_update.go)
 internal/daemon/daemon.go	(*Daemon).handleConnectionContext	reaches Daemon.handleRestartSharedCodexCLI (internal/daemon/codex_update.go)
 internal/daemon/daemon.go	Daemon	reaches codexShared (internal/daemon/codex_shared.go)
-internal/daemon/markdown_annotation_payload.go	formatQuestionPayload	reaches shellQuote (internal/daemon/codex_update.go)
-internal/daemon/markdown_annotation_payload.go	formatReviewPayload	reaches shellQuote (internal/daemon/codex_update.go)
 internal/daemon/monitor_home_calls.go	(*Daemon).classifierHarness	names "claude"
-internal/daemon/monitor_leaves.go	(*Daemon).renameLink	reaches Daemon.renameLinkedConversation (internal/daemon/link_runtime.go)
 internal/daemon/profiles.go	(*Daemon).sendProfileSnapshots	reaches Daemon.codexShared (internal/daemon/codex_shared.go)
 internal/daemon/profiles.go	(*Daemon).sendProfileSnapshots	reaches codexShared (internal/daemon/codex_shared.go)
 internal/daemon/profiles.go	(*Daemon).sendProfileSnapshots	reaches codexShared.changedMessage (internal/daemon/codex_versions.go)
@@ -31,16 +21,7 @@ internal/hooks/codex.go	GenerateCodexServerConfigOverrides	names "codex"
 internal/protocol/constants.go	SessionAgentClaude	names "claude"
 internal/protocol/constants.go	SessionAgentCodex	names "codex"
 internal/protocol/constants.go	SessionAgentSigma	names "sigma"
-internal/ptyworker/debug_capture.go	shouldEnableDebugCapture	names "claude"
-internal/ptyworker/debug_capture.go	shouldEnableDebugCapture	names "codex"
 internal/sessioninstructions/service.go	(Service).Ask	names "codex"
-internal/transcript/events.go	parseEventLine	names "claude"
-internal/transcript/events.go	parseEventLine	names "codex"
-internal/transcript/usage.go	(*UsageExtractor).Observe	names "claude"
-internal/transcript/usage.go	(*UsageExtractor).Observe	names "codex"
-internal/transcript/usage.go	(*UsageExtractor).seedCodexUsageBefore	names "codex"
-internal/transcript/usage.go	SupportsUsage	names "claude"
-internal/transcript/usage.go	SupportsUsage	names "codex"
 native/crates/attn-app/src/automations/form/model.rs		names "codex"
 native/crates/attn-app/src/automations/form/view.rs		names "codex"
 native/crates/attn-app/src/automations/form/view.rs		names "codex"

@@ -10,6 +10,7 @@ import (
 
 // Transcript is the optional part of a harness whose terminal writes a transcript file attn tails.
 type Transcript interface {
+	Format() transcript.Format
 	// Watcher reads the live transcript's lines; nil when attn does not watch this harness's transcript.
 	Watcher() TranscriptWatcher
 	UsageSources(root string) transcript.UsageSourceResolver

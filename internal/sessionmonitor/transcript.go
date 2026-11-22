@@ -26,6 +26,7 @@ const TranscriptPoll stepclock.Name = "transcript-poll"
 type transcriptWatcher struct {
 	monitor       *Monitor
 	agent         protocol.SessionAgent
+	format        transcript.Format
 	cwd           string
 	startedAt     time.Time
 	preferredPath string
@@ -43,10 +44,11 @@ type transcriptWatcher struct {
 
 type AssistantWindow = harness.AssistantWindow
 
-func newTranscriptWatcher(monitor *Monitor, agent protocol.SessionAgent, cwd string, startedAt time.Time, behavior harness.TranscriptWatcher) *transcriptWatcher {
+func newTranscriptWatcher(monitor *Monitor, agent protocol.SessionAgent, format transcript.Format, cwd string, startedAt time.Time, behavior harness.TranscriptWatcher) *transcriptWatcher {
 	return &transcriptWatcher{
 		monitor:   monitor,
 		agent:     agent,
+		format:    format,
 		cwd:       cwd,
 		startedAt: startedAt,
 		behavior:  behavior,
@@ -203,7 +205,7 @@ func (m *Monitor) startTranscriptWatcher(transcriptPath string, replaceCurrent b
 		m.mu.Unlock()
 		return
 	}
-	watcher := newTranscriptWatcher(m, agent, cwd, startedAt, behavior)
+	watcher := newTranscriptWatcher(m, agent, part.Format(), cwd, startedAt, behavior)
 	watcher.preferredPath = preferredPath
 
 	// Admitted before it replaces the previous watcher, so a refused start leaves that one to stop's final reconcile.
@@ -225,7 +227,7 @@ func (m *Monitor) startTranscriptWatcher(transcriptPath string, replaceCurrent b
 }
 
 func (w *transcriptWatcher) applyUsageAvailability(batch transcript.FollowBatch) {
-	if len(batch.Records) == 0 || transcript.SupportsUsage(string(w.agent)) {
+	if len(batch.Records) == 0 || w.format.SupportsUsage() {
 		return
 	}
 	for _, event := range batch.Events {
@@ -397,7 +399,11 @@ func (m *Monitor) TranscriptEvents(cursor string) (activity.Window, error) {
 	m.mu.Lock()
 	agent := m.agent
 	m.mu.Unlock()
-	return activity.Read(path, string(agent), cursor)
+	var format transcript.Format
+	if part, ok := m.transcriptPart(agent); ok {
+		format = part.Format()
+	}
+	return activity.Read(path, format, cursor)
 }
 
 func (m *Monitor) TranscriptHead() (string, error) {
@@ -516,7 +522,7 @@ func (w *transcriptWatcher) run(predecessorDone <-chan struct{}) {
 			} else if bootstrapBytes > 0 {
 				startOffset = 0
 			}
-			follower, err = transcript.NewFollower(transcriptPath, string(w.agent), startOffset)
+			follower, err = transcript.NewFollower(transcriptPath, w.format, startOffset)
 			if err != nil {
 				m.logf("transcript watcher: follower init failed session=%s path=%s err=%v", label, transcriptPath, err)
 				w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript could not be read", false)

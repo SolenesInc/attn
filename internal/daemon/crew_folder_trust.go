@@ -19,16 +19,3 @@ func (d *Daemon) trustCrewHome(member crew.Member, agent, home string) {
 		d.logf("crew: %s's harness will ask whether to trust its home %s: %v", member.Name, home, err)
 	}
 }
-
-func (d *Daemon) trustCodexFolder(folder string) error {
-	d.codexTrustMu.Lock()
-	defer d.codexTrustMu.Unlock()
-	config, err := readCodexTrust(codexConfigPath())
-	if err != nil {
-		return err
-	}
-	if config.level(folder) != "" {
-		return nil
-	}
-	return config.addTrusted(folder)
-}

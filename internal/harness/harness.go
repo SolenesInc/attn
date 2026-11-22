@@ -134,6 +134,11 @@ type Trust interface {
 	TrustFolder(dir string) error
 }
 
+// Renamer is the optional part of a harness whose server mirrors a session's name.
+type Renamer interface {
+	Rename(session SessionID, label string)
+}
+
 // Planned is what Plan decided for a launch.
 type Planned struct {
 	Lifetime Lifetime
@@ -329,26 +334,28 @@ type Executable struct {
 
 // Options are the launch options a harness takes.
 type Options struct {
-	Resume             bool
-	Yolo               bool
-	AutoApprove        bool
-	InitialPrompt      bool
-	LaunchInstructions bool
-	ModelPin           bool
-	EffortPin          bool
-	ContextCap         bool
-	Picker             bool
-	Provider           bool
+	Resume               bool
+	Yolo                 bool
+	AutoApprove          bool
+	AutomationExecutable bool
+	InitialPrompt        bool
+	LaunchInstructions   bool
+	ModelPin             bool
+	EffortPin            bool
+	ContextCap           bool
+	Picker               bool
+	Provider             bool
 }
 
 // Request is the launch options a caller asks of a harness.
 type Request struct {
-	InitialPrompt bool
-	Model         bool
-	Effort        bool
-	Yolo          bool
-	AutoApprove   bool
-	ContextCap    bool
+	InitialPrompt        bool
+	Model                bool
+	Effort               bool
+	Yolo                 bool
+	AutoApprove          bool
+	AutomationExecutable bool
+	ContextCap           bool
 }
 
 // Accept refuses the first option in r that the harness does not take.
@@ -367,6 +374,9 @@ func (f Facts) Accept(r Request) error {
 		if option.asked && !option.taken {
 			return fmt.Errorf("agent %q %s", f.ID, option.refusal)
 		}
+	}
+	if r.AutomationExecutable && !f.Options.AutomationExecutable {
+		return protocol.Refuse(protocol.RefusalInvalidInput, "launch.executable cannot be set for %s: every %s session runs on its profile's shared app server; set %s_executable with {attn settings set %s_executable <path>} instead", f.ID, f.DisplayName, f.ID, f.ID)
 	}
 	return nil
 }

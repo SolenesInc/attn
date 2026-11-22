@@ -173,9 +173,6 @@ func ValidateDefinition(s *DefinitionSpec) error {
 	if s.Launch.Driver == "" {
 		return errors.New("launch.driver is required")
 	}
-	if err := refuseCodexExecutable(s.Launch); err != nil {
-		return err
-	}
 	switch s.Location.Type {
 	case "directory":
 		if err := canonicalizeDirectory(&s.Location.Path, "location.path"); err != nil {
@@ -462,26 +459,14 @@ func ParsePullRequestURL(raw string) (host, owner, repository string, number int
 	return identityParts[0], identityParts[1], identityParts[2], number, nil
 }
 
-func refuseCodexExecutable(launch LaunchSpec) error {
-	if strings.EqualFold(launch.Driver, "codex") && launch.Executable != "" {
-		return protocol.Refuse(protocol.RefusalInvalidInput, "launch.executable cannot be set for codex: every Codex session runs on its profile's shared app server; set codex_executable with {attn settings set codex_executable <path>} instead")
-	}
-	return nil
-}
-
 func Effective(spec DefinitionSpec, revision int) (Snapshot, error) {
-	mode := launchcontract.ApprovalAuto
-	switch strings.ToLower(spec.Launch.Driver) {
-	case "codex":
-		mode = launchcontract.ApprovalAutoReview
-	}
 	launch := EffectiveLaunch{
 		Agent:               spec.Launch.Driver,
 		Model:               spec.Launch.Model,
 		Effort:              spec.Launch.Effort,
 		Executable:          spec.Launch.Executable,
 		ApprovalProductMode: launchcontract.ApprovalAuto,
-		ApprovalDriverMode:  mode,
+		ApprovalDriverMode:  launchcontract.ApprovalAuto,
 		DirectoryTrust:      launchcontract.TrustConfiguredDirectory,
 		Recovery:            launchcontract.RecoveryAdoptOrRestartFresh,
 	}
@@ -511,8 +496,15 @@ func (s Snapshot) ContinuationContract() ContinuationContract {
 	return NewContinuationContract(s.Prompt, s.Launch, s.Location)
 }
 
+func normalizedLaunch(launch EffectiveLaunch) EffectiveLaunch {
+	if launch.ApprovalDriverMode == launchcontract.ApprovalAutoReview {
+		launch.ApprovalDriverMode = launchcontract.ApprovalAuto
+	}
+	return launch
+}
+
 func (c ContinuationContract) Equal(other ContinuationContract) bool {
-	if c.Prompt != other.Prompt || c.Launch != other.Launch {
+	if c.Prompt != other.Prompt || normalizedLaunch(c.Launch) != normalizedLaunch(other.Launch) {
 		return false
 	}
 	leftJSON, leftErr := json.Marshal(c.Location)
