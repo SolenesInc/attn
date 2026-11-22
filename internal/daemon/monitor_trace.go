@@ -105,14 +105,13 @@ func (d *Daemon) stateExplainResult(ctx context.Context, session *protocol.Sessi
 
 func (d *Daemon) handleHookNotification(conn net.Conn, msg *protocol.HookNotificationMessage) {
 	sessionID := d.sessionInTerminal(msg.ID)
-	kind := strings.TrimSpace(msg.NotificationType)
-	if kind == "" {
-		d.sendError(conn, "missing notification_type")
+	if msg.Turn == "" {
+		d.sendError(conn, "missing turn")
 		return
 	}
-	message := strings.TrimSpace(protocol.Deref(msg.Message))
-	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHookNotify, Detail: message}, kind)
-	d.events().Turn(harness.FromTerminal(msg.ID), time.Now(), notificationTurn(kind, message))
+	detail := strings.TrimSpace(protocol.Deref(msg.Detail))
+	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHookNotify, Detail: detail}, string(msg.Turn))
+	d.events().Turn(harness.FromTerminal(msg.ID), time.Now(), notificationTurn(msg.Turn, detail))
 	d.sendOK(conn)
 }
 
@@ -141,11 +140,11 @@ func (d *Daemon) handleHookCompaction(conn net.Conn, msg *protocol.HookCompactio
 	d.sendOK(conn)
 }
 
-func notificationTurn(kind, message string) harness.TurnEvent {
-	switch kind {
-	case "permission_prompt":
-		return harness.TurnEvent{Turn: harness.TurnApproval, Detail: message}
-	case "idle_prompt":
+func notificationTurn(turn protocol.HookTurn, detail string) harness.TurnEvent {
+	switch turn {
+	case protocol.HookTurnApproval:
+		return harness.TurnEvent{Turn: harness.TurnApproval, Detail: detail}
+	case protocol.HookTurnPromptIdle:
 		return harness.TurnEvent{Turn: harness.TurnPromptIdle}
 	}
 	return harness.TurnEvent{Turn: harness.TurnUnknown}

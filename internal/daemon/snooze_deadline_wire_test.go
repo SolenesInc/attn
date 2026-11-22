@@ -84,7 +84,7 @@ func snoozeReport(t *testing.T, w *world, cli *client.Client, id, state string) 
 	report := cli.UpdateState
 	if state == protocol.StatePendingApproval {
 		report = func(id protocol.TerminalID, _ string) error {
-			return cli.RecordNotification(id, "permission_prompt", "Allow edit?")
+			return cli.RecordNotification(id, protocol.HookTurnApproval, "Allow edit?")
 		}
 	}
 	if err := report(protocol.TerminalID(w.Terminal(id)), state); err != nil {

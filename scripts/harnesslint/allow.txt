@@ -21,6 +21,7 @@ internal/prreadiness/readiness.go ModeCodex the Codex review bot's watch mode, n
 internal/prreadiness/readiness.go ParseMode the Codex review bot's watch mode, not a harness
 internal/prreadiness/readiness.go ValidateConfig the Codex review bot's watch mode, not a harness
 internal/protocol/generated.go PullRequestWatchModeCodex the Codex review bot's watch mode, not a harness
-internal/prompts/tool_families_generated.go catalogFamilies generated from the catalog; the `attn codex` command it names is flagged in cli/attn/src/route.rs
-cli/attn/src/commands/top_level_generated.rs * generated from the catalog; the `attn codex` command it names is flagged in cli/attn/src/route.rs
+internal/prompts/tool_families_generated.go catalogFamilies generated from the catalog; the `attn codex` command it names is leak 2's, in cli/attn/src/commands/codex.rs
+cli/attn/src/commands/top_level_generated.rs * generated from the catalog; the `attn codex` command it names is leak 2's, in cli/attn/src/commands/codex.rs
+cli/attn/src/commands/codex.rs * leak 2: shared Codex's update and restart command, `attn codex`
 cli/attn/src/commands/model.rs * an example reply in the command's help text

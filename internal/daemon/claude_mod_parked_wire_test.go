@@ -25,9 +25,7 @@ func parkOnBackgroundWork(t *testing.T, w *world, cli *client.Client, run *fakea
 	t.Helper()
 	run.Stream("The deploy is running in the background.")
 	transcript := fakeagent.WriteClaudeTranscript(t, w.Path("shop"), run.ConversationID)
-	if err := cli.SendStop(protocol.TerminalID(w.Terminal(session)), transcript.Path, client.StopFacts{BackgroundTasks: []protocol.StopBackgroundTask{
-		{Type: "background_session", Status: "running", Name: protocol.Ptr("./deploy.sh staging")},
-	}}); err != nil {
+	if err := cli.SendStop(protocol.TerminalID(w.Terminal(session)), transcript.Path, client.StopFacts{RunningWork: []string{`background_session "./deploy.sh staging"`}}); err != nil {
 		t.Fatalf("stop with background work: %v", err)
 	}
 	run.ProgramStatus("state=done:app=claude-code")
@@ -67,7 +65,7 @@ func TestAnAnnotationReturnedWhileWorkingWaitsOutAnApprovalThenReachesTheParkedA
 	waits := annotationReturnedWhileWorking(t, w, app, run, session)
 	terminal := protocol.TerminalID(w.Terminal(session))
 
-	if err := cli.RecordNotification(terminal, "permission_prompt", "Allow edit?"); err != nil {
+	if err := cli.RecordNotification(terminal, protocol.HookTurnApproval, "Allow edit?"); err != nil {
 		t.Fatalf("report the permission prompt: %v", err)
 	}
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })

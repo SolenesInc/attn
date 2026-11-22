@@ -168,7 +168,7 @@ func TestAReviewThatCannotBeDeliveredTypesNothingAndKeepsTheDraft(t *testing.T) 
 	setSetting(t, r.app, "auto_approve_enabled", "false")
 	marks := []protocol.MarkdownAnnotation{codeMark("q1", "question", "Why?", 7, 4, 4, "    sum := a + b")}
 	saveDocumentAnnotations(r.app, r.doc, marks)
-	if err := r.w.Client().RecordNotification(protocol.TerminalID(r.w.Terminal(r.session)), "permission_prompt", "Allow edit?"); err != nil {
+	if err := r.w.Client().RecordNotification(protocol.TerminalID(r.w.Terminal(r.session)), protocol.HookTurnApproval, "Allow edit?"); err != nil {
 		t.Fatalf("ask for approval: %v", err)
 	}
 	testworld.AwaitSession(r.app, r.session, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })

@@ -241,7 +241,7 @@ func TestAnnotationsThatCannotBeDeliveredTypeNothingAndKeepTheDraft(t *testing.T
 	marks := []protocol.MarkdownAnnotation{{ID: "g1", Type: "global", Text: protocol.Ptr("tighten the intro"), CreatedAt: 1}}
 	saveDocumentAnnotations(app, plan, marks)
 
-	if err := cli.RecordNotification(protocol.TerminalID(w.Terminal(session)), "permission_prompt", "Allow edit?"); err != nil {
+	if err := cli.RecordNotification(protocol.TerminalID(w.Terminal(session)), protocol.HookTurnApproval, "Allow edit?"); err != nil {
 		t.Fatalf("ask for approval: %v", err)
 	}
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })

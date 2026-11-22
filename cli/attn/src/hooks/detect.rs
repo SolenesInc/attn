@@ -10,8 +10,6 @@ struct FileEditInput<'a> {
     file_path: Raw<'a>,
     #[serde(borrow, default)]
     notebook_path: Raw<'a>,
-    #[serde(borrow, default)]
-    path: Raw<'a>,
 }
 
 #[derive(Deserialize)]
@@ -30,13 +28,35 @@ struct SendFilesInput<'a> {
     files: Raw<'a>,
 }
 
-pub fn markdown_edits(tool_name: &str, tool_input: Raw<'_>, cwd: &str, home: &str) -> Vec<String> {
-    let paths = match tool_name {
-        "Edit" | "Write" | "MultiEdit" | "NotebookEdit" | "edit" | "write" => {
-            edited_file_paths(tool_input).unwrap_or_default()
-        }
-        "apply_patch" => patched_paths(tool_input).unwrap_or_default(),
-        _ => return Vec::new(),
+pub struct Tools {
+    pub edits: &'static [&'static str],
+    pub patches: &'static [&'static str],
+    pub sends: &'static [&'static str],
+    pub shell: fn(&str) -> bool,
+}
+
+impl Tools {
+    pub fn knows(&self, tool_name: &str) -> bool {
+        self.edits.contains(&tool_name)
+            || self.patches.contains(&tool_name)
+            || self.sends.contains(&tool_name)
+            || (self.shell)(tool_name)
+    }
+}
+
+pub fn markdown_edits(
+    tools: &Tools,
+    tool_name: &str,
+    tool_input: Raw<'_>,
+    cwd: &str,
+    home: &str,
+) -> Vec<String> {
+    let paths = if tools.edits.contains(&tool_name) {
+        edited_file_paths(tool_input).unwrap_or_default()
+    } else if tools.patches.contains(&tool_name) {
+        patched_paths(tool_input).unwrap_or_default()
+    } else {
+        return Vec::new();
     };
     let markdown = paths
         .iter()
@@ -90,7 +110,6 @@ fn edited_file_paths(tool_input: Raw<'_>) -> Option<Vec<String>> {
     Some(vec![
         strict_text(input.file_path)?,
         strict_text(input.notebook_path)?,
-        strict_text(input.path)?,
     ])
 }
 
@@ -127,8 +146,8 @@ fn is_markdown(path: &str) -> bool {
     matches!(extension(path).to_lowercase().as_str(), ".md" | ".markdown")
 }
 
-pub fn sent_files(tool_name: &str, tool_input: Raw<'_>, cwd: &str) -> Vec<String> {
-    if tool_name != "SendUserFile" {
+pub fn sent_files(tools: &Tools, tool_name: &str, tool_input: Raw<'_>, cwd: &str) -> Vec<String> {
+    if !tools.sends.contains(&tool_name) {
         return Vec::new();
     }
     sent_file_paths(tool_input).map_or_default(|paths| resolve_unique(paths, cwd))
@@ -171,11 +190,12 @@ fn resolve_unique(paths: Vec<String>, cwd: &str) -> Vec<String> {
 }
 
 pub fn pull_requests_created(
+    tools: &Tools,
     tool_name: &str,
     tool_input: Raw<'_>,
     tool_response: Raw<'_>,
 ) -> Vec<String> {
-    if !is_shell_tool(tool_name) || !has_gh_pr_create(&shell_command(tool_input)) {
+    if !(tools.shell)(tool_name) || !has_gh_pr_create(&shell_command(tool_input)) {
         return Vec::new();
     }
     let Some(response) = tool_response else {
@@ -199,11 +219,6 @@ pub fn pull_requests_created(
         }
     }
     urls
-}
-
-fn is_shell_tool(name: &str) -> bool {
-    let name = name.trim().to_lowercase();
-    name == "bash" || name == "shell" || name == "exec_command" || name.ends_with(".exec_command")
 }
 
 fn shell_command(tool_input: Raw<'_>) -> String {
@@ -322,9 +337,22 @@ mod tests {
         .unwrap()
     }
 
+    fn tools(tool_name: &str) -> &'static Tools {
+        crate::hooks::tools_for(tool_name).unwrap_or(&NO_TOOLS)
+    }
+
+    static NO_TOOLS: Tools = Tools {
+        edits: &[],
+        patches: &[],
+        sends: &[],
+        shell: |_| false,
+    };
+
     #[derive(Deserialize)]
     struct MarkdownEditCase<'a> {
         name: String,
+        #[serde(default = "seen_by_hooks")]
+        hooks: bool,
         tool_name: String,
         #[serde(borrow)]
         tool_input: &'a RawValue,
@@ -334,6 +362,10 @@ mod tests {
         want: Vec<String>,
     }
 
+    fn seen_by_hooks() -> bool {
+        true
+    }
+
     #[test]
     fn markdown_edits_against_the_shared_corpus() {
         let corpus = fixture("markdown-edits.json");
@@ -341,12 +373,14 @@ mod tests {
         assert!(!cases.is_empty());
         for case in cases {
             let got = markdown_edits(
+                tools(&case.tool_name),
                 &case.tool_name,
                 Some(case.tool_input),
                 &case.cwd,
                 &case.home,
             );
-            assert_eq!(got, case.want, "{}", case.name);
+            let want: &[String] = if case.hooks { &case.want } else { &[] };
+            assert_eq!(got, want, "{}", case.name);
         }
     }
 
@@ -399,7 +433,11 @@ mod tests {
         ];
         for (name, tool, input, cwd, want) in cases {
             let input = raw(input);
-            assert_eq!(sent_files(tool, Some(&input), cwd), want, "{name}");
+            assert_eq!(
+                sent_files(tools(tool), tool, Some(&input), cwd),
+                want,
+                "{name}"
+            );
         }
     }
 
@@ -421,6 +459,7 @@ mod tests {
         assert!(!cases.is_empty());
         for case in cases {
             let got = pull_requests_created(
+                tools(&case.tool_name),
                 &case.tool_name,
                 Some(case.tool_input),
                 Some(case.tool_output),
@@ -433,7 +472,7 @@ mod tests {
     fn pull_request_without_a_tool_response() {
         let input = raw(r#"{"command":"gh pr create --fill"}"#);
         assert_eq!(
-            pull_requests_created("Bash", Some(&input), None),
+            pull_requests_created(tools("Bash"), "Bash", Some(&input), None),
             Vec::<String>::new()
         );
     }
@@ -461,6 +500,7 @@ mod tests {
             assert_eq!(payload.tool_name, "Bash");
             assert_eq!(
                 pull_requests_created(
+                    tools(&payload.tool_name),
                     &payload.tool_name,
                     Some(payload.tool_input),
                     Some(payload.tool_response)
@@ -470,6 +510,7 @@ mod tests {
 
             let gh_create = raw(r#"{"command":"gh pr create --fill"}"#);
             let created = pull_requests_created(
+                tools(&payload.tool_name),
                 &payload.tool_name,
                 Some(&gh_create),
                 Some(payload.tool_response),

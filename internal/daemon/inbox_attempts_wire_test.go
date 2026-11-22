@@ -264,7 +264,7 @@ func TestBusyAndApprovalBlockedInboxesKeepTheirFullAttemptBudget(t *testing.T) {
 				synctest.Wait()
 				switch approval {
 				case "permission_prompt":
-					if err := cli.RecordNotification(protocol.TerminalID(w.Terminal(recipient.id)), "permission_prompt", "Allow edit?"); err != nil {
+					if err := cli.RecordNotification(protocol.TerminalID(w.Terminal(recipient.id)), protocol.HookTurnApproval, "Allow edit?"); err != nil {
 						t.Fatal(err)
 					}
 				case "permission_request":

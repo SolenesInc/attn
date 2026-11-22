@@ -29,7 +29,7 @@ func TestStateExplainAttributesEachHookClaimToItsSourceAndCollapsesRepeats(t *te
 		testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 		w.advance(time.Second)
 		notified := time.Now()
-		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "permission_prompt", "Claude needs your permission"); err != nil {
+		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), protocol.HookTurnApproval, "Claude needs your permission"); err != nil {
 			t.Fatalf("notify s1: %v", err)
 		}
 		w.advance(time.Second)
@@ -45,7 +45,7 @@ func TestStateExplainAttributesEachHookClaimToItsSourceAndCollapsesRepeats(t *te
 			stateExplainRow{source: "permission_mode", claim: "auto", outcome: "observed", at: reported},
 			stateExplainRow{source: "hook_state", claim: "working", outcome: "observed", at: reported},
 			stateExplainRow{source: "resolver", claim: "working", outcome: "applied", cause: "resolver_observation", detail: "bracket_open", at: reported},
-			stateExplainRow{source: "hook_notify", claim: "permission_prompt", outcome: "observed", detail: "Claude needs your permission", at: notified},
+			stateExplainRow{source: "hook_notify", claim: "approval", outcome: "observed", detail: "Claude needs your permission", at: notified},
 		)
 
 		first := time.Now()

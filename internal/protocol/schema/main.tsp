@@ -670,18 +670,24 @@ model StateMessage {
   prompt?: string;
 }
 
-// HookNotificationMessage carries Claude's `Notification` hook. The hook is
-// harness-owned and typed — notification_type is "permission_prompt" when the
-// agent is blocked on approval and "idle_prompt" when it has been waiting on
-// the user for 60s — so it needs no message-string parsing. It arrives ~6s
-// after the underlying event, which makes it a corroborator rather than a
-// low-latency trigger.
+// What a harness's notification hook says about the turn. The CLI's file for
+// that harness reads the harness's own notification types; the daemon reads
+// only the turn. A notification arrives some seconds after what it reports, so
+// it corroborates the turn rather than triggering on it.
+enum HookTurn {
+  approval,
+  prompt_idle,
+  `unknown`,
+}
+
+// detail is the harness's message, or for an unknown turn the harness's own
+// notification type.
 @extension("x-on", #{ here: true })
 model HookNotificationMessage {
   cmd: "hook_notification";
   id: TerminalID;
-  notification_type: string;
-  message?: string;
+  turn: HookTurn;
+  detail?: string;
 }
 
 // HookStopFailureMessage carries Claude's `StopFailure` hook, which replaces
@@ -1076,30 +1082,19 @@ model QuickCaptureUnreadMessage {
 
 // A Stop is not always terminal: the turn may yield with background work still
 // in flight (it auto-resumes on completion) or park on a pending scheduled
-// wakeup. These carry that as FACTS observed by the hook — the statuses of the
-// agent's background tasks, and how many scheduled wakeups are pending — and the
-// daemon decides what they mean. The hook used to decide and report a state
-// instead, which hid the facts from the daemon and forced the hook to query the
-// daemon back for the chief-of-staff role it needed to decide.
+// wakeup. The hook reports what the turn left as facts, and the daemon decides
+// what they mean, with the chief-of-staff role the hook does not know.
 //
-// Both are optional: a hook binary predating them reports neither, and the
-// daemon then classifies the stop as terminal, which is what such a hook already
-// caused by omitting the state update.
+// running_work names each piece of work still running, as "<kind> \"<name>\"",
+// so a stop judged non-terminal names what held it. scheduled_work counts the
+// scheduled wakeups still pending. Absent, the turn left nothing.
 @extension("x-on", #{ here: true })
 model StopMessage {
   cmd: "stop";
   id: TerminalID;
   transcript_path: string;
-  background_tasks?: StopBackgroundTask[];
-  pending_session_crons?: int32;
-}
-
-// One entry of the harness's background task list at stop time, verbatim: the
-// daemon logs type and name so a stop judged non-terminal names what held it.
-model StopBackgroundTask {
-  type: string;
-  status: string;
-  name?: string;
+  running_work?: string[];
+  scheduled_work?: int32;
 }
 
 // Files an agent just wrote, reported by the tool-use hook after a completed

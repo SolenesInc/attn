@@ -578,7 +578,7 @@ func runEnv(run *fakeagent.Run, name string) string {
 
 func permissionQuestion(t *testing.T, w *world, app *testworld.Peer, session string) {
 	t.Helper()
-	if err := w.Client().RecordNotification(protocol.TerminalID(w.Terminal(session)), "permission_prompt", "Allow edit?"); err != nil {
+	if err := w.Client().RecordNotification(protocol.TerminalID(w.Terminal(session)), protocol.HookTurnApproval, "Allow edit?"); err != nil {
 		t.Fatalf("ask for approval: %v", err)
 	}
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })

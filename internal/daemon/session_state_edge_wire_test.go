@@ -27,7 +27,7 @@ func TestAHookReportedStateReachesTheAppOnTheEdge(t *testing.T) {
 				return cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking)
 			}, protocol.SessionStateWorking},
 			{func() error {
-				return cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "permission_prompt", "Allow edit?")
+				return cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), protocol.HookTurnApproval, "Allow edit?")
 			}, protocol.SessionStatePendingApproval},
 			{func() error {
 				return cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking)
@@ -241,7 +241,7 @@ func TestAHookThatStrongerEvidenceOutranksDoesNotMoveTheSession(t *testing.T) {
 		if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
 			t.Fatalf("register: %v", err)
 		}
-		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "permission_prompt", "Allow edit?"); err != nil {
+		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), protocol.HookTurnApproval, "Allow edit?"); err != nil {
 			t.Fatalf("notify: %v", err)
 		}
 		testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })

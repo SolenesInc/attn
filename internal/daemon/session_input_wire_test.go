@@ -75,7 +75,7 @@ func TestResendingAnAnnotationBatchNeverPressesEnterOnAnApprovalThatOpenedSince(
 		}
 		typed := len(term.Inputs())
 
-		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal(session)), "permission_prompt", "Allow rm -rf build?"); err != nil {
+		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal(session)), protocol.HookTurnApproval, "Allow rm -rf build?"); err != nil {
 			t.Fatal(err)
 		}
 		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })

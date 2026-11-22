@@ -1,4 +1,3 @@
-cli/attn/src/route.rs		names "codex"
 cmd/attnd/agent_launch.go	runAgentDirectly	names "codex"
 cmd/attnd/main.go	runWrapper	names "codex"
 cmd/attnd/preflight.go	parsePreflightArgs	names "codex"

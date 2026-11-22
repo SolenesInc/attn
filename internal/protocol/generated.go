@@ -6129,14 +6129,14 @@ type HookNotificationMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// Detail corresponds to the JSON schema field "detail".
+	Detail *string `json:"detail,omitempty,omitzero"`
+
 	// ID corresponds to the JSON schema field "id".
 	ID TerminalID `json:"id"`
 
-	// Message corresponds to the JSON schema field "message".
-	Message *string `json:"message,omitempty,omitzero"`
-
-	// NotificationType corresponds to the JSON schema field "notification_type".
-	NotificationType string `json:"notification_type"`
+	// Turn corresponds to the JSON schema field "turn".
+	Turn HookTurn `json:"turn"`
 }
 
 type HookStopFailureMessage struct {
@@ -6152,6 +6152,12 @@ type HookStopFailureMessage struct {
 	// ID corresponds to the JSON schema field "id".
 	ID TerminalID `json:"id"`
 }
+
+type HookTurn string
+
+const HookTurnApproval HookTurn = "approval"
+const HookTurnPromptIdle HookTurn = "prompt_idle"
+const HookTurnUnknown HookTurn = "unknown"
 
 type InboxRingOutcome string
 
@@ -13704,30 +13710,18 @@ type StateMessage struct {
 	State string `json:"state"`
 }
 
-type StopBackgroundTask struct {
-	// Name corresponds to the JSON schema field "name".
-	Name *string `json:"name,omitempty,omitzero"`
-
-	// Status corresponds to the JSON schema field "status".
-	Status string `json:"status"`
-
-	// Type corresponds to the JSON schema field "type".
-	Type string `json:"type"`
-}
-
 type StopMessage struct {
-	// BackgroundTasks corresponds to the JSON schema field "background_tasks".
-	BackgroundTasks []StopBackgroundTask `json:"background_tasks,omitempty,omitzero"`
-
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
 	ID TerminalID `json:"id"`
 
-	// PendingSessionCrons corresponds to the JSON schema field
-	// "pending_session_crons".
-	PendingSessionCrons *int `json:"pending_session_crons,omitempty,omitzero"`
+	// RunningWork corresponds to the JSON schema field "running_work".
+	RunningWork []string `json:"running_work,omitempty,omitzero"`
+
+	// ScheduledWork corresponds to the JSON schema field "scheduled_work".
+	ScheduledWork *int `json:"scheduled_work,omitempty,omitzero"`
 
 	// TranscriptPath corresponds to the JSON schema field "transcript_path".
 	TranscriptPath string `json:"transcript_path"`

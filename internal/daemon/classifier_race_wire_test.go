@@ -20,7 +20,7 @@ func TestAVerdictLandingAfterAnApprovalLeavesTheApprovalStanding(t *testing.T) {
 		}
 		verdict := w.HeadlessTask()
 
-		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "permission_prompt", "Allow the migration to run?"); err != nil {
+		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), protocol.HookTurnApproval, "Allow the migration to run?"); err != nil {
 			t.Fatalf("notify: %v", err)
 		}
 		asking := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })

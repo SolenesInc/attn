@@ -324,14 +324,14 @@ func (c *Client) UpdateStateFromHookEvidence(id protocol.TerminalID, state strin
 	return err
 }
 
-func (c *Client) RecordNotification(id protocol.TerminalID, notificationType string, message string) error {
+func (c *Client) RecordNotification(id protocol.TerminalID, turn protocol.HookTurn, detail string) error {
 	msg := protocol.HookNotificationMessage{
-		Cmd:              protocol.CmdHookNotification,
-		ID:               id,
-		NotificationType: notificationType,
+		Cmd:  protocol.CmdHookNotification,
+		ID:   id,
+		Turn: turn,
 	}
-	if strings.TrimSpace(message) != "" {
-		msg.Message = protocol.Ptr(message)
+	if strings.TrimSpace(detail) != "" {
+		msg.Detail = protocol.Ptr(detail)
 	}
 	_, err := c.send(msg)
 	return err
@@ -615,17 +615,17 @@ func (c *Client) AgentMsgStatus(messageID string, senderSessionID protocol.Sessi
 }
 
 type StopFacts struct {
-	BackgroundTasks     []protocol.StopBackgroundTask
-	PendingSessionCrons int
+	RunningWork   []string
+	ScheduledWork int
 }
 
 func (c *Client) SendStop(id protocol.TerminalID, transcriptPath string, facts StopFacts) error {
 	msg := protocol.StopMessage{
-		Cmd:                 protocol.CmdStop,
-		ID:                  id,
-		TranscriptPath:      transcriptPath,
-		BackgroundTasks:     facts.BackgroundTasks,
-		PendingSessionCrons: protocol.Ptr(facts.PendingSessionCrons),
+		Cmd:            protocol.CmdStop,
+		ID:             id,
+		TranscriptPath: transcriptPath,
+		RunningWork:    facts.RunningWork,
+		ScheduledWork:  protocol.Ptr(facts.ScheduledWork),
 	}
 	_, err := c.send(msg)
 	return err

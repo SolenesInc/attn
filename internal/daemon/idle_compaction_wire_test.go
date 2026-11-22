@@ -37,9 +37,7 @@ func (a *bubbleClaude) stopWithBackgroundWork(text string) {
 	a.t.Helper()
 	synctest.Wait()
 	a.transcript.Answer(text)
-	if err := a.cli.SendStop(protocol.TerminalID(a.self), a.transcript.Path, client.StopFacts{BackgroundTasks: []protocol.StopBackgroundTask{
-		{Type: "background_session", Status: "running", Name: protocol.Ptr("./deploy.sh staging")},
-	}}); err != nil {
+	if err := a.cli.SendStop(protocol.TerminalID(a.self), a.transcript.Path, client.StopFacts{RunningWork: []string{`background_session "./deploy.sh staging"`}}); err != nil {
 		a.t.Fatalf("%s stops with background work: %v", a.id, err)
 	}
 }
@@ -159,7 +157,7 @@ func TestAnAgentWithBackgroundWorkDoesNotGoStuckAfterAnIdleCompaction(t *testing
 				agent.term.ProgramStatus(pty.ProgramDone)
 				answerTurnVerdict(t, w, tc.verdict)
 				w.advance(time.Minute)
-				if err := cli.RecordNotification(protocol.TerminalID(agent.self), "idle_prompt", "Claude is waiting for your input"); err != nil {
+				if err := cli.RecordNotification(protocol.TerminalID(agent.self), protocol.HookTurnPromptIdle, "Claude is waiting for your input"); err != nil {
 					t.Fatalf("notify idle_prompt: %v", err)
 				}
 				w.advance(tc.wait)
@@ -186,7 +184,7 @@ func TestACompactionInsideTheParkedWindowLeavesTheExpiryToOpenTheTurn(t *testing
 		agent.term.ProgramStatus(pty.ProgramDone)
 		answerTurnVerdict(t, w, "PARKED")
 		w.advance(time.Minute)
-		if err := cli.RecordNotification(protocol.TerminalID(agent.self), "idle_prompt", "Claude is waiting for your input"); err != nil {
+		if err := cli.RecordNotification(protocol.TerminalID(agent.self), protocol.HookTurnPromptIdle, "Claude is waiting for your input"); err != nil {
 			t.Fatalf("notify idle_prompt: %v", err)
 		}
 		w.advance(time.Minute)

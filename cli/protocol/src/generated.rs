@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "5637139de838";
+pub const PROTOCOL_VERSION: &str = "4bb35280e651";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -5510,10 +5510,10 @@ impl HookCompactionMessage {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct HookNotificationMessage {
     pub cmd: String,
-    pub id: TerminalID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub message: Option<String>,
-    pub notification_type: String,
+    pub detail: Option<String>,
+    pub id: TerminalID,
+    pub turn: HookTurn,
 }
 
 impl HookNotificationMessage {
@@ -5543,6 +5543,7 @@ impl HookStopFailureMessage {
         }
     }
 }
+pub type HookTurn = String;
 pub type InboxRingOutcome = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct InboxRingRecord {
@@ -12029,20 +12030,13 @@ impl StateMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct StopBackgroundTask {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    pub status: String,
-    pub r#type: String,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StopMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub background_tasks: Option<Vec<StopBackgroundTask>>,
     pub cmd: String,
     pub id: TerminalID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pending_session_crons: Option<i64>,
+    pub running_work: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheduled_work: Option<i64>,
     pub transcript_path: String,
 }
 

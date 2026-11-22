@@ -1,3 +1,5 @@
+mod claude;
+mod codex;
 pub mod detect;
 pub mod input;
 
@@ -9,9 +11,10 @@ use attn_protocol::go_values::{
 };
 use attn_protocol::{
     FilesEditedMessage, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage,
-    OpenSentFilesMessage, PullRequestCreatedMessage, SetSessionResumeIDMessage, StateMessage,
-    StopBackgroundTask, StopMessage,
+    HookTurn, OpenSentFilesMessage, PullRequestCreatedMessage, SetSessionResumeIDMessage,
+    StateMessage, StopMessage,
 };
+use detect::Tools;
 use input::{HookInput, text};
 use std::io::{self, Write};
 
@@ -28,6 +31,57 @@ pub const COMMANDS: &[&str] = &[
 
 pub struct Failure {
     pub refusal: Option<String>,
+}
+
+pub struct Notification {
+    pub turn: HookTurn,
+    pub detail: Option<String>,
+}
+
+pub struct StopFailure {
+    pub error_type: String,
+    pub message: Option<String>,
+}
+
+pub trait HookHarness: Sync {
+    fn tools(&self) -> &'static Tools;
+
+    fn running_work(&self, _input: &HookInput<'_>) -> Vec<String> {
+        Vec::new()
+    }
+
+    fn scheduled_work(&self, _input: &HookInput<'_>) -> usize {
+        0
+    }
+
+    fn notification(&self, _input: &HookInput<'_>) -> Option<Notification> {
+        None
+    }
+
+    fn stop_failure(&self, _input: &HookInput<'_>) -> Option<StopFailure> {
+        None
+    }
+
+    fn compaction_trigger(&self, _input: &HookInput<'_>) -> Option<String> {
+        None
+    }
+
+    fn used_by_subagent(&self, _input: &HookInput<'_>) -> bool {
+        false
+    }
+}
+
+const HARNESSES: &[&dyn HookHarness] = &[&claude::Claude, &codex::Codex];
+
+pub fn tools_for(tool_name: &str) -> Option<&'static Tools> {
+    HARNESSES
+        .iter()
+        .map(|harness| harness.tools())
+        .find(|tools| tools.knows(tool_name))
+}
+
+fn first<T>(read: impl Fn(&dyn HookHarness) -> Option<T>) -> Option<T> {
+    HARNESSES.iter().find_map(|harness| read(*harness))
 }
 
 pub fn terminal_from_env(getenv: &dyn Fn(&str) -> String) -> String {
@@ -154,7 +208,7 @@ impl Hook<'_> {
         if profile.is_empty() {
             return id;
         }
-        codex_thread_terminal(&profile, &text(input.session_id))
+        codex_thread_terminal(&profile, &text(input.field("session_id")))
     }
 
     fn client(&mut self, caller: &str) -> Client<'_> {
@@ -172,27 +226,23 @@ impl Hook<'_> {
         }
         let mut message = StopMessage::new();
         message.id.clone_from(&id);
-        message.transcript_path = text(input.transcript_path);
-        message.pending_session_crons = i64::try_from(input.session_cron_count()).ok();
-        let tasks: Vec<StopBackgroundTask> = input
-            .background_tasks()
-            .into_iter()
-            .map(|task| StopBackgroundTask {
-                r#type: text(task.r#type),
-                status: text(task.status),
-                name: Some(text(task.description)),
-            })
+        message.transcript_path = text(input.field("transcript_path"));
+        let scheduled: usize = HARNESSES.iter().map(|h| h.scheduled_work(&input)).sum();
+        message.scheduled_work = i64::try_from(scheduled).ok();
+        let running: Vec<String> = HARNESSES
+            .iter()
+            .flat_map(|h| h.running_work(&input))
             .collect();
-        message.background_tasks = (!tasks.is_empty()).then_some(tasks);
+        message.running_work = (!running.is_empty()).then_some(running);
         self.client(&id)
             .send(&message)
             .map_err(|error| failed("sending stop", error))
     }
 
     fn observe_conversation(&mut self, id: &str, input: &HookInput<'_>) {
-        let session = text(input.session_id);
+        let session = text(input.field("session_id"));
         let session = session.trim();
-        let transcript = text(input.transcript_path);
+        let transcript = text(input.field("transcript_path"));
         let transcript = transcript.trim();
         if session.is_empty() || transcript.is_empty() {
             return;
@@ -256,9 +306,9 @@ impl Hook<'_> {
         let mut message = StateMessage::new();
         message.id.clone_from(&id);
         message.state = state;
-        message.permission_mode = non_blank(&text(input.permission_mode));
+        message.permission_mode = non_blank(&text(input.field("permission_mode")));
         message.hook_event = non_blank(&hook_event);
-        message.prompt = non_blank(&text(input.prompt));
+        message.prompt = non_blank(&text(input.field("prompt")));
         self.client(&id)
             .send(&message)
             .map_err(|error| failed("updating state", error))
@@ -271,14 +321,13 @@ impl Hook<'_> {
         }
         let stdin = read_stdin();
         let input = HookInput::parse(&stdin);
-        let notification_type = text(input.notification_type);
-        if notification_type.trim().is_empty() {
+        let Some(notification) = first(|h| h.notification(&input)) else {
             return Ok(());
-        }
+        };
         let mut message = HookNotificationMessage::new();
         message.id.clone_from(&id);
-        message.notification_type = notification_type;
-        message.message = non_blank(&text(input.message));
+        message.turn = notification.turn;
+        message.detail = notification.detail;
         self.client(&id)
             .send(&message)
             .map_err(|error| failed("recording notification", error))
@@ -291,15 +340,13 @@ impl Hook<'_> {
         }
         let stdin = read_stdin();
         let input = HookInput::parse(&stdin);
-        let error_type = text(input.error_type);
-        let error_type = error_type.trim();
-        if error_type.is_empty() {
+        let Some(failure) = first(|h| h.stop_failure(&input)) else {
             return Ok(());
-        }
+        };
         let mut message = HookStopFailureMessage::new();
         message.id.clone_from(&id);
-        message.error_type = error_type.to_string();
-        message.error_message = non_blank(&text(input.error_message));
+        message.error_type = failure.error_type;
+        message.error_message = failure.message;
         self.client(&id)
             .send(&message)
             .map_err(|error| failed("recording stop failure", error))
@@ -316,7 +363,7 @@ impl Hook<'_> {
         let mut message = HookCompactionMessage::new();
         message.id.clone_from(&id);
         message.active = active;
-        message.trigger = non_blank(&text(input.trigger));
+        message.trigger = first(|h| h.compaction_trigger(&input));
         self.client(&id)
             .send(&message)
             .map_err(|error| failed("recording compaction", error))
@@ -329,8 +376,9 @@ impl Hook<'_> {
         if id.is_empty() {
             return Err(usage("_hook-tool-use [session_id]"));
         }
+        let used_by_subagent = HARNESSES.iter().any(|h| h.used_by_subagent(&input));
         let client = self.client(&id);
-        if text(input.agent_id).trim().is_empty() {
+        if !used_by_subagent {
             let mut message = StateMessage::new();
             message.id.clone_from(&id);
             message.state = STATE_WORKING.to_string();
@@ -338,10 +386,14 @@ impl Hook<'_> {
                 .send(&message)
                 .map_err(|error| failed("updating state", error))?;
         }
-        let tool_name = text(input.tool_name);
-        let cwd = text(input.cwd);
+        let tool_name = text(input.field("tool_name"));
+        let Some(tools) = tools_for(&tool_name) else {
+            return Ok(());
+        };
+        let cwd = text(input.field("cwd"));
         let home = std::env::var("HOME").unwrap_or_default();
-        let edited = detect::markdown_edits(&tool_name, input.tool_input, &cwd, &home);
+        let edited =
+            detect::markdown_edits(tools, &tool_name, input.field("tool_input"), &cwd, &home);
         if !edited.is_empty() {
             let mut message = FilesEditedMessage::new();
             message.id.clone_from(&id);
@@ -350,7 +402,7 @@ impl Hook<'_> {
                 say(&format!("warning: could not record edited files: {error}"));
             }
         }
-        let sent = detect::sent_files(&tool_name, input.tool_input, &cwd);
+        let sent = detect::sent_files(tools, &tool_name, input.field("tool_input"), &cwd);
         if !sent.is_empty() {
             let mut message = OpenSentFilesMessage::new();
             message.terminal_id = Some(id.clone());
@@ -359,8 +411,12 @@ impl Hook<'_> {
                 say(&format!("warning: could not open sent files: {error}"));
             }
         }
-        for url in detect::pull_requests_created(&tool_name, input.tool_input, input.tool_response)
-        {
+        for url in detect::pull_requests_created(
+            tools,
+            &tool_name,
+            input.field("tool_input"),
+            input.field("tool_response"),
+        ) {
             let mut message = PullRequestCreatedMessage::new();
             message.terminal_id = Some(id.clone());
             message.url.clone_from(&url);

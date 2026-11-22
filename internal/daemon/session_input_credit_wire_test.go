@@ -51,7 +51,7 @@ func TestAnApprovalKeypressEarnsNoCreditAndHoldsAttnsDoorbellForTheQuietWindow(t
 		app.TypeLine(agent.id, "edit the config")
 		agent.reply("Which file? <!-- attn:state=waiting_input -->")
 		agent.term.OnSubmit(nil)
-		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal(agent.id)), "permission_prompt", "Allow edit?"); err != nil {
+		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal(agent.id)), protocol.HookTurnApproval, "Allow edit?"); err != nil {
 			t.Fatal(err)
 		}
 		w.advance(0)

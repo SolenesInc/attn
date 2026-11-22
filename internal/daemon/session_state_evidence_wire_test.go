@@ -57,10 +57,10 @@ func TestAnIdleSessionStaysIdleHoweverLongItIsQuiet(t *testing.T) {
 		settle func(w *world, cli *client.Client) error
 	}{
 		{"idle at its prompt", "prompt_idle", func(w *world, cli *client.Client) error {
-			return cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "idle_prompt", "Claude is waiting for your input")
+			return cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), protocol.HookTurnPromptIdle, "Claude is waiting for your input")
 		}},
 		{"idle with only a cron pending", "cron_pending", func(w *world, cli *client.Client) error {
-			return cli.SendStop(protocol.TerminalID(w.Terminal("s1")), "", client.StopFacts{PendingSessionCrons: 1})
+			return cli.SendStop(protocol.TerminalID(w.Terminal("s1")), "", client.StopFacts{ScheduledWork: 1})
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -68,7 +68,7 @@ func TestAnIdleSessionStaysIdleHoweverLongItIsQuiet(t *testing.T) {
 				app, cli := w.App(), w.Client()
 				sessionStateEvidenceAtWork(t, w, app, cli)
 				atWork := len(sessionUpdatesOf(app, "s1"))
-				if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "some_future_type", "something new"); err != nil {
+				if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), protocol.HookTurnUnknown, "some_future_type"); err != nil {
 					t.Fatalf("notify some_future_type: %v", err)
 				}
 				w.advance(time.Second)
@@ -149,9 +149,7 @@ func TestAStopWithBackgroundWorkHoldsTheSessionUntilItClears(t *testing.T) {
 		app, cli := w.App(), w.Client()
 		sessionStateEvidenceAtWork(t, w, app, cli)
 
-		if err := cli.SendStop(protocol.TerminalID(w.Terminal("s1")), "", client.StopFacts{BackgroundTasks: []protocol.StopBackgroundTask{
-			{Type: "background_session", Status: "running", Name: protocol.Ptr("gh run watch 1234")},
-		}}); err != nil {
+		if err := cli.SendStop(protocol.TerminalID(w.Terminal("s1")), "", client.StopFacts{RunningWork: []string{`background_session "gh run watch 1234"`}}); err != nil {
 			t.Fatalf("stop with background work: %v", err)
 		}
 		testworld.AwaitSession(app, "s1", func(s protocol.Session) bool {
@@ -162,7 +160,7 @@ func TestAStopWithBackgroundWorkHoldsTheSessionUntilItClears(t *testing.T) {
 			t.Fatalf("a minute into its background work the session is %s (%s), want working", got.State, protocol.Deref(got.StateReason))
 		}
 
-		if err := cli.SendStop(protocol.TerminalID(w.Terminal("s1")), "", client.StopFacts{PendingSessionCrons: 1}); err != nil {
+		if err := cli.SendStop(protocol.TerminalID(w.Terminal("s1")), "", client.StopFacts{ScheduledWork: 1}); err != nil {
 			t.Fatalf("stop with only a cron pending: %v", err)
 		}
 		w.advance(5 * time.Second)

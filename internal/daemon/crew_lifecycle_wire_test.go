@@ -149,7 +149,7 @@ func TestACrewDayMidTurnOrAwaitingApprovalIsLeftAlone(t *testing.T) {
 	}{
 		{"working", func(*testing.T, *bubbleClaude) {}},
 		{"pending_approval", func(t *testing.T, day *bubbleClaude) {
-			if err := day.cli.RecordNotification(protocol.TerminalID(day.self), "permission_prompt", "Allow edit?"); err != nil {
+			if err := day.cli.RecordNotification(protocol.TerminalID(day.self), protocol.HookTurnApproval, "Allow edit?"); err != nil {
 				t.Fatal(err)
 			}
 		}},

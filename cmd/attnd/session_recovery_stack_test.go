@@ -34,7 +34,7 @@ func TestLiveAgentsKeepTheirStateAndSnoozeAcrossADaemonRestart(t *testing.T) {
 	}
 	ask := func(id string) {
 		t.Helper()
-		if err := cli.RecordNotification(protocol.TerminalID(app.Terminal(id)), "permission_prompt", "Allow edit?"); err != nil {
+		if err := cli.RecordNotification(protocol.TerminalID(app.Terminal(id)), protocol.HookTurnApproval, "Allow edit?"); err != nil {
 			t.Fatalf("ask for approval: %v", err)
 		}
 		testworld.AwaitSession(app, id, func(x protocol.Session) bool { return x.State == protocol.SessionStatePendingApproval })

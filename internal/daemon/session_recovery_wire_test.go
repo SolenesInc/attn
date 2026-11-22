@@ -38,7 +38,7 @@ func TestRecoveryKeepsEveryConversationThatCanResumeWithItsPaneAndReapsTheRest(t
 
 	claudeWorking, _ := begin(fakeagent.Claude)
 	claudeAsking, _ := begin(fakeagent.Claude)
-	if err := cli.RecordNotification(protocol.TerminalID(w.Terminal(claudeAsking)), "permission_prompt", "Allow edit?"); err != nil {
+	if err := cli.RecordNotification(protocol.TerminalID(w.Terminal(claudeAsking)), protocol.HookTurnApproval, "Allow edit?"); err != nil {
 		t.Fatalf("ask for approval: %v", err)
 	}
 	testworld.AwaitSession(app, claudeAsking, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })

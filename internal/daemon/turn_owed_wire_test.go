@@ -46,7 +46,7 @@ func TestATurnOpensAtAWaitSurvivesTheWorkAndOnlySettleClosesIt(t *testing.T) {
 		if protocol.Deref(report(protocol.SessionStateWorking, working).TurnOwed) {
 			t.Fatal("a session at work owes a turn")
 		}
-		if err := cli.SendStop(protocol.TerminalID(w.Terminal("s1")), "", client.StopFacts{PendingSessionCrons: 1}); err != nil {
+		if err := cli.SendStop(protocol.TerminalID(w.Terminal("s1")), "", client.StopFacts{ScheduledWork: 1}); err != nil {
 			t.Fatalf("stop: %v", err)
 		}
 		finished := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
@@ -86,7 +86,7 @@ func TestATurnOpensAtAWaitSurvivesTheWorkAndOnlySettleClosesIt(t *testing.T) {
 		}
 		w.advance(time.Second)
 		asking := report(protocol.SessionStatePendingApproval, func() error {
-			return cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "permission_prompt", "Allow edit?")
+			return cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), protocol.HookTurnApproval, "Allow edit?")
 		})
 		if !protocol.Deref(asking.TurnOwed) {
 			t.Fatal("an approval request after a settle opened no turn")

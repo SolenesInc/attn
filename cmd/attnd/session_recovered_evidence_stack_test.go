@@ -18,7 +18,7 @@ func TestAnAgentThatMovedOnWhileTheDaemonWasDownComesBackAsItNowIs(t *testing.T)
 	setSetting(t, app, "auto_approve_enabled", "false")
 	finished, finishedRun := claudeAtWork(t, s, app, "finished")
 	answered, answeredRun := claudeAtWork(t, s, app, "answered")
-	if err := cli.RecordNotification(protocol.TerminalID(app.Terminal(answered)), "permission_prompt", "Allow edit?"); err != nil {
+	if err := cli.RecordNotification(protocol.TerminalID(app.Terminal(answered)), protocol.HookTurnApproval, "Allow edit?"); err != nil {
 		t.Fatalf("ask for approval: %v", err)
 	}
 	testworld.AwaitSession(app, answered, func(x protocol.Session) bool { return x.State == protocol.SessionStatePendingApproval })

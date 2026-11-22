@@ -124,7 +124,7 @@ func TestAnInterruptedCountdownVanishesAndOnlyASettleClosesTheTurn(t *testing.T)
 			}
 		}, protocol.SessionStateWaitingInput, true},
 		{"the agent asks for approval", func(t *testing.T, app *testworld.Peer, cli *client.Client) {
-			if err := cli.RecordNotification(protocol.TerminalID(app.Terminal("s1")), "permission_prompt", "Allow edit?"); err != nil {
+			if err := cli.RecordNotification(protocol.TerminalID(app.Terminal("s1")), protocol.HookTurnApproval, "Allow edit?"); err != nil {
 				t.Fatalf("notify: %v", err)
 			}
 		}, protocol.SessionStatePendingApproval, true},
@@ -397,7 +397,7 @@ func TestUserActivityHoldsTheCountdownUntilQuiet(t *testing.T) {
 			w.advance(0)
 			autoSettleHeld(t, app)
 
-			if err := cli.RecordNotification(protocol.TerminalID(app.Terminal("s1")), "permission_prompt", "Allow edit?"); err != nil {
+			if err := cli.RecordNotification(protocol.TerminalID(app.Terminal("s1")), protocol.HookTurnApproval, "Allow edit?"); err != nil {
 				t.Fatalf("notify: %v", err)
 			}
 			asking := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })

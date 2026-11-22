@@ -94,7 +94,7 @@ fn native_command(name: &str, verb: Option<&str>, argv: &[OsString]) -> Option<N
         },
         ("conversation", _) => native(conversation::run, true),
         ("worktree", _) => native(worktree::run, true),
-        ("codex", _) => native(codex::run, true),
+        (codex::COMMAND, _) => native(codex::run, true),
         ("enrollment", _) => native(enrollment::run, true),
         ("instance", Some("resolve")) => Native {
             checks: Checks::InstanceOnly,

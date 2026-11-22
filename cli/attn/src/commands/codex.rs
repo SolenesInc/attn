@@ -21,6 +21,8 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::process::Command;
 
+pub const COMMAND: &str = "codex";
+
 const HELP: &str = r"usage: attn codex <command>
 
   status [--profile <name|id>] [--json]

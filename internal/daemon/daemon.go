@@ -3224,16 +3224,16 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		monitor.CancelAutoSettle("stop judged")
 	}
 	stop := &harness.Stop{
-		Left:       &harness.Left{BackgroundWork: !relaxBackgroundWork && hasActiveBackgroundTask(msg), PendingCron: hasPendingSessionCron(msg)},
+		Left:       &harness.Left{BackgroundWork: !relaxBackgroundWork && hasRunningWork(msg), PendingCron: hasScheduledWork(msg)},
 		Yielded:    stopIsNonTerminal(msg, relaxBackgroundWork),
 		Classifies: classifies,
 	}
 	d.events().Turn(harness.FromTerminal(msg.ID), time.Now(), harness.TurnEvent{Turn: harness.TurnEnded, Stop: stop})
 	if stop.Yielded {
-		tasks := describeBackgroundTasks(msg)
+		tasks := strings.Join(runningWork(msg), ", ")
 		d.logf(
-			"handleStop: non-terminal stop session=%s pending_crons=%d background_tasks=[%s]",
-			sessionID, protocol.Deref(msg.PendingSessionCrons), tasks,
+			"handleStop: non-terminal stop session=%s scheduled_work=%d running_work=[%s]",
+			sessionID, protocol.Deref(msg.ScheduledWork), tasks,
 		)
 		d.traceStateEvidence(
 			sessionID,
@@ -3247,7 +3247,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		}
 		classification := sessionmonitor.StopClassification{
 			Yielded:                true,
-			RunningBackgroundTasks: runningBackgroundTasks(msg),
+			RunningBackgroundTasks: runningWork(msg),
 		}
 		d.life.Go("classifyStop", func() { monitor.ClassifyStop(msg.TranscriptPath, classification) })
 		return
