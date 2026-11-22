@@ -49,7 +49,33 @@ func AttnBinaryFromCommit(t testing.TB, commit string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	markAnotherBuild(binary, true)
 	return binary
+}
+
+var anotherBuild sync.Map
+
+func markAnotherBuild(attn string, another bool) {
+	for _, path := range []string{attn, filepath.Join(filepath.Dir(attn), "attnd")} {
+		if another {
+			anotherBuild.Store(path, true)
+		} else {
+			anotherBuild.Delete(path)
+		}
+	}
+}
+
+func isAnotherBuild(binary string) bool {
+	_, another := anotherBuild.Load(binary)
+	return another
+}
+
+func (s *Stack) App() *Peer {
+	s.T.Helper()
+	if isAnotherBuild(s.binary) {
+		return s.AppOfAnotherBuild()
+	}
+	return s.World.App()
 }
 
 func buildAttnFromCommit(commit string) (string, error) {
@@ -142,6 +168,7 @@ func (s *Stack) InstallBuild(attn, host string) {
 	if err := os.Symlink(installed, link); err != nil {
 		s.T.Fatal(err)
 	}
+	markAnotherBuild(installed, isAnotherBuild(attn))
 	s.binary = installed
 }
 
