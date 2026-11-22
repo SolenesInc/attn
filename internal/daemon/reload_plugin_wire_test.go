@@ -45,6 +45,25 @@ func TestAReloadedPluginSessionResumesItsConversationOnTheLaunchItHad(t *testing
 	converse(t, app, session, second, "price the checkout")
 }
 
+func TestAReloadedDriverSessionResumesTheConversationItLastReported(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"resume": true, "state_reporting": true})
+	awaitDriverAvailable(app, "snipe")
+	session, run := spawnDriven(w, app, driver, w.Path("shop"))
+	driver.mustReport("session.report_metadata", map[string]any{
+		"session_id": run.SessionID, "run_id": run.RunID, "seq": 1,
+		"metadata": map[string]string{"snipe_session_id": "native-id"}, "resume_session_id": "native-id",
+	})
+
+	if reloaded := reloadPlug(app, session); !reloaded.Success {
+		t.Fatalf("reload: %s", protocol.Deref(reloaded.Error))
+	}
+	if resumed := driver.launched(); resumed.Method != "driver.resume" || resumed.ResumeSessionID != "native-id" || string(resumed.Metadata) != `{"snipe_session_id":"native-id"}` {
+		t.Errorf("the reload asked the driver %s for %q with metadata %s, want driver.resume of native-id with its metadata", resumed.Method, resumed.ResumeSessionID, resumed.Metadata)
+	}
+}
+
 func TestAReloadedPluginSessionResumesWithItsPins(t *testing.T) {
 	t.Setenv(fakeagent.PlugCapabilitiesEnv, "launch_instructions,model_pin,effort_pin,yolo")
 	w := newWorld(t, fakeagent.Plug)

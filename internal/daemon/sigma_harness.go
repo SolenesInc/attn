@@ -65,7 +65,9 @@ func (h sigmaHarness) Launch(_ context.Context, req harness.LaunchRequest) (harn
 }
 
 func (h sigmaHarness) Plan(req harness.LaunchRequest) (harness.Planned, error) {
-	return h.d.planOnServer(h.Facts().ID, "", req), nil
+	planned := h.d.planOnServer(h.Facts().ID, "", req)
+	planned.Conversation = resumedOrTerminal(req)
+	return planned, nil
 }
 
 func (sigmaHarness) Start(context.Context) error { return nil }

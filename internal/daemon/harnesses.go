@@ -78,11 +78,11 @@ func (d *Daemon) agentOf(sessionID protocol.SessionID) harness.ID {
 	return ""
 }
 
-func (d *Daemon) planLaunch(req *spawnRequest) (harness.Planned, error) {
+func (d *Daemon) planLaunch(req *spawnRequest, plan *spawnPlan) (harness.Planned, error) {
 	if req.isShell {
 		return harness.Planned{Lifetime: harness.InTerminal}, nil
 	}
-	launch := harness.LaunchRequest{Session: req.msg.ID, Unattended: req.policy.unattendedLaunch}
+	launch := harness.LaunchRequest{Session: req.msg.ID, Terminal: req.terminal, Conversation: req.resumeSessionID, Picker: plan.spawnOpts.ResumePicker, Unattended: req.policy.unattendedLaunch}
 	if req.existingSession != nil && !req.policy.fromLedger {
 		launch.Lifetime = d.lifetime(req.msg.ID)
 	}

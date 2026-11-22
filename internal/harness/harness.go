@@ -131,6 +131,25 @@ type Trust interface {
 // Planned is what Plan decided for a launch.
 type Planned struct {
 	Lifetime Lifetime
+	// Conversation is what the launch records as its session's conversation before it runs, so the harness's first report of it is never a move.
+	Conversation LaunchConversation
+}
+
+// LaunchConversation is a launch's conversation as its plan knows it. The zero value leaves the session's stored conversation as it is.
+type LaunchConversation struct {
+	id      string
+	cleared bool
+}
+
+// ConversationIs names the conversation the launch runs.
+func ConversationIs(id string) LaunchConversation { return LaunchConversation{id: id} }
+
+// ConversationCleared is a launch whose conversation is not known yet and is not the stored one.
+var ConversationCleared = LaunchConversation{cleared: true}
+
+// Recorded is the conversation to record, and whether the launch records one at all; "" with true clears it.
+func (c LaunchConversation) Recorded() (string, bool) {
+	return c.id, c.id != "" || c.cleared
 }
 
 // RecoverPoint is a step of the daemon's start at which a harness brings back what it ran before.

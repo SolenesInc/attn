@@ -993,7 +993,7 @@ func (d *Daemon) sessionConversationSurvives(session *protocol.Session, intent s
 		return true
 	}
 	driver := agentdriver.Get(session.Agent)
-	resumeID := agentdriver.ResolveSpawnResumeSessionID(driver, session.ID, "", d.store.GetResumeSessionID(session.ID))
+	resumeID := d.resumeTarget(session.Agent, session.ID, "")
 	if host := d.sessionHost(session.ID); host != "" {
 		readiness, err := d.placedConversationReadiness(session.ID, host, session.Agent, session.ProfileID, resumeID, false)
 		if err != nil {

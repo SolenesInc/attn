@@ -298,23 +298,6 @@ func (d *Daemon) reloadLiveOrPlanResume(sessionID protocol.SessionID, cols, rows
 	return &storedIntentResume{msg: msg, policy: policy}, nil
 }
 
-// persistReloadedConversation records the conversation a reload launches before it runs, or clears a
-// stale one when the harness names it, so its report reads as this session's and opens no successor.
-func (d *Daemon) persistReloadedConversation(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) {
-	driver := agentdriver.Get(opts.Agent)
-	conversation := agentdriver.SpawnResumeSessionID(driver, string(opts.ID), opts.ResumeSessionID, opts.ResumePicker)
-	if conversation == d.store.GetResumeSessionID(sessionID) || (conversation == "" && !d.factsOrNone(opts.Agent).ConversationIsSession) {
-		return
-	}
-	if conversation == "" {
-		d.store.SetResumeSessionID(sessionID, "")
-		return
-	}
-	if _, err := d.store.TransitionSessionResumeID(sessionID, conversation); err != nil {
-		d.logf("reload: persist launched conversation for session %s: %v", sessionID, err)
-	}
-}
-
 // ptyRespawn names the terminal whose process a respawn replaced; the fact's subject is its session.
 type ptyRespawn struct {
 	Terminal string `json:"terminal,omitempty"`
@@ -343,9 +326,14 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 		name = protocol.Ptr(hostName)
 	}
 	var agent *AgentLaunch
+	var planned harness.Planned
 	if opts.Agent != protocol.AgentShellValue {
 		var err error
-		agent, err = d.buildAgentReloadLaunch(d.store.Get(sessionID), &opts)
+		planned, err = d.harnessOf(opts.Agent).Plan(harness.LaunchRequest{Session: sessionID, Terminal: opts.ID, Lifetime: d.lifetime(sessionID), Conversation: opts.ResumeSessionID, Picker: opts.ResumePicker})
+		if err != nil {
+			return nil, err
+		}
+		agent, err = d.buildAgentReloadLaunch(d.store.Get(sessionID), &opts, planned)
 		if err != nil {
 			return nil, err
 		}
@@ -365,7 +353,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	}
 	stillRunning := d.monitors().replacingRun(sessionID, protocol.Deref(running.LifecycleID))
 	if opts.Agent != protocol.AgentShellValue {
-		d.persistReloadedConversation(sessionID, opts)
+		d.recordLaunchConversation(sessionID, planned, "reload")
 	}
 	if _, err = Call[struct{}](context.Background(), d.router(), msg); err != nil {
 		stillRunning()
@@ -465,10 +453,7 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 	if driver == nil && !isPlugin && agent != protocol.AgentShellValue {
 		return ptybackend.SpawnOptions{}, fmt.Errorf("agent %q is not available", session.Agent)
 	}
-	resumeSessionID := agentdriver.ResolveSpawnResumeSessionID(driver, sessionID, "", d.store.GetResumeSessionID(sessionID))
-	if d.serverLinkFor(agent) != nil {
-		resumeSessionID = d.store.GetSessionConversation(sessionID).NativeID
-	}
+	resumeSessionID := d.resumeTarget(agent, sessionID, "")
 	if resumeSessionID != "" {
 		readiness, err := d.placedConversationReadiness(sessionID, d.sessionHost(sessionID), agent, session.ProfileID, resumeSessionID, true)
 		if err != nil {
@@ -548,7 +533,7 @@ func pluginReloadCapabilityError(reg pluginDriverRegistration) error {
 	return nil
 }
 
-func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptybackend.SpawnOptions) (*AgentLaunch, error) {
+func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptybackend.SpawnOptions, planned harness.Planned) (*AgentLaunch, error) {
 	launch, err := d.agentLaunchContext(session.ID, opts.Agent)
 	if err != nil {
 		return nil, err
@@ -574,7 +559,7 @@ func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptyback
 		Yolo:            opts.YoloMode,
 		Model:           opts.Model,
 		Effort:          opts.Effort,
-		ConversationID:  d.serverConversation(session.ID),
+		ConversationID:  d.reloadedServerConversation(session.ID, planned),
 		ResumeSessionID: opts.ResumeSessionID,
 		ExecutionTarget: opts.ExecutionTarget,
 
@@ -585,4 +570,11 @@ func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptyback
 	}
 	launch.Plugin = &AgentPluginLaunch{Plugin: reg.PluginName, Resume: true, Params: params, LaunchInstructions: reg.Capabilities["launch_instructions"]}
 	return launch, nil
+}
+
+func (d *Daemon) reloadedServerConversation(session protocol.SessionID, planned harness.Planned) string {
+	if conversation, records := planned.Conversation.Recorded(); records && d.lifetime(session) == harness.InServer {
+		return conversation
+	}
+	return d.serverConversation(session)
 }

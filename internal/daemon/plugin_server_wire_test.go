@@ -331,6 +331,24 @@ func TestAPluginServerInterruptsWhenItsViewQuits(t *testing.T) {
 	}
 }
 
+func TestAReloadedPluginServerSessionResumesTheConversationItRuns(t *testing.T) {
+	w := newWorld(t, fakeagent.SampleServer)
+	app := w.App()
+	driver := registerServerDriver(t, w, "reload-server", serverDriverDeclaration(w))
+	driver.mu.Lock()
+	driver.holdLaunch = false
+	driver.mu.Unlock()
+	awaitDriverAvailable(app, serverPluginAgent)
+	session := w.Spawn(app, fakeagent.Harness(serverPluginAgent), w.Path("shop"))
+	spawned := driver.launched()
+
+	launchIntentReload(t, app, session)
+	reloaded := driver.launched()
+	if reloaded.Method != "driver.resume" || spawned.ConversationID == "" || reloaded.ConversationID != spawned.ConversationID || reloaded.ResumeSessionID != spawned.ConversationID {
+		t.Errorf("the reload asked the driver %s for conversation %q resuming %q, want driver.resume of %q, the conversation the spawn ran", reloaded.Method, reloaded.ConversationID, reloaded.ResumeSessionID, spawned.ConversationID)
+	}
+}
+
 func TestAPluginServerKeepsTheConfiguredExecutableOnLaunchAndReload(t *testing.T) {
 	for _, source := range []string{"session", "machine", "environment"} {
 		t.Run(source, func(t *testing.T) {

@@ -71,7 +71,9 @@ func (h codexHarness) Launch(_ context.Context, req harness.LaunchRequest) (harn
 func (h codexHarness) TrustFolder(dir string) error { return h.d.trustCodexFolder(dir) }
 
 func (h codexHarness) Plan(req harness.LaunchRequest) (harness.Planned, error) {
-	return planOn(h.d.codexShared(), req), nil
+	planned := planOn(h.d.codexShared(), req)
+	planned.Conversation = resumedOrCleared(req)
+	return planned, nil
 }
 
 func (h codexHarness) Start(context.Context) error {

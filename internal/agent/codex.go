@@ -375,14 +375,6 @@ func (c *Codex) NewTranscriptWatcherBehavior() harness.TranscriptWatcher {
 	return &codexTranscriptWatcherBehavior{}
 }
 
-func (c *Codex) ResolveSpawnResumeSessionID(existingSessionID, requestedResumeID, storedResumeID string) string {
-	return preferStoredResumeSessionID(existingSessionID, requestedResumeID, storedResumeID)
-}
-
-func (c *Codex) SpawnResumeSessionID(sessionID, resolvedResumeID string, resumePicker bool) string {
-	return strings.TrimSpace(resolvedResumeID)
-}
-
 func (c *Codex) ResumeSessionIDFromTranscriptPath(transcriptPath string) string {
 	return ""
 }

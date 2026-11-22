@@ -110,17 +110,6 @@ func (s *Sigma) BuildEnv(opts SpawnOpts) []string {
 	return env
 }
 
-func (s *Sigma) ResolveSpawnResumeSessionID(existingSessionID, requestedResumeID, storedResumeID string) string {
-	return preferStoredResumeSessionID(existingSessionID, requestedResumeID, storedResumeID)
-}
-
-func (s *Sigma) SpawnResumeSessionID(terminalID, resolvedResumeID string, _ bool) string {
-	if resolvedResumeID != "" {
-		return resolvedResumeID
-	}
-	return terminalID
-}
-
 func (s *Sigma) ResumeSessionIDFromTranscriptPath(string) string { return "" }
 
 func (s *Sigma) SkillDirs(lookupEnv func(string) string, homeDir string) ([]string, error) {

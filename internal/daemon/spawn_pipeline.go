@@ -60,14 +60,15 @@ type spawnRequest struct {
 	resumeSessionID string
 	parentSessionID protocol.SessionID
 	lifetime        harness.Lifetime
+	terminal        harness.TerminalID
 	addsTerminal    bool
 }
 
 type spawnPlan struct {
-	spawnOpts            ptybackend.SpawnOptions
-	launchSession        *protocol.Session
-	launchedConversation string
-	agent                *AgentLaunch
+	spawnOpts     ptybackend.SpawnOptions
+	launchSession *protocol.Session
+	planned       harness.Planned
+	agent         *AgentLaunch
 }
 
 type spawnRejection struct {
@@ -280,11 +281,10 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 			req.resumeSessionID = ""
 		}
 	}
-	if req.existingSession != nil && req.hasPluginDriver && req.resumeSessionID == "" && req.pluginDriver.Capabilities["resume"] {
-		req.resumeSessionID = d.store.GetResumeSessionID(msg.ID)
+	if req.existingSession != nil && !req.isShell {
+		req.resumeSessionID = d.resumeTarget(req.agent, msg.ID, req.resumeSessionID)
 	}
 	if req.existingSession != nil && !req.hasPluginDriver && !req.isShell {
-		req.resumeSessionID = agentdriver.ResolveSpawnResumeSessionID(req.driver, req.existingSession.ID, req.resumeSessionID, d.store.GetResumeSessionID(msg.ID))
 		readiness, err := d.placedConversationReadiness(msg.ID, protocol.Deref(msg.Host), req.agent, req.profile.ID, req.resumeSessionID, false)
 		if err != nil {
 			return nil, &spawnRejection{err: err}
@@ -364,12 +364,14 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 		plan.spawnOpts.ApprovalRoute = launchcontract.ResolveApprovalRoute(plan.spawnOpts.YoloMode, plan.spawnOpts.AutoApprove, plan.spawnOpts.UnattendedLaunch)
 	}
 	plan.spawnOpts.ContextWindowCap = d.launchContextWindowCap(msg.ID, req.agent)
-	planned, err := d.planLaunch(req)
+	req.terminal = d.launchTerminal(req)
+	planned, err := d.planLaunch(req, plan)
 	if err != nil {
 		plan.rollback(d, msg.ID)
 		return nil, &spawnRejection{err: err}
 	}
 	req.lifetime = planned.Lifetime
+	plan.planned = planned
 
 	return plan, nil
 }
@@ -383,7 +385,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{alreadyLive: true}
 	}
-	terminal := d.launchTerminal(req)
+	terminal := req.terminal
 	plan.spawnOpts.ID = terminal
 	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.profile.ID, req.existingSession, req.policy.startsLaunching, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"] && !req.pluginDriver.Capabilities["server_binding"], req.parentSessionID, nil)
 	session := plan.launchSession
@@ -409,7 +411,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	if err := d.store.SetSessionLifetime(session.ID, req.lifetime); err != nil {
 		d.logf("spawn: %v", err)
 	}
-	d.persistLaunchedConversation(req, plan)
+	d.recordLaunchConversation(session.ID, plan.planned, "spawn")
 	if !req.isShell {
 		var err error
 		plan.agent, err = d.buildAgentSpawnLaunch(req, plan)
@@ -465,7 +467,7 @@ func (d *Daemon) startSessionTerminal(session *protocol.Session, terminal harnes
 }
 
 func (d *Daemon) executeAddedTerminal(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
-	plan.spawnOpts.ID = d.launchTerminal(req)
+	plan.spawnOpts.ID = req.terminal
 	plan.launchSession = req.existingSession
 	var err error
 	plan.agent, err = d.buildAgentSpawnLaunch(req, plan)
@@ -503,34 +505,6 @@ func (d *Daemon) expectTerminal(terminal harness.TerminalID, session protocol.Se
 func (d *Daemon) launchedHere(sessionID protocol.SessionID, resumeID string) bool {
 
 	return slices.Contains(d.terminals().Of(sessionID), harness.TerminalID(resumeID))
-}
-
-// persistLaunchedConversation records the conversation a launch starts before its worker runs, so
-// the harness's first report of it is never a move: a fresh Claude's is its terminal id, a picker's none.
-func (d *Daemon) persistLaunchedConversation(req *spawnRequest, plan *spawnPlan) {
-	sessionID := req.msg.ID
-	conversation := agentdriver.SpawnResumeSessionID(req.driver, string(plan.spawnOpts.ID), req.resumeSessionID, plan.spawnOpts.ResumePicker)
-	if req.hasPluginDriver && req.pluginDriver.Capabilities["server_binding"] {
-		conversation = req.resumeSessionID
-		if conversation == "" {
-			conversation = string(plan.spawnOpts.ID)
-		}
-	}
-	clearPicker := conversation == "" && !req.hasPluginDriver && (plan.spawnOpts.ResumePicker || d.factsOrNone(req.agent).ConversationIsSession)
-	if conversation == "" && !clearPicker {
-		return
-	}
-	plan.launchedConversation = conversation
-	if d.store.GetResumeSessionID(sessionID) == conversation {
-		return
-	}
-	if clearPicker {
-		d.store.SetResumeSessionID(sessionID, "")
-		return
-	}
-	if _, err := d.store.TransitionSessionResumeID(sessionID, conversation); err != nil {
-		d.logf("spawn: persist launched conversation for session %s: %v", sessionID, err)
-	}
 }
 
 func (d *Daemon) killSessionRuntime(terminal harness.TerminalID) error {

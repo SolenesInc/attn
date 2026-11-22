@@ -56,8 +56,12 @@ func (h claudeHarness) Launch(_ context.Context, req harness.LaunchRequest) (har
 
 func (claudeHarness) TrustFolder(dir string) error { return trustClaudeFolder(claudeConfigPath(), dir) }
 
-func (claudeHarness) Plan(harness.LaunchRequest) (harness.Planned, error) {
-	return harness.Planned{Lifetime: harness.InTerminal}, nil
+func (claudeHarness) Plan(req harness.LaunchRequest) (harness.Planned, error) {
+	conversation := resumedOrTerminal(req)
+	if req.Conversation == "" && req.Picker {
+		conversation = harness.ConversationCleared
+	}
+	return harness.Planned{Lifetime: harness.InTerminal, Conversation: conversation}, nil
 }
 
 func (h claudeHarness) Start(context.Context) error {

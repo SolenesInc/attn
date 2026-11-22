@@ -449,21 +449,6 @@ func (c *Claude) NewTranscriptWatcherBehavior() harness.TranscriptWatcher {
 	return &claudeTranscriptWatcherBehavior{}
 }
 
-func (c *Claude) ResolveSpawnResumeSessionID(existingSessionID, requestedResumeID, storedResumeID string) string {
-	return preferStoredResumeSessionID(existingSessionID, requestedResumeID, storedResumeID)
-}
-
-func (c *Claude) SpawnResumeSessionID(sessionID, resolvedResumeID string, resumePicker bool) string {
-	resolved := strings.TrimSpace(resolvedResumeID)
-	if resolved != "" {
-		return resolved
-	}
-	if !resumePicker {
-		return strings.TrimSpace(sessionID)
-	}
-	return ""
-}
-
 func (c *Claude) ResumeSessionIDFromTranscriptPath(transcriptPath string) string {
 	clean := strings.TrimSpace(transcriptPath)
 	if clean == "" {
