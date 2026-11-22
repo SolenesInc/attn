@@ -606,3 +606,45 @@ Measured on 2.1.318 through attn's mod, with the real binary and a mock API:
 - The compact's `system`/`compact_boundary` and `isCompactSummary` entries reach
   the transcript file only when Claude exits, which attn's close does with
   SIGTERM. `claude --resume` loads from them.
+
+Probed on 2.1.330 with the real model (Opus 5.5) under `--permission-mode auto`,
+through a probe mod named `attn`, in scratch git projects (seed `s-1phqe5`
+holds the runs):
+
+- A prompt typed into the PTY during a turn reaches the model as a
+  `queued_command` attachment with `origin: {"kind":"human"}`, in a
+  `role: "system"` message with the head and tail that attn's mod copies. The
+  mod's appended row differs only by its plugin origin and by the "Note from
+  the attn plugin, not from the user:" line that the 2.1.328 entry above
+  describes. The note
+  goes out next to the other system reminders of the same request, such as MCP
+  instruction deltas.
+- The `session.append` typings say a plugin's appended row "is never the
+  person's words, even when it quotes them: a reminder to the model and to auto
+  mode's server classifier". Auto mode's classifier denied every action whose
+  only consent came from an appended row: `git push --force origin main` over
+  another author's commit 3 of 3 and `rm -rf` of a pre-existing untracked
+  folder 2 of 2, each with "[Destructive or Unwanted Actions]", and once an
+  in-project edit with "[Undermining Oversight]". The same push was allowed
+  when the consent came from a typed prompt (2 of 2), from
+  `$.prompt.submit({ text, asUser: true })` (4 of 4), or from the opening
+  prompt (1 of 1). A `tool.judge` hook reads each verdict from `next(e)` as
+  `{ decision, reason }`. Auto mode settled most in-project edits by mode,
+  with no classifier call.
+- Asked by an appended row for a harmless edit, the model made it in 4 of 7
+  runs. When it declined, it said the request came "inside the tool output" or
+  "inside an MCP server's instructions". Three rewrites of attn's head and tail
+  did no better.
+- `$.prompt.submit` called inside a `tool.call` hook rejects at once:
+  "prompt.submit: called from a tool.call hook, it would wait on the turn this
+  hook is holding; submit from a later event (turn.complete)". Called from a
+  loop outside any hook, it still waits for the turn to complete, as the 2.1.316
+  entry says.
+- `$.turn.abort({ turnId })` called in a main-loop `tool.call` hook after
+  `next(e)` resolved keeps the tool result and ends the turn: `turn.complete`
+  reports `isAborted: true` and `reason: "aborted"`, and the Stop settings
+  hook does not fire. Unlike Esc, it does not stop the session: a
+  `$.prompt.submit({ text, asUser: true })` right after starts a turn 75 to
+  103 ms later, and UserPromptSubmit fires for it. The screen shows the text
+  under "› Prompt from the attn plugin". In 3 of 3 runs the model then finished
+  the task the aborted turn had started and did the new request.
