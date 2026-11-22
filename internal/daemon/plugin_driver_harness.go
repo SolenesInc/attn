@@ -139,7 +139,7 @@ func (d *Daemon) launchPluginDriver(req harness.LaunchRequest, agent harness.ID,
 func (h pluginHarness) Plan(req harness.LaunchRequest) (harness.Planned, error) {
 	planned := h.link().Plan(h.reg.PluginName, req)
 	if h.reg.Capabilities["server_binding"] {
-		planned.Conversation = resumedOrTerminal(req)
+		planned.Conversation = harness.ResumedOrTerminal(req)
 	}
 	return planned, nil
 }

@@ -18,6 +18,10 @@ type Host interface {
 	LoginEnv() []string
 	// ServerTools are attn's tools for the agents of a server holding subject, and whether attn offers them.
 	ServerTools(subject string) (AgentTools, bool)
+	// TerminalTools are attn's tools for the agent in terminal t, and whether attn offers them.
+	TerminalTools(t TerminalID) (AgentTools, bool)
+	// ExecutableHealth reports whether the harness's executable is installed on this machine, without waiting for the login environment.
+	ExecutableHealth(facts Facts, offered bool) Health
 	Sessions() HostSessions
 	Terminals() HostTerminals
 	Records() ServerRecords

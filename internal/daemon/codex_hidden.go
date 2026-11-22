@@ -60,7 +60,7 @@ type codexConversation struct {
 
 func (h codexHarness) Conversation(facts harness.SessionFacts) harness.Conversation {
 	if facts.Lifetime != harness.InServer {
-		return typedConversation{refusal: errors.New("this Codex session started before Codex sessions ran on the shared app server, so attn has no way to compact it. Close without --compact instead")}
+		return harness.TypedConversation(errors.New("this Codex session started before Codex sessions ran on the shared app server, so attn has no way to compact it. Close without --compact instead"))
 	}
 	return codexConversation{shared: h.d.codexShared(), facts: facts}
 }

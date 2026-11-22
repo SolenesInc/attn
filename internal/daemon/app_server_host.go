@@ -40,6 +40,19 @@ func (h adapterHost) ServerTools(subject string) (harness.AgentTools, bool) {
 	return harness.AgentTools{URL: tools.URL, Credential: tools.Credential, Name: catalog.Name, Description: catalog.Description, Instructions: catalog.Instructions}, true
 }
 
+func (h adapterHost) TerminalTools(t harness.TerminalID) (harness.AgentTools, bool) {
+	tools := h.d.agentTools(t)
+	if tools == nil {
+		return harness.AgentTools{}, false
+	}
+	catalog := agentToolsCatalog()
+	return harness.AgentTools{URL: tools.URL, Credential: tools.Credential, Name: catalog.Name, Description: catalog.Description, Instructions: catalog.Instructions}, true
+}
+
+func (h adapterHost) ExecutableHealth(facts harness.Facts, offered bool) harness.Health {
+	return h.d.executableHealth(facts, offered)
+}
+
 type hostSessions adapterHost
 
 func (h hostSessions) Get(id harness.SessionID) *protocol.Session { return h.d.store.Get(id) }

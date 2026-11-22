@@ -63,12 +63,12 @@ func (d *Daemon) applySetting(_ context.Context, msg protocol.SetSettingMessage)
 	if spec.Scope == setting.PerProfile {
 		return d.applyProfileSetting(spec, msg)
 	}
-	if spec == setting.OutpostsEnabled && d.on(spec) == parseBooleanSetting(msg.Value) {
+	if spec == setting.OutpostsEnabled && d.on(spec) == setting.ParseBool(msg.Value) {
 		entry := d.settingEntry(spec, msg.Key, d.settingValue(spec, msg.Key, nil, ""))
 		return &entry, nil
 	}
 	if spec.Kind == setting.Bool && strings.TrimSpace(msg.Value) != "" {
-		msg.Value = strconv.FormatBool(parseBooleanSetting(msg.Value))
+		msg.Value = strconv.FormatBool(setting.ParseBool(msg.Value))
 	}
 	if msg.Key == setting.SharedPTYHostEnabled.Key {
 		err = d.setSharedPTYHostEnabled(msg.Value)
@@ -144,13 +144,13 @@ func (d *Daemon) settingChanged(key, value string) {
 		d.pushMonitorPolicies()
 	}
 	if key == setting.AutoSettleEnabled.Key {
-		if parseBooleanSetting(value) {
+		if setting.ParseBool(value) {
 			d.armAutoSettleForRunningSessions()
 		} else {
 			d.cancelAllAutoSettle()
 		}
 	}
-	if key == setting.ActivityEnabled.Key && !parseBooleanSetting(value) {
+	if key == setting.ActivityEnabled.Key && !setting.ParseBool(value) {
 		d.clearAllSessionActivity()
 	}
 	if spec, ok := setting.Lookup(key); ok && spec == setting.CodeNavDefinition {
@@ -318,7 +318,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	}
 	for _, spec := range setting.All() {
 		if spec.Kind == setting.Bool && !spec.IsFamily() {
-			settings[spec.Key] = strconv.FormatBool(parseBooleanSetting(stored[spec.Key]))
+			settings[spec.Key] = strconv.FormatBool(setting.ParseBool(stored[spec.Key]))
 		}
 	}
 	settings[setting.NarrowestTileCols.Key] = strconv.Itoa(resolveNarrowestTileCols(stored[setting.NarrowestTileCols.Key]))
@@ -454,15 +454,6 @@ func validateNewSessionDestination(value string) error {
 		return nil
 	default:
 		return fmt.Errorf("new session destination must be %q or %q: %s", DestinationNewWorktree, DestinationMainRepo, value)
-	}
-}
-
-func parseBooleanSetting(value string) bool {
-	switch strings.TrimSpace(strings.ToLower(value)) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
 	}
 }
 

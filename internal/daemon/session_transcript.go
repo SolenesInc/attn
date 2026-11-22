@@ -128,7 +128,7 @@ type fileConversations struct{ d *Daemon }
 func (f fileConversations) Page(_ context.Context, ref harness.ConversationRef, cursor string, limit int) (transcript.EventPage, error) {
 	path := f.d.inspectableTranscriptPath(ref.Session, string(ref.Harness))
 	if path == "" {
-		return transcript.EventPage{}, errTranscriptUnavailable
+		return transcript.EventPage{}, harness.ErrTranscriptUnavailable
 	}
 	return transcript.ReadEventPage(path, ref.Harness, cursor, limit)
 }

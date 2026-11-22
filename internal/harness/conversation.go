@@ -3,6 +3,7 @@ package harness
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -76,3 +77,25 @@ type Custody struct {
 	// Uncertain, with Deferred: the harness may have taken it.
 	Uncertain bool
 }
+
+// TypedConversation is the conversation of a session attn types into: it takes no input itself, and compaction is refused with compactRefusal.
+func TypedConversation(compactRefusal error) Conversation { return typedConversation{compactRefusal} }
+
+type typedConversation struct{ refusal error }
+
+func (typedConversation) Deliver(context.Context, Input) Custody { return Custody{Outcome: NotMine} }
+
+func (typedConversation) Compact(context.Context, Input) Custody { return Custody{Outcome: NotMine} }
+
+func (c typedConversation) CanCompact() error { return c.refusal }
+
+// ResumedOrTerminal names the conversation a launch resumes, or else one named for its terminal.
+func ResumedOrTerminal(req LaunchRequest) LaunchConversation {
+	if req.Conversation != "" {
+		return ConversationIs(req.Conversation)
+	}
+	return ConversationIs(string(req.Terminal))
+}
+
+// ErrTranscriptUnavailable is a transcript read of a conversation attn cannot find.
+var ErrTranscriptUnavailable = errors.New("transcript unavailable")

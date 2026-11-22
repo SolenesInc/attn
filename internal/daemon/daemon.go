@@ -222,6 +222,7 @@ type Daemon struct {
 	codexSharedOnce          sync.Once
 	codexSharedState         *codexShared
 	appServer                *appserver.Client
+	builtins                 []harness.Harness
 	attachmentMu             sync.Mutex
 	inboxMu                  sync.Mutex
 	inboxStates              map[who.Address]*inboxDeliveryState
@@ -534,7 +535,7 @@ func New(socketPath string) *Daemon {
 	d.loginEnv = newLoginEnv(&d.life, d.logf)
 	d.pluginStartEnded = make(chan struct{})
 	d.codeNav = d.newCodeNavigation()
-	d.appServer = appserver.New(d.host(appServerTerminalOwner))
+	d.adapt()
 	return d
 }
 
@@ -606,7 +607,7 @@ func (d *Daemon) startMigratingPTYBackend() error {
 	}
 	if candidateErr := shared.SharedCandidateError(); sharedEnabled && !useSharedForNew && candidateErr != nil {
 		d.logf("shared PTY host unavailable: %v; new sessions remain on legacy workers", candidateErr)
-		if d.enrollmentStatus().IsHome() && parseBooleanSetting(d.store.GetSetting(setting.SharedPTYHostEnabled.Key)) {
+		if d.enrollmentStatus().IsHome() && setting.ParseBool(d.store.GetSetting(setting.SharedPTYHostEnabled.Key)) {
 			d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Shared PTY host is unavailable (%v). New terminals will keep using dedicated workers.", candidateErr))
 		}
 	}
@@ -673,7 +674,6 @@ func (d *Daemon) Start() error {
 	if err := d.openStore(); err != nil {
 		return err
 	}
-	d.bindBuiltInServers()
 	if err := d.restorePluginServerOwners(); err != nil {
 		return fmt.Errorf("restore server ownership: %w", err)
 	}

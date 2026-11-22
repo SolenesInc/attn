@@ -3,9 +3,9 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionstate"
@@ -14,7 +14,7 @@ import (
 var harnessSources []func(*Daemon) []harness.Harness
 
 func (d *Daemon) harnesses() []harness.Harness {
-	var all []harness.Harness
+	all := slices.Clone(d.builtins)
 	for _, source := range harnessSources {
 		all = append(all, source(d)...)
 	}
@@ -179,18 +179,6 @@ func (d *Daemon) abortLaunch(sessionID protocol.SessionID) {
 	}
 }
 
-type typedConversation struct{ refusal error }
-
-func (typedConversation) Deliver(context.Context, harness.Input) harness.Custody {
-	return harness.Custody{Outcome: harness.NotMine}
-}
-
-func (typedConversation) Compact(context.Context, harness.Input) harness.Custody {
-	return harness.Custody{Outcome: harness.NotMine}
-}
-
-func (c typedConversation) CanCompact() error { return c.refusal }
-
 func (d *Daemon) oneShot(id harness.ID) (harness.OneShot, error) {
 	h, err := d.harness(id)
 	if err != nil {
@@ -217,47 +205,6 @@ func (d *Daemon) factsOrNone(id string) harness.Facts {
 func (d *Daemon) offered(id string) bool {
 	h, err := d.harness(id)
 	return err == nil && h.Health(d.life.Context()).Offered
-}
-
-func builtinFacts(driver agentdriver.Driver) harness.Facts {
-	caps := agentdriver.EffectiveCapabilities(driver)
-	_, declaresServer := agentdriver.DeclaredServer(driver)
-	return harness.Facts{
-		ID:          driver.Name(),
-		DisplayName: driver.DisplayName(),
-		Options: harness.Options{
-			Resume:             caps.HasResume,
-			Yolo:               caps.HasYolo,
-			AutoApprove:        caps.HasAutoApprove,
-			InitialPrompt:      caps.HasInitialPrompt,
-			LaunchInstructions: caps.HasLaunchInstructions,
-			ModelPin:           caps.HasModelPin,
-			EffortPin:          caps.HasEffortPin,
-			ContextCap:         caps.HasContextWindowCap,
-			Picker:             true,
-			Provider:           declaresServer,
-		},
-		Executable:            harness.Executable{Default: driver.DefaultExecutable(), Env: driver.ExecutableEnvVar()},
-		Signals:               stopSignals(withTitles(hookSignals(caps.HasHooks), caps.HarnessSignals), caps),
-		ConversationIsSession: caps.ConversationIsSession,
-	}
-}
-
-func stopSignals(s harness.Signals, caps agentdriver.Capabilities) harness.Signals {
-	s.StopsReadable, s.StopsClassified = caps.HasTranscript, caps.HasClassifier
-	return s
-}
-
-func withTitles(s harness.Signals, titles harness.TitleKind) harness.Signals {
-	s.Titles = titles
-	return s
-}
-
-func hookSignals(hooks bool) harness.Signals {
-	if !hooks {
-		return harness.Signals{}
-	}
-	return harness.Signals{TurnStarts: harness.TurnStartsReported, ReportsTools: true}
 }
 
 func (d *Daemon) signalsOf(agent protocol.SessionAgent) harness.Signals {

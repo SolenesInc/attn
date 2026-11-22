@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/layouttree"
@@ -56,7 +55,6 @@ type spawnRequest struct {
 	cwd             string
 	label           string
 	spawnStartedAt  time.Time
-	driver          agentdriver.Driver
 	resumeSessionID string
 	parentSessionID protocol.SessionID
 	lifetime        harness.Lifetime
@@ -247,7 +245,6 @@ func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
 		return &spawnRejection{err: fmt.Errorf("invalid terminal size cols=%d rows=%d (expected 1..%d)", req.msg.Cols, req.msg.Rows, maxPTYDimValue)}
 	}
 	req.resumeSessionID = protocol.Deref(req.msg.ResumeSessionID)
-	req.driver = agentdriver.Get(req.agent)
 	if rejection := d.checkExistingSessionMembership(req); rejection != nil {
 		return rejection
 	}

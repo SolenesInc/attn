@@ -51,7 +51,7 @@ func TestEveryHarnessAnswersTheContractWithItsFake(t *testing.T) {
 			OneShot:        true,
 		},
 		{
-			Facts:          harness.Facts{ID: "sigma", DisplayName: "Sigma", Logo: adapterLogo(t, 24, "sigma_logo.svg"), Options: sigmaOptions, Executable: harness.Executable{Default: "sigma", Env: "ATTN_SIGMA_EXECUTABLE"}, CacheTTL: time.Hour, Signals: harness.Signals{Heartbeat: 500 * time.Millisecond}, Recovery: harness.ByServer, ModelDiscovery: true, Activity: true},
+			Facts:          harness.Facts{ID: "sigma", DisplayName: "Sigma", Logo: adapterLogo(t, 24, "../harness/internal/sigma/logo.svg"), Options: sigmaOptions, Executable: harness.Executable{Default: "sigma", Env: "ATTN_SIGMA_EXECUTABLE"}, CacheTTL: time.Hour, Signals: harness.Signals{Heartbeat: 500 * time.Millisecond}, Recovery: harness.ByServer, ModelDiscovery: true, Activity: true},
 			SkillDirs:      []string{home + "/.sigma/skills", home + "/.claude/skills"},
 			ServerTerminal: "sigma-server",
 			Offered:        true,

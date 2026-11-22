@@ -25,7 +25,7 @@ func init() {
 func (codexHarness) driver() agentdriver.Driver { return agentdriver.MustGet("codex") }
 
 func (h codexHarness) Facts() harness.Facts {
-	facts := builtinFacts(h.driver())
+	facts := agentdriver.Facts(h.driver())
 	facts.Logo = harness.Logo{View: 24, Body: codexLogo}
 	facts.SkillDirs = func(_ func(string) string, homeDir string) ([]string, error) {
 		return []string{filepath.Join(homeDir, ".agents", "skills")}, nil

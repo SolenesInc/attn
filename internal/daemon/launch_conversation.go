@@ -7,13 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func resumedOrTerminal(req harness.LaunchRequest) harness.LaunchConversation {
-	if req.Conversation != "" {
-		return harness.ConversationIs(req.Conversation)
-	}
-	return harness.ConversationIs(string(req.Terminal))
-}
-
 func resumedOrCleared(req harness.LaunchRequest) harness.LaunchConversation {
 	if req.Conversation != "" {
 		return harness.ConversationIs(req.Conversation)

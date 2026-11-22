@@ -40,7 +40,7 @@ func (d *Daemon) settingValue(spec *setting.Setting, key string, computed map[st
 		concrete := *spec
 		concrete.Key = key
 		if value := d.setting(&concrete); strings.TrimSpace(value) != "" {
-			return strconv.FormatBool(parseBooleanSetting(value))
+			return strconv.FormatBool(setting.ParseBool(value))
 		}
 		return ""
 	}

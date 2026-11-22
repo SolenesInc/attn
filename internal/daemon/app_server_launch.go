@@ -4,6 +4,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/harness/appserver"
+	"github.com/victorarias/attn/internal/harness/builtin"
 )
 
 func serverTerminalOf(l *appserver.Link) func(string) harness.TerminalID {
@@ -33,15 +34,7 @@ func (d *Daemon) launchOnAppServer(req harness.LaunchRequest, agent harness.ID) 
 	return command, err
 }
 
-func (d *Daemon) bindBuiltInServers() {
-	for _, name := range agentdriver.List() {
-		declaration, ok := agentdriver.DeclaredServer(agentdriver.Get(name))
-		if !ok {
-			continue
-		}
-		binding := appserver.Binding{Agent: name, Declaration: &declaration, DisplayName: func() string { return d.factsOrNone(name).DisplayName }, Enabled: func() bool { return d.offered(name) }}
-		if err := d.appServer.Bind(binding, nil); err != nil {
-			d.logf("link the %s server: %v", name, err)
-		}
-	}
+func (d *Daemon) adapt() {
+	d.appServer = appserver.New(d.host(appServerTerminalOwner))
+	d.builtins = builtin.All(d.host(appServerTerminalOwner), d.appServer)
 }

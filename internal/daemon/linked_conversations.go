@@ -24,7 +24,7 @@ func (c linkedConversations) Page(ctx context.Context, ref harness.ConversationR
 	case l == nil:
 		return fileConversations(c).Page(ctx, ref, cursor, limit)
 	case ref.ID == "":
-		return transcript.EventPage{}, errTranscriptUnavailable
+		return transcript.EventPage{}, harness.ErrTranscriptUnavailable
 	}
 	return l.TranscriptPage(ctx, ref.ID, cursor, limit)
 }

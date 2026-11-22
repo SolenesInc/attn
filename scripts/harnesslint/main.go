@@ -30,7 +30,6 @@ var builtinHarnessIDs = []string{"claude", "codex", "sigma"}
 var adapterFilePatterns = []string{
 	"internal/daemon/codex_*.go",
 	"internal/daemon/claude_*.go",
-	"internal/daemon/sigma_*.go",
 	"internal/daemon/plugin_driver*.go",
 	"internal/daemon/plugin_link*.go",
 	"internal/daemon/plugin_server*.go",
@@ -359,12 +358,14 @@ func goFindings() ([]finding, error) {
 	var found []finding
 	for _, pkg := range pkgs {
 		found = append(found, importFindings(pkg)...)
+		found = append(found, hostFindings(pkg, rel)...)
+		importer := isAdapterImporter(pkg.PkgPath)
 		for _, file := range pkg.Syntax {
 			path := rel(pkg.Fset.Position(file.Pos()))
 			if path == "" || strings.HasSuffix(path, "_test.go") || isAdapterFile(path) || strings.HasPrefix(path, selfDir+"/") {
 				continue
 			}
-			c := checker{info: pkg.TypesInfo, fset: pkg.Fset, rel: rel, path: path, seen: map[string]bool{}}
+			c := checker{info: pkg.TypesInfo, fset: pkg.Fset, rel: rel, path: path, importer: importer, seen: map[string]bool{}}
 			for _, decl := range file.Decls {
 				gen, ok := decl.(*ast.GenDecl)
 				if !ok {
@@ -384,7 +385,7 @@ func goFindings() ([]finding, error) {
 }
 
 func importFindings(pkg *packages.Package) []finding {
-	if strings.Contains(pkg.PkgPath+"/", adapterPackages) || slices.ContainsFunc(adapterImporters, func(s string) bool { return strings.HasSuffix(pkg.PkgPath, s) }) {
+	if strings.Contains(pkg.PkgPath+"/", adapterPackages) || isAdapterImporter(pkg.PkgPath) {
 		return nil
 	}
 	var found []finding
@@ -396,14 +397,75 @@ func importFindings(pkg *packages.Package) []finding {
 	return found
 }
 
+func isAdapterImporter(pkgPath string) bool {
+	return slices.ContainsFunc(adapterImporters, func(s string) bool { return strings.HasSuffix(pkgPath, s) })
+}
+
+func hostFindings(pkg *packages.Package, rel func(token.Position) string) []finding {
+	if !strings.HasSuffix(pkg.PkgPath, "/internal/harness") {
+		return nil
+	}
+	host, ok := pkg.Types.Scope().Lookup("Host").(*types.TypeName)
+	if !ok {
+		return []finding{{path: pkg.PkgPath, what: "declares no Host interface for harnesslint to read"}}
+	}
+	var found []finding
+	seen := map[*types.TypeName]bool{}
+	var walk func(*types.TypeName)
+	walk = func(iface *types.TypeName) {
+		if seen[iface] {
+			return
+		}
+		seen[iface] = true
+		methods, ok := iface.Type().Underlying().(*types.Interface)
+		if !ok {
+			return
+		}
+		path := rel(pkg.Fset.Position(iface.Pos()))
+		for i := range methods.NumMethods() {
+			method := methods.Method(i)
+			fn := iface.Name() + "." + method.Name()
+			if id, ok := namesHarness(method.Name()); ok {
+				found = append(found, finding{path: path, fn: fn, what: fmt.Sprintf("names %q in a Host method", id)})
+			}
+			sig := method.Signature()
+			for _, tuple := range []*types.Tuple{sig.Params(), sig.Results()} {
+				for v := range tuple.Variables() {
+					named := namedType(v.Type())
+					if named == nil || named.Obj().Pkg() != pkg.Types {
+						continue
+					}
+					if id, ok := namesHarness(named.Obj().Name()); ok {
+						found = append(found, finding{path: path, fn: fn, what: fmt.Sprintf("names %q in a Host method's type %s", id, named.Obj().Name())})
+					}
+					walk(named.Obj())
+				}
+			}
+		}
+	}
+	walk(host)
+	return found
+}
+
+func namesHarness(name string) (string, bool) {
+	lower := strings.ToLower(name)
+	for _, id := range builtinHarnessIDs {
+		if strings.Contains(lower, id) {
+			return id, true
+		}
+	}
+	return "", false
+}
+
 type checker struct {
-	info  *types.Info
-	fset  *token.FileSet
-	rel   func(token.Position) string
-	path  string
-	fn    string
-	seen  map[string]bool
-	found []finding
+	info     *types.Info
+	fset     *token.FileSet
+	rel      func(token.Position) string
+	path     string
+	fn       string
+	importer bool
+	seen     map[string]bool
+	found    []finding
 }
 
 func (c *checker) report(what string) {
@@ -490,6 +552,9 @@ func (c *checker) declaredInAdapter(pos token.Pos) bool {
 		return false
 	}
 	path := c.rel(c.fset.Position(pos))
+	if c.importer && strings.HasPrefix(path, "internal/harness/internal/") {
+		return false
+	}
 	return path != "" && isAdapterFile(path)
 }
 

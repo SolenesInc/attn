@@ -26,7 +26,7 @@ func init() {
 func (claudeHarness) driver() agentdriver.Driver { return agentdriver.MustGet("claude") }
 
 func (h claudeHarness) Facts() harness.Facts {
-	facts := builtinFacts(h.driver())
+	facts := agentdriver.Facts(h.driver())
 	facts.Logo = harness.Logo{View: 1200, Body: claudeLogo}
 	facts.SkillDirs = func(_ func(string) string, homeDir string) ([]string, error) {
 		return []string{filepath.Join(homeDir, ".claude", "skills")}, nil
@@ -62,7 +62,7 @@ func (h claudeHarness) Launch(_ context.Context, req harness.LaunchRequest) (har
 func (claudeHarness) TrustFolder(dir string) error { return trustClaudeFolder(claudeConfigPath(), dir) }
 
 func (claudeHarness) Plan(req harness.LaunchRequest) (harness.Planned, error) {
-	conversation := resumedOrTerminal(req)
+	conversation := harness.ResumedOrTerminal(req)
 	if req.Conversation == "" && req.Picker {
 		conversation = harness.ConversationCleared
 	}

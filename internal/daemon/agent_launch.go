@@ -45,16 +45,30 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, req harness.L
 	launch, awareness, initialPrompt := req.Guidance, req.AwarenessDirs, req.InitialPrompt
 	claudeMod := d.claudeModForLaunch(terminal, driver.Name())
 	if !req.Direct {
-		prepareLauncherLaunch(driver, opts, initialPrompt)
+		var env []string
+		if opts.CodexRemote != "" {
+			env = append(env, "ATTN_CODEX_REMOTE="+opts.CodexRemote)
+		}
 		if claudeMod != (agentdriver.ClaudeMod{}) {
-			opts.AgentEnv = append(opts.AgentEnv, agentdriver.ClaudeModDirEnv+"="+claudeMod.Dir, agentdriver.ClaudeModSocketEnv+"="+claudeMod.Socket)
+			env = append(env, agentdriver.ClaudeModDirEnv+"="+claudeMod.Dir, agentdriver.ClaudeModSocketEnv+"="+claudeMod.Socket)
 		}
 		if launch.Crew != "" {
-			opts.AgentEnv = append(opts.AgentEnv, "ATTN_CREW_MEMBER=1")
+			env = append(env, "ATTN_CREW_MEMBER=1")
 		}
-		opts.AgentEnv = append(opts.AgentEnv, tools.LauncherEnv()...)
-		opts.AgentEnv = append(opts.AgentEnv, shared.LauncherEnv()...)
-		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_VENT_ENABLED=%t", launch.Vent), fmt.Sprintf("ATTN_TOOL_VENTS_ENABLED=%t", launch.ToolVents), fmt.Sprintf("ATTN_CODE_REVIEW_ENABLED=%t", launch.CodeReview))
+		env = append(env, tools.LauncherEnv()...)
+		env = append(env, shared.LauncherEnv()...)
+		env = append(env, fmt.Sprintf("ATTN_VENT_ENABLED=%t", launch.Vent), fmt.Sprintf("ATTN_TOOL_VENTS_ENABLED=%t", launch.ToolVents), fmt.Sprintf("ATTN_CODE_REVIEW_ENABLED=%t", launch.CodeReview))
+		autoApprove, model, effort := opts.AutoApprove, opts.Model, opts.Effort
+		if unattended := opts.UnattendedLaunch; !unattended.IsZero() {
+			autoApprove, model, effort = true, unattended.Model, unattended.Effort
+		}
+		command := harness.LauncherCommand(harness.LauncherLaunch{
+			Label: opts.Label, Conversation: opts.ResumeSessionID, Picker: opts.ResumePicker, Yolo: opts.YoloMode, InitialPrompt: initialPrompt,
+			ExecutableEnv: driver.ExecutableEnvVar(), Executable: configuredLaunchExecutable(opts),
+			AutoApprove: autoApprove, Model: model, Effort: effort, Target: opts.ExecutionTarget, ContextCap: opts.ContextWindowCap,
+			Env: env,
+		})
+		opts.AgentArgv, opts.AgentEnv, opts.AgentLoginShell = command.Argv, command.Env, command.LoginShell
 		return nil
 	}
 	caps := agentdriver.EffectiveCapabilities(driver)
@@ -97,14 +111,8 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, req harness.L
 	if provider, ok := agentdriver.GetConfigOverrideProvider(driver); ok {
 		spawn.ConfigOverrides = provider.GenerateConfigOverrides(spawn)
 	}
-	opts.AgentArgv = append([]string{"/bin/sh", "-c", directAgentLaunchScript, "attn-agent", driver.ExecutableEnvVar(), explicitExecutable}, driver.BuildCommand(spawn).Args...)
-	for _, entry := range driver.BuildEnv(spawn) {
-		key, _, _ := strings.Cut(entry, "=")
-		if key != driver.ExecutableEnvVar() {
-			opts.AgentEnv = append(opts.AgentEnv, entry)
-		}
-	}
-	opts.AgentLoginShell = true
+	command := harness.DirectCommand(driver.ExecutableEnvVar(), explicitExecutable, driver.BuildCommand(spawn).Args, driver.BuildEnv(spawn))
+	opts.AgentArgv, opts.AgentEnv, opts.AgentLoginShell = command.Argv, append(opts.AgentEnv, command.Env...), command.LoginShell
 	return nil
 }
 
@@ -117,50 +125,3 @@ func configuredLaunchExecutable(opts *ptybackend.SpawnOptions) string {
 	}
 	return opts.Executable
 }
-
-func prepareLauncherLaunch(driver agentdriver.Driver, opts *ptybackend.SpawnOptions, initialPrompt string) {
-	opts.AgentArgv = []string{launchenv.ActiveAttnExecutable(), "-s", opts.Label}
-	if opts.ResumeSessionID != "" {
-		opts.AgentArgv = append(opts.AgentArgv, "--resume", opts.ResumeSessionID)
-	} else if opts.ResumePicker {
-		opts.AgentArgv = append(opts.AgentArgv, "--resume")
-	}
-	if opts.YoloMode {
-		opts.AgentArgv = append(opts.AgentArgv, "--yolo")
-	}
-	if initialPrompt != "" {
-		opts.AgentArgv = append(opts.AgentArgv, "--initial-prompt", initialPrompt)
-	}
-	executable := configuredLaunchExecutable(opts)
-	autoApprove, model, effort := opts.AutoApprove, opts.Model, opts.Effort
-	if launch := opts.UnattendedLaunch; !launch.IsZero() {
-		autoApprove, model, effort = true, launch.Model, launch.Effort
-	}
-	opts.AgentEnv = []string{"ATTN_DAEMON_MANAGED=1", "ATTN_MODEL=" + model, "ATTN_EFFORT=" + effort, "ATTN_EXECUTION_TARGET=" + opts.ExecutionTarget, fmt.Sprintf("ATTN_AUTO_COMPACT_WINDOW=%d", opts.ContextWindowCap)}
-	if autoApprove {
-		opts.AgentEnv = append(opts.AgentEnv, "ATTN_AUTO_APPROVE=1")
-	}
-	if executable != "" {
-		opts.AgentEnv = append(opts.AgentEnv, driver.ExecutableEnvVar()+"="+executable)
-	}
-	if opts.CodexRemote != "" {
-		opts.AgentEnv = append(opts.AgentEnv, "ATTN_CODEX_REMOTE="+opts.CodexRemote)
-	}
-	opts.AgentLoginShell = true
-}
-
-const directAgentLaunchScript = `
-trim_space() {
- trimmed=${1#"${1%%[![:space:]]*}"}
- trimmed=${trimmed%"${trimmed##*[![:space:]]}"}
-}
-executable_var=$1
-explicit_executable=$2
-shift 2
-eval "inherited_executable=\${$executable_var-}"
-trim_space "$inherited_executable"
-executable=${explicit_executable:-${trimmed:-$1}}
-shift
-export "$executable_var=$executable"
-exec "$executable" "$@"
-`

@@ -26,7 +26,7 @@ func (h pluginHarness) Conversation(facts harness.SessionFacts) harness.Conversa
 		return l.Conversation(facts)
 	}
 	if facts.Run == "" || facts.Route == "terminal" {
-		return typedConversation{refusal: harness.NoCompaction(facts.Harness)}
+		return harness.TypedConversation(harness.NoCompaction(facts.Harness))
 	}
 	reg, conn := h.d.ensurePluginRegistry().driverConnection(facts.Harness, facts.RunOwner)
 	return pluginConversation{daemon: h.d, facts: facts, registration: reg, connection: conn}

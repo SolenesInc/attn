@@ -13,7 +13,7 @@ import (
 )
 
 func (d *Daemon) setSharedPTYHostEnabled(value string) error {
-	enabled := parseBooleanSetting(setting.SharedPTYHostEnabled.WithDefault(value))
+	enabled := setting.ParseBool(setting.SharedPTYHostEnabled.WithDefault(value))
 	d.ptySettingsChangeMu.Lock()
 	defer d.ptySettingsChangeMu.Unlock()
 	backend, ok := d.ptyBackend.(*ptybackend.MigratingBackend)

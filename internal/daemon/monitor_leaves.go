@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -216,8 +215,6 @@ func (d *Daemon) transcriptPage(ctx context.Context, session *protocol.SessionLe
 func (d *Daemon) ledgerConversation(session *protocol.SessionLedgerEntry) harness.ConversationRef {
 	return harness.ConversationRef{Harness: session.Agent, Session: session.ID, ID: d.store.GetSessionConversation(session.ID).NativeID}
 }
-
-var errTranscriptUnavailable = errors.New("transcript unavailable")
 
 func (d *Daemon) monitorTranscriptSession(id protocol.SessionID) *protocol.SessionLedgerEntry {
 	if session := d.store.SessionLedgerEntry(id); session != nil {

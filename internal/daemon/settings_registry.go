@@ -31,7 +31,7 @@ func (d *Daemon) setting(s *setting.Setting) string {
 }
 
 func (d *Daemon) on(s *setting.Setting) bool {
-	return parseBooleanSetting(d.setting(s))
+	return setting.ParseBool(d.setting(s))
 }
 
 var settingValidators = map[*setting.Setting]func(*Daemon, string, string) error{
