@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pausepoint"
@@ -976,6 +977,39 @@ func TestNewInASharedCodexTerminalKeepsTheSessionsContextCap(t *testing.T) {
 	moveOn(t, app, codex, terminal, "/new", "add a discount field")
 	if limit := w.CodexServer().CompactLimit(codex.ConversationID); limit != "300000" {
 		t.Errorf("the conversation /new started loaded with compact limit %q, want the session's 300000", limit)
+	}
+}
+
+func TestACommandFromAClosedSharedCodexSubagentReadsItsThreadNoMoreThanOneCallerLookup(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	parent, codex, shownTerminal := sharedCodexWaiting(t, w, app)
+	server := w.CodexServer()
+	child := server.SpawnSubagent(codex.ConversationID)
+	profile := app.SelectedProfile()
+	terminal := protocol.TerminalID(harness.CodexThreadTerminal(profile, child))
+	server.CloseThread(child)
+	typeInto(app, shownTerminal, "/rename Closed child processed\r")
+	codex.Prompted()
+	testworld.AwaitSession(app, parent, func(s protocol.Session) bool { return s.Label == "Closed child processed" })
+
+	before := server.Reads(child)
+	if caller, err := cli.CallerSession(terminal); err != nil || caller != "" {
+		t.Fatalf("closed subagent caller = %s, %v; want no session", caller, err)
+	}
+	lookup := server.Reads(child) - before
+	if lookup == 0 {
+		t.Fatal("a caller lookup of the closed subagent read nothing from the app-server; the test measures nothing")
+	}
+	for name, scoped := range map[string]*client.Client{"no profile": cli.WithCaller(terminal), "--profile": cli.WithGardenProfile(profile, "").WithCaller(terminal)} {
+		before := server.Reads(child)
+		var result protocol.PresenceResult
+		if err := scoped.RunCommand("presence", "", map[string]bool{"session_only": true}, &result); err != nil || result.SessionID != "" {
+			t.Fatalf("%s: presence = %+v, %v; want no session", name, result, err)
+		}
+		if reads := server.Reads(child) - before; reads > lookup {
+			t.Errorf("%s: the command read the closed subagent's thread %d times; one caller lookup reads it %d", name, reads, lookup)
+		}
 	}
 }
 

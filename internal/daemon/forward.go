@@ -200,9 +200,9 @@ func socketPair() (*net.UnixConn, *net.UnixConn, error) {
 	return server.(*net.UnixConn), relay.(*net.UnixConn), nil
 }
 
-func (d *Daemon) callerSession(ctx context.Context, terminal protocol.TerminalID) protocol.SessionID {
+func (d *Daemon) callerIdentity(ctx context.Context, terminal protocol.TerminalID) (protocol.SessionID, string) {
 	if origin, remote := OriginOf(ctx); remote {
-		return origin.Caller
+		return origin.Caller, ""
 	}
-	return d.sessionInTerminal(terminal)
+	return d.terminalIdentity(terminal)
 }

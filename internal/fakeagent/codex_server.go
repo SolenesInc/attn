@@ -45,6 +45,7 @@ const (
 	methodCompactLimit    = "compact_limit"
 	methodMemoryConfig    = "memory_config"
 	methodWorkspaceRoots  = "workspace_roots"
+	methodThreadReads     = "thread_reads"
 	methodPermissions     = "permissions"
 	methodDropControl     = "drop_control"
 	methodDrain           = "drain"
@@ -84,6 +85,7 @@ type codexAppServer struct {
 	listed          chan struct{}
 	held            map[string]*codexHeldReply
 	modelCalls      map[string]*codexModelCall
+	reads           map[string]int
 
 	compactRefusal string
 }
@@ -437,6 +439,7 @@ func (s *codexAppServer) handle(conn *codexServerConn, m codexshared.Message) (a
 		}
 		return map[string]any{}, nil, s.write(t, lines...)
 	case "thread/read":
+		s.countRead(p.ThreadID)
 		if t, err := s.loaded(p.ThreadID); err == nil {
 			return map[string]any{"thread": s.metadata(t)}, nil, nil
 		}
@@ -1264,6 +1267,10 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 		case <-time.After(HangGuard):
 			return nil, fmt.Errorf("no control connection came back within %s", HangGuard)
 		}
+	case methodThreadReads:
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.reads[p.ThreadID], nil
 	case methodWorkspaceRoots:
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -1333,4 +1340,13 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 		return promptedResult{ConversationID: t.c.conversation}, nil
 	}
 	return nil, fmt.Errorf("unknown method %q", method)
+}
+
+func (s *codexAppServer) countRead(conversation string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.reads == nil {
+		s.reads = map[string]int{}
+	}
+	s.reads[conversation]++
 }

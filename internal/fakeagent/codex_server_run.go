@@ -223,6 +223,13 @@ func (s *CodexServer) call(method string, params, result any) {
 	}
 }
 
+func (s *CodexServer) Reads(conversation string) int {
+	s.t.Helper()
+	var reads int
+	s.call(methodThreadReads, serverThreadParams{ThreadID: conversation}, &reads)
+	return reads
+}
+
 func (s *CodexServer) CloseThread(conversation string) {
 	s.t.Helper()
 	s.call(methodCloseThread, serverThreadParams{ThreadID: conversation}, nil)

@@ -2897,7 +2897,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	defer release()
 	cmd, msg, err := protocol.ParseMessage(data)
 	identity := parseSocketFrameIdentity(data)
-	caller := d.callerSession(ctx, identity.terminal)
+	caller, callerProfile := d.callerIdentity(ctx, identity.terminal)
 	if origin, remote := OriginOf(ctx); remote && !d.isOutpostConn(origin.Host, origin.bridge) {
 		d.sendError(conn, "outpost bridge was replaced")
 		return
@@ -3079,7 +3079,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdQuery:
 		d.handleQuery(conn, msg.(*protocol.QueryMessage))
 	case protocol.CmdRunCommand:
-		d.serveRunCommand(ctx, conn, msg.(*protocol.RunCommandMessage))
+		d.serveRunCommand(ctx, conn, msg.(*protocol.RunCommandMessage), command.Caller{Session: caller, Profile: callerProfile})
 	case protocol.CmdCallerSession:
 		d.handleCallerSession(conn, caller)
 	case protocol.CmdQueryPRs:

@@ -47,11 +47,16 @@ func (d *Daemon) shownIn(t harness.TerminalID) (protocol.SessionID, bool) {
 }
 
 func (d *Daemon) sessionInTerminal(t protocol.TerminalID) protocol.SessionID {
-	if session, _, _, ours := d.resolveCaller(t); ours {
-		return session
+	session, _ := d.terminalIdentity(t)
+	return session
+}
+
+func (d *Daemon) terminalIdentity(t protocol.TerminalID) (protocol.SessionID, string) {
+	if session, _, profile, ours := d.resolveCaller(t); ours {
+		return session, profile
 	}
 	session, _ := d.terminals().Showing(protocol.TrimID(t))
-	return session
+	return session, ""
 }
 
 func (d *Daemon) terminalsOf(sessionID protocol.SessionID) []harness.TerminalID {

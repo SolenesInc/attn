@@ -53,10 +53,10 @@ func (d *Daemon) commandLayer() *command.Layer {
 	return d.commands
 }
 
-func (d *Daemon) serveRunCommand(ctx context.Context, conn net.Conn, msg *protocol.RunCommandMessage) {
+func (d *Daemon) serveRunCommand(ctx context.Context, conn net.Conn, msg *protocol.RunCommandMessage, framing command.Caller) {
 	ctx, cancel := d.connectionContext(ctx, conn)
 	defer cancel()
-	caller, err := d.callerFromFrame(ctx, msg)
+	caller, err := d.callerFromFrame(msg, framing)
 	if err != nil {
 		if err := json.NewEncoder(conn).Encode(command.Response(nil, command.AsRefusal(err))); err != nil {
 			d.logf("run_command %s: writing response: %v", msg.Command, err)
@@ -72,27 +72,26 @@ func (d *Daemon) serveRunCommand(ctx context.Context, conn net.Conn, msg *protoc
 	}
 }
 
-func (d *Daemon) callerFromFrame(ctx context.Context, msg *protocol.RunCommandMessage) (command.Caller, error) {
-	c, err := d.framedCaller(ctx, msg)
+func (d *Daemon) callerFromFrame(msg *protocol.RunCommandMessage, framing command.Caller) (command.Caller, error) {
+	c, err := d.framedCaller(msg, framing)
 	c.Directory = strings.TrimSpace(protocol.Deref(msg.Directory))
 	c.GitEnvironment = msg.GitEnvironment
 	return c, err
 }
 
-func (d *Daemon) framedCaller(ctx context.Context, msg *protocol.RunCommandMessage) (command.Caller, error) {
+func (d *Daemon) framedCaller(msg *protocol.RunCommandMessage, framing command.Caller) (command.Caller, error) {
 	requested := strings.TrimSpace(protocol.Deref(msg.ProfileID))
 	terminal := protocol.TerminalID(strings.TrimSpace(string(protocol.Deref(msg.CallerID))))
 	role := command.CallerRole(msg.Command)
 	var asking command.Caller
 	if terminal != "" {
-		if session := d.callerSession(ctx, terminal); session != "" {
-			profile, known := d.knownSessionProfile(session)
+		asking = framing
+		if asking.Session != "" {
+			profile, known := d.knownSessionProfile(asking.Session)
 			if !known {
-				return command.Caller{}, unknownFramedSession(role, session)
+				return command.Caller{}, unknownFramedSession(role, asking.Session)
 			}
-			asking = command.Caller{Session: session, Profile: profile}
-		} else if _, remote := OriginOf(ctx); !remote {
-			_, _, asking.Profile, _ = d.resolveCaller(terminal)
+			asking.Profile = profile
 		}
 	}
 	if named := protocol.TrimID(protocol.Deref(msg.SessionID)); named != "" {
@@ -109,8 +108,8 @@ func (d *Daemon) framedCaller(ctx context.Context, msg *protocol.RunCommandMessa
 	if err != nil {
 		return command.Caller{}, err
 	}
-	if _, _, callerProfile, _ := d.resolveCaller(terminal); profile == "" && callerProfile != "" {
-		profile = callerProfile
+	if profile == "" {
+		profile = asking.Profile
 	}
 	return command.Caller{Profile: profile, Terminal: terminal}, nil
 }
