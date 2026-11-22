@@ -130,7 +130,7 @@ func (d *Daemon) askOnHome(msg any, sessionID protocol.SessionID, result func(pr
 		return protocol.Ask{}, err
 	}
 	var out bytes.Buffer
-	if err := d.router().Forward(append(frame, '\n'), sessionID, nil, &out); err != nil {
+	if err := d.router().Forward(append(frame, '\n'), forwardRequest{Caller: sessionID}, nil, &out); err != nil {
 		return protocol.Ask{}, err
 	}
 	var reply protocol.Response

@@ -23,7 +23,8 @@ const bridgeForward = "forward"
 const forwardComplete = "forward-complete"
 
 type forwardRequest struct {
-	Caller protocol.SessionID `json:"caller"`
+	Caller        protocol.SessionID `json:"caller"`
+	CallerProfile string             `json:"caller_profile,omitempty"`
 }
 
 type bufferedSocket struct {
@@ -41,7 +42,7 @@ type forwardInput interface {
 // Forward runs a frame on the home for caller and copies the home's reply
 // frames to out. input carries what the caller sends after the frame, as a
 // socket client does; nil sends the frame alone.
-func (r *Router) Forward(frame []byte, caller protocol.SessionID, input forwardInput, out io.Writer) error {
+func (r *Router) Forward(frame []byte, caller forwardRequest, input forwardInput, out io.Writer) error {
 	d := r.daemon
 	conn, name, err := d.homeConn(d.enrollmentStatus())
 	if err != nil {
@@ -54,7 +55,7 @@ func (r *Router) Forward(frame []byte, caller protocol.SessionID, input forwardI
 		}
 		return &homeLostError{home: name, message: lost}
 	}
-	header, err := json.Marshal(forwardRequest{Caller: caller})
+	header, err := json.Marshal(caller)
 	if err != nil {
 		return err
 	}
@@ -157,7 +158,7 @@ func (d *Daemon) forwardBridgeHandler(host string) func(*bridge.Conn, ssh.NewCha
 				defer close(outputEnded)
 				_, _ = io.Copy(channel, relay)
 			})
-			ctx := context.WithValue(d.life.Context(), originKey{}, Origin{Host: host, Name: row.Name, Caller: request.Caller, bridge: conn})
+			ctx := context.WithValue(d.life.Context(), originKey{}, Origin{Host: host, Name: row.Name, Caller: request.Caller, CallerProfile: request.CallerProfile, bridge: conn})
 			d.handleConnectionContext(ctx, server)
 			<-outputEnded
 			if conn.Context().Err() == nil {
@@ -202,7 +203,7 @@ func socketPair() (*net.UnixConn, *net.UnixConn, error) {
 
 func (d *Daemon) callerIdentity(ctx context.Context, terminal protocol.TerminalID) (protocol.SessionID, string) {
 	if origin, remote := OriginOf(ctx); remote {
-		return origin.Caller, ""
+		return origin.Caller, origin.CallerProfile
 	}
 	return d.terminalIdentity(terminal)
 }

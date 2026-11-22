@@ -390,6 +390,47 @@ func TestASharedCodexOnAnOutpostRunsHomeToolsAsTheSessionShowingItsConversation(
 	o.requireNoteBy(session, "Noted by the outpost's Codex")
 }
 
+func TestACLICommandFromASharedCodexThreadNoSessionHoldsOnAnOutpostRunsInTheThreadsProfile(t *testing.T) {
+	o := newOutpostTools(t, fakeagent.Codex)
+	profile := o.pair.App.SelectedProfile()
+	side := testworld.Request(o.pair.App,
+		protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "side", Name: "Side"},
+		protocol.EventProfileActionResult,
+		func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "side" })
+	if !side.Success {
+		t.Fatalf("create a second profile: %+v", side)
+	}
+	shop := o.outpost.Path("shop")
+	o.outpost.SetCodexFolderTrust(shop, "trusted")
+	session, codex := o.spawn(fakeagent.Codex, shop)
+	o.pair.App.TypeLine(session, "find the flaky checkout test")
+	codex.Prompted()
+	codex.Reply("It races the tax lookup. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(o.pair.App, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+
+	server := o.outpost.CodexServer()
+	child := server.SpawnSubagent(codex.ConversationID)
+	server.CloseThread(child)
+	o.pair.App.TypeLine(session, "/rename Closed child processed")
+	codex.Prompted()
+	testworld.AwaitSession(o.pair.App, session, func(s protocol.Session) bool { return s.Label == "Closed child processed" })
+
+	env := []string{"ATTN_INSIDE_APP=1", "ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_CODEX_SHARED_PROFILE=" + profile, "CODEX_THREAD_ID=" + child}
+	var caller protocol.PresenceResult
+	presence := o.outpost.Run(testworld.Invocation{Args: []string{"presence", "--json"}, Env: env})
+	if presence.Code != 0 {
+		t.Fatalf("presence from thread %s: %+v", child, presence)
+	}
+	presence.JSON(t, &caller)
+	if caller.SessionID != "" {
+		t.Fatalf("closed subagent %s still resolves to session %s", child, caller.SessionID)
+	}
+	listed := o.outpost.Run(testworld.Invocation{Args: []string{"seed", "ls"}, Env: env})
+	if listed.Code != 0 || !strings.Contains(listed.Stdout, "Work done on the outpost") {
+		t.Errorf("attn seed ls from thread %s, which no session holds, answered %+v; want profile %s's seed listed", child, listed, profile)
+	}
+}
+
 func TestThePresenceToolOnAnOutpostNamesTheHomesSeedsAndRefusesWhileTheHomeIsDown(t *testing.T) {
 	o := newOutpostTools(t, fakeagent.Claude)
 	session, claude := o.spawn(fakeagent.Claude, o.outpost.Path("work"))

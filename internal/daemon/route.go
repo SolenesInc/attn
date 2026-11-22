@@ -92,9 +92,10 @@ func (r *Router) Send(msg protocol.Placed, answered func(error)) {
 }
 
 type Origin struct {
-	Host, Name string
-	Caller     protocol.SessionID
-	bridge     *bridge.Conn
+	Host, Name    string
+	Caller        protocol.SessionID
+	CallerProfile string
+	bridge        *bridge.Conn
 }
 
 type originKey struct{}
@@ -196,7 +197,7 @@ func (d *Daemon) forwardCommand(c command.Caller, name string, args json.RawMess
 		return nil, command.AsRefusal(err)
 	}
 	var out bytes.Buffer
-	if err := d.router().Forward(append(frame, '\n'), c.Session, nil, &out); err != nil {
+	if err := d.router().Forward(append(frame, '\n'), forwardRequest{Caller: c.Session}, nil, &out); err != nil {
 		return nil, homeForwardRefusal(err)
 	}
 	var reply protocol.Response

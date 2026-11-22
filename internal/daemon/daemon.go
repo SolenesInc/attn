@@ -2909,7 +2909,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 				if _, asksStatus := msg.(*protocol.UpdateStatusMessage); asksStatus && d.answerUpdateStatusFromNotice(conn) {
 					return
 				}
-				if err := d.router().Forward(data, caller, bufferedSocket{Conn: conn, reader: reader}, conn); err != nil {
+				if err := d.router().Forward(data, forwardRequest{Caller: caller, CallerProfile: callerProfile}, bufferedSocket{Conn: conn, reader: reader}, conn); err != nil {
 					pausepoint.At(pausepoint.HomeForwardFailed)
 					d.sendForwardFailure(conn, cmd, err)
 				}
