@@ -24,6 +24,7 @@ pub const COMMANDS: &[Command] = &[
         usage: &[],
         args: &[
             Arg { name: "name", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
+            Arg { name: "agent", cli: Cli::Flag("agent"), value: Value::Text, source: Source::Given, required: true, list: false },
         ],
     },
     Command {

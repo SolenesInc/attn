@@ -11,9 +11,15 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-func (d *Daemon) createCrewMember(profileID, name string) (crew.Member, error) {
+func (d *Daemon) createCrewMember(profileID, name, agent string) (crew.Member, error) {
 	name = strings.TrimSpace(name)
 	if err := crew.ValidateName(name); err != nil {
+		return crew.Member{}, err
+	}
+	if harnessID(agent) == "" {
+		return crew.Member{}, fmt.Errorf("a member needs a harness: pass --agent, %s", d.harnessChoices())
+	}
+	if err := d.validateCrewLaunchSelection(crew.Member{Agent: agent}, false); err != nil {
 		return crew.Member{}, err
 	}
 	identities, err := d.store.CrewIdentities()
@@ -38,7 +44,7 @@ func (d *Daemon) createCrewMember(profileID, name string) (crew.Member, error) {
 	if err != nil {
 		return crew.Member{}, err
 	}
-	member := crew.Member{ID: key, Name: name, ProfileID: profileID, Home: home, AwarenessDirs: []string{}}
+	member := crew.Member{ID: key, Name: name, ProfileID: profileID, Home: home, Agent: harnessID(agent), AwarenessDirs: []string{}}
 	created := false
 	defer func() {
 		if !created {

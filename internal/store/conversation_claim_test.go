@@ -15,7 +15,7 @@ func TestAReportedConversationIsExclusiveInItsProfile(t *testing.T) {
 	}
 	defer s.Close()
 	for id, profile := range map[protocol.SessionID]string{"holder": "work", "here": "home", "neighbour": "home"} {
-		s.Add(&protocol.Session{ID: id, Label: string(id)})
+		s.Add(&protocol.Session{ID: id, Label: string(id), Agent: protocol.SessionAgentClaude})
 		if _, err := s.db.Exec(`UPDATE sessions SET profile_id = ? WHERE id = ?`, profile, id); err != nil {
 			t.Fatal(err)
 		}

@@ -42,6 +42,13 @@ func requireStdout(t *testing.T, got testworld.Result, want ...string) {
 	requireLines(t, "stdout", got.Stdout, want...)
 }
 
+func giveMemberClaude(t *testing.T, s *testworld.Stack, member string) {
+	t.Helper()
+	if set := s.Attn("crew", "set", member, "--agent", "claude"); set.Code != 0 {
+		t.Fatal(set)
+	}
+}
+
 func writeCharter(t *testing.T, s *testworld.Stack, name string) {
 	t.Helper()
 	home := filepath.Join(s.Dir, "crew", name)
@@ -95,16 +102,19 @@ func TestCrewMembersStartCloseAndKeepTheirLaunchSettings(t *testing.T) {
 	if keel := roster["keel"]; keel.ResolvedAgent != "codex" || protocol.Deref(keel.ResolvedEffort) != "high" || !slices.Equal(keel.AwarenessDirs, []string{notes, specs}) {
 		t.Fatalf("keel after crew set = %+v", keel)
 	}
-	if trellis := roster["trellis"]; trellis.ResolvedAgent != "claude" || trellis.Agent != nil || trellis.Model != nil || trellis.Effort != nil || len(trellis.AwarenessDirs) != 0 {
+	if trellis := roster["trellis"]; trellis.ResolvedAgent != "" || trellis.Agent != nil || trellis.Model != nil || trellis.Effort != nil || len(trellis.AwarenessDirs) != 0 {
 		t.Fatalf("setting keel touched trellis: %+v", trellis)
 	}
+	requireStdout(t, s.Attn("crew", "set", "trellis", "--agent", "claude"), "Trellis launches in - on claude")
+	roster = crewRoster(t, s)
 	table := s.Attn("crew", "list").Stdout
 	requireLines(t, "crew list", table, "MEMBER", "STATE", "AGENT", "MODEL", "EFFORT", "SESSION", "HOME")
 	requireLines(t, "keel's row", crewRow(t, table, "Keel"), " between sessions ", " codex ", " high ", filepath.Join(s.Dir, "crew", "keel"))
 	requireLines(t, "trellis's row", crewRow(t, table, "Trellis"), " between sessions ", " claude ", " "+protocol.Deref(roster["trellis"].ResolvedModel)+" ", filepath.Join(s.Dir, "crew", "trellis"))
 
-	requireStdout(t, s.Attn("crew", "set", "keel", "--agent", "", "--effort", "", "--awareness-dir", ""), "Keel launches in - on claude", "awareness dirs: -\n")
-	if keel := crewRoster(t, s)["keel"]; keel.Agent != nil || keel.Model != nil || keel.Effort != nil || keel.ResolvedAgent != "claude" || len(keel.AwarenessDirs) != 0 {
+	requireFailure(t, s.Attn("crew", "set", "keel", "--agent", ""), "crew set: ", "needs a harness")
+	requireStdout(t, s.Attn("crew", "set", "keel", "--agent", "claude", "--effort", "", "--awareness-dir", ""), "Keel launches in - on claude", "awareness dirs: -\n")
+	if keel := crewRoster(t, s)["keel"]; protocol.Deref(keel.Agent) != "claude" || keel.Model != nil || keel.Effort != nil || keel.ResolvedAgent != "claude" || len(keel.AwarenessDirs) != 0 {
 		t.Fatalf("keel after clearing its settings = %+v", keel)
 	}
 	requireStdout(t, s.Attn("crew", "set", "keel", "--model", "claude-fake-sonnet"), "Keel launches in - on claude, model claude-fake-sonnet, ")
@@ -159,6 +169,7 @@ func TestCrewNamesResolveInTheCallersProfile(t *testing.T) {
 	s.Start()
 	app := s.App()
 	home := app.SelectedProfile()
+	giveMemberClaude(t, s, "Keel")
 	requireStdout(t, s.Attn("crew", "start", "Keel"), "Keel is in session")
 	created := testworld.Request(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "side", Name: "Side"}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "side" })
 	if !created.Success {
@@ -201,13 +212,13 @@ func TestCrewCreateRetireAndRestoreCommands(t *testing.T) {
 		{args: []string{"crew", "restore", "Keel", "extra"}, want: `takes 1 argument (member), got 2: "Keel" "extra"`},
 	})
 	s.Start()
-	requireStdout(t, s.Attn("crew", "create", "Keel"), "Keel joined profile", "with key member:keel.", "home: "+filepath.Join(s.Dir, "notebook", "crew", "keel"), "attn crew start Keel")
+	requireStdout(t, s.Attn("crew", "create", "Keel", "--agent", "claude"), "Keel joined profile", "with key member:keel.", "home: "+filepath.Join(s.Dir, "notebook", "crew", "keel"), "attn crew start Keel")
 	var created protocol.CrewMember
-	s.Attn("crew", "create", "Trellis", "--json").JSON(t, &created)
+	s.Attn("crew", "create", "Trellis", "--agent", "claude", "--json").JSON(t, &created)
 	if created.ID != "trellis" || created.Name != "Trellis" {
 		t.Fatalf("created = %+v", created)
 	}
-	requireFailure(t, s.Attn("crew", "create", "keel"), "crew create: ", "Keel already exists")
+	requireFailure(t, s.Attn("crew", "create", "keel", "--agent", "claude"), "crew create: ", "Keel already exists")
 
 	requireStdout(t, s.Attn("crew", "retire", "Keel"), "Keel is retired.", "released seeds: -", "removed watches: 0", "closed asks: -", "unread mail kept: 0", "attn crew restore Keel")
 	requireStdout(t, s.Attn("crew", "retire", "Keel"), "Keel was already retired.")
@@ -218,7 +229,7 @@ func TestCrewCreateRetireAndRestoreCommands(t *testing.T) {
 		t.Fatalf("retired row = %q", row)
 	}
 	requireFailure(t, s.Attn("crew", "start", "Keel"), "crew start: ", "Keel is retired")
-	requireFailure(t, s.Attn("crew", "create", "Keel"), "crew create: ", "Keel is retired", "attn crew restore Keel")
+	requireFailure(t, s.Attn("crew", "create", "Keel", "--agent", "claude"), "crew create: ", "Keel is retired", "attn crew restore Keel")
 	requireStdout(t, s.Attn("crew", "restore", "Keel"), "Keel is back.")
 	requireStdout(t, s.Attn("crew", "restore", "Keel"), "Keel was not retired; nothing changed.")
 
@@ -240,6 +251,7 @@ func TestCrewMoveHomeAndRenameReportWhereTheHomeIs(t *testing.T) {
 	writeCharter(t, s, "keel")
 	writeCharter(t, s, "trellis")
 	s.Start()
+	giveMemberClaude(t, s, "Keel")
 	var moved protocol.CrewMoveHomeResult
 	s.Attn("crew", "move-home", "Keel", "--json").JSON(t, &moved)
 	if moved.Member.ID != "keel" || moved.PreviousHome != filepath.Join(s.Dir, "crew", "keel") || moved.Member.HomeDir != filepath.Join(s.Dir, "notebook", "crew", "keel") {
@@ -290,6 +302,7 @@ func TestAClearedMemberKeepsItsDayAcrossADaemonCrash(t *testing.T) {
 	writeCharter(t, s, "keel")
 	s.Start()
 	s.App()
+	giveMemberClaude(t, s, "Keel")
 	var wake protocol.CrewStartResult
 	s.Attn("crew", "start", "Keel", "--json").JSON(t, &wake)
 	day := s.Launched(string(wake.SessionID))

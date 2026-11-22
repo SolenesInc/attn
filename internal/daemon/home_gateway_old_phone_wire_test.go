@@ -74,6 +74,7 @@ func startOldPhoneConversation(t *testing.T) *oldPhoneConversation {
 	t.Helper()
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
+	giveImportedMemberAHarness(t, cli, "keel")
 	setSetting(t, app, "phone_access_enabled", "true")
 	setSetting(t, app, "asks_enabled", "true")
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))

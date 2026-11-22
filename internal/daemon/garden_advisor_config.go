@@ -13,7 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/setting"
 )
 
-const gardenAdvisorDefaultAgent = "codex"
+var errGardenAdvisorUnset = errors.New("the garden advisor has no harness yet; choose one in Settings > Background")
 
 type gardenAdvisorConfig struct {
 	Agent  string `json:"agent"`
@@ -24,7 +24,7 @@ type gardenAdvisorConfig struct {
 func (d *Daemon) parseGardenAdvisorConfig(raw string) (gardenAdvisorConfig, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return gardenAdvisorConfig{Agent: gardenAdvisorDefaultAgent}, nil
+		return gardenAdvisorConfig{}, errGardenAdvisorUnset
 	}
 
 	var config gardenAdvisorConfig
@@ -51,6 +51,9 @@ func (d *Daemon) parseGardenAdvisorConfig(raw string) (gardenAdvisorConfig, erro
 }
 
 func (d *Daemon) validateGardenAdvisorSetting(raw string) error {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
 	config, err := d.parseGardenAdvisorConfig(raw)
 	if err != nil {
 		return err

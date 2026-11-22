@@ -720,7 +720,7 @@ func TestSeedMovesFollowTheChainAndChiefStandingOfAgentCloseAndTellTheDelegate(t
 		if result.Audit == nil || !slices.Contains(forcedNotes, result.Audit.Body) || !strings.Contains(result.Audit.Body, "stranger forced") || !strings.Contains(result.Audit.Body, worker) {
 			t.Fatalf("forced audit: %q", forcedNotes)
 		}
-		if _, err := cli.CrewCreate("Trellis"); err != nil {
+		if _, err := cli.CrewCreate("Trellis", "claude"); err != nil {
 			t.Fatal(err)
 		}
 		memberSeed := plantSeedAs(t, cli, parent, "A crew member's claim")

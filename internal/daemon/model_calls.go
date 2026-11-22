@@ -86,6 +86,10 @@ func (d *Daemon) validateModelCallsAgent(value string) error {
 	return fmt.Errorf("model calls are answered by %s, not %q", strings.Join(d.modelCallHarnesses(), " or "), value)
 }
 
+func (d *Daemon) newSessionAgent() string {
+	return harnessID(d.setting(setting.NewSessionAgent))
+}
+
 func (d *Daemon) modelCallDefaultHarness() string {
 	if name := strings.ToLower(strings.TrimSpace(d.setting(setting.ModelCallsAgent))); name != "" {
 		return name
@@ -112,6 +116,9 @@ func (d *Daemon) modelCallHarness(named string) (string, harness.OneShot, error)
 func (d *Daemon) modelCallHarnessRefusal(named, name string, answers []string) error {
 	answering := strings.Join(answers, " or ")
 	if strings.TrimSpace(named) == "" && strings.TrimSpace(d.setting(setting.ModelCallsAgent)) == "" {
+		if name == "" {
+			return fmt.Errorf("model calls name no harness; set model_calls.agent to %s", answering)
+		}
 		return fmt.Errorf("model calls default to the new-session agent %q, which does not answer model calls; set model_calls.agent to %s", name, answering)
 	}
 	return fmt.Errorf("%q does not answer model calls; model calls are answered by %s", name, answering)

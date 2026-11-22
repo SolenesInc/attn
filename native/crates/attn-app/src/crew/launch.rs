@@ -241,29 +241,15 @@ pub(crate) fn pump(state: &mut State, member: &str, tx: &mut Tx) {
     );
 }
 
-/// The harness a member with no pin of its own runs on.
-pub(crate) fn followed_harness(shown: &Shown) -> String {
-    if shown.draft.agent.is_empty()
-        && !shown
-            .acknowledged
-            .agent
-            .clone()
-            .unwrap_or_default()
-            .is_empty()
-    {
-        return String::new();
-    }
-    if shown.draft.agent.is_empty() {
-        shown.acknowledged.resolved_agent.clone()
-    } else {
-        shown.draft.agent.clone()
-    }
+/// The harness the member's saved agent names, none for a Chief before setup.
+pub(crate) fn harness(shown: &Shown) -> String {
+    shown.draft.agent.clone()
 }
 
-/// What the member runs without a pin of its own: the harness it follows, and on it the
+/// What the member runs without a pin of its own: its harness, and on it the
 /// launch default for a part the member pins, else the part it resolves to now.
 fn inherited(state: &State, shown: &Shown) -> Option<Route> {
-    let harness = followed_harness(shown);
+    let harness = harness(shown);
     if harness.is_empty() {
         return None;
     }
@@ -295,9 +281,7 @@ pub(crate) fn route(state: &State, member: &str) -> Option<(Route, Rules)> {
             .iter()
             .map(RouteHarness::from)
             .collect(),
-        allow_none: true,
         require_available: true,
-        none_label: Some("Crew default"),
         inherited: inherited(state, &shown),
         ..Rules::default()
     };

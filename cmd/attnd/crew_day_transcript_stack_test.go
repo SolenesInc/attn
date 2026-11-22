@@ -22,6 +22,7 @@ func TestForgetCrewLetterTranscriptRequiresConsent(t *testing.T) {
 			s.Start()
 			app := s.App()
 			awaitAgentAvailable(app, fakeagent.Claude)
+			giveMemberClaude(t, s, "trellis")
 			var day protocol.CrewStartResult
 			s.Attn("crew", "start", "trellis", "--json").JSON(t, &day)
 			run := s.Launched(string(day.SessionID))

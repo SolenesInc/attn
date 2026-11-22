@@ -1307,7 +1307,7 @@ func (d *Daemon) resumeMonitor(existing *protocol.Session, live liveTerminal) (s
 			existing.State == protocol.SessionStatePendingApproval) {
 		return false
 	}
-	nextState, ok := sessionStateFromRecoveredInfo(live.info, d.signalsOf(normalizeSpawnAgent(live.info.Agent)))
+	nextState, ok := sessionStateFromRecoveredInfo(live.info, d.signalsOf(harnessID(live.info.Agent)))
 	if !ok && !sessionmonitor.ResolverOwnedStates[existing.State] {
 		nextState, ok = protocol.SessionStateLaunching, true
 	}
@@ -1465,8 +1465,12 @@ func (d *Daemon) adoptLiveTerminal(sessionID protocol.SessionID, live liveTermin
 		return
 	}
 	info := live.info
-	if normalizeSpawnAgent(info.Agent) == protocol.AgentShellValue {
+	switch harnessID(info.Agent) {
+	case protocol.AgentShellValue:
 		report.SkippedShell++
+		return
+	case "":
+		report.MissingMetadata++
 		return
 	}
 
@@ -1481,7 +1485,7 @@ func (d *Daemon) adoptLiveTerminal(sessionID protocol.SessionID, live liveTermin
 		label = string(sessionID)
 	}
 
-	state, ok := sessionStateFromRecoveredInfo(info, d.signalsOf(normalizeSpawnAgent(info.Agent)))
+	state, ok := sessionStateFromRecoveredInfo(info, d.signalsOf(harnessID(info.Agent)))
 	if !ok {
 		state = protocol.SessionStateLaunching
 	}
@@ -1495,7 +1499,7 @@ func (d *Daemon) adoptLiveTerminal(sessionID protocol.SessionID, live liveTermin
 	recoveredSession := &protocol.Session{
 		ID:             sessionID,
 		Label:          label,
-		Agent:          normalizeSpawnAgent(info.Agent),
+		Agent:          harnessID(info.Agent),
 		Directory:      directory,
 		ProfileID:      profile.ID,
 		State:          state,
@@ -3970,7 +3974,7 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 		return
 	}
 
-	msg.Session.Agent = normalizeSpawnAgent(msg.Session.Agent)
+	msg.Session.Agent = harnessID(msg.Session.Agent)
 	stampSessionTimestamps(&msg.Session, string(protocol.TimestampNow()))
 	profile, err := d.requestedOrRecentProfile(msg.Session.ProfileID)
 	if err != nil {

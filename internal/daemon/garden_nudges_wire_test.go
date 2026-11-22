@@ -278,6 +278,7 @@ func TestASeedBellStartsItsMemberTenderBetweenSessionsAndStaysWithTheMember(t *t
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
 		cli := w.Client()
+		giveImportedMemberAHarness(t, cli, "trellis")
 		registerSessions(t, w, cli, "sender", "watcher")
 		seed := plantSeedAs(t, cli, "sender", "review the deployment")
 		if _, err := cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: "trellis"}); err != nil {

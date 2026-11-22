@@ -411,7 +411,8 @@ func runWrapper() {
 	if os.Getenv("ATTN_DAEMON_MANAGED") == "1" {
 		agentName := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_AGENT")))
 		if agentName == "" {
-			agentName = "codex"
+			fmt.Fprintf(os.Stderr, "attn: this terminal names no harness: set ATTN_AGENT to one of %s\n", builtinHarnesses())
+			exit(1)
 		}
 		runAgentDirectly(agentName)
 		return

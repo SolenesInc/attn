@@ -2604,6 +2604,9 @@ type CodeNavServer struct {
 }
 
 type CodeNavSetupMessage struct {
+	// Agent corresponds to the JSON schema field "agent".
+	Agent *string `json:"agent,omitempty,omitzero"`
+
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 

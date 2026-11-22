@@ -50,22 +50,9 @@ fn parse_activity(raw: Option<&str>) -> Config {
 }
 
 fn parse_advisor(raw: Option<&str>) -> Config {
-    let parsed = raw
-        .filter(|r| !r.trim().is_empty())
-        .and_then(|r| serde_json::from_str::<Config>(r).ok());
-    let Some(parsed) = parsed else {
-        return Config {
-            agent: "codex".into(),
-            ..Config::default()
-        };
-    };
-    let agent = parsed.agent.trim().to_lowercase();
+    let parsed = parse_activity(raw);
     Config {
-        agent: if agent.is_empty() {
-            "codex".into()
-        } else {
-            agent
-        },
+        agent: parsed.agent.trim().to_lowercase(),
         model: parsed.model.trim().to_owned(),
         effort: parsed.effort.trim().to_owned(),
     }
@@ -112,6 +99,9 @@ const ADVISOR_CODEC: Codec = Codec {
     actual: |settings, key| draft(&parse_advisor(settings.get(key).map(String::as_str))),
     serialize: |_, raw| {
         let config = draft_config(raw);
+        if config.agent.is_empty() {
+            return Ok(String::new());
+        }
         Ok(stored(&Stored {
             agent: &config.agent,
             model: Some(config.model.trim()),
@@ -464,7 +454,15 @@ fn garden_advisor(state: &State, t: &Tokens) -> Block {
     };
     let mut section = Section::new("settings.block.garden-advisor", "Garden advisor")
         .description("Classifies seeds during Review garden and can draft a handoff. It runs in the background with this saved agent and cannot change a seed.");
-    if !(runs_here("available") && runs_here("cap_headless_task")) {
+    if agent.is_empty() {
+        section = section.push(
+            Notice::warn(
+                "settings.garden-advisor.unset",
+                "Choose an agent first: Review garden waits for one.",
+            )
+            .build(t),
+        );
+    } else if !(runs_here("available") && runs_here("cap_headless_task")) {
         section = section.push(
             Notice::warn(
                 "settings.garden-advisor.unavailable",

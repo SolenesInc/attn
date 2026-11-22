@@ -213,11 +213,19 @@ fn a_stored_activity_model_missing_from_discovery_stays_and_an_exact_id_saves() 
 }
 
 #[test]
-fn the_advisor_shows_its_light_default_at_codex_s_default_effort_without_writing() {
+fn an_unset_advisor_asks_for_an_agent_and_writes_nothing() {
     let mut world = on_background(&[]);
     let shown = route_value(&world, ADVISOR);
-    assert!(shown.contains("Light default → gpt-6-luna"), "{shown}");
-    assert!(shown.contains("xhigh"), "{shown}");
+    assert!(
+        !shown.contains("Codex") && !shown.contains("Claude"),
+        "{shown}"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("settings.garden-advisor.unset"))
+            .is_some()
+    );
     assert!(writes(&world).is_empty());
     rest(&mut world);
 }
@@ -283,6 +291,7 @@ fn the_advisor_clears_its_pins_back_to_the_discovered_defaults() {
 fn the_advisor_saves_an_explicit_model_and_effort_and_shows_the_model_s_tier() {
     let mut world = on_background(&[]);
     open_route(&mut world, "Garden advisor model");
+    preview_harness(&mut world, "Codex");
     pick_model(&mut world, "gpt-6-luna");
     pick_effort(&mut world, "max");
     let shown = route_value(&world, ADVISOR);

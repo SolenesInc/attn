@@ -46,7 +46,7 @@ func TestConversationKeepSurvivesAnUnavailableCrewHome(t *testing.T) {
 		t.Fatalf("resume kept conversation after harness pruning: %+v", result)
 	}
 	seedResumeContinues(t, w, run, string(delegated.SessionID))
-	_, err = cli.CrewStart("Keel", "", "")
+	_, err = crewStartFrom(t, cli, "Keel", "")
 	crewErrorContains(t, err, home, "unavailable")
 }
 

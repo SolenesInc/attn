@@ -17,7 +17,7 @@ func setupAgentDesktop(t *testing.T) (*Daemon, profiles.Desktop) {
 
 func setupAgentDesktopOn(t *testing.T, d *Daemon) (*Daemon, profiles.Desktop) {
 	t.Helper()
-	injectTestSession(t, d, protocol.Session{ID: "session-1", Label: "agent", Directory: t.TempDir()})
+	injectTestSession(t, d, protocol.Session{ID: "session-1", Label: "agent", Agent: protocol.SessionAgentClaude, Directory: t.TempDir()})
 	focusTestAgent(t, d, "session-1")
 	placement, _, err := d.store.SessionPlacement("session-1")
 	if err != nil {

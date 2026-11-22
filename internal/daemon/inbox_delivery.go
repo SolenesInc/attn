@@ -312,7 +312,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 					d.armInboxLocked(a, state, tripwire.reopensAt.Sub(d.clock.Now()))
 					return receipt, nil
 				}
-				if retired := (errRetiredMember{}); errors.As(err, &retired) || errors.Is(err, errChiefHasNoHarness) {
+				if retired := (errRetiredMember{}); errors.As(err, &retired) || errors.As(err, new(errMemberHasNoHarness)) {
 					state.startedSession = ""
 					receipt.Detail = err.Error()
 					return receipt, nil

@@ -445,7 +445,7 @@ fn launch_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<Block> {
         );
     }
     let catalog_error = crate::settings::harnesses_error(state);
-    let follows = launch::followed_harness(&shown);
+    let follows = launch::harness(&shown);
     let unavailable = !follows.is_empty()
         && !crate::settings::listed_harnesses(state)
             .iter()

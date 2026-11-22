@@ -85,6 +85,7 @@ func TestAGardenReviewFreezesItsCandidatesAndRecipe(t *testing.T) {
 func TestAReviewOfAGardenWithNothingToReviewListsNoCandidates(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	cli := w.Client()
+	setSetting(t, w.App(), "garden.advisor", `{"agent":"claude"}`)
 	started := gardenReviewStart(t, cli)
 	if started.Run.Status != "complete" || started.Run.CandidateIds == nil || len(started.Run.CandidateIds) != 0 {
 		t.Errorf("starting a review of an empty garden = %+v, want it complete with an empty candidate list", started.Run)
@@ -159,6 +160,7 @@ func TestTheCLIAndTheAppShowTheSameReviewWithItsAdvisorProgress(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	seed := gardenReviewAbandonedSeed(t, w, app, cli, "gardener", "old work")
+	setSetting(t, app, "garden.advisor", `{"agent":"claude"}`)
 	review := gardenReviewStart(t, cli)
 
 	retrying := testworld.Await(app, protocol.EventGardenReviewUpdated, func(m protocol.GardenReviewUpdatedMessage) bool {

@@ -17,7 +17,8 @@ auto memory, Codex memories). Every profile has one member from the start: the
 
 ## Add a member
 
-`attn crew create <name>` adds a member to your profile. A name is letters,
+`attn crew create <name> --agent <harness>` adds a member to your profile, on
+the harness its days run on. A name is letters,
 digits and `-`, starting with a letter, at most 40 characters. The names
 `chief`, `attn`, `user` and `you` are taken. The member's home is `crew/<name>/` in your
 profile's Notebook, or `crew/<name>-2/` when that folder is taken, so you can
@@ -29,7 +30,8 @@ A home folder you make yourself also works. The folder is `~/.attn/crew/<key>/`
 (for a named instance, `~/.attn-<instance>/crew/<key>/`), it holds a
 `CHARTER.md`, and its name is lowercase letters, digits and `-`. After
 `attn daemon stop` and `attn daemon ensure`, the daemon adds the member to the
-roster.
+roster with no harness, and its first start asks you to pick one with
+`attn crew set <name> --agent <harness>`.
 
 The member's name starts as the key with a capital letter, so `fern` is Fern.
 The member joins the profile you used most recently.

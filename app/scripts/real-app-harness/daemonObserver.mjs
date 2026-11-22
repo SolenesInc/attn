@@ -76,6 +76,7 @@ export class DaemonObserver {
         );
         return;
       } catch (error) {
+        await this.close();
         await delay(250);
         this.lastConnectError = error;
       }

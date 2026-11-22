@@ -18,18 +18,15 @@ func TestPreflightReportsEachLaunchSettingWithWhereItCameFrom(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
 
+	if unnamed := s.Attn("preflight", "--json"); unnamed.Code == 0 || !strings.Contains(unnamed.Stderr, "name the harness to check with --agent or ATTN_AGENT") {
+		t.Fatalf("preflight naming no harness = %+v, want a refusal that says to name one", unnamed)
+	}
 	for _, tc := range []struct {
 		name                 string
 		args                 []string
 		env                  []string
 		agent, model, effort resolvedLaunch
 	}{
-		{
-			name:   "defaults",
-			agent:  resolvedLaunch{Value: "codex", Source: "default"},
-			model:  resolvedLaunch{Source: "agent_default"},
-			effort: resolvedLaunch{Source: "agent_default"},
-		},
 		{
 			name:   "a flag over the environment",
 			args:   []string{"--model", "flag-model"},
@@ -105,6 +102,7 @@ func TestPreflightNamesTheRootCauseAndTheActionOfEachFailingCheck(t *testing.T) 
 				} `json:"checks"`
 			}
 			inv := tc.inv
+			inv.Env = append([]string{"ATTN_AGENT=claude"}, inv.Env...)
 			inv.Args = append([]string{"preflight", "--json"}, inv.Args...)
 			s.Run(inv).JSON(t, &report)
 			for _, c := range report.Checks {

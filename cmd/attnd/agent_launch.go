@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -86,6 +87,12 @@ func parseDirectLaunchArgs(args []string) (directLaunchArgs, error) {
 	return parsed, nil
 }
 
+func builtinHarnesses() string {
+	names := agentdriver.List()
+	slices.Sort(names)
+	return strings.Join(names, ", ")
+}
+
 func runAgentDirectly(requestedAgent string) {
 	leaveInvocationUnrecorded()
 	parsed, err := parseDirectLaunchArgs(os.Args[1:])
@@ -99,8 +106,8 @@ func runAgentDirectly(requestedAgent string) {
 
 	driver := agentdriver.Get(requestedAgent)
 	if driver == nil {
-		fmt.Fprintf(os.Stderr, "warning: unknown ATTN_AGENT %q, defaulting to codex\n", requestedAgent)
-		driver = agentdriver.MustGet("codex")
+		fmt.Fprintf(os.Stderr, "attn: ATTN_AGENT %q is no harness attn runs: set it to one of %s\n", requestedAgent, builtinHarnesses())
+		exit(1)
 	}
 	caps := agentdriver.EffectiveCapabilities(driver)
 

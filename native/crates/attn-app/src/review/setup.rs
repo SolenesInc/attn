@@ -45,6 +45,13 @@ fn offer_setting(bundle: &ReviewBundle, host: Option<&str>) -> String {
     )
 }
 
+fn picked_harness(settings: &std::collections::BTreeMap<String, String>) -> Option<String> {
+    settings
+        .get("new_session_agent")
+        .map(|a| a.trim().to_lowercase())
+        .filter(|a| !a.is_empty() && a != "shell")
+}
+
 fn offered(bundle: &ReviewBundle, host: Option<&str>, servers: Servers) -> bool {
     servers
         .settings
@@ -182,9 +189,13 @@ pub(crate) fn states(
             let toggle: fn(&mut State, &str, &mut Tx) = |s, tile, tx| {
                 toggle_offer(s, tile, tx);
             };
+            let set_up = match picked_harness(servers.settings) {
+                Some(agent) => format!("set up with {}", crate::picker::agents::label(&agent)),
+                None => "set up".to_owned(),
+            };
             if offering {
                 vec![
-                    press("s", "set up", "start", |s, tile, tx| {
+                    press("s", &set_up, "start", |s, tile, tx| {
                         start(s, tile, tx);
                     }),
                     press("x", "not here", "offer", toggle),
@@ -245,6 +256,7 @@ pub(crate) fn start(state: &mut State, tile: &str, tx: &mut Tx) -> bool {
         .map(|(_, d)| d)
         .unwrap_or_default();
     let repository = bundle.repository.clone();
+    let agent = picked_harness(&state.facts.settings);
     say(
         state,
         tile,
@@ -264,6 +276,7 @@ pub(crate) fn start(state: &mut State, tile: &str, tx: &mut Tx) -> bool {
             file: n.file,
             state: n.state,
             detail: n.detail,
+            agent,
             request_id: Some(id),
             ..CodeNavSetupMessage::new()
         },

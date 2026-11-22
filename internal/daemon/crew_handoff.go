@@ -115,7 +115,7 @@ func (d *Daemon) crewTurnover(member crew.Member, sessionID protocol.SessionID, 
 func (d *Daemon) crewSwitchDue(member crew.Member, sessionID protocol.SessionID) bool {
 	session := d.store.Get(sessionID)
 	return member.SwitchingSession == sessionID && !member.Retired && session != nil &&
-		!strings.EqualFold(strings.TrimSpace(session.Agent), member.LaunchAgent())
+		!strings.EqualFold(strings.TrimSpace(session.Agent), member.Harness())
 }
 
 func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.SessionID, note string, retry bool) (string, error) {
@@ -224,7 +224,7 @@ func (d *Daemon) crewSwitchHarness(member crew.Member, oldSessionID protocol.Ses
 	committed = true
 	d.clearCrewSwitching(member.ID)
 	d.announceBackgroundLaunch("crew", member.ID, newSessionID, member.Name+" handoff")
-	d.logf("crew: %s switched to %s — session %s ended, session %s continues from its letter", member.Name, member.LaunchAgent(), oldSessionID, newSessionID)
+	d.logf("crew: %s switched to %s — session %s ended, session %s continues from its letter", member.Name, member.Harness(), oldSessionID, newSessionID)
 	return newSessionID, nil
 }
 
@@ -251,7 +251,7 @@ func (d *Daemon) crewSuccessorSpawn(member crew.Member, session *protocol.Sessio
 	spawnMsg.Label = protocol.Ptr(member.Name)
 	spawnMsg.InitialPrompt = protocol.Ptr(prompts.RenderText("crew", "successor", nil))
 	previousAgent := spawnMsg.Agent
-	spawnMsg.Agent = member.LaunchAgent()
+	spawnMsg.Agent = member.Harness()
 	spawnMsg.Model = d.crewStartModel(member, spawnMsg.Agent)
 	spawnMsg.Effort = d.crewStartEffort(member, spawnMsg.Agent)
 	if !strings.EqualFold(previousAgent, spawnMsg.Agent) {

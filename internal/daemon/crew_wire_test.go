@@ -91,11 +91,36 @@ func memberOf(members []protocol.CrewMember, id string) (protocol.CrewMember, bo
 
 func startCrew(t *testing.T, cli *client.Client, member, agent string) *protocol.CrewStartResult {
 	t.Helper()
+	if agent == "" {
+		giveImportedMemberAHarness(t, cli, member)
+	}
 	woken, err := cli.CrewStart(member, agent, "")
 	if err != nil {
 		t.Fatalf("wake %s: %v", member, err)
 	}
 	return woken
+}
+
+func crewStartFrom(t *testing.T, cli *client.Client, member string, source protocol.SessionID) (*protocol.CrewStartResult, error) {
+	t.Helper()
+	giveImportedMemberAHarness(t, cli, member)
+	return cli.CrewStart(member, "", source)
+}
+
+func giveImportedMemberAHarness(t *testing.T, cli *client.Client, member string) {
+	t.Helper()
+	listed, err := cli.CrewListAll()
+	if err != nil {
+		t.Fatalf("crew list: %v", err)
+	}
+	for _, m := range listed.Members {
+		if strings.EqualFold(m.ID, member) || strings.EqualFold(m.Name, member) {
+			if protocol.Deref(m.Agent) == "" && !protocol.Deref(m.Chief) {
+				setCrew(t, cli, member, protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
+			}
+			return
+		}
+	}
 }
 
 func setCrew(t *testing.T, cli *client.Client, member string, change protocol.CrewSetMessage) protocol.CrewMember {
@@ -266,6 +291,7 @@ func TestConcurrentStartsOfOneMemberShareOneSession(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	results := make(chan *protocol.CrewStartResult, 2)
 	failures := make(chan error, 2)
+	giveImportedMemberAHarness(t, w.Client(), "keel")
 	for range 2 {
 		go func() {
 			woken, err := w.Client().CrewStart("keel", "", "")
@@ -298,7 +324,7 @@ func TestCrewStartAndSetRefusalsNameWhatToDo(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 
-	_, err := cli.CrewStart("nobody", "", "")
+	_, err := crewStartFrom(t, cli, "nobody", "")
 	crewErrorContains(t, err, "attn crew list")
 
 	moved := w.Path("moved")
@@ -309,7 +335,7 @@ func TestCrewStartAndSetRefusalsNameWhatToDo(t *testing.T) {
 	if err := os.RemoveAll(moved); err != nil {
 		t.Fatal(err)
 	}
-	_, err = cli.CrewStart("alder", "", "")
+	_, err = crewStartFrom(t, cli, "alder", "")
 	crewErrorContains(t, err, "Alder launches in", moved, "attn crew set Alder --cwd")
 	if binding := crewRosterMember(t, cli, "alder").BindingSession; binding != nil {
 		t.Errorf("a refused wake left alder bound to %s", *binding)
@@ -322,11 +348,12 @@ func TestCrewStartAndSetRefusalsNameWhatToDo(t *testing.T) {
 	_, err = cli.CrewSet("keel", protocol.Ptr(missing), nil, nil, nil, nil)
 	crewErrorContains(t, err, missing)
 
+	giveImportedMemberAHarness(t, cli, "trellis")
 	pinned := setCrew(t, cli, "trellis", protocol.CrewSetMessage{Effort: protocol.Ptr("high")})
 	_, err = cli.CrewSet("trellis", nil, protocol.Ptr("nosuchharness"), protocol.Ptr("some-model"), protocol.Ptr("max"), nil)
 	crewErrorContains(t, err, "nosuchharness")
 	after := crewRosterMember(t, cli, "trellis")
-	if after.Revision != pinned.Revision || after.Agent != nil || after.Model != nil || protocol.Deref(after.Effort) != "high" {
+	if after.Revision != pinned.Revision || protocol.Deref(after.Agent) != "claude" || after.Model != nil || protocol.Deref(after.Effort) != "high" {
 		t.Fatalf("a refused selection changed trellis: before %+v, after %+v", pinned, after)
 	}
 }
@@ -334,6 +361,7 @@ func TestCrewStartAndSetRefusalsNameWhatToDo(t *testing.T) {
 func TestCrewSetRecordsAndClearsEachFieldIndependently(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	cli := w.Client()
+	giveImportedMemberAHarness(t, cli, "keel")
 	workDir, awareness := w.Path("keel-work"), w.Path("keel-notes")
 	for _, dir := range []string{workDir, awareness} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -356,12 +384,10 @@ func TestCrewSetRecordsAndClearsEachFieldIndependently(t *testing.T) {
 	if protocol.Deref(switched.Agent) != "codex" || switched.Effort != nil {
 		t.Fatalf("switching harness left agent %q effort %q, want codex with its pins cleared", protocol.Deref(switched.Agent), protocol.Deref(switched.Effort))
 	}
-	cleared := setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("")})
-	if cleared.Agent != nil || cleared.ResolvedAgent != crew.DefaultAgent {
-		t.Fatalf("clearing the agent left %v resolving to %q, want unset resolving to %q", cleared.Agent, cleared.ResolvedAgent, crew.DefaultAgent)
-	}
-	if got := crewRosterMember(t, cli, "keel"); got.Agent != nil || protocol.Deref(got.Cwd) != workDir {
-		t.Fatalf("roster keel = agent %v cwd %q, want unset and %q", got.Agent, protocol.Deref(got.Cwd), workDir)
+	_, err := cli.CrewSet("keel", nil, protocol.Ptr(""), nil, nil, nil)
+	crewErrorContains(t, err, "needs a harness")
+	if got := crewRosterMember(t, cli, "keel"); protocol.Deref(got.Agent) != "codex" || protocol.Deref(got.Cwd) != workDir {
+		t.Fatalf("roster keel = agent %v cwd %q after a refused clear, want codex and %q", protocol.Deref(got.Agent), protocol.Deref(got.Cwd), workDir)
 	}
 	if home := setCrew(t, cli, "keel", protocol.CrewSetMessage{Cwd: protocol.Ptr("")}); protocol.Deref(home.Cwd) != "" {
 		t.Fatalf("an empty cwd left keel in %q, want it back in its home", protocol.Deref(home.Cwd))
@@ -402,8 +428,8 @@ func TestAStartLaunchesTheMembersHarnessAndEffort(t *testing.T) {
 		}
 	}
 
-	wake("an unset agent wakes on the default harness and its historical model", "trellis", "",
-		launch{harness: fakeagent.Claude, model: "fable", roster: "fable"})
+	wake("a member given Claude wakes on it with its historical model", "trellis", "",
+		launch{harness: fakeagent.Claude, model: "fable", registeredAgent: "claude", roster: "fable"})
 
 	defaultReachesRoster := func(key, value string, resolved func(protocol.CrewMember) string) {
 		t.Helper()
@@ -416,7 +442,7 @@ func TestAStartLaunchesTheMembersHarnessAndEffort(t *testing.T) {
 
 	defaultReachesRoster("default_model_claude", "claude-opus-4-1", func(m protocol.CrewMember) string { return protocol.Deref(m.ResolvedModel) })
 	wake("the harness's configured default model wins over the historical one", "trellis", "",
-		launch{harness: fakeagent.Claude, model: "claude-opus-4-1", roster: "claude-opus-4-1"})
+		launch{harness: fakeagent.Claude, model: "claude-opus-4-1", registeredAgent: "claude", roster: "claude-opus-4-1"})
 
 	setCrew(t, cli, "alder", protocol.CrewSetMessage{Agent: protocol.Ptr("codex")})
 	wake("a member registered on codex wakes on codex unpinned", "alder", "",
@@ -426,7 +452,7 @@ func TestAStartLaunchesTheMembersHarnessAndEffort(t *testing.T) {
 
 	setSetting(t, app, "default_model_codex", "gpt-5.6-sol")
 	wake("a one-day codex wake takes codex's configured default model", "keel", "codex",
-		launch{harness: fakeagent.Codex, model: "gpt-5.6-sol", roster: "claude-opus-4-1"})
+		launch{harness: fakeagent.Codex, model: "gpt-5.6-sol"})
 
 	defaultReachesRoster("default_effort_claude", "medium", func(m protocol.CrewMember) string { return protocol.Deref(m.ResolvedEffort) })
 	set := setCrew(t, cli, "trellis", protocol.CrewSetMessage{Effort: protocol.Ptr("HIGH")})
@@ -434,7 +460,7 @@ func TestAStartLaunchesTheMembersHarnessAndEffort(t *testing.T) {
 		t.Fatalf("effort HIGH stored %q resolving to %q, want high", protocol.Deref(set.Effort), protocol.Deref(set.ResolvedEffort))
 	}
 	wake("a member's effort reaches the launch", "trellis", "",
-		launch{harness: fakeagent.Claude, model: "claude-opus-4-1", effort: "high", roster: "claude-opus-4-1"})
+		launch{harness: fakeagent.Claude, model: "claude-opus-4-1", effort: "high", registeredAgent: "claude", roster: "claude-opus-4-1"})
 
 	setCrew(t, cli, "alder", protocol.CrewSetMessage{Effort: protocol.Ptr("high")})
 	codexDay := startCrew(t, cli, "alder", "")
@@ -549,7 +575,7 @@ func TestACopiedCrewUsesOnlyItsOwnFilesAndCanCloseSessions(t *testing.T) {
 		}
 	}
 	setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
-	_, err = cli.CrewStart("chief", "", "")
+	_, err = crewStartFrom(t, cli, "chief", "")
 	crewErrorContains(t, err, "outside instance harness root")
 	woken := startCrew(t, cli, "trellis", "")
 	day := copied.Launched(string(woken.SessionID))
@@ -595,7 +621,7 @@ func TestMissingCrewFilesAffectOnlyTheirMember(t *testing.T) {
 			if got, want := rosterIDs(crewRoster(t, cli)), []string{"alder", "chief", "keel", "trellis"}; !slices.Equal(got, want) {
 				t.Fatalf("missing %s changed the roster to %v, want %v", missing, got, want)
 			}
-			_, err := cli.CrewStart("trellis", "", "")
+			_, err := crewStartFrom(t, cli, "trellis", "")
 			crewErrorContains(t, err, "Trellis", path)
 			if got := crewSessionCount(t, cli); got != 0 {
 				t.Fatalf("a member with missing %s launched %d sessions", missing, got)
@@ -774,6 +800,7 @@ func TestCrewEditsFromTheAppAreRevisionChecked(t *testing.T) {
 		w.restart()
 		app := w.App()
 		cli := w.Client()
+		giveImportedMemberAHarness(t, cli, "alder")
 		save := func(requestID string, revision int, effort string) protocol.CrewSetResultMessage {
 			t.Helper()
 			msg := protocol.CrewSetMessage{Cmd: protocol.CmdCrewSet, Member: "alder", ExpectedRevision: protocol.Ptr(revision), Effort: protocol.Ptr(effort)}

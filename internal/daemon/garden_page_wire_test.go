@@ -142,6 +142,7 @@ func TestTheGardenIsReadWholePastOnePageOfSeedsAndNotes(t *testing.T) {
 		w.advance(0)
 		rippleRung(t, cli, "the old dependent", oldDependent, "tender")
 
+		setSetting(t, w.App(), "garden.advisor", `{"agent":"claude"}`)
 		review := gardenReviewStart(t, cli)
 		if !slices.ContainsFunc(review.Items, func(item protocol.GardenReviewItem) bool { return item.SeedID == abandoned }) {
 			t.Errorf("the review holds %d items, none for the oldest abandoned seed %s", len(review.Items), abandoned)

@@ -36,7 +36,7 @@ func TestACrewNameResolvesOnlyInItsProfile(t *testing.T) {
 		t.Fatalf("Side roster besides its Chief: %+v", roster)
 	}
 	for _, name := range []string{"Keel", "Nobody", "member:keel"} {
-		_, err := scoped.CrewStart(name, "", "")
+		_, err := crewStartFrom(t, scoped, name, "")
 		crewErrorContains(t, err, "no crew member named", `profile "Side"`)
 		_, err = scoped.CrewClose(name)
 		crewErrorContains(t, err, "no crew member named", `profile "Side"`)
@@ -109,10 +109,10 @@ func TestRenamingAMemberKeepsEveryReference(t *testing.T) {
 	if after.Name != "Alfred" || after.HomeDir != before.HomeDir || after.CharterPath != before.CharterPath || protocol.Deref(after.BindingSession) != day.SessionID {
 		t.Fatalf("references changed: %+v -> %+v", before, after)
 	}
-	if _, err := cli.CrewStart("Keel", "", ""); err == nil {
+	if _, err := crewStartFrom(t, cli, "Keel", ""); err == nil {
 		t.Fatal("the old name still resolves")
 	}
-	if woken, err := cli.CrewStart("member:keel", "", ""); err != nil || !woken.AlreadyInSession || woken.Name != "Alfred" {
+	if woken, err := crewStartFrom(t, cli, "member:keel", ""); err != nil || !woken.AlreadyInSession || woken.Name != "Alfred" {
 		t.Fatalf("wake by key: %+v %v", woken, err)
 	}
 	priming, err := cli.CrewPrime(day.SessionID)
@@ -208,7 +208,7 @@ func TestAFailedCrewStartKeepsItsLastLedgerRow(t *testing.T) {
 			t.Fatal(err)
 		}
 		w.terms.RefuseNextSpawn(errors.New("PTY allocation failed"))
-		_, err := cli.CrewStart("Keel", "", "")
+		_, err := crewStartFrom(t, cli, "Keel", "")
 		crewErrorContains(t, err, "PTY allocation failed")
 		check := func() {
 			page := ledger(t, cli, client.SessionListOptions{All: true})

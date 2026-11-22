@@ -198,8 +198,8 @@ try {
     }
     attn('crew', 'set', inSession, '--cwd', home(inSession), '--agent', 'claude');
     registered = true;
-    attn('crew', 'set', resting, '--cwd', home(resting));
-    attn('crew', 'set', history, '--cwd', home(history));
+    attn('crew', 'set', resting, '--cwd', home(resting), '--agent', 'claude');
+    attn('crew', 'set', history, '--cwd', home(history), '--agent', 'claude');
     linked = plant('Crew charter history link receipt', '-m', 'Opened from a full handoff letter.').id;
     fs.writeFileSync(path.join(home(history), 'handoffs', '2026-08-31T18-05Z-trellis.md'),
       `# Linked handoff\n\nContinue from [Crew charter history link receipt](${linked}).\n`);
@@ -253,21 +253,23 @@ try {
     await closeSeedTile(plot);
   });
 
-  await runner.step('the_member_menu_opens_details_and_saves_then_clears_launch_settings', async () => {
+  await runner.step('the_member_menu_opens_details_and_saves_launch_settings', async () => {
     if (await driver.find({ key: 'crew.heading' })) await closeCrew();
     await memberDetails(resting);
     await named('crew.presence', 'Between sessions');
     await driver.waitFor({ key: 'crew.start' });
-    const claude = crewChange(resting, (m) => m.agent === 'claude', 'the resting harness saved');
+    const switched = crewChange(resting, (m) => m.agent === 'codex', 'the resting harness saved');
+    await driver.click({ key: `settings.route.crew.${resting}` });
+    await driver.click({ key: 'settings.route-picker.harness.codex' });
+    await driver.click({ key: 'settings.route-picker.model.0' });
+    await switched;
+    if (await driver.find({ key: 'settings.route-picker' })) await driver.pressKey('Escape');
+    const restored = crewChange(resting, (m) => m.agent === 'claude', 'the resting harness restored');
     await driver.click({ key: `settings.route.crew.${resting}` });
     await driver.click({ key: 'settings.route-picker.harness.claude' });
     await driver.click({ key: 'settings.route-picker.model.0' });
-    await claude;
+    await restored;
     if (await driver.find({ key: 'settings.route-picker' })) await driver.pressKey('Escape');
-    const cleared = crewChange(resting, (m) => !m.agent, 'the crew default restored');
-    await driver.click({ key: `settings.route.crew.${resting}` });
-    await driver.click({ key: 'settings.route-picker.harness.none' });
-    await cleared;
     await named('crew.launch.status', 'Saved');
     await shot('03-resting-defaults.png');
     await closeCrew();

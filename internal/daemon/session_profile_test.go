@@ -106,7 +106,7 @@ func injectTestSession(t testing.TB, d *Daemon, session protocol.Session) {
 
 func TestInjectedSessionsLandOnTheCurrentDesktopOfTheirProfile(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	injectTestSession(t, d, protocol.Session{ID: "injected", Label: "injected", Directory: t.TempDir()})
+	injectTestSession(t, d, protocol.Session{ID: "injected", Label: "injected", Agent: protocol.SessionAgentClaude, Directory: t.TempDir()})
 	profile, err := d.store.MostRecentlyUsedProfile()
 	if err != nil {
 		t.Fatal(err)

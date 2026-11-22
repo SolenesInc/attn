@@ -56,6 +56,7 @@ pub(crate) enum Field {
     Prompt,
     DirectoryPath,
     CatchUp,
+    Agent,
     Include(usize),
     Exclude(usize),
     OverrideRepository(usize),
@@ -69,6 +70,7 @@ impl Field {
             Field::Prompt => "prompt".into(),
             Field::DirectoryPath => "directoryPath".into(),
             Field::CatchUp => "catchUp".into(),
+            Field::Agent => "agent".into(),
             Field::Include(i) => format!("repositoriesInclude.{i}"),
             Field::Exclude(i) => format!("repositoriesExclude.{i}"),
             Field::OverrideRepository(i) => format!("repositoryOverrides.{i}.repository"),
@@ -100,14 +102,13 @@ pub(crate) struct Values {
 }
 
 impl Values {
-    /// A new automation's: manual, run by Codex on its defaults, and a schedule of weekday
-    /// mornings in `time_zone` for when the user picks one.
+    /// A new automation's: manual, with no harness until the user picks one, and a schedule of
+    /// weekday mornings in `time_zone` for when the user picks one.
     pub(crate) fn new(time_zone: &str) -> Values {
         Values {
             cron: "0 9 * * 1-5".into(),
             time_zone: time_zone.into(),
             catch_up: CatchUp::Latest,
-            agent: "codex".into(),
             ..Values::default()
         }
     }
@@ -179,6 +180,9 @@ pub(crate) fn validate(values: &Values) -> BTreeMap<Field, String> {
     }
     if values.prompt.trim().is_empty() {
         errors.insert(Field::Prompt, "A prompt is required.".into());
+    }
+    if values.agent.trim().is_empty() {
+        errors.insert(Field::Agent, "Choose the harness it runs on.".into());
     }
     match values.trigger {
         Trigger::Manual if values.location == Location::Worktree => {

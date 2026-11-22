@@ -49,6 +49,7 @@ func modelCallStack(t *testing.T) (*testworld.Stack, string) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex))
 	s.Vars = append(s.Vars, "ATTN_HEADLESS_TASKS=on")
 	s.Start()
+	requireStdout(t, s.Attn("settings", "set", "new_session_agent", "claude"), "claude")
 	token := pairSender(t, s, "Lens")
 	s.TrustedApp().Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, IdleSeconds: protocol.Ptr(0.0)})
 	return s, token

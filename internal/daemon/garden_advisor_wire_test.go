@@ -16,8 +16,8 @@ import (
 func TestTheGardenAdvisorSettingRefusesWhatCannotRunAndKeepsTheSavedRecipe(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	if got := gardenAdvisorRecipe(t, app.Initial.Settings); got != (gardenAdvisorConfig{Agent: "codex", Model: "", Effort: ""}) {
-		t.Errorf("with nothing saved the app is sent recipe %+v, want the Codex default", got)
+	if raw, _ := app.Initial.Settings["garden.advisor"].(string); raw != "" {
+		t.Errorf("with nothing saved the app is sent recipe %q, want none until a harness is chosen", raw)
 	}
 
 	t.Setenv("ATTN_CODEX_EXECUTABLE", "")

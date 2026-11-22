@@ -228,7 +228,7 @@ location: {type: directory, path: %q}
 	}{
 		{"codex", valid("corpus-codex", "codex"), ""},
 		{"claude", valid("corpus-claude", "claude"), ""},
-		{"a driver without automatic approval", valid("corpus-shell", "shell"), "does not support automation automatic approval"},
+		{"a shell, which is no harness", valid("corpus-shell", "shell"), "not available"},
 		{"an unknown driver", valid("corpus-unknown", "totally-not-a-real-agent"), "not available"},
 		{"no prompt", strings.Replace(valid("corpus-no-prompt", "codex"), "prompt: Do the thing.\n", "", 1), "prompt is required"},
 		{"an old api_version", strings.Replace(valid("corpus-old-api", "codex"), "v1alpha1", "v0", 1), "api_version must be"},

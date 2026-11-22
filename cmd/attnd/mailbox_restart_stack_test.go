@@ -79,6 +79,7 @@ func TestRestartDuringInboxPrimingKeepsTheDayAndOutstandingDelay(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	writeCharter(t, s, "trellis")
 	s.Start()
+	giveMemberClaude(t, s, "trellis")
 	cli := s.Client()
 	if err := s.InjectSession("reviewer", "reviewer", s.Path("reviewer"), protocol.SessionAgentClaude); err != nil {
 		t.Fatal(err)

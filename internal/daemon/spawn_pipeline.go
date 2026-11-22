@@ -107,7 +107,10 @@ func (plan *spawnPlan) rollback(d *Daemon, sessionID protocol.SessionID) {
 func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (*spawnRequest, *spawnRejection) {
 	requestedAgent := strings.TrimSpace(strings.ToLower(msg.Agent))
 	pluginDriver, hasPluginDriver := d.ensurePluginRegistry().driver(requestedAgent)
-	agent := normalizeSpawnAgent(msg.Agent)
+	agent := harnessID(msg.Agent)
+	if agent == "" {
+		return nil, &spawnRejection{err: fmt.Errorf("spawn_session names no agent: name %s", d.harnessChoices())}
+	}
 	startsSession := policy.fromLedger || d.store.Get(msg.ID) == nil
 	if hasPluginDriver {
 		agent = pluginDriver.Agent

@@ -191,6 +191,20 @@ fn fill(world: &mut World, name: &str, text: &str) {
     });
 }
 
+fn choose_harness(world: &mut World, harness: &str) {
+    harness_catalogs::open_route(world, "Automation model");
+    harness_catalogs::preview_harness(world, harness);
+    click(world, "settings.route-picker.model.0");
+    if harness_catalogs::picker_open(world) {
+        world.gesture(|app| app.press("escape"));
+    }
+}
+
+fn fill_new(world: &mut World) {
+    choose_harness(world, "Codex");
+    fill_manual(world);
+}
+
 fn fill_manual(world: &mut World) {
     fill(world, "name", "My automation");
     fill(world, "directory", "/tmp/work");
@@ -352,6 +366,13 @@ fn a_new_manual_automation_applies_the_spec_it_built_and_the_list_shows_again() 
     let mut world = open_new();
     fill_manual(&mut world);
     press(&mut world, "save");
+    assert_eq!(
+        name(&world, &format!("{}.error", key("runs-as"))).as_deref(),
+        Some("Choose the harness it runs on.")
+    );
+    assert!(applied(&world).is_empty());
+    choose_harness(&mut world, "Codex");
+    press(&mut world, "save");
 
     let mut expected = with(
         manual_spec("My automation"),
@@ -369,7 +390,7 @@ fn the_form_holds_while_the_daemon_applies_it() {
     let mut world = open_new_with(|daemon| {
         daemon.answer_in_turn("automation_apply", [Answer::Hold]);
     });
-    fill_manual(&mut world);
+    fill_new(&mut world);
     press(&mut world, "save");
     assert_eq!(applied(&world).len(), 1);
     assert!(is(&world, &key("name"), "disabled"));
@@ -462,14 +483,14 @@ fn a_new_schedule_saves_its_guard_and_missed_runs_in_the_zone_of_this_machine() 
     press(&mut world, "trigger-scheduled");
     let zone = value(&world, "time-zone");
     assert!(!zone.is_empty());
-    fill_manual(&mut world);
+    fill_new(&mut world);
     fill(&mut world, "cron", "0 9 * * *");
     press(&mut world, "save");
     assert_eq!(applied(&world)[0].0["trigger"]["catch_up"], "latest");
 
     let mut world = open_new();
     press(&mut world, "trigger-scheduled");
-    fill_manual(&mut world);
+    fill_new(&mut world);
     fill(&mut world, "cron", "0 9 * * *");
     press(&mut world, "advanced");
     pick(&mut world, "Skip");
@@ -552,7 +573,7 @@ fn switching_back_to_manual_hides_and_omits_the_guard() {
     fill(&mut world, "guard", "git rev-parse HEAD");
     press(&mut world, "trigger-manual");
     assert!(!has(&world, &key("guard")));
-    fill_manual(&mut world);
+    fill_new(&mut world);
     press(&mut world, "save");
     let sent = applied(&world);
     assert_eq!(sent.len(), 1);
@@ -950,9 +971,13 @@ fn an_executable_override_stops_discovery_and_codex_offers_none() {
 }
 
 #[test]
-fn a_new_automation_starts_on_the_codex_defaults_and_saves_the_model_and_effort_picked() {
+fn a_new_automation_starts_without_a_harness_and_saves_the_model_and_effort_picked() {
     let mut world = open_new();
-    assert!(route(&world).starts_with("Codex"), "{}", route(&world));
+    assert!(
+        !route(&world).contains("Codex") && !route(&world).contains("Claude"),
+        "{}",
+        route(&world)
+    );
     harness_catalogs::open_route(&mut world, "Automation model");
     let offered: Vec<String> = harness_catalogs::options(&world, "harnesses")
         .into_iter()
@@ -962,7 +987,7 @@ fn a_new_automation_starts_on_the_codex_defaults_and_saves_the_model_and_effort_
     harness_catalogs::preview_harness(&mut world, "Claude");
     assert_eq!(
         form_state(&mut world)["spec"]["launch"],
-        json!({"driver": "codex"}),
+        json!({"driver": ""}),
         "browsing commits nothing"
     );
     harness_catalogs::pick_model(&mut world, "Opus 5.5");
@@ -1033,6 +1058,7 @@ fn a_repository_entry_is_canonical_and_a_malformed_or_doubled_one_blocks_save() 
     press(&mut world, "trigger-github");
     fill(&mut world, "name", "Reviewer");
     fill(&mut world, "prompt", "Review the PR");
+    choose_harness(&mut world, "Codex");
     fill(
         &mut world,
         "repositories-include",
@@ -1218,7 +1244,7 @@ fn a_new_automation_offers_the_profile_s_desktops_and_saves_the_one_chosen() {
         (read["kind"].as_str(), read["item_id"].as_str()),
         (Some("automation"), Some(""))
     );
-    fill_manual(&mut world);
+    fill_new(&mut world);
     press(&mut world, "save");
     assert_eq!(
         world.daemon.sent_of("automation_apply")[0]["launch_desktop_setting"],
@@ -1271,7 +1297,7 @@ fn a_save_answered_after_its_form_closed_leaves_the_next_form_and_its_edits_alon
     let mut world = open_new_with(|daemon| {
         daemon.answer_in_turn("automation_apply", [Answer::Hold]);
     });
-    fill_manual(&mut world);
+    fill_new(&mut world);
     press(&mut world, "save");
     reopen_drawer(&mut world);
     click(&mut world, "automations.new");

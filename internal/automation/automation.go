@@ -114,7 +114,7 @@ var StarterDefinition = DefinitionSpec{
 	Name:       "My automation",
 	Trigger:    TriggerSpec{Type: "manual"},
 	Prompt:     "Describe what the agent should do when this automation runs.",
-	Launch:     LaunchSpec{Driver: "codex"},
+	Launch:     LaunchSpec{},
 	Location:   LocationSpec{Type: "directory", Path: "/path/to/repository"},
 }
 

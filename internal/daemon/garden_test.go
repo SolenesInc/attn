@@ -31,7 +31,7 @@ func newGardenDaemon(t *testing.T) *Daemon {
 	d.ensureGardenCollections()
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
-		ID: "sess-a", Label: "a", ProfileID: defaultProfileID(t, d.store),
+		ID: "sess-a", Label: "a", Agent: protocol.SessionAgentClaude, ProfileID: defaultProfileID(t, d.store),
 		State: "idle", StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 	return d
@@ -56,7 +56,7 @@ func addGardenSession(t *testing.T, d *Daemon, id string) {
 	t.Helper()
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
-		ID: protocol.SessionID(id), Label: id, State: "idle", ProfileID: defaultProfileID(t, d.store),
+		ID: protocol.SessionID(id), Label: id, Agent: protocol.SessionAgentClaude, State: "idle", ProfileID: defaultProfileID(t, d.store),
 		StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 }

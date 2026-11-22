@@ -435,7 +435,10 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 		rows = uint16(*recorded.Rows)
 	}
 
-	agent := normalizeSpawnAgent(session.Agent)
+	agent := harnessID(session.Agent)
+	if agent == "" {
+		return ptybackend.SpawnOptions{}, fmt.Errorf("session %s names no harness to reload", sessionID)
+	}
 	if agent != protocol.AgentShellValue {
 		h, err := d.harness(session.Agent)
 		if err != nil {
@@ -486,7 +489,7 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 	if intent, ok := d.store.LaunchIntent(sessionID); ok && intent.Command != nil {
 		opts.AgentArgv = append([]string(nil), intent.Command.Argv...)
 	}
-	if member, bound := d.crewMemberForSession(sessionID); bound && strings.EqualFold(strings.TrimSpace(session.Agent), member.LaunchAgent()) {
+	if member, bound := d.crewMemberForSession(sessionID); bound && strings.EqualFold(strings.TrimSpace(session.Agent), member.Harness()) {
 		opts.Model = protocol.Deref(d.crewStartModel(member, session.Agent))
 		opts.Effort = protocol.Deref(d.crewStartEffort(member, session.Agent))
 	}

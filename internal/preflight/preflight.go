@@ -303,16 +303,8 @@ func agentHealthCheck(agent harness.Descriptor) Check {
 }
 
 func resolveLaunch(opts Options) Launch {
-	agentName := strings.ToLower(strings.TrimSpace(opts.Agent))
-	if agentName == "" {
-		agentName = "codex"
-	}
-	agentSource := opts.AgentSource
-	if agentSource == "" {
-		agentSource = "default"
-	}
 	return Launch{
-		Agent:  ResolvedValue{Value: agentName, Source: agentSource},
+		Agent:  ResolvedValue{Value: strings.ToLower(strings.TrimSpace(opts.Agent)), Source: opts.AgentSource},
 		Model:  resolvedLaunchValue(opts.Model, opts.ModelSource),
 		Effort: resolvedLaunchValue(strings.ToLower(strings.TrimSpace(opts.Effort)), opts.EffortSource),
 	}

@@ -308,6 +308,7 @@ func TestWorkASessionAssignsResumesWithTheMemberAfterItParks(t *testing.T) {
 func TestWorkTheUserAssignsToAMemberBetweenSessionsResumesWithTheMember(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
+	giveImportedMemberAHarness(t, cli, "keel")
 	seed := plantSeedAs(t, cli, "", "Work assigned by the user")
 	if _, err := cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: "Keel"}); err != nil {
 		t.Fatal(err)

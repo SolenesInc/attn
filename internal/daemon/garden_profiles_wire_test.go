@@ -289,6 +289,7 @@ func TestDeletingAProfileWithAClosedSeedAndALiveDelegate(t *testing.T) {
 func TestGardenReviewsBelongToTheRequestingProfile(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
+		setSetting(t, app, "garden.advisor", `{"agent":"claude"}`)
 		original := app.SelectedProfile()
 		side := createProfile(app, "Side")
 		first, err := cli.WithGardenProfile(original, "").SeedReviewStart()

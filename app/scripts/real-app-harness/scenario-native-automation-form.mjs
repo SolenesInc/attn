@@ -82,7 +82,13 @@ async function fill(name, text) {
 
 async function openNew() {
   await driver.click({ key: 'automations.new' });
-  return waitForm((f) => f?.status === 'ready' && f.mode === 'create', 'a new form ready');
+  const opened = await waitForm((f) => f?.status === 'ready' && f.mode === 'create', 'a new form ready');
+  await driver.click({ role: 'button', name: 'Automation model' });
+  await driver.click({ key: 'settings.route-picker.harness.codex' });
+  await driver.click({ key: 'settings.route-picker.model.0' });
+  if (await driver.find({ key: 'settings.route-picker' })) await driver.pressKey('Escape');
+  await waitForm((f) => f?.spec?.launch?.driver === 'codex', 'Codex chosen in Runs as');
+  return opened;
 }
 
 async function openEdit(id) {
@@ -144,7 +150,7 @@ try {
     const opened = await openNew();
     runner.assert(opened.mode === 'create' && opened.definitionId === null && opened.revision === 0, 'New opens in create mode with no id at revision 0', opened);
     runner.assert(opened.spec.trigger.type === 'manual', 'the default trigger is manual', opened.spec);
-    runner.assert(JSON.stringify(opened.spec.launch) === JSON.stringify({ driver: 'codex' }), 'the default launch is Codex with model and effort left to the harness', opened.spec);
+    runner.assert(JSON.stringify(opened.spec.launch) === JSON.stringify({ driver: '' }), 'a new automation names no harness until the user picks one', opened.spec);
   });
 
   const primaryName = `Automation form proof ${suffix}`;

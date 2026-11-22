@@ -23,6 +23,7 @@ func TestAGardenBellRetriesAfterACrewRosterPathFailureIsRepaired(t *testing.T) {
 		w.restart()
 		w.App() // Initial state waits for startup recovery, which drops injected sessions.
 		cli = w.Client()
+		giveImportedMemberAHarness(t, cli, "trellis")
 		registerSessions(t, w, cli, "sender")
 		if _, err := cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: "trellis"}); err != nil {
 			t.Fatal(err)

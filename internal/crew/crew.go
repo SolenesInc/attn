@@ -28,8 +28,6 @@ const HomesDirName = "crew"
 
 const CharterFileName = "CHARTER.md"
 
-const DefaultAgent = "claude"
-
 const ChiefName = "Chief"
 
 const ChiefAlias = "chief"
@@ -89,11 +87,9 @@ func (m Member) CharterPath(dataRoot string) string {
 	return filepath.Join(m.HomeDir(dataRoot), CharterFileName)
 }
 
-func (m Member) LaunchAgent() string {
-	if agent := strings.TrimSpace(strings.ToLower(m.Agent)); agent != "" {
-		return agent
-	}
-	return DefaultAgent
+// Harness is the harness the member's days run on, or "" before the user picks one.
+func (m Member) Harness() string {
+	return strings.TrimSpace(strings.ToLower(m.Agent))
 }
 
 func (m Member) FiledLetterFor(sessionID protocol.SessionID) (string, bool) {

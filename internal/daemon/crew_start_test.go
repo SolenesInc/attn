@@ -52,6 +52,13 @@ func newStartableDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, func() string
 	}
 }
 
+func giveMemberAHarness(t *testing.T, d *Daemon, member string) {
+	t.Helper()
+	if _, _, err := d.crewSet(&protocol.CrewSetMessage{Member: member, ProfileID: protocol.Ptr(defaultProfileID(t, d.store)), Agent: protocol.Ptr("claude")}); err != nil {
+		t.Fatalf("crew set %s --agent claude: %v", member, err)
+	}
+}
+
 func TestCrewSet_ACwdInsideAnotherInstancesCrewIsRefused(t *testing.T) {
 	d, _, _ := newStartableDaemon(t)
 	userHome := t.TempDir()
@@ -160,6 +167,7 @@ func TestCrewPrime_AClaimOlderThanAPageOfTheGardenStillStartsWithItsMember(t *te
 		}
 	}
 
+	giveMemberAHarness(t, d, "trellis")
 	result, err := d.crewStart("trellis", "")
 	if err != nil {
 		t.Fatalf("wake: %v", err)
@@ -237,6 +245,7 @@ func TestCrewStart_RefusesAMemberOfAnotherProfile(t *testing.T) {
 		t.Fatal("a refused wake spawned a session")
 	}
 
+	giveMemberAHarness(t, d, "trellis")
 	result, err := d.crewStartAsked(&protocol.CrewStartMessage{Member: "trellis", ProfileID: protocol.Ptr(defaultProfileID(t, d.store))}, crewStartRequest{})
 	if err != nil || result.ProfileID != defaultProfileID(t, d.store) {
 		t.Fatalf("wake from the member's own profile = %+v, %v", result, err)

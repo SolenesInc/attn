@@ -469,7 +469,8 @@ type CrewListArgs struct {
 }
 
 type CrewCreateArgs struct {
-	Name string `json:"name,omitempty"`
+	Name  string `json:"name,omitempty"`
+	Agent string `json:"agent,omitempty"`
 }
 
 type CrewStartArgs struct {

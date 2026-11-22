@@ -247,7 +247,7 @@ fn short_id(id: &str) -> String {
 
 fn roster(members: &[CrewMember]) -> String {
     if members.is_empty() {
-        return "No crew members in this profile. `attn crew create <name>` adds one; `attn crew list --all` includes retired members.\n".to_string();
+        return "No crew members in this profile. `attn crew create <name> --agent <harness>` adds one; `attn crew list --all` includes retired members.\n".to_string();
     }
     let mut out = format!(
         "{:<12}  {:<16}  {:<8}  {:<20}  {:<8}  {:<10}  {:<22}  {}\n",

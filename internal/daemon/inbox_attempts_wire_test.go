@@ -152,6 +152,7 @@ func TestInboxDeliveryStartsAgainOnlyAfterDelayAndFollowsTheMember(t *testing.T)
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
 		app, cli := w.App(), w.Client()
+		giveImportedMemberAHarness(t, cli, "trellis")
 		setSetting(t, app, "crew.heartbeat_enabled", "false")
 		setSetting(t, app, "crew.away_close_enabled", "false")
 		registerSessions(t, w, cli, "sender")
@@ -366,6 +367,7 @@ func TestAGardenBellForACaseVariantTenderReachesTheRegisteredMember(t *testing.T
 		w.restart()
 		w.App() // Initial state waits for startup recovery, which drops injected sessions.
 		cli = w.Client()
+		giveImportedMemberAHarness(t, cli, "trellis")
 		registerSessions(t, w, cli, "sender")
 		if _, err := cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: "Trellis"}); err != nil {
 			t.Fatal(err)
@@ -392,6 +394,7 @@ func TestMailForAMemberTendedSeedResumesTheTender(t *testing.T) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
 		cli := w.Client()
+		giveImportedMemberAHarness(t, cli, "trellis")
 		registerSessions(t, w, cli, "sender")
 		seed := plantSeedAs(t, cli, "sender", "review the build")
 		if _, err := cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: "trellis"}); err != nil {
@@ -454,6 +457,7 @@ func TestTheThirdMailStartCompletesItsRingAndNeverStartsAFourthSession(t *testin
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
 		app, cli := w.App(), w.Client()
+		giveImportedMemberAHarness(t, cli, "trellis")
 		setSetting(t, app, "crew.heartbeat_enabled", "false")
 		setSetting(t, app, "crew.away_close_enabled", "false")
 		registerSessions(t, w, cli, "sender")

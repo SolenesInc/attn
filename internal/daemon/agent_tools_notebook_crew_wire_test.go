@@ -104,7 +104,7 @@ func TestEveryCrewToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) 
 	if member, _ := moved["member"].(map[string]any); member["name"] != "Keel" {
 		t.Errorf("crew_move_home answered %v, want keel's new home", moved)
 	}
-	created := tools.call("crew_create", map[string]any{"name": "scout"})
+	created := tools.call("crew_create", map[string]any{"name": "scout", "agent": "claude"})
 	if created["name"] != "scout" {
 		t.Errorf("crew_create answered %v, want the member scout", created)
 	}

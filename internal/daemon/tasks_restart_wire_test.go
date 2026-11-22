@@ -14,6 +14,7 @@ func TestATaskThatFailedForGoodIsStillListedWithItsCauseAfterARestart(t *testing
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
 		gardenReviewRegisteredAbandonedSeed(t, w, cli, "gardener", "Old checkout work")
+		setSetting(t, w.App(), "garden.advisor", `{"agent":"claude"}`)
 		gardenReviewStart(t, cli)
 		w.advance(0)
 		w.advance(time.Minute)
