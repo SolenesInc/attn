@@ -46,8 +46,9 @@ refuses its registration, because Attn has the harness of that name.
   `/new` does in shared Codex. The tile moves when the fork starts work. If
   you reload the tile, or send its session annotations, a review or a prompt
   from your phone before then, Attn moves the tile first, so they reach the
-  fork. The conversation you forked from stays with its session, which stays
-  open and hidden. The new session's transcript follows the forked
+  fork. On an outpost, a reload before then still reopens the conversation
+  you forked from. The conversation you forked from stays with its session,
+  which stays open and hidden. The new session's transcript follows the forked
   conversation (including the history it inherited up to the fork), while its
   title comes from the first prompt you type in the fork and its usage, recent
   files, and pull requests start at the fork.

@@ -118,7 +118,7 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 			return
 		}
 		delivery := sessionmonitor.ComposedInput(msg.RequestID, payload)
-		attempt := d.placeDelivery(context.Background(), d.sessionItsTerminalShows(targetSession), delivery)
+		attempt := d.placeDelivery(context.Background(), targetSession, delivery)
 		if attempt.Stage != sessionmonitor.Placed {
 			if sessionmonitor.DeferredError(attempt.Err) {
 				result.Status = annotationSubmitStatusSkipped

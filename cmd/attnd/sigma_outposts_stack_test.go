@@ -236,3 +236,33 @@ func TestAnAnnotationAndAReloadOfAnOutpostSigmaSessionStartNoHomeSigmaServer(t *
 	}
 	requireNoHomeSigmaServer(t, pair)
 }
+
+func TestAnAnnotationRightAfterAnIdleForkOfAnOutpostSigmaSessionReachesTheFork(t *testing.T) {
+	pair := sigmaOutpostPair(t)
+	id := spawnOnOutpost(pair, fakeagent.Sigma)
+	tui := pair.Outpost.LaunchedCarrying(pair.App.Terminal(id))
+	server := pair.Outpost.AppServer(fakeagent.Sigma)
+	original := tui.ConversationID
+	pair.App.TypeLine(id, "work on the outpost")
+	tui.Prompted()
+	server.Prompted(original)
+	server.Reply(original, "Ready. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	pair.App.TypeLine(id, "/fork")
+	tui.Prompted()
+	forks := server.Forks(original)
+	if len(forks) != 1 {
+		t.Fatalf("the /fork made %v, want one fork", forks)
+	}
+	annotated := testworld.Request(pair.App, protocol.SessionAnnotationsSubmitMessage{Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: "outpost-fork-annotation", SessionID: protocol.SessionID(id), Text: "check the totals"},
+		protocol.EventSessionAnnotationsSubmitResult, func(r protocol.SessionAnnotationsSubmitResultMessage) bool {
+			return r.RequestID == "outpost-fork-annotation"
+		})
+	if !annotated.Success {
+		t.Fatalf("annotation: %+v", annotated)
+	}
+	if got := server.Prompted(forks[0]); got.Text != "check the totals" {
+		t.Fatalf("the fork %s took %+v, want the annotation", forks[0], got)
+	}
+	requireNoHomeSigmaServer(t, pair)
+}
