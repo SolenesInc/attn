@@ -1,0 +1,13 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Conversation readiness read Prepare then Check, so a transcript appearing between them failed a reload",
+  "at": "2026-11-23T16:44:57.075Z",
+  "severity": "p1",
+  "source": "agent",
+  "location": {
+    "path": "internal/daemon/agent_machine.go",
+    "line": 243
+  },
+  "culprit": "f15e7b7dd651d831501f9cf00d5f584531b97f5d"
+}
