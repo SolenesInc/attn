@@ -1,0 +1,13 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Live terminal plugin reload waits on an unused driver.resume_available reply",
+  "at": "2026-11-23T17:27:52.615Z",
+  "severity": "p1",
+  "source": "agent",
+  "location": {
+    "path": "internal/daemon/agent_machine.go",
+    "line": 243
+  },
+  "culprit": "7862c84aefc9445e3a322519b42a9dd5b9ae3a7b"
+}
