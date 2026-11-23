@@ -581,16 +581,21 @@ impl Terminals {
         if w <= 0.0 || h <= 0.0 {
             return;
         }
+        let scale_changed = term.slot.is_some_and(|(_, previous)| previous != scale);
         term.slot = Some(((w, h), scale));
         place_caret(term, &metrics);
         let size = metrics.fit(w, h, scale);
         if term.agent && mid_layout(size, term.vt.size(), (w, h), scale, &metrics) {
             return;
         }
-        term.tile = Some(Tile {
+        let next = Tile {
             size,
             pixels: metrics.pixels(size, scale),
-        });
+        };
+        if scale_changed && term.tile != Some(next) {
+            term.sent_size = None;
+        }
+        term.tile = Some(next);
         let now = tx.clock();
         match &mut term.phase {
             Phase::Waiting => self.attach_waiting(now, daemon),

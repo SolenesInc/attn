@@ -14,9 +14,27 @@ pub struct Screens {
 fn sync_terminals(rt: &mut Runtime<State>) -> TerminalColors {
     let theme = crate::colors(&rt.state().facts.settings, rt.env.system_dark).terminal;
     let scale = rt.env.scale;
-    let state = rt.state_mut();
-    state.terminals.set_theme(theme, &state.daemon);
-    state.terminals.set_scale(scale, &state.daemon);
+    let pending_layout = rt.has_pending_input();
+    let invalidate = {
+        let state = rt.state_mut();
+        state.terminals.set_theme(theme, &state.daemon);
+        if pending_layout {
+            false
+        } else {
+            state.terminals.set_scale(scale, &state.daemon);
+            let px_per_col = state.terminals.metrics().cell_points(scale).0;
+            match state.window.desk.reported_area.as_mut() {
+                Some(area) if area.px_per_col != px_per_col => {
+                    area.px_per_col = px_per_col;
+                    true
+                }
+                _ => false,
+            }
+        }
+    };
+    if invalidate {
+        rt.invalidate();
+    }
     theme
 }
 
@@ -45,7 +63,7 @@ impl Compositor<State> for Screens {
 
     fn redraws(&self, rt: &Runtime<State>) -> bool {
         let terminals = &rt.state().terminals;
-        terminals.undrawn() || terminals.scale_changed(rt.env.scale)
+        terminals.undrawn() || (!rt.has_pending_input() && terminals.scale_changed(rt.env.scale))
     }
 
     fn render(&mut self, f: &mut Frame<'_, State>) {

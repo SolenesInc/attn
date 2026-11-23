@@ -4451,4 +4451,42 @@ fn split_terminals_at_fractional_scales_fit_their_drawn_cells_inside_their_slots
         world.advance(Duration::from_secs(1));
         assert_fits(&world, &format!("uiScale={ui_scale} moved to 1x"));
     }
+
+    // Moving to a 1x display at uiScale=1.3 widens each cell in view points (23/2.6 -> 12/1.3),
+    // so a window that just fits two columns on 2x shelves the second column on 1x.
+    let threshold = (1860.0, 900.0);
+    let mut state = initial(vec![desktop(1, "a", Some(row([pane("a"), pane("b")])))]);
+    state.settings = Some([("uiScale".into(), "1.3".into())].into());
+    let mut world = World::start_sized(Daemon::scripted().state(state), threshold);
+    world.open_desktop();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(shown(&world), ["a", "b"]);
+    world.gesture(|app| app.runtime.set_viewport(threshold, 1.0));
+    world.advance(Duration::from_secs(1));
+    assert_eq!(shown(&world), ["a"]);
+    assert!(world.runtime_is_at_rest());
+
+    // Rendering Frame N of a combined scale+size change while Action::Layout is still queued
+    // must not send a spurious pty_resize from the stale pre-layout slot size.
+    let mut state = initial(vec![desktop(1, "a", Some(row([pane("a"), pane("b")])))]);
+    state.settings = Some([("uiScale".into(), "1.2".into())].into());
+    let mut world = World::start_sized(Daemon::scripted().state(state), wide);
+    world.open_desktop();
+    world.advance(Duration::from_secs(1));
+    let before = world.daemon.sent_of("pty_resize").len();
+    let now = world.runtime().clock;
+    world.gesture(|app| {
+        app.runtime.set_viewport((1900.0, 900.0), 1.0);
+        app.runtime.frame(now);
+        assert!(app.runtime.has_pending_input());
+        attn_app::screen::Screens::default().draw_without_gpu(app.runtime);
+    });
+    world.advance(Duration::from_secs(1));
+    let sent_during_move = &world.daemon.sent_of("pty_resize")[before..];
+    assert_eq!(
+        sent_during_move.len(),
+        2,
+        "one pty_resize per tile after Action::Layout, no bogus pre-layout resize: {sent_during_move:?}"
+    );
+    assert_fits(&world, "combined scale+size move");
 }
