@@ -136,9 +136,11 @@ address                 who an item is for: a session or a mailbox
    └─ answer (at most 1) the user's reply, typed into the conversation of
                         the ask's addressee as the user's message; a seed
                         also keeps it as a note
-ring                    one prompt for an agent with unread items: it types
-                        answers and quick captures as the user's message and
-                        tells of the rest; like a push notification
+ring                    a prompt that delivers an agent's unread items:
+                        answers, quick captures and messages sent as the
+                        user, as the user; a steer or interrupt alone, as
+                        attn; otherwise a line that tells of the rest, like
+                        a push notification
 quick capture           a quick message (with optional attachments) the user
                         sends from outside attn: to chief or crew with a global
                         shortcut, or to any session through a paired sender;
