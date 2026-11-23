@@ -5,8 +5,8 @@ A ring prompts the agent to read them, like a push notification. A sender saves
 an item for an address. An address is either a session or a mailbox. A mailbox
 is a crew member, the chief or a seed's tender, and whichever session holds that
 job reads it. attn then decides when to ring. When attn rings, it types what the
-user wrote into the conversation as the user's message, followed by a 📬 line
-for the other items. The agent reads those items with `attn agent inbox`. Items
+user wrote into the conversation as the user's message, and a 📬 line for the
+other items follows in a ring of its own. The agent reads those items with `attn agent inbox`. Items
 are durable and stay unread until read, typed, withdrawn or replaced.
 `docs/internal/inbox.md` holds the rules. This file shows how to drive them.
 See [agent-state.md](agent-state.md) for reading another agent's screen with
