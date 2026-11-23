@@ -23,12 +23,14 @@ type ReadTextInfo struct {
 	IntegrationSeen bool       `json:"integration_seen"`
 	AtPrompt        bool       `json:"at_prompt"`
 	LastBlockID     uint64     `json:"last_block_id"`
+	PromptBlockID   uint64     `json:"prompt_block_id"`
 }
 
 type WaitBlockParams struct {
-	AfterBlockID *uint64 `json:"after_block_id,omitempty"`
-	Until        string  `json:"until"`
-	FirstPrompt  bool    `json:"first_prompt,omitempty"`
+	AfterBlockID      *uint64 `json:"after_block_id,omitempty"`
+	PastPromptBlockID *uint64 `json:"past_prompt_block_id,omitempty"`
+	Until             string  `json:"until"`
+	FirstPrompt       bool    `json:"first_prompt,omitempty"`
 }
 
 type WaitBlockResult struct {
@@ -40,7 +42,14 @@ type WaitBlockResult struct {
 var ErrNoShellIntegration = errors.New("OSC 133 rule: this shell has no command marks; run --wait and wait --until prompt cannot work here; use send or run without --wait")
 
 func (bt *blockTable) readState() ReadTextInfo {
-	return ReadTextInfo{IntegrationSeen: bt.integrationSeen, AtPrompt: bt.atPrompt, LastBlockID: bt.lastCompletedID}
+	return ReadTextInfo{IntegrationSeen: bt.integrationSeen, AtPrompt: bt.atPrompt, LastBlockID: bt.lastCompletedID, PromptBlockID: bt.promptBlockID()}
+}
+
+func (bt *blockTable) promptBlockID() uint64 {
+	if bt.pending != nil {
+		return bt.pending.id
+	}
+	return bt.nextID
 }
 
 func (bt *blockTable) readBlock(term *ghosttyvt.Terminal, after *uint64) (*TextBlock, error) {
@@ -137,12 +146,14 @@ func (s *Session) waitBlock(ctx context.Context, params WaitBlockParams) (WaitBl
 				s.replayMu.Unlock()
 				return WaitBlockResult{}, ErrNoShellIntegration
 			}
-			if params.AfterBlockID != nil && state.LastBlockID > *params.AfterBlockID {
-				block, err := table.readBlock(s.ghostty, params.AfterBlockID)
-				s.replayMu.Unlock()
-				return WaitBlockResult{Block: block}, err
-			}
-			if params.AfterBlockID == nil && state.AtPrompt {
+			switch {
+			case params.AfterBlockID != nil:
+				if state.LastBlockID > *params.AfterBlockID {
+					block, err := table.readBlock(s.ghostty, params.AfterBlockID)
+					s.replayMu.Unlock()
+					return WaitBlockResult{Block: block}, err
+				}
+			case state.AtPrompt && (params.PastPromptBlockID == nil || state.PromptBlockID != *params.PastPromptBlockID):
 				s.replayMu.Unlock()
 				return WaitBlockResult{}, nil
 			}

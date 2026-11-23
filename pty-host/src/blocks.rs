@@ -182,7 +182,8 @@ impl BlockTable {
     }
 
     pub fn read_state(&self) -> serde_json::Value {
-        serde_json::json!({"integration_seen": self.integration_seen, "at_prompt": self.at_prompt, "last_block_id": self.last_completed_id})
+        let prompt_block_id = self.pending.as_ref().map_or(self.next_id, |block| block.id);
+        serde_json::json!({"integration_seen": self.integration_seen, "at_prompt": self.at_prompt, "last_block_id": self.last_completed_id, "prompt_block_id": prompt_block_id})
     }
 
     pub fn read_block(

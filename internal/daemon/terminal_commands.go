@@ -31,8 +31,9 @@ const terminalFirstPromptReceipt = "first prompt measured at 9-176 ms across fis
 const typedCommandFinishTripwire = 5 * time.Second
 
 type typedCommand struct {
-	afterBlockID string
-	typedAt      time.Time
+	lastBlockID   string
+	promptBlockID string
+	typedAt       time.Time
 }
 
 func (d *Daemon) terminalCaller(id protocol.SessionID) (*protocol.Session, error) {
@@ -442,7 +443,7 @@ func (d *Daemon) typeInput(ctx context.Context, terminal protocol.TerminalID, st
 		return err
 	}
 	if state.IntegrationSeen {
-		d.typedCommands.Store(terminal, typedCommand{afterBlockID: state.LastBlockID, typedAt: time.Now()})
+		d.typedCommands.Store(terminal, typedCommand{lastBlockID: state.LastBlockID, promptBlockID: state.PromptBlockID, typedAt: time.Now()})
 	}
 	return nil
 }
@@ -464,7 +465,7 @@ func (d *Daemon) awaitTypedCommandFinish(ctx context.Context, terminal protocol.
 	finishBy := typed.typedAt.Add(typedCommandFinishTripwire)
 	finishing, cancel := context.WithDeadline(ctx, finishBy)
 	defer cancel()
-	_, err := Call[protocol.TerminalWaitResult](finishing, d.router(), protocol.TerminalWaitBlockMessage{Cmd: protocol.CmdTerminalWaitBlock, TerminalID: terminal, Until: protocol.TerminalWaitUntilPrompt, AfterBlockID: protocol.Ptr(typed.afterBlockID)})
+	_, err := Call[protocol.TerminalWaitResult](finishing, d.router(), protocol.TerminalWaitBlockMessage{Cmd: protocol.CmdTerminalWaitBlock, TerminalID: terminal, Until: protocol.TerminalWaitUntilPrompt, PastPromptBlockID: protocol.Ptr(typed.promptBlockID)})
 	if err == nil {
 		d.typedCommands.CompareAndDelete(terminal, typed)
 		return nil
@@ -475,16 +476,16 @@ func (d *Daemon) awaitTypedCommandFinish(ctx context.Context, terminal protocol.
 	return nil
 }
 
-func (d *Daemon) unfinishedTypedCommand(terminal protocol.TerminalID, state protocol.TerminalText) (typedCommand, bool) {
+func (d *Daemon) typedCommandUnfinished(terminal protocol.TerminalID, state protocol.TerminalText) bool {
 	typed, ok := d.typedCommandOf(terminal, state)
 	if !ok {
-		return typedCommand{}, false
+		return false
 	}
-	if state.LastBlockID != typed.afterBlockID || time.Since(typed.typedAt) > typedCommandFinishTripwire {
+	if state.LastBlockID != typed.lastBlockID || state.PromptBlockID != typed.promptBlockID || time.Since(typed.typedAt) > typedCommandFinishTripwire {
 		d.typedCommands.CompareAndDelete(terminal, typed)
-		return typedCommand{}, false
+		return false
 	}
-	return typed, true
+	return true
 }
 
 func (d *Daemon) readTerminalScreen(ctx context.Context, terminal protocol.TerminalID) (protocol.TerminalText, error) {
@@ -540,7 +541,7 @@ func (d *Daemon) inputTerminal(ctx context.Context, caller *protocol.Session, in
 				return nil, nil, err
 			}
 		}
-		if _, unfinished := d.unfinishedTypedCommand(target.terminal, state); unfinished {
+		if d.typedCommandUnfinished(target.terminal, state) {
 			return nil, nil, errors.New("prompt rule: the command attn typed into this shell has not finished; read the terminal, and run again once it shows its prompt")
 		}
 		if !state.AtPrompt {
@@ -598,11 +599,12 @@ func (d *Daemon) runTerminalRead(_ context.Context, c command.Caller, a command.
 	return protocol.TerminalReadResult{Text: info.Text, Block: info.Block}, nil
 }
 
-func (d *Daemon) waitTerminal(ctx context.Context, target *selectedTerminal, until protocol.TerminalWaitUntil, after *string) (protocol.TerminalWaitResult, error) {
-	if until == protocol.TerminalWaitUntilPrompt && target.Agent != protocol.AgentShellValue {
+func (d *Daemon) waitTerminal(ctx context.Context, target *selectedTerminal, wait protocol.TerminalWaitBlockMessage) (protocol.TerminalWaitResult, error) {
+	if wait.Until == protocol.TerminalWaitUntilPrompt && target.Agent != protocol.AgentShellValue {
 		return protocol.TerminalWaitResult{}, errors.New("prompt rule: wait --until prompt requires a shell; use wait --until exit for an agent")
 	}
-	result, err := Call[protocol.TerminalWaitResult](ctx, d.router(), protocol.TerminalWaitBlockMessage{Cmd: protocol.CmdTerminalWaitBlock, TerminalID: target.terminal, Until: until, AfterBlockID: after})
+	wait.Cmd, wait.TerminalID = protocol.CmdTerminalWaitBlock, target.terminal
+	result, err := Call[protocol.TerminalWaitResult](ctx, d.router(), wait)
 	if err != nil && ctx.Err() == nil {
 		if terminals := d.terminalsOf(target.ID); len(terminals) == 1 && terminals[0] == target.terminal {
 			if exit := d.store.GetSessionExit(target.ID); exit != nil {

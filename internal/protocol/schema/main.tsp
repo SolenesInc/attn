@@ -3520,6 +3520,7 @@ model TerminalText {
   at_prompt: boolean;
   integration_seen: boolean;
   last_block_id: int64;
+  prompt_block_id: int64;
 }
 
 @extension("x-on", #{ terminal: "terminal_id" })
@@ -3528,6 +3529,7 @@ model TerminalWaitBlockMessage {
   terminal_id: TerminalID;
   until: TerminalWaitUntil;
   after_block_id?: int64;
+  past_prompt_block_id?: int64;
   first_prompt?: boolean;
 }
 

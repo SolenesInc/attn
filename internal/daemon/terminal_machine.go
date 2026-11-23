@@ -329,7 +329,7 @@ func (d *Daemon) readTerminalText(ctx context.Context, msg protocol.TerminalRead
 	if err != nil {
 		return protocol.TerminalText{}, err
 	}
-	return protocol.TerminalText{Text: info.Text, Block: protocolTerminalBlock(info.Block), AtPrompt: info.AtPrompt, IntegrationSeen: info.IntegrationSeen, LastBlockID: strconv.FormatUint(info.LastBlockID, 10)}, nil
+	return protocol.TerminalText{Text: info.Text, Block: protocolTerminalBlock(info.Block), AtPrompt: info.AtPrompt, IntegrationSeen: info.IntegrationSeen, LastBlockID: strconv.FormatUint(info.LastBlockID, 10), PromptBlockID: strconv.FormatUint(info.PromptBlockID, 10)}, nil
 }
 
 func (d *Daemon) waitTerminalBlock(ctx context.Context, msg protocol.TerminalWaitBlockMessage) (protocol.TerminalWaitResult, error) {
@@ -338,18 +338,28 @@ func (d *Daemon) waitTerminalBlock(ctx context.Context, msg protocol.TerminalWai
 		return protocol.TerminalWaitResult{}, err
 	}
 	params := pty.WaitBlockParams{Until: string(msg.Until), FirstPrompt: protocol.Deref(msg.FirstPrompt)}
-	if msg.AfterBlockID != nil {
-		id, err := strconv.ParseUint(*msg.AfterBlockID, 10, 64)
-		if err != nil {
-			return protocol.TerminalWaitResult{}, errors.New("block rule: after_block_id must be an unsigned integer")
-		}
-		params.AfterBlockID = &id
+	if params.AfterBlockID, err = parseBlockID("after_block_id", msg.AfterBlockID); err != nil {
+		return protocol.TerminalWaitResult{}, err
+	}
+	if params.PastPromptBlockID, err = parseBlockID("past_prompt_block_id", msg.PastPromptBlockID); err != nil {
+		return protocol.TerminalWaitResult{}, err
 	}
 	result, err := provider.WaitBlock(ctx, msg.TerminalID, params)
 	if err != nil {
 		return protocol.TerminalWaitResult{}, err
 	}
 	return protocol.TerminalWaitResult{Block: protocolTerminalBlock(result.Block), Exited: protocol.Ptr(result.Exited), ExitCode: result.ExitCode}, nil
+}
+
+func parseBlockID(field string, given *string) (*uint64, error) {
+	if given == nil {
+		return nil, nil
+	}
+	id, err := strconv.ParseUint(*given, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("block rule: %s must be an unsigned integer", field)
+	}
+	return &id, nil
 }
 
 func (d *Daemon) killTerminal(ctx context.Context, msg protocol.TerminalKillMessage) (struct{}, error) {

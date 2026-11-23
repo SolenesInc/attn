@@ -142,6 +142,9 @@ func TestTerminalCLI(t *testing.T) {
 			if got := run("wait", string(second.TerminalID), "--until", "exit"); got.Code != 9 {
 				t.Fatalf("wait --until exit: %+v", got)
 			}
+			if got := run("wait", string(second.TerminalID), "--until", "prompt", "--json"); got.Code != 9 || strings.TrimSpace(got.Stdout) != `{"exit_code":9,"exited":true}` {
+				t.Fatalf("wait --until prompt on a shell that exited after attn typed into it: %+v", got)
+			}
 
 			if got := run("close", caller); got.Code != 1 || !strings.Contains(got.Stderr, "attn agent close") {
 				t.Fatalf("close agent: %+v", got)
@@ -155,6 +158,53 @@ func TestTerminalCLI(t *testing.T) {
 				t.Fatalf("close shell: %+v", got)
 			}
 			t.Logf("verified terminal open/read/run/send/wait/close on %s", backend)
+		})
+	}
+}
+
+func TestTerminalWaitUntilPromptAfterACommandAttnTyped(t *testing.T) {
+	for _, backend := range testworld.WorkerAndSharedHost {
+		t.Run(string(backend), func(t *testing.T) {
+			t.Parallel()
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(backend))
+			s.Vars = append(s.Vars, "SHELL=/bin/bash")
+			s.Start()
+			app := s.App()
+			caller := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
+			s.Launched(caller)
+			invoke := func(args ...string) testworld.Invocation {
+				return testworld.Invocation{Session: caller, Args: append([]string{"terminal"}, args...)}
+			}
+			run := func(args ...string) testworld.Result { return s.Run(invoke(args...)) }
+			var opened protocol.TerminalOpenResult
+			got := run("open", "--json")
+			if got.Code != 0 {
+				t.Fatalf("open: %+v", got)
+			}
+			got.JSON(t, &opened)
+			shell := string(opened.TerminalID)
+			if got := run("run", shell, "true", "--wait"); got.Code != 0 {
+				t.Fatalf("first prompt: %+v", got)
+			}
+
+			if got := run("run", shell, "echo )"); got.Code != 0 {
+				t.Fatalf("type a line bash rejects: %+v", got)
+			}
+			if got := run("wait", shell, "--until", "prompt"); got.Code != 0 {
+				t.Fatalf("wait --until prompt after bash rejected the typed line: %+v", got)
+			}
+
+			if got := run("run", shell, "printf 'ready-%s\\n' seq; IFS= read -r line; seq 160000"); got.Code != 0 {
+				t.Fatalf("type a command whose output outgrows scrollback: %+v", got)
+			}
+			app.AwaitScreen(string(opened.SessionID), "ready-seq")
+			waiting := s.Launch(invoke("wait", shell, "--until", "prompt"))
+			if got := run("send", shell, "--keys", "Enter"); got.Code != 0 {
+				t.Fatalf("release the command: %+v", got)
+			}
+			if got := waiting.Wait(); got.Code != 0 {
+				t.Fatalf("wait --until prompt after the command's output left scrollback: %+v", got)
+			}
 		})
 	}
 }

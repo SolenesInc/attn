@@ -14421,6 +14421,9 @@ type TerminalText struct {
 	// LastBlockID corresponds to the JSON schema field "last_block_id".
 	LastBlockID string `json:"last_block_id"`
 
+	// PromptBlockID corresponds to the JSON schema field "prompt_block_id".
+	PromptBlockID string `json:"prompt_block_id"`
+
 	// Text corresponds to the JSON schema field "text".
 	Text string `json:"text"`
 }
@@ -14454,6 +14457,9 @@ type TerminalWaitBlockMessage struct {
 
 	// FirstPrompt corresponds to the JSON schema field "first_prompt".
 	FirstPrompt *bool `json:"first_prompt,omitempty,omitzero"`
+
+	// PastPromptBlockID corresponds to the JSON schema field "past_prompt_block_id".
+	PastPromptBlockID *string `json:"past_prompt_block_id,omitempty,omitzero"`
 
 	// TerminalID corresponds to the JSON schema field "terminal_id".
 	TerminalID TerminalID `json:"terminal_id"`

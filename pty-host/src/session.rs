@@ -956,6 +956,7 @@ impl Session {
             return Err(format!("unknown wait condition {until:?}"));
         }
         let after = params["after_block_id"].as_u64();
+        let past_prompt = params["past_prompt_block_id"].as_u64();
         let first = params["first_prompt"].as_bool().unwrap_or(false);
         let mut model = self.model.lock().expect("model mutex poisoned");
         loop {
@@ -971,7 +972,9 @@ impl Session {
                     if state["last_block_id"].as_u64().unwrap_or(0) > id {
                         return Ok(json!({"block": model.wire.read_block(model.cols, after)?}));
                     }
-                } else if state["at_prompt"] == true {
+                } else if state["at_prompt"] == true
+                    && past_prompt.is_none_or(|id| state["prompt_block_id"].as_u64() != Some(id))
+                {
                     return Ok(json!({}));
                 }
             }

@@ -59,7 +59,7 @@ func (d *Daemon) runTerminalRun(ctx context.Context, c command.Caller, a command
 	if !a.Wait {
 		return protocol.TerminalRunResult{TerminalID: protocol.Ptr(input.TerminalID), LastBlockID: input.LastBlockID}, nil
 	}
-	waited, err := d.waitTerminal(ctx, target, protocol.TerminalWaitUntilPrompt, input.LastBlockID)
+	waited, err := d.waitTerminal(ctx, target, protocol.TerminalWaitBlockMessage{Until: protocol.TerminalWaitUntilPrompt, AfterBlockID: input.LastBlockID})
 	if err != nil {
 		return nil, timedOut(ctx, err)
 	}
@@ -105,21 +105,16 @@ func (d *Daemon) runTerminalWait(ctx context.Context, c command.Caller, a comman
 	if err != nil {
 		return nil, err
 	}
-	var afterTyped *string
-	if until == protocol.TerminalWaitUntilPrompt && target.Agent == protocol.AgentShellValue {
-		state, err := d.readTerminalScreen(ctx, target.terminal)
-		if err != nil {
-			return nil, timedOut(ctx, err)
-		}
-		if typed, unfinished := d.unfinishedTypedCommand(target.terminal, state); unfinished {
-			afterTyped = &typed.afterBlockID
+	wait := protocol.TerminalWaitBlockMessage{Until: until}
+	if stored, ok := d.typedCommands.Load(target.terminal); ok && until == protocol.TerminalWaitUntilPrompt {
+		if typed := stored.(typedCommand); time.Since(typed.typedAt) <= typedCommandFinishTripwire {
+			wait.PastPromptBlockID = &typed.promptBlockID
 		}
 	}
-	waited, err := d.waitTerminal(ctx, target, until, afterTyped)
+	waited, err := d.waitTerminal(ctx, target, wait)
 	if err != nil {
 		return nil, timedOut(ctx, err)
 	}
-	waited.Block = nil
 	return waited, nil
 }
 

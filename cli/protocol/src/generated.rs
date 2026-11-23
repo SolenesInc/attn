@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "cf87f28ef301";
+pub const PROTOCOL_VERSION: &str = "0e5c927565f1";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -12656,6 +12656,7 @@ pub struct TerminalText {
     pub block: Option<TerminalBlock>,
     pub integration_seen: bool,
     pub last_block_id: String,
+    pub prompt_block_id: String,
     pub text: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -12685,6 +12686,8 @@ pub struct TerminalWaitBlockMessage {
     pub cmd: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_prompt: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub past_prompt_block_id: Option<String>,
     pub terminal_id: TerminalID,
     pub until: TerminalWaitUntil,
 }
