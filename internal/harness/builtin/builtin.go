@@ -14,7 +14,7 @@ import (
 
 // All are the built-in harnesses, their servers bound on servers.
 func All(host func(owner string) harness.Host, servers *appserver.Client) []harness.Harness {
-	return []harness.Harness{sigma.New(host(""), servers), claude.New(host("")), codex.New(host)}
+	return []harness.Harness{claude.New(host("")), codex.New(host), sigma.New(host(""), servers)}
 }
 
 func facts() []harness.Facts {

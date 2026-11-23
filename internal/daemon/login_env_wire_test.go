@@ -110,17 +110,15 @@ func TestTheDaemonAnswersWhileTheLoginShellRuns(t *testing.T) {
 	app := w.App()
 
 	initialCatalog := testworld.Await(app, protocol.EventHarnessCatalog, func(protocol.HarnessCatalogMessage) bool { return true })
-	if got, ok := testworld.FindHarness(initialCatalog.Harnesses, "claude"); !ok || got.Installation != protocol.HarnessInstallationChecking {
-		t.Fatalf("initial harness_catalog carries claude=%+v during the capture, want checking", got)
+	if got, ok := testworld.FindHarness(initialCatalog.Harnesses, "claude"); !ok || got.Installation != protocol.HarnessInstallationChecking || !got.Available() {
+		t.Fatalf("initial harness_catalog carries claude=%+v during the capture, want checking and available", got)
 	}
 
 	requestID := "prefs"
 	prefs := testworld.Request(app, protocol.DelegationPreferencesGetMessage{Cmd: protocol.CmdDelegationPreferencesGet, RequestID: requestID},
 		protocol.EventDelegationPreferencesResult, func(m protocol.DelegationPreferencesResultMessage) bool { return m.RequestID == requestID })
-	for _, harness := range prefs.Harnesses {
-		if harness.ID == "claude" && !harness.Available() {
-			t.Fatal("delegation_preferences_get reports a checking harness as not available")
-		}
+	if !prefs.Success {
+		t.Fatalf("delegation_preferences_get failed during capture: %s", protocol.Deref(prefs.Error))
 	}
 	app.Send(protocol.ClearWarningsMessage{Cmd: protocol.CmdClearWarnings})
 	testworld.Request(app, protocol.SendersGetMessage{Cmd: protocol.CmdSendersGet}, protocol.EventSendersUpdated, func(protocol.SendersUpdatedMessage) bool { return true })

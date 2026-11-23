@@ -58,6 +58,13 @@ func TestTheAppGetsEveryHarnessAtConnectIncludingOneThatIsInstalledButNotOffered
 	if _, listed := catalogEntry(changed, "claude"); !listed {
 		t.Fatalf("the catalog sent on the change lists %+v, want every harness again", changed.Harnesses)
 	}
+	var ids []string
+	for _, h := range changed.Harnesses {
+		ids = append(ids, h.ID)
+	}
+	if strings.Join(ids, ",") != "claude,codex,sigma" {
+		t.Fatalf("catalog order with Sigma enabled = %v, want [claude codex sigma]", ids)
+	}
 }
 
 func TestTheAppDrawsABuiltInHarnessLogoItAsksForByHash(t *testing.T) {

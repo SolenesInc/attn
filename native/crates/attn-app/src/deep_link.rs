@@ -23,17 +23,22 @@ pub fn open_link(state: &mut State, url: &str, tx: &mut Tx) {
     settle(state, tx);
 }
 
-/// Follows the links that waited, once the current desktop is here.
+/// Follows the links that waited, once the current desktop (and for a new session, the harness
+/// catalog) is here.
 pub(crate) fn settle(state: &mut State, tx: &mut Tx) {
     if state.window.links.is_empty() || state.facts.current_desktop().is_none() {
         return;
     }
+    let mut waiting = Vec::new();
     for link in std::mem::take(&mut state.window.links) {
-        follow(state, link, tx);
+        if !follow(state, &link, tx) {
+            waiting.push(link);
+        }
     }
+    state.window.links = waiting;
 }
 
-fn follow(state: &mut State, link: Link, tx: &mut Tx) {
+fn follow(state: &mut State, link: &Link, tx: &mut Tx) -> bool {
     let profile = &state.facts.profiles.selected;
     let working = state
         .facts
@@ -41,27 +46,33 @@ fn follow(state: &mut State, link: Link, tx: &mut Tx) {
         .iter()
         .find(|s| s.directory == link.cwd && &s.profile_id == profile)
         .map(|s| s.id.clone());
+    if let Some(session) = working {
+        crate::sidebar::open_agent(state, &session, tx);
+        return true;
+    }
+    if !state.facts.harnesses_loaded {
+        return false;
+    }
     let picked = picker::Choice::new(None, &state.facts.settings).agent(state);
-    match working {
-        Some(session) => crate::sidebar::open_agent(state, &session, tx),
-        None if picked.is_empty() || picked == picker::TERMINAL => {
-            picker::new_session_at(state, &link.cwd, tx)
-        }
-        None => picker::spawn(
+    if picked.is_empty() || picked == picker::TERMINAL {
+        picker::new_session_at(state, &link.cwd, tx);
+    } else {
+        picker::spawn(
             state,
             Spawn {
-                path: link.cwd,
+                path: link.cwd.clone(),
                 agent: picked,
                 yolo: false,
                 desktop: None,
                 anchor: None,
                 direction: Direction::Vertical,
-                label: link.label,
+                label: link.label.clone(),
                 host: None,
             },
             tx,
-        ),
+        );
     }
+    true
 }
 
 fn parse(url: &str) -> Option<Link> {

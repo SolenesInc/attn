@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"sort"
 	"strings"
 
 	harnessapi "github.com/victorarias/attn/internal/harness"
@@ -21,6 +22,7 @@ func (d *Daemon) harnessCatalog() []protocol.Harness {
 	for _, h := range d.harnesses() {
 		catalog = append(catalog, harnessRecord(ctx, h))
 	}
+	sort.Slice(catalog, func(i, j int) bool { return catalog[i].ID < catalog[j].ID })
 	return catalog
 }
 

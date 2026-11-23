@@ -137,17 +137,6 @@ fn machine(
             message(DelegationPreferencesResultMessage {
                 success: true,
                 preferences: Some(DelegationPreferences::default()),
-                harnesses: Some(
-                    ["claude", "codex"]
-                        .iter()
-                        .map(|id| Harness {
-                            id: (*id).into(),
-                            name: (*id).into(),
-                            installation: "installed".into(),
-                            ..Harness::default()
-                        })
-                        .collect(),
-                ),
                 ..DelegationPreferencesResultMessage::new()
             })
         })

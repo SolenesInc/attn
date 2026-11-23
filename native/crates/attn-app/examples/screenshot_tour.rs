@@ -2278,17 +2278,6 @@ fn launcher_serving(state: InitialStateMessage) -> Daemon {
             message(DelegationPreferencesResultMessage {
                 success: true,
                 preferences: Some(DelegationPreferences::default()),
-                harnesses: Some(
-                    ["claude", "codex"]
-                        .iter()
-                        .map(|id| Harness {
-                            id: (*id).into(),
-                            name: (*id).into(),
-                            installation: "installed".into(),
-                            ..Harness::default()
-                        })
-                        .collect(),
-                ),
                 ..DelegationPreferencesResultMessage::new()
             })
         })
@@ -3449,7 +3438,6 @@ fn empty_delegation_world(dark: bool, settings: &[(&str, &str)]) -> World {
                         ..DelegationRole::default()
                     }]),
                     expanded_roles: Some(Vec::new()),
-                    harnesses: Some(Vec::new()),
                     workflow_skill_paths: Some(Vec::new()),
                     ..DelegationPreferencesResultMessage::new()
                 })
@@ -3611,7 +3599,6 @@ fn delegation_preferences(daemon: &Daemon, enabled: bool, failure: Option<&'stat
                     selection: route("claude", "sonnet", "medium"),
                 },
             }),
-            harnesses: Some(attn_testkit::built_in_harnesses()),
             templates: Some(vec![roles[0].clone()]),
             expanded_roles: Some(roles),
             workflow_skill_paths: Some(Vec::new()),

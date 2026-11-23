@@ -76,11 +76,7 @@ fn initial(queue: bool, member: CrewMember, sessions: Vec<Session>) -> InitialSt
 fn daemon(initial: InitialStateMessage) -> Daemon {
     let daemon = super::palette::daemon(initial, Vec::new());
     daemon.on("delegation_preferences_get", |_| {
-        message(preferences_result(vec![
-            harness("claude", "Claude"),
-            harness("codex", "Codex"),
-            harness("plug", "Plug"),
-        ]))
+        message(preferences_result())
     });
     daemon.on("harness_models", serve_models);
     daemon

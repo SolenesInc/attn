@@ -85,10 +85,7 @@ fn initial(crew: Vec<CrewMember>, sessions: Vec<Session>, seeds: Vec<Seed>) -> I
 fn daemon(crew: Vec<CrewMember>, sessions: Vec<Session>, seeds: Vec<Seed>) -> Daemon {
     let daemon = super::palette::daemon(initial(crew, sessions, seeds), Vec::new());
     daemon.on("delegation_preferences_get", |_| {
-        message(preferences_result(vec![
-            harness("claude", "Claude Code"),
-            harness("codex", "Codex"),
-        ]))
+        message(preferences_result())
     });
     daemon.on("harness_models", |r| {
         let harness = r["harness"].as_str().unwrap_or_default().to_owned();

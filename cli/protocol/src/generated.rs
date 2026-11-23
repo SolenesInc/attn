@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "29385843f81a";
+pub const PROTOCOL_VERSION: &str = "cf87f28ef301";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -3537,8 +3537,6 @@ pub struct DelegationPreferencesResultMessage {
     pub event: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expanded_roles: Option<Vec<DelegationRole>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub harnesses: Option<Vec<Harness>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preferences: Option<DelegationPreferences>,
     pub request_id: String,

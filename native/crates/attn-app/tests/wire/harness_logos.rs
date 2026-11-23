@@ -253,3 +253,81 @@ fn plugin_that_leaves_after_a_missed_logo_fetches_again_when_it_rejoins() {
     );
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_monochrome_symbol_use_plugin_logo_paints_in_the_sidebar() {
+    const HASH: &str = "11223344556677889900aabbccddeeff";
+    const SYMBOL_USE: &str = r##"<defs><symbol id="m" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></symbol></defs><use href="#m" fill="currentColor"/>"##;
+    let daemon = Daemon::scripted()
+        .state(plugin_state())
+        .harnesses(vec![nebula(Some(HASH))]);
+    daemon.answer_in_turn("harness_logo", [Answer::Hold]);
+    let mut world = World::start(daemon);
+    world.open_desktop();
+    let fallback = painted_lead(&world);
+    assert!(!fallback.is_empty());
+
+    let req = world.daemon.sent_of("harness_logo").remove(0);
+    world.daemon.reply_to(
+        &req,
+        message(HarnessLogoResultMessage {
+            success: true,
+            logo: Some(HarnessLogo {
+                view: 24.0,
+                body: SYMBOL_USE.into(),
+            }),
+            ..HarnessLogoResultMessage::new()
+        }),
+    );
+    world.settle();
+
+    let drawn = painted_lead(&world);
+    assert!(!drawn.is_empty(), "symbol/use currentColor logo must paint");
+    assert_ne!(
+        drawn, fallback,
+        "symbol/use currentColor logo replaces fallback"
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn an_unrenderable_plugin_logo_keeps_the_fallback_mark() {
+    const HASH: &str = "ffeeddccbbaa00998877665544332211";
+    let dir = tempfile::tempdir().expect("logo cache dir");
+    let daemon = Daemon::scripted()
+        .state(plugin_state())
+        .harnesses(vec![nebula(Some(HASH))]);
+    daemon.answer_in_turn("harness_logo", [Answer::Hold]);
+    let mut world = World::start_with_data_dir(daemon, dir.path().to_path_buf());
+    world.open_desktop();
+    let fallback = painted_lead(&world);
+    assert!(!fallback.is_empty());
+
+    let req = world.daemon.sent_of("harness_logo").remove(0);
+    world.daemon.reply_to(
+        &req,
+        message(HarnessLogoResultMessage {
+            success: true,
+            logo: Some(HarnessLogo {
+                view: 24.0,
+                body: r##"<use href="#missing" fill="currentColor"/>"##.into(),
+            }),
+            ..HarnessLogoResultMessage::new()
+        }),
+    );
+    world.settle();
+
+    assert_eq!(
+        painted_lead(&world),
+        fallback,
+        "an SVG that renders nothing must keep the visible fallback mark"
+    );
+    assert!(
+        !dir.path()
+            .join("cache/harness-logos")
+            .join(format!("{HASH}.json"))
+            .exists(),
+        "an unrenderable logo must not be cached to disk"
+    );
+    assert!(world.runtime_is_at_rest());
+}

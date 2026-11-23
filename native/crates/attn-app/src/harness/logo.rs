@@ -35,7 +35,7 @@ enum Entry {
     Missing,
 }
 
-type DiskInbox = Arc<Mutex<Vec<(String, Option<HarnessLogo>)>>>;
+type DiskInbox = Arc<Mutex<Vec<(String, Option<OwnedIcon>)>>>;
 
 #[derive(Default)]
 pub struct Logos {
@@ -69,16 +69,22 @@ impl Logos {
         self.revision
     }
 
-    fn insert_loaded(&mut self, hash: String, logo: HarnessLogo) -> bool {
-        if !valid_logo(&logo) {
-            self.entries.insert(hash, Entry::Missing);
-            return false;
-        }
-        let icon = OwnedIcon::new(format!("harness-logo-{hash}"), logo.view as f32, logo.body);
+    fn insert_loaded(&mut self, hash: String, icon: OwnedIcon) -> bool {
         self.entries.insert(hash, Entry::Loaded(icon));
         self.revision += 1;
         true
     }
+}
+
+fn build_icon(hash: &str, logo: &HarnessLogo) -> Option<OwnedIcon> {
+    if !valid_logo(logo) {
+        return None;
+    }
+    OwnedIcon::try_new(
+        format!("harness-logo-{hash}"),
+        logo.view as f32,
+        logo.body.clone(),
+    )
 }
 
 fn valid_hash(hash: &str) -> bool {
@@ -96,10 +102,10 @@ fn disk_path(dir: &Path, hash: &str) -> PathBuf {
     dir.join(format!("{hash}.json"))
 }
 
-fn read_disk_logo(dir: &Path, hash: &str) -> Option<HarnessLogo> {
+fn read_disk_logo(dir: &Path, hash: &str) -> Option<OwnedIcon> {
     let bytes = std::fs::read(disk_path(dir, hash)).ok()?;
     let logo: HarnessLogo = serde_json::from_slice(&bytes).ok()?;
-    valid_logo(&logo).then_some(logo)
+    build_icon(hash, &logo)
 }
 
 static NEXT_TMP: AtomicU64 = AtomicU64::new(1);
@@ -131,7 +137,7 @@ fn write_disk_logo(
 }
 
 fn drain_disk(state: &mut State, tx: &mut Tx) -> bool {
-    let arrived: Vec<(String, Option<HarnessLogo>)> = {
+    let arrived: Vec<(String, Option<OwnedIcon>)> = {
         let mut inbox = state.logos.disk_inbox.lock().unwrap();
         std::mem::take(&mut *inbox)
     };
@@ -141,8 +147,8 @@ fn drain_disk(state: &mut State, tx: &mut Tx) -> bool {
     let connected = state.facts.connection == attn_client::Connection::Connected;
     let mut changed = false;
     for (hash, found) in arrived {
-        if let Some(logo) = found {
-            changed |= state.logos.insert_loaded(hash, logo);
+        if let Some(icon) = found {
+            changed |= state.logos.insert_loaded(hash, icon);
         } else if connected {
             fetch(state, hash, tx);
         } else {
@@ -168,22 +174,22 @@ fn fetch(state: &mut State, hash: String, tx: &mut Tx) {
                 .and_then(|reply| reply.parse::<HarnessLogoResultMessage>())
                 .filter(|r| r.success)
                 .and_then(|r| r.logo);
-            match parsed {
-                Some(logo) if valid_logo(&logo) => {
+            match parsed.and_then(|logo| build_icon(&hash, &logo).map(|icon| (logo, icon))) {
+                Some((logo, icon)) => {
                     if let Some(dir) = state.logos.cache_dir.clone()
                         && valid_hash(&hash)
                     {
                         write_disk_logo(
                             dir,
                             hash.clone(),
-                            logo.clone(),
+                            logo,
                             state.logos.pending_writes.clone(),
                             state.logos.wake.clone(),
                         );
                     }
-                    state.logos.insert_loaded(hash, logo);
+                    state.logos.insert_loaded(hash, icon);
                 }
-                _ => {
+                None => {
                     state.logos.entries.insert(hash, Entry::Missing);
                 }
             }

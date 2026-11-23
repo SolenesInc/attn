@@ -1276,7 +1276,6 @@ model DelegationPreferencesResultMessage {
   templates?: DelegationRole[];
   expanded_roles?: DelegationRole[];
   workflow_skill_paths?: string[];
-  harnesses?: Harness[];
 }
 
 model DelegationPreferencesChangedMessage {

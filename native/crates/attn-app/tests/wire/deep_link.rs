@@ -2,10 +2,10 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use attn_protocol::{
-    Desktop, DesktopPane, InitialStateMessage, Profile, ProfileArrangementChangedMessage, Session,
-    SessionsUpdatedMessage, SpawnResultMessage,
+    Desktop, DesktopPane, HarnessCatalogMessage, InitialStateMessage, Profile,
+    ProfileArrangementChangedMessage, Session, SessionsUpdatedMessage, SpawnResultMessage,
 };
-use attn_testkit::{Daemon, Request, Target, World, message};
+use attn_testkit::{Daemon, Request, Target, World, built_in_harnesses, message};
 use serde_json::Value;
 
 const PLAN: &str = "attn://spawn?cwd=%2Frepo%2Fplan&label=plan";
@@ -122,6 +122,49 @@ fn a_spawn_link_waits_for_the_current_desktop_then_starts_the_harness_last_picke
     assert!(spawns[0].get("yolo_mode").is_none_or(Value::is_null));
     assert_eq!(spawns[0]["placement"]["desktop_id"], "d1");
     assert_eq!(spawns[0]["placement"]["direction"], "vertical");
+    rest(&mut world);
+}
+
+#[test]
+fn a_cold_spawn_link_waits_for_the_harness_catalog_before_starting_the_saved_harness_with_its_label()
+ {
+    let mut world = World::start(Daemon::scripted().without_harness_catalog().state(
+        InitialStateMessage {
+            selected_profile_id: Some("work".into()),
+            profiles: Some(vec![profile("d1")]),
+            desktops: Some(vec![desktop()]),
+            sessions: Some(vec![session("existing", "/repo/existing", "work")]),
+            settings: Some(BTreeMap::from([(
+                "new_session_agent".into(),
+                "codex".into(),
+            )])),
+            ..InitialStateMessage::new()
+        },
+    ));
+
+    open(&mut world, "attn://spawn?cwd=%2Frepo%2Fexisting");
+    assert_eq!(shown(&world), ["existing"]);
+
+    open(&mut world, PLAN);
+    assert!(world.daemon.sent_of("spawn_session").is_empty());
+    assert!(
+        world
+            .screen()
+            .find(Target::key("new-session.path.field"))
+            .is_none()
+    );
+
+    world.daemon.emit(HarnessCatalogMessage {
+        harnesses: built_in_harnesses(),
+        ..HarnessCatalogMessage::new()
+    });
+    world.settle();
+
+    let spawns = world.daemon.sent_of("spawn_session");
+    assert_eq!(spawns.len(), 1);
+    assert_eq!(spawns[0]["cwd"], "/repo/plan");
+    assert_eq!(spawns[0]["label"], "plan");
+    assert_eq!(spawns[0]["agent"], "codex");
     rest(&mut world);
 }
 

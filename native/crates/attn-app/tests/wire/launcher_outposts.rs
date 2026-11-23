@@ -313,7 +313,6 @@ fn world(setup: Setup) -> World {
             message(DelegationPreferencesResultMessage {
                 success: true,
                 preferences: Some(DelegationPreferences::default()),
-                harnesses: Some(harnesses(&["claude", "codex"])),
                 ..DelegationPreferencesResultMessage::new()
             })
         })

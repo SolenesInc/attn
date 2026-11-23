@@ -29,7 +29,6 @@ struct Table {
     preferences: DelegationPreferences,
     templates: Vec<DelegationRole>,
     expanded: Expand,
-    harnesses: Vec<Harness>,
     holding_saves: bool,
     held_saves: Vec<Request>,
     holding_loads: bool,
@@ -178,7 +177,6 @@ impl Server {
             preferences: Some(table.preferences.clone()),
             templates: Some(table.templates.clone()),
             expanded_roles: Some((table.expanded)(&table.preferences.roles)),
-            harnesses: Some(table.harnesses.clone()),
             workflow_skill_paths: Some(Vec::new()),
             ..DelegationPreferencesResultMessage::new()
         })
@@ -311,7 +309,6 @@ fn on_delegation(spec: Spec) -> (World, Server) {
         expanded: spec
             .expanded
             .unwrap_or_else(|| Box::new(|roles| roles.to_vec())),
-        harnesses: initial_harnesses,
         holding_saves: false,
         held_saves: Vec::new(),
         holding_loads: false,
@@ -1022,16 +1019,14 @@ fn the_fallback_row_stays_when_the_table_has_no_roles() {
 
 #[test]
 fn showing_the_section_again_reloads_the_table_and_pushed_harnesses_appear() {
-    let (mut world, server) = on_delegation(Spec::default());
+    let (mut world, _server) = on_delegation(Spec::default());
     assert_eq!(loads(&world), 1);
     let mut plug = codex();
     plug.id = "plug".into();
     plug.name = "Plug".into();
     plug.options.discovery = false;
     plug.options.provider = true;
-    server.table().harnesses.push(plug);
-    let updated = server.table().harnesses.clone();
-    push_harnesses(&mut world, updated);
+    push_harnesses(&mut world, vec![codex(), plug]);
     show_section_again(&mut world);
     assert_eq!(loads(&world), 2);
     open_route(&mut world, "Model for anything else");

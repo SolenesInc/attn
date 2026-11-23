@@ -202,11 +202,10 @@ pub(crate) fn reported(
     }
 }
 
-pub(crate) fn preferences_result(harnesses: Vec<Harness>) -> DelegationPreferencesResultMessage {
+pub(crate) fn preferences_result() -> DelegationPreferencesResultMessage {
     DelegationPreferencesResultMessage {
         success: true,
         preferences: Some(DelegationPreferences::default()),
-        harnesses: Some(harnesses),
         templates: Some(Vec::new()),
         expanded_roles: Some(Vec::new()),
         ..DelegationPreferencesResultMessage::new()
@@ -215,9 +214,9 @@ pub(crate) fn preferences_result(harnesses: Vec<Harness>) -> DelegationPreferenc
 
 /// Answers the harness list with `harnesses` and each catalog read from [`catalog`].
 pub(crate) fn serve(daemon: &Daemon, settings: &Settings, harnesses: Vec<Harness>) {
-    daemon.set_harnesses(harnesses.clone());
-    daemon.on("delegation_preferences_get", move |_| {
-        message(preferences_result(harnesses.clone()))
+    daemon.set_harnesses(harnesses);
+    daemon.on("delegation_preferences_get", |_| {
+        message(preferences_result())
     });
     let settings = settings.clone();
     daemon.on("harness_models", move |r| {

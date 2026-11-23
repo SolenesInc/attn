@@ -4131,9 +4131,6 @@ type DelegationPreferencesResultMessage struct {
 	// ExpandedRoles corresponds to the JSON schema field "expanded_roles".
 	ExpandedRoles []DelegationRole `json:"expanded_roles,omitempty,omitzero"`
 
-	// Harnesses corresponds to the JSON schema field "harnesses".
-	Harnesses []Harness `json:"harnesses,omitempty,omitzero"`
-
 	// Preferences corresponds to the JSON schema field "preferences".
 	Preferences *DelegationPreferences `json:"preferences,omitempty,omitzero"`
 

@@ -64,16 +64,14 @@ func TestTheAgentCatalogListsBuiltInAgentsAndThoseAConnectedPluginOffers(t *test
 		t.Errorf("plug = %+v, want offered by attn-plug, healthy with %q, without the pins the plugin did not declare", plug, plugHealth)
 	}
 
-	prefs := testworld.Request(app, protocol.DelegationPreferencesGetMessage{Cmd: protocol.CmdDelegationPreferencesGet, RequestID: "display-name"}, protocol.EventDelegationPreferencesResult, func(m protocol.DelegationPreferencesResultMessage) bool { return m.RequestID == "display-name" })
-	found := false
-	for _, harness := range prefs.Harnesses {
-		if harness.ID == "plug" && harness.Name == "Example Agent" {
-			found = true
+	testworld.Await(app, protocol.EventHarnessCatalog, func(m protocol.HarnessCatalogMessage) bool {
+		for _, h := range m.Harnesses {
+			if h.ID == "plug" && h.Name == "Example Agent" {
+				return true
+			}
 		}
-	}
-	if !found {
-		t.Fatalf("picker catalog lost display name: %+v", prefs.Harnesses)
-	}
+		return false
+	})
 
 	uninstalled := testworld.Request(app, protocol.UninstallPluginMessage{Cmd: protocol.CmdUninstallPlugin, Name: "attn-plug"},
 		protocol.EventPluginActionResult, func(m protocol.PluginActionResultMessage) bool { return protocol.Deref(m.Name) == "attn-plug" })

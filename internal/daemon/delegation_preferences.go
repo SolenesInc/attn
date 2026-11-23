@@ -47,7 +47,6 @@ func (d *Daemon) handleDelegationPreferencesGet(client *wsClient, msg *protocol.
 		result.Success = true
 		result.Preferences = &cfg
 		result.ExpandedRoles = append(prompts.ExpandDelegationRoles(cfg.Roles), prompts.ExpandDelegationRoles(prompts.DelegationRoleTemplates())...)
-		result.Harnesses = d.delegationHarnesses()
 		result.Templates = prompts.DelegationRoleTemplates()
 	}
 	d.sendToClient(client, result)
@@ -78,7 +77,6 @@ func (d *Daemon) handleDelegationPreferencesSave(client *wsClient, msg *protocol
 		result.Success = true
 		result.Preferences = &cfg
 		result.ExpandedRoles = append(prompts.ExpandDelegationRoles(cfg.Roles), prompts.ExpandDelegationRoles(prompts.DelegationRoleTemplates())...)
-		result.Harnesses = d.delegationHarnesses()
 		result.Templates = prompts.DelegationRoleTemplates()
 		if !protocol.Deref(msg.InstallWorkflowSkill) {
 			d.ensureEnabledWorkflowSkills()
