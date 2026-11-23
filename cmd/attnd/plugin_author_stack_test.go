@@ -93,6 +93,7 @@ func TestAnAuthorsHarnessTakesQueuedInputAfterRecovery(t *testing.T) {
 	s.Stop()
 	s.Start()
 	app = s.App()
+	app.AwaitScreen(session, "sample harness started conversation")
 	if err := listener.SetDeadline(time.Now().Add(fakeagent.HangGuard)); err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +120,6 @@ func TestAnAuthorsHarnessTakesQueuedInputAfterRecovery(t *testing.T) {
 	if _, err := conn.Write([]byte("ready\n")); err != nil {
 		t.Fatal(err)
 	}
-	awaitAgentAvailable(app, agent)
 	app.AwaitScreen(session, "You have unread items in your attn inbox")
 	inbox := s.Run(testworld.Invocation{Args: []string{"agent", "inbox"}, Session: session})
 	if inbox.Code != 0 || !strings.Contains(inbox.Stdout, "queued during recovery") {
