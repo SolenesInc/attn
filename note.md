@@ -1,0 +1,1 @@
+The asks sheet reads at the document reader's size: an ask's prose is 15 points on a 24-point line instead of 13, with the subject, questions and choices scaled to match. The ask reads in a centred 620-point column, pictures run up to 980 points wide, and the sheet grows to 1440 points wide and the window's height.
