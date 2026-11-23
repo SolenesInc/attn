@@ -1,0 +1,1 @@
+On an outpost, annotations, reviews and prompts from the phone sent to a Sigma tile right after an idle `/fork` now reach the fork, as they already did at home. Reloading an outpost tile before the fork's first prompt still reopens the conversation it forked from.
