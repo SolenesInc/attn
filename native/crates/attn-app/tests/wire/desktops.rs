@@ -4310,9 +4310,8 @@ fn a_column_a_divider_drag_sends_to_the_shelf_leaves_without_sliding_with_the_ro
     );
 }
 
-/// What the renderer confines terminal `runtime`'s grid to: its effect slot's clip, in points.
-fn terminal_drawn_within(world: &World, runtime: &str) -> [f32; 4] {
-    let [x, y, w, h] = world
+fn terminal_effect_slot(world: &World, runtime: &str) -> ([f32; 4], [f32; 4], [f32; 4]) {
+    let bounds @ [x, y, w, h] = world
         .screen()
         .bounds(Target::key(format!("terminal.{runtime}")))
         .unwrap_or_else(|| panic!("{runtime} is laid out"));
@@ -4330,7 +4329,14 @@ fn terminal_drawn_within(world: &World, runtime: &str) -> [f32; 4] {
                 && near(i.rect[3], h)
         })
         .unwrap_or_else(|| panic!("{runtime}'s grid has an effect slot"));
-    slot.clip.map(|v| v / scale)
+    (bounds, slot.rect, slot.clip)
+}
+
+/// What the renderer confines terminal `runtime`'s grid to: its effect slot's clip, in points.
+fn terminal_drawn_within(world: &World, runtime: &str) -> [f32; 4] {
+    let (_, _, clip) = terminal_effect_slot(world, runtime);
+    let scale = world.runtime().env.scale;
+    clip.map(|v| v / scale)
 }
 
 fn corner(world: &World, key: &str) -> (f32, f32) {
@@ -4380,4 +4386,69 @@ fn a_spotlit_terminal_whose_grid_outgrows_its_tile_draws_nothing_over_its_neighb
         assert_eq!(corner(&world, "tile.a.spotlight.right"), tile_corner);
         assert_eq!(corner(&world, "terminal.r-a"), tile_corner, "in {tree}");
     }
+}
+
+#[test]
+fn split_terminals_at_fractional_scales_fit_their_drawn_cells_inside_their_slots() {
+    let assert_fits = |world: &World, label: &str| {
+        let metrics = attn_term::Metrics::of(attn_term::FONT_SIZE);
+        let scale = world.runtime().env.scale;
+        let (cw, ch) = (
+            (metrics.cell_w * scale).round(),
+            (metrics.cell_h * scale).round(),
+        );
+        for runtime in ["r-a", "r-b"] {
+            let ([_, _, w, h], slot_rect, _) = terminal_effect_slot(world, runtime);
+            let resize = world
+                .daemon
+                .sent_of("pty_resize")
+                .into_iter()
+                .rev()
+                .find(|r| r["id"] == runtime)
+                .unwrap_or_else(|| panic!("{runtime} sent pty_resize ({label})"));
+            let cols = resize["cols"].as_i64().unwrap();
+            let rows = resize["rows"].as_i64().unwrap();
+            let xpixel = resize["xpixel"].as_i64().unwrap();
+            let ypixel = resize["ypixel"].as_i64().unwrap();
+            assert!(
+                (cols as f32) * cw <= slot_rect[2] && (rows as f32) * ch <= slot_rect[3],
+                "{label} (scale={scale}) {runtime}: {cols}x{rows} at {cw}x{ch}px = {}x{}px overflows slot {}x{}px",
+                (cols as f32) * cw,
+                (rows as f32) * ch,
+                slot_rect[2],
+                slot_rect[3]
+            );
+            assert!(
+                ((cols + 1) as f32) * cw > (w * scale).floor()
+                    && ((rows + 1) as f32) * ch > (h * scale).floor(),
+                "{label} (scale={scale}) {runtime}: {cols}x{rows} leaves an unused cell in {}x{}px",
+                (w * scale).floor(),
+                (h * scale).floor()
+            );
+            assert_eq!(
+                (xpixel, ypixel),
+                (cols * cw as i64, rows * ch as i64),
+                "{label} {runtime}: pixel size matches drawn cells"
+            );
+        }
+    };
+
+    let wide = (2200.0, 900.0);
+    for ui_scale in ["1.2", "0.8", "1.1", "1.3", "1.4"] {
+        let mut state = initial(vec![desktop(1, "a", Some(row([pane("a"), pane("b")])))]);
+        state.settings = Some([("uiScale".into(), ui_scale.into())].into());
+        let mut world = World::start_sized(Daemon::scripted().state(state), wide);
+        world.open_desktop();
+        world.advance(Duration::from_secs(1));
+        assert_fits(&world, &format!("uiScale={ui_scale} at 2x"));
+    }
+
+    let mut state = initial(vec![desktop(1, "a", Some(row([pane("a"), pane("b")])))]);
+    state.settings = Some([("uiScale".into(), "1.2".into())].into());
+    let mut world = World::start_sized(Daemon::scripted().state(state), wide);
+    world.open_desktop();
+    world.advance(Duration::from_secs(1));
+    world.gesture(|app| app.runtime.set_viewport(wide, 1.0));
+    world.advance(Duration::from_secs(1));
+    assert_fits(&world, "uiScale=1.2 moved to 1x");
 }
