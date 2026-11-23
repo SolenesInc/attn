@@ -29,7 +29,7 @@ esac
 	}
 	t.Setenv("ATTN_MOCK_GH_URL", "")
 	t.Setenv("ATTN_GITHUB_POLLING", "on")
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+ghWarningPath(t, ""))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 func awaitBothGitHubHosts(app *testworld.Peer) []string {
@@ -51,7 +51,7 @@ func TestTheFirstScreenCarriesTheWarningOfASlowGHCheck(t *testing.T) {
 	}
 	t.Setenv("ATTN_MOCK_GH_URL", "")
 	t.Setenv("ATTN_GITHUB_POLLING", "on")
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+ghWarningPath(t, ""))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	warnings := newWorld(t).App().Initial.Warnings
 	if !slices.ContainsFunc(warnings, func(w protocol.DaemonWarning) bool { return w.Code == "gh_version_too_old" }) {
 		t.Fatalf("the first initial_state warns %+v, want gh_version_too_old", warnings)

@@ -49,7 +49,7 @@ esac
 	t.Setenv("FAKE_GH_DIR", gh.dir)
 	t.Setenv("ATTN_MOCK_GH_URL", "")
 	t.Setenv("ATTN_GITHUB_POLLING", "on")
-	t.Setenv("PATH", gh.dir+string(os.PathListSeparator)+ghWarningPath(t, ""))
+	t.Setenv("PATH", gh.dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	original := http.DefaultTransport
 	http.DefaultTransport = gh
 	t.Cleanup(func() { http.DefaultTransport = original })
@@ -448,7 +448,7 @@ esac
 	t.Setenv("FAKE_GH_DIR", dir)
 	t.Setenv("ATTN_MOCK_GH_URL", "")
 	t.Setenv("ATTN_GITHUB_POLLING", "on")
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+ghWarningPath(t, ""))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	gh := &routedGitHub{}
 	original := http.DefaultTransport
 	http.DefaultTransport = gh
