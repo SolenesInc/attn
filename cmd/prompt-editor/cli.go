@@ -51,25 +51,15 @@ func runCLI(ctx context.Context, args []string, stdin io.Reader, stdout, stderr 
 	asJSON := flags.Bool("json", false, "Structured output")
 	port := flags.Int("port", 0, "Loopback port for serve")
 	q := operationRequest{Values: prompts.Values{}, Inputs: map[string]string{}}
-	flags.StringVar(&q.DraftID, "draft", "", "Shared draft id")
-	flags.StringVar(&q.ReviewID, "review", "", "Immutable review id")
 	flags.StringVar(&q.Scenario, "scenario", "", "Saved scenario id")
 	flags.StringVar(&q.Event, "event", "", "recipient/event")
 	flags.StringVar(&q.Path, "source", "", "Markdown source path")
-	flags.StringVar(&q.Title, "title", "", "Draft, review, or scenario title")
-	flags.StringVar(&q.Text, "message", "", "Review feedback")
-	flags.StringVar(&q.Author, "author", "agent", "Change author")
-	flags.StringVar(&q.Expect, "expect", "", "Expected source or scenario revision")
-	flags.Int64Var(&q.Revision, "revision", 0, "Expected draft revision")
+	flags.StringVar(&q.Title, "title", "", "Scenario title")
+	flags.StringVar(&q.Expect, "expect", "", "Expected scenario revision")
 	flags.StringVar(&q.Base, "base", "", "Comparison branch, tag, or commit")
 	flags.StringVar(&q.Mode, "mode", "merge-base", "merge-base or tip")
-	flags.StringVar(&q.Target, "target", "", "Feedback target: source or prompt")
-	flags.StringVar(&q.Selection, "selection", "", "Quoted source or prompt selection")
-	file := flags.String("file", "", "Read source text from a file; - reads stdin")
 	valuesFile := flags.String("values", "", "Read scenario values as JSON; - reads stdin")
-	open := flags.Bool("open", false, "Open the review link in a browser")
-	after := flags.Int64("after", 0, "Watch after this draft revision or feedback count")
-	timeout := flags.Duration("timeout", 30*time.Second, "Watch timeout")
+	open := flags.Bool("open", false, "Open the editor link in a browser")
 	flags.Var(assignments(q.Values), "set", "Scenario input name=value; repeatable")
 	flags.Var(assignments(q.Inputs), "input", "Producer binding field=scenario; repeatable")
 	flags.Var((*targets)(&q.Include), "include", "Related event, fragment or source to include in context; repeatable")
@@ -126,13 +116,6 @@ func runCLI(ctx context.Context, args []string, stdin io.Reader, stdout, stderr 
 		}
 		return os.ReadFile(name)
 	}
-	if *file != "" {
-		data, err := read(*file)
-		if err != nil {
-			return fail(err)
-		}
-		q.Text = string(data)
-	}
 	if *valuesFile != "" {
 		data, err := read(*valuesFile)
 		if err != nil {
@@ -158,7 +141,7 @@ func runCLI(ctx context.Context, args []string, stdin io.Reader, stdout, stderr 
 	defer e.root.Close()
 	q.Op = words[0]
 	position := 1
-	if q.Op == "draft" || q.Op == "review" || q.Op == "scenario" {
+	if q.Op == "scenario" {
 		if len(words) < 2 {
 			return fail(fmt.Errorf("%s needs a subcommand", q.Op))
 		}
@@ -182,69 +165,12 @@ func runCLI(ctx context.Context, args []string, stdin io.Reader, stdout, stderr 
 	if q.Op == "uses" {
 		q.Target = q.ID
 	}
-	if q.Op == "draft-put" && *file == "" {
-		return fail(fmt.Errorf("draft put requires --file"))
-	}
-	if q.Op == "draft-focus" || q.Op == "show" {
-		if q.Op == "draft-focus" && q.DraftID == "" {
-			q.DraftID = q.ID
-		}
-		snapshot, selected, err := e.dataset(q.DraftID, q.ReviewID)
-		if err != nil {
-			return fail(err)
-		}
-		if selected == nil {
-			selected = &focus{Values: prompts.Values{}}
-		}
-		if q.Event != "" {
-			if selected.Event != q.Event {
-				selected.Scenario = ""
-				selected.Values = prompts.Values{}
-				selected.Path = ""
-			}
-			selected.Event = q.Event
-		}
-		if q.Path != "" {
-			selected.Path = q.Path
-		}
-		if q.Values != nil {
-			selected.Values = q.Values
-			selected.Scenario = ""
-		}
-		if q.Scenario != "" {
-			all, err := e.scenarios()
-			if err != nil {
-				return fail(err)
-			}
-			s, ok := all[q.Scenario]
-			if !ok {
-				return fail(fmt.Errorf("unknown scenario"))
-			}
-			catalog, err := snapshot.load(nil)
-			if err != nil {
-				return fail(err)
-			}
-			selected.Values, err = scenarioValues(catalog, all, q.Scenario, map[string]bool{})
-			if err != nil {
-				return fail(err)
-			}
-			selected.Event = s.Recipient + "/" + s.Event
-			selected.Scenario = s.ID
-		}
-		if q.Base != "" {
-			base, err := e.selectBase(ctx, q.Base, q.Mode)
-			if err != nil {
-				return fail(err)
-			}
-			selected.BaseCommit = base.Commit
-		}
-		q.Focus = selected
+	if q.Op == "show" && q.Event == "" {
+		q.Event = q.ID
 	}
 	var result any
 	if q.Op == "show" {
-		result, err = e.show(ctx, q, *open)
-	} else if q.Op == "watch" {
-		result, err = e.watch(ctx, q, *after, *timeout)
+		result, err = e.show(ctx, q.Event, *open)
 	} else {
 		result, err = e.operation(ctx, q)
 	}
@@ -271,17 +197,6 @@ func runCLI(ctx context.Context, args []string, stdin io.Reader, stdout, stderr 
 
 func printResult(w io.Writer, q operationRequest, result any) {
 	switch value := result.(type) {
-	case sharedDraft:
-		fmt.Fprintf(w, "%s  %s  revision %d  %d changed files\n", value.ID, value.Title, value.Revision, len(value.Files))
-		for path, file := range value.Files {
-			fmt.Fprintf(w, "  %s  %s  by %s\n", path, file.Revision, file.Author)
-		}
-	case review:
-		fmt.Fprintf(w, "%s  %s  draft %s revision %d\n", value.ID, value.Title, value.DraftID, value.DraftRevision)
-		fmt.Fprintf(w, "  %s  scenario %s  %d comments\n", value.Focus.Event, value.Focus.Scenario, len(value.Feedback))
-		for _, comment := range value.Feedback {
-			fmt.Fprintf(w, "  %s: %s\n", comment.Author, comment.Message)
-		}
 	case map[string]any:
 		if q.Op == "authoring" {
 			fmt.Fprint(w, value["workflow"])
@@ -336,35 +251,23 @@ func printResult(w io.Writer, q operationRequest, result any) {
 	}
 }
 
-func (e *editor) show(ctx context.Context, q operationRequest, open bool) (any, error) {
-	if q.DraftID == "" && q.ReviewID == "" {
-		return nil, fmt.Errorf("show needs --draft or --review")
-	}
-	if q.DraftID != "" {
-		q.Op = "draft-focus"
-		q.ID = q.DraftID
-		if _, err := e.operation(ctx, q); err != nil {
-			return nil, err
-		}
-	}
-	var address string
-	_, err := e.withState(func(root *os.Root) (any, error) {
-		var server struct {
-			URL  string `json:"url"`
-			Repo string `json:"repo"`
-		}
-		if err := readJSON(root, "server.json", &server); err != nil {
-			return nil, fmt.Errorf("start prompt-editor serve in this checkout before show: %w", err)
-		}
-		if server.Repo != e.repo {
-			return nil, fmt.Errorf("editor belongs to another checkout")
-		}
-		address = server.URL
-		return nil, nil
-	})
+func (e *editor) show(ctx context.Context, event string, open bool) (any, error) {
+	repo, err := os.OpenRoot(e.repo)
 	if err != nil {
 		return nil, err
 	}
+	defer repo.Close()
+	var server struct {
+		URL  string `json:"url"`
+		Repo string `json:"repo"`
+	}
+	if err := readJSON(repo, serverRecord, &server); err != nil {
+		return nil, fmt.Errorf("start prompt-editor serve in this checkout before show: %w", err)
+	}
+	if server.Repo != e.repo {
+		return nil, fmt.Errorf("editor belongs to another checkout")
+	}
+	address := server.URL
 	u, err := url.Parse(address)
 	if err != nil || u.Scheme != "http" || u.Hostname() != "127.0.0.1" || u.Port() == "" || u.User != nil || u.Path != "" {
 		return nil, fmt.Errorf("invalid local editor address; restart prompt-editor serve")
@@ -385,11 +288,13 @@ func (e *editor) show(ctx context.Context, q operationRequest, open bool) (any, 
 	if response.StatusCode != 200 || json.NewDecoder(io.LimitReader(response.Body, 8192)).Decode(&identity) != nil || identity.Repo != e.repo {
 		return nil, fmt.Errorf("running editor does not match this checkout; restart prompt-editor serve")
 	}
-	kind, id := "draft", q.DraftID
-	if q.ReviewID != "" {
-		kind, id = "review", q.ReviewID
+	url := address + "/"
+	if event != "" {
+		if _, _, err := eventParts(event); err != nil {
+			return nil, err
+		}
+		url += "#" + event
 	}
-	url := address + "/?" + kind + "=" + id
 	if open {
 		command := "xdg-open"
 		if runtime.GOOS == "darwin" {
@@ -399,16 +304,17 @@ func (e *editor) show(ctx context.Context, q operationRequest, open bool) (any, 
 			return nil, err
 		}
 	}
-	return map[string]any{"url": url, "focus": q.Focus}, nil
+	return map[string]any{"url": url}, nil
 }
 
 const cliHelp = `usage: prompt-editor [command] [options]
 
 A maintainer tool for the checkout's prompt catalog. Omitting the command starts the editor.
-Every operation supports --repo PATH and --json. Text files accept - for stdin.
+Every operation supports --repo PATH and --json. --values accepts - for stdin.
 Start prompt changes with context. Read its workflow and complete instructions before editing.
 
   serve [--port N] [--base REF]           start the browser editor
+  show [RECIPIENT/EVENT] [--open]         print the running editor's link to an event
   authoring                              read the prompt revision workflow
   context EVENT_OR_SOURCE [--base REF]   full sources, uses, scenarios and coverage gaps
   list                                   list events
@@ -420,28 +326,9 @@ Start prompt changes with context. Read its workflow and complete instructions b
   scenarios                              list repository scenarios
   scenario save ID --event R/E --values FILE [--expect HASH]
 
-  draft create --title TEXT              start a persistent shared draft
-  draft list | draft get ID              inspect shared work
-  draft put ID PATH --file FILE --expect HASH
-  draft reset ID PATH --expect HASH      discard one draft edit
-  draft apply ID --revision N            validate and save changed files
-  draft sync ID --revision N             adopt refreshed checkout definitions
-  draft focus ID --event R/E [--scenario ID] [--source PATH]
-  draft archive ID --revision N          hide a draft; restore reverses this
-  draft restore ID --revision N
-
-  review create --draft ID --revision N [--title TEXT]
-  review list | review get ID            inspect immutable snapshots and feedback
-  review comment ID --message TEXT [--target source|prompt --selection TEXT]
-  show --draft ID|--review ID [--open]    print an exact editor link
-  watch --draft ID|--review ID --after N [--timeout 30s]
-
-Use --draft ID or --review ID with context/inspect/check/compare for shared work.
-context includes every changed draft source; reviews retain that scope. Use
---include EVENT_OR_SOURCE (repeatable) to include semantically related guidance.
---scenario ID selects context; custom --set/--input values add an example without
-replacing saved scenarios. Without --base, shared context uses its pinned base.
+Use --include EVENT_OR_SOURCE (repeatable) with context to include semantically
+related guidance. --scenario ID selects context; custom --set/--input values add
+an example without replacing saved scenarios.
 Use --set name=value for scenario inputs; --input field=scenario binds a producer.
-Use --author NAME on changes. Revision conflicts exit 3; invalid input exits 2;
-a failed scenario check exits 1. Reviews retain their own sources and definitions.
+Revision conflicts exit 3; invalid input exits 2; a failed scenario check exits 1.
 `

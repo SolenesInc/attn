@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -118,66 +117,6 @@ func TestAuthoringContextExpandsRelatedInstructionsAndCustomInputs(t *testing.T)
 	for _, args := range [][]string{{"context"}, {"context", "wrong/path"}, {"context", "writer/rules", "--include", "missing"}, {"context", "--scenario", "missing"}, {"context", "content/rule.md", "--set", "task=hi"}} {
 		if code, out := runTestCLI(t, e, "", args...); code != 2 {
 			t.Fatalf("invalid context accepted: %v: %d %s", args, code, out)
-		}
-	}
-}
-
-func TestAuthoringContextFreezesAllDraftEditsAndScenarios(t *testing.T) {
-	e, base := contextFixture(t)
-	d := operate(t, e, operationRequest{Op: "draft-create", Title: "Clarify rules", Focus: &focus{Event: "writer/rules", Values: prompts.Values{}, BaseCommit: base}}).(sharedDraft)
-	d = putTest(t, e, d, "content/rule.md", "Revised shared rule.")
-	d = putTest(t, e, d, "content/reference.md", "Revised related guide.")
-	draft := readContext(t, e, operationRequest{DraftID: d.ID})
-	if !slices.Contains(draft.Scope, "content/reference.md") || draft.Sources["content/reference.md"].Current.Text != "Revised related guide." {
-		t.Fatal("draft context was limited to the selected event")
-	}
-	r := operate(t, e, operationRequest{Op: "review-create", DraftID: d.ID, Revision: d.Revision}).(review)
-	before := readContext(t, e, operationRequest{ReviewID: r.ID})
-	d = operate(t, e, operationRequest{Op: "draft-get", ID: d.ID}).(sharedDraft)
-	putTest(t, e, d, "content/reference.md", "Later draft edit.")
-	writeTest(t, e, "content/preamble.md", "Later checkout preamble.")
-	writeTest(t, e, "scenarios/ordinary.json", `{"version":1,"id":"ordinary","description":"Changed inputs","recipient":"session","event":"start","values":{"extra":"true"},"inputs":{"preamble":"provided"}}`)
-	after := readContext(t, e, operationRequest{ReviewID: r.ID})
-	if !reflect.DeepEqual(before, after) || before.BaseCommit != base {
-		t.Fatal("review context followed later edits or lost its pinned base")
-	}
-	if !slices.Contains(after.Scope, "content/reference.md") {
-		t.Fatal("review lost the draft's complete changed-source scope")
-	}
-	_, err := e.withState(func(root *os.Root) (any, error) {
-		r.Snapshot.EditedSources = nil
-		return nil, writeJSON(root, "reviews/"+r.ID+".json", r)
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	legacy := readContext(t, e, operationRequest{ReviewID: r.ID})
-	if !slices.Contains(legacy.Scope, "content/reference.md") {
-		t.Fatal("older review scope was silently narrowed")
-	}
-	_, err = e.withState(func(root *os.Root) (any, error) {
-		r.Focus.BaseCommit = ""
-		return nil, writeJSON(root, "reviews/"+r.ID+".json", r)
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	legacy = readContext(t, e, operationRequest{ReviewID: r.ID})
-	if !strings.Contains(strings.Join(legacy.Limits, " "), "older review") {
-		t.Fatal("unknown older review scope was not disclosed")
-	}
-}
-
-func TestAuthoringContextKeepsAppliedChangesInSharedComparison(t *testing.T) {
-	e, base := contextFixture(t)
-	d := operate(t, e, operationRequest{Op: "draft-create", Title: "Rules and references", Focus: &focus{Event: "writer/rules", Values: prompts.Values{}, BaseCommit: base}}).(sharedDraft)
-	d = putTest(t, e, d, "content/reference.md", "Applied reference change.")
-	d = operate(t, e, operationRequest{Op: "draft-apply", ID: d.ID, Revision: d.Revision}).(sharedDraft)
-	r := operate(t, e, operationRequest{Op: "review-create", DraftID: d.ID, Revision: d.Revision}).(review)
-	for _, q := range []operationRequest{{DraftID: d.ID}, {ReviewID: r.ID}} {
-		report := readContext(t, e, q)
-		if !slices.Contains(report.Scope, "content/reference.md") || report.Sources["content/reference.md"].Current.Text != "Applied reference change." {
-			t.Fatal("applying a draft removed its changed sources from shared context")
 		}
 	}
 }

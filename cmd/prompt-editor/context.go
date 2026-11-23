@@ -138,7 +138,7 @@ func contextScope(targets []string, current, base *prompts.Catalog, sources map[
 	return events, paths, nil
 }
 
-func (e *editor) authoringContext(ctx context.Context, q operationRequest, snapshot catalogSnapshot, selected *focus, catalog *prompts.Catalog, scenarios map[string]scenario) (contextReport, error) {
+func (e *editor) authoringContext(ctx context.Context, q operationRequest, snapshot catalogSnapshot, catalog *prompts.Catalog, scenarios map[string]scenario) (contextReport, error) {
 	report := contextReport{
 		Guide: "docs/internal/prompt-authoring.md", Workflow: authoringWorkflow,
 		CatalogRevision: revision(snapshot.Manifest), Sources: map[string]contextSource{},
@@ -149,11 +149,7 @@ func (e *editor) authoringContext(ctx context.Context, q operationRequest, snaps
 			"available_skill and reference mean available to load, not delivered. Trace adapters and loading behavior; external skills, charters and harness instructions may supply more context.",
 		},
 	}
-	if q.DraftID != "" && q.ReviewID != "" {
-		return report, fmt.Errorf("choose --draft or --review")
-	}
 	var base *baseRevision
-	var err error
 	if q.Base != "" {
 		mode := q.Mode
 		if mode == "" {
@@ -164,11 +160,6 @@ func (e *editor) authoringContext(ctx context.Context, q operationRequest, snaps
 			return report, selectErr
 		}
 		base = selection.baseRevision
-	} else if selected != nil && selected.BaseCommit != "" {
-		base, err = e.readBase(ctx, selected.BaseCommit)
-		if err != nil {
-			return report, err
-		}
 	}
 	allSources := map[string]contextSource{}
 	for path, source := range snapshot.Sources {
@@ -189,23 +180,6 @@ func (e *editor) authoringContext(ctx context.Context, q operationRequest, snaps
 			targets = append(targets, target)
 		}
 	}
-	targets = append(targets, snapshot.EditedSources...)
-	if selected != nil {
-		targets = append(targets, selected.Event)
-		if selected.Path != "" {
-			targets = append(targets, selected.Path)
-		}
-	}
-	if (q.DraftID != "" || q.ReviewID != "") && base != nil {
-		for path, source := range allSources {
-			if source.Current == nil || source.Base == nil || source.Current.Text != source.Base.Text {
-				targets = append(targets, path)
-			}
-		}
-	}
-	if q.ReviewID != "" && snapshot.EditedSources == nil && base == nil {
-		report.Limits = append(report.Limits, "This older review has no recorded changed-source scope or base. Include other affected sources explicitly with --include.")
-	}
 	if q.Scenario != "" {
 		s, ok := scenarios[q.Scenario]
 		if !ok {
@@ -214,7 +188,7 @@ func (e *editor) authoringContext(ctx context.Context, q operationRequest, snaps
 		targets = append(targets, s.Recipient+"/"+s.Event)
 	}
 	if len(targets) == 0 {
-		return report, fmt.Errorf("context needs an event, source, --scenario, --draft or --review; read docs/internal/prompt-authoring.md before editing")
+		return report, fmt.Errorf("context needs an event, source or --scenario; read docs/internal/prompt-authoring.md before editing")
 	}
 	slices.Sort(targets)
 	report.Scope = slices.Compact(targets)
@@ -266,17 +240,11 @@ func (e *editor) authoringContext(ctx context.Context, q operationRequest, snaps
 			report.Scenarios = append(report.Scenarios, contextScenario{Label: s.Description, Scenario: id, Event: s.Recipient + "/" + s.Event, Values: s.Values, Inputs: s.Inputs})
 		}
 	}
-	if selected != nil {
-		report.Scenarios = append(report.Scenarios, contextScenario{Label: "Selected draft or review inputs", Event: selected.Event, Values: selected.Values})
-	}
 	if q.Values != nil || len(q.Inputs) > 0 {
 		s := scenario{Values: prompts.Values{}, Inputs: map[string]string{}}
 		key := q.Event
 		if _, ok := currentEvents[q.ID]; ok && key == "" {
 			key = q.ID
-		}
-		if selected != nil && key == "" {
-			key, s.Values = selected.Event, maps.Clone(selected.Values)
 		}
 		if q.Scenario != "" {
 			s = scenarios[q.Scenario]

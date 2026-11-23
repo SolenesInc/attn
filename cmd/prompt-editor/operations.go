@@ -1,69 +1,59 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/victorarias/attn/internal/prompts"
 )
 
-type operationRequest struct {
-	Op        string            `json:"op"`
-	ID        string            `json:"id,omitempty"`
-	Title     string            `json:"title,omitempty"`
-	Event     string            `json:"event,omitempty"`
-	Scenario  string            `json:"scenario,omitempty"`
-	Path      string            `json:"path,omitempty"`
-	Text      string            `json:"text,omitempty"`
-	Expect    string            `json:"expect,omitempty"`
-	Revision  int64             `json:"revision,omitempty"`
-	Author    string            `json:"author,omitempty"`
-	Values    prompts.Values    `json:"values,omitempty"`
-	Inputs    map[string]string `json:"inputs,omitempty"`
-	DraftID   string            `json:"draft,omitempty"`
-	ReviewID  string            `json:"review,omitempty"`
-	Base      string            `json:"base,omitempty"`
-	Mode      string            `json:"mode,omitempty"`
-	Target    string            `json:"target,omitempty"`
-	Selection string            `json:"selection,omitempty"`
-	Focus     *focus            `json:"focus,omitempty"`
-	Include   []string          `json:"include,omitempty"`
+var validName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$`)
+
+type operationError struct {
+	Code    string `json:"code"`
+	Message string `json:"error"`
+	Path    string `json:"path,omitempty"`
+	Current any    `json:"current,omitempty"`
 }
 
-func (e *editor) dataset(draftID, reviewID string) (catalogSnapshot, *focus, error) {
-	if draftID == "" && reviewID == "" {
-		var s catalogSnapshot
-		_, err := e.withState(func(*os.Root) (any, error) { var err error; s, err = e.snapshot(); return nil, err })
-		return s, nil, err
+func (e *operationError) Error() string { return e.Message }
+func conflict(message string, current any) error {
+	return &operationError{Code: "revision_conflict", Message: message, Current: current}
+}
+
+func decodeJSON(data []byte, value any) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(value); err != nil {
+		return err
 	}
-	var snapshot catalogSnapshot
-	var selected focus
-	_, err := e.withState(func(root *os.Root) (any, error) {
-		if reviewID != "" {
-			r, err := readReview(root, reviewID)
-			if err != nil {
-				return nil, err
-			}
-			snapshot, selected = r.Snapshot, r.Focus
-		} else {
-			d, err := readDraft(root, draftID)
-			if err != nil {
-				return nil, err
-			}
-			snapshot, err = e.draftSnapshot(d)
-			if err != nil {
-				return nil, err
-			}
-			selected = d.Focus
-		}
-		return nil, nil
-	})
-	return snapshot, &selected, err
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return fmt.Errorf("expected one JSON value")
+	}
+	return nil
+}
+
+type operationRequest struct {
+	Op       string            `json:"op"`
+	ID       string            `json:"id,omitempty"`
+	Title    string            `json:"title,omitempty"`
+	Event    string            `json:"event,omitempty"`
+	Scenario string            `json:"scenario,omitempty"`
+	Path     string            `json:"path,omitempty"`
+	Expect   string            `json:"expect,omitempty"`
+	Values   prompts.Values    `json:"values,omitempty"`
+	Inputs   map[string]string `json:"inputs,omitempty"`
+	Base     string            `json:"base,omitempty"`
+	Mode     string            `json:"mode,omitempty"`
+	Target   string            `json:"target,omitempty"`
+	Include  []string          `json:"include,omitempty"`
 }
 
 func eventParts(key string) (string, string, error) {
@@ -75,38 +65,31 @@ func eventParts(key string) (string, string, error) {
 }
 
 func (e *editor) operation(ctx context.Context, q operationRequest) (any, error) {
-	if q.Author == "" {
-		q.Author = "maintainer"
-	}
 	switch q.Op {
 	case "authoring":
 		return map[string]any{"guide": "docs/internal/prompt-authoring.md", "workflow": authoringWorkflow}, nil
 	case "refresh":
-		return e.withState(func(*os.Root) (any, error) { return e.refresh(ctx) })
+		return e.refresh(ctx)
 	case "scenarios":
 		return e.scenarios()
 	case "scenario-save":
 		return e.saveScenario(q)
-	case "draft-create", "draft-list", "draft-get", "draft-put", "draft-reset", "draft-apply", "draft-sync", "draft-focus", "draft-archive", "draft-restore", "review-create", "review-list", "review-get", "review-comment":
-		return e.withState(func(root *os.Root) (any, error) { return e.stateOperation(root, q) })
 	}
-	snapshot, selected, err := e.dataset(q.DraftID, q.ReviewID)
+	snapshot, err := e.snapshot()
 	if err != nil {
 		return nil, err
 	}
 	if q.Op == "catalog" {
 		v, err := snapshotView(snapshot)
-		if err == nil && q.ReviewID == "" {
+		if err == nil {
 			if freshness := e.freshness(snapshot); freshness != nil {
 				v.Validation = freshness.Error()
 			}
 		}
 		return v, err
 	}
-	if q.ReviewID == "" {
-		if err := e.freshness(snapshot); err != nil {
-			return nil, err
-		}
+	if err := e.freshness(snapshot); err != nil {
+		return nil, err
 	}
 	catalog, err := snapshot.load(nil)
 	if err != nil {
@@ -124,12 +107,12 @@ func (e *editor) operation(ctx context.Context, q operationRequest) (any, error)
 		}
 		return items, nil
 	}
-	scenarios, err := e.selectedScenarios(snapshot, q.ReviewID)
+	scenarios, err := e.scenarios()
 	if err != nil {
 		return nil, err
 	}
 	if q.Op == "context" {
-		return e.authoringContext(ctx, q, snapshot, selected, catalog, scenarios)
+		return e.authoringContext(ctx, q, snapshot, catalog, scenarios)
 	}
 	if q.Op == "check" || q.Op == "compare" {
 		return e.checkScenarios(ctx, q, snapshot, catalog, scenarios)
@@ -138,10 +121,6 @@ func (e *editor) operation(ctx context.Context, q operationRequest) (any, error)
 		return nil, fmt.Errorf("unknown operation %q", q.Op)
 	}
 	key, values := q.Event, q.Values
-	if key == "" && selected != nil {
-		key = selected.Event
-		values = selected.Values
-	}
 	if q.Scenario != "" {
 		s, ok := scenarios[q.Scenario]
 		if !ok {
@@ -339,7 +318,7 @@ func (e *editor) saveScenario(q operationRequest) (any, error) {
 		return nil, err
 	}
 	s := scenario{Version: 1, ID: q.ID, Description: q.Title, Recipient: r, Event: event, Values: q.Values, Inputs: q.Inputs}
-	snapshot, _, err := e.dataset(q.DraftID, "")
+	snapshot, err := e.snapshot()
 	if err != nil {
 		return nil, err
 	}
@@ -359,266 +338,27 @@ func (e *editor) saveScenario(q operationRequest) (any, error) {
 	if _, err := catalog.Render(r, event, values); err != nil {
 		return nil, err
 	}
-	return e.withState(func(_ *os.Root) (any, error) {
-		name := "scenarios/" + s.ID + ".json"
-		previous, err := e.root.ReadFile(name)
-		if err != nil && !os.IsNotExist(err) {
-			return nil, err
-		}
-		if err == nil && revision(previous) != q.Expect {
-			return nil, conflict("scenario changed; reload before saving", revision(previous))
-		}
-		if os.IsNotExist(err) && q.Expect != "" {
-			return nil, conflict("scenario was removed", nil)
-		}
-		if err := e.root.MkdirAll("scenarios", 0755); err != nil {
-			return nil, err
-		}
-		if err := writeJSON(e.root, name, s); err != nil {
-			return nil, err
-		}
-		data, err := e.root.ReadFile(name)
-		if err != nil {
-			return nil, err
-		}
-		s.Revision = revision(data)
-		return s, nil
-	})
-}
-
-func (e *editor) stateOperation(root *os.Root, q operationRequest) (any, error) {
-	switch q.Op {
-	case "draft-list":
-		return listState(root, "drafts")
-	case "review-list":
-		return listState(root, "reviews")
-	case "review-get":
-		return readReview(root, q.ID)
-	case "draft-create":
-		snapshot, err := e.snapshot()
-		if err != nil {
-			return nil, err
-		}
-		if _, err := snapshot.load(nil); err != nil {
-			return nil, err
-		}
-		d := sharedDraft{Version: 1, ID: newID("d-"), Title: q.Title, Manifest: snapshot.Manifest, Files: map[string]draftFile{}, Focus: focus{Event: "session/launch", Values: prompts.Values{}}}
-		if q.DraftID != "" {
-			previous, err := readDraft(root, q.DraftID)
-			if err != nil {
-				return nil, err
-			}
-			d.Manifest = previous.Manifest
-			d.Focus = previous.Focus
-			for path, file := range previous.Files {
-				d.Files[path] = file
-			}
-		}
-		if q.ReviewID != "" {
-			r, err := readReview(root, q.ReviewID)
-			if err != nil {
-				return nil, err
-			}
-			if !sameDefinitions(snapshot.Manifest, r.Snapshot.Manifest) {
-				return nil, conflict("review uses different composition definitions", nil)
-			}
-			for name, file := range r.Snapshot.Sources {
-				if current, ok := snapshot.Sources[name]; ok && current.Text != file.Text {
-					d.Files[name] = draftFile{file.Text, current.Revision, file.Revision, q.Author}
-				}
-			}
-			d.Focus = r.Focus
-		}
-		if q.Focus != nil {
-			d.Focus = *q.Focus
-		}
-		if err := saveDraft(root, &d, q.Author); err != nil {
-			return nil, err
-		}
-		return d, nil
-	case "review-comment":
-		r, err := readReview(root, q.ID)
-		if err != nil {
-			return nil, err
-		}
-		if strings.TrimSpace(q.Text) == "" {
-			return nil, fmt.Errorf("feedback needs a message")
-		}
-		comment := feedback{ID: newID("c-"), Author: q.Author, Message: q.Text, Target: q.Target, Selection: q.Selection, Path: q.Path, CreatedAt: now()}
-		if q.Target == "source" {
-			file, ok := r.Snapshot.Sources[q.Path]
-			if !ok {
-				return nil, fmt.Errorf("source not in review")
-			}
-			if q.Selection != "" && !strings.Contains(file.Text, q.Selection) {
-				return nil, conflict("selection does not match the review source", nil)
-			}
-			comment.SourceRevision = file.Revision
-		} else if q.Target == "prompt" {
-			catalog, err := r.Snapshot.load(nil)
-			if err != nil {
-				return nil, err
-			}
-			recipient, event, err := eventParts(r.Focus.Event)
-			if err != nil {
-				return nil, err
-			}
-			result, err := catalog.Render(recipient, event, r.Focus.Values)
-			if err != nil {
-				return nil, err
-			}
-			if q.Selection != "" && !strings.Contains(result.Text, q.Selection) {
-				return nil, conflict("selection does not match the reviewed prompt", nil)
-			}
-		} else if q.Target != "" {
-			return nil, fmt.Errorf("feedback target must be source or prompt")
-		}
-		r.Feedback = append(r.Feedback, comment)
-		if err := writeJSON(root, "reviews/"+r.ID+".json", r); err != nil {
-			return nil, err
-		}
-		d, err := readDraft(root, r.DraftID)
-		if err != nil {
-			return nil, err
-		}
-		d.LatestReview = r.ID
-		if err := saveDraft(root, &d, q.Author); err != nil {
-			return nil, err
-		}
-		return r, nil
+	name := "scenarios/" + s.ID + ".json"
+	previous, err := e.root.ReadFile(name)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
 	}
-	id := q.ID
-	if q.DraftID != "" {
-		id = q.DraftID
+	if err == nil && revision(previous) != q.Expect {
+		return nil, conflict("scenario changed; reload before saving", revision(previous))
 	}
-	d, err := readDraft(root, id)
+	if os.IsNotExist(err) && q.Expect != "" {
+		return nil, conflict("scenario was removed", nil)
+	}
+	if err := e.root.MkdirAll("scenarios", 0755); err != nil {
+		return nil, err
+	}
+	if err := writeJSON(e.root, name, s); err != nil {
+		return nil, err
+	}
+	data, err := e.root.ReadFile(name)
 	if err != nil {
 		return nil, err
 	}
-	if q.Op == "draft-get" {
-		return d, nil
-	}
-	if d.Archived && q.Op != "draft-restore" {
-		return nil, fmt.Errorf("draft is archived; restore it before editing")
-	}
-	if q.Op == "draft-apply" {
-		return e.applyDraft(root, d, q.Revision, q.Author)
-	}
-	if q.Op == "review-create" {
-		if q.Revision != d.Revision {
-			return nil, conflict("draft changed; inspect it before creating a review", d)
-		}
-		snapshot, err := e.draftSnapshot(d)
-		if err != nil {
-			return nil, err
-		}
-		if err := e.freshness(snapshot); err != nil {
-			return nil, err
-		}
-		f := d.Focus
-		if q.Focus != nil {
-			f = *q.Focus
-		}
-		catalog, err := snapshot.load(nil)
-		if err != nil {
-			return nil, err
-		}
-		recipient, event, err := eventParts(f.Event)
-		if err != nil {
-			return nil, err
-		}
-		snapshot.Scenarios, err = e.scenarios()
-		if err != nil {
-			return nil, err
-		}
-		if f.Scenario != "" {
-			scenario, ok := snapshot.Scenarios[f.Scenario]
-			if !ok || scenario.Recipient+"/"+scenario.Event != f.Event {
-				return nil, fmt.Errorf("scenario does not match review event")
-			}
-			f.Values, err = scenarioValues(catalog, snapshot.Scenarios, f.Scenario, map[string]bool{})
-			if err != nil {
-				return nil, err
-			}
-		}
-		if _, err := catalog.Render(recipient, event, f.Values); err != nil {
-			return nil, err
-		}
-		r := review{Version: 1, ID: newID("r-"), Title: q.Title, DraftID: d.ID, DraftRevision: d.Revision, Author: q.Author, CreatedAt: now(), Focus: f, Snapshot: snapshot, Feedback: []feedback{}}
-		if r.Title == "" {
-			r.Title = d.Title
-		}
-		if err := writeJSON(root, "reviews/"+r.ID+".json", r); err != nil {
-			return nil, err
-		}
-		d.LatestReview = r.ID
-		if err := saveDraft(root, &d, q.Author); err != nil {
-			return nil, err
-		}
-		return r, nil
-	}
-	switch q.Op {
-	case "draft-put", "draft-reset":
-		if !utf8.ValidString(q.Text) {
-			return nil, fmt.Errorf("source text must be UTF-8")
-		}
-		snapshot, err := e.snapshot()
-		if err != nil {
-			return nil, err
-		}
-		file, ok := snapshot.Sources[q.Path]
-		if edited, exists := d.Files[q.Path]; exists {
-			file = source{edited.Text, edited.Revision}
-			ok = ok || q.Op == "draft-reset"
-		}
-		if !ok {
-			return nil, fmt.Errorf("unregistered source: %s", q.Path)
-		}
-		if file.Revision != q.Expect {
-			return nil, conflict("source changed in the shared draft; inspect it before retrying", file)
-		}
-		if q.Op == "draft-reset" || q.Text == snapshot.Sources[q.Path].Text {
-			delete(d.Files, q.Path)
-		} else {
-			base := snapshot.Sources[q.Path].Revision
-			if previous, ok := d.Files[q.Path]; ok {
-				base = previous.BaseRevision
-			}
-			d.Files[q.Path] = draftFile{q.Text, base, revision([]byte(q.Text)), q.Author}
-		}
-	case "draft-sync":
-		if q.Revision != d.Revision {
-			return nil, conflict("draft changed; reload before syncing", d)
-		}
-		snapshot, err := e.snapshot()
-		if err != nil {
-			return nil, err
-		}
-		for name, file := range d.Files {
-			current, ok := snapshot.Sources[name]
-			if !ok || current.Revision != file.BaseRevision {
-				return nil, conflict("edited source also changed on disk; resolve it before syncing", name)
-			}
-		}
-		if _, err := snapshot.load(draftTexts(d)); err != nil {
-			return nil, err
-		}
-		d.Manifest = snapshot.Manifest
-	case "draft-focus":
-		if q.Focus == nil {
-			return nil, fmt.Errorf("focus required")
-		}
-		d.Focus = *q.Focus
-	case "draft-archive", "draft-restore":
-		if q.Revision != d.Revision {
-			return nil, conflict("draft changed; reload before changing its state", d)
-		}
-		d.Archived = q.Op == "draft-archive"
-	default:
-		return nil, fmt.Errorf("unknown operation %s", q.Op)
-	}
-	if err := saveDraft(root, &d, q.Author); err != nil {
-		return nil, err
-	}
-	return d, nil
+	s.Revision = revision(data)
+	return s, nil
 }

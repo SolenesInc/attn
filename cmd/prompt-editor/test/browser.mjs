@@ -17,7 +17,8 @@ let server, browser, context;
 const consoleErrors = [];
 try {
   await fs.mkdir(root, { recursive: true });
-  await fs.cp(path.join(repo, "internal/prompts/content"), path.join(root, "content"), { recursive: true });
+  for (const name of ["content", "scenarios"])
+    await fs.cp(path.join(repo, "internal/prompts", name), path.join(root, name), { recursive: true });
   git("init", "-b", "next");
   const commit = () => {
     git("add", ".");
@@ -66,9 +67,18 @@ try {
   context = await browser.newContext({ colorScheme: "light", viewport: { width: 1440, height: 1000 }, ...(artifacts ? { recordVideo: { dir: artifacts, size: { width: 1440, height: 1000 } } } : {}) });
   const page = await context.newPage();
   page.on("pageerror", (error) => consoleErrors.push(String(error)));
-  await page.goto(`${url}/#crew/new-session`);
+  const link = JSON.parse(execFileSync(binary, ["--repo", fixture, "--json", "show", "crew/new-session"], { encoding: "utf8" }));
+  assert.equal(link.url, `${url}/#crew/new-session`);
+  await page.goto(link.url);
   await expect(page.locator("#base-status")).toContainText(ancestor.slice(0, 8));
   await expect(page.locator("#event-change")).toHaveText("definition changed");
+  const scenarioCount = (await fs.readdir(path.join(root, "scenarios"))).filter((name) => name.endsWith(".json")).length;
+  await expect(page.locator("#saved-scenario option")).toHaveCount(scenarioCount + 1);
+  await page.locator("#saved-scenario").selectOption("crew-v2-with-handoff");
+  await expect(page.locator("#event-name")).toHaveText("priming");
+  await expect(page.locator("#saved-scenario")).toHaveValue("crew-v2-with-handoff");
+  await page.locator(".event-link").filter({ hasText: /^new-session/ }).click();
+  await expect(page.locator("#event-name")).toHaveText("new-session");
   await expect(page.locator("#theme")).toHaveValue("system");
   await page.emulateMedia({ colorScheme: "dark" });
   await expect(page.locator("html")).toHaveCSS("color-scheme", "dark");
@@ -146,6 +156,9 @@ try {
   page.on("dialog", (dialog) => dialog.accept());
   await page.locator("#reload").click();
   await expect(page.getByLabel("Markdown source")).toHaveValue("External edit.\n");
+  await fs.writeFile(wake, "An agent edits the checkout file.\n");
+  await expect(page.getByLabel("Markdown source")).toHaveValue("An agent edits the checkout file.\n");
+  await expect(page.locator("#output")).toContainText("An agent edits the checkout file.");
   const contextBefore = "# Purpose\n\nEvery seed is a prompt for a fresh agent.\n\n## Shared decisions\n\nKeep the common design in the parent plot.\nRead the named sections before starting.\nUse the child body to define this assignment.\nRecord evidence on the seed.\n\n## Child assignment\n\n";
   const contextAfter = "\n\n## Verification\n\nDescribe how the result will be checked.\nPreserve the agreed scope.\nName the artifact the next agent needs.\n\n## Handover\n\nThe final section must remain readable outside the changed hunk.\n";
   const paragraph = "Build enough shared understanding to avoid costly misalignment. Keep discovery proportional to the task: investigate factual gaps through inspection, research, and bring choices and context only the user can supply back to them.";

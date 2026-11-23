@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing/fstest"
@@ -49,8 +51,6 @@ type editRequest struct {
 	Ref        string            `json:"ref"`
 	Mode       string            `json:"mode"`
 	BaseCommit string            `json:"base_commit"`
-	DraftID    string            `json:"draft,omitempty"`
-	ReviewID   string            `json:"review,omitempty"`
 	Scenario   string            `json:"scenario,omitempty"`
 }
 
@@ -83,10 +83,7 @@ func (e *editor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if r.URL.Path == "/api/catalog" && r.Method == "GET" {
-		_, err := e.withState(func(*os.Root) (any, error) { e.catalog(w); return nil, nil })
-		if err != nil {
-			problem(w, 422, err)
-		}
+		e.catalog(w)
 		return
 	}
 	if r.URL.Path == "/api/refs" && r.Method == "GET" {
@@ -152,7 +149,7 @@ func (e *editor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			respond(w, result)
 		}
 	case "/api/preview":
-		snapshot, _, err := e.dataset(request.DraftID, request.ReviewID)
+		snapshot, err := e.snapshot()
 		if err != nil {
 			problem(w, 422, err)
 			return
@@ -162,7 +159,7 @@ func (e *editor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			problem(w, 422, err)
 			return
 		}
-		scenarios, err := e.selectedScenarios(snapshot, request.ReviewID)
+		scenarios, err := e.scenarios()
 		if err != nil {
 			problem(w, 422, err)
 			return
@@ -177,10 +174,7 @@ func (e *editor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Values prompts.Values `json:"values"`
 		}{*result.Result, values})
 	case "/api/save":
-		_, err := e.withState(func(*os.Root) (any, error) { e.save(w, request); return nil, nil })
-		if err != nil {
-			problem(w, 422, err)
-		}
+		e.save(w, request)
 	default:
 		http.NotFound(w, r)
 	}
@@ -292,6 +286,43 @@ func (e *editor) saveSource(w http.ResponseWriter, request editRequest) {
 		return
 	}
 	respond(w, source{request.Text, revision([]byte(request.Text))})
+}
+
+func atomicWrite(root *os.Root, name string, data []byte, mode fs.FileMode) error {
+	temp := filepath.ToSlash(filepath.Join(filepath.Dir(name), ".write-"+rand.Text()))
+	file, err := root.OpenFile(temp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
+	if err != nil {
+		return err
+	}
+	defer root.Remove(temp)
+	_, err = file.Write(data)
+	if err == nil {
+		err = file.Sync()
+	}
+	closeErr := file.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return root.Rename(temp, name)
+}
+
+func writeJSON(root *os.Root, name string, value any) error {
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return err
+	}
+	return atomicWrite(root, name, append(data, '\n'), 0600)
+}
+
+func readJSON(root *os.Root, name string, value any) error {
+	data, err := root.ReadFile(name)
+	if err != nil {
+		return err
+	}
+	return decodeJSON(data, value)
 }
 
 func respond(w http.ResponseWriter, value any) {

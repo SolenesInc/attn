@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -9,22 +8,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/fsnotify/fsnotify"
 )
 
 func (e *editor) newWatcher() (*fsnotify.Watcher, error) {
-	state, err := e.stateRoot()
-	if err != nil {
-		return nil, err
-	}
-	state.Close()
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
 	}
-	paths := []string{filepath.Join(e.repo, ".prompt-editor/drafts"), filepath.Join(e.repo, ".prompt-editor/reviews"), e.root.Name()}
+	paths := []string{e.root.Name()}
 	_ = fs.WalkDir(e.root.FS(), "content", func(name string, entry fs.DirEntry, err error) error {
 		if err == nil && entry.IsDir() {
 			paths = append(paths, filepath.Join(e.root.Name(), name))
@@ -106,66 +99,6 @@ func (e *editor) events(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			flusher.Flush()
-		}
-	}
-}
-func (e *editor) watch(ctx context.Context, q operationRequest, after int64, timeout time.Duration) (any, error) {
-	if q.DraftID == "" && q.ReviewID == "" {
-		return nil, fmt.Errorf("watch needs --draft or --review")
-	}
-	watcher, err := e.newWatcher()
-	if err != nil {
-		return nil, err
-	}
-	defer watcher.Close()
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	read := func() (any, int64, error) {
-		var result any
-		var revision int64
-		_, err := e.withState(func(root *os.Root) (any, error) {
-			if q.ReviewID != "" {
-				r, err := readReview(root, q.ReviewID)
-				if err != nil {
-					return nil, err
-				}
-				result = r
-				revision = int64(len(r.Feedback))
-			} else {
-				d, err := readDraft(root, q.DraftID)
-				if err != nil {
-					return nil, err
-				}
-				result = d
-				revision = d.Revision
-			}
-			return nil, nil
-		})
-		return result, revision, err
-	}
-	for {
-		result, revision, err := read()
-		if err != nil {
-			return nil, err
-		}
-		if revision > after {
-			return result, nil
-		}
-		select {
-		case <-ctx.Done():
-			return map[string]any{"changed": false, "revision": revision}, nil
-		case err, ok := <-watcher.Errors:
-			if !ok {
-				return nil, fmt.Errorf("watch closed")
-			}
-			return nil, err
-		case event, ok := <-watcher.Events:
-			if !ok {
-				return nil, fmt.Errorf("watch closed")
-			}
-			if _, err := watchEvent(watcher, event); err != nil {
-				return nil, err
-			}
 		}
 	}
 }

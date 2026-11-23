@@ -7,13 +7,11 @@ attn embeds all prompts in the binary. During development, change prompts with t
 
 Follow the workflow in `cmd/prompt-editor/authoring.md` for every
 prompt change. `context` returns that workflow with the complete relevant
-instructions. Start `context` from an event, a source, a scenario, or a shared
-draft:
+instructions. Start `context` from an event, a source or a scenario:
 
 ```sh
 go run ./cmd/prompt-editor context crew/priming --include crew/new-session --base main --json
 go run ./cmd/prompt-editor context --scenario crew-v2-chief-first-day --json
-go run ./cmd/prompt-editor context --draft DRAFT_ID --json
 ```
 
 Use `context` to understand the full scope of a change before you make it.
@@ -57,57 +55,15 @@ scenarios. `compare` defaults to the merge-base. Use `--mode tip` to compare the
 selected revision itself.
 
 After you edit, rerun `context` and read the full results against the intended
-behavior. `context` evaluates the selected dataset's scenario inputs against both
-revisions. Shared context uses its pinned base unless you pass `--base` to pick
-another comparison.
-
-## Share work with a maintainer
-
-Edit checkout files directly for independent work. Use a shared draft when a
-maintainer and an agent need to edit together. This checkout's ignored
-`.prompt-editor/` directory stores drafts and reviews.
-
-```sh
-go run ./cmd/prompt-editor draft create --title 'Clarify new-session instructions' --json
-go run ./cmd/prompt-editor context crew/new-session --draft DRAFT_ID --json
-go run ./cmd/prompt-editor draft put DRAFT_ID content/crew/v2/new-session.md \
-  --file /tmp/new-session.md --expect SOURCE_REVISION --author agent
-go run ./cmd/prompt-editor draft focus DRAFT_ID --scenario crew-v2-new-session --base main
-go run ./cmd/prompt-editor check --draft DRAFT_ID
-go run ./cmd/prompt-editor compare --draft DRAFT_ID --base main --json
-go run ./cmd/prompt-editor context --draft DRAFT_ID --base main --json
-go run ./cmd/prompt-editor draft get DRAFT_ID --json
-```
-
-For `--expect`, use `sources[PATH].current.revision` from `context`. For
-`draft apply` and `review create`, use the latest draft revision from
-`draft get`:
-
-```sh
-go run ./cmd/prompt-editor draft apply DRAFT_ID --revision N
-go run ./cmd/prompt-editor review create --draft DRAFT_ID --revision N --json
-```
-
-`draft apply` validates and writes all draft Markdown. A review freezes
-definitions, sources, scenarios, selected inputs, and the comparison commit.
-Creating a review or adding feedback advances the parent draft revision, so reread
-the revision before you apply.
-
-```sh
-go run ./cmd/prompt-editor context --review REVIEW_ID --json
-go run ./cmd/prompt-editor review get REVIEW_ID --json
-go run ./cmd/prompt-editor watch --review REVIEW_ID --after 0 --timeout 30s --json
-```
-
-Read feedback with `review get`. Add feedback with `review comment`.
-`watch --after N` returns when the review has more than N comments or, with
-`--draft`, when the draft revision is above N. If the timeout passes, `watch` returns `changed: false`.
+behavior. `context` renders the scenarios in its scope from the checkout and,
+with `--base`, from that revision too.
 
 ## Show the user in the browser
 
-When you present prompt changes, open the relevant draft or review and give the
-user the exact URL with a sentence about what to inspect. Use a draft for live
-editing. Use a review for feedback tied to fixed text.
+When you present prompt changes, open the editor at the relevant event and give
+the user the exact URL with a sentence about what to inspect. You and the user
+edit the same checkout files. The editor saves to them, and it reloads a file
+that changes on disk unless the page holds an unsaved edit of that file.
 
 Explain the intended behavior and how the instructions now fit together. Show
 the full source and composed text beside the diff, so the user can review the
@@ -115,17 +71,15 @@ overall result.
 
 Reuse the editor for this checkout. If `show` reports that no editor is running,
 start `make prompt-editor` in a persistent terminal, then retry. Keep the editor
-running while the user reviews. Open the appropriate view:
+running while the user reviews.
 
 ```sh
-go run ./cmd/prompt-editor show --draft DRAFT_ID \
-  --scenario crew-v2-new-session --source content/crew/v2/new-session.md --base main --open
-go run ./cmd/prompt-editor show --review REVIEW_ID --open
+go run ./cmd/prompt-editor show crew/new-session --open
 ```
 
-`show` prints the URL. `--open` opens the browser. Before you create a review
-from a draft, set the draft's scenario, source, and base with `draft focus`. The review shows that frozen selection. Existing draft tabs follow navigation only
-when the user enables **Follow shared focus**.
+`show` prints the URL, and `--open` opens the browser. The page compares with
+`main` by default. `serve --base REF` sets another default, and the user can
+pick any branch, tag or commit in the page.
 
 ## Verify
 

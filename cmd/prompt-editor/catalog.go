@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"sort"
 	"strconv"
@@ -22,10 +21,8 @@ import (
 )
 
 type catalogSnapshot struct {
-	Manifest      json.RawMessage     `json:"manifest"`
-	Sources       map[string]source   `json:"sources"`
-	Scenarios     map[string]scenario `json:"scenarios,omitempty"`
-	EditedSources []string            `json:"edited_sources"`
+	Manifest json.RawMessage   `json:"manifest"`
+	Sources  map[string]source `json:"sources"`
 }
 
 func visitNode(n prompts.Node, visit func(prompts.Node)) {
@@ -334,15 +331,6 @@ func (e *editor) declarations(event prompts.Event) []declarationLocation {
 	return locations
 }
 
-func sameDefinitions(a, b json.RawMessage) bool {
-	left, err := prompts.ParseManifest(a)
-	if err != nil {
-		return false
-	}
-	right, err := prompts.ParseManifest(b)
-	return err == nil && reflect.DeepEqual(left.Recipients, right.Recipients)
-}
-
 func openEditor(repo string) (*editor, error) {
 	absolute, err := filepath.Abs(repo)
 	if err != nil {
@@ -357,12 +345,6 @@ func openEditor(repo string) (*editor, error) {
 	return e, nil
 }
 
-func (e *editor) selectedScenarios(snapshot catalogSnapshot, reviewID string) (map[string]scenario, error) {
-	if reviewID != "" {
-		return snapshot.Scenarios, nil
-	}
-	return e.scenarios()
-}
 func renderScenario(c *prompts.Catalog, request editRequest, scenarios map[string]scenario) (previewSide, prompts.Values) {
 	values := request.Values
 	if request.Scenario != "" {

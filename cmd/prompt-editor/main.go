@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 )
@@ -21,6 +22,20 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	os.Exit(runCLI(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+}
+
+const serverRecord = ".prompt-editor/server.json"
+
+func recordServer(repo, address string) error {
+	root, err := os.OpenRoot(repo)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	if err := root.MkdirAll(filepath.Dir(serverRecord), 0700); err != nil {
+		return err
+	}
+	return writeJSON(root, serverRecord, map[string]string{"url": address, "repo": repo})
 }
 
 func serve(ctx context.Context, options cliOptions, out io.Writer) error {
@@ -42,10 +57,7 @@ func serve(ctx context.Context, options cliOptions, out io.Writer) error {
 	editor.host = listener.Addr().String()
 	editor.defaultBase = options.base
 	address := "http://" + editor.host
-	_, err = editor.withState(func(root *os.Root) (any, error) {
-		return nil, writeJSON(root, "server.json", map[string]string{"url": address, "repo": editor.repo})
-	})
-	if err != nil {
+	if err := recordServer(editor.repo, address); err != nil {
 		return err
 	}
 	fmt.Fprintf(out, "Prompt editor: %s\nEditing: %s\n", address, editor.root.Name())

@@ -446,9 +446,7 @@ jobs:
         run: pnpm --dir cmd/prompt-editor exec playwright install-deps chromium
 
       - name: Test prompt editor in Chromium
-        run: |
-          node cmd/prompt-editor/test/browser.mjs
-          node cmd/prompt-editor/test/collaboration.mjs
+        run: node cmd/prompt-editor/test/browser.mjs
 
   mobile:
     name: Mobile

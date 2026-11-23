@@ -286,11 +286,11 @@ func (e *editor) compare(ctx context.Context, request editRequest) (*comparison,
 		return nil, err
 	}
 	result := &comparison{Base: previewSide{Status: "unavailable", Error: base.Unavailable}}
-	snapshot, _, err := e.dataset(request.DraftID, request.ReviewID)
+	snapshot, err := e.snapshot()
 	if err != nil {
 		return nil, err
 	}
-	scenarios, err := e.selectedScenarios(snapshot, request.ReviewID)
+	scenarios, err := e.scenarios()
 	if err != nil {
 		return nil, err
 	}

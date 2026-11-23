@@ -1,8 +1,5 @@
 import { mergedRecipients, findEvent, sourceChange, renderDiff } from "./compare.js";
 
-import { collaborate } from "./collaboration.js";
-
-let collaboration;
 const $ = (id) => document.getElementById(id);
 const state = {
   catalog: null,
@@ -21,6 +18,10 @@ const state = {
 };
 let previewTimer;
 let previewAbort;
+let refreshTimer;
+let initialized = false;
+let refreshPending = false;
+let scenarios = {};
 const bytes = (text) => new TextEncoder().encode(text).length;
 const work = (() => {
   const workspace = document.querySelector(".workspace");
@@ -168,7 +169,6 @@ function status() {
   const error = state.errors.get(state.path);
   $("file-error").hidden = !error;
   $("file-error").textContent = error || "";
-  collaboration?.contextLabel();
 }
 function renderNavigation() {
   $("changed-only").disabled = !state.base;
@@ -218,7 +218,6 @@ function renderNavigation() {
   $("event-change").textContent = eventChange(state.key);
 }
 function selectEvent(key) {
-  if (collaboration?.reviewEvent() && key !== collaboration.reviewEvent()) return;
   const [recipient, event] = key.split("/");
   if (
     !recipients().some(
@@ -421,7 +420,7 @@ function renderViews() {
   $("review-prompt").setAttribute("aria-pressed", String(promptDiff));
   const comparison = state.comparison;
   const label = state.base ? `${state.base.ref.replace(/^refs\/(heads|remotes)\//, "")} · ${state.base.commit.slice(0, 8)}` : "Base";
-  const currentLabel = collaboration?.reviewEvent() ? "Review snapshot" : "Working copy + drafts";
+  const currentLabel = "Working copy + drafts";
   const pending = state.base ? "Updating comparison…" : "Choose a base above to compare.";
   const change = state.path ? changeFor(state.path) : "";
   renderDiff($("source-diff"), comparison?.source_diff,
@@ -447,7 +446,7 @@ function renderFullText(baseLabel, currentLabel) {
   if (!state.reviewTarget) return;
   const source = state.reviewTarget === "source";
   const base = $("review-version").value === "base";
-  const editable = source && !base && Object.hasOwn(state.catalog.sources, state.path) && !collaboration?.readonly();
+  const editable = source && !base && Object.hasOwn(state.catalog.sources, state.path);
   $("review-title").textContent = source ? state.path || "No source selected" : state.key;
   $("review-context").textContent = source ? state.key : $("saved-scenario").selectedOptions[0]?.textContent || "Custom inputs";
   $("review-full-label").textContent = base ? baseLabel : currentLabel;
@@ -455,7 +454,6 @@ function renderFullText(baseLabel, currentLabel) {
   $("review-full-text").readOnly = !editable;
   $("review-save").hidden = !editable;
   $("review-save").disabled = !state.drafts.has(state.path) || state.saving;
-  $("review-save").textContent = collaboration?.active() ? "Apply draft" : "Save file";
   let text;
   if (base && !state.base) text = "Choose a base above to read its full text.";
   else if (source) {
@@ -513,7 +511,7 @@ async function preview(version) {
         event: event.id,
         values,
         drafts: Object.fromEntries(state.drafts),
-        ...collaboration?.payload(),
+        ...($("saved-scenario").value ? { scenario: $("saved-scenario").value } : {}),
         ...(state.base ? { base_commit: state.base.commit, path: state.path } : {}),
       }),
     });
@@ -531,7 +529,6 @@ async function preview(version) {
     $("copy").disabled = !state.result;
     renderTree();
     renderViews();
-    collaboration?.contextLabel();
   } catch (error) {
     if (version !== state.previewVersion || error.name === "AbortError") return;
     state.result = null;
@@ -542,7 +539,6 @@ async function preview(version) {
     $("output-size").textContent = "Preview unavailable";
     renderTree();
     renderViews();
-    collaboration?.contextLabel();
     if (state.base) renderDiff($("source-diff"), "", error.message, state.base.commit.slice(0, 8));
   } finally {
     done();
@@ -595,7 +591,7 @@ async function loadRefs() {
       option.label = ref;
       $("base-refs").append(option);
     }
-    if (data.default && !collaboration.active() && !$("base-ref").value.trim()) {
+    if (data.default && !$("base-ref").value.trim()) {
       $("base-ref").value = data.default.replace(/^refs\/(heads|remotes)\//, "");
       await selectBase();
     }
@@ -606,8 +602,6 @@ async function loadRefs() {
   }
 }
 async function save() {
-  try { if (await collaboration?.save()) return; }
-  catch (error) { state.errors.set(state.path, error.message); status(); return; }
   const path = state.path;
   if (!path || !state.drafts.has(path) || state.saving) return;
   const text = textFor(path);
@@ -638,7 +632,6 @@ function editSource(text) {
     state.drafts.delete(path);
   else state.drafts.set(path, text);
   state.errors.delete(path);
-  collaboration?.edited(path, text);
   status();
   renderNavigation();
   schedulePreview();
@@ -651,9 +644,7 @@ $("review-full-text").addEventListener("input", () => {
 });
 $("save").addEventListener("click", save);
 $("review-save").addEventListener("click", save);
-$("reset").addEventListener("click", async () => {
-  try { if (await collaboration?.reset()) return; }
-  catch (error) { state.errors.set(state.path, error.message); status(); return; }
+$("reset").addEventListener("click", () => {
   state.drafts.delete(state.path);
   state.errors.delete(state.path);
   selectSource(state.path);
@@ -661,8 +652,6 @@ $("reset").addEventListener("click", async () => {
   schedulePreview();
 });
 $("reload").addEventListener("click", async () => {
-  try { if (await collaboration?.reload()) return; }
-  catch (error) { state.errors.set(state.path, error.message); status(); return; }
   const path = state.path;
   if (
     state.drafts.has(path) &&
@@ -725,7 +714,7 @@ window.addEventListener("keydown", (event) => {
   }
 });
 window.addEventListener("beforeunload", (event) => {
-  if (collaboration?.pending() || (!collaboration?.active() && state.drafts.size)) {
+  if (state.drafts.size) {
     event.preventDefault();
     event.returnValue = "";
   }
@@ -733,16 +722,100 @@ window.addEventListener("beforeunload", (event) => {
 window.addEventListener("hashchange", () =>
   selectEvent(location.hash.slice(1)),
 );
+function showCatalogError(error) {
+  $("catalog-error").hidden = false;
+  $("catalog-error").textContent = error.message;
+}
+function action(id, fn) {
+  $(id).addEventListener("click", async () => {
+    $("catalog-error").hidden = true;
+    try {
+      await fn();
+    } catch (error) {
+      showCatalogError(error);
+    }
+  });
+}
+async function loadScenarios() {
+  scenarios = await api("operation", { op: "scenarios" });
+  const selected = $("saved-scenario").value;
+  $("saved-scenario").replaceChildren(new Option("Custom inputs", ""));
+  for (const scenario of Object.values(scenarios))
+    $("saved-scenario").append(new Option(scenario.description || scenario.id, scenario.id));
+  $("saved-scenario").value = selected;
+}
+async function refreshCheckout() {
+  await loadScenarios();
+  const fresh = await api("catalog");
+  if (fresh.validation) showCatalogError(new Error(fresh.validation));
+  const selectedPath = state.path;
+  const activeSource = document.activeElement === $("source");
+  for (const [path, file] of Object.entries(fresh.sources))
+    if (!state.drafts.has(path)) state.catalog.sources[path] = file;
+  if (fresh.revision !== state.catalog.revision) {
+    state.catalog = fresh;
+    selectEvent(state.key);
+  }
+  if (!activeSource) selectSource(selectedPath);
+  else $("source").value = textFor(selectedPath);
+  renderNavigation();
+  schedulePreview();
+}
+function queueRefresh() {
+  if (!initialized) {
+    refreshPending = true;
+    return;
+  }
+  refreshTimer?.();
+  refreshTimer = work.schedule(() => {
+    refreshTimer = undefined;
+    return refreshCheckout().catch(showCatalogError);
+  }, 90);
+}
+action("refresh-checkout", async () => {
+  $("global-status").textContent = "Regenerating catalog…";
+  await api("operation", { op: "refresh" });
+  await refreshCheckout();
+});
+action("save-scenario", async () => {
+  const id = prompt("Scenario id (letters, digits, hyphens)", $("saved-scenario").value || "my-scenario");
+  if (!id) return;
+  const existing = scenarios[$("saved-scenario").value];
+  const inputs = existing?.recipient + "/" + existing?.event === state.key ? existing.inputs : undefined;
+  const values = { ...state.scenarios.get(state.key) };
+  for (const field of Object.keys(inputs || {})) delete values[field];
+  await api("operation", { op: "scenario-save", id, title: scenarios[id]?.description || id, event: state.key, values, inputs, expect: scenarios[id]?.revision || "" });
+  await loadScenarios();
+  $("saved-scenario").value = id;
+});
+$("saved-scenario").addEventListener("change", async () => {
+  const id = $("saved-scenario").value;
+  if (!id) return;
+  try {
+    const inspected = await api("operation", { op: "inspect", scenario: id });
+    state.scenarios.set(inspected.event, inspected.values);
+    selectEvent(inspected.event);
+    $("saved-scenario").value = id;
+  } catch (error) {
+    showCatalogError(error);
+  }
+});
+const events = new EventSource("/api/events");
+events.onmessage = queueRefresh;
+events.addEventListener("ready", queueRefresh);
+window.addEventListener("pagehide", () => events.close());
 try {
   state.catalog = await api("catalog");
+  await loadScenarios();
   const requestedKey = location.hash.slice(1) || "session/launch";
   selectEvent(requestedKey);
   if (!state.key) selectEvent("session/launch");
-  collaboration = collaborate({ state, $, api, selectEvent, selectSource, renderNavigation, schedulePreview, status, work });
-  await collaboration.init();
+  if (state.catalog.validation) showCatalogError(new Error(state.catalog.validation));
+  initialized = true;
+  if (refreshPending) queueRefresh();
   document.body.inert = false;
   await loadRefs();
-  if (!collaboration.active() && state.key !== requestedKey) selectEvent(requestedKey);
+  if (state.key !== requestedKey) selectEvent(requestedKey);
 } catch (error) {
   document.body.inert = false;
   $("global-status").textContent = "Could not open catalog";

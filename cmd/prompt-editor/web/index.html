@@ -22,33 +22,7 @@
         </label>
       </div>
     </header>
-    <section class="collaboration-bar" aria-label="Shared editing">
-      <div class="shared-controls">
-        <label for="shared-draft">Working on</label><select id="shared-draft"><option value="">Checkout only</option></select>
-        <button id="new-draft">New draft</button>
-        <button id="apply-draft" class="primary" hidden>Apply draft</button>
-        <button id="share-review" disabled>Capture review</button>
-        <button id="return-draft" hidden>Back to draft</button>
-        <label class="follow-control"><input id="follow-agent" type="checkbox" /> Follow shared focus</label>
-        <span id="draft-state" role="status">Checkout files</span>
-      </div>
-      <details class="shared-tools">
-        <summary>Reviews &amp; tools <span id="review-notification"></span></summary>
-        <div class="shared-controls">
-          <label for="saved-review">Review</label><select id="saved-review"><option value="">Open a review…</option></select>
-          <button id="copy-agent-context">Copy agent context</button>
-          <label for="editor-author">Author</label><input id="editor-author" value="maintainer" autocomplete="off" />
-          <button id="sync-draft" hidden>Sync definitions</button>
-          <button id="archive-draft" hidden>Archive draft</button>
-          <button id="restore-draft" hidden>Restore draft</button>
-          <button id="refresh-checkout">Refresh Go definitions</button>
-        </div>
-      </details>
-    </section>
-    <div id="collaboration-error" class="error" role="alert" hidden></div>
-    <div id="resolve-conflict" class="conflict-actions" hidden>
-      Your edit is still here. <button id="fork-local">Keep mine in a new draft</button><button id="load-shared">Discard mine and load shared edit</button>
-    </div>
+    <div id="catalog-error" class="error" role="alert" hidden></div>
     <section class="comparison-bar" aria-label="Git comparison">
       <form id="base-form">
         <label for="base-ref">Compare with</label>
@@ -152,7 +126,7 @@
           </button>
         </div>
         <div id="file-error" class="error" role="alert" hidden></div>
-        <textarea readonly
+        <textarea
           id="source"
           aria-label="Markdown source"
           spellcheck="false"
@@ -187,17 +161,10 @@
         </div>
         <div id="preview-error" class="error" role="alert" hidden></div>
         <pre id="output" tabindex="0" aria-label="Resolved prompt"></pre>
-        <details id="discussion" class="discussion">
-          <summary>Feedback <span id="feedback-count"></span></summary>
-          <p id="selection-context">Feedback includes this scenario and its exact prompt revision.</p>
-          <div id="feedback-list"></div>
-          <label for="feedback-message">Comment on this prompt or selected text</label>
-          <textarea id="feedback-message" rows="2" placeholder="What should change, and why?"></textarea>
-          <button id="send-feedback">Save comment</button>
-        </details>
         <div class="preview-footer">
           Preview uses Markdown from this checkout. Rebuild Go after saving.
           Use Refresh Go definitions after changing composition code.
+          <button id="refresh-checkout">Refresh Go definitions</button>
         </div>
       </aside>
     </div>
