@@ -1,0 +1,1 @@
+Red main fixed: the outpost stack test for an ask answer that wakes a closed tender now expects what 38b85d7ac made the contract. The resume note comes first in attn's voice, and the answer follows as the user's own prompt at the turn's end. Test-only change; the product was right.
