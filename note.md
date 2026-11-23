@@ -1,0 +1,1 @@
+The PR poll outpost stack test now settles jobs at every 2.5 s step past a hot interval, so the 30 s refresh cron keeps its cadence and the cold-phase "watch ended #74" read no longer flakes (4 of 342 CI runs). Test-only; diagnosed in s-pjjjg9.
