@@ -156,6 +156,35 @@ func TestTerminalToolsAnswerWithoutWaitingOnTheShell(t *testing.T) {
 	}
 }
 
+func TestTerminalWaitUntilPromptWaitsForTheCommandATerminalOpenToolTyped(t *testing.T) {
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	const slowToStartEachCommand = "PS0=$(sleep 1)"
+	s.Vars = append(s.Vars, "SHELL=/bin/bash", slowToStartEachCommand)
+	s.Start()
+	app := s.App()
+	mark := app.EventCount()
+	requireStdout(t, s.Attn("settings", "set", "agent_tools_enabled", "true"), "true")
+	testworld.AwaitSince(app, mark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["agent_tools_enabled"] == "true"
+	})
+	session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
+	tools := claudeToolEndpoint(t, s.LaunchedCarrying(app.Terminal(session)))
+
+	var opened protocol.TerminalOpenResult
+	tools.structured(t, "terminal_open", map[string]any{"command": []string{"printf 'opened-%s\\n' ran"}}, &opened)
+	app.AwaitScreen(string(opened.SessionID), "printf 'opened-%s\\n' ran")
+	shell := string(opened.TerminalID)
+	if atPrompt := s.Run(testworld.Invocation{Session: session, Args: []string{"terminal", "wait", shell, "--until", "prompt"}}); atPrompt.Code != 0 {
+		t.Fatalf("attn terminal wait --until prompt while the opened command is typed but not yet started: %+v", atPrompt)
+	}
+	var last protocol.TerminalReadResult
+	tools.structured(t, "terminal_read", map[string]any{"terminal": shell, "mode": "last"}, &last)
+	if last.Block == nil || strings.TrimSpace(last.Block.Output) != "opened-ran" {
+		t.Fatalf("terminal_read last after the wait = %+v, want the opened command's finished block", last)
+	}
+	tools.structured(t, "terminal_run", map[string]any{"terminal": shell, "command": "printf next"}, &protocol.TerminalRunResult{})
+}
+
 func TestACommandTerminalOpenAcceptedBeforeADaemonRestartIsNoticedNotTyped(t *testing.T) {
 	for _, backend := range testworld.WorkerAndSharedHost {
 		t.Run(string(backend), func(t *testing.T) {

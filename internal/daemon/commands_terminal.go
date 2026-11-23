@@ -105,10 +105,21 @@ func (d *Daemon) runTerminalWait(ctx context.Context, c command.Caller, a comman
 	if err != nil {
 		return nil, err
 	}
-	waited, err := d.waitTerminal(ctx, target, until, nil)
+	var afterTyped *string
+	if until == protocol.TerminalWaitUntilPrompt && target.Agent == protocol.AgentShellValue {
+		state, err := d.readTerminalScreen(ctx, target.terminal)
+		if err != nil {
+			return nil, timedOut(ctx, err)
+		}
+		if typed, unfinished := d.unfinishedTypedCommand(target.terminal, state); unfinished {
+			afterTyped = &typed.afterBlockID
+		}
+	}
+	waited, err := d.waitTerminal(ctx, target, until, afterTyped)
 	if err != nil {
 		return nil, timedOut(ctx, err)
 	}
+	waited.Block = nil
 	return waited, nil
 }
 

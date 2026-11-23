@@ -475,16 +475,20 @@ func (d *Daemon) awaitTypedCommandFinish(ctx context.Context, terminal protocol.
 	return nil
 }
 
-func (d *Daemon) typedCommandUnfinished(terminal protocol.TerminalID, state protocol.TerminalText) bool {
+func (d *Daemon) unfinishedTypedCommand(terminal protocol.TerminalID, state protocol.TerminalText) (typedCommand, bool) {
 	typed, ok := d.typedCommandOf(terminal, state)
 	if !ok {
-		return false
+		return typedCommand{}, false
 	}
 	if state.LastBlockID != typed.afterBlockID || time.Since(typed.typedAt) > typedCommandFinishTripwire {
 		d.typedCommands.CompareAndDelete(terminal, typed)
-		return false
+		return typedCommand{}, false
 	}
-	return true
+	return typed, true
+}
+
+func (d *Daemon) readTerminalScreen(ctx context.Context, terminal protocol.TerminalID) (protocol.TerminalText, error) {
+	return Call[protocol.TerminalText](ctx, d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: terminal, Mode: protocol.TerminalReadModeScreen})
 }
 
 type terminalInput struct {
@@ -506,13 +510,10 @@ func (d *Daemon) inputTerminal(ctx context.Context, caller *protocol.Session, in
 		if target.Agent != protocol.AgentShellValue {
 			return nil, nil, errors.New("run rule: run requires a shell; use send to type into an agent")
 		}
-		readScreen := func(ctx context.Context) (protocol.TerminalText, error) {
-			return Call[protocol.TerminalText](ctx, d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: target.terminal, Mode: protocol.TerminalReadModeScreen})
-		}
 		if ctx.Err() != nil {
 			return nil, nil, ctx.Err()
 		}
-		state, err = readScreen(ctx)
+		state, err = d.readTerminalScreen(ctx, target.terminal)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -523,7 +524,7 @@ func (d *Daemon) inputTerminal(ctx context.Context, caller *protocol.Session, in
 			if ctx.Err() != nil {
 				return nil, nil, ctx.Err()
 			}
-			state, err = readScreen(ctx)
+			state, err = d.readTerminalScreen(ctx, target.terminal)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -534,12 +535,12 @@ func (d *Daemon) inputTerminal(ctx context.Context, caller *protocol.Session, in
 			if err := d.waitForTerminalFirstPrompt(prompt, target.terminal); err != nil {
 				return nil, nil, err
 			}
-			state, err = readScreen(prompt)
+			state, err = d.readTerminalScreen(prompt, target.terminal)
 			if err != nil {
 				return nil, nil, err
 			}
 		}
-		if d.typedCommandUnfinished(target.terminal, state) {
+		if _, unfinished := d.unfinishedTypedCommand(target.terminal, state); unfinished {
 			return nil, nil, errors.New("prompt rule: the command attn typed into this shell has not finished; read the terminal, and run again once it shows its prompt")
 		}
 		if !state.AtPrompt {

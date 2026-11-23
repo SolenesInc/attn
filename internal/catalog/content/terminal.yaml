@@ -59,7 +59,7 @@ groups:
 
           `run` requires a shell at its prompt. If a program is running, use `send` to talk to the program. `run --wait` reads the next completed command block and exits with the block's exit code. To attribute a block to a command, avoid concurrent writers to that shell. Shells without OSC 133 command marks do not support `run --wait`, `read --last`, or `wait --until prompt`. In those shells, use plain `run` and screen reads.
 
-          `wait --until prompt` waits for the shell prompt. `wait --until exit` waits for the terminal process to exit. `--timeout <seconds>` bounds either wait and `run --wait`. When the timeout expires, the command exits 124. Without `--timeout`, waiting continues until the condition is met or your CLI connection closes. If the worker restarts or disconnects, the call fails visibly. It never leaves a command queued for later.
+          `wait --until prompt` waits for the shell prompt, after any command attn typed into that shell has finished. `wait --until exit` waits for the terminal process to exit. `--timeout <seconds>` bounds either wait and `run --wait`. When the timeout expires, the command exits 124. Without `--timeout`, waiting continues until the condition is met or your CLI connection closes. If the worker restarts or disconnects, the call fails visibly. It never leaves a command queued for later.
         commands: [terminal read, terminal run, terminal wait]
 
 commands:
@@ -148,7 +148,7 @@ commands:
     offered: false
     reason: "It holds the call until the prompt or the exit, with no limit of its own, past a harness's tool limit (D9). A tool caller looks with terminal_read; attn terminal wait stays on the CLI."
     doc: |
-      Waits until `terminal` shows its shell prompt, or until its process exits, and exits with the exit code. `timeout` gives up after that many seconds and exits 124.
+      Waits until `terminal` shows its shell prompt, or until its process exits, and exits with the exit code. A prompt wait first waits for any command attn typed into that shell to finish. `timeout` gives up after that many seconds and exits 124.
     args:
       - {name: terminal, type: terminal_ref, required: true, cli: pos, placeholder: "<terminal>"}
       - {name: until, type: wait_until, required: true, cli: "--until", doc: "what to wait for"}

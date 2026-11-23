@@ -53,7 +53,7 @@ The terminal goes beside the destination's active tile. Your profile's current d
 
 `run` requires a shell at its prompt. If a program is running, use `send` to talk to the program. `run --wait` reads the next completed command block and exits with the block's exit code. To attribute a block to a command, avoid concurrent writers to that shell. Shells without OSC 133 command marks do not support `run --wait`, `read --last`, or `wait --until prompt`. In those shells, use plain `run` and screen reads.
 
-`wait --until prompt` waits for the shell prompt. `wait --until exit` waits for the terminal process to exit. `--timeout <seconds>` bounds either wait and `run --wait`. When the timeout expires, the command exits 124. Without `--timeout`, waiting continues until the condition is met or your CLI connection closes. If the worker restarts or disconnects, the call fails visibly. It never leaves a command queued for later.
+`wait --until prompt` waits for the shell prompt, after any command attn typed into that shell has finished. `wait --until exit` waits for the terminal process to exit. `--timeout <seconds>` bounds either wait and `run --wait`. When the timeout expires, the command exits 124. Without `--timeout`, waiting continues until the condition is met or your CLI connection closes. If the worker restarts or disconnects, the call fails visibly. It never leaves a command queued for later.
 
 - `attn terminal read <terminal> [--last | --scrollback] [--lines <n>] [--json]`: read a terminal's screen, scrollback or last command
 - `attn terminal run <terminal> "<command>" [--wait] [--timeout <seconds>] [--desktop <ref>] [--json]`: type a command into a shell at its prompt
