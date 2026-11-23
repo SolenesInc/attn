@@ -146,6 +146,7 @@ fn sheets() -> Vec<Sheet> {
                 "Narrow",
                 "Recommended",
                 "Many",
+                "Reads",
             ],
         ),
         (

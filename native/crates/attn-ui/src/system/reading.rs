@@ -116,5 +116,16 @@ pub fn note_style(ink: Color, t: &Tokens) -> MarkdownStyle {
     door::document::note(ink, t)
 }
 
+/// Words read on their own in `ink`, such as an ask: a document's type across the column it is
+/// given, or with its prose kept to `measure` and centred, while its pictures, tables and code
+/// take the whole column.
+pub fn read_alone_style(ink: Color, measure: Option<f32>, t: &Tokens) -> MarkdownStyle {
+    let style = door::document::family(t).text(ink).deep_heading(ink);
+    match measure {
+        Some(points) => style.prose_measure(points),
+        None => style,
+    }
+}
+
 /// A table head's words.
 pub(crate) const HEAD_WEIGHT: f32 = 600.0;

@@ -4,9 +4,10 @@ use std::rc::Rc;
 use attn_protocol::{Ask, AskAnswer, AskQuestion, AskSeedMention, AskThread, Session};
 use attn_ui::blocks::{Block, Disclosure, Inline, List, Popover, Section, Sheet, Stack};
 use attn_ui::system::{
-    AskChip, Button, Choice, DotShape, DotSize, FieldState, IconSize, ListRow, Look, Size, Tone,
-    Type, answers, area_box, ask_mark, checks, count_badge, dot, drop_overlay, file_chip,
-    file_kind, file_size, icon_button, image_tile, keycaps, keys_hint, line_box, tag, words,
+    AskChip, Button, Choice, DotShape, DotSize, FieldState, IconSize, ListRow, Look, Reading, Size,
+    Tone, Type, answers, area_box, ask_mark, checks, count_badge, dot, drop_overlay, file_chip,
+    file_kind, file_size, icon_button, image_tile, keycaps, keys_hint, line_box, read_as, tag,
+    words,
 };
 use attn_ui::{Backdrop, Frame, Tokens, glyph};
 use rune::{El, Image, Key, KeyEvent, Side, SurfaceFit, Tx, col, row};
@@ -22,12 +23,14 @@ pub(super) const SNOOZE: &str = "asks.snooze";
 const OPEN_SEED: &str = "asks.open-seed";
 const LIST: &str = "asks.list";
 
-/// The sheet's greatest width and height, its list rail's width and its reading column's
-/// measure, as the plan's D1 agreed them from the prototype.
-const SHEET_W: f32 = 1020.0;
-const SHEET_H: f32 = 880.0;
+/// The sheet's greatest width, its list rail's width, its reading column's measure and the
+/// widest its pictures run, as the person chose them from the asks sheet's third prototype. At
+/// `Reading::Text` the measure holds about 90 characters, as the document reader's 640 holds 91
+/// to 97. The rail, the widest picture and the body's insets need 1276 of the sheet's width.
+const SHEET_W: f32 = 1440.0;
 const RAIL_W: f32 = 264.0;
-const MEASURE: f32 = 700.0;
+const MEASURE: f32 = 620.0;
+const PICTURES: f32 = MEASURE + 360.0;
 /// Under its greatest size the sheet stays 96 points narrower than the window and 120 points
 /// shorter, centred under the title bar. Past the least size below, its margins give way to
 /// it, down to the tightest.
@@ -154,7 +157,11 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
         .max_w(SHEET_W);
     let now_ms = state.window.now_ms;
     let panel = match shown.and_then(|id| items.iter().position(|i| i.ask.id == id)) {
-        None => panel.child(rail.push(empty(replied, t)).fits(SHEET_H).build(t)),
+        None => panel.child(
+            rail.push(empty(replied, t))
+                .fits(under_title_bar - 2.0 * above)
+                .build(t),
+        ),
         Some(at) if beside => {
             let item = &items[at];
             let rail = rail
@@ -167,14 +174,13 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
             let reading = Sheet::new("asks.reading", item.ask.subject.clone())
                 .head(header(state, item, t))
                 .article("asks.ask", item.ask.subject.clone())
-                .measure(MEASURE)
-                .push_all(article(state, item, t))
+                .measure(MEASURE, PICTURES)
+                .push_all(article(state, item, Some(MEASURE), t))
                 .footer(footer(state, item, items.len() > 1, t))
                 .build(t)
                 .grow_from(1.0, 0.0);
             panel
                 .h_full()
-                .max_h(SHEET_H)
                 .child(row().w_full().h_full().child(rail).child(reading))
         }
         Some(at) => {
@@ -189,10 +195,10 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
                 .keeps_room(rows)
                 .article("asks.ask", item.ask.subject.clone())
                 .push(Block::custom("asks.header.block", header(state, item, t)))
-                .push_all(article(state, item, t))
+                .push_all(article(state, item, None, t))
                 .footer(footer(state, item, items.len() > 1, t))
                 .build(t);
-            panel.h_full().max_h(SHEET_H).child(stacked)
+            panel.h_full().child(stacked)
         }
     };
     let panel = match asks.quotable.as_deref().filter(|_| quoting) {
@@ -360,15 +366,17 @@ fn list_row(item: &Item<'_>, selected: bool, now_ms: i64, t: &Tokens) -> El {
 /// read from the copy of them the home keeps.
 struct Prose<'a> {
     names: &'a [AskSeedMention],
+    measure: Option<f32>,
     pictures: Rc<HashMap<String, Image>>,
     document: String,
     t: &'a Tokens,
 }
 
 impl<'a> Prose<'a> {
-    fn of(state: &'a State, ask: &Ask, t: &'a Tokens) -> Prose<'a> {
+    fn of(state: &'a State, ask: &Ask, measure: Option<f32>, t: &'a Tokens) -> Prose<'a> {
         Prose {
             names: mentions::of(state, &ask.id),
+            measure,
             pictures: state.pictures.of_ask(&ask.id),
             document: images::ask_document(ask),
             t,
@@ -394,7 +402,11 @@ impl<'a> Prose<'a> {
         Markdown::new(source)
             .selectable(true)
             .text_links(mentions::seed_links(self.names))
-            .style(attn_ui::system::note_style(self.t.text_secondary, self.t))
+            .style(attn_ui::system::read_alone_style(
+                self.t.text_secondary,
+                self.measure,
+                self.t,
+            ))
             .on_link_tx(move |state: &mut State, href: &str, tx: &mut Tx| {
                 match mentions::seed_of(href) {
                     Some(seed) => super::open_seed(state, seed, tx),
@@ -523,9 +535,10 @@ fn asker_state(state: &State, item: &Item<'_>) -> Option<String> {
     )
 }
 
-fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
+/// The ask's blocks, its prose kept to `measure` where the ask reads in a centred column.
+fn article(state: &State, item: &Item<'_>, measure: Option<f32>, t: &Tokens) -> Vec<Block> {
     let ask = item.ask;
-    let prose = Prose::of(state, ask, t);
+    let prose = Prose::of(state, ask, measure, t);
     let mut blocks = Vec::new();
     if let Some(standby) = item.standby.as_ref().filter(|_| ask.reply.is_none()) {
         blocks.push(Block::custom(
@@ -539,11 +552,14 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
     blocks.push(Block::custom(
         "asks.subject.block",
         prose.text(
-            words(ask.subject.clone(), Type::PageTitle, t.text_primary)
-                .key("asks.subject")
-                .role("heading")
-                .selectable(true)
-                .wrap(),
+            read_as(
+                words(ask.subject.clone(), Type::PageTitle, t.text_primary),
+                Reading::Title,
+            )
+            .key("asks.subject")
+            .role("heading")
+            .selectable(true)
+            .wrap(),
             &ask.subject,
         ),
     ));
@@ -596,12 +612,17 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
                         } else {
                             format!("Updated {age} ago")
                         };
-                        words(said.clone(), Type::Small, t.text_tertiary)
+                        let said = words(said.clone(), Type::Small, t.text_tertiary)
                             .key(format!("asks.part.{at}.amended"))
-                            .label(said)
+                            .label(said);
+                        match prose.measure {
+                            Some(points) => said.w_full().max_w(points).self_center(),
+                            None => said,
+                        }
                     }))
                     .child(prose.markdown(part.markdown.as_deref().unwrap_or_default())),
-            ),
+            )
+            .wide(),
         });
     }
     let note_placeholder = match (item.holder, &item.standby, &ask.seed_id) {
@@ -836,11 +857,14 @@ fn question_section(
         .child(words(index.to_string(), Type::Mono, number_ink))
         .child(
             prose.text(
-                words(question.prompt.clone(), Type::Heading, t.text_primary)
-                    .selectable(true)
-                    .wrap()
-                    .grow(1.0)
-                    .min_w(0.0),
+                read_as(
+                    words(question.prompt.clone(), Type::Heading, t.text_primary),
+                    Reading::Heading,
+                )
+                .selectable(true)
+                .wrap()
+                .grow(1.0)
+                .min_w(0.0),
                 &question.prompt,
             ),
         );
@@ -967,7 +991,8 @@ fn choice_list(
             .many(many)
             .chosen(answer.picked(&choice.label))
             .disabled(replied)
-            .selectable(true);
+            .selectable(true)
+            .reads();
         if let Some(note) = choice.description.clone().filter(|d| !d.is_empty()) {
             shown = shown.note(note);
         }

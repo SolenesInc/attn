@@ -1,7 +1,8 @@
 use rune::{Color, El, Tx, col, el, row};
 
 use super::{
-    Control, IconSize, Radius, Said, Size, Space, Type, disabled, door, focus, glyph, layers, words,
+    Control, IconSize, Radius, Reading, Said, Size, Space, Type, disabled, door, focus, glyph,
+    layers, read_as, words,
 };
 use crate::Tokens;
 
@@ -23,6 +24,7 @@ pub struct Choice {
     chosen: bool,
     disabled: bool,
     selectable: bool,
+    reads: bool,
     size: Size,
 }
 
@@ -39,6 +41,7 @@ impl Choice {
             chosen: false,
             disabled: false,
             selectable: false,
+            reads: false,
             size: Size::Regular,
         }
     }
@@ -70,6 +73,13 @@ impl Choice {
     /// checkbox, in place of a dot.
     pub fn many(mut self, many: bool) -> Self {
         self.many = many;
+        self
+    }
+
+    /// A choice read as part of a document, such as an ask's: its name and note at the sizes
+    /// the document's own words read at.
+    pub fn reads(mut self) -> Self {
+        self.reads = true;
         self
     }
 
@@ -133,7 +143,13 @@ impl Choice {
         }
         .key(format!("{}.mark", self.key))
         .a11y_hidden();
-        let name = words(self.name.clone(), Type::Name, ink)
+        let name = words(self.name.clone(), Type::Name, ink);
+        let name = if self.reads {
+            read_as(name, Reading::Subheading)
+        } else {
+            name
+        };
+        let name = name
             .key(format!("{}.name", self.key))
             .selectable(self.selectable)
             .wrap()
@@ -148,10 +164,13 @@ impl Choice {
         let named = door::gap(col().grow_from(1.0, NAME_FLOOR), Space::S2)
             .child(name)
             .children(self.note.map(|note| {
-                words(note, Type::Small, t.text_tertiary)
-                    .selectable(self.selectable)
-                    .wrap()
-                    .a11y_hidden()
+                let note = words(note, Type::Small, t.text_tertiary);
+                let note = if self.reads {
+                    read_as(note, Reading::Item)
+                } else {
+                    note
+                };
+                note.selectable(self.selectable).wrap().a11y_hidden()
             }));
         let said = door::gaps(
             row().grow(1.0).flex_wrap().items_center(),

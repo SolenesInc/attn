@@ -28,6 +28,7 @@ pub struct Block {
     pub(crate) kind: Kind,
     pub(crate) el: El,
     slot: Option<String>,
+    wide: bool,
 }
 
 impl Block {
@@ -38,6 +39,7 @@ impl Block {
             kind,
             el,
             slot: None,
+            wide: false,
         }
     }
 
@@ -48,6 +50,7 @@ impl Block {
             kind: Kind::Control,
             el: control.into().self_start(),
             slot: Some(key.into()),
+            wide: false,
         }
     }
 
@@ -64,6 +67,27 @@ impl Block {
             kind: Kind::Custom,
             el,
             slot: Some(key.into()),
+            wide: false,
+        }
+    }
+
+    /// The block runs past a page's reading measure to the room its pictures want, as an ask's
+    /// words do: see [`super::Sheet::measure`].
+    pub fn wide(self) -> Block {
+        Block { wide: true, ..self }
+    }
+
+    /// The block at most `text` wide, or `wide` when it is wide, centred in its column.
+    pub(crate) fn measured(self, text: f32, wide: f32) -> Block {
+        let most = if self.wide { wide } else { text };
+        let el = match self.slot {
+            Some(key) => col().key(key).w_full().child(self.el),
+            None => self.el,
+        };
+        Block {
+            el: el.w_full().max_w(most).self_center(),
+            slot: None,
+            ..self
         }
     }
 

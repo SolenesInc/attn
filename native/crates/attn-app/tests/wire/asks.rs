@@ -428,11 +428,13 @@ fn a_drag_selects_the_subject_a_part_and_a_choice_and_the_copy_key_copies_it() {
     );
 }
 
-/// Drags across the first line of the text keyed `key`, from the edge of its box to past its end.
+/// Drags across the first line of the text keyed `key`, from the edge of the ask's column to
+/// past the text's end.
 fn drag_from_edge(world: &mut World, key: &str) {
     let [x, y, w, h] = world.rect(key);
+    let edge = world.rect("asks.subject.block")[0];
     let line = (y + h.min(16.0) / 2.0) as f32;
-    let (from, to) = ((x as f32, line), ((x + w) as f32 + 4.0, line));
+    let (from, to) = ((edge as f32, line), ((x + w) as f32 + 4.0, line));
     world.gesture(|app| {
         app.drag_from(from, to);
         app.release(to);
@@ -441,7 +443,8 @@ fn drag_from_edge(world: &mut World, key: &str) {
 }
 
 #[test]
-fn a_drag_that_starts_at_the_edge_of_a_part_in_a_wide_window_selects_its_first_line() {
+fn a_drag_that_starts_at_the_edge_of_the_asks_column_beside_a_part_in_a_wide_window_selects_its_first_line()
+ {
     let mut world = start(vec![cache_store()], vec![api_working()]);
     world.resize((1200.0, 800.0));
     open_sheet(&mut world);
@@ -633,6 +636,11 @@ fn an_amendment_shows_as_an_update_after_the_questions_and_keeps_the_answer_star
 
     assert_eq!(name(&world, "asks.part.3.amended"), "Updated 2m ago");
     assert!(has(&world, "asks.part.3"));
+    assert_eq!(
+        world.rect("asks.part.3.amended")[0],
+        world.rect("asks.subject.block")[0],
+        "the update's label starts on the ask's column"
+    );
     assert!(!has(&world, "asks.part.0.amended"));
     assert!(checked(&world, "asks.q.q1.choice.1"));
     assert_eq!(
@@ -1863,6 +1871,49 @@ fn a_seed_planted_after_the_ask_is_linked_once_the_garden_has_it() {
 
 const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAYAAAC09K7GAAAAEklEQVR4nGP4z8DwHxkzEBQAAGHtF+mRbBMEAAAAAElFTkSuQmCC";
 
+/// A grey picture 2000 by 8 pixels.
+const WIDE_PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAB9AAAAAICAIAAAAukPPiAAAAVUlEQVR42u3QMQEAAAzDoEqf9InICxLYAQAAAAAA2RQAAAAAAEA3BQAAAAAA0E0BAAAAAAB0UwAAAAAAAN0UAAAAAABANwUAAAAAANBNAQAAAAAAdA/rnsV0d7EvXAAAAABJRU5ErkJggg==";
+
+#[test]
+fn a_picture_in_an_ask_runs_wider_than_its_lines_and_centred_with_them() {
+    let mut shot = ask(
+        "a-cache1",
+        "api",
+        "Cache store",
+        30,
+        vec![prose("The banner overlaps:\n\n![banner](shots/banner.png)")],
+    );
+    shot.base_dir = "/tmp/api".into();
+    let mut world = start(vec![shot], vec![api_working()]);
+    world.daemon.on("ask_image", |r| {
+        serde_json::json!({
+            "event": "ask_image_result",
+            "request_id": r["request_id"],
+            "success": true,
+            "mime_type": "image/png",
+            "data_base64": WIDE_PNG,
+        })
+    });
+    world.resize((1512.0, 945.0));
+    open_sheet(&mut world);
+    world.settle();
+
+    let picture = world
+        .screen()
+        .bounds(Target::role("image").name("banner"))
+        .map(|r| r.map(f64::from))
+        .expect("the picture shows");
+    let subject = world.rect("asks.subject.block");
+    let middle = |r: [f64; 4]| r[0] + r[2] / 2.0;
+    assert_eq!(subject[2], 620.0, "the ask's lines");
+    assert_eq!(picture[2], 980.0, "the picture: {picture:?}");
+    assert_eq!(
+        middle(picture),
+        middle(subject),
+        "the picture centred on the lines"
+    );
+}
+
 #[test]
 fn an_asks_images_show_from_the_copy_the_home_keeps() {
     let mut screenshot = ask(
@@ -2758,16 +2809,19 @@ fn with_no_agent_on_screen_the_sheet_key_opens_on_the_ask_shown_last_or_the_firs
 }
 
 #[test]
-fn the_sheet_is_centred_under_the_title_bar_at_its_sizes_with_its_list_beside_the_ask() {
-    for (window, sheet) in [
-        ((1512.0, 945.0), [246.0, 76.0, 1020.0, 825.0]),
-        ((3440.0, 1400.0), [1210.0, 276.0, 1020.0, 880.0]),
-        ((800.0, 600.0), [48.0, 76.0, 704.0, 480.0]),
+fn the_sheet_is_centred_under_the_title_bar_with_its_list_beside_the_ask_read_in_a_centred_column()
+{
+    for (window, sheet, lines, words) in [
+        ((1512.0, 945.0), [48.0, 76.0, 1416.0, 825.0], 620.0, 980.0),
+        (
+            (3440.0, 1400.0),
+            [1000.0, 76.0, 1440.0, 1280.0],
+            620.0,
+            980.0,
+        ),
+        ((800.0, 600.0), [48.0, 76.0, 704.0, 480.0], 400.0, 400.0),
     ] {
-        let mut world = start(
-            vec![rollout(), cache_store(), release_day()],
-            vec![api_working(), web_waiting()],
-        );
+        let mut world = start(vec![cache_store()], vec![api_working()]);
         world.resize(window);
         open_sheet(&mut world);
         assert_eq!(world.rect("asks.sheet"), sheet, "in a {window:?} window");
@@ -2780,11 +2834,20 @@ fn the_sheet_is_centred_under_the_title_bar_at_its_sizes_with_its_list_beside_th
             sheet[0] + sheet[2],
             "the ask to the edge"
         );
+        let middle = |r: [f64; 4]| r[0] + r[2] / 2.0;
+        let ask = world.rect("asks.ask");
         let subject = world.rect("asks.subject.block");
-        assert!(
-            subject[2] <= 700.0,
-            "the ask reads at most 700 wide: {subject:?}"
+        let prose = world.rect("asks.part.0.block");
+        assert_eq!(subject[2], lines, "the ask's lines in a {window:?} window");
+        assert_eq!(prose[2], words, "the room its words and pictures take");
+        assert_eq!(
+            middle(subject),
+            middle(prose),
+            "its lines and pictures share a middle"
         );
+        if lines < words {
+            assert_eq!(middle(subject), middle(ask), "the ask's lines centred");
+        }
     }
 }
 

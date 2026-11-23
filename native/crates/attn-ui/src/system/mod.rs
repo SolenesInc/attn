@@ -70,8 +70,8 @@ pub use pager::pager;
 pub use press_area::{pick_area, press_area};
 pub use radius::Radius;
 pub use reading::{
-    Reading, document_style, note_style, passage_mark, read_as, read_aside, written_as,
-    written_cell,
+    Reading, document_style, note_style, passage_mark, read_alone_style, read_as, read_aside,
+    written_as, written_cell,
 };
 pub use said::{Part, Said};
 pub use search_field::{SEARCH_FLOOR, search_field};

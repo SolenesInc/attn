@@ -27,7 +27,7 @@ pub struct Sheet {
     opens: Opens,
     least: f32,
     article: Option<(String, String)>,
-    measure: Option<f32>,
+    measure: Option<(f32, f32)>,
     body_key: Option<String>,
     blocks: Vec<Block>,
     footer: Vec<Block>,
@@ -136,10 +136,11 @@ impl Sheet {
         self
     }
 
-    /// The body's blocks run at most `points` wide, against the body's start, however wide the
-    /// sheet: a column read at a measure, such as an ask.
-    pub fn measure(mut self, points: f32) -> Self {
-        self.measure = Some(points);
+    /// The body's blocks run at most `text` wide, and its wide blocks ([`Block::wide`]) at
+    /// most `wide`, centred however wide the sheet: a column read at a measure, such as an ask,
+    /// whose pictures take more room than its lines.
+    pub fn measure(mut self, text: f32, wide: f32) -> Self {
+        self.measure = Some((text, wide));
         self
     }
 
@@ -259,11 +260,15 @@ impl Sheet {
         let body = match self.fill {
             Some(body) => body.key(format!("{key}.body")).grow(1.0).min_h(0.0),
             None => {
-                let blocks = spaced(self.blocks, page_gap, Some(t.border_subtle));
                 let blocks = match self.measure {
-                    Some(points) => blocks.w_full().max_w(points),
-                    None => blocks,
+                    Some((text, wide)) => self
+                        .blocks
+                        .into_iter()
+                        .map(|block| block.measured(text, wide))
+                        .collect(),
+                    None => self.blocks,
                 };
+                let blocks = spaced(blocks, page_gap, Some(t.border_subtle));
                 let blocks = door::frame(blocks, Space::S16, Space::S16, Space::S24);
                 let body = match self.article {
                     Some((article, label)) => col().key(article).role("article").label(label),

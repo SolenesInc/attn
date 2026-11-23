@@ -67,6 +67,7 @@ pub struct Library {
     pub failed: bool,
     pub narrow: bool,
     pub many: bool,
+    pub reads: bool,
     pub banner: BannerCase,
     pub line: TextEdit,
     pub code: TextEdit,
@@ -191,7 +192,8 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("Disabled", |s| s.disabled = true)
                 .variant("Narrow", |s| s.narrow = true)
                 .variant("Recommended", |s| s.open = true)
-                .variant("Many", |s| s.many = true),
+                .variant("Many", |s| s.many = true)
+                .variant("Reads", |s| s.reads = true),
         )
         .story(
             Story::new("Library/Press area", Library::default, press_areas)
@@ -1171,6 +1173,7 @@ fn choice_list(s: &Library, cx: &mut Cx<Library>) -> El {
                     .many(s.many)
                     .chosen(if s.many { i != 1 } else { i == s.chosen })
                     .disabled(s.disabled);
+                let choice = if s.reads { choice.reads() } else { choice };
                 let choice = if s.open && i == 0 {
                     choice.tag(tag(
                         "choice.0.recommended",
