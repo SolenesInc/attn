@@ -306,7 +306,7 @@ func TestAQuickCaptureThatSteersANotificationRunOpensItsTurnAtTheStop(t *testing
 	working, _ := notificationRunStarts(t, app, cli, agent, session, settled, "the review is in")
 	sendQuickCapture(t, app, sessionMailbox(session), "what did the reviewer say?")
 	modEvent(t, agent, fakeagent.ModEventHeld, "what did the reviewer say?")
-	agent.ModToolBoundary()
+	submittedAtTurnEnd(t, agent, "what did the reviewer say?", true)
 	agent.Reply("They approved. <!-- attn:state=idle -->")
 	stopped := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	if !protocol.Deref(stopped.TurnOwed) || protocol.Deref(stopped.TurnByAgent) {
@@ -329,12 +329,16 @@ func TestAQuickCaptureRungWithOtherItemsOpensItsTurn(t *testing.T) {
 		w.advance(sessionmonitor.QuietWindow)
 
 		pasted := agent.term.Pasted()
-		if len(pasted) != 1 || !strings.Contains(pasted[0], "what did the reviewer say?") || !strings.Contains(pasted[0], inboxDoorbell) {
-			t.Fatalf("once the user was quiet attn pasted %q, want one ring with the capture and the doorbell", pasted)
+		if len(pasted) != 1 || !strings.Contains(pasted[0], "what did the reviewer say?") || strings.Contains(pasted[0], inboxDoorbell) {
+			t.Fatalf("once the user was quiet attn pasted %q, want the capture in a ring of its own", pasted)
 		}
+		mark := len(app.Log())
 		agent.reply("They approved. <!-- attn:state=idle -->")
-		if stopped := queriedSession(t, cli, agent.id); !protocol.Deref(stopped.TurnOwed) {
-			t.Fatalf("the ring's run stopped %s without opening the user's turn", stopped.State)
+		testworld.AwaitSince(app, mark, protocol.EventSessionStateChanged, func(m protocol.SessionStateChangedMessage) bool {
+			return m.Session.State == protocol.SessionStateIdle && protocol.Deref(m.Session.TurnOwed)
+		})
+		if pasted := agent.term.Pasted(); len(pasted) != 2 || !strings.Contains(pasted[1], inboxDoorbell) {
+			t.Fatalf("after the capture's run attn pasted %q, want the doorbell in a ring of its own", pasted)
 		}
 	})
 }

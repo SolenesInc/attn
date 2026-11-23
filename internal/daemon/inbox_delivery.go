@@ -372,7 +372,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		}
 		input := sessionmonitor.MaintenanceInput(sessionmonitor.InboxRing, uuid.NewString(), paste.text, when)
 		input.BypassInitialGate = true
-		input.UserWords = len(paste.typed) > 0 && !paste.notified && !(finishingStart && tenderResume != nil)
+		input.UserWords = len(paste.typed) > 0 && !(finishingStart && tenderResume != nil)
 		at := time.Now()
 		input.Ring = &protocol.InboxRingRecord{Address: a.String(), ProfileID: holder.ProfileID, Stamp: store.InboxRingStamp(at), Typed: paste.typed, Notified: paste.notified, Captures: paste.captures, AuthorizedSeeds: paste.authorizedSeeds}
 		run := d.store.GetAgentDriverRun(holder.ID)
@@ -550,10 +550,11 @@ func (d *Daemon) inboxPaste(a who.Address, profileID string, bell bool) (inboxPa
 	}
 	var paste inboxPaste
 	var texts []string
+	untyped := false
 	for _, delivery := range deliveries {
 		item := delivery.Item
 		if !item.Kind.Typed() {
-			paste.notified = bell
+			untyped = true
 			continue
 		}
 		if item.Kind == inbox.QuickCapture {
@@ -571,6 +572,7 @@ func (d *Daemon) inboxPaste(a who.Address, profileID string, bell bool) (inboxPa
 		}
 		paste.typed = append(paste.typed, item.ID)
 	}
+	paste.notified = bell && untyped && len(paste.typed) == 0
 	if paste.notified {
 		texts = append(texts, inboxRingText())
 	}

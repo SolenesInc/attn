@@ -196,9 +196,8 @@ plugin may have restarted in between. With `attributedInput`, compare
 return `targetEnded()` when they differ. Other answers: `deferred()` for "try
 again later", `rejected(reason)` for "never".
 
-`voice` is `"user"` for an annotation, a typed conversation and a ring with
-only the user's words, and `"attn"` for everything else, including a ring that
-carries a notice. A harness that tells its model who is speaking uses it.
+`voice` is `"user"` for an annotation, a typed conversation and a ring of the
+user's words, and `"attn"` for everything else, such as a ring with a notice. A harness that tells its model who is speaking uses it.
 
 A plugin tells Attn what a launch is doing with the `run` object:
 

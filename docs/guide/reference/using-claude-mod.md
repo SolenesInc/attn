@@ -5,18 +5,21 @@ instead of typing into the terminal. A mod is a plugin that runs inside Claude. 
 from elsewhere no longer race what you are typing, and Attn no longer waits for
 a quiet moment in the terminal.
 
-Claude reads the same text either way: the bare message when it is idle, and
-Claude's own "The user sent a new message while you were working" wording when
-it is in the middle of a turn. Attn was checked against Claude Code 2.1.318.
+Your own words, such as a Quick Capture, an answer to an ask or an annotation,
+reach Claude as yours, so Claude and its auto mode count an approval in them as
+yours. Attn's own messages, such as the line that says the inbox has unread
+items, reach Claude as sent by the attn plugin. Attn was checked against Claude
+Code 2.1.330.
 
 ## What you see
 
 - **Claude is idle.** Your message starts a turn. Claude draws a "Prompt from the
   attn plugin" line above it, which no mod can remove.
-- **Claude is working.** The message appears in a band above the prompt, with
-  "attn adds this after the current tool call". Once Claude has it, the band
-  clears and the transcript shows `attn: ❯ <message>`. If the turn ends with no
-  further tool call, the message starts the next turn instead.
+- **Claude is working.** The message waits in a band above the prompt, with
+  "attn sends this when the turn ends". When the turn ends, everything you sent
+  starts the next turn as one prompt, and the band clears. A message from Attn
+  itself that waited too goes after Claude finishes that turn. To reach Claude
+  before its turn ends, type into the terminal.
 - **You press Esc while Claude works.** Attn stops delivering its own messages, so a session you
   stopped stays stopped. The band lists them under "Waiting in attn — sent with
   your next prompt", and they go out after your next prompt. Your own words, such
@@ -76,6 +79,6 @@ running session reloads the mod, and the transcript shows `attn: reloaded`. Attn
 types into a session until its mod has reloaded.
 
 A daemon restart loses nothing while Claude keeps running, on your home machine or
-on an outpost: the mod keeps a message that waits for the next tool call, and hands
+on an outpost: the mod keeps a message that waits for the turn to end, and hands
 it back if you press Esc. If the restart comes with an upgrade that changes the
 mod, the reload drops that message, and you need to send it again.

@@ -58,7 +58,6 @@ const (
 	methodStatus               = "program_status"
 	methodSuggestion           = "claude_suggestion"
 	methodModNext              = "mod_next"
-	methodModTool              = "mod_tool_boundary"
 	methodModEsc               = "mod_esc"
 	methodModReload            = "mod_reload"
 	methodModStop              = "mod_stop_polling"
@@ -109,6 +108,7 @@ type promptedResult struct {
 	Text           string `json:"text"`
 	ConversationID string `json:"conversation_id"`
 	ThroughMod     bool   `json:"through_mod"`
+	AsUser         bool   `json:"as_user"`
 }
 
 type exitParams struct {
@@ -235,6 +235,7 @@ type promptSubmission struct {
 	text         string
 	conversation string
 	throughMod   bool
+	asUser       bool
 	err          error
 }
 
@@ -314,15 +315,19 @@ func serve(cfg config, style composer, conv conversation) int {
 }
 
 func (a *agent) submit(prompt string) {
-	a.place(prompt, false)
+	a.place(promptSubmission{text: prompt, asUser: true})
 }
 
-func (a *agent) place(prompt string, throughMod bool) {
+func (a *agent) placeThroughMod(prompt string, asUser bool) {
+	a.place(promptSubmission{text: prompt, throughMod: true, asUser: asUser})
+}
+
+func (a *agent) place(submission promptSubmission) {
 	a.turn.Lock()
-	err := a.conv.submit(prompt)
-	conversation := a.conv.launch().ConversationID
+	submission.err = a.conv.submit(submission.text)
+	submission.conversation = a.conv.launch().ConversationID
 	a.turn.Unlock()
-	a.prompts <- promptSubmission{text: prompt, conversation: conversation, throughMod: throughMod, err: err}
+	a.prompts <- submission
 }
 
 func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, error) {
@@ -337,7 +342,7 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		return struct{}{}, nil
 	case methodPrompted:
 		submitted := <-a.prompts
-		return promptedResult{Text: submitted.text, ConversationID: submitted.conversation, ThroughMod: submitted.throughMod}, submitted.err
+		return promptedResult{Text: submitted.text, ConversationID: submitted.conversation, ThroughMod: submitted.throughMod, AsUser: submitted.asUser}, submitted.err
 	case methodReply, methodReplyLate:
 		var p textParams
 		if err := json.Unmarshal(params, &p); err != nil {
@@ -391,7 +396,7 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		a.turn.Lock()
 		defer a.turn.Unlock()
 		return struct{}{}, halting.halt()
-	case methodModNext, methodModTool, methodModEsc, methodModReload, methodModStop, methodModPause, methodModResume, methodModGiveBack, methodModReaddressHeld,
+	case methodModNext, methodModEsc, methodModReload, methodModStop, methodModPause, methodModResume, methodModGiveBack, methodModReaddressHeld,
 		methodModCompactOutcome, methodModCompactHold, methodModCompactArrived, methodModCompactRelease, methodModCompactReport,
 		methodModAckHold, methodModAckArrived, methodModAckRelease:
 		modded, ok := a.conv.(*claude)

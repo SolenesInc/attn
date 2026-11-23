@@ -113,6 +113,14 @@ func cacheAskAnswered(t *testing.T, w *world, app *testworld.Peer, session strin
 
 const cacheAnswerText = "Answer: Postgres"
 
+func submittedAtTurnEnd(t *testing.T, run *fakeagent.Run, text string, asUser bool) {
+	t.Helper()
+	run.Reply("Done. <!-- attn:state=waiting_input -->")
+	if got := run.Prompted(); !strings.Contains(got, text) || !run.ThroughMod || run.AsUser != asUser {
+		t.Fatalf("at the turn's end the agent took %q (through the mod: %t, as the user: %t), want %q through the mod as the user: %t", got, run.ThroughMod, run.AsUser, text, asUser)
+	}
+}
+
 func TestAnIdleAnnotationReachesClaudeThroughTheModWithNoKeystroke(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
@@ -131,21 +139,66 @@ func TestAnIdleAnnotationReachesClaudeThroughTheModWithNoKeystroke(t *testing.T)
 	}
 }
 
-func TestAMessageToAWorkingClaudeIsHeldThenAppendedAtTheToolBoundary(t *testing.T) {
+func TestTheUsersInputToAWorkingClaudeWaitsForTheTurnAndGoesAsOnePromptAsTheUser(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
-	app := w.App()
+	app := w.TrustedApp()
+	setSetting(t, app, "asks_enabled", "true")
 	session, run := moddedClaude(t, w, app)
 	workingOn(t, app, run, session, "write the essay")
 
-	delivered(t, app, session, "shorter please")
-	modEvent(t, run, fakeagent.ModEventHeld, "shorter please")
-	if appended := run.ModToolBoundary(); !slices.Equal(appended, []string{"shorter please"}) {
-		t.Fatalf("the tool boundary appended %v, want the held message", appended)
+	sendQuickCapture(t, app, sessionMailbox(session), "make it shorter")
+	modEvent(t, run, fakeagent.ModEventHeld, "make it shorter")
+	cacheAskAnswered(t, w, app, session)
+	modEvent(t, run, fakeagent.ModEventHeld, cacheAnswerText)
+
+	run.Reply("Done. <!-- attn:state=waiting_input -->")
+	got := run.Prompted()
+	if !strings.Contains(got, "make it shorter") || !strings.Contains(got, cacheAnswerText) || !run.ThroughMod || !run.AsUser {
+		t.Fatalf("at the turn's end the agent took %q (through the mod: %t, as the user: %t), want the capture and the answer in one prompt as the user", got, run.ThroughMod, run.AsUser)
+	}
+	nothingElsePrompted(t, app, run, session)
+}
+
+func TestTheUsersInputAndAPeerMessageUnreadTogetherReachClaudeAsTwoPromptsInTheirOwnVoices(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.TrustedApp(), w.Client()
+	registerSessions(t, w, cli, "peer")
+	session, run := moddedClaude(t, w, app)
+	app.AwaitScreen(session, "? for shortcuts")
+	permissionQuestion(t, w, app, session)
+	sendAgentMessage(t, cli, "peer", session, "the review is in")
+	sendQuickCapture(t, app, sessionMailbox(session), "what did the reviewer say?")
+
+	if err := cli.UpdateState(protocol.TerminalID(w.Terminal(session)), protocol.StateWaitingInput); err != nil {
+		t.Fatalf("answer the question: %v", err)
 	}
 
-	run.ModReload()
-	w.awaitTimer(claudemod.PollHoldTimer)
-	nothingElsePrompted(t, app, run, session)
+	if got := run.Prompted(); !strings.Contains(got, "what did the reviewer say?") || strings.Contains(got, inboxDoorbell) || !run.ThroughMod || !run.AsUser {
+		t.Fatalf("the agent took %q (through the mod: %t, as the user: %t), want the capture alone as the user", got, run.ThroughMod, run.AsUser)
+	}
+	run.Reply("They approved. <!-- attn:state=waiting_input -->")
+	if got := run.Prompted(); !strings.Contains(got, inboxDoorbell) || strings.Contains(got, "what did the reviewer say?") || !run.ThroughMod || run.AsUser {
+		t.Fatalf("the agent took %q (through the mod: %t, as the user: %t), want the doorbell alone in attn's voice", got, run.ThroughMod, run.AsUser)
+	}
+}
+
+func TestASeedUpdateReachesAModdedClaudeInAttnsVoice(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "peer")
+	session, run := moddedClaude(t, w, app)
+	app.AwaitScreen(session, "? for shortcuts")
+
+	seed := plantSeedAs(t, cli, "peer", "Ship the release")
+	if _, err := cli.SeedWatch(protocol.SessionID(session), seed, false); err != nil {
+		t.Fatalf("watch the release: %v", err)
+	}
+	if _, err := cli.SeedNote("peer", seed, "the release is tagged", "", true, nil); err != nil {
+		t.Fatalf("ring the watcher: %v", err)
+	}
+	if got := run.Prompted(); !strings.Contains(got, inboxDoorbell) || !run.ThroughMod || run.AsUser {
+		t.Fatalf("the seed update reached the agent as %q (through the mod: %t, as the user: %t), want the doorbell in attn's voice", got, run.ThroughMod, run.AsUser)
+	}
 }
 
 func TestAfterEscAnInboxRingWaitsUnreadUntilTheUsersNextPrompt(t *testing.T) {
@@ -201,9 +254,7 @@ func TestAfterEscAnAskAnswerWaitsForTheUsersNextPrompt(t *testing.T) {
 
 	workingOn(t, app, run, session, "carry on")
 	modEvent(t, run, fakeagent.ModEventHeld, cacheAnswerText)
-	if appended := run.ModToolBoundary(); len(appended) != 1 || !strings.Contains(appended[0], cacheAnswerText) {
-		t.Fatalf("the tool boundary appended %v, want the ask's answer", appended)
-	}
+	submittedAtTurnEnd(t, run, cacheAnswerText, true)
 }
 
 func heldRingAndAnnotation(t *testing.T, w *world, app *testworld.Peer, run *fakeagent.Run, session string) {
@@ -227,10 +278,7 @@ func TestEscReturnsAHeldRingToUnreadAndTypesAHeldAnnotationOnce(t *testing.T) {
 	}
 	modEvent(t, run, fakeagent.ModEventRefusedStop, "check the rounding")
 	typedOnce(t, app, run, session, "check the rounding")
-	run.Reply("Done. <!-- attn:state=waiting_input -->")
-	if got := run.Prompted(); !strings.Contains(got, cacheAnswerText) || !run.ThroughMod {
-		t.Fatalf("the agent took %q (through the mod: %t), want the returned answer through the mod", got, run.ThroughMod)
-	}
+	submittedAtTurnEnd(t, run, cacheAnswerText, true)
 }
 
 func TestLosingTheModReturnsWhatItHeld(t *testing.T) {
@@ -594,9 +642,10 @@ func TestAMessageDuringATurnsPermissionQuestionWaitsInTheMod(t *testing.T) {
 
 	delivered(t, app, session, "check the rounding")
 	modEvent(t, run, fakeagent.ModEventHeld, "check the rounding")
-	if appended := run.ModToolBoundary(); len(appended) != 1 || appended[0] != "check the rounding" {
-		t.Fatalf("the tool boundary appended %v, want the annotation", appended)
+	if err := w.Client().UpdateState(protocol.TerminalID(w.Terminal(session)), protocol.StateWorking); err != nil {
+		t.Fatalf("approve: %v", err)
 	}
+	submittedAtTurnEnd(t, run, "check the rounding", true)
 }
 
 func TestAQuestionOutsideATurnKeepsAMessageFromTheMod(t *testing.T) {
@@ -609,9 +658,7 @@ func TestAQuestionOutsideATurnKeepsAMessageFromTheMod(t *testing.T) {
 	if got := submitSessionAnnotationFeedback(app, session, "check the rounding"); got.status != "skipped_pending_approval" {
 		t.Fatalf("the annotation was answered %+v, want it kept for a retry", got)
 	}
-	if appended := run.ModToolBoundary(); len(appended) != 0 {
-		t.Fatalf("the mod took %v", appended)
-	}
+	nothingElsePrompted(t, app, run, session)
 }
 
 func TestAMessageDuringATurnsQuestionIsNotTypedWithoutTheMod(t *testing.T) {
@@ -677,9 +724,7 @@ func TestAnAnswerDuringAUsersPermissionQuestionKeepsTheirTurnOwedAcrossARestart(
 			}
 			resumed := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 			if tc.answer {
-				if appended := run.ModToolBoundary(); len(appended) != 1 || !strings.Contains(appended[0], cacheAnswerText) {
-					t.Fatalf("the tool boundary appended %v, want the answer", appended)
-				}
+				submittedAtTurnEnd(t, run, cacheAnswerText, true)
 			}
 			run.Reply("an invalid flag <!-- attn:state=waiting_input -->")
 			stopped := testworld.AwaitStateAfter(app, resumed, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
@@ -743,7 +788,7 @@ func TestAQuickCaptureThroughTheModOpensTheUsersTurn(t *testing.T) {
 	working = testworld.AwaitStateAfter(app, settled, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	sendQuickCapture(t, app, sessionMailbox(session), "what did the reviewer say?")
 	modEvent(t, run, fakeagent.ModEventHeld, "what did the reviewer say?")
-	run.ModToolBoundary()
+	submittedAtTurnEnd(t, run, "what did the reviewer say?", true)
 	run.Reply("They approved. <!-- attn:state=waiting_input -->")
 	steered := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 	if !protocol.Deref(steered.TurnOwed) || protocol.Deref(steered.TurnByAgent) {

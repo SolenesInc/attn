@@ -108,7 +108,7 @@ func TestAnAnsweredAskIsTypedIntoTheAgentsConversationAndHandsItsTurnBack(t *tes
 	}
 }
 
-func TestATypedAnswerEndsWithTheDoorbellForTheItemsLeftUnread(t *testing.T) {
+func TestATypedAnswerRingsAloneAndTheDoorbellFollowsForTheItemsLeftUnread(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		setSetting(t, app, "asks_enabled", "true")
@@ -126,12 +126,12 @@ func TestATypedAnswerEndsWithTheDoorbellForTheItemsLeftUnread(t *testing.T) {
 		w.advance(sessionmonitor.QuietWindow)
 
 		pasted := asker.term.Pasted()
-		if len(pasted) != 1 {
-			t.Fatalf("once the user was quiet attn pasted %q, want one ring", pasted)
+		if len(pasted) != 1 || !strings.Contains(pasted[0], "Answer: Postgres") || strings.Contains(pasted[0], inboxDoorbell) {
+			t.Fatalf("once the user was quiet attn pasted %q, want the answer in a ring of its own", pasted)
 		}
-		answer, doorbell := strings.Index(pasted[0], "Answer: Postgres"), strings.Index(pasted[0], inboxDoorbell)
-		if answer < 0 || doorbell < answer || !strings.HasSuffix(pasted[0], inboxDoorbell) {
-			t.Fatalf("the agent was typed %q, want the answer then the doorbell for the peer message", pasted[0])
+		asker.reply("Postgres it is. <!-- attn:state=idle -->")
+		if pasted := asker.term.Pasted(); len(pasted) != 2 || !strings.HasSuffix(pasted[1], inboxDoorbell) {
+			t.Fatalf("after the answer's run attn pasted %q, want the doorbell for the peer message next", pasted)
 		}
 		left := readInbox(t, cli, asker.id, 0).Items
 		if len(left) != 1 || left[0].Kind != "peer_message" {

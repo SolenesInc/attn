@@ -301,7 +301,6 @@ func TestAUserSteeringARunTheAgentStartedKeepsItsStartCause(t *testing.T) {
 			steer(app, session)
 			if name == "annotation" {
 				modEvent(t, agent, fakeagent.ModEventHeld, "also run the linter")
-				agent.ModToolBoundary()
 			} else {
 				agent.Prompted()
 			}

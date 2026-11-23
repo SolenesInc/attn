@@ -120,8 +120,10 @@ a Quick Capture, or a change to a seed's authorization. It stands for the user
 typing into the agent, so attn types it into the agent's conversation as the
 user's message in a ring (see
 [Rings](#rings)), and harness auto-mode reviewers count an approval in the
-message as the user's. User input does not wait for the agent to finish its
-turn, for the 5 minutes between rings, or for a crew member's mail-start limit.
+message as the user's. User input does not wait for the 5 minutes between rings
+or for a crew member's mail-start limit. attn types it without waiting for the
+agent to finish its turn, but the Claude mod holds it to the turn's end (see
+[With the Claude mod](#with-the-claude-mod)).
 `attn agent inbox` never returns user input. Each piece of user input is its own
 item.
 
@@ -212,21 +214,21 @@ Rings coalesce too. One ring covers every unread item at an address. See
 
 ## Rings
 
-A ring is one prompt that covers every unread item at the address. attn types
-the text of each unread piece of user input in the ring, oldest first. When other
-unread items remain, attn ends the ring with the line "📬 You have unread items
-in your attn inbox. Run attn agent inbox to read them." The text of those items
-stays in the inbox. A session that holds several addresses with unread items
-gets one ring for each address.
+A ring is one prompt for one address. When the address has unread user input,
+the ring types each piece of it, oldest first, and nothing else. Otherwise the
+ring is the line "📬 You have unread items in your attn inbox. Run attn agent
+inbox to read them.", and the text of the unread items stays in the inbox. The
+user's words and the 📬 line never share a ring, so the harness can deliver each
+in its own voice: the 📬 line for the other items follows in a ring of its own.
+A session that holds several addresses with unread items gets one ring for each
+address.
 
 Once attn has placed a ring in the session, attn records the session as the
 reader of the ring's user input. attn never checks that the agent acted on
 that input. A ring lost to an open menu in the harness stays lost.
 
 - attn types user input while the agent works or is at a safe prompt, and
-  adds the 📬 line only at a safe prompt. A ring placed while the agent
-  works types its user input alone. The 📬 line for the other items waits for
-  the prompt.
+  rings the 📬 line only at a safe prompt.
 - A safe prompt is an agent that is idle or waiting, an agent parked on its
   background work, or an agent in a state attn cannot tell. A parked agent shows
   as working but has stopped at its prompt. An agent in a state attn cannot tell
@@ -266,6 +268,16 @@ Claude session that attn resumed for a standby seed's mail: attn waits for its
 mod and never types (see [A seed on standby](#a-seed-on-standby)). With the mod
 connected:
 
+- The mod submits each ring as a prompt. A ring of user input goes as the user's
+  words (`asUser`), so auto mode counts an approval in it as the user's. A 📬
+  ring goes in attn's voice: the model reads it after "The attn plugin sent a
+  message:", and auto mode does not count it as the user's.
+- While a turn runs, the mod holds every ring and adds nothing to the turn: since
+  Claude Code 2.1.326 anything a plugin adds to a running turn reaches the model
+  as a note that is not from the user ([Claude Code](harnesses/claude.md)). When
+  the turn ends, the mod submits the user input it holds as one prompt. A 📬 ring
+  it holds waits for the end of the turn that prompt starts, so each voice gets a
+  prompt of its own.
 - After the user stops the session with Esc while Claude works, the mod refuses
   every ring. Its items stay unread, the refusal costs no attempt, and attn rings
   again at the session's next state change after the user's next prompt.
@@ -332,9 +344,8 @@ retain their existing attempt counts. A successful ring records its receipt
 and clears the pending attempt in one transaction, with the same counting
 rules as other rings.
 
-A driver that accepts attributed input receives annotations and rings containing
-only typed user input as `voice: "user"`. Rings with notices use `voice: "attn"`,
-even when they also carry user input. Each attributed input names the expected
+A driver that accepts attributed input receives annotations and rings of user
+input as `voice: "user"`, and rings with the 📬 line as `voice: "attn"`. Each attributed input names the expected
 native conversation. Input waits until that conversation is known. A driver that
 promises permission-safe delivery can accept annotations during a running
 turn's approval without answering it. The existing inbox policy still decides
@@ -344,7 +355,7 @@ when to ring.
 
 A notification run is a run that attn's own input started: a ring, or a crew
 member's heartbeat. A Quick Capture is the user's own input, so a ring that
-carries one starts the user's run, even with other items in the same ring. If
+carries one starts the user's run. If
 the user types into the agent during a notification run, or a Quick Capture
 reaches it, the run becomes the user's. The user's answer to an ask and a change
 to a seed's authorization do not change whose run it is.

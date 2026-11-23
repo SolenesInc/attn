@@ -118,7 +118,7 @@ func (p *plugTerminal) handleInput(_ *rpcPeer, method string, raw json.RawMessag
 		p.inputs = map[string]bool{}
 	}
 	if !p.inputs[in.InputID] {
-		p.agent.place(in.Text, false)
+		p.agent.place(promptSubmission{text: in.Text})
 		p.inputs[in.InputID] = true
 	}
 	return okResult{OK: true}, nil

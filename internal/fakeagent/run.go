@@ -17,6 +17,7 @@ type Run struct {
 	Env            []string
 	Yolo           bool
 	ThroughMod     bool
+	AsUser         bool
 	t              testing.TB
 	fake           *fake
 	kit            *Kit
@@ -28,6 +29,7 @@ func (r *Run) Prompted() string {
 	r.call(methodPrompted, struct{}{}, &prompted)
 	r.ConversationID = prompted.ConversationID
 	r.ThroughMod = prompted.ThroughMod
+	r.AsUser = prompted.AsUser
 	return prompted.Text
 }
 
@@ -101,13 +103,6 @@ func (r *Run) ModNext() ModEvent {
 	var event ModEvent
 	r.call(methodModNext, struct{}{}, &event)
 	return event
-}
-
-func (r *Run) ModToolBoundary() []string {
-	r.t.Helper()
-	var appended []string
-	r.call(methodModTool, struct{}{}, &appended)
-	return appended
 }
 
 func (r *Run) ModEsc() []string {

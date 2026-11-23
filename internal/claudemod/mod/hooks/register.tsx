@@ -4,15 +4,12 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Message, Request } from '../types'
 
 type Link = { terminal: string; socketPath: string }
-type Outcome = 'submitted' | 'held' | 'appended' | 'refused'
+type Outcome = 'submitted' | 'held' | 'refused'
 type Compacted = 'compacted' | 'skipped' | 'busy' | 'ready' | 'failed'
 
 const POLL_RETRY_MS = 1000
 const RING_ID_PREFIX = 'inbox-ring/'
 const BETWEEN_TURNS_ONLY = ['compacts between turns', 'a newer turn began']
-const MID_TURN_HEAD = 'The user sent a new message while you were working:\n'
-const MID_TURN_TAIL =
-  '\n\nThis is how Claude Code surfaces messages the user sends mid-turn — within the running turn, often alongside the next tool result, rather than as a separate conversation turn. Address the message above as you continue this turn.'
 
 const persistedTurnRunning = atom({ plugin: 'attn', key: 'isTurnRunning' } as const, false)
 const heldLines = atom({ plugin: 'attn', key: 'heldLines' } as const, [] as string[])
@@ -22,7 +19,7 @@ const instance = crypto.randomUUID()
 let link: Link = { terminal: '', socketPath: '' }
 let isTurnRunning = false
 let isStopped = false
-let held: Message[] = []
+let queued: Message[] = []
 let givenBack: Message[] = []
 let lastRequest: Promise<void> = Promise.resolve()
 let turnsEnded = 0
@@ -30,10 +27,6 @@ let compactRefused = false
 
 function firstLine(text: string): string {
   return text.split('\n', 1)[0] ?? ''
-}
-
-function oneRow(text: string): string {
-  return text.replace(/\s*\n\s*/g, ' ')
 }
 
 function post($: EngineInterface, path: string, body: object, answered?: (text: string) => void): Promise<void> {
@@ -95,8 +88,8 @@ function reportBetweenTurns($: EngineInterface): Promise<void> {
   return post($, '/claude/compacted', { outcome: 'ready' })
 }
 
-function setHeld($: EngineInterface, messages: Message[]): Promise<unknown> {
-  held = messages
+function setQueued($: EngineInterface, messages: Message[]): Promise<unknown> {
+  queued = messages
   return update($, heldLines, () => messages.map(message => firstLine(message.text)))
 }
 
@@ -105,9 +98,9 @@ function listWaiting($: EngineInterface, messages: Message[]): Promise<unknown> 
   return update($, waitingLines, lines => [...new Set([...lines, ...rings.map(ring => firstLine(ring.text))])])
 }
 
-async function submit($: EngineInterface, text: string): Promise<string | undefined> {
+async function submit($: EngineInterface, text: string, asUser: boolean): Promise<string | undefined> {
   try {
-    const entered = await $.prompt.submit({ text, asUser: true })
+    const entered = await $.prompt.submit({ text, asUser })
     return 'drop' in entered ? entered.drop : undefined
   } catch (err) {
     return String(err)
@@ -124,10 +117,10 @@ async function place($: EngineInterface, message: Message): Promise<void> {
     return refuseStopped($, message)
   }
   if (isTurnRunning) {
-    await Promise.all([setHeld($, [...held, message]), ack($, message.id, 'held')])
+    await Promise.all([setQueued($, [...queued, message]), ack($, message.id, 'held')])
     return
   }
-  const drop = await submit($, message.text)
+  const drop = await submit($, message.text, message.user_words === true)
   if (drop === undefined) {
     return ack($, message.id, 'submitted')
   }
@@ -188,35 +181,20 @@ async function pollForever($: EngineInterface): Promise<void> {
   }
 }
 
-async function appendHeld($: EngineInterface): Promise<void> {
-  const messages = held
-  if (messages.length === 0) {
-    return
-  }
-  await setHeld($, [])
-  for (const message of messages) {
-    const { text } = message
-    const appended = await $.session
-      .append({ message: { type: 'user', content: [{ type: 'text', text: MID_TURN_HEAD + text + MID_TURN_TAIL }] } })
-      .catch((err: unknown) => ({ deny: String(err) }))
-    if (appended.deny !== undefined) {
-      $.ui.log(`attn takes this back, Claude refused it (${appended.deny}): ${oneRow(text)}`, { to: 'debug' })
-      await giveBack($, [message])
-      continue
-    }
-    $.ui.log(`❯ ${oneRow(text)}`)
-    await ackHeld($, message, 'appended')
-  }
+function nextPrompt(messages: Message[]): { prompt: Message[]; rest: Message[] } {
+  const asUser = messages.some(message => message.user_words === true)
+  const inVoice = (message: Message) => (message.user_words === true) === asUser
+  return { prompt: messages.filter(inVoice), rest: messages.filter(message => !inVoice(message)) }
 }
 
-async function submitLeftOver($: EngineInterface, messages: Message[]): Promise<void> {
-  const drop = await submit($, messages.map(message => message.text).join('\n\n'))
+async function submitPrompt($: EngineInterface, prompt: Message[]): Promise<void> {
+  const drop = await submit($, prompt.map(message => message.text).join('\n\n'), prompt[0]?.user_words === true)
   if (drop !== undefined) {
-    const back = [...messages, ...held]
-    await Promise.all([setHeld($, []), setTurnRunning($, false)])
+    const back = [...prompt, ...queued]
+    await Promise.all([setQueued($, []), setTurnRunning($, false)])
     return giveBack($, back)
   }
-  for (const message of messages) {
+  for (const message of prompt) {
     await ackHeld($, message, 'submitted')
   }
 }
@@ -229,7 +207,7 @@ export const register: Register = on => {
       socketPath: (await $.env.get('ATTN_CLAUDE_MOD_SOCKET')) ?? '',
     }
     isTurnRunning = await read($, persistedTurnRunning)
-    await setHeld($, [])
+    await setQueued($, [])
     void pollForever($)
     return started
   })
@@ -243,48 +221,44 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('tool.call', async ($, e, next) => {
-    const result = await next(e)
-    if (e.agentId === undefined && next.signal.aborted !== true) {
-      await appendHeld($)
-    }
-    return result
-  })
-
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
     if (e.agentId !== undefined) {
       return result
     }
-    const leftOver = held
     isStopped = e.isAborted
-    await Promise.all([setHeld($, []), setTurnRunning($, !isStopped && leftOver.length > 0)])
     if (isStopped) {
+      const leftOver = queued
+      await Promise.all([setQueued($, []), setTurnRunning($, false)])
       await listWaiting($, leftOver)
       if (leftOver.length > 0) {
         await giveBack($, leftOver)
       }
-    } else if (leftOver.length > 0) {
-      void submitLeftOver($, leftOver)
+      return result
+    }
+    const { prompt, rest } = nextPrompt(queued)
+    await Promise.all([setQueued($, rest), setTurnRunning($, prompt.length > 0)])
+    if (prompt.length > 0) {
+      void submitPrompt($, prompt)
     }
     return result
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const steers = await read($, heldLines)
+    const held = await read($, heldLines)
     const waiting = await read($, waitingLines)
-    if (e.props.hasSurvey || (steers.length === 0 && waiting.length === 0)) {
+    if (e.props.hasSurvey || (held.length === 0 && waiting.length === 0)) {
       return next(e)
     }
     const { Box, Text } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
-        {steers.map((line, index) => (
-          <Text key={`steer-${index}`} wrap="truncate">
+        {held.map((line, index) => (
+          <Text key={`held-${index}`} wrap="truncate">
             ❯ {line}
           </Text>
         ))}
-        {steers.length > 0 && <Text dimColor>attn adds this after the current tool call</Text>}
+        {held.length > 0 && <Text dimColor>attn sends this when the turn ends</Text>}
         {waiting.length > 0 && <Text dimColor>Waiting in attn — sent with your next prompt</Text>}
         {waiting.map((line, index) => (
           <Text key={`waiting-${index}`} dimColor wrap="truncate">

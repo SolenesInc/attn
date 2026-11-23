@@ -88,10 +88,12 @@ On a `fakeagent.Run`:
 - Claude launched with `--plugin-dir` also runs a fake mod that polls the
   daemon's mod socket. Worlds with in-memory terminals launch Claude without the
   mod, because no agent process can reach a socket there. After
-  `Prompted`, `ThroughMod` says whether the prompt came through the mod.
+  `Prompted`, `ThroughMod` says whether the prompt came through the mod, and
+  `AsUser` whether the mod submitted it as the user's words.
   `ModNext` returns what the mod did next with a message it could not submit:
-  held it, refused it as stopped, or lost its poll to a newer one.
-  `ModToolBoundary` appends what it holds, `ModEsc` stops the session and returns
+  held it, refused it as stopped, or lost its poll to a newer one. A held
+  message goes when the turn ends: the user's words as one prompt, then attn's
+  own in the next. `ModEsc` stops the session and returns
   what it held, `ModReload` draws a new instance id, and `ModStopPolling` stops
   its polls. Wait for `claudemod.PollHoldTimer` to know a poll is open.
   The mod answers a compact request with `busy` while a turn runs, as real

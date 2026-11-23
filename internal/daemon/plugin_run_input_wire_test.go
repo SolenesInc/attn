@@ -509,7 +509,7 @@ func TestADeferredPluginNoticeDoesNotHoldBackTheUsersInputDuringWork(t *testing.
 	})
 }
 
-func TestAPluginRingWithUserTextAndAnInboxNoticeKeepsAttnsVoice(t *testing.T) {
+func TestAPluginGetsTheUsersTextAndAnInboxNoticeAsTwoRingsInTheirOwnVoices(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.TrustedApp(), w.Client()
 		driver := connectDriver(t, w, "independent-plugin", "independent", map[string]bool{"state_reporting": true, "message_delivery": true, "attributed_input": true})
@@ -529,10 +529,21 @@ func TestAPluginRingWithUserTextAndAnInboxNoticeKeepsAttnsVoice(t *testing.T) {
 		}
 		var input deliveredMessage
 		held := driver.asked("driver.deliver_message", &input)
-		if input.Voice != "attn" || !strings.Contains(input.Text, capture.Content) || !strings.Contains(input.Text, inboxDoorbell) {
-			t.Fatalf("mixed input=%+v", input)
+		if input.Voice != "user" || !strings.Contains(input.Text, capture.Content) || strings.Contains(input.Text, inboxDoorbell) {
+			t.Fatalf("the user's input=%+v, want the capture alone in the user's voice", input)
 		}
 		driver.answer(held, map[string]bool{"ok": true})
 		testworld.Await(app, protocol.EventQuickCaptureRead, func(m protocol.QuickCaptureReadMessage) bool { return m.CaptureID == capture.CaptureID })
+		if err := driver.state(run, 4, protocol.StateWorking); err != nil {
+			t.Fatal(err)
+		}
+		if err := driver.state(run, 5, protocol.StateIdle); err != nil {
+			t.Fatal(err)
+		}
+		var notice deliveredMessage
+		driver.answer(driver.asked("driver.deliver_message", &notice), map[string]bool{"ok": true})
+		if notice.Voice != "attn" || !strings.Contains(notice.Text, inboxDoorbell) || strings.Contains(notice.Text, capture.Content) {
+			t.Fatalf("the notice=%+v, want the doorbell alone in attn's voice", notice)
+		}
 	})
 }

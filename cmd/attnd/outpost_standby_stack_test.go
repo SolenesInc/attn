@@ -139,9 +139,7 @@ func TestAnAnswerReturnedBeforeItsPlacementAnswersReachesClaudeOnTheNextTurn(t *
 	mark := len(m.app.Log())
 	m.workingOn(t, m.app, "carry on")
 	m.modEvent(t, fakeagent.ModEventHeld, "Answer: Postgres")
-	if appended := m.run.ModToolBoundary(); len(appended) != 1 || !strings.Contains(appended[0], "Answer: Postgres") {
-		t.Fatalf("the tool boundary appended %v, want the answer", appended)
-	}
+	m.submittedAtTurnEnd(t, "Answer: Postgres", true)
 	testworld.AwaitSince(m.app, mark, protocol.EventGardenSeedsChanged, func(changed protocol.GardenSeedsChangedMessage) bool {
 		for _, s := range changed.Seeds {
 			if s.ID == seed && s.Standby == nil {

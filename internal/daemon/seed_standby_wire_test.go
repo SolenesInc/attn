@@ -339,9 +339,7 @@ func TestAnAnswerTheModHoldsKeepsTheSeedOnStandbyUntilClaudeTakesIt(t *testing.T
 	mark := len(app.Log())
 	workingOn(t, app, run, session, "carry on")
 	modEvent(t, run, fakeagent.ModEventHeld, cacheAnswerText)
-	if appended := run.ModToolBoundary(); len(appended) != 1 || !strings.Contains(appended[0], cacheAnswerText) {
-		t.Fatalf("the tool boundary appended %v, want the answer", appended)
-	}
+	submittedAtTurnEnd(t, run, cacheAnswerText, true)
 	awaitStandbyEnded(t, app, mark, seed)
 }
 
@@ -379,9 +377,7 @@ func TestAnAnswerReturnedBeforeItsPlacementAnswersStaysUnreadOnStandby(t *testin
 	mark := len(app.Log())
 	workingOn(t, app, run, session, "carry on")
 	modEvent(t, run, fakeagent.ModEventHeld, cacheAnswerText)
-	if appended := run.ModToolBoundary(); len(appended) != 1 || !strings.Contains(appended[0], cacheAnswerText) {
-		t.Fatalf("the tool boundary appended %v, want the answer", appended)
-	}
+	submittedAtTurnEnd(t, run, cacheAnswerText, true)
 	awaitStandbyEnded(t, app, mark, seed)
 }
 

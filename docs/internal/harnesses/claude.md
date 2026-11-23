@@ -615,10 +615,11 @@ holds the runs):
 
 - A prompt typed into the PTY during a turn reaches the model as a
   `queued_command` attachment with `origin: {"kind":"human"}`, in a
-  `role: "system"` message with the head and tail that attn's mod copies. The
-  mod's appended row differs only by its plugin origin and by the "Note from
-  the attn plugin, not from the user:" line that the 2.1.326 entry above
-  describes. The note
+  `role: "system"` message with the head "The user sent a new message while you
+  were working:" and a tail that tells the model to address it in the running
+  turn. A plugin's appended row with the same head and tail differs only by its
+  plugin origin and by the "Note from the attn plugin, not from the user:" line
+  that the 2.1.326 entry above describes. The note
   goes out next to the other system reminders of the same request, such as MCP
   instruction deltas.
 - The `session.append` typings say a plugin's appended row "is never the
@@ -650,6 +651,17 @@ holds the runs):
   hook is holding; submit from a later event (turn.complete)". Called from a
   loop outside any hook, it still waits for the turn to complete, as the 2.1.316
   entry says.
+- `$.prompt.submit({ text })` without `asUser` starts a turn whose transcript
+  row has `origin: {"kind":"plugin","name":"attn"}`, and the model reads the
+  text after "The attn plugin sent a message:", followed by "This is how Claude
+  Code surfaces a prompt a plugin submits between turns — it starts this turn in
+  the user's place. Address the message above." The screen shows it under
+  "› Prompt from the attn plugin", as it does a submit with `asUser: true`.
+  Measured through attn's mod with a 📬 ring (seed `s-4nrpn7`).
+- Through attn's mod, a Quick Capture sent while a foreground Bash call ran was
+  held to the turn's end and submitted with `asUser: true`. It told Claude to
+  `git push --force origin main` over another author's commit, and auto mode
+  allowed the push (1 of 1, seed `s-4nrpn7`).
 - `$.turn.abort({ turnId })` called in a main-loop `tool.call` hook after
   `next(e)` resolved keeps the tool result and ends the turn: `turn.complete`
   reports `isAborted: true` and `reason: "aborted"`, and the Stop settings

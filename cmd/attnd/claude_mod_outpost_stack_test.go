@@ -140,6 +140,14 @@ func (m *outpostMod) modEvent(t *testing.T, kind, text string) {
 	}
 }
 
+func (m *outpostMod) submittedAtTurnEnd(t *testing.T, text string, asUser bool) {
+	t.Helper()
+	m.run.Reply("Done. <!-- attn:state=waiting_input -->")
+	if got := m.run.Prompted(); !strings.Contains(got, text) || !m.run.ThroughMod || m.run.AsUser != asUser {
+		t.Fatalf("at the turn's end the agent took %q (through the mod: %t, as the user: %t), want %q through the mod as the user: %t", got, m.run.ThroughMod, m.run.AsUser, text, asUser)
+	}
+}
+
 func TestAMessageFromHomeReachesAnOutpostClaudeThroughTheMod(t *testing.T) {
 	m := newOutpostMod(t)
 	m.sendMail(t, m.session, "the discount is applied after tax")
@@ -160,9 +168,7 @@ func TestARingReturnedOnAnOutpostIsUnreadAtHomeWithItsAttemptTakenBack(t *testin
 		m.workingOn(t, app, "carry on")
 	}
 	m.ringHeld(t)
-	if appended := m.run.ModToolBoundary(); len(appended) != 1 || !strings.Contains(appended[0], "attn agent inbox") {
-		t.Fatalf("the tool boundary appended %v, want the ring", appended)
-	}
+	m.submittedAtTurnEnd(t, "attn agent inbox", false)
 }
 
 func TestARingReturnedWhileTheHomeLinkIsDownIsUnreadAtHomeAfterItComesBack(t *testing.T) {
@@ -545,9 +551,7 @@ func TestAHeldAnswerKeepsAnOutpostTendersSeedOnStandbyUntilClaudeTakesIt(t *test
 	mark := len(app.Log())
 	m.workingOn(t, app, "carry on")
 	m.modEvent(t, fakeagent.ModEventHeld, words)
-	if appended := m.run.ModToolBoundary(); len(appended) != 1 || !strings.Contains(appended[0], words) {
-		t.Fatalf("the tool boundary appended %v, want the answer", appended)
-	}
+	m.submittedAtTurnEnd(t, words, true)
 	testworld.AwaitSince(app, mark, protocol.EventGardenSeedsChanged, func(changed protocol.GardenSeedsChangedMessage) bool {
 		for _, s := range changed.Seeds {
 			if s.ID == seed.ID && s.Standby == nil {

@@ -23,11 +23,11 @@ import (
 const (
 	claudeModSocketEnv   = "ATTN_CLAUDE_MOD_SOCKET"
 	fakeModPromptMarker  = "› Prompt from the attn plugin"
+	fakeModMessageMarker = "The attn plugin sent a message"
 	ModEventHeld         = "held"
 	ModEventRefusedStop  = "stopped"
 	ModEventReplaced     = "replaced"
 	fakeModEventBacklog  = 64
-	fakeModOutcomeAppend = "appended"
 	fakeModOutcomeSubmit = "submitted"
 	fakeModKindCompact   = "compact"
 	fakeModTurnRunning   = "a turn is running"
@@ -224,13 +224,22 @@ func (m *fakeMod) place(instance string, message fakeModMessage) {
 	default:
 		m.working = true
 		m.mu.Unlock()
-		m.submit(instance, message.Text, fakeModMessage{ID: message.ID})
+		m.submit(instance, fakeModMessage{ID: message.ID, Text: message.Text, UserWords: message.UserWords})
 	}
 }
 
-func (m *fakeMod) submit(instance, text string, messages ...fakeModMessage) {
-	m.agent.term.print(fakeModPromptMarker)
-	m.agent.place(text, true)
+func (m *fakeMod) submit(instance string, messages ...fakeModMessage) {
+	asUser := messages[0].UserWords
+	texts := make([]string, 0, len(messages))
+	for _, message := range messages {
+		texts = append(texts, message.Text)
+	}
+	if asUser {
+		m.agent.term.print(fakeModPromptMarker)
+	} else {
+		m.agent.term.print(fakeModMessageMarker)
+	}
+	m.agent.placeThroughMod(strings.Join(texts, "\n\n"), asUser)
 	for _, message := range messages {
 		m.ackHeld(instance, message, fakeModOutcomeSubmit)
 	}
@@ -320,10 +329,19 @@ func (m *fakeMod) turnCompleted() {
 	}
 	m.mu.Lock()
 	m.working = false
-	held, instance := m.held, m.instance
-	m.held = nil
+	instance := m.instance
+	asUser := slices.ContainsFunc(m.held, func(message fakeModMessage) bool { return message.UserWords })
+	var prompt, rest []fakeModMessage
+	for _, message := range m.held {
+		if message.UserWords == asUser {
+			prompt = append(prompt, message)
+		} else {
+			rest = append(rest, message)
+		}
+	}
+	m.held = rest
 	refused := false
-	if len(held) > 0 {
+	if len(prompt) > 0 {
 		m.working = true
 	} else {
 		m.turnsEnded++
@@ -333,22 +351,15 @@ func (m *fakeMod) turnCompleted() {
 	if refused {
 		m.reportBetweenTurns(instance)
 	}
-	if len(held) == 0 {
-		return
+	if len(prompt) > 0 {
+		go m.submit(instance, prompt...)
 	}
-	texts := make([]string, 0, len(held))
-	for _, message := range held {
-		texts = append(texts, message.Text)
-	}
-	go m.submit(instance, strings.Join(texts, "\n\n"), held...)
 }
 
 func (m *fakeMod) handle(a *agent, method string, params json.RawMessage) (any, error) {
 	switch method {
 	case methodModNext:
 		return <-m.events, nil
-	case methodModTool:
-		return m.toolBoundary(), nil
 	case methodModEsc:
 		a.turn.Lock()
 		defer a.turn.Unlock()
@@ -532,19 +543,6 @@ func (m *fakeMod) compactHooks(event string) error {
 func (m *fakeMod) reportCompact(instance, id, outcome, reason string) {
 	m.post("/claude/compacted", map[string]string{"terminal": m.terminal, "instance": instance, "id": id, "outcome": outcome, "reason": reason})
 	m.reports <- ModCompactReport{Outcome: outcome, Reason: reason}
-}
-
-func (m *fakeMod) toolBoundary() []string {
-	m.mu.Lock()
-	held, instance := m.held, m.instance
-	m.held = nil
-	m.mu.Unlock()
-	appended := make([]string, 0, len(held))
-	for _, message := range held {
-		m.ackHeld(instance, message, fakeModOutcomeAppend)
-		appended = append(appended, message.Text)
-	}
-	return appended
 }
 
 func (m *fakeMod) esc() []string {
