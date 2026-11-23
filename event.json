@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Clearing a note that opened on its own hides it and loses keystrokes",
+  "at": "2026-11-23T12:50:50.995Z",
+  "repairs": "3264856fed3632a4afbdde5f1a022287cf4e02c5"
+}
