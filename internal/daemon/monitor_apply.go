@@ -234,7 +234,7 @@ func runtimeStateOf(view sessionmonitor.View) store.SessionRuntimeState {
 	state, turn, driver := view.State.V, view.Turn.V, view.RunRecord.V
 	return store.SessionRuntimeState{
 		Live: view.Live.V, State: state.State, Since: state.Since, Updated: state.Updated,
-		Turn:                       store.TurnStamps{OpenedAt: turn.OpenedAt, SettledAt: turn.SettledAt, SnoozedUntil: turn.SnoozedUntil, AgentAt: turn.AgentAt, RequestedAt: turn.RequestedAt},
+		Turn:                       store.TurnStamps{OpenedAt: turn.OpenedAt, SettledAt: turn.SettledAt, SnoozedUntil: turn.SnoozedUntil, AgentAt: turn.AgentAt, RequestedAt: turn.RequestedAt, CaptureAt: turn.CaptureAt},
 		LastModelRequestAt:         view.LastModelRequestAt.V,
 		Driver:                     store.AgentDriverReportCursor{PluginName: driver.Owner, RunID: driver.ID, Seq: driver.Sequence, Route: driver.Route},
 		DriverMetadata:             driver.Note,

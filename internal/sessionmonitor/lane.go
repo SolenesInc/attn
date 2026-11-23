@@ -267,18 +267,21 @@ func (m *Monitor) Place(ctx context.Context, delivery Delivery) Attempt {
 		m.armAutoSettleForUserInput(credited)
 	}
 	if attempt.Stage == Placed && delivery.origin.kind == originMaintenance {
-		m.settleForRunningNotification()
+		m.notificationPlaced(delivery.carriesCapture())
 	}
 	return attempt
 }
 
-func (m *Monitor) settleForRunningNotification() {
+func (m *Monitor) notificationPlaced(capture bool) {
 	m.mu.Lock()
-	if m.state.State != protocol.SessionStateWorking {
+	working := m.state.State == protocol.SessionStateWorking
+	if !working && !capture {
 		m.mu.Unlock()
 		return
 	}
-	m.syncAutoSettleLocked()
+	if working {
+		m.syncAutoSettleLocked()
+	}
 	view := m.viewLocked()
 	m.mu.Unlock()
 	m.publish(view)
@@ -323,6 +326,7 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	}
 	steering := l.run != nil || duringQuestion
 	epochAtPlacing := l.epoch
+	runsAtPlacing, runOpenAtPlacing := m.runs.started, m.runs.open != nil
 	var attempt Attempt
 	handled := false
 	attempt, handled = l.placeOverConversationLocked(ctx, delivery, duringQuestion)
@@ -359,7 +363,11 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 		m.runSteeredLocked()
 	}
 	if delivery.carriesCapture() {
-		m.captureReplyAtStop = true
+		answering := runsAtPlacing
+		if attempt.Held || !runOpenAtPlacing {
+			answering++
+		}
+		m.captureAnsweredByLocked(answering)
 	}
 	credited := l.tookLocked(delivery, epochAtPlacing)
 	if !steering && !attempt.steered {

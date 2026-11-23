@@ -15,6 +15,7 @@ type TurnStamps struct {
 	SnoozedUntil time.Time
 	AgentAt      time.Time
 	RequestedAt  time.Time
+	CaptureAt    time.Time
 }
 
 type TurnOpening struct {
@@ -81,10 +82,11 @@ func (s *Store) turnStampsLocked(id protocol.SessionID) TurnStamps {
 		snoozed   string
 		agent     string
 		requested string
+		capture   string
 	)
 	err := s.db.QueryRow(
-		`SELECT turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, turn_requested_at FROM sessions_with_runtime WHERE id = ?`, id).
-		Scan(&opened, &settled, &snoozed, &agent, &requested)
+		`SELECT turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, turn_requested_at, turn_capture_at FROM session_runtime WHERE session_id = ?`, id).
+		Scan(&opened, &settled, &snoozed, &agent, &requested, &capture)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			log.Printf("[store] TurnStamps: failed for session %s: %v", id, err)
@@ -97,6 +99,7 @@ func (s *Store) turnStampsLocked(id protocol.SessionID) TurnStamps {
 		SnoozedUntil: parseTurnStamp(snoozed),
 		AgentAt:      parseTurnStamp(agent),
 		RequestedAt:  parseTurnStamp(requested),
+		CaptureAt:    parseTurnStamp(capture),
 	}
 }
 

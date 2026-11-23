@@ -90,8 +90,6 @@ type Monitor struct {
 	state                StateView
 	runRecord            RunRecord
 	turn                 TurnStamps
-	captureReplyAtStop   bool
-	captureReply         time.Time
 	lastModelRequestAt   time.Time
 	firstReportAt        time.Time
 	awaitingHarness      bool

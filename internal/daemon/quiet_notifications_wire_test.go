@@ -466,6 +466,105 @@ func TestTheReplyToACaptureClaudeHeldThroughItsTurnStaysOwedAfterTheDoorbellsRun
 	}
 }
 
+func TestTheReplyToACaptureClaudeHeldStaysOwedWhenTheUserSettledTheTurnBeforeIt(t *testing.T) {
+	w, _, cli := quietNotificationsWorld(t, true)
+	app := w.TrustedApp()
+	session, run := moddedClaude(t, w, app)
+	workingOn(t, app, run, session, "write the essay")
+	working := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+
+	capture := sendQuickCapture(t, app, sessionMailbox(session), "what did the reviewer say?")
+	modEvent(t, run, fakeagent.ModEventHeld, "what did the reviewer say?")
+	testworld.Await(app, protocol.EventQuickCaptureRead, func(m protocol.QuickCaptureReadMessage) bool { return m.CaptureID == capture.CaptureID })
+	submittedAtTurnEnd(t, run, "what did the reviewer say?", true)
+	essayDone := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	if !protocol.Deref(essayDone.TurnOwed) {
+		t.Fatal("the essay's run stopped without opening the user's turn")
+	}
+	replying := testworld.AwaitStateAfter(app, essayDone, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	settled := settleFromApp(app, replying)
+	run.Reply("They approved. <!-- attn:state=idle -->")
+	replied := testworld.AwaitStateAfter(app, settled, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if !protocol.Deref(replied.TurnOwed) || protocol.Deref(replied.TurnOpenedAt) == protocol.Deref(essayDone.TurnOpenedAt) {
+		t.Fatalf("the capture's reply shows owed=%t opened=%q, want a new turn after the essay's %q",
+			protocol.Deref(replied.TurnOwed), protocol.Deref(replied.TurnOpenedAt), protocol.Deref(essayDone.TurnOpenedAt))
+	}
+
+	captureReplyOwedThroughDoorbells(t, w, app, cli, run, session, replied)
+}
+
+func TestTheReplyToACaptureThatStopsBeforeItsPlacementReturnsStaysOwed(t *testing.T) {
+	w, app, cli := quietNotificationsWorld(t, true)
+	app = w.TrustedApp()
+	session, agent, owed := owingIdleAgent(t, w, app, cli)
+	settled := settleFromApp(app, owed)
+
+	handed := w.PauseAt(pausepoint.SessionInputHanded)
+	capture := sendQuickCapture(t, app, sessionMailbox(session), "What is the review status?")
+	agent.Prompted()
+	handed.Await()
+	working := testworld.AwaitStateAfter(app, settled, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	agent.Reply("The review is green. <!-- attn:state=idle -->")
+	replied := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if !protocol.Deref(replied.TurnOwed) {
+		t.Fatal("the capture's reply stopped without opening the user's turn")
+	}
+	handed.Release()
+	testworld.Await(app, protocol.EventQuickCaptureRead, func(m protocol.QuickCaptureReadMessage) bool { return m.CaptureID == capture.CaptureID })
+
+	captureReplyOwedThroughDoorbells(t, w, app, cli, agent, session, replied)
+}
+
+func TestTheReplyToACaptureStaysOwedThroughADoorbellAfterARestart(t *testing.T) {
+	w, _, cli := quietNotificationsWorld(t, true)
+	app := w.TrustedApp()
+	session, agent, owed := owingIdleAgent(t, w, app, cli)
+	settled := settleFromApp(app, owed)
+	sendQuickCapture(t, app, sessionMailbox(session), "What is the review status?")
+	agent.Prompted()
+	working := testworld.AwaitStateAfter(app, settled, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	agent.Reply("The review is green. <!-- attn:state=idle -->")
+	replied := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if !protocol.Deref(replied.TurnOwed) {
+		t.Fatal("the capture's reply stopped without opening the user's turn")
+	}
+
+	w.restart()
+	app = w.App()
+	w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+		m.ID = protocol.SessionID(session)
+		m.ResumeSessionID = protocol.Ptr(session)
+	})
+	resumed := w.Launched(session)
+	restored := testworld.AwaitSessionFromConnect(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if !protocol.Deref(restored.TurnOwed) || protocol.Deref(restored.TurnOpenedAt) != protocol.Deref(replied.TurnOpenedAt) {
+		t.Fatalf("after a restart the capture's reply shows owed=%v opened=%q, want it owed from %q",
+			protocol.Deref(restored.TurnOwed), protocol.Deref(restored.TurnOpenedAt), protocol.Deref(replied.TurnOpenedAt))
+	}
+	registerSessions(t, w, w.Client(), "reviewer")
+	captureReplyOwedThroughDoorbells(t, w, app, w.Client(), resumed, session, restored)
+}
+
+func captureReplyOwedThroughDoorbells(t *testing.T, w *world, app *testworld.Peer, cli *client.Client, agent *fakeagent.Run, session string, replied protocol.Session) {
+	t.Helper()
+	want := protocol.Deref(replied.TurnOpenedAt)
+	stopped := replied
+	for i := range 2 {
+		working, batch := notificationRunStarts(t, app, cli, agent, session, stopped, fmt.Sprintf("review round %d is in", i+1))
+		if shown := queriedSession(t, cli, session); !protocol.Deref(shown.TurnOwed) || protocol.Deref(shown.TurnOpenedAt) != want {
+			t.Fatalf("doorbell %d's run shows owed=%t opened=%q, want the capture's reply owed from %q", i+1, protocol.Deref(shown.TurnOwed), protocol.Deref(shown.TurnOpenedAt), want)
+		}
+		if protocol.Deref(batch.QuietNotifications) {
+			t.Errorf("doorbell %d: attn agent inbox told the agent the capture's reply left the queue", i+1)
+		}
+		stopped = runEnds(w, app, agent, working, "Nothing for this plot. <!-- attn:state=idle -->")
+		if !protocol.Deref(stopped.TurnOwed) || protocol.Deref(stopped.TurnByAgent) || protocol.Deref(stopped.TurnOpenedAt) != want {
+			t.Fatalf("after doorbell %d's run the session shows owed=%t by_agent=%t opened=%q, want the capture's reply owed from %q",
+				i+1, protocol.Deref(stopped.TurnOwed), protocol.Deref(stopped.TurnByAgent), protocol.Deref(stopped.TurnOpenedAt), want)
+		}
+	}
+}
+
 func TestWithTheQueueFlowOffAnAgentOpensAndSettlesItsOwnTurn(t *testing.T) {
 	w, app, cli := quietNotificationsWorld(t, true)
 	setSetting(t, app, "queue_mode_enabled", "false")

@@ -57,6 +57,7 @@ type TurnStamps struct {
 	SnoozedUntil time.Time
 	AgentAt      time.Time
 	RequestedAt  time.Time
+	CaptureAt    time.Time
 }
 
 type AutoSettleView struct {

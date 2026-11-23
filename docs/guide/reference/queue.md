@@ -160,7 +160,7 @@ Yes. Ask the Chief or an agent, or run `attn session snooze <id> --until <when>`
 <details>
 <summary>Do turns and snoozes survive a restart?</summary>
 
-Yes. Attn keeps owed turns and snoozes in its database, so restarting the app, the daemon or your machine doesn't settle a turn or lose a snooze. A snooze that ran out while the daemon was stopped ends as soon as the daemon starts again. A daemon restart does drop a running auto-settle countdown, and that turn stays owed until you settle it. It also forgets which owed turn holds the reply to a Quick Capture, so the next notification after the restart can take that agent out of the queue like any other.
+Yes. Attn keeps owed turns and snoozes in its database, so restarting the app, the daemon or your machine doesn't settle a turn or lose a snooze. A snooze that ran out while the daemon was stopped ends as soon as the daemon starts again. A daemon restart does drop a running auto-settle countdown, and that turn stays owed until you settle it. A turn that holds the reply to a Quick Capture keeps that standing, so notifications after the restart still leave it in your queue. Only a restart while the agent is still writing that reply loses it, and the next notification can then take that agent out of the queue like any other.
 </details>
 
 <details>

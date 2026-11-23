@@ -222,7 +222,7 @@ func (d *Daemon) monitorLaunch(sessionID protocol.SessionID) sessionmonitor.Laun
 		StateUpdated:       protocol.Timestamp(session.StateUpdatedAt).Time(),
 		LastModelRequestAt: protocol.Timestamp(protocol.Deref(session.LastModelRequestAt)).Time(),
 		Turn: sessionmonitor.TurnStamps{OpenedAt: stamps.OpenedAt, SettledAt: stamps.SettledAt, SnoozedUntil: stamps.SnoozedUntil,
-			AgentAt: stamps.AgentAt, RequestedAt: stamps.RequestedAt},
+			AgentAt: stamps.AgentAt, RequestedAt: stamps.RequestedAt, CaptureAt: stamps.CaptureAt},
 		RunRecord:            d.driverInputFromRecord(sessionID),
 		Conversation:         sessionmonitor.ConversationObservation{NativeID: conversation.NativeID, TranscriptPath: conversation.TranscriptPath},
 		LastSeen:             protocol.Timestamp(session.LastSeen).Time(),

@@ -426,10 +426,15 @@ queue flow on, attn does not bring the agent to the user for a notification run:
   quiet and points to `attn turn open`.
 
 One turn is exempt from the second and third bullets: the turn that was owed
-when the run that took a Quick Capture stopped. It stays owed, at its place in
-the queue, through every notification run that follows, until the user settles
-it. Those runs neither settle it nor print the quiet note, and because they stay
-attn's, they never start auto-settle. Their stops still open no turn.
+when the run that answers a Quick Capture stopped. That run is the one going
+when the harness takes the capture, or the next one when the harness holds the
+capture to the turn's end or nothing was running. A permission question inside
+the run does not end it. The turn stays owed, at its place in the queue, through
+every notification run that follows, until the user settles it. Those runs
+neither settle it nor print the quiet note, and because they stay attn's, they
+never start auto-settle. Their stops still open no turn. The exemption is kept
+with the turn, so it survives a daemon restart, except one during the run that
+answers the capture.
 
 An agent that needs the user, or that finished work the user should read, opens
 its own turn with `attn turn open`. If the agent runs the command while it

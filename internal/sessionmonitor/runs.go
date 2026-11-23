@@ -56,6 +56,8 @@ type Run struct {
 
 type trackedRun struct {
 	Run
+	number         uint64
+	answersCapture bool
 	startKnown     bool
 	costAtStart    map[string]*sessioncost.Source
 	awaitsBaseline bool
@@ -70,6 +72,8 @@ type runRecorder struct {
 	open       *trackedRun
 	ended      []trackedRun
 	unreadStop time.Time
+	started    uint64
+	captureRun uint64
 }
 
 func (r *runState) start() RunStart {
@@ -98,7 +102,8 @@ func (m *Monitor) observeRunLocked(previous protocol.SessionState, cause Cause, 
 		if recovered || RunsIn(previous) || m.input.run == nil {
 			return nil
 		}
-		m.runs.open = &trackedRun{Run: Run{StartedBy: m.input.run.start(), StartedAt: now}, startKnown: m.input.run.prompted || !m.runStartInFlightLocked(), costAtStart: m.cost, awaitsBaseline: !m.runs.unreadStop.IsZero()}
+		m.runs.started++
+		m.runs.open = &trackedRun{Run: Run{StartedBy: m.input.run.start(), StartedAt: now}, number: m.runs.started, answersCapture: m.runs.started == m.runs.captureRun, startKnown: m.input.run.prompted || !m.runStartInFlightLocked(), costAtStart: m.cost, awaitsBaseline: !m.runs.unreadStop.IsZero()}
 	case open == nil, phase == protocol.SessionStateWorking:
 	case phase == protocol.SessionStatePendingApproval:
 		if previous != protocol.SessionStatePendingApproval {
@@ -107,6 +112,9 @@ func (m *Monitor) observeRunLocked(previous protocol.SessionState, cause Cause, 
 	default:
 		open.EndedAt, open.Ended, open.OpenedTurn = now, phase, stop.openedTurn
 		open.QuietStop, open.TurnAfterStop = stop.quiet, m.turnAfterStopLocked(now)
+		if open.answersCapture {
+			m.markCaptureReplyLocked()
+		}
 		m.runs.open = nil
 		m.runs.ended = append(m.runs.ended, *open)
 		if watcher := m.transcriptWatch; watcher == nil || watcherStopped(watcher) {
@@ -122,6 +130,17 @@ func RunsIn(state protocol.SessionState) bool {
 
 func (m *Monitor) runStartInFlightLocked() bool {
 	return m.input.userSubmit || m.input.placing || m.evidence.InitialPromptOwed
+}
+
+func (m *Monitor) captureAnsweredByLocked(run uint64) {
+	switch open := m.runs.open; {
+	case open != nil && open.number == run:
+		open.answersCapture = true
+	case m.runs.started < run:
+		m.runs.captureRun = run
+	case m.runs.started == run:
+		m.markCaptureReplyLocked()
+	}
 }
 
 func (m *Monitor) runSteeredLocked() {

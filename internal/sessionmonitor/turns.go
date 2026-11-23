@@ -33,18 +33,14 @@ func (m *Monitor) openTurnLocked(now time.Time, quietStop bool) bool {
 	return opened
 }
 
-func (m *Monitor) keepCaptureReplyLocked(previous protocol.SessionState) {
-	if !m.captureReplyAtStop || !RunsIn(previous) || RunsIn(m.state.State) {
-		return
-	}
-	m.captureReplyAtStop = false
+func (m *Monitor) markCaptureReplyLocked() {
 	if m.turnOwedLocked() {
-		m.captureReply = m.turn.OpenedAt
+		m.turn.CaptureAt = m.turn.OpenedAt
 	}
 }
 
 func (m *Monitor) quietNotificationRunLocked() bool {
-	return m.input.inNotificationRunLocked() && !(m.turnOwedLocked() && m.turn.OpenedAt.Equal(m.captureReply))
+	return m.input.inNotificationRunLocked() && !attention.CaptureReplyOwed(m.turn.OpenedAt, m.turn.SettledAt, m.turn.CaptureAt)
 }
 
 func (m *Monitor) notificationStopLocked() bool {

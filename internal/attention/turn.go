@@ -40,6 +40,10 @@ func TurnByAgent(opened, settled, agentAt time.Time) bool {
 	return !agentAt.IsZero() && agentAt.Equal(latest)
 }
 
+func CaptureReplyOwed(opened, settled, captureAt time.Time) bool {
+	return opened.After(settled) && !captureAt.IsZero() && captureAt.Equal(opened)
+}
+
 func BreaksSnooze(state protocol.SessionState, reason string) bool {
 	switch state {
 	case protocol.SessionStateUnknown:
