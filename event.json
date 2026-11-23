@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Conversation readiness read Prepare then Check, so a transcript appearing between them failed a reload",
+  "at": "2026-11-23T16:44:59.285Z",
+  "repairs": "f15e7b7dd651d831501f9cf00d5f584531b97f5d"
+}
