@@ -252,7 +252,7 @@ func (d *Daemon) peerMessageResult(record inbox.PeerRecord) *protocol.AgentPeerM
 	if record.NotifiedAt != "" {
 		result.NotifiedAt = protocol.Ptr(record.NotifiedAt)
 	}
-	if record.ReadAt != "" {
+	if record.State() == inbox.StateRead {
 		result.ReadAt = protocol.Ptr(record.ReadAt)
 	}
 	return result

@@ -62,10 +62,11 @@ type PeerRecord struct {
 	ReadAt      string
 	DeliveredAs protocol.PeerTurn
 	TurnLapse   string
+	Held        bool
 }
 
 func (r PeerRecord) State() State {
-	if r.ReadAt != "" {
+	if r.ReadAt != "" && !r.Held {
 		return StateRead
 	}
 	if r.NotifiedAt != "" {

@@ -26,7 +26,7 @@ func scanPeerRecord(row peerRecordScanner) (inbox.PeerRecord, error) {
 	err := row.Scan(
 		&record.Message.ID, &record.Message.Sender, &record.Message.Body,
 		&record.Message.CreatedAt, &record.Message.Turn, &record.Message.AsUser, &record.DeliveredAs, &record.TurnLapse, &address,
-		&record.NotifiedAt, &record.ReadAt, &record.ReadBy,
+		&record.NotifiedAt, &record.ReadAt, &record.ReadBy, &record.Held,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return inbox.PeerRecord{}, ErrPeerMessageNotFound
@@ -42,7 +42,7 @@ func peerMessageRecord(queryer interface {
 }, id string) (inbox.PeerRecord, error) {
 	record, err := scanPeerRecord(queryer.QueryRow(`
 		SELECT p.id, p.sender, p.body, p.created_at, p.turn, p.as_user, p.delivered_as, p.turn_lapse,
-		       i.address, i.notified_at, i.read_at, i.read_by
+		       i.address, i.notified_at, i.read_at, i.read_by, i.held
 		FROM peer_messages p
 		JOIN inbox_items i ON i.kind = ? AND i.source_id = p.id
 		WHERE p.id = ?
@@ -183,6 +183,32 @@ func (s *Store) DropPeerTurn(items []string, lapse string) error {
 func (s *Store) DeliverPeerAs(items []string, turn protocol.PeerTurn) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec(`UPDATE peer_messages SET delivered_as=? WHERE id IN (SELECT source_id FROM inbox_items WHERE kind=? AND id IN (SELECT value FROM json_each(?)))`, turn, inbox.PeerMessage, jsonStrings(items))
+	return deliverPeerAs(s.db, items, turn)
+}
+
+func deliverPeerAs(db interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}, items []string, turn protocol.PeerTurn) error {
+	_, err := db.Exec(`UPDATE peer_messages SET delivered_as=? WHERE id IN (SELECT source_id FROM inbox_items WHERE kind=? AND id IN (SELECT value FROM json_each(?)))`, turn, inbox.PeerMessage, jsonStrings(items))
 	return err
+}
+
+// PlaceHeldRing records that the harness placed the items it held from the ring stamped stamp, and how a running turn took them when it did.
+func (s *Store) PlaceHeldRing(to who.Address, items []string, stamp string, takenAs *protocol.PeerTurn) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if takenAs != nil {
+		if err := deliverPeerAs(tx, items, *takenAs); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`UPDATE inbox_items SET held=0 WHERE address=? AND read_at=? AND id IN (SELECT value FROM json_each(?))`, to.String(), stamp, jsonStrings(items)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

@@ -409,7 +409,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 	finishingStart, bellWaitsForPrompt, bellHeldUntil := pending.FinishingStart, pending.BellWaitsForPrompt, pending.HeldUntil
 	placement := d.placeDelivery(context.Background(), holder.ID, sessionmonitor.DeliveryFromMessage(pending.Message))
 	if placement.Stage == sessionmonitor.Placed {
-		readAt, err := d.store.RingInbox(a, finishingStart, ring.Typed, holder.ID, ring.Notified, pending.At)
+		readAt, err := d.store.RingInbox(a, finishingStart, ring.Typed, placement.Held, holder.ID, ring.Notified, pending.At)
 		pausepoint.Done(pausepoint.InboxRingRecorded, err)
 		if err != nil {
 			return receipt, err
@@ -504,10 +504,8 @@ func (d *Daemon) settleInboxRing(_ context.Context, msg protocol.InboxRingSettle
 	state := d.lockInboxState(address)
 	defer state.unlock()
 	if msg.Outcome == protocol.InboxRingOutcomePlaced {
-		if msg.TakenAs != nil {
-			if err := d.store.DeliverPeerAs(msg.Ring.Typed, *msg.TakenAs); err != nil {
-				return struct{}{}, fmt.Errorf("inbox ring %s: %w", msg.DeliveryID, err)
-			}
+		if err := d.store.PlaceHeldRing(address, msg.Ring.Typed, msg.Ring.Stamp, msg.TakenAs); err != nil {
+			return struct{}{}, fmt.Errorf("inbox ring %s: %w", msg.DeliveryID, err)
 		}
 		d.endStandbyOnceMailRead(address)
 		return struct{}{}, nil

@@ -17,7 +17,7 @@ does to the queue.
 
 - `peer-message`: one agent sends another a message. The sender gets a receipt at once.
 - `peer-turn`: `--steer` puts a message into a working agent's running turn at its next step, `--interrupt` stops the turn and starts the next one with it, and `--as-user` sends the text bare as the user's words. Claude with the mod, shared Codex, Sigma and app servers that declare `steer` or `interrupt` take them; a typed session, a plugin driver and a server without the ability queue it with the reason.
-- `msg-status`: the sender checks whether its message is queued, notified or read, how a running turn took it or that it arrived as the next prompt instead, and whether it went as the user.
+- `msg-status`: the sender checks whether its message is queued, notified or read, how a running turn took it, that the running turn still holds it (it reads `notified` until then), or that it arrived as the next prompt instead, and whether it went as the user.
 - `inbox-read`: read up to 20 unread items, oldest first, or read a rung peer message again by id.
 - `mailbox`: address a crew member, the chief or a seed, so the item follows whoever holds that job.
 - `ring`: one prompt per address with unread items, with at most 3 attempts per item, 5 minutes apart.

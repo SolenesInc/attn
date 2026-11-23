@@ -303,6 +303,13 @@ fn msg_status_line(message: &AgentPeerMessage) -> String {
                 with_article(turn)
             );
         }
+        (None, Some(turn)) if message.state == "notified" => {
+            let _ = write!(
+                line,
+                "; its running turn holds it, not yet taken as {}",
+                with_article(turn)
+            );
+        }
         _ => {}
     }
     if message.as_user == Some(true) {

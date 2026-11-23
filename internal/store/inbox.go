@@ -439,7 +439,7 @@ func (s *Store) ClearPendingInboxInput(to who.Address) error {
 	return tx.Commit()
 }
 
-func (s *Store) RingInbox(to who.Address, finishingStart bool, typed []string, readBy protocol.SessionID, notified bool, at time.Time) (string, error) {
+func (s *Store) RingInbox(to who.Address, finishingStart bool, typed []string, held bool, readBy protocol.SessionID, notified bool, at time.Time) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	stamp := InboxRingStamp(at)
@@ -449,7 +449,7 @@ func (s *Store) RingInbox(to who.Address, finishingStart bool, typed []string, r
 	}
 	defer tx.Rollback()
 	for _, id := range typed {
-		if _, err := tx.Exec(`UPDATE inbox_items SET notified_at=CASE WHEN notified_at='' THEN ? ELSE notified_at END,read_at=?,read_by=? WHERE id=? AND address=? AND read_at=''`, stamp, stamp, readBy, id, to.String()); err != nil {
+		if _, err := tx.Exec(`UPDATE inbox_items SET notified_at=CASE WHEN notified_at='' THEN ? ELSE notified_at END,read_at=?,read_by=?,held=? WHERE id=? AND address=? AND read_at=''`, stamp, stamp, readBy, held, id, to.String()); err != nil {
 			return "", fmt.Errorf("read typed inbox item %s: %w", id, err)
 		}
 	}
@@ -494,7 +494,7 @@ func (s *Store) ReturnInboxRing(to who.Address, typed []string, notified bool, s
 	}
 	defer tx.Rollback()
 	for _, id := range typed {
-		if _, err := tx.Exec(`UPDATE inbox_items SET read_at='',read_by='',notified_at=CASE WHEN notified_at=? THEN '' ELSE notified_at END WHERE id=? AND address=? AND read_at=?`, stamp, id, to.String(), stamp); err != nil {
+		if _, err := tx.Exec(`UPDATE inbox_items SET read_at='',read_by='',held=0,notified_at=CASE WHEN notified_at=? THEN '' ELSE notified_at END WHERE id=? AND address=? AND read_at=?`, stamp, id, to.String(), stamp); err != nil {
 			return fmt.Errorf("return typed inbox item %s: %w", id, err)
 		}
 	}

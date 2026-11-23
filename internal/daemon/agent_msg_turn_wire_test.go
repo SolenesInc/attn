@@ -584,6 +584,9 @@ func TestASteerOrInterruptHeldUntilTheTurnEndsOnItsOwnArrivesAsTheNextPrompt(t *
 				t.Fatalf("the %s to a working agent = %+v, want the mod to hold it", flag, sent)
 			}
 			modEvent(t, run, fakeagent.ModEventHeld, "cache key unchanged")
+			if held := peerMessageStatus(t, cli, "lead", sent.MessageID); held.State != protocol.AgentMessageStateNotified || held.ReadAt != nil || held.DeliveredAs != nil {
+				t.Fatalf("while the mod holds the %s its status = %+v, want notified: the running turn has not taken it", flag, held)
+			}
 			run.Reply("Checked the cache. <!-- attn:state=waiting_input -->")
 			if got := run.Prompted(); !strings.Contains(got, "Keep the cache key unchanged.") || !run.ThroughMod {
 				t.Fatalf("after the turn ended on its own the agent took %q (through the mod: %t), want the held %s as its next prompt", got, run.ThroughMod, flag)
@@ -591,8 +594,8 @@ func TestASteerOrInterruptHeldUntilTheTurnEndsOnItsOwnArrivesAsTheNextPrompt(t *
 			settled.Await()
 			settled.Release()
 			status := peerMessageStatus(t, cli, "lead", sent.MessageID)
-			if status.DeliveredAs != nil || protocol.Deref(status.Turn) != protocol.PeerTurn(flag) {
-				t.Fatalf("the %s's status = %+v, want it asked as a %s and taken as the next prompt, not by the running turn", flag, status, flag)
+			if status.State != protocol.AgentMessageStateRead || status.DeliveredAs != nil || protocol.Deref(status.Turn) != protocol.PeerTurn(flag) {
+				t.Fatalf("the %s's status = %+v, want it read, asked as a %s and taken as the next prompt, not by the running turn", flag, status, flag)
 			}
 		})
 	}

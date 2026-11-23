@@ -72,10 +72,10 @@ the message. When the turn ends before the harness can steer or interrupt it,
 the message reaches the recipient as its next prompt instead: a Claude steer
 that no tool call takes before the turn ends, an interrupt whose turn ends
 before the stop lands, or a turn that ended before Codex or an app server got
-the message. `msg-status` then shows the turn use with no `delivered_as`. An
-interrupt never reaches a session while it waits on an approval or a question,
-whatever the harness: attn keeps it until the wait ends, so it never answers or
-cancels the question.
+the message. `msg-status` shows the turn use with no `delivered_as` once the
+harness reports that it placed the message. An interrupt never reaches a
+session while it waits on an approval or a question, whatever the harness:
+attn keeps it until the wait ends, so it never answers or cancels the question.
 
 attn refuses a peer message, and gives the reason, when:
 
@@ -326,9 +326,11 @@ connected:
 - After the user stops the session with Esc while Claude works, the mod refuses
   every ring. Its items stay unread, the refusal costs no attempt, and attn rings
   again at the session's next state change after the user's next prompt.
-- A ring the mod holds for the running turn counts as placed. When the mod gives
-  it back instead of placing it, at Esc, on a reload, or when the mod stops
-  polling, attn puts the ring's items back to unread, takes back the ring's
+- A ring the mod holds for the running turn counts as placed, so attn does not
+  ring its items again. Its peer messages still read as notified in
+  `attn agent msg-status` until the mod reports that it placed them, because
+  the model has not read them yet. When the mod gives it back instead of
+  placing it, at Esc, on a reload, or when the mod stops polling, attn puts the ring's items back to unread, takes back the ring's
   attempt and outstanding ring, and rings again. The app shows a Quick Capture
   or a seed authorization change from that ring as read or typed while the mod
   holds it, then as waiting again once the mod gives it back, until the next
