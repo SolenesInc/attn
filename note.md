@@ -1,0 +1,1 @@
+`attn terminal wait --until prompt` works again after a command attn typed: it returns when bash rejects the typed line, when the command's output has left scrollback, and with the saved exit status of a shell that already exited. Both PTY backends now report which prompt the shell is at, so the wait no longer reads command output to know the command finished.
