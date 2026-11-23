@@ -4388,49 +4388,51 @@ fn a_spotlit_terminal_whose_grid_outgrows_its_tile_draws_nothing_over_its_neighb
     }
 }
 
+/// Asserts that each of `runtimes` last asked for the grid that fills its slot at the window's
+/// scale, in whole drawn cells, and that the window is at rest.
+fn assert_fits(world: &World, runtimes: &[&str], label: &str) {
+    let metrics = attn_term::Metrics::of(attn_term::FONT_SIZE);
+    let scale = world.runtime().env.scale;
+    let (cw, ch) = metrics.device_cell(scale);
+    for &runtime in runtimes {
+        let ([_, _, w, h], slot_rect, _) = terminal_effect_slot(world, runtime);
+        let resize = world
+            .daemon
+            .sent_of("pty_resize")
+            .into_iter()
+            .rev()
+            .find(|r| r["id"] == runtime)
+            .unwrap_or_else(|| panic!("{runtime} sent pty_resize ({label})"));
+        let cols = resize["cols"].as_i64().unwrap();
+        let rows = resize["rows"].as_i64().unwrap();
+        let xpixel = resize["xpixel"].as_i64().unwrap();
+        let ypixel = resize["ypixel"].as_i64().unwrap();
+        assert!(
+            (cols as f32) * cw <= slot_rect[2] && (rows as f32) * ch <= slot_rect[3],
+            "{label} (scale={scale}) {runtime}: {cols}x{rows} at {cw}x{ch}px = {}x{}px overflows slot {}x{}px",
+            (cols as f32) * cw,
+            (rows as f32) * ch,
+            slot_rect[2],
+            slot_rect[3]
+        );
+        assert!(
+            ((cols + 1) as f32) * cw > (w * scale).floor()
+                && ((rows + 1) as f32) * ch > (h * scale).floor(),
+            "{label} (scale={scale}) {runtime}: {cols}x{rows} leaves an unused cell in {}x{}px",
+            (w * scale).floor(),
+            (h * scale).floor()
+        );
+        assert_eq!(
+            (xpixel, ypixel),
+            (cols * cw as i64, rows * ch as i64),
+            "{label} {runtime}: pixel size matches drawn cells"
+        );
+    }
+    assert!(world.runtime_is_at_rest(), "{label}: window stays at rest");
+}
+
 #[test]
 fn split_terminals_at_fractional_scales_fit_their_drawn_cells_inside_their_slots() {
-    let assert_fits = |world: &World, label: &str| {
-        let metrics = attn_term::Metrics::of(attn_term::FONT_SIZE);
-        let scale = world.runtime().env.scale;
-        let (cw, ch) = metrics.device_cell(scale);
-        for runtime in ["r-a", "r-b"] {
-            let ([_, _, w, h], slot_rect, _) = terminal_effect_slot(world, runtime);
-            let resize = world
-                .daemon
-                .sent_of("pty_resize")
-                .into_iter()
-                .rev()
-                .find(|r| r["id"] == runtime)
-                .unwrap_or_else(|| panic!("{runtime} sent pty_resize ({label})"));
-            let cols = resize["cols"].as_i64().unwrap();
-            let rows = resize["rows"].as_i64().unwrap();
-            let xpixel = resize["xpixel"].as_i64().unwrap();
-            let ypixel = resize["ypixel"].as_i64().unwrap();
-            assert!(
-                (cols as f32) * cw <= slot_rect[2] && (rows as f32) * ch <= slot_rect[3],
-                "{label} (scale={scale}) {runtime}: {cols}x{rows} at {cw}x{ch}px = {}x{}px overflows slot {}x{}px",
-                (cols as f32) * cw,
-                (rows as f32) * ch,
-                slot_rect[2],
-                slot_rect[3]
-            );
-            assert!(
-                ((cols + 1) as f32) * cw > (w * scale).floor()
-                    && ((rows + 1) as f32) * ch > (h * scale).floor(),
-                "{label} (scale={scale}) {runtime}: {cols}x{rows} leaves an unused cell in {}x{}px",
-                (w * scale).floor(),
-                (h * scale).floor()
-            );
-            assert_eq!(
-                (xpixel, ypixel),
-                (cols * cw as i64, rows * ch as i64),
-                "{label} {runtime}: pixel size matches drawn cells"
-            );
-        }
-        assert!(world.runtime_is_at_rest(), "{label}: window stays at rest");
-    };
-
     let wide = (2200.0, 900.0);
     for ui_scale in ["1.2", "0.8", "1.1", "1.3", "1.4"] {
         let mut state = initial(vec![desktop(1, "a", Some(row([pane("a"), pane("b")])))]);
@@ -4438,7 +4440,11 @@ fn split_terminals_at_fractional_scales_fit_their_drawn_cells_inside_their_slots
         let mut world = World::start_sized(Daemon::scripted().state(state), wide);
         world.open_desktop();
         world.advance(Duration::from_secs(1));
-        assert_fits(&world, &format!("uiScale={ui_scale} at 2x"));
+        assert_fits(
+            &world,
+            &["r-a", "r-b"],
+            &format!("uiScale={ui_scale} at 2x"),
+        );
     }
 
     for ui_scale in ["1.2", "1.3"] {
@@ -4449,7 +4455,11 @@ fn split_terminals_at_fractional_scales_fit_their_drawn_cells_inside_their_slots
         world.advance(Duration::from_secs(1));
         world.gesture(|app| app.runtime.set_viewport(wide, 1.0));
         world.advance(Duration::from_secs(1));
-        assert_fits(&world, &format!("uiScale={ui_scale} moved to 1x"));
+        assert_fits(
+            &world,
+            &["r-a", "r-b"],
+            &format!("uiScale={ui_scale} moved to 1x"),
+        );
     }
 
     // Moving to a 1x display at uiScale=1.3 widens each cell in view points (23/2.6 -> 12/1.3),
@@ -4488,5 +4498,36 @@ fn split_terminals_at_fractional_scales_fit_their_drawn_cells_inside_their_slots
         2,
         "one pty_resize per tile after Action::Layout, no bogus pre-layout resize: {sent_during_move:?}"
     );
-    assert_fits(&world, "combined scale+size move");
+    assert_fits(&world, &["r-a", "r-b"], "combined scale+size move");
+}
+
+#[test]
+fn a_display_scale_move_leaves_a_shelved_terminal_sized_until_its_tile_returns() {
+    let mut state = initial(vec![desktop(1, "a", Some(row([pane("a"), pane("b")])))]);
+    state.settings = Some([("uiScale".into(), "1.3".into())].into());
+    let wide = (2200.0, 900.0);
+    let mut world = World::start_sized(Daemon::scripted().state(state), wide);
+    world.open_desktop();
+    world.advance(Duration::from_secs(1));
+    let narrow = (1200.0, 900.0);
+    world.gesture(|app| app.runtime.set_viewport(narrow, 2.0));
+    world.advance(Duration::from_secs(1));
+    assert_eq!(shown(&world), ["a"]);
+    let before = world.daemon.sent_of("pty_resize").len();
+
+    world.gesture(|app| app.runtime.set_viewport(narrow, 1.0));
+    world.advance(Duration::from_secs(1));
+    assert_eq!(shown(&world), ["a"]);
+    let sent = &world.daemon.sent_of("pty_resize")[before..];
+    assert!(sent.iter().any(|r| r["id"] == "r-a"), "a refits: {sent:?}");
+    assert!(
+        sent.iter().all(|r| r["id"] != "r-b"),
+        "b stays at its size on the shelf: {sent:?}"
+    );
+    assert_fits(&world, &["r-a"], "moved to 1x with b on the shelf");
+
+    world.gesture(|app| app.runtime.set_viewport(wide, 1.0));
+    world.advance(Duration::from_secs(1));
+    assert_eq!(shown(&world), ["a", "b"]);
+    assert_fits(&world, &["r-a", "r-b"], "b back from the shelf at 1x");
 }

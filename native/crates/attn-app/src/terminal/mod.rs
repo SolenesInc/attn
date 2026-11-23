@@ -388,6 +388,11 @@ pub(crate) fn window_focused(state: &mut crate::State, focused: bool, _: &mut Tx
     }
 }
 
+/// The key of the element a terminal draws in.
+pub(crate) fn slot_key(runtime_id: &str) -> String {
+    format!("terminal.{runtime_id}")
+}
+
 /// The mark a terminal's slot carries, so the renderer finds the terminal it draws.
 pub fn mark(runtime_id: &str) -> u32 {
     BuildHasherDefault::<DefaultHasher>::default().hash_one(runtime_id) as u32
@@ -615,11 +620,14 @@ impl Terminals {
         }
     }
 
-    /// Re-fits laid-out terminals when the display scale changes without moving their view-point
+    /// Re-fits terminals `ids` when the display scale changes without moving their view-point
     /// rects, such as dragging a window between a 1x and 2x monitor.
-    pub(crate) fn set_scale(&mut self, scale: f32, daemon: &Commands) {
+    pub(crate) fn set_scale(&mut self, scale: f32, ids: &[String], daemon: &Commands) {
         let metrics = self.metrics();
-        for (id, term) in &mut self.panes {
+        for id in ids {
+            let Some(term) = self.panes.get_mut(id) else {
+                continue;
+            };
             let Some(((w, h), previous)) = term.slot else {
                 continue;
             };
@@ -1427,11 +1435,12 @@ impl Terminals {
         Some(term)
     }
 
-    /// Whether any laid-out terminal was fitted for a display scale other than `scale`.
-    pub(crate) fn scale_changed(&self, scale: f32) -> bool {
+    /// The laid-out terminals fitted for a display scale other than `scale`.
+    pub(crate) fn fitted_for_other_scale(&self, scale: f32) -> impl Iterator<Item = &str> {
         self.panes
-            .values()
-            .any(|term| term.slot.is_some_and(|(_, previous)| previous != scale))
+            .iter()
+            .filter(move |(_, term)| term.slot.is_some_and(|(_, previous)| previous != scale))
+            .map(|(id, _)| id.as_str())
     }
 
     /// Whether a screen changed since the renderer last took the grids.

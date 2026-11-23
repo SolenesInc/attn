@@ -1790,7 +1790,7 @@ fn terminal_slot(
     let (moved_over, left) = (session.to_owned(), session.to_owned());
     let reading = id.clone();
     let slot = el()
-        .key(format!("terminal.{runtime_id}"))
+        .key(crate::terminal::slot_key(runtime_id))
         .role("terminal")
         .label(title.to_owned())
         .holds_keys(held)

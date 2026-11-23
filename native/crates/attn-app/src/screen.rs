@@ -10,18 +10,32 @@ pub struct Screens {
     cells: Cells,
 }
 
+/// The terminals whose slots the last layout holds, fitted for a display scale other than the
+/// window's. A shelved terminal keeps its fit until its tile returns and lays out again.
+fn mounted_for_other_scale(rt: &Runtime<State>) -> impl Iterator<Item = &str> {
+    rt.state()
+        .terminals
+        .fitted_for_other_scale(rt.env.scale)
+        .filter(|id| rt.find(&crate::terminal::slot_key(id)).is_some())
+}
+
 /// Gives the terminals the window's theme and display scale, and returns the theme.
 fn sync_terminals(rt: &mut Runtime<State>) -> TerminalColors {
     let theme = crate::colors(&rt.state().facts.settings, rt.env.system_dark).terminal;
     let scale = rt.env.scale;
     let pending_layout = rt.has_pending_input();
+    let refit: Vec<String> = if pending_layout {
+        Vec::new()
+    } else {
+        mounted_for_other_scale(rt).map(str::to_owned).collect()
+    };
     let invalidate = {
         let state = rt.state_mut();
         state.terminals.set_theme(theme, &state.daemon);
         if pending_layout {
             false
         } else {
-            state.terminals.set_scale(scale, &state.daemon);
+            state.terminals.set_scale(scale, &refit, &state.daemon);
             let px_per_col = state.terminals.metrics().cell_points(scale).0;
             match state.window.desk.reported_area.as_mut() {
                 Some(area) if area.px_per_col != px_per_col => {
@@ -62,8 +76,8 @@ impl Compositor<State> for Screens {
     }
 
     fn redraws(&self, rt: &Runtime<State>) -> bool {
-        let terminals = &rt.state().terminals;
-        terminals.undrawn() || (!rt.has_pending_input() && terminals.scale_changed(rt.env.scale))
+        rt.state().terminals.undrawn()
+            || (!rt.has_pending_input() && mounted_for_other_scale(rt).next().is_some())
     }
 
     fn render(&mut self, f: &mut Frame<'_, State>) {
