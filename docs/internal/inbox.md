@@ -431,9 +431,11 @@ queue flow on, attn does not bring the agent to the user for a notification run:
   quiet and points to `attn turn open`.
 
 One turn is exempt from the second and third bullets: the turn the user is
-owed when the run that answers a Quick Capture stops. That run is the one the
-capture reaches, or, when the harness holds the capture to the end of the
-running turn or nothing is running, the next run. A permission question inside
+owed when the run that answers a Quick Capture stops. Exactly one run answers
+a capture: the one the capture reaches, or the next run when nothing is
+running. When the harness holds the capture to the end of the running turn, it
+is the run that takes the capture's prompt, whether attn sees that as the end
+of the running turn's run or as a run of its own. A permission question inside
 the run does not end it. The turn stays owed, at its place in the queue, through
 every notification run that follows, until the user settles it. Those runs
 neither settle it nor print the quiet note, and because they stay attn's, they

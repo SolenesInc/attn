@@ -469,6 +469,33 @@ func TestTheReplyToACaptureClaudeHeldThroughItsTurnStaysOwedAfterTheDoorbellsRun
 func TestTheReplyToACaptureClaudeHeldStaysOwedWhenTheUserSettledTheTurnBeforeIt(t *testing.T) {
 	w, _, cli := quietNotificationsWorld(t, true)
 	app := w.TrustedApp()
+	session, run, replied := heldCaptureRepliedAfterTheEssaysStop(t, w, app, cli)
+	captureReplyOwedThroughDoorbells(t, w, app, cli, run, session, replied)
+}
+
+func TestAHeldCaptureRepliedAfterTheEssaysStopLeavesTheNextOrdinaryReplyToQuietNotifications(t *testing.T) {
+	w, _, cli := quietNotificationsWorld(t, true)
+	app := w.TrustedApp()
+	session, run, replied := heldCaptureRepliedAfterTheEssaysStop(t, w, app, cli)
+	theNextOrdinaryReplySettlesAtTheFirstDoorbell(t, w, app, cli, run, session, replied)
+}
+
+func TestTheReplyToACaptureClaudeSubmitsInsideTheEssaysRunStaysOwedThroughTheDoorbells(t *testing.T) {
+	w, _, cli := quietNotificationsWorld(t, true)
+	app := w.TrustedApp()
+	session, run, replied := heldCaptureRepliedInTheEssaysRun(t, w, app, cli)
+	captureReplyOwedThroughDoorbells(t, w, app, cli, run, session, replied)
+}
+
+func TestAHeldCaptureRepliedInsideTheEssaysRunLeavesTheNextOrdinaryReplyToQuietNotifications(t *testing.T) {
+	w, _, cli := quietNotificationsWorld(t, true)
+	app := w.TrustedApp()
+	session, run, replied := heldCaptureRepliedInTheEssaysRun(t, w, app, cli)
+	theNextOrdinaryReplySettlesAtTheFirstDoorbell(t, w, app, cli, run, session, replied)
+}
+
+func heldCaptureRepliedAfterTheEssaysStop(t *testing.T, w *world, app *testworld.Peer, cli *client.Client) (string, *fakeagent.Run, protocol.Session) {
+	t.Helper()
 	session, run := moddedClaude(t, w, app)
 	workingOn(t, app, run, session, "write the essay")
 	working := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
@@ -495,8 +522,55 @@ func TestTheReplyToACaptureClaudeHeldStaysOwedWhenTheUserSettledTheTurnBeforeIt(
 		t.Fatalf("the capture's reply shows owed=%t opened=%q, want a new turn after the essay's %q",
 			protocol.Deref(replied.TurnOwed), protocol.Deref(replied.TurnOpenedAt), essayTurn)
 	}
+	return session, run, replied
+}
 
-	captureReplyOwedThroughDoorbells(t, w, app, cli, run, session, replied)
+func heldCaptureRepliedInTheEssaysRun(t *testing.T, w *world, app *testworld.Peer, cli *client.Client) (string, *fakeagent.Run, protocol.Session) {
+	t.Helper()
+	setAnalyticsEnabled(app, "true")
+	session, run := moddedClaude(t, w, app)
+	workingOn(t, app, run, session, "write the essay")
+	essay := queriedSession(t, cli, session)
+
+	capture := sendQuickCapture(t, app, sessionMailbox(session), "what did the reviewer say?")
+	modEvent(t, run, fakeagent.ModEventHeld, "what did the reviewer say?")
+	testworld.Await(app, protocol.EventQuickCaptureRead, func(m protocol.QuickCaptureReadMessage) bool { return m.CaptureID == capture.CaptureID })
+	essayVerdict := w.PauseAt(pausepoint.ClassifierVerdictReached)
+	submittedAtTurnEnd(t, run, "what did the reviewer say?", true)
+	essayVerdict.Await()
+	if replying := queriedSession(t, cli, session); replying.State != protocol.SessionStateWorking {
+		t.Fatalf("the held capture reached Claude with the session %s, want the essay's run still open", replying.State)
+	}
+	essayVerdict.Release()
+	run.Reply("They approved. <!-- attn:state=idle -->")
+	replied := testworld.AwaitStateAfter(app, essay, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateIdle && protocol.Deref(s.TurnOwed)
+	})
+	w.readTranscripts()
+	if runs := runRecords(t, w, app, session); len(runs) != 1 {
+		t.Fatalf("run records %v, want the essay and the capture's reply in one run", runs)
+	}
+	return session, run, replied
+}
+
+func theNextOrdinaryReplySettlesAtTheFirstDoorbell(t *testing.T, w *world, app *testworld.Peer, cli *client.Client, agent *fakeagent.Run, session string, owed protocol.Session) {
+	t.Helper()
+	settled := settleFromApp(app, owed)
+	workingOn(t, app, agent, session, "open a different PR")
+	agent.Reply("The new PR is open, CI is running. <!-- attn:state=waiting_input -->")
+	ordinary := testworld.AwaitStateAfter(app, settled, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateWaitingInput && protocol.Deref(s.TurnOwed)
+	})
+	working, batch := notificationRunStarts(t, app, cli, agent, session, ordinary, "CI passed")
+	if shown := queriedSession(t, cli, session); protocol.Deref(shown.TurnOwed) {
+		t.Errorf("the doorbell's run after the capture's reply shows the ordinary reply owed from %q, want it settled", protocol.Deref(shown.TurnOpenedAt))
+	}
+	if !protocol.Deref(batch.QuietNotifications) {
+		t.Error("attn agent inbox did not tell the agent the ordinary reply left the queue")
+	}
+	if stopped := runEnds(w, app, agent, working, "Read the notification. <!-- attn:state=idle -->"); protocol.Deref(stopped.TurnOwed) {
+		t.Errorf("after the doorbell's run the ordinary reply is owed from %q, want it settled", protocol.Deref(stopped.TurnOpenedAt))
+	}
 }
 
 func TestTheReplyToACaptureThatStopsBeforeItsPlacementReturnsStaysOwed(t *testing.T) {
@@ -551,7 +625,7 @@ func TestTheReplyToACaptureStaysOwedThroughADoorbellAfterARestart(t *testing.T) 
 	captureReplyOwedThroughDoorbells(t, w, app, w.Client(), resumed, session, restored)
 }
 
-func captureReplyOwedThroughDoorbells(t *testing.T, w *world, app *testworld.Peer, cli *client.Client, agent *fakeagent.Run, session string, replied protocol.Session) {
+func captureReplyOwedThroughDoorbells(t *testing.T, w *world, app *testworld.Peer, cli *client.Client, agent *fakeagent.Run, session string, replied protocol.Session) protocol.Session {
 	t.Helper()
 	want := protocol.Deref(replied.TurnOpenedAt)
 	stopped := replied
@@ -569,6 +643,7 @@ func captureReplyOwedThroughDoorbells(t *testing.T, w *world, app *testworld.Pee
 				i+1, protocol.Deref(stopped.TurnOwed), protocol.Deref(stopped.TurnByAgent), protocol.Deref(stopped.TurnOpenedAt), want)
 		}
 	}
+	return stopped
 }
 
 func TestWithTheQueueFlowOffAnAgentOpensAndSettlesItsOwnTurn(t *testing.T) {

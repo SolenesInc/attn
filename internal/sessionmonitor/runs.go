@@ -138,10 +138,11 @@ func (m *Monitor) heldCaptureAnsweredByNextPromptLocked() {
 		return
 	}
 	m.runs.captureNextPrompt = false
-	m.captureAnsweredByLocked(m.runs.started + 1)
-	if open := m.runs.open; open != nil {
-		open.answersCapture = true
+	answering := m.runs.started
+	if m.runs.open == nil {
+		answering++
 	}
+	m.captureAnsweredByLocked(answering)
 }
 
 func (m *Monitor) captureAnsweredByLocked(run uint64) {
