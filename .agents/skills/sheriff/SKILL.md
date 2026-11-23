@@ -70,8 +70,10 @@ git rev-parse origin/main
 - Inspect every `<run-id> <attempt>` line from `scripts/ci-main-red.sh`.
 - Call `main` green only when `scripts/ci-main-red.sh` prints nothing, no
   in-progress run has a failed job, and the newest completed push run of both
-  `ci.yml` and `ci-macos.yml` passed at `origin/main`. When nothing is red but
-  `origin/main` is still in CI, report the last green SHA and stop.
+  `ci.yml` and `ci-macos.yml` passed at `origin/main`. When nothing is red, note
+  the green SHA on your seed if `origin/main` passed, or the last green SHA if
+  `origin/main` is still in CI, then wrap up in
+  [Step 6](#6-wrap-up-when-the-pass-is-settled).
 - For pass records, carried groups, nightly runs, and release commits, see
   [Verifying before landing](../../../docs/internal/trunk-based-development.md#verifying-before-landing).
 
@@ -90,13 +92,15 @@ ignored, and repeated failed repairs stop patching and question the premise.
 
 Read recent comments on the matching issue first. Reopen a closed issue
 (`gh issue reopen <number>`) only when acting on an in-progress run of that
-same track. Match failures by `(job, test, error)`, not run id:
+same track. Match each failure by `(job, test, error)`, not run id:
 
-- **Owned, no landed repair**: log the new run and stop.
+- **Owned or already escalated, no landed repair**: log the new run and skip
+  this failure. Do not open a second turn for an already escalated failure or
+  outage.
 - **Covered by a landed repair** (or an unrecorded newer `main` commit whose
   diff fixes or reverts the culprit): if
   `git merge-base --is-ancestor <repair-sha> <head-sha>` fails, log the run and
-  wait for CI on a commit containing the repair.
+  skip this failure.
 - **Contains repair 1 and fails in the same job and test** (even at another
   step or error): return the failure to its owner with that run.
 - **Contains repair 2 and fails in the same job and test**: stop patching. Read
@@ -105,7 +109,11 @@ same track. Match failures by `(job, test, error)`, not run id:
   a redesign. Escalate if the owner disagrees.
 - **One-off past failure now green on a newer `main` commit**: if a newer run
   on that track passed the same job and test and `CI flake ledger` lists no
-  prior failure, log the failure once and stop. Act if the failure repeats.
+  prior failure, log the failure once and skip this failure. Act if the failure
+  repeats.
+
+If no failure needs action, wrap up in
+[Step 6](#6-wrap-up-when-the-pass-is-settled).
 
 ### 3. Gather enough evidence to pick a path and name a culprit
 
@@ -145,10 +153,10 @@ self-contained for a reader with no context.
   `Attn-Session:` (or the live tender of its `Attn-Seed:`) first. Check the
   session with `attn agent peek <session>`. If live and not waiting on an
   approval prompt, send the failure and repair bar below with
-  `attn agent msg <session>` and ask the author to reply with the landed SHA or
-  decline right away. If the session is gone (`"no session or crew member
-  matches"` or `"is between sessions"`), closed, or blocked, delegate a
-  Builder.
+  `attn agent msg <session>` and ask the author to land the fix or note a
+  decline on the matching Branch health issue or on their seed. If the session
+  is gone (`"no session or crew member matches"` or `"is between sessions"`),
+  closed, or blocked, delegate a Builder.
 - **Revert** (large or unclear break, or blocks everyone, and
   `git revert <culprit>` applies cleanly on `origin/main` without reverting a
   merged database migration): delegate a Builder immediately, then give the
@@ -227,17 +235,38 @@ seeds that keep landings fast.
 
 ### 6. Wrap up when the pass is settled
 
-**Outcome**: finished Sheriff runs do not pile up as open sessions. Run this
-step even when the pass stops early in Step 1 or Step 2.
+**Outcome**: finished Sheriff automation runs close themselves instead of piling
+up as open sessions.
 
-- If you escalated to the user (`attn turn open` or an unanswered `attn ask`),
-  stay open until the user answers.
-- If a delegate you dispatched in this run is still working, end your turn and
-  wait for its ring. When the ring arrives, run Step 0 to review and close the
-  delegate and record its repair SHA.
-- Once no delegate of this run remains open and nothing waits on the user,
-  harvest your seed (`attn seed harvest <your seed> -m "<summary>"`) and close
-  yourself (`attn agent close --self -m "<what you settled>"`).
+If the user asked you to check `main` in an existing session, answer in the
+conversation and skip the harvest and close below.
+
+For a Sheriff automation run, a pass is settled when no delegate dispatched by
+this run is still working and you have no open escalation (`attn turn open`) or
+unanswered `attn ask` from this run. Early stops in Step 1 or Step 2 and
+live-author routing in Step 4 are settled passes, even while `main` is red or CI
+is running.
+
+Do not wait on CI or on a delegate from an earlier run, because that delegate's
+ring goes to the earlier run. Never put your seed on standby
+(`attn seed standby`). The automation starts a fresh run on its schedule while
+`main` stays red.
+
+Finish the pass according to its state:
+
+- **Settled**: write every seed note and issue comment first. Then harvest your
+  seed and close yourself in one shell command, without stopping after
+  `attn seed harvest` to write a conversation summary:
+
+  ```bash
+  attn seed harvest <your seed> -m "<summary>" && attn agent close --self -m "<what you settled>"
+  ```
+
+- **Delegate from this run still working**: end your turn and wait for its ring.
+  When the ring arrives, review and close the delegate in Step 0, record the
+  repair in Step 5, and return to this step.
+- **Open escalation or unanswered `attn ask` from this run**: stay open until
+  the user answers, then finish the pass and return to this step.
 
 ## Asking the user
 
