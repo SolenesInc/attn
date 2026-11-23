@@ -1,0 +1,13 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Outpost stack test still expected the tender-resume note and the ask answer in one prompt",
+  "at": "2026-11-23T14:48:22.736Z",
+  "severity": "p2",
+  "source": "agent",
+  "location": {
+    "path": "cmd/attnd/outpost_standby_stack_test.go",
+    "line": 163
+  },
+  "culprit": "38b85d7ac6c55de9a7f6fca589137bece6d93f7b"
+}
