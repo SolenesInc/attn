@@ -1,0 +1,1 @@
+The Sheriff automation now runs again at least every 30 minutes while `main` stays red, even when CI keeps showing the same red run. `scripts/ci-main-red.sh` adds a `window <UTC half hour>` line while anything is red, so its guard no longer treats the output as handled, and a later Sheriff can take over a fix that a live author declined or let stall.
