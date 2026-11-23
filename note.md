@@ -1,0 +1,1 @@
+The prompt editor now serves at most one process per checkout. Starting a second `serve` for a checkout whose editor runs prints the running editor's URL and exits 0, so two editors can no longer both pass a save's revision check and silently overwrite an acknowledged save.
