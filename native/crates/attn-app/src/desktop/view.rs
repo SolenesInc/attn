@@ -191,8 +191,11 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         .w_full()
         .grow(1.0)
         .min_h(0.0)
-        .on_layout_tx(|state: &mut State, rect, tx: &mut Tx| {
-            let area = Some(Area::at(rect, state.terminals.metrics().cell_w));
+        .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| {
+            let area = Some(Area::at(
+                rect,
+                state.terminals.metrics().cell_points(scale).0,
+            ));
             if state.window.desk.reported_area == area {
                 tx.live_only();
                 return;

@@ -583,8 +583,8 @@ impl Terminals {
         }
         term.slot = Some(((w, h), scale));
         place_caret(term, &metrics);
-        let size = metrics.fit(w, h);
-        if term.agent && mid_layout(size, term.vt.size(), (w, h), &metrics) {
+        let size = metrics.fit(w, h, scale);
+        if term.agent && mid_layout(size, term.vt.size(), (w, h), scale, &metrics) {
             return;
         }
         term.tile = Some(Tile {
@@ -607,6 +607,45 @@ impl Terminals {
                 attaching.relaid = true;
             }
             Phase::Away | Phase::Stopped => {}
+        }
+    }
+
+    /// Re-fits laid-out terminals when the display scale changes without moving their view-point
+    /// rects, such as dragging a window between a 1x and 2x monitor.
+    pub(crate) fn set_scale(&mut self, scale: f32, daemon: &Commands) {
+        let metrics = self.metrics();
+        for (id, term) in &mut self.panes {
+            let Some(((w, h), previous)) = term.slot else {
+                continue;
+            };
+            if previous == scale {
+                continue;
+            }
+            term.slot = Some(((w, h), scale));
+            place_caret(term, &metrics);
+            let size = metrics.fit(w, h, scale);
+            if term.agent && mid_layout(size, term.vt.size(), (w, h), scale, &metrics) {
+                continue;
+            }
+            let next = Tile {
+                size,
+                pixels: metrics.pixels(size, scale),
+            };
+            if term.tile == Some(next) {
+                continue;
+            }
+            term.tile = Some(next);
+            match &mut term.phase {
+                Phase::Live => {
+                    term.sent_size = None;
+                    let at = term.sent_at;
+                    send_resize(id, term, at, Pixels::Sent, daemon);
+                }
+                Phase::Attaching(attaching) | Phase::Retrying { attaching, .. } => {
+                    attaching.relaid = true;
+                }
+                Phase::Waiting | Phase::Away | Phase::Stopped => {}
+            }
         }
     }
 
@@ -1169,7 +1208,10 @@ impl Terminals {
         let Some(term) = self.panes.get_mut(id) else {
             return false;
         };
-        let lines = term.pointer.wheel.take(-dy / metrics.cell_h);
+        let row_h = term
+            .slot
+            .map_or(metrics.cell_h, |(_, scale)| metrics.cell_points(scale).1);
+        let lines = term.pointer.wheel.take(-dy / row_h);
         let modes = term.vt.mouse_modes();
         if !modes.tracking && !modes.alternate_screen {
             if lines != 0 && Terminals::scroll_view(term, lines) {
@@ -1232,8 +1274,12 @@ impl Terminals {
     /// The font size and line height a cell of terminal `id` draws at now.
     pub(crate) fn cell_font(&self, id: &str) -> Option<(f32, f32)> {
         let metrics = self.metrics?;
-        let h = self.caret(id)?.get()[3];
-        Some((FONT_SIZE * h / metrics.cell_h, h))
+        let term = self.panes.get(id)?;
+        let h = term.caret.get()[3];
+        let cell_h = term
+            .slot
+            .map_or(metrics.cell_h, |(_, scale)| metrics.cell_points(scale).1);
+        Some((FONT_SIZE * h / cell_h, h))
     }
 
     /// How tall a terminal's row stands at rest, in points, whatever grid a resize still waits on.
@@ -1374,6 +1420,13 @@ impl Terminals {
             term,
         );
         Some(term)
+    }
+
+    /// Whether any laid-out terminal was fitted for a display scale other than `scale`.
+    pub(crate) fn scale_changed(&self, scale: f32) -> bool {
+        self.panes
+            .values()
+            .any(|term| term.slot.is_some_and(|(_, previous)| previous != scale))
     }
 
     /// Whether a screen changed since the renderer last took the grids.
@@ -1525,13 +1578,19 @@ fn send_resize(id: &str, term: &mut Term, now: f64, pixels: Pixels, daemon: &Com
 /// An agent's tile laid out too small to be a size the agent should draw for, while the
 /// terminal's grid is healthy and fits the tile. A grid already
 /// that small is followed as it grows; one that overflows the tile is always refit.
-fn mid_layout(size: (u16, u16), grid: (u16, u16), (w, h): (f32, f32), metrics: &Metrics) -> bool {
+fn mid_layout(
+    size: (u16, u16),
+    grid: (u16, u16),
+    (w, h): (f32, f32),
+    scale: f32,
+    metrics: &Metrics,
+) -> bool {
     let unusable = |(cols, rows): (u16, u16)| cols < AGENT_USABLE.0 || rows < AGENT_USABLE.1;
     if !unusable(size) {
         return false;
     }
-    let overflows = f32::from(grid.1) * metrics.cell_h > h + 1.0
-        || f32::from(grid.0) * metrics.cell_w > w + 1.0;
+    let (cell_w, cell_h) = metrics.cell_points(scale);
+    let overflows = f32::from(grid.1) * cell_h > h + 1.0 || f32::from(grid.0) * cell_w > w + 1.0;
     let shrinks = size.0 < grid.0 || size.1 < grid.1;
     !overflows && !(unusable(grid) && !shrinks)
 }

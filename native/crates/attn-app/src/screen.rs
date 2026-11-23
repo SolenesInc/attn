@@ -10,11 +10,13 @@ pub struct Screens {
     cells: Cells,
 }
 
-/// Gives the terminals the window's theme and returns it.
-fn theme_terminals(rt: &mut Runtime<State>) -> TerminalColors {
+/// Gives the terminals the window's theme and display scale, and returns the theme.
+fn sync_terminals(rt: &mut Runtime<State>) -> TerminalColors {
     let theme = crate::colors(&rt.state().facts.settings, rt.env.system_dark).terminal;
+    let scale = rt.env.scale;
     let state = rt.state_mut();
     state.terminals.set_theme(theme, &state.daemon);
+    state.terminals.set_scale(scale, &state.daemon);
     theme
 }
 
@@ -29,7 +31,7 @@ impl Screens {
     /// A frame of a window with no GPU, as a wire test's world draws one: it takes the
     /// terminals' screens as `render` does and uploads nothing.
     pub fn draw_without_gpu(&mut self, rt: &mut Runtime<State>) {
-        theme_terminals(rt);
+        sync_terminals(rt);
         let redrawn = rt.state().terminals.undrawn();
         rt.state_mut().terminals.grids().for_each(drop);
         screens_drawn(rt, redrawn);
@@ -42,13 +44,14 @@ impl Compositor<State> for Screens {
     }
 
     fn redraws(&self, rt: &Runtime<State>) -> bool {
-        rt.state().terminals.undrawn()
+        let terminals = &rt.state().terminals;
+        terminals.undrawn() || terminals.scale_changed(rt.env.scale)
     }
 
     fn render(&mut self, f: &mut Frame<'_, State>) {
         let (device, queue, key) = (f.device, f.queue, f.device_key());
         let scale = f.rt.env.scale;
-        let theme = theme_terminals(f.rt);
+        let theme = sync_terminals(f.rt);
         let redrawn = f.rt.state().terminals.undrawn();
         let terminals = &mut f.rt.state_mut().terminals;
         let metrics = terminals.metrics();

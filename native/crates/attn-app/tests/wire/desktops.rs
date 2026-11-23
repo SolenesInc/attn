@@ -4393,10 +4393,7 @@ fn split_terminals_at_fractional_scales_fit_their_drawn_cells_inside_their_slots
     let assert_fits = |world: &World, label: &str| {
         let metrics = attn_term::Metrics::of(attn_term::FONT_SIZE);
         let scale = world.runtime().env.scale;
-        let (cw, ch) = (
-            (metrics.cell_w * scale).round(),
-            (metrics.cell_h * scale).round(),
-        );
+        let (cw, ch) = metrics.device_cell(scale);
         for runtime in ["r-a", "r-b"] {
             let ([_, _, w, h], slot_rect, _) = terminal_effect_slot(world, runtime);
             let resize = world
@@ -4431,6 +4428,7 @@ fn split_terminals_at_fractional_scales_fit_their_drawn_cells_inside_their_slots
                 "{label} {runtime}: pixel size matches drawn cells"
             );
         }
+        assert!(world.runtime_is_at_rest(), "{label}: window stays at rest");
     };
 
     let wide = (2200.0, 900.0);
@@ -4443,12 +4441,14 @@ fn split_terminals_at_fractional_scales_fit_their_drawn_cells_inside_their_slots
         assert_fits(&world, &format!("uiScale={ui_scale} at 2x"));
     }
 
-    let mut state = initial(vec![desktop(1, "a", Some(row([pane("a"), pane("b")])))]);
-    state.settings = Some([("uiScale".into(), "1.2".into())].into());
-    let mut world = World::start_sized(Daemon::scripted().state(state), wide);
-    world.open_desktop();
-    world.advance(Duration::from_secs(1));
-    world.gesture(|app| app.runtime.set_viewport(wide, 1.0));
-    world.advance(Duration::from_secs(1));
-    assert_fits(&world, "uiScale=1.2 moved to 1x");
+    for ui_scale in ["1.2", "1.3"] {
+        let mut state = initial(vec![desktop(1, "a", Some(row([pane("a"), pane("b")])))]);
+        state.settings = Some([("uiScale".into(), ui_scale.into())].into());
+        let mut world = World::start_sized(Daemon::scripted().state(state), wide);
+        world.open_desktop();
+        world.advance(Duration::from_secs(1));
+        world.gesture(|app| app.runtime.set_viewport(wide, 1.0));
+        world.advance(Duration::from_secs(1));
+        assert_fits(&world, &format!("uiScale={ui_scale} moved to 1x"));
+    }
 }

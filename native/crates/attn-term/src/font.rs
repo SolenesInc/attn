@@ -27,16 +27,28 @@ impl Metrics {
         }
     }
 
-    /// The grid that fits `w`×`h` points, at least one cell each way.
-    pub fn fit(&self, w: f32, h: f32) -> (u16, u16) {
-        let count =
-            |len: f32, cell: f32| (len / cell).floor().clamp(1.0, f32::from(u16::MAX)) as u16;
-        (count(w, self.cell_w), count(h, self.cell_h))
+    /// The grid that fits `w`×`h` points at `scale` device pixels per point, at least one cell
+    /// each way.
+    pub fn fit(&self, w: f32, h: f32, scale: f32) -> (u16, u16) {
+        let (cw, ch) = self.device_cell(scale);
+        let count = |len: f32, cell: f32| {
+            (len * scale / cell).floor().clamp(1.0, f32::from(u16::MAX)) as u16
+        };
+        (count(w, cw), count(h, ch))
     }
 
     /// A cell's size in device pixels at `scale`, as the renderer draws it.
-    pub(crate) fn device_cell(&self, scale: f32) -> (f32, f32) {
-        ((self.cell_w * scale).round(), (self.cell_h * scale).round())
+    pub fn device_cell(&self, scale: f32) -> (f32, f32) {
+        (
+            (self.cell_w * scale).round().max(1.0),
+            (self.cell_h * scale).round().max(1.0),
+        )
+    }
+
+    /// A drawn cell's size in view points at `scale`.
+    pub fn cell_points(&self, scale: f32) -> (f32, f32) {
+        let (cw, ch) = self.device_cell(scale);
+        (cw / scale, ch / scale)
     }
 
     /// The zero-based cell drawn under (`x`, `y`) when a `shape` grid draws in a `slot` at
@@ -107,8 +119,8 @@ impl Metrics {
 
     /// The pixel size `cols`×`rows` cells take at `scale` device pixels per point.
     pub fn pixels(&self, (cols, rows): (u16, u16), scale: f32) -> (u32, u32) {
-        let px = |n: u16, cell: f32| (f32::from(n) * cell * scale).round() as u32;
-        (px(cols, self.cell_w), px(rows, self.cell_h))
+        let (cw, ch) = self.device_cell(scale);
+        (u32::from(cols) * cw as u32, u32::from(rows) * ch as u32)
     }
 }
 
@@ -134,5 +146,67 @@ pub(crate) fn fit((cols, rows): (u16, u16), (cw, ch): (f32, f32), (w, h): (f32, 
     Fit {
         zoom,
         offset: [(w - gw * zoom) / 2.0, (h - gh * zoom) / 2.0],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fitted_grids_never_overflow_or_trigger_spurious_zoom_at_fractional_scales() {
+        for cell_w in [7.0_f32, 8.0, 9.0, 10.0, 11.0] {
+            for cell_h in [18.0_f32, 20.0, 21.0, 23.0] {
+                let metrics = Metrics {
+                    font_size: FONT_SIZE,
+                    cell_w,
+                    cell_h,
+                };
+                for display in [1.0_f32, 1.25, 1.5, 2.0] {
+                    for tenths in 7..=15 {
+                        let scale = display * (tenths as f32 / 10.0);
+                        let (cw, ch) = metrics.device_cell(scale);
+                        for (w, h) in [
+                            (480.0_f32, 320.0_f32),
+                            (774.0, 650.0),
+                            (955.5, 712.25),
+                            (1548.0, 900.0),
+                        ] {
+                            let (cols, rows) = metrics.fit(w, h, scale);
+                            let (w_px, h_px) = (w * scale, h * scale);
+                            assert!(
+                                f32::from(cols) * cw <= w_px.floor()
+                                    && f32::from(rows) * ch <= h_px.floor(),
+                                "cell={cell_w}x{cell_h} scale={scale} slot={w}x{h}: {cols}x{rows} at {cw}x{ch}px overflows {}x{}px",
+                                w_px.floor(),
+                                h_px.floor()
+                            );
+                            let placed = fit((cols, rows), (cw, ch), (w_px, h_px));
+                            assert_eq!(
+                                (placed.zoom, placed.offset),
+                                (1.0, [0.0, 0.0]),
+                                "cell={cell_w}x{cell_h} scale={scale} slot={w}x{h}: fitted grid {cols}x{rows} triggered zoom {}",
+                                placed.zoom
+                            );
+                            assert_eq!(
+                                metrics.pixels((cols, rows), scale),
+                                (u32::from(cols) * cw as u32, u32::from(rows) * ch as u32),
+                                "cell={cell_w}x{cell_h} scale={scale}: pixel size matches drawn cells"
+                            );
+                            let last = metrics.cell_rect(
+                                (cols, rows),
+                                (w, h),
+                                scale,
+                                (cols - 1, rows - 1),
+                            );
+                            assert!(
+                                last[0] + last[2] <= w + 1e-3 && last[1] + last[3] <= h + 1e-3,
+                                "cell={cell_w}x{cell_h} scale={scale} slot={w}x{h}: last cell {last:?} past slot"
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 }
