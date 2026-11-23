@@ -1,0 +1,1 @@
+Repairs the red PTY upgrade job (CI run 45240944475): the reboot test no longer checks the shared host's registry file, which the host writes only when the daemon commits the spawn, after the agent has already started. The agent's parent being `attn-pty-host` still proves the session came back on the host.
