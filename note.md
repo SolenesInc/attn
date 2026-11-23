@@ -1,0 +1,1 @@
+Sigma and watching app-server sessions now follow descendant subagent conversations from `conversation/list` (`lineage`), counting subagents' recent markdown files, `gh pr create` pull requests, and spend once across restarts while keeping non-root cost sources and honoring `fork.at` and launch-time history rules (`s-bsqbvs`).
