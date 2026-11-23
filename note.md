@@ -1,0 +1,1 @@
+A model a harness lists is now launched by its exact catalog id: attn no longer joins or splits a provider, and `attn delegate --provider` is gone. Saved roles, pending delegations and tier overrides are migrated to `provider/model` ids, and a harness can report a model `family` so the shipped tiers still recognize renamed ids.
