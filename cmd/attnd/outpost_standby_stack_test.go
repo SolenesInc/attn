@@ -159,7 +159,11 @@ func TestAnAnswerReturnedBeforeItsPlacementAnswersResumesATenderThatCloses(t *te
 	testworld.Request(m.app, protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: protocol.SessionID(m.session)}, protocol.EventSessionCloseResult,
 		func(r protocol.SessionCloseResultMessage) bool { return string(r.SessionID) == m.session })
 	woken := next()
-	if got := woken.Prompted(); !woken.ThroughMod || !strings.Contains(got, "Answer: Postgres") {
-		t.Fatalf("the woken Claude took %q (through the mod: %t), want the answer through the mod", got, woken.ThroughMod)
+	if got := woken.Prompted(); !strings.Contains(got, outpostStandbyNote) || strings.Contains(got, "Answer: Postgres") || !woken.ThroughMod || woken.AsUser {
+		t.Fatalf("the woken Claude first took %q (through the mod: %t, as the user: %t), want the standby note alone in attn's voice", got, woken.ThroughMod, woken.AsUser)
+	}
+	woken.Reply("Reading my mail. <!-- attn:state=waiting_input -->")
+	if got := woken.Prompted(); !strings.Contains(got, "Answer: Postgres") || strings.Contains(got, outpostStandbyNote) || !woken.ThroughMod || !woken.AsUser {
+		t.Fatalf("at the turn's end Claude took %q (through the mod: %t, as the user: %t), want the answer alone as the user", got, woken.ThroughMod, woken.AsUser)
 	}
 }
