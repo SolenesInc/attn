@@ -18,7 +18,7 @@ func (h codexHarness) Watcher() harness.TranscriptWatcher {
 	if enabled, ok := harness.CapabilityEnv(codexID, "TRANSCRIPT_WATCHER"); ok && !enabled {
 		return nil
 	}
-	return &codexTranscriptWatcherBehavior{}
+	return &codexTranscriptWatcherBehavior{shared: h.shared}
 }
 
 func (h codexHarness) UsageSources(root string) transcript.UsageSourceResolver {
@@ -30,12 +30,17 @@ func (codexHarness) LastAssistant(path string, max int, _ time.Time, _ string) (
 	return content, "", err
 }
 
-type codexTranscriptWatcherBehavior struct{}
+type codexTranscriptWatcherBehavior struct {
+	shared *codexShared
+}
 
 func (b *codexTranscriptWatcherBehavior) HandleLine(line []byte) harness.WatcherLine {
 	abort, ok := transcript.CodexTurnAborted(line)
 	if !ok {
 		return harness.WatcherLine{}
+	}
+	if b.shared.tookOwnInterrupt(abort.Turn) {
+		return harness.WatcherLine{Log: fmt.Sprintf("transcript watcher: codex turn %s ended by attn's interrupt; the next turn carries on", abort.Turn)}
 	}
 	if !abort.UserHalt {
 		return harness.WatcherLine{

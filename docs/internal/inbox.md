@@ -239,11 +239,21 @@ A peer message with a turn use, or sent as the user, rings first and alone: the
 ring types that one message. A steer or an interrupt goes in attn's voice under
 the peer header, with a line that says the sender let the turn go on or
 stopped it. A message sent as the user goes bare, in the user's voice. Only a
-harness that can put input into a running turn takes a turn use, which today is
-the Claude mod. A typed session, Codex, Sigma and plugin drivers refuse it. attn
-then clears the turn use, the message waits as a queued message, and the
-sender's result says why. attn never types a steer or an interrupt into a
+harness that can put input into a running turn takes a turn use: the Claude
+mod, Codex on the shared app-server, and an app server that declares the
+matching ability, `steer` or `interrupt`. Sigma declares both. A typed session,
+a plugin driver and an app server without the ability refuse it. attn then
+clears the turn use, the message waits as a queued message, and the sender's
+result says why. attn never types a steer or an interrupt into a
 terminal, because typed text reads as the user's.
+
+Codex on the shared app-server takes a steer with `turn/steer` into the running
+turn. For an interrupt it calls `turn/interrupt`, waits for the conversation to
+go idle, then starts the next turn with `turn/start`. An app server takes an
+interrupt as `conversation/interrupt`, then `conversation/submit`. With these,
+as with the Claude mod, the session stays working across the interrupt and no
+turn opens for the user: attn does not read the end of the turn it interrupted
+as a stop.
 
 Once attn has placed a ring in the session, attn records the session as the
 reader of the ring's user input. attn never checks that the agent acted on

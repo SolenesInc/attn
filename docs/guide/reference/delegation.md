@@ -102,8 +102,9 @@ standby](#seeds-on-standby) describes.
 A message to a working agent waits until its turn ends, unless the sender
 chooses otherwise. `--steer` puts the message into the running turn at the
 agent's next step, and `--interrupt` stops the turn and starts the next one
-with the message. Both reach Claude Code sessions with the Claude mod. For
-other agents the message waits for the turn to end, and the sender is told why.
+with the message. Both reach Claude Code sessions with the Claude mod, shared
+Codex sessions, Sigma, and plugin servers that support them. For other agents
+the message waits for the turn to end, and the sender is told why.
 
 Every message says it comes from another agent, so the recipient never takes it
 as your approval. When you ask an agent to pass on your words, such as

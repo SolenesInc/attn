@@ -63,6 +63,7 @@ type codexShared struct {
 	probing   sync.Mutex
 
 	archivingAfterClose map[string]int
+	ownInterrupts       map[string]bool
 }
 
 type codexServer struct {
@@ -74,6 +75,7 @@ type codexServer struct {
 	control    *codexshared.Client
 	held       map[string]codexThreadStatus
 	compacting map[string]*codexCompaction
+	idleWaits  map[string]chan struct{}
 	parents    map[string]string
 	attempt    *codexAttempt
 	events     linkEvents

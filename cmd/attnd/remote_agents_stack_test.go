@@ -72,6 +72,40 @@ func TestOutpostAgentsRunOnTheirMachineAndReportToTheHome(t *testing.T) {
 	}
 }
 
+func TestASteerAndAnInterruptReachACodexRunningOnAnOutpost(t *testing.T) {
+	home := testworld.NewStack(t)
+	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	shareOutpostCodex(t, pair)
+	app := pair.App
+	outpost.SetCodexFolderTrust(outpost.Path("agent"), "trusted")
+	id := home.Spawn(app, fakeagent.Codex, outpost.Path("agent"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) })
+	agent := outpost.LaunchedCarrying(app.Terminal(id))
+	sender := home.Spawn(app, fakeagent.Harness("shell"), home.Path("sender"))
+	app.TypeLine(id, "fix the flaky checkout test")
+	agent.Prompted()
+	testworld.AwaitSession(app, id, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+
+	for _, use := range []struct {
+		flag string
+		want protocol.AgentMsgStatus
+	}{{"steer", protocol.AgentMsgStatusSteered}, {"interrupt", protocol.AgentMsgStatusInterrupted}} {
+		text := "Keep to the TTL line, by " + use.flag + "."
+		var sent protocol.AgentMsgResult
+		if err := home.Client().RunCommand("agent msg", protocol.SessionID(sender), map[string]any{"target": id, "text": text, use.flag: true}, &sent); err != nil {
+			t.Fatalf("%s to the outpost's Codex: %v", use.flag, err)
+		}
+		if sent.Status != use.want {
+			t.Fatalf("a %s to the outpost's working Codex = %+v, want %s", use.flag, sent, use.want)
+		}
+		if got := outpost.CodexServer().Prompted(agent.ConversationID); !strings.Contains(got, text) {
+			t.Fatalf("the outpost's Codex took %q, want the %s", got, use.flag)
+		}
+	}
+}
+
 func TestOutpostAgentsQueueMessagesOfflineAndRecoverAcrossBothRestarts(t *testing.T) {
 	home := testworld.NewStack(t)
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))

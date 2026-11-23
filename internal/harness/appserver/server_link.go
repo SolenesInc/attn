@@ -310,7 +310,7 @@ func (l *Link) observedCompletion(sessionID protocol.SessionID) int64 {
 
 func (l *Link) observe(sessionID protocol.SessionID, quiet bool, status string, ended *serverEnded) {
 	evidence, ok := l.c.host.Sessions().Evidence(sessionID)
-	if !ok {
+	if !ok || status == "idle" && l.endedByOwnInterrupt(sessionID, ended) {
 		return
 	}
 	l.c.host.Sessions().TraceClaim(sessionID, quiet, status, time.Now())
@@ -363,8 +363,8 @@ func (l *Link) Conversation(facts harness.SessionFacts) harness.Conversation {
 }
 
 func (s serverConversation) Deliver(ctx context.Context, in harness.Input) harness.Custody {
-	if in.Turn != harness.Queue {
-		return harness.Custody{Outcome: harness.Rejected, Reason: "attn does not steer or interrupt " + string(s.link.b.agent) + " yet"}
+	if refusal := s.link.turnRefusal(in.Turn); refusal != "" {
+		return harness.Custody{Outcome: harness.Rejected, Reason: refusal}
 	}
 	if in.PendingApproval && !s.link.Can(AbilityQuestionSafe) {
 		return harness.Custody{Outcome: harness.NotMine}
@@ -392,14 +392,24 @@ func (l *Link) deliver(ctx context.Context, session protocol.SessionID, in harne
 		return harness.Custody{Reason: fmt.Sprintf("session %s holds no %s conversation", session, l.b.name)}
 	}
 	params := map[string]any{"conversation": conversation, "requestId": in.ID, "author": l.inputAuthor(session, in.Voice), "text": in.Text}
-	if l.Can(AbilitySteer) {
+	if l.Can(AbilitySteer) && in.Turn != harness.Interrupt {
 		params["steer"] = true
 	}
 	c, err := l.ensureServer(ctx, nil)
-	if err == nil {
+	call := func(method string, params any) error {
 		callCtx, cancel := context.WithTimeout(ctx, serverCallLimit)
-		err = c.Call(callCtx, "conversation/submit", params, nil)
-		cancel()
+		defer cancel()
+		return c.Call(callCtx, method, params, nil)
+	}
+	if err == nil && in.Turn == harness.Interrupt {
+		l.b.interrupting.Store(session, true)
+		err = call("conversation/interrupt", map[string]any{"conversation": conversation, "author": l.author(harness.VoiceAttn)})
+		if err != nil {
+			l.b.interrupting.Delete(session)
+		}
+	}
+	if err == nil {
+		err = call("conversation/submit", params)
 	}
 	if err != nil {
 		return harness.Custody{Reason: fmt.Sprintf("deliver to %s conversation %s: %v", l.b.name, conversation, err)}
@@ -430,6 +440,21 @@ func (l *Link) inputAuthor(session protocol.SessionID, voice harness.Voice) serv
 		author.ID = authors.Of(terminal)
 	}
 	return author
+}
+
+func (l *Link) endedByOwnInterrupt(sessionID protocol.SessionID, ended *serverEnded) bool {
+	_, interrupting := l.b.interrupting.LoadAndDelete(sessionID)
+	return interrupting && ended != nil && ended.Outcome == "interrupted"
+}
+
+func (l *Link) turnRefusal(turn harness.TurnUse) string {
+	switch {
+	case turn == harness.Steer && !l.Can(AbilitySteer):
+		return l.b.name + " cannot take a steer into its running turn"
+	case turn == harness.Interrupt && !l.Can(AbilityInterrupt):
+		return l.b.name + " cannot interrupt its running turn"
+	}
+	return ""
 }
 
 func (l *Link) Can(ability Ability) bool {

@@ -46,6 +46,16 @@ measurement uses that one.
   `approval/resolve` answers an approval; what a steer does while a call waits
   on an approval is not probed (`packages/protocol/src/index.ts`,
   `packages/sigma/src/server.ts`).
+- `conversation/interrupt` withdraws the inputs waiting in the conversation's
+  queue in the same commit that writes its `sigma.interrupted` entry, and
+  answers with the people's inputs it withdrew; inputs that arrive while the run
+  stops are not withdrawn (`packages/sigma/src/server.ts`, read at 9fbd582). A
+  `conversation/submit` without `steer` right after it starts the next run
+  with that input. Probed through a non-production attn instance on 9fbd582
+  with `claude-haiku-5-5` (seed `s-77s6d3`, 2026-11-23): the run's foreground
+  tool call ended "interrupted; it may or may not have taken effect", and the
+  submitted message started the next run 7 ms later. A steer sent during a
+  tool call reached the run right after that call's result.
 - `ephemeral/run {prompt, system?, schema?, provider?, model?, effort?, maxTurns?}`
   answers one prompt with no tools and commits nothing: no conversation in
   `conversation/list`, no entry, no usage (measured on 43ebbba: after a title,

@@ -442,8 +442,13 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		}
 		receipt.Rang = true
 		receipt.Detail = "notified " + sessionDisplayName(holder)
-		if placement.Held && ring.Turn != nil {
+		if ring.Turn != nil {
 			receipt.Turn, receipt.Typed = *ring.Turn, ring.Typed
+		}
+		if ring.Turn != nil && !placement.Held {
+			if err := d.store.DeliverPeerAs(ring.Typed, *ring.Turn); err != nil {
+				return receipt, err
+			}
 		}
 		return receipt, nil
 	}

@@ -51,7 +51,7 @@ func serverDeclaration() appserver.Declaration {
 		HomeEnv:                  "SIGMA_HOME",
 		DefaultHome:              ".sigma",
 		SocketName:               "sigma.sock",
-		Abilities:                []appserver.Ability{appserver.AbilityCompact, appserver.AbilityWatch, appserver.AbilitySteer, appserver.AbilityQuestionSafe},
+		Abilities:                []appserver.Ability{appserver.AbilityCompact, appserver.AbilityWatch, appserver.AbilitySteer, appserver.AbilityInterrupt, appserver.AbilityQuestionSafe},
 		CallerConversationEnv:    "SIGMA_ROOT_CONVERSATION",
 		CallerConversationHeader: "Sigma-Root-Conversation",
 		OnClose:                  "interrupt",

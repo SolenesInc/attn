@@ -29,7 +29,7 @@ type conversation struct {
 
 func (c conversation) Deliver(ctx context.Context, in harness.Input) harness.Custody {
 	if in.Turn != harness.Queue {
-		return harness.Custody{Outcome: harness.Rejected, Reason: "attn does not steer or interrupt " + string(c.facts.Harness) + " yet"}
+		return harness.Custody{Outcome: harness.Rejected, Reason: "the " + string(c.facts.Harness) + " plugin driver cannot steer or interrupt a running turn"}
 	}
 	return c.request(ctx, "driver.deliver_message", in)
 }

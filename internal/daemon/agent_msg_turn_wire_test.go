@@ -214,20 +214,75 @@ func TestAMessageSentAsTheUserReachesAWorkingModdedClaudeBareAndAsTheUser(t *tes
 	})
 }
 
-func TestAnInterruptAsTheUserReachesCodexAsTheUsersInput(t *testing.T) {
-	const words = "Leave the migration for tonight."
+type shownSince struct{ log, updates int }
+
+func shownNow(app *testworld.Peer, session string) shownSince {
+	return shownSince{log: len(app.Log()), updates: len(sessionUpdatesOf(app, session))}
+}
+
+func stayedWorkingOnOneTurn(t *testing.T, app *testworld.Peer, session string, before shownSince, endTurn func()) {
+	t.Helper()
+	endTurn()
+	testworld.AwaitSessionSince(app, before.log, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	updates := sessionUpdatesOf(app, session)
+	opened := protocol.Deref(updates[before.updates-1].TurnOpenedAt)
+	for _, shown := range updates[before.updates : len(updates)-1] {
+		if shown.State != protocol.SessionStateWorking || protocol.Deref(shown.TurnOpenedAt) != opened {
+			t.Fatalf("across attn's interrupt the app was shown %s (%s) with its turn opened at %q, want it working on the turn opened at %q", shown.State, protocol.Deref(shown.StateReason), protocol.Deref(shown.TurnOpenedAt), opened)
+		}
+	}
+	if last := updates[len(updates)-1]; protocol.Deref(last.StateReason) == "turn_aborted" {
+		t.Fatalf("the turn after attn's interrupt ended as %s (%s), want it to end on its own", last.State, protocol.Deref(last.StateReason))
+	}
+}
+
+func TestASteerReachesAWorkingSharedCodexInItsRunningTurn(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	registerSessions(t, w, cli, "lead")
 	session, run := sharedCodexInATurn(t, w, app)
 
-	sent := sendPeerMessage(t, cli, "lead", session, words, "interrupt", "as_user")
-	if sent.Status != protocol.AgentMsgStatusQueued || !strings.Contains(sent.Detail, "Codex") {
-		t.Fatalf("an interrupt as the user to a working Codex = %+v, want it queued with the reason", sent)
+	sent := sendPeerMessage(t, cli, "lead", session, "New code logs through slog, not log.Printf.", "steer")
+	if sent.Status != protocol.AgentMsgStatusSteered {
+		t.Fatalf("a steer to a working Codex = %+v, want steered", sent)
 	}
-	run.Reply("Checked. <!-- attn:state=idle -->")
-	if got := w.CodexServer().Prompted(run.ConversationID); got != words {
-		t.Fatalf("Codex took %q, want the bare words as the user's input", got)
+	if got := w.CodexServer().Prompted(run.ConversationID); !strings.Contains(got, "New code logs through slog") || !strings.Contains(got, peerHeader) || !strings.Contains(got, steerLine) {
+		t.Fatalf("the running turn took %q, want the steer under the peer header", got)
+	}
+	run.Reply("Refactored with slog. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if status := peerMessageStatus(t, cli, "lead", sent.MessageID); protocol.Deref(status.DeliveredAs) != protocol.PeerTurnSteer {
+		t.Fatalf("the steer's status = %+v, want delivered as a steer", status)
+	}
+}
+
+func TestAnInterruptStopsAWorkingSharedCodexAndStartsItsNextTurnWithTheMessage(t *testing.T) {
+	const words = "Leave the migration for tonight."
+	for _, asUser := range []bool{false, true} {
+		t.Run(fmt.Sprintf("as the user %t", asUser), func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			app, cli := w.App(), w.Client()
+			registerSessions(t, w, cli, "lead")
+			session, run := sharedCodexInATurn(t, w, app)
+			flags := []string{"interrupt"}
+			if asUser {
+				flags = append(flags, "as_user")
+			}
+
+			before := shownNow(app, session)
+			sent := sendPeerMessage(t, cli, "lead", session, words, flags...)
+			if sent.Status != protocol.AgentMsgStatusInterrupted {
+				t.Fatalf("an interrupt to a working Codex = %+v, want interrupted", sent)
+			}
+			got := w.CodexServer().Prompted(run.ConversationID)
+			if asUser && got != words || !asUser && (!strings.Contains(got, words) || !strings.Contains(got, interruptOrigin) || !strings.Contains(got, peerHeader)) {
+				t.Fatalf("the next turn started with %q, want the interrupt (as the user: %t)", got, asUser)
+			}
+			stayedWorkingOnOneTurn(t, app, session, before, func() { w.CodexServer().Reply(run.ConversationID, "Left it. <!-- attn:state=idle -->") })
+			if status := peerMessageStatus(t, cli, "lead", sent.MessageID); protocol.Deref(status.DeliveredAs) != protocol.PeerTurnInterrupt {
+				t.Fatalf("the interrupt's status = %+v, want delivered as an interrupt", status)
+			}
+		})
 	}
 }
 
@@ -313,25 +368,75 @@ func TestAnInterruptSentAfterTheUserStoppedClaudeNeverStopsTheUsersNextTurn(t *t
 	}
 }
 
-func TestASteerOrInterruptToAWorkingAppServerQueuesWithTheReason(t *testing.T) {
+func TestASteerReachesAWorkingSigmaInItsRunningTurn(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "lead")
+	session, view, server := appServerSession(t, w, app, fakeagent.Sigma)
+	promptUntilWorking(app, session, view, server, "find the flaky checkout test")
+
+	sent := sendPeerMessage(t, cli, "lead", session, "New code logs through slog, not log.Printf.", "steer")
+	if sent.Status != protocol.AgentMsgStatusSteered {
+		t.Fatalf("a steer to a working Sigma = %+v, want steered", sent)
+	}
+	got := server.Prompted(view.ConversationID)
+	if !got.Steer || got.Author != "attn" || !strings.Contains(got.Text, "New code logs through slog") || !strings.Contains(got.Text, steerLine) {
+		t.Fatalf("Sigma took %+v, want the steer under the peer header, from attn, into the running turn", got)
+	}
+	if status := peerMessageStatus(t, cli, "lead", sent.MessageID); protocol.Deref(status.DeliveredAs) != protocol.PeerTurnSteer {
+		t.Fatalf("the steer's status = %+v, want delivered as a steer", status)
+	}
+}
+
+func TestAnInterruptStopsAWorkingSigmaAndStartsItsNextRunWithTheMessage(t *testing.T) {
+	const words = "Leave the migration for tonight."
+	for _, asUser := range []bool{false, true} {
+		t.Run(fmt.Sprintf("as the user %t", asUser), func(t *testing.T) {
+			w := newWorld(t, fakeagent.Sigma)
+			app, cli := w.App(), w.Client()
+			registerSessions(t, w, cli, "lead")
+			session, view, server := appServerSession(t, w, app, fakeagent.Sigma)
+			promptUntilWorking(app, session, view, server, "find the flaky checkout test")
+			flags := []string{"interrupt"}
+			if asUser {
+				flags = append(flags, "as_user")
+			}
+
+			before := shownNow(app, session)
+			sent := sendPeerMessage(t, cli, "lead", session, words, flags...)
+			if sent.Status != protocol.AgentMsgStatusInterrupted {
+				t.Fatalf("an interrupt to a working Sigma = %+v, want interrupted", sent)
+			}
+			server.AwaitInterrupted(view.ConversationID)
+			got := server.Prompted(view.ConversationID)
+			if got.Steer || asUser && (got.Text != words || got.Author == "attn") || !asUser && (got.Author != "attn" || !strings.Contains(got.Text, words) || !strings.Contains(got.Text, interruptOrigin)) {
+				t.Fatalf("after the interrupt Sigma took %+v, want the message as its next run (as the user: %t)", got, asUser)
+			}
+			stayedWorkingOnOneTurn(t, app, session, before, func() { server.Reply(view.ConversationID, "Left it. <!-- attn:state=idle -->") })
+			if status := peerMessageStatus(t, cli, "lead", sent.MessageID); protocol.Deref(status.DeliveredAs) != protocol.PeerTurnInterrupt {
+				t.Fatalf("the interrupt's status = %+v, want delivered as an interrupt", status)
+			}
+		})
+	}
+}
+
+func TestASteerOrInterruptToAWorkingServerWithoutTheAbilityQueuesWithTheReason(t *testing.T) {
 	for _, flag := range []string{"steer", "interrupt"} {
 		t.Run(flag, func(t *testing.T) {
-			eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
-				w := newWorld(t, h)
-				app, cli := w.App(), w.Client()
-				registerSessions(t, w, cli, "lead")
-				session, view, server := appServerSession(t, w, app, h)
-				promptUntilWorking(app, session, view, server, "find the flaky checkout test")
+			w := newWorld(t, fakeagent.SampleServer)
+			app, cli := w.App(), w.Client()
+			registerSessions(t, w, cli, "lead")
+			session, view, server := appServerSession(t, w, app, fakeagent.SampleServer)
+			promptUntilWorking(app, session, view, server, "find the flaky checkout test")
 
-				sent := sendPeerMessage(t, cli, "lead", session, "Rename the flag to ttl_seconds.", flag)
-				if sent.Status != protocol.AgentMsgStatusQueued || !strings.Contains(sent.Detail, "does not steer or interrupt") {
-					t.Fatalf("a %s to a working %s = %+v, want queued with the reason", flag, h, sent)
-				}
-				server.Reply(view.ConversationID, "Found it. <!-- attn:state=idle -->")
-				if got := server.Prompted(view.ConversationID); !strings.Contains(got.Text, inboxDoorbell) || strings.Contains(got.Text, "ttl_seconds") {
-					t.Fatalf("at the turn's end %s took %+v, want the doorbell", h, got)
-				}
-			})
+			sent := sendPeerMessage(t, cli, "lead", session, "Rename the flag to ttl_seconds.", flag)
+			if sent.Status != protocol.AgentMsgStatusQueued || !strings.Contains(sent.Detail, "cannot") {
+				t.Fatalf("a %s to a working server without the ability = %+v, want queued with the reason", flag, sent)
+			}
+			server.Reply(view.ConversationID, "Found it. <!-- attn:state=idle -->")
+			if got := server.Prompted(view.ConversationID); !strings.Contains(got.Text, inboxDoorbell) || strings.Contains(got.Text, "ttl_seconds") {
+				t.Fatalf("at the turn's end the server took %+v, want the doorbell", got)
+			}
 		})
 	}
 }
@@ -352,7 +457,7 @@ func TestASteerOrInterruptToAWorkingPluginDriverQueuesWithTheReason(t *testing.T
 				testworld.AwaitSession(app, recipient, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 
 				sent := sendPeerMessage(t, w.Client(), author, recipient, "Rename the flag to ttl_seconds.", flag)
-				if sent.Status != protocol.AgentMsgStatusQueued || !strings.Contains(sent.Detail, "does not steer or interrupt") {
+				if sent.Status != protocol.AgentMsgStatusQueued || !strings.Contains(sent.Detail, "plugin driver cannot steer or interrupt") {
 					t.Fatalf("a %s to a working plugin session = %+v, want queued with the reason", flag, sent)
 				}
 				if err := driver.state(run, 2, protocol.StateIdle); err != nil {

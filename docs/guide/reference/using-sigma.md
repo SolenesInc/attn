@@ -104,7 +104,9 @@ The session's state comes from the server, not from the terminal:
   for other harnesses.
 - If a run fails, or has crashed the server three times in a row, Attn sets the
   session to **waiting** and shows the reason.
-- If a run is interrupted, Attn sets the session to **idle**.
+- If a run is interrupted, Attn sets the session to **idle**. An interrupt
+  from another agent is the exception: its message starts the next run at
+  once, and the session stays **working**.
 
 If a run ends while Attn is down, Attn sets the session's state when Attn is
 back. Attn uses what the server reports about how the conversation's last run
@@ -163,7 +165,9 @@ until you answer. While only a subagent waits, the conversation is free: the
 annotation reaches its run at the next step, or starts a run if the
 conversation's run had ended, and the subagent's approval stays open. Messages
 from other agents and inbox notifications wait for the run to end, as they do
-for other harnesses. Whatever arrives while no run works starts one. A retried
+for other harnesses, unless the agent sends with `attn agent msg --steer`, which
+reaches the run at its next step, or `--interrupt`, which stops the run and
+starts the next one with the message. Whatever arrives while no run works starts one. A retried
 delivery is one follow-up.
 
 ## Closing and resuming

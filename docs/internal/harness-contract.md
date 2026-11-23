@@ -21,7 +21,7 @@ Outside `internal/harness/internal/`, only `internal/harness/builtin` and `inter
 - `harness.ConversationStore` (`internal/harness/harness.go`): checks resume readiness and admission (`Check`, `Prepare`, `Admit`), reads transcripts and harness versions (`Page`, `LastReply`, `Window`, `Activity`, `Version`), and maps transcript paths (`Locate`, `IDFromPath`).
 - `harness.Events` (`internal/harness/events.go`): the single evidence sink from adapters into core (`Turn`, `Compacting`, `Prompt`, `Tool`, `Usage`, `Replied`, `Named`, `Moved`, `Compaction`, `Returned`, `Settled`, `Reach`, `Reloaded`).
 - `harness.Host` (`internal/harness/host.go`): what attn gives an adapter, including `Life`, `Events`, `Setting`, `LoginEnv`, `ServerTools`, `TerminalTools`, `Sessions`, `Files`, `Terminals`, `Records`, `Clock`, `Executable`, `RegisterCron`, `Notifications`, `Profiles`, and command and snapshot registration.
-- `internal/harness/appserver`: the shared `attn-app-server-v2` client used by Sigma and by server-backed plugins. Servers declare their abilities (`compact`, `watch`, `targets`, `steer`, `question_safe`).
+- `internal/harness/appserver`: the shared `attn-app-server-v2` client used by Sigma and by server-backed plugins. Servers declare their abilities (`compact`, `watch`, `targets`, `steer`, `interrupt`, `question_safe`).
 - `harness.DirectLauncher` (`internal/harness/direct_launch.go`): wrapper-side launch construction (`Facts`, `ResolveExecutable`, `Prepare`, `Build`, `FindTranscript`) used by `cmd/attnd` (`attn -s` with `ATTN_DAEMON_MANAGED=1`) when `direct_agent_launch_enabled` is off.
 
 ### Shared optional parts

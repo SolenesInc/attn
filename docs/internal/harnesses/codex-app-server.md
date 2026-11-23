@@ -158,6 +158,22 @@ Probed on 0.162.1 against the app-server alone:
   of 200 concurrent `command/exec` calls failed with
   `Too many open files (os error 24)`.
 
+Probed on 0.167.0 with a real model over stdio, and through a non-production
+attn instance's shared app-server (seed `s-77s6d3`, 2026-11-23). attn's
+steer and interrupt rely on these:
+
+- `turn/steer` with `expectedTurnId` adds a user message to the running turn
+  while a command runs. The turn goes on and its reply can follow the steer.
+- `turn/interrupt {threadId, turnId}` answers `{}` before the turn has ended:
+  `thread/status/changed` `idle` and `turn/completed` with status
+  `interrupted` follow within milliseconds. The rollout records
+  `turn_aborted` with the turn's `turn_id` and reason `interrupted`.
+- `turn/start` while a turn is active starts no turn: it answers with the
+  running turn's id. A `turn/start` after the `idle` starts a new turn with
+  the input, 9 ms after the abort in the attn run.
+- A command the interrupted turn ran keeps running as a background terminal;
+  the next turn's agent saw its `sleep` still running.
+
 Probed on 0.162.1 and 0.163.0 with a mock model, and read in the source at
 rust-v0.163.0. Stopping and restarting the shared Codex app-server relies on
 these.

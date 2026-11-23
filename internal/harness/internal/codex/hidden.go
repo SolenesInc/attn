@@ -65,9 +65,6 @@ func (h codexHarness) Conversation(facts harness.SessionFacts) harness.Conversat
 func (codexConversation) CanCompact() error { return nil }
 
 func (c codexConversation) Deliver(_ context.Context, in harness.Input) harness.Custody {
-	if in.Turn != harness.Queue {
-		return harness.Custody{Outcome: harness.Rejected, Reason: "attn does not steer or interrupt Codex yet"}
-	}
 	if in.PendingApproval {
 		return harness.Custody{Outcome: harness.NotMine}
 	}
@@ -80,7 +77,7 @@ func (c codexConversation) Deliver(_ context.Context, in harness.Input) harness.
 	defer cancel()
 	s, client, err := r.control(ctx, facts.Profile)
 	if err == nil {
-		err = r.startTurn(ctx, client, facts.Session, conversation, in.Text)
+		err = r.startTurn(ctx, s, client, facts.Session, conversation, in)
 	}
 	if err == nil && facts.Session != "" {
 		s.events.run(r.host, func() {
@@ -93,26 +90,103 @@ func (c codexConversation) Deliver(_ context.Context, in harness.Input) harness.
 	return harness.Custody{Outcome: harness.Taken, At: time.Now()}
 }
 
-func (r *codexShared) startTurn(ctx context.Context, client *codexshared.Client, sessionID protocol.SessionID, conversation, text string) error {
+func (r *codexShared) startTurn(ctx context.Context, s *codexServer, client *codexshared.Client, sessionID protocol.SessionID, conversation string, in harness.Input) error {
 	return r.withResumed(ctx, client, sessionID, conversation, func(call codexCall, status codexThreadStatus) error {
-		params := map[string]any{"threadId": conversation, "input": []any{map[string]any{"type": "text", "text": text, "text_elements": []any{}}}}
+		params := map[string]any{"threadId": conversation, "input": []any{map[string]any{"type": "text", "text": in.Text, "text_elements": []any{}}}}
 		if status.Type == "active" {
-			var turns struct {
-				Data []struct {
-					ID     string `json:"id"`
-					Status string `json:"status"`
-				} `json:"data"`
-			}
-			if err := call("thread/turns/list", map[string]any{"threadId": conversation, "limit": 1, "sortDirection": "desc"}, &turns); err != nil {
+			running, err := runningTurn(call, conversation)
+			switch {
+			case err != nil:
 				return err
-			}
-			if len(turns.Data) > 0 && turns.Data[0].Status == "inProgress" {
-				params["expectedTurnId"] = turns.Data[0].ID
+			case running == "":
+			case in.Turn == harness.Interrupt:
+				idle := s.awaitIdle(conversation)
+				r.interrupting(running)
+				err := call("turn/interrupt", map[string]any{"threadId": conversation, "turnId": running}, nil)
+				if err == nil {
+					err = awaitClosed(ctx, idle, codexServerCallLimit)
+				}
+				if err != nil {
+					s.forgetIdleWait(conversation, idle)
+					r.tookOwnInterrupt(running)
+					return fmt.Errorf("interrupt turn %s: %w", running, err)
+				}
+			default:
+				params["expectedTurnId"] = running
 				return call("turn/steer", params, nil)
 			}
 		}
 		return call("turn/start", params, nil)
 	})
+}
+
+func (r *codexShared) interrupting(turn string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.ownInterrupts == nil {
+		r.ownInterrupts = make(map[string]bool)
+	}
+	r.ownInterrupts[turn] = true
+}
+
+func (r *codexShared) tookOwnInterrupt(turn string) bool {
+	if r == nil || turn == "" {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	own := r.ownInterrupts[turn]
+	delete(r.ownInterrupts, turn)
+	return own
+}
+
+func (s *codexServer) forgetIdleWait(conversation string, idle <-chan struct{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if waiting := s.idleWaits[conversation]; waiting != nil && (<-chan struct{})(waiting) == idle {
+		delete(s.idleWaits, conversation)
+	}
+}
+
+func runningTurn(call codexCall, conversation string) (string, error) {
+	var turns struct {
+		Data []struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		} `json:"data"`
+	}
+	if err := call("thread/turns/list", map[string]any{"threadId": conversation, "limit": 1, "sortDirection": "desc"}, &turns); err != nil {
+		return "", err
+	}
+	if len(turns.Data) > 0 && turns.Data[0].Status == "inProgress" {
+		return turns.Data[0].ID, nil
+	}
+	return "", nil
+}
+
+func awaitClosed(ctx context.Context, closed <-chan struct{}, limit time.Duration) error {
+	ctx, cancel := context.WithTimeout(ctx, limit)
+	defer cancel()
+	select {
+	case <-closed:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *codexServer) awaitIdle(conversation string) <-chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.idleWaits == nil {
+		s.idleWaits = make(map[string]chan struct{})
+	}
+	idle := s.idleWaits[conversation]
+	if idle == nil {
+		idle = make(chan struct{})
+		s.idleWaits[conversation] = idle
+	}
+	return idle
 }
 
 type codexCall func(method string, params, result any) error
@@ -253,6 +327,12 @@ func (r *codexShared) observeStatus(s *codexServer, m codexshared.Message) {
 	if json.Unmarshal(m.Params, &p) != nil || p.ThreadID == "" {
 		return
 	}
+	idle := s.idleWaits[p.ThreadID]
+	ownInterruptEnded := idle != nil && p.Status.Type != "active"
+	if ownInterruptEnded {
+		close(idle)
+		delete(s.idleWaits, p.ThreadID)
+	}
 	if compacted := s.compactionStepLocked(p.ThreadID, p.Status.Type); compacted != nil {
 		r.host.Events().Compaction(compacted.session, harness.Compaction{Input: compacted.delivery, Result: harness.Compacted})
 	}
@@ -262,7 +342,9 @@ func (r *codexShared) observeStatus(s *codexServer, m codexshared.Message) {
 	}
 	s.events.run(r.host, func() {
 		holder := r.holder(s.profile, p.ThreadID)
-		r.observe(holder, turn)
+		if !ownInterruptEnded {
+			r.observe(holder, turn)
+		}
 		if turn == harness.TurnEnded {
 			r.host.Events().Compaction(holder, harness.Compaction{Result: harness.CompactionReady})
 		}

@@ -19,6 +19,7 @@ const (
 	AbilityWatch        Ability = "watch"
 	AbilityTargets      Ability = "targets"
 	AbilitySteer        Ability = "steer"
+	AbilityInterrupt    Ability = "interrupt"
 	AbilityQuestionSafe Ability = "question_safe"
 )
 
@@ -42,7 +43,7 @@ type Handshake struct {
 	Server string `json:"server,omitempty"`
 }
 
-var knownAbilities = []Ability{AbilityCompact, AbilityWatch, AbilityTargets, AbilitySteer, AbilityQuestionSafe}
+var knownAbilities = []Ability{AbilityCompact, AbilityWatch, AbilityTargets, AbilitySteer, AbilityInterrupt, AbilityQuestionSafe}
 
 func (p *Declaration) UnknownAbilities() []Ability {
 	var unknown []Ability

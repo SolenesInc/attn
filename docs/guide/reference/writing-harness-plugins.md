@@ -287,7 +287,8 @@ ignored.
 | `watch` | `conversation/watch` and `conversation/entries` | follows each open session's conversation, as the watching binding below describes. Without it, a server session has no transcript, last reply, activity line, title from its prompt, usage, recent files or pull requests from its tools |
 | `targets` | `targets/list` | offers execution targets at launch |
 | `compact` | `conversation/compact` | compacts the conversation when an agent closes with `--compact` or stands by |
-| `steer` | `steer: true` on `conversation/submit` | sends input into the run in flight at its next step instead of after the run |
+| `steer` | `steer: true` on `conversation/submit` | sends input into the run in flight at its next step instead of after the run, and passes on another agent's `attn agent msg --steer` |
+| `interrupt` | `conversation/interrupt` that stops the run in flight at once, then a `conversation/submit` that starts the next run | passes on another agent's `attn agent msg --interrupt`: it interrupts the run, then submits the message without `steer`. Without it, Attn holds the message until the run ends |
 | `question_safe` | input while a call waits on an approval or a question | delivers input during that wait instead of holding it until the wait ends |
 
 The executable, optional executable override, home variable and default home
@@ -373,7 +374,9 @@ The required calls are `initialize`, `status/watch`, `conversation/list`,
 - `conversation/submit {conversation, requestId, author: {id, name}, text,
   steer?: true}`. `steer` comes only to a server that declares `steer`.
 - `conversation/interrupt {conversation, author: {id, name}}`, sent when the
-  last session holding a conversation closes and `onClose` is `"interrupt"`.
+  last session holding a conversation closes and `onClose` is `"interrupt"`,
+  and, to a server that declares `interrupt`, before the submit that carries
+  another agent's interrupt. `onClose` does not declare `interrupt`.
 
 A server that declares `compact` answers
 `conversation/compact {conversation, author: {id, name}}` once the compaction

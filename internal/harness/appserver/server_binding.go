@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/victorarias/attn/internal/effectrpc"
@@ -24,6 +25,7 @@ type serverBinding struct {
 	terminal       harness.TerminalID
 	conversationOf func(harness.TerminalID) (string, bool)
 	authors        atomic.Pointer[TerminalAuthors]
+	interrupting   sync.Map
 }
 
 func newServerBinding(b Binding) *serverBinding {

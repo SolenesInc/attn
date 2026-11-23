@@ -286,6 +286,8 @@ const (
 type TurnAbort struct {
 	Reason string
 
+	Turn string
+
 	UserHalt bool
 
 	At time.Time
@@ -363,6 +365,7 @@ func CodexTurnAborted(line []byte) (TurnAbort, bool) {
 	var payload struct {
 		Type   string `json:"type"`
 		Reason string `json:"reason"`
+		Turn   string `json:"turn_id"`
 	}
 	if err := json.Unmarshal(envelope.Payload, &payload); err != nil || payload.Type != "turn_aborted" {
 		return TurnAbort{}, false
@@ -374,6 +377,7 @@ func CodexTurnAborted(line []byte) (TurnAbort, bool) {
 	return TurnAbort{
 		Reason:   reason,
 		UserHalt: reason == codexUserAbortReason,
+		Turn:     payload.Turn,
 		At:       parseTranscriptTime(envelope.Timestamp),
 	}, true
 }

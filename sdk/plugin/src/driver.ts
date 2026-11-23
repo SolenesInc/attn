@@ -13,7 +13,7 @@ export type DriverLaunchInstructions = {
 };
 
 /** What a server can do beyond the base protocol. attn sends a request for an ability only to a server that declares it. */
-export type ServerAbility = "compact" | "watch" | "targets" | "steer" | "question_safe";
+export type ServerAbility = "compact" | "watch" | "targets" | "steer" | "interrupt" | "question_safe";
 
 export type ServerBinding = {
  protocol: "attn-app-server-v2";
