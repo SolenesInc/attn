@@ -3,7 +3,7 @@ attn resumed you because seed {{seed_id}} "{{seed_title}}" got mail while it was
 Your standby note:
 {{note}}
 
-The mail is below or in your inbox (`attn agent inbox`). End this turn in one of these ways:
+The mail is below or in your inbox (`attn agent inbox`). Anything the user wrote, such as an answer to your ask, reaches you in a prompt of its own. End this turn in one of these ways:
 - Wait again: `attn seed standby {{seed_id}} -m "<what to do next>"`
 - Finish: `attn seed harvest {{seed_id}} -m "<what got done>"`
 - Ask the user, when only they can decide: `attn ask`, and end your turn with this session open
