@@ -1,9 +1,12 @@
 package store
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
+	"log"
+	"math"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -14,8 +17,10 @@ const FileActivitySourceOpened = "opened"
 const FileActivitySourceEdited = "edited"
 
 const (
-	editedWeight = 0.6
-	inRootBonus  = 1.5
+	editedWeight  = 0.6
+	useHalfLife   = 48 * time.Hour
+	freshHalfLife = 30 * time.Minute
+	freshBoost    = 5.0
 )
 
 func sourceWeight(source string) float64 {
@@ -64,26 +69,54 @@ func (s *Store) recordFileActivity(activity FileActivity, onlyNewer bool) {
 		return
 	}
 
+	at := activity.At.Truncate(time.Second)
 	var session any
 	if activity.SessionID != "" {
 		session = activity.SessionID
 	}
-	newer := ""
-	if onlyNewer {
-		newer = "WHERE julianday(excluded.last_at) > julianday(file_activity.last_at)"
+	use := 1.0
+	var stored float64
+	var storedAt string
+	err := s.db.QueryRow("SELECT use_score, last_at FROM file_activity WHERE host = ? AND path = ? AND source = ?",
+		activity.Host, activity.Path, activity.Source).Scan(&stored, &storedAt)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+	case err != nil:
+		log.Printf("[store] read file activity: %v", err)
+		return
+	default:
+		last, err := time.Parse(time.RFC3339, storedAt)
+		if err != nil {
+			last = at
+		}
+		if onlyNewer && !at.After(last) {
+			return
+		}
+		if at.Before(last) {
+			use = stored + halved(last.Sub(at), useHalfLife)
+			at, session = last, nil
+		} else {
+			use = stored*halved(at.Sub(last), useHalfLife) + 1
+		}
 	}
 	s.execLog(`
-		INSERT INTO file_activity (host, path, source, session_id, last_at, count)
-		VALUES (?, ?, ?, ?, ?, 1)
+		INSERT INTO file_activity (host, path, source, session_id, last_at, count, use_score)
+		VALUES (?, ?, ?, ?, ?, 1, ?)
 		ON CONFLICT(host, path, source) DO UPDATE SET
 			session_id = COALESCE(excluded.session_id, session_id),
 			last_at = excluded.last_at,
-			count = count + 1
-		`+newer,
-		activity.Host, activity.Path, activity.Source, session, activity.At.Local().Format(time.RFC3339))
+			count = count + 1,
+			use_score = excluded.use_score`,
+		activity.Host, activity.Path, activity.Source, session, at.Local().Format(time.RFC3339), use)
 }
 
-func (s *Store) GetRecentFiles(limit int, root string) []protocol.FileActivity {
+func halved(age, halfLife time.Duration) float64 {
+	return math.Exp2(-max(age, 0).Seconds() / halfLife.Seconds())
+}
+
+// GetRecentFiles ranks every machine's files best first, keeping at most limit
+// files of each machine.
+func (s *Store) GetRecentFiles(limit int) []protocol.FileActivity {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -94,23 +127,28 @@ func (s *Store) GetRecentFiles(limit int, root string) []protocol.FileActivity {
 		return nil
 	}
 
-	rows, err := s.db.Query(`SELECT host, path, source, session_id, last_at, count FROM file_activity`)
+	rows, err := s.db.Query(`SELECT host, path, source, session_id, last_at, count, use_score FROM file_activity`)
 	if err != nil {
 		return nil
 	}
 	defer rows.Close()
 
 	now := time.Now()
-	prefix := rootPrefix(root)
-	merged := map[HostPath]*protocol.FileActivity{}
-	scores := map[HostPath]float64{}
+	type ranked struct {
+		file   protocol.FileActivity
+		use    float64
+		latest time.Time
+		score  float64
+	}
+	merged := map[HostPath]*ranked{}
 	var order []HostPath
 
 	for rows.Next() {
 		var entry protocol.FileActivity
 		var session *protocol.SessionID
 		var key HostPath
-		if err := rows.Scan(&key.Host, &entry.Path, &entry.Source, &session, &entry.LastAt, &entry.Count); err != nil {
+		var use float64
+		if err := rows.Scan(&key.Host, &entry.Path, &entry.Source, &session, &entry.LastAt, &entry.Count, &use); err != nil {
 			continue
 		}
 		key.Path = entry.Path
@@ -118,38 +156,43 @@ func (s *Store) GetRecentFiles(limit int, root string) []protocol.FileActivity {
 		if key.Host != "" {
 			entry.Host = protocol.Ptr(key.Host)
 		}
+		at, err := time.Parse(time.RFC3339, entry.LastAt)
+		decayed := 0.0
+		if err == nil {
+			decayed = sourceWeight(entry.Source) * use * halved(now.Sub(at), useHalfLife)
+		}
 
-		scores[key] += frecencyScore(entry.Count, entry.LastAt, now) * sourceWeight(entry.Source)
 		existing, ok := merged[key]
 		if !ok {
-			copied := entry
-			merged[key] = &copied
+			merged[key] = &ranked{file: entry, use: decayed, latest: at}
 			order = append(order, key)
 			continue
 		}
-		existing.Count += entry.Count
-		sameSecondOpen := entry.LastAt == existing.LastAt && entry.Source == FileActivitySourceOpened
-		if entry.LastAt > existing.LastAt || sameSecondOpen {
-			existing.LastAt = entry.LastAt
-			existing.Source = entry.Source
-			existing.SessionID = entry.SessionID
+		existing.use += decayed
+		existing.file.Count += entry.Count
+		sameSecondOpen := at.Equal(existing.latest) && entry.Source == FileActivitySourceOpened
+		if at.After(existing.latest) || sameSecondOpen {
+			existing.latest = at
+			existing.file.LastAt = entry.LastAt
+			existing.file.Source = entry.Source
+			existing.file.SessionID = entry.SessionID
 		}
 	}
 
-	for key := range scores {
-		if prefix != "" && key.Host == "" && strings.HasPrefix(key.Path, prefix) {
-			scores[key] *= inRootBonus
+	for _, r := range merged {
+		r.score = math.Log1p(r.use)
+		if !r.latest.IsZero() {
+			r.score += freshBoost * halved(now.Sub(r.latest), freshHalfLife)
 		}
 	}
-
 	sort.SliceStable(order, func(i, j int) bool {
 		ki, kj := order[i], order[j]
-		li, lj := merged[ki], merged[kj]
-		if scores[ki] != scores[kj] {
-			return scores[ki] > scores[kj]
+		ri, rj := merged[ki], merged[kj]
+		if ri.score != rj.score {
+			return ri.score > rj.score
 		}
-		if li.LastAt != lj.LastAt {
-			return li.LastAt > lj.LastAt
+		if !ri.latest.Equal(rj.latest) {
+			return ri.latest.After(rj.latest)
 		}
 		if ki.Path != kj.Path {
 			return ki.Path < kj.Path
@@ -157,50 +200,21 @@ func (s *Store) GetRecentFiles(limit int, root string) []protocol.FileActivity {
 		return ki.Host < kj.Host
 	})
 
-	if len(order) > limit {
-		order = order[:limit]
-	}
-	all := make([]protocol.FileActivity, 0, len(order))
+	perMachine := map[string]int{}
+	best := make([]protocol.FileActivity, 0, len(order))
 	for _, key := range order {
-		all = append(all, *merged[key])
-	}
-	return all
-}
-
-func rootPrefix(root string) string {
-	root = strings.TrimSpace(root)
-	if root == "" || root == "/" {
-		return ""
-	}
-	return strings.TrimSuffix(root, "/") + "/"
-}
-
-// HomeFileActivityPaths lists the home's paths with activity; another
-// machine's paths can only be checked on that machine.
-func (s *Store) HomeFileActivityPaths() []string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.db == nil {
-		return nil
-	}
-	rows, err := s.db.Query("SELECT DISTINCT path FROM file_activity WHERE host = ''")
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-
-	var paths []string
-	for rows.Next() {
-		var path string
-		if err := rows.Scan(&path); err != nil {
+		if perMachine[key.Host] == limit {
 			continue
 		}
-		paths = append(paths, path)
+		perMachine[key.Host]++
+		best = append(best, merged[key].file)
 	}
-	return paths
+	return best
 }
 
-func (s *Store) DeleteHomeFileActivity(paths ...string) {
+// DeleteFileActivity forgets the paths on the machine named by host, empty for
+// the home.
+func (s *Store) DeleteFileActivity(host string, paths ...string) {
 	if len(paths) == 0 {
 		return
 	}
@@ -210,5 +224,5 @@ func (s *Store) DeleteHomeFileActivity(paths ...string) {
 	if s.db == nil {
 		return
 	}
-	s.execLog("DELETE FROM file_activity WHERE host = '' AND path IN (SELECT value FROM json_each(?))", string(encodedPaths))
+	s.execLog("DELETE FROM file_activity WHERE host = ? AND path IN (SELECT value FROM json_each(?))", host, string(encodedPaths))
 }

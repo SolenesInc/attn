@@ -237,7 +237,7 @@ func TestAnAppServerSessionsSubagentsReportFilesPullRequestsAndSpendOnceAcrossRe
 
 func recentFileCountForSession(app *testworld.Peer, path, sessionID string) int {
 	app.T.Helper()
-	for _, file := range recentFiles(app, 0, "") {
+	for _, file := range recentFiles(app, 0) {
 		if file.Path == path && string(protocol.Deref(file.SessionID)) == sessionID {
 			return file.Count
 		}

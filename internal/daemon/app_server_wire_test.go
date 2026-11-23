@@ -515,7 +515,7 @@ func writeMarkdownCall(path string) fakeagent.ServerToolCall {
 
 func recentCount(app *testworld.Peer, path string) int {
 	app.T.Helper()
-	for _, file := range recentFiles(app, 0, "") {
+	for _, file := range recentFiles(app, 0) {
 		if file.Path == path {
 			return file.Count
 		}

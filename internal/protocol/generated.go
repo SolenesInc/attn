@@ -5158,6 +5158,17 @@ type FilesEditedMessage struct {
 	Paths []string `json:"paths"`
 }
 
+type FindMissingFilesMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
+	// Paths corresponds to the JSON schema field "paths".
+	Paths []string `json:"paths"`
+}
+
 type ForgetAnalyticsInstallMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -7388,6 +7399,11 @@ type MergePRMessage struct {
 	Method string `json:"method"`
 }
 
+type MissingFiles struct {
+	// Missing corresponds to the JSON schema field "missing".
+	Missing []string `json:"missing"`
+}
+
 type ModelCall struct {
 	// At corresponds to the JSON schema field "at".
 	At string `json:"at"`
@@ -9106,9 +9122,6 @@ type RecentFilesMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
-
-	// Root corresponds to the JSON schema field "root".
-	Root *string `json:"root,omitempty,omitzero"`
 }
 
 type RecentFilesResultMessage struct {

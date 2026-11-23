@@ -197,7 +197,6 @@ fn the_markdown_opener_for_an_outpost_agent_roots_at_the_notebook_not_a_folder_h
     press(&mut world, Action::FileOpen);
 
     assert_eq!(roots_sent(&world, "fs_index"), [json!(NOTEBOOK)]);
-    assert_eq!(roots_sent(&world, "recent_files"), [json!(NOTEBOOK)]);
 }
 
 #[test]

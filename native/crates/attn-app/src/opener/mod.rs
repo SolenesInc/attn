@@ -94,11 +94,9 @@ pub(crate) fn open(state: &mut State, tx: &mut Tx) {
     };
     state.window.layer = Some(Layer::Palette(Palette::Files));
     tx.focus(FIELD, false);
-    let asked_root = root.clone();
     state.ask(
         |id| RecentFilesMessage {
             limit: Some(RECENTS),
-            root: asked_root,
             request_id: Some(id),
             ..RecentFilesMessage::new()
         },

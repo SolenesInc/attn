@@ -2101,17 +2101,15 @@ model RecordCommandUsageMessage {
   command_id: string;
 }
 
-// Recently touched files, frecency-ranked (frequency weighted by recency, the
-// same model as get_recent_locations). Feeds the ⌘P markdown opener's list on
-// an empty query. Entries whose file no longer exists are pruned rather than
-// returned.
+// Recently touched files, for the ⌘P markdown opener. A file's rank adds its
+// use, which every touch raises and time decays, to a boost for its latest
+// touch that fades within the hour, so a file an agent just edited comes first.
+// Before answering, the home asks each machine whether its files still exist
+// and forgets the ones that don't; the files of an outpost it cannot reach come
+// back unchecked.
 model RecentFilesMessage {
   cmd: "recent_files";
-  limit?: int32;  // Default 20
-  // The directory the caller is working in (the opener's fuzzy root). Files
-  // under it rank above equally-scored files from elsewhere, so the project
-  // in front of you wins without hiding the rest.
-  root?: string;
+  limit?: int32;  // Per machine; default 20
   request_id?: string;
 }
 
@@ -2166,6 +2164,20 @@ model CallerPaths {
   commit?: string;
   problems: string[];
   absent: string[];
+}
+
+// Asks the machine that holds the paths which of them it can no longer open,
+// so the home forgets them from recent files.
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
+model FindMissingFilesMessage {
+  cmd: "find_missing_files";
+  host?: string;
+  paths: string[];
+}
+
+// The asked paths whose stat failed or did not answer in time.
+model MissingFiles {
+  missing: string[];
 }
 
 @extension("x-on", #[#{ machine: "host" }, #{ here: true }])
@@ -8567,7 +8579,8 @@ model RecordCommandUsageResultMessage {
   error?: string;
 }
 
-// Result of recent_files. files are absolute paths, best-first by frecency.
+// Result of recent_files. files are absolute paths, best first across every
+// machine, holding at most limit files of each machine.
 model RecentFilesResultMessage {
   event: "recent_files_result";
   request_id: string;

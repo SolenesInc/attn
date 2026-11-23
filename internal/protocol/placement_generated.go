@@ -88,6 +88,7 @@ var Placements = map[string][]Placement{
 	"drop_outpost_copy":              {Placement{LocatorHere, ""}},
 	"fetch_pr_details":               {Placement{LocatorHome, ""}},
 	"files_edited":                   {Placement{LocatorHere, ""}},
+	"find_missing_files":             {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"forward_analytics":              {Placement{LocatorHome, ""}},
 	"get_kitty_image":                {Placement{LocatorTerminal, "id"}},
 	"get_repo_info":                  {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
@@ -978,6 +979,24 @@ func (m FilesEditedMessage) Placement() Placement {
 }
 
 func (m FilesEditedMessage) Locate() string {
+	return ""
+}
+
+func (FindMissingFilesMessage) CommandName() string {
+	return "find_missing_files"
+}
+
+func (m FindMissingFilesMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
+	return Placement{LocatorHere, ""}
+}
+
+func (m FindMissingFilesMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
 	return ""
 }
 

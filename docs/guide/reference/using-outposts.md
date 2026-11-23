@@ -158,7 +158,9 @@ file with the same path.
 
 Markdown files an outpost agent sends or edits show in the file opener (Cmd+P)
 with the outpost's name, also those from while the outpost was away, and open
-on the outpost. The Mac never checks or forgets them on its own disk.
+on the outpost. The outpost checks them on its own disk, so a file deleted
+there leaves the opener. While the outpost can't be reached, its files stay
+listed.
 
 Other files on an outpost don't open on the Mac yet. **Open in editor** and
 Cmd-clicked paths in an outpost shell fail and name the outpost, and nothing

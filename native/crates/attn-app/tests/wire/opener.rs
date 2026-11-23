@@ -266,7 +266,7 @@ fn the_opener_lists_recent_files_at_once_relative_to_the_agents_folder_and_takes
         world.screen().focused().and_then(|n| n.key).as_deref(),
         Some("opener.field")
     );
-    assert_eq!(sent(&world, "recent_files")[0]["root"], "/repo");
+    assert_eq!(sent(&world, "recent_files").len(), 1);
     let index = &sent(&world, "fs_index")[0];
     assert_eq!(
         (&index["root"], &index["extensions"]),

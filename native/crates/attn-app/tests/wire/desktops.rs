@@ -4210,9 +4210,9 @@ fn the_palette_moves_with_delegates_the_tile_shown_alone_while_another_window_se
 fn the_opener_opens_on_the_folder_of_the_tile_shown_alone_while_another_window_selects_another() {
     let mut world = alone_here_selected_elsewhere("root", "lone");
     press(&mut world, Action::FileOpen);
-    let recents = sent(&world, "recent_files");
-    assert_eq!(recents.len(), 1);
-    assert_eq!(recents[0]["root"], "/work/root");
+    let index = sent(&world, "fs_index");
+    assert_eq!(index.len(), 1);
+    assert_eq!(index[0]["root"], "/work/root");
 }
 
 #[test]

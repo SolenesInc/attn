@@ -17,8 +17,8 @@ import (
 
 // Both stacks share one disk, so files are named through /proc/self/cwd: each
 // daemon resolves that path inside its own working directory. The outpost's
-// sent and edited files exist only in its directory, so a stat on the home
-// would fail and forget them. Views apply in order, so the sent file's tile
+// sent and edited files exist only in its directory, so only the outpost can
+// tell whether they still exist. Views apply in order, so the sent file's tile
 // shows only after the home has applied the earlier edit.
 func TestAnOutpostsFilesKeepTheirMachineInRecentsAndDrafts(t *testing.T) {
 	if runtime.GOOS != "linux" {
@@ -27,7 +27,7 @@ func TestAnOutpostsFilesKeepTheirMachineInRecentsAndDrafts(t *testing.T) {
 	home, outpost := testworld.NewStack(t, testworld.WithoutAgentKit()), testworld.NewStack(t)
 	files := map[*testworld.Stack]map[string]string{
 		home:    {"notes.md": "# home notes\n"},
-		outpost: {"notes.md": "# outpost notes\n", "sent.md": "# sent\n", "edited.md": "# edited\n", "gap-sent.md": "# sent in the gap\n", "after.md": "# after the gap\n", "after-restart.md": "# after the restart\n"},
+		outpost: {"notes.md": "# outpost notes\n", "sent.md": "# sent\n", "edited.md": "# edited\n", "gap-sent.md": "# sent in the gap\n", "gap-edited.md": "# edited in the gap\n", "after.md": "# after the gap\n", "after-restart.md": "# after the restart\n"},
 	}
 	for stack, named := range files {
 		stack.Vars = append(stack.Vars, "SHELL=/bin/bash")
@@ -188,6 +188,12 @@ func TestAnOutpostsFilesKeepTheirMachineInRecentsAndDrafts(t *testing.T) {
 			t.Fatalf("recent %s after a home restart = %+v, want it as before the restart, %+v: the outpost's view was seen again, not reported again", path, file, caughtUp[path])
 		}
 	}
+	if err := os.Remove(filepath.Join(outpost.DaemonDir, "sent.md")); err != nil {
+		t.Fatal(err)
+	}
+	if afterDelete := recents(); afterDelete[sent].Path != "" || protocol.Deref(afterDelete[edited].Host) != pair.Host {
+		t.Fatalf("recents after %s was deleted on the outpost = %+v, want it forgotten and %s kept", sent, afterDelete, edited)
+	}
 	app.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: pair.Host})
 	testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
 	outpost.AwaitStopped()
@@ -200,7 +206,7 @@ func TestAnOutpostsFilesKeepTheirMachineInRecentsAndDrafts(t *testing.T) {
 		t.Fatalf("the home's draft after removing the outpost = %+v, want it kept", marks)
 	}
 
-	t.Logf("recents: %s opened and %s edited on %s, kept after the home's cleanup; %s sent and %s edited while the outpost was away arrived on reconnect after an outpost restart without a tile, and none counted again after a home restart, and all forgotten when the outpost was removed; drafts of %s on %s and on the home stayed separate, and sending the outpost's spent only its own, naming the outpost to the agent", sent, edited, pair.Host, gapSent, gapEdited, notes, pair.Host)
+	t.Logf("recents: %s opened and %s edited on %s, kept after the home's cleanup and forgotten once deleted on the outpost; %s sent and %s edited while the outpost was away arrived on reconnect after an outpost restart without a tile, and none counted again after a home restart, and all forgotten when the outpost was removed; drafts of %s on %s and on the home stayed separate, and sending the outpost's spent only its own, naming the outpost to the agent", sent, edited, pair.Host, gapSent, gapEdited, notes, pair.Host)
 }
 
 func awaitOutpostSees(outpost *testworld.Stack, state string) {

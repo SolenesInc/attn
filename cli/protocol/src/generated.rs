@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "947fa6b2022e";
+pub const PROTOCOL_VERSION: &str = "5a7aa8652536";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -4518,6 +4518,24 @@ impl FilesEditedMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FindMissingFilesMessage {
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub paths: Vec<String>,
+}
+
+impl FindMissingFilesMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "find_missing_files".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ForgetAnalyticsInstallMessage {
     pub cmd: String,
     pub request_id: String,
@@ -6635,6 +6653,11 @@ impl MergePRMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MissingFiles {
+    #[serde(deserialize_with = "null_as_default")]
+    pub missing: Vec<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ModelCall {
     pub at: String,
     pub cost_usd: f64,
@@ -8231,8 +8254,6 @@ pub struct RecentFilesMessage {
     pub limit: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub root: Option<String>,
 }
 
 impl RecentFilesMessage {

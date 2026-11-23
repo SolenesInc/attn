@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"os"
 	"strings"
 	"time"
@@ -67,14 +68,13 @@ func (d *Daemon) handleGetRecentLocationsWS(client *wsClient, msg *protocol.GetR
 }
 
 func (d *Daemon) handleRecentFilesWS(client *wsClient, msg *protocol.RecentFilesMessage) {
-	d.forgetUnopenableRecentFiles()
 	limit := 20
 	if msg.Limit != nil {
 		limit = int(*msg.Limit)
 	}
 	d.sendToClient(client, &protocol.RecentFilesResultMessage{
 		Event:     protocol.EventRecentFilesResult,
-		Files:     d.store.GetRecentFiles(limit, strings.TrimSpace(protocol.Deref(msg.Root))),
+		Files:     d.openableRecentFiles(limit),
 		RequestID: strings.TrimSpace(protocol.Deref(msg.RequestID)),
 		Success:   true,
 	})
@@ -82,45 +82,89 @@ func (d *Daemon) handleRecentFilesWS(client *wsClient, msg *protocol.RecentFiles
 
 const recentFileStatDeadline = 500 * time.Millisecond
 
-func (d *Daemon) forgetUnopenableRecentFiles() {
+// An outpost answers within its own stat deadline plus a bridge round trip;
+// checkout_inspect round trips took 35-89ms in the bridge receipts.
+const outpostMissingFilesTripwire = time.Second
+
+func (d *Daemon) openableRecentFiles(limit int) []protocol.FileActivity {
 	d.recentFilePruneGate <- struct{}{}
 	defer func() { <-d.recentFilePruneGate }()
-	paths := d.store.HomeFileActivityPaths()
-	if len(paths) == 0 {
-		return
+	checked := map[store.HostPath]bool{}
+	for {
+		files := d.store.GetRecentFiles(limit)
+		unchecked := map[string][]string{}
+		for _, file := range files {
+			key := store.HostPath{Host: protocol.Deref(file.Host), Path: file.Path}
+			if !checked[key] {
+				checked[key] = true
+				unchecked[key.Host] = append(unchecked[key.Host], key.Path)
+			}
+		}
+		if len(unchecked) == 0 {
+			return files
+		}
+		d.forgetMissingFiles(unchecked)
 	}
+}
+
+func (d *Daemon) forgetMissingFiles(byMachine map[string][]string) {
+	tasks := make([]func(), 0, len(byMachine))
+	for host, paths := range byMachine {
+		tasks = append(tasks, func() { d.store.DeleteFileActivity(host, d.findMissingFiles(host, paths)...) })
+	}
+	runJoined(tasks...)
+}
+
+func (d *Daemon) findMissingFiles(host string, paths []string) []string {
+	ask := protocol.FindMissingFilesMessage{Cmd: protocol.CmdFindMissingFiles, Paths: paths}
+	ctx := d.life.Context()
+	if host != "" {
+		ask.Host = protocol.Ptr(host)
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, outpostMissingFilesTripwire)
+		defer cancel()
+	}
+	found, err := Call[protocol.MissingFiles](ctx, d.router(), ask)
+	if err != nil {
+		d.logf("recent_files: %s did not check its files, listed unchecked: %v", host, err)
+		return nil
+	}
+	return found.Missing
+}
+
+func (d *Daemon) findMissingFilesHere(_ context.Context, msg protocol.FindMissingFilesMessage) (protocol.MissingFiles, error) {
 	type statAnswer struct {
 		path string
 		err  error
 	}
-	answers := make(chan statAnswer, len(paths))
-	pending := make(map[string]struct{}, len(paths))
+	answers := make(chan statAnswer, len(msg.Paths))
+	pending := make(map[string]struct{}, len(msg.Paths))
 	stat := d.recentFileStat
 	deadline := time.NewTimer(recentFileStatDeadline)
 	defer deadline.Stop()
-	for _, path := range paths {
+	for _, path := range msg.Paths {
 		pending[path] = struct{}{}
 		go func() {
 			_, err := stat(path)
 			answers <- statAnswer{path: path, err: err}
 		}()
 	}
-	var unopenable []string
+	missing := []string{}
 collect:
 	for len(pending) > 0 {
 		select {
 		case answer := <-answers:
 			delete(pending, answer.path)
 			if answer.err != nil {
-				unopenable = append(unopenable, answer.path)
+				missing = append(missing, answer.path)
 			}
 		case <-deadline.C:
 			for path := range pending {
 				d.logf("recent_files: stat %q exceeded deadline=%s; forgotten", path, recentFileStatDeadline)
-				unopenable = append(unopenable, path)
+				missing = append(missing, path)
 			}
 			break collect
 		}
 	}
-	d.store.DeleteHomeFileActivity(unopenable...)
+	return protocol.MissingFiles{Missing: missing}, nil
 }
