@@ -1,0 +1,1 @@
+A message to a sleeping crew member, or one sent while its day wakes, now answers "started <member> in session …; notification queued until it reaches a safe prompt" instead of the generic "target is not taking input right now". The generic answer came from a race with the inbox kick that `crew set` fires, and it made TestMessagingACrewMemberReachesItsDayWakingItIfNeeded flaky.
