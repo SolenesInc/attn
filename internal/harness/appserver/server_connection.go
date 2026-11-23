@@ -139,6 +139,10 @@ func (p *serverConnection) ensureLocked(ctx context.Context, l *Link, req *harne
 	p.mu.Lock()
 	c, info := p.control, p.info
 	p.mu.Unlock()
+	if c != nil && c.HungUp() {
+		p.letGo(c)
+		c = nil
+	}
 	if c != nil {
 		if err := l.validateServerInfo(info, p.socket, 0); err != nil {
 			return nil, err
@@ -379,24 +383,31 @@ func (p *serverConnection) watch(c *effectrpc.Client) {
 			})
 		}
 	})
-	c.Close()
-	p.mu.Lock()
-	current := p.control == c
-	if current {
-		p.control = nil
-		p.finishSnapshotLocked()
-	}
-	p.mu.Unlock()
-	if !current || p.c.host.Life().Context().Err() != nil {
+	current := p.letGo(c)
+	if p.c.host.Life().Context().Err() != nil {
 		return
 	}
-	p.c.host.Logf("lost app-server status at %s: %v", p.socket, err)
+	if current {
+		p.c.host.Logf("lost app-server status at %s: %v", p.socket, err)
+	}
 	for _, l := range p.sessions() {
 		if _, err := p.ensure(p.c.host.Life().Context(), l, nil, true); err != nil {
 			l.logf("reconnecting: %v", err)
 		}
 		break
 	}
+}
+
+func (p *serverConnection) letGo(c *effectrpc.Client) (current bool) {
+	c.Close()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.control != c {
+		return false
+	}
+	p.control = nil
+	p.finishSnapshotLocked()
+	return true
 }
 
 func (p *serverConnection) statusWatchParams() any {
