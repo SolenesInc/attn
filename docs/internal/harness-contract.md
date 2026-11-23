@@ -92,6 +92,7 @@ These features stay isolated in their adapter, dedicated command or UI folders, 
 - `make lint-harness` (`go run ./scripts/harnesslint`): fails on any unlisted built-in harness literal in non-test Go, `pty-host/`, `native/`, `cli/`, or `mobile/` files. It also fails on adapter imports outside `builtin` and `conformance`, references to symbols declared in an adapter package, `harness.Host` methods or types naming a harness, `harness.As[T]` calls for a Leak 1 part outside `allow.txt`, and stale entries in `allow.txt` or `violations.txt`.
 - `internal/harness/conformance` (`TestEveryHarnessAnswersTheContractWithItsFake` in `internal/daemon/harness_conformance_wire_test.go`): exercises every registered adapter's facts, health, options, and no-channel conversation refusal against its fake harness.
 - `make check-types`: runs `go run ./scripts/harnessdoc docs/guide/reference/harnesses.md` and fails if the generated capability table drifts from `internal/harness/builtin`.
+- The `verify-harness` skill (`.agents/skills/verify-harness`): before a landing, runs `make lint-harness` and has an agent read the change for leaks the lint can't see, such as generic code that parses a value a harness owns, or depends on a fact only one harness sets.
 
 ## Add a harness
 
@@ -107,4 +108,4 @@ Use a plugin unless the harness must ship inside attn. Implement `driver.registe
 4. Add a fake harness in `internal/fakeagent/` and a conformance row in `internal/daemon/harness_conformance_wire_test.go`.
 5. Run `make generate-types` to update the capability table in `docs/guide/reference/harnesses.md`.
 6. Record probed harness behavior in `docs/internal/harnesses/<name>.md` and link it from `docs/internal/harnesses.md`.
-7. Run `make lint-harness`, targeted daemon conformance and wire tests, and `make check-types`. Do not add an entry to `scripts/harnesslint/allow.txt` without user approval.
+7. Run `make lint-harness`, targeted daemon conformance and wire tests, `make check-types`, and the `verify-harness` skill. Do not add an entry to `scripts/harnesslint/allow.txt` without user approval.
