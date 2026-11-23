@@ -397,7 +397,11 @@ fn plain_inline(text: &str) -> String {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Line {
     Desktop(DesktopHeader),
-    Agent { desktop: String, row: AgentRow },
+    Agent {
+        desktop: String,
+        leaf: String,
+        row: Box<AgentRow>,
+    },
     Tile(TileRow),
 }
 
@@ -570,6 +574,7 @@ pub fn desktop_lines(facts: &Facts, home: bool, on_screen: &[String]) -> Vec<Lin
                         children.push(agent_line(
                             facts,
                             desktop,
+                            &leaf.id,
                             session,
                             shown,
                             active_session,
@@ -581,11 +586,13 @@ pub fn desktop_lines(facts: &Facts, home: bool, on_screen: &[String]) -> Vec<Lin
         }
         for session in facts.sessions.iter() {
             if desktop_of.get(session.id.as_str()) == Some(&desktop.id.as_str())
+                && let Some(pane) = desktop.panes.iter().find(|p| p.session_id == session.id)
                 && placed.insert(session.id.as_str())
             {
                 children.push(agent_line(
                     facts,
                     desktop,
+                    &pane.pane_id,
                     session,
                     shown,
                     active_session,
@@ -610,6 +617,7 @@ pub fn desktop_lines(facts: &Facts, home: bool, on_screen: &[String]) -> Vec<Lin
 fn agent_line(
     facts: &Facts,
     desktop: &Desktop,
+    leaf: &str,
     session: &Session,
     shown: bool,
     active: Option<&str>,
@@ -621,11 +629,12 @@ fn agent_line(
         .chained(session, facts);
     Line::Agent {
         desktop: desktop.id.clone(),
-        row: if on_screen.contains(&session.id) {
+        leaf: leaf.to_owned(),
+        row: Box::new(if on_screen.contains(&session.id) {
             row
         } else {
             row.off_screen(session)
-        },
+        }),
     }
 }
 

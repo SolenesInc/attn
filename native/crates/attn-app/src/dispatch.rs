@@ -72,9 +72,6 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
         Action::ToggleAutomations => crate::automations::toggle(state, tx),
         Action::SessionNextRun => crate::automations::runs::next_run(state, tx),
         Action::CreateDesktop => crate::desktop::create_desktop(state, tx),
-        Action::MoveToDesktop { desktop, leaf } => {
-            crate::palette::open_move_to_desktop(state, desktop, leaf, tx)
-        }
         Action::OpenWhatsNew => crate::whats_new::open(state, tx),
         Action::NotebookOpenTile => crate::notebook::open_tile(state, tx),
         Action::OpenInEditor { session } => crate::editor::open_session(state, &session, tx),

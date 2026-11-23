@@ -394,13 +394,14 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
             ROWS_BUILT.with(|n| n.set(n.get() + 1));
             let row = match line {
                 Line::Desktop(desktop) => desktop_row(key.clone(), desktop, keys.clone(), t),
-                Line::Agent { row, .. } => {
+                Line::Agent { desktop, leaf, row } => {
                     let bar = settling_bar(state, &key, row, t);
+                    let tile = Some((desktop.clone(), leaf.clone()));
                     let controls = row
                         .settle_run
                         .then(|| settle_button(&key, row))
                         .into_iter()
-                        .chain([actions_button(&key, row)]);
+                        .chain([actions_button(&key, row, tile)]);
                     agent_row(state, key.clone(), row, logos, controls.collect(), t).children(bar)
                 }
                 Line::Tile(tile) => tile_row(key.clone(), tile, t),
@@ -641,8 +642,13 @@ fn close_desktop_button(row_key: &str, desktop: &DesktopHeader) -> system::IconB
     )
 }
 
-/// The ••• button that opens an agent's actions menu under itself.
-pub(crate) fn actions_button(row_key: &str, agent: &AgentRow) -> system::IconButton {
+/// The ••• button that opens an agent's actions menu under itself, for the tile its row shows
+/// or, with none, the agent's own tile.
+pub(crate) fn actions_button(
+    row_key: &str,
+    agent: &AgentRow,
+    tile: Option<(String, String)>,
+) -> system::IconButton {
     let (id, name, under) = (
         agent.id.clone(),
         agent.name.clone(),
@@ -653,7 +659,9 @@ pub(crate) fn actions_button(row_key: &str, agent: &AgentRow) -> system::IconBut
         "actions",
         format!("Actions for {}", agent.name),
         "•••",
-        move |state, tx| session_menu::open(state, &id, name.clone(), under.clone(), tx),
+        move |state, tx| {
+            session_menu::open(state, &id, name.clone(), under.clone(), tile.clone(), tx)
+        },
     )
 }
 
@@ -984,14 +992,11 @@ pub(crate) fn row_source_at(state: &State, path: &str) -> Option<crate::desktop:
             return None;
         }
         match line {
-            Line::Agent { row, .. } => {
-                let (desktop, leaf) = pane_of(state, &row.id)?;
-                Some(crate::desktop::drag::Source::Row {
-                    desktop,
-                    leaf,
-                    label: row.name,
-                })
-            }
+            Line::Agent { desktop, leaf, row } => Some(crate::desktop::drag::Source::Row {
+                desktop,
+                leaf,
+                label: row.name,
+            }),
             Line::Tile(tile) => Some(crate::desktop::drag::Source::Row {
                 desktop: tile.desktop,
                 leaf: tile.id,

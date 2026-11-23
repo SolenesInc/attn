@@ -1364,6 +1364,86 @@ fn moving_a_tile_or_agent_from_the_sidebar_action_picks_a_desktop_and_moves_it()
     assert!(world.runtime_is_at_rest());
 }
 
+#[test]
+fn moving_a_shared_agent_from_its_row_on_another_desktop_moves_that_rows_tile() {
+    let on = |id: &str, order: &str, name: &str, leaf: &str| Desktop {
+        tree_json: format!(r#"{{"type":"pane","pane_id":"{leaf}"}}"#),
+        active_pane_id: leaf.into(),
+        ..desktop(id, order, name, vec![pane(id, leaf, "shared")])
+    };
+    let mut world = World::start(Daemon::scripted().state(state(
+        vec![session("shared", "idle")],
+        vec![
+            on("work/desktop_1", "a", "First", "first-leaf"),
+            on("work/desktop_2", "b", "Second", "second-leaf"),
+            desktop("work/desktop_3", "c", "Third", vec![]),
+        ],
+    )));
+    world
+        .daemon
+        .on("desktop_move_leaf", |r: &attn_testkit::Request| {
+            serde_json::json!({
+                "event": "profile_action_result",
+                "request_id": r["request_id"],
+                "action": "desktop_move_leaf",
+                "success": true,
+            })
+        });
+    let second_row = second_of(&world, Target::role("button").name("Open shared"));
+    let at = centre_of(&world, &second_row);
+    world.gesture(|app| app.move_to(at));
+    let actions = button_in(&world, &second_row, "sidebar.session.shared.actions");
+    world.gesture(|app| app.click_at(actions));
+    world.gesture(|app| app.click(Target::key("session.menu.move")));
+    let offered: Vec<String> = world
+        .screen()
+        .all(Target::role("list-box-option"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert_eq!(offered, ["First", "Third", "+ New desktop"]);
+    world.gesture(|app| app.click(Target::key("palette.row.move-desktop:work/desktop_3")));
+
+    let moved = world.daemon.sent_of("desktop_move_leaf");
+    assert_eq!(moved.len(), 1, "{moved:?}");
+    assert_eq!(moved[0]["source_desktop_id"], "work/desktop_2");
+    assert_eq!(moved[0]["leaf_id"], "second-leaf");
+    assert_eq!(moved[0]["target_desktop_id"], "work/desktop_3");
+    world.advance(std::time::Duration::from_secs(6));
+    assert!(world.runtime_is_at_rest());
+}
+
+fn button_in(world: &World, row: &str, button: &str) -> (f32, f32) {
+    let [rx, ry, rw, rh] = world.screen().bounds(Target::key(row)).expect("it shows");
+    world
+        .runtime()
+        .elements()
+        .into_iter()
+        .filter(|e| e.key.as_deref() == Some(button))
+        .map(|e| {
+            let [x, y, w, h] = e.rect;
+            (x + w / 2.0, y + h / 2.0)
+        })
+        .find(|&(x, y)| x > rx && x < rx + rw && y > ry && y < ry + rh)
+        .expect("the row shows the button")
+}
+
+fn second_of(world: &World, target: Target) -> String {
+    let found: Vec<String> = world
+        .screen()
+        .all(target.clone())
+        .into_iter()
+        .filter_map(|n| n.key)
+        .filter(|k| k.starts_with("sidebar.session."))
+        .collect();
+    assert_eq!(
+        found.len(),
+        2,
+        "{target:?} shows once per desktop in the sidebar"
+    );
+    found[1].clone()
+}
+
 fn many_desktops(n: usize) -> InitialStateMessage {
     let (sessions, desktops) = (0..n)
         .map(|i| {

@@ -298,20 +298,32 @@ pub(crate) fn open(state: &mut State, wanted: Face, tx: &mut Tx) {
 
 /// Opens the palette directly on the desktop picker for `leaf` on `desktop`.
 pub(crate) fn open_move_to_desktop(state: &mut State, desktop: String, leaf: String, tx: &mut Tx) {
-    if blocked_by_modal(state) || leaf_label(state, &desktop, &leaf).is_none() {
+    choose_destination(
+        state,
+        Moving {
+            desktop,
+            leaf,
+            from_commands: None,
+        },
+        tx,
+    );
+}
+
+fn choose_destination(state: &mut State, moving: Moving, tx: &mut Tx) {
+    if blocked_by_modal(state) || leaf_label(state, &moving.desktop, &moving.leaf).is_none() {
         return;
     }
+    let fresh = !is_open(state);
     state.window.layer = Some(Layer::Palette(Palette::Search));
     let search = &mut state.window.search;
     search.query = TextEdit::default();
     search.highlight = None;
-    search.pointer = None;
+    if fresh {
+        search.pointer = None;
+    }
     search.snoozing = None;
-    search.moving = Some(Moving {
-        desktop,
-        leaf,
-        from_commands: None,
-    });
+    search.moving = Some(moving);
+    attn_ui::finder::reveal(tx, view::LIST, None);
     tx.focus(FIELD, false);
 }
 
@@ -722,16 +734,16 @@ fn pick(state: &mut State, row: Row, tx: &mut Tx) {
             action: Action::MoveToDesktop { desktop, leaf },
         }) => {
             record(state, id, tx);
-            let search = &mut state.window.search;
-            let from_commands = std::mem::take(&mut search.query);
-            search.moving = Some(Moving {
-                desktop,
-                leaf,
-                from_commands: Some(from_commands),
-            });
-            search.highlight = None;
-            attn_ui::finder::reveal(tx, view::LIST, None);
-            tx.focus(FIELD, false);
+            let from_commands = Some(state.window.search.query.clone());
+            choose_destination(
+                state,
+                Moving {
+                    desktop,
+                    leaf,
+                    from_commands,
+                },
+                tx,
+            );
             return;
         }
         Some(Pick::Command { id, action }) => {

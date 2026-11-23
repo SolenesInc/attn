@@ -962,7 +962,7 @@ fn row_controls(key: &str, a: &QueueAgent) -> Vec<system::IconButton> {
         .into_iter()
         .chain(unsnooze)
         .chain(snooze)
-        .chain([super::actions_button(key, &a.agent)])
+        .chain([super::actions_button(key, &a.agent, None)])
         .chain(settle)
         .collect()
 }

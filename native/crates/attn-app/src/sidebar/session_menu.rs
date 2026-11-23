@@ -14,9 +14,17 @@ pub struct Menu {
     pub session: String,
     pub name: String,
     pub under: String,
+    pub tile: Option<(String, String)>,
 }
 
-pub(crate) fn open(state: &mut State, session: &str, name: String, under: String, tx: &mut Tx) {
+pub(crate) fn open(
+    state: &mut State,
+    session: &str,
+    name: String,
+    under: String,
+    tile: Option<(String, String)>,
+    tx: &mut Tx,
+) {
     let first = if chief_session(state, session).is_some() {
         "route"
     } else if member_of(state, session).is_some() {
@@ -29,6 +37,7 @@ pub(crate) fn open(state: &mut State, session: &str, name: String, under: String
         session: session.to_owned(),
         name,
         under,
+        tile,
     });
 }
 
@@ -235,7 +244,11 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> Vec<El> {
         .item(
             item("rename", (&attn_ui::icon::PENCIL).into(), "Rename session").on_select_tx(rename),
         );
-    if let Some((desktop, leaf)) = super::pane_of(state, &menu.session) {
+    if let Some((desktop, leaf)) = menu
+        .tile
+        .clone()
+        .or_else(|| super::pane_of(state, &menu.session))
+    {
         kit_menu = kit_menu.item(
             item(
                 "move",
