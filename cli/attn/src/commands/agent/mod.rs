@@ -289,11 +289,7 @@ fn msg_status_line(message: &AgentPeerMessage) -> String {
         short(&message.target_session_id)
     );
     if let Some(turn) = &message.delivered_as {
-        let article = if turn.to_string() == "interrupt" {
-            "an"
-        } else {
-            "a"
-        };
+        let article = if turn == "interrupt" { "an" } else { "a" };
         let _ = write!(line, "; its running turn took it as {article} {turn}");
     }
     if message.as_user == Some(true) {
