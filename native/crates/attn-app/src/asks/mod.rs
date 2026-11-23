@@ -41,8 +41,6 @@ pub struct Asks {
     pub(crate) show_replied: bool,
     /// The footer lists the sheet's keys, which it otherwise leaves behind its Keys button.
     pub(crate) keys_shown: bool,
-    /// The ask whose note the person opened with Add a note.
-    pub(crate) noting: Option<String>,
     /// The ask whose "Follows …" line is unfolded to show the earlier answer.
     pub(crate) follows_open: Option<String>,
     pub(crate) drafts: HashMap<String, Draft>,
@@ -69,6 +67,8 @@ pub struct Asks {
 pub(crate) struct Draft {
     pub answers: BTreeMap<String, Answer>,
     pub note: TextEdit,
+    /// The person opened the note or put the keyboard in it, so it shows though it holds nothing.
+    pub note_opened: bool,
     /// The stop ⇥, the number keys and clicks last made active; the ask's first unanswered
     /// choice question until then.
     pub active: Option<Stop>,
@@ -289,6 +289,9 @@ fn enter(state: &mut State, ask: &Ask, stop: Stop, tx: &mut Tx) {
 }
 
 fn focus_in(state: &mut State, ask: &Ask, stop: Stop, control: String, tx: &mut Tx) {
+    if control == view::NOTE {
+        state.draft(&ask.id).note_opened = true;
+    }
     activate(state, &ask.id, stop);
     tx.focus(control, tx.by_keys() || tx.focus_visible());
 }
@@ -435,14 +438,15 @@ pub(crate) fn pick(
     }
 }
 
-/// The note of `ask` shows its field: the person opened it, it holds words or files, or the ask
-/// asks no question, so the note is its whole answer. Otherwise it shows Add a note.
+/// The note of `ask` shows its field: the person opened it or put the keyboard in it, it holds
+/// words or files, or the ask asks no question, so the note is its whole answer. Otherwise it
+/// shows Add a note.
 pub(crate) fn note_open(state: &State, ask: &Ask) -> bool {
     let draft = state.window.asks.drafts.get(&ask.id);
-    state.window.asks.noting.as_deref() == Some(ask.id.as_str())
-        || questions(ask).next().is_none()
-        || draft
-            .is_some_and(|d| !d.note.text.is_empty() || d.files_on(&Stop::Note).next().is_some())
+    questions(ask).next().is_none()
+        || draft.is_some_and(|d| {
+            d.note_opened || !d.note.text.is_empty() || d.files_on(&Stop::Note).next().is_some()
+        })
 }
 
 fn note_input(state: &State, ask: &Ask) -> String {
@@ -453,12 +457,19 @@ fn note_input(state: &State, ask: &Ask) -> String {
     }
 }
 
+/// A press in the note of `ask`: the note becomes the active stop and stays open, so clearing
+/// its words keeps the keyboard in it.
+pub(crate) fn press_note(state: &mut State, ask: &str) {
+    state.draft(ask).note_opened = true;
+    activate(state, ask, Stop::Note);
+}
+
 /// Opens the note of the ask shown and puts the keyboard in it.
 pub(crate) fn open_note(state: &mut State, tx: &mut Tx) -> bool {
     let Some(ask) = shown_open(state) else {
         return false;
     };
-    state.window.asks.noting = Some(ask.id.clone());
+    state.draft(&ask.id).note_opened = true;
     enter(state, &ask, Stop::Note, tx);
     true
 }

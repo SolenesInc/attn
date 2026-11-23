@@ -191,6 +191,25 @@ fn a_half_written_answer_is_saved_once_writing_pauses_and_comes_back_after_a_rel
 }
 
 #[test]
+fn clearing_a_note_brought_back_from_a_draft_keeps_it_open_with_the_keyboard_in_it() {
+    let mut held = launch();
+    held.draft = Some(AskDraft {
+        note: Some("Ask me before Friday".into()),
+        generation: 1,
+        ..AskDraft::default()
+    });
+    let mut world = launched(vec![held]);
+    open_sheet(&mut world);
+
+    world.gesture(|app| app.click(Target::key(NOTE)));
+    world.gesture(|app| app.press("mod+a"));
+    world.gesture(|app| app.press("backspace"));
+    world.gesture(|app| app.type_text("Ship next week."));
+
+    assert_eq!(field_text(&world, NOTE), "Ship next week.");
+}
+
+#[test]
 fn a_file_still_uploading_when_the_app_quit_comes_back_failed_and_holds_the_send() {
     let mut held = launch();
     held.draft = Some(AskDraft {

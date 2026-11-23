@@ -2390,6 +2390,47 @@ fn q_quotes_the_selected_passage_into_the_note_and_puts_the_keyboard_there() {
 }
 
 #[test]
+fn clearing_a_quoted_note_keeps_it_open_with_the_keyboard_in_it() {
+    let mut world = start(vec![release_plan()], vec![api_working()]);
+    world.resize((1000.0, 1000.0));
+    open_sheet(&mut world);
+    drag_across(&mut world, "asks.subject");
+    letter(&mut world, "q");
+
+    world.gesture(|app| app.press("mod+a"));
+    world.gesture(|app| app.press("backspace"));
+    world.gesture(|app| app.type_text("Ship next week."));
+
+    assert_eq!(focused(&world).as_deref(), Some(NOTE));
+    assert_eq!(field_text(&world, NOTE), "Ship next week.");
+}
+
+#[test]
+fn a_note_stays_open_on_its_ask_while_another_asks_note_is_written() {
+    let mut world = start(
+        vec![cache_store(), release_day()],
+        vec![api_working(), web_waiting()],
+    );
+    world.resize((1000.0, 1000.0));
+    open_sheet(&mut world);
+    assert_eq!(shown(&world).as_deref(), Some("Release day"));
+    drag_across(&mut world, "asks.subject");
+    letter(&mut world, "q");
+    click(&mut world, "asks.row.a-cache1");
+    add_note(&mut world);
+    world.gesture(|app| app.type_text("Fine by me."));
+    click(&mut world, "asks.row.a-release");
+    assert_eq!(shown(&world).as_deref(), Some("Release day"));
+
+    world.gesture(|app| app.press("mod+a"));
+    world.gesture(|app| app.press("backspace"));
+    world.gesture(|app| app.type_text("Ship next week."));
+
+    assert_eq!(focused(&world).as_deref(), Some(NOTE));
+    assert_eq!(field_text(&world, NOTE), "Ship next week.");
+}
+
+#[test]
 fn the_quote_button_floats_over_a_selection_and_quotes_it() {
     let mut world = start(vec![release_plan()], vec![api_working()]);
     open_sheet(&mut world);

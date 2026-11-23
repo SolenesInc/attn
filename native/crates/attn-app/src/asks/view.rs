@@ -663,7 +663,7 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
                     t,
                 )
                 .on_press_within(move |state: &mut State, _: &mut Tx| {
-                    super::activate(state, &pressed, Stop::Note)
+                    super::press_note(state, &pressed)
                 }),
             ));
             blocks.push(Block::custom(
