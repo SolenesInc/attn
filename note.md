@@ -1,0 +1,3 @@
+Steers and interrupts now survive a Claude permission question: the steer lands at the first tool call after the user approves, and the interrupt waits for the question to close before it stops the turn (it never answers the question).
+
+`attn agent msg-status` now reports what happened, not what the sender asked for. `delivered_as` is set only when the running turn really took the message as a steer or an interrupt. That holds for the Claude mod (new `interrupted` ack), shared Codex and app servers (`Custody.TookAs` → `SessionPlaceResult.taken_as`). When the turn ended first, the message arrives as the next prompt and the CLI says `it arrived as its next prompt, not as a steer`.
