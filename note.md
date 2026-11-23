@@ -1,0 +1,1 @@
+A held Quick Capture now protects only the reply that answers it. Before, when Claude's mod submitted the held capture at the end of a turn, attn also reserved the following run, so the user's next unrelated reply stayed in the queue through notifications that should have settled it quietly.
