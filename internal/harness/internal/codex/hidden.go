@@ -72,7 +72,7 @@ func (c codexConversation) Deliver(_ context.Context, in harness.Input) harness.
 	r, facts := c.shared, c.facts
 	conversation := facts.Conversation
 	if conversation == "" {
-		return harness.Custody{Reason: "shared Codex monitor has no conversation yet"}
+		return harness.Custody{Outcome: harness.NotMine}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), codexServerStartLimit)
 	defer cancel()

@@ -255,6 +255,10 @@ clears the turn use, the message waits as a queued message, and the sender's
 result says why. attn never types a steer or an interrupt into a
 terminal, because typed text reads as the user's.
 
+A new Codex chat has no conversation for attn until its first turn, so
+until then attn types each ring into its terminal: a Quick Capture becomes the
+chat's first prompt.
+
 Codex on the shared app-server takes a steer with `turn/steer` into the running
 turn. For an interrupt it calls `turn/interrupt`, waits for the conversation to
 go idle, then starts the next turn with `turn/start`. An app server takes an

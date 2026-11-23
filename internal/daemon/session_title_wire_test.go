@@ -145,6 +145,17 @@ func TestAQuickCaptureAsTheFirstWordsTitlesTheSession(t *testing.T) {
 			t.Fatalf("Claude took %q, want the user's capture", got)
 		}
 	})
+	t.Run(string(fakeagent.Codex), func(t *testing.T) {
+		w := newTitlingWorld(t, fakeagent.Codex)
+		app := w.TrustedApp()
+		session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+		codex := w.Launched(session)
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+		titledFromCapture(t, w, app, session)
+		if got := codex.Prompted(); !strings.Contains(got, capture) {
+			t.Fatalf("Codex took %q as its first prompt, want the user's capture", got)
+		}
+	})
 	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
 		w := newTitlingWorld(t, h, fakeagent.Claude)
 		app := w.TrustedApp()
