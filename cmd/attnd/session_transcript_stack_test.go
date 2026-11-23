@@ -243,7 +243,8 @@ func TestSessionTranscriptFollowStopsWhenItsReaderGoesAwayAndNamesTheLastPageItD
 	converse(app, claude, id, "add a discount field", "Added the field.")
 	_, delivered := readTranscript(t, s, id)
 
-	follow := s.Launch(testworld.Invocation{Binary: "/bin/sh", Args: []string{"-c", `"$0" session transcript "$1" --follow | head -c 1 >/dev/null`, testworld.AttnBinary(t), id}})
+	follow := s.Launch(testworld.Invocation{Binary: "/bin/sh", Args: []string{"-c", `"$0" session transcript "$1" --follow | { head -c 1 >/dev/null; exec <&-; echo reader gone; }`, testworld.AttnBinary(t), id}})
+	follow.AwaitStdout("reader gone")
 	converse(app, claude, id, "and apply it after tax", "Applied after tax.")
 	stopped := follow.Wait()
 	if stopped.Code != 0 || !strings.Contains(stopped.Stderr, "cursor: "+delivered) {
