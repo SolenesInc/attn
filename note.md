@@ -1,0 +1,1 @@
+Native terminals now size their PTYs from rounded device-pixel cells (`Metrics::device_cell(scale)`) instead of unrounded points, fixing right-edge clipping at fractional effective scales such as `uiScale = 1.2` on Retina displays and keeping pixel sizes and column widths accurate across 1x/2x display changes.
