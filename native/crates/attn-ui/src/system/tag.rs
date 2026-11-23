@@ -27,8 +27,15 @@ pub(crate) fn tag_height() -> f32 {
 /// into the panel, round, the words taken toward the primary ink only as far as they need to read. Its ground is its own, so the words read the same on a row at rest,
 /// hovered or pressed.
 pub fn pill(key: impl Into<String>, said: impl Into<Said>, t: &Tokens) -> El {
-    let ground = crate::colors::mix_srgb(t.bg_panel, t.brand, PILL_WASH);
-    let ink = crate::colors::moved_until_it_reads(t.brand, t.text_primary, ground);
+    tinted_pill(key, said, t.brand, t)
+}
+
+/// A state the user should see at a glance, such as "waiting for you": words in `ink` on that ink
+/// mixed into the panel, round, the words taken toward the primary ink only as far as they need
+/// to read.
+pub fn tinted_pill(key: impl Into<String>, said: impl Into<Said>, ink: Color, t: &Tokens) -> El {
+    let ground = crate::colors::mix_srgb(t.bg_panel, ink, PILL_WASH);
+    let ink = crate::colors::moved_until_it_reads(ink, t.text_primary, ground);
     let pill = words(said, Type::Control, ink)
         .key(key.into())
         .single_line()

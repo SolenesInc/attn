@@ -1191,6 +1191,7 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("system::stepper::stepper(value)", true),
     ("system::switch::switch(label)", false),
     ("system::tag::pill(said)", true),
+    ("system::tag::tinted_pill(said)", true),
     ("system::tag::tag(said)", true),
     ("system::tag::tag_width(said)", true),
     ("system::trigger::Trigger::new(label)", false),

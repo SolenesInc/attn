@@ -47,7 +47,7 @@ impl Link {
         let ink = self.ink.unwrap_or(t.text_secondary);
         let said = words(self.shown.clone(), self.kind, ink).a11y_hidden();
         let said = if self.wrap {
-            said.wrap()
+            said.wrap().min_w(0.0).shrink()
         } else {
             said.truncate()
         };

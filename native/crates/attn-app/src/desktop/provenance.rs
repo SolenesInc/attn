@@ -1,8 +1,10 @@
 use attn_protocol::{AutomationProvenance, Session, SessionPullRequest};
 use attn_ui::Tokens;
-use attn_ui::blocks::{Actions, Block, Facts, HeaderPiece, Inline, Popover, Stack};
-use attn_ui::system::{Button, DotShape, DotSize, Link, Look, Size, Type, dot, keys_hint, words};
-use rune::{Color, El, Key, KeyEvent, Tx};
+use attn_ui::blocks::{Actions, Block, HeaderPiece, Inline, Popover, Stack};
+use attn_ui::system::{
+    DotShape, DotSize, IconSize, Link, ListRow, Type, dot, icon_button, keys_hint, words,
+};
+use rune::{Color, El, Key, KeyEvent, Tx, col};
 use rune_kit::Placement;
 
 use super::fit::{Level, Widths};
@@ -439,30 +441,316 @@ fn merge(pr: &SessionPullRequest) -> Said {
     }
 }
 
-fn said((label, tone): Said) -> (String, Tone) {
-    (label.to_owned(), tone)
+fn fetched(pr: &SessionPullRequest) -> bool {
+    pr.status_fetched_at
+        .as_deref()
+        .is_some_and(|at| !at.is_empty())
 }
 
-fn age(created: &str, now_ms: i64) -> String {
-    let Some(at) = crate::sidebar::queue::epoch_ms(created) else {
-        return String::new();
-    };
-    let seconds = ((now_ms - at).max(0) as f64 / 1000.0).round() as i64;
-    let when = crate::calendar::date_time(at);
-    let ago = match seconds {
-        s if s < 60 => "just now".to_owned(),
-        s if s < 3600 => format!("{}m ago", (s as f64 / 60.0).round()),
-        s if s < 86_400 => format!("{}h ago", (s as f64 / 3600.0).round()),
-        s => format!("{}d ago", (s as f64 / 86_400.0).round()),
-    };
-    format!("{ago} · {when}")
+/// The pull request's name, as "attn#812".
+pub(crate) fn name(pr: &SessionPullRequest) -> String {
+    target_name(&pr.repository, pr.number)
 }
 
-/// How wide the details stand: a pull request's title of 60 characters keeps two lines in
-/// `Name`.
-const DETAILS_W: f32 = 360.0;
+/// A pull request at a glance, as the delegation chain's details show it: its status's dot, its
+/// name and its status.
+pub(crate) fn status_mark(pr: &SessionPullRequest, t: &Tokens) -> El {
+    let (said, tone) = status(pr);
+    Inline::joined()
+        .child(dot(tone.color(t), DotShape::Filled, DotSize::Small))
+        .child(words(name(pr), Type::Mono, t.text_secondary).single_line())
+        .child(
+            words(said, Type::Small, tone.color(t))
+                .single_line()
+                .truncate()
+                .shrink(),
+        )
+}
 
-/// The open details popover: the picked pull request's state, and the others the session has.
+fn capitalized(said: &str) -> String {
+    let mut chars = said.chars();
+    chars
+        .next()
+        .map(|first| first.to_uppercase().chain(chars).collect())
+        .unwrap_or_default()
+}
+
+/// What stands between the pull request and its merge, as its watch or else its status says it:
+/// a word, its tone, and the reason when there is one to add.
+fn verdict(pr: &SessionPullRequest, now_ms: i64) -> (String, Tone, Option<String>) {
+    match pr.state.as_str() {
+        "merged" => return ("Merged".into(), Tone::Merged, None),
+        "closed" => return ("Closed".into(), Tone::Neutral, None),
+        _ => {}
+    }
+    if !fetched(pr) {
+        return (
+            "Waiting for GitHub".into(),
+            Tone::Neutral,
+            Some("attn has not fetched its status yet".into()),
+        );
+    }
+    let watched = pr.watching == Some(true);
+    match pr.readiness_state.as_deref().filter(|_| watched) {
+        Some("ready") => (
+            "Ready to merge".into(),
+            Tone::Ok,
+            readiness_words(pr, now_ms),
+        ),
+        Some("waiting") => ("Waiting".into(), Tone::Warn, readiness_words(pr, now_ms)),
+        Some("blocked") => ("Blocked".into(), Tone::Bad, readiness_words(pr, now_ms)),
+        _ => {
+            let (said, tone) = status(pr);
+            let why = match said {
+                "approved" => Some("GitHub still blocks the merge".to_owned()),
+                "draft" => Some("Mark it ready for review to merge it".to_owned()),
+                _ => None,
+            };
+            (capitalized(said), tone, why)
+        }
+    }
+}
+
+/// Why the watch reads its pull request as it does, from the reason the daemon reported.
+fn readiness_words(pr: &SessionPullRequest, now_ms: i64) -> Option<String> {
+    let named = pr.watch_reviewer.as_deref().filter(|r| !r.is_empty());
+    let reviewer = named.unwrap_or("the reviewer");
+    let said = match pr.readiness_reason.as_deref()? {
+        "green" => "GitHub reports it ready to merge".to_owned(),
+        "codex_settling" => {
+            let left = pr
+                .settling_until
+                .as_deref()
+                .and_then(crate::sidebar::queue::epoch_ms)
+                .map(|until| (until - now_ms + 59_999) / 60_000)
+                .filter(|minutes| *minutes > 0);
+            match left {
+                Some(minutes) => format!("Codex's review settles in {minutes}m"),
+                None => "Codex's review is settling".to_owned(),
+            }
+        }
+        "codex_reviewing" => "Codex is reviewing it".to_owned(),
+        "codex_approved_best_effort" => "Codex gave a thumbs-up".to_owned(),
+        "codex_approval_missing" => "Waiting for a thumbs-up from Codex".to_owned(),
+        "formal_review_approved" => "Approved on GitHub".to_owned(),
+        "changes_requested" => match named {
+            Some(reviewer) => format!("{reviewer} requested changes"),
+            None => "Changes were requested".to_owned(),
+        },
+        "review_required" => "GitHub requires a review".to_owned(),
+        "formal_approval_missing" => "Waiting for an approval".to_owned(),
+        "selected_reviewer_requested" => format!("Waiting for {reviewer} to review"),
+        "selected_reviewer_approved" => format!("{reviewer} approved it"),
+        "review_dismissed" => format!("{reviewer}'s review was dismissed"),
+        "selected_reviewer_approval_missing" => format!("Waiting for {reviewer} to approve"),
+        "draft" => "It is a draft".to_owned(),
+        "repository_policy_blocked" => "Repository rules block the merge".to_owned(),
+        "behind_base" => "Its branch is behind the base".to_owned(),
+        "merge_conflict" => "It has merge conflicts".to_owned(),
+        "checks_not_green" => "Some checks are not green".to_owned(),
+        _ => return None,
+    };
+    Some(said)
+}
+
+/// The checks, review and merge that are not yet fine, leaving out what the verdict `said`, its
+/// word and its reason, already names.
+fn in_the_way(pr: &SessionPullRequest, said: &str) -> Vec<(String, Tone)> {
+    if !fetched(pr) || matches!(pr.state.as_str(), "merged" | "closed") {
+        return Vec::new();
+    }
+    let said = said.to_lowercase();
+    [
+        ("checks ", checks(pr)),
+        ("review ", review(pr)),
+        ("", merge(pr)),
+    ]
+    .into_iter()
+    .filter(|(_, (word, tone))| {
+        *tone != Tone::Ok
+            && !matches!(*word, "none reported" | "none requested" | "unknown")
+            && !said.contains(word)
+    })
+    .map(|(what, (word, tone))| (format!("{what}{word}"), tone))
+    .collect()
+}
+
+/// Who or what the watch waits for and when it last looked, as "Codex watch · 2m ago".
+fn watch_words(pr: &SessionPullRequest, now_ms: i64) -> Option<String> {
+    if pr.watching != Some(true) {
+        return None;
+    }
+    let reviewer = pr.watch_reviewer.as_deref().filter(|r| !r.is_empty());
+    let who = match (pr.watch_mode.as_deref(), reviewer) {
+        (Some("formal-review"), Some(reviewer)) => format!("{reviewer} watch"),
+        (Some("formal-review"), None) => "Review watch".to_owned(),
+        (Some("green") | None, _) => "Checks watch".to_owned(),
+        (Some(mode), _) => format!("{} watch", capitalized(mode)),
+    };
+    let checked = pr
+        .watch_last_checked_at
+        .as_deref()
+        .map(|at| crate::garden::model::ago(at, now_ms))
+        .filter(|ago| !ago.is_empty());
+    Some(match checked {
+        Some(ago) => format!("{who} · checked {ago}"),
+        None => who,
+    })
+}
+
+/// The picked pull request: its title, which opens it, what stands before its merge and why,
+/// its watch, and where and when it opened.
+fn details(key: &str, pr: &SessionPullRequest, now_ms: i64, t: &Tokens) -> El {
+    let identity = name(pr);
+    let url = pr.url.clone();
+    let title = El::from(
+        Link::new(
+            format!("{key}.title"),
+            pr.title
+                .clone()
+                .filter(|t| !t.is_empty())
+                .unwrap_or_else(|| pr.url.clone()),
+        )
+        .kind(Type::Name)
+        .ink(t.text_primary)
+        .wrap()
+        .build(t)
+        .label(format!("Open {identity} on GitHub")),
+    )
+    .min_w(0.0)
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| open(state, &url, tx));
+    let (word, tone, why) = verdict(pr, now_ms);
+    let in_way = in_the_way(
+        pr,
+        &format!("{word} {}", why.as_deref().unwrap_or_default()),
+    );
+    let ink = |tone: Tone| match tone {
+        Tone::Neutral => t.text_secondary,
+        tone => tone.color(t),
+    };
+    let verdict_line = Inline::tight()
+        .key(format!("{key}.verdict"))
+        .child(dot(tone.color(t), DotShape::Filled, DotSize::Regular))
+        .child(words(word.clone(), Type::Name, ink(tone)))
+        .children(why.map(|why| words(why, Type::Small, t.text_secondary).wrap()));
+    let in_way = (!in_way.is_empty()).then(|| {
+        Inline::tight().key(format!("{key}.in-the-way")).children(
+            in_way
+                .into_iter()
+                .map(|(said, tone)| words(said, Type::Small, ink(tone))),
+        )
+    });
+    let watch = watch_words(pr, now_ms);
+    let error = pr
+        .watch_error
+        .clone()
+        .filter(|e| !e.is_empty())
+        .map(|error| {
+            if pr.watch_health.as_deref() == Some("delayed") {
+                format!("Watch delayed: {error}")
+            } else {
+                error
+            }
+        });
+    let watch = (watch.is_some() || error.is_some()).then(|| {
+        Inline::tight()
+            .key(format!("{key}.watch"))
+            .children(watch.map(|w| words(w, Type::Small, t.text_tertiary)))
+            .children(error.map(|e| words(e, Type::Small, t.warning).wrap()))
+    });
+    let repository = pr
+        .repository
+        .strip_prefix("github.com/")
+        .unwrap_or(&pr.repository);
+    let opened = crate::garden::model::ago(&pr.created_at, now_ms);
+    let place = Inline::tight()
+        .key(format!("{key}.place"))
+        .child(
+            words(
+                format!("{repository}#{}", pr.number),
+                Type::Mono,
+                t.text_tertiary,
+            )
+            .wrap(),
+        )
+        .children(
+            (!opened.is_empty())
+                .then(|| words(format!("opened {opened}"), Type::Small, t.text_tertiary)),
+        );
+    Stack::loose()
+        .w_full()
+        .min_w(0.0)
+        .child(title)
+        .child(verdict_line)
+        .children(in_way)
+        .children(watch)
+        .child(place)
+}
+
+/// The session's pull requests, one row each, the picked one marked: its status's dot, its
+/// number, and its title.
+fn list(key: &str, all: &[&SessionPullRequest], picked: usize, t: &Tokens) -> El {
+    let one_repository = all.iter().all(|pr| pr.repository == all[0].repository);
+    col()
+        .role("list")
+        .label("Pull requests from this session")
+        .w_full()
+        .children(all.iter().enumerate().map(|(i, pr)| {
+            let number = if one_repository {
+                format!("#{}", pr.number)
+            } else {
+                name(pr)
+            };
+            let title = pr
+                .title
+                .clone()
+                .filter(|t| !t.is_empty())
+                .unwrap_or_else(|| pr.url.clone());
+            let (said, tone) = status(pr);
+            let ink = if state_rank(pr) > 0 {
+                t.text_tertiary
+            } else {
+                t.text_primary
+            };
+            let url = pr.url.clone();
+            ListRow::new(
+                format!("{key}.pr.{i}"),
+                format!("{number} {title} · {said}"),
+            )
+            .lead(dot(tone.color(t), DotShape::Filled, DotSize::Regular))
+            .title_el(
+                Inline::joined()
+                    .shrink()
+                    .child(words(number, Type::Mono, t.text_tertiary).single_line())
+                    .child(
+                        words(title, Type::Body, ink)
+                            .single_line()
+                            .truncate()
+                            .shrink(),
+                    ),
+            )
+            .unfocusable()
+            .cursor(i == picked)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| open(state, &url, tx))
+            .build(t)
+            .focus_selected(i == picked)
+            .on_pointer_move_local(move |state: &mut State, _, tx: &mut Tx| {
+                let pop = &mut state.window.desk.header_pop;
+                if pop.picked == i {
+                    tx.live_only();
+                } else {
+                    pop.picked = i;
+                }
+            })
+        }))
+}
+
+/// How wide the details stand: as wide as the delegation chain, so a title of 60 characters
+/// keeps two lines in `Name`.
+const DETAILS_W: f32 = 400.0;
+
+/// The open details popover: the session's pull requests to pick from when it has more than one,
+/// and the picked one's details.
 pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     let session = state.facts.sessions.iter().find(|s| s.id == pop.session)?;
     let all = pull_requests(session);
@@ -473,100 +761,43 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         .picked
         .min(all.len().checked_sub(1)?);
     let current = all[picked];
-    let identity = target_name(&current.repository, current.number);
+    let identity = name(current);
     let surface_key = pop.surface();
-    let fact = |facts: Facts, name: &str, (value, tone): (String, Tone)| {
-        let ink = match tone {
-            Tone::Neutral => t.text_secondary,
-            tone => tone.color(t),
-        };
-        facts.item(
-            format!("{surface_key}.{name}"),
-            name.to_owned(),
-            words(value, Type::Body, ink),
-        )
-    };
-    let facts = fact(
-        Facts::new(format!("{surface_key}.facts")),
-        "state",
-        (current.state.clone(), Tone::Neutral),
-    );
-    let facts = if current
-        .status_fetched_at
-        .as_deref()
-        .is_none_or(str::is_empty)
-    {
-        fact(
-            facts,
-            "status",
-            ("waiting for GitHub".into(), Tone::Neutral),
-        )
-    } else {
-        let facts = fact(facts, "checks", said(checks(current)));
-        let facts = fact(facts, "review", said(review(current)));
-        fact(facts, "merge", said(merge(current)))
-    };
-    let facts = fact(
-        facts,
-        "opened",
-        (age(&current.created_at, state.window.now_ms), Tone::Neutral),
-    );
-    let mut blocks = vec![facts.build(t)];
-    if all.len() > 1 {
-        let list = Stack::tight()
-            .role("list")
-            .label("Pull requests from this session")
-            .w_full()
-            .children(all.iter().enumerate().map(|(i, pr)| {
-                let url = pr.url.clone();
-                let shown = format!(
-                    "#{} {} · {}",
-                    pr.number,
-                    pr.title
-                        .clone()
-                        .filter(|t| !t.is_empty())
-                        .unwrap_or_else(|| pr.url.clone()),
-                    status(pr).0
-                );
-                El::from(
-                    Link::new(format!("{surface_key}.pr.{i}"), shown)
-                        .ink(if i == picked {
-                            t.text_primary
-                        } else {
-                            t.text_secondary
-                        })
-                        .build(t),
-                )
-                .focusable(false)
-                .on_hover_change(move |state: &mut State, inside, _: &mut Tx| {
-                    if inside {
-                        state.window.desk.header_pop.picked = i;
-                    }
-                })
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| open(state, &url, tx))
-            }));
-        blocks.push(Block::custom(format!("{surface_key}.prs"), list));
-    }
+    let close = icon_button(
+        format!("{surface_key}.close"),
+        "Close pull request details",
+        attn_ui::glyph::TIMES,
+        IconSize::Large,
+    )
+    .on_press(|state: &mut State| header_pop::close(state))
+    .build(t);
     let picking = all.len() > 1;
-    let url = current.url.clone();
-    let open_button: El = Button::new("Open on GitHub ↗")
-        .look(Look::Plain)
-        .size(Size::Compact)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| open(state, &url, tx))
-        .build(t)
-        .key(format!("{surface_key}.title"))
-        .label(format!("Open {identity} on GitHub"))
-        .into();
-    let title = current
-        .title
-        .clone()
-        .filter(|t| !t.is_empty())
-        .unwrap_or_else(|| identity.clone());
-    let surface = Popover::new(surface_key.clone(), title)
-        .aside(words(identity.clone(), Type::Mono, t.text_tertiary))
-        .push_all(blocks)
+    let picked_block = Block::custom(
+        format!("{surface_key}.picked"),
+        details(&surface_key, current, state.window.now_ms, t),
+    );
+    let surface = Popover::new(
+        surface_key.clone(),
+        if picking {
+            "Pull requests"
+        } else {
+            "Pull request"
+        },
+    )
+    .aside(close);
+    let surface = if picking {
+        surface
+            .push(Block::custom(
+                format!("{surface_key}.prs"),
+                list(&surface_key, &all, picked, t),
+            ))
+            .footing(picked_block)
+    } else {
+        surface.push(picked_block)
+    };
+    let surface = surface
         .actions(
-            Actions::new("open").push(open_button).push(
+            Actions::new("open").push(
                 Inline::loose()
                     .key(format!("{surface_key}.keys"))
                     .children(picking.then(|| keys_hint(["↑", "↓"], "pick", t)))
@@ -619,7 +850,7 @@ fn details_key(state: &mut State, urls: &[String], ev: &KeyEvent, tx: &mut Tx) -
     true
 }
 
-fn open(state: &mut State, url: &str, tx: &mut Tx) {
+pub(crate) fn open(state: &mut State, url: &str, tx: &mut Tx) {
     if let Err(why) = tx.open_url(url) {
         state
             .window

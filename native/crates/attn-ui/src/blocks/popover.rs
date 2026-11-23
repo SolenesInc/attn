@@ -15,6 +15,7 @@ pub struct Popover {
     aside: Vec<El>,
     about: Option<Block>,
     body: Vec<Block>,
+    footing: Option<Block>,
     actions: Option<Actions>,
     focusable: bool,
     reading: bool,
@@ -34,6 +35,7 @@ impl Popover {
             aside: Vec::new(),
             about: None,
             body: Vec::new(),
+            footing: None,
             actions: None,
             focusable: true,
             reading: false,
@@ -74,6 +76,13 @@ impl Popover {
     /// its own, so the keyboard reaches only its controls.
     pub fn shown_only(mut self) -> Self {
         self.focusable = false;
+        self
+    }
+
+    /// What stands under the body, across a rule, and stays in view while the body scrolls, such
+    /// as the details of the row the body's list picks.
+    pub fn footing(mut self, block: Block) -> Self {
+        self.footing = Some(block);
         self
     }
 
@@ -124,7 +133,23 @@ impl Popover {
                 t,
             )
         });
-        let surface = door::gap(bounded(head, body, actions, Room::Fit), Space::S12)
+        let footing = self.footing.map(|block| {
+            door::rows(
+                door::inset(spaced(vec![block], gap, None), INSET, Space::S0),
+                Space::S12,
+                Space::S0,
+            )
+            .border_sides([1.0, 0.0, 0.0, 0.0], t.border)
+        });
+        let foot = match (footing, actions) {
+            (None, actions) => actions,
+            (footing, actions) => Some(
+                door::gap(col().w_full(), Space::S12)
+                    .children(footing)
+                    .children(actions),
+            ),
+        };
+        let surface = door::gap(bounded(head, body, foot, Room::Fit), Space::S12)
             .key(self.key)
             .role("dialog")
             .label(self.title.text())

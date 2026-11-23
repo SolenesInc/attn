@@ -644,14 +644,20 @@ fn the_pull_request_details_open_on_hover_and_close_soon_after_the_pointer_leave
     for line in [
         "Pull request attn#71",
         "Open attn#71 on GitHub",
-        "attn#71",
-        "open",
-        "waiting for GitHub",
+        "Waiting for GitHub",
+        "victorarias/attn#71",
         "↵ open",
         "c copy url",
     ] {
         assert!(shown.lines().any(|l| l == line), "{line:?} in {shown}");
     }
+    assert!(
+        world
+            .screen()
+            .find(Target::role("list").name("Pull requests from this session"))
+            .is_none(),
+        "one pull request has no list to pick from"
+    );
     rest_on(&mut world, "tile.a.details.popover");
     world.advance(Duration::from_millis(400));
     assert!(
@@ -682,14 +688,7 @@ fn pinned_pull_request_details_pick_with_the_arrows_open_with_return_and_copy_wi
     );
     world.gesture(|app| app.click(Target::key("tile.a.details")));
     let shown = details(&world).expect("a press pins the details");
-    for line in [
-        "passed",
-        "approved",
-        "no conflicts",
-        "↑ ↓ pick",
-        "↵ open",
-        "c copy url",
-    ] {
+    for line in ["Ready to merge", "↑ ↓ pick", "↵ open", "c copy url"] {
         assert!(shown.lines().any(|l| l == line), "{line:?} in {shown}");
     }
 
@@ -1302,38 +1301,85 @@ fn at_the_smallest_window_with_large_text_pinned_details_keep_every_pull_request
 }
 
 #[test]
-fn the_details_of_one_pull_request_spell_out_every_status_the_daemon_reported() {
-    let mut pr = pull_request(71, "open", "2026-08-30T12:00:00Z");
-    pr.status_fetched_at = Some("2026-08-30T12:05:00Z".into());
-    pr.ci_status = Some("failure".into());
-    pr.review_status = Some("pending".into());
-    pr.mergeable_state = Some("clean".into());
-    let mut world = start(with_pull_requests(vec![pr]), session("b", "docs", None));
-    world.gesture(|app| app.click(Target::key("tile.a.details")));
-    let shown = details(&world).expect("a press pins the details");
-    let lines: Vec<&str> = shown.lines().collect();
-    let after = |name: &str| {
-        lines
-            .iter()
-            .position(|l| *l == name)
-            .and_then(|i| lines.get(i + 1).copied())
-            .unwrap_or_else(|| panic!("{name:?} in {shown}"))
-    };
-    assert_eq!(after("checks"), "failed");
-    assert_eq!(after("review"), "waiting on a reviewer");
-    assert_eq!(after("merge"), "no conflicts");
-    assert_eq!(after("state"), "open");
-    assert!(after("opened").contains(" ago · "), "{shown}");
-    assert!(
-        lines.contains(&"↵ open") && lines.contains(&"c copy url"),
-        "{shown}"
+fn the_details_of_a_pull_request_lead_with_what_stands_before_its_merge_and_leave_out_what_is_fine()
+{
+    let fetched =
+        |pr: SessionPullRequest, checks: &str, review: &str, merge: &str| SessionPullRequest {
+            status_fetched_at: Some("2026-08-30T12:05:00Z".into()),
+            ci_status: Some(checks.into()),
+            review_status: Some(review.into()),
+            mergeable_state: Some(merge.into()),
+            ..pr
+        };
+    let failing = fetched(
+        pull_request(71, "open", "2026-08-30T12:00:00Z"),
+        "failure",
+        "pending",
+        "clean",
     );
-    assert!(
-        world
-            .screen()
-            .find(Target::role("list").name("Pull requests from this session"))
-            .is_none(),
-        "one pull request has no list to pick from"
+    let watched = SessionPullRequest {
+        watching: Some(true),
+        watch_mode: Some("formal-review".into()),
+        watch_reviewer: Some("octo".into()),
+        readiness_state: Some("blocked".into()),
+        readiness_reason: Some("merge_conflict".into()),
+        watch_health: Some("delayed".into()),
+        watch_error: Some("GitHub rate limit reached".into()),
+        ..fetched(
+            pull_request(72, "open", "2026-08-29T12:00:00Z"),
+            "failure",
+            "changes_requested",
+            "dirty",
+        )
+    };
+    let merged = fetched(
+        pull_request(60, "merged", "2026-08-01T12:00:00Z"),
+        "success",
+        "approved",
+        "clean",
+    );
+    let mut world = start(
+        with_pull_requests(vec![merged, watched, failing]),
+        session("b", "docs", None),
+    );
+    world.gesture(|app| app.click(Target::key("tile.a.details")));
+    let picked = |world: &World| texts(world, "tile.a.details.popover.picked");
+    assert_eq!(
+        picked(&world),
+        [
+            "Open attn#71 on GitHub",
+            "Checks failed",
+            "review waiting on a reviewer",
+            "victorarias/attn#71",
+            "opened 74d ago",
+        ],
+        "an unwatched pull request leads with its status and leaves out its clean merge"
+    );
+    key(&mut world, Key::Down);
+    assert_eq!(
+        picked(&world),
+        [
+            "Open attn#72 on GitHub",
+            "Blocked",
+            "It has merge conflicts",
+            "checks failed",
+            "review changes requested",
+            "octo watch",
+            "Watch delayed: GitHub rate limit reached",
+            "victorarias/attn#72",
+            "opened 75d ago",
+        ],
+        "a watched pull request leads with its watch's verdict and names its conflicts once"
+    );
+    key(&mut world, Key::Down);
+    assert_eq!(
+        picked(&world),
+        [
+            "Open attn#60 on GitHub",
+            "Merged",
+            "victorarias/attn#60",
+            "opened 103d ago",
+        ]
     );
     rest(&mut world);
 }
@@ -1370,6 +1416,197 @@ fn the_command_palette_pins_the_delegation_chain_of_the_agent_on_screen() {
     assert_eq!(
         shown.last().map(|r| r["session_id"].clone()),
         Some("s-dispatcher".into())
+    );
+    rest(&mut world);
+}
+
+fn picked_agent(world: &World, surface: &str) -> Option<usize> {
+    let rows = chain(world)?.len();
+    (0..rows).find(|i| {
+        world
+            .screen()
+            .find(Target::key(format!("{surface}.agent.{i}")))
+            .is_some_and(|n| n.is("selected"))
+    })
+}
+
+#[test]
+fn the_side_arrows_step_a_pinned_chain_to_the_picked_agents_dispatcher_and_first_delegate() {
+    let mut world = start_with(vec![
+        delegate_of("a", "ledger sweep", "dispatcher"),
+        session("b", "docs", None),
+        session("dispatcher", "docs sweep", None),
+        delegate_of("delegate", "glossary rework", "a"),
+        delegate_of("sibling", "release notes", "dispatcher"),
+    ]);
+    world.gesture(|app| app.click(Target::key("tile.a.role")));
+    let surface = "tile.a.role.popover";
+    assert_eq!(picked_agent(&world, surface), Some(1));
+    for (pressed, lands) in [
+        (Key::Left, 0),
+        (Key::Left, 0),
+        (Key::Right, 1),
+        (Key::Right, 2),
+        (Key::Right, 2),
+        (Key::Left, 1),
+        (Key::End, 3),
+        (Key::Left, 0),
+    ] {
+        key(&mut world, pressed.clone());
+        assert_eq!(
+            picked_agent(&world, surface),
+            Some(lands),
+            "after {pressed:?}"
+        );
+    }
+    rest(&mut world);
+}
+
+#[test]
+fn a_pinned_chain_opens_the_picked_agents_seed_pull_request_and_ask_by_letter_and_a_hovered_one_leaves_letters_to_the_terminal()
+ {
+    let pr = pull_request(71, "open", "2026-08-30T12:00:00Z");
+    let mut world = start_from(InitialStateMessage {
+        desktops: Some(vec![desktop("a")]),
+        sessions: Some(vec![
+            Session {
+                seed_id: Some("s-ledger".into()),
+                pull_requests: Some(vec![pr.clone()]),
+                ..delegate_of("a", "ledger sweep", "dispatcher")
+            },
+            session("b", "docs", None),
+            session("dispatcher", "docs sweep", None),
+        ]),
+        seeds: Some(vec![super::garden::seed("s-ledger", "Sweep the ledger")]),
+        asks: Some(vec![super::asks::ask(
+            "a-cache",
+            "s-a",
+            "Cache store",
+            5,
+            vec![],
+        )]),
+        ..InitialStateMessage::new()
+    });
+    let letter = |world: &mut World, c: &str| key(world, Key::Text(c.into()));
+
+    let typed = world.daemon.sent_of("pty_input").len();
+    rest_on(&mut world, "sidebar.session.s-a");
+    assert!(
+        chain(&world).is_some(),
+        "resting on the row shows its chain"
+    );
+    letter(&mut world, "s");
+    assert!(
+        world.daemon.sent_of("open_seed").is_empty(),
+        "a chain shown by hover leaves letters alone"
+    );
+    assert_eq!(world.daemon.sent_of("pty_input").len(), typed + 1);
+    rest_on(&mut world, "tile.b");
+    world.advance(Duration::from_secs(1));
+
+    world.gesture(|app| app.click(Target::key("tile.a.role")));
+    for (go, said) in [
+        ("s", "Open seed Sweep the ledger"),
+        ("p", "Open pull request attn#71 on GitHub"),
+        ("a", "Answer ask: Cache store"),
+    ] {
+        assert_eq!(
+            world
+                .screen()
+                .find(Target::key(format!("tile.a.role.popover.picked.{go}")))
+                .and_then(|n| n.name)
+                .as_deref(),
+            Some(said)
+        );
+    }
+    letter(&mut world, "s");
+    assert_eq!(chain(&world), None);
+    let opened = world.daemon.sent_of("open_seed");
+    assert_eq!(opened.len(), 1);
+    assert_eq!(opened[0]["seed_id"], "s-ledger");
+    assert_eq!(opened[0]["session_id"], "s-a");
+
+    world.gesture(|app| app.click(Target::key("tile.a.role")));
+    letter(&mut world, "p");
+    assert_eq!(chain(&world), None);
+    assert_eq!(world.opened_links(), [pr.url.as_str()]);
+
+    world.gesture(|app| app.click(Target::key("tile.a.role")));
+    letter(&mut world, "a");
+    assert_eq!(chain(&world), None);
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::key("asks.ask"))
+            .and_then(|n| n.name)
+            .as_deref(),
+        Some("Cache store")
+    );
+}
+
+#[test]
+fn a_chain_marks_what_each_agent_needs_from_the_user_counts_them_and_folds_the_name_a_delegate_shares_with_its_dispatcher()
+ {
+    let mut world = start_from(InitialStateMessage {
+        desktops: Some(vec![desktop("a")]),
+        sessions: Some(vec![
+            session("a", "attn--sweep", None),
+            session("b", "docs", None),
+            Session {
+                turn_owed: Some(true),
+                ..delegate_of("terms", "attn--sweep-terms", "a")
+            },
+            Session {
+                state: "pending_approval".into(),
+                ..delegate_of("links", "attn--sweep-links", "a")
+            },
+            delegate_of("notes", "release notes", "a"),
+        ]),
+        asks: Some(vec![
+            super::asks::ask("a-1", "s-notes", "Cache store", 5, vec![]),
+            super::asks::ask("a-2", "s-notes", "Release day", 4, vec![]),
+        ]),
+        ..InitialStateMessage::new()
+    });
+    world.gesture(|app| app.click(Target::key("tile.a.role")));
+    let surface = "tile.a.role.popover";
+    assert_eq!(
+        chain(&world).expect("a press pins the chain"),
+        [
+            "attn--sweep · Unknown harness · current",
+            "attn--sweep-terms · Codex",
+            "attn--sweep-links · Codex",
+            "release notes · Codex",
+        ],
+        "a screen reader hears each whole name"
+    );
+    let named =
+        |world: &World, key: String| world.screen().find(Target::key(key)).and_then(|n| n.name);
+    assert_eq!(
+        named(&world, format!("{surface}.needs")).as_deref(),
+        Some("3 need you")
+    );
+    for (i, shown, needs) in [
+        (1, "…-terms", "waiting for you"),
+        (2, "…-links", "wants approval"),
+        (3, "release notes", "2 asks"),
+    ] {
+        let said = texts(&world, &format!("{surface}.agent.{i}"));
+        assert!(said.iter().any(|s| s == shown), "{shown:?} in {said:?}");
+        assert_eq!(
+            named(&world, format!("{surface}.agent.{i}.needs")).as_deref(),
+            Some(needs)
+        );
+    }
+    assert_eq!(
+        named(&world, format!("{surface}.picked.name")).as_deref(),
+        Some("attn--sweep")
+    );
+    key(&mut world, Key::Down);
+    assert_eq!(
+        named(&world, format!("{surface}.picked.name")).as_deref(),
+        Some("attn--sweep-terms"),
+        "the picked agent's details name it whole where its row folds it"
     );
     rest(&mut world);
 }

@@ -7052,6 +7052,258 @@ fn session_chain_tile(dark: bool) {
     snap(&mut world, "session-chain-tile", dark);
 }
 
+/// A chain of nine agents four levels deep pinned beside the sidebar: delegates named after their
+/// dispatcher's worktree, every badge, a role with no icon whose name runs past any width, an
+/// agent on an outpost, and a closed delegate on standby whose resume is blocked. The picked agent
+/// waits for the user with a seed, a pull request and an ask.
+fn session_chain_wide(dark: bool) {
+    let mut world = popover_world(
+        dark,
+        |state| {
+            let role = |name: &str, builtin: Option<&str>| attn_protocol::SessionDelegationRole {
+                name: name.into(),
+                builtin: builtin.map(Into::into),
+                ..Default::default()
+            };
+            let sessions = state.sessions.as_mut().expect("the tour's sessions");
+            for (i, label, dispatcher, agent_state, role) in [
+                (
+                    0,
+                    "attn--native-rewrite",
+                    None,
+                    "working",
+                    Some(role("Orchestrator", Some("orchestrator"))),
+                ),
+                (
+                    1,
+                    "attn--native-rewrite-sidebar",
+                    Some("s0"),
+                    "working",
+                    Some(role("Builder", Some("builder"))),
+                ),
+                (
+                    2,
+                    "attn--native-rewrite-sidebar-dock",
+                    Some("s1"),
+                    "pending_approval",
+                    Some(role("Reviewer", Some("reviewer"))),
+                ),
+                (
+                    3,
+                    "attn--native-rewrite-sidebar-dock-keys",
+                    Some("s2"),
+                    "idle",
+                    None,
+                ),
+                (
+                    4,
+                    "attn--native-rewrite-tiles",
+                    Some("s0"),
+                    "waiting_input",
+                    Some(role("Builder", Some("builder"))),
+                ),
+                (
+                    5,
+                    "build-and-release-platform-本番の権限を移行する作業ツリー-osaka-secondary",
+                    Some("s4"),
+                    "working",
+                    Some(role("Data-migration verifier for the Tokyo region", None)),
+                ),
+                (
+                    6,
+                    "attn--native-rewrite-tiles-codex",
+                    Some("s4"),
+                    "unknown",
+                    None,
+                ),
+                (
+                    7,
+                    "attn--native-rewrite-settings",
+                    Some("s0"),
+                    "scheduled",
+                    Some(role("Prototyper", Some("prototyper"))),
+                ),
+            ] {
+                let session = &mut sessions[i];
+                session.label = label.into();
+                session.dispatcher_session_id = dispatcher.map(Into::into);
+                session.state = agent_state.into();
+                session.delegation_role = role;
+            }
+            sessions[1].host = Some("osaka-build-02".into());
+            sessions[6].agent = "codex".into();
+            let tiles = &mut sessions[4];
+            tiles.turn_owed = Some(true);
+            tiles.activity = Some(
+                "Comparing each tile header piece with the width it measured at 150% text".into(),
+            );
+            tiles.seed_id = Some("s-tiles".into());
+            tiles.pull_requests = Some(vec![SessionPullRequest {
+                repository: "github.com/victorarias/attn".into(),
+                number: 851,
+                url: "https://github.com/victorarias/attn/pull/851".into(),
+                title: Some("Tiles: the header measures what it draws".into()),
+                created_at: "2026-11-12T07:00:00Z".into(),
+                state: "open".into(),
+                ci_status: Some("failure".into()),
+                status_fetched_at: Some("2026-11-12T08:30:00Z".into()),
+                ..SessionPullRequest::default()
+            }]);
+            let tiles_seed = Seed {
+                step_slug: "tiles-measure-their-header".into(),
+                ..seed("s-tiles", "Tiles measure their header", "growing", None)
+            };
+            let notices = Seed {
+                step_slug: "notices-land-in-the-inbox".into(),
+                standby: Some(attn_protocol::SeedStandbyView {
+                    note: "Merge once CI is green".into(),
+                    resume_blocked: Some("the harness is not installed here".into()),
+                    set_at: "2026-11-12T07:30:00Z".into(),
+                    tender: Some(attn_protocol::StandbyTender {
+                        session_id: "s-gone".into(),
+                        label: "attn--native-rewrite-settings-notices".into(),
+                        agent: "claude".into(),
+                        dispatcher_session_id: Some("s7".into()),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..seed("s-notices", "Notices land in the inbox", "growing", None)
+            };
+            let seeds = state.seeds.get_or_insert_with(Vec::new);
+            seeds.extend([tiles_seed, notices]);
+            state.seeds_total = Some(seeds.len() as i64);
+            state.asks = Some(vec![cache_ask("s4")]);
+        },
+        |_| {},
+    );
+    click(&mut world, Target::key("sidebar.session.s4.chain"));
+    snap(&mut world, "session-chain-wide", dark);
+}
+
+/// Nine pull requests across three repositories on two hosts, pinned open: the picked one
+/// watched for Codex while GitHub rate-limits the watch and Codex's review settles, one blocked
+/// three ways, a draft with no title, and a title past two lines in two scripts.
+fn session_pr_wide(dark: bool) {
+    let pr = |repository: &str, number: i64, state: &str, created: &str, title: Option<&str>| {
+        SessionPullRequest {
+            repository: repository.into(),
+            number,
+            url: format!("https://{repository}/pull/{number}"),
+            title: title.map(Into::into),
+            created_at: created.into(),
+            state: state.into(),
+            status_fetched_at: Some("2026-11-12T08:30:00Z".into()),
+            ..SessionPullRequest::default()
+        }
+    };
+    let (api, web, infra) = (
+        "github.com/acme/api",
+        "github.com/acme/web",
+        "ghe.acme.dev/platform/infra",
+    );
+    let mut world = popover_world(
+        dark,
+        |state| {
+            first_session(state).pull_requests = Some(vec![
+                SessionPullRequest {
+                    ci_status: Some("success".into()),
+                    review_status: Some("pending".into()),
+                    mergeable_state: Some("clean".into()),
+                    watching: Some(true),
+                    watch_mode: Some("codex".into()),
+                    readiness_state: Some("waiting".into()),
+                    readiness_reason: Some("codex_settling".into()),
+                    settling_until: Some("2026-11-12T09:03:00Z".into()),
+                    watch_health: Some("delayed".into()),
+                    watch_error: Some("GitHub rate limit reached; resets at 14:20".into()),
+                    watch_last_checked_at: Some("2026-11-12T08:51:00Z".into()),
+                    ..pr(
+                        api,
+                        4521,
+                        "open",
+                        "2026-11-12T08:40:00Z",
+                        Some("Rate-limit the export endpoint per token"),
+                    )
+                },
+                SessionPullRequest {
+                    ci_status: Some("failure".into()),
+                    review_status: Some("changes_requested".into()),
+                    mergeable_state: Some("dirty".into()),
+                    watching: Some(true),
+                    watch_mode: Some("formal-review".into()),
+                    watch_reviewer: Some("octo-reviewer".into()),
+                    readiness_state: Some("blocked".into()),
+                    readiness_reason: Some("merge_conflict".into()),
+                    ..pr(
+                        web,
+                        1207,
+                        "open",
+                        "2026-11-12T08:20:00Z",
+                        Some("Export button shows the job's progress"),
+                    )
+                },
+                SessionPullRequest {
+                    ci_status: Some("pending".into()),
+                    ..pr(
+                        api,
+                        4519,
+                        "open",
+                        "2026-11-12T08:00:00Z",
+                        Some(
+                            "Permissions: migrate the production deploy role in Tokyo, Osaka and Singapore to scoped grants (本番環境のデプロイ権限をスコープ付きの付与に移行する) and remove the legacy role",
+                        ),
+                    )
+                },
+                pr(infra, 88, "draft", "2026-11-12T07:40:00Z", None),
+                SessionPullRequest {
+                    ci_status: Some("success".into()),
+                    review_status: Some("approved".into()),
+                    mergeable_state: Some("clean".into()),
+                    ..pr(
+                        infra,
+                        87,
+                        "open",
+                        "2026-11-12T07:20:00Z",
+                        Some("Alert on export queue depth"),
+                    )
+                },
+                pr(
+                    web,
+                    1206,
+                    "open",
+                    "2026-11-12T07:00:00Z",
+                    Some("Fix: export modal loses focus on close"),
+                ),
+                pr(
+                    api,
+                    4502,
+                    "merged",
+                    "2026-11-11T12:00:00Z",
+                    Some("Export: stream rows instead of buffering"),
+                ),
+                pr(
+                    web,
+                    1199,
+                    "merged",
+                    "2026-11-11T10:00:00Z",
+                    Some("Export history page"),
+                ),
+                pr(
+                    api,
+                    4490,
+                    "closed",
+                    "2026-11-10T10:00:00Z",
+                    Some("Spike: export as Parquet"),
+                ),
+            ]);
+        },
+        |_| {},
+    );
+    world.gesture(|app| app.click(Target::key("tile.a.details")));
+    snap(&mut world, "session-pr-wide", dark);
+}
+
 fn session_usage(dark: bool) {
     let mut world = popover_world(
         dark,
@@ -8287,6 +8539,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("session_chain_row", || session_chain_row(dark));
         scene("session_chain_tile", || session_chain_tile(dark));
         scene("session_pr_details", || session_pr_details(dark));
+        scene("session_chain_wide", || session_chain_wide(dark));
+        scene("session_pr_wide", || session_pr_wide(dark));
         scene("session_usage", || session_usage(dark));
         scene("session_seed_context", || session_seed_context(dark));
         scene("terminal_seed_card", || terminal_seed_card(dark));

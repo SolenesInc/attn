@@ -93,7 +93,21 @@ pub struct ListRow {
     help: Option<String>,
     asides_give_way: bool,
     beside: bool,
+    tree_lines: Option<TreeLines>,
 }
+
+/// The lines a row in a tree draws in its indent: its parent's line, which turns to the row's
+/// mark, and the lines of rows further up that run past it to later rows.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TreeLines {
+    /// Whether the line of each level above the row's parent runs past the row, outermost first.
+    pub through: Vec<bool>,
+    /// Whether the row's parent has a later child, so its line goes on below the row.
+    pub more: bool,
+}
+
+/// How wide a tree's line draws.
+const TREE_LINE: f32 = 1.0;
 
 /// How strongly a tinted row takes its tint, at rest and selected.
 const TINT: (f32, f32) = (0.07, 0.12);
@@ -138,6 +152,7 @@ impl ListRow {
             tint: None,
             help: None,
             asides_give_way: false,
+            tree_lines: None,
             beside: false,
         }
     }
@@ -417,6 +432,12 @@ impl ListRow {
         self
     }
 
+    /// The lines that join the row, at its depth, to its parent and its parent's later rows.
+    pub fn tree_lines(mut self, lines: TreeLines) -> Self {
+        self.tree_lines = Some(lines);
+        self
+    }
+
     /// How deep in a tree the row is: each level moves its lead one step in.
     pub fn depth(mut self, depth: u8) -> Self {
         self.depth = depth;
@@ -551,6 +572,7 @@ impl ListRow {
 
     fn build_with(mut self, holding: Option<El>, t: &Tokens) -> El {
         let size = Size::Compact;
+        let tree_lines = self.tree_lines.take();
         let two_lines = self.subtitle.is_some();
         let wraps = self.wrap;
         let on_its_line = wraps || (!two_lines && !self.tags.is_empty());
@@ -981,7 +1003,20 @@ impl ListRow {
             (true, false) => door::around_band(line, band, Size::Regular),
         };
         let line = door::sides(line, Space::S0, size.inset());
-        let line = door::indented(line, size.inset(), Space::S12, self.depth);
+        let line = door::indented(line, size.inset(), Space::S12, self.depth).children(
+            tree_lines
+                .map(|lines| {
+                    tree_rules(
+                        &lines,
+                        self.depth,
+                        size.inset().pt(),
+                        height,
+                        t.border_hover,
+                    )
+                })
+                .into_iter()
+                .flatten(),
+        );
         let line = if two_lines {
             door::rows(line, Space::S6, Space::S6)
         } else {
@@ -1036,4 +1071,32 @@ impl ListRow {
 enum Title {
     Words(Said, bool),
     Built(El),
+}
+
+/// The rules that draw `lines` in the indent of a row at `depth`, `height` tall, whose indent
+/// starts `inset` in: each level's line runs under the middle of that level's lead, and the
+/// parent's line turns at the row's middle toward the row's own lead.
+fn tree_rules(lines: &TreeLines, depth: u8, inset: f32, height: f32, ink: Color) -> Vec<El> {
+    let Some(parent) = depth.checked_sub(1) else {
+        return Vec::new();
+    };
+    let under_lead =
+        |level: u8| inset + Space::S12.pt() * f32::from(level) + (LEAD - TREE_LINE) / 2.0;
+    let rule = |x: f32, y: f32, w: f32, h: f32| el().absolute(x, y).size(w, h).fill(ink).inert();
+    let middle = (height / 2.0).round();
+    let turn = under_lead(parent);
+    let to_lead = under_lead(depth) - super::DotSize::Regular.side() / 2.0 - Space::S2.pt();
+    (0..parent)
+        .filter(|level| lines.through.get(usize::from(*level)) == Some(&true))
+        .map(|level| rule(under_lead(level), 0.0, TREE_LINE, height))
+        .chain([
+            rule(
+                turn,
+                0.0,
+                TREE_LINE,
+                if lines.more { height } else { middle },
+            ),
+            rule(turn, middle, to_lead - turn, TREE_LINE),
+        ])
+        .collect()
 }

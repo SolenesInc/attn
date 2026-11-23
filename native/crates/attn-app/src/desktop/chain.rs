@@ -2,9 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use attn_client::Facts;
 use attn_protocol::{ActorView, Seed, Session, StandbyTender};
-use attn_ui::blocks::{Actions, Block, HeaderPiece, Popover, Prose};
+use attn_ui::blocks::{Actions, Block, HeaderPiece, Inline, Popover, Prose, Stack};
 use attn_ui::system::{
-    DotShape, DotSize, IconSize, ListRow, Type, dot, icon_button, keys_hint, words,
+    DotShape, DotSize, IconSize, ListRow, TreeLines, Type, dot, glyph, icon_button, keycaps,
+    keys_hint, press_area, tinted_pill, words,
 };
 use attn_ui::{Tokens, glyph};
 use rune::{Color, El, Key, KeyEvent, Tx, col};
@@ -267,17 +268,138 @@ pub(crate) fn row_hovers(row_el: El, row: &str, session: &str) -> El {
     )
 }
 
-/// How wide the open chain stands: an agent named after its worktree,
-/// "attn--ds-page-blocks-delegation", keeps its name whole in `Name` two levels down.
-const CHAIN_W: f32 = 360.0;
+/// How wide the open chain stands: a delegate four levels down keeps "attn--native-sidebar"
+/// whole beside a "waiting for you" badge and its role.
+const CHAIN_W: f32 = 400.0;
+
+/// One agent as the chain shows it: its row in the tree and, while picked, its details.
+struct Agent<'a> {
+    link: Link<'a>,
+    depth: usize,
+    name: String,
+    /// The name less the start it shares with its dispatcher's, as "…-terms".
+    folded: Option<String>,
+    lines: TreeLines,
+    needs: Option<Needs>,
+}
+
+impl Agent<'_> {
+    fn shown_name(&self) -> String {
+        self.folded.clone().unwrap_or_else(|| self.name.clone())
+    }
+}
+
+/// Why an agent waits on the user, most pressing first.
+enum Needs {
+    Approval,
+    Turn,
+    Asks(usize),
+}
+
+impl Needs {
+    fn of(session: &Session, facts: &Facts, now_ms: i64) -> Option<Needs> {
+        let snoozed =
+            crate::sidebar::queue::is_snoozed(session.turn_snoozed_until.as_deref(), now_ms);
+        if AgentState::parse(&session.state) == AgentState::PendingApproval {
+            Some(Needs::Approval)
+        } else if session.turn_owed == Some(true) && !snoozed {
+            Some(Needs::Turn)
+        } else {
+            let asks = crate::asks::of_session(facts, session).len();
+            (asks > 0).then_some(Needs::Asks(asks))
+        }
+    }
+
+    fn badge(&self, key: String, t: &Tokens) -> El {
+        match self {
+            Needs::Approval => tinted_pill(key, "wants approval", t.state_approval, t),
+            Needs::Turn => tinted_pill(key, "waiting for you", t.state_waiting, t),
+            Needs::Asks(1) => tinted_pill(key, "1 ask", t.state_waiting, t),
+            Needs::Asks(n) => tinted_pill(key, format!("{n} asks"), t.state_waiting, t),
+        }
+    }
+}
+
+fn name_of(link: Link<'_>, harnesses: &[attn_protocol::Harness]) -> String {
+    match link {
+        Link::Live(session) => display_name(session, harnesses),
+        Link::Dormant(_, tender) => dormant_name(tender, harnesses),
+    }
+}
+
+/// `name` less the start it shares with its dispatcher's name, "…-terms" for
+/// "attn--glossary-sweep-terms" under "attn--glossary-sweep": a delegate's worktree is named after
+/// its dispatcher's, so the end is what tells delegates apart.
+fn folded(name: &str, dispatcher: &str) -> Option<String> {
+    let rest = name.strip_prefix(dispatcher)?;
+    (rest.chars().count() > 1 && rest.starts_with(['-', '_', '/', ' '])).then(|| format!("…{rest}"))
+}
+
+/// The lines of the row at `i` of a tree listed in order at these depths.
+fn lines_of(depths: &[usize], i: usize) -> TreeLines {
+    let depth = depths[i];
+    let later = &depths[i + 1..];
+    let goes_on = |level: usize| {
+        later
+            .iter()
+            .take_while(|d| **d >= level)
+            .any(|d| *d == level)
+    };
+    TreeLines {
+        through: (1..depth).map(goes_on).collect(),
+        more: depth > 0 && goes_on(depth),
+    }
+}
+
+fn agents<'a>(rows: &[(Link<'a>, usize)], facts: &'a Facts, now_ms: i64) -> Vec<Agent<'a>> {
+    let names: Vec<String> = rows
+        .iter()
+        .map(|(link, _)| name_of(*link, &facts.harnesses))
+        .collect();
+    let depths: Vec<usize> = rows.iter().map(|(_, depth)| *depth).collect();
+    rows.iter()
+        .enumerate()
+        .map(|(i, (link, depth))| Agent {
+            link: *link,
+            depth: *depth,
+            folded: dispatcher_row(&depths, i).and_then(|up| folded(&names[i], &names[up])),
+            name: names[i].clone(),
+            lines: lines_of(&depths, i),
+            needs: match link {
+                Link::Live(session) => Needs::of(session, facts, now_ms),
+                Link::Dormant(..) => None,
+            },
+        })
+        .collect()
+}
+
+/// The row of the dispatcher of the row at `i`: the nearest row above it one level up.
+fn dispatcher_row(depths: &[usize], i: usize) -> Option<usize> {
+    (0..i).rev().find(|up| depths[*up] < depths[i])
+}
+
+/// The row of the first delegate of the row at `i`: the row under it, one level down.
+fn first_delegate_row(depths: &[usize], i: usize) -> Option<usize> {
+    depths
+        .get(i + 1)
+        .filter(|d| **d == depths[i] + 1)
+        .map(|_| i + 1)
+}
 
 /// The open delegation chain, under its role, or beside the sidebar for a sidebar row: its
-/// agents as a tree, each with its role and its state, the one on screen marked.
+/// agents as a tree, each with its state, what it needs from the user and its role, the one on
+/// screen marked, and the picked agent's details under the tree.
 pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     state.facts.sessions.iter().find(|s| s.id == pop.session)?;
     let (rows, earlier) = tree(&pop.session, &state.facts);
     let now_ms = state.window.now_ms;
-    let picked = state.window.desk.header_pop.picked;
+    let agents = agents(&rows, &state.facts, now_ms);
+    let picked = state
+        .window
+        .desk
+        .header_pop
+        .picked
+        .min(agents.len().checked_sub(1)?);
     let surface_key = pop.surface();
     let close = icon_button(
         format!("{surface_key}.close"),
@@ -287,35 +409,16 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     )
     .on_press(|state: &mut State| header_pop::close(state))
     .build(t);
-    let agents = col()
+    let tree_el = col()
         .key(agents_key(pop))
         .role("tree")
         .label("Agents in delegation chain")
         .w_full()
         .children(
-            rows.iter()
+            agents
+                .iter()
                 .enumerate()
-                .map(|(i, (link, depth))| match link {
-                    Link::Live(session) => agent_row(
-                        pop,
-                        i,
-                        session,
-                        &state.facts.harnesses,
-                        *depth,
-                        i == picked,
-                        t,
-                    ),
-                    Link::Dormant(seed, tender) => dormant_row(
-                        pop,
-                        i,
-                        (seed, tender),
-                        &state.facts.harnesses,
-                        now_ms,
-                        *depth,
-                        i == picked,
-                        t,
-                    ),
-                }),
+                .map(|(i, agent)| agent_row(pop, i, agent, &state.facts, now_ms, i == picked, t)),
         );
     let mut blocks = Vec::new();
     blocks.extend(earlier.map(|name| {
@@ -325,14 +428,27 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         )
         .build(t)
     }));
-    blocks.push(Block::custom(format!("{surface_key}.tree"), agents));
+    blocks.push(Block::custom(format!("{surface_key}.tree"), tree_el));
+    let need = agents.iter().filter(|a| a.needs.is_some()).count();
     let keys = Actions::new("keys")
-        .push(keys_hint(["↑", "↓"], "move", t))
-        .push(keys_hint(["↵"], "open", t))
-        .push(keys_hint(["esc"], "close", t));
-    let surface = Popover::new(surface_key, "Delegation chain")
+        .push(keys_hint(["↑", "↓", "←", "→"], "move", t))
+        .push(keys_hint(["↵"], "open", t));
+    let surface = Popover::new(surface_key.clone(), "Delegation chain");
+    let surface = if need > 0 {
+        surface.aside(
+            words(format!("{need} need you"), Type::Small, t.state_waiting)
+                .key(format!("{surface_key}.needs")),
+        )
+    } else {
+        surface
+    };
+    let surface = surface
         .aside(close)
         .push_all(blocks)
+        .footing(Block::custom(
+            details_key(pop),
+            details(pop, &agents[picked], state, t),
+        ))
         .actions(keys)
         .build(t)
         .w(CHAIN_W)
@@ -342,7 +458,7 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         });
     let surface = if pop.pinned {
         surface
-            .on_key(chain_key)
+            .on_key(pinned_key)
             .modal_tx(true, |state: &mut State, _: &mut Tx| {
                 header_pop::close(state)
             })
@@ -376,93 +492,108 @@ fn row_key(pop: &Pop, i: usize) -> String {
     format!("{}.agent.{i}", pop.surface())
 }
 
+fn details_key(pop: &Pop) -> String {
+    format!("{}.picked", pop.surface())
+}
+
 /// Keeps the picked agent of the open chain in view.
 pub(crate) fn reveal(pop: &Pop, picked: usize, tx: &mut Tx) {
     tx.scroll_into_view_in(body_key(pop), row_key(pop, picked));
 }
 
-fn agent_row(
-    pop: &Pop,
-    i: usize,
-    session: &Session,
-    harnesses: &[attn_protocol::Harness],
-    depth: usize,
-    picked: bool,
-    t: &Tokens,
-) -> El {
-    let name = display_name(session, harnesses);
-    let kind = session
-        .delegation_role
-        .as_ref()
-        .map(|r| r.name.clone())
-        .unwrap_or_else(|| harness_label(harnesses, &session.agent));
-    let current = session.id == pop.session;
-    let label = format!("{name} · {kind}{}", if current { " · current" } else { "" });
-    let agent_state = AgentState::parse(&session.state);
-    let id = session.id.clone();
-    let row = ListRow::new(row_key(pop, i), label)
-        .lead(dot(
-            crate::sidebar::state_color(agent_state, t),
-            DotShape::Filled,
-            DotSize::Regular,
-        ))
-        .title(name)
-        .subtitle(kind, t)
-        .aside(words(agent_state.spoken(), Type::Small, t.text_tertiary))
-        .in_view(current)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| select(state, &id, tx));
-    chain_row(row, i, depth, picked, t)
-}
-
-/// The row of a closed agent that tends a seed on standby: its name, "on standby" and what it
-/// waits for. Activating it opens the seed.
-#[allow(clippy::too_many_arguments)]
-fn dormant_row(
-    pop: &Pop,
-    i: usize,
-    (seed, tender): (&Seed, &StandbyTender),
-    harnesses: &[attn_protocol::Harness],
-    now_ms: i64,
-    depth: usize,
-    picked: bool,
-    t: &Tokens,
-) -> El {
-    let name = dormant_name(tender, harnesses);
-    let kind = std::iter::once("on standby".to_owned())
-        .chain(
-            crate::garden::model::standby_of(seed, now_ms)
-                .map(|s| s.waits())
-                .filter(|w| !w.is_empty()),
-        )
-        .collect::<Vec<_>>()
-        .join(" · ");
-    let opens = (seed.id.clone(), pop.session.clone());
-    let row = ListRow::new(row_key(pop, i), format!("{name} · {kind}"))
-        .lead(dot(t.text_muted, DotShape::Hollow, DotSize::Regular))
-        .title(name)
-        .subtitle(kind, t)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            open_seed(state, &opens.0, &opens.1, tx)
-        });
-    chain_row(row, i, depth, picked, t)
-}
-
-/// How attn names a closed agent on standby.
-pub(crate) fn dormant_name(tender: &StandbyTender, harnesses: &[attn_protocol::Harness]) -> String {
-    if tender.label.is_empty() {
-        harness_label(harnesses, &tender.agent)
+fn role_ink(role: &attn_protocol::SessionDelegationRole, t: &Tokens) -> Color {
+    if role.builtin.as_deref() == Some("orchestrator") {
+        t.accent
     } else {
-        tender.label.clone()
+        t.text_tertiary
     }
 }
 
-fn chain_row(row: ListRow, i: usize, depth: usize, picked: bool, t: &Tokens) -> El {
+/// The role's mark at the end of a row, and the room of one where the agent has no role, so the
+/// badges before it line up.
+fn role_slot(role: Option<&attn_protocol::SessionDelegationRole>, t: &Tokens) -> El {
+    match role {
+        Some(role) => glyph(
+            Mark::of(Some(role)).glyph(),
+            IconSize::Small,
+            role_ink(role, t),
+        ),
+        None => glyph(Mark::Chain.glyph(), IconSize::Small, Color::TRANSPARENT),
+    }
+}
+
+fn agent_row(
+    pop: &Pop,
+    i: usize,
+    agent: &Agent<'_>,
+    facts: &Facts,
+    now_ms: i64,
+    picked: bool,
+    t: &Tokens,
+) -> El {
+    let key = row_key(pop, i);
+    let row = match agent.link {
+        Link::Live(session) => {
+            let kind = session
+                .delegation_role
+                .as_ref()
+                .map(|r| r.name.clone())
+                .unwrap_or_else(|| harness_label(&facts.harnesses, &session.agent));
+            let current = session.id == pop.session;
+            let label = format!(
+                "{} · {kind}{}",
+                agent.name,
+                if current { " · current" } else { "" }
+            );
+            let ink = crate::sidebar::state_color(AgentState::parse(&session.state), t);
+            let id = session.id.clone();
+            let row = ListRow::new(key.clone(), label)
+                .lead(dot(ink, DotShape::Filled, DotSize::Regular))
+                .title(agent.shown_name())
+                .cut_middle();
+            let row = match &agent.needs {
+                Some(needs) => row.aside(needs.badge(format!("{key}.needs"), t)),
+                None => row,
+            };
+            row.aside(role_slot(session.delegation_role.as_ref(), t))
+                .in_view(current)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| select(state, &id, tx))
+        }
+        Link::Dormant(seed, _) => {
+            let standby = crate::garden::model::standby_of(seed, now_ms);
+            let waits = standby
+                .as_ref()
+                .map(|s| s.waits())
+                .filter(|w| !w.is_empty());
+            let kind = std::iter::once("on standby".to_owned())
+                .chain(waits)
+                .collect::<Vec<_>>()
+                .join(" · ");
+            let blocked = standby.is_some_and(|s| !s.resume_blocked.is_empty());
+            let said = if blocked {
+                words("resume blocked", Type::Small, t.warning)
+            } else {
+                words("standby", Type::Small, t.text_tertiary)
+            };
+            let opens = (seed.id.clone(), pop.session.clone());
+            ListRow::new(key, format!("{} · {kind}", agent.name))
+                .lead(dot(t.text_muted, DotShape::Hollow, DotSize::Regular))
+                .quiet_title(agent.shown_name())
+                .cut_middle()
+                .aside(said.single_line())
+                .aside(role_slot(None, t))
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    open_seed(state, &opens.0, &opens.1, tx)
+                })
+        }
+    };
     row.role("treeitem")
         .unfocusable()
-        .depth(depth.min(u8::MAX as usize) as u8)
+        .depth(agent.depth.min(u8::MAX as usize) as u8)
+        .tree_lines(agent.lines.clone())
         .cursor(picked)
         .build(t)
-        .level(depth as u32 + 1)
+        .level(agent.depth as u32 + 1)
         .focus_selected(picked)
         .on_pointer_move_local(move |state: &mut State, _, tx: &mut Tx| {
             let pop = &mut state.window.desk.header_pop;
@@ -474,8 +605,236 @@ fn chain_row(row: ListRow, i: usize, depth: usize, picked: bool, t: &Tokens) -> 
         })
 }
 
-/// Up, Down, Home, End and Enter on a chain shown by hover, which takes them the way a pinned
-/// chain does.
+/// How long ago `iso` was, as "for 3m", or "just now".
+fn held_for(iso: &str, now_ms: i64) -> Option<String> {
+    let at = crate::sidebar::queue::epoch_ms(iso)?;
+    let seconds = (now_ms - at).max(0) / 1000;
+    Some(match seconds {
+        s if s < 60 => "just now".to_owned(),
+        s if s < 3600 => format!("for {}m", s / 60),
+        s if s < 86_400 => format!("for {}h", s / 3600),
+        s => format!("for {}d", s / 86_400),
+    })
+}
+
+/// What the picked agent's details lead to, each by its letter.
+#[derive(Clone)]
+enum Go {
+    Seed(String),
+    PullRequest(String),
+    Ask(String),
+}
+
+impl Go {
+    fn letter(&self) -> &'static str {
+        match self {
+            Go::Seed(_) => "s",
+            Go::PullRequest(_) => "p",
+            Go::Ask(_) => "a",
+        }
+    }
+}
+
+/// Where the letters and the details of the agent `link` lead: its seed, its pull request and its
+/// oldest open ask.
+fn goes(link: Link<'_>, facts: &Facts) -> Vec<Go> {
+    match link {
+        Link::Live(session) => session
+            .seed_id
+            .clone()
+            .filter(|s| !s.is_empty())
+            .map(Go::Seed)
+            .into_iter()
+            .chain(
+                super::provenance::pull_request(session).map(|pr| Go::PullRequest(pr.url.clone())),
+            )
+            .chain(
+                crate::asks::of_session(facts, session)
+                    .first()
+                    .map(|ask| Go::Ask(ask.id.clone())),
+            )
+            .collect(),
+        Link::Dormant(seed, _) => vec![Go::Seed(seed.id.clone())],
+    }
+}
+
+fn find_seed<'a>(facts: &'a Facts, id: &str) -> Option<&'a Seed> {
+    facts
+        .garden
+        .of(&facts.profiles.selected)
+        .iter()
+        .map(|s| s.as_ref())
+        .find(|s| s.id == id)
+}
+
+/// One way out of the picked agent's details: its letter's keycap and what it opens.
+fn go_line(key: String, go: &Go, link: Link<'_>, facts: &Facts, session: &str, t: &Tokens) -> El {
+    let (label, shown): (String, El) = match go {
+        Go::Seed(id) => {
+            let seed = find_seed(facts, id);
+            let (named, kind) = match seed {
+                Some(s) if !s.step_slug.is_empty() => (s.step_slug.clone(), Type::Mono),
+                Some(s) if !s.title.is_empty() => (s.title.clone(), Type::Body),
+                _ => (id.clone(), Type::Mono),
+            };
+            let mark = attn_ui::icon::seed(seed.map_or("", |s| s.status.as_str()));
+            (
+                format!("Open seed {named}"),
+                Inline::joined()
+                    .child(glyph(mark, IconSize::Small, t.text_tertiary))
+                    .child(
+                        words(named, kind, t.text_secondary)
+                            .single_line()
+                            .truncate()
+                            .shrink(),
+                    ),
+            )
+        }
+        Go::PullRequest(url) => {
+            let pr = match link {
+                Link::Live(agent) => super::provenance::pull_request(agent),
+                Link::Dormant(..) => None,
+            };
+            match pr {
+                Some(pr) => (
+                    format!(
+                        "Open pull request {} on GitHub",
+                        super::provenance::name(pr)
+                    ),
+                    super::provenance::status_mark(pr, t),
+                ),
+                None => (
+                    format!("Open {url}"),
+                    words(url.clone(), Type::Mono, t.text_secondary)
+                        .single_line()
+                        .truncate()
+                        .shrink(),
+                ),
+            }
+        }
+        Go::Ask(id) => {
+            let subject = facts
+                .asks
+                .iter()
+                .find(|a| &a.id == id)
+                .map(|a| a.subject.clone())
+                .unwrap_or_default();
+            (
+                format!("Answer ask: {subject}"),
+                Inline::joined()
+                    .child(glyph(glyph::COMMENT, IconSize::Small, t.state_waiting))
+                    .child(
+                        words(subject, Type::Body, t.text_secondary)
+                            .single_line()
+                            .truncate()
+                            .shrink(),
+                    ),
+            )
+        }
+    };
+    let content = Inline::top()
+        .min_w(0.0)
+        .child(keycaps([go.letter().to_uppercase()], t))
+        .child(shown);
+    let (go, session) = (go.clone(), session.to_owned());
+    El::from(press_area(
+        key,
+        &label,
+        false,
+        false,
+        content,
+        t,
+        move |state: &mut State, tx: &mut Tx| follow(state, &go, &session, tx),
+    ))
+}
+
+/// The picked agent's details: its whole name, its role, harness, outpost and how long it has
+/// been in its state, what it is doing, and where its letters lead.
+fn details(pop: &Pop, agent: &Agent<'_>, state: &State, t: &Tokens) -> El {
+    let key = details_key(pop);
+    let facts = &state.facts;
+    let now_ms = state.window.now_ms;
+    let name = words(agent.name.clone(), Type::Name, t.text_primary)
+        .wrap()
+        .key(format!("{key}.name"));
+    let (about, doing): (El, Option<El>) = match agent.link {
+        Link::Live(session) => {
+            let spoken = AgentState::parse(&session.state).spoken();
+            let held = held_for(&session.state_since, now_ms)
+                .map_or_else(|| spoken.to_owned(), |held| format!("{spoken} {held}"));
+            let role = session.delegation_role.as_ref();
+            let said = [
+                role.map(|r| r.name.clone()),
+                Some(harness_label(&facts.harnesses, &session.agent)),
+                session.host.clone().filter(|h| !h.is_empty()),
+                Some(held),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" · ");
+            let about = Inline::top()
+                .min_w(0.0)
+                .children(role.map(|role| {
+                    glyph(
+                        Mark::of(Some(role)).glyph(),
+                        IconSize::Small,
+                        role_ink(role, t),
+                    )
+                }))
+                .child(words(said, Type::Small, t.text_tertiary).wrap().shrink());
+            let doing = session
+                .activity
+                .clone()
+                .filter(|a| !a.trim().is_empty())
+                .map(|a| words(a, Type::Body, t.text_secondary).wrap().max_lines(2));
+            (about, doing)
+        }
+        Link::Dormant(seed, _) => {
+            let standby = crate::garden::model::standby_of(seed, now_ms);
+            let blocked = standby.as_ref().and_then(|s| s.blocked_words());
+            let waits = standby
+                .map(|s| s.waits())
+                .filter(|w| !w.is_empty())
+                .map_or_else(|| "On standby".to_owned(), |w| format!("On standby · {w}"));
+            (
+                words(waits, Type::Small, t.text_tertiary).wrap(),
+                blocked.map(|b| words(b, Type::Body, t.warning).wrap()),
+            )
+        }
+    };
+    let session = pop.session.clone();
+    let lines = goes(agent.link, facts)
+        .iter()
+        .map(|go| {
+            go_line(
+                format!("{key}.{}", go.letter()),
+                go,
+                agent.link,
+                facts,
+                &session,
+                t,
+            )
+        })
+        .collect::<Vec<_>>();
+    Stack::loose()
+        .w_full()
+        .min_w(0.0)
+        .child(name)
+        .child(about.key(format!("{key}.about")))
+        .children(doing.map(|d| d.key(format!("{key}.doing"))))
+        .children((!lines.is_empty()).then(|| {
+            Stack::tight()
+                .key(format!("{key}.goes"))
+                .w_full()
+                .min_w(0.0)
+                .children(lines)
+        }))
+}
+
+/// Up, Down, Home, End, Left, Right and Enter on a chain shown by hover, which takes them the way
+/// a pinned chain does. Its letters wait for a pin: under a resting pointer they are the user
+/// typing.
 pub(crate) fn hover_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let shown = state
         .window
@@ -485,10 +844,21 @@ pub(crate) fn hover_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         .as_ref()
         .is_some_and(|p| !p.pinned && p.what == What::Chain);
     let m = ev.mods;
-    shown && !(m.shift || m.cmd || m.alt || m.ctrl || m.logo) && chain_key(state, ev, tx)
+    shown && !(m.shift || m.cmd || m.alt || m.ctrl || m.logo) && chain_key(state, ev, false, tx)
 }
 
-fn chain_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+fn pinned_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    chain_key(state, ev, true, tx)
+}
+
+/// What a key reaches from one row of the chain.
+struct Target {
+    depth: usize,
+    opens: Pick,
+    goes: Vec<Go>,
+}
+
+fn chain_key(state: &mut State, ev: &KeyEvent, letters: bool, tx: &mut Tx) -> bool {
     let Some(session) = state
         .window
         .desk
@@ -499,26 +869,49 @@ fn chain_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     else {
         return false;
     };
-    let picks: Vec<Pick> = tree(&session, &state.facts)
+    let targets: Vec<Target> = tree(&session, &state.facts)
         .0
         .iter()
-        .map(|(link, _)| match link {
-            Link::Live(s) => Pick::Agent(s.id.clone()),
-            Link::Dormant(seed, _) => Pick::Seed(seed.id.clone()),
+        .map(|(link, depth)| Target {
+            depth: *depth,
+            opens: match link {
+                Link::Live(s) => Pick::Agent(s.id.clone()),
+                Link::Dormant(seed, _) => Pick::Seed(seed.id.clone()),
+            },
+            goes: goes(*link, &state.facts),
         })
         .collect();
+    let depths: Vec<usize> = targets.iter().map(|t| t.depth).collect();
     let pop = &mut state.window.desk.header_pop;
-    let last = picks.len().saturating_sub(1);
+    let last = targets.len().saturating_sub(1);
+    let at = pop.picked.min(last);
+    let plain = ev.mods == rune::Mods::default();
     match &ev.key {
-        Key::Down => pop.picked = (pop.picked + 1).min(last),
-        Key::Up => pop.picked = pop.picked.saturating_sub(1),
+        Key::Down => pop.picked = (at + 1).min(last),
+        Key::Up => pop.picked = at.saturating_sub(1),
         Key::Home => pop.picked = 0,
         Key::End => pop.picked = last,
-        Key::Enter => match picks.get(pop.picked.min(last)).cloned() {
-            Some(Pick::Agent(id)) => select(state, &id, tx),
-            Some(Pick::Seed(id)) => open_seed(state, &id, &session, tx),
-            None => {}
-        },
+        Key::Left => pop.picked = dispatcher_row(&depths, at).unwrap_or(at),
+        Key::Right => pop.picked = first_delegate_row(&depths, at).unwrap_or(at),
+        Key::Enter => {
+            match targets.get(at).map(|t| t.opens.clone()) {
+                Some(Pick::Agent(id)) => select(state, &id, tx),
+                Some(Pick::Seed(id)) => open_seed(state, &id, &session, tx),
+                None => {}
+            }
+            return true;
+        }
+        Key::Text(c) if letters && plain => {
+            let Some(go) = targets
+                .get(at)
+                .and_then(|t| t.goes.iter().find(|g| g.letter() == c.as_str()))
+                .cloned()
+            else {
+                return false;
+            };
+            follow(state, &go, &session, tx);
+            return true;
+        }
         _ => return false,
     }
     if let Some(open) = &state.window.desk.header_pop.open {
@@ -533,6 +926,22 @@ enum Pick {
     Seed(String),
 }
 
+/// Opens what `go` leads to and closes the chain: a seed in a tile beside `session`, a pull
+/// request on GitHub, an ask in the asks sheet.
+fn follow(state: &mut State, go: &Go, session: &str, tx: &mut Tx) {
+    match go {
+        Go::Seed(id) => open_seed(state, id, session, tx),
+        Go::PullRequest(url) => {
+            header_pop::close(state);
+            super::provenance::open(state, url, tx);
+        }
+        Go::Ask(id) => {
+            header_pop::close(state);
+            crate::asks::show(state, Some(id), tx);
+        }
+    }
+}
+
 fn open_seed(state: &mut State, seed: &str, session: &str, tx: &mut Tx) {
     header_pop::close(state);
     crate::garden::open_tile_beside(state, seed, Some(session.to_owned()), tx);
@@ -541,4 +950,13 @@ fn open_seed(state: &mut State, seed: &str, session: &str, tx: &mut Tx) {
 fn select(state: &mut State, session: &str, tx: &mut Tx) {
     header_pop::close(state);
     crate::sidebar::open_agent(state, session, tx);
+}
+
+/// How attn names a closed agent on standby.
+pub(crate) fn dormant_name(tender: &StandbyTender, harnesses: &[attn_protocol::Harness]) -> String {
+    if tender.label.is_empty() {
+        harness_label(harnesses, &tender.agent)
+    } else {
+        tender.label.clone()
+    }
 }
