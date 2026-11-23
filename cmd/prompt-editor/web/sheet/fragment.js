@@ -1,6 +1,7 @@
-import { EditorState, Transaction, Annotation } from "@codemirror/state";
+import { EditorState, Transaction, Annotation, StateField } from "@codemirror/state";
 import { EditorView, Decoration, MatchDecorator, ViewPlugin, WidgetType, keymap, drawSelection } from "@codemirror/view";
 import { history, historyKeymap, defaultKeymap } from "@codemirror/commands";
+import { changes } from "./merge.js";
 
 export const placeholder = /\{\{([a-zA-Z][a-zA-Z0-9_]*)\}\}/g;
 
@@ -43,6 +44,46 @@ class Chip extends WidgetType {
   }
 }
 
+class Removed extends WidgetType {
+  constructor(text) {
+    super();
+    this.text = text;
+  }
+  eq(other) {
+    return other.text === this.text;
+  }
+  toDOM() {
+    const removed = document.createElement("div");
+    removed.className = "cm-removed";
+    removed.textContent = this.text;
+    return removed;
+  }
+}
+
+const addedLine = Decoration.line({ class: "cm-added" });
+
+function changeMarks(base, doc) {
+  const hunks = changes(base, doc.toString());
+  const marks = [];
+  for (const { removed, added: [from, to] } of hunks) {
+    const at = from < doc.lines ? doc.line(from + 1).from : doc.length;
+    if (removed.length) marks.push(Decoration.widget({ widget: new Removed(removed.join("\n")), block: true, side: from < doc.lines ? -1 : 1 }).range(at));
+    for (let line = from; line < to && line < doc.lines; line++) {
+      const start = doc.line(line + 1).from;
+      marks.push(addedLine.range(start));
+    }
+  }
+  return Decoration.set(marks, true);
+}
+
+function diffAgainst(base) {
+  return StateField.define({
+    create: (state) => changeMarks(base, state.doc),
+    update: (marks, transaction) => transaction.docChanged ? changeMarks(base, transaction.state.doc) : marks,
+    provide: (field) => EditorView.decorations.from(field),
+  });
+}
+
 function chips(chip) {
   const matcher = new MatchDecorator({
     regexp: placeholder,
@@ -59,7 +100,7 @@ function chips(chip) {
   return [plugin, EditorView.atomicRanges.of((view) => view.plugin(plugin)?.chips ?? Decoration.none)];
 }
 
-export function fragmentEditor({ parent, text, chip, onChange, navigation = [], label }) {
+export function fragmentEditor({ parent, text, chip, base, onChange, navigation = [], label }) {
   const view = new EditorView({
     parent,
     state: EditorState.create({
@@ -70,6 +111,7 @@ export function fragmentEditor({ parent, text, chip, onChange, navigation = [], 
         EditorView.lineWrapping,
         keymap.of([...navigation, ...historyKeymap, ...defaultKeymap]),
         chip ? chips(chip) : [],
+        base === undefined ? [] : diffAgainst(base),
         EditorView.contentAttributes.of({ "aria-label": label, spellcheck: "false", "data-stop": "" }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged && !update.transactions.some((t) => t.annotation(fromStore))) onChange?.(update.state.doc.toString());

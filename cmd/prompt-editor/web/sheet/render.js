@@ -62,24 +62,41 @@ function textRow(node, trace, into, scope, depth, untaken) {
   });
   const unsaved = el("span", { class: "unsaved", hidden: true }, "● unsaved");
   const twice = el("span", { class: "tag twice", hidden: true, title: "This file is in more than one place on this page. Every place follows your typing." });
+  const disk = el("pre", { class: "conflict-disk" });
   const conflict = el("div", { class: "conflict", hidden: true, role: "alert" },
-    "This file changed on disk since the page loaded it. Your text stays unsaved, and Save skips this file.");
+    el("p", {}, "This file changed on disk where you changed it too. Save skips this file until you choose. On disk now:"),
+    disk,
+    el("div", { class: "conflict-actions" },
+      el("button", { type: "button", onclick: () => scope.files.keepMine(path) }, "Keep mine"),
+      el("button", { type: "button", onclick: () => scope.files.useDisk(path) }, "Use disk")));
   const body = el("div", { class: "body" }, conflict);
   body.style.setProperty("--depth", String(depth));
-  const row = el("div", { class: untaken ? "row untaken" : "row", "data-path": path },
-    el("div", { class: "gutter" }, el("span", { class: "path", title: path }, short(path)), unsaved, twice, usesTag(scope.sources[path])),
+  const text = sliceOf(files.text(path), node);
+  const base = scope.base ? sliceOf(scope.base[path] ?? "", node) : undefined;
+  const folded = base === text;
+  const label = el("button", { class: "path", type: "button", title: path, tabindex: "-1", "data-stop": folded ? "" : null, onclick: () => { unfold(); view.focus(); } }, short(path));
+  const row = el("div", { class: ["row", untaken && "untaken", folded && "folded"].filter(Boolean).join(" "), "data-path": path },
+    el("div", { class: "gutter" }, label, unsaved, twice, usesTag(scope.sources[path])),
     body);
   into.append(row);
   const view = fragmentEditor({
     parent: body,
-    text: sliceOf(files.text(path), node),
+    text,
+    base,
     chip: node.verbatim ? null : (name) => bound[name] ?? { value: scope.values[name] },
     onChange: (text) => files.edit(path, node, text, view),
     navigation: scope.navigation,
     label: short(path),
   });
-  files.attach(path, node, view, (text) => replaceText(view, text));
-  scope.rows.push({ path, unsaved, twice, conflict });
+  const unfold = () => {
+    row.classList.remove("folded");
+    label.removeAttribute("data-stop");
+  };
+  files.attach(path, node, view, (text) => {
+    replaceText(view, text);
+    if (text !== base) unfold();
+  });
+  scope.rows.push({ path, node, unsaved, twice, conflict, disk });
   for (const { binding, childTrace, producer } of nested) {
     const block = nestedBlock(binding.name, producer ? `rendered by ${producer.event}` : `fills ${short(path)}`, into, depth);
     if (producer) walk(producer.definition.body, producer.trace, block, eventScope(scope, producer), depth + 1, untaken);

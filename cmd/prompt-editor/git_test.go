@@ -46,64 +46,37 @@ func manifestTest(t *testing.T, e *editor, recipients ...prompts.Recipient) {
 	writeTest(t, e, prompts.ManifestPath, string(data))
 }
 
-func TestComparisonUsesEachRevisionsCompositionAndDrafts(t *testing.T) {
+func TestPageDiffsAgainstTheMergeBaseOfARef(t *testing.T) {
 	e := testEditor(t)
 	gitTest(t, e, "init", "-b", "next")
 	path := "content/crew/v2/new-session.md"
 	writeTest(t, e, path, "Wake from the base.\n")
-	writeTest(t, e, "content/removed.md", "A retired event.\n")
-	flag := prompts.FlagField("old_flag", "Only the base has this input")
-	manifestTest(t, e, prompts.Recipient{ID: "crew", Events: []prompts.Event{
-		prompts.On("new-session", "launch_instructions", "Old composition", prompts.Compose(
-			prompts.When(prompts.Enabled(flag), prompts.Use("old.wake", path)),
-			prompts.Input(prompts.TextField("base_suffix", "A base-only input")))),
-		prompts.On("retired", "user_message", "Removed", prompts.Document("retired", "content/removed.md")),
-	}})
-	base := commitTest(t, e)
 	manifestTest(t, e, prompts.Builtin().Recipients()...)
+	base := commitTest(t, e)
+	gitTest(t, e, "checkout", "-b", "feature")
+	writeTest(t, e, path, "Wake from the feature.\n")
+	commitTest(t, e)
+	gitTest(t, e, "checkout", "next")
+	writeTest(t, e, path, "Wake from the moved base.\n")
+	commitTest(t, e)
+	gitTest(t, e, "checkout", "feature")
 	writeTest(t, e, path, "Wake from disk.\n")
 	beforeStatus := gitTest(t, e, "status", "--porcelain")
-	w := request(t, e, "base", editRequest{Ref: "next", Mode: "merge-base"})
-	if w.Code != 200 || !strings.Contains(w.Body.String(), base) {
-		t.Fatalf("base: %d %s", w.Code, w.Body)
+	w := request(t, e, "page", pageRequest{Event: "crew/new-session", Base: "next"})
+	var page pageResponse
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &page) != nil {
+		t.Fatalf("page: %d %s", w.Code, w.Body)
 	}
-	body := editRequest{BaseCommit: base, Recipient: "crew", Event: "new-session", Path: path,
-		Values: prompts.Values{"old_flag": "true", "base_suffix": "Base tail", "current_only": "ignored"},
-		Drafts: map[string]string{path: "Wake from the unsaved draft.\n"}}
-	w = request(t, e, "compare", body)
-	var comparison comparison
-	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &comparison) != nil {
-		t.Fatalf("compare: %d %s", w.Code, w.Body)
+	if page.BaseCommit != base || page.Base[path] != "Wake from the base.\n" || page.Sources[path].Text != "Wake from disk.\n" {
+		t.Fatalf("page base: %s %q %q", page.BaseCommit, page.Base[path], page.Sources[path].Text)
 	}
-	if comparison.Base.Result.Text != "Wake from the base.\n\nBase tail" || comparison.Current.Result.Text != "Wake from the unsaved draft." {
-		t.Fatalf("rendered with wrong declarations: %+v / %+v", comparison.Base, comparison.Current)
+	if gitTest(t, e, "status", "--porcelain") != beforeStatus {
+		t.Fatal("a diff changed the checkout")
 	}
-	if comparison.Base.Result.Delivery != "launch_instructions" || !strings.Contains(comparison.SourceDiff, "+Wake from the unsaved draft.") || !strings.Contains(comparison.PromptDiff, "-Base tail") {
-		t.Fatalf("missing comparison details: %+v", comparison)
-	}
-	body.Values["old_flag"] = "false"
-	w = request(t, e, "compare", body)
-	if err := json.Unmarshal(w.Body.Bytes(), &comparison); err != nil || comparison.Base.Result.Text != "Base tail" {
-		t.Fatalf("old condition not respected: %s", w.Body)
-	}
-	body.Event, body.Path = "retired", "content/removed.md"
-	w = request(t, e, "compare", body)
-	if !strings.Contains(w.Body.String(), `"status":"absent"`) || !strings.Contains(w.Body.String(), "-A retired event.") {
-		t.Fatalf("removed event: %s", w.Body)
-	}
-	body.Event, body.Path = "heartbeat", "content/crew/heartbeat.md"
-	w = request(t, e, "compare", body)
-	if !strings.Contains(w.Body.String(), `"base":{"status":"absent"}`) {
-		t.Fatalf("added event: %s", w.Body)
-	}
-	body.Event, body.Path = "new-session", path
-	body.Drafts[path] = "{{invalid}}"
-	w = request(t, e, "compare", body)
-	if !strings.Contains(w.Body.String(), `"current":{"status":"invalid"`) || !strings.Contains(w.Body.String(), "+{{invalid}}") {
-		t.Fatalf("invalid draft hid source diff: %s", w.Body)
-	}
-	if gitTest(t, e, "status", "--porcelain") != beforeStatus || gitTest(t, e, "rev-parse", "HEAD") != base {
-		t.Fatal("comparison changed the checkout")
+	for _, ref := range []string{"--output=/tmp/unwanted", "missing"} {
+		if w := request(t, e, "page", pageRequest{Event: "crew/new-session", Base: ref}); w.Code != 422 {
+			t.Fatalf("base %s: %d %s", ref, w.Code, w.Body)
+		}
 	}
 }
 
@@ -133,10 +106,6 @@ func TestBaseModesPinCommitsAndReportMissingManifests(t *testing.T) {
 	if err != nil || base.Sources["content/crew/v2/new-session.md"].Text != "New base tip\n" {
 		t.Fatalf("moving ref changed pinned revision: %+v / %v", base, err)
 	}
-	w := request(t, e, "compare", editRequest{BaseCommit: ancestor, Recipient: "crew", Event: "new-session", Path: "content/crew/v2/new-session.md"})
-	if w.Code != 200 || !strings.Contains(w.Body.String(), `"status":"unavailable"`) || !strings.Contains(w.Body.String(), "+Feature") {
-		t.Fatalf("legacy source comparison: %d %s", w.Code, w.Body)
-	}
 }
 
 func TestBaseFailuresAreExplicitAndCannotReadOutsideSources(t *testing.T) {
@@ -148,17 +117,8 @@ func TestBaseFailuresAreExplicitAndCannotReadOutsideSources(t *testing.T) {
 	if err != nil || !strings.Contains(base.Unavailable, "unsupported catalog version") {
 		t.Fatalf("version: %+v / %v", base, err)
 	}
-	for _, body := range []editRequest{{Ref: "--output=/tmp/unwanted", Mode: "tip"}, {Ref: "missing", Mode: "tip"}, {Ref: "next", Mode: "unknown"}} {
-		w := request(t, e, "base", body)
-		if w.Code != 422 {
-			t.Fatalf("invalid base: %d %s", w.Code, w.Body)
-		}
-	}
-	for _, body := range []editRequest{{BaseCommit: "HEAD"}, {BaseCommit: commit, Path: "../../go.mod"}} {
-		w := request(t, e, "compare", body)
-		if w.Code != 422 {
-			t.Fatalf("invalid compare: %d %s", w.Code, w.Body)
-		}
+	if _, err := e.selectBase(context.Background(), "next", "unknown"); err == nil {
+		t.Fatal("an unknown comparison mode was accepted")
 	}
 	writeTest(t, e, prompts.ManifestPath, `{"version":1,"recipients":[{"id":"broken","events":[{"id":"wake","delivery":"user_message","body":{"kind":"text","id":"missing","source":"content/missing.md"}}]}]}`)
 	commit = commitTest(t, e)

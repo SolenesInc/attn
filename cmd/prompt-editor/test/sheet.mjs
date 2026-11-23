@@ -57,7 +57,10 @@ try {
   const row = (name, scope = page) => scope.locator(`.row[data-path="content/${name}"]`);
   const editor = (name, scope = page) => row(name, scope).locator(".cm-content");
 
-  await page.goto(`${url}/sheet/#situation=crew-member-start`);
+  const show = (...args) => JSON.parse(execFileSync(binary, ["show", ...args, "--repo", fixture, "--json"], { encoding: "utf8" })).url;
+  const situationLink = show("--situation", "crew-member-start");
+  assert.equal(situationLink, `${url}/#situation=crew-member-start`);
+  await page.goto(situationLink);
   await expect(page.locator(".event h2")).toHaveText(["session/launch", "session/garden-ready", "crew/new-session"]);
   await expect(page.locator("#title-id")).toHaveText("crew-member-start");
 
@@ -141,7 +144,96 @@ try {
   assert.ok((await read(wake)).startsWith("Twice. This is a new session."));
   commit("C7 twice save");
 
-  // A file changed on disk since load is a conflict: the local text stays unsaved and the disk keeps its text.
+  // C9: a file another process changes merges into the open page.
+  await expect(page.locator("body")).toHaveAttribute("data-watching", "true");
+  const capture = "session/quick-capture.md";
+  const changeLine = async (index, edit) => {
+    const lines = (await read(capture)).split("\n");
+    lines[index] = edit(lines[index]);
+    await fs.writeFile(source(capture), lines.join("\n"));
+    return lines.join("\n");
+  };
+  const typeAtStart = async (name, text) => {
+    await editor(name).click();
+    await page.keyboard.press("ControlOrMeta+Home");
+    await page.keyboard.type(text);
+  };
+  await changeLine(5, (line) => line + " Disk one.");
+  await expect(editor(capture)).toContainText("Disk one.");
+  await expect(saveState).toHaveText("All saved");
+
+  await typeAtStart(capture, "Local. ");
+  const diskTwo = await changeLine(5, (line) => line + " Disk two.");
+  await expect(editor(capture)).toContainText("Disk two.");
+  await expect(editor(capture)).toContainText("Local. ");
+  await expect(saveState).toHaveText(/1 unsaved file$|1 unsaved file ·/);
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect(saveState).toHaveText("All saved");
+  assert.equal(await read(capture), "Local. " + diskTwo);
+
+  await typeAtStart(capture, "Mine. ");
+  const theirs = await changeLine(0, (line) => "Theirs. " + line);
+  await expect(row(capture).locator(".conflict")).toBeVisible();
+  await expect(row(capture).locator(".conflict-disk")).toContainText("Theirs. Local. ");
+  await expect(saveState).toHaveText(/1 in conflict/);
+  if (artifacts) await row(capture).screenshot({ path: path.join(artifacts, "conflict.png") });
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect(page.locator("#notice")).toContainText("Save skips them");
+  assert.equal(await read(capture), theirs);
+  await row(capture).getByRole("button", { name: "Keep mine" }).click();
+  await expect(row(capture).locator(".conflict")).toBeHidden();
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect(saveState).toHaveText("All saved");
+  assert.equal(await read(capture), "Mine. Local. " + diskTwo);
+
+  await typeAtStart(capture, "Dropped. ");
+  const disk = await changeLine(0, (line) => "Disk wins. " + line);
+  await row(capture).getByRole("button", { name: "Use disk" }).click();
+  await expect(editor(capture)).toContainText("Disk wins. Mine. ");
+  await expect(editor(capture)).not.toContainText("Dropped.");
+  await expect(saveState).toHaveText("All saved");
+  assert.equal(await read(capture), disk);
+  commit("C9 disk changes");
+
+  // C9: the diff shows a changed fragment's change and folds unchanged fragments.
+  const original = (await read(capture)).split("\n")[2];
+  await changeLine(2, (line) => line + " Diffed.");
+  await expect(editor(capture)).toContainText("Diffed.");
+  await page.keyboard.press("ControlOrMeta+Shift+d");
+  await expect(page.locator("#diff")).toHaveAttribute("aria-pressed", "true");
+  await expect(row(capture)).not.toHaveClass(/folded/);
+  await expect(row(capture).locator(".cm-added")).toHaveText([original + " Diffed."]);
+  await expect(row(capture).locator(".cm-removed")).toHaveText([original]);
+  await expect(row(identity)).toHaveClass(/folded/);
+  await expect(editor(identity)).toBeHidden();
+  if (artifacts) await page.screenshot({ path: path.join(artifacts, "diff.png"), fullPage: true });
+  await row(identity).locator(".path").focus();
+  await page.keyboard.press("Enter");
+  await expect(editor(identity)).toBeVisible();
+  await expect(editor(identity)).toBeFocused();
+  await page.keyboard.press("ControlOrMeta+Shift+d");
+  await expect(page.locator("#diff")).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator(".row.folded")).toHaveCount(0);
+  await expect(page.locator(".cm-added")).toHaveCount(0);
+  commit("C9 diff");
+
+  // A changed scenario or definition asks for the page again and keeps unsaved text.
+  await typeAtStart(capture, "Kept. ");
+  const scenarioFile = path.join(root, "scenarios/crew-v2-with-handoff.json");
+  const scenario = JSON.parse(await fs.readFile(scenarioFile, "utf8"));
+  scenario.values.display_name = "Renamed on disk";
+  await fs.writeFile(scenarioFile, JSON.stringify(scenario, null, 2) + "\n");
+  await expect(chip).toContainText("Renamed on disk");
+  await expect(editor(capture)).toContainText("Kept. ");
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect(saveState).toHaveText("All saved");
+  commit("Renamed scenario");
+
+  // A conflict that only the save reports takes the disk-change path: the local text stays unsaved and the disk keeps its text.
+  await page.route("**/api/events", (route) => route.abort());
+  await page.goto("about:blank");
+  await page.goto(situationLink);
+  await expect(page.locator("body")).not.toHaveAttribute("data-watching", "true");
   const cleared = "crew/cleared.md";
   await editor(cleared).click();
   await page.keyboard.press("ControlOrMeta+Home");
@@ -153,12 +245,12 @@ try {
   assert.equal(await read(cleared), "Changed by another process.\n");
   await expect(editor(cleared)).toContainText("Mine. ");
   await fs.writeFile(source(cleared), (await fs.readFile(path.join(repo, "internal/prompts/content", cleared), "utf8")));
+  await page.unroute("**/api/events");
 
   // A save that fails midway keeps the files written before the failure saved.
   await page.goto("about:blank");
-  await page.goto(`${url}/sheet/#situation=crew-member-start`);
+  await page.goto(situationLink);
   await expect(saveState).toHaveText("All saved");
-  const capture = "session/quick-capture.md";
   await editor(cleared).click();
   await page.keyboard.press("ControlOrMeta+Home");
   await page.keyboard.type("First. ");
@@ -193,9 +285,9 @@ try {
   await expect(saveState).toHaveText(/1 unsaved file/);
 
   // A scenario or a bare event opens from its hash.
-  await page.goto(`${url}/sheet/#scenario=crew-v2-new-session`);
+  await page.goto(`${url}/#scenario=crew-v2-new-session`);
   await expect(page.locator(".event h2")).toHaveText(["crew/new-session"]);
-  await page.goto(`${url}/sheet/#event=session/garden-ready`);
+  await page.goto(show("session/garden-ready"));
   await expect(page.locator(".event h2")).toHaveText(["session/garden-ready"]);
 
   // Leaving with unsaved text asks first.

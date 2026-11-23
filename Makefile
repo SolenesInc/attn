@@ -590,6 +590,4 @@ prompt-editor: $(PROMPT_EDITOR_BUNDLE)
 test-prompt-editor: $(PROMPT_EDITOR_BUNDLE)
 	go test ./cmd/prompt-editor ./cmd/promptgen ./internal/prompts
 	go run ./cmd/prompt-editor check
-	node --test cmd/prompt-editor/test/compare.test.mjs
-	node cmd/prompt-editor/test/browser.mjs
 	node cmd/prompt-editor/test/sheet.mjs

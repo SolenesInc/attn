@@ -87,8 +87,9 @@ func TestScenarioProducerDiff(t *testing.T) {
 	if _, ok := result["affected_events"].(map[string]string)["example/consumer"]; !ok {
 		t.Fatal("missing indirect usage")
 	}
-	w := request(t, e, "compare", editRequest{BaseCommit: base, Recipient: "example", Event: "consumer", Scenario: "consumer"})
-	if w.Code != 200 || !strings.Contains(w.Body.String(), "-Before producer.") || !strings.Contains(w.Body.String(), "+After producer.") {
+	w := request(t, e, "page", pageRequest{Scenario: "consumer", Base: base})
+	var page pageResponse
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &page) != nil || page.Base[name] != "Before producer." || page.Sources[name].Text != "After producer." {
 		t.Fatalf("browser producer diff: %s", w.Body)
 	}
 }

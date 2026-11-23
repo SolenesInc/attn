@@ -95,12 +95,13 @@ Preconditions:
 - Wire: `internal/daemon/agent_guidance_wire_test.go`, `internal/daemon/agent_skill_wire_test.go`, `internal/daemon/attn_skill_install_wire_test.go`, `internal/daemon/settings_skill_read_wire_test.go`, `internal/daemon/plugin_launch_instructions_wire_test.go`.
 - Wire: `internal/daemon/agent_tools_reading_wire_test.go` calls the `skill` and `guide` tools.
 - Stack: `cmd/attnd/skill_stack_test.go`, `cmd/attnd/prompts_stack_test.go`, each skill check with no daemon and through one.
+- Stack: `cmd/prompt-editor/test/sheet.mjs` drives the prompt editor's page in Chromium against a copy of the prompts (`make test-prompt-editor`).
 - Kernel: `native/crates/attn-app/tests/prompts.rs`, `internal/prompts/*_test.go`, `cmd/prompt-editor/*_test.go`, `cmd/attnd/prompt_compatibility_test.go`, `internal/*/prompt_compatibility_test.go`.
 
 ## Gotchas
 
 - Prompts and references are embedded at build time. After editing `internal/prompts/content/**`, run `make build` before `./attn prompts` shows the change, restart the instance's daemon before `./attn skill` does, and relaunch the agent before it reads the change.
-- The prompt editor (`go run ./cmd/prompt-editor`, `cmd/prompt-editor/main.go`, with `docs/internal/prompt-authoring.md`) is how maintainers change the text. It is not a way in for people or agents, so nothing here drives it. Its tests are under Kernel.
+- The prompt editor (`go run ./cmd/prompt-editor`, `cmd/prompt-editor/main.go`, with `docs/internal/prompt-authoring.md`) is how maintainers change the text. It is not a way in for people or agents, so nothing here drives it. Its tests are under Kernel and Stack.
 - `attn prompts` is a preview: it says so, and it is not proof that an agent received the text. The proof is the mock agent's launch record.
 - An input left out of `--set` is false or absent. `render session launch` without `--set garden_available=true` drops the garden guidance that every real launch carries.
 - A named instance does not touch skills in your harness homes. Only production and `dev` do, and so does an instance whose shell sets `ATTN_AUTOMATION=1`, `ATTN_HARNESS_SKILL_SYNC=1` and `ATTN_TOOL_HOME`.

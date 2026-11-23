@@ -69,21 +69,6 @@ func request(t *testing.T, e *editor, route string, body any) *httptest.Response
 	return w
 }
 
-func TestPreviewRendersUnsavedTextWithoutWriting(t *testing.T) {
-	e := testEditor(t)
-	path := "content/crew/v2/new-session.md"
-	original, _ := e.root.ReadFile(path)
-	draft := string(original) + "\nA maintainer edit.\n"
-	w := request(t, e, "preview", editRequest{Recipient: "crew", Event: "new-session", Drafts: map[string]string{path: draft}})
-	if w.Code != 200 || !strings.Contains(w.Body.String(), "A maintainer edit.") {
-		t.Fatalf("preview: %d %s", w.Code, w.Body)
-	}
-	disk, _ := e.root.ReadFile(path)
-	if !bytes.Equal(disk, original) {
-		t.Fatal("preview wrote a file")
-	}
-}
-
 func saveFiles(t *testing.T, e *editor, files ...saveFile) (int, saveResponse) {
 	t.Helper()
 	w := request(t, e, "save", saveRequest{Files: files})

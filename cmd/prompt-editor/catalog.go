@@ -342,22 +342,3 @@ func openEditor(repo string) (*editor, error) {
 	e.repo = absolute
 	return e, nil
 }
-
-func renderScenario(c *prompts.Catalog, request editRequest, scenarios map[string]scenario) (previewSide, prompts.Values) {
-	values := request.Values
-	if request.Scenario != "" {
-		s, ok := scenarios[request.Scenario]
-		if !ok || s.Recipient+"/"+s.Event != request.Recipient+"/"+request.Event {
-			return previewSide{Status: "invalid", Error: "scenario does not match this event"}, nil
-		}
-		if _, err := c.Fields(request.Recipient, request.Event); err != nil {
-			return previewSide{Status: "absent"}, nil
-		}
-		var err error
-		values, _, err = scenarioValues(c, scenarios, request.Scenario, map[string]bool{})
-		if err != nil {
-			return previewSide{Status: "invalid", Error: err.Error()}, nil
-		}
-	}
-	return renderSide(c, request.Recipient, request.Event, values), values
-}

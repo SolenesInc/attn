@@ -1,3 +1,5 @@
+import { merge3 } from "./merge.js";
+
 export function sliceRange(text, node) {
   let from = 0;
   let to = text.length;
@@ -21,19 +23,44 @@ export class Files {
   #listeners = new Set();
 
   take(sources) {
+    const fresh = {};
+    for (const [path, source] of Object.entries(sources)) {
+      if (this.#files.has(path)) fresh[path] = source;
+      else this.#files.set(path, { disk: source.text, revision: source.revision, local: source.text, conflict: null });
+    }
+    this.sync(fresh);
+  }
+
+  sync(sources) {
     for (const [path, source] of Object.entries(sources)) {
       const file = this.#files.get(path);
-      if (!file) this.#files.set(path, { disk: source.text, revision: source.revision, local: source.text, conflict: null });
-      else if (!this.dirty(path)) Object.assign(file, { disk: source.text, revision: source.revision, local: source.text });
+      if (!file || source.revision === (file.conflict ?? file).revision) continue;
+      if (file.local === file.disk && !file.conflict) {
+        Object.assign(file, { disk: source.text, revision: source.revision, local: source.text });
+        this.#refresh(path);
+        continue;
+      }
+      const merged = merge3(file.disk, file.local, source.text);
+      if (merged.conflict) {
+        file.conflict = { text: source.text, revision: source.revision };
+        continue;
+      }
+      Object.assign(file, { disk: source.text, revision: source.revision, local: merged.text, conflict: null });
+      this.#refresh(path);
     }
     this.#notify();
   }
 
-  reloadDisk(sources) {
-    for (const [path, source] of Object.entries(sources)) {
-      const file = this.#files.get(path);
-      if (file && !file.conflict) Object.assign(file, { disk: source.text, revision: source.revision });
-    }
+  keepMine(path) {
+    const file = this.#files.get(path);
+    Object.assign(file, { disk: file.conflict.text, revision: file.conflict.revision, conflict: null });
+    this.#notify();
+  }
+
+  useDisk(path) {
+    const file = this.#files.get(path);
+    Object.assign(file, { disk: file.conflict.text, revision: file.conflict.revision, local: file.conflict.text, conflict: null });
+    this.#refresh(path);
     this.#notify();
   }
 
@@ -66,11 +93,6 @@ export class Files {
     this.#notify();
   }
 
-  conflicted(path, disk) {
-    this.#files.get(path).conflict = disk;
-    this.#notify();
-  }
-
   attach(path, node, view, replace) {
     if (!this.#fragments.has(path)) this.#fragments.set(path, new Set());
     this.#fragments.get(path).add({ node, view, replace });
@@ -88,13 +110,18 @@ export class Files {
     const file = this.#files.get(path);
     const [start, end] = sliceRange(file.local, node);
     file.local = file.local.slice(0, start) + fragmentText + file.local.slice(end);
-    for (const fragment of this.#fragments.get(path) ?? [])
-      if (fragment.view !== from) fragment.replace(sliceOf(file.local, fragment.node));
+    this.#refresh(path, from);
     this.#notify();
   }
 
   listen(listener) {
     this.#listeners.add(listener);
+  }
+
+  #refresh(path, except) {
+    const text = this.#files.get(path).local;
+    for (const fragment of this.#fragments.get(path) ?? [])
+      if (fragment.view !== except) fragment.replace(sliceOf(text, fragment.node));
   }
 
   #notify() {

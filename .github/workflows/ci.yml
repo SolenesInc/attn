@@ -412,13 +412,10 @@ jobs:
       - name: Lint, test the harness and the browser runtime, and check the committed runtime
         run: make check-js-tools
 
-      - name: Test prompt editor helpers
-        run: node --test cmd/prompt-editor/test/compare.test.mjs
-
       - name: Install prompt editor test dependencies
         run: pnpm --dir cmd/prompt-editor install --frozen-lockfile
 
-      - name: Build the Sheet page
+      - name: Build the prompt editor page
         run: node cmd/prompt-editor/build.mjs
 
       - name: Get Playwright version
@@ -448,10 +445,7 @@ jobs:
         timeout-minutes: 10
         run: pnpm --dir cmd/prompt-editor exec playwright install-deps chromium
 
-      - name: Test prompt editor in Chromium
-        run: node cmd/prompt-editor/test/browser.mjs
-
-      - name: Test the Sheet page in Chromium
+      - name: Test the prompt editor in Chromium
         run: node cmd/prompt-editor/test/sheet.mjs
 
   mobile:

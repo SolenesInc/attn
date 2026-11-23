@@ -80,32 +80,43 @@ with `--base`, from that revision too.
 
 ## Show the user in the browser
 
-When you present prompt changes, open the editor at the relevant event and give
-the user the exact URL with a sentence about what to inspect. You and the user
-edit the same checkout files. The editor saves to them, and it reloads a file
-that changes on disk unless the page holds an unsaved edit of that file.
-
-Explain the intended behavior and how the instructions now fit together. Show
-the full source and composed text beside the diff, so the user can review the
-overall result.
-
-Reuse the editor for this checkout. If `show` reports that no editor is running,
-start `make prompt-editor` in a persistent terminal, then retry. Keep the editor
-running while the user reviews.
+When you present prompt changes, open the editor at the situation or event you
+changed and give the user the exact URL with a sentence about what to inspect.
+Explain the intended behavior and how the instructions now fit together.
 
 ```sh
-go run ./cmd/prompt-editor show crew/new-session --open
 go run ./cmd/prompt-editor show --situation crew-member-start --open
+go run ./cmd/prompt-editor show crew/new-session --open
 ```
 
-`show` prints the URL of an event or a situation, and `--open` opens the
-browser. The page compares with `main` by default. `serve --base REF` sets
-another default, and the user can pick any branch, tag or commit in the page.
+`show` prints the URL of a situation or an event, and `--open` opens the
+browser. Prefer a situation: the page then shows everything the agent receives,
+in delivery order. Reuse the editor for this checkout. If `show` reports that no
+editor is running, start `make prompt-editor` in a persistent terminal, then
+retry. Keep the editor running while the user reviews.
 
-The Sheet page, at `/sheet/` with the same hash, is a new page beside this one:
-it shows a situation's composed prompt as one document, edited in place and
-saved with Ctrl S. It does not yet compare with a base or reload files that
-change on disk.
+The page shows the composed prompt as one document. Each fragment is the text a
+definition takes from a source file, usually the whole file and sometimes one
+side of a marker. The file's name is in the left gutter, and placeholders show
+as chips with their values. A fragment that fills a placeholder, or a
+producer's output such as `crew/priming`, sits in a block under its parent. A
+branch the scenario does not deliver is a stub that opens to its fragments, and
+a flag's stub flips the flag for the page without writing anything. Ctrl or Cmd
+K opens another situation, scenario or event, and unsaved edits stay.
+
+You and the user edit the same checkout files. Typing in a fragment edits its
+file, Ctrl or Cmd S saves every unsaved file, and the browser warns before it
+leaves a page with unsaved edits. When a file changes on disk, the page takes
+the new text. If the page holds an unsaved edit of that file, it keeps both
+edits; when they touch the same lines, the fragment shows the text on disk with
+Keep mine and Use disk, and saving skips the file until the user chooses. A
+change to the Go definitions, the catalog, a scenario or a situation redraws the
+page and keeps unsaved edits.
+
+The Diff button, or Ctrl or Cmd Shift D, shows each fragment's change against
+the merge-base with the branch chosen beside it in the header. That is `main`
+unless `serve --base REF` sets another. Unchanged fragments fold to their file
+name; open one by clicking it or pressing Enter on it.
 
 ## Verify
 

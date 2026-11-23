@@ -53,12 +53,11 @@ func (s situation) missingScenario(scenarios map[string]scenario) error {
 }
 
 type pageRequest struct {
-	Situation string            `json:"situation,omitempty"`
-	Scenario  string            `json:"scenario,omitempty"`
-	Event     string            `json:"event,omitempty"`
-	Flips     prompts.Values    `json:"flips,omitempty"`
-	Drafts    map[string]string `json:"drafts,omitempty"`
-	Base      string            `json:"base,omitempty"`
+	Situation string         `json:"situation,omitempty"`
+	Scenario  string         `json:"scenario,omitempty"`
+	Event     string         `json:"event,omitempty"`
+	Flips     prompts.Values `json:"flips,omitempty"`
+	Base      string         `json:"base,omitempty"`
 }
 
 type pageEvent struct {
@@ -76,9 +75,10 @@ type pageSource struct {
 }
 
 type pageResponse struct {
-	Events  []pageEvent           `json:"events"`
-	Sources map[string]pageSource `json:"sources"`
-	Base    map[string]string     `json:"base,omitempty"`
+	Events     []pageEvent           `json:"events"`
+	Sources    map[string]pageSource `json:"sources"`
+	Base       map[string]string     `json:"base,omitempty"`
+	BaseCommit string                `json:"base_commit,omitempty"`
 }
 
 func renderPageEvent(c *prompts.Catalog, scenarios map[string]scenario, id string, visiting map[string]bool) (pageEvent, error) {
@@ -135,7 +135,7 @@ func (e *editor) page(ctx context.Context, q pageRequest) (pageResponse, error) 
 	if err != nil {
 		return pageResponse{}, err
 	}
-	catalog, err := snapshot.load(q.Drafts)
+	catalog, err := snapshot.load(nil)
 	if err != nil {
 		return pageResponse{}, err
 	}
@@ -209,10 +209,11 @@ func (e *editor) page(ctx context.Context, q pageRequest) (pageResponse, error) 
 		response.Sources[path] = pageSource{snapshot.Sources[path], uses}
 	}
 	if q.Base != "" {
-		base, err := e.readBase(ctx, q.Base)
+		base, err := e.selectBase(ctx, q.Base, "merge-base")
 		if err != nil {
 			return pageResponse{}, err
 		}
+		response.BaseCommit = base.Commit
 		response.Base = map[string]string{}
 		for path := range paths {
 			if before, ok := base.Sources[path]; ok {

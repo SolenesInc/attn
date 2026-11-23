@@ -272,69 +272,6 @@ func renderSide(c *prompts.Catalog, recipient, event string, values prompts.Valu
 	return previewSide{Status: "present", Result: &result}
 }
 
-type comparison struct {
-	Base       previewSide    `json:"base"`
-	Current    previewSide    `json:"current"`
-	SourceDiff string         `json:"source_diff"`
-	PromptDiff string         `json:"prompt_diff"`
-	Values     prompts.Values `json:"values"`
-}
-
-func (e *editor) compare(ctx context.Context, request editRequest) (*comparison, error) {
-	base, err := e.readBase(ctx, request.BaseCommit)
-	if err != nil {
-		return nil, err
-	}
-	result := &comparison{Base: previewSide{Status: "unavailable", Error: base.Unavailable}}
-	snapshot, err := e.snapshot()
-	if err != nil {
-		return nil, err
-	}
-	scenarios, err := e.scenarios()
-	if err != nil {
-		return nil, err
-	}
-	if base.catalog != nil {
-		result.Base, _ = renderScenario(base.catalog, request, scenarios)
-	}
-	current, err := snapshot.load(request.Drafts)
-	if err != nil {
-		result.Current = previewSide{Status: "invalid", Error: err.Error()}
-	} else {
-		result.Current, result.Values = renderScenario(current, request, scenarios)
-	}
-	if request.Path != "" {
-		before, was := base.Sources[request.Path]
-		_, now := snapshot.Sources[request.Path]
-		if !was && !now {
-			return nil, fmt.Errorf("unregistered source: %s", request.Path)
-		}
-		after := ""
-		if now {
-			if draft, ok := request.Drafts[request.Path]; ok {
-				after = draft
-			} else {
-				after = snapshot.Sources[request.Path].Text
-			}
-		}
-		result.SourceDiff, err = unifiedDiff(ctx, before.Text, after)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if result.Base.Status != "unavailable" && result.Base.Status != "invalid" && result.Current.Status != "invalid" {
-		before, after := "", ""
-		if result.Base.Result != nil {
-			before = result.Base.Result.Text
-		}
-		if result.Current.Result != nil {
-			after = result.Current.Result.Text
-		}
-		result.PromptDiff, err = unifiedDiff(ctx, before, after)
-	}
-	return result, err
-}
-
 func unifiedDiff(ctx context.Context, before, after string) (string, error) {
 	if before == after {
 		return "", nil

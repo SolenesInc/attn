@@ -1,5 +1,5 @@
 import { EditorView } from "@codemirror/view";
-import { Files } from "./files.js";
+import { Files, sliceOf } from "./files.js";
 import { el } from "./dom.js";
 import { renderPage } from "./render.js";
 import { palette } from "./palette.js";
@@ -12,6 +12,7 @@ let target = null;
 let flips = {};
 let rows = [];
 let catalog = { situations: {}, scenarios: {}, recipients: [] };
+let diff = false;
 
 async function api(path, body) {
   const response = await fetch(`/api/${path}`, body === undefined ? {} : {
@@ -45,11 +46,12 @@ function titleFor(page) {
 }
 
 async function load() {
-  const page = await api("page", { ...target, flips });
+  const page = await api("page", { ...target, flips, ...(diff ? { base: $("base").value } : {}) });
   files.take(page.sources);
   files.detachAll();
   const scroll = window.scrollY;
-  const drawn = renderPage(page, { files, flips, flip, navigation, expanded: marks });
+  $("base-commit").textContent = page.base_commit ? page.base_commit.slice(0, 10) : "";
+  const drawn = renderPage(page, { files, flips, flip, navigation, expanded: marks, base: diff ? page.base ?? {} : undefined });
   rows = drawn.rows;
   documentRoot.replaceChildren(...drawn.sections);
   documentRoot.setAttribute("aria-busy", "false");
@@ -97,7 +99,9 @@ async function flip(name, value) {
 function marks() {
   for (const row of rows) {
     row.unsaved.hidden = !files.dirty(row.path);
-    row.conflict.hidden = !files.conflict(row.path);
+    const conflict = files.conflict(row.path);
+    row.conflict.hidden = !conflict;
+    row.disk.textContent = conflict ? sliceOf(conflict.text, row.node) : "";
     const count = files.fragmentsOf(row.path);
     row.twice.hidden = count < 2;
     row.twice.textContent = `×${count} on this page`;
@@ -111,7 +115,14 @@ function marks() {
   $("save-state").title = dirty.join("\n");
 }
 
-async function save() {
+let saving = null;
+
+function save() {
+  saving ??= saveFiles().finally(() => { saving = null; });
+  return saving;
+}
+
+async function saveFiles() {
   const request = files.saveRequest();
   if (!request.length) {
     notice(files.dirtyPaths().length ? "Only files in conflict are unsaved; Save skips them." : "Nothing to save.");
@@ -120,16 +131,70 @@ async function save() {
   try {
     const answer = await api("save", { files: request });
     for (const file of request) if (answer.saved[file.path]) files.saved(file.path, file.text, answer.saved[file.path]);
-    for (const [path, disk] of Object.entries(answer.conflicts)) files.conflicted(path, disk);
+    files.sync(answer.conflicts);
     const saved = Object.keys(answer.saved).length;
-    const conflicts = Object.keys(answer.conflicts);
-    notice(conflicts.length
-      ? `Saved ${saved} file${saved === 1 ? "" : "s"}. Changed on disk, not saved: ${conflicts.join(", ")}.`
-      : `Saved ${saved} file${saved === 1 ? "" : "s"}.`, conflicts.length ? "error" : "info");
+    const conflicts = Object.keys(answer.conflicts).filter((path) => files.conflict(path));
+    const merged = Object.keys(answer.conflicts).filter((path) => !files.conflict(path) && files.dirty(path));
+    const parts = [`Saved ${saved} file${saved === 1 ? "" : "s"}.`];
+    if (merged.length) parts.push(`Merged changes on disk into ${merged.join(", ")}; save again to write them.`);
+    if (conflicts.length) parts.push(`Changed on disk where you changed it, not saved: ${conflicts.join(", ")}.`);
+    notice(parts.join(" "), conflicts.length ? "error" : "info");
   } catch (error) {
     notice(`Save failed: ${error.message}`, "error");
-    if (error.status === 500) files.reloadDisk((await api("catalog")).sources);
+    if (error.status === 500) files.sync((await api("catalog")).sources);
   }
+}
+
+async function toggleDiff() {
+  diff = !diff;
+  $("diff").setAttribute("aria-pressed", String(diff));
+  if (!target) return;
+  try {
+    await load();
+    notice(diff ? `Showing changes since ${$("base").selectedOptions[0]?.textContent}. Unchanged fragments are folded; click a file name to open one.` : "");
+  } catch (error) {
+    diff = false;
+    $("diff").setAttribute("aria-pressed", "false");
+    notice(error.message, "error");
+  }
+}
+
+let syncing = null;
+let again = { sources: false, page: false };
+
+function diskChanged(path) {
+  if (path.endsWith(".md")) again.sources = true;
+  else again.page = true;
+  syncing ??= drainDisk().finally(() => { syncing = null; });
+}
+
+async function drainDisk() {
+  while (again.sources || again.page) {
+    await saving;
+    const wanted = again;
+    again = { sources: false, page: false };
+    try {
+      if (wanted.page && target) await load();
+      else files.sync((await api("catalog")).sources);
+    } catch (error) {
+      notice(`Reading a change on disk failed: ${error.message}`, "error");
+    }
+  }
+}
+
+function watchDisk() {
+  const events = new EventSource("/api/events");
+  events.addEventListener("ready", () => { document.body.dataset.watching = "true"; });
+  events.onerror = () => { document.body.dataset.watching = "false"; };
+  events.onmessage = (message) => diskChanged(JSON.parse(message.data).path);
+}
+
+async function chooseBase() {
+  const { refs, default: chosen } = await api("refs");
+  if (chosen && !refs.includes(chosen)) refs.unshift(chosen);
+  const label = (ref) => ref.replace(/^refs\/(heads|remotes|tags)\//, "");
+  $("base").replaceChildren(...refs.map((ref) => el("option", { value: ref, selected: ref === chosen }, label(ref))));
+  $("base").addEventListener("change", () => { if (diff) load().catch((error) => notice(error.message, "error")); });
 }
 
 function stops() {
@@ -190,6 +255,10 @@ function onKey(event) {
     event.preventDefault();
     event.stopPropagation();
     save();
+  } else if (mod && event.shiftKey && !event.altKey && event.key.toLowerCase() === "d") {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleDiff();
   } else if (mod && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "k") {
     event.preventDefault();
     event.stopPropagation();
@@ -210,6 +279,7 @@ async function start() {
   document.body.append(picker.element);
   document.addEventListener("keydown", onKey, true);
   $("open").addEventListener("click", () => picker.show());
+  $("diff").addEventListener("click", toggleDiff);
   window.addEventListener("hashchange", openTarget);
   window.addEventListener("beforeunload", (event) => {
     if (files.dirtyPaths().length) event.preventDefault();
@@ -221,6 +291,8 @@ async function start() {
     api("catalog"),
   ]);
   catalog = { situations, scenarios, recipients: fresh.recipients };
+  await chooseBase().catch((error) => notice(`Diff is unavailable: ${error.message}`, "error"));
+  watchDisk();
   await openTarget();
 }
 

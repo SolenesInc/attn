@@ -24,8 +24,10 @@ func (e *editor) newWatcher() (*fsnotify.Watcher, error) {
 		}
 		return err
 	})
-	if _, err := e.root.Stat("scenarios"); err == nil {
-		paths = append(paths, filepath.Join(e.root.Name(), "scenarios"))
+	for _, dir := range []string{"scenarios", "situations"} {
+		if _, err := e.root.Stat(dir); err == nil {
+			paths = append(paths, filepath.Join(e.root.Name(), dir))
+		}
 	}
 	for _, path := range paths {
 		if err := watcher.Add(path); err != nil {
@@ -94,7 +96,11 @@ func (e *editor) events(w http.ResponseWriter, r *http.Request) {
 			if !relevant {
 				continue
 			}
-			data, _ := json.Marshal(map[string]string{"path": event.Name})
+			name, err := filepath.Rel(e.root.Name(), event.Name)
+			if err != nil {
+				continue
+			}
+			data, _ := json.Marshal(map[string]string{"path": filepath.ToSlash(name)})
 			if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
 				return
 			}

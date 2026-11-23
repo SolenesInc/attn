@@ -40,18 +40,6 @@ type source struct {
 	Revision string `json:"revision"`
 }
 
-type editRequest struct {
-	Recipient  string            `json:"recipient"`
-	Event      string            `json:"event"`
-	Values     prompts.Values    `json:"values"`
-	Drafts     map[string]string `json:"drafts"`
-	Path       string            `json:"path"`
-	Ref        string            `json:"ref"`
-	Mode       string            `json:"mode"`
-	BaseCommit string            `json:"base_commit"`
-	Scenario   string            `json:"scenario,omitempty"`
-}
-
 func revision(text []byte) string { return fmt.Sprintf("%x", sha256.Sum256(text)) }
 
 func (e *editor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -140,53 +128,7 @@ func (e *editor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	var request editRequest
-	if !decodeRequest(w, r, &request) {
-		return
-	}
-	switch r.URL.Path {
-	case "/api/base":
-		base, err := e.selectBase(r.Context(), request.Ref, request.Mode)
-		if err != nil {
-			problem(w, 422, err)
-		} else {
-			respond(w, base)
-		}
-	case "/api/compare":
-		result, err := e.compare(r.Context(), request)
-		if err != nil {
-			problem(w, 422, err)
-		} else {
-			respond(w, result)
-		}
-	case "/api/preview":
-		snapshot, err := e.snapshot()
-		if err != nil {
-			problem(w, 422, err)
-			return
-		}
-		catalog, err := snapshot.load(request.Drafts)
-		if err != nil {
-			problem(w, 422, err)
-			return
-		}
-		scenarios, err := e.scenarios()
-		if err != nil {
-			problem(w, 422, err)
-			return
-		}
-		result, values := renderScenario(catalog, request, scenarios)
-		if result.Error != "" || result.Result == nil {
-			problem(w, 422, fmt.Errorf("preview: %s", result.Error))
-			return
-		}
-		respond(w, struct {
-			prompts.Result
-			Values prompts.Values `json:"values"`
-		}{*result.Result, values})
-	default:
-		http.NotFound(w, r)
-	}
+	http.NotFound(w, r)
 }
 
 func decodeRequest(w http.ResponseWriter, r *http.Request, value any) bool {
