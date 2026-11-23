@@ -330,11 +330,12 @@ connected:
   ring its items again. Its peer messages still read as notified in
   `attn agent msg-status` until the mod reports that it placed them, because
   the model has not read them yet. When the mod gives it back instead of
-  placing it, at Esc, on a reload, or when the mod stops polling, attn puts the ring's items back to unread, takes back the ring's
-  attempt and outstanding ring, and rings again. The app shows a Quick Capture
-  or a seed authorization change from that ring as read or typed while the mod
-  holds it, then as waiting again once the mod gives it back, until the next
-  ring places it. A seed stays on standby while the mod holds its mail, and when
+  placing it, at Esc, on a reload, or when the mod stops polling, attn puts
+  the ring's items back to unread, takes back the ring's attempt and
+  outstanding ring, and rings again. The app shows a Quick Capture or a seed
+  authorization change from that ring as read or typed while the mod holds it,
+  then as waiting again once the mod gives it back, until the next ring places
+  it. A seed stays on standby while the mod holds its mail, and when
   the mod gives the mail back, even before the home hears that the mod took it.
 - The inbox lives on the home, and the daemon that runs the session reports each
   placement and give-back to the home. A report made while the home is restarting
