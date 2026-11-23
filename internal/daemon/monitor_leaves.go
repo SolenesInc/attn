@@ -90,7 +90,7 @@ func (d *Daemon) monitorCommand(session protocol.SessionID, kind string, until t
 }
 
 func (d *Daemon) placeSessionInput(ctx context.Context, msg protocol.SessionPlaceMessage) (protocol.SessionPlaceResult, error) {
-	if msg.Origin == protocol.SessionPlaceOriginUserConversation {
+	if addressesTheTile(msg) {
 		msg.SessionID = d.sessionItsTerminalShows(msg.SessionID)
 	}
 	monitor := d.monitorInTerminal(d.primaryTerminal(msg.SessionID), msg.SessionID)
@@ -102,6 +102,10 @@ func (d *Daemon) placeSessionInput(ctx context.Context, msg protocol.SessionPlac
 		pausepoint.At(pausepoint.RingPlacementAnswering)
 	}
 	return result, nil
+}
+
+func addressesTheTile(msg protocol.SessionPlaceMessage) bool {
+	return msg.Origin == protocol.SessionPlaceOriginUserConversation && protocol.Deref(msg.ExpectedConversation) == ""
 }
 
 type placementCallError struct{ error }

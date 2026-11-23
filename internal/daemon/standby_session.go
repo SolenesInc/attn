@@ -22,7 +22,9 @@ func (d *Daemon) handleStandbySession(msg *protocol.StandbySessionMessage) error
 	request := prompts.RenderText("session", "standby-request", prompts.Values{
 		"until": msg.Until.Local().Format(time.RFC3339),
 	})
-	attempt := d.placeDelivery(context.Background(), sessionID, sessionmonitor.ComposedInput(uuid.NewString(), request))
+	delivery := sessionmonitor.ComposedInput(uuid.NewString(), request)
+	delivery.ExpectedConversation = d.store.GetSessionConversation(sessionID).NativeID
+	attempt := d.placeDelivery(context.Background(), sessionID, delivery)
 	if attempt.Stage != sessionmonitor.Placed {
 		return fmt.Errorf("session %s: could not ask the agent to go on standby: %w", sessionID, attempt.Err)
 	}
