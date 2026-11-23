@@ -339,6 +339,8 @@ func (gh *routedGitHub) RoundTrip(req *http.Request) (*http.Response, error) {
 	path := req.URL.Path
 	var canonicalHost, repoURLPrefix string
 	switch {
+	case host == "gh-gateway.example.net" && (path == "/search/issues" || strings.HasPrefix(path, "/repos/")):
+		canonicalHost, repoURLPrefix = "github.com", "https://gh-gateway.example.net"
 	case host == "ghec-dr-api.acme.net" && (path == "/search/issues" || path == "/graphql" || strings.HasPrefix(path, "/repos/")):
 		canonicalHost, repoURLPrefix = "acme.ghe.com", "https://ghec-dr-api.acme.net"
 	case host == "api.direct.ghe.com" && (path == "/search/issues" || strings.HasPrefix(path, "/repos/")):
@@ -412,6 +414,7 @@ func TestHostDiscoveryUsesConfiguredAPIHostAndGHEComSubdomains(t *testing.T) {
 	dir := t.TempDir()
 	status, err := json.Marshal(map[string]any{
 		"hosts": map[string][]map[string]any{
+			"github.com":       {{"state": "success", "active": true, "login": "ada"}},
 			"acme.ghe.com":     {{"state": "success", "active": true, "login": "ada"}},
 			"direct.ghe.com":   {{"state": "success", "active": true, "login": "ada"}},
 			"ghe.corp.example": {{"state": "success", "active": true, "login": "ada"}},
@@ -431,6 +434,7 @@ case "$1 $2" in
   "config get")
     if [ "$3" = "api_host" ]; then
       case "$5" in
+        "github.com") echo 'gh-gateway.example.net/' ;;
         "acme.ghe.com") echo 'ghec-dr-api.acme.net' ;;
         "ghe.corp.example") echo 'api-gw.corp.example' ;;
       esac
@@ -453,15 +457,15 @@ esac
 	w := &world{World: prepareWorld(t, fakeagent.Claude)}
 	w.start()
 	app, cli := w.App(), w.Client()
-	if len(app.Initial.GithubHosts) != 3 {
+	if len(app.Initial.GithubHosts) != 4 {
 		testworld.Await(app, protocol.EventGitHubHostsUpdated, func(m protocol.GitHubHostsUpdatedMessage) bool {
-			return len(m.GithubHosts) == 3
+			return len(m.GithubHosts) == 4
 		})
 	}
 
 	refreshPRs(t, app)
 	prs := queryPRs(t, cli, "")
-	for _, host := range []string{"acme.ghe.com", "direct.ghe.com", "ghe.corp.example"} {
+	for _, host := range []string{"github.com", "acme.ghe.com", "direct.ghe.com", "ghe.corp.example"} {
 		pr := hostPR(t, prs, host)
 		if pr.Title != "Routed PR on "+host {
 			t.Errorf("PR for %s has title %q, want %q", host, pr.Title, "Routed PR on "+host)

@@ -63,24 +63,3 @@ func TestParseAuthStatusHostsEmpty(t *testing.T) {
 		t.Fatalf("expected no hosts, got %d", len(hosts))
 	}
 }
-
-func TestMapHostToAPIURL(t *testing.T) {
-	for _, tc := range []struct {
-		host    string
-		apiHost string
-		want    string
-	}{
-		{"github.com", "", "https://api.github.com"},
-		{"GITHUB.COM", "", "https://api.github.com"},
-		{"github.com", "gateway.example.net", "https://gateway.example.net"},
-		{"spotify.ghe.com", "", "https://api.spotify.ghe.com"},
-		{"spotify.ghe.com", "ghec-dr-api.spotify.net", "https://ghec-dr-api.spotify.net"},
-		{"spotify.ghe.com", "ghec-dr-api.spotify.net/", "https://ghec-dr-api.spotify.net"},
-		{"ghe.corp.com", "", "https://ghe.corp.com/api/v3"},
-		{"ghe.corp.com", "api-gw.corp.com", "https://api-gw.corp.com/api/v3"},
-	} {
-		if got := mapHostToAPIURL(tc.host, tc.apiHost); got != tc.want {
-			t.Errorf("mapHostToAPIURL(%q, %q) = %q, want %q", tc.host, tc.apiHost, got, tc.want)
-		}
-	}
-}
