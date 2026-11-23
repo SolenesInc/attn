@@ -126,7 +126,7 @@ func ReturnedUserInput(key string, text string) Delivery {
 }
 
 func (delivery Delivery) speaksForUser() bool {
-	return delivery.origin.kind == originUserConversation || (delivery.Ring != nil && len(delivery.Ring.Captures) > 0)
+	return delivery.origin.kind == originUserConversation || (delivery.Ring != nil && (len(delivery.Ring.Captures) > 0 || protocol.Deref(delivery.Ring.FollowsCaptures)))
 }
 
 type runRef struct {

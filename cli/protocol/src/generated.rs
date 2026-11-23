@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "0e5c927565f1";
+pub const PROTOCOL_VERSION: &str = "f7a08e1a38dd";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -5637,6 +5637,8 @@ pub struct InboxRingRecord {
     pub authorized_seeds: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub captures: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follows_captures: Option<bool>,
     pub notified: bool,
     pub profile_id: String,
     pub stamp: String,

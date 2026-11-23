@@ -355,7 +355,9 @@ when to ring.
 
 A notification run is a run that attn's own input started: a ring, or a crew
 member's heartbeat. A Quick Capture is the user's own input, so a ring that
-carries one starts the user's run. If
+carries one starts the user's run. When other items were unread with the
+capture, the 📬 ring that follows the capture's ring for them starts the user's
+run too, so it leaves the turn that the capture's reply opened owed. If
 the user types into the agent during a notification run, or a Quick Capture
 reaches it, the run becomes the user's. The user's answer to an ask and a change
 to a seed's authorization do not change whose run it is.
@@ -457,10 +459,14 @@ mod. attn types nothing into a Claude terminal. A Claude session cannot be resum
 when its mod does not poll within 30 seconds of the resume; the block's reason
 names the Claude Code version.
 
-The first prompt carries the mail and the standby note. It says the user may
+The first prompt carries the standby note, in attn's voice. It says the user may
 not be watching, and names the ways to end the turn: put the seed on standby
-again, harvest it, ask the user with `attn ask`, or report. A resumed session that
-stops owes the user a turn, as any resumed session does.
+again, harvest it, ask the user with `attn ask`, or report. When the mail holds
+user input, such as the user's answer to an ask or a change to the seed's
+authorization, that input follows as a ring of its own in the user's voice, and
+the 📬 line for the rest follows it. Otherwise the 📬 line shares the first
+prompt. A resumed session that stops owes the user a turn, as any resumed
+session does.
 
 Standby ends when the tender has read all of the seed's mail, whether the
 session was open or resumed. The tender reads the mail with `attn agent inbox`,

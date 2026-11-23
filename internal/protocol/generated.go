@@ -6288,6 +6288,9 @@ type InboxRingRecord struct {
 	// Captures corresponds to the JSON schema field "captures".
 	Captures []string `json:"captures,omitempty,omitzero"`
 
+	// FollowsCaptures corresponds to the JSON schema field "follows_captures".
+	FollowsCaptures *bool `json:"follows_captures,omitempty,omitzero"`
+
 	// Notified corresponds to the JSON schema field "notified".
 	Notified bool `json:"notified"`
 

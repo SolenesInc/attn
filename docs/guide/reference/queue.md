@@ -186,8 +186,9 @@ not need you. In queue flow:
 
 A message you send through [Quick Capture](quick-capture.md) or `attn send` is not a notification.
 Its run is yours, and the agent goes into your queue when it stops, so you see
-the reply. The same happens if you type into an agent or send it such a message
-while it works on a notification.
+the reply. Notifications that waited with your message reach the agent after
+the reply and leave the agent in your queue. The same happens if you type into
+an agent or send it such a message while it works on a notification.
 
 Quiet notifications are on by default. To have every notification run open a
 turn when it stops, turn off **Settings → Attention queue → Quiet notifications

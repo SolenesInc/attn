@@ -39,6 +39,7 @@ type inboxDeliveryState struct {
 	tenderResume   *tenderResumeDelivery
 	pending        *inboxRing
 	rang           protocol.SessionID
+	captureBell    protocol.SessionID
 }
 
 func (s *inboxDeliveryState) lock()   { s.gate <- struct{}{} }
@@ -49,6 +50,7 @@ type inboxRing struct {
 	FinishingStart     bool                         `json:"finishing_start"`
 	BellWaitsForPrompt bool                         `json:"bell_waits_for_prompt"`
 	HeldUntil          time.Time                    `json:"held_until"`
+	BellSplitOff       bool                         `json:"bell_split_off,omitempty"`
 	At                 time.Time                    `json:"at"`
 }
 
@@ -169,7 +171,7 @@ func (d *Daemon) deliverInbox(a who.Address) (inbox.Receipt, error) {
 func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (inbox.Receipt, error) {
 	receipt := inbox.Receipt{}
 	defer func() {
-		if state.timer != nil || state.startedSession != "" || state.pending != nil {
+		if state.timer != nil || state.startedSession != "" || state.pending != nil || state.captureBell != "" {
 			return
 		}
 		d.inboxMu.Lock()
@@ -214,7 +216,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		if err := d.clearPendingInbox(a, state); err != nil {
 			return receipt, err
 		}
-		state.startedSession, state.tenderResume = "", nil
+		state.startedSession, state.tenderResume, state.captureBell = "", nil, ""
 		return receipt, nil
 	}
 	holder, memberID, err := d.inboxRecipient(a)
@@ -364,7 +366,11 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 			return receipt, err
 		}
 		if finishingStart && tenderResume != nil {
-			paste.text = d.tenderResumeText(tenderResume) + "\n\n" + paste.text
+			if len(paste.typed) > 0 {
+				paste = inboxPaste{text: d.tenderResumeText(tenderResume)}
+			} else {
+				paste.text = d.tenderResumeText(tenderResume) + "\n\n" + paste.text
+			}
 		}
 		when := sessionmonitor.WhenWorkingOrPromptReady
 		if paste.notified {
@@ -372,15 +378,18 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		}
 		input := sessionmonitor.MaintenanceInput(sessionmonitor.InboxRing, uuid.NewString(), paste.text, when)
 		input.BypassInitialGate = true
-		input.UserWords = len(paste.typed) > 0 && !(finishingStart && tenderResume != nil)
+		input.UserWords = len(paste.typed) > 0
 		at := time.Now()
 		input.Ring = &protocol.InboxRingRecord{Address: a.String(), ProfileID: holder.ProfileID, Stamp: store.InboxRingStamp(at), Typed: paste.typed, Notified: paste.notified, Captures: paste.captures, AuthorizedSeeds: paste.authorizedSeeds}
+		if paste.notified && state.captureBell == holder.ID {
+			input.Ring.FollowsCaptures = protocol.Ptr(true)
+		}
 		run := d.store.GetAgentDriverRun(holder.ID)
 		if run.Route == "direct" && run.RunID != "" {
 			input.ExpectedDriverRun = run.RunID
 			input.ExpectedConversation = d.store.GetSessionConversation(holder.ID).NativeID
 		}
-		pending = &inboxRing{Message: input.Message(holder.ID), FinishingStart: finishingStart, BellWaitsForPrompt: bellWaitsForPrompt, HeldUntil: bellHeldUntil, At: at}
+		pending = &inboxRing{Message: input.Message(holder.ID), FinishingStart: finishingStart, BellWaitsForPrompt: bellWaitsForPrompt, HeldUntil: bellHeldUntil, BellSplitOff: paste.bellSplitOff, At: at}
 		if input.ExpectedDriverRun != "" {
 			raw, err := json.Marshal(pending)
 			if err != nil {
@@ -416,6 +425,12 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		state.pending = nil
 		state.tenderResume = nil
 		state.rang = holder.ID
+		switch {
+		case ring.Notified:
+			state.captureBell = ""
+		case len(ring.Captures) > 0 && pending.BellSplitOff:
+			state.captureBell = holder.ID
+		}
 		for _, captureID := range ring.Captures {
 			d.publishQuickCaptureRead(holder.ProfileID, captureID, readAt)
 		}
@@ -541,6 +556,7 @@ type inboxPaste struct {
 	captures        []string
 	authorizedSeeds []string
 	notified        bool
+	bellSplitOff    bool
 }
 
 func (d *Daemon) inboxPaste(a who.Address, profileID string, bell bool) (inboxPaste, error) {
@@ -573,6 +589,7 @@ func (d *Daemon) inboxPaste(a who.Address, profileID string, bell bool) (inboxPa
 		paste.typed = append(paste.typed, item.ID)
 	}
 	paste.notified = bell && untyped && len(paste.typed) == 0
+	paste.bellSplitOff = bell && untyped && len(paste.typed) > 0
 	if paste.notified {
 		texts = append(texts, inboxRingText())
 	}

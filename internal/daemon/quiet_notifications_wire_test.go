@@ -337,8 +337,19 @@ func TestAQuickCaptureRungWithOtherItemsOpensItsTurn(t *testing.T) {
 		testworld.AwaitSince(app, mark, protocol.EventSessionStateChanged, func(m protocol.SessionStateChangedMessage) bool {
 			return m.Session.State == protocol.SessionStateIdle && protocol.Deref(m.Session.TurnOwed)
 		})
-		if pasted := agent.term.Pasted(); len(pasted) != 2 || !strings.Contains(pasted[1], inboxDoorbell) {
+		pasted = agent.term.Pasted()
+		if len(pasted) != 2 || !strings.Contains(pasted[1], inboxDoorbell) {
 			t.Fatalf("after the capture's run attn pasted %q, want the doorbell in a ring of its own", pasted)
+		}
+		mark = len(app.Log())
+		agent.take(pasted[1])
+		agent.reply("Read the review. <!-- attn:state=idle -->")
+		stopped := testworld.AwaitSince(app, mark, protocol.EventSessionStateChanged, func(m protocol.SessionStateChangedMessage) bool {
+			return m.Session.State == protocol.SessionStateIdle
+		})
+		if !protocol.Deref(stopped.Session.TurnOwed) || protocol.Deref(stopped.Session.TurnByAgent) {
+			t.Fatalf("after the doorbell's run the session shows owed=%v by_agent=%v, want the capture's reply still owed to the user",
+				protocol.Deref(stopped.Session.TurnOwed), protocol.Deref(stopped.Session.TurnByAgent))
 		}
 	})
 }

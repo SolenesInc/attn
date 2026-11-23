@@ -378,9 +378,10 @@ if no other mail arrives first.
 
 When mail reaches the seed, Attn resumes the closed session as
 itself, or starts a session for the crew member that tends the seed, and hands over the mail
-with the note. Mail for a seed is a reminder, an update from a pull request
-watch that addresses the seed, a message to the seed's id, and your answer to an
-ask about the seed. Only the seed's tender can put a seed on standby.
+with the note. Your answer to an ask, or your change to the seed's
+authorization, follows the note as a prompt of its own, in your words. Mail for
+a seed is a reminder, an update from a pull request watch that addresses the
+seed, a message to the seed's id, and your answer to an ask about the seed. Only the seed's tender can put a seed on standby.
 
 Standby ends when the agent has read all of the seed's mail. It also ends when
 the seed is parked, harvested or withered, and when the seed gets a new tender.

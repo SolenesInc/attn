@@ -396,25 +396,28 @@ func TestAQuickCaptureRealClaudesModHoldsThroughADaemonRestartComesBackUnreadAtE
 	model.AwaitPromptSince(t, mark, words)
 }
 
-func TestAMultiLineMessageRealClaudesModAppendsMidTurnShowsOnOneRow(t *testing.T) {
+func TestAMultiLineMessageRealClaudesModHoldsReachesItAsAPromptAfterTheTurn(t *testing.T) {
 	t.Parallel()
 	s, app, model, recipient, toolRunning := realClaudeRunningATool(t)
 	defer toolRunning.Close()
 
 	quickCapture(t, app, recipient, "check the rounding\n\nthen the totals")
 
-	mark := len(app.Log())
 	if err := toolRunning.Close(); err != nil {
 		t.Fatal(err)
 	}
 	model.AwaitPrompt(t, "check the rounding\n\nthen the totals")
-	testworld.AwaitSessionSince(app, mark, recipient, func(s protocol.Session) bool { return s.State != protocol.SessionStateWorking })
+	app.AwaitScreen(recipient, "then the totals")
 
 	screen := s.Attn("agent", "peek", recipient).Stdout
 	if strings.Contains(screen, "\uFFFD") {
 		t.Errorf("the screen shows U+FFFD for the message's line breaks:\n%s", screen)
 	}
-	if !strings.Contains(screen, "check the rounding then the totals") {
-		t.Errorf("the screen does not show the message on one row:\n%s", screen)
+	turnEnd, prompt := strings.Index(screen, "Noted."), strings.Index(screen, "check the rounding")
+	if turnEnd < 0 || prompt < turnEnd {
+		t.Errorf("the message does not follow the end of the running turn as a prompt of its own:\n%s", screen)
+	}
+	if strings.Contains(screen, "check the rounding then the totals") || !strings.Contains(screen, "then the totals") {
+		t.Errorf("the screen does not show the message's lines as the user wrote them:\n%s", screen)
 	}
 }

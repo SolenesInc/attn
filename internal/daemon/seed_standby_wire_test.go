@@ -343,6 +343,48 @@ func TestAnAnswerTheModHoldsKeepsTheSeedOnStandbyUntilClaudeTakesIt(t *testing.T
 	awaitStandbyEnded(t, app, mark, seed)
 }
 
+func TestAnAnswerThatResumesAClaudeTenderReachesItAsTheUserAfterTheResumeNote(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+
+	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
+	session, seed := string(delegated.SessionID), delegated.SeedID
+	first := w.Launched(session)
+	first.Prompted()
+	w.awaitTimer(claudemod.PollHoldTimer)
+	asked, err := cli.AskOpen(delegated.SessionID, seed, cacheAsk, "", w.Path("api"))
+	if err != nil {
+		t.Fatalf("ask about %s: %v", seed, err)
+	}
+	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 })
+	if _, err := standbyAs(t, cli, delegated, false); err != nil {
+		t.Fatalf("seed standby: %v", err)
+	}
+	closeSession(t, cli, session, "The user told me to close.")
+	stillClosed(t, cli, delegated, "closing after standby --stay")
+
+	mark := len(app.Log())
+	answerCacheAsk(t, app, asked.ID)
+	woken := w.Launched(session)
+	if !woken.Resumed || woken.ConversationID != first.ConversationID {
+		t.Fatalf("the answer ran %s %q, want it resuming conversation %s", woken.Harness, woken.Argv, first.ConversationID)
+	}
+	if got := woken.Prompted(); !strings.Contains(got, standbyNote) || strings.Contains(got, cacheAnswerText) || !woken.ThroughMod || woken.AsUser {
+		t.Fatalf("the woken Claude first took %q (through the mod: %t, as the user: %t), want the standby note alone in attn's voice", got, woken.ThroughMod, woken.AsUser)
+	}
+	if shown := lifeShow(t, cli, seed); shown.Seed.Standby == nil {
+		t.Fatalf("%s left standby before its tender took the answer", seed)
+	}
+	modEvent(t, woken, fakeagent.ModEventHeld, cacheAnswerText)
+	woken.Reply("Reading my mail. <!-- attn:state=waiting_input -->")
+	if got := woken.Prompted(); !strings.Contains(got, cacheAnswerText) || strings.Contains(got, standbyNote) || !woken.ThroughMod || !woken.AsUser {
+		t.Fatalf("at the turn's end Claude took %q (through the mod: %t, as the user: %t), want the answer alone as the user", got, woken.ThroughMod, woken.AsUser)
+	}
+	awaitStandbyEnded(t, app, mark, seed)
+	nothingElsePrompted(t, app, woken, session)
+}
+
 func TestAnAnswerReturnedBeforeItsPlacementAnswersStaysUnreadOnStandby(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
