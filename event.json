@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Outpost stack test still expected the tender-resume note and the ask answer in one prompt",
+  "at": "2026-11-23T14:48:25.186Z",
+  "repairs": "38b85d7ac6c55de9a7f6fca589137bece6d93f7b"
+}
