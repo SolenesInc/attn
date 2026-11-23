@@ -1,0 +1,3 @@
+The prompt editor has a new page, Sheet, at `/sheet/` beside the current one (`make prompt-editor`, then open `/sheet/#situation=crew-member-start`). It shows everything one agent receives as one document you edit in place: chips for placeholders, nested blocks for bound fragments and producer output, stubs for branches the scenario does not take (expand to edit, or flip a flag to see the other branch), Ctrl/⌘S to save every touched file and Ctrl/⌘K to switch. Disk changes, the diff, and replacing the old page come in the next landing.
+
+CodeMirror 6 and esbuild are now dev dependencies of `cmd/prompt-editor`; the bundle is built, not committed. The editor's CSP allows inline styles because CodeMirror mounts its base theme as a `<style>` element; scripts stay `'self'`.
