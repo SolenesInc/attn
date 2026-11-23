@@ -362,6 +362,20 @@ func TestASnoozedAgentStillWaitingPushesAgainWhenItWakes(t *testing.T) {
 	phone.expect("waiting", "Should I land this?")
 }
 
+func TestAnAskPushShowsItsSubjectWithoutItsMarkdown(t *testing.T) {
+	w, app, cli, phone := phonePushWorld(t, true, true)
+	setSetting(t, app, "asks_enabled", "true")
+	registerSessions(t, w, cli, "asker")
+	if _, err := cli.AskOpen("asker", "", ":::question\nSigned in?\n- [ ] Yes\n- [ ] No\n:::\n", "Sign in to *Sigma* with `attn login`", w.Path("asker")); err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+	phone.expect("ask", "Sign in to Sigma with attn login")
+	if _, err := cli.AskOpen("reviewer", "", ":::question\nOpen [the device page](https://auth.openai.com/codex/device) and enter **Z5RI-IDLV2**\n- [ ] Done\n:::\n", "", w.Path("reviewer")); err != nil {
+		t.Fatalf("second ask: %v", err)
+	}
+	phone.expect("ask", "Open the device page and enter Z5RI-IDLV2")
+}
+
 func TestAnAmendedAskSendsThePhoneNoSecondPush(t *testing.T) {
 	w, app, cli, phone := phonePushWorld(t, true, true)
 	setSetting(t, app, "asks_enabled", "true")

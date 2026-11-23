@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/ask"
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/cloudlink"
 	"github.com/victorarias/attn/internal/protocol"
@@ -269,7 +270,7 @@ func (d *Daemon) askNote(askID string) (phonePushNote, bool) {
 		SessionID:  string(stored.SessionID),
 		Title:      clipRunes(title, phonePushTitleRunes),
 		Kind:       phonePushAsk,
-		Text:       clipRunes(stored.Subject, phonePushTextRunes),
+		Text:       clipRunes(ask.Plain(stored.Subject), phonePushTextRunes),
 		AskID:      askID,
 		collapseID: "ask-" + askID,
 		freshUntil: created.Add(phonePushFreshFor),

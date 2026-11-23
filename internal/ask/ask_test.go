@@ -319,3 +319,22 @@ func TestReplyRefusesAnswersTheAskCannotHold(t *testing.T) {
 		})
 	}
 }
+
+func TestPlainTakesInlineMarkdownOffALineAndKeepsABlockAsWritten(t *testing.T) {
+	cases := []struct{ line, plain string }{
+		{"Sign in to *Sigma*", "Sign in to Sigma"},
+		{"Open https://auth.openai.com/codex/device and enter the code **Z5RI-IDLV2**, then answer here.", "Open https://auth.openai.com/codex/device and enter the code Z5RI-IDLV2, then answer here."},
+		{"Read [the notes](https://example.com/n) and run `attn retry`", "Read the notes and run attn retry"},
+		{"See <https://example.com>", "See https://example.com"},
+		{"2 \\* 3 is six", "2 * 3 is six"},
+		{"Plain words", "Plain words"},
+		{"# Not a heading here", "# Not a heading here"},
+		{"- a list item", "- a list item"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := ask.Plain(c.line); got != c.plain {
+			t.Errorf("Plain(%q) = %q, want %q", c.line, got, c.plain)
+		}
+	}
+}
