@@ -292,13 +292,15 @@ ignored.
 | `question_safe` | input while a call waits on an approval or a question | delivers input during that wait instead of holding it until the wait ends. Another agent's interrupt still waits for the wait to end |
 
 The executable, optional executable override, home variable and default home
-resolve in the daemon's machine and login environment. `socketName` is a filename
-inside that home. `callerConversationEnv` names the variable the server sets
-on its shell tools, including tools of a server started outside Attn. Its name
+resolve in the daemon's machine and login environment. `socketName` is a filename inside that home. `callerConversationEnv` names the
+variable the server sets on its shell tools to the root conversation of the
+caller's tree (the user-started conversation, or the worker itself for a worker
+and its subagents), including tools of a server started outside Attn. Its name
 must end in `_ROOT_CONVERSATION`, with a nonempty prefix. Without terminal or
 Codex identity, the Go and Rust CLIs scan their own environment for that suffix.
 They send the variable name and native conversation ID. The daemon matches both
-to the owning session, whose profile the command keeps. If more than one
+to the owning session, adopting a worker under an open Attn session into its own
+session first if needed, and keeps that session's profile. If more than one
 nonempty root variable exists, commands needing a caller refuse with the
 conflicting names; keep only the current server's root variable.
 
@@ -346,14 +348,17 @@ harness ID remains: uninstalling one leaves the tools working for the others.
 attn ends it when the last one is uninstalled or the user turns the tools off.
 
 Your server sends the registered headers on every request to attn's MCP
-server, and adds the declared header with the root conversation that makes the
-call: the conversation the user started, not a subagent or a worker. One
-registration covers every conversation of the server, and attn acts as the
-session that holds the named conversation. A conversation no session holds, such
-as a fork nobody opened in attn yet, is refused with a message that names it.
-Once the fork opens in attn, it is its own session, and its calls act as that
-session. `examples/plugins/sample-server` passes the name and description to its
-view.
+server, and adds the declared header with the root conversation of the caller's
+tree: the conversation the user started, or the worker itself for a worker and
+any subagent running under that worker. One registration covers every
+conversation of the server, and attn acts as the session that holds the named
+conversation. If the header names a worker under an attn session that attn has
+not adopted yet, attn adopts that worker into its own session first and runs
+the call as it. Any other conversation no session holds, such as a fork nobody
+opened in attn yet or a conversation started outside attn, is refused with a
+message that names it. Once a fork opens in attn, it is its own session, and
+its calls act as that session. `examples/plugins/sample-server` passes the name
+and description to its view.
 
 ### Shared server RPC contract
 
@@ -406,17 +411,27 @@ has `id`, `name`, `description` and `efforts`. Attn lists each model as
 it launches a view.
 
 `status/watch` starts with `{_tag: "trees", trees: [...]}` for busy
-conversations, then streams `{conversation, status, ended?}` changes.
+conversation trees (each user-started conversation and each worker is its own
+tree), then streams `{conversation, status, ended?}` changes.
 `status` is `working`, `waiting` for approval, or `idle`.
 `ended` has `outcome` (`answered`, `interrupted`, or a failure), optional
 `message`, `said`, and, with numbered recovery, `completion`.
-`conversation/list` returns `[{id, ended?, fork?, lineage?}]`. `ended` recovers
-the last run. `fork: {of, at}` names the conversation a fork came from and the
-last entry it inherits. `lineage: {parent, root, task?}` places a child
-conversation under the conversation that started it and the root of its tree.
-A worker has a `task`, its task name such as `/root/explore`, and takes input
-of its own. A child with no `task` is a subagent: it takes input only through
-its parent.
+`conversation/list` returns `[{id, title?, ended?, fork?, lineage?}]`. `ended`
+recovers the last run. `fork: {of, at}` names the conversation a fork came from
+and the last entry it inherits. `lineage: {parent, root, title, task?}` places
+a child conversation under the conversation that started it and the root of its
+tree. A conversation with `lineage.task` (such as `/root/explore`) is a worker:
+its `lineage.root` is its own ID, it starts a tree of its own, takes direct
+input, and gets its own Attn session titled `lineage.title` whenever its
+ancestor chain reaches an open Attn session (adopting any unheld parent workers
+first). Attn opens a visible tile for the adopted worker with `driver.resume`
+(or `driver.spawn` carrying `conversation_id` when the driver omits `resume`).
+A worker whose chain reaches no Attn session stays outside Attn. A closed worker
+session resumes when its worker runs again or calls Attn while an ancestor
+session is open. Worker adoption currently runs on the home machine only;
+workers started on an outpost are not yet adopted. A child with no `task` is a
+subagent: its `lineage.root` is its nearest worker or user-started root, it
+stays in that root's tree and takes input only through its parent.
 Numbered recovery accepts `status/watch {after: {conversation: completion}}`
 and replays newer idle completions. Completion numbers ascend per conversation.
 
@@ -458,10 +473,12 @@ and the list of a running server no longer holds cannot be resumed.
   `path`, and in `apply_patch` calls. It finds a pull request in a `bash`,
   `shell` or `exec_command` call that runs `gh pr create`, by the pull request
   URL in its output.
-- Attn watches each subagent under a session's conversation the same way, and
-  counts its files, pull requests and `pi.usage` toward that session. Attn
-  counts nothing of a worker, or of any child under a worker, toward the
-  session whose conversation started it.
+- Attn watches each subagent under a session's conversation (whether the
+  session holds a user-started conversation or a worker) the same way, and
+  counts its files, pull requests and `pi.usage` toward that session. A worker
+  has its own session, which counts its own `pi.usage`, files and pull requests
+  from zero (skipping any entries inherited up to `fork.at` for a forked
+  worker) and never toward the session that started it.
 
 ## The wire, for any language
 

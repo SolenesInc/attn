@@ -197,7 +197,11 @@ func (s *appServer) callTool(raw json.RawMessage) (any, error) {
 	for name, value := range server.Headers {
 		req.Header.Set(name, value)
 	}
-	req.Header.Set(s.flavor.callerHeader, p.Conversation)
+	callerRoot := p.Conversation
+	if conv.Lineage != nil && conv.Lineage.Root != "" {
+		callerRoot = conv.Lineage.Root
+	}
+	req.Header.Set(s.flavor.callerHeader, callerRoot)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err

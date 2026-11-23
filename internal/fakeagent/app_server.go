@@ -992,8 +992,14 @@ func (s *appServer) handleKit(_ *rpcPeer, method string, raw json.RawMessage) (a
 			return nil, fmt.Errorf("conversation %s was not interrupted within %s", p.ThreadID, HangGuard)
 		}
 	case methodRunTool:
+		s.mu.Lock()
+		callerRoot := p.ThreadID
+		if conv := s.convs[p.ThreadID]; conv != nil && conv.Lineage != nil && conv.Lineage.Root != "" {
+			callerRoot = conv.Lineage.Root
+		}
+		s.mu.Unlock()
 		cmd := exec.Command("/bin/sh", "-c", p.Text)
-		cmd.Env = append(os.Environ(), s.flavor.rootVariable+"="+p.ThreadID)
+		cmd.Env = append(os.Environ(), s.flavor.rootVariable+"="+callerRoot)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return nil, fmt.Errorf("%v: %s", err, out)

@@ -539,27 +539,38 @@ func userName() string {
 }
 
 func (l *Link) SessionClosed(sessionID protocol.SessionID, _ string, released string) {
-	if p, err := l.connection(); err == nil {
+	declaration := l.b.declaration.Load()
+	interrupt := declaration != nil && declaration.OnClose != "leave-running" && released != ""
+	p, connErr := l.connection()
+	if connErr == nil {
 		p.events.run(l.c, func() { p.closeFeed(sessionID) })
 	}
-	declaration := l.b.declaration.Load()
-	if declaration == nil || declaration.OnClose == "leave-running" || released == "" {
-		return
+	if interrupt && connErr == nil {
+		ctx, cancel := context.WithTimeout(l.c.host.Life().Context(), serverCallLimit)
+		if c, release, err := p.borrow(ctx, l, false); err == nil {
+			params := map[string]any{"conversation": released, "author": l.author(harness.VoiceAttn)}
+			if err := c.Call(ctx, "conversation/interrupt", params, nil); err != nil {
+				l.logf("interrupting conversation %s of closed session %s: %v", released, sessionID, err)
+			}
+			release()
+		}
+		cancel()
 	}
-	ctx, cancel := context.WithTimeout(l.c.host.Life().Context(), serverCallLimit)
-	defer cancel()
-	p, err := l.connection()
-	if err != nil {
-		return
-	}
-	c, release, err := p.borrow(ctx, l, false)
-	if err != nil {
-		return
-	}
-	defer release()
-	params := map[string]any{"conversation": released, "author": l.author(harness.VoiceAttn)}
-	if err := c.Call(ctx, "conversation/interrupt", params, nil); err != nil {
-		l.logf("interrupting conversation %s of closed session %s: %v", released, sessionID, err)
+	if connErr == nil && released != "" {
+		cleared := make(chan struct{})
+		p.events.run(l.c, func() {
+			if interrupt {
+				delete(p.busy, released)
+				delete(p.ended, released)
+			}
+			p.markDeclinedIdle(released)
+			close(cleared)
+		})
+		select {
+		case <-cleared:
+		case <-l.c.host.Life().Context().Done():
+		}
+		p.drainAdoption(l.c.host.Life().Context(), released)
 	}
 }
 

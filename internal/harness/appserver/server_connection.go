@@ -32,6 +32,11 @@ type serverConnection struct {
 	ended              map[string]serverEnded
 	tools              *serverToolsRegistration
 	feeds              map[feedKey]*serverFeed
+	adopting           map[string]*inFlightAdoption
+	nonWorkers         map[string]bool
+	externalGen        map[string]uint64
+	declinedIdle       map[string]bool
+	sessionGen         uint64
 	subagentScanClient *effectrpc.Client
 	subagentScanAgain  bool
 	subagentScanLive   bool
@@ -70,7 +75,7 @@ func (l *Link) connection() (*serverConnection, error) {
 	if p := cl.connections[socket]; p != nil {
 		return p, nil
 	}
-	p := &serverConnection{c: cl, socket: socket, ended: make(map[string]serverEnded)}
+	p := &serverConnection{c: cl, socket: socket, ended: make(map[string]serverEnded), sessionGen: 1}
 	cl.connections[socket] = p
 	cl.host.Life().Go("appServerStop", func() {
 		<-cl.host.Life().Context().Done()
@@ -441,6 +446,7 @@ func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 		return
 	}
 	if tree.Tag == "trees" {
+		p.resetAdoptionCache()
 		p.busy = make(map[string]string, len(tree.Trees))
 		for _, t := range tree.Trees {
 			p.busy[t.Conversation] = t.Status
@@ -483,10 +489,12 @@ func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 		}
 		p.busy[tree.Conversation] = tree.Status
 	}
-	if tree.Status != "idle" {
+	if p.holder(tree.Conversation) == "" {
+		p.adoptFromStatus(c, tree.Conversation, tree.Status != "idle")
+	} else if tree.Status != "idle" {
 		p.openFeeds(c, map[string]bool{tree.Conversation: true}, true)
-	} else if p.holder(tree.Conversation) != "" {
-		p.scheduleSubagentScan(c, true)
+	} else {
+		p.scheduleListScan(c, true)
 	}
 	for id, l := range p.sessions() {
 		if p.c.host.Sessions().Conversation(id) != tree.Conversation {
@@ -498,6 +506,7 @@ func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 }
 
 func (p *serverConnection) reconcile(l *Link, ids []protocol.SessionID, launching bool) {
+	p.bumpSessionGen()
 	p.mu.Lock()
 	c, ready := p.control, p.ready
 	p.mu.Unlock()

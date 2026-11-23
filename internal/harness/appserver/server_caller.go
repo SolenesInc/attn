@@ -29,6 +29,9 @@ func (c *Client) Authenticate(subject string, header http.Header) (harness.Sessi
 	}
 	session := p.toolsCaller(conversation)
 	if session == "" {
+		session = p.adoptForCaller(conversation)
+	}
+	if session == "" {
 		return "", "", false, fmt.Errorf("no session of %s holds conversation %s", p.harnesses(), conversation)
 	}
 	return session, p.harnesses() + " conversation " + conversation, false, nil
@@ -50,20 +53,51 @@ func (c *Client) declares(variable string) bool {
 	return false
 }
 
+func (c *Client) callerOwner(variable, conversation string) (protocol.SessionID, bool) {
+	var owner protocol.SessionID
+	for _, id := range c.host.Sessions().Holding(conversation) {
+		if l := c.serverHolding(id); l != nil && l.callerConversationEnv() == variable {
+			if owner != "" {
+				return "", true
+			}
+			owner = id
+		}
+	}
+	return owner, false
+}
+
+func (c *Client) adoptForCallerEnv(variable, conversation string) {
+	c.mu.Lock()
+	connections := make([]*serverConnection, 0, len(c.connections))
+	for _, p := range c.connections {
+		connections = append(connections, p)
+	}
+	c.mu.Unlock()
+	for _, p := range connections {
+		for _, peer := range p.peers() {
+			if peer.callerConversationEnv() == variable {
+				if p.adoptForCaller(conversation) != "" {
+					return
+				}
+				break
+			}
+		}
+	}
+}
+
 func (c *Client) ResolveCaller(caller string) (harness.SessionID, harness.TerminalID, string, bool) {
 	if named, ok := harness.ParseServerCaller(harness.TerminalID(caller)); ok {
 		if named.Scope != "" || !c.declares(named.Variable) {
 			return "", "", "", false
 		}
 		variable, conversation := named.Variable, named.Conversation
-		var owner protocol.SessionID
-		for _, id := range c.host.Sessions().Holding(conversation) {
-			if l := c.serverHolding(id); l != nil && l.callerConversationEnv() == variable {
-				if owner != "" {
-					return "", "", "", true
-				}
-				owner = id
-			}
+		owner, ambiguous := c.callerOwner(variable, conversation)
+		if owner == "" && !ambiguous {
+			c.adoptForCallerEnv(variable, conversation)
+			owner, ambiguous = c.callerOwner(variable, conversation)
+		}
+		if ambiguous {
+			return "", "", "", true
 		}
 		return owner, c.host.Sessions().PrimaryTerminal(owner), "", true
 	}

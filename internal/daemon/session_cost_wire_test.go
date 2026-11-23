@@ -235,6 +235,16 @@ func TestAnAppServerSessionsSubagentsReportFilesPullRequestsAndSpendOnceAcrossRe
 	})
 }
 
+func recentFileCountForSession(app *testworld.Peer, path, sessionID string) int {
+	app.T.Helper()
+	for _, file := range recentFiles(app, 0, "") {
+		if file.Path == path && string(protocol.Deref(file.SessionID)) == sessionID {
+			return file.Count
+		}
+	}
+	return 0
+}
+
 func TestASigmaWorkersFilesPullRequestsAndSpendStayOutOfTheSessionThatStartedIt(t *testing.T) {
 	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
 		w := newWorld(t, h)
@@ -262,19 +272,35 @@ func TestASigmaWorkersFilesPullRequestsAndSpendStayOutOfTheSessionThatStartedIt(
 		server.SetUsage("sub", "anthropic/claude-haiku-4-5", serverUsage(100))
 		awaitUsageTokens(app, session, 1100)
 
-		if got := recentCount(app, subDoc); got != 1 {
-			t.Errorf("sub.md written by the session's subagent counts %d, want 1", got)
+		workerSession, _ := awaitVisibleWorker(w, app, "refactor")
+		forkedSession, _ := awaitVisibleWorker(w, app, "review")
+		awaitUsageTokens(app, string(workerSession.ID), 600)
+		awaitUsageTokens(app, string(forkedSession.ID), 300)
+		testworld.AwaitSession(app, string(workerSession.ID), func(s protocol.Session) bool {
+			return slices.Contains(pullNumbers(s), 9)
+		})
+
+		if got := recentFileCountForSession(app, subDoc, session); got != 1 {
+			t.Errorf("sub.md written by the session's subagent counts %d on parent, want 1", got)
 		}
-		if got := recentCount(app, parentDoc); got != 1 {
-			t.Errorf("parent.md counts %d, want 1", got)
+		if got := recentFileCountForSession(app, parentDoc, session); got != 1 {
+			t.Errorf("parent.md counts %d on parent, want 1", got)
 		}
 		for _, doc := range []string{workerDoc, nestedDoc, forkDoc} {
-			if got := recentCount(app, doc); got != 0 {
-				t.Errorf("%s written under a worker counts %d in the session that started it, want 0", doc, got)
+			if got := recentFileCountForSession(app, doc, session); got != 0 {
+				t.Errorf("%s written under a worker counts %d on parent, want 0", doc, got)
 			}
 		}
-		if got := pullNumbers(testworld.AwaitSession(app, session, func(protocol.Session) bool { return true })); slices.Contains(got, 9) {
-			t.Errorf("pull requests = %v, want none from the worker", got)
+		for _, doc := range []string{workerDoc, nestedDoc} {
+			if got := recentFileCountForSession(app, doc, string(workerSession.ID)); got != 1 {
+				t.Errorf("%s counts %d on worker session, want 1", doc, got)
+			}
+		}
+		if got := recentFileCountForSession(app, forkDoc, string(forkedSession.ID)); got != 1 {
+			t.Errorf("%s counts %d on forked worker session, want 1", forkDoc, got)
+		}
+		if got := pullNumbers(sessionByID(t, w, session)); slices.Contains(got, 9) {
+			t.Errorf("parent pull requests = %v, want none from the worker", got)
 		}
 	})
 }

@@ -202,6 +202,7 @@ type Daemon struct {
 
 	teardownMu            sync.Mutex
 	tearingDown           map[protocol.SessionID]chan struct{}
+	releasing             map[protocol.SessionID]int
 	sessionLifecycleLocks sessionLocks
 	terminalEndLocks      sessionLocks
 	spawnLocksMu          sync.Mutex
@@ -2192,6 +2193,33 @@ func (d *Daemon) sessionTeardownInFlight(sessionID protocol.SessionID) bool {
 	return d.tearingDown[sessionID] != nil
 }
 
+func (d *Daemon) beginSessionRelease(sessionID protocol.SessionID) func() {
+	d.teardownMu.Lock()
+	if d.releasing == nil {
+		d.releasing = make(map[protocol.SessionID]int)
+	}
+	d.releasing[sessionID]++
+	d.teardownMu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			d.teardownMu.Lock()
+			if d.releasing[sessionID] <= 1 {
+				delete(d.releasing, sessionID)
+			} else {
+				d.releasing[sessionID]--
+			}
+			d.teardownMu.Unlock()
+		})
+	}
+}
+
+func (d *Daemon) sessionReleaseInFlight(sessionID protocol.SessionID) bool {
+	d.teardownMu.Lock()
+	defer d.teardownMu.Unlock()
+	return d.releasing[sessionID] > 0
+}
+
 func (d *Daemon) waitForSessionTeardown(sessionID protocol.SessionID) {
 	d.teardownMu.Lock()
 	done := d.tearingDown[sessionID]
@@ -2222,6 +2250,7 @@ func (d *Daemon) terminateSessionAsync(sessionID protocol.SessionID, sig syscall
 			delete(d.tearingDown, sessionID)
 			d.teardownMu.Unlock()
 			close(done)
+			pausepoint.At(pausepoint.SessionTeardownFinished)
 		}()
 		crashpoint.At(crashBeforeTeardownKill)
 		pausepoint.At(pausepoint.SessionTeardownKilling)
@@ -2268,16 +2297,24 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 	}
 	session := d.store.Get(sessionID)
 	inServer := d.lifetime(sessionID) == harness.InServer
+	var endRelease func()
+	if inServer && session != nil {
+		endRelease = d.beginSessionRelease(sessionID)
+	}
 	closure, err := d.closeSessionRecord(sessionID, closed)
 	if err != nil {
+		if endRelease != nil {
+			endRelease()
+		}
 		return err
 	}
 	if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "committed"}); err != nil {
 		d.logf("machine close: %v", err)
 	}
-	if inServer && session != nil {
+	if endRelease != nil {
 		profile, released := session.ProfileID, closure.ReleasedConversation
-		d.life.Go("linkAfterSessionClose", func() {
+		if !d.life.Go("linkAfterSessionClose", func() {
+			defer endRelease()
 			pausepoint.At(pausepoint.SessionCloseReleasing)
 			lifecycle := d.sessionLifecycleLockFor(sessionID)
 			lifecycle.Lock()
@@ -2288,8 +2325,11 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 			if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "released", Agent: protocol.Ptr(session.Agent), Profile: protocol.Ptr(profile), Conversation: protocol.Ptr(released)}); err != nil {
 				d.logf("machine close release: %v", err)
 			}
+			endRelease()
 			pausepoint.At(pausepoint.SessionCloseReleased)
-		})
+		}) {
+			endRelease()
+		}
 	}
 	return nil
 }

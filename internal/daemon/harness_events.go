@@ -211,6 +211,10 @@ func (e harnessEvents) Moved(r harness.Reporter, m harness.Move) func(context.Co
 	return receipt.Wait
 }
 
+func (e harnessEvents) Adopted(a harness.Adoption) func(context.Context) error {
+	return e.daemon.adoptServerConversation(a)
+}
+
 func (e harnessEvents) Returned(session protocol.SessionID, id, text string) {
 	e.daemon.returnInput(session, id, text)
 }

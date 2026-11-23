@@ -209,8 +209,50 @@ func (m *Monitor) StartCost() {
 	}
 }
 
+func (m *Monitor) replaceCostSource(sourceID string, root bool, observations []sessioncost.Observation) bool {
+	m.mu.Lock()
+	var ledger sessioncost.Ledger
+	for _, observation := range observations {
+		observation.Model = strings.TrimSpace(observation.Model)
+		observation.Purpose = sessioncost.NewLedgerKey(observation.Model, observation.Purpose).Purpose
+		if observation.Model == "" || !observation.Usage.HasUsage() {
+			continue
+		}
+		if ledger == nil {
+			ledger = make(sessioncost.Ledger)
+		}
+		key := sessioncost.RequestLedgerKey(observation.Model, observation.Purpose, observation.Usage)
+		key.FastMode = observation.FastMode
+		ledger[key] = ledger[key].Add(observation.Usage)
+	}
+	next := &sessioncost.Source{
+		Root:        root,
+		Initialized: true,
+		Ledger:      ledger,
+	}
+	prior := m.cost[sourceID]
+	if m.costInitialized && prior != nil && prior.Root == next.Root && prior.Initialized == next.Initialized && !prior.UsageUnavailable && !prior.MeasurementIncomplete && len(prior.Observations) == 0 && len(prior.Finalized) == 0 && maps.Equal(prior.Ledger, next.Ledger) {
+		m.mu.Unlock()
+		return false
+	}
+	sources := maps.Clone(m.cost)
+	if sources == nil {
+		sources = make(map[string]*sessioncost.Source)
+	}
+	sources[sourceID] = next
+	for id, owner := range m.costOwners {
+		if owner.Source == sourceID {
+			delete(m.costOwners, id)
+		}
+	}
+	m.costInitialized, m.cost = true, sources
+	m.updateCostTotalsLocked()
+	m.mu.Unlock()
+	return true
+}
+
 func (m *Monitor) ReportServerUsage(source string, root bool, observations []sessioncost.Observation) {
-	if m != nil && m.applyCostObservations(source, root, "", observations) {
+	if m != nil && m.replaceCostSource(source, root, observations) {
 		m.publishCost()
 	}
 }

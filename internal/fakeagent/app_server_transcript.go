@@ -296,21 +296,26 @@ func (s *appServer) handleTranscriptKit(method string, raw json.RawMessage) (any
 		if parent == nil {
 			return nil, os.ErrNotExist, true
 		}
+		isWorker := method == methodServerWorker || method == methodServerForkWorker
 		root := parent.ID
 		if parent.Lineage != nil && parent.Lineage.Root != "" {
 			root = parent.Lineage.Root
 		}
+		if isWorker {
+			root = p.Key
+		}
 		callID := s.nextCallID()
 		child := &ServerConversation{
-			ID:       p.Key,
-			Cwd:      parent.Cwd,
-			Target:   parent.Target,
-			Lineage:  &ServerLineage{Parent: parent.ID, Root: root, Call: callID, Title: p.Text},
-			Status:   "idle",
-			requests: map[string]int{},
+			ID:         p.Key,
+			Cwd:        parent.Cwd,
+			Target:     parent.Target,
+			MCPServers: parent.MCPServers,
+			Lineage:    &ServerLineage{Parent: parent.ID, Root: root, Call: callID, Title: p.Text},
+			Status:     "idle",
+			requests:   map[string]int{},
 		}
-		if method == methodServerWorker || method == methodServerForkWorker {
-			child.Lineage.Task = p.Text
+		if isWorker {
+			child.Lineage.Task = "/root/" + p.Text
 		}
 		var inherited []serverEntry
 		if method == methodServerForkSubagent || method == methodServerForkWorker {
@@ -327,7 +332,9 @@ func (s *appServer) handleTranscriptKit(method string, raw json.RawMessage) (any
 			childTranscript.Entries = inherited
 		}
 		s.appendLocked(p.Key, serverEntry{Kind: "sigma.started", Data: map[string]any{"author": ServerAuthor{ID: "attn", Name: "attn"}}})
-		s.appendLocked(parent.ID, serverEntry{Kind: "sigma.subagent", Data: map[string]any{"call": callID, "conversation": childTranscript.Number, "title": p.Text}})
+		if !isWorker {
+			s.appendLocked(parent.ID, serverEntry{Kind: "sigma.subagent", Data: map[string]any{"call": callID, "conversation": childTranscript.Number, "title": p.Text}})
+		}
 	case methodForget:
 		delete(s.convs, p.ThreadID)
 		delete(s.transcripts, p.ThreadID)

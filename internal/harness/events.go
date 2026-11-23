@@ -109,6 +109,13 @@ type Move struct {
 	ServerConfirmed bool
 }
 
+type Adoption struct {
+	Parent       SessionID
+	Conversation string
+	Title        string
+	Reopen       bool
+}
+
 // Events is core's side of a harness: everything the harness tells attn arrives here.
 type Events interface {
 	Turn(r Reporter, at time.Time, e TurnEvent)
@@ -120,6 +127,7 @@ type Events interface {
 	Named(session SessionID, title string)
 	// Moved returns what to wait on until the move is recorded, or nil when nothing is to wait on.
 	Moved(r Reporter, m Move) (wait func(context.Context) error)
+	Adopted(a Adoption) (wait func(context.Context) error)
 	// Compaction answers a Conversation.Compact, matched by its input id.
 	Compaction(session SessionID, c Compaction)
 	// Returned gives back the user's words the harness took but did not place, so attn places them again.

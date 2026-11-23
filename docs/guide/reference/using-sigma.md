@@ -94,19 +94,30 @@ session's row in the sidebar shows Sigma's mark.
 
 Two kinds of conversation can run under a session's conversation. A
 **subagent** is one of Claude Code's own subagents, which Sigma hosts when it
-runs Claude Code. A **worker** is a conversation that a Sigma agent starts with
-`start_worker`, and it works apart from the conversation that started it.
-Attn counts a subagent's spend, files and pull requests toward the session, and
-none of a worker's or of anything under a worker, so those show in no session.
+runs Claude Code. It stays inside its parent's tree: Attn counts its spend,
+files and pull requests toward the session that owns that tree, and its
+approvals surface on that session.
+
+A **worker** is an independent conversation that a Sigma agent starts with
+`start_worker`. Each worker starts a tree of its own, so Attn opens it as its
+own Sigma session titled by the worker's task, taking its profile, folder and
+launch settings from the session that started it and opening a tile beside it
+running `sigma --conversation <id>`. A worker session tracks its own state,
+files, pull requests and spend from zero, folds its own hosted subagents into
+itself, and answers `attn` CLI and MCP calls as itself. If you close a worker
+session and its worker runs again or calls Attn while an ancestor session is
+open, Attn resumes it. A worker started under a conversation outside Attn stays
+outside Attn. Worker adoption currently runs on the home machine only; workers
+started on an outpost are not yet adopted.
 
 ## State
 
 The session's state comes from the server, not from the terminal:
 
-- **working** while a run is active in the conversation or in any subagent or
-  worker under the conversation.
-- **needs approval** while a call there waits for someone to allow it, a
-  subagent's or worker's call included.
+- **working** while a run is active in the conversation or in any hosted
+  subagent under it.
+- **needs approval** while a call there waits for someone to allow it, a hosted
+  subagent's call included. A worker reports on its own session instead.
 - When the conversation's run ends with an answer, Attn reads the
   conversation's last message to tell **waiting** from **idle**, as Attn does
   for other harnesses.
@@ -167,12 +178,11 @@ Annotations, messages from other agents and inbox notifications reach the
 conversation as follow-ups through the server, never typed into the terminal.
 What you send arrives under your user name, and what Attn and other agents send
 arrives from `attn`. An annotation sent while a run works reaches that run at
-its next step, as a steer. An annotation never answers an approval. While the
-conversation's own run waits for your approval, the annotation waits in Sigma
-until you answer. While only a subagent or worker waits, the conversation is
-free: the annotation reaches its run at the next step, or starts a run if the
-conversation's run had ended, and the subagent's or worker's approval stays
-open. Messages from other agents and inbox notifications wait for the run to
+its next step, as a steer. An annotation never answers an approval. While the conversation's own run waits for your approval, the annotation waits
+in Sigma until you answer. While only a hosted subagent waits, the conversation
+is free: the annotation reaches its run at the next step, or starts a run if
+the conversation's run had ended, and the subagent's approval stays open. A
+worker has its own session, so messages and approvals go directly to it. Messages from other agents and inbox notifications wait for the run to
 end, as they do for other harnesses, unless the agent sends with
 `attn agent msg --steer`, which reaches the run at its next step, or
 `--interrupt`, which stops the run and starts the next one with the message.
@@ -181,13 +191,14 @@ follow-up.
 
 ## Closing and resuming
 
-Closing a session interrupts its conversation's run, and its subagents with it,
-and closes the session into the ledger. Workers keep working when the
-conversation's run was active, and stop when it was idle. Quitting the TUI with
-`^C` closes the session the same way, as quitting any other harness does. Resume
-the session from the Sessions ledger to open its conversation in a new tile. If
-the server is running and no longer holds a conversation Attn has followed, Attn
-says so instead of offering a resume.
+Closing a session interrupts its conversation's run, and its hosted subagents
+with it, and closes the session into the ledger. Workers are sessions of their
+own and keep running when their parent session closes; closing a worker session
+interrupts that worker. Quitting the TUI with `^C` closes the session the same
+way, as quitting any other harness does. Resume the session from the Sessions
+ledger to open its conversation in a new tile. If the server is running and no
+longer holds a conversation Attn has followed, Attn says so instead of offering
+a resume.
 
 An agent can compact its conversation just before it closes itself, as
 [Seeds on standby](delegation.md#seeds-on-standby) describes. Attn waits for
@@ -199,8 +210,10 @@ to resume the conversation in another profile while that session is open.
 
 ## Agents using Attn
 
-Every command that a Sigma agent runs, including in a subagent or a worker, has
-`SIGMA_ROOT_CONVERSATION` set. Attn finds the session that holds that
+Every command that a Sigma agent runs has `SIGMA_ROOT_CONVERSATION` set to the
+root of its tree: the conversation you started for a root session and its
+hosted subagents, or the worker's own conversation for a worker and its hosted
+subagents. Attn finds (or adopts, for a worker) the session that holds that
 conversation and runs the `attn` command as that session, as it does for other
 harnesses.
 
@@ -209,11 +222,11 @@ a Sigma agent also gets Attn's tools, such as `seed_note`, as the MCP server
 `attn`. Attn registers the server with the Sigma server each time it connects.
 It starts each new conversation with `--mcp-server attn=<description>` and
 appends the intent map, the text that says when to reach for each tool, to the
-conversation's instructions. Sigma sends the root conversation's id with every
-tool call, so a call acts as the session that holds the conversation, and a
-subagent's or worker's call as its root's. Attn gives the credential to the
-Sigma server alone: the `sigma` client, its arguments and Sigma's database never
-hold it.
+conversation's instructions. Sigma sends the tree root conversation's id with
+every tool call, so a call acts as the session holding that conversation: a
+hosted subagent's call acts as its root session, and a worker's call acts as
+the worker's own session. Attn gives the credential to the Sigma server alone:
+the `sigma` client, its arguments and Sigma's database never hold it.
 
 Sigma lists a conversation's tools when the conversation starts and keeps the
 list. A conversation started with the setting off therefore has no Attn tools

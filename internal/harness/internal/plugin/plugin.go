@@ -197,6 +197,9 @@ func (h Harness) Launch(_ context.Context, req harness.LaunchRequest) (harness.C
 		params.Instructions = &launchInstructions{Kind: "agent", Content: guidance.Instructions(), ProfileID: req.Profile}
 	}
 	resume := req.Reason == harness.Reload || req.Reason == harness.Resume && reg.Capabilities["resume"]
+	if serverBound && !resume {
+		params.ResumeSessionID = ""
+	}
 	result, err := h.spawn(reg, params, resume)
 	if err != nil {
 		return harness.Command{}, err

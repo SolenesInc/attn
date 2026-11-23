@@ -35,6 +35,7 @@ type internalSpawnPolicy struct {
 	userStarted            bool
 	fromLedger             bool
 	startsLaunching        bool
+	onlyIfHidden           bool
 	// The client that asked; it gets the placement as its own answer before any broadcast of it.
 	requester *wsClient
 }
@@ -162,6 +163,9 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 			return nil, &spawnRejection{err: err}
 		}
 	}
+	if policy.onlyIfHidden && d.store.Get(msg.ID) == nil {
+		return nil, &spawnRejection{err: fmt.Errorf("show session %s: %w", msg.ID, store.ErrSessionClosed)}
+	}
 	addsTerminal := d.addsTerminal(msg, policy)
 	placement := requestedLaunchPlacement(msg.Placement)
 	if policy.launchPlacement != nil || placement == nil {
@@ -190,7 +194,7 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 
 func (d *Daemon) addsTerminal(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) bool {
 	conversation := d.serverConversation(msg.ID)
-	return !policy.fromLedger && conversation != "" && protocol.Deref(msg.ResumeSessionID) == conversation
+	return !policy.fromLedger && d.store.Get(msg.ID) != nil && conversation != "" && protocol.Deref(msg.ResumeSessionID) == conversation
 }
 
 func (d *Daemon) checkExistingSessionMembership(req *spawnRequest) *spawnRejection {
@@ -217,6 +221,18 @@ func (d *Daemon) checkExistingSessionMembership(req *spawnRequest) *spawnRejecti
 func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
 	req.spawnStartedAt = time.Now()
 	req.existingSession = d.store.Get(req.msg.ID)
+	if req.addsTerminal {
+		if req.existingSession == nil {
+			return &spawnRejection{err: fmt.Errorf("session %s: %w", req.msg.ID, store.ErrSessionClosed)}
+		}
+		closing, err := d.store.SessionCloseIntentionalChecked(req.msg.ID)
+		if err != nil {
+			return &spawnRejection{err: fmt.Errorf("check teardown of session %s: %w", req.msg.ID, err)}
+		}
+		if closing {
+			return &spawnRejection{err: fmt.Errorf("session %s is closing", req.msg.ID)}
+		}
+	}
 	if req.existingSession != nil {
 		req.msg.Host = req.existingSession.Host
 	}
@@ -514,7 +530,8 @@ func (d *Daemon) removeSessionRuntime(terminal harness.TerminalID) error {
 func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	msg, session := req.msg, plan.launchSession
 	current := d.store.Get(session.ID)
-	if current == nil {
+	closing, _ := d.store.SessionCloseIntentionalChecked(session.ID)
+	if current == nil || closing {
 		killErr := d.killSessionRuntime(plan.spawnOpts.ID)
 		removeErr := d.removeSessionRuntime(plan.spawnOpts.ID)
 		persistErr := fmt.Errorf("spawned session %s is no longer open", session.ID)
@@ -619,7 +636,7 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 		if rejection == nil || d.store.Get(msg.ID) == nil {
 			return
 		}
-		if !d.sessionHasLiveWorker(msg.ID) {
+		if !d.sessionHasLiveWorker(msg.ID) && !d.serverOwns(msg.ID) {
 			d.startSessionMonitor(msg.ID)
 			d.sessionMonitor(msg.ID).RecordProcessExit()
 		}
@@ -643,6 +660,13 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 	}
 	releaseSpawnLock := d.acquireSpawnLock(msg.ID)
 	defer releaseSpawnLock()
+
+	if req.policy.onlyIfHidden && !d.hidden(msg.ID) {
+		if d.store.Get(msg.ID) == nil {
+			return placementOutcome{}, &spawnRejection{err: fmt.Errorf("show session %s: %w", msg.ID, store.ErrSessionClosed)}
+		}
+		return placementOutcome{session: msg.ID}, nil
+	}
 
 	if err := ctx.Err(); err != nil {
 		return placementOutcome{}, &spawnRejection{err: fmt.Errorf("prepare session launch: %w", err)}

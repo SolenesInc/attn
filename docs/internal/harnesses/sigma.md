@@ -46,19 +46,21 @@ measurement uses that one.
   `approval/resolve` answers an approval; what a steer does while a call waits
   on an approval is not probed (`packages/protocol/src/index.ts`,
   `packages/sigma/src/server.ts`).
-- `conversation/interrupt` withdraws the inputs waiting in the conversation's
-  queue in the same commit that writes its `sigma.interrupted` entry, and
-  answers with the people's inputs it withdrew; inputs that arrive while the run
-  stops are not withdrawn (`packages/sigma/src/server.ts`, read at 9fbd582). A
-  `conversation/submit` without `steer` right after it starts the next run
-  with that input. Probed through a non-production attn instance on 9fbd582
-  with `claude-haiku-5-5` (seed `s-77s6d3`, 2026-11-23): the run's foreground
-  tool call ended "interrupted; it may or may not have taken effect", and the
-  submitted message started the next run 7 ms later. A steer sent during a
-  tool call reached the run right after that call's result. For another
-  agent's interrupt, attn submits the withdrawn inputs again after its message,
-  each with its author and without `steer`. The answer carries only their text,
-  so their images and the skills they named are lost.
+- `conversation/interrupt` stops only the named conversation's run (when busy)
+  or its own hosted background jobs (when idle), and never crosses worker
+  boundaries (`packages/sigma/src/agents.ts`, read at e69ff71). It withdraws
+  the people's inputs waiting in the conversation's inbox in the same commit
+  that writes its `sigma.interrupted` entry, and answers with them; inputs that
+  arrive while the run stops are not withdrawn (`packages/sigma/src/server.ts`,
+  read at 9fbd582). A `conversation/submit` without `steer` right after it
+  starts the next run with that input. Probed through a non-production attn
+  instance on 9fbd582 with `claude-haiku-5-5` (seed `s-77s6d3`, 2026-11-23):
+  the run's foreground tool call ended "interrupted; it may or may not have
+  taken effect", and the submitted message started the next run 7 ms later. A
+  steer sent during a tool call reached the run right after that call's result.
+  For another agent's interrupt, attn submits the withdrawn inputs again after
+  its message, each with its author and without `steer`. The answer carries
+  only their text, so their images and the skills they named are lost.
 - `ephemeral/run {prompt, system?, schema?, provider?, model?, effort?, maxTurns?}`
   answers one prompt with no tools and commits nothing: no conversation in
   `conversation/list`, no entry, no usage (measured on 43ebbba: after a title,
@@ -78,13 +80,17 @@ measurement uses that one.
   compaction has ended, with `outcome` `compacted`, `nothing_to_compact`,
   `failed` (with a `message`) or `stopped`. Behind a run in flight it waits for
   the run's next step or its end.
-- Every `bash` call, and Claude Code's process, runs with
-  `SIGMA_ROOT_CONVERSATION` set to the id of the conversation people started.
-  Every MCP request carries the registered headers and
-  `Sigma-Root-Conversation` with the same root: the id the client chose, or
-  Sigma's internal number for a conversation started without one, such as by
-  `sigma exec` or `/fork` (measured on 69daaf7: a bare `sigma exec` sent `149`,
-  a fork `173`).
+- Every `bash` call, and Claude Code's and `agy`'s processes, run with
+  `SIGMA_ROOT_CONVERSATION` set to the root of the conversation's tree: the id
+  of the conversation people started for a root conversation and its hosted
+  subagents, or the worker's own id for a worker and its hosted subagents
+  (`packages/sigma/src/conversations.ts`, read at e69ff71). Every MCP request
+  carries the registered headers and `Sigma-Root-Conversation` with the same
+  tree root (and MCP clients are keyed by tree root): the id the client chose,
+  or Sigma's internal number for a conversation started without one, such as by
+  `sigma exec`, `/fork` or `start_worker` (measured on 69daaf7: a bare
+  `sigma exec` sent `149`, a fork `173`; worker boundary verified by wire and
+  Claude tests on e69ff71).
 - `conversation/start` takes `instructions`, kept with the conversation and not
   given to its subagents: OpenAI is told them after the `AGENTS.md` files, and
   Claude Code appends them to its own system prompt. They are fixed once the
@@ -130,7 +136,9 @@ measurement uses that one.
   either method 0.8 to 1.0 s.
 - `status/watch` opens with the busy conversation trees and then sends one
   status per change of a tree (working, waiting on an approval, idle), with
-  how its root's run ended. Subagents and workers are part of their root's tree.
+  how its root's run ended. Each conversation people started and each worker
+  starts a tree of its own; hosted subagents roll up into their nearest worker
+  or person-started root (`packages/sigma/src/status.ts`, read at e69ff71).
 - A client says which conversation it shows with `client/shows
   {conversation, author}`, a stream that lasts while the client keeps it
   open. `status/watch` sends `{_tag: "shown", author, conversation}` when one
@@ -175,19 +183,23 @@ measurement uses that one.
   the compactions running.
 - A child conversation has its own entries and its own `pi.usage`, which
   counts only that conversation's spend. `conversation/list` gives each child's
-  `lineage` (`parent`, `root`, and `task` on a worker)
+  `lineage` (`parent`, `root`, `title`, and `task` on a worker)
   (`packages/kernel/docs/spec.md`, `packages/protocol/src/index.ts`). Read at
-  a9b3461, a child is one of two kinds:
+  e69ff71, a child is one of two kinds:
   - A worker comes from the `start_worker` tool. Its lineage's `task` is its
-    task name, such as `/root/explore`. It takes input and outlives its
-    parent's turns. With `fork_turns: "all"` it is a fork of its parent
-    (`packages/sigma/src/agents.ts`, `packages/sigma/src/server.ts`). It is a
-    Sigma worker in the glossary's sense.
+    worker path, such as `/root/explore`, and its `lineage.root` is its own id.
+    It starts a tree of its own, takes direct input, and outlives its parent's
+    turns. With `fork_turns: "all"` it is a fork of its parent
+    (`packages/sigma/src/agents.ts`, `packages/sigma/src/conversations.ts`,
+    `packages/sigma/src/server.ts`). It is a Sigma worker in the glossary's
+    sense.
   - A subagent is one of Claude Code's own subagents, which Sigma hosts. Its
-    lineage has no `task`. It takes input only through its parent, refusing
-    its own with `TakesNoInput`, and stops when its parent's run does
-    (`packages/hosted/src/transcript.ts`, `packages/protocol/src/index.ts`).
-    Its parent gets a `sigma.subagent` entry that points at it.
+    lineage has no `task`, and its `lineage.root` is its nearest worker or
+    person-started root. It stays in that root's tree, takes input only through
+    its parent (refusing its own with `TakesNoInput`), and stops when its
+    parent's run does (`packages/hosted/src/transcript.ts`,
+    `packages/protocol/src/index.ts`). Its parent gets a `sigma.subagent` entry
+    that points at it.
 - A conversation's `title` in `conversation/list` is a child's lineage title, or
   else the first line of the conversation's first prompt.
 - Sigma's own tools are `read`, `write` and `edit`, which take a `path`,

@@ -70,6 +70,7 @@ const (
 	SessionSnoozeDecided           = "session-snooze-decided"
 	SessionTeardownPrepared        = "session-teardown-prepared"
 	SessionTeardownKilling         = "session-teardown-killing"
+	SessionTeardownFinished        = "session-teardown-finished"
 	AgentCloseDrained              = "agent-close-drained"
 	SessionCloseReleasing          = "session-close-releasing"
 	SessionCloseReleased           = "session-close-released"

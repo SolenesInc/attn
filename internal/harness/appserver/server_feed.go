@@ -77,13 +77,12 @@ func (l *Link) WatchesConversations() bool {
 }
 
 func (p *serverConnection) openFeeds(c *effectrpc.Client, conversations map[string]bool, live bool) {
-	hasWatching := false
-	for id, l := range p.sessions() {
+	sessions := p.sessions()
+	for id, l := range sessions {
 		conversation := p.c.host.Sessions().Conversation(id)
 		if conversation == "" || !l.WatchesConversations() || (conversations != nil && !conversations[conversation]) {
 			continue
 		}
-		hasWatching = true
 		key := feedKey{session: id, conversation: conversation}
 		if _, open := p.feeds[key]; open {
 			continue
@@ -102,23 +101,13 @@ func (p *serverConnection) openFeeds(c *effectrpc.Client, conversations map[stri
 			delete(p.feeds, key)
 		}
 	}
-	if hasWatching {
-		p.scheduleSubagentScan(c, live)
+	if len(sessions) > 0 {
+		p.scheduleListScan(c, live)
 	}
 }
 
-func (p *serverConnection) scheduleSubagentScan(c *effectrpc.Client, live bool) {
-	if p.client() != c {
-		return
-	}
-	watching := false
-	for id, l := range p.sessions() {
-		if l.WatchesConversations() && p.c.host.Sessions().Conversation(id) != "" {
-			watching = true
-			break
-		}
-	}
-	if !watching {
+func (p *serverConnection) scheduleListScan(c *effectrpc.Client, live bool) {
+	if p.client() != c || len(p.sessions()) == 0 {
 		return
 	}
 	if p.subagentScanClient == c {
@@ -129,11 +118,8 @@ func (p *serverConnection) scheduleSubagentScan(c *effectrpc.Client, live bool) 
 	p.subagentScanClient = c
 	p.subagentScanAgain = false
 	p.subagentScanLive = false
-	if !p.c.host.Life().Go("serverSubagents", func() {
-		var listed []listedConversation
-		callCtx, cancel := context.WithTimeout(p.c.host.Life().Context(), serverCallLimit)
-		err := c.Call(callCtx, "conversation/list", nil, &listed)
-		cancel()
+	if !p.c.host.Life().Go("serverConversations", func() {
+		listed, err := p.listConversations(p.c.host.Life().Context(), c)
 		p.events.run(p.c, func() {
 			if p.client() != c {
 				if p.subagentScanClient == c {
@@ -143,12 +129,13 @@ func (p *serverConnection) scheduleSubagentScan(c *effectrpc.Client, live bool) 
 			}
 			if err == nil {
 				p.openSubagentFeeds(c, listed, live)
+				p.adoptListed(c, listed)
 			}
 			if p.subagentScanClient == c {
 				again, againLive := p.subagentScanAgain, p.subagentScanLive
 				p.subagentScanClient, p.subagentScanAgain, p.subagentScanLive = nil, false, false
 				if again {
-					p.scheduleSubagentScan(c, againLive)
+					p.scheduleListScan(c, againLive)
 				}
 			}
 		})
@@ -175,10 +162,7 @@ func (p *serverConnection) openSubagentFeeds(c *effectrpc.Client, listed []liste
 	if len(roots) == 0 {
 		return
 	}
-	byID := make(map[string]listedConversation, len(listed))
-	for _, each := range listed {
-		byID[each.ID] = each
-	}
+	byID := indexListedConversations(listed)
 	for _, each := range listed {
 		if !subagentOfRoot(each, byID) {
 			continue
@@ -194,12 +178,28 @@ func (p *serverConnection) openSubagentFeeds(c *effectrpc.Client, listed []liste
 }
 
 func subagentOfRoot(each listedConversation, byID map[string]listedConversation) bool {
-	for at := each; at.child(); at = byID[at.Lineage.Parent] {
-		if at.worker() {
+	if each.kind() != hostedSubagentConversation {
+		return false
+	}
+	seen := map[string]bool{each.ID: true}
+	for at := each; at.Lineage != nil && at.Lineage.Parent != ""; {
+		if at.Lineage.Parent == each.Lineage.Root {
+			return true
+		}
+		if seen[at.Lineage.Parent] {
 			return false
 		}
+		seen[at.Lineage.Parent] = true
+		parent, ok := byID[at.Lineage.Parent]
+		if !ok {
+			return true
+		}
+		if parent.kind() == workerConversation {
+			return false
+		}
+		at = parent
 	}
-	return each.child()
+	return true
 }
 
 func (p *serverConnection) openSubagentFeed(c *effectrpc.Client, id protocol.SessionID, l *Link, conversation string, forkAt int64, live bool) {
@@ -262,11 +262,18 @@ func (f *serverFeed) startAfterInherited(ctx context.Context) error {
 	if f.seen > 0 || f.subagent {
 		return nil
 	}
-	at, err := f.l.forkedAt(ctx, f.c, f.conversation)
-	if at > 0 {
-		f.seen, f.baselined = at, true
+	info, ok, err := f.l.findListedConversation(ctx, f.c, f.conversation)
+	if err != nil || !ok {
+		return err
 	}
-	return err
+	if info.Fork != nil && info.Fork.At > 0 {
+		f.seen, f.baselined = info.Fork.At, true
+	}
+	if info.kind() == workerConversation {
+		f.baselined = true
+		f.launched = time.Time{}
+	}
+	return nil
 }
 
 func (f *serverFeed) watch(ctx context.Context, live bool) error {
@@ -463,7 +470,7 @@ func (f *serverFeed) observe(ctx context.Context, entry transcript.ServerEntry, 
 		return
 	}
 	if entry.Kind == serverSubagent {
-		f.p.events.run(f.p.c, func() { f.p.scheduleSubagentScan(f.c, live) })
+		f.p.events.run(f.p.c, func() { f.p.scheduleListScan(f.c, live) })
 	}
 	written, dated := entry.Written()
 	if !dated {
@@ -507,7 +514,7 @@ func (f *serverFeed) observe(ctx context.Context, entry transcript.ServerEntry, 
 			f.p.c.serverToolFinished(f.session, call.name, call.input, result.Content)
 		}
 		if finished {
-			f.p.events.run(f.p.c, func() { f.p.scheduleSubagentScan(f.c, live) })
+			f.p.events.run(f.p.c, func() { f.p.scheduleListScan(f.c, live) })
 		}
 	}
 }
