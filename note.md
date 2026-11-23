@@ -1,0 +1,1 @@
+The retired `scripts/land.sh` now explains the case that sends most landers to it: a clone whose `core.hooksPath` names another checkout still holding the pre-land pre-push hook, which refuses `land`'s push after the gate passes. Bring that checkout up to date with main, then run `land` again.
