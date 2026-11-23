@@ -90,10 +90,6 @@ func (p *serverConnection) openFeeds(c *effectrpc.Client, conversations map[stri
 		}
 		ctx, cancel := context.WithCancel(p.c.host.Life().Context())
 		stored := p.c.host.Records().Feed(id)
-		if forked, ok := p.takeFork(conversation); ok && stored.Entry == 0 {
-			stored.Entry = forked
-			p.c.host.Records().SaveFeedEntry(id, forked)
-		}
 		f := &serverFeed{p: p, l: l, c: c, session: id, conversation: conversation, cancel: cancel, seen: stored.Entry, launched: p.c.host.Sessions().LaunchedAt(id), calls: map[string]serverToolCall{}}
 		f.baselined = stored.UsageBaseline != "" || stored.Entry > 0
 		_ = json.Unmarshal([]byte(stored.UsageBaseline), &f.baseline)
@@ -109,16 +105,6 @@ func (p *serverConnection) openFeeds(c *effectrpc.Client, conversations map[stri
 	if hasWatching {
 		p.scheduleSubagentScan(c, live)
 	}
-}
-
-type listedSubagentConversation struct {
-	ID   string `json:"id"`
-	Fork *struct {
-		At int64 `json:"at"`
-	} `json:"fork"`
-	Lineage *struct {
-		Root string `json:"root"`
-	} `json:"lineage"`
 }
 
 func (p *serverConnection) scheduleSubagentScan(c *effectrpc.Client, live bool) {
@@ -144,7 +130,7 @@ func (p *serverConnection) scheduleSubagentScan(c *effectrpc.Client, live bool) 
 	p.subagentScanAgain = false
 	p.subagentScanLive = false
 	if !p.c.host.Life().Go("serverSubagents", func() {
-		var listed []listedSubagentConversation
+		var listed []listedConversation
 		callCtx, cancel := context.WithTimeout(p.c.host.Life().Context(), serverCallLimit)
 		err := c.Call(callCtx, "conversation/list", nil, &listed)
 		cancel()
@@ -171,7 +157,7 @@ func (p *serverConnection) scheduleSubagentScan(c *effectrpc.Client, live bool) 
 	}
 }
 
-func (p *serverConnection) openSubagentFeeds(c *effectrpc.Client, listed []listedSubagentConversation, live bool) {
+func (p *serverConnection) openSubagentFeeds(c *effectrpc.Client, listed []listedConversation, live bool) {
 	roots := make(map[string]map[protocol.SessionID]*Link)
 	for id, l := range p.sessions() {
 		if !l.WatchesConversations() {
@@ -190,7 +176,7 @@ func (p *serverConnection) openSubagentFeeds(c *effectrpc.Client, listed []liste
 		return
 	}
 	for _, each := range listed {
-		if each.Lineage == nil || each.Lineage.Root == "" || each.Lineage.Root == each.ID {
+		if !each.subagent() {
 			continue
 		}
 		forkAt := int64(0)
@@ -244,13 +230,40 @@ func (p *serverConnection) closeFeeds() {
 }
 
 func (f *serverFeed) run(ctx context.Context, live bool) {
+	err := f.startAfterInherited(ctx)
+	if err == nil {
+		err = f.watch(ctx, live)
+	}
+	f.p.events.run(f.p.c, func() {
+		key := feedKey{session: f.session, conversation: f.conversation}
+		if f.p.feeds[key] == f {
+			delete(f.p.feeds, key)
+		}
+	})
+	if err != nil && ctx.Err() == nil {
+		f.l.logf("conversation feed of %s ended: %v", f.conversation, err)
+	}
+}
+
+func (f *serverFeed) startAfterInherited(ctx context.Context) error {
+	if f.seen > 0 || f.subagent {
+		return nil
+	}
+	at, err := f.l.forkedAt(ctx, f.c, f.conversation)
+	if at > 0 {
+		f.seen, f.baselined = at, true
+	}
+	return err
+}
+
+func (f *serverFeed) watch(ctx context.Context, live bool) error {
 	window := map[string]any{"min": serverEntriesPerCall / 2, "max": serverEntriesPerCall}
 	if f.seen > 0 {
 		window["from"] = f.seen + 1
 	}
 	params := map[string]any{"conversation": f.conversation, "window": window}
 	first := true
-	err := f.c.Stream(ctx, "conversation/watch", params, func(raw json.RawMessage) {
+	return f.c.Stream(ctx, "conversation/watch", params, func(raw json.RawMessage) {
 		var item serverViewItem
 		if json.Unmarshal(raw, &item) != nil {
 			return
@@ -263,15 +276,6 @@ func (f *serverFeed) run(ctx context.Context, live bool) {
 			}
 		})
 	})
-	f.p.events.run(f.p.c, func() {
-		key := feedKey{session: f.session, conversation: f.conversation}
-		if f.p.feeds[key] == f {
-			delete(f.p.feeds, key)
-		}
-	})
-	if err != nil && ctx.Err() == nil {
-		f.l.logf("conversation feed of %s ended: %v", f.conversation, err)
-	}
 }
 
 func (f *serverFeed) apply(ctx context.Context, item serverViewItem, live bool) {

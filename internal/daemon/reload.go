@@ -232,6 +232,7 @@ func (d *Daemon) reloadSession(sessionID protocol.SessionID, cols, rows int) err
 	if session := d.store.Get(sessionID); session != nil {
 		d.awaitHarness(session.Agent)
 	}
+	sessionID = d.sessionItsTerminalShows(sessionID)
 	resume, err := d.reloadLiveOrPlanResume(sessionID, cols, rows)
 	if err != nil || resume == nil {
 		return err

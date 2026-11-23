@@ -213,3 +213,26 @@ func TestAnOpenOutpostSigmaSessionRevivesAfterSigmaIsTurnedOffWhileANewOneIsRefu
 	requireNoHomeSigmaServer(t, pair)
 	t.Logf("with sigma_enabled off, %s revived on the outpost into conversation %s; a new launch was refused: %s", id, tui.ConversationID, protocol.Deref(denied.Error))
 }
+
+func TestAnAnnotationAndAReloadOfAnOutpostSigmaSessionStartNoHomeSigmaServer(t *testing.T) {
+	pair := sigmaOutpostPair(t)
+	id, server, conversation := outpostSigmaAtWork(t, pair)
+	server.Reply(conversation, "Ready. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
+	annotated := testworld.Request(pair.App, protocol.SessionAnnotationsSubmitMessage{Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: "outpost-annotation", SessionID: protocol.SessionID(id), Text: "check the totals"},
+		protocol.EventSessionAnnotationsSubmitResult, func(r protocol.SessionAnnotationsSubmitResultMessage) bool {
+			return r.RequestID == "outpost-annotation"
+		})
+	if !annotated.Success {
+		t.Fatalf("annotation: %+v", annotated)
+	}
+	if got := server.Prompted(conversation); got.Text != "check the totals" {
+		t.Fatalf("the outpost's server took %+v, want the annotation", got)
+	}
+	reloaded := testworld.Request(pair.App, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(id), Cols: 100, Rows: 30},
+		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == id })
+	if !reloaded.Success {
+		t.Fatalf("reload: %s", protocol.Deref(reloaded.Error))
+	}
+	requireNoHomeSigmaServer(t, pair)
+}

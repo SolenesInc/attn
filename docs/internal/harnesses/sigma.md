@@ -159,11 +159,14 @@ measurement uses that one.
   `glob` and tool search (`packages/tools/src`). Sigma has no tool that sends
   the user a file.
 - `/fork` in the TUI starts a new conversation that inherits the entries up to
-  a point. The original conversation's watch gets nothing. The fork's first
-  entry is `sigma.forked`, naming the client's `SIGMA_AUTHOR_ID`, and
-  `conversation/list` gives the fork's `fork.of` (probe). `conversation/list`
-  takes a null payload and refuses an object with `Expected null` (probe on
-  43ebbba, 2026-11-22).
+  a point. The original conversation's watch gets nothing, and `status/watch`
+  says nothing of the fork until it works or waits: the tracker reports a tree
+  only when a commit changes either (source, `packages/sigma/src/status.ts`).
+  The fork's first entry is `sigma.forked`, naming the client's
+  `SIGMA_AUTHOR_ID`. `conversation/list` gives the fork's `fork.of` (probe)
+  and `fork.at`, the last entry it inherits (source,
+  `packages/protocol/src/index.ts`). `conversation/list` takes a null payload
+  and refuses an object with `Expected null` (probe on 43ebbba, 2026-11-22).
 - `tasks/watch` shows only `claude.run` tasks, from pending to running to gone
   at the run's end. Sigma sleeps only for a retry's backoff or a deferred poll
   inside a run, so no task outlives a run (probe, `packages/harness/src/live.ts`).

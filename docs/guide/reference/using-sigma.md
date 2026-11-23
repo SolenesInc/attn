@@ -43,11 +43,14 @@ refuses its registration, because Attn has the harness of that name.
   resumed or reloaded session keeps the instructions it started with, as a
   Claude Code session does.
 - `/fork` in a Sigma tile moves the tile to a new session for the fork, as
-  `/new` does in shared Codex. The conversation you forked from stays with its
-  session, which stays open and hidden. The new session's transcript follows
-  the forked conversation (including the history it inherited up to the fork),
-  while its title comes from the first prompt you type in the fork and its
-  usage, recent files, and pull requests start at the fork.
+  `/new` does in shared Codex. The tile moves when the fork starts work. If
+  you reload the tile, or send its session annotations, a review or a prompt
+  from your phone before then, Attn moves the tile first, so they reach the
+  fork. The conversation you forked from stays with its session, which stays
+  open and hidden. The new session's transcript follows the forked
+  conversation (including the history it inherited up to the fork), while its
+  title comes from the first prompt you type in the fork and its usage, recent
+  files, and pull requests start at the fork.
 - A delegation role that needs the attn-workflow skill installs it where Sigma
   finds skills: `skills` in the Sigma home, `skills` in `CLAUDE_CONFIG_DIR` (by
   default `~/.claude`), and `skills` in the folder of each Claude provider in

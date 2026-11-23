@@ -56,20 +56,31 @@ func (d *Daemon) conversationMoved(terminal protocol.TerminalID, m harness.Move)
 		d.conversationIn(terminal, observation)
 		return nil
 	}
+	receipt, err := d.proposeMove(terminal, observation)
+	if err != nil {
+		return refused(err)
+	}
+	if !receipt.MustWait() {
+		return nil
+	}
+	return receipt.Wait
+}
+
+func (d *Daemon) proposeMove(terminal protocol.TerminalID, observation agentConversationObservation) (*sessionmonitor.ConversationReceipt, error) {
 	if _, view, _, ours := d.resolveCaller(terminal); ours {
 		if view == "" {
 			d.logf("agent conversation: no terminal shows the conversation of %s", terminal)
-			return nil
+			return nil, nil
 		}
 		terminal = view
 	}
 	if observation.TranscriptPath == "" && !d.serverOwns(d.sessionInTerminal(terminal)) {
 		d.logf("agent conversation: ignored pathless observation terminal=%s native=%s", terminal, observation.NativeID)
-		return nil
+		return nil, nil
 	}
 	if session := d.store.Get(d.sessionInTerminal(terminal)); session != nil {
 		if err := d.admitConversation(session, observation.NativeID); err != nil {
-			return refused(err)
+			return nil, err
 		}
 	}
 	if held := d.store.GetSessionConversation(d.sessionInTerminal(terminal)).NativeID; held != "" && held != observation.NativeID {
@@ -77,12 +88,9 @@ func (d *Daemon) conversationMoved(terminal protocol.TerminalID, m harness.Move)
 	}
 	receipt, accepted := d.conversationIn(terminal, observation)
 	if !accepted {
-		return refused(errors.New("conversation observation could not be saved"))
+		return nil, errors.New("conversation observation could not be saved")
 	}
-	if !receipt.MustWait() {
-		return nil
-	}
-	return receipt.Wait
+	return receipt, nil
 }
 
 // conversationIn routes a conversation the harness in terminal t reports from SessionStart or

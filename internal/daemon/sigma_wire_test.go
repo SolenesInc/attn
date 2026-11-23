@@ -450,3 +450,71 @@ func TestChainedForkInASigmaTerminalFollowsToTheFinalFork(t *testing.T) {
 		t.Errorf("the chained fork's session counts %d tokens, want only the fork's 250", usage.TotalTokens)
 	}
 }
+
+func TestReloadRightAfterAnIdleSigmaForkOpensTheFork(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	app := w.App()
+	first, tui, server := appServerSession(t, w, app, fakeagent.Sigma)
+	terminal := app.Terminal(first)
+	original := tui.ConversationID
+	settleTwoSigmaPrompts(app, first, tui, server)
+
+	mark := len(app.Log())
+	typeInto(app, terminal, "/fork\r")
+	tui.Prompted()
+	forks := server.Forks(original)
+	if len(forks) != 1 {
+		t.Fatalf("the /fork made %v, want one fork", forks)
+	}
+	reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(first), Cols: 100, Rows: 30},
+		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == first })
+	if !reloaded.Success {
+		t.Fatalf("reload %s: %s", first, protocol.Deref(reloaded.Error))
+	}
+	shown := awaitTerminalSessionChange(app, mark, terminal, first)
+	testworld.Await(app, protocol.EventRuntimeRespawned, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.ID) == terminal })
+	if run := w.Launched(shown); run.ConversationID != forks[0] {
+		t.Errorf("reload opened conversation %s, want the fork %s the tile showed", run.ConversationID, forks[0])
+	}
+}
+
+func TestAnAnnotationRightAfterAnIdleSigmaForkReachesTheFork(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	app := w.App()
+	first, tui, server := appServerSession(t, w, app, fakeagent.Sigma)
+	terminal := app.Terminal(first)
+	original := tui.ConversationID
+	settleTwoSigmaPrompts(app, first, tui, server)
+
+	mark := len(app.Log())
+	typeInto(app, terminal, "/fork\r")
+	tui.Prompted()
+	forks := server.Forks(original)
+	if len(forks) != 1 {
+		t.Fatalf("the /fork made %v, want one fork", forks)
+	}
+	if r := submitSessionAnnotationFeedbackAs(app, first, "feedback-after-fork", "check the shipping total"); !r.Success || r.Status != "delivered" {
+		t.Fatalf("feedback: %+v", r)
+	}
+	if got := server.Prompted(forks[0]); got.Text != "check the shipping total" {
+		t.Fatalf("the fork %s took %+v, want the annotation", forks[0], got)
+	}
+	if shown := awaitTerminalSessionChange(app, mark, terminal, first); shown == first {
+		t.Errorf("the tile still shows %s after the annotation reached the fork", first)
+	}
+}
+
+func settleTwoSigmaPrompts(app *testworld.Peer, session string, tui *fakeagent.Run, server *fakeagent.AppServer) {
+	original := tui.ConversationID
+	promptUntilWorking(app, session, tui, server, "review checkout tests")
+	server.Reply(original, "The checkout tests are ready. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	mark := app.EventCount()
+	app.TypeLine(session, "review taxes")
+	tui.Prompted()
+	server.Prompted(original)
+	testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	mark = app.EventCount()
+	server.Reply(original, "The tax tests are ready. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+}

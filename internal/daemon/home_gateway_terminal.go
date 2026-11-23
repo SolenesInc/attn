@@ -245,7 +245,7 @@ func (d *Daemon) homeGatewaySubmitPrompt(conn *homeGatewayConn, message homegate
 	case strings.TrimSpace(message.Text) == "":
 		result.Message = protocol.Ptr("there is no text to send")
 	default:
-		attempt := d.placeDelivery(context.Background(), sessionID, sessionmonitor.ComposedInput(message.RequestID, message.Text))
+		attempt := d.placeDelivery(context.Background(), d.sessionItsTerminalShows(sessionID), sessionmonitor.ComposedInput(message.RequestID, message.Text))
 		if attempt.Stage == sessionmonitor.Placed {
 			result.Delivered = true
 		} else {

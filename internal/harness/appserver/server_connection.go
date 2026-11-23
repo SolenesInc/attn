@@ -33,7 +33,6 @@ type serverConnection struct {
 	tools              *serverToolsRegistration
 	feeds              map[feedKey]*serverFeed
 	judged             map[string]bool
-	forks              map[string]int64
 	subagentScanClient *effectrpc.Client
 	subagentScanAgain  bool
 	subagentScanLive   bool

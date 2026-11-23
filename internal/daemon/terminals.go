@@ -63,6 +63,28 @@ func (d *Daemon) terminalsOf(sessionID protocol.SessionID) []harness.TerminalID 
 	return d.terminals().Of(sessionID)
 }
 
+// sessionItsTerminalShows is the session whose conversation the terminal of sessionID shows once attn follows its program there.
+func (d *Daemon) sessionItsTerminalShows(sessionID protocol.SessionID) protocol.SessionID {
+	terminal := d.primaryTerminal(sessionID)
+	if terminal == "" {
+		return sessionID
+	}
+	fork, err := d.appServer.UnfollowedFork(d.life.Context(), terminal)
+	if fork != "" {
+		receipt, proposed := d.proposeMove(terminal, agentConversationObservation{NativeID: fork})
+		if err = proposed; err == nil {
+			err = receipt.Wait(d.life.Context())
+		}
+	}
+	if err != nil {
+		d.logf("following what terminal %s shows: %v", terminal, err)
+	}
+	if shown, ok := d.terminals().Showing(terminal); ok {
+		return shown
+	}
+	return sessionID
+}
+
 func (d *Daemon) primaryTerminal(sessionID protocol.SessionID) harness.TerminalID {
 	ids := d.terminalsOf(sessionID)
 	if len(ids) > 1 {
