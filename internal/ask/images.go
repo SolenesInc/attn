@@ -146,8 +146,14 @@ func ImagePaths(parts []protocol.AskPart, baseDir string) []string {
 }
 
 // ShownImages lists the images of ImagePaths for an ask being opened or amended, and refuses
-// the first image target that the app or the phone cannot show.
-func ShownImages(parts []protocol.AskPart, baseDir string) ([]string, error) {
+// the first image target that the app or the phone cannot show, and any image in a line that
+// reads inline: the subject, a question's first line, a choice's label or note.
+func ShownImages(subject string, parts []protocol.AskPart, baseDir string) ([]string, error) {
+	for _, field := range inlineFields(subject, parts) {
+		if targets := imageTargets(field.text); len(targets) > 0 {
+			return nil, protocol.Refuse(protocol.RefusalInvalidInput, "the ask shows the image %q in %s, which shows only its alt text there; put the image in the ask's markdown or in the question's context lines below its first line", targets[0].src, field.where)
+		}
+	}
 	for _, markdown := range renderedMarkdown(parts) {
 		for _, target := range imageTargets(markdown) {
 			if target.html {
@@ -159,6 +165,31 @@ func ShownImages(parts []protocol.AskPart, baseDir string) ([]string, error) {
 		}
 	}
 	return ImagePaths(parts, baseDir), nil
+}
+
+type inlineField struct {
+	where string
+	text  string
+}
+
+func inlineFields(subject string, parts []protocol.AskPart) []inlineField {
+	fields := []inlineField{{where: "the subject", text: subject}}
+	number := 0
+	for _, part := range parts {
+		question := part.Question
+		if question == nil {
+			continue
+		}
+		number++
+		fields = append(fields, inlineField{where: fmt.Sprintf("the first line of question %d", number), text: question.Prompt})
+		for _, choice := range question.Choices {
+			fields = append(fields, inlineField{where: fmt.Sprintf("the choice %q of question %d", Plain(choice.Label), number), text: choice.Label})
+			if choice.Description != nil {
+				fields = append(fields, inlineField{where: fmt.Sprintf("the note of choice %q in question %d", Plain(choice.Label), number), text: *choice.Description})
+			}
+		}
+	}
+	return fields
 }
 
 const whatAsksShow = "an ask shows a diagram drawn in a ```mermaid code block, and a local PNG, JPEG, GIF, WebP, BMP or TIFF file written ![alt](path)"

@@ -183,6 +183,43 @@ func TestAnAskOrAmendmentShowingAnImageThatWillNotRenderIsRefusedAndAStoredOneSt
 	}
 }
 
+func TestAnAskOrAmendmentShowingAnImageInALineThatReadsInlineIsRefused(t *testing.T) {
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Start()
+	app := s.App()
+	turnAsksOn(app)
+	asker := s.Spawn(app, fakeagent.Claude, s.Path("work"))
+	s.Launched(asker)
+	work := s.Path("work")
+	writeImage(t, filepath.Join(work, "layout.png"), 256)
+	opened := askAs(t, s, asker, work, "About the work.\n\n:::question\nShip it?\n- [ ] Yes\n- [ ] No\n:::\n")
+
+	for markdown, says := range map[string]string{
+		":::question\nShip ![layout](layout.png)?\n- [ ] Yes\n- [ ] No\n:::\n":               `the image "layout.png" in the first line of question 1`,
+		":::question\nShip <img src=\"layout.png\">?\n- [ ] Yes\n- [ ] No\n:::\n":            `the image "layout.png" in the first line of question 1`,
+		":::question\nShip it?\n- [ ] Yes ![layout](layout.png)\n- [ ] No\n:::\n":            `the image "layout.png" in the choice "Yes layout" of question 1`,
+		":::question\nShip it?\n- [ ] Yes — as ![layout](layout.png) shows\n- [ ] No\n:::\n": `the image "layout.png" in the note of choice "Yes" in question 1`,
+	} {
+		for _, args := range [][]string{{"ask"}, {"ask", "amend", opened.ID}} {
+			refused := s.Run(testworld.Invocation{Session: asker, Dir: work, Stdin: markdown, Args: args})
+			if refused.Code == 0 || !strings.Contains(refused.Stderr, says) || !strings.Contains(refused.Stderr, "the question's context lines") {
+				t.Errorf("%v of %q answered code %d and %q, want a refusal that says %q and points to the context lines", args, markdown, refused.Code, refused.Stderr, says)
+			}
+		}
+	}
+	subject := s.Run(testworld.Invocation{Session: asker, Dir: work, Stdin: "About the work.\n", Args: []string{"ask", "--subject", "Layout ![layout](layout.png)"}})
+	if says := `the image "layout.png" in the subject`; subject.Code == 0 || !strings.Contains(subject.Stderr, says) {
+		t.Errorf("an ask with an image in its subject answered code %d and %q, want a refusal that says %q", subject.Code, subject.Stderr, says)
+	}
+	if listed, err := s.Client().AskList(protocol.SessionID(asker)); err != nil || len(listed.Asks) != 1 || len(listed.Asks[0].Parts) != 2 {
+		t.Fatalf("after the refusals the agent lists %+v (%v), want its one ask, unamended", listed, err)
+	}
+	inContext := askAs(t, s, asker, work, ":::question\nShip it?\n![layout](layout.png)\n- [ ] Yes\n- [ ] No\n:::\n")
+	if got := askImage(t, app, inContext.ID, filepath.Join(work, "layout.png")); len(got) != 256 {
+		t.Fatalf("the image in the question's context lines shows %d bytes, want its 256", len(got))
+	}
+}
+
 func TestAnAskFromAFolderWhoseNameEndsInASpaceKeepsItsOwnImageAcrossARestart(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()

@@ -217,6 +217,57 @@ describe('asks on the phone', () => {
       ),
     )
   })
+  it('reads an image in a subject, a prompt or a choice as its alt text, with nothing to load or zoom', () => {
+    const pictured: Question = {
+      ...choiceQuestion,
+      prompt: 'Which layout reads easier? ![the prompt shot](shot.png)',
+      context: 'Compare: ![the context shot](shot.png)',
+      choices: [
+        {
+          label: 'Wide ![the wide shot](shot.png)',
+          description: 'as <img src="shot.png" alt="the html shot"> shows',
+        },
+        { label: 'Narrow', description: null },
+      ],
+      recommended: null,
+    }
+    const inline = ask(
+      'a-pictured',
+      1,
+      [{ markdown: null, question: pictured }],
+      'Layout ![the subject shot](shot.png)',
+    )
+    Scene.scene(
+      { update, view },
+      Scene.given(online(personal)),
+      arrive(personal, [inline]),
+      Scene.Command.expectExact(LoadImage),
+      Scene.Command.resolve(
+        LoadImage({ pairingId: personal.id, askId: inline.id, src: 'shot.png' }),
+        Message.LoadedImage({ key: `${personal.id}\na-pictured\nshot.png`, url: 'blob:shot' }),
+      ),
+      Scene.tap((simulation) => {
+        expect(entries('ask-entry', simulation.html)[0]).toContain('Layout the subject shot')
+      }),
+      Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
+      Scene.expect(Scene.role('heading', { name: 'Layout the subject shot' })).toExist(),
+      Scene.expect(Scene.role('img', { name: 'the context shot' })).toHaveAttr('src', 'blob:shot'),
+      Scene.expect(Scene.role('img', { name: 'the prompt shot' })).not.toExist(),
+      Scene.expect(Scene.role('img', { name: 'the wide shot' })).not.toExist(),
+      Scene.expect(Scene.role('img', { name: 'the html shot' })).not.toExist(),
+      Scene.expect(Scene.role('button', { name: /full screen/ })).toHaveAttr(
+        'aria-label',
+        'Open the context shot full screen',
+      ),
+      Scene.expect(Scene.role('radio', { name: /^Wide the wide shot/ })).toHaveAttr('aria-checked', 'false'),
+      Scene.tap((simulation) => {
+        const shown = Scene.textContent(Scene.getAllByTestId('ask-question-q1')(simulation.html)[0]!)
+        expect(shown).toContain('Which layout reads easier? the prompt shot')
+        expect(shown).toContain('as the html shot shows')
+        expect(shown).not.toContain('Loading')
+      }),
+    )
+  })
   it('lists the open asks of every home above the agents, oldest first', () => {
     Scene.scene(
       { update, view },

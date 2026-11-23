@@ -2428,6 +2428,87 @@ fn a_prompt_and_its_choices_show_their_inline_markdown_with_links_that_open_and_
     );
 }
 
+#[test]
+fn an_image_in_a_subject_prompt_or_choice_reads_as_its_alt_text_and_only_the_context_shows_a_picture()
+ {
+    let shot = "![the {name} shot](shots/shot.png)";
+    let pictured = |name: &str| shot.replace("{name}", name);
+    let mut layout = question(
+        "q1",
+        "one",
+        &format!("Which layout reads easier? {}", pictured("prompt")),
+        &[],
+    );
+    let asked = layout.question.as_mut().unwrap();
+    asked.context = Some(format!("Compare: {}", pictured("context")));
+    asked.choices = vec![
+        AskChoice {
+            label: format!("Wide {}", pictured("wide")),
+            description: Some(format!("as {} shows", pictured("note"))),
+        },
+        choice("Narrow"),
+    ];
+    let mut inline = ask(
+        "a-layout",
+        "api",
+        &format!("Layout {}", pictured("subject")),
+        30,
+        vec![layout],
+    );
+    inline.base_dir = "/tmp/api".into();
+    let mut world = start(vec![inline], vec![api_working()]);
+    world.daemon.on("ask_image", |r| {
+        serde_json::json!({
+            "event": "ask_image_result",
+            "request_id": r["request_id"],
+            "success": true,
+            "mime_type": "image/png",
+            "data_base64": PNG,
+        })
+    });
+    assert_eq!(
+        name(&world, "home.ask.a-layout.subject"),
+        "Layout the subject shot"
+    );
+    open_sheet(&mut world);
+    world.settle();
+
+    assert_eq!(name(&world, "asks.subject"), "Layout the subject shot");
+    let prompt: Vec<String> = world
+        .screen()
+        .descendants(Target::key("asks.q.q1.prompt"))
+        .into_iter()
+        .filter_map(|n| n.name.or(n.value))
+        .collect();
+    assert!(
+        prompt
+            .iter()
+            .any(|t| t == "Which layout reads easier? the prompt shot"),
+        "the prompt reads its picture's alt text: {prompt:?}"
+    );
+    assert_eq!(name(&world, "asks.q.q1.choice.0"), "Wide the wide shot");
+    let pictures: Vec<String> = world
+        .screen()
+        .descendants(Target::key("asks.ask"))
+        .into_iter()
+        .filter(|n| n.role == "image")
+        .filter_map(|n| n.name)
+        .collect();
+    assert_eq!(
+        pictures,
+        ["the context shot"],
+        "only the context draws its picture"
+    );
+
+    scroll_to(&mut world, "asks.q.q1.choice.0");
+    click(&mut world, "asks.q.q1.choice.0");
+    assert!(checked(&world, "asks.q.q1.choice.0"));
+    assert!(
+        sent_answers(&world).is_empty(),
+        "a click on the choice picks it and sends nothing"
+    );
+}
+
 const NOTES: &str = "https://example.com/notes";
 const MIGRATION_LINK: &str = "attn-seed:s-cache1";
 

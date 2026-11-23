@@ -133,17 +133,27 @@ export const mentionText = <Message>(
     : [text]
 
 const textOf = (node: Nodes): string =>
-  'value' in node ? node.value : 'children' in node ? node.children.map(textOf).join('') : ''
+  node.type === 'image' || node.type === 'imageReference'
+    ? (node.alt ?? '')
+    : 'value' in node
+      ? node.value
+      : 'children' in node
+        ? node.children.map(textOf).join('')
+        : ''
+
+type ImageShown = 'drawn' | 'as its alt text'
 
 const renderer = <Message>(
   definitions: ReadonlyMap<string, string>,
   context: MarkdownContext<Message>,
   h: HtmlBuilder<Message>,
+  images: ImageShown,
 ) => {
   const children = (node: Nodes, inLink = false): Array<Html | string> =>
     'children' in node ? node.children.map((child: RootContent) => render(child, inLink)) : []
 
-  const image = (src: string, alt: string): Html => {
+  const image = (src: string, alt: string): Html | string => {
+    if (images === 'as its alt text') return alt
     const shown = context.image(src)
     switch (shown.status) {
       case 'loaded':
@@ -284,7 +294,7 @@ export const renderMarkdown = <Message>(
   h: HtmlBuilder<Message>,
 ): Html => {
   const { root, definitions } = parsedMarkdown(markdown)
-  return h.div([h.Class('markdown')], renderer(definitions, context, h)(root))
+  return h.div([h.Class('markdown')], renderer(definitions, context, h, 'drawn')(root))
 }
 
 const onlyParagraph = (text: string) => {
@@ -299,7 +309,9 @@ export const renderInline = <Message>(
   h: HtmlBuilder<Message>,
 ): Array<Html | string> => {
   const line = onlyParagraph(text)
-  return line ? renderer(line.shown.definitions, context, h)(line.only) : mentionText(text, context, h)
+  return line
+    ? renderer(line.shown.definitions, context, h, 'as its alt text')(line.only)
+    : mentionText(text, context, h)
 }
 
 export const plainInline = (text: string): string => {

@@ -30,7 +30,7 @@ func TestShownImagesRefuseEachImageTheAppOrThePhoneCannotShow(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			parts := []protocol.AskPart{{Markdown: protocol.Ptr(tc.markdown)}}
-			got, err := ask.ShownImages(parts, "/work")
+			got, err := ask.ShownImages("", parts, "/work")
 			if err == nil {
 				t.Fatalf("ShownImages(%q) = %q, want a refusal that says %q", tc.markdown, got, tc.says)
 			}
@@ -46,7 +46,7 @@ func TestShownImagesRefuseEachImageTheAppOrThePhoneCannotShow(t *testing.T) {
 
 func TestShownImagesListTheLocalImagesInReadingOrder(t *testing.T) {
 	markdown := "![b](b.png) ![a](/tmp/a.webp) in code `![s](x.svg)`\n\n```mermaid\nflowchart LR\n  A --> B\n```\n"
-	got, err := ask.ShownImages([]protocol.AskPart{{Markdown: protocol.Ptr(markdown)}}, "/work")
+	got, err := ask.ShownImages("", []protocol.AskPart{{Markdown: protocol.Ptr(markdown)}}, "/work")
 	if want := []string{"/work/b.png", "/tmp/a.webp"}; err != nil || !slices.Equal(got, want) {
 		t.Fatalf("ShownImages = %q, %v; want %q", got, err, want)
 	}
