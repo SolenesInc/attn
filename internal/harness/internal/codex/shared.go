@@ -51,7 +51,6 @@ type codexShared struct {
 	host               harness.Host
 	terminals          harness.HostTerminals
 	facts              func() harness.Facts
-	trust              *sync.Mutex
 	notifySnapshot     func(profiles ...string)
 	enqueueUpdateCheck func()
 
@@ -111,12 +110,11 @@ type codexView struct {
 	unprompted map[string]bool
 }
 
-func newCodexShared(host harness.Host, facts func() harness.Facts, trust *sync.Mutex) *codexShared {
+func newCodexShared(host harness.Host, facts func() harness.Facts) *codexShared {
 	r := &codexShared{
 		host:                host,
 		terminals:           host.Terminals(),
 		facts:               facts,
-		trust:               trust,
 		servers:             make(map[string]*codexServer),
 		views:               make(map[harness.TerminalID]*codexView),
 		archivingAfterClose: make(map[string]int),

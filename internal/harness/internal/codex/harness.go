@@ -36,7 +36,7 @@ func newCodexHarness(host harness.Host) codexHarness {
 		host:  host,
 		trust: &sync.Mutex{},
 	}
-	h.shared = newCodexShared(host, h.Facts, h.trust)
+	h.shared = newCodexShared(host, h.Facts)
 	host.RegisterClientCommand(protocol.CmdRestartSharedCodex, true, h.handleRestartSharedCodex)
 	host.RegisterClientCommand(protocol.CmdInstallCodexUpdate, true, h.handleInstallCodexUpdate)
 	host.RegisterSocketCommand(protocol.CmdCodexStatus, h.handleCodexStatus)

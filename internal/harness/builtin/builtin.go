@@ -17,16 +17,9 @@ func All(host func(owner string) harness.Host, servers *appserver.Client) []harn
 	return []harness.Harness{claude.New(host("")), codex.New(host), sigma.New(host(""), servers)}
 }
 
-func facts() []harness.Facts {
-	return []harness.Facts{claude.Facts(), codex.Facts(), sigma.Facts()}
-}
-
 func FactsFor(id harness.ID) (harness.Facts, bool) {
-	id = strings.TrimSpace(strings.ToLower(id))
-	for _, f := range facts() {
-		if f.ID == id {
-			return f, true
-		}
+	if l := Launcher(id); l != nil {
+		return l.Facts(), true
 	}
 	return harness.Facts{}, false
 }
@@ -37,10 +30,10 @@ func Has(id harness.ID) bool {
 }
 
 func IDs() []harness.ID {
-	all := facts()
+	all := launchers()
 	ids := make([]harness.ID, len(all))
-	for i, f := range all {
-		ids[i] = f.ID
+	for i, l := range all {
+		ids[i] = l.Facts().ID
 	}
 	return ids
 }
@@ -61,9 +54,9 @@ func Launcher(id harness.ID) harness.DirectLauncher {
 
 func CallerEnvs() []harness.CallerEnv {
 	var callers []harness.CallerEnv
-	for _, f := range facts() {
-		if f.Caller != (harness.CallerEnv{}) {
-			callers = append(callers, f.Caller)
+	for _, l := range launchers() {
+		if caller := l.Facts().Caller; caller != (harness.CallerEnv{}) {
+			callers = append(callers, caller)
 		}
 	}
 	return callers

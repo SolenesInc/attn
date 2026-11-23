@@ -102,7 +102,7 @@ Use a plugin unless the harness must ship inside attn. Implement `driver.registe
 ### Add a built-in adapter
 
 1. Create a package under `internal/harness/internal/<name>/` implementing `New(...)` (`harness.Harness`), `Facts()`, `Launcher()` (`harness.DirectLauncher`), an embedded SVG `Logo`, and any shared optional parts (`OneShot`, `Trust`, `Transcript`, `CallerResolver`). If the harness speaks `attn-app-server-v2`, bind it through `internal/harness/appserver`.
-2. Register the adapter in `internal/harness/builtin/builtin.go` (`All`, `facts`, `launchers`) and add `<name>` to `builtinHarnessIDs` in `scripts/harnesslint/main.go`.
+2. Register the adapter in `internal/harness/builtin/builtin.go` (`All`, `launchers`) and add `<name>` to `builtinHarnessIDs` in `scripts/harnesslint/main.go`.
 3. If the harness reports through CLI hooks, add one hook file under `cli/attn/src/hooks/` that sends the existing neutral evidence messages.
 4. Add a fake harness in `internal/fakeagent/` and a conformance row in `internal/daemon/harness_conformance_wire_test.go`.
 5. Run `make generate-types` to update the capability table in `docs/guide/reference/harnesses.md`.
