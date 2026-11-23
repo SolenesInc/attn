@@ -1,6 +1,4 @@
-export function lines(text) {
-  return text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
-}
+const lines = (text) => (text === "" ? [] : text.split("\n"));
 
 export function matching(before, after) {
   const lengths = Array.from({ length: before.length + 1 }, () => new Uint32Array(after.length + 1));
@@ -18,55 +16,87 @@ export function matching(before, after) {
   return pairs;
 }
 
-export function changes(beforeText, afterText) {
-  const before = beforeText.split("\n");
-  const after = afterText.split("\n");
-  const pairs = matching(before, after);
-  const hunks = [];
+function hunks(before, after) {
+  const found = [];
   let i = 0;
   let j = 0;
   const flush = (toI, toJ) => {
-    if (toI > i || toJ > j) hunks.push({ removed: before.slice(i, toI), added: [j, toJ] });
-    i = toI;
-    j = toJ;
+    if (toI > i || toJ > j) found.push({ from: i, to: toI, start: j, end: toJ });
+    i = toI + 1;
+    j = toJ + 1;
   };
-  for (const [bi, aj] of pairs) {
-    flush(bi, aj);
-    i++;
-    j++;
-  }
+  for (const [bi, aj] of matching(before, after)) flush(bi, aj);
   flush(before.length, after.length);
-  return hunks;
+  return found;
+}
+
+export function changes(beforeText, afterText) {
+  const before = lines(beforeText);
+  return hunks(before, lines(afterText)).map(({ from, to, start, end }) => ({ removed: before.slice(from, to), added: [start, end] }));
+}
+
+function sideHunks(base, side, mine) {
+  return hunks(base, side).map(({ from, to, start, end }) => ({ from, to, lines: side.slice(start, end), mine }));
+}
+
+function overlap(a, b) {
+  if (a.from === a.to && b.from === b.to) return a.from === b.from;
+  return a.from < b.to && b.from < a.to;
+}
+
+function regions(mine, theirs) {
+  const all = [...mine, ...theirs].sort((a, b) => a.from - b.from || a.to - b.to);
+  const found = [];
+  for (const hunk of all) {
+    const last = found.at(-1);
+    if (last && overlap(last, hunk)) {
+      last.to = Math.max(last.to, hunk.to);
+      last.hunks.push(hunk);
+    } else found.push({ from: hunk.from, to: hunk.to, hunks: [hunk] });
+  }
+  return found;
+}
+
+function sideOf(base, region, mine) {
+  const out = [];
+  let at = region.from;
+  for (const hunk of region.hunks) {
+    if (hunk.mine !== mine) continue;
+    out.push(...base.slice(at, hunk.from), ...hunk.lines);
+    at = hunk.to;
+  }
+  out.push(...base.slice(at, region.to));
+  return out;
 }
 
 const same = (a, b) => a.length === b.length && a.every((line, index) => line === b[index]);
 
-export function merge3(base, mine, theirs) {
-  const b = lines(base);
-  const m = lines(mine);
-  const t = lines(theirs);
-  const toMine = matching(b, m);
-  const toTheirs = matching(b, t);
+function merge(baseText, mineText, theirsText) {
+  const base = lines(baseText);
+  const mine = lines(mineText);
+  const theirs = lines(theirsText);
   const merged = [];
-  let i = 0;
-  let mi = 0;
-  let ti = 0;
-  while (i <= b.length) {
-    let sync = i;
-    while (sync < b.length && !(toMine.has(sync) && toTheirs.has(sync))) sync++;
-    const mEnd = sync < b.length ? toMine.get(sync) : m.length;
-    const tEnd = sync < b.length ? toTheirs.get(sync) : t.length;
-    const baseChunk = b.slice(i, sync);
-    const mineChunk = m.slice(mi, mEnd);
-    const theirChunk = t.slice(ti, tEnd);
-    if (same(mineChunk, baseChunk)) merged.push(...theirChunk);
-    else if (same(theirChunk, baseChunk) || same(mineChunk, theirChunk)) merged.push(...mineChunk);
-    else return { conflict: true };
-    if (sync === b.length) break;
-    merged.push(b[sync]);
-    i = sync + 1;
-    mi = mEnd + 1;
-    ti = tEnd + 1;
+  let conflict = false;
+  let at = 0;
+  for (const region of regions(sideHunks(base, mine, true), sideHunks(base, theirs, false))) {
+    merged.push(...base.slice(at, region.from));
+    const ours = sideOf(base, region, true);
+    const disk = sideOf(base, region, false);
+    const mineChanged = region.hunks.some((hunk) => hunk.mine);
+    const diskChanged = region.hunks.some((hunk) => !hunk.mine);
+    if (mineChanged && diskChanged && !same(ours, disk)) conflict = true;
+    merged.push(...(mineChanged ? ours : disk));
+    at = region.to;
   }
-  return { conflict: false, text: merged.join("") };
+  merged.push(...base.slice(at));
+  return { conflict, text: merged.join("\n") };
+}
+
+export function merge3(base, mine, theirs) {
+  const { conflict, text } = merge(base, mine, theirs);
+  return conflict ? { conflict: true } : { conflict: false, text };
+}
+
+export function mergeKeepingMine(base, mine, theirs) {
+  return merge(base, mine, theirs).text;
 }

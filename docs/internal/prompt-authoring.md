@@ -108,10 +108,12 @@ You and the user edit the same checkout files. Typing in a fragment edits its
 file, Ctrl or Cmd S saves every unsaved file, and the browser warns before it
 leaves a page with unsaved edits. When a file changes on disk, the page takes
 the new text. If the page holds an unsaved edit of that file, it keeps both
-edits; when they touch the same lines, the fragment shows the text on disk with
-Keep mine and Use disk, and saving skips the file until the user chooses. A
-change to the Go definitions, the catalog, a scenario or a situation redraws the
-page and keeps unsaved edits.
+edits, including edits on adjacent lines. When both change the same lines, the
+fragment shows the text on disk with Keep mine and Use disk, and saving skips
+the file until the user chooses. Keep mine keeps the user's text on those lines
+and takes the disk's changes elsewhere in the file. Use disk takes the text on
+disk. A change to the Go definitions, the catalog, a scenario or a situation
+redraws the page and keeps unsaved edits.
 
 The Diff button, or Ctrl or Cmd Shift D, shows each fragment's change against
 the merge-base with the branch chosen beside it in the header. That is `main`

@@ -47,9 +47,9 @@ function titleFor(page) {
 
 async function load() {
   const page = await api("page", { ...target, flips, ...(diff ? { base: $("base").value } : {}) });
-  files.take(page.sources);
-  files.detachAll();
   const scroll = window.scrollY;
+  files.take(page.sources);
+  files.destroyFragments();
   $("base-commit").textContent = page.base_commit ? page.base_commit.slice(0, 10) : "";
   const drawn = renderPage(page, { files, flips, flip, navigation, expanded: marks, base: diff ? page.base ?? {} : undefined });
   rows = drawn.rows;
@@ -60,12 +60,18 @@ async function load() {
   window.scrollTo(0, scroll);
 }
 
+function showEmpty(message) {
+  rows = [];
+  files.destroyFragments();
+  documentRoot.replaceChildren(el("p", { class: "empty" }, message));
+  documentRoot.setAttribute("aria-busy", "false");
+}
+
 async function openTarget() {
   target = targetFromHash();
   flips = {};
   if (!target) {
-    documentRoot.replaceChildren(el("p", { class: "empty" }, "Press Ctrl K to open a situation, a scenario or an event."));
-    documentRoot.setAttribute("aria-busy", "false");
+    showEmpty("Press Ctrl K to open a situation, a scenario or an event.");
     picker.show();
     return;
   }
@@ -75,10 +81,7 @@ async function openTarget() {
     await load();
     notice("");
   } catch (error) {
-    rows = [];
-    files.detachAll();
-    documentRoot.replaceChildren(el("p", { class: "empty" }, `This page did not open: ${error.message}`));
-    documentRoot.setAttribute("aria-busy", "false");
+    showEmpty(`This page did not open: ${error.message}`);
     titleFor({ events: [] });
     notice(error.message, "error");
   }

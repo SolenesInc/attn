@@ -1,4 +1,4 @@
-import { merge3 } from "./merge.js";
+import { merge3, mergeKeepingMine } from "./merge.js";
 
 export function sliceRange(text, node) {
   let from = 0;
@@ -53,7 +53,9 @@ export class Files {
 
   keepMine(path) {
     const file = this.#files.get(path);
-    Object.assign(file, { disk: file.conflict.text, revision: file.conflict.revision, conflict: null });
+    const local = mergeKeepingMine(file.disk, file.local, file.conflict.text);
+    Object.assign(file, { disk: file.conflict.text, revision: file.conflict.revision, local, conflict: null });
+    this.#refresh(path);
     this.#notify();
   }
 
@@ -98,7 +100,9 @@ export class Files {
     this.#fragments.get(path).add({ node, view, replace });
   }
 
-  detachAll() {
+  destroyFragments() {
+    for (const fragments of this.#fragments.values())
+      for (const { view } of fragments) view.destroy();
     this.#fragments.clear();
   }
 

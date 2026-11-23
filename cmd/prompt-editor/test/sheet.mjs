@@ -6,6 +6,50 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, expect } from "@playwright/test";
+import { merge3, mergeKeepingMine } from "../web/sheet/merge.js";
+
+// C15: merge3 against its rules. Each side's edits are base-relative line ranges; two ranges overlap when they share a base line, or are insertions at the same point. Disjoint edits merge, adjacent ones included; overlapping, different edits conflict, and keeping mine keeps the disk's other edits.
+{
+  let seed = 1;
+  const random = (below) => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed % below;
+  };
+  const overlaps = (a, b) => (a.from === a.to && b.from === b.to ? a.from === b.from : a.from < b.to && b.from < a.to);
+  const sameEdit = (a, b) => a.from === b.from && a.to === b.to && a.lines.join() === b.lines.join();
+  const apply = (lines, edits) => {
+    const out = [];
+    let at = 0;
+    for (const edit of [...edits].sort((a, b) => a.from - b.from || a.to - b.to)) {
+      out.push(...lines.slice(at, edit.from), ...edit.lines);
+      at = edit.to;
+    }
+    return [...out, ...lines.slice(at)].join("\n");
+  };
+  let tokens = 0;
+  const editWithin = (from, end, side) => {
+    for (;;) {
+      const start = from + random(end - from + 1);
+      const edit = { from: start, to: start + random(end - start + 1), lines: Array.from({ length: random(3) }, () => `${side}${tokens++}`) };
+      if (edit.from < edit.to || edit.lines.length) return edit;
+    }
+  };
+  for (let run = 0; run < 3000; run++) {
+    const base = Array.from({ length: random(9) }, (_, index) => `line ${index}`);
+    if (base.length && random(2)) base.push("");
+    const baseText = base.join("\n");
+    const mine = editWithin(0, base.length, "mine ");
+    const theirs = [random(5) ? editWithin(0, base.length, "disk ") : mine];
+    if (theirs[0].to + 1 < base.length && random(2)) theirs.push(editWithin(theirs[0].to + 1, base.length, "disk "));
+    const kept = theirs.filter((edit) => !sameEdit(edit, mine));
+    const apart = kept.filter((edit) => !overlaps(edit, mine));
+    const cases = { baseText, mine, theirs };
+    const merged = merge3(baseText, apply(base, [mine]), apply(base, theirs));
+    if (apart.length === kept.length) assert.deepEqual(merged, { conflict: false, text: apply(base, [mine, ...kept]) }, JSON.stringify(cases));
+    else assert.deepEqual(merged, { conflict: true }, JSON.stringify(cases));
+    assert.equal(mergeKeepingMine(baseText, apply(base, [mine]), apply(base, theirs)), apply(base, [mine, ...apart]), JSON.stringify(cases));
+  }
+}
 
 const repo = fileURLToPath(new URL("../../..", import.meta.url));
 const fixture = await fs.mkdtemp(path.join(os.tmpdir(), "prompt-editor-sheet-"));
@@ -53,6 +97,17 @@ try {
   const page = await context.newPage();
   page.on("pageerror", (error) => pageErrors.push(String(error)));
   page.on("console", (message) => { if (message.type() === "error" && !message.text().startsWith("Failed to load resource")) pageErrors.push(message.text()); });
+  const cdp = await context.newCDPSession(page);
+  let viewPrototype;
+  const liveEditorViews = async () => {
+    await cdp.send("HeapProfiler.collectGarbage");
+    viewPrototype ??= (await cdp.send("Runtime.evaluate", { expression: 'Object.getPrototypeOf(document.querySelector("#document .cm-content").cmTile.root.view)' })).result.objectId;
+    const { objects } = await cdp.send("Runtime.queryObjects", { prototypeObjectId: viewPrototype });
+    const { result } = await cdp.send("Runtime.callFunctionOn", { objectId: objects.objectId, functionDeclaration: "function () { return this.length; }", returnByValue: true });
+    await cdp.send("Runtime.releaseObject", { objectId: objects.objectId });
+    return result.value;
+  };
+  const expectOnlyMountedViews = async () => assert.equal(await liveEditorViews(), await page.locator("#document .cm-editor").count());
   const saveState = page.locator("#save-state");
   const row = (name, scope = page) => scope.locator(`.row[data-path="content/${name}"]`);
   const editor = (name, scope = page) => row(name, scope).locator(".cm-content");
@@ -138,6 +193,24 @@ try {
   await page.keyboard.press("Enter");
   await expect(page.locator("#title-id")).toHaveText("crew-member-start");
   await expect(editor(wake, wakeEvent)).toContainText("Twice. This is a new session.");
+
+  // C14: switching pages frees the editors it discards and keeps unsaved text.
+  for (const id of ["delegate-start", "crew-member-start", "delegate-start", "crew-member-start"]) {
+    await page.keyboard.press("ControlOrMeta+k");
+    await page.getByLabel("Open a situation, scenario or event").fill(`situation ${id}`);
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#title-id")).toHaveText(id);
+  }
+  await expect(editor(wake, wakeEvent)).toContainText("Twice. This is a new session.");
+  await expect(saveState).toHaveText(/1 unsaved file/);
+  await expectOnlyMountedViews();
+  await page.evaluate(() => { location.hash = ""; });
+  await expect(page.locator("#document .empty")).toBeVisible();
+  assert.equal(await liveEditorViews(), 0);
+  await page.getByLabel("Open a situation, scenario or event").fill("situation crew-member-start");
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#title-id")).toHaveText("crew-member-start");
+  await expect(editor(wake, wakeEvent)).toContainText("Twice. This is a new session.");
   assert.ok(!(await read(wake)).startsWith("Twice."));
   await page.keyboard.press("ControlOrMeta+s");
   await expect(saveState).toHaveText("All saved");
@@ -171,10 +244,21 @@ try {
   await expect(saveState).toHaveText("All saved");
   assert.equal(await read(capture), "Local. " + diskTwo);
 
+  // C15: edits on adjacent lines merge and both are saved.
+  await typeAtStart(capture, "Near. ");
+  const adjacent = await changeLine(1, (line) => line + " Next line.");
+  await expect(editor(capture)).toContainText("Next line.");
+  await expect(row(capture).locator(".conflict")).toBeHidden();
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect(saveState).toHaveText("All saved");
+  assert.equal(await read(capture), "Near. " + adjacent);
+
+  // C15: an edit on the line I changed conflicts; Keep mine keeps my line and the disk's change elsewhere.
   await typeAtStart(capture, "Mine. ");
-  const theirs = await changeLine(0, (line) => "Theirs. " + line);
+  await changeLine(0, (line) => "Theirs. " + line);
+  const theirs = await changeLine(4, (line) => line + " Elsewhere.");
   await expect(row(capture).locator(".conflict")).toBeVisible();
-  await expect(row(capture).locator(".conflict-disk")).toContainText("Theirs. Local. ");
+  await expect(row(capture).locator(".conflict-disk")).toContainText("Theirs. Near. Local. ");
   await expect(saveState).toHaveText(/1 in conflict/);
   if (artifacts) await row(capture).screenshot({ path: path.join(artifacts, "conflict.png") });
   await page.keyboard.press("ControlOrMeta+s");
@@ -184,7 +268,10 @@ try {
   await expect(row(capture).locator(".conflict")).toBeHidden();
   await page.keyboard.press("ControlOrMeta+s");
   await expect(saveState).toHaveText("All saved");
-  assert.equal(await read(capture), "Mine. Local. " + diskTwo);
+  const kept = theirs.split("\n");
+  kept[0] = kept[0].replace("Theirs. ", "Mine. ");
+  assert.equal(await read(capture), kept.join("\n"));
+  await expect(editor(capture)).toContainText("Elsewhere.");
 
   await typeAtStart(capture, "Dropped. ");
   const disk = await changeLine(0, (line) => "Disk wins. " + line);
@@ -215,6 +302,7 @@ try {
   await expect(page.locator("#diff")).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator(".row.folded")).toHaveCount(0);
   await expect(page.locator(".cm-added")).toHaveCount(0);
+  await expectOnlyMountedViews();
   commit("C9 diff");
 
   // A changed scenario or definition asks for the page again and keeps unsaved text.
