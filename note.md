@@ -1,0 +1,1 @@
+Fixes red main: when another delivery of the recipient's inbox reached a new steer or interrupt first, the sender read a generic "not taking input" reply. It now reads that the message waits for the turn to end.
