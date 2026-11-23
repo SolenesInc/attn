@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: terminal wait --until prompt returned before attn's typed command started, so terminal_run refused",
+  "at": "2026-11-23T12:20:06.587Z",
+  "repairs": "f36da3061f46a509357277c731494ce8c7528baf"
+}
