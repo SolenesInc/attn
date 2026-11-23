@@ -1104,7 +1104,7 @@ fn condition(ask: &str, question: &AskQuestion, answer: &Shown<'_>, t: &Tokens) 
         .choices
         .iter()
         .filter(|choice| answer.picked(&choice.label))
-        .map(|choice| choice.label.as_str())
+        .map(|choice| Line::plain(&choice.label))
         .collect::<Vec<_>>()
         .join(", ");
     let label = format!("Condition on {picked}");

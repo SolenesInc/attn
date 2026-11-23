@@ -2314,6 +2314,7 @@ fn a_prompt_and_its_choices_show_their_inline_markdown_with_links_that_open_and_
         )],
         vec![api_working()],
     );
+    assert_eq!(name(&world, "home.ask.a-sign.subject"), "Sign in to Sigma");
     open_sheet(&mut world);
 
     assert_eq!(name(&world, "asks.subject"), "Sign in to Sigma");

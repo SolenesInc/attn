@@ -274,7 +274,8 @@ const ASKER_SHARE: f32 = 0.5;
 fn ask_row(item: &AskItem<'_>, t: &Tokens) -> El {
     let id = item.ask.id.clone();
     let key = format!("home.ask.{id}");
-    ListRow::new(key.clone(), format!("{}: {}", item.from, item.ask.subject))
+    let subject = crate::asks::inline::Line::plain(&item.ask.subject);
+    ListRow::new(key.clone(), format!("{}: {subject}", item.from))
         .lead(system::glyph("?", IconSize::Regular, t.accent))
         .title_el(
             Inline::joined()
@@ -288,7 +289,7 @@ fn ask_row(item: &AskItem<'_>, t: &Tokens) -> El {
                         .max_w_frac(ASKER_SHARE),
                 )
                 .child(
-                    words(item.ask.subject.clone(), Type::Body, t.text_secondary)
+                    words(subject, Type::Body, t.text_secondary)
                         .key(format!("{key}.subject"))
                         .single_line()
                         .truncate()

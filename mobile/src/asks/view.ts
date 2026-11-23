@@ -181,7 +181,12 @@ const repliedAnswer = <Message>(
   answer: RepliedAnswer | undefined,
   h: HtmlBuilder<Message>,
 ): Html => {
-  const shown = [...(answer?.picked ?? []), answer?.other ?? '', answer?.text ?? '', ...(answer?.files ?? [])]
+  const shown = [
+    ...(answer?.picked ?? []).map(plainInline),
+    answer?.other ?? '',
+    answer?.text ?? '',
+    ...(answer?.files ?? []),
+  ]
     .filter(Boolean)
     .join(' · ')
   const replied = h.p([h.Class(`replied${shown ? '' : ' none'}`)], [shown || 'Not answered'])

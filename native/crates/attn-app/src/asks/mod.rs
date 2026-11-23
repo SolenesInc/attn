@@ -1,5 +1,5 @@
 mod attach;
-mod inline;
+pub(crate) mod inline;
 mod mentions;
 mod saving;
 mod view;
