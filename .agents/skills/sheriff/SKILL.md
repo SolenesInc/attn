@@ -33,10 +33,14 @@ and recorded.
   `attn seed check confirm <seed> <C#>` or
   `attn seed check reject <seed> <C#> -m "<what would prove it>" --ring`. Once
   every check is confirmed (or when abandoning the delegate), record the landed
-  repair SHA and close the delegate by session id
-  (`attn agent close <session> -m "<why>"`), because a closed seed has no
-  tender. Leave the delegate open after a rejection so the delegate can act on
-  the ring.
+  repair SHA and close the delegate, because a closed seed has no tender. Close
+  a delegate of this run by session id
+  (`attn agent close <session> -m "<why>"`). A delegate of an earlier run is
+  outside your delegation chain, so `attn agent close` refuses it: tell it to
+  close itself
+  (`attn agent msg <session> "Reviewed: <verdict>. Close yourself with attn agent close --self -m <why>."`).
+  Leave the delegate open after a rejection so the delegate can act on the
+  ring.
 - Check live-author owners passively with `attn agent peek <session>`. If the
   author landed a repair, review the commit and record its SHA. If the author
   closed without fixing the failure, declined, or stayed idle for about 30
