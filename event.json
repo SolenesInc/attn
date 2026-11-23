@@ -1,0 +1,12 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "terminal wait --until prompt returned before attn's typed command started, so terminal_run refused",
+  "at": "2026-11-23T12:20:03.095Z",
+  "severity": "p1",
+  "source": "agent",
+  "location": {
+    "path": "internal/daemon/commands_terminal.go"
+  },
+  "culprit": "f36da3061f46a509357277c731494ce8c7528baf"
+}
