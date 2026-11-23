@@ -38,6 +38,9 @@ type HomeGatewayAsk struct {
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID string `json:"session_id"`
 
+	// Stranded corresponds to the JSON schema field "stranded".
+	Stranded *bool `json:"stranded,omitempty,omitzero"`
+
 	// Subject corresponds to the JSON schema field "subject".
 	Subject string `json:"subject"`
 
@@ -80,6 +83,9 @@ type HomeGatewayAskAnswerCommand struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
+
+	// ToChief corresponds to the JSON schema field "to_chief".
+	ToChief *bool `json:"to_chief,omitempty,omitzero"`
 }
 
 type HomeGatewayAskAnswerResult struct {

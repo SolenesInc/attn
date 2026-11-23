@@ -4396,6 +4396,10 @@ model Ask {
   // The files the draft names, from the ask's own attachments. A file that is
   // not ready never finished uploading.
   draft_files?: AskDraftFile[];
+  // No agent takes the answer: the asking session closed, or nobody tends the
+  // seed and no answer resumes its tender. An answer or follow-up with
+  // to_chief goes to the profile's Chief instead.
+  stranded?: boolean;
 }
 
 // An unsent answer, saved whole. attachments name the note's files, uploaded
@@ -4563,6 +4567,10 @@ model AskAnswerMessage {
   answers: AskAnswer[];
   note?: string;
   attachments?: string[];
+  // Send the answer to the profile's Chief, because the ask is stranded. Refused
+  // while an agent takes the answer, and when the profile has no Chief. An ask
+  // about a seed still keeps the answer as a note.
+  to_chief?: boolean;
 }
 
 model AskAnswerResultMessage {
@@ -4582,6 +4590,8 @@ model AskFollowUpMessage {
   request_id: string;
   ask_id: string;
   text: string;
+  // Send the follow-up to the profile's Chief, as an answer's to_chief does.
+  to_chief?: boolean;
 }
 
 model AskFollowUpResultMessage {

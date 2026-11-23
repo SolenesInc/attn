@@ -40,6 +40,9 @@
       "session_id": {
         "type": "string"
       },
+      "stranded": {
+        "type": "boolean"
+      },
       "subject": {
         "type": "string"
       },
@@ -111,6 +114,9 @@
       },
       "request_id": {
         "type": "string"
+      },
+      "to_chief": {
+        "type": "boolean"
       }
     },
     "required": [

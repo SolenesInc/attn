@@ -589,6 +589,9 @@ type Ask struct {
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID SessionID `json:"session_id"`
 
+	// Stranded corresponds to the JSON schema field "stranded".
+	Stranded *bool `json:"stranded,omitempty,omitzero"`
+
 	// Subject corresponds to the JSON schema field "subject".
 	Subject string `json:"subject"`
 }
@@ -651,6 +654,9 @@ type AskAnswerMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
+
+	// ToChief corresponds to the JSON schema field "to_chief".
+	ToChief *bool `json:"to_chief,omitempty,omitzero"`
 }
 
 type AskAnswerResultMessage struct {
@@ -762,6 +768,9 @@ type AskFollowUpMessage struct {
 
 	// Text corresponds to the JSON schema field "text".
 	Text string `json:"text"`
+
+	// ToChief corresponds to the JSON schema field "to_chief".
+	ToChief *bool `json:"to_chief,omitempty,omitzero"`
 }
 
 type AskFollowUpResultMessage struct {

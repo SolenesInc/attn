@@ -78,6 +78,7 @@ export interface HomeGatewayAsk {
     seed_slug?:       string;
     seed_title?:      string;
     session_id:       string;
+    stranded?:        boolean;
     subject:          string;
     too_large_bytes?: number;
     [property: string]: any;
@@ -163,6 +164,7 @@ export interface HomeGatewayAskAnswerCommand {
     cmd:        HomeGatewayAskAnswerCommandCmd;
     note?:      string;
     request_id: string;
+    to_chief?:  boolean;
     [property: string]: any;
 }
 
@@ -212,6 +214,7 @@ export interface Ask {
     seed_slug?:       string;
     seed_title?:      string;
     session_id:       string;
+    stranded?:        boolean;
     subject:          string;
     too_large_bytes?: number;
     [property: string]: any;
@@ -1507,6 +1510,7 @@ const typeMap: any = {
         { json: "seed_slug", js: "seed_slug", typ: u(undefined, "") },
         { json: "seed_title", js: "seed_title", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: "" },
+        { json: "stranded", js: "stranded", typ: u(undefined, true) },
         { json: "subject", js: "subject", typ: "" },
         { json: "too_large_bytes", js: "too_large_bytes", typ: u(undefined, 0) },
     ], "any"),
@@ -1566,6 +1570,7 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("HomeGatewayAskAnswerCommandCmd") },
         { json: "note", js: "note", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
+        { json: "to_chief", js: "to_chief", typ: u(undefined, true) },
     ], "any"),
     "HomeGatewayAskAnswerResult": o([
         { json: "ask_id", js: "ask_id", typ: "" },
@@ -1597,6 +1602,7 @@ const typeMap: any = {
         { json: "seed_slug", js: "seed_slug", typ: u(undefined, "") },
         { json: "seed_title", js: "seed_title", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: "" },
+        { json: "stranded", js: "stranded", typ: u(undefined, true) },
         { json: "subject", js: "subject", typ: "" },
         { json: "too_large_bytes", js: "too_large_bytes", typ: u(undefined, 0) },
     ], "any"),

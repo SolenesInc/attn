@@ -235,6 +235,9 @@ model HomeGatewayAsk {
   reply?: HomeGatewayAskReply;
   too_large_bytes?: int32;
   max_frame_bytes?: int32;
+  // Since api 10: no agent takes the answer, as the desktop's ask says. An
+  // answer with to_chief goes to the profile's Chief instead.
+  stranded?: boolean;
 }
 
 // Answers an ask through the same path as the desktop. The home answers with
@@ -245,6 +248,9 @@ model HomeGatewayAskAnswerCommand {
   ask_id: string;
   answers: HomeGatewayAskAnswer[];
   note?: string;
+  // Since api 10: send the answer to the profile's Chief, because the ask is
+  // stranded; the desktop's ask_answer to_chief says what refuses it.
+  to_chief?: boolean;
 }
 
 model HomeGatewayAskAnswerResult {
