@@ -95,6 +95,26 @@ kbd {
 }
 .notice:empty { display: none; }
 .notice[data-kind="error"] { color: var(--error); }
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 1140px;
+  margin: 10px auto 0;
+  padding: 8px 12px;
+  color: var(--warning);
+  background: var(--warning-wash);
+  border-radius: 4px;
+}
+.banner[hidden] { display: none; }
+.banner p { margin: 0; flex: 1; }
+.banner button {
+  padding: 2px 10px;
+  background: var(--surface);
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  cursor: pointer;
+}
 .sheet {
   max-width: 1180px;
   margin: 12px auto 48px;

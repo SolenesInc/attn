@@ -103,7 +103,8 @@ as chips with their values. A fragment that fills a placeholder, or a
 producer's output such as `crew/priming`, sits in a block under its parent. A
 branch the scenario does not deliver is a stub that opens to its fragments, and
 a flag's stub flips the flag for the page without writing anything. Ctrl or Cmd
-K opens another situation, scenario or event, and unsaved edits stay.
+K opens another situation, scenario or event, or a source file's raw text, and
+unsaved edits stay.
 
 You and the user edit the same checkout files. Typing in a fragment edits its
 file, Ctrl or Cmd S saves every unsaved file, and the browser warns before it
@@ -113,8 +114,23 @@ edits, including edits on adjacent lines. When both change the same lines, the
 fragment shows the text on disk with Keep mine and Use disk, and saving skips
 the file until the user chooses. Keep mine keeps the user's text on those lines
 and takes the disk's changes elsewhere in the file. Use disk takes the text on
-disk. A change to the Go definitions, the catalog, a scenario or a situation
-redraws the page and keeps unsaved edits.
+disk. A change to the catalog, a scenario or a situation redraws the page and
+keeps unsaved edits.
+
+A change to the Go definitions redraws the page too, but the catalog still
+holds the old composition. The page shows that composition under a warning, and
+saving is refused. Refresh Go definitions in the warning regenerates the catalog
+and redraws the page, keeping unsaved edits.
+
+When a source file holds text the catalog refuses, such as an unbound
+placeholder, no page opens, because the catalog validates every event together.
+Each page shows the catalog's error, which names the event and the fragment but
+not the file. Find the file in Ctrl or Cmd K by its path, fix its raw text and
+save, and pages open again. When the Go definitions changed too, the warning
+shows over the error, and its refresh may be what the page needs. When a Go
+change needs a source changed with it, such as a renamed placeholder, edit that
+source outside the page, then refresh: the page refuses to save it against the
+old catalog.
 
 The Diff button, or Ctrl or Cmd Shift D, shows each fragment's change against
 the merge-base with the branch chosen beside it in the header. That is `main`

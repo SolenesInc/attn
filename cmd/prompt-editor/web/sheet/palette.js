@@ -1,7 +1,7 @@
 import { el } from "./dom.js";
 
 export function palette({ items, open }) {
-  const input = el("input", { type: "search", class: "palette-input", "aria-label": "Open a situation, scenario or event", placeholder: "Open a situation, scenario or event", autocomplete: "off", spellcheck: "false" });
+  const input = el("input", { type: "search", class: "palette-input", "aria-label": "Open a situation, scenario, event or file", placeholder: "Open a situation, scenario, event or file", autocomplete: "off", spellcheck: "false" });
   const list = el("ul", { class: "palette-list", role: "listbox" });
   const dialog = el("div", { class: "palette", role: "dialog", "aria-label": "Open", hidden: true },
     el("div", { class: "palette-box" }, input, list,

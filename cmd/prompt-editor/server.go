@@ -157,7 +157,7 @@ func (e *editor) catalog(w http.ResponseWriter) {
 		return
 	}
 	if err := e.freshness(snapshot); err != nil {
-		catalog.Validation = err.Error()
+		catalog.Stale = err.Error()
 	}
 	respond(w, catalog)
 }

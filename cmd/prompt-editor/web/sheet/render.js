@@ -9,6 +9,13 @@ export function renderPage(page, context) {
   return { sections, rows };
 }
 
+export function renderFile(path, context) {
+  const rows = [];
+  const doc = el("div", { class: "doc" });
+  textRow({ kind: "text", source: path, verbatim: true, keep_final_newline: true }, undefined, doc, { ...context, rows, sources: {}, values: {}, producers: {} }, 0, false);
+  return { sections: [el("section", { class: "event", "data-file": path }, doc)], rows };
+}
+
 function renderEvent(event, index, scope) {
   const doc = el("div", { class: "doc" });
   walk(event.definition.body, event.trace, doc, eventScope(scope, event), 0, false);

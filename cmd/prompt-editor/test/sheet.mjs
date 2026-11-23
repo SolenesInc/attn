@@ -183,13 +183,13 @@ try {
 
   // C7: another situation from the palette keeps unsaved edits.
   await page.keyboard.press("ControlOrMeta+k");
-  await page.getByLabel("Open a situation, scenario or event").fill("delegate-start");
+  await page.getByLabel("Open a situation, scenario, event or file").fill("delegate-start");
   await page.keyboard.press("Enter");
   await expect(page.locator("#title-id")).toHaveText("delegate-start");
   await expect(page.locator(".event h2")).toHaveText(["session/launch", "session/garden-ready", "delegation/opening"]);
   await expect(saveState).toHaveText(/1 unsaved file/);
   await page.keyboard.press("ControlOrMeta+k");
-  await page.getByLabel("Open a situation, scenario or event").fill("situation crew-member");
+  await page.getByLabel("Open a situation, scenario, event or file").fill("situation crew-member");
   await page.keyboard.press("Enter");
   await expect(page.locator("#title-id")).toHaveText("crew-member-start");
   await expect(editor(wake, wakeEvent)).toContainText("Twice. This is a new session.");
@@ -197,7 +197,7 @@ try {
   // C14: switching pages frees the editors it discards and keeps unsaved text.
   for (const id of ["delegate-start", "crew-member-start", "delegate-start", "crew-member-start"]) {
     await page.keyboard.press("ControlOrMeta+k");
-    await page.getByLabel("Open a situation, scenario or event").fill(`situation ${id}`);
+    await page.getByLabel("Open a situation, scenario, event or file").fill(`situation ${id}`);
     await page.keyboard.press("Enter");
     await expect(page.locator("#title-id")).toHaveText(id);
   }
@@ -207,7 +207,7 @@ try {
   await page.evaluate(() => { location.hash = ""; });
   await expect(page.locator("#document .empty")).toBeVisible();
   assert.equal(await liveEditorViews(), 0);
-  await page.getByLabel("Open a situation, scenario or event").fill("situation crew-member-start");
+  await page.getByLabel("Open a situation, scenario, event or file").fill("situation crew-member-start");
   await page.keyboard.press("Enter");
   await expect(page.locator("#title-id")).toHaveText("crew-member-start");
   await expect(editor(wake, wakeEvent)).toContainText("Twice. This is a new session.");
@@ -366,7 +366,7 @@ try {
   await page.keyboard.press("ControlOrMeta+End");
   await page.keyboard.type(" {{oops}}");
   await page.keyboard.press("ControlOrMeta+k");
-  await page.getByLabel("Open a situation, scenario or event").fill("delegate-start");
+  await page.getByLabel("Open a situation, scenario, event or file").fill("delegate-start");
   await page.keyboard.press("Enter");
   await expect(page.locator("#title-id")).toHaveText("delegate-start");
   await expect(page.locator(".event h2")).toHaveText(["session/launch", "session/garden-ready", "delegation/opening"]);
@@ -384,6 +384,108 @@ try {
   const asked = new Promise((resolve) => page.once("dialog", (dialog) => { resolve(dialog.type()); dialog.dismiss(); }));
   await page.close({ runBeforeUnload: true });
   assert.equal(await asked, "beforeunload");
+
+  // C16: a Go definition change shows the freshness diagnostic on open and after a disk change; the refresh redraws and keeps unsaved edits.
+  const goSource = (name) => path.join(repo, name);
+  for (const name of await fs.readdir(goSource("internal/prompts")))
+    if (name.endsWith(".go") && !name.endsWith("_test.go")) await fs.copyFile(goSource(path.join("internal/prompts", name)), path.join(root, name));
+  for (const name of ["internal/protocol/generated.go", "cmd/promptgen/main.go"]) {
+    await fs.mkdir(path.dirname(path.join(fixture, name)), { recursive: true });
+    await fs.copyFile(goSource(name), path.join(fixture, name));
+  }
+  await fs.mkdir(path.join(fixture, "native/crates/attn-app/prompts"), { recursive: true });
+  await fs.writeFile(path.join(fixture, "go.mod"), "module github.com/victorarias/attn\n\ngo 1.25.3\n");
+  execFileSync(binary, ["refresh", "--repo", fixture], { stdio: "ignore" });
+  commit("Go definitions");
+  const declarations = path.join(root, "crew.go");
+  const describe = async (from, to) => {
+    const text = await fs.readFile(declarations, "utf8");
+    assert.ok(text.includes(from), `crew.go declares ${from}`);
+    await fs.writeFile(declarations, text.replace(from, to));
+  };
+  const declared = "crew_start.go: the session's first message.";
+  await describe(declared, "Renamed in Go once.");
+  const goPage = await context.newPage();
+  goPage.on("pageerror", (error) => pageErrors.push(String(error)));
+  const stale = goPage.locator("#stale");
+  const wakeDescription = goPage.locator('.event[data-event="crew/new-session"] .event-description');
+  const refresh = async () => {
+    const refreshed = goPage.waitForResponse((response) => response.url().endsWith("/api/operation") && response.request().postDataJSON().op === "refresh");
+    await goPage.getByRole("button", { name: "Refresh Go definitions" }).click();
+    assert.equal((await refreshed).status(), 200);
+  };
+  await goPage.goto(situationLink);
+  await expect(stale).toBeVisible();
+  await expect(stale).toContainText("The Go definitions changed after the catalog was generated.");
+  await expect(wakeDescription).toHaveText(declared);
+  if (artifacts) await goPage.screenshot({ path: path.join(artifacts, "stale.png") });
+  await refresh();
+  await expect(stale).toBeHidden();
+  await expect(wakeDescription).toHaveText("Renamed in Go once.");
+
+  await expect(goPage.locator("body")).toHaveAttribute("data-watching", "true");
+  const refreshKept = "session/garden-ready.md";
+  await goPage.locator(`.row[data-path="content/${refreshKept}"] .cm-content`).click();
+  await goPage.keyboard.press("ControlOrMeta+Home");
+  await goPage.keyboard.type("Unsaved across refresh. ");
+  await describe("Renamed in Go once.", "Renamed in Go twice.");
+  await expect(stale).toBeVisible();
+  await expect(wakeDescription).toHaveText("Renamed in Go once.");
+  await goPage.keyboard.press("ControlOrMeta+s");
+  await expect(goPage.locator("#notice")).toContainText("Save failed: composition declarations changed in Go");
+  await refresh();
+  await expect(stale).toBeHidden();
+  await expect(wakeDescription).toHaveText("Renamed in Go twice.");
+  await expect(goPage.locator(`.row[data-path="content/${refreshKept}"] .cm-content`)).toContainText("Unsaved across refresh. ");
+  await expect(goPage.locator("#save-state")).toHaveText(/1 unsaved file/);
+  assert.ok(!(await read(refreshKept)).startsWith("Unsaved across refresh."));
+  await goPage.close();
+
+  // C17: a source saved with an unbound placeholder from outside the page shows the catalog's error; the palette opens the raw file to fix it.
+  const broken = "crew/v2/new-session.md";
+  const brokenBefore = await read(broken);
+  await fs.writeFile(source(broken), brokenBefore + "{{oops}}\n");
+  const repairPage = await context.newPage();
+  repairPage.on("pageerror", (error) => pageErrors.push(String(error)));
+  const palette = async (query) => {
+    await repairPage.keyboard.press("ControlOrMeta+k");
+    await repairPage.getByLabel("Open a situation, scenario, event or file").fill(query);
+    await repairPage.keyboard.press("Enter");
+  };
+  await repairPage.goto(situationLink);
+  await expect(repairPage.locator("#document")).toContainText("This page did not open: crew/new-session: crew.v2.new-session: missing bindings for oops");
+  if (artifacts) await repairPage.screenshot({ path: path.join(artifacts, "invalid.png") });
+  await palette("file content/" + broken);
+  await expect(repairPage.locator("#title-kind")).toHaveText("file");
+  await expect(repairPage.locator("#title-id")).toHaveText("content/" + broken);
+  const raw = repairPage.locator(`.row[data-path="content/${broken}"] .cm-content`);
+  await expect(raw).toContainText("{{oops}}");
+  if (artifacts) await repairPage.screenshot({ path: path.join(artifacts, "repair.png") });
+  await raw.click();
+  await repairPage.keyboard.press("ControlOrMeta+End");
+  for (const _ of "{{oops}}\n") await repairPage.keyboard.press("Backspace");
+  await repairPage.keyboard.press("ControlOrMeta+s");
+  await expect(repairPage.locator("#save-state")).toHaveText("All saved");
+  assert.equal(await read(broken), brokenBefore);
+  await palette("situation crew-member");
+  await expect(repairPage.locator(".event h2")).toHaveText(["session/launch", "session/garden-ready", "crew/new-session"]);
+  await repairPage.close();
+
+  // C16 with C17: Go and a source changed together outside the page fail the old catalog; the error page offers the refresh, which opens the page.
+  const switchSource = "crew/switch-requested.md";
+  await describe('Bind("agent", Input(TextField("agent",', 'Bind("harness", Input(TextField("harness",');
+  await fs.writeFile(source(switchSource), (await read(switchSource)).replaceAll("{{agent}}", "{{harness}}"));
+  const renamePage = await context.newPage();
+  renamePage.on("pageerror", (error) => pageErrors.push(String(error)));
+  await renamePage.goto(show("crew/switch-requested"));
+  await expect(renamePage.locator("#document")).toContainText("This page did not open: crew/switch-requested:");
+  await expect(renamePage.locator("#stale")).toBeVisible();
+  const renamed = renamePage.waitForResponse((response) => response.url().endsWith("/api/operation") && response.request().postDataJSON().op === "refresh");
+  await renamePage.getByRole("button", { name: "Refresh Go definitions" }).click();
+  assert.equal((await renamed).status(), 200);
+  await expect(renamePage.locator("#stale")).toBeHidden();
+  await expect(renamePage.locator('.chip[data-name="harness"]')).toHaveCount(placeholders(await read(switchSource)).filter((name) => name === "{{harness}}").length);
+  await renamePage.close();
   assert.deepEqual(pageErrors, []);
   console.log(JSON.stringify({ status: "passed", fixture: path.basename(fixture) }));
 } finally {

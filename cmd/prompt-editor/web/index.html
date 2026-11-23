@@ -11,7 +11,7 @@
 <body>
   <header class="top">
     <span class="brand">Prompt editor</span>
-    <button id="open" class="open" type="button" title="Open a situation, scenario or event (Ctrl K)">
+    <button id="open" class="open" type="button" title="Open a situation, scenario, event or file (Ctrl K)">
       <span id="title-kind" class="title-kind"></span>
       <span id="title-id" class="title-id">Open…</span>
       <span id="title-count" class="title-count"></span>
@@ -31,6 +31,10 @@
   </header>
   <p id="description" class="description"></p>
   <p id="notice" class="notice" role="status" aria-live="polite"></p>
+  <div id="stale" class="banner" role="alert" hidden>
+    <p>The Go definitions changed after the catalog was generated. This page shows the old composition, and saving is refused.</p>
+    <button id="refresh" type="button">Refresh Go definitions</button>
+  </div>
   <main id="document" class="sheet" aria-busy="true">
     <p id="missing" class="empty">This page is not built yet. Run <code>make prompt-editor</code>.</p>
   </main>

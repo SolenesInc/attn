@@ -79,6 +79,7 @@ type pageResponse struct {
 	Sources    map[string]pageSource `json:"sources"`
 	Base       map[string]string     `json:"base,omitempty"`
 	BaseCommit string                `json:"base_commit,omitempty"`
+	Stale      string                `json:"stale,omitempty"`
 }
 
 func renderPageEvent(c *prompts.Catalog, scenarios map[string]scenario, id string, visiting map[string]bool) (pageEvent, error) {
@@ -180,6 +181,9 @@ func (e *editor) page(ctx context.Context, q pageRequest) (pageResponse, error) 
 	}
 	scenarios = flipped(catalog, scenarios, q.Flips)
 	response := pageResponse{Events: []pageEvent{}, Sources: map[string]pageSource{}}
+	if err := e.freshness(snapshot); err != nil {
+		response.Stale = err.Error()
+	}
 	for _, id := range ids {
 		event, err := renderPageEvent(catalog, scenarios, id, map[string]bool{})
 		if err != nil {

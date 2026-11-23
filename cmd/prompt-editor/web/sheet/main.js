@@ -1,18 +1,19 @@
 import { EditorView } from "@codemirror/view";
 import { Files, sliceOf } from "./files.js";
 import { el } from "./dom.js";
-import { renderPage } from "./render.js";
+import { renderFile, renderPage } from "./render.js";
 import { palette } from "./palette.js";
 
 const files = new Files();
 const $ = (id) => document.getElementById(id);
 const documentRoot = $("document");
-const kinds = ["situation", "scenario", "event"];
+const kinds = ["situation", "scenario", "event", "file"];
 let target = null;
 let flips = {};
 let rows = [];
-let catalog = { situations: {}, scenarios: {}, recipients: [] };
+let catalog = { situations: {}, scenarios: {}, recipients: [], sources: [] };
 let diff = false;
+let failed = false;
 
 async function api(path, body) {
   const response = await fetch(`/api/${path}`, body === undefined ? {} : {
@@ -36,42 +37,87 @@ function targetFromHash() {
   return null;
 }
 
-function titleFor(page) {
+const descriptions = {
+  situation: (id) => catalog.situations[id]?.description,
+  scenario: (id) => catalog.scenarios[id]?.description,
+  event: () => null,
+  file: () => "The file's raw text. Ctrl S saves it after the catalog validates it.",
+};
+
+function titleFor(events) {
   const [kind, id] = Object.entries(target)[0];
-  const description = kind === "situation" ? catalog.situations[id]?.description : kind === "scenario" ? catalog.scenarios[id]?.description : null;
   $("title-kind").textContent = kind;
   $("title-id").textContent = id;
-  $("title-count").textContent = `${page.events.length} event${page.events.length === 1 ? "" : "s"}`;
-  $("description").textContent = description ?? "";
+  $("title-count").textContent = events === undefined ? "" : `${events} event${events === 1 ? "" : "s"}`;
+  $("description").textContent = descriptions[kind](id) ?? "";
 }
 
-async function load() {
-  const page = await api("page", { ...target, flips, ...(diff ? { base: $("base").value } : {}) });
-  const scroll = window.scrollY;
-  files.take(page.sources);
-  files.destroyFragments();
-  $("base-commit").textContent = page.base_commit ? page.base_commit.slice(0, 10) : "";
-  const drawn = renderPage(page, { files, flips, flip, navigation, expanded: marks, base: diff ? page.base ?? {} : undefined });
+function draw(drawn, scroll) {
   rows = drawn.rows;
   documentRoot.replaceChildren(...drawn.sections);
   documentRoot.setAttribute("aria-busy", "false");
-  titleFor(page);
   marks();
   window.scrollTo(0, scroll);
 }
 
-function showEmpty(message) {
+function showEmpty(...content) {
   rows = [];
   files.destroyFragments();
-  documentRoot.replaceChildren(el("p", { class: "empty" }, message));
+  documentRoot.replaceChildren(el("p", { class: "empty" }, ...content));
   documentRoot.setAttribute("aria-busy", "false");
+}
+
+async function loadFile(path) {
+  const { sources, stale } = await api("catalog");
+  if (!sources[path]) throw new Error(`${path} is not a registered source`);
+  const scroll = window.scrollY;
+  files.take({ [path]: sources[path] });
+  files.destroyFragments();
+  showStale(stale);
+  $("base-commit").textContent = "";
+  draw(renderFile(path, { files, navigation }), scroll);
+  titleFor();
+}
+
+async function load() {
+  if (target.file) return loadFile(target.file);
+  const page = await api("page", { ...target, flips, ...(diff ? { base: $("base").value } : {}) });
+  showStale(page.stale);
+  const scroll = window.scrollY;
+  files.take(page.sources);
+  files.destroyFragments();
+  $("base-commit").textContent = page.base_commit ? page.base_commit.slice(0, 10) : "";
+  draw(renderPage(page, { files, flips, flip, navigation, expanded: marks, base: diff ? page.base ?? {} : undefined }), scroll);
+  titleFor(page.events.length);
+}
+
+function showStale(stale) {
+  $("stale").hidden = !stale;
+}
+
+async function refreshDefinitions() {
+  $("refresh").disabled = true;
+  notice("Regenerating the catalog from the Go definitions…");
+  try {
+    const refreshed = await api("operation", { op: "refresh" });
+    catalog.recipients = refreshed.recipients;
+    catalog.sources = Object.keys(refreshed.sources).sort();
+    notice("Refreshed the Go definitions.");
+    if (failed) await openTarget();
+    else if (target) await load();
+    else showStale(refreshed.stale);
+  } catch (error) {
+    notice(`Refresh failed: ${error.message}`, "error");
+  } finally {
+    $("refresh").disabled = false;
+  }
 }
 
 async function openTarget() {
   target = targetFromHash();
   flips = {};
   if (!target) {
-    showEmpty("Press Ctrl K to open a situation, a scenario or an event.");
+    showEmpty("Press Ctrl K to open a situation, a scenario, an event or a source file.");
     picker.show();
     return;
   }
@@ -79,10 +125,13 @@ async function openTarget() {
   window.scrollTo(0, 0);
   try {
     await load();
+    failed = false;
     notice("");
   } catch (error) {
-    showEmpty(`This page did not open: ${error.message}`);
-    titleFor({ events: [] });
+    failed = true;
+    showStale((await api("catalog").catch(() => ({}))).stale);
+    showEmpty(`This page did not open: ${error.message}`, el("br"), "If a source file caused this, Ctrl K opens it as raw text to fix and save.");
+    titleFor(target.file ? undefined : 0);
     notice(error.message, "error");
   }
 }
@@ -177,7 +226,8 @@ async function drainDisk() {
     const wanted = again;
     again = { sources: false, page: false };
     try {
-      if (wanted.page && target) await load();
+      if (failed && target) await openTarget();
+      else if (wanted.page && target) await load();
       else files.sync((await api("catalog")).sources);
     } catch (error) {
       notice(`Reading a change on disk failed: ${error.message}`, "error");
@@ -246,6 +296,7 @@ function paletteItems() {
   for (const scenario of Object.values(catalog.scenarios)) items.push({ kind: "scenario", id: scenario.id, description: scenario.description });
   for (const recipient of catalog.recipients)
     for (const event of recipient.events) items.push({ kind: "event", id: `${recipient.id}/${event.id}`, description: event.description });
+  for (const path of catalog.sources) items.push({ kind: "file", id: path, description: "raw text" });
   for (const item of items) item.search = `${item.kind} ${item.id} ${item.description ?? ""}`.toLowerCase();
   return items;
 }
@@ -283,6 +334,7 @@ async function start() {
   document.addEventListener("keydown", onKey, true);
   $("open").addEventListener("click", () => picker.show());
   $("diff").addEventListener("click", toggleDiff);
+  $("refresh").addEventListener("click", refreshDefinitions);
   window.addEventListener("hashchange", openTarget);
   window.addEventListener("beforeunload", (event) => {
     if (files.dirtyPaths().length) event.preventDefault();
@@ -293,7 +345,7 @@ async function start() {
     api("operation", { op: "scenarios" }),
     api("catalog"),
   ]);
-  catalog = { situations, scenarios, recipients: fresh.recipients };
+  catalog = { situations, scenarios, recipients: fresh.recipients, sources: Object.keys(fresh.sources).sort() };
   await chooseBase().catch((error) => notice(`Diff is unavailable: ${error.message}`, "error"));
   watchDisk();
   await openTarget();

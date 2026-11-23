@@ -25,6 +25,7 @@ type catalogView struct {
 	Sources    map[string]source          `json:"sources"`
 	Fields     map[string][]prompts.Field `json:"fields"`
 	Validation string                     `json:"validation,omitempty"`
+	Stale      string                     `json:"stale,omitempty"`
 	Revision   string                     `json:"revision,omitempty"`
 }
 

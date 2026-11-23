@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/victorarias/attn/internal/prompts"
 )
 
 func copyCommitted(t *testing.T, e *editor, dir string) {
@@ -112,5 +114,32 @@ func TestCheckRefusesASituationWithAMissingScenario(t *testing.T) {
 	}
 	if code, out := runTestCLI(t, e, "", "check"); code != 2 || !strings.Contains(out, "match filename") {
 		t.Fatalf("check passed an id that is not its filename: %d %s", code, out)
+	}
+}
+
+func TestPageWarnsWhenGoDefinitionsChangedSinceTheCatalog(t *testing.T) {
+	e := testEditor(t)
+	copyCommitted(t, e, "scenarios")
+	copyCommitted(t, e, "situations")
+	snapshot, err := e.snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := prompts.ParseManifest(snapshot.Manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.DefinitionsHash, err = prompts.DefinitionsHash(e.root.FS()); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(m)
+	writeTest(t, e, prompts.ManifestPath, string(data))
+	if fresh := page(t, e, pageRequest{Situation: "crew-member-start"}); fresh.Stale != "" {
+		t.Fatalf("a current catalog reads as stale: %s", fresh.Stale)
+	}
+	writeTest(t, e, "new.go", "package prompts\n")
+	stale := page(t, e, pageRequest{Situation: "crew-member-start"})
+	if !strings.Contains(stale.Stale, "refresh") || len(stale.Events) != 3 {
+		t.Fatalf("stale catalog: %q with %d events", stale.Stale, len(stale.Events))
 	}
 }
