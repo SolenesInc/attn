@@ -46,8 +46,6 @@ type editRequest struct {
 	Values     prompts.Values    `json:"values"`
 	Drafts     map[string]string `json:"drafts"`
 	Path       string            `json:"path"`
-	Text       string            `json:"text"`
-	Revision   string            `json:"revision"`
 	Ref        string            `json:"ref"`
 	Mode       string            `json:"mode"`
 	BaseCommit string            `json:"base_commit"`
@@ -122,15 +120,28 @@ func (e *editor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		respond(w, result)
 		return
 	}
-	var request editRequest
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
-		problem(w, 400, err)
+	switch r.URL.Path {
+	case "/api/page":
+		var q pageRequest
+		if !decodeRequest(w, r, &q) {
+			return
+		}
+		result, err := e.page(r.Context(), q)
+		if err != nil {
+			problem(w, 422, err)
+		} else {
+			respond(w, result)
+		}
+		return
+	case "/api/save":
+		var q saveRequest
+		if decodeRequest(w, r, &q) {
+			e.save(w, q)
+		}
 		return
 	}
-	if err := decoder.Decode(new(any)); err != io.EOF {
-		problem(w, 400, fmt.Errorf("expected one JSON request"))
+	var request editRequest
+	if !decodeRequest(w, r, &request) {
 		return
 	}
 	switch r.URL.Path {
@@ -173,11 +184,23 @@ func (e *editor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			prompts.Result
 			Values prompts.Values `json:"values"`
 		}{*result.Result, values})
-	case "/api/save":
-		e.save(w, request)
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func decodeRequest(w http.ResponseWriter, r *http.Request, value any) bool {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(value); err != nil {
+		problem(w, 400, err)
+		return false
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		problem(w, 400, fmt.Errorf("expected one JSON request"))
+		return false
+	}
+	return true
 }
 
 func (e *editor) catalog(w http.ResponseWriter) {
@@ -228,21 +251,78 @@ func (e *editor) load(drafts map[string]string) (*prompts.Catalog, error) {
 	return snapshot.load(drafts)
 }
 
-func (e *editor) save(w http.ResponseWriter, request editRequest) {
+type saveFile struct {
+	Path     string `json:"path"`
+	Text     string `json:"text"`
+	Revision string `json:"revision"`
+}
+
+type saveRequest struct {
+	Files []saveFile `json:"files"`
+}
+
+type saveResponse struct {
+	Saved     map[string]string `json:"saved"`
+	Conflicts map[string]source `json:"conflicts"`
+}
+
+func (e *editor) save(w http.ResponseWriter, request saveRequest) {
 	snapshot, err := e.snapshot()
 	if err != nil {
 		problem(w, 422, err)
 		return
 	}
-	if _, ok := snapshot.Sources[request.Path]; !ok {
-		problem(w, 400, fmt.Errorf("unregistered source: %s", request.Path))
+	response := saveResponse{Saved: map[string]string{}, Conflicts: map[string]source{}}
+	texts := map[string]string{}
+	var writes []saveFile
+	for _, file := range request.Files {
+		if _, ok := snapshot.Sources[file.Path]; !ok {
+			problem(w, 400, fmt.Errorf("unregistered source: %s", file.Path))
+			return
+		}
+		if _, twice := texts[file.Path]; twice {
+			problem(w, 400, fmt.Errorf("%s is listed twice", file.Path))
+			return
+		}
+		texts[file.Path] = file.Text
+		if err := e.regularSource(file.Path); err != nil {
+			problem(w, 400, err)
+			return
+		}
+		current, err := e.root.ReadFile(file.Path)
+		if err != nil {
+			problem(w, 500, err)
+			return
+		}
+		switch {
+		case revision(current) != file.Revision:
+			response.Conflicts[file.Path] = source{string(current), revision(current)}
+		case bytes.Equal(current, []byte(file.Text)):
+			response.Saved[file.Path] = file.Revision
+		default:
+			writes = append(writes, file)
+		}
+	}
+	drafts := map[string]string{}
+	for _, file := range writes {
+		drafts[file.Path] = file.Text
+	}
+	if _, err := e.load(drafts); err != nil {
+		problem(w, 422, err)
 		return
 	}
-	if err := e.regularSource(request.Path); err != nil {
-		problem(w, 400, err)
-		return
+	for _, file := range writes {
+		info, err := e.root.Stat(file.Path)
+		if err == nil {
+			err = atomicWrite(e.root, file.Path, []byte(file.Text), info.Mode().Perm())
+		}
+		if err != nil {
+			problem(w, 500, fmt.Errorf("%s: %w", file.Path, err))
+			return
+		}
+		response.Saved[file.Path] = revision([]byte(file.Text))
 	}
-	e.saveSource(w, request)
+	respond(w, response)
 }
 
 func (e *editor) regularSource(sourcePath string) error {
@@ -256,36 +336,6 @@ func (e *editor) regularSource(sourcePath string) error {
 		}
 	}
 	return nil
-}
-
-func (e *editor) saveSource(w http.ResponseWriter, request editRequest) {
-	current, err := e.root.ReadFile(request.Path)
-	if err != nil {
-		problem(w, 500, err)
-		return
-	}
-	if revision(current) != request.Revision {
-		problem(w, 409, fmt.Errorf("file changed on disk; reload it before saving"))
-		return
-	}
-	if _, err := e.load(map[string]string{request.Path: request.Text}); err != nil {
-		problem(w, 422, err)
-		return
-	}
-	if bytes.Equal(current, []byte(request.Text)) {
-		respond(w, source{request.Text, revision(current)})
-		return
-	}
-	info, err := e.root.Stat(request.Path)
-	if err != nil {
-		problem(w, 500, err)
-		return
-	}
-	if err := atomicWrite(e.root, request.Path, []byte(request.Text), info.Mode().Perm()); err != nil {
-		problem(w, 500, err)
-		return
-	}
-	respond(w, source{request.Text, revision([]byte(request.Text))})
 }
 
 func atomicWrite(root *os.Root, name string, data []byte, mode fs.FileMode) error {

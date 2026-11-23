@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "garden-ready-dispatched",
+  "description": "Garden readiness for a delegated session whose stake is a seed.",
+  "recipient": "session",
+  "event": "garden-ready",
+  "values": {
+    "has_crown": "true",
+    "has_ready": "false",
+    "one_ready": "false",
+    "is_plot": "false",
+    "count": "0",
+    "seed_id": "s-example",
+    "title": "\"Review the queue change\""
+  }
+}

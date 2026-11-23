@@ -52,6 +52,7 @@ func runCLI(ctx context.Context, args []string, stdin io.Reader, stdout, stderr 
 	port := flags.Int("port", 0, "Loopback port for serve")
 	q := operationRequest{Values: prompts.Values{}, Inputs: map[string]string{}}
 	flags.StringVar(&q.Scenario, "scenario", "", "Saved scenario id")
+	flags.StringVar(&q.Situation, "situation", "", "Saved situation id")
 	flags.StringVar(&q.Event, "event", "", "recipient/event")
 	flags.StringVar(&q.Path, "source", "", "Markdown source path")
 	flags.StringVar(&q.Title, "title", "", "Scenario title")
@@ -170,7 +171,7 @@ func runCLI(ctx context.Context, args []string, stdin io.Reader, stdout, stderr 
 	}
 	var result any
 	if q.Op == "show" {
-		result, err = e.show(ctx, q.Event, *open)
+		result, err = e.show(ctx, q.Event, q.Situation, *open)
 	} else {
 		result, err = e.operation(ctx, q)
 	}
@@ -225,7 +226,13 @@ func printResult(w io.Writer, q operationRequest, result any) {
 			return
 		}
 		if checks, ok := value["scenarios"].([]scenarioCheck); ok {
-			fmt.Fprintf(w, "Catalog valid: %v; %d scenarios\n", value["valid"], len(checks))
+			situations, _ := value["situations"].([]situationCheck)
+			fmt.Fprintf(w, "Catalog valid: %v; %d scenarios; %d situations\n", value["valid"], len(checks), len(situations))
+			for _, s := range situations {
+				if s.Error != "" {
+					fmt.Fprintf(w, "  situation %s: %s\n", s.ID, s.Error)
+				}
+			}
 			for _, c := range checks {
 				status := "ok"
 				if c.Changed {
@@ -251,7 +258,10 @@ func printResult(w io.Writer, q operationRequest, result any) {
 	}
 }
 
-func (e *editor) show(ctx context.Context, event string, open bool) (any, error) {
+func (e *editor) show(ctx context.Context, event, situation string, open bool) (any, error) {
+	if event != "" && situation != "" {
+		return nil, fmt.Errorf("show opens an event or a situation, not both")
+	}
 	repo, err := os.OpenRoot(e.repo)
 	if err != nil {
 		return nil, err
@@ -289,6 +299,16 @@ func (e *editor) show(ctx context.Context, event string, open bool) (any, error)
 		return nil, fmt.Errorf("running editor does not match this checkout; restart prompt-editor serve")
 	}
 	url := address + "/"
+	if situation != "" {
+		situations, err := e.situations()
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := situations[situation]; !ok {
+			return nil, fmt.Errorf("unknown situation %s; list them with situations", situation)
+		}
+		url += "#situation=" + situation
+	}
 	if event != "" {
 		if _, _, err := eventParts(event); err != nil {
 			return nil, err
@@ -315,15 +335,18 @@ Start prompt changes with context. Read its workflow and complete instructions b
 
   serve [--port N] [--base REF]           start the browser editor
   show [RECIPIENT/EVENT] [--open]         print the running editor's link to an event
+  show --situation ID [--open]            print the running editor's link to a situation
   authoring                              read the prompt revision workflow
   context EVENT_OR_SOURCE [--base REF]   full sources, uses, scenarios and coverage gaps
+  context --situation ID [--base REF]    the same for every event of a situation
   list                                   list events
   inspect RECIPIENT/EVENT [--scenario ID] inspect sources, inputs and declarations
   uses FRAGMENT_OR_PATH                  direct and producer usages
-  check [--scenario ID]                   validate catalog and saved scenarios
+  check [--scenario ID]                   validate catalog, saved scenarios and situations
   compare --base REF [--scenario ID]      affected events and scenario diffs
   refresh                                regenerate and reload Go declarations
   scenarios                              list repository scenarios
+  situations                             list repository situations
   scenario save ID --event R/E --values FILE [--expect HASH]
 
 Use --include EVENT_OR_SOURCE (repeatable) with context to include semantically

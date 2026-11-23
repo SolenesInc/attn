@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -41,19 +43,20 @@ func decodeJSON(data []byte, value any) error {
 }
 
 type operationRequest struct {
-	Op       string            `json:"op"`
-	ID       string            `json:"id,omitempty"`
-	Title    string            `json:"title,omitempty"`
-	Event    string            `json:"event,omitempty"`
-	Scenario string            `json:"scenario,omitempty"`
-	Path     string            `json:"path,omitempty"`
-	Expect   string            `json:"expect,omitempty"`
-	Values   prompts.Values    `json:"values,omitempty"`
-	Inputs   map[string]string `json:"inputs,omitempty"`
-	Base     string            `json:"base,omitempty"`
-	Mode     string            `json:"mode,omitempty"`
-	Target   string            `json:"target,omitempty"`
-	Include  []string          `json:"include,omitempty"`
+	Op        string            `json:"op"`
+	ID        string            `json:"id,omitempty"`
+	Title     string            `json:"title,omitempty"`
+	Event     string            `json:"event,omitempty"`
+	Scenario  string            `json:"scenario,omitempty"`
+	Situation string            `json:"situation,omitempty"`
+	Path      string            `json:"path,omitempty"`
+	Expect    string            `json:"expect,omitempty"`
+	Values    prompts.Values    `json:"values,omitempty"`
+	Inputs    map[string]string `json:"inputs,omitempty"`
+	Base      string            `json:"base,omitempty"`
+	Mode      string            `json:"mode,omitempty"`
+	Target    string            `json:"target,omitempty"`
+	Include   []string          `json:"include,omitempty"`
 }
 
 func eventParts(key string) (string, string, error) {
@@ -72,6 +75,8 @@ func (e *editor) operation(ctx context.Context, q operationRequest) (any, error)
 		return e.refresh(ctx)
 	case "scenarios":
 		return e.scenarios()
+	case "situations":
+		return e.situations()
 	case "scenario-save":
 		return e.saveScenario(q)
 	}
@@ -127,7 +132,7 @@ func (e *editor) operation(ctx context.Context, q operationRequest) (any, error)
 			return nil, fmt.Errorf("unknown scenario %s", q.Scenario)
 		}
 		key = s.Recipient + "/" + s.Event
-		values, err = scenarioValues(catalog, scenarios, q.Scenario, map[string]bool{})
+		values, _, err = scenarioValues(catalog, scenarios, q.Scenario, map[string]bool{})
 		if err != nil {
 			return nil, err
 		}
@@ -166,6 +171,11 @@ func (e *editor) operation(ctx context.Context, q operationRequest) (any, error)
 		result["values"] = values
 	}
 	return result, nil
+}
+
+type situationCheck struct {
+	ID    string `json:"id"`
+	Error string `json:"error,omitempty"`
 }
 
 type scenarioCheck struct {
@@ -208,7 +218,7 @@ func (e *editor) checkScenarios(ctx context.Context, q operationRequest, snapsho
 	for _, name := range names {
 		s := scenarios[name]
 		check := scenarioCheck{ID: name, Event: s.Recipient + "/" + s.Event}
-		values, err := scenarioValues(catalog, scenarios, name, map[string]bool{})
+		values, _, err := scenarioValues(catalog, scenarios, name, map[string]bool{})
 		if err == nil {
 			var rendered prompts.Result
 			rendered, err = catalog.Render(s.Recipient, s.Event, values)
@@ -221,7 +231,7 @@ func (e *editor) checkScenarios(ctx context.Context, q operationRequest, snapsho
 			valid = false
 		}
 		if base != nil && base.catalog != nil {
-			baseValues, baseErr := scenarioValues(base.catalog, scenarios, name, map[string]bool{})
+			baseValues, _, baseErr := scenarioValues(base.catalog, scenarios, name, map[string]bool{})
 			before := renderSide(base.catalog, s.Recipient, s.Event, baseValues)
 			if baseErr != nil && before.Status != "absent" {
 				before.Error = baseErr.Error()
@@ -245,7 +255,20 @@ func (e *editor) checkScenarios(ctx context.Context, q operationRequest, snapsho
 		}
 		checks = append(checks, check)
 	}
-	result := map[string]any{"valid": valid, "scenarios": checks, "catalog_revision": revision(snapshot.Manifest)}
+	situations, err := e.situations()
+	if err != nil {
+		return nil, err
+	}
+	situationChecks := []situationCheck{}
+	for _, id := range slices.Sorted(maps.Keys(situations)) {
+		check := situationCheck{ID: id}
+		if err := situations[id].missingScenario(scenarios); err != nil {
+			check.Error = err.Error()
+			valid = false
+		}
+		situationChecks = append(situationChecks, check)
+	}
+	result := map[string]any{"valid": valid, "scenarios": checks, "situations": situationChecks, "catalog_revision": revision(snapshot.Manifest)}
 	if base != nil {
 		result["base_commit"] = base.Commit
 		result["unavailable"] = base.Unavailable
@@ -331,7 +354,7 @@ func (e *editor) saveScenario(q operationRequest) (any, error) {
 		return nil, err
 	}
 	all[s.ID] = s
-	values, err := scenarioValues(catalog, all, s.ID, map[string]bool{})
+	values, _, err := scenarioValues(catalog, all, s.ID, map[string]bool{})
 	if err != nil {
 		return nil, err
 	}

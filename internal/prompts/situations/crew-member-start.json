@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "id": "crew-member-start",
+  "description": "What a crew member with a charter and a predecessor letter receives when the user starts its session.",
+  "scenarios": [
+    "crew-launch",
+    "garden-ready-many",
+    "crew-v2-new-session"
+  ]
+}

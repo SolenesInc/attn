@@ -7,11 +7,13 @@ attn embeds all prompts in the binary. During development, change prompts with t
 
 Follow the workflow in `cmd/prompt-editor/authoring.md` for every
 prompt change. `context` returns that workflow with the complete relevant
-instructions. Start `context` from an event, a source or a scenario:
+instructions. Start `context` from an event, a source, a scenario or a
+situation:
 
 ```sh
 go run ./cmd/prompt-editor context crew/priming --include crew/new-session --base main --json
 go run ./cmd/prompt-editor context --scenario crew-v2-chief-first-day --json
+go run ./cmd/prompt-editor context --situation crew-member-start --json
 ```
 
 Use `context` to understand the full scope of a change before you make it.
@@ -46,13 +48,31 @@ conflicting fragment IDs, and invalid input types.
 Save representative inputs in `internal/prompts/scenarios/ID.json`. `values`
 supplies literal strings. `inputs` maps a field to a named producer scenario.
 
+A situation is what one agent receives, in delivery order, such as a crew
+member's start. Save it in `internal/prompts/situations/ID.json` as the list of
+scenarios whose events arrive one after another. Text that reaches the agent
+inside another event, such as `crew/priming` inside `session/launch`, is not a
+scenario of the situation: bind it through the outer scenario's `inputs`.
+
+```json
+{
+  "version": 1,
+  "id": "crew-member-start",
+  "description": "What a crew member with a charter and a predecessor letter receives when the user starts its session.",
+  "scenarios": ["crew-launch", "garden-ready-many", "crew-v2-new-session"]
+}
+```
+
+`situations` lists them.
+
 ```sh
 go run ./cmd/prompt-editor compare --base main --json
 ```
 
-Add `--scenario ID` to narrow `compare`. `check` validates the catalog and
-scenarios. `compare` defaults to the merge-base. Use `--mode tip` to compare the
-selected revision itself.
+Add `--scenario ID` to narrow `compare`. `check` validates the catalog, the
+scenarios and the situations: each situation's id matches its filename, and each
+scenario it names exists. `compare` defaults to the merge-base. Use `--mode tip`
+to compare the selected revision itself.
 
 After you edit, rerun `context` and read the full results against the intended
 behavior. `context` renders the scenarios in its scope from the checkout and,
@@ -75,9 +95,11 @@ running while the user reviews.
 
 ```sh
 go run ./cmd/prompt-editor show crew/new-session --open
+go run ./cmd/prompt-editor show --situation crew-member-start --open
 ```
 
-`show` prints the URL, and `--open` opens the browser. The page compares with
+`show` prints the URL of an event or a situation, and `--open` opens the
+browser. The page compares with
 `main` by default. `serve --base REF` sets another default, and the user can
 pick any branch, tag or commit in the page.
 

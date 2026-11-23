@@ -55,7 +55,7 @@ func testEditor(t *testing.T) *editor {
 	return e
 }
 
-func request(t *testing.T, e *editor, route string, body editRequest) *httptest.ResponseRecorder {
+func request(t *testing.T, e *editor, route string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	data, err := json.Marshal(body)
 	if err != nil {
@@ -69,7 +69,7 @@ func request(t *testing.T, e *editor, route string, body editRequest) *httptest.
 	return w
 }
 
-func TestPreviewDraftSaveAndConflict(t *testing.T) {
+func TestPreviewRendersUnsavedTextWithoutWriting(t *testing.T) {
 	e := testEditor(t)
 	path := "content/crew/v2/new-session.md"
 	original, _ := e.root.ReadFile(path)
@@ -82,21 +82,64 @@ func TestPreviewDraftSaveAndConflict(t *testing.T) {
 	if !bytes.Equal(disk, original) {
 		t.Fatal("preview wrote a file")
 	}
-	w = request(t, e, "save", editRequest{Path: path, Text: draft, Revision: revision(original)})
-	if w.Code != 200 {
-		t.Fatalf("save: %d %s", w.Code, w.Body)
+}
+
+func saveFiles(t *testing.T, e *editor, files ...saveFile) (int, saveResponse) {
+	t.Helper()
+	w := request(t, e, "save", saveRequest{Files: files})
+	var answer saveResponse
+	if w.Code == 200 {
+		if err := json.Unmarshal(w.Body.Bytes(), &answer); err != nil {
+			t.Fatal(err)
+		}
 	}
-	disk, _ = e.root.ReadFile(path)
-	if string(disk) != draft {
-		t.Fatal("save lost text or whitespace")
+	return w.Code, answer
+}
+
+func TestSaveWritesEveryFileAndSkipsConflicts(t *testing.T) {
+	e := testEditor(t)
+	first, second := "content/crew/v2/new-session.md", "content/delegation/opening.md"
+	firstDisk, _ := e.root.ReadFile(first)
+	secondDisk, _ := e.root.ReadFile(second)
+	firstText, secondText := string(firstDisk)+"\nA maintainer edit.\n", string(secondDisk)+"\nAnother edit.\n"
+	code, answer := saveFiles(t, e,
+		saveFile{first, firstText, revision(firstDisk)},
+		saveFile{second, secondText, revision(secondDisk)})
+	if code != 200 || answer.Saved[first] != revision([]byte(firstText)) || answer.Saved[second] != revision([]byte(secondText)) || len(answer.Conflicts) != 0 {
+		t.Fatalf("save both: %d %+v", code, answer)
 	}
-	w = request(t, e, "save", editRequest{Path: path, Text: "stale edit", Revision: revision(original)})
-	if w.Code != 409 {
-		t.Fatalf("stale save: %d %s", w.Code, w.Body)
+	for path, text := range map[string]string{first: firstText, second: secondText} {
+		if disk, _ := e.root.ReadFile(path); string(disk) != text {
+			t.Fatalf("%s on disk is %q", path, disk)
+		}
 	}
-	disk, _ = e.root.ReadFile(path)
-	if string(disk) != draft {
-		t.Fatal("stale save overwrote the file")
+
+	agentText := firstText + "\nAn agent's edit.\n"
+	if err := e.root.WriteFile(first, []byte(agentText), 0644); err != nil {
+		t.Fatal(err)
+	}
+	code, answer = saveFiles(t, e,
+		saveFile{first, firstText + "\nStale page edit.\n", revision([]byte(firstText))},
+		saveFile{second, secondText + "\nFresh page edit.\n", revision([]byte(secondText))})
+	if code != 200 || answer.Conflicts[first] != (source{agentText, revision([]byte(agentText))}) || answer.Saved[second] == "" {
+		t.Fatalf("save with conflict: %d %+v", code, answer)
+	}
+	if disk, _ := e.root.ReadFile(first); string(disk) != agentText {
+		t.Fatal("a conflicting save overwrote the agent's edit")
+	}
+	if disk, _ := e.root.ReadFile(second); string(disk) != secondText+"\nFresh page edit.\n" {
+		t.Fatal("a conflict in one file kept the other from saving")
+	}
+
+	secondNow, _ := e.root.ReadFile(second)
+	code, _ = saveFiles(t, e,
+		saveFile{first, agentText + "\nValid.\n", revision([]byte(agentText))},
+		saveFile{second, "{{undeclared}}", revision(secondNow)})
+	if code != 422 {
+		t.Fatalf("invalid save: %d", code)
+	}
+	if disk, _ := e.root.ReadFile(first); string(disk) != agentText {
+		t.Fatal("an invalid catalog saved a valid file beside it")
 	}
 }
 
@@ -105,16 +148,15 @@ func TestInvalidAndUnregisteredWritesLeaveFilesAlone(t *testing.T) {
 	path := "content/crew/v2/new-session.md"
 	original, _ := e.root.ReadFile(path)
 	for _, test := range []struct {
-		body   editRequest
+		file   saveFile
 		status int
 	}{
-		{editRequest{Path: path, Text: "{{undeclared}}", Revision: revision(original)}, 422},
-		{editRequest{Path: "../outside.md", Text: "escape"}, 400},
-		{editRequest{Path: "content/new.md", Text: "unregistered"}, 400},
+		{saveFile{path, "{{undeclared}}", revision(original)}, 422},
+		{saveFile{"../outside.md", "escape", ""}, 400},
+		{saveFile{"content/new.md", "unregistered", ""}, 400},
 	} {
-		w := request(t, e, "save", test.body)
-		if w.Code != test.status {
-			t.Fatalf("save: %d %s", w.Code, w.Body)
+		if code, _ := saveFiles(t, e, test.file); code != test.status {
+			t.Fatalf("save %s: %d", test.file.Path, code)
 		}
 	}
 	disk, _ := e.root.ReadFile(path)
@@ -127,9 +169,8 @@ func TestInvalidAndUnregisteredWritesLeaveFilesAlone(t *testing.T) {
 	if err := e.root.Symlink("successor.md", path); err != nil {
 		t.Fatal(err)
 	}
-	w := request(t, e, "save", editRequest{Path: path, Text: "symlink"})
-	if w.Code != 400 {
-		t.Fatalf("symlink save: %d %s", w.Code, w.Body)
+	if code, _ := saveFiles(t, e, saveFile{path, "symlink", ""}); code != 400 {
+		t.Fatalf("symlink save: %d", code)
 	}
 }
 

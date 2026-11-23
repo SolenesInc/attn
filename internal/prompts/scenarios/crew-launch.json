@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "id": "crew-launch",
+  "description": "A crew member's session launch, with its identity and predecessor letter from crew/priming.",
+  "recipient": "session",
+  "event": "launch",
+  "values": {
+    "garden_available": "true",
+    "asks_enabled": "true",
+    "vent_enabled": "false",
+    "self_report_pull_requests": "false",
+    "tool_vents_enabled": "false"
+  },
+  "inputs": {
+    "crew_priming": "crew-v2-with-handoff"
+  }
+}

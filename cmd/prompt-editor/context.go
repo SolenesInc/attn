@@ -55,6 +55,7 @@ type contextReport struct {
 	Guide                 string                   `json:"guide"`
 	Workflow              string                   `json:"workflow"`
 	Scope                 []string                 `json:"scope"`
+	Situation             *situation               `json:"situation,omitempty"`
 	CatalogRevision       string                   `json:"catalog_revision"`
 	BaseCommit            string                   `json:"base_commit,omitempty"`
 	Unavailable           string                   `json:"unavailable,omitempty"`
@@ -187,8 +188,25 @@ func (e *editor) authoringContext(ctx context.Context, q operationRequest, snaps
 		}
 		targets = append(targets, s.Recipient+"/"+s.Event)
 	}
+	if q.Situation != "" {
+		situations, err := e.situations()
+		if err != nil {
+			return report, err
+		}
+		s, ok := situations[q.Situation]
+		if !ok {
+			return report, fmt.Errorf("unknown situation %s", q.Situation)
+		}
+		if err := s.missingScenario(scenarios); err != nil {
+			return report, err
+		}
+		report.Situation = &s
+		for _, id := range s.Scenarios {
+			targets = append(targets, scenarios[id].Recipient+"/"+scenarios[id].Event)
+		}
+	}
 	if len(targets) == 0 {
-		return report, fmt.Errorf("context needs an event, source or --scenario; read docs/internal/prompt-authoring.md before editing")
+		return report, fmt.Errorf("context needs an event, source, --scenario or --situation; read docs/internal/prompt-authoring.md before editing")
 	}
 	slices.Sort(targets)
 	report.Scope = slices.Compact(targets)
@@ -345,7 +363,7 @@ func renderContext(catalog *prompts.Catalog, scenarios map[string]scenario, samp
 		inputs = map[string]scenario{}
 	}
 	inputs["@context"] = scenario{Recipient: r, Event: event, Values: sample.Values, Inputs: sample.Inputs}
-	values, err := scenarioValues(catalog, inputs, "@context", map[string]bool{})
+	values, _, err := scenarioValues(catalog, inputs, "@context", map[string]bool{})
 	if err != nil {
 		return contextPrompt{Status: "invalid", Error: err.Error()}
 	}

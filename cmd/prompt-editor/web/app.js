@@ -609,12 +609,12 @@ async function save() {
   state.errors.delete(path);
   status();
   try {
-    const saved = await api("save", {
-      path,
-      text,
-      revision: state.catalog.sources[path].revision,
+    const answer = await api("save", {
+      files: [{ path, text, revision: state.catalog.sources[path].revision }],
     });
-    state.catalog.sources[path] = saved;
+    if (answer.conflicts[path])
+      throw new Error("file changed on disk; reload it before saving");
+    state.catalog.sources[path] = { text, revision: answer.saved[path] };
     if (state.drafts.get(path) === text) state.drafts.delete(path);
     renderNavigation();
     schedulePreview();

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "id": "delegate-start",
+  "description": "What a delegated agent receives when its session starts on a seed with checks.",
+  "scenarios": [
+    "guided-session",
+    "garden-ready-dispatched",
+    "delegation"
+  ]
+}

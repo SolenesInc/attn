@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "garden-ready-many",
+  "description": "Garden readiness for a session without a stake, with several seeds ready.",
+  "recipient": "session",
+  "event": "garden-ready",
+  "values": {
+    "has_crown": "false",
+    "has_ready": "true",
+    "one_ready": "false",
+    "is_plot": "false",
+    "count": "3",
+    "seed_id": "",
+    "title": ""
+  }
+}

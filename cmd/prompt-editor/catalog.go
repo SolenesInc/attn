@@ -191,27 +191,28 @@ func (e *editor) scenarios() (map[string]scenario, error) {
 	return result, nil
 }
 
-func scenarioValues(c *prompts.Catalog, scenarios map[string]scenario, id string, visiting map[string]bool) (prompts.Values, error) {
+func scenarioValues(c *prompts.Catalog, scenarios map[string]scenario, id string, visiting map[string]bool) (prompts.Values, map[string]pageEvent, error) {
 	s, ok := scenarios[id]
 	if !ok {
-		return nil, fmt.Errorf("unknown scenario %q", id)
+		return nil, nil, fmt.Errorf("unknown scenario %q", id)
 	}
 	if visiting[id] {
-		return nil, fmt.Errorf("scenario input cycle at %s", id)
+		return nil, nil, fmt.Errorf("scenario input cycle at %s", id)
 	}
 	visiting[id] = true
 	defer delete(visiting, id)
 	fields, err := c.Fields(s.Recipient, s.Event)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	values := prompts.Values{}
 	for name, value := range s.Values {
 		values[name] = value
 	}
+	producers := map[string]pageEvent{}
 	for name, producer := range s.Inputs {
 		if _, exists := values[name]; exists {
-			return nil, fmt.Errorf("scenario %s supplies %s twice", id, name)
+			return nil, nil, fmt.Errorf("scenario %s supplies %s twice", id, name)
 		}
 		from := ""
 		for _, field := range fields {
@@ -221,19 +222,16 @@ func scenarioValues(c *prompts.Catalog, scenarios map[string]scenario, id string
 		}
 		p, ok := scenarios[producer]
 		if !ok || from == "" || from != p.Recipient+"/"+p.Event {
-			return nil, fmt.Errorf("scenario %s: %s must reference its declared producer %s", id, name, from)
+			return nil, nil, fmt.Errorf("scenario %s: %s must reference its declared producer %s", id, name, from)
 		}
-		inputs, err := scenarioValues(c, scenarios, producer, visiting)
+		produced, err := renderPageEvent(c, scenarios, producer, visiting)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		rendered, err := c.Render(p.Recipient, p.Event, inputs)
-		if err != nil {
-			return nil, err
-		}
-		values[name] = rendered.Text
+		producers[name] = produced
+		values[name] = produced.Trace.Text
 	}
-	return values, nil
+	return values, producers, nil
 }
 
 type usage struct {
@@ -356,7 +354,7 @@ func renderScenario(c *prompts.Catalog, request editRequest, scenarios map[strin
 			return previewSide{Status: "absent"}, nil
 		}
 		var err error
-		values, err = scenarioValues(c, scenarios, request.Scenario, map[string]bool{})
+		values, _, err = scenarioValues(c, scenarios, request.Scenario, map[string]bool{})
 		if err != nil {
 			return previewSide{Status: "invalid", Error: err.Error()}, nil
 		}
