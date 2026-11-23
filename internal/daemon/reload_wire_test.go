@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -136,6 +137,28 @@ func TestReloadKeepsTheApprovalItStartedWith(t *testing.T) {
 		if mode != tc.mode || model != tc.model || effort != tc.effort || slices.Contains(argv, "--dangerously-skip-permissions") {
 			t.Errorf("reloading %s ran claude %q, want permission mode %q, model %q and effort %q", tc.name, argv, tc.mode, tc.model, tc.effort)
 		}
+	}
+}
+
+func TestAReloadWhileTheFirstPromptLandsResumesTheConversationItStarted(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	unprepared := w.PauseAt(pausepoint.ConversationReadinessProbed)
+	app := w.App()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	first := w.Launched(session)
+
+	reloaded := make(chan protocol.ReloadSessionResultMessage, 1)
+	go func() { reloaded <- reloadPlug(app, session) }()
+	unprepared.Await()
+	first.Input("add a discount field to checkout")
+	first.Prompted()
+	unprepared.Release()
+
+	if result := <-reloaded; !result.Success {
+		t.Fatalf("reloading while the first prompt landed: %s", protocol.Deref(result.Error))
+	}
+	if again := w.Launched(session); !again.Resumed || again.ConversationID != first.ConversationID {
+		t.Fatalf("the reload ran claude %q, want it resuming conversation %s", again.Argv, first.ConversationID)
 	}
 }
 

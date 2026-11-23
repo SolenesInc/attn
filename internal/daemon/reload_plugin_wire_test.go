@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -45,10 +46,10 @@ func TestAReloadedPluginSessionResumesItsConversationOnTheLaunchItHad(t *testing
 	converse(t, app, session, second, "price the checkout")
 }
 
-func TestAReloadedDriverSessionResumesTheConversationItLastReported(t *testing.T) {
+func TestAReloadedDriverSessionResumesTheConversationItLastReportedWithoutAskingWhetherItIsAvailable(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"resume": true, "state_reporting": true})
+	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"resume": true, "resume_availability": true, "state_reporting": true})
 	awaitDriverAvailable(app, "snipe")
 	session, run := spawnDriven(w, app, driver, w.Path("shop"))
 	driver.mustReport("session.report_metadata", map[string]any{
@@ -56,11 +57,20 @@ func TestAReloadedDriverSessionResumesTheConversationItLastReported(t *testing.T
 		"metadata": map[string]string{"snipe_session_id": "native-id"}, "resume_session_id": "native-id",
 	})
 
-	if reloaded := reloadPlug(app, session); !reloaded.Success {
-		t.Fatalf("reload: %s", protocol.Deref(reloaded.Error))
+	reloaded := make(chan protocol.ReloadSessionResultMessage, 1)
+	go func() { reloaded <- reloadPlug(app, session) }()
+	select {
+	case resumed := <-driver.launches:
+		if resumed.Method != "driver.resume" || resumed.ResumeSessionID != "native-id" || string(resumed.Metadata) != `{"snipe_session_id":"native-id"}` {
+			t.Errorf("the reload asked the driver %s for %q with metadata %s, want driver.resume of native-id with its metadata", resumed.Method, resumed.ResumeSessionID, resumed.Metadata)
+		}
+	case request := <-driver.requests:
+		t.Fatalf("the reload asked the driver %s before resuming its live conversation", request.Method)
+	case <-time.After(fakeagent.HangGuard):
+		t.Fatal("the reload never reached its driver")
 	}
-	if resumed := driver.launched(); resumed.Method != "driver.resume" || resumed.ResumeSessionID != "native-id" || string(resumed.Metadata) != `{"snipe_session_id":"native-id"}` {
-		t.Errorf("the reload asked the driver %s for %q with metadata %s, want driver.resume of native-id with its metadata", resumed.Method, resumed.ResumeSessionID, resumed.Metadata)
+	if result := <-reloaded; !result.Success {
+		t.Fatalf("reload: %s", protocol.Deref(result.Error))
 	}
 }
 

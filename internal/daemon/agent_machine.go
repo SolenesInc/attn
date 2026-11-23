@@ -240,16 +240,26 @@ func (d *Daemon) readConversationReadiness(ctx context.Context, msg protocol.Con
 	}
 	ref := harness.ConversationRef{Harness: h.Facts().ID, Profile: msg.Profile, ID: msg.Conversation, Lifetime: harness.Lifetime(msg.Lifetime)}
 	conversations := h.Conversations()
-	known := conversations.Check(ctx, []harness.ConversationRef{ref})[ref].Resumable
-	pausepoint.At(pausepoint.ConversationReadinessProbed)
+	known := func() bool { return conversations.Check(ctx, []harness.ConversationRef{ref})[ref].Resumable }
 	if !msg.Restore {
-		return protocol.ConversationReadinessResult{Known: known}, nil
+		return protocol.ConversationReadinessResult{Known: known()}, nil
 	}
 	ready, err := conversations.Prepare(ctx, ref)
 	if err != nil {
 		return protocol.ConversationReadinessResult{}, err
 	}
-	return protocol.ConversationReadinessResult{Known: known || ready, Ready: ready}, nil
+	if ready {
+		return protocol.ConversationReadinessResult{Known: true, Ready: true}, nil
+	}
+	pausepoint.At(pausepoint.ConversationReadinessProbed)
+	if !known() {
+		return protocol.ConversationReadinessResult{}, nil
+	}
+	ready, err = conversations.Prepare(ctx, ref)
+	if err != nil {
+		return protocol.ConversationReadinessResult{}, err
+	}
+	return protocol.ConversationReadinessResult{Known: true, Ready: ready}, nil
 }
 
 func (d *Daemon) placedConversationReadiness(session protocol.SessionID, host, agent, profile, conversation string, restore bool) (protocol.ConversationReadinessResult, error) {
