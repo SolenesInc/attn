@@ -1,0 +1,1 @@
+Prompt editor: Sheet warns when the Go definitions changed after the catalog was generated, with a Refresh Go definitions button that redraws the page and keeps unsaved edits. When one source holds text the catalog refuses, pages show the catalog's error, and the palette now opens any source file as raw text to fix and save.
