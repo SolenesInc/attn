@@ -29,10 +29,13 @@ pub const COMMANDS: &[Command] = &[
         name: "msg",
         result: true,
         runs_without_daemon: false,
-        usage: &["no_sender"],
+        usage: &["no_sender", "steer_and_interrupt", "as_user_with_steer"],
         args: &[
             Arg { name: "target", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "text", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
+            Arg { name: "steer", cli: Cli::Flag("steer"), value: Value::Bool, source: Source::Given, required: false, list: false },
+            Arg { name: "interrupt", cli: Cli::Flag("interrupt"), value: Value::Bool, source: Source::Given, required: false, list: false },
+            Arg { name: "as_user", cli: Cli::Flag("as-user"), value: Value::Bool, source: Source::Given, required: false, list: false },
         ],
     },
     Command {

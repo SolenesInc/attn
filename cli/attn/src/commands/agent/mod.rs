@@ -124,12 +124,7 @@ impl Family for Agent {
             "peek" => print_stdout(&peek(&command::decode(run, self, cmd, &result)?)),
             _ => {
                 let message: AgentPeerMessage = command::decode(run, self, cmd, &result)?;
-                print_stdout(&format!(
-                    "{}: message {} to session {}\n",
-                    message.state,
-                    message.message_id,
-                    short(&message.target_session_id)
-                ));
+                print_stdout(&msg_status_line(&message));
             }
         }
         self.settle(run, cmd, &result)
@@ -284,6 +279,28 @@ fn peek(result: &AgentPeekResult) -> String {
         None => out.push_str("\nscreen unavailable\n"),
     }
     out
+}
+
+fn msg_status_line(message: &AgentPeerMessage) -> String {
+    let mut line = format!(
+        "{}: message {} to session {}",
+        message.state,
+        message.message_id,
+        short(&message.target_session_id)
+    );
+    if let Some(turn) = &message.delivered_as {
+        let article = if turn.to_string() == "interrupt" {
+            "an"
+        } else {
+            "a"
+        };
+        let _ = write!(line, "; its running turn took it as {article} {turn}");
+    }
+    if message.as_user == Some(true) {
+        line.push_str("; sent as the user");
+    }
+    line.push('\n');
+    line
 }
 
 fn msg_line(result: &AgentMsgResult) -> String {

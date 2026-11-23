@@ -89,7 +89,14 @@ func (delivery *claudeModDelivery) wire() any {
 	if delivery.compact {
 		return map[string]string{"id": delivery.input.ID, "kind": "compact"}
 	}
-	return claudeModMessage{ID: delivery.input.ID, Kind: "input", Text: delivery.input.Text, UserWords: delivery.input.Voice == harness.VoiceUser, Ring: delivery.input.Ring}
+	message := claudeModMessage{ID: delivery.input.ID, Kind: "input", Text: delivery.input.Text, UserWords: delivery.input.Voice == harness.VoiceUser, Ring: delivery.input.Ring}
+	switch delivery.input.Turn {
+	case harness.Steer:
+		message.Turn = "steer"
+	case harness.Interrupt:
+		message.Turn = "interrupt"
+	}
+	return message
 }
 
 type claudeModMessage struct {
@@ -97,6 +104,7 @@ type claudeModMessage struct {
 	Kind      string                    `json:"kind,omitempty"`
 	Text      string                    `json:"text"`
 	UserWords bool                      `json:"user_words,omitempty"`
+	Turn      string                    `json:"turn,omitempty"`
 	Ring      *protocol.InboxRingRecord `json:"ring,omitempty"`
 }
 

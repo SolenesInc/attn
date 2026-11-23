@@ -59,6 +59,16 @@ session. The recipient's reply line names the member, so a reply reaches the
 member's current session or starts one for the member, even after the session that
 sent it has ended. A session sender is named by its short id.
 
+The sender chooses how a working recipient takes the message, its turn use. By
+default the message queues: it waits for the recipient's turn to end.
+`--steer` puts it into the running turn at the recipient's next step, and
+`--interrupt` stops the turn and makes the message the next prompt. A
+recipient that is not working takes the message at once whatever its turn use,
+as if it had none. `--as-user` sends the sender's text alone, as the user's
+words, by default or with `--interrupt`. attn keeps the turn use and
+`as_user` with the message, and records how a running turn took it, which
+`attn agent msg-status` shows as `delivered_as`.
+
 attn refuses a peer message, and gives the reason, when:
 
 - the message is empty or longer than 32 KiB
@@ -67,6 +77,8 @@ attn refuses a peer message, and gives the reason, when:
 - the address has 50 unread peer messages
 - the message would reach the sender: the sender's own session, the sender's
   member, or a seed the sender tends
+- the message asks for both `--steer` and `--interrupt`, or for `--as-user`
+  with `--steer`
 
 ### Seed updates
 
@@ -223,6 +235,16 @@ in its own voice: the 📬 line for the other items follows in a ring of its own
 A session that holds several addresses with unread items gets one ring for each
 address.
 
+A peer message with a turn use, or sent as the user, rings first and alone: the
+ring types that one message. A steer or an interrupt goes in attn's voice under
+the peer header, with a line that says the sender let the turn go on or
+stopped it. A message sent as the user goes bare, in the user's voice. Only a
+harness that can put input into a running turn takes a turn use, which today is
+the Claude mod. A typed session, Codex, Sigma and plugin drivers refuse it. attn
+then clears the turn use, the message waits as a queued message, and the
+sender's result says why. attn never types a steer or an interrupt into a
+terminal, because typed text reads as the user's.
+
 Once attn has placed a ring in the session, attn records the session as the
 reader of the ring's user input. attn never checks that the agent acted on
 that input. A ring lost to an open menu in the harness stays lost.
@@ -313,12 +335,23 @@ connected:
   items to the unread mail of that profile's Chief member, even when attn could
   not yet create the Chief's home. The items then wait for the daemon start that
   creates the Chief.
+- The mod holds a steer until the turn's next tool call and adds it to the
+  turn there, as a note that is not from the user, so the turn goes on. For an
+  interrupt the mod stops the turn itself. When the turn ends it submits the
+  interrupt, with the steers and input it holds in the interrupt's voice, as one
+  prompt. What it holds in the other voice waits for that turn to end. The mod
+  does not read its own stop as the user's Esc: the session stays working and
+  no turn opens for the user. A steer or an
+  interrupt the mod gives back, at Esc, on a reload, or when the mod stops
+  polling, loses its turn use and rings again as a queued message.
 - While a running turn waits on a permission question, the mod takes a ring it
-  would take during that turn. It holds the ring until the question closes,
-  because the mod's delivery cannot answer the question. Refusing the question,
-  with "No" or with Esc, does not stop the session: Claude reports both the same
-  way, and it takes the next prompt. A held ring then starts a new turn, and later
-  rings go out as usual. A question outside a turn still holds every ring back.
+  would take during that turn and holds it until the question closes, because
+  the mod's delivery cannot answer the question. An interrupt is the exception:
+  attn keeps it until the question closes, so it never answers or cancels the
+  question. Refusing the question, with "No" or with Esc, does not stop the
+  session: Claude reports both the same way, and it takes the next prompt. A
+  held ring then starts a new turn, and later rings go out as usual. A question
+  outside a turn still holds every ring back.
 
 ### With a plugin driver
 

@@ -17,6 +17,10 @@ func feedbackEvents() []Event {
 		On("start-cause-more", "message_fragment", "inboxStartCause: the unread items past the listing's tripwire.", template("session.start-cause-more", "content/session/start-cause-more.md", TextField("count", "Items not listed."))),
 		On("peer-message", "cli_output", "Attributed peer message, including the trust boundary and reply command.",
 			template("session.peer-message", "content/session/peer-message.md", TextField("origin", "Sender identity."), TextField("message", "Literal peer message."), TextField("reply_to", "Reply target."))),
+		On("peer-message-steer", "user_message", "A peer message sent with --steer, put into the recipient's running turn at its next step.",
+			template("session.peer-message-steer", "content/session/peer-message-steer.md", TextField("origin", "Sender identity."), TextField("message", "Literal peer message."), TextField("reply_to", "Reply target."))),
+		On("peer-message-interrupt", "user_message", "A peer message sent with --interrupt: attn stopped the recipient's turn, and the message starts its next one.",
+			template("session.peer-message-interrupt", "content/session/peer-message-interrupt.md", TextField("origin", "Sender identity."), TextField("message", "Literal peer message."), TextField("reply_to", "Reply target."))),
 	}
 }
 

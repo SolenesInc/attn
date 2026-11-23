@@ -65,6 +65,9 @@ func (h codexHarness) Conversation(facts harness.SessionFacts) harness.Conversat
 func (codexConversation) CanCompact() error { return nil }
 
 func (c codexConversation) Deliver(_ context.Context, in harness.Input) harness.Custody {
+	if in.Turn != harness.Queue {
+		return harness.Custody{Outcome: harness.Rejected, Reason: "attn does not steer or interrupt Codex yet"}
+	}
 	if in.PendingApproval {
 		return harness.Custody{Outcome: harness.NotMine}
 	}

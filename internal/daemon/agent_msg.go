@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -50,6 +51,12 @@ func (d *Daemon) runAgentMsg(ctx context.Context, c command.Caller, a command.Ag
 		return nil, senderRefusal(string(c.Session), "sender")
 	}
 	msg := agentMsgTarget(a.Target)
+	switch {
+	case a.Steer && a.Interrupt:
+		return nil, command.Refuse(command.CodeSteerAndInterrupt, "--steer goes into the running turn and --interrupt stops it; pass one")
+	case a.Steer && a.AsUser:
+		return nil, command.Refuse(command.CodeAsUserWithSteer, "a steer reaches the recipient as a note from attn, never as the user's words")
+	}
 
 	content := strings.TrimSpace(a.Text)
 	result := &protocol.AgentMsgResult{Status: protocol.AgentMsgStatusRefused}
@@ -126,7 +133,13 @@ func (d *Daemon) runAgentMsg(ctx context.Context, c command.Caller, a command.Ag
 		result.Detail = verdict
 		return result, nil
 	}
-	message := inbox.Message{ID: uuid.NewString(), Sender: senderParty, Body: content, CreatedAt: now.UTC().Format(time.RFC3339Nano)}
+	message := inbox.Message{ID: uuid.NewString(), Sender: senderParty, Body: content, CreatedAt: now.UTC().Format(time.RFC3339Nano), AsUser: a.AsUser}
+	switch {
+	case a.Steer:
+		message.Turn = protocol.PeerTurnSteer
+	case a.Interrupt:
+		message.Turn = protocol.PeerTurnInterrupt
+	}
 	if err := d.store.PutPeerMessage(message, address); err != nil {
 		return nil, err
 	}
@@ -137,14 +150,30 @@ func (d *Daemon) runAgentMsg(ctx context.Context, c command.Caller, a command.Ag
 		result.Status = protocol.AgentMsgStatusNotified
 	}
 	result.Detail = receipt.Detail
-	if holder := d.inboxHolder(address); holder != nil {
+	holder := d.inboxHolder(address)
+	if holder != nil {
 		result.TargetSessionID = holder.ID
 	}
 	if key, member := address.Member(); receipt.Rang && member {
 		result.Detail = "notified " + d.crewMemberName(key.String())
 	}
-
+	if a.AsUser {
+		result.AsUser = protocol.Ptr(true)
+	}
+	if receipt.Turn != "" && slices.Contains(receipt.Typed, message.ID) && holder != nil {
+		result.Status, result.Detail = tookMidTurn(receipt.Turn, sessionDisplayName(holder), a.AsUser)
+	}
 	return result, nil
+}
+
+func tookMidTurn(turn protocol.PeerTurn, recipient string, asUser bool) (protocol.AgentMsgStatus, string) {
+	if turn == protocol.PeerTurnSteer {
+		return protocol.AgentMsgStatusSteered, recipient + " gets your message at its next step; its turn goes on"
+	}
+	if asUser {
+		return protocol.AgentMsgStatusInterrupted, recipient + "'s turn stopped; your text starts its next turn as the user's words"
+	}
+	return protocol.AgentMsgStatusInterrupted, recipient + "'s turn stopped; your message starts its next turn"
 }
 
 type agentMsgTargets struct {

@@ -20,6 +20,13 @@ Code 2.1.330.
   starts the next turn as one prompt, and the band clears. A message from Attn
   itself that waited too goes after Claude finishes that turn. To reach Claude
   before its turn ends, type into the terminal.
+- **Another agent steers or interrupts Claude.** An agent that sends with
+  `attn agent msg --steer` reaches the running turn at Claude's next tool call,
+  and the turn goes on. One that sends with `--interrupt` stops the turn, and
+  its message starts the next turn. Neither counts as your Esc. Claude reads a
+  steer as from another agent, never from you. It reads an interrupt the same
+  way, unless the agent passed on your words with `--as-user`. If you press Esc
+  first, the message waits for your next prompt like any other.
 - **You press Esc while Claude works.** Attn stops delivering its own messages, so a session you
   stopped stays stopped. The band lists them under "Waiting in attn — sent with
   your next prompt", and they go out after your next prompt. Your own words, such

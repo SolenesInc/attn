@@ -243,7 +243,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 	}
 	var bellHeldUntil time.Time
 	if !finishingStart {
-		if attempt.Live == 0 && (holder == nil || attempt.FromUser == 0) {
+		if attempt.Live == 0 && (holder == nil || attempt.Typed == 0) {
 			return receipt, nil
 		}
 		now := time.Now()
@@ -253,7 +253,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 			due, state.rang = now, ""
 		}
 		nobodyToType := seedMail && holder == nil
-		if due.After(now) && attempt.FromUser > 0 && !nobodyToType {
+		if due.After(now) && attempt.Typed > 0 && !nobodyToType {
 			bellHeldUntil = due
 		} else if due.After(now) {
 			d.armInboxLocked(a, state, due.Sub(now))
@@ -362,8 +362,8 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 	pending := state.pending
 	fresh := pending == nil
 	if pending == nil {
-		bellWaitsForPrompt := attempt.FromUser > 0 && !sessionmonitor.PromptReady(holder.State, d.stateReason(holder.ID))
-		paste, err := d.inboxPaste(a, holder.ProfileID, bellHeldUntil.IsZero() && !bellWaitsForPrompt)
+		bellWaitsForPrompt := attempt.Typed > 0 && !sessionmonitor.PromptReady(holder.State, d.stateReason(holder.ID))
+		paste, err := d.inboxPaste(a, holder.ProfileID, bellHeldUntil.IsZero() && !bellWaitsForPrompt, holder.State == protocol.SessionStateWorking)
 		if err != nil {
 			return receipt, err
 		}
@@ -374,15 +374,12 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 				paste.text = d.tenderResumeText(tenderResume) + "\n\n" + paste.text
 			}
 		}
-		when := sessionmonitor.WhenWorkingOrPromptReady
-		if paste.notified {
-			when = sessionmonitor.WhenPromptReady
-		}
-		input := sessionmonitor.MaintenanceInput(sessionmonitor.InboxRing, uuid.NewString(), paste.text, when)
+		input := sessionmonitor.MaintenanceInput(sessionmonitor.InboxRing, uuid.NewString(), paste.text, paste.when())
 		input.BypassInitialGate = true
-		input.UserWords = len(paste.typed) > 0
+		input.UserWords = paste.userWords
+		input.Turn = sessionmonitor.TurnUse(paste.turn)
 		at := time.Now()
-		input.Ring = &protocol.InboxRingRecord{Address: a.String(), ProfileID: holder.ProfileID, Stamp: store.InboxRingStamp(at), Typed: paste.typed, Notified: paste.notified, Captures: paste.captures, AuthorizedSeeds: paste.authorizedSeeds}
+		input.Ring = &protocol.InboxRingRecord{Address: a.String(), ProfileID: holder.ProfileID, Stamp: store.InboxRingStamp(at), Typed: paste.typed, Notified: paste.notified, Captures: paste.captures, AuthorizedSeeds: paste.authorizedSeeds, Turn: paste.turn}
 		if paste.notified && state.captureBell == holder.ID && holder.TurnOpenedAt != nil && !protocol.Deref(holder.TurnByAgent) {
 			input.Ring.FollowsCaptures = protocol.Ptr(true)
 		}
@@ -453,11 +450,29 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		} else if !bellHeldUntil.IsZero() {
 			d.armInboxLocked(a, state, time.Until(bellHeldUntil))
 		}
-		if remaining, err := d.store.InboxAttempt(a); err == nil && remaining.FromUser > 0 {
+		if remaining, err := d.store.InboxAttempt(a); err == nil && remaining.Typed > 0 {
 			d.kickInbox(a)
 		}
 		receipt.Rang = true
 		receipt.Detail = "notified " + sessionDisplayName(holder)
+		if placement.Held && ring.Turn != nil {
+			receipt.Turn, receipt.Typed = *ring.Turn, ring.Typed
+		}
+		return receipt, nil
+	}
+	stopped := errors.Is(placement.Err, sessionmonitor.ErrSessionStopped)
+	if ring.Turn != nil && (placement.Stage == sessionmonitor.Failed || stopped) {
+		if err := d.store.DropPeerTurn(ring.Typed); err != nil {
+			return receipt, err
+		}
+		if err := d.clearPendingInbox(a, state); err != nil {
+			return receipt, err
+		}
+		receipt.Detail = fmt.Sprintf("queued (%v; the message waits for the turn to end)", placement.Err)
+		if stopped {
+			receipt.Detail = agentMessageQueuedDetail(placement.Err)
+		}
+		d.kickInbox(a)
 		return receipt, nil
 	}
 	var callError *placementCallError
@@ -483,7 +498,8 @@ type inboxRingReturned struct {
 	AuthorizedSeeds []string `json:"authorized_seeds,omitempty"`
 }
 
-func (d *Daemon) settleInboxRing(_ context.Context, msg protocol.InboxRingSettleMessage) (struct{}, error) {
+func (d *Daemon) settleInboxRing(_ context.Context, msg protocol.InboxRingSettleMessage) (settled struct{}, err error) {
+	defer func() { pausepoint.Done(pausepoint.InboxRingSettled, err) }()
 	address, err := d.heldRingAddress(msg.Ring.Address)
 	if err != nil {
 		return struct{}{}, fmt.Errorf("inbox ring %s: %w", msg.DeliveryID, err)
@@ -491,8 +507,18 @@ func (d *Daemon) settleInboxRing(_ context.Context, msg protocol.InboxRingSettle
 	state := d.lockInboxState(address)
 	defer state.unlock()
 	if msg.Outcome == protocol.InboxRingOutcomePlaced {
+		if msg.Ring.Turn != nil {
+			if err := d.store.DeliverPeerAs(msg.Ring.Typed, *msg.Ring.Turn); err != nil {
+				return struct{}{}, fmt.Errorf("inbox ring %s: %w", msg.DeliveryID, err)
+			}
+		}
 		d.endStandbyOnceMailRead(address)
 		return struct{}{}, nil
+	}
+	if msg.Ring.Turn != nil {
+		if err := d.store.DropPeerTurn(msg.Ring.Typed); err != nil {
+			return struct{}{}, fmt.Errorf("inbox ring %s: %w", msg.DeliveryID, err)
+		}
 	}
 	if state.pending != nil && state.pending.Message.DeliveryID == msg.DeliveryID {
 		if err := d.clearPendingInbox(address, state); err != nil {
@@ -558,12 +584,38 @@ type inboxPaste struct {
 	captures        []string
 	authorizedSeeds []string
 	notified        bool
+	userWords       bool
+	peer            bool
+	turn            *protocol.PeerTurn
 }
 
-func (d *Daemon) inboxPaste(a who.Address, profileID string, bell bool) (inboxPaste, error) {
+func (p inboxPaste) when() sessionmonitor.Placement {
+	if p.notified || (p.peer && p.turn == nil) {
+		return sessionmonitor.WhenPromptReady
+	}
+	return sessionmonitor.WhenWorkingOrPromptReady
+}
+
+func (d *Daemon) inboxPaste(a who.Address, profileID string, bell, working bool) (inboxPaste, error) {
 	deliveries, err := d.store.UnreadInboxDeliveries(a)
 	if err != nil {
 		return inboxPaste{}, err
+	}
+	var lapsed []string
+	for _, delivery := range deliveries {
+		peer := delivery.Peer
+		switch {
+		case peer == nil:
+		case peer.AsUser || peer.Turn != "" && working:
+			return d.peerPaste(delivery.Item.ID, *peer, working), nil
+		case peer.Turn != "":
+			lapsed = append(lapsed, delivery.Item.ID)
+		}
+	}
+	if len(lapsed) > 0 {
+		if err := d.store.DropPeerTurn(lapsed); err != nil {
+			return inboxPaste{}, err
+		}
 	}
 	var paste inboxPaste
 	var texts []string
@@ -594,7 +646,19 @@ func (d *Daemon) inboxPaste(a who.Address, profileID string, bell bool) (inboxPa
 		texts = append(texts, inboxRingText())
 	}
 	paste.text = strings.Join(texts, "\n\n")
+	paste.userWords = len(paste.typed) > 0
 	return paste, nil
+}
+
+func (d *Daemon) peerPaste(item string, message inbox.Message, working bool) inboxPaste {
+	paste := inboxPaste{text: message.Body, typed: []string{item}, userWords: message.AsUser, peer: true}
+	if message.Turn != "" && working {
+		paste.turn = protocol.Ptr(message.Turn)
+	}
+	if !message.AsUser {
+		paste.text = d.peerRingText(message)
+	}
+	return paste
 }
 func (d *Daemon) logInboxExhaustion(a who.Address) {
 	attempt, err := d.store.InboxAttempt(a)

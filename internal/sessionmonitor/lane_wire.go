@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -18,6 +19,7 @@ func (delivery Delivery) Message(session protocol.SessionID) protocol.SessionPla
 	if delivery.UserWords {
 		msg.UserWords = protocol.Ptr(true)
 	}
+	msg.Turn = PeerTurn(delivery.Turn)
 	if delivery.ExpectedDriverRun != "" {
 		msg.ExpectedDriverRun = protocol.Ptr(delivery.ExpectedDriverRun)
 	}
@@ -34,7 +36,7 @@ func DeliveryFromMessage(msg protocol.SessionPlaceMessage) Delivery {
 	if msg.Origin == protocol.SessionPlaceOriginUserConversation {
 		origin.kind = originUserConversation
 	}
-	return Delivery{UserWords: protocol.Deref(msg.UserWords), ID: NewAttemptID(domain, key), Text: msg.Text, Placement: phases[msg.Phase], origin: origin, BypassInitialGate: protocol.Deref(msg.BypassInitialGate), AllowUserComposer: protocol.Deref(msg.AllowUserComposer), Compact: protocol.Deref(msg.Compact), Ring: msg.Ring, ExpectedDriverRun: protocol.Deref(msg.ExpectedDriverRun), ExpectedConversation: protocol.Deref(msg.ExpectedConversation)}
+	return Delivery{UserWords: protocol.Deref(msg.UserWords), Turn: TurnUse(msg.Turn), ID: NewAttemptID(domain, key), Text: msg.Text, Placement: phases[msg.Phase], origin: origin, BypassInitialGate: protocol.Deref(msg.BypassInitialGate), AllowUserComposer: protocol.Deref(msg.AllowUserComposer), Compact: protocol.Deref(msg.Compact), Ring: msg.Ring, ExpectedDriverRun: protocol.Deref(msg.ExpectedDriverRun), ExpectedConversation: protocol.Deref(msg.ExpectedConversation)}
 }
 
 func (attempt Attempt) Result() protocol.SessionPlaceResult {
@@ -108,4 +110,24 @@ func AttemptFromResult(result protocol.SessionPlaceResult) Attempt {
 		attempt.Err = errors.New(*result.Error)
 	}
 	return attempt
+}
+
+func PeerTurn(use harness.TurnUse) *protocol.PeerTurn {
+	switch use {
+	case harness.Steer:
+		return protocol.Ptr(protocol.PeerTurnSteer)
+	case harness.Interrupt:
+		return protocol.Ptr(protocol.PeerTurnInterrupt)
+	}
+	return nil
+}
+
+func TurnUse(turn *protocol.PeerTurn) harness.TurnUse {
+	switch protocol.Deref(turn) {
+	case protocol.PeerTurnSteer:
+		return harness.Steer
+	case protocol.PeerTurnInterrupt:
+		return harness.Interrupt
+	}
+	return harness.Queue
 }

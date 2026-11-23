@@ -76,6 +76,7 @@ func (id AttemptID) String() string {
 
 type Delivery struct {
 	UserWords            bool
+	Turn                 harness.TurnUse
 	ExpectedDriverRun    string
 	ExpectedConversation string
 	ID                   AttemptID
@@ -179,6 +180,7 @@ type lane struct {
 
 var (
 	ErrBlockedByApproval       = errors.New("session input blocked by pending approval")
+	ErrTurnUseNotTyped         = errors.New("the target takes input only through its terminal, and attn never types a steer or an interrupt, since typed text reads as the user")
 	ErrUserTyping              = errors.New("session input waits because the user typed in the session moments ago")
 	ErrLaneClosed              = errors.New("the session's input lane is closed")
 	ErrSessionStopped          = errors.New("the user stopped the session; attn's input waits for the user's next prompt")
@@ -322,6 +324,9 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	if !handled && duringQuestion {
 		return deferred(ErrBlockedByApproval)
 	}
+	if !handled && delivery.Turn != harness.Queue {
+		return Attempt{Stage: Failed, Err: ErrTurnUseNotTyped}, runRef{}
+	}
 	if !handled && delivery.Compact {
 		return Attempt{Stage: Failed, Err: errors.New("the session has no link that compacts its conversation")}, runRef{}
 	}
@@ -391,7 +396,7 @@ func (l *lane) placeOverConversationLocked(ctx context.Context, delivery Deliver
 	if delivery.UserWords {
 		voice = harness.VoiceUser
 	}
-	in := harness.Input{ID: delivery.ID.String(), Text: delivery.Text, Voice: voice, Ring: delivery.Ring, PendingApproval: duringQuestion, AskedInTurn: l.questionInTurn}
+	in := harness.Input{ID: delivery.ID.String(), Text: delivery.Text, Voice: voice, Ring: delivery.Ring, Turn: delivery.Turn, PendingApproval: duringQuestion, AskedInTurn: l.questionInTurn}
 	facts := l.monitor.sessionFactsLocked()
 	var custody harness.Custody
 	l.unlockedWhilePlacing(func() {

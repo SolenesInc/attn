@@ -105,6 +105,20 @@ func (r *Run) ModNext() ModEvent {
 	return event
 }
 
+// ModToolBoundary is a tool call ending in the running turn: the mod appends the steers it holds and answers their texts.
+func (r *Run) ModToolBoundary() []string {
+	r.t.Helper()
+	var appended []string
+	r.call(methodModTool, struct{}{}, &appended)
+	return appended
+}
+
+// ModAbortLands ends the running turn as the mod's own abort for a held interrupt does: no Stop hook, and the mod submits the interrupt.
+func (r *Run) ModAbortLands() {
+	r.t.Helper()
+	r.call(methodModAbortLands, struct{}{}, nil)
+}
+
 func (r *Run) ModEsc() []string {
 	r.t.Helper()
 	var returned []string

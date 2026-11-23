@@ -99,6 +99,18 @@ lets the recipient know it's there. When the seed is on standby and its tender's
 session is closed, the message resumes the tender, as [Seeds on
 standby](#seeds-on-standby) describes.
 
+A message to a working agent waits until its turn ends, unless the sender
+chooses otherwise. `--steer` puts the message into the running turn at the
+agent's next step, and `--interrupt` stops the turn and starts the next one
+with the message. Both reach Claude Code sessions with the Claude mod. For
+other agents the message waits for the turn to end, and the sender is told why.
+
+Every message says it comes from another agent, so the recipient never takes it
+as your approval. When you ask an agent to pass on your words, such as
+approving a push to a delegate, it can send them with `--as-user`: the
+recipient then reads them as yours, and `attn agent msg-status` records who
+sent them.
+
 ### Handing work to a fresh agent
 
 A handover gives a seed, and the seed's claim, to a new agent. The agent handing

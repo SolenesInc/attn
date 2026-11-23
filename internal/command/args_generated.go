@@ -12,6 +12,7 @@ var _ json.RawMessage
 const (
 	CodeAmbiguousSession            = "ambiguous_session"
 	CodeAppNotShowingProfile        = "app_not_showing_profile"
+	CodeAsUserWithSteer             = "as_user_with_steer"
 	CodeBadBookmark                 = "bad_bookmark"
 	CodeBadCapture                  = "bad_capture"
 	CodeBadMode                     = "bad_mode"
@@ -78,6 +79,7 @@ const (
 	CodeSessionOrCrewMemberNotFound = "session_or_crew_member_not_found"
 	CodeSinceAndSection             = "since_and_section"
 	CodeStandbyWithScope            = "standby_with_scope"
+	CodeSteerAndInterrupt           = "steer_and_interrupt"
 	CodeStepNeedsText               = "step_needs_text"
 	CodeStepTooLong                 = "step_too_long"
 	CodeTimeout                     = "timeout"
@@ -104,7 +106,7 @@ var specs = sync.OnceValue(func() map[string]spec {
 		"activity clear":          {readOnly: false, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"session_not_found": "Pass the full id of a session this daemon holds."}},
 		"agent list":              {readOnly: true, anyone: true, sessionFlag: true, runsWithoutDaemon: false},
 		"agent peek":              {readOnly: true, anyone: true, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"session_not_found": "Pass a session id agent_list names, or the name of a crew member in session.", "ambiguous_session": "Give more of the id; agent_list carries full ids.", "crew_member_asleep": "Start the member with crew_start first, or message it with agent_msg, which starts it."}},
-		"agent msg":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, caller: "sender", fixes: map[string]string{"no_sender": "Pass {session}, or run it inside an attn session.", "session_or_crew_member_not_found": "Pass a session id agent_list names, a crew member's name, or a seed id.", "ambiguous_session": "Give more of the id; agent_list carries full ids."}},
+		"agent msg":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, caller: "sender", fixes: map[string]string{"no_sender": "Pass {session}, or run it inside an attn session.", "steer_and_interrupt": "Pass {steer} or {interrupt}, not both.", "as_user_with_steer": "A steer cannot be the user's words. Drop {steer}, or pass {interrupt}.", "session_or_crew_member_not_found": "Pass a session id agent_list names, a crew member's name, or a seed id.", "ambiguous_session": "Give more of the id; agent_list carries full ids."}},
 		"agent close":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_sender": "Pass {session}, or run it inside an attn session.", "close_reason_required": "Pass {reason}: why this session is done.", "session_not_found": "Pass a session id agent_list names, or {self} to close yourself."}},
 		"agent reload":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_sender": "Pass {session}, or run it inside an attn session."}},
 		"agent inbox":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Pass {session}, or run it inside an attn session.", "message_not_found": "Pass the id of a message your inbox notified you about.", "message_not_notified": "Read it after its notification lands."}},
@@ -278,8 +280,11 @@ type AgentPeekArgs struct {
 }
 
 type AgentMsgArgs struct {
-	Target string `json:"target,omitempty"`
-	Text   string `json:"text,omitempty"`
+	Target    string `json:"target,omitempty"`
+	Text      string `json:"text,omitempty"`
+	Steer     bool   `json:"steer,omitempty"`
+	Interrupt bool   `json:"interrupt,omitempty"`
+	AsUser    bool   `json:"as_user,omitempty"`
 }
 
 type AgentCloseArgs struct {

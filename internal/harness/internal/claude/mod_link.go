@@ -37,7 +37,7 @@ func (c claudeConversation) CanCompact() error {
 
 func (c claudeConversation) hand(ctx context.Context, in harness.Input, compact bool) harness.Custody {
 	mod, terminal := c.mod, c.facts.Terminal
-	if !mod.reachable(terminal) || (in.PendingApproval && !in.AskedInTurn) {
+	if !mod.reachable(terminal) || (in.PendingApproval && (!in.AskedInTurn || in.Turn == harness.Interrupt)) {
 		return harness.Custody{Outcome: harness.NotMine}
 	}
 	delivery := &claudeModDelivery{session: c.facts.Session, input: in, compact: compact, answer: make(chan harness.Custody, 1)}

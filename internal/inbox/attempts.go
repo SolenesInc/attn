@@ -1,6 +1,10 @@
 package inbox
 
-import "time"
+import (
+	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
+)
 
 const (
 	AttemptDelay = 5 * time.Minute // F1: healthy agents read p99.5 60s after a ring.
@@ -12,6 +16,8 @@ type Receipt struct {
 	Rang        bool
 	Outstanding bool
 	Detail      string
+	Turn        protocol.PeerTurn
+	Typed       []string
 }
 
 // Due returns the next attempt time while an address has an outstanding attempt.

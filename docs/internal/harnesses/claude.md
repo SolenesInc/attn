@@ -670,3 +670,16 @@ holds the runs):
   103 ms later, and UserPromptSubmit fires for it. The screen shows the text
   under "› Prompt from the attn plugin". In 3 of 3 runs the model then finished
   the task the aborted turn had started and did the new request.
+- In Code Mode the `tool.call` hooks for the calls inside a REPL script fire
+  when the script settles, so a steer that attn's mod holds for the next tool
+  call reaches the model when the running script ends, not while its command
+  runs. The appended row is a `plugin_note` attachment that the model reads
+  after "Note from the attn plugin, not from the user:" (seed `s-w8vjqt`).
+- attn's interrupt during a Code Mode script ends the open `Poll` call with
+  "[Tool call did not complete: the turn was ended to deliver the message that
+  follows. Nothing refused it; re-run it if still needed.]", and the mod's
+  prompt starts the next turn about 120 ms later. The abort writes no
+  "[Request interrupted by user]" row, and attn keeps the session working
+  (4 of 4 runs). The script's command keeps
+  running in the background until the model stops it, which it did in 2 of 2
+  runs when the message asked it to (seed `s-w8vjqt`).

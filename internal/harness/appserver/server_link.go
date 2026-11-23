@@ -363,6 +363,9 @@ func (l *Link) Conversation(facts harness.SessionFacts) harness.Conversation {
 }
 
 func (s serverConversation) Deliver(ctx context.Context, in harness.Input) harness.Custody {
+	if in.Turn != harness.Queue {
+		return harness.Custody{Outcome: harness.Rejected, Reason: "attn does not steer or interrupt " + string(s.link.b.agent) + " yet"}
+	}
 	if in.PendingApproval && !s.link.Can(AbilityQuestionSafe) {
 		return harness.Custody{Outcome: harness.NotMine}
 	}

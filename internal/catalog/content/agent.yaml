@@ -49,13 +49,18 @@ commands:
     grant: own
     caller: sender
     doc: |
-      Sends a session, crew member or seed a message. The body stays in the inbox; the recipient gets a generic inbox notification. A target that cannot take input safely keeps it queued. The result says queued, notified, or refused. attn starts a session for a member between sessions before the notification is placed. A seed id reaches its current or next tender, waiting when none is reachable. In the CLI, a message that starts with - goes after --, as: attn agent msg -- <target> "-text".
+      Sends a session, crew member or seed a message. By default the message waits until the recipient's turn ends: the body stays in the inbox and the recipient gets a generic inbox notification at its next safe prompt. `steer` puts the message into a working recipient's running turn at its next step, without stopping the turn. `interrupt` stops a working recipient's turn now and makes the message its next prompt. A recipient that is not working gets the message right away either way. A harness that cannot take a steer or an interrupt keeps the message queued, and the result says why. `as_user` delivers the text as the user's own words, without the sender's name; use it only to pass on words the user gave you to pass on. The result says queued, notified, steered, interrupted, or refused. attn starts a session for a member between sessions before the notification is placed. A seed id reaches its current or next tender, waiting when none is reachable. In the CLI, a message that starts with - goes after --, as: attn agent msg -- <target> "-text".
     args:
       - {name: target, type: text, required: true, cli: pos, placeholder: "<session-or-member-or-seed>", doc: "a session id or unique prefix, a crew member's name, or a seed id"}
       - {name: text, type: text, required: true, cli: pos, placeholder: '"<text>"', doc: "the message"}
+      - {name: steer, type: bool, cli: "--steer", doc: "put the message into the recipient's running turn at its next step, without stopping the turn"}
+      - {name: interrupt, type: bool, cli: "--interrupt", doc: "stop the recipient's turn now and make the message its next prompt"}
+      - {name: as_user, type: bool, cli: "--as-user", doc: "deliver the text as the user's words, without your name; only to pass on what the user said"}
     result: AgentMsgResult
     errors:
       - {code: no_sender, usage: true, fix: "Pass {session}, or run it inside an attn session."}
+      - {code: steer_and_interrupt, usage: true, fix: "Pass {steer} or {interrupt}, not both."}
+      - {code: as_user_with_steer, usage: true, fix: "A steer cannot be the user's words. Drop {steer}, or pass {interrupt}."}
       - {code: session_or_crew_member_not_found, fix: "Pass a session id agent_list names, a crew member's name, or a seed id."}
       - {code: ambiguous_session, fix: "Give more of the id; agent_list carries full ids."}
 
@@ -113,7 +118,7 @@ commands:
     grant: own
     read_only: true
     doc: |
-      Inspects a message you sent as queued, notified, or read.
+      Inspects a message you sent as queued, notified, or read, and says whether a running turn took it as a steer or an interrupt, and whether you sent it as the user.
     args:
       - {name: message, type: text, required: true, cli: pos, placeholder: "<message-id>", doc: "the id agent_msg answered"}
     result: AgentPeerMessage

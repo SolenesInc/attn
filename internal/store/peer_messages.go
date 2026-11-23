@@ -25,7 +25,7 @@ func scanPeerRecord(row peerRecordScanner) (inbox.PeerRecord, error) {
 	var address string
 	err := row.Scan(
 		&record.Message.ID, &record.Message.Sender, &record.Message.Body,
-		&record.Message.CreatedAt, &address,
+		&record.Message.CreatedAt, &record.Message.Turn, &record.Message.AsUser, &record.DeliveredAs, &address,
 		&record.NotifiedAt, &record.ReadAt, &record.ReadBy,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -41,7 +41,7 @@ func peerMessageRecord(queryer interface {
 	QueryRow(query string, args ...any) *sql.Row
 }, id string) (inbox.PeerRecord, error) {
 	record, err := scanPeerRecord(queryer.QueryRow(`
-		SELECT p.id, p.sender, p.body, p.created_at,
+		SELECT p.id, p.sender, p.body, p.created_at, p.turn, p.as_user, p.delivered_as,
 		       i.address, i.notified_at, i.read_at, i.read_by
 		FROM peer_messages p
 		JOIN inbox_items i ON i.kind = ? AND i.source_id = p.id
@@ -162,11 +162,27 @@ func (s *Store) PutPeerMessage(message inbox.Message, to who.Address) error {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err = tx.Exec("INSERT INTO peer_messages(id,sender,body,created_at) VALUES(?,?,?,?)", message.ID, message.Sender, message.Body, at.UTC().Format(sortableTimeFormat)); err != nil {
+	if _, err = tx.Exec("INSERT INTO peer_messages(id,sender,body,created_at,turn,as_user) VALUES(?,?,?,?,?,?)", message.ID, message.Sender, message.Body, at.UTC().Format(sortableTimeFormat), message.Turn, message.AsUser); err != nil {
 		return err
 	}
 	if err := putInbox(tx, inbox.Item{ID: message.ID, To: to, Kind: inbox.PeerMessage, Source: message.ID}, at); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+// DropPeerTurn makes the messages behind these inbox items wait for the turn to end, as messages sent without a turn use do.
+func (s *Store) DropPeerTurn(items []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`UPDATE peer_messages SET turn='' WHERE id IN (SELECT source_id FROM inbox_items WHERE kind=? AND id IN (SELECT value FROM json_each(?)))`, inbox.PeerMessage, jsonStrings(items))
+	return err
+}
+
+// DeliverPeerAs records that a running turn took the messages behind these inbox items as turn.
+func (s *Store) DeliverPeerAs(items []string, turn protocol.PeerTurn) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`UPDATE peer_messages SET delivered_as=? WHERE id IN (SELECT source_id FROM inbox_items WHERE kind=? AND id IN (SELECT value FROM json_each(?)))`, turn, inbox.PeerMessage, jsonStrings(items))
+	return err
 }

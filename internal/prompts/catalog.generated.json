@@ -1616,6 +1616,96 @@
           }
         },
         {
+          "id": "peer-message-steer",
+          "delivery": "user_message",
+          "description": "A peer message sent with --steer, put into the recipient's running turn at its next step.",
+          "body": {
+            "kind": "text",
+            "id": "session.peer-message-steer",
+            "source": "content/session/peer-message-steer.md",
+            "bindings": [
+              {
+                "name": "origin",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "origin",
+                    "kind": "text",
+                    "description": "Sender identity."
+                  }
+                }
+              },
+              {
+                "name": "message",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "message",
+                    "kind": "text",
+                    "description": "Literal peer message."
+                  }
+                }
+              },
+              {
+                "name": "reply_to",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "reply_to",
+                    "kind": "text",
+                    "description": "Reply target."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "peer-message-interrupt",
+          "delivery": "user_message",
+          "description": "A peer message sent with --interrupt: attn stopped the recipient's turn, and the message starts its next one.",
+          "body": {
+            "kind": "text",
+            "id": "session.peer-message-interrupt",
+            "source": "content/session/peer-message-interrupt.md",
+            "bindings": [
+              {
+                "name": "origin",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "origin",
+                    "kind": "text",
+                    "description": "Sender identity."
+                  }
+                }
+              },
+              {
+                "name": "message",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "message",
+                    "kind": "text",
+                    "description": "Literal peer message."
+                  }
+                }
+              },
+              {
+                "name": "reply_to",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "reply_to",
+                    "kind": "text",
+                    "description": "Reply target."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
           "id": "garden-update",
           "delivery": "inbox_content",
           "description": "A watched seed moved; returned by the durable inbox.",
@@ -7958,5 +8048,5 @@
       ]
     }
   ],
-  "definitions_hash": "bbdb6b9cc1f73464168cfeb041913bc8ea60e32c61fcf366e618e14d26760df1"
+  "definitions_hash": "c944d66363c63da5c3cab15a5baad532b41ea25e326c09c2227ee82cf8876789"
 }

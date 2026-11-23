@@ -17,7 +17,7 @@ Outside `internal/harness/internal/`, only `internal/harness/builtin` and `inter
 
 - `harness.Harness` (`internal/harness/harness.go`): the adapter interface. Generic code calls `Facts`, `Health`, `Models`, `Plan`, `Launch`, `Conversation`, `End`, `Terminal`, `Start`, `Recover`, `SettingChanged`, `Released`, `Stop`, and `Conversations`.
 - `harness.Facts` (`internal/harness/harness.go`): static adapter data (`ID`, `DisplayName`, `Logo`, `Options`, `Executable`, `SkillDirs`, `CacheTTL`, `Tiers`, `Advisor`, `CrewModel`, `Signals`, `Recovery`, `ModelDiscovery`, `Activity`, `ConversationIsSession`, `ServerTerminal`, `ReservesServer`, `Owner`, `Caller`). Every adapter states every field, and the zero value is a statement rather than a leak.
-- `harness.Conversation` (`internal/harness/conversation.go`): a stateless handle built from `SessionFacts` on each call. `Deliver` and `Compact` return a `Custody` with one `Outcome` (`Taken`, `Held`, `Deferred`, `Rejected`, `Stopped`, or `NotMine`). `CanCompact` returns `nil` or a refusal error.
+- `harness.Conversation` (`internal/harness/conversation.go`): a stateless handle built from `SessionFacts` on each call. `Deliver` and `Compact` return a `Custody` with one `Outcome` (`Taken`, `Held`, `Deferred`, `Rejected`, `Stopped`, or `NotMine`). `CanCompact` returns `nil` or a refusal error. `Input.Turn` asks for a steer or an interrupt of the running turn; an adapter that cannot place one answers `Rejected`, and attn queues the input for the turn's end.
 - `harness.ConversationStore` (`internal/harness/harness.go`): checks resume readiness and admission (`Check`, `Prepare`, `Admit`), reads transcripts and harness versions (`Page`, `LastReply`, `Window`, `Activity`, `Version`), and maps transcript paths (`Locate`, `IDFromPath`).
 - `harness.Events` (`internal/harness/events.go`): the single evidence sink from adapters into core (`Turn`, `Compacting`, `Prompt`, `Tool`, `Usage`, `Replied`, `Named`, `Moved`, `Compaction`, `Returned`, `Settled`, `Reach`, `Reloaded`).
 - `harness.Host` (`internal/harness/host.go`): what attn gives an adapter, including `Life`, `Events`, `Setting`, `LoginEnv`, `ServerTools`, `TerminalTools`, `Sessions`, `Files`, `Terminals`, `Records`, `Clock`, `Executable`, `RegisterCron`, `Notifications`, `Profiles`, and command and snapshot registration.
@@ -60,7 +60,7 @@ Single-implementer members inside `Events`, `TurnEvent`, `Input`, `Custody`, `La
 - `TurnEvent.Stop` background work and yield fields (`Left`, `Yielded`): Claude Code stop hooks.
 - `Events.Named`: session rename reported by shared Codex.
 - `Outcome` values `Held` and `Stopped`, `Input.Ring`, `Events.Settled`, and `Events.Returned`: Claude mod held-ring lifecycle.
-- `Outcome` value `Rejected` and `Custody.Uncertain`: plugin RPC direct delivery outcomes.
+- `Custody.Uncertain`: plugin RPC direct delivery outcomes.
 - `Events.Reach`: Claude mod channel reachability reports.
 - `TerminalEvent` values `Handed`, `Working`, and `Restarting`: shared Codex terminal lifecycle.
 - `LaunchRequest.Note`: plugin RPC launch metadata.

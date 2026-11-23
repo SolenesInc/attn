@@ -43,7 +43,7 @@ func TestMailForAnAgentMidTurnStaysSealedUntilItsTurnEndsThenRings(t *testing.T)
 	}
 
 	agent.Reply("Rebased. <!-- attn:state=idle -->")
-	if got := agent.Prompted(); !strings.Contains(got, inboxDoorbell) || strings.Contains(got, "rebase again") {
+	if got := agent.Prompted(); !strings.Contains(got, inboxDoorbell) || strings.Contains(got, "rebase again") || !agent.ThroughMod || agent.AsUser {
 		t.Fatalf("once its turn ended the agent was prompted with %q, want only the inbox doorbell", got)
 	}
 	recorded.Await()

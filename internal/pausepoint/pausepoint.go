@@ -60,6 +60,7 @@ const (
 	ClaudeModEnqueuing             = "claude-mod-enqueuing"
 	RingPlacementAnswering         = "ring-placement-answering"
 	InboxRingRecorded              = "inbox-ring-recorded"
+	InboxRingSettled               = "inbox-ring-settled"
 	TenderDirectoryInspecting      = "tender-directory-inspecting"
 	SessionInputLaneContended      = "session-input-lane-contended"
 	CodexReplyDelivering           = "codex-reply-delivering"

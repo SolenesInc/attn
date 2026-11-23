@@ -40,12 +40,25 @@ type Conversation interface {
 	CanCompact() error
 }
 
+// TurnUse says how an input reaches a working session.
+type TurnUse uint8
+
+const (
+	// Queue waits for the running turn to end: the harness's normal delivery.
+	Queue TurnUse = iota
+	// Steer joins the running turn at its next step without stopping it.
+	Steer
+	// Interrupt stops the running turn now and starts the next one with the input.
+	Interrupt
+)
+
 // Input is one delivery to a session. ID names the attempt; a harness may pass it on. Text is empty for a compact.
 type Input struct {
 	ID    string
 	Text  string
 	Voice Voice
 	Ring  *protocol.InboxRingRecord
+	Turn  TurnUse
 	// PendingApproval: the session waits on an approval or a question.
 	PendingApproval bool
 	// AskedInTurn: that wait followed working in this run.

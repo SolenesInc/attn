@@ -240,6 +240,12 @@ func (d *Daemon) peerMessageResult(record inbox.PeerRecord) *protocol.AgentPeerM
 		Content: record.Message.Body, State: protocol.AgentMessageState(record.State()),
 		CreatedAt: record.Message.CreatedAt,
 	}
+	if record.DeliveredAs != "" {
+		result.DeliveredAs = protocol.Ptr(record.DeliveredAs)
+	}
+	if record.Message.AsUser {
+		result.AsUser = protocol.Ptr(true)
+	}
 	if record.NotifiedAt != "" {
 		result.NotifiedAt = protocol.Ptr(record.NotifiedAt)
 	}
@@ -292,9 +298,21 @@ func agentInboxText(result *protocol.AgentInboxBatchResult) string {
 }
 
 func agentPeerMessageText(sender protocol.PartyView, replyTo, content string) string {
+	return peerMessageText("peer-message", sender, replyTo, content)
+}
+
+func (d *Daemon) peerRingText(message inbox.Message) string {
+	event := "peer-message-steer"
+	if message.Turn == protocol.PeerTurnInterrupt {
+		event = "peer-message-interrupt"
+	}
+	return peerMessageText(event, d.partyView(message.Sender), d.replyTo(message.Sender), message.Body)
+}
+
+func peerMessageText(event string, sender protocol.PartyView, replyTo, content string) string {
 	origin := replyTo
 	if name := strings.TrimSpace(sender.Name); name != "" && name != origin {
 		origin = fmt.Sprintf("%s (%s)", origin, name)
 	}
-	return prompts.RenderText("session", "peer-message", prompts.Values{"origin": origin, "message": content, "reply_to": replyTo})
+	return prompts.RenderText("session", event, prompts.Values{"origin": origin, "message": content, "reply_to": replyTo})
 }

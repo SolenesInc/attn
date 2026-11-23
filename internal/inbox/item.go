@@ -42,6 +42,8 @@ type Message struct {
 	Sender    who.Party
 	Body      string
 	CreatedAt string
+	Turn      protocol.PeerTurn
+	AsUser    bool
 }
 
 type State string
@@ -53,11 +55,12 @@ const (
 )
 
 type PeerRecord struct {
-	To         who.Address
-	Message    Message
-	ReadBy     protocol.SessionID
-	NotifiedAt string
-	ReadAt     string
+	To          who.Address
+	Message     Message
+	ReadBy      protocol.SessionID
+	NotifiedAt  string
+	ReadAt      string
+	DeliveredAs protocol.PeerTurn
 }
 
 func (r PeerRecord) State() State {

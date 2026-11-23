@@ -80,12 +80,14 @@ func scanInboxDelivery(row inboxDeliveryScanner) (InboxDelivery, error) {
 		kind                         string
 		address                      string
 		peerID, peerSender, body, at string
+		turn                         protocol.PeerTurn
+		asUser                       bool
 	)
 	if err := row.Scan(
 		&delivery.Item.ID, &address, &kind,
 		&delivery.Item.Source, &delivery.Item.Key, &delivery.Item.Hint,
 		&delivery.Item.Text, &delivery.Item.CreatedAt, &delivery.Item.NotifiedAt,
-		&delivery.Item.ReadAt, &delivery.Item.ReadBy, &delivery.Item.Attempts, &delivery.Item.AttemptedAt, &delivery.Item.BellName, &delivery.Item.AfterSeq, &peerID, &peerSender, &body, &at,
+		&delivery.Item.ReadAt, &delivery.Item.ReadBy, &delivery.Item.Attempts, &delivery.Item.AttemptedAt, &delivery.Item.BellName, &delivery.Item.AfterSeq, &peerID, &peerSender, &body, &at, &turn, &asUser,
 	); err != nil {
 		return InboxDelivery{}, err
 	}
@@ -103,7 +105,7 @@ func scanInboxDelivery(row inboxDeliveryScanner) (InboxDelivery, error) {
 		if err != nil {
 			return InboxDelivery{}, fmt.Errorf("peer message %s: %w", peerID, err)
 		}
-		delivery.Peer = &inbox.Message{ID: peerID, Sender: sender, Body: body, CreatedAt: at}
+		delivery.Peer = &inbox.Message{ID: peerID, Sender: sender, Body: body, CreatedAt: at, Turn: turn, AsUser: asUser}
 	}
 	return delivery, nil
 }
@@ -127,7 +129,7 @@ func (s *Store) UnreadInboxDeliveries(to who.Address) ([]InboxDelivery, error) {
 		SELECT i.id, i.address, i.kind, i.source_id, i.coalesce_key,
 		       i.hint, i.text, i.created_at, i.notified_at, i.read_at, i.read_by, i.attempts, i.attempted_at, i.bell_name, i.after_seq,
 		       COALESCE(p.id, ''), COALESCE(p.sender, ''),
-		       COALESCE(p.body, ''), COALESCE(p.created_at, '')
+		       COALESCE(p.body, ''), COALESCE(p.created_at, ''), COALESCE(p.turn, ''), COALESCE(p.as_user, 0)
 		FROM inbox_items i
 		LEFT JOIN peer_messages p ON i.kind = ? AND p.id = i.source_id
 		WHERE i.address = ? AND i.read_at = ''
@@ -163,7 +165,7 @@ func (s *Store) ReadInbox(addresses []who.Address, readBy protocol.SessionID, li
 		SELECT i.id, i.address, i.kind, i.source_id, i.coalesce_key,
 		       i.hint, i.text, i.created_at, i.notified_at, i.read_at, i.read_by, i.attempts, i.attempted_at, i.bell_name, i.after_seq,
 		       COALESCE(p.id, ''), COALESCE(p.sender, ''),
-		       COALESCE(p.body, ''), COALESCE(p.created_at, '')
+		       COALESCE(p.body, ''), COALESCE(p.created_at, ''), COALESCE(p.turn, ''), COALESCE(p.as_user, 0)
 		FROM inbox_items i
 		LEFT JOIN peer_messages p ON i.kind = ? AND p.id = i.source_id
 		WHERE i.address IN (SELECT value FROM json_each(?)) AND i.read_at = '' AND i.kind NOT IN (SELECT value FROM json_each(?))
@@ -258,6 +260,11 @@ func (s *Store) ReadGardenSeedInboxItems(to who.Address, readBy protocol.Session
 	return changed > 0, tx.Commit()
 }
 
+func jsonStrings(values []string) string {
+	data, _ := json.Marshal(values)
+	return string(data)
+}
+
 func typedKindsJSON() string {
 	data, _ := json.Marshal(inbox.TypedKinds())
 	return string(data)
@@ -341,6 +348,7 @@ func withdrawInbox(tx *sql.Tx, key InboxKey) error {
 
 type InboxAttempt struct {
 	Live     int
+	Typed    int
 	FromUser int
 	Unread   int
 	Last     time.Time
@@ -355,7 +363,14 @@ func (s *Store) InboxAttempt(to who.Address) (InboxAttempt, error) {
 		return result, err
 	}
 	result.Last, _ = time.Parse(time.RFC3339Nano, last)
-	err := s.db.QueryRow(`SELECT COUNT(*),COALESCE(SUM(attempts < ?),0),COALESCE(SUM(kind IN (SELECT value FROM json_each(?))),0) FROM inbox_items WHERE address=? AND read_at=''`, inbox.MaxAttempts, typedKindsJSON(), to.String()).Scan(&result.Unread, &result.Live, &result.FromUser)
+	err := s.db.QueryRow(`
+		SELECT COUNT(*),
+		       COALESCE(SUM(i.attempts < ?),0),
+		       COALESCE(SUM(i.kind IN (SELECT value FROM json_each(?)) OR p.turn <> '' OR p.as_user),0),
+		       COALESCE(SUM(i.kind IN (SELECT value FROM json_each(?)) OR p.as_user),0)
+		FROM inbox_items i
+		LEFT JOIN peer_messages p ON i.kind = ? AND p.id = i.source_id
+		WHERE i.address=? AND i.read_at=''`, inbox.MaxAttempts, typedKindsJSON(), typedKindsJSON(), inbox.PeerMessage, to.String()).Scan(&result.Unread, &result.Live, &result.Typed, &result.FromUser)
 	return result, err
 }
 

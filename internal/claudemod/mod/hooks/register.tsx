@@ -4,7 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Message, Request } from '../types'
 
 type Link = { terminal: string; socketPath: string }
-type Outcome = 'submitted' | 'held' | 'refused'
+type Outcome = 'submitted' | 'held' | 'appended' | 'refused'
 type Compacted = 'compacted' | 'skipped' | 'busy' | 'ready' | 'failed'
 
 const POLL_RETRY_MS = 1000
@@ -12,6 +12,7 @@ const RING_ID_PREFIX = 'inbox-ring/'
 const BETWEEN_TURNS_ONLY = ['compacts between turns', 'a newer turn began']
 
 const persistedTurnRunning = atom({ plugin: 'attn', key: 'isTurnRunning' } as const, false)
+const persistedTurnId = atom({ plugin: 'attn', key: 'turnId' } as const, '')
 const heldLines = atom({ plugin: 'attn', key: 'heldLines' } as const, [] as string[])
 const waitingLines = atom({ plugin: 'attn', key: 'waitingLines' } as const, [] as string[])
 
@@ -19,6 +20,10 @@ const instance = crypto.randomUUID()
 let link: Link = { terminal: '', socketPath: '' }
 let isTurnRunning = false
 let isStopped = false
+let turnId = ''
+let ownAbort = false
+let steers: Message[] = []
+let interrupts: Message[] = []
 let queued: Message[] = []
 let givenBack: Message[] = []
 let lastRequest: Promise<void> = Promise.resolve()
@@ -116,6 +121,15 @@ async function place($: EngineInterface, message: Message): Promise<void> {
   if (isStopped) {
     return refuseStopped($, message)
   }
+  if (isTurnRunning && message.turn === 'steer') {
+    steers = [...steers, message]
+    return ack($, message.id, 'held')
+  }
+  if (isTurnRunning && message.turn === 'interrupt') {
+    interrupts = [...interrupts, message]
+    await ack($, message.id, 'held')
+    return abortOwnTurn($)
+  }
   if (isTurnRunning) {
     await Promise.all([setQueued($, [...queued, message]), ack($, message.id, 'held')])
     return
@@ -181,8 +195,46 @@ async function pollForever($: EngineInterface): Promise<void> {
   }
 }
 
+async function abortOwnTurn($: EngineInterface): Promise<void> {
+  if (ownAbort) {
+    return
+  }
+  ownAbort = true
+  try {
+    await $.turn.abort({ turnId })
+  } catch (err) {
+    ownAbort = false
+    $.ui.log(`attn could not stop the turn for an interrupt, so it waits for the turn to end: ${String(err)}`, { to: 'debug' })
+  }
+}
+
+async function appendSteers($: EngineInterface): Promise<void> {
+  const messages = steers
+  steers = []
+  for (const message of messages) {
+    const appended = await $.session
+      .append({ message: { type: 'user', content: [{ type: 'text', text: message.text }] } })
+      .catch((err: unknown) => ({ deny: String(err) }))
+    if (appended.deny !== undefined) {
+      $.ui.log(`Claude refused a steer, so attn sends it when the turn ends: ${appended.deny}`, { to: 'debug' })
+      steers = [...steers, message]
+      continue
+    }
+    await ackHeld($, message, 'appended')
+  }
+}
+
+function takeHeld(): Message[] {
+  const held = [...interrupts, ...steers, ...queued]
+  interrupts = []
+  steers = []
+  return held
+}
+
 function nextPrompt(messages: Message[]): { prompt: Message[]; rest: Message[] } {
-  const asUser = messages.some(message => message.user_words === true)
+  const first = messages[0]
+  const asUser =
+    first?.turn === 'interrupt' ? first.user_words === true : messages.some(message => message.user_words === true)
   const inVoice = (message: Message) => (message.user_words === true) === asUser
   return { prompt: messages.filter(inVoice), rest: messages.filter(message => !inVoice(message)) }
 }
@@ -190,7 +242,7 @@ function nextPrompt(messages: Message[]): { prompt: Message[]; rest: Message[] }
 async function submitPrompt($: EngineInterface, prompt: Message[]): Promise<void> {
   const drop = await submit($, prompt.map(message => message.text).join('\n\n'), prompt[0]?.user_words === true)
   if (drop !== undefined) {
-    const back = [...prompt, ...queued]
+    const back = [...prompt, ...takeHeld()]
     await Promise.all([setQueued($, []), setTurnRunning($, false)])
     return giveBack($, back)
   }
@@ -207,6 +259,7 @@ export const register: Register = on => {
       socketPath: (await $.env.get('ATTN_CLAUDE_MOD_SOCKET')) ?? '',
     }
     isTurnRunning = await read($, persistedTurnRunning)
+    turnId = await read($, persistedTurnId)
     await setQueued($, [])
     void pollForever($)
     return started
@@ -215,10 +268,19 @@ export const register: Register = on => {
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) {
       isStopped = false
-      await setTurnRunning($, true)
+      turnId = e.turnId
+      await Promise.all([setTurnRunning($, true), update($, persistedTurnId, () => e.turnId)])
       await update($, waitingLines, () => [])
     }
     return next(e)
+  })
+
+  on('tool.call', async ($, e, next) => {
+    const result = await next(e)
+    if (e.agentId === undefined && next.signal.aborted !== true && steers.length > 0) {
+      await appendSteers($)
+    }
+    return result
   })
 
   on('turn.complete', async ($, e, next) => {
@@ -226,17 +288,18 @@ export const register: Register = on => {
     if (e.agentId !== undefined) {
       return result
     }
-    isStopped = e.isAborted
+    isStopped = e.isAborted && !ownAbort
+    ownAbort = false
+    const held = takeHeld()
     if (isStopped) {
-      const leftOver = queued
       await Promise.all([setQueued($, []), setTurnRunning($, false)])
-      await listWaiting($, leftOver)
-      if (leftOver.length > 0) {
-        await giveBack($, leftOver)
+      await listWaiting($, held)
+      if (held.length > 0) {
+        await giveBack($, held)
       }
       return result
     }
-    const { prompt, rest } = nextPrompt(queued)
+    const { prompt, rest } = nextPrompt(held)
     await Promise.all([setQueued($, rest), setTurnRunning($, prompt.length > 0)])
     if (prompt.length > 0) {
       void submitPrompt($, prompt)

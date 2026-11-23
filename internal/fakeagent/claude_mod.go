@@ -29,6 +29,9 @@ const (
 	ModEventReplaced     = "replaced"
 	fakeModEventBacklog  = 64
 	fakeModOutcomeSubmit = "submitted"
+	fakeModOutcomeAppend = "appended"
+	fakeModTurnSteer     = "steer"
+	fakeModTurnInterrupt = "interrupt"
 	fakeModKindCompact   = "compact"
 	fakeModTurnRunning   = "a turn is running"
 	ModNewerTurnBegan    = "a newer turn began before the compaction could be applied"
@@ -48,6 +51,8 @@ const (
 	methodModResume         = "mod_resume"
 	methodModGiveBack       = "mod_give_back"
 	methodModReaddressHeld  = "mod_readdress_held"
+	methodModTool           = "mod_tool_boundary"
+	methodModAbortLands     = "mod_abort_lands"
 )
 
 const (
@@ -79,6 +84,7 @@ type fakeModMessage struct {
 	Kind      string          `json:"kind,omitempty"`
 	Text      string          `json:"text"`
 	UserWords bool            `json:"user_words,omitempty"`
+	Turn      string          `json:"turn,omitempty"`
 	Ring      json.RawMessage `json:"ring,omitempty"`
 }
 
@@ -100,6 +106,8 @@ type fakeMod struct {
 	working  bool
 	stopped  bool
 	held     []fakeModMessage
+	steers   []fakeModMessage
+	aborts   []fakeModMessage
 	back     []fakeModMessage
 
 	nextCompact ModCompactReport
@@ -216,6 +224,16 @@ func (m *fakeMod) place(instance string, message fakeModMessage) {
 		m.mu.Unlock()
 		m.post("/claude/ack", map[string]any{"terminal": m.terminal, "instance": instance, "id": message.ID, "outcome": ModEventRefusedStop})
 		m.events <- ModEvent{Kind: ModEventRefusedStop, Text: message.Text}
+	case m.working && message.Turn == fakeModTurnSteer:
+		m.steers = append(m.steers, message)
+		m.mu.Unlock()
+		m.ack(instance, message.ID, ModEventHeld)
+		m.events <- ModEvent{Kind: ModEventHeld, Text: message.Text}
+	case m.working && message.Turn == fakeModTurnInterrupt:
+		m.aborts = append(m.aborts, message)
+		m.mu.Unlock()
+		m.ack(instance, message.ID, ModEventHeld)
+		m.events <- ModEvent{Kind: ModEventHeld, Text: message.Text}
 	case m.working:
 		m.held = append(m.held, message)
 		m.mu.Unlock()
@@ -243,6 +261,25 @@ func (m *fakeMod) submit(instance string, messages ...fakeModMessage) {
 	for _, message := range messages {
 		m.ackHeld(instance, message, fakeModOutcomeSubmit)
 	}
+}
+
+func (m *fakeMod) toolBoundary() []string {
+	m.mu.Lock()
+	steers, instance := m.steers, m.instance
+	m.steers = nil
+	m.mu.Unlock()
+	appended := make([]string, 0, len(steers))
+	for _, message := range steers {
+		m.ackHeld(instance, message, fakeModOutcomeAppend)
+		appended = append(appended, message.Text)
+	}
+	return appended
+}
+
+func (m *fakeMod) takeHeldLocked() []fakeModMessage {
+	held := slices.Concat(m.aborts, m.steers, m.held)
+	m.aborts, m.steers, m.held = nil, nil, nil
+	return held
 }
 
 func (m *fakeMod) ackHeld(instance string, message fakeModMessage, outcome string) {
@@ -330,9 +367,13 @@ func (m *fakeMod) turnCompleted() {
 	m.mu.Lock()
 	m.working = false
 	instance := m.instance
-	asUser := slices.ContainsFunc(m.held, func(message fakeModMessage) bool { return message.UserWords })
+	held := m.takeHeldLocked()
+	asUser := slices.ContainsFunc(held, func(message fakeModMessage) bool { return message.UserWords })
+	if len(held) > 0 && held[0].Turn == fakeModTurnInterrupt {
+		asUser = held[0].UserWords
+	}
 	var prompt, rest []fakeModMessage
-	for _, message := range m.held {
+	for _, message := range held {
 		if message.UserWords == asUser {
 			prompt = append(prompt, message)
 		} else {
@@ -360,6 +401,19 @@ func (m *fakeMod) handle(a *agent, method string, params json.RawMessage) (any, 
 	switch method {
 	case methodModNext:
 		return <-m.events, nil
+	case methodModTool:
+		return m.toolBoundary(), nil
+	case methodModAbortLands:
+		a.turn.Lock()
+		defer a.turn.Unlock()
+		m.mu.Lock()
+		aborting := len(m.aborts) > 0
+		m.mu.Unlock()
+		if !aborting {
+			return nil, errors.New("the mod holds no interrupt whose abort could land")
+		}
+		m.turnCompleted()
+		return struct{}{}, nil
 	case methodModEsc:
 		a.turn.Lock()
 		defer a.turn.Unlock()
@@ -547,8 +601,8 @@ func (m *fakeMod) reportCompact(instance, id, outcome, reason string) {
 
 func (m *fakeMod) esc() []string {
 	m.mu.Lock()
-	held, instance := m.held, m.instance
-	m.held, m.working, m.stopped = nil, false, true
+	held, instance := m.takeHeldLocked(), m.instance
+	m.working, m.stopped = false, true
 	m.back = append(m.back, held...)
 	m.mu.Unlock()
 	texts := make([]string, 0, len(held))
@@ -565,7 +619,8 @@ func (m *fakeMod) stopPolling() {
 	if m.cancel != nil {
 		m.cancel()
 	}
-	m.held, m.back, m.working = nil, nil, false
+	m.takeHeldLocked()
+	m.back, m.working = nil, false
 }
 
 func (m *fakeMod) reload() {

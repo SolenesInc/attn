@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "4a240263cfd0";
+pub const PROTOCOL_VERSION: &str = "fb8a99d608c2";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -212,6 +212,8 @@ pub struct AgentListRow {
 pub type AgentMessageState = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentMsgResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub as_user: Option<bool>,
     pub detail: String,
     pub message_id: String,
     pub status: AgentMsgStatus,
@@ -260,8 +262,12 @@ pub struct AgentPeekScreen {
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentPeerMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub as_user: Option<bool>,
     pub content: String,
     pub created_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivered_as: Option<PeerTurn>,
     pub message_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notified_at: Option<String>,
@@ -5641,6 +5647,8 @@ pub struct InboxRingRecord {
     pub profile_id: String,
     pub stamp: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn: Option<PeerTurn>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub typed: Option<Vec<String>>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -7317,6 +7325,7 @@ pub struct PathInspection {
     pub repo_root: Option<String>,
     pub resolved_path: String,
 }
+pub type PeerTurn = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PhoneLink {
     pub cloud_url: String,
@@ -11203,6 +11212,8 @@ pub struct SessionPlaceMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn: Option<PeerTurn>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user_words: Option<bool>,
 }

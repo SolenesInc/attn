@@ -270,6 +270,9 @@ const AgentMessageStateQueued AgentMessageState = "queued"
 const AgentMessageStateRead AgentMessageState = "read"
 
 type AgentMsgResult struct {
+	// AsUser corresponds to the JSON schema field "as_user".
+	AsUser *bool `json:"as_user,omitempty,omitzero"`
+
 	// Detail corresponds to the JSON schema field "detail".
 	Detail string `json:"detail"`
 
@@ -285,9 +288,11 @@ type AgentMsgResult struct {
 
 type AgentMsgStatus string
 
+const AgentMsgStatusInterrupted AgentMsgStatus = "interrupted"
 const AgentMsgStatusNotified AgentMsgStatus = "notified"
 const AgentMsgStatusQueued AgentMsgStatus = "queued"
 const AgentMsgStatusRefused AgentMsgStatus = "refused"
+const AgentMsgStatusSteered AgentMsgStatus = "steered"
 
 type AgentPeekExit struct {
 	// At corresponds to the JSON schema field "at".
@@ -360,11 +365,17 @@ type AgentPeekScreen struct {
 }
 
 type AgentPeerMessage struct {
+	// AsUser corresponds to the JSON schema field "as_user".
+	AsUser *bool `json:"as_user,omitempty,omitzero"`
+
 	// Content corresponds to the JSON schema field "content".
 	Content string `json:"content"`
 
 	// CreatedAt corresponds to the JSON schema field "created_at".
 	CreatedAt string `json:"created_at"`
+
+	// DeliveredAs corresponds to the JSON schema field "delivered_as".
+	DeliveredAs *PeerTurn `json:"delivered_as,omitempty,omitzero"`
 
 	// MessageID corresponds to the JSON schema field "message_id".
 	MessageID string `json:"message_id"`
@@ -6294,6 +6305,9 @@ type InboxRingRecord struct {
 	// Stamp corresponds to the JSON schema field "stamp".
 	Stamp string `json:"stamp"`
 
+	// Turn corresponds to the JSON schema field "turn".
+	Turn *PeerTurn `json:"turn,omitempty,omitzero"`
+
 	// Typed corresponds to the JSON schema field "typed".
 	Typed []string `json:"typed,omitempty,omitzero"`
 }
@@ -8182,6 +8196,11 @@ type PathInspection struct {
 	// ResolvedPath corresponds to the JSON schema field "resolved_path".
 	ResolvedPath string `json:"resolved_path"`
 }
+
+type PeerTurn string
+
+const PeerTurnInterrupt PeerTurn = "interrupt"
+const PeerTurnSteer PeerTurn = "steer"
 
 type PhoneLink struct {
 	// CloudURL corresponds to the JSON schema field "cloud_url".
@@ -12803,6 +12822,9 @@ type SessionPlaceMessage struct {
 
 	// Text corresponds to the JSON schema field "text".
 	Text string `json:"text"`
+
+	// Turn corresponds to the JSON schema field "turn".
+	Turn *PeerTurn `json:"turn,omitempty,omitzero"`
 
 	// UserWords corresponds to the JSON schema field "user_words".
 	UserWords *bool `json:"user_words,omitempty,omitzero"`

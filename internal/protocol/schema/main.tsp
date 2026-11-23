@@ -7872,6 +7872,14 @@ enum AgentMsgStatus {
   notified,
   queued,
   refused,
+  steered,
+  interrupted,
+}
+
+// How a peer message reaches a working recipient when it does not wait for the turn to end.
+enum PeerTurn {
+  steer,
+  interrupt,
 }
 
 model AgentMsgResult {
@@ -7879,6 +7887,7 @@ model AgentMsgResult {
   target_session_id: SessionID;
   status: AgentMsgStatus;
   detail: string;
+  as_user?: boolean;
 }
 
 enum AgentMessageState {
@@ -7899,6 +7908,10 @@ model AgentPeerMessage {
   created_at: string;
   notified_at?: string;
   read_at?: string;
+  // The running turn took it this way; unset when it waited for the turn to end.
+  delivered_as?: PeerTurn;
+  // Sent with --as-user: delivered as the user's words, without the sender's name.
+  as_user?: boolean;
 }
 
 // One durable notification consumed by a bounded inbox read. Content is the
@@ -9174,6 +9187,7 @@ model SessionPlaceMessage {
   compact?: boolean;
   ring?: InboxRingRecord;
   user_words?: boolean;
+  turn?: PeerTurn;
   expected_driver_run?: string;
   expected_conversation?: string;
 }
@@ -9197,6 +9211,7 @@ model InboxRingRecord {
   captures?: string[];
   authorized_seeds?: string[];
   follows_captures?: boolean;
+  turn?: PeerTurn;
 }
 
 enum InboxRingOutcome { Placed: "placed", Returned: "returned" }
