@@ -31,7 +31,6 @@ func Facts() harness.Facts {
 			ModelPin:              true,
 			EffortPin:             true,
 			Picker:                true,
-			Provider:              true,
 		},
 		Executable:     harness.Executable{Default: defaultExecutable, Env: executableEnvVar},
 		SkillDirs:      skillDirs,

@@ -95,8 +95,8 @@ func TestAPluginHarnessReachesTheCatalogWithTheLogoItRegistered(t *testing.T) {
 		return listed
 	})
 	plug, _ := catalogEntry(catalog, "plug")
-	if plug.Name != "Example Agent" || plug.Options.ExecutableSetting || !plug.Options.Provider || protocol.Deref(plug.Logo) == "" {
-		t.Fatalf("the plugin's harness in the catalog = %+v, want Example Agent as a provider, with its logo and no executable setting", plug)
+	if plug.Name != "Example Agent" || plug.Options.ExecutableSetting || protocol.Deref(plug.Logo) == "" {
+		t.Fatalf("the plugin's harness in the catalog = %+v, want Example Agent with its logo and no executable setting", plug)
 	}
 	logo := requestLogo(app, *plug.Logo)
 	if !logo.Success || logo.Logo.View != 16 || !strings.HasPrefix(logo.Logo.Body, "<circle") {

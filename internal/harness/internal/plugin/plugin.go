@@ -98,7 +98,6 @@ func (h Harness) Facts() harness.Facts {
 			LaunchInstructions: declared["launch_instructions"],
 			ModelPin:           declared["model_pin"],
 			EffortPin:          declared["effort_pin"],
-			Provider:           true,
 		},
 		SkillDirs:      h.reg.SkillDirs,
 		CacheTTL:       time.Hour,

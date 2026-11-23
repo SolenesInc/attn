@@ -235,7 +235,7 @@ fn a_stored_activity_model_missing_from_discovery_stays_and_an_exact_id_saves() 
             .any(|(name, selected, _)| name.starts_with("retired-model") && *selected)
     );
     assert!(writes(&world).is_empty());
-    enter_model(&mut world, "custom-model", None);
+    enter_model(&mut world, "custom-model");
     assert_eq!(
         writes(&world).last().unwrap(),
         &(
@@ -487,7 +487,13 @@ fn sigma_model(provider: &str, id: &str, name: &str, one_shot: &str) -> HarnessM
     HarnessModel {
         provider: provider.into(),
         one_shot: one_shot.into(),
-        ..model("sigma", id, name, Some("light"), &["low", "high"])
+        ..model(
+            "sigma",
+            &format!("{provider}/{id}"),
+            name,
+            Some("light"),
+            &["low", "high"],
+        )
     }
 }
 
@@ -513,7 +519,7 @@ fn on_sigma_background(settings: &[(&str, &str)]) -> World {
 }
 
 #[test]
-fn a_sigma_activity_model_saves_and_reads_back_with_its_provider() {
+fn a_sigma_activity_model_saves_and_reads_back_as_its_catalog_id() {
     let mut world = on_sigma_background(&[]);
     open_route(&mut world, "Session activity model");
     preview_harness(&mut world, "Sigma");

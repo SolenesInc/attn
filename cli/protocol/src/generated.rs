@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "f7a08e1a38dd";
+pub const PROTOCOL_VERSION: &str = "4a240263cfd0";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -3271,8 +3271,6 @@ pub struct DelegateMessage {
     pub priority: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
     pub request_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub review: Option<SeedReviewActionContext>,
@@ -3616,7 +3614,6 @@ pub struct DelegationSelection {
     pub effort: String,
     pub harness: String,
     pub model: String,
-    pub provider: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DelegationWorktreeOwner {
@@ -5449,6 +5446,8 @@ pub struct HarnessModel {
     #[serde(deserialize_with = "null_as_default")]
     pub effort_levels: Vec<String>,
     pub effort_support: ModelCapabilitySupport,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub family: Option<String>,
     pub harness: String,
     pub id: String,
     pub name: String,
@@ -5515,7 +5514,6 @@ pub struct HarnessOptions {
     pub launch_instructions: bool,
     pub model_pin: bool,
     pub one_shot: bool,
-    pub provider: bool,
     pub resume: bool,
     pub yolo: bool,
 }

@@ -155,7 +155,7 @@ func TestTheSigmaModelListForAnOutpostComesFromTheOutpostsServer(t *testing.T) {
 		t.Fatalf("the outpost started %d Sigma servers to list models, want one", servers)
 	}
 	requireNoHomeSigmaServer(t, pair)
-	t.Logf("%d Sigma models from the outpost's server (%s/%s first); the home started none", len(r.Catalog.Models), r.Catalog.Models[0].Provider, r.Catalog.Models[0].ID)
+	t.Logf("%d Sigma models from the outpost's server (%s first); the home started none", len(r.Catalog.Models), r.Catalog.Models[0].ID)
 }
 
 func TestAHarnessIsRefusedOnAnOutpostOnlyWhenTheOutpostsCatalogLacksIt(t *testing.T) {

@@ -335,13 +335,34 @@ func TestAppServerOffersItsProvidersModelsWithoutKeepingItsServer(t *testing.T) 
 			protocol.EventHarnessModelsResult, func(r protocol.HarnessModelsResultMessage) bool { return r.RequestID == "server-models" })
 		var offered []string
 		for _, m := range found.Models {
-			offered = append(offered, m.Provider+"/"+m.ID+" "+string(m.EffortSupport)+" "+strings.Join(m.EffortLevels, ","))
+			offered = append(offered, m.Provider+" "+m.ID+" "+string(m.EffortSupport)+" "+strings.Join(m.EffortLevels, ","))
 		}
-		want := []string{"claude/opus supported low,medium,high", "openai/gpt-5.5 supported low,high", "openai/gpt-image unsupported "}
+		want := []string{"claude claude/opus supported low,medium,high", "openai openai/gpt-5.5 supported low,high", "openai openai/gpt-image unsupported "}
 		if !found.Success || !slices.Equal(offered, want) {
 			t.Fatalf("app-server's models = %q (%+v), want %q", offered, found, want)
 		}
 		w.AppServer(h).AwaitStopped()
+	})
+}
+
+func TestAServerModelKeepsTheShippedTierOfItsPlainName(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		w.ServeProvidersAtNextBoot(fakeagent.ServerProvider{ID: "claude", Status: "ready", Models: []fakeagent.ServerModel{
+			{ID: "default", Name: "Default", Efforts: []string{}},
+			{ID: "haiku", Name: "Haiku", Efforts: []string{}},
+		}})
+		app := w.App()
+		offerAppServer(t, w, app, h)
+		found := testworld.Request(app, protocol.HarnessModelsMessage{Cmd: protocol.CmdHarnessModels, Harness: string(h), RequestID: "server-tiers"},
+			protocol.EventHarnessModelsResult, func(r protocol.HarnessModelsResultMessage) bool { return r.RequestID == "server-tiers" })
+		var got []string
+		for _, m := range found.Models {
+			got = append(got, m.ID+" "+string(protocol.Deref(m.Tier))+" "+string(m.TierSource))
+		}
+		if want := []string{"claude/default  alias", "claude/haiku light shipped"}; !found.Success || !slices.Equal(got, want) {
+			t.Fatalf("app-server's tiers = %q (%+v), want %q", got, found, want)
+		}
 	})
 }
 
@@ -351,7 +372,7 @@ func TestADelegationRoleRunsTheAppServerModelThePickerOffered(t *testing.T) {
 		app, cli := w.App(), w.Client()
 		offerAppServer(t, w, app, h)
 		roles := buildRole()
-		roles.Roles[0].Choices[0].Selection = protocol.DelegationSelection{Harness: string(h), Provider: "openai", Model: "gpt-5.5", Effort: "high"}
+		roles.Roles[0].Choices[0].Selection = protocol.DelegationSelection{Harness: string(h), Model: "openai/gpt-5.5", Effort: "high"}
 		if saved := savePreferences(app, roles); !saved.Success {
 			t.Fatalf("saving the build role on app-server's openai/gpt-5.5: %s", protocol.Deref(saved.Error))
 		}

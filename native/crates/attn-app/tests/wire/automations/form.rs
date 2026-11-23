@@ -1182,7 +1182,7 @@ fn a_model_typed_by_hand_saves_when_the_harness_list_fails() {
         });
     });
     harness_catalogs::open_route(&mut world, "Automation model");
-    harness_catalogs::enter_model(&mut world, "custom-model", None);
+    harness_catalogs::enter_model(&mut world, "custom-model");
     world.gesture(|app| app.press("escape"));
     assert!(route(&world).contains("custom-model"), "{}", route(&world));
     press(&mut world, "save");

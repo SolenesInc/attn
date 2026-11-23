@@ -347,7 +347,6 @@ type Options struct {
 	EffortPin             bool
 	ContextCap            bool
 	Picker                bool
-	Provider              bool
 }
 
 // Request is the launch options a caller asks of a harness.

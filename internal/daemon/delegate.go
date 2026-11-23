@@ -279,10 +279,6 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		msg.Agent = &s.Harness
 		msg.Model = &s.Model
 		msg.Effort = &s.Effort
-		if s.Provider != "" {
-			joined := s.Provider + "/" + s.Model
-			msg.Model = &joined
-		}
 		guidance = prompts.DelegationExecutionGuidance(resolved.RoleName, resolved.Instructions)
 	}
 	sessionID := reservedSessionID

@@ -3449,7 +3449,6 @@ fn empty_delegation_world(dark: bool, settings: &[(&str, &str)]) -> World {
 fn route(harness: &str, model: &str, effort: &str) -> DelegationSelection {
     DelegationSelection {
         harness: harness.into(),
-        provider: String::new(),
         model: model.into(),
         effort: effort.into(),
     }
@@ -4502,7 +4501,6 @@ fn settings_smallest_pages(dark: bool) {
                     model_pin: true,
                     effort_pin: true,
                     discovery: true,
-                    provider: true,
                     ..attn_protocol::HarnessOptions::default()
                 },
                 ..Harness::default()
@@ -4647,7 +4645,7 @@ fn settings_smallest_pages(dark: bool) {
         "models",
         &[(
             "model_tier_overrides",
-            r#"[{"harness":"codex","provider":"openrouter","model":"gpt-5.1-codex-max-preview-2026-09-30-with-extended-context","tier":"deep"}]"#,
+            r#"[{"harness":"codex","model":"openrouter/gpt-5.1-codex-max-preview-2026-09-30-with-extended-context","tier":"deep"}]"#,
         )],
         |_| {},
         |daemon| {
@@ -4662,7 +4660,6 @@ fn settings_smallest_pages(dark: bool) {
                     model_pin: true,
                     effort_pin: true,
                     discovery: true,
-                    provider: true,
                     ..attn_protocol::HarnessOptions::default()
                 },
                 ..Harness::default()

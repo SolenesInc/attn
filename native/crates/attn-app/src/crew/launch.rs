@@ -266,7 +266,7 @@ fn inherited(state: &State, shown: &Shown) -> Option<Route> {
             resolved.clone().unwrap_or_default()
         }
     };
-    Some(Route::stored(
+    Some(Route::new(
         &harness,
         &part(&member.model, "default_model", &member.resolved_model),
         &part(&member.effort, "default_effort", &member.resolved_effort),
@@ -285,7 +285,7 @@ pub(crate) fn route(state: &State, member: &str) -> Option<(Route, Rules)> {
         inherited: inherited(state, &shown),
         ..Rules::default()
     };
-    let value = Route::stored(&shown.draft.agent, &shown.draft.model, &shown.draft.effort);
+    let value = Route::new(&shown.draft.agent, &shown.draft.model, &shown.draft.effort);
     Some((value, rules))
 }
 
@@ -294,7 +294,7 @@ pub(crate) fn write_route(state: &mut State, member: &str, route: Route, tx: &mu
     let Some(shown) = shown(state, member) else {
         return;
     };
-    let model = route.stored_model();
+    let model = route.model.clone();
     let selection = &shown.draft;
     if route.harness != selection.agent {
         update(

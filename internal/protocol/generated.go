@@ -3785,9 +3785,6 @@ type DelegateMessage struct {
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
-	// Provider corresponds to the JSON schema field "provider".
-	Provider *string `json:"provider,omitempty,omitzero"`
-
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
 
@@ -4234,9 +4231,6 @@ type DelegationSelection struct {
 
 	// Model corresponds to the JSON schema field "model".
 	Model string `json:"model"`
-
-	// Provider corresponds to the JSON schema field "provider".
-	Provider string `json:"provider"`
 }
 
 type DelegationWorktreeOwner struct {
@@ -6060,6 +6054,9 @@ type HarnessModel struct {
 	// EffortSupport corresponds to the JSON schema field "effort_support".
 	EffortSupport ModelCapabilitySupport `json:"effort_support"`
 
+	// Family corresponds to the JSON schema field "family".
+	Family *string `json:"family,omitempty,omitzero"`
+
 	// Harness corresponds to the JSON schema field "harness".
 	Harness string `json:"harness"`
 
@@ -6163,9 +6160,6 @@ type HarnessOptions struct {
 
 	// OneShot corresponds to the JSON schema field "one_shot".
 	OneShot bool `json:"one_shot"`
-
-	// Provider corresponds to the JSON schema field "provider".
-	Provider bool `json:"provider"`
 
 	// Resume corresponds to the JSON schema field "resume".
 	Resume bool `json:"resume"`

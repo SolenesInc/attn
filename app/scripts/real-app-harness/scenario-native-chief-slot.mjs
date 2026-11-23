@@ -65,7 +65,7 @@ try {
     for (const key of ['queue_mode_enabled', 'model_tier_overrides', 'new_session_agent']) queueDaemonSettingRestore(observer, key);
     observer.send({ cmd: 'set_setting', key: 'queue_mode_enabled', value: 'true' });
     observer.send({ cmd: 'set_setting', key: 'new_session_agent', value: 'claude' });
-    observer.send({ cmd: 'set_setting', key: 'model_tier_overrides', value: JSON.stringify([{ harness: 'claude', provider: '', model: MOCK_AGENT_MODEL, tier: 'deep' }]) });
+    observer.send({ cmd: 'set_setting', key: 'model_tier_overrides', value: JSON.stringify([{ harness: 'claude', model: MOCK_AGENT_MODEL, tier: 'deep' }]) });
     home = observer.profileId;
     profile = (await observer.profileCommand('profile_create', { name: `Chief slot ${runner.runId}` })).profile;
     runner.registerCleanup('delete_profile', async () => {
@@ -85,7 +85,7 @@ try {
     const chief = chiefOfRoster();
     runner.assert(chief && !chief.agent, 'a new profile has a Chief with no harness', { chief });
     runner.assert((await node(SLOT))?.value === 'unconfigured', 'the slot reads unconfigured', await node(SLOT));
-    await driver.waitFor({ key: `chief-setup.model./${MOCK_AGENT_MODEL}` }, { timeoutMs: 30_000 });
+    await driver.waitFor({ key: `chief-setup.model.${MOCK_AGENT_MODEL}` }, { timeoutMs: 30_000 });
     runner.assert((await node(PRIMARY))?.value === 'ready', 'Start is ready once the models are read', await node(PRIMARY));
     await assertFocus(PRIMARY);
     const tree = await driver.tree();

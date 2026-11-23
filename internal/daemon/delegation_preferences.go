@@ -153,11 +153,6 @@ func (d *Daemon) projectDelegationPreferencesChanged() {
 	})
 }
 
-func (d *Daemon) selectsProviders(id string) bool {
-	h, err := d.harness(id)
-	return err == nil && h.Facts().Options.Provider
-}
-
 func usesDelegationPreferences(msg *protocol.DelegateMessage) bool {
 	return msg.Role != nil || msg.Choice != nil || protocol.Deref(msg.Fallback)
 }
@@ -179,9 +174,6 @@ func (d *Daemon) ensureDelegationWorkflowSkill(harness string, required bool) er
 
 func (d *Daemon) resolveDelegationPreferences(msg *protocol.DelegateMessage, host string) (*delegationprefs.Resolved, error) {
 	if !usesDelegationPreferences(msg) {
-		if msg.Provider != nil {
-			return nil, fmt.Errorf("--provider requires --role or --fallback; direct plugin delegation uses provider/model")
-		}
 		return nil, nil
 	}
 	cfg, err := d.store.GetDelegationPreferences()
@@ -189,7 +181,7 @@ func (d *Daemon) resolveDelegationPreferences(msg *protocol.DelegateMessage, hos
 		return nil, err
 	}
 	expanded := prompts.ExpandDelegationPreferences(cfg)
-	resolved, err := delegationprefs.Resolve(expanded, delegationprefs.Request{Role: protocol.Deref(msg.Role), Choice: protocol.Deref(msg.Choice), Fallback: protocol.Deref(msg.Fallback), Harness: msg.Agent, Provider: msg.Provider, Model: msg.Model, Effort: msg.Effort})
+	resolved, err := delegationprefs.Resolve(expanded, delegationprefs.Request{Role: protocol.Deref(msg.Role), Choice: protocol.Deref(msg.Choice), Fallback: protocol.Deref(msg.Fallback), Harness: msg.Agent, Model: msg.Model, Effort: msg.Effort})
 	if err != nil {
 		return nil, err
 	}
@@ -197,9 +189,6 @@ func (d *Daemon) resolveDelegationPreferences(msg *protocol.DelegateMessage, hos
 	d.awaitHarness(s.Harness)
 	if _, err := d.resolveDelegationAgent("", &s.Harness); err != nil {
 		return nil, err
-	}
-	if s.Provider != "" && !d.selectsProviders(s.Harness) {
-		return nil, fmt.Errorf("harness %q uses its configured provider; provider selection is supported by plugin harnesses", s.Harness)
 	}
 	if err := d.validateHarnessModelEffort(s.Harness, s.Model, s.Effort); err != nil {
 		return nil, err
@@ -210,7 +199,7 @@ func (d *Daemon) resolveDelegationPreferences(msg *protocol.DelegateMessage, hos
 			if err != nil {
 				return protocol.HarnessModel{}, false, false, fmt.Errorf("validate selected model: %w", err)
 			}
-			i := slices.IndexFunc(catalog.Models, func(m protocol.HarnessModel) bool { return m.ID == s.Model && m.Provider == s.Provider })
+			i := slices.IndexFunc(catalog.Models, func(m protocol.HarnessModel) bool { return m.ID == s.Model })
 			if i < 0 {
 				return protocol.HarnessModel{}, false, true, nil
 			}

@@ -176,7 +176,11 @@ func (l *Link) models(ctx context.Context, refresh bool) ([]protocol.HarnessMode
 			if len(m.Efforts) > 0 {
 				effort = protocol.ModelCapabilitySupportSupported
 			}
-			models = append(models, protocol.HarnessModel{Harness: l.b.agent, Provider: p.Provider, ID: m.ID, Name: m.Name, Description: m.Description, EffortSupport: effort, EffortLevels: append([]string{}, m.Efforts...), Access: protocol.ModelCapabilitySupportUnknown, OneShot: protocol.ModelCapabilitySupportUnknown})
+			id := m.ID
+			if p.Provider != "" {
+				id = p.Provider + "/" + m.ID
+			}
+			models = append(models, protocol.HarnessModel{Harness: l.b.agent, Provider: p.Provider, ID: id, Family: protocol.Ptr(m.ID), Name: m.Name, Description: m.Description, EffortSupport: effort, EffortLevels: append([]string{}, m.Efforts...), Access: protocol.ModelCapabilitySupportUnknown, OneShot: protocol.ModelCapabilitySupportUnknown})
 		}
 	}
 	return models, nil

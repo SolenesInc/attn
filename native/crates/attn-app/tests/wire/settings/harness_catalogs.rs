@@ -36,7 +36,6 @@ pub(crate) fn harness(id: &str, name: &str) -> Harness {
         options.keeps_conversations = true;
     }
     if id == "sigma" {
-        options.provider = true;
         options.auto_approve_unreviewed = true;
     }
     Harness {
@@ -136,13 +135,13 @@ pub(crate) fn catalog(harness: &str) -> Vec<HarnessModel> {
         "sigma" => vec![
             HarnessModel {
                 provider: "claude".into(),
-                ..model("sigma", "opus", "Opus 5.5", Some("deep"), EFFORTS)
+                ..model("sigma", "claude/opus", "Opus 5.5", Some("deep"), EFFORTS)
             },
             HarnessModel {
                 provider: "openai".into(),
                 ..model(
                     "sigma",
-                    "gpt-6.1-terra",
+                    "openai/gpt-6.1-terra",
                     "gpt-6.1-terra",
                     Some("light"),
                     EFFORTS,
@@ -169,11 +168,9 @@ pub(crate) fn reported(
     let models: Vec<HarnessModel> = models
         .into_iter()
         .map(|mut m| {
-            let own = overrides.iter().find(|o| {
-                o["harness"] == harness
-                    && o["provider"] == m.provider.as_str()
-                    && o["model"] == m.id.as_str()
-            });
+            let own = overrides
+                .iter()
+                .find(|o| o["harness"] == harness && o["model"] == m.id.as_str());
             if let Some(own) = own
                 && m.tier_source != "alias"
             {
@@ -304,14 +301,10 @@ pub(crate) fn pick_effort(world: &mut World, name: &str) {
     click(world, &key);
 }
 
-/// Types `id` into the filter and uses it as the model, with `provider` when one is given.
-pub(crate) fn enter_model(world: &mut World, id: &str, provider: Option<&str>) {
+/// Types `id` into the filter and uses it as the model.
+pub(crate) fn enter_model(world: &mut World, id: &str) {
     click(world, "settings.route-picker.filter");
     world.gesture(|app| app.type_text(id));
-    if let Some(provider) = provider {
-        click(world, "settings.route-picker.provider");
-        world.gesture(|app| app.type_text(provider));
-    }
     click(world, "settings.route-picker.manual");
 }
 

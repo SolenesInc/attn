@@ -15,7 +15,7 @@ Attn hosts coding agent CLIs as they are. Claude Code, Codex, and Sigma are buil
 | Automation executable override | Yes | No | Yes | No |
 | Initial prompt and delegation | Yes | Yes | Yes | Declared (`initial_prompt`) |
 | Launch guidance | Yes | Yes | Yes | Declared (`launch_instructions`) |
-| Model pin | Yes | Yes | Yes (`provider/model`) | Declared (`model_pin`, `provider/model`) |
+| Model pin | Yes | Yes | Yes | Declared (`model_pin`) |
 | Effort pin | Yes | Yes | Yes | Declared (`effort_pin`) |
 | Model discovery | Yes | Yes | Yes | Declared (`model_discovery` or `server_binding`) |
 | Context window cap | Yes | Yes | No | No |

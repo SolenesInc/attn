@@ -21,33 +21,17 @@ use crate::State;
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Route {
     pub(crate) harness: String,
-    pub(crate) provider: String,
     pub(crate) model: String,
     pub(crate) effort: String,
 }
 
 impl Route {
-    /// A route as a setting stores it, its model qualified by its provider.
-    pub(crate) fn stored(harness: &str, model: &str, effort: &str) -> Route {
-        let (provider, model) = model.split_once('/').unwrap_or(("", model));
+    pub(crate) fn new(harness: &str, model: &str, effort: &str) -> Route {
         Route {
             harness: harness.into(),
-            provider: provider.into(),
             model: model.into(),
             effort: effort.into(),
         }
-    }
-
-    pub(crate) fn stored_model(&self) -> String {
-        stored_model(&self.provider, &self.model)
-    }
-}
-
-fn stored_model(provider: &str, model: &str) -> String {
-    if provider.is_empty() {
-        model.to_owned()
-    } else {
-        format!("{provider}/{model}")
     }
 }
 
@@ -109,7 +93,6 @@ impl Rules {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct TierOverride {
     pub(crate) harness: String,
-    pub(crate) provider: String,
     pub(crate) model: String,
     pub(crate) tier: String,
 }
@@ -211,14 +194,8 @@ pub(crate) fn view<'a>(state: &'a State, input: &Route, rules: &'a Rules) -> Vie
     let pins_unavailable = rules.require_available && !harness.is_some_and(|h| h.available);
     let can_pin_model = harness.is_none_or(|h| h.model_pin) && !pins_unavailable;
     let models: &[HarnessModel] = catalog.map_or(&[], |c| c.models.as_slice());
-    let selected = models
-        .iter()
-        .find(|m| stored_model(&m.provider, &m.id) == input.stored_model());
-    let mut value = input.clone();
-    if let Some(m) = selected {
-        value.model = m.id.clone();
-        value.provider = m.provider.clone();
-    }
+    let selected = models.iter().find(|m| m.id == input.model);
+    let value = input.clone();
     let default_model = match (rules.tier, inherited) {
         (Some(tier), _) if rules.one_shot => models.iter().find(|m| {
             m.tier.as_deref() == Some(tier) && m.tier_source != "alias" && !rules.refuses(m)
@@ -228,9 +205,7 @@ pub(crate) fn view<'a>(state: &'a State, input: &Route, rules: &'a Rules) -> Vie
                 m.id == id && m.tier.as_deref() == Some(tier) && m.access != "unsupported"
             })
         }),
-        (None, Some(i)) if !i.model.is_empty() => models
-            .iter()
-            .find(|m| m.id == i.model && m.provider == i.provider),
+        (None, Some(i)) if !i.model.is_empty() => models.iter().find(|m| m.id == i.model),
         (None, _) => None,
     };
     let runs = if !value.model.is_empty() {
@@ -241,9 +216,9 @@ pub(crate) fn view<'a>(state: &'a State, input: &Route, rules: &'a Rules) -> Vie
     let overrides = tier_overrides(state.facts.settings.get(TIER_OVERRIDES).map(String::as_str));
     let own = (!value.model.is_empty() && runs.is_none())
         .then(|| {
-            overrides.into_iter().find(|o| {
-                o.harness == effective && o.provider == value.provider && o.model == value.model
-            })
+            overrides
+                .into_iter()
+                .find(|o| o.harness == effective && o.model == value.model)
         })
         .flatten();
     let tier = match runs {
@@ -298,7 +273,7 @@ pub(crate) fn view<'a>(state: &'a State, input: &Route, rules: &'a Rules) -> Vie
                 default_model
                     .map(|m| m.name.clone())
                     .filter(|n| !n.is_empty())
-                    .unwrap_or_else(|| i.stored_model())
+                    .unwrap_or_else(|| i.model.clone())
             ),
             None => format!("{effective_name} default"),
         },
@@ -309,7 +284,7 @@ pub(crate) fn view<'a>(state: &'a State, input: &Route, rules: &'a Rules) -> Vie
         selected
             .map(|m| m.name.clone())
             .filter(|n| !n.is_empty())
-            .unwrap_or_else(|| value.stored_model())
+            .unwrap_or_else(|| value.model.clone())
     };
     let missing = !value.model.is_empty() && catalog.is_some() && selected.is_none();
     let effort_model = if value.model.is_empty() {
@@ -436,7 +411,7 @@ impl View<'_> {
             if !self.value.model.is_empty() && self.selected.is_none() && stored_tier == group {
                 ordered.push(ModelOption {
                     model: None,
-                    label: self.value.stored_model(),
+                    label: self.value.model.clone(),
                     group: group.into(),
                 });
             }
@@ -450,10 +425,7 @@ impl View<'_> {
                     "{} {} {}",
                     option.label,
                     option.model.as_ref().map_or(&self.value.model, |m| &m.id),
-                    option
-                        .model
-                        .as_ref()
-                        .map_or(&self.value.provider, |m| &m.provider)
+                    option.model.as_ref().map_or("", |m| m.provider.as_str())
                 )
                 .to_lowercase();
                 terms.iter().all(|term| words.contains(term))
@@ -464,11 +436,9 @@ impl View<'_> {
     /// The route with `model` picked, or the harness's default without one, keeping the effort
     /// where the new model takes it.
     pub(crate) fn with_model(&self, model: Option<&HarnessModel>) -> Route {
-        let (id, provider) = model.map_or((String::new(), String::new()), |m| {
-            (m.id.clone(), m.provider.clone())
-        });
+        let id = model.map_or_else(String::new, |m| m.id.clone());
         let effort_pin = self.harness.is_none_or(|h| h.effort_pin);
-        if id == self.value.model && provider == self.value.provider && effort_pin {
+        if id == self.value.model && effort_pin {
             return self.value.clone();
         }
         let source = model.or(self.default_model);
@@ -478,7 +448,6 @@ impl View<'_> {
             effort_pin && supported && (levels.is_empty() || levels.contains(&self.value.effort));
         Route {
             model: id,
-            provider,
             effort: if keeps {
                 self.value.effort.clone()
             } else {
@@ -525,7 +494,6 @@ pub(crate) struct Picker {
     /// The harness being browsed, until a pick commits it.
     preview: Option<String>,
     query: TextEdit,
-    provider: TextEdit,
     /// The typed effort, while the effort field has it.
     effort: Option<TextEdit>,
     /// The picker fits on neither side of its chip, so it stands over the window for the rest
@@ -538,7 +506,6 @@ pub(crate) struct Picker {
 
 const PICKER: &str = "settings.route-picker";
 const FILTER: &str = "settings.route-picker.filter";
-const PROVIDER: &str = "settings.route-picker.provider";
 const EFFORT: &str = "settings.route-picker.effort";
 
 fn picker(state: &State) -> Option<&Picker> {
@@ -841,7 +808,6 @@ fn toggle(state: &mut State, target: Target, tx: &mut Tx) {
         layer: state.window.layer,
         preview: None,
         query: TextEdit::default(),
-        provider: TextEdit::default(),
         effort: None,
         over_chip: false,
         moved: false,
@@ -874,7 +840,6 @@ fn current(state: &State) -> Option<(Open, Route, Rules)> {
     Some((
         Open {
             query: p.query.text.clone(),
-            provider: p.provider.text.clone(),
         },
         shown,
         rules,
@@ -884,7 +849,6 @@ fn current(state: &State) -> Option<(Open, Route, Rules)> {
 /// What a handler needs of the open picker, out of the borrow of the state.
 struct Open {
     query: String,
-    provider: String,
 }
 
 fn change(state: &mut State, route: Route, tx: &mut Tx) {
@@ -947,44 +911,25 @@ fn pick_harness(state: &mut State, id: String, tx: &mut Tx) {
     if let Some(p) = state.window.settings.route_picker.as_mut() {
         p.preview = Some(id);
         p.query = TextEdit::default();
-        p.provider = TextEdit::default();
         p.effort = None;
     }
     super::invalidate(state);
 }
 
-fn has_provider(state: &State, harness: &str) -> bool {
-    crate::harness::catalog::options(&state.facts.harnesses, harness).is_some_and(|o| o.provider)
-}
-
-/// The model and provider typed into the filter, and whether the catalog refuses them.
-fn manual(state: &State) -> Option<(String, String, bool)> {
+/// The model id typed into the filter, and whether the catalog refuses it.
+fn manual(state: &State) -> Option<(String, bool)> {
     let (p, shown, rules) = current(state)?;
-    let takes_provider = has_provider(state, &shown.harness);
-    let mut model = p.query.trim().to_owned();
-    let mut provider = if takes_provider {
-        p.provider.trim().to_owned()
-    } else {
-        String::new()
-    };
-    if takes_provider
-        && provider.is_empty()
-        && let Some((pre, post)) = model.clone().split_once('/')
-    {
-        provider = pre.to_owned();
-        model = post.to_owned();
-    }
+    let model = p.query.trim().to_owned();
     let view = view(state, &shown, &rules);
-    let unsupported = view.discovered.catalog.is_some_and(|c| {
-        c.models
-            .iter()
-            .any(|m| m.id == model && m.provider == provider && rules.refuses(m))
-    });
-    Some((model, provider, unsupported))
+    let unsupported = view
+        .discovered
+        .catalog
+        .is_some_and(|c| c.models.iter().any(|m| m.id == model && rules.refuses(m)));
+    Some((model, unsupported))
 }
 
 fn use_manual(state: &mut State, tx: &mut Tx) {
-    let Some((model, provider, unsupported)) = manual(state) else {
+    let Some((model, unsupported)) = manual(state) else {
         return;
     };
     if model.is_empty() || unsupported {
@@ -997,7 +942,6 @@ fn use_manual(state: &mut State, tx: &mut Tx) {
         state,
         Route {
             model,
-            provider,
             effort: String::new(),
             ..shown
         },
@@ -1012,14 +956,10 @@ fn submit_filter(state: &mut State, tx: &mut Tx) {
     if p.query.trim().is_empty() {
         return;
     }
-    let Some((_, _, unsupported)) = manual(state) else {
+    let Some((_, unsupported)) = manual(state) else {
         return;
     };
     if unsupported {
-        return;
-    }
-    if has_provider(state, &shown.harness) && !p.provider.trim().is_empty() {
-        use_manual(state, tx);
         return;
     }
     let view = view(state, &shown, &rules);
@@ -1253,29 +1193,9 @@ fn main(state: &State, p: &Picker, view: &View, t: &Tokens) -> El {
     main = main.child(model_list(p, view, t));
     let query = p.query.text.trim().to_owned();
     if view.can_pin_model && !query.is_empty() {
-        let unsupported = manual(state).is_some_and(|(_, _, u)| u);
-        let provider = has_provider(state, &view.effective).then(|| {
-            El::from(line_box(
-                TextInput::new(&p.provider)
-                    .key(PROVIDER)
-                    .label("Provider")
-                    .placeholder("Provider")
-                    .on_edit(|state: &mut State| {
-                        &mut state
-                            .window
-                            .settings
-                            .route_picker
-                            .as_mut()
-                            .expect("the picker is open while its provider shows")
-                            .provider
-                    }),
-                FieldState::Ready,
-                t,
-            ))
-            .w(PROVIDER_WIDTH)
-        });
+        let unsupported = manual(state).is_some_and(|(_, u)| u);
         main = main.child(
-            Inline::loose().children(provider).child(El::from(
+            Inline::loose().child(El::from(
                 system::Button::new(format!("Use “{query}”"))
                     .disabled(unsupported)
                     .on_press_tx(use_manual)
@@ -1307,8 +1227,6 @@ fn main(state: &State, p: &Picker, view: &View, t: &Tokens) -> El {
     main
 }
 
-/// The provider field's width, as main draws it: "openrouter" with the field's insets.
-const PROVIDER_WIDTH: f32 = 120.0;
 const EFFORT_PLACEHOLDER: &str = "As the harness names it";
 /// How many models the list shows before it scrolls, however little room the window leaves.
 const ROWS_AT_LEAST: usize = 3;
@@ -1378,7 +1296,11 @@ fn model_list(p: &Picker, view: &View, t: &Tokens) -> El {
                     m.description.clone()
                 };
                 let detail = [
-                    m.provider.clone(),
+                    if m.id.starts_with(&format!("{}/", m.provider)) {
+                        String::new()
+                    } else {
+                        m.provider.clone()
+                    },
                     if m.name != m.id {
                         m.id.clone()
                     } else {
@@ -1391,7 +1313,7 @@ fn model_list(p: &Picker, view: &View, t: &Tokens) -> El {
                 .collect::<Vec<_>>()
                 .join(" · ");
                 (
-                    m.id == view.value.model && m.provider == view.value.provider,
+                    m.id == view.value.model,
                     view.rules.refuses(m),
                     mark,
                     detail,
@@ -1619,9 +1541,7 @@ fn on_key(state: &mut State, key: &KeyEvent, tx: &mut Tx) -> bool {
         }
         return false;
     }
-    if !matches!(key.key, Key::Left | Key::Right)
-        || [FILTER, PROVIDER, EFFORT].contains(&focused.as_str())
-    {
+    if !matches!(key.key, Key::Left | Key::Right) || [FILTER, EFFORT].contains(&focused.as_str()) {
         return false;
     }
     let selected_model = selected_key(p, &view);
@@ -1694,10 +1614,7 @@ fn selected_key(p: &Picker, view: &View) -> Option<String> {
         index += 1;
     }
     for o in view.options(&p.query.text) {
-        let selected = o
-            .model
-            .as_ref()
-            .is_none_or(|m| m.id == view.value.model && m.provider == view.value.provider);
+        let selected = o.model.as_ref().is_none_or(|m| m.id == view.value.model);
         if selected {
             return Some(format!("settings.route-picker.model.{index}"));
         }

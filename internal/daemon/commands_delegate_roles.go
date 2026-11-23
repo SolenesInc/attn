@@ -45,7 +45,7 @@ func (d *Daemon) delegateRolesCommands() map[string]command.Handler {
 			if err != nil {
 				return nil, err
 			}
-			model := roleSelection{a.Agent, a.Model, a.Provider, a.Effort}
+			model := roleSelection{a.Agent, a.Model, a.Effort}
 			if choiceID != "" {
 				return d.editDelegationRoles(a.Message, a.Render, addAlternative(roleID, choiceID, a.Name, a.When, model))
 			}
@@ -53,7 +53,7 @@ func (d *Daemon) delegateRolesCommands() map[string]command.Handler {
 			return d.editDelegationRoles(a.Message, a.Render, addRole(roleID, a.Builtin, guidance, model))
 		}),
 		"delegate roles set": command.Typed(func(ctx context.Context, c command.Caller, a command.DelegateRolesSetArgs) (any, error) {
-			model := roleSelection{a.Agent, a.Model, a.Provider, a.Effort}
+			model := roleSelection{a.Agent, a.Model, a.Effort}
 			if a.Fallback {
 				if a.Target != "" {
 					return nil, command.Refuse("fallback_with_target", "{fallback} changes the fallback; leave out the role")
@@ -387,10 +387,10 @@ func delegationChangesText(changes []string) string {
 
 type delegationRolesEdit func(*protocol.DelegationPreferences) error
 
-type roleSelection struct{ agent, model, provider, effort *string }
+type roleSelection struct{ agent, model, effort *string }
 
 func (s roleSelection) apply(selection *protocol.DelegationSelection) {
-	delegationprefs.ApplyOverrides(selection, s.agent, s.provider, harnessDefault(s.model), harnessDefault(s.effort))
+	delegationprefs.ApplyOverrides(selection, s.agent, harnessDefault(s.model), harnessDefault(s.effort))
 }
 
 func harnessDefault(value *string) *string {

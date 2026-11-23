@@ -2517,7 +2517,7 @@ fn a_typed_model_id_goes_on_return_as_one_write_and_the_draft_outlasts_roster_pu
 }
 
 #[test]
-fn a_provider_qualified_model_is_picked_when_bare_ids_collide() {
+fn a_picked_model_saves_its_catalog_id_exactly() {
     let d = daemon(
         vec![with(member("keel", 5), |m| {
             m.agent = Some("codex".into());
@@ -2538,7 +2538,13 @@ fn a_provider_qualified_model_is_picked_when_bare_ids_collide() {
     let mut world = World::start(d);
     let shared = |provider: &str, name: &str, effort: &str| attn_protocol::HarnessModel {
         provider: provider.into(),
-        ..super::settings::harness_catalogs::model("codex", "shared", name, None, &[effort])
+        ..super::settings::harness_catalogs::model(
+            "codex",
+            &format!("{provider}/shared"),
+            name,
+            None,
+            &[effort],
+        )
     };
     serve_models(
         &world,
@@ -2586,7 +2592,7 @@ fn an_unsupported_models_cleared_effort_stays_cleared_through_a_conflict() {
         &world,
         vec![attn_protocol::HarnessModel {
             provider: "local".into(),
-            ..super::settings::harness_catalogs::model("codex", "fixed", "Fixed", None, &[])
+            ..super::settings::harness_catalogs::model("codex", "local/fixed", "Fixed", None, &[])
         }],
     );
     open(&mut world);

@@ -459,7 +459,7 @@ fn launch_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<Block> {
         ack.resolved_effort.as_deref().unwrap_or_default(),
     );
     let acknowledged = route_words(state, agent, model, effort);
-    let acknowledged_route = crate::settings::route::Route::stored(agent, model, effort);
+    let acknowledged_route = crate::settings::route::Route::new(agent, model, effort);
     let save = launch::status(&shown);
     let save_ink = if shown.error.is_some() {
         t.error

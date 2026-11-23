@@ -332,7 +332,7 @@ pub(crate) fn set_up(
             member: command_member,
             expected_revision: Some(revision),
             agent: Some(route.harness.clone()),
-            model: Some(route.stored_model()),
+            model: Some(route.model.clone()),
             effort: Some(route.effort.clone()),
             notebook_root,
             profile_id,

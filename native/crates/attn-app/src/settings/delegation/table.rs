@@ -357,7 +357,6 @@ impl Slot {
         self.selection(preferences)?;
         let selection = DelegationSelection {
             harness: route.harness,
-            provider: route.provider,
             model: route.model,
             effort: route.effort,
         };
@@ -377,7 +376,6 @@ impl Slot {
 pub(super) fn route(selection: &DelegationSelection) -> Route {
     Route {
         harness: selection.harness.clone(),
-        provider: selection.provider.clone(),
         model: selection.model.clone(),
         effort: selection.effort.clone(),
     }

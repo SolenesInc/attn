@@ -80,7 +80,7 @@ try {
     });
     const role = (id, name, icon) => ({
       id, name, icon, enabled: true, description: '', instructions: 'Wait for direction.', default_choice_id: 'default',
-      choices: [{ id: 'default', name: 'Default', when: '', selection: { harness: 'codex', provider: '', model: '', effort: '' } }],
+      choices: [{ id: 'default', name: 'Default', when: '', selection: { harness: 'codex', model: '', effort: '' } }],
     });
     await preferences('delegation_preferences_save', { ...baseline, enabled: true, roles: [role('coordinate', 'Orchestrator', 'spark'), role('build', 'Builder', 'code')] });
     fs.mkdirSync(runner.sessionDir, { recursive: true });

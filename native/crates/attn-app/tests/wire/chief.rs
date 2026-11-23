@@ -424,7 +424,7 @@ fn arrows_walk_a_radio_group_picking_as_they_go_and_enter_on_a_radio_saves() {
 #[test]
 fn a_refused_save_says_why_and_keeps_the_route_and_folder() {
     let mut world = start(initial(true, chief(false), Vec::new()));
-    world.gesture(|app| app.click(Target::key("chief-setup.model./sonnet")));
+    world.gesture(|app| app.click(Target::key("chief-setup.model.sonnet")));
     world.daemon.on("crew_set", |_| {
         message(CrewSetResultMessage {
             success: false,
@@ -686,7 +686,7 @@ fn a_changed_route_saves_for_the_next_session_without_starting_a_chief_between_s
         named(&world, "chief-setup.heading").as_deref(),
         Some("Captain's harness")
     );
-    world.gesture(|app| app.click(Target::key("chief-setup.model./sonnet")));
+    world.gesture(|app| app.click(Target::key("chief-setup.model.sonnet")));
     world.daemon.on("crew_set", |_| {
         message(CrewSetResultMessage {
             success: true,
@@ -1110,8 +1110,8 @@ fn a_replaced_catalog_keeps_the_focus_on_the_model_group_on_close_or_outside_the
             vec![super::sidebar::session("agent", "idle")],
         ));
         click(&mut world, SLOT);
-        tab_to(&mut world, "chief-setup.model./opus", true);
-        assert_eq!(focused(&world).as_deref(), Some("chief-setup.model./opus"));
+        tab_to(&mut world, "chief-setup.model.opus", true);
+        assert_eq!(focused(&world).as_deref(), Some("chief-setup.model.opus"));
         refreshed_catalog(&mut world);
         match destination {
             "close" => tab_to(&mut world, "chief-setup.close", false),
@@ -1121,7 +1121,7 @@ fn a_replaced_catalog_keeps_the_focus_on_the_model_group_on_close_or_outside_the
         let before = focused(&world);
         reply_to_claude_models(&mut world, vec![deep("new-deep", "New deep model")]);
         let expected = match destination {
-            "model" => Some("chief-setup.model./new-deep".to_owned()),
+            "model" => Some("chief-setup.model.new-deep".to_owned()),
             _ => before,
         };
         assert_eq!(focused(&world), expected, "{destination}");
@@ -1231,7 +1231,7 @@ fn escape_and_a_late_configured_save_both_hand_the_focus_back_to_the_chiefs_row(
 fn enter_on_a_radio_saves_a_configured_chiefs_route_and_returns_to_its_row_without_starting_it() {
     let mut world = start(initial(true, chief(true), Vec::new()));
     open_route(&mut world, false);
-    tab_to(&mut world, "chief-setup.model./opus", true);
+    tab_to(&mut world, "chief-setup.model.opus", true);
     world.daemon.on("crew_set", |_| ());
     press(&mut world, Key::Enter);
     let set = &sent(&world, "crew_set")[0];
@@ -1279,7 +1279,7 @@ fn a_focused_primary_stays_inert_while_the_models_are_read_again_and_works_once_
             let mut s = settings(true);
             s.insert(
                 "model_tier_overrides".into(),
-                r#"[{"harness":"claude","provider":"","model":"opus","tier":"standard"}]"#.into(),
+                r#"[{"harness":"claude","model":"opus","tier":"standard"}]"#.into(),
             );
             Some(s)
         },
@@ -1356,7 +1356,7 @@ fn a_save_that_completes_in_another_profile_starts_nothing_there_and_leaves_star
         world.daemon.on("crew_set", |_| ());
         if configured {
             open_route(&mut world, false);
-            click(&mut world, "chief-setup.model./sonnet");
+            click(&mut world, "chief-setup.model.sonnet");
         }
         click(&mut world, PRIMARY);
         assert_eq!(sent(&world, "crew_set").len(), 1, "configured={configured}");

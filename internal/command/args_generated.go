@@ -542,7 +542,6 @@ type DelegateArgs struct {
 	Role               string  `json:"role,omitempty"`
 	Choice             string  `json:"choice,omitempty"`
 	Fallback           bool    `json:"fallback,omitempty"`
-	Provider           *string `json:"provider,omitempty"`
 	Effort             *string `json:"effort,omitempty"`
 	Name               string  `json:"name,omitempty"`
 	Desktop            *string `json:"desktop,omitempty"`
@@ -585,7 +584,6 @@ type DelegateRolesAddArgs struct {
 	When         *string `json:"when,omitempty"`
 	Agent        *string `json:"agent,omitempty"`
 	Model        *string `json:"model,omitempty"`
-	Provider     *string `json:"provider,omitempty"`
 	Effort       *string `json:"effort,omitempty"`
 	Message      string  `json:"message,omitempty"`
 }
@@ -602,7 +600,6 @@ type DelegateRolesSetArgs struct {
 	When         *string `json:"when,omitempty"`
 	Agent        *string `json:"agent,omitempty"`
 	Model        *string `json:"model,omitempty"`
-	Provider     *string `json:"provider,omitempty"`
 	Effort       *string `json:"effort,omitempty"`
 	Message      string  `json:"message,omitempty"`
 }

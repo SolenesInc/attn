@@ -1119,7 +1119,6 @@ model PullRequestCreatedMessage {
 
 model DelegationSelection {
   harness: string;
-  provider: string;
   `model`: string; // Empty selects the harness default; empty harness is unconfigured.
   effort: string; // Empty preserves the harness default.
 }
@@ -1182,7 +1181,8 @@ model TierDefaults {
 model HarnessModel {
   harness: string;
   provider: string;
-  id: string;
+  id: string; // The exact name attn launches and calls the model with, unique within the harness.
+  family?: string; // The name attn's shipped tier rules match; absent, they match the id.
   name: string;
   description: string;
   effort_support: ModelCapabilitySupport;
@@ -1222,7 +1222,6 @@ model HarnessOptions {
   effort_pin: boolean;
   discovery: boolean;                  // exposes model discovery
   context_cap: boolean;
-  provider: boolean;                   // its model names carry a provider, as provider/model
   executable_setting: boolean;         // the user can name its program in the <id>_executable setting
   one_shot: boolean;                   // answers headless tasks and model calls
   activity: boolean;                   // attn reads its conversations for activity lines
@@ -1430,7 +1429,6 @@ model DelegateMessage {
   role?: string;
   choice?: string;
   fallback?: boolean;
-  provider?: string;
   review?: SeedReviewActionContext;
   desktop?: string; // Desktop of the caller's profile for the delegate: shortcut digit, name or id; empty = beside the caller
   // The user's instructions for this task beyond the project's guidance.

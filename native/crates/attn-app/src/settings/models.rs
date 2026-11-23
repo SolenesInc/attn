@@ -43,22 +43,21 @@ fn entries(state: &State) -> Vec<TierOverride> {
     tier_overrides(Some(state.window.settings.autosave.draft(TIER_OVERRIDES)))
 }
 
-fn same(entry: &TierOverride, harness: &str, provider: &str, model: &str) -> bool {
-    entry.harness == harness && entry.provider == provider && entry.model == model
+fn same(entry: &TierOverride, harness: &str, model: &str) -> bool {
+    entry.harness == harness && entry.model == model
 }
 
 /// Gives `model` the tier `tier`, or attn's shipped tier when there is none or it is the same.
 fn set_tier(state: &mut State, model: &HarnessModel, tier: Option<&str>, tx: &mut Tx) {
     let mut next: Vec<TierOverride> = entries(state)
         .into_iter()
-        .filter(|e| !same(e, &model.harness, &model.provider, &model.id))
+        .filter(|e| !same(e, &model.harness, &model.id))
         .collect();
     if let Some(tier) = tier
         && model.shipped_tier.as_deref() != Some(tier)
     {
         next.push(TierOverride {
             harness: model.harness.clone(),
-            provider: model.provider.clone(),
             model: model.id.clone(),
             tier: tier.to_owned(),
         });
@@ -69,23 +68,21 @@ fn set_tier(state: &mut State, model: &HarnessModel, tier: Option<&str>, tx: &mu
 fn remove(state: &mut State, entry: &TierOverride, tx: &mut Tx) {
     let next: Vec<TierOverride> = entries(state)
         .into_iter()
-        .filter(|e| !same(e, &entry.harness, &entry.provider, &entry.model))
+        .filter(|e| !same(e, &entry.harness, &entry.model))
         .collect();
     autosave::apply(state, TIER_OVERRIDES, &stored(&next), tx);
 }
 
 fn joined(provider: &str, model: &str) -> String {
-    [provider, model]
-        .into_iter()
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join(" / ")
+    if provider.is_empty() || model.starts_with(&format!("{provider}/")) {
+        model.to_owned()
+    } else {
+        format!("{provider} / {model}")
+    }
 }
 
 fn model_row(model: &HarnessModel, entries: &[TierOverride], t: &Tokens) -> El {
-    let own = entries
-        .iter()
-        .find(|e| same(e, &model.harness, &model.provider, &model.id));
+    let own = entries.iter().find(|e| same(e, &model.harness, &model.id));
     let alias = model.tier_source == "alias";
     let selected = if alias {
         None
@@ -100,11 +97,7 @@ fn model_row(model: &HarnessModel, entries: &[TierOverride], t: &Tokens) -> El {
         &model.name
     };
     let name = joined(&model.provider, shown);
-    let key = format!(
-        "settings.models.{}.model.{}",
-        model.harness,
-        joined(&model.provider, &model.id)
-    );
+    let key = format!("settings.models.{}.model.{}", model.harness, model.id);
     let mark = TierInfo::mark(
         Some(&TierInfo {
             tier: selected.clone(),
@@ -192,11 +185,11 @@ fn item(key: &str, name: &str, t: &Tokens) -> ListRow {
 }
 
 fn orphan_row(entry: &TierOverride, t: &Tokens) -> El {
-    let name = joined(&entry.provider, &entry.model);
+    let name = &entry.model;
     let key = format!("settings.models.{}.orphan.{name}", entry.harness);
     let removed = entry.clone();
     let detail = format!("Your tier: {}", entry.tier);
-    item(&key, &name, t)
+    item(&key, name, t)
         .subtitle_el(
             Inline::tight().child(
                 words(detail.clone(), Type::Small, t.text_tertiary)
@@ -311,11 +304,7 @@ fn harness_block(state: &State, harness: &Harness, entries: &[TierOverride], t: 
     let orphans: Vec<&TierOverride> = entries
         .iter()
         .filter(|e| {
-            e.harness == harness.id
-                && shows_orphans
-                && !models
-                    .iter()
-                    .any(|m| m.id == e.model && m.provider == e.provider)
+            e.harness == harness.id && shows_orphans && !models.iter().any(|m| m.id == e.model)
         })
         .collect();
     if !orphans.is_empty() {
@@ -348,17 +337,8 @@ fn missing_harnesses(listed: &[Harness], entries: &[TierOverride], t: &Tokens) -
     let rows: Vec<El> = missing
         .into_iter()
         .map(|entry| {
-            let said = format!(
-                "{} / {} · {}",
-                entry.harness,
-                joined(&entry.provider, &entry.model),
-                entry.tier
-            );
-            let key = format!(
-                "settings.models.missing.{}/{}",
-                entry.harness,
-                joined(&entry.provider, &entry.model)
-            );
+            let said = format!("{} / {} · {}", entry.harness, entry.model, entry.tier);
+            let key = format!("settings.models.missing.{}/{}", entry.harness, entry.model);
             let removed = entry.clone();
             item(&key, &said, t)
                 .controls(

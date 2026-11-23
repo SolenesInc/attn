@@ -406,7 +406,7 @@ fn read_route(state: &State, _: &str) -> Option<(Route, Rules)> {
         }
     }
     Some((
-        Route::stored(&f.agent, &f.model, &f.effort),
+        Route::new(&f.agent, &f.model, &f.effort),
         Rules {
             harnesses,
             ..Rules::default()
@@ -416,7 +416,7 @@ fn read_route(state: &State, _: &str) -> Option<(Route, Rules)> {
 
 fn write_route(state: &mut State, _: &str, route: Route, _: &mut Tx) {
     if let Some(f) = form_mut(state) {
-        f.model = route.stored_model();
+        f.model = route.model.clone();
         f.agent = route.harness;
         f.effort = route.effort;
         f.edited(|field| *field == Field::Agent);

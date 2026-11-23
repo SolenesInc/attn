@@ -46,9 +46,6 @@ func delegateRequest(a command.DelegateArgs) (*protocol.DelegateMessage, error) 
 	if choice != "" && role == "" {
 		return nil, command.Usage("{choice} requires {role}")
 	}
-	if a.Provider != nil && role == "" && !a.Fallback {
-		return nil, command.Usage("{provider} requires {role} or {fallback}; direct plugin delegation uses provider/model")
-	}
 	brief, seed := strings.TrimSpace(a.Brief), strings.TrimSpace(a.Seed)
 	if (brief == "") == (seed == "") {
 		return nil, command.Usage("pass exactly one of {brief} or {seed}")
@@ -77,7 +74,6 @@ func delegateRequest(a command.DelegateArgs) (*protocol.DelegateMessage, error) 
 		Checkout:   checkout,
 		Model:      harnessDefault(trimmed(a.Model)),
 		Effort:     harnessDefault(trimmed(a.Effort)),
-		Provider:   trimmed(a.Provider),
 	}
 	if seed != "" {
 		request.Assignment = protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindSeed, SeedID: protocol.Ptr(seed)}

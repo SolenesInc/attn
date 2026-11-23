@@ -228,12 +228,12 @@ fn config(state: &State, key: &str) -> Config {
 }
 
 fn route_of(config: Config) -> Route {
-    Route::stored(&config.agent, &config.model, &config.effort)
+    Route::new(&config.agent, &config.model, &config.effort)
 }
 
 fn write(state: &mut State, key: &str, route: Route, tx: &mut Tx) {
     let next = draft(&Config {
-        model: route.stored_model(),
+        model: route.model.clone(),
         agent: route.harness,
         effort: route.effort,
     });

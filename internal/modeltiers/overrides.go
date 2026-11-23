@@ -30,7 +30,7 @@ func ParseOverrides(raw string) (Overrides, error) {
 		if entry.Harness == "" || entry.Model == "" {
 			return nil, fmt.Errorf("model_tier_overrides requires a harness and model for each override")
 		}
-		if err := delegationprefs.ValidateSelection(delegationprefs.Selection{Harness: entry.Harness, Provider: entry.Provider, Model: entry.Model}, true); err != nil {
+		if err := delegationprefs.ValidateSelection(delegationprefs.Selection{Harness: entry.Harness, Model: entry.Model}, true); err != nil {
 			return nil, fmt.Errorf("invalid model_tier_overrides identity: %w", err)
 		}
 		switch entry.Tier {
@@ -39,7 +39,7 @@ func ParseOverrides(raw string) (Overrides, error) {
 			return nil, fmt.Errorf("model_tier_overrides tier %q must be light, standard or deep", entry.Tier)
 		}
 		if _, exists := result[entry.Key]; exists {
-			return nil, fmt.Errorf("model_tier_overrides repeats %s/%s/%s", entry.Harness, entry.Provider, entry.Model)
+			return nil, fmt.Errorf("model_tier_overrides repeats %s %s", entry.Harness, entry.Model)
 		}
 		result[entry.Key] = entry.Tier
 	}

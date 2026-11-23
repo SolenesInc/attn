@@ -80,16 +80,19 @@ func (d *Daemon) queryHarnessModels(id string, h harnessapi.Harness) (harnessMod
 	if err != nil {
 		return harnessModelCatalog{}, err
 	}
-	result := harnessModelCatalog{Models: models.List, Detail: models.Detail}
-	if result.Models == nil {
-		result.Models = []protocol.HarnessModel{}
-	}
-	for i := range result.Models {
-		m := &result.Models[i]
+	result := harnessModelCatalog{Models: []protocol.HarnessModel{}, Detail: models.Detail}
+	listed := map[string]bool{}
+	var repeated []string
+	for _, m := range models.List {
 		if m.Harness != id || strings.TrimSpace(m.ID) == "" {
 			return harnessModelCatalog{}, fmt.Errorf("model discovery returned an invalid identity")
 		}
-		if err := delegationprefs.ValidateSelection(delegationprefs.Selection{Harness: id, Provider: m.Provider, Model: m.ID}, true); err != nil {
+		if listed[m.ID] {
+			repeated = append(repeated, m.ID)
+			continue
+		}
+		listed[m.ID] = true
+		if err := delegationprefs.ValidateSelection(delegationprefs.Selection{Harness: id, Model: m.ID}, true); err != nil {
 			return harnessModelCatalog{}, err
 		}
 		if m.EffortSupport != "supported" && m.EffortSupport != "unsupported" {
@@ -104,6 +107,10 @@ func (d *Daemon) queryHarnessModels(id string, h harnessapi.Harness) (harnessMod
 		if m.EffortLevels == nil {
 			m.EffortLevels = []string{}
 		}
+		result.Models = append(result.Models, m)
+	}
+	if len(repeated) > 0 {
+		d.logf("%s model discovery repeated model ids %q; kept the first entry of each", id, repeated)
 	}
 	return result, nil
 }
@@ -130,7 +137,7 @@ func (d *Daemon) harnessModels(ctx context.Context, harness string, refresh bool
 	catalog.TierDefaults = protocol.TierDefaults{}
 	for i := range catalog.Models {
 		model := &catalog.Models[i]
-		assignment := modeltiers.Assign(overrides, modeltiers.Key{Harness: harness, Provider: model.Provider, Model: model.ID})
+		assignment := modeltiers.Assign(overrides, modeltiers.Key{Harness: harness, Model: model.ID}, protocol.Deref(model.Family))
 		model.Tier, model.ShippedTier = nil, nil
 		if assignment.Tier != "" {
 			model.Tier = protocol.Ptr(protocol.ModelTier(assignment.Tier))
@@ -162,9 +169,6 @@ func (d *Daemon) resolveTierModel(ctx context.Context, harness string, tier mode
 		return fallback
 	}
 	if model, ok := modeltiers.FirstOf(oneShotModels(catalog.Models), tier); ok {
-		if model.Provider != "" {
-			return model.Provider + "/" + model.ID
-		}
 		return model.ID
 	}
 	return fallback
@@ -192,13 +196,13 @@ func (d *Daemon) oneShotModelRefused(ctx context.Context, agent, model string) e
 	return nil
 }
 
-func (d *Daemon) harnessModel(ctx context.Context, agent, qualified string, recheck func(protocol.HarnessModel) bool) (protocol.HarnessModel, bool, error) {
+func (d *Daemon) harnessModel(ctx context.Context, agent, id string, recheck func(protocol.HarnessModel) bool) (protocol.HarnessModel, bool, error) {
 	return listedRechecked(func(refresh bool) (protocol.HarnessModel, bool, bool, error) {
 		catalog, cached, err := d.loadHarnessModels(ctx, agent, refresh)
 		if err != nil {
 			return protocol.HarnessModel{}, false, false, err
 		}
-		i := slices.IndexFunc(catalog.Models, func(m protocol.HarnessModel) bool { return qualifiedModel(m.Provider, m.ID) == qualified })
+		i := slices.IndexFunc(catalog.Models, func(m protocol.HarnessModel) bool { return m.ID == id })
 		if i < 0 {
 			return protocol.HarnessModel{}, false, cached, nil
 		}
@@ -217,13 +221,6 @@ func listedRechecked(read func(refresh bool) (model protocol.HarnessModel, liste
 
 func signedOut(m protocol.HarnessModel) bool {
 	return m.Access == protocol.ModelCapabilitySupportUnsupported
-}
-
-func qualifiedModel(provider, model string) string {
-	if provider == "" {
-		return model
-	}
-	return provider + "/" + model
 }
 
 func (d *Daemon) handleHarnessModels(client *wsClient, msg *protocol.HarnessModelsMessage) {

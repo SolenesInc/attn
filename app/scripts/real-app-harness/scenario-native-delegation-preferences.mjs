@@ -105,7 +105,7 @@ try {
   if (baseline.revision !== 0) {
     await preferencesRequest('delegation_preferences_save', {
       ...baseline, enabled: false, roles: [],
-      fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' },
+      fallback: { selection: { harness: '', model: '', effort: '' }, instructions: '' },
     });
   }
 

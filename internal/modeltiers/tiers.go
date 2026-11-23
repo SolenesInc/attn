@@ -33,9 +33,8 @@ var Shipped = []Rule{
 }
 
 type Key struct {
-	Harness  string `json:"harness"`
-	Provider string `json:"provider"`
-	Model    string `json:"model"`
+	Harness string `json:"harness"`
+	Model   string `json:"model"`
 }
 
 type Override struct {
@@ -51,13 +50,16 @@ type Assignment struct {
 	Shipped Tier
 }
 
-func Assign(overrides Overrides, key Key) Assignment {
+func Assign(overrides Overrides, key Key, family string) Assignment {
 	assignment := Assignment{Source: "none"}
+	if family == "" {
+		family = key.Model
+	}
 	for _, rule := range Shipped {
 		prefix, suffix, wildcard := strings.Cut(rule.Match, "*")
-		matches := key.Model == rule.Match
+		matches := family == rule.Match
 		if wildcard {
-			matches = strings.HasPrefix(key.Model, prefix) && strings.HasSuffix(key.Model, suffix)
+			matches = strings.HasPrefix(family, prefix) && strings.HasSuffix(family, suffix)
 		}
 		if !matches {
 			continue

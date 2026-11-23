@@ -391,7 +391,9 @@ closing the connection ends it too. `conversation/start` then takes
 The `author` is the user's name, as both `id` and `name`, for user input, and
 `{id: "attn", name: "attn"}` for notices.
 `models/list` returns providers with `provider` and `models`, where each model
-has `id`, `name`, `description` and `efforts`.
+has `id`, `name`, `description` and `efforts`. Attn lists each model as
+`provider/id`, with `id` as its `family`, and passes that name as `model` when
+it launches a view.
 
 `status/watch` starts with `{_tag: "trees", trees: [...]}` for busy
 conversations, then streams `{conversation, status, ended?}` changes.
@@ -498,6 +500,18 @@ Attn to plugin, each answered with a result or a JSON-RPC error:
 | `driver.session_closed` | `session_id`, `run_id`, `reason`, and when known `exit_code`, `signal` | `{"ok":true}` |
 
 A method for a capability you did not declare never arrives.
+
+Each `driver.models` entry has `harness` (your `agent`) and `id`, and may have
+`provider`, `family`, `name`, `description`, `effort_support`, `effort_levels`,
+`access`, `one_shot` and `detail`. The `id` is the exact name Attn sends back
+as `model` in `driver.spawn`, `driver.resume` and background calls. Keep it
+unique among your models: when a list repeats one, Attn keeps the first entry.
+Attn never adds the provider to an `id` or splits one. `provider` only groups
+models in the pickers, so when several providers offer one model, give each
+its own `id`, such as `openrouter/deepseek-v4` and `fireworks/deepseek-v4`.
+`family` is the name Attn's built-in intelligence tiers recognize, such as
+`claude-opus-5` for `anthropic/claude-opus-5`. Without it, the tiers look at
+the `id`.
 
 Plugin to Attn, for a run you launched:
 

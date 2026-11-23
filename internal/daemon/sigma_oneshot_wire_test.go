@@ -138,7 +138,7 @@ func TestSettingsRefuseASigmaModelWhoseProviderCannotAnswerABackgroundCall(t *te
 	catalog := harnessCatalog(app, "sigma", false)
 	oneShot := map[string]protocol.ModelCapabilitySupport{}
 	for _, m := range catalog.Models {
-		oneShot[m.Provider+"/"+m.ID] = m.OneShot
+		oneShot[m.ID] = m.OneShot
 	}
 	if oneShot["agy/gemini-4-neon"] != protocol.ModelCapabilitySupportUnsupported || oneShot["openai/gpt-6-luna"] != protocol.ModelCapabilitySupportSupported {
 		t.Fatalf("Sigma's catalog says of background calls %v, want agy unable and openai able", oneShot)

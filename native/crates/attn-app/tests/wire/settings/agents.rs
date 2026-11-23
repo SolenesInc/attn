@@ -1060,7 +1060,7 @@ fn each_default_model_save_settles_by_its_own_request_and_only_the_refused_one_s
         ("Codex default model", "test-model"),
     ] {
         open_route(&mut world, label);
-        enter_model(&mut world, model, None);
+        enter_model(&mut world, model);
         if picker_open(&world) {
             press(&mut world, Key::Escape);
         }

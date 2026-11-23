@@ -78,21 +78,18 @@ func ValidateSelection(s Selection, ready bool) error {
 		if ready {
 			return fmt.Errorf("choose a harness in Settings > Delegation")
 		}
-		if s.Provider != "" || s.Model != "" || s.Effort != "" {
-			return fmt.Errorf("model, provider and effort need a harness")
+		if s.Model != "" || s.Effort != "" {
+			return fmt.Errorf("model and effort need a harness")
 		}
 		return nil
 	}
 	if !identifier().MatchString(s.Harness) {
 		return fmt.Errorf("invalid harness %q", s.Harness)
 	}
-	for _, value := range []string{s.Provider, s.Model, s.Effort} {
+	for _, value := range []string{s.Model, s.Effort} {
 		if strings.ContainsAny(value, " \t\r\n\x00") {
-			return fmt.Errorf("provider, model and effort must be exact identifiers without whitespace")
+			return fmt.Errorf("model and effort must be exact identifiers without whitespace")
 		}
-	}
-	if s.Provider != "" && s.Model == "" {
-		return fmt.Errorf("a provider needs an explicit model")
 	}
 	return nil
 }
@@ -103,7 +100,6 @@ type Request struct {
 	Fallback bool
 	Revision *int
 	Harness  *string
-	Provider *string
 	Model    *string
 	Effort   *string
 }
@@ -162,27 +158,20 @@ func Resolve(c Config, r Request) (Resolved, error) {
 		out.Builtin = role.Builtin
 		out.RoleIcon = role.Icon
 	}
-	ApplyOverrides(&out.Selection, r.Harness, r.Provider, r.Model, r.Effort)
+	ApplyOverrides(&out.Selection, r.Harness, r.Model, r.Effort)
 	if err := ValidateSelection(out.Selection, true); err != nil {
 		return out, err
 	}
 	return out, nil
 }
 
-func ApplyOverrides(s *Selection, harness, provider, model, effort *string) {
+func ApplyOverrides(s *Selection, harness, model, effort *string) {
 	if harness != nil && *harness != s.Harness {
 		*s = Selection{Harness: *harness}
 	}
 	if model != nil && *model != s.Model {
 		s.Model = *model
 		s.Effort = ""
-	}
-	if provider != nil && *provider != s.Provider {
-		s.Provider = *provider
-		s.Effort = ""
-	}
-	if s.Model == "" {
-		s.Provider = ""
 	}
 	if effort != nil {
 		s.Effort = *effort

@@ -163,7 +163,7 @@ fn read_route(state: &State, id: &str) -> Option<(Route, Rules)> {
     let agent = id.strip_prefix(ROUTE_PREFIX)?;
     let drafts = &state.window.settings.autosave;
     Some((
-        Route::stored(
+        Route::new(
             agent,
             drafts.draft(&model_key(agent)),
             drafts.draft(&effort_key(agent)),
@@ -177,7 +177,7 @@ fn write_route(state: &mut State, id: &str, route: Route, tx: &mut Tx) {
         return;
     };
     let (model, effort) = (model_key(agent), effort_key(agent));
-    let stored = route.stored_model();
+    let stored = route.model.clone();
     if stored != state.window.settings.autosave.draft(&model) {
         autosave::apply(state, &model, &stored, tx);
     }
@@ -432,7 +432,7 @@ fn seeds_on_standby(state: &State, t: &Tokens) -> Block {
 /// whether it is there, quiet while it is and marked when it is not.
 fn head_summary(state: &State, agent: &str, status: Availability, t: &Tokens) -> El {
     let settings = &state.facts.settings;
-    let value = Route::stored(
+    let value = Route::new(
         agent,
         settings.get(&model_key(agent)).map_or("", String::as_str),
         settings.get(&effort_key(agent)).map_or("", String::as_str),
@@ -465,7 +465,7 @@ fn availability_word(status: Availability) -> &'static str {
 /// The agent's stored route as the badge in its group's head shows it.
 fn route_badge(state: &State, agent: &str) -> String {
     let settings = &state.facts.settings;
-    let value = Route::stored(
+    let value = Route::new(
         agent,
         settings.get(&model_key(agent)).map_or("", String::as_str),
         settings.get(&effort_key(agent)).map_or("", String::as_str),

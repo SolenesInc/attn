@@ -47,7 +47,6 @@ func harnessRecord(ctx context.Context, h harnessapi.Harness) protocol.Harness {
 			EffortPin:             facts.Options.EffortPin,
 			Discovery:             facts.ModelDiscovery,
 			ContextCap:            facts.Options.ContextCap,
-			Provider:              facts.Options.Provider,
 			ExecutableSetting:     facts.Executable.Default != "",
 			OneShot:               oneShot,
 			Activity:              facts.Activity,

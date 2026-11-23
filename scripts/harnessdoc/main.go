@@ -171,18 +171,9 @@ func renderTable(host *stubHost, harnesses []harness.Harness) string {
 			plugin: "Declared (`launch_instructions`)",
 		},
 		{
-			label: "Model pin",
-			cell: func(h harness.Harness) string {
-				opts := h.Facts().Options
-				if !opts.ModelPin {
-					return "No"
-				}
-				if opts.Provider {
-					return "Yes (`provider/model`)"
-				}
-				return "Yes"
-			},
-			plugin: "Declared (`model_pin`, `provider/model`)",
+			label:  "Model pin",
+			cell:   func(h harness.Harness) string { return yesNo(h.Facts().Options.ModelPin) },
+			plugin: "Declared (`model_pin`)",
 		},
 		{
 			label:  "Effort pin",

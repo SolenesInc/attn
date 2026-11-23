@@ -160,9 +160,6 @@ fn form(state: &State, draft: &Draft, busy: bool) -> Form {
         model: selected
             .as_ref()
             .map_or_else(|| route.model.clone(), |m| m.id.clone()),
-        provider: selected
-            .as_ref()
-            .map_or_else(|| route.provider.clone(), |m| m.provider.clone()),
         effort: if view.effort_mode == EffortMode::Unsupported {
             String::new()
         } else {
@@ -181,20 +178,16 @@ fn form(state: &State, draft: &Draft, busy: bool) -> Form {
         .map(|o| {
             let (key, checked) = match &o.model {
                 None => (
-                    format!("{}{}", Group::Model.prefix(), route.stored_model()),
+                    format!("{}{}", Group::Model.prefix(), route.model.clone()),
                     true,
                 ),
                 Some(m) => (
-                    format!("{}{}/{}", Group::Model.prefix(), m.provider, m.id),
-                    value.model == m.id && value.provider == m.provider,
+                    format!("{}{}", Group::Model.prefix(), m.id),
+                    value.model == m.id,
                 ),
             };
             let mark = match &o.model {
-                Some(m)
-                    if recommended
-                        .as_ref()
-                        .is_some_and(|r| r.id == m.id && r.provider == m.provider) =>
-                {
+                Some(m) if recommended.as_ref().is_some_and(|r| r.id == m.id) => {
                     Some("recommended".to_owned())
                 }
                 Some(m) => m.tier.clone(),
@@ -342,7 +335,7 @@ pub(super) fn poll(state: &mut State, tx: &mut Tx) -> bool {
         state.window.chief.draft = Some(Draft {
             key: view.key.clone(),
             first_run: view.agent.is_none(),
-            route: Route::stored(
+            route: Route::new(
                 member.agent.as_deref().unwrap_or_default(),
                 member.model.as_deref().unwrap_or_default(),
                 effort.as_deref().unwrap_or("low"),

@@ -59,7 +59,7 @@ func TestModelTiersAndDefaultsFollowReportedOrderAndOverridesWithoutRediscovery(
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Rename(executable+"-saved", executable) })
-	setSetting(t, app, "model_tier_overrides", `[{"harness":"claude","provider":"","model":"claude-sonnet-fake","tier":"light"}]`)
+	setSetting(t, app, "model_tier_overrides", `[{"harness":"claude","model":"claude-sonnet-fake","tier":"light"}]`)
 	changed := harnessCatalog(app, "claude", false)
 	if !changed.Success || protocol.Deref(changed.TierDefaults.Light) != "claude-sonnet-fake" || changed.Models[2].TierSource != protocol.ModelTierSourceOverride || protocol.Deref(changed.Models[2].ShippedTier) != protocol.ModelTierStandard {
 		t.Fatalf("override without a discovery executable = %+v", changed)
@@ -83,7 +83,7 @@ func TestModelTiersAndDefaultsFollowReportedOrderAndOverridesWithoutRediscovery(
 func TestInvalidTierOverridesAreRefusedAndKeepTheSavedMapping(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
-	const saved = `[{"harness":"claude","provider":"","model":"claude-sonnet-fake","tier":"light"}]`
+	const saved = `[{"harness":"claude","model":"claude-sonnet-fake","tier":"light"}]`
 	setSetting(t, app, "model_tier_overrides", saved)
 	for _, raw := range []string{`null`, `{}`, `[{"harness":"claude","model":"sonnet","tier":"fast"}]`, `[{"harness":"claude","model":"sonnet","tier":"light","typo":true}]`, `[] []`} {
 		refused := gardenAdvisorSetSetting(app, "model_tier_overrides", raw)
@@ -142,7 +142,7 @@ func tierCallAfterTheExecutableReturns(t *testing.T, configured bool) {
 	w.start()
 	app := w.TrustedApp()
 	token := pairSenderInApp(t, w.Client(), app, "Tier recovery")
-	setSetting(t, app, "model_tier_overrides", `[{"harness":"claude","provider":"","model":"claude-sonnet-fake","tier":"light"}]`)
+	setSetting(t, app, "model_tier_overrides", `[{"harness":"claude","model":"claude-sonnet-fake","tier":"light"}]`)
 	const chosen = "claude-sonnet-fake"
 	checkCatalog := func() {
 		t.Helper()

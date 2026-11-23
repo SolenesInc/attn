@@ -41,8 +41,9 @@ The flags you'll reach for most:
   one of the role's alternatives. `--fallback` uses "Anything else". Without
   `--role`, `--choice`, or `--fallback`, `--model` is required (`--model default`
   takes the harness default).
-- `--agent NAME`, `--model`, `--effort` and `--provider` pick the harness and
-  model for this one delegation, on top of a role or without one.
+- `--agent NAME`, `--model` and `--effort` pick the harness and model for this
+  one delegation, on top of a role or without one. `--model` takes the model's
+  id as the harness lists it, such as `openai/gpt-5.5` for Sigma.
 - `--desktop` opens the delegate on another desktop of your profile. Give the
   desktop's shortcut digit, name, or id.
 - `--name` names the session. The default is the title of the brief or seed.

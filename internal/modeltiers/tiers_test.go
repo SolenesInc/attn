@@ -33,7 +33,7 @@ func TestModelIDRulesAssignTheSameTierOnEveryHarness(t *testing.T) {
 	} {
 		for _, harness := range []string{"claude", "codex", "pi"} {
 			t.Run(harness+"/"+row.model, func(t *testing.T) {
-				got := modeltiers.Assign(nil, modeltiers.Key{Harness: harness, Provider: "provider", Model: row.model})
+				got := modeltiers.Assign(nil, modeltiers.Key{Harness: harness, Model: row.model}, "")
 				want := modeltiers.Assignment{Tier: row.tier, Source: row.source, Shipped: row.tier}
 				if got != want {
 					t.Errorf("assignment = %+v, want %+v", got, want)
@@ -43,8 +43,8 @@ func TestModelIDRulesAssignTheSameTierOnEveryHarness(t *testing.T) {
 	}
 }
 
-func TestOverridesBelongToOneHarnessProviderAndModelAndLeaveAliasesUntiered(t *testing.T) {
-	key := modeltiers.Key{Harness: "pi", Provider: "openai", Model: "gpt-6-luna"}
+func TestOverridesBelongToOneHarnessAndModelAndLeaveAliasesUntiered(t *testing.T) {
+	key := modeltiers.Key{Harness: "pi", Model: "gpt-6-luna"}
 	alias := modeltiers.Key{Harness: "claude", Model: "default"}
 	overrides := modeltiers.Overrides{key: modeltiers.Deep, alias: modeltiers.Deep}
 	for _, row := range []struct {
@@ -52,17 +52,37 @@ func TestOverridesBelongToOneHarnessProviderAndModelAndLeaveAliasesUntiered(t *t
 		want modeltiers.Assignment
 	}{
 		{key, modeltiers.Assignment{Tier: modeltiers.Deep, Source: "override", Shipped: modeltiers.Light}},
-		{modeltiers.Key{Harness: "codex", Provider: "openai", Model: key.Model}, modeltiers.Assignment{Tier: modeltiers.Light, Source: "shipped", Shipped: modeltiers.Light}},
-		{modeltiers.Key{Harness: "pi", Provider: "other", Model: key.Model}, modeltiers.Assignment{Tier: modeltiers.Light, Source: "shipped", Shipped: modeltiers.Light}},
-		{modeltiers.Key{Harness: "pi", Provider: "openai", Model: "gpt-5.6-luna"}, modeltiers.Assignment{Tier: modeltiers.Light, Source: "shipped", Shipped: modeltiers.Light}},
+		{modeltiers.Key{Harness: "codex", Model: key.Model}, modeltiers.Assignment{Tier: modeltiers.Light, Source: "shipped", Shipped: modeltiers.Light}},
+		{modeltiers.Key{Harness: "pi", Model: "gpt-5.6-luna"}, modeltiers.Assignment{Tier: modeltiers.Light, Source: "shipped", Shipped: modeltiers.Light}},
 		{alias, modeltiers.Assignment{Source: "alias"}},
 	} {
-		if got := modeltiers.Assign(overrides, row.key); got != row.want {
+		if got := modeltiers.Assign(overrides, row.key, ""); got != row.want {
 			t.Errorf("assignment for %+v = %+v, want %+v", row.key, got, row.want)
 		}
 	}
 	delete(overrides, key)
-	if got := modeltiers.Assign(overrides, key); got.Tier != modeltiers.Light || got.Source != "shipped" {
+	if got := modeltiers.Assign(overrides, key, ""); got.Tier != modeltiers.Light || got.Source != "shipped" {
 		t.Errorf("removing override assigned %+v, want the shipped light tier", got)
+	}
+}
+
+func TestShippedRulesMatchTheFamilyAHarnessReports(t *testing.T) {
+	for _, row := range []struct {
+		model, family string
+		want          modeltiers.Assignment
+	}{
+		{"anthropic/claude-sonnet-5", "claude-sonnet-5", modeltiers.Assignment{Tier: modeltiers.Standard, Source: "shipped", Shipped: modeltiers.Standard}},
+		{"claude/haiku", "haiku", modeltiers.Assignment{Tier: modeltiers.Light, Source: "shipped", Shipped: modeltiers.Light}},
+		{"claude/default", "default", modeltiers.Assignment{Source: "alias"}},
+		{"claude/haiku", "", modeltiers.Assignment{Source: "none"}},
+		{"gemini/gemini-4-carbon", "gemini-4-carbon", modeltiers.Assignment{Source: "none"}},
+	} {
+		if got := modeltiers.Assign(nil, modeltiers.Key{Harness: "sigma", Model: row.model}, row.family); got != row.want {
+			t.Errorf("%s of family %q = %+v, want %+v", row.model, row.family, got, row.want)
+		}
+	}
+	overrides := modeltiers.Overrides{{Harness: "sigma", Model: "claude/haiku"}: modeltiers.Deep}
+	if got := modeltiers.Assign(overrides, modeltiers.Key{Harness: "sigma", Model: "claude/haiku"}, "haiku"); got.Tier != modeltiers.Deep || got.Shipped != modeltiers.Light {
+		t.Errorf("an override on the full id assigned %+v, want deep over the shipped light tier", got)
 	}
 }

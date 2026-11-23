@@ -30,7 +30,7 @@ func TestDelegationDiscoveryIsOnDemand(t *testing.T) {
 func TestDelegationRolesIncludesMaintainedGuidanceAndChoices(t *testing.T) {
 	roles := DelegationRoleTemplates()
 	roles = ExpandDelegationRoles(roles)
-	roles[2].Choices = append(roles[2].Choices, protocol.DelegationChoice{ID: "hard", Name: "Demanding", When: "Hard verification", Selection: protocol.DelegationSelection{Harness: "pi", Provider: "example", Model: "custom", Effort: "high"}})
+	roles[2].Choices = append(roles[2].Choices, protocol.DelegationChoice{ID: "hard", Name: "Demanding", When: "Hard verification", Selection: protocol.DelegationSelection{Harness: "pi", Model: "example/custom", Effort: "high"}})
 	output := DelegationRolesText(protocol.DelegationRolesResult{Roles: roles, Guidance: DelegationRoutingGuidance()})
 	for _, expected := range []string{"Pathfinder", "Builder", "Reviewer", "Orchestrator", "Hard verification", "example", "custom"} {
 		if !strings.Contains(output, expected) {

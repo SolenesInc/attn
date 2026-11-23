@@ -73,10 +73,9 @@ fn push_harnesses(world: &mut World, harnesses: Vec<Harness>) {
     world.settle();
 }
 
-fn selection(harness: &str, provider: &str, model: &str, effort: &str) -> DelegationSelection {
+fn selection(harness: &str, model: &str, effort: &str) -> DelegationSelection {
     DelegationSelection {
         harness: harness.into(),
-        provider: provider.into(),
         model: model.into(),
         effort: effort.into(),
     }
@@ -728,7 +727,7 @@ fn copying_a_maintained_role_keeps_its_configured_model_and_state_not_the_templa
             "default",
             "Default",
             "",
-            selection("codex", "", "model-a", "high"),
+            selection("codex", "model-a", "high"),
         )],
         ..template()
     };
@@ -743,8 +742,8 @@ fn copying_a_maintained_role_keeps_its_configured_model_and_state_not_the_templa
     assert!(!copy.enabled);
     let s = &copy.choices[0].selection;
     assert_eq!(
-        (&*s.harness, &*s.provider, &*s.model, &*s.effort),
-        ("codex", "", "model-a", "high")
+        (&*s.harness, &*s.model, &*s.effort),
+        ("codex", "model-a", "high")
     );
     rest(&mut world);
 }
@@ -849,8 +848,8 @@ fn the_row_saves_a_picked_model_an_alternative_with_its_condition_and_the_switch
     assert_eq!(saves(&world).len(), 2);
     let s = last_saved(&world).roles[0].choices[0].selection.clone();
     assert_eq!(
-        (&*s.harness, &*s.provider, &*s.model, &*s.effort),
-        ("codex", "", "model-a", "medium")
+        (&*s.harness, &*s.model, &*s.effort),
+        ("codex", "model-a", "medium")
     );
     assert!(!described(&world, "settings.delegation.role.build").contains("Needs a model"));
     assert!(!picker_open(&world));
@@ -876,8 +875,8 @@ fn the_row_saves_a_picked_model_an_alternative_with_its_condition_and_the_switch
     assert!(alternative.when.contains("ambiguous"));
     let s = alternative.selection;
     assert_eq!(
-        (&*s.harness, &*s.provider, &*s.model, &*s.effort),
-        ("codex", "", "model-a", "medium")
+        (&*s.harness, &*s.model, &*s.effort),
+        ("codex", "model-a", "medium")
     );
     assert_eq!(
         described(
@@ -1025,7 +1024,6 @@ fn showing_the_section_again_reloads_the_table_and_pushed_harnesses_appear() {
     plug.id = "plug".into();
     plug.name = "Plug".into();
     plug.options.discovery = false;
-    plug.options.provider = true;
     push_harnesses(&mut world, vec![codex(), plug]);
     show_section_again(&mut world);
     assert_eq!(loads(&world), 2);
@@ -1043,17 +1041,12 @@ fn showing_the_section_again_reloads_the_table_and_pushed_harnesses_appear() {
 fn making_an_alternative_the_default_keeps_the_former_default_as_an_alternative() {
     let role = DelegationRole {
         choices: vec![
-            choice(
-                "default",
-                "Everyday",
-                "",
-                selection("codex", "", "model-a", ""),
-            ),
+            choice("default", "Everyday", "", selection("codex", "model-a", "")),
             choice(
                 "careful",
                 "Hard verification",
                 "Verification is difficult.",
-                selection("codex", "", "model-b", "high"),
+                selection("codex", "model-b", "high"),
             ),
         ],
         ..custom("Everyday", "Run relevant tests")
@@ -1091,13 +1084,11 @@ fn picker_harnesses() -> Vec<Harness> {
     house.options.model_pin = false;
     house.options.effort_pin = false;
     house.options.discovery = false;
-    house.options.provider = true;
 
     let mut plug = codex();
     plug.id = "plug".into();
     plug.name = "Plug".into();
     plug.options.discovery = false;
-    plug.options.provider = true;
 
     vec![
         Harness {
@@ -1169,18 +1160,13 @@ fn picker(selection: DelegationSelection, held: bool) -> (World, Server, Arc<Mut
     (world, server, requests)
 }
 
-fn build_route(world: &World) -> (String, String, String, String) {
+fn build_route(world: &World) -> (String, String, String) {
     let s = last_saved(world).roles[0].choices[0].selection.clone();
-    (s.harness, s.provider, s.model, s.effort)
+    (s.harness, s.model, s.effort)
 }
 
-fn route_of(
-    harness: &str,
-    provider: &str,
-    model: &str,
-    effort: &str,
-) -> (String, String, String, String) {
-    (harness.into(), provider.into(), model.into(), effort.into())
+fn route_of(harness: &str, model: &str, effort: &str) -> (String, String, String) {
+    (harness.into(), model.into(), effort.into())
 }
 
 fn close_picker(world: &mut World) {
@@ -1206,7 +1192,7 @@ const BUILD_CHIP: &str = "settings.route.delegation.build/default";
 
 #[test]
 fn an_unavailable_harness_stays_pickable_and_marked_without_reading_the_table_again() {
-    let (mut world, _, _) = picker(selection("claude", "", "", ""), false);
+    let (mut world, _, _) = picker(selection("claude", "", ""), false);
     let availability = |world: &mut World, installation: &str| {
         let mut list = picker_harnesses();
         list[0].installation = installation.into();
@@ -1229,7 +1215,7 @@ fn an_unavailable_harness_stays_pickable_and_marked_without_reading_the_table_ag
 
 #[test]
 fn one_discovery_serves_a_reopen_and_refresh_asks_again() {
-    let (mut world, _, _) = picker(selection("claude", "", "", ""), false);
+    let (mut world, _, _) = picker(selection("claude", "", ""), false);
     assert_eq!(models_asked(&world).len(), 1);
     close_picker(&mut world);
     open_route(&mut world, "Model for Build");
@@ -1243,7 +1229,7 @@ fn one_discovery_serves_a_reopen_and_refresh_asks_again() {
 
 #[test]
 fn models_group_by_tier_in_reported_order_with_the_alias_first() {
-    let (mut world, _, _) = picker(selection("claude", "", "", ""), false);
+    let (mut world, _, _) = picker(selection("claude", "", ""), false);
     let names: Vec<String> = options(&world, "models")
         .into_iter()
         .map(|(n, _, _)| n)
@@ -1265,11 +1251,11 @@ fn models_group_by_tier_in_reported_order_with_the_alias_first() {
 
 #[test]
 fn a_model_and_effort_save_as_complete_routes_and_the_effort_closes_the_picker() {
-    let (mut world, _, _) = picker(selection("claude", "", "", ""), false);
+    let (mut world, _, _) = picker(selection("claude", "", ""), false);
     pick_model(&mut world, "Opus");
-    assert_eq!(build_route(&world), route_of("claude", "", "opus", ""));
+    assert_eq!(build_route(&world), route_of("claude", "opus", ""));
     pick_effort(&mut world, "high");
-    assert_eq!(build_route(&world), route_of("claude", "", "opus", "high"));
+    assert_eq!(build_route(&world), route_of("claude", "opus", "high"));
     assert!(!picker_open(&world));
     assert_eq!(
         world.screen().focused().and_then(|n| n.key).as_deref(),
@@ -1280,7 +1266,7 @@ fn a_model_and_effort_save_as_complete_routes_and_the_effort_closes_the_picker()
 
 #[test]
 fn browsing_another_harness_neither_saves_nor_wipes_the_model() {
-    let (mut world, _, _) = picker(selection("claude", "", "opus", "high"), false);
+    let (mut world, _, _) = picker(selection("claude", "opus", "high"), false);
     preview_harness(&mut world, "Plug");
     assert!(saves(&world).is_empty());
     close_picker(&mut world);
@@ -1291,7 +1277,7 @@ fn browsing_another_harness_neither_saves_nor_wipes_the_model() {
 
 #[test]
 fn a_stored_missing_model_and_effort_stay_shown_without_a_save_on_open() {
-    let (mut world, _, _) = picker(selection("claude", "", "retired", "future-effort"), false);
+    let (mut world, _, _) = picker(selection("claude", "retired", "future-effort"), false);
     assert!(
         options(&world, "models")
             .iter()
@@ -1303,32 +1289,23 @@ fn a_stored_missing_model_and_effort_stay_shown_without_a_save_on_open() {
 }
 
 #[test]
-fn an_exact_provider_qualified_model_saves_on_a_harness_without_discovery() {
-    let (mut world, _, _) = picker(selection("claude", "", "", ""), false);
+fn an_exact_model_id_saves_on_a_harness_without_discovery() {
+    let (mut world, _, _) = picker(selection("claude", "", ""), false);
     preview_harness(&mut world, "Plug");
-    enter_model(&mut world, "openai/gpt-next", None);
-    assert_eq!(
-        build_route(&world),
-        route_of("plug", "openai", "gpt-next", "")
-    );
+    enter_model(&mut world, "openai/gpt-next");
+    assert_eq!(build_route(&world), route_of("plug", "openai/gpt-next", ""));
     assert_eq!(models_asked(&world), ["claude"]);
     rest(&mut world);
 }
 
 #[test]
-fn a_known_unsupported_manual_model_is_refused_while_an_unknown_provider_is_accepted() {
-    for (by_enter, query) in [
-        (false, "vendor/blocked"),
-        (true, "vendor/blocked"),
-        (false, "blocked"),
-        (true, "blocked"),
-    ] {
+fn a_known_unsupported_manual_model_is_refused_while_an_unknown_one_is_accepted() {
+    for by_enter in [false, true] {
         let mut house = codex();
         house.id = "house".into();
         house.name = "House".into();
-        house.options.provider = true;
         let (mut world, _) = on_delegation(Spec {
-            roles: vec![build_on(selection("house", "", "", ""))],
+            roles: vec![build_on(selection("house", "", ""))],
             harnesses: Some(vec![house]),
             ..Spec::default()
         });
@@ -1336,7 +1313,13 @@ fn a_known_unsupported_manual_model_is_refused_while_an_unknown_provider_is_acce
             let blocked = |provider: &str, name: &str, access: &str| attn_protocol::HarnessModel {
                 provider: provider.into(),
                 access: access.into(),
-                ..model("house", "blocked", name, Some("deep"), &["medium", "high"])
+                ..model(
+                    "house",
+                    &format!("{provider}/blocked"),
+                    name,
+                    Some("deep"),
+                    &["medium", "high"],
+                )
             };
             message(HarnessModelsResultMessage {
                 success: true,
@@ -1362,42 +1345,31 @@ fn a_known_unsupported_manual_model_is_refused_while_an_unknown_provider_is_acce
                 world.settle();
             }
         };
-        let retype = |world: &mut World, key: &str, text: &str| {
+        let retype = |world: &mut World, text: &str| {
+            let key = "settings.route-picker.filter";
             click(world, key);
             for _ in 0..value(world, key).chars().count() {
                 press(world, Key::Backspace);
             }
             world.gesture(|app| app.type_text(text));
         };
-        retype(&mut world, "settings.route-picker.filter", query);
-        if query == "blocked" {
-            retype(&mut world, "settings.route-picker.provider", "vendor");
-        }
-        submit(&mut world, query);
-        assert!(saves(&world).is_empty(), "{query} by enter {by_enter}");
+        retype(&mut world, "vendor/blocked");
+        submit(&mut world, "vendor/blocked");
+        assert!(saves(&world).is_empty(), "by enter {by_enter}");
         let manual = world
             .screen()
             .find(Target::key("settings.route-picker.manual"));
         assert!(
             manual.is_some_and(|m| m.is("disabled")),
-            "{query} by enter {by_enter}: {}",
+            "by enter {by_enter}: {}",
             world.screen()
         );
-        retype(&mut world, "settings.route-picker.provider", "");
-        let unknown = if query == "blocked" {
-            "blocked"
-        } else {
-            "unknown/blocked"
-        };
-        retype(&mut world, "settings.route-picker.filter", unknown);
-        if query == "blocked" {
-            retype(&mut world, "settings.route-picker.provider", "unknown");
-        }
-        submit(&mut world, unknown);
+        retype(&mut world, "unknown/blocked");
+        submit(&mut world, "unknown/blocked");
         assert_eq!(
             build_route(&world),
-            route_of("house", "unknown", "blocked", ""),
-            "{query} by enter {by_enter}"
+            route_of("house", "unknown/blocked", ""),
+            "by enter {by_enter}"
         );
         rest(&mut world);
     }
@@ -1409,7 +1381,7 @@ fn a_harness_that_chooses_its_model_commits_only_when_its_default_row_is_chosen(
     preview_harness(&mut world, "House");
     assert!(saves(&world).is_empty());
     pick_model(&mut world, "House default");
-    assert_eq!(build_route(&world), route_of("house", "", "", ""));
+    assert_eq!(build_route(&world), route_of("house", "", ""));
     assert!(models_asked(&world).is_empty());
     rest(&mut world);
 }
@@ -1422,9 +1394,8 @@ fn a_plugin_that_discovers_but_cannot_pin_offers_only_its_default() {
         house.name = "House".into();
         house.options.model_pin = false;
         house.options.effort_pin = false;
-        house.options.provider = true;
         let (mut world, _) = on_delegation(Spec {
-            roles: vec![build_on(selection("house", "", stored, "high"))],
+            roles: vec![build_on(selection("house", stored, "high"))],
             harnesses: Some(vec![house]),
             ..Spec::default()
         });
@@ -1463,7 +1434,7 @@ fn a_plugin_that_discovers_but_cannot_pin_offers_only_its_default() {
         assert_eq!(names, ["House default"]);
         assert!(!shown(&world, "settings.route-picker.filter"));
         pick_model(&mut world, "House default");
-        assert_eq!(build_route(&world), route_of("house", "", "", ""));
+        assert_eq!(build_route(&world), route_of("house", "", ""));
         rest(&mut world);
     }
 }
@@ -1474,9 +1445,8 @@ fn effort_stays_free_when_the_harness_chooses_the_model() {
         let mut house = codex();
         house.id = "house".into();
         house.name = "House".into();
-        house.options.provider = true;
         let (mut world, _) = on_delegation(Spec {
-            roles: vec![build_on(selection("house", "", "pinned", "high"))],
+            roles: vec![build_on(selection("house", "pinned", "high"))],
             harnesses: Some(vec![house]),
             ..Spec::default()
         });
@@ -1496,7 +1466,7 @@ fn effort_stays_free_when_the_harness_chooses_the_model() {
         });
         open_route(&mut world, "Model for Build");
         pick_model(&mut world, "House default");
-        assert_eq!(build_route(&world), route_of("house", "", "", "high"));
+        assert_eq!(build_route(&world), route_of("house", "", "high"));
         assert_eq!(effort_field(&world).as_deref(), Some("high"));
         assert!(
             world
@@ -1510,7 +1480,7 @@ fn effort_stays_free_when_the_harness_chooses_the_model() {
 
 #[test]
 fn a_discovery_in_flight_is_shared_over_a_close_and_reopen() {
-    let (mut world, _, requests) = picker(selection("claude", "", "", ""), true);
+    let (mut world, _, requests) = picker(selection("claude", "", ""), true);
     assert_eq!(
         status(&world, "settings.route-picker.loading"),
         "Discovering models…"
@@ -1531,7 +1501,7 @@ fn a_discovery_in_flight_is_shared_over_a_close_and_reopen() {
 
 #[test]
 fn a_stored_effort_stays_editable_when_discovery_fails() {
-    let (mut world, _, requests) = picker(selection("claude", "", "retired", "future"), true);
+    let (mut world, _, requests) = picker(selection("claude", "retired", "future"), true);
     let held = requests.lock().unwrap().clone();
     world.daemon.reply_to(
         &held[0],
@@ -1549,7 +1519,7 @@ fn a_stored_effort_stays_editable_when_discovery_fails() {
 
 #[test]
 fn an_empty_catalog_reads_differently_from_a_failed_discovery() {
-    let (mut world, _, requests) = picker(selection("claude", "", "", ""), true);
+    let (mut world, _, requests) = picker(selection("claude", "", ""), true);
     let held = requests.lock().unwrap().clone();
     world.daemon.reply_to(
         &held[0],
@@ -1579,23 +1549,55 @@ fn an_empty_catalog_reads_differently_from_a_failed_discovery() {
 
 #[test]
 fn none_clears_the_route_and_closes_the_picker() {
-    let (mut world, _, _) = picker(selection("claude", "", "opus", ""), false);
+    let (mut world, _, _) = picker(selection("claude", "opus", ""), false);
     click(&mut world, "settings.route-picker.harness.none");
-    assert_eq!(build_route(&world), route_of("", "", "", ""));
+    assert_eq!(build_route(&world), route_of("", "", ""));
     assert!(!picker_open(&world));
     rest(&mut world);
 }
 
 #[test]
 fn a_typed_effort_saves_when_a_press_outside_closes_the_picker() {
-    let (mut world, _, _) = picker(selection("claude", "", "retired", ""), false);
+    let (mut world, _, _) = picker(selection("claude", "retired", ""), false);
     click(&mut world, "settings.route-picker.effort");
     world.gesture(|app| app.type_text(" max "));
     click(&mut world, "settings.heading");
+    assert_eq!(build_route(&world), route_of("claude", "retired", "max"));
+    assert!(!picker_open(&world));
+    rest(&mut world);
+}
+
+#[test]
+fn a_picked_model_saves_its_catalog_id_exactly() {
+    let mut snipe = codex();
+    snipe.id = "snipe".into();
+    snipe.name = "Snipe".into();
+    let (mut world, _) = on_delegation(Spec {
+        roles: vec![build_on(selection("snipe", "", ""))],
+        harnesses: Some(vec![snipe]),
+        ..Spec::default()
+    });
+    world.daemon.on("harness_models", |_| {
+        message(HarnessModelsResultMessage {
+            success: true,
+            models: vec![attn_protocol::HarnessModel {
+                provider: "gemini".into(),
+                ..model(
+                    "snipe",
+                    "gemini/gemini-4-carbon",
+                    "Gemini 4 Carbon",
+                    Some("standard"),
+                    &[],
+                )
+            }],
+            ..HarnessModelsResultMessage::new()
+        })
+    });
+    open_route(&mut world, "Model for Build");
+    pick_model(&mut world, "Gemini 4 Carbon");
     assert_eq!(
         build_route(&world),
-        route_of("claude", "", "retired", "max")
+        route_of("snipe", "gemini/gemini-4-carbon", "")
     );
-    assert!(!picker_open(&world));
     rest(&mut world);
 }

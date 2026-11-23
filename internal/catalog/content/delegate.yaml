@@ -20,7 +20,7 @@ groups:
   - name: delegate roles
     summary: the roles agents choose from when delegating, and the saved table behind them
     doc: |
-      With no command, `delegate_roles` prints the roles agents choose from when delegating. The other commands read and change the saved table in Settings > Delegation. Every change is a new revision; `delegate_roles_rollback` undoes any of them. Each change takes a message, the reason recorded in history. Guidance (a description, instructions and an icon) is for custom roles only. Changing the model or provider clears effort unless an effort is given.
+      With no command, `delegate_roles` prints the roles agents choose from when delegating. The other commands read and change the saved table in Settings > Delegation. Every change is a new revision; `delegate_roles_rollback` undoes any of them. Each change takes a message, the reason recorded in history. Guidance (a description, instructions and an icon) is for custom roles only. Changing the model clears effort unless an effort is given.
 
 commands:
   - name: delegate
@@ -58,7 +58,6 @@ commands:
       - {name: role, type: name, cli: "--role", doc: "a configured delegation role, with its default choice"}
       - {name: choice, type: name, cli: "--choice", doc: "an alternative within role"}
       - {name: fallback, type: bool, cli: "--fallback", doc: "the configured model for work no role fits"}
-      - {name: provider, type: clearable, cli: "--provider", placeholder: "<id>", doc: "the provider for a plugin harness model; with role or fallback"}
       - {name: effort, type: clearable, cli: "--effort", placeholder: "<level>", doc: 'pin the effort; "default" selects the harness default (default: medium where supported)'}
       - {name: name, type: text, cli: "--name", doc: "the session's name, at most 48 characters (default: from the brief or the seed's title)"}
       - {name: desktop, type: clearable, cli: "--desktop", placeholder: "<ref>", doc: "a desktop of your profile for the new agent: its shortcut digit (1-9), its name or its id; the agent opens at the end of that desktop's row without changing what you see (default: the caller's desktop)"}
@@ -152,7 +151,6 @@ commands:
       - {name: when, type: clearable, cli: "--when", doc: "when an agent should pick this alternative instead of the default"}
       - {name: agent, type: clearable, cli: "--agent", doc: "the harness; changing it starts a fresh selection"}
       - {name: model, type: clearable, cli: "--model", doc: 'the model; "default" selects the harness default'}
-      - {name: provider, type: clearable, cli: "--provider", doc: "the provider for a plugin harness model"}
       - {name: effort, type: clearable, cli: "--effort", doc: 'the effort; "default" selects the harness default'}
       - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
     result: DelegateRolesChangeResult
@@ -179,7 +177,6 @@ commands:
       - {name: when, type: clearable, cli: "--when", doc: "when an agent should pick this alternative instead of the default"}
       - {name: agent, type: clearable, cli: "--agent", doc: "the harness; changing it starts a fresh selection"}
       - {name: model, type: clearable, cli: "--model", doc: 'the model; "default" selects the harness default'}
-      - {name: provider, type: clearable, cli: "--provider", doc: "the provider for a plugin harness model"}
       - {name: effort, type: clearable, cli: "--effort", doc: 'the effort; "default" selects the harness default'}
       - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
     result: DelegateRolesChangeResult

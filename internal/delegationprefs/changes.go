@@ -52,9 +52,6 @@ func DescribeSelection(s Selection) string {
 		return "no model chosen"
 	}
 	model := s.Model
-	if s.Provider != "" {
-		model = s.Provider + "/" + model
-	}
 	if model == "" {
 		model = "default model"
 	}

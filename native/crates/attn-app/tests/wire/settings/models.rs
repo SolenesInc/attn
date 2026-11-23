@@ -128,9 +128,7 @@ fn a_tier_updates_the_mapping_and_the_live_default_and_reset_returns_to_the_ship
     world.settle();
     assert_eq!(
         last_write(&world),
-        overrides_written(
-            r#"[{"harness":"codex","provider":"","model":"gpt-6-luna","tier":"standard"}]"#
-        )
+        overrides_written(r#"[{"harness":"codex","model":"gpt-6-luna","tier":"standard"}]"#)
     );
     assert_eq!(light_default(&world), "Light default gpt-5.6-luna");
     assert_eq!(
@@ -151,8 +149,23 @@ fn a_tier_updates_the_mapping_and_the_live_default_and_reset_returns_to_the_ship
 }
 
 #[test]
+fn changing_one_tier_keeps_every_other_saved_override() {
+    let overrides = r#"[{"harness":"codex","model":"retired-model","tier":"deep"},{"harness":"codex","model":"gpt-5.6-luna","tier":"deep"}]"#;
+    let (mut world, _) = on_models(&[(OVERRIDES, overrides)], harnesses());
+    click(&mut world, &radio("codex", "gpt-6-luna", "standard"));
+    world.settle();
+    assert_eq!(
+        last_write(&world),
+        overrides_written(
+            r#"[{"harness":"codex","model":"retired-model","tier":"deep"},{"harness":"codex","model":"gpt-5.6-luna","tier":"deep"},{"harness":"codex","model":"gpt-6-luna","tier":"standard"}]"#
+        )
+    );
+    rest(&mut world);
+}
+
+#[test]
 fn a_missing_models_override_stays_visible_and_remove_drops_only_it() {
-    let overrides = r#"[{"harness":"codex","provider":"","model":"retired-model","tier":"deep"},{"harness":"codex","provider":"","model":"gpt-6-luna","tier":"standard"}]"#;
+    let overrides = r#"[{"harness":"codex","model":"retired-model","tier":"deep"},{"harness":"codex","model":"gpt-6-luna","tier":"standard"}]"#;
     let (mut world, _) = on_models(&[(OVERRIDES, overrides)], harnesses());
     assert_eq!(
         said(&world, "settings.models.codex.orphans"),
@@ -168,9 +181,7 @@ fn a_missing_models_override_stays_visible_and_remove_drops_only_it() {
     world.settle();
     assert_eq!(
         last_write(&world),
-        overrides_written(
-            r#"[{"harness":"codex","provider":"","model":"gpt-6-luna","tier":"standard"}]"#
-        )
+        overrides_written(r#"[{"harness":"codex","model":"gpt-6-luna","tier":"standard"}]"#)
     );
     rest(&mut world);
 }
@@ -180,7 +191,7 @@ fn delete_resets_a_model_without_changing_its_neighbors() {
     let (mut world, _) = on_models(
         &[(
             OVERRIDES,
-            r#"[{"harness":"codex","provider":"","model":"gpt-6-luna","tier":"deep"}]"#,
+            r#"[{"harness":"codex","model":"gpt-6-luna","tier":"deep"}]"#,
         )],
         harnesses(),
     );
@@ -206,7 +217,7 @@ fn an_override_for_a_known_harness_without_discovery_can_be_removed() {
     let (mut world, _) = on_models(
         &[(
             OVERRIDES,
-            r#"[{"harness":"plug","provider":"","model":"old-model","tier":"deep"}]"#,
+            r#"[{"harness":"plug","model":"old-model","tier":"deep"}]"#,
         )],
         listed,
     );
@@ -226,7 +237,7 @@ fn an_override_for_a_known_harness_without_discovery_can_be_removed() {
 
 #[test]
 fn saved_overrides_stay_removable_when_model_discovery_fails() {
-    let overrides = r#"[{"harness":"codex","provider":"","model":"gpt-6-luna","tier":"deep"}]"#;
+    let overrides = r#"[{"harness":"codex","model":"gpt-6-luna","tier":"deep"}]"#;
     let (mut world, _) = on_models(&[(OVERRIDES, overrides)], harnesses());
     world.daemon.on("harness_models", |_| {
         message(HarnessModelsResultMessage {
