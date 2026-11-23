@@ -7,6 +7,7 @@ use super::{
 use crate::Tokens;
 
 const DOT: f32 = 14.0;
+const INSET: Space = Space::S12;
 
 /// The narrowest a choice's name gets beside its mark before it takes a line of its own under
 /// it: the longest word of a colour scheme's name, "Catppuccin", measures 72.5 in `Name`.
@@ -206,7 +207,7 @@ impl Choice {
             Size::Regular => Space::S8,
             Size::Compact | Size::Small => Space::S4,
         };
-        let row = door::inset(door::gap(row, Space::S12), Space::S12, rows);
+        let row = door::inset(door::gap(row, Space::S12), INSET, rows);
         let row = door::corner(row, Radius::Card);
         if self.disabled && self.selectable {
             return Control::new(disabled::readable(row), self.size);
@@ -250,4 +251,10 @@ pub fn choices(key: impl Into<String>, label: &str) -> El {
         .focus_group()
         .w_full();
     door::gap(group, Space::S4)
+}
+
+/// `key`, the key after a field under a list of choices, such as an "Other…" answer's, set in to
+/// end where the choices' own keys end.
+pub fn key_under_choices(key: El) -> El {
+    row().child(door::room_after(key, INSET.pt()))
 }

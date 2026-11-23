@@ -84,7 +84,7 @@ fn cap(key: String, look: Look, colors: Option<[Color; 3]>, t: &Tokens) -> El {
     let [ink, edge, fill] = colors.unwrap_or(if raised {
         [t.text_primary, Color::TRANSPARENT, t.bg_button]
     } else {
-        [t.text_tertiary, t.border, t.bg_app]
+        hint_colors(t.text_tertiary)
     });
     let face = door::font(text(key), if raised { RAISED_TYPE } else { HINT_TYPE }).color(ink);
     let cap = row().center().a11y_hidden().child(face);
@@ -98,6 +98,12 @@ fn cap(key: String, look: Look, colors: Option<[Color; 3]>, t: &Tokens) -> El {
                 .border_layout()
         }
     }
+}
+
+/// An outlined cap in `ink`, its frame and its face washed from the ink, so it stands as a key on
+/// whatever surface carries it: the panel, a hovered row or a picked one.
+pub(crate) fn hint_colors(ink: Color) -> [Color; 3] {
+    [ink, ink.alpha(0.4), ink.alpha(0.06)]
 }
 
 /// Groups of outlined keys in a row ending on its end, each whole or gone: a group that does not

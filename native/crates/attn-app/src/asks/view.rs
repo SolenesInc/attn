@@ -854,7 +854,10 @@ fn question_section(
     let heading = Inline::joined()
         .key(format!("asks.q.{}.prompt", question.key))
         .items_start()
-        .child(words(index.to_string(), Type::Mono, number_ink))
+        .child(read_as(
+            words(index.to_string(), Type::Name, number_ink),
+            Reading::Heading,
+        ))
         .child(
             prose.text(
                 read_as(
@@ -926,7 +929,9 @@ fn question_section(
 /// others keep its room so nothing moves as the active question changes.
 fn number_cap(n: usize, active: bool, t: &Tokens) -> Option<El> {
     (n <= 9).then(|| {
-        let cap = keycaps([n.to_string()], t).a11y_hidden();
+        let cap = attn_ui::keycap::Keys::ledged(&[n.to_string()])
+            .build(t)
+            .a11y_hidden();
         if active { cap } else { cap.opacity(0.0) }
     })
 }
@@ -1057,7 +1062,7 @@ fn choice_list(
                 Inline::loose()
                     .w_full()
                     .child(field)
-                    .children(number_cap(n + 1, active, t)),
+                    .children(number_cap(n + 1, active, t).map(attn_ui::system::key_under_choices)),
             )
         }
     };

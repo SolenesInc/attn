@@ -49,7 +49,7 @@ pub use chip::{
     chip_button, chip_edge, chip_width, count_badge, count_chip, keycaps, keycaps_width, keys_hint,
     keys_hint_width, number_chip, slot_badge,
 };
-pub use choice::{Choice, answers, checks, choices};
+pub use choice::{Choice, answers, checks, choices, key_under_choices};
 pub use composer::{composer, text_input};
 pub use control::Control;
 pub use disclosure::disclosure;

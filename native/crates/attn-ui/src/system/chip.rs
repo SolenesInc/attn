@@ -76,11 +76,11 @@ pub fn count_chip(said: impl Into<Said>, t: &Tokens) -> El {
 /// Keys drawn as keys: an outlined cap for each, in the order they are pressed together.
 pub fn keycaps(keys: impl IntoIterator<Item = impl Into<String>>, t: &Tokens) -> El {
     door::gap(row().items_center(), Space::S2).children(keys.into_iter().map(|key| {
-        let cap = row().fill(t.bg_app).border(1.0, t.border).child(words(
-            key.into(),
-            Type::Mono,
-            t.text_secondary,
-        ));
+        let [ink, edge, face] = crate::keycap::hint_colors(t.text_secondary);
+        let cap = row()
+            .fill(face)
+            .border(1.0, edge)
+            .child(words(key.into(), Type::Mono, ink));
         door::corner(door::inset(cap, Space::S4, Space::S0), Radius::Tag)
     }))
 }
