@@ -444,12 +444,10 @@ func (l *lane) placeOverConversationLocked(ctx context.Context, delivery Deliver
 
 // tookLocked credits the user's words to the run going, or to the next turn start when none has started since placing began.
 func (l *lane) tookLocked(delivery Delivery, epochAtPlacing uint64) runRef {
-	if delivery.origin.kind == originUserConversation {
-		l.titleLocked(delivery)
-	}
 	if !delivery.speaksForUser() {
 		return runRef{}
 	}
+	l.titleLocked(delivery)
 	if l.run != nil {
 		l.run.credited = true
 		return l.run.ref
@@ -461,8 +459,8 @@ func (l *lane) tookLocked(delivery Delivery, epochAtPlacing uint64) runRef {
 }
 
 func (l *lane) titleLocked(delivery Delivery) {
-	m, text, user := l.monitor, delivery.Text, delivery.origin.kind == originUserConversation
-	m.registry.host.Go("maybeGenerateSessionTitleFromPrompt", func() { m.TitleFromPrompt(text, user) })
+	m, text := l.monitor, delivery.Text
+	m.registry.host.Go("maybeGenerateSessionTitleFromPrompt", func() { m.TitleFromPrompt(text, true) })
 }
 
 func (l *lane) claimNextLocked() bool {
