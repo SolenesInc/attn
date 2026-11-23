@@ -1,0 +1,1 @@
+GitHub host discovery now reads `gh`'s per-host `api_host` setting (`gh config get api_host -h <host>`) and maps `*.ghe.com` GHEC-DR tenants to root API paths (`api.<host>` or `api_host`) instead of `/api/v3`, fixing `tls: access denied` errors when monitoring pull requests on reverse-proxied tenants like `spotify.ghe.com`.
