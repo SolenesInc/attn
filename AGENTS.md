@@ -409,6 +409,8 @@ entry names:
   (.agents/skills/write-test)
 - Test runners, their receipts, or `scripts/test-history` =>
   docs/internal/test-history.md
+- Harness contract, adapters, optional parts, approved leaks, or adding a
+  harness => docs/internal/harness-contract.md
 - How a harness behaves, before relying on it => docs/internal/harnesses.md and
   the file it names for that harness; check new claims in the harness's source
   or with a probe and record them in that file

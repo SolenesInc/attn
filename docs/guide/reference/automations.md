@@ -29,9 +29,7 @@ sidebar, or "Show automations" in the command palette (Cmd+Shift+K,
 Ctrl+Alt+K on Linux). Click **New automation** and fill in:
 
 - **Name**, and the **Trigger** with its settings (below).
-- **Runs as**. The harness (Claude Code, Codex or, while [Sigma](using-sigma.md)
-  is on, Sigma), model and effort, and the launch desktop where its agents start. By default that is a new desktop
-  named after the automation.
+- **Runs as**. The harness, model, effort, and launch desktop where its agents start. Automations offer every harness that supports auto-approve (see [Harnesses](harnesses.md)). By default, runs start on a new desktop named after the automation.
 - **Prompt**. The instruction the agent receives. Details of the occurrence,
   such as the pull request, arrive separately as data, and Attn never changes the prompt with them.
 
@@ -151,8 +149,7 @@ location:
   path: /Users/you/projects/api
 ```
 
-`launch.driver` is `claude`, `codex` or, while [Sigma](using-sigma.md) is on,
-`sigma`. The app's form offers Sigma.
+`launch.driver` accepts any offered harness that supports auto-approve: `claude`, `codex`, or `sigma` while [Sigma](using-sigma.md) is on.
 
 ## Details
 

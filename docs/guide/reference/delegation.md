@@ -535,5 +535,5 @@ A planted seed is open and nobody tends it. A seed is growing while an agent or 
 <details>
 <summary>Can a delegate run on a different harness, or in another profile?</summary>
 
-Any harness can delegate to any other, so a Claude Code agent can hand work to Codex, or to a harness a plugin adds, and back. Without a role or a named harness, the delegate runs on the same harness as the agent that started it, or Codex when that was a shell. A delegation stays in the profile of the agent that started it, so the delegate opens on one of that profile's desktops and a seed from another profile is refused. Your delegation roles are one table shared by every profile.
+Any harness can delegate to any other (see [Harnesses](harnesses.md)), so a Claude Code agent can hand work to Codex, or to a harness a plugin adds, and back. Without a role or a named harness, the delegate runs on the same harness as the agent that started it. A delegation from a shell must name a role or a harness. A delegation stays in the profile of the agent that started it, so the delegate opens on one of that profile's desktops and a seed from another profile is refused. Your delegation roles are one table shared by every profile.
 </details>

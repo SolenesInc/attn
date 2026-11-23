@@ -20,6 +20,7 @@ the app still shows an older word, the page tells you which label to look for.
 | [desktops](reference/desktops.md) | Desktop flow: desktops, tiles, moving agents between desktops, the row and the shelf, and profiles |
 | [queue](reference/queue.md) | Queue flow: turns, settling, snoozing and priority |
 | [sessions](reference/sessions.md) | Opening agents and shells, worktrees, the terminal, restarts, the ledger, resume, and sending files to an agent |
+| [harnesses](reference/harnesses.md) | Built-in and plugin harnesses, what each harness supports, and choosing a harness |
 | [delegation](reference/delegation.md) | Agents starting agents you can steer, delegation roles, and the garden |
 | [crew](reference/crew.md) | Permanent agents with a name and a charter |
 | [chief](reference/chief.md) | The agent that looks after your other agents, and its first day with you |

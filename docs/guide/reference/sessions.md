@@ -11,8 +11,9 @@ picker. Pick a harness or a plain shell, then a directory. In a git repository,
 Tab moves on to where the agent works: a new worktree (type to name its
 branch), the main checkout, or a worktree that already exists. Enter starts it.
 
-Attn runs Claude Code, Codex and Sigma, and other harnesses through plugins; to
-add one, see [Writing a harness plugin](writing-harness-plugins.md). Sigma is
+Attn runs Claude Code, Codex, and Sigma, and other harnesses through plugins.
+See [Harnesses](harnesses.md) for what each harness supports, and
+[Writing a harness plugin](writing-harness-plugins.md) to add one. Sigma is
 experimental: turn on **Sigma** in **Settings → Experimental** to offer it, and
 see [Using Sigma](using-sigma.md). You get each harness as its makers built it,
 and you can still use its bare CLI whenever you want.

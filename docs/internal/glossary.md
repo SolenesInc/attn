@@ -53,13 +53,17 @@ terminal                one PTY process in a terminal tile
 ├─ host (at most 1)    the outpost it runs on; no host means the home's machine
 └─ offline             its host is unreachable (bridge lost or refused, or
                        Outposts off); typing is not sent
-harness                 the agent CLI: Claude Code, Codex, Sigma
+harness                 the agent CLI: Claude Code, Codex, Sigma, or one a
+                        plugin adds
+├─ adapter (1)          the code that implements attn's harness contract for it
+└─ offered              enabled for new sessions (for a harness behind a
+                        feature, turned on), whether installed or missing
 model                   the AI model a harness runs
 ├─ tier (at most 1)      the intelligence a task needs: light, standard or deep
 └─ effort (at most 1)    how much reasoning the model uses
-link                    a way attn reaches a harness besides its terminal,
-                        such as the shared Codex app-server or the Sigma
-                        server; a session runs over the link its
+link                    a connection attn holds to a harness besides its
+                        terminal, such as the shared Codex app-server or the
+                        Sigma server; a session runs over the link its
                         conversation runs on now
 agent                   a harness that runs in a terminal, which the user talks
                         to; like a coding agent
@@ -76,6 +80,8 @@ agent                   a harness that runs in a terminal, which the user talks
 session                 attn's record of one conversation in one profile; like
                         one chat in a chat app's history
 ├─ conversation (1)     the harness's chat history
+│  └─ lifetime (1)      where the conversation runs: in its terminal's process,
+│                       or in a server that outlives the terminal
 ├─ terminal (0..n)      the terminals showing it; a terminal shows 1 session
 │                       at a time; when its agent moves to another
 │                       conversation (/clear, /new, /resume, Codex /agents),
@@ -368,6 +374,8 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 - reopen → resume
 - reporting seed → stake
 - device (in the relay contract) → phone
+- driver (for an adapter) → adapter
+- has a link → server lifetime
 
 ### Changes to make
 

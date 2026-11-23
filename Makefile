@@ -474,6 +474,7 @@ generate-types: ensure-go-jsonschema $(SCHEMA_NODE_MODULES)
 	node scripts/generate-protocol-version.mjs
 	node scripts/generate-rust-protocol.mjs
 	go run ./cmd/cligen cli/protocol/src/go_values.rs cli/testdata cli/attn/src internal/prompts/content/skills/attn/references internal
+	go run ./scripts/harnessdoc docs/guide/reference/harnesses.md
 	rm -rf internal/protocol/schema/tsp-output-home-gateway
 	cd internal/protocol/schema && pnpm exec tsp compile home_gateway.tsp --output-dir tsp-output-home-gateway
 	$(GO_JSONSCHEMA) -p homegateway --only-models --tags json --resolve-extension json --capitalization ID --capitalization API \
@@ -502,7 +503,7 @@ generate-types: ensure-go-jsonschema $(SCHEMA_NODE_MODULES)
 # diff runs and this passes silently — commit the edit if you are trying to
 # reproduce a drift failure locally.
 check-types: generate-types
-	git diff --exit-code internal/protocol/generated.go internal/protocol/placement_generated.go internal/protocol/protocol_version.go internal/protocol/homegateway mobile/src/homeGateway/generated.ts mobile/src/homeGateway/version.ts cli/protocol/src/generated.rs cli/protocol/src/go_values.rs cli/testdata 'cli/attn/src/commands/*/help_generated.rs' 'cli/attn/src/commands/*/table_generated.rs' cli/attn/src/commands/top_level_generated.rs internal/protocol/commands_generated.go internal/command/args_generated.go internal/daemon/agent_tools_generated.json internal/prompts/tool_families_generated.go internal/prompts/content/skills/attn/references/garden.md
+	git diff --exit-code internal/protocol/generated.go internal/protocol/placement_generated.go internal/protocol/protocol_version.go internal/protocol/homegateway mobile/src/homeGateway/generated.ts mobile/src/homeGateway/version.ts cli/protocol/src/generated.rs cli/protocol/src/go_values.rs cli/testdata 'cli/attn/src/commands/*/help_generated.rs' 'cli/attn/src/commands/*/table_generated.rs' cli/attn/src/commands/top_level_generated.rs internal/protocol/commands_generated.go internal/command/args_generated.go internal/daemon/agent_tools_generated.json internal/prompts/tool_families_generated.go internal/prompts/content/skills/attn/references/garden.md docs/guide/reference/harnesses.md
 
 # Refuses a Home Gateway API change that is not an addition to the schema on origin/main.
 check-home-gateway-compat:

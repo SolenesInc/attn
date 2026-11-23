@@ -200,7 +200,7 @@ run_checks() {
     fi
     go_checks=(check-go "GO_PACKAGES=$packages")
   fi
-  touches '^internal/protocol/(schema/|constants\.go)|^internal/(setting|garden|prompts|ask|inbox)/|^cmd/(settingsgen|cligen)/|^internal/catalog/|^cli/|^scripts/generate-rust-protocol\.mjs|^go\.mod$' && targets+=(check-types)
+  touches '^internal/protocol/(schema/|constants\.go)|^internal/(setting|garden|prompts|ask|inbox|harness)/|^cmd/(settingsgen|cligen)/|^internal/catalog/|^cli/|^scripts/(generate-rust-protocol\.mjs|harnessdoc/)|^docs/guide/reference/harnesses\.md$|^go\.mod$' && targets+=(check-types)
   touches '^internal/protocol/(schema/home_gateway\.tsp|homegateway/)' && targets+=(check-home-gateway-compat)
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
   touches '^scripts/harnesslint/' && targets+=(lint-harness)

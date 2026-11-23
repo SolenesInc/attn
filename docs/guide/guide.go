@@ -23,6 +23,9 @@ var imageLink = sync.OnceValue(func() *regexp.Regexp {
 var summaryLine = sync.OnceValue(func() *regexp.Regexp {
 	return regexp.MustCompile(`<summary>(.*?)</summary>`)
 })
+var htmlCommentLine = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`(?m)^<!--[^\n]*-->\n?`)
+})
 
 type page struct {
 	topic string
@@ -69,6 +72,7 @@ func Topic(name string) ([]byte, error) {
 }
 
 func forTerminal(section, text string) string {
+	text = htmlCommentLine().ReplaceAllString(text, "")
 	return imageLink().ReplaceAllStringFunc(text, func(link string) string {
 		match := imageLink().FindStringSubmatch(link)
 		alt, target := match[1], path.Clean(path.Join(section, match[2]))
