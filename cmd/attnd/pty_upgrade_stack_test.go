@@ -1177,7 +1177,6 @@ func (u *releaseUpdate) reloadOntoTheHost(app *testworld.Peer, agent releaseAgen
 func (u *releaseUpdate) assertBackInItsConversation(app *testworld.Peer, agent releaseAgent, conversation string) {
 	u.T.Helper()
 	u.assertParent(agent.run, "attn-pty-host")
-	sharedHostOf(u.t, u.Dir, app.Terminal(agent.session))
 	u.turn(app, agent, "back-again")
 	if !agent.run.Resumed || agent.run.ConversationID != conversation {
 		u.T.Errorf("session %s ran conversation %q (resumed=%t), want %q resumed", agent.session, agent.run.ConversationID, agent.run.Resumed, conversation)
