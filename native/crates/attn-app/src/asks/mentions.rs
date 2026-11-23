@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use attn_client::Garden;
 use attn_protocol::{AskSeedMention, AskSeedMentionsMessage, AskSeedMentionsResultMessage};
-use rune::{El, Link, Span, Tx};
+use rune::Tx;
 
 use crate::State;
 use crate::requests::Answer;
@@ -93,28 +93,6 @@ pub(crate) fn of<'a>(state: &'a State, ask: &str) -> &'a [AskSeedMention] {
         .map_or(&[], |m| m.names.as_slice())
 }
 
-/// `el`, the text `content`, with each seed it names as a link that opens the seed.
-pub(crate) fn linked(el: El, content: &str, names: &[AskSeedMention], color: rune::Color) -> El {
-    let found = found(content, names);
-    if found.is_empty() {
-        return el;
-    }
-    let spans: Vec<Span> = found
-        .iter()
-        .map(|(range, _)| {
-            Span::new(range.start, range.end)
-                .color(color)
-                .underline(color)
-        })
-        .collect();
-    found
-        .into_iter()
-        .fold(el.spans(spans), |el, (range, seed)| {
-            el.link(Link::new(range, seed).help(format!("Open {seed} in the Garden")))
-        })
-        .on_link(|state: &mut State, seed: &str, tx: &mut Tx| super::open_seed(state, seed, tx))
-}
-
 /// The seed links in a run of an ask's prose, as `Markdown::text_links` takes them: the run's
 /// text outside code and links, so a seed named inside a URL leaves the URL one link.
 pub(crate) fn seed_links(
@@ -124,9 +102,14 @@ pub(crate) fn seed_links(
     move |run| {
         found(run, &names)
             .into_iter()
-            .map(|(at, seed)| (at, format!("{SEED_HREF}{seed}")))
+            .map(|(at, seed)| (at, href(seed)))
             .collect()
     }
+}
+
+/// The href of a link that opens `seed`.
+pub(crate) fn href(seed: &str) -> String {
+    format!("{SEED_HREF}{seed}")
 }
 
 /// The seed a link in an ask's markdown opens.
@@ -136,7 +119,7 @@ pub(crate) fn seed_of(href: &str) -> Option<&str> {
 
 /// Where `text` names a seed: a name the daemon resolved, standing on its own, the longest
 /// name first where two start at the same place.
-fn found<'a>(text: &str, names: &'a [AskSeedMention]) -> Vec<(Range<usize>, &'a str)> {
+pub(crate) fn found<'a>(text: &str, names: &'a [AskSeedMention]) -> Vec<(Range<usize>, &'a str)> {
     let mut longest: Vec<&AskSeedMention> = names.iter().filter(|m| !m.text.is_empty()).collect();
     longest.sort_by_key(|m| std::cmp::Reverse(m.text.len()));
     let bytes = text.as_bytes();

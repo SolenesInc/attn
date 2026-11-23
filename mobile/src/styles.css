@@ -419,7 +419,8 @@ button.row.ask {
   color: var(--muted);
 }
 
-.markdown a {
+.markdown a,
+.ask-screen a {
   color: var(--accent);
 }
 

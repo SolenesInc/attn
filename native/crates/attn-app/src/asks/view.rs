@@ -13,6 +13,7 @@ use attn_ui::{Backdrop, Frame, Tokens, glyph};
 use rune::{El, Image, Key, KeyEvent, Side, SurfaceFit, Tx, col, row};
 use rune_kit::{ImageFrame, Markdown, TextArea, TextInput};
 
+use super::inline::Line;
 use super::{Chip, Item, Kind, Lists, Stop, attach, mentions, questions};
 use crate::State;
 use crate::desktop::header_pop::{self, Pop, What};
@@ -171,9 +172,9 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
                 .w(RAIL_W)
                 .min_w(RAIL_W)
                 .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle);
-            let reading = Sheet::new("asks.reading", item.ask.subject.clone())
+            let reading = Sheet::new("asks.reading", Line::plain(&item.ask.subject))
                 .head(header(state, item, t))
-                .article("asks.ask", item.ask.subject.clone())
+                .article("asks.ask", Line::plain(&item.ask.subject))
                 .measure(MEASURE, PICTURES)
                 .push_all(article(state, item, Some(MEASURE), t))
                 .footer(footer(state, item, items.len() > 1, t))
@@ -193,7 +194,7 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
             let stacked = rail
                 .top(list)
                 .keeps_room(rows)
-                .article("asks.ask", item.ask.subject.clone())
+                .article("asks.ask", Line::plain(&item.ask.subject))
                 .push(Block::custom("asks.header.block", header(state, item, t)))
                 .push_all(article(state, item, None, t))
                 .footer(footer(state, item, items.len() > 1, t))
@@ -329,7 +330,8 @@ fn list_row(item: &Item<'_>, selected: bool, now_ms: i64, t: &Tokens) -> El {
         about.push("replied".into());
     }
     let age = queue::turn_age(Some(super::age_from(ask)), now_ms);
-    let mut said = vec![item.from.clone(), ask.subject.clone()];
+    let subject = Line::plain(&ask.subject);
+    let mut said = vec![item.from.clone(), subject.clone()];
     said.extend(about[1..].iter().cloned());
     if waiting {
         said.push("Waiting on you".into());
@@ -344,7 +346,7 @@ fn list_row(item: &Item<'_>, selected: bool, now_ms: i64, t: &Tokens) -> El {
     } else {
         row
     };
-    let row = row.role("option").unfocusable().title(ask.subject.clone());
+    let row = row.role("option").unfocusable().title(subject);
     let row = if timed.is_empty() {
         row
     } else {
@@ -383,12 +385,8 @@ impl<'a> Prose<'a> {
         }
     }
 
-    fn text(&self, el: El, content: &str) -> El {
-        mentions::linked(el, content, self.names, self.t.accent)
-    }
-
-    fn markdown(&self, source: &str) -> El {
-        let document = links::Document {
+    fn document(&self) -> links::Document {
+        links::Document {
             path: self.document.clone(),
             session: None,
             outpost: None,
@@ -396,7 +394,29 @@ impl<'a> Prose<'a> {
             opens_seed: None,
             seed: None,
             part: None,
-        };
+        }
+    }
+
+    /// The words of `source`, a line of inline markdown, and what draws its marks on the words
+    /// that show them, its links opening as the ask's prose opens them.
+    fn line(&self, source: &str) -> (String, bool, impl FnOnce(El) -> El + 'static) {
+        let line = Line::of(source, self.names);
+        let (link, code) = (self.t.accent, self.t.bg_elevated);
+        let document = self.document();
+        let (words, linked) = (line.text.clone(), line.has_links());
+        (words, linked, move |el: El| {
+            let el = line.drawn(el, link, code);
+            if !linked {
+                return el;
+            }
+            el.on_link(move |state: &mut State, href: &str, tx: &mut Tx| {
+                follow_link(state, &document, href, tx)
+            })
+        })
+    }
+
+    fn markdown(&self, source: &str) -> El {
+        let document = self.document();
         let path = self.document.clone();
         let pictures = self.pictures.clone();
         Markdown::new(source)
@@ -408,10 +428,7 @@ impl<'a> Prose<'a> {
                 self.t,
             ))
             .on_link_tx(move |state: &mut State, href: &str, tx: &mut Tx| {
-                match mentions::seed_of(href) {
-                    Some(seed) => super::open_seed(state, seed, tx),
-                    None => links::follow(state, &document, href, tx),
-                }
+                follow_link(state, &document, href, tx)
             })
             .images(move |src| match links::resolve(&path, src) {
                 Some(links::Target::Local(file)) => pictures.get(&file).cloned(),
@@ -424,6 +441,13 @@ impl<'a> Prose<'a> {
                 })
             })
             .build(attn_ui::kit(self.t))
+    }
+}
+
+fn follow_link(state: &mut State, document: &links::Document, href: &str, tx: &mut Tx) {
+    match mentions::seed_of(href) {
+        Some(seed) => super::open_seed(state, seed, tx),
+        None => links::follow(state, document, href, tx),
     }
 }
 
@@ -549,18 +573,18 @@ fn article(state: &State, item: &Item<'_>, measure: Option<f32>, t: &Tokens) -> 
     if let Some(re) = &ask.re {
         blocks.push(follows(state, &ask.id, re, &prose, t));
     }
+    let (subject, _, marked) = prose.line(&ask.subject);
     blocks.push(Block::custom(
         "asks.subject.block",
-        prose.text(
+        marked(
             read_as(
-                words(ask.subject.clone(), Type::PageTitle, t.text_primary),
+                words(subject, Type::PageTitle, t.text_primary),
                 Reading::Title,
             )
             .key("asks.subject")
             .role("heading")
             .selectable(true)
             .wrap(),
-            &ask.subject,
         ),
     ));
     if let Some(due) = super::default_of(ask).filter(|_| ask.reply.is_none()) {
@@ -568,7 +592,7 @@ fn article(state: &State, item: &Item<'_>, measure: Option<f32>, t: &Tokens) -> 
             "No answer by {}, and {} goes with {}",
             queue::wake_time_long(Some(&due.due_at), state.window.now_ms),
             item.from,
-            due.choice
+            Line::plain(&due.choice)
         );
         blocks.push(Block::custom(
             "asks.default.block",
@@ -782,7 +806,7 @@ fn follows(state: &State, ask_id: &str, re: &AskThread, prose: &Prose, t: &Token
     let id = ask_id.to_owned();
     let fold = Disclosure::new(
         "asks.follows",
-        format!("Follows {subject} · {answered}"),
+        format!("Follows {} · {answered}", Line::plain(subject)),
         open,
         move |state: &mut State, _: &mut Tx| {
             let folds = &mut state.window.asks.follows_open;
@@ -851,25 +875,23 @@ fn question_section(
 ) -> Block {
     let kind = Kind::of(question);
     let number_ink = if active { t.accent } else { t.text_tertiary };
+    let (prompt, _, marked) = prose.line(&question.prompt);
     let heading = Inline::top()
         .key(format!("asks.q.{}.prompt", question.key))
         .child(read_as(
             words(index.to_string(), Type::Name, number_ink),
             Reading::Heading,
         ))
-        .child(
-            prose.text(
-                read_as(
-                    words(question.prompt.clone(), Type::Heading, t.text_primary),
-                    Reading::Heading,
-                )
-                .selectable(true)
-                .wrap()
-                .grow(1.0)
-                .min_w(0.0),
-                &question.prompt,
-            ),
-        );
+        .child(marked(
+            read_as(
+                words(prompt, Type::Heading, t.text_primary),
+                Reading::Heading,
+            )
+            .selectable(true)
+            .wrap()
+            .grow(1.0)
+            .min_w(0.0),
+        ));
     let context = question
         .context
         .as_ref()
@@ -883,7 +905,7 @@ fn question_section(
         });
     let body = match kind {
         Kind::Text => written(ask, question, &answer, t),
-        Kind::One | Kind::Any => choice_list(ask, question, kind, &answer, active, t),
+        Kind::One | Kind::Any => choice_list(ask, question, kind, &answer, active, prose, t),
         Kind::File => match files {
             Files::Drafted(files, dropping) => drop_zone(ask, &question.key, &files, dropping, t),
             Files::Sent(files) if files.is_empty() => {
@@ -901,7 +923,10 @@ fn question_section(
         .wrap(),
     };
     let (ask_id, key) = (ask.to_owned(), question.key.clone());
-    let section = Section::new(format!("asks.q.{}", question.key), question.prompt.clone());
+    let section = Section::new(
+        format!("asks.q.{}", question.key),
+        Line::plain(&question.prompt),
+    );
     let section = match prose.measure {
         Some(points) => section.measure(points),
         None => section,
@@ -940,7 +965,7 @@ fn written(ask: &str, question: &AskQuestion, answer: &Shown<'_>, t: &Tokens) ->
     match answer {
         Shown::Replied(answer) => replied_text(
             format!("asks.q.{key}.text"),
-            &question.prompt,
+            &Line::plain(&question.prompt),
             answer.and_then(|a| a.text.as_deref()).unwrap_or_default(),
             t,
         ),
@@ -955,7 +980,7 @@ fn written(ask: &str, question: &AskQuestion, answer: &Shown<'_>, t: &Tokens) ->
             let field = written_field(
                 edit,
                 &text_key(&key),
-                &question.prompt,
+                &Line::plain(&question.prompt),
                 &placeholder,
                 move |state: &mut State| &mut state.answer(&ask_id, &q).text,
                 t,
@@ -990,6 +1015,7 @@ fn choice_list(
     kind: Kind,
     answer: &Shown<'_>,
     active: bool,
+    prose: &Prose<'_>,
     t: &Tokens,
 ) -> El {
     let replied = matches!(answer, Shown::Replied(_));
@@ -998,14 +1024,17 @@ fn choice_list(
     let options = question.choices.iter().enumerate().map(|(i, choice)| {
         let recommended = question.recommended.as_deref() == Some(choice.label.as_str());
         let (ask_id, q, label) = (ask.to_owned(), question.key.clone(), choice.label.clone());
-        let mut shown = Choice::new(choice_key(&question.key, i), choice.label.clone())
+        let (name, linked, marked) = prose.line(&choice.label);
+        let mut shown = Choice::new(choice_key(&question.key, i), name)
+            .name_marks(marked, linked)
             .many(many)
             .chosen(answer.picked(&choice.label))
             .disabled(replied)
             .selectable(true)
             .reads();
-        if let Some(note) = choice.description.clone().filter(|d| !d.is_empty()) {
-            shown = shown.note(note);
+        if let Some(note) = choice.description.as_deref().filter(|d| !d.is_empty()) {
+            let (note, linked, marked) = prose.line(note);
+            shown = shown.note(note).note_marks(marked, linked);
         }
         if let Some(cap) = number_cap(i + 1, active, t).filter(|_| !replied) {
             shown = shown.trailing(cap);
@@ -1030,11 +1059,11 @@ fn choice_list(
         .flatten();
     let group_key = format!("asks.q.{}.choices", question.key);
     let group = if many {
-        checks(group_key, &question.prompt)
+        checks(group_key, &Line::plain(&question.prompt))
     } else {
-        answers(group_key, &question.prompt)
+        answers(group_key, &Line::plain(&question.prompt))
     };
-    let label = format!("Other answer to {}", question.prompt);
+    let label = format!("Other answer to {}", Line::plain(&question.prompt));
     let other = match answer {
         Shown::Replied(a) => a
             .and_then(|a| a.other.as_deref())
@@ -1813,14 +1842,14 @@ fn previewed(ask: &Ask, key: &str, t: &Tokens) -> El {
                     let choice = format!("{key}.q.{n}.choice.{i}");
                     Inline::tight()
                         .child(
-                            words(c.label.clone(), Type::Small, t.text_secondary)
+                            words(Line::plain(&c.label), Type::Small, t.text_secondary)
                                 .key(format!("{choice}.name"))
                                 .wrap()
                                 .min_w(0.0)
                                 .shrink(),
                         )
-                        .children(c.description.clone().map(|d| {
-                            words(d, Type::Small, t.text_tertiary)
+                        .children(c.description.as_deref().map(|d| {
+                            words(Line::plain(d), Type::Small, t.text_tertiary)
                                 .wrap()
                                 .min_w(0.0)
                                 .shrink()
@@ -1837,7 +1866,7 @@ fn previewed(ask: &Ask, key: &str, t: &Tokens) -> El {
                 .collect(),
         };
         Stack::tight()
-            .child(words(q.prompt.clone(), Type::Body, t.text_primary).wrap())
+            .child(words(Line::plain(&q.prompt), Type::Body, t.text_primary).wrap())
             .children(lines)
     });
     let answer = Button::new("Answer")
@@ -1851,8 +1880,8 @@ fn previewed(ask: &Ask, key: &str, t: &Tokens) -> El {
     Stack::tight()
         .key(key.to_owned())
         .role("group")
-        .label(ask.subject.clone())
-        .child(words(ask.subject.clone(), Type::Name, t.text_primary).wrap())
+        .label(Line::plain(&ask.subject))
+        .child(words(Line::plain(&ask.subject), Type::Name, t.text_primary).wrap())
         .children(questions)
         .child(El::from(answer).key(format!("{key}.answer")).self_start())
 }

@@ -173,6 +173,50 @@ describe('asks on the phone', () => {
       Scene.expect(Scene.role('button', { name: 'old-work' })).not.toExist(),
     )
   })
+  it('shows the inline markdown of a subject, a prompt and its choices, and a link opens without picking', () => {
+    const device = 'https://auth.openai.com/codex/device'
+    const guide = 'https://example.com/guide'
+    const signIn: Question = {
+      ...choiceQuestion,
+      prompt: `Open ${device} and enter the code **Z5RI-IDLV2**, then answer here.`,
+      choices: [
+        { label: '**Signed in**', description: `see [the guide](${guide})` },
+        { label: 'Run `attn retry`', description: null },
+      ],
+      recommended: null,
+    }
+    const signing = ask('a-sign', 1, [{ markdown: null, question: signIn }], 'Sign in to *Sigma*')
+    Scene.scene(
+      { update, view },
+      Scene.given(online(personal)),
+      arrive(personal, [signing]),
+      Scene.tap((simulation) => {
+        expect(entries('ask-entry', simulation.html)[0]).toContain('Sign in to Sigma')
+      }),
+      Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
+      Scene.expect(Scene.role('heading', { name: 'Sign in to Sigma' })).toExist(),
+      Scene.expect(Scene.role('link', { name: device })).toHaveAttr('href', device),
+      Scene.expect(Scene.role('link', { name: 'the guide' })).toHaveAttr('href', guide),
+      Scene.expect(Scene.role('radio', { name: /^Signed in/ })).toExist(),
+      Scene.tap((simulation) => {
+        const shown = Scene.getAllByTestId('ask-question-q1')(simulation.html)[0]!
+        expect(Scene.textContent(shown)).not.toContain('**')
+        expect(Scene.textContent(shown)).not.toContain('`')
+      }),
+      Scene.click(Scene.role('link', { name: 'the guide' })),
+      Scene.expect(Scene.role('radio', { name: /^Signed in/ })).toHaveAttr('aria-checked', 'false'),
+      Scene.click(Scene.role('radio', { name: /^Signed in/ })),
+      Scene.Command.resolve(
+        SendAnswer({
+          pairingId: personal.id,
+          askId: 'a-sign',
+          answers: [{ key: 'q1', picked: ['**Signed in**'] }],
+          note: '',
+        }),
+        Message.SentAnswer({ pairingId: personal.id, askId: 'a-sign' }),
+      ),
+    )
+  })
   it('lists the open asks of every home above the agents, oldest first', () => {
     Scene.scene(
       { update, view },

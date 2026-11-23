@@ -12,7 +12,7 @@ import {
   type RepliedAnswer,
   type Question,
 } from './ask'
-import { mentionText, renderMarkdown, type MarkdownContext } from './markdown'
+import { plainInline, renderInline, renderMarkdown, type MarkdownContext } from './markdown'
 import { createSeedMentionIndex } from './seedMentions'
 import type { HomeGatewaySeedMention } from '../homeGateway/generated'
 
@@ -66,7 +66,7 @@ export const askRow = <Message>(
           h.span(
             [h.Class('row-main')],
             [
-              h.span([h.Class('row-title')], [row.ask.subject]),
+              h.span([h.Class('row-title')], [plainInline(row.ask.subject)]),
               h.span([h.Class('row-where')], [`${row.from} · ${where(row.pairing)}`]),
             ],
           ),
@@ -91,7 +91,7 @@ const choiceList = <Message>(
     [
       h.Class('choices'),
       h.Role(question.kind === 'one' ? 'radiogroup' : 'group'),
-      h.AriaLabel(question.prompt),
+      h.AriaLabel(plainInline(question.prompt)),
     ],
     [
       ...question.choices.map((choice) => {
@@ -117,13 +117,15 @@ const choiceList = <Message>(
                 h.span(
                   [h.Class('choice-label')],
                   [
-                    choice.label,
+                    ...renderInline(choice.label, actions, h),
                     question.recommended === choice.label
                       ? h.span([h.Class('recommended-badge')], ['recommended'])
                       : h.empty,
                   ],
                 ),
-                choice.description ? h.span([h.Class('choice-description')], [choice.description]) : h.empty,
+                choice.description
+                  ? h.span([h.Class('choice-description')], renderInline(choice.description, actions, h))
+                  : h.empty,
               ],
             ),
             oneTap && picked && sending ? h.span([h.Class('sending')], ['Sending…']) : h.empty,
@@ -134,7 +136,7 @@ const choiceList = <Message>(
         h.Class('other'),
         h.Type('text'),
         h.Placeholder('Other…'),
-        h.AriaLabel(`Other answer to ${question.prompt}`),
+        h.AriaLabel(`Other answer to ${plainInline(question.prompt)}`),
         h.Value(answer.other),
         h.Disabled(sending),
         h.EnterKeyHint(oneTap ? 'send' : 'done'),
@@ -154,7 +156,7 @@ const writtenAnswer = <Message>(
     [h.Class('written')],
     [
       h.textarea([
-        h.AriaLabel(question.prompt),
+        h.AriaLabel(plainInline(question.prompt)),
         h.Value(answer.text),
         h.Rows(3),
         h.Disabled(sending),
@@ -203,7 +205,7 @@ const defaultDue = <Message>(question: Question, from: string, now: number, h: H
     ? h.p(
         [h.Class('muted default-due'), h.DataAttribute('testid', 'ask-default-due')],
         [
-          `No answer by ${clockTime(question.default.dueAt, now)}, and ${from} goes with ${question.default.choice}`,
+          `No answer by ${clockTime(question.default.dueAt, now)}, and ${from} goes with ${plainInline(question.default.choice)}`,
         ],
       )
     : h.empty
@@ -225,7 +227,7 @@ const questionCard = <Message>(
     [
       h.legend(
         [],
-        [h.span([h.Class('index')], [String(index)]), ...mentionText(question.prompt, actions, h)],
+        [h.span([h.Class('index')], [String(index)]), ...renderInline(question.prompt, actions, h)],
       ),
       question.context ? renderMarkdown(question.context, actions, h) : h.empty,
       ask.reply ? h.empty : defaultDue(question, from, now, h),
@@ -256,7 +258,8 @@ const followsLine = <Message>(
   h: HtmlBuilder<Message>,
 ): Html => {
   const answered = re.answeredAt === null ? 'not answered' : `you answered ${age(re.answeredAt, now)} ago`
-  const line = re.subject === null ? `Follows ${re.askId}` : `Follows ${re.subject} · ${answered}`
+  const line =
+    re.subject === null ? `Follows ${re.askId}` : `Follows ${plainInline(re.subject)} · ${answered}`
   return h.details(
     [h.Class('follows'), h.DataAttribute('testid', 'ask-follows')],
     [
@@ -317,7 +320,7 @@ export const askScreen = <Message>(
     [h.Class('ask-screen'), h.DataAttribute('testid', 'ask-screen')],
     [
       ask.re ? followsLine(ask.re, now, age, mentionActions, h) : h.empty,
-      h.h2([h.Class('subject')], mentionText(ask.subject, mentionActions, h)),
+      h.h2([h.Class('subject')], renderInline(ask.subject, mentionActions, h)),
       h.p([h.Class('ask-from')], [`${row.from} · ${where(row.pairing)} · ${age(ask.createdAt, now)}`]),
       ...body,
       ask.reply

@@ -107,6 +107,7 @@ export type MarkdownContext<Message> = {
   readonly zoomDiagram: (svg: string) => Message
   readonly seedMentions?: SeedMentionIndex | null
   readonly openMention?: (seedId: string) => Message
+  readonly followLink?: Message
 }
 
 export const mentionText = <Message>(
@@ -121,7 +122,11 @@ export const mentionText = <Message>(
           typeof piece === 'string'
             ? piece
             : h.button(
-                [h.Type('button'), h.Class('seed-mention'), h.OnClick(context.openMention!(piece.seedId))],
+                [
+                  h.Type('button'),
+                  h.Class('seed-mention'),
+                  h.OnClick(context.openMention!(piece.seedId), { propagation: 'Stop' }),
+                ],
                 [piece.text],
               ),
         )
@@ -130,12 +135,11 @@ export const mentionText = <Message>(
 const textOf = (node: Nodes): string =>
   'value' in node ? node.value : 'children' in node ? node.children.map(textOf).join('') : ''
 
-export const renderMarkdown = <Message>(
-  markdown: string,
+const renderer = <Message>(
+  definitions: ReadonlyMap<string, string>,
   context: MarkdownContext<Message>,
   h: HtmlBuilder<Message>,
-): Html => {
-  const { root, definitions } = parsedMarkdown(markdown)
+) => {
   const children = (node: Nodes, inLink = false): Array<Html | string> =>
     'children' in node ? node.children.map((child: RootContent) => render(child, inLink)) : []
 
@@ -188,6 +192,13 @@ export const renderMarkdown = <Message>(
     }
   }
 
+  const linkAttributes = (href: string) => [
+    h.Href(href),
+    h.Target('_blank'),
+    h.Rel('noopener'),
+    ...(context.followLink ? [h.OnClick(context.followLink, { propagation: 'Stop' })] : []),
+  ]
+
   const render = (node: RootContent, inLink = false): Html | string => {
     switch (node.type) {
       case 'text':
@@ -231,7 +242,7 @@ export const renderMarkdown = <Message>(
               ],
         )
       case 'link':
-        return h.a([h.Href(node.url), h.Target('_blank'), h.Rel('noopener')], children(node, true))
+        return h.a(linkAttributes(node.url), children(node, true))
       case 'image':
         return image(node.url, node.alt ?? '')
       case 'imageReference': {
@@ -240,9 +251,7 @@ export const renderMarkdown = <Message>(
       }
       case 'linkReference': {
         const href = definitions.get(node.identifier)
-        return href
-          ? h.a([h.Href(href), h.Target('_blank'), h.Rel('noopener')], children(node, true))
-          : textOf(node)
+        return href ? h.a(linkAttributes(href), children(node, true)) : textOf(node)
       }
       case 'definition':
         return ''
@@ -266,5 +275,34 @@ export const renderMarkdown = <Message>(
     }
   }
 
-  return h.div([h.Class('markdown')], children(root))
+  return children
+}
+
+export const renderMarkdown = <Message>(
+  markdown: string,
+  context: MarkdownContext<Message>,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const { root, definitions } = parsedMarkdown(markdown)
+  return h.div([h.Class('markdown')], renderer(definitions, context, h)(root))
+}
+
+const onlyParagraph = (text: string) => {
+  const shown = parsedMarkdown(text)
+  const [only] = shown.root.children
+  return shown.root.children.length === 1 && only?.type === 'paragraph' ? { only, shown } : null
+}
+
+export const renderInline = <Message>(
+  text: string,
+  context: MarkdownContext<Message>,
+  h: HtmlBuilder<Message>,
+): Array<Html | string> => {
+  const line = onlyParagraph(text)
+  return line ? renderer(line.shown.definitions, context, h)(line.only) : mentionText(text, context, h)
+}
+
+export const plainInline = (text: string): string => {
+  const line = onlyParagraph(text)
+  return line ? textOf(line.only) : text
 }

@@ -2283,6 +2283,71 @@ fn a_url_that_holds_a_seeds_name_stays_one_link_that_opens_the_whole_url() {
     assert_eq!(world.opened_links(), [url]);
 }
 
+#[test]
+fn a_prompt_and_its_choices_show_their_inline_markdown_with_links_that_open_and_answer_with_the_label_as_written()
+ {
+    let device = "https://auth.openai.com/codex/device";
+    let guide = "https://example.com/guide";
+    let mut sign_in = question(
+        "q1",
+        "one",
+        &format!("Open {device} and enter the code **Z5RI-IDLV2**, then answer here."),
+        &[],
+    );
+    sign_in.question.as_mut().unwrap().choices = vec![
+        AskChoice {
+            label: "**Signed in**".into(),
+            description: Some(format!("see [the guide]({guide})")),
+        },
+        AskChoice {
+            label: "Run `attn retry`".into(),
+            description: None,
+        },
+    ];
+    let mut world = start(
+        vec![ask(
+            "a-sign",
+            "api",
+            "Sign in to *Sigma*",
+            30,
+            vec![sign_in],
+        )],
+        vec![api_working()],
+    );
+    open_sheet(&mut world);
+
+    assert_eq!(name(&world, "asks.subject"), "Sign in to Sigma");
+    assert_eq!(
+        name(&world, "asks.q.q1.choice.0"),
+        "Signed in",
+        "the choice reads without its markup"
+    );
+    assert_eq!(name(&world, "asks.q.q1.choice.1"), "Run attn retry");
+    let links: Vec<(String, String)> = seed_links(&world);
+    assert_eq!(
+        links,
+        [
+            (device.to_owned(), device.to_owned()),
+            ("the guide".to_owned(), guide.to_owned()),
+        ]
+    );
+
+    world.gesture(|app| app.click(Target::key(device)));
+    world.gesture(|app| app.click(Target::key(guide)));
+    assert_eq!(world.opened_links(), [device, guide]);
+    assert!(
+        !checked(&world, "asks.q.q1.choice.0"),
+        "opening a choice's link leaves it unpicked"
+    );
+
+    click(&mut world, "asks.q.q1.choice.0");
+    click(&mut world, "asks.send");
+    assert_eq!(
+        sent_answers(&world)[0]["answers"][0]["picked"],
+        serde_json::json!(["**Signed in**"])
+    );
+}
+
 const NOTES: &str = "https://example.com/notes";
 const MIGRATION_LINK: &str = "attn-seed:s-cache1";
 

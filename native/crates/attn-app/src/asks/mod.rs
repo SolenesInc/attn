@@ -1,4 +1,5 @@
 mod attach;
+mod inline;
 mod mentions;
 mod saving;
 mod view;
@@ -839,7 +840,7 @@ pub(crate) fn chip_of(facts: &Facts, session: &Session) -> Option<Chip> {
     let first = asks.first()?;
     Some(Chip {
         ask: first.id.clone(),
-        subject: first.subject.clone(),
+        subject: inline::Line::plain(&first.subject),
         more: asks.len() - 1,
     })
 }

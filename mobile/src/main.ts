@@ -220,6 +220,7 @@ export const Message = defineMessageUnion({
   ReleasedImages: {},
   ClickedZoomImage: { url: Schema.String, alt: Schema.String },
   ClickedZoomDiagram: { svg: Schema.String },
+  FollowedLink: {},
   ClosedZoom: {},
   AttachedZoom: {},
   WentOffline: { pairingId: Schema.String },
@@ -1131,6 +1132,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
     ClickedZoomDiagram: ({ svg }) => ({
       model: modifyFields(model, { zoom: () => ({ kind: 'diagram' as const, svg }) }),
     }),
+    FollowedLink: () => ({ model }),
     ClosedZoom: () => ({ model: modifyFields(model, { zoom: () => null }) }),
     AttachedZoom: () => ({ model }),
     WentOffline: ({ pairingId }) => ({
@@ -1676,6 +1678,7 @@ const askActions = (model: Model): AskActions<Message> => ({
   changeNote: (value) => Message.ChangedNote({ value }),
   acceptRecommended: Message.ClickedAcceptRecommended(),
   send: Message.ClickedSend(),
+  followLink: Message.FollowedLink(),
 })
 
 const gardenActions = (model: Model): GardenActions<Message> => ({

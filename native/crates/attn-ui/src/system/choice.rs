@@ -7,6 +7,21 @@ use super::{
 use crate::Tokens;
 
 const DOT: f32 = 14.0;
+
+struct Marks {
+    draw: Box<dyn FnOnce(El) -> El>,
+    links: bool,
+}
+
+impl Marks {
+    fn drawn(marks: Option<Marks>, words: El) -> El {
+        match marks {
+            Some(Marks { draw, links: true }) => draw(words),
+            Some(Marks { draw, links: false }) => draw(words.a11y_hidden()),
+            None => words.a11y_hidden(),
+        }
+    }
+}
 const INSET: Space = Space::S12;
 
 /// The narrowest a choice's name gets beside its mark before it takes a line of its own under
@@ -18,6 +33,8 @@ pub struct Choice {
     key: String,
     name: Said,
     note: Option<Said>,
+    name_marks: Option<Marks>,
+    note_marks: Option<Marks>,
     leading: Option<El>,
     tag: Option<El>,
     trailing: Option<El>,
@@ -35,6 +52,8 @@ impl Choice {
             key: key.into(),
             name: name.into(),
             note: None,
+            name_marks: None,
+            note_marks: None,
             leading: None,
             tag: None,
             trailing: None,
@@ -49,6 +68,25 @@ impl Choice {
 
     pub fn note(mut self, note: impl Into<Said>) -> Self {
         self.note = Some(note.into());
+        self
+    }
+
+    /// Draws on the words its name shows what marks them, such as bold words or links. Words
+    /// with `links` read to assistive tools on their own, so the links can be reached.
+    pub fn name_marks(mut self, marks: impl FnOnce(El) -> El + 'static, links: bool) -> Self {
+        self.name_marks = Some(Marks {
+            draw: Box::new(marks),
+            links,
+        });
+        self
+    }
+
+    /// Draws on the words its note shows what marks them, as [`Choice::name_marks`] does.
+    pub fn note_marks(mut self, marks: impl FnOnce(El) -> El + 'static, links: bool) -> Self {
+        self.note_marks = Some(Marks {
+            draw: Box::new(marks),
+            links,
+        });
         self
     }
 
@@ -150,11 +188,12 @@ impl Choice {
         } else {
             name
         };
-        let name = name
-            .key(format!("{}.name", self.key))
-            .selectable(self.selectable)
-            .wrap()
-            .a11y_hidden();
+        let name = Marks::drawn(
+            self.name_marks,
+            name.key(format!("{}.name", self.key))
+                .selectable(self.selectable)
+                .wrap(),
+        );
         let name = match self.tag {
             Some(tag) => door::gaps(row().flex_wrap().items_center(), Space::S2, Space::S8)
                 .child(name.shrink())
@@ -162,6 +201,7 @@ impl Choice {
             None => name,
         };
         let described = self.note.clone();
+        let note_marks = self.note_marks;
         let named = door::gap(col().grow_from(1.0, NAME_FLOOR), Space::S2)
             .child(name)
             .children(self.note.map(|note| {
@@ -171,7 +211,7 @@ impl Choice {
                 } else {
                     note
                 };
-                note.selectable(self.selectable).wrap().a11y_hidden()
+                Marks::drawn(note_marks, note.selectable(self.selectable).wrap())
             }));
         let said = door::gaps(
             row().grow(1.0).flex_wrap().items_center(),
