@@ -48,6 +48,8 @@ const (
 	methodModAckHold        = "mod_ack_hold"
 	methodModAckArrived     = "mod_ack_arrived"
 	methodModAckRelease     = "mod_ack_release"
+	methodModSubmitHold     = "mod_submit_hold"
+	methodModSubmitRelease  = "mod_submit_release"
 	methodModPause          = "mod_pause"
 	methodModResume         = "mod_resume"
 	methodModGiveBack       = "mod_give_back"
@@ -114,6 +116,7 @@ type fakeMod struct {
 	nextCompact ModCompactReport
 	compactHold *fakeModHold
 	ackHold     *fakeModHold
+	submitHold  *fakeModHold
 	refused     bool
 	turnsEnded  int
 	newerTurn   bool
@@ -387,8 +390,12 @@ func (m *fakeMod) turnCompleted(interrupted bool) {
 	}
 	m.held = rest
 	refused := false
+	var submitHold *fakeModHold
 	if len(prompt) > 0 {
 		m.working = true
+		if hold := m.submitHold; hold != nil && !hold.taken {
+			hold.taken, submitHold = true, hold
+		}
 	} else {
 		m.turnsEnded++
 		refused, m.refused, m.newerTurn = m.refused, false, false
@@ -398,7 +405,12 @@ func (m *fakeMod) turnCompleted(interrupted bool) {
 		m.reportBetweenTurns(instance)
 	}
 	if len(prompt) > 0 {
-		go m.submit(instance, interrupted, prompt...)
+		go func() {
+			if submitHold != nil {
+				<-submitHold.release
+			}
+			m.submit(instance, interrupted, prompt...)
+		}()
 	}
 }
 
@@ -489,6 +501,20 @@ func (m *fakeMod) handle(a *agent, method string, params json.RawMessage) (any, 
 		return struct{}{}, nil
 	case methodModCompactReport:
 		return <-m.reports, nil
+	case methodModSubmitHold:
+		m.mu.Lock()
+		m.submitHold = &fakeModHold{release: make(chan struct{})}
+		m.mu.Unlock()
+		return struct{}{}, nil
+	case methodModSubmitRelease:
+		m.mu.Lock()
+		hold := m.submitHold
+		m.submitHold = nil
+		m.mu.Unlock()
+		if hold != nil {
+			close(hold.release)
+		}
+		return struct{}{}, nil
 	case methodModAckHold:
 		m.mu.Lock()
 		m.ackHold = &fakeModHold{arrived: make(chan struct{}), release: make(chan struct{})}

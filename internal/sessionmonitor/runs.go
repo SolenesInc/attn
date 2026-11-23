@@ -69,11 +69,12 @@ type runStop struct {
 }
 
 type runRecorder struct {
-	open       *trackedRun
-	ended      []trackedRun
-	unreadStop time.Time
-	started    uint64
-	captureRun uint64
+	open              *trackedRun
+	ended             []trackedRun
+	unreadStop        time.Time
+	started           uint64
+	captureRun        uint64
+	captureNextPrompt bool
 }
 
 func (r *runState) start() RunStart {
@@ -130,6 +131,17 @@ func RunsIn(state protocol.SessionState) bool {
 
 func (m *Monitor) runStartInFlightLocked() bool {
 	return m.input.userSubmit || m.input.placing || m.evidence.InitialPromptOwed
+}
+
+func (m *Monitor) heldCaptureAnsweredByNextPromptLocked() {
+	if !m.runs.captureNextPrompt {
+		return
+	}
+	m.runs.captureNextPrompt = false
+	m.captureAnsweredByLocked(m.runs.started + 1)
+	if open := m.runs.open; open != nil {
+		open.answersCapture = true
+	}
 }
 
 func (m *Monitor) captureAnsweredByLocked(run uint64) {

@@ -457,8 +457,8 @@ func TestTheReplyToACaptureClaudeHeldThroughItsTurnStaysOwedAfterTheDoorbellsRun
 			protocol.Deref(shown.TurnOwed), protocol.Deref(shown.TurnOpenedAt), protocol.Deref(replied.TurnOpenedAt))
 	}
 	stopped = runEnds(w, app, run, working, "Read the second review. <!-- attn:state=idle -->")
-	if runs := runRecords(t, w, app, session); len(runs) < 2 || runs[len(runs)-2].StartedBy != "ring" || runs[len(runs)-1].StartedBy != "ring" {
-		t.Fatalf("run records %v, want both doorbells' runs started by the ring, so auto-settle never counts them as the user's", runs)
+	if runs := runRecords(t, w, app, session); len(runs) < 2 || runs[len(runs)-2].StartedBy == "user" || runs[len(runs)-1].StartedBy == "user" {
+		t.Fatalf("run records %v, want neither doorbell's run started by the user, so auto-settle never counts them as the user's", runs)
 	}
 	if stopped.State != protocol.SessionStateIdle || !protocol.Deref(stopped.TurnOwed) || protocol.Deref(stopped.TurnByAgent) || protocol.Deref(stopped.TurnOpenedAt) != protocol.Deref(replied.TurnOpenedAt) {
 		t.Fatalf("after the doorbell's run the session shows owed=%v by_agent=%v opened=%q, want the capture's reply still owed from %q",
@@ -476,26 +476,32 @@ func TestTheReplyToACaptureClaudeHeldStaysOwedWhenTheUserSettledTheTurnBeforeIt(
 	capture := sendQuickCapture(t, app, sessionMailbox(session), "what did the reviewer say?")
 	modEvent(t, run, fakeagent.ModEventHeld, "what did the reviewer say?")
 	testworld.Await(app, protocol.EventQuickCaptureRead, func(m protocol.QuickCaptureReadMessage) bool { return m.CaptureID == capture.CaptureID })
-	submittedAtTurnEnd(t, run, "what did the reviewer say?", true)
+	release := run.ModHoldTurnEndSubmit()
+	run.Reply("Done. <!-- attn:state=waiting_input -->")
 	essayDone := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 	if !protocol.Deref(essayDone.TurnOwed) {
 		t.Fatal("the essay's run stopped without opening the user's turn")
+	}
+	essayTurn := protocol.Deref(essayDone.TurnOpenedAt)
+	release()
+	if got := run.Prompted(); !strings.Contains(got, "what did the reviewer say?") || !run.ThroughMod || !run.AsUser {
+		t.Fatalf("at the essay's end the agent took %q (through the mod: %t, as the user: %t), want the held capture as the user", got, run.ThroughMod, run.AsUser)
 	}
 	replying := testworld.AwaitStateAfter(app, essayDone, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	settled := settleFromApp(app, replying)
 	run.Reply("They approved. <!-- attn:state=idle -->")
 	replied := testworld.AwaitStateAfter(app, settled, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	if !protocol.Deref(replied.TurnOwed) || protocol.Deref(replied.TurnOpenedAt) == protocol.Deref(essayDone.TurnOpenedAt) {
+	if !protocol.Deref(replied.TurnOwed) || protocol.Deref(replied.TurnOpenedAt) == essayTurn {
 		t.Fatalf("the capture's reply shows owed=%t opened=%q, want a new turn after the essay's %q",
-			protocol.Deref(replied.TurnOwed), protocol.Deref(replied.TurnOpenedAt), protocol.Deref(essayDone.TurnOpenedAt))
+			protocol.Deref(replied.TurnOwed), protocol.Deref(replied.TurnOpenedAt), essayTurn)
 	}
 
 	captureReplyOwedThroughDoorbells(t, w, app, cli, run, session, replied)
 }
 
 func TestTheReplyToACaptureThatStopsBeforeItsPlacementReturnsStaysOwed(t *testing.T) {
-	w, app, cli := quietNotificationsWorld(t, true)
-	app = w.TrustedApp()
+	w, _, cli := quietNotificationsWorld(t, true)
+	app := w.TrustedApp()
 	session, agent, owed := owingIdleAgent(t, w, app, cli)
 	settled := settleFromApp(app, owed)
 

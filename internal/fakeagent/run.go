@@ -185,6 +185,16 @@ func (r *Run) ModHoldNextCompact() (arrived, release func()) {
 	return arrived, release
 }
 
+// ModHoldTurnEndSubmit keeps the prompt the mod submits at the next turn end until release, as Claude starts that turn after the stop.
+func (r *Run) ModHoldTurnEndSubmit() (release func()) {
+	r.t.Helper()
+	r.call(methodModSubmitHold, struct{}{}, nil)
+	return func() {
+		r.t.Helper()
+		r.call(methodModSubmitRelease, struct{}{}, nil)
+	}
+}
+
 func (r *Run) ModHoldNextAck() (arrived, release func()) {
 	r.t.Helper()
 	r.call(methodModAckHold, struct{}{}, nil)

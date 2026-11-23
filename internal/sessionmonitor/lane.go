@@ -362,12 +362,13 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	if steering {
 		m.runSteeredLocked()
 	}
-	if delivery.carriesCapture() {
-		answering := runsAtPlacing
-		if attempt.Held || !runOpenAtPlacing {
-			answering++
-		}
-		m.captureAnsweredByLocked(answering)
+	switch {
+	case delivery.carriesCapture() && attempt.Held:
+		m.runs.captureNextPrompt = true
+	case delivery.carriesCapture() && runOpenAtPlacing:
+		m.captureAnsweredByLocked(runsAtPlacing)
+	case delivery.carriesCapture():
+		m.captureAnsweredByLocked(runsAtPlacing + 1)
 	}
 	credited := l.tookLocked(delivery, epochAtPlacing)
 	if !steering && !attempt.steered {
@@ -514,6 +515,7 @@ func (m *Monitor) ObservePromptSubmitted(at time.Time) (typed bool) {
 	}
 	current.prompted = true
 	m.runPromptedLocked()
+	m.heldCaptureAnsweredByNextPromptLocked()
 	run, credited := current.ref, current.credited
 	m.mu.Unlock()
 	m.MarkModelRequestStarted(at)

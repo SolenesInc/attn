@@ -398,7 +398,7 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		return struct{}{}, halting.halt()
 	case methodModNext, methodModTool, methodModAbortLands, methodModEsc, methodModReload, methodModStop, methodModPause, methodModResume, methodModGiveBack, methodModReaddressHeld,
 		methodModCompactOutcome, methodModCompactHold, methodModCompactArrived, methodModCompactRelease, methodModCompactReport,
-		methodModAckHold, methodModAckArrived, methodModAckRelease:
+		methodModAckHold, methodModAckArrived, methodModAckRelease, methodModSubmitHold, methodModSubmitRelease:
 		modded, ok := a.conv.(*claude)
 		if !ok || modded.mod == nil {
 			return nil, fmt.Errorf("%T has no mod to script %s", a.conv, method)

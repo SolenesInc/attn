@@ -425,16 +425,17 @@ queue flow on, attn does not bring the agent to the user for a notification run:
 - During the run, `attn agent inbox` ends with a note that says the run is
   quiet and points to `attn turn open`.
 
-One turn is exempt from the second and third bullets: the turn that was owed
-when the run that answers a Quick Capture stopped. That run is the one going
-when the harness takes the capture, or the next one when the harness holds the
-capture to the turn's end or nothing was running. A permission question inside
+One turn is exempt from the second and third bullets: the turn the user is
+owed when the run that answers a Quick Capture stops. That run is the one the
+capture reaches, or, when the harness holds the capture to the end of the
+running turn or nothing is running, the next run. A permission question inside
 the run does not end it. The turn stays owed, at its place in the queue, through
 every notification run that follows, until the user settles it. Those runs
 neither settle it nor print the quiet note, and because they stay attn's, they
-never start auto-settle. Their stops still open no turn. The exemption is kept
-with the turn, so it survives a daemon restart, except one during the run that
-answers the capture.
+never start auto-settle. Their stops still open no turn. attn stores the
+exemption with the turn, so it survives a daemon restart once the answering run
+has stopped. A restart before then loses it, and the next notification run
+treats the turn like any other.
 
 An agent that needs the user, or that finished work the user should read, opens
 its own turn with `attn turn open`. If the agent runs the command while it
