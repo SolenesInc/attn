@@ -1,0 +1,1 @@
+Asks gain two protocol fields for plot s-02bfn9 (every ask answer reaches an agent): `stranded` on an ask says no agent would take the answer, and `to_chief` on an answer or follow-up sends it to the profile's Chief instead. Nothing fills or reads them yet; the daemon, the native ask sheet and the phone build on them next.
