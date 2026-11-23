@@ -359,6 +359,38 @@ func TestAFailedTitleWarnsOnlyTheProfileThatOwnsTheSession(t *testing.T) {
 	})
 }
 
+func TestTheFirstPromptTypedAfterASigmaForkTitlesItsNewSession(t *testing.T) {
+	w := newTitlingWorld(t, fakeagent.Sigma, fakeagent.Claude)
+	app := w.App()
+	first, view, server := appServerSession(t, w, app, fakeagent.Sigma)
+	promptUntilWorking(app, first, view, server, "find the flaky test")
+	w.HeadlessTask().Answer("Flaky test hunt")
+	awaitLabel(app, first, "Flaky test hunt")
+	server.Reply(view.ConversationID, "It races the tax lookup.")
+	answerTurnVerdict(t, w, "waiting_input")
+	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	app.TypeLine(first, "look at the cart too")
+	view.Prompted()
+	server.Prompted(view.ConversationID)
+
+	terminal := app.Terminal(first)
+	mark := len(app.Log())
+	typeInto(app, terminal, "/fork\r")
+	view.Prompted()
+	typeInto(app, terminal, "the cart total ignores discounts\r")
+	view.Prompted()
+	next := awaitTerminalSessionChange(app, mark, terminal, first)
+	task := w.HeadlessTask()
+	if !strings.Contains(task.Prompt, "the cart total ignores discounts") || strings.Contains(task.Prompt, "find the flaky test") {
+		t.Fatalf("the title task asked %q, want the fork's first prompt alone", task.Prompt)
+	}
+	task.Answer("Fix cart discounts")
+	awaitLabel(app, next, "Fix cart discounts")
+	if label := w.sessionLabel(first); label != "Flaky test hunt" {
+		t.Errorf("the session the terminal left is titled %q, want it to keep its own title", label)
+	}
+}
+
 func TestTheFirstPromptTheUserTypesTitlesAnAppServerSession(t *testing.T) {
 	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
 		w := newTitlingWorld(t, h, fakeagent.Claude)

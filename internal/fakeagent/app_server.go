@@ -46,6 +46,7 @@ type appServerFlavor struct {
 	homeVariable string
 	homeDir      string
 	rootVariable string
+	authorID     string
 	socket       func(home string) string
 	hello        map[string]any
 	completions  bool
@@ -57,7 +58,7 @@ type appServerFlavor struct {
 
 var appServerFlavors = map[Harness]appServerFlavor{
 	Sigma: {
-		harness: Sigma, role: "sigma-server", homeVariable: "SIGMA_HOME", homeDir: "sg", rootVariable: "SIGMA_ROOT_CONVERSATION",
+		harness: Sigma, role: "sigma-server", homeVariable: "SIGMA_HOME", homeDir: "sg", rootVariable: "SIGMA_ROOT_CONVERSATION", authorID: "SIGMA_AUTHOR_ID",
 		socket: func(home string) string { return filepath.Join(home, "sigma.sock") },
 		hello:  map[string]any{"version": "fake", "protocol": 2},
 		steers: true, compacts: true, ephemeral: true, callerHeader: "Sigma-Root-Conversation",
@@ -139,7 +140,46 @@ func (n *serverView) begin(*terminal) error {
 }
 
 func (n *serverView) submit(prompt string) error {
-	return n.call("conversation/submit", map[string]any{"conversation": n.conversation, "requestId": uuid.NewString(), "author": ServerAuthor{ID: "you", Name: "you"}, "text": prompt})
+	if strings.TrimSpace(prompt) == "/fork" && n.flavor.harness == Sigma {
+		return n.fork()
+	}
+	return n.call("conversation/submit", map[string]any{"conversation": n.conversation, "requestId": uuid.NewString(), "author": n.author(), "text": prompt})
+}
+
+func (n *serverView) author() ServerAuthor {
+	if id := os.Getenv(n.flavor.authorID); n.flavor.authorID != "" && id != "" {
+		return ServerAuthor{ID: id, Name: "you"}
+	}
+	return ServerAuthor{ID: "you", Name: "you"}
+}
+
+// fork moves the view to a fork of its conversation taken just before its last prompt, as Sigma's /fork does.
+func (n *serverView) fork() error {
+	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)
+	defer cancel()
+	var page struct {
+		Entries []serverEntry `json:"entries"`
+	}
+	if err := n.client.Call(ctx, "conversation/entries", map[string]any{"conversation": n.conversation, "order": "ascending", "limit": 1000}, &page); err != nil {
+		return err
+	}
+	at := int64(0)
+	for i, entry := range page.Entries {
+		if entry.Kind == "sigma.user" && i > 0 {
+			at = page.Entries[i-1].ID
+		}
+	}
+	if at == 0 {
+		return errors.New("nothing comes before the last prompt to fork from")
+	}
+	var forked struct {
+		Conversation string `json:"conversation"`
+	}
+	if err := n.client.Call(ctx, "conversation/fork", map[string]any{"conversation": n.conversation, "at": at, "author": n.author()}, &forked); err != nil {
+		return err
+	}
+	n.conversation = forked.Conversation
+	return nil
 }
 
 func (n *serverView) reply(text string, _ bool) error {
@@ -164,7 +204,7 @@ type ServerAuthor struct {
 }
 
 func parseAuthor(method string, raw json.RawMessage) (ServerAuthor, string) {
-	if method != "conversation/submit" && method != "conversation/interrupt" && method != "conversation/compact" {
+	if method != "conversation/submit" && method != "conversation/interrupt" && method != "conversation/compact" && method != "conversation/fork" {
 		return ServerAuthor{}, ""
 	}
 	var author ServerAuthor
@@ -243,6 +283,7 @@ type ServerConversation struct {
 	Instructions string            `json:"instructions,omitempty"`
 	Target       string            `json:"target,omitempty"`
 	MCPServers   []ServerMCPServer `json:"mcpServers,omitempty"`
+	Fork         *ServerFork       `json:"fork,omitempty"`
 	Ended        map[string]any    `json:"ended,omitempty"`
 	Status       string            `json:"status"`
 	requests     map[string]int
@@ -251,6 +292,12 @@ type ServerConversation struct {
 	compactions  int
 	compactedMid int
 	compactsWith *ServerCompaction
+}
+
+// ServerFork is the conversation a fork was forked from, and the last entry it inherits.
+type ServerFork struct {
+	Of string `json:"of"`
+	At int64  `json:"at"`
 }
 
 // ServerCompaction is how Sigma answers conversation/compact: compacted, nothing_to_compact, failed or stopped.
@@ -526,7 +573,22 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 			s.appendLocked(p.ID, serverEntry{Kind: "sigma.started", Data: map[string]any{"author": author}})
 		}
 		return conv, ""
+	case "conversation/fork":
+		var fork struct {
+			At int64 `json:"at"`
+		}
+		_ = json.Unmarshal(raw, &fork)
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		id, refused := s.forkLocked(p.Conversation, p.ID, fork.At, author)
+		if refused != "" {
+			return nil, refused
+		}
+		return map[string]any{"conversation": id}, ""
 	case "conversation/list":
+		if len(raw) > 0 && string(raw) != "null" {
+			return nil, "InvalidParams: conversation/list takes no payload; Expected null"
+		}
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		convs := make([]*ServerConversation, 0, len(s.convs))
@@ -789,6 +851,8 @@ func (s *appServer) handleKit(_ *rpcPeer, method string, raw json.RawMessage) (a
 		return s.mcpHeader(raw)
 	case methodFork:
 		return s.fork(raw)
+	case methodForks:
+		return s.forks(raw)
 	case methodAwaitMCP:
 		return s.awaitMCP(raw)
 	case methodRefuseMCP:

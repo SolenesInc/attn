@@ -384,7 +384,7 @@ func (l *Link) deliver(ctx context.Context, session protocol.SessionID, in harne
 	if conversation == "" {
 		return harness.Custody{Reason: fmt.Sprintf("session %s holds no %s conversation", session, l.b.name)}
 	}
-	params := map[string]any{"conversation": conversation, "requestId": in.ID, "author": l.author(in.Voice), "text": in.Text}
+	params := map[string]any{"conversation": conversation, "requestId": in.ID, "author": l.inputAuthor(session, in.Voice), "text": in.Text}
 	if l.Can(AbilitySteer) {
 		params["steer"] = true
 	}
@@ -411,6 +411,18 @@ func (l *Link) author(voice harness.Voice) serverAuthorRef {
 		name = userName()
 	}
 	return serverAuthorRef{ID: name, Name: name}
+}
+
+func (l *Link) inputAuthor(session protocol.SessionID, voice harness.Voice) serverAuthorRef {
+	author := l.author(voice)
+	authors := l.b.authors.Load()
+	if voice != harness.VoiceUser || authors == nil {
+		return author
+	}
+	if terminal := l.c.host.Sessions().PrimaryTerminal(session); terminal != "" {
+		author.ID = authors.Of(terminal)
+	}
+	return author
 }
 
 func (l *Link) Can(ability Ability) bool {

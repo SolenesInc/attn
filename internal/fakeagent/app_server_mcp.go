@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"time"
 )
 
@@ -14,6 +16,7 @@ const (
 	methodMCPRegistered = "mcp_registered"
 	methodCallTool      = "call_tool"
 	methodFork          = "fork"
+	methodForks         = "forks"
 	methodAwaitMCP      = "await_mcp"
 	methodRefuseMCP     = "refuse_mcp"
 	methodMCPHeader     = "mcp_header"
@@ -271,21 +274,75 @@ func (s *appServer) fork(raw json.RawMessage) (any, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	from := s.convs[p.Conversation]
-	if from == nil {
-		return nil, fmt.Errorf("no conversation %s", p.Conversation)
+	entries := s.transcriptLocked(p.Conversation).Entries
+	at := int64(0)
+	if len(entries) > 0 {
+		at = entries[len(entries)-1].ID
 	}
-	if s.convs[p.ID] != nil {
-		return nil, fmt.Errorf("conversation %s exists", p.ID)
+	if _, refused := s.forkLocked(p.Conversation, p.ID, at, ServerAuthor{ID: "you", Name: "you"}); refused != "" {
+		return nil, errors.New(refused)
 	}
-	s.convs[p.ID] = &ServerConversation{ID: p.ID, Cwd: from.Cwd, Target: from.Target, Instructions: from.Instructions, MCPServers: from.MCPServers, Status: "idle", requests: map[string]int{}}
 	return struct{}{}, nil
+}
+
+// forkLocked starts a conversation that inherits from's entries through at and goes on with a sigma.forked entry
+// naming author, as Sigma's conversation/fork does. A fork with no id is named by its number.
+func (s *appServer) forkLocked(from, id string, at int64, author ServerAuthor) (string, string) {
+	parent := s.convs[from]
+	if parent == nil {
+		return "", "NoSuchConversation"
+	}
+	if id == "" {
+		id = strconv.FormatInt(s.nextEntry+1, 10)
+	}
+	if s.convs[id] != nil {
+		return "", "ConversationExists"
+	}
+	var inherited []serverEntry
+	for _, entry := range s.transcriptLocked(from).Entries {
+		if entry.ID <= at {
+			inherited = append(inherited, entry)
+		}
+	}
+	s.convs[id] = &ServerConversation{ID: id, Cwd: parent.Cwd, Target: parent.Target, Instructions: parent.Instructions, MCPServers: parent.MCPServers, Fork: &ServerFork{Of: from, At: at}, Status: "idle", requests: map[string]int{}}
+	s.transcriptLocked(id).Entries = inherited
+	s.appendLocked(id, serverEntry{Kind: "sigma.forked", Data: map[string]any{"author": author}})
+	return id, ""
 }
 
 // RefuseMCPRegistration makes the server refuse every later mcp/register with code, as a server that cannot reach the MCP server does.
 func (s *AppServer) RefuseMCPRegistration(code string) {
 	s.t.Helper()
 	s.call(methodRefuseMCP, map[string]string{"code": code}, nil)
+}
+
+type forksParams struct {
+	Of string `json:"of"`
+}
+
+func (s *appServer) forks(raw json.RawMessage) (any, error) {
+	var p forksParams
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	forks := []string{}
+	for id, conv := range s.convs {
+		if conv.Fork != nil && conv.Fork.Of == p.Of {
+			forks = append(forks, id)
+		}
+	}
+	sort.Strings(forks)
+	return forks, nil
+}
+
+// Forks are the conversations forked from conversation of.
+func (s *AppServer) Forks(of string) []string {
+	s.t.Helper()
+	var out []string
+	s.call(methodForks, forksParams{Of: of}, &out)
+	return out
 }
 
 // Fork starts conversation id on the server as a fork of conversation, as an agent's /fork does: it keeps the MCP servers it uses, and no attn session holds it yet.

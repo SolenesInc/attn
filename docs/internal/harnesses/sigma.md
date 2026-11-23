@@ -25,11 +25,20 @@ measurement uses that one.
   once the conversation opens.
 - Every call that changes a conversation, `conversation/submit` and
   `conversation/interrupt` among them, requires `author: {id, name}`. Sigma
-  stores both on the change's entry, shows the name and never reads the id. A
+  stores both on the change's entry and shows the name. A
   string author, or none, fails to decode; the protocol version stayed 1 when
   this changed (dff03a5). The TUI and `sigma exec` act as `SIGMA_AUTHOR_ID` and
   `SIGMA_AUTHOR_NAME`, each defaulting to the system's user name
   (`packages/sigma/src/author.ts`).
+- The server never compares author ids, and the TUI draws history by name. The
+  TUI compares ids only on live queue state: it lets you edit the queued
+  prompts whose author id is its own, and an interrupt puts back in its
+  composer the withdrawn prompts that are its own (43ebbba,
+  `packages/sigma/src/tui/main.tsx`). attn launches each tile's TUI as
+  `attn-terminal:<terminal>` so a fork names its tile, and sends input in the
+  user's voice with the id of the session's terminal so the tile counts it as
+  its own. A prompt queued from a tile that is then reloaded or resumed in a
+  new terminal can't be edited from the new tile while that run works.
 - `conversation/submit` is idempotent by its `requestId`: a retried submit is
   one input. With `steer: true` the input reaches the run in flight at its next
   step instead of waiting for the run to end; with no run working it starts one.
@@ -152,7 +161,9 @@ measurement uses that one.
 - `/fork` in the TUI starts a new conversation that inherits the entries up to
   a point. The original conversation's watch gets nothing. The fork's first
   entry is `sigma.forked`, naming the client's `SIGMA_AUTHOR_ID`, and
-  `conversation/list` gives the fork's `fork.of` (probe).
+  `conversation/list` gives the fork's `fork.of` (probe). `conversation/list`
+  takes a null payload and refuses an object with `Expected null` (probe on
+  43ebbba, 2026-11-22).
 - `tasks/watch` shows only `claude.run` tasks, from pending to running to gone
   at the run's end. Sigma sleeps only for a retry's backoff or a deferred poll
   inside a run, so no task outlives a run (probe, `packages/harness/src/live.ts`).

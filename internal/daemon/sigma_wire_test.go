@@ -80,8 +80,9 @@ func TestMessagesAndTheCloseInterruptReachASigmaConversationWithAnIDAndNameAutho
 	if r := submitSessionAnnotationFeedbackAs(app, session, "feedback-1", "check the total"); !r.Success || r.Status != "delivered" {
 		t.Fatalf("feedback: %+v", r)
 	}
-	if got := server.Prompted(conversation); got.Author == "" || got.AuthorID != got.Author || got.Author == "attn" {
-		t.Fatalf("the user's feedback reached Sigma from %q (id %q), want the user's name as both", got.Author, got.AuthorID)
+	tile, _ := envEntry(view.Env, "SIGMA_AUTHOR_ID")
+	if got := server.Prompted(conversation); got.Author == "" || got.Author == "attn" || tile == "" || got.AuthorID != tile {
+		t.Fatalf("the user's feedback reached Sigma from %q (id %q), want the user's name with the id the tile's Sigma acts as (%q), so the tile counts it as its own", got.Author, got.AuthorID, tile)
 	}
 	server.Reply(conversation, "Checked. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
@@ -345,5 +346,107 @@ func TestASigmaSessionStartsWithAttnsToolsWhileAgentToolsAreOn(t *testing.T) {
 				t.Errorf("the Sigma conversation's note is by %s, want its session %s", author, session)
 			}
 		})
+	}
+}
+
+func TestForkInASigmaTerminalLeavesTheSessionItLeftOpenAndHidden(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	app := w.App()
+	checkout, view, server := appServerSession(t, w, app, fakeagent.Sigma)
+	original := view.ConversationID
+	terminal := app.Terminal(checkout)
+	promptUntilWorking(app, checkout, view, server, "add a discount field")
+	server.Reply(original, "Added. <!-- attn:state=waiting_input -->")
+	awaitServerFeed(app, checkout, original, server, 500)
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+
+	mark := len(app.Log())
+	typeInto(app, terminal, "/fork\r")
+	view.Prompted()
+	typeInto(app, terminal, "add a coupon field instead\r")
+	if got := view.Prompted(); got != "add a coupon field instead" {
+		t.Fatalf("the TUI sent %q after /fork, want the prompt", got)
+	}
+	coupon := awaitTerminalSessionChange(app, mark, terminal, checkout)
+	forks := server.Forks(original)
+	if len(forks) != 1 {
+		t.Fatalf("conversation %s has forks %q, want the one /fork made", original, forks)
+	}
+	fork := forks[0]
+	if got := server.Prompted(fork); got.Text != "add a coupon field instead" {
+		t.Fatalf("the fork %s took %+v, want the prompt typed after /fork", fork, got)
+	}
+	testworld.AwaitSession(app, coupon, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	server.Reply(fork, "Added the coupon. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, coupon, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if usage := awaitServerFeed(app, coupon, fork, server, 300); usage.TotalTokens != 300 {
+		t.Errorf("the fork's session counts %d tokens, want only the fork's 300", usage.TotalTokens)
+	}
+	read, err := w.Client().SessionTranscript(coupon, "")
+	if err != nil || len(read.Events) == 0 || !strings.HasPrefix(protocol.Deref(read.Events[len(read.Events)-1].Text), "Added the coupon.") {
+		t.Fatalf("the transcript of %s = %+v, %v, want the fork's, ending in its reply", coupon, read.Events, err)
+	}
+
+	hidden := testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
+	if hidden.State != protocol.SessionStateWaitingInput {
+		t.Errorf("the session the terminal left is %s, want it still waiting on the user", hidden.State)
+	}
+	if entry := ledgerShowOverTheWebSocket(app, checkout).Entry; entry == nil || protocol.Deref(entry.ClosedAt) != "" {
+		t.Errorf("the ledger shows %+v, want %s live", entry, checkout)
+	}
+	workMark := len(app.Log())
+	server.Work(original)
+	testworld.AwaitSessionSince(app, workMark, checkout, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	if shown := queriedSession(t, w.Client(), coupon); shown.State != protocol.SessionStateIdle {
+		t.Errorf("work in the original conversation moved %s to %s, want the fork's session idle", coupon, shown.State)
+	}
+}
+
+func TestChainedForkInASigmaTerminalFollowsToTheFinalFork(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	app := w.App()
+	first, view, server := appServerSession(t, w, app, fakeagent.Sigma)
+	original := view.ConversationID
+	terminal := app.Terminal(first)
+	promptUntilWorking(app, first, view, server, "first prompt")
+	server.Reply(original, "First reply. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+
+	workMark := len(app.Log())
+	app.TypeLine(first, "second prompt")
+	view.Prompted()
+	server.Prompted(original)
+	testworld.AwaitSessionSince(app, workMark, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	waitMark := len(app.Log())
+	server.Reply(original, "Second reply. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSessionSince(app, waitMark, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+
+	mark := len(app.Log())
+	typeInto(app, terminal, "/fork\r")
+	view.Prompted()
+	typeInto(app, terminal, "/fork\r")
+	view.Prompted()
+	typeInto(app, terminal, "third branch\r")
+	if got := view.Prompted(); got != "third branch" {
+		t.Fatalf("the TUI sent %q after two /forks, want the prompt", got)
+	}
+	moved := awaitTerminalSessionChange(app, mark, terminal, first)
+	firstForks := server.Forks(original)
+	if len(firstForks) != 1 {
+		t.Fatalf("original %s has forks %q, want one intermediate fork", original, firstForks)
+	}
+	secondForks := server.Forks(firstForks[0])
+	if len(secondForks) != 1 {
+		t.Fatalf("intermediate fork %s has forks %q, want the final fork", firstForks[0], secondForks)
+	}
+	finalFork := secondForks[0]
+	if got := server.Prompted(finalFork); got.Text != "third branch" {
+		t.Fatalf("the final fork %s took %+v, want the prompt typed after two /forks", finalFork, got)
+	}
+	testworld.AwaitSession(app, moved, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	server.Reply(finalFork, "Branched. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, moved, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if usage := awaitServerFeed(app, moved, finalFork, server, 250); usage.TotalTokens != 250 {
+		t.Errorf("the chained fork's session counts %d tokens, want only the fork's 250", usage.TotalTokens)
 	}
 }

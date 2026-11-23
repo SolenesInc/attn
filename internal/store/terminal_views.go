@@ -88,8 +88,15 @@ func (s *Store) SetSessionLifetime(id protocol.SessionID, lifetime harness.Lifet
 	return nil
 }
 
-func routeThroughTerminalTx(tx *sql.Tx, terminal protocol.TerminalID, id protocol.SessionID) error {
-	_, err := tx.Exec(`UPDATE sessions SET lifetime = CASE WHEN EXISTS (SELECT 1 FROM terminal_views WHERE terminal_id = ?) THEN 'server' ELSE 'terminal' END WHERE id = ?`, terminal, id)
+func routeThroughTerminalTx(tx *sql.Tx, terminal protocol.TerminalID, from, to protocol.SessionID) error {
+	_, err := tx.Exec(`
+		UPDATE sessions
+		SET lifetime = CASE
+			WHEN EXISTS (SELECT 1 FROM terminal_views WHERE terminal_id = ?) THEN 'server'
+			WHEN (SELECT host FROM sessions WHERE id = ?) != '' THEN COALESCE((SELECT lifetime FROM sessions WHERE id = ?), 'terminal')
+			ELSE 'terminal'
+		END
+		WHERE id = ?`, terminal, from, from, to)
 	return err
 }
 

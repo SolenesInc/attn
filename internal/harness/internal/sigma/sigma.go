@@ -34,7 +34,7 @@ type Harness struct {
 func New(host harness.Host, servers *appserver.Client) *Harness {
 	h := &Harness{host: host}
 	declaration := serverDeclaration()
-	binding := appserver.Binding{Agent: id, Declaration: &declaration, DisplayName: func() string { return displayName }, Enabled: h.enabled}
+	binding := appserver.Binding{Agent: id, Declaration: &declaration, DisplayName: func() string { return displayName }, Enabled: h.enabled, Authors: &appserver.TerminalAuthors{Of: authorOf, Terminal: terminalOf}}
 	if err := servers.Bind(binding, nil); err != nil {
 		host.Logf("link the %s server: %v", id, err)
 	}

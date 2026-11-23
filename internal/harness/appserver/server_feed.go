@@ -81,6 +81,10 @@ func (p *serverConnection) openFeeds(c *effectrpc.Client, conversations map[stri
 		}
 		ctx, cancel := context.WithCancel(p.c.host.Life().Context())
 		stored := p.c.host.Records().Feed(id)
+		if forked, ok := p.takeFork(conversation); ok && stored.Entry == 0 {
+			stored.Entry = forked
+			p.c.host.Records().SaveFeedEntry(id, forked)
+		}
 		f := &serverFeed{p: p, l: l, c: c, session: id, conversation: conversation, cancel: cancel, seen: stored.Entry, launched: p.c.host.Sessions().LaunchedAt(id), calls: map[string]serverToolCall{}}
 		f.baselined = stored.UsageBaseline != "" || stored.Entry > 0
 		_ = json.Unmarshal([]byte(stored.UsageBaseline), &f.baseline)

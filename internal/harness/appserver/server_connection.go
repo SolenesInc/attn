@@ -32,6 +32,8 @@ type serverConnection struct {
 	ended       map[string]serverEnded
 	tools       *serverToolsRegistration
 	feeds       map[protocol.SessionID]*serverFeed
+	judged      map[string]bool
+	forks       map[string]int64
 }
 
 type serverToolsRegistration struct {
@@ -431,8 +433,10 @@ func (p *serverConnection) statusWatchParams() any {
 func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 	if tree.Tag == "trees" {
 		p.busy = make(map[string]string, len(tree.Trees))
+		p.judged = nil
 		for _, t := range tree.Trees {
 			p.busy[t.Conversation] = t.Status
+			p.followFork(c, t.Conversation)
 		}
 		var last map[string]*serverEnded
 		for id, l := range p.sessions() {
@@ -472,6 +476,7 @@ func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 		p.busy[tree.Conversation] = tree.Status
 	}
 	if tree.Status != "idle" {
+		p.followFork(c, tree.Conversation)
 		p.openFeeds(c, map[string]bool{tree.Conversation: true}, true)
 	}
 	for id, l := range p.sessions() {

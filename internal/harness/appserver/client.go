@@ -37,6 +37,15 @@ type Binding struct {
 	DisplayName func() string
 	Declaration *Declaration
 	Enabled     func() bool
+	// Authors, when set, gives each terminal's client an author id of its own: input attn sends in the user's voice acts
+	// as the client of the session's terminal, and a fork that client makes moves its terminal there.
+	Authors *TerminalAuthors
+}
+
+// TerminalAuthors maps a terminal to the author id its client acts as, and back.
+type TerminalAuthors struct {
+	Of       func(harness.TerminalID) string
+	Terminal func(author string) (harness.TerminalID, bool)
 }
 
 // Bind links a harness to its server, or gives a restored link its declaration. claim runs under the client's lock before the link changes.
@@ -66,6 +75,7 @@ func (c *Client) Bind(b Binding, claim func() error) error {
 		return nil
 	}
 	l.b.declaration.Store(b.Declaration)
+	l.b.authors.Store(b.Authors)
 	l.b.enabled, l.b.displayName = b.Enabled, b.DisplayName
 	return nil
 }

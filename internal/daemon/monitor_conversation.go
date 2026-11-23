@@ -117,6 +117,7 @@ func (d *Daemon) bindMonitorCandidate(source, candidate *sessionmonitor.Monitor,
 	}
 	if source.Session() != monitor.Session() {
 		pausepoint.At(pausepoint.ConversationCandidateBound)
+		d.life.Go("successorStarted", func() { d.terminalEvent(proposed.Terminal, harness.Started{Session: monitor.Session()}) })
 	}
 }
 

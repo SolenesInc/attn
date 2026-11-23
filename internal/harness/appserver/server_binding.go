@@ -23,6 +23,7 @@ type serverBinding struct {
 	kind           string
 	terminal       harness.TerminalID
 	conversationOf func(harness.TerminalID) (string, bool)
+	authors        atomic.Pointer[TerminalAuthors]
 }
 
 func newServerBinding(b Binding) *serverBinding {
@@ -34,6 +35,7 @@ func newServerBinding(b Binding) *serverBinding {
 		},
 	}
 	s.declaration.Store(b.Declaration)
+	s.authors.Store(b.Authors)
 	return s
 }
 

@@ -121,8 +121,17 @@ func sigmaConversation(opts harness.DirectLaunchOpts) string {
 	return string(opts.TerminalID)
 }
 
+const terminalAuthor = "attn-terminal:"
+
+func authorOf(t harness.TerminalID) string { return terminalAuthor + string(t) }
+
+func terminalOf(author string) (harness.TerminalID, bool) {
+	t, ok := strings.CutPrefix(author, terminalAuthor)
+	return harness.TerminalID(t), ok && t != ""
+}
+
 func buildEnv(opts harness.DirectLaunchOpts) []string {
-	env := []string{"ATTN_TERMINAL_ID=" + string(opts.TerminalID), "ATTN_AGENT=" + id}
+	env := []string{"ATTN_TERMINAL_ID=" + string(opts.TerminalID), "ATTN_AGENT=" + id, "SIGMA_AUTHOR_ID=" + authorOf(harness.TerminalID(opts.TerminalID))}
 	if opts.Executable != "" && opts.Executable != defaultExecutable {
 		env = append(env, executableEnvVar+"="+opts.Executable)
 	}
