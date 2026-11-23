@@ -160,7 +160,7 @@ Yes. Ask the Chief or an agent, or run `attn session snooze <id> --until <when>`
 <details>
 <summary>Do turns and snoozes survive a restart?</summary>
 
-Yes. Attn keeps owed turns and snoozes in its database, so restarting the app, the daemon or your machine doesn't settle a turn or lose a snooze. A snooze that ran out while the daemon was stopped ends as soon as the daemon starts again. A daemon restart does drop a running auto-settle countdown, and that turn stays owed until you settle it.
+Yes. Attn keeps owed turns and snoozes in its database, so restarting the app, the daemon or your machine doesn't settle a turn or lose a snooze. A snooze that ran out while the daemon was stopped ends as soon as the daemon starts again. A daemon restart does drop a running auto-settle countdown, and that turn stays owed until you settle it. It also forgets which owed turn holds the reply to a Quick Capture, so the next notification after the restart can take that agent out of the queue like any other.
 </details>
 
 <details>
@@ -179,16 +179,17 @@ not need you. In queue flow:
   needs an approval, Claude Code reports that its run failed, such as on a usage
   limit, or Attn can't tell what it's doing.
 - An agent waiting for you leaves the queue when a notification sets it working
-  again. If the agent is on screen, you stay there, and settle moves you on as usual.
+  again, unless it is waiting on the reply to a message you sent (below). If the
+  agent is on screen, you stay there, and settle moves you on as usual.
 - An agent that needs you runs `attn turn open`. That command puts the agent in
   your queue when the agent stops. Notifications do not take the agent out. You
   settle the agent, or the agent runs `attn turn settle`.
 
 A message you send through [Quick Capture](quick-capture.md) or `attn send` is not a notification.
 Its run is yours, and the agent goes into your queue when it stops, so you see
-the reply. Notifications that arrive before you settle the agent reach it after
-the reply and leave it in your queue. The same happens if you type into
-an agent or send it such a message while it works on a notification.
+the reply. The same happens if you type into an agent or send it such a message
+while it works on a notification. Notifications that reach the agent after that
+reply leave it where it is in your queue until you settle it.
 
 Quiet notifications are on by default. To have every notification run open a
 turn when it stops, turn off **Settings → Attention queue → Quiet notifications

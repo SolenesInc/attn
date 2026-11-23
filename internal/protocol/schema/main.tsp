@@ -9210,7 +9210,6 @@ model InboxRingRecord {
   notified: boolean;
   captures?: string[];
   authorized_seeds?: string[];
-  follows_captures?: boolean;
   turn?: PeerTurn;
 }
 

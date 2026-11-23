@@ -39,7 +39,6 @@ type inboxDeliveryState struct {
 	tenderResume   *tenderResumeDelivery
 	pending        *inboxRing
 	rang           protocol.SessionID
-	captureBell    protocol.SessionID
 }
 
 func (s *inboxDeliveryState) lock()   { s.gate <- struct{}{} }
@@ -170,7 +169,7 @@ func (d *Daemon) deliverInbox(a who.Address) (inbox.Receipt, error) {
 func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (inbox.Receipt, error) {
 	receipt := inbox.Receipt{}
 	defer func() {
-		if state.timer != nil || state.startedSession != "" || state.pending != nil || state.captureBell != "" {
+		if state.timer != nil || state.startedSession != "" || state.pending != nil {
 			return
 		}
 		d.inboxMu.Lock()
@@ -216,9 +215,6 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 			return receipt, err
 		}
 		state.startedSession, state.tenderResume = "", nil
-		if state.captureBell != "" && d.store.Get(state.captureBell) == nil {
-			state.captureBell = ""
-		}
 		return receipt, nil
 	}
 	holder, memberID, err := d.inboxRecipient(a)
@@ -380,9 +376,6 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		input.Turn = sessionmonitor.TurnUse(paste.turn)
 		at := time.Now()
 		input.Ring = &protocol.InboxRingRecord{Address: a.String(), ProfileID: holder.ProfileID, Stamp: store.InboxRingStamp(at), Typed: paste.typed, Notified: paste.notified, Captures: paste.captures, AuthorizedSeeds: paste.authorizedSeeds, Turn: paste.turn}
-		if paste.notified && state.captureBell == holder.ID && holder.TurnOpenedAt != nil && !protocol.Deref(holder.TurnByAgent) {
-			input.Ring.FollowsCaptures = protocol.Ptr(true)
-		}
 		run := d.store.GetAgentDriverRun(holder.ID)
 		if run.Route == "direct" && run.RunID != "" {
 			input.ExpectedDriverRun = run.RunID
@@ -424,12 +417,6 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		state.pending = nil
 		state.tenderResume = nil
 		state.rang = holder.ID
-		switch {
-		case ring.Notified:
-			state.captureBell = ""
-		case len(ring.Captures) > 0:
-			state.captureBell = holder.ID
-		}
 		for _, captureID := range ring.Captures {
 			d.publishQuickCaptureRead(holder.ProfileID, captureID, readAt)
 		}

@@ -127,7 +127,11 @@ func ReturnedUserInput(key string, text string) Delivery {
 }
 
 func (delivery Delivery) speaksForUser() bool {
-	return delivery.origin.kind == originUserConversation || (delivery.Ring != nil && (len(delivery.Ring.Captures) > 0 || protocol.Deref(delivery.Ring.FollowsCaptures)))
+	return delivery.origin.kind == originUserConversation || delivery.carriesCapture()
+}
+
+func (delivery Delivery) carriesCapture() bool {
+	return delivery.Ring != nil && len(delivery.Ring.Captures) > 0
 }
 
 type runRef struct {
@@ -352,6 +356,9 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	}
 	if steering {
 		m.runSteeredLocked()
+	}
+	if delivery.carriesCapture() {
+		m.captureReplyAtStop = true
 	}
 	credited := l.tookLocked(delivery, epochAtPlacing)
 	if !steering && !attempt.steered {

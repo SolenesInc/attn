@@ -183,7 +183,7 @@ func (m *Monitor) snapshotLocked() View {
 		FirstReportAt:       Value[time.Time]{m.firstReportAt},
 		AwaitingHarness:     Value[bool]{m.awaitingHarness},
 		Run:                 Value[uint64]{m.input.epoch},
-		NotificationRun:     Value[bool]{m.input.inNotificationRunLocked()},
+		NotificationRun:     Value[bool]{m.quietNotificationRunLocked()},
 		NotificationStop:    Value[bool]{m.notificationStopLocked()},
 		Branch:              Value[attngit.BranchInfo]{m.branch},
 		PullRequests:        KeyedSet[string, PullRequest]{Entries: m.pullRequests},

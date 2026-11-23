@@ -388,9 +388,7 @@ when to ring.
 
 A notification run is a run that attn's own input started: a ring, or a crew
 member's heartbeat. A Quick Capture is the user's own input, so a ring that
-carries one starts the user's run. The next 📬 ring after it, while the
-session still owes the user a turn, starts the user's run too, so the turn that
-the capture's reply opened stays owed. If the user types into the
+carries one starts the user's run. If the user types into the
 agent during a notification run, or a Quick Capture reaches it, the run becomes
 the user's. The user's answer to an ask and a change to a seed's authorization
 go in the user's voice, but they do not change whose run it is.
@@ -406,6 +404,12 @@ queue flow on, attn does not bring the agent to the user for a notification run:
   input, so the app leaves the user where they are.
 - During the run, `attn agent inbox` ends with a note that says the run is
   quiet and points to `attn turn open`.
+
+One turn is exempt from the second and third bullets: the turn that was owed
+when the run that took a Quick Capture stopped. It stays owed, at its place in
+the queue, through every notification run that follows, until the user settles
+it. Those runs neither settle it nor print the quiet note, and because they stay
+attn's, they never start auto-settle. Their stops still open no turn.
 
 An agent that needs the user, or that finished work the user should read, opens
 its own turn with `attn turn open`. If the agent runs the command while it

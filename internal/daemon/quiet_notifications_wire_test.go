@@ -316,47 +316,113 @@ func TestAQuickCaptureThatSteersANotificationRunOpensItsTurnAtTheStop(t *testing
 }
 
 func TestAQuickCaptureRungWithOtherItemsOpensItsTurn(t *testing.T) {
-	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		app, cli := w.TrustedApp(), w.Client()
-		setSetting(t, app, "queue_mode_enabled", "true")
-		registerSessions(t, w, cli, "peer")
-		agent := w.bubbleClaude(t, app, "shop")
+	for _, quiet := range []string{"true", "false"} {
+		t.Run("quiet_notifications="+quiet, func(t *testing.T) {
+			inBubbleWithAgents(t, func(t *testing.T, w *world) {
+				app, cli := w.TrustedApp(), w.Client()
+				setSetting(t, app, "queue_mode_enabled", "true")
+				setSetting(t, app, "queue_quiet_notifications", quiet)
+				setSetting(t, app, "auto_settle_enabled", "true")
+				registerSessions(t, w, cli, "peer")
+				agent := w.bubbleClaude(t, app, "shop")
+				if booted := queriedSession(t, cli, agent.id); protocol.Deref(booted.TurnOwed) {
+					settleFromApp(app, booted)
+				}
 
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(agent.self), Data: "half a thought"})
-		synctest.Wait()
-		sendAgentMessage(t, cli, "peer", agent.id, "the review is in")
-		sendQuickCapture(t, app, sessionMailbox(agent.id), "what did the reviewer say?")
-		w.advance(sessionmonitor.QuietWindow)
+				app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(agent.self), Data: "half a thought"})
+				synctest.Wait()
+				sendAgentMessage(t, cli, "peer", agent.id, "the review is in")
+				sendQuickCapture(t, app, sessionMailbox(agent.id), "what did the reviewer say?")
+				w.advance(sessionmonitor.QuietWindow)
+				pasted := agent.term.Pasted()
+				if len(pasted) != 1 || !strings.Contains(pasted[0], "what did the reviewer say?") || strings.Contains(pasted[0], inboxDoorbell) {
+					t.Fatalf("once the user was quiet attn pasted %q, want the capture in a ring of its own", pasted)
+				}
+				agent.reply("They approved. <!-- attn:state=idle -->")
+				replied := queriedSession(t, cli, agent.id)
+				if !protocol.Deref(replied.TurnOwed) || replied.TurnOpenedAt == nil {
+					t.Fatalf("the capture's reply left no turn owed: %+v", replied)
+				}
 
-		pasted := agent.term.Pasted()
-		if len(pasted) != 1 || !strings.Contains(pasted[0], "what did the reviewer say?") || strings.Contains(pasted[0], inboxDoorbell) {
-			t.Fatalf("once the user was quiet attn pasted %q, want the capture in a ring of its own", pasted)
-		}
-		mark := len(app.Log())
-		agent.reply("They approved. <!-- attn:state=idle -->")
-		testworld.AwaitSince(app, mark, protocol.EventSessionStateChanged, func(m protocol.SessionStateChangedMessage) bool {
-			return m.Session.State == protocol.SessionStateIdle && protocol.Deref(m.Session.TurnOwed)
+				pasted = agent.term.Pasted()
+				if len(pasted) != 2 || !strings.Contains(pasted[1], inboxDoorbell) || strings.Contains(pasted[1], "what did the reviewer say?") {
+					t.Fatalf("attn pasted %q, want the capture, then the doorbell alone", pasted)
+				}
+				for doorbell := 1; doorbell <= 2; doorbell++ {
+					if doorbell == 2 {
+						sendAgentMessage(t, cli, "peer", agent.id, "a second review is in")
+						synctest.Wait()
+						pasted = agent.term.Pasted()
+						if len(pasted) != 3 || !strings.Contains(pasted[2], inboxDoorbell) {
+							t.Fatalf("attn pasted %q, want a second doorbell", pasted)
+						}
+					}
+					agent.take(pasted[doorbell])
+					if batch := readInbox(t, cli, agent.id, 0); protocol.Deref(batch.QuietNotifications) {
+						t.Errorf("doorbell %d: the agent was told its run is quiet and it left the queue, while the user still owes the capture's reply", doorbell)
+					}
+					w.advance(autoSettleDefaultArm)
+					w.advance(autoSettleDefaultCountdown)
+					working := queriedSession(t, cli, agent.id)
+					if working.State != protocol.SessionStateWorking || working.AutoSettleFiresAt != nil || !protocol.Deref(working.TurnOwed) || protocol.Deref(working.TurnOpenedAt) != *replied.TurnOpenedAt {
+						t.Fatalf("past the auto-settle countdown doorbell %d's run shows state=%s owed=%t opened=%q countdown=%q, want the reply's turn owed from %q with no countdown",
+							doorbell, working.State, protocol.Deref(working.TurnOwed), protocol.Deref(working.TurnOpenedAt), protocol.Deref(working.AutoSettleFiresAt), *replied.TurnOpenedAt)
+					}
+
+					mark := len(app.Log())
+					agent.reply("Read the review. <!-- attn:state=idle -->")
+					stopped := testworld.AwaitSince(app, mark, protocol.EventSessionStateChanged, func(update protocol.SessionStateChangedMessage) bool {
+						return string(update.Session.ID) == agent.id && update.Session.State == protocol.SessionStateIdle
+					}).Session
+					if !protocol.Deref(stopped.TurnOwed) || protocol.Deref(stopped.TurnByAgent) || protocol.Deref(stopped.TurnOpenedAt) != *replied.TurnOpenedAt {
+						t.Fatalf("after doorbell %d's run the session shows owed=%t by_agent=%t opened=%q, want the reply's turn still owed from %q",
+							doorbell, protocol.Deref(stopped.TurnOwed), protocol.Deref(stopped.TurnByAgent), protocol.Deref(stopped.TurnOpenedAt), *replied.TurnOpenedAt)
+					}
+				}
+			})
 		})
-		pasted = agent.term.Pasted()
-		if len(pasted) != 2 || !strings.Contains(pasted[1], inboxDoorbell) {
-			t.Fatalf("after the capture's run attn pasted %q, want the doorbell in a ring of its own", pasted)
-		}
-		mark = len(app.Log())
-		agent.take(pasted[1])
-		agent.reply("Read the review. <!-- attn:state=idle -->")
-		stopped := testworld.AwaitSince(app, mark, protocol.EventSessionStateChanged, func(m protocol.SessionStateChangedMessage) bool {
-			return m.Session.State == protocol.SessionStateIdle
-		})
-		if !protocol.Deref(stopped.Session.TurnOwed) || protocol.Deref(stopped.Session.TurnByAgent) {
-			t.Fatalf("after the doorbell's run the session shows owed=%v by_agent=%v, want the capture's reply still owed to the user",
-				protocol.Deref(stopped.Session.TurnOwed), protocol.Deref(stopped.Session.TurnByAgent))
-		}
-	})
+	}
+}
+
+func TestTheReplyToACaptureThatAskedForApprovalStaysOwedThroughTheDoorbellsRun(t *testing.T) {
+	w, _, cli := quietNotificationsWorld(t, true)
+	app := w.TrustedApp()
+	session, agent, owed := owingIdleAgent(t, w, app, cli)
+	settled := settleFromApp(app, owed)
+
+	sendQuickCapture(t, app, sessionMailbox(session), "what did the reviewer say?")
+	if got := agent.DeliveredPrompt(); !strings.Contains(got, "what did the reviewer say?") {
+		t.Fatalf("the agent was prompted with %q, want the capture", got)
+	}
+	working := testworld.AwaitStateAfter(app, settled, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	agent.AskApproval()
+	asking := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
+	answered := settleFromApp(app, asking)
+	agent.Dismiss()
+	working = testworld.AwaitStateAfter(app, answered, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	agent.Reply("They approved. <!-- attn:state=idle -->")
+	replied := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if !protocol.Deref(replied.TurnOwed) {
+		t.Fatal("the reply to the user's capture stopped without opening the user's turn")
+	}
+
+	working, _ = notificationRunStarts(t, app, cli, agent, session, replied, "the review is in")
+	if shown := queriedSession(t, cli, session); !protocol.Deref(shown.TurnOwed) || protocol.Deref(shown.TurnOpenedAt) != protocol.Deref(replied.TurnOpenedAt) {
+		t.Fatalf("the doorbell's run shows owed=%t opened=%q, want the reply's turn owed from %q",
+			protocol.Deref(shown.TurnOwed), protocol.Deref(shown.TurnOpenedAt), protocol.Deref(replied.TurnOpenedAt))
+	}
+	agent.Reply("Read the review. <!-- attn:state=idle -->")
+	stopped := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if !protocol.Deref(stopped.TurnOwed) || protocol.Deref(stopped.TurnOpenedAt) != protocol.Deref(replied.TurnOpenedAt) {
+		t.Fatalf("after the doorbell's run the session shows owed=%t opened=%q, want the reply's turn still owed from %q",
+			protocol.Deref(stopped.TurnOwed), protocol.Deref(stopped.TurnOpenedAt), protocol.Deref(replied.TurnOpenedAt))
+	}
 }
 
 func TestTheReplyToACaptureClaudeHeldThroughItsTurnStaysOwedAfterTheDoorbellsRun(t *testing.T) {
 	w, _, cli := quietNotificationsWorld(t, true)
 	app := w.TrustedApp()
+	setAnalyticsEnabled(app, "true")
 	session, run := moddedClaude(t, w, app)
 	workingOn(t, app, run, session, "write the essay")
 
@@ -375,11 +441,28 @@ func TestTheReplyToACaptureClaudeHeldThroughItsTurnStaysOwedAfterTheDoorbellsRun
 		t.Fatalf("after the capture's reply the agent took %q (as the user: %t), want the doorbell in attn's voice", got, run.AsUser)
 	}
 	working := testworld.AwaitStateAfter(app, replied, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
-	run.Reply("Read the review. <!-- attn:state=idle -->")
-	stopped := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	if !protocol.Deref(stopped.TurnOwed) || protocol.Deref(stopped.TurnByAgent) {
-		t.Fatalf("after the doorbell's run the session shows owed=%v by_agent=%v, want the capture's reply still owed to the user",
-			protocol.Deref(stopped.TurnOwed), protocol.Deref(stopped.TurnByAgent))
+	readInbox(t, cli, session, 0)
+	if shown := queriedSession(t, cli, session); !protocol.Deref(shown.TurnOwed) || protocol.Deref(shown.TurnOpenedAt) != protocol.Deref(replied.TurnOpenedAt) {
+		t.Fatalf("the doorbell's run shows owed=%t opened=%q, want the reply's turn owed from %q",
+			protocol.Deref(shown.TurnOwed), protocol.Deref(shown.TurnOpenedAt), protocol.Deref(replied.TurnOpenedAt))
+	}
+	stopped := runEnds(w, app, run, working, "Read the review. <!-- attn:state=idle -->")
+	sendAgentMessage(t, cli, "reviewer", session, "a second review is in")
+	if got := run.Prompted(); !strings.Contains(got, inboxDoorbell) {
+		t.Fatalf("after the first doorbell's run the agent took %q, want the second doorbell", got)
+	}
+	working = testworld.AwaitStateAfter(app, stopped, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	if shown := queriedSession(t, cli, session); !protocol.Deref(shown.TurnOwed) || protocol.Deref(shown.TurnOpenedAt) != protocol.Deref(replied.TurnOpenedAt) {
+		t.Fatalf("the second doorbell's run shows owed=%t opened=%q, want the reply's turn owed from %q",
+			protocol.Deref(shown.TurnOwed), protocol.Deref(shown.TurnOpenedAt), protocol.Deref(replied.TurnOpenedAt))
+	}
+	stopped = runEnds(w, app, run, working, "Read the second review. <!-- attn:state=idle -->")
+	if runs := runRecords(t, w, app, session); len(runs) < 2 || runs[len(runs)-2].StartedBy != "ring" || runs[len(runs)-1].StartedBy != "ring" {
+		t.Fatalf("run records %v, want both doorbells' runs started by the ring, so auto-settle never counts them as the user's", runs)
+	}
+	if stopped.State != protocol.SessionStateIdle || !protocol.Deref(stopped.TurnOwed) || protocol.Deref(stopped.TurnByAgent) || protocol.Deref(stopped.TurnOpenedAt) != protocol.Deref(replied.TurnOpenedAt) {
+		t.Fatalf("after the doorbell's run the session shows owed=%v by_agent=%v opened=%q, want the capture's reply still owed from %q",
+			protocol.Deref(stopped.TurnOwed), protocol.Deref(stopped.TurnByAgent), protocol.Deref(stopped.TurnOpenedAt), protocol.Deref(replied.TurnOpenedAt))
 	}
 }
 

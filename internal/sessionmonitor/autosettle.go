@@ -74,7 +74,7 @@ func (m *Monitor) syncAutoSettleLocked() {
 		m.stopAutoSettleLocked()
 		return
 	}
-	if m.input.inNotificationRunLocked() && m.turnOwedLocked() && !m.turnByAgentLocked() && m.policy.QuietNotifications {
+	if m.quietNotificationRunLocked() && m.turnOwedLocked() && !m.turnByAgentLocked() && m.policy.QuietNotifications {
 		m.settleForAgentLocked(time.Now())
 		m.logf("turn settled by a notification run: session=%s", m.label)
 	}

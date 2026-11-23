@@ -26,7 +26,7 @@ queue, but the user settles a run's turn the same way in either flow.
 - `snooze`: put an agent off until a set time. The user moves on.
 - `unsnooze`: end a snooze early. The agent's turn comes back at the back of the queue.
 - `priority`: mark an agent so its turns go first.
-- `quiet-notifications`: on by default. attn opens no turn at the stop of a notification run unless the agent opened one with `attn turn open`. A quick capture makes the run the user's, so its stop opens a turn.
+- `quiet-notifications`: on by default. attn opens no turn at the stop of a notification run unless the agent opened one with `attn turn open`. A quick capture makes the run the user's, so its stop opens a turn, and the turn that reply leaves owed stays owed, at its place, through every notification run after it until the user settles it. Those runs do not settle it, do not print the quiet note and do not start auto-settle.
 - `turn-guidance`: what attn tells its agents about turns.
 
 ## How to get to it

@@ -33,6 +33,20 @@ func (m *Monitor) openTurnLocked(now time.Time, quietStop bool) bool {
 	return opened
 }
 
+func (m *Monitor) keepCaptureReplyLocked(previous protocol.SessionState) {
+	if !m.captureReplyAtStop || !runsIn(previous) || runsIn(m.state.State) {
+		return
+	}
+	m.captureReplyAtStop = false
+	if m.turnOwedLocked() {
+		m.captureReply = m.turn.OpenedAt
+	}
+}
+
+func (m *Monitor) quietNotificationRunLocked() bool {
+	return m.input.inNotificationRunLocked() && !(m.turnOwedLocked() && m.turn.OpenedAt.Equal(m.captureReply))
+}
+
 func (m *Monitor) notificationStopLocked() bool {
 	return m.input.stopFollowsNotificationLocked() && !attention.RunFailed(m.reason)
 }
@@ -164,15 +178,6 @@ func (m *Monitor) AgentTurn(action protocol.AgentTurnAction, now time.Time) (pro
 	m.mu.Unlock()
 	m.publish(view)
 	return outcome, err
-}
-
-func (m *Monitor) InNotificationRun() bool {
-	if m == nil {
-		return false
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.input.inNotificationRunLocked()
 }
 
 func (m *Monitor) traceWake(cause string) {
