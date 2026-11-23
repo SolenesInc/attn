@@ -851,9 +851,8 @@ fn question_section(
 ) -> Block {
     let kind = Kind::of(question);
     let number_ink = if active { t.accent } else { t.text_tertiary };
-    let heading = Inline::joined()
+    let heading = Inline::top()
         .key(format!("asks.q.{}.prompt", question.key))
-        .items_start()
         .child(read_as(
             words(index.to_string(), Type::Name, number_ink),
             Reading::Heading,
