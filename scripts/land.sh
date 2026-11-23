@@ -10,6 +10,10 @@ Run `land guide` and read `.agents/skills/land-on-main/SKILL.md`, then land with
 To run the baseline landing tests alone (replacing `scripts/land.sh --baseline`):
   ATTN_LAND_BASELINE=1 land
 
+If git's pre-push hook sent you here after land's gate passed, core.hooksPath
+points at a checkout whose .githooks/pre-push predates land. Bring that checkout
+up to date with main, then run land again.
+
 If `land` is not on your PATH, install it with:
   mise use -g github:SolenesInc/land
 or:

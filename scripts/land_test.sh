@@ -188,6 +188,7 @@ fi
 expect_output 'scripts/land.sh is retired'
 expect_output 'land guide'
 expect_output 'ATTN_LAND_BASELINE=1 land'
+expect_output 'If git'"'"'s pre-push hook sent you here after land'"'"'s gate passed'
 
 # 2. .githooks/pre-push refuses plain pushes and ATTN_LANDING=1, and allows LAND_LANDING=1.
 if printf 'refs/heads/work 1 refs/heads/main 2\n' | bash "$root/.githooks/pre-push" >"$work/output" 2>&1; then
