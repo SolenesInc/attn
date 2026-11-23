@@ -1,0 +1,1 @@
+Sheet, the prompt editor page, no longer leaks an editor set on every page switch: after six palette switches its listeners went from 1,649 to 1,650, where they used to grow to 10,041. When a file changes on disk, edits on different lines now merge even when the lines are adjacent, and Keep mine keeps the disk's changes to the rest of the file.
