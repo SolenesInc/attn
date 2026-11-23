@@ -55,6 +55,7 @@ const (
 	DaemonInitialStateBuilt        = "daemon-initial-state-built"
 	SessionInputPlacing            = "session-input-placing"
 	SessionInputPasteGap           = "session-input-paste-gap"
+	SessionInputHanded             = "session-input-handed"
 	ClaudeModReturnWaits           = "claude-mod-return-waits"
 	ClaudeModEnqueuing             = "claude-mod-enqueuing"
 	RingPlacementAnswering         = "ring-placement-answering"

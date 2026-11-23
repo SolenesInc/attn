@@ -50,6 +50,7 @@ go ./internal/daemon TestASubscriberThatHangsUpReleasesItsLiveQuery
 go ./internal/daemon TestTheDiagnosticsServerIsOptInAndLoopbackOnly
 go ./internal/daemon TestADelegationThatFailsAfterItsToolCallReturnedReachesTheCallersInbox
 go ./internal/daemon TestAnAgentDrivesTheBrowserTileWithTheBrowserTools
+go ./internal/daemon TestAQuestionWhoseRunEndsBeforeAttnHearsItWasTakenLeavesTheNextNotificationRunQuiet
 go ./cmd/attnd TestSeedNotesNarrowsToABookmarkAndAKind
 go ./cmd/attnd TestATerminalOpenedWhileAnotherBuildIsOnDiskKeepsItsWorkerUntilTheDaemonRestarts
 go ./cmd/attnd TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning

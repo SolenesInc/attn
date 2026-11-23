@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionstate"
 )
@@ -400,6 +401,7 @@ func (l *lane) placeOverConversationLocked(ctx context.Context, delivery Deliver
 		} else {
 			custody = conversation.Deliver(ctx, in)
 		}
+		pausepoint.At(pausepoint.SessionInputHanded)
 	})
 	switch custody.Outcome {
 	case harness.NotMine:

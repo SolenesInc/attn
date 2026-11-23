@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/testworld"
@@ -265,6 +266,34 @@ func TestAPairedSendersQuestionPutsTheAgentsReplyInTheQueue(t *testing.T) {
 	agent.Reply("Nothing for this plot. <!-- attn:state=idle -->")
 	if stopped := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle }); protocol.Deref(stopped.TurnOwed) {
 		t.Fatal("the notification run after the user's question opened a turn")
+	}
+}
+
+func TestAQuestionWhoseRunEndsBeforeAttnHearsItWasTakenLeavesTheNextNotificationRunQuiet(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	handed := w.PauseAt(pausepoint.SessionInputHanded)
+	app, cli := w.TrustedApp(), w.Client()
+	setSetting(t, app, "queue_mode_enabled", "true")
+	registerSessions(t, w, cli, "reviewer")
+	session, agent, owed := owingIdleAgent(t, w, app, cli)
+	settled := settleFromApp(app, owed)
+
+	sendQuickCapture(t, app, sessionMailbox(session), "What is the review status?")
+	agent.Prompted()
+	handed.Await()
+	working := testworld.AwaitStateAfter(app, settled, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	agent.Reply("The review is green. <!-- attn:state=idle -->")
+	answered := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	handed.Release()
+	if !protocol.Deref(answered.TurnOwed) {
+		t.Fatal("the reply to the user's question stopped without opening the user's turn")
+	}
+
+	settled = settleFromApp(app, answered)
+	working, _ = notificationRunStarts(t, app, cli, agent, session, settled, "the review is in")
+	agent.Reply("Nothing for this plot. <!-- attn:state=idle -->")
+	if stopped := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle }); protocol.Deref(stopped.TurnOwed) {
+		t.Fatal("the user's question, taken by a run that had already ended, opened a turn for the next notification run")
 	}
 }
 
