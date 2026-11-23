@@ -48,6 +48,7 @@ type Store struct {
 	sessionRows            sessionRows
 	touchedAt              map[protocol.SessionID]time.Time
 	runtimeRecords         map[protocol.SessionID]SessionRuntimeRecords
+	subagentFeeds          map[subagentFeedKey]ServerFeed
 	costMu                 sync.Mutex
 	liveCosts              map[protocol.SessionID]*sessionCostEntry
 	profilesSeq            int64
@@ -490,6 +491,7 @@ func (s *Store) openSessionLocked(id protocol.SessionID) (*protocol.Session, boo
 
 var sessionOwnedTables = []string{
 	"session_runtime",
+	"session_subagent_feeds",
 	"session_annotation_drafts",
 	"session_exit_screens",
 	"session_focus",
@@ -506,6 +508,11 @@ func (s *Store) Remove(id protocol.SessionID) []string {
 		delete(s.agentDriverRuns, id)
 		delete(s.agentMetadata, id)
 		delete(s.sessionCosts, id)
+		for key := range s.subagentFeeds {
+			if key.session == id {
+				delete(s.subagentFeeds, key)
+			}
+		}
 		return nil
 	}
 	asks, err := deleteSessionRows(s.db, id)

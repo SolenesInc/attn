@@ -116,16 +116,15 @@ whose tile is closed, or whose TUI has not come back yet, still reports:
   started outside Attn, from its first prompt;
 - `attn session transcript` and the last reply in `attn agent peek`;
 - the activity line, and the agent's replies you can select to annotate;
-- usage and cost, from the totals Sigma keeps for each model, counting only
-  what the session spent after it resumed a conversation;
-- markdown files the agent writes or edits, in recent files, and the pull
-  requests its `gh pr create` calls open, on the session;
+- usage and cost, from the totals Sigma keeps for each model across the
+  conversation and its subagents, counting only what the session spent after it
+  resumed a conversation;
+- markdown files the agent or its subagents write or edit, in recent files, and
+  the pull requests their `gh pr create` calls open, on the session;
 - **working** while Sigma compacts the conversation.
 
 Attn picks up where it left off after an Attn or Sigma server restart, and
-counts nothing twice. Attn follows the session's own conversation, not those of
-its subagents, so the files and pull requests their tools make, and what they
-spend, do not reach the session. Sigma has no tool that sends you a file, so a Sigma agent sends no
+counts nothing twice. Sigma has no tool that sends you a file, so a Sigma agent sends no
 files to a tile.
 
 ## Background model calls

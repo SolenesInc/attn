@@ -115,7 +115,7 @@ type Events interface {
 	Compacting(r Reporter, active bool, trigger string)
 	Prompt(r Reporter, at time.Time, p Prompt)
 	Tool(session SessionID, use ToolUse) error
-	Usage(session SessionID, source string, observations []sessioncost.Observation)
+	Usage(session SessionID, source string, root bool, observations []sessioncost.Observation)
 	Replied(session SessionID)
 	Named(session SessionID, title string)
 	// Moved returns what to wait on until the move is recorded, or nil when nothing is to wait on.

@@ -223,6 +223,9 @@ type ServerRecords interface {
 	Feed(id SessionID) FeedRecord
 	SaveFeedEntry(id SessionID, entry int64)
 	SaveUsageBaseline(id SessionID, baseline string)
+	SubagentFeed(id SessionID, conversation string) FeedRecord
+	SaveSubagentFeedEntry(id SessionID, conversation string, entry int64)
+	SaveSubagentUsageBaseline(id SessionID, conversation, baseline string)
 	ConversationSeen(conversation string) bool
 }
 

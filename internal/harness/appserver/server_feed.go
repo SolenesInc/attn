@@ -14,12 +14,18 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
+type feedKey struct {
+	session      protocol.SessionID
+	conversation string
+}
+
 type serverFeed struct {
 	p            *serverConnection
 	l            *Link
 	c            *effectrpc.Client
 	session      protocol.SessionID
 	conversation string
+	subagent     bool
 	cancel       context.CancelFunc
 	events       appServerEvents
 	seen         int64
@@ -71,12 +77,15 @@ func (l *Link) WatchesConversations() bool {
 }
 
 func (p *serverConnection) openFeeds(c *effectrpc.Client, conversations map[string]bool, live bool) {
+	hasWatching := false
 	for id, l := range p.sessions() {
 		conversation := p.c.host.Sessions().Conversation(id)
 		if conversation == "" || !l.WatchesConversations() || (conversations != nil && !conversations[conversation]) {
 			continue
 		}
-		if _, open := p.feeds[id]; open {
+		hasWatching = true
+		key := feedKey{session: id, conversation: conversation}
+		if _, open := p.feeds[key]; open {
 			continue
 		}
 		ctx, cancel := context.WithCancel(p.c.host.Life().Context())
@@ -89,26 +98,148 @@ func (p *serverConnection) openFeeds(c *effectrpc.Client, conversations map[stri
 		f.baselined = stored.UsageBaseline != "" || stored.Entry > 0
 		_ = json.Unmarshal([]byte(stored.UsageBaseline), &f.baseline)
 		if p.feeds == nil {
-			p.feeds = make(map[protocol.SessionID]*serverFeed)
+			p.feeds = make(map[feedKey]*serverFeed)
 		}
-		p.feeds[id] = f
+		p.feeds[key] = f
 		if !p.c.host.Life().Go("serverFeed", func() { f.run(ctx, live) }) {
 			cancel()
-			delete(p.feeds, id)
+			delete(p.feeds, key)
 		}
+	}
+	if hasWatching {
+		p.scheduleSubagentScan(c, live)
+	}
+}
+
+type listedSubagentConversation struct {
+	ID   string `json:"id"`
+	Fork *struct {
+		At int64 `json:"at"`
+	} `json:"fork"`
+	Lineage *struct {
+		Root string `json:"root"`
+	} `json:"lineage"`
+}
+
+func (p *serverConnection) scheduleSubagentScan(c *effectrpc.Client, live bool) {
+	if p.client() != c {
+		return
+	}
+	watching := false
+	for id, l := range p.sessions() {
+		if l.WatchesConversations() && p.c.host.Sessions().Conversation(id) != "" {
+			watching = true
+			break
+		}
+	}
+	if !watching {
+		return
+	}
+	if p.subagentScanClient == c {
+		p.subagentScanAgain = true
+		p.subagentScanLive = p.subagentScanLive || live
+		return
+	}
+	p.subagentScanClient = c
+	p.subagentScanAgain = false
+	p.subagentScanLive = false
+	if !p.c.host.Life().Go("serverSubagents", func() {
+		var listed []listedSubagentConversation
+		callCtx, cancel := context.WithTimeout(p.c.host.Life().Context(), serverCallLimit)
+		err := c.Call(callCtx, "conversation/list", nil, &listed)
+		cancel()
+		p.events.run(p.c, func() {
+			if p.client() != c {
+				if p.subagentScanClient == c {
+					p.subagentScanClient, p.subagentScanAgain, p.subagentScanLive = nil, false, false
+				}
+				return
+			}
+			if err == nil {
+				p.openSubagentFeeds(c, listed, live)
+			}
+			if p.subagentScanClient == c {
+				again, againLive := p.subagentScanAgain, p.subagentScanLive
+				p.subagentScanClient, p.subagentScanAgain, p.subagentScanLive = nil, false, false
+				if again {
+					p.scheduleSubagentScan(c, againLive)
+				}
+			}
+		})
+	}) {
+		p.subagentScanClient = nil
+	}
+}
+
+func (p *serverConnection) openSubagentFeeds(c *effectrpc.Client, listed []listedSubagentConversation, live bool) {
+	roots := make(map[string]map[protocol.SessionID]*Link)
+	for id, l := range p.sessions() {
+		if !l.WatchesConversations() {
+			continue
+		}
+		conversation := p.c.host.Sessions().Conversation(id)
+		if conversation == "" {
+			continue
+		}
+		if roots[conversation] == nil {
+			roots[conversation] = make(map[protocol.SessionID]*Link)
+		}
+		roots[conversation][id] = l
+	}
+	if len(roots) == 0 {
+		return
+	}
+	for _, each := range listed {
+		if each.Lineage == nil || each.Lineage.Root == "" || each.Lineage.Root == each.ID {
+			continue
+		}
+		forkAt := int64(0)
+		if each.Fork != nil {
+			forkAt = each.Fork.At
+		}
+		for id, l := range roots[each.Lineage.Root] {
+			p.openSubagentFeed(c, id, l, each.ID, forkAt, live)
+		}
+	}
+}
+
+func (p *serverConnection) openSubagentFeed(c *effectrpc.Client, id protocol.SessionID, l *Link, conversation string, forkAt int64, live bool) {
+	key := feedKey{session: id, conversation: conversation}
+	if _, open := p.feeds[key]; open {
+		return
+	}
+	ctx, cancel := context.WithCancel(p.c.host.Life().Context())
+	stored := p.c.host.Records().SubagentFeed(id, conversation)
+	seen := stored.Entry
+	if seen == 0 && forkAt > 0 {
+		seen = forkAt
+	}
+	f := &serverFeed{p: p, l: l, c: c, session: id, conversation: conversation, subagent: true, cancel: cancel, seen: seen, launched: p.c.host.Sessions().LaunchedAt(id), calls: map[string]serverToolCall{}}
+	f.baselined = stored.UsageBaseline != "" || stored.Entry > 0
+	_ = json.Unmarshal([]byte(stored.UsageBaseline), &f.baseline)
+	if p.feeds == nil {
+		p.feeds = make(map[feedKey]*serverFeed)
+	}
+	p.feeds[key] = f
+	if !p.c.host.Life().Go("serverFeed", func() { f.run(ctx, live) }) {
+		cancel()
+		delete(p.feeds, key)
 	}
 }
 
 func (p *serverConnection) closeFeed(id protocol.SessionID) {
-	if f := p.feeds[id]; f != nil {
-		f.cancel()
-		delete(p.feeds, id)
+	for key, f := range p.feeds {
+		if key.session == id {
+			f.cancel()
+			delete(p.feeds, key)
+		}
 	}
 }
 
 func (p *serverConnection) closeFeeds() {
-	for id := range p.feeds {
-		p.closeFeed(id)
+	for key, f := range p.feeds {
+		f.cancel()
+		delete(p.feeds, key)
 	}
 }
 
@@ -133,8 +264,9 @@ func (f *serverFeed) run(ctx context.Context, live bool) {
 		})
 	})
 	f.p.events.run(f.p.c, func() {
-		if f.p.feeds[f.session] == f {
-			delete(f.p.feeds, f.session)
+		key := feedKey{session: f.session, conversation: f.conversation}
+		if f.p.feeds[key] == f {
+			delete(f.p.feeds, key)
 		}
 	})
 	if err != nil && ctx.Err() == nil {
@@ -173,21 +305,33 @@ func (f *serverFeed) apply(ctx context.Context, item serverViewItem, live bool) 
 		if f.sawHistory {
 			f.baseline = f.usageTotals()
 			if encoded, err := json.Marshal(f.baseline); err == nil {
-				f.p.c.host.Records().SaveUsageBaseline(f.session, string(encoded))
+				if f.subagent {
+					f.p.c.host.Records().SaveSubagentUsageBaseline(f.session, f.conversation, string(encoded))
+				} else {
+					f.p.c.host.Records().SaveUsageBaseline(f.session, string(encoded))
+				}
 			}
 		}
-		pausepoint.At(pausepoint.ServerFeedBaselined)
+		if f.subagent {
+			pausepoint.At(pausepoint.ServerSubagentFeedBaselined)
+		} else {
+			pausepoint.At(pausepoint.ServerFeedBaselined)
+		}
 	}
 	if f.usageChanged {
 		f.usageChanged = false
 		f.reportUsage()
 	}
-	if f.compactionsChanged {
+	if !f.subagent && f.compactionsChanged {
 		f.compactionsChanged = false
 		f.reportCompactions()
 	}
 	if f.seen != seen {
-		f.p.c.host.Records().SaveFeedEntry(f.session, f.seen)
+		if f.subagent {
+			f.p.c.host.Records().SaveSubagentFeedEntry(f.session, f.conversation, f.seen)
+		} else {
+			f.p.c.host.Records().SaveFeedEntry(f.session, f.seen)
+		}
 	}
 }
 
@@ -301,9 +445,16 @@ func (f *serverFeed) observe(ctx context.Context, entry transcript.ServerEntry, 
 	if _, open := f.p.c.host.Sessions().Evidence(f.session); !open {
 		return
 	}
-	if written, dated := entry.Written(); !dated || written.Before(f.launched) {
+	if entry.Kind == serverSubagent {
+		f.p.events.run(f.p.c, func() { f.p.scheduleSubagentScan(f.c, live) })
+	}
+	written, dated := entry.Written()
+	if !dated {
+		return
+	}
+	if written.Before(f.launched) {
 		f.sawHistory = true
-		if entry.Kind == serverPrompt && !f.titledFromHistory {
+		if !f.subagent && entry.Kind == serverPrompt && !f.titledFromHistory {
 			f.titledFromHistory = true
 			f.p.c.host.Events().Prompt(harness.FromSession(f.session), time.Now(), harness.Prompt{Text: entry.Text(), History: true, Titles: true})
 		}
@@ -311,15 +462,18 @@ func (f *serverFeed) observe(ctx context.Context, entry transcript.ServerEntry, 
 	}
 	switch entry.Kind {
 	case serverPrompt:
-		f.p.c.host.Events().Prompt(harness.FromSession(f.session), time.Now(), harness.Prompt{Text: entry.Text(), Live: live, Titles: !f.titledFromHistory})
+		if !f.subagent {
+			f.p.c.host.Events().Prompt(harness.FromSession(f.session), time.Now(), harness.Prompt{Text: entry.Text(), Live: live, Titles: !f.titledFromHistory})
+		}
 	case "pi.assistant":
 		for _, call := range entry.ToolCalls() {
 			f.calls[call.ID] = serverToolCall{name: call.Name, input: call.Arguments}
 		}
-		if strings.TrimSpace(entry.Text()) != "" {
+		if !f.subagent && strings.TrimSpace(entry.Text()) != "" {
 			f.p.c.host.Events().Replied(f.session)
 		}
 	case "pi.tool-result":
+		finished := false
 		for _, result := range entry.ToolResults() {
 			call, known := f.calls[result.ToolCallID]
 			delete(f.calls, result.ToolCallID)
@@ -332,12 +486,19 @@ func (f *serverFeed) observe(ctx context.Context, entry transcript.ServerEntry, 
 			if !known {
 				continue
 			}
+			finished = true
 			f.p.c.serverToolFinished(f.session, call.name, call.input, result.Content)
+		}
+		if finished {
+			f.p.events.run(f.p.c, func() { f.p.scheduleSubagentScan(f.c, live) })
 		}
 	}
 }
 
-const serverPrompt = "sigma.user"
+const (
+	serverPrompt   = "sigma.user"
+	serverSubagent = "sigma.subagent"
+)
 
 func (f *serverFeed) requestBefore(ctx context.Context, result int64, id string) (serverToolCall, bool) {
 	var request serverToolCall
@@ -371,25 +532,35 @@ func (f *serverFeed) usageTotals() map[string]serverModelUsage {
 
 func (f *serverFeed) reportUsage() {
 	totals := f.usageTotals()
+	source := f.l.b.agent
+	obsPrefix := f.l.b.agent + ":"
+	if f.subagent {
+		source = f.l.b.agent + ":subagent:" + f.conversation
+		obsPrefix = f.l.b.agent + ":" + f.conversation + ":"
+	}
 	observations := make([]sessioncost.Observation, 0, len(totals))
 	for key, total := range totals {
 		before := f.baseline[key]
 		_, model, _ := strings.Cut(key, "/")
+		usage := sessioncost.Usage{
+			InputTokens:                  total.Input - before.Input,
+			OutputTokens:                 total.Output - before.Output,
+			CacheReadInputTokens:         total.CacheRead - before.CacheRead,
+			UnclassifiedCacheWriteTokens: total.CacheWrite - before.CacheWrite,
+			ReportedCostUSD:              total.Cost.Total - before.Cost.Total,
+		}
+		if f.subagent && !usage.HasUsage() {
+			continue
+		}
 		observations = append(observations, sessioncost.Observation{
-			ObservationID: f.l.b.agent + ":" + key,
+			ObservationID: obsPrefix + key,
 			Model:         model,
 			Purpose:       sessioncost.PurposeAgent,
-			Usage: sessioncost.Usage{
-				InputTokens:                  total.Input - before.Input,
-				OutputTokens:                 total.Output - before.Output,
-				CacheReadInputTokens:         total.CacheRead - before.CacheRead,
-				UnclassifiedCacheWriteTokens: total.CacheWrite - before.CacheWrite,
-				ReportedCostUSD:              total.Cost.Total - before.Cost.Total,
-			},
+			Usage:         usage,
 		})
 	}
 	if len(observations) > 0 {
-		f.p.c.host.Events().Usage(f.session, f.l.b.agent, observations)
+		f.p.c.host.Events().Usage(f.session, source, !f.subagent, observations)
 	}
 }
 

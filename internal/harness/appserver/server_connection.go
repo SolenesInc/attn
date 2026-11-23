@@ -17,23 +17,26 @@ import (
 )
 
 type serverConnection struct {
-	c           *Client
-	socket      string
-	ensureMu    sync.Mutex
-	uses        int
-	mu          sync.Mutex
-	control     *effectrpc.Client
-	info        effectrpc.ServerInfo
-	ready       chan struct{}
-	readyClosed bool
-	terminal    harness.TerminalID
-	events      appServerEvents
-	busy        map[string]string
-	ended       map[string]serverEnded
-	tools       *serverToolsRegistration
-	feeds       map[protocol.SessionID]*serverFeed
-	judged      map[string]bool
-	forks       map[string]int64
+	c                  *Client
+	socket             string
+	ensureMu           sync.Mutex
+	uses               int
+	mu                 sync.Mutex
+	control            *effectrpc.Client
+	info               effectrpc.ServerInfo
+	ready              chan struct{}
+	readyClosed        bool
+	terminal           harness.TerminalID
+	events             appServerEvents
+	busy               map[string]string
+	ended              map[string]serverEnded
+	tools              *serverToolsRegistration
+	feeds              map[feedKey]*serverFeed
+	judged             map[string]bool
+	forks              map[string]int64
+	subagentScanClient *effectrpc.Client
+	subagentScanAgain  bool
+	subagentScanLive   bool
 }
 
 type serverToolsRegistration struct {
@@ -478,6 +481,8 @@ func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 	if tree.Status != "idle" {
 		p.followFork(c, tree.Conversation)
 		p.openFeeds(c, map[string]bool{tree.Conversation: true}, true)
+	} else if p.holder(tree.Conversation) != "" {
+		p.scheduleSubagentScan(c, true)
 	}
 	for id, l := range p.sessions() {
 		if p.c.host.Sessions().Conversation(id) != tree.Conversation {

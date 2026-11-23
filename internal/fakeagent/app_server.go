@@ -284,6 +284,7 @@ type ServerConversation struct {
 	Target       string            `json:"target,omitempty"`
 	MCPServers   []ServerMCPServer `json:"mcpServers,omitempty"`
 	Fork         *ServerFork       `json:"fork,omitempty"`
+	Lineage      *ServerLineage    `json:"lineage,omitempty"`
 	Ended        map[string]any    `json:"ended,omitempty"`
 	Status       string            `json:"status"`
 	requests     map[string]int
@@ -298,6 +299,14 @@ type ServerConversation struct {
 type ServerFork struct {
 	Of string `json:"of"`
 	At int64  `json:"at"`
+}
+
+// ServerLineage places a subagent conversation under its parent and root conversation.
+type ServerLineage struct {
+	Parent string `json:"parent"`
+	Root   string `json:"root"`
+	Call   string `json:"call"`
+	Title  string `json:"title"`
 }
 
 // ServerCompaction is how Sigma answers conversation/compact: compacted, nothing_to_compact, failed or stopped.

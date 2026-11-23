@@ -209,8 +209,8 @@ func (m *Monitor) StartCost() {
 	}
 }
 
-func (m *Monitor) ReportServerUsage(source string, observations []sessioncost.Observation) {
-	if m != nil && m.applyCostObservations(source, true, "", observations) {
+func (m *Monitor) ReportServerUsage(source string, root bool, observations []sessioncost.Observation) {
+	if m != nil && m.applyCostObservations(source, root, "", observations) {
 		m.publishCost()
 	}
 }

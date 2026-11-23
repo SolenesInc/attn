@@ -75,6 +75,7 @@ const (
 	SessionExitObserved            = "session-process-exit-observed"
 	AgentTerminalStarted           = "agent-terminal-started"
 	ServerFeedBaselined            = "server-feed-baselined"
+	ServerSubagentFeedBaselined    = "server-subagent-feed-baselined"
 	TerminalStarting               = "terminal-starting"
 	TerminalOpenCommandTyped       = "terminal-open-command-typed"
 	TerminalRuntimeEnding          = "terminal-runtime-ending"

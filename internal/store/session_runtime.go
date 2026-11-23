@@ -257,6 +257,50 @@ type ServerFeed struct {
 	UsageBaseline string
 }
 
+type subagentFeedKey struct {
+	session      protocol.SessionID
+	conversation string
+}
+
+func (s *Store) SubagentServerFeed(id protocol.SessionID, conversation string) ServerFeed {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return s.subagentFeeds[subagentFeedKey{session: id, conversation: conversation}]
+	}
+	var feed ServerFeed
+	if err := s.db.QueryRow(`SELECT server_entry, server_usage_baseline FROM session_subagent_feeds WHERE session_id = ? AND conversation_id = ?`, id, conversation).Scan(&feed.Entry, &feed.UsageBaseline); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		log.Printf("[store] session %s subagent %s server feed: %v", id, conversation, err)
+	}
+	return feed
+}
+
+func (s *Store) SaveSubagentServerFeedEntry(id protocol.SessionID, conversation string, entry int64) {
+	s.saveSubagentServerFeedColumn(id, conversation, "server_entry", entry, func(feed *ServerFeed) { feed.Entry = entry })
+}
+
+func (s *Store) SaveSubagentServerUsageBaseline(id protocol.SessionID, conversation, baseline string) {
+	s.saveSubagentServerFeedColumn(id, conversation, "server_usage_baseline", baseline, func(feed *ServerFeed) { feed.UsageBaseline = baseline })
+}
+
+func (s *Store) saveSubagentServerFeedColumn(id protocol.SessionID, conversation, column string, value any, inMemory func(*ServerFeed)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		if s.subagentFeeds == nil {
+			s.subagentFeeds = make(map[subagentFeedKey]ServerFeed)
+		}
+		key := subagentFeedKey{session: id, conversation: conversation}
+		feed := s.subagentFeeds[key]
+		inMemory(&feed)
+		s.subagentFeeds[key] = feed
+		return
+	}
+	if _, err := s.db.Exec(`INSERT INTO session_subagent_feeds(session_id, conversation_id, `+column+`) VALUES (?, ?, ?) ON CONFLICT(session_id, conversation_id) DO UPDATE SET `+column+` = excluded.`+column, id, conversation, value); err != nil {
+		log.Printf("[store] save session %s subagent %s %s: %v", id, conversation, column, err)
+	}
+}
+
 func (s *Store) ServerFeed(id protocol.SessionID) ServerFeed {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

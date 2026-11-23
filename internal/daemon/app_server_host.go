@@ -572,6 +572,16 @@ func (h hostRecords) SaveFeedEntry(id harness.SessionID, entry int64) {
 func (h hostRecords) SaveUsageBaseline(id harness.SessionID, baseline string) {
 	h.d.store.SaveServerUsageBaseline(id, baseline)
 }
+func (h hostRecords) SubagentFeed(id harness.SessionID, conversation string) harness.FeedRecord {
+	feed := h.d.store.SubagentServerFeed(id, conversation)
+	return harness.FeedRecord{Entry: feed.Entry, UsageBaseline: feed.UsageBaseline}
+}
+func (h hostRecords) SaveSubagentFeedEntry(id harness.SessionID, conversation string, entry int64) {
+	h.d.store.SaveSubagentServerFeedEntry(id, conversation, entry)
+}
+func (h hostRecords) SaveSubagentUsageBaseline(id harness.SessionID, conversation, baseline string) {
+	h.d.store.SaveSubagentServerUsageBaseline(id, conversation, baseline)
+}
 func (h hostRecords) ConversationSeen(conversation string) bool {
 	return h.d.store.ServerConversationSeen(conversation)
 }

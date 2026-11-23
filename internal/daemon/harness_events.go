@@ -184,8 +184,8 @@ func (d *Daemon) recordEditedFiles(sessionID protocol.SessionID, paths []string)
 	return true
 }
 
-func (e harnessEvents) Usage(session protocol.SessionID, source string, observations []sessioncost.Observation) {
-	e.daemon.sessionMonitor(session).ReportServerUsage(source, observations)
+func (e harnessEvents) Usage(session protocol.SessionID, source string, root bool, observations []sessioncost.Observation) {
+	e.daemon.sessionMonitor(session).ReportServerUsage(source, root, observations)
 }
 
 func (e harnessEvents) Replied(session protocol.SessionID) {
