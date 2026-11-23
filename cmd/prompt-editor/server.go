@@ -57,7 +57,7 @@ func revision(text []byte) string { return fmt.Sprintf("%x", sha256.Sum256(text)
 func (e *editor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 	if r.Host != e.host || (r.Header.Get("Origin") != "" && r.Header.Get("Origin") != "http://"+e.host) {
 		problem(w, http.StatusForbidden, fmt.Errorf("open the editor at http://%s", e.host))
 		return

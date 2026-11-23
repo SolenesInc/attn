@@ -209,6 +209,10 @@ $(PROMPT_EDITOR_NODE_MODULES): cmd/prompt-editor/package.json cmd/prompt-editor/
 	pnpm --dir cmd/prompt-editor install --frozen-lockfile
 	@touch $@
 
+PROMPT_EDITOR_BUNDLE := cmd/prompt-editor/web/sheet/dist/sheet.js
+$(PROMPT_EDITOR_BUNDLE): $(PROMPT_EDITOR_NODE_MODULES) cmd/prompt-editor/build.mjs $(wildcard cmd/prompt-editor/web/sheet/*.js)
+	node cmd/prompt-editor/build.mjs
+
 LINT_NODE_MODULES := lint/node_modules/.attn-installed
 $(LINT_NODE_MODULES): lint/package.json lint/pnpm-lock.yaml
 	pnpm --dir lint install --frozen-lockfile
@@ -580,11 +584,12 @@ generate-prompts:
 check-prompts:
 	GOOS=$$(go env GOHOSTOS) GOARCH=$$(go env GOHOSTARCH) CGO_ENABLED=0 go run ./cmd/promptgen --check
 
-prompt-editor:
+prompt-editor: $(PROMPT_EDITOR_BUNDLE)
 	go run ./cmd/prompt-editor
 
-test-prompt-editor: $(PROMPT_EDITOR_NODE_MODULES)
+test-prompt-editor: $(PROMPT_EDITOR_BUNDLE)
 	go test ./cmd/prompt-editor ./cmd/promptgen ./internal/prompts
 	go run ./cmd/prompt-editor check
 	node --test cmd/prompt-editor/test/compare.test.mjs
 	node cmd/prompt-editor/test/browser.mjs
+	node cmd/prompt-editor/test/sheet.mjs

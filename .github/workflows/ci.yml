@@ -418,6 +418,9 @@ jobs:
       - name: Install prompt editor test dependencies
         run: pnpm --dir cmd/prompt-editor install --frozen-lockfile
 
+      - name: Build the Sheet page
+        run: node cmd/prompt-editor/build.mjs
+
       - name: Get Playwright version
         id: playwright-version
         run: echo "version=$(pnpm --dir cmd/prompt-editor exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
@@ -447,6 +450,9 @@ jobs:
 
       - name: Test prompt editor in Chromium
         run: node cmd/prompt-editor/test/browser.mjs
+
+      - name: Test the Sheet page in Chromium
+        run: node cmd/prompt-editor/test/sheet.mjs
 
   mobile:
     name: Mobile

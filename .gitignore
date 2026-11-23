@@ -45,6 +45,8 @@ coverage.out
 
 # Local prompt editor drafts and reviews
 .prompt-editor/
+# The Sheet page's bundle, built by make prompt-editor
+/cmd/prompt-editor/web/sheet/dist/
 /cmd/attn-ingest/attn-ingest
 
 /internal/ghosttyvt/native_paths_generated_*.go

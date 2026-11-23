@@ -99,9 +99,13 @@ go run ./cmd/prompt-editor show --situation crew-member-start --open
 ```
 
 `show` prints the URL of an event or a situation, and `--open` opens the
-browser. The page compares with
-`main` by default. `serve --base REF` sets another default, and the user can
-pick any branch, tag or commit in the page.
+browser. The page compares with `main` by default. `serve --base REF` sets
+another default, and the user can pick any branch, tag or commit in the page.
+
+The Sheet page, at `/sheet/` with the same hash, is a new page beside this one:
+it shows a situation's composed prompt as one document, edited in place and
+saved with Ctrl S. It does not yet compare with a base or reload files that
+change on disk.
 
 ## Verify
 
