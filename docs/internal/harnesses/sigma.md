@@ -55,7 +55,10 @@ measurement uses that one.
   with `claude-haiku-5-5` (seed `s-77s6d3`, 2026-11-23): the run's foreground
   tool call ended "interrupted; it may or may not have taken effect", and the
   submitted message started the next run 7 ms later. A steer sent during a
-  tool call reached the run right after that call's result.
+  tool call reached the run right after that call's result. For another
+  agent's interrupt, attn submits the withdrawn inputs again after its message,
+  each with its author and without `steer`. The answer carries only their text,
+  so their images and the skills they named are lost.
 - `ephemeral/run {prompt, system?, schema?, provider?, model?, effort?, maxTurns?}`
   answers one prompt with no tools and commits nothing: no conversation in
   `conversation/list`, no entry, no usage (measured on 43ebbba: after a title,

@@ -420,6 +420,51 @@ func TestAnInterruptStopsAWorkingSigmaAndStartsItsNextRunWithTheMessage(t *testi
 	}
 }
 
+func TestAnInterruptToSigmaKeepsTheUsersQueuedPromptsForAfterItsMessage(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "lead")
+	session, view, server := appServerSession(t, w, app, fakeagent.Sigma)
+	promptUntilWorking(app, session, view, server, "find the flaky checkout test")
+	server.QueueFromTile(view.ConversationID, "Then bump the cache TTL.")
+	queued := server.Prompted(view.ConversationID)
+
+	sent := sendPeerMessage(t, cli, "lead", session, "Leave the migration for tonight.", "interrupt")
+	if sent.Status != protocol.AgentMsgStatusInterrupted {
+		t.Fatalf("an interrupt to a working Sigma = %+v, want interrupted", sent)
+	}
+	server.AwaitInterrupted(view.ConversationID)
+	if got := server.Prompted(view.ConversationID); got.Author != "attn" || !strings.Contains(got.Text, "Leave the migration for tonight.") {
+		t.Fatalf("after the interrupt Sigma took %+v first, want the interrupt's message to start the next run", got)
+	}
+	again := server.Prompted(view.ConversationID)
+	if again.Text != queued.Text || again.Author != queued.Author || again.AuthorID != queued.AuthorID || again.Steer || again.RequestID == queued.RequestID {
+		t.Fatalf("after the message Sigma took %+v, want the user's withdrawn prompt %+v submitted again as theirs, without steer, under a new request id", again, queued)
+	}
+}
+
+func TestAnInterruptWhoseMessageSigmaRefusesEndsTheRunAndQueuesTheMessage(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "lead")
+	session, view, server := appServerSession(t, w, app, fakeagent.Sigma)
+	promptUntilWorking(app, session, view, server, "find the flaky checkout test")
+	server.RefuseNextSubmit(view.ConversationID, "TargetUnavailable")
+
+	sent := sendPeerMessage(t, cli, "lead", session, "Leave the migration for tonight.", "interrupt")
+	if sent.Status != protocol.AgentMsgStatusQueued || !strings.Contains(sent.Detail, "TargetUnavailable") {
+		t.Fatalf("an interrupt whose message Sigma refused = %+v, want it queued with the refusal", sent)
+	}
+	server.AwaitInterrupted(view.ConversationID)
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State != protocol.SessionStateWorking })
+	if got := server.Prompted(view.ConversationID); got.Author != "attn" || !strings.Contains(got.Text, inboxDoorbell) {
+		t.Fatalf("once the interrupted run ended Sigma took %+v, want the inbox doorbell for the queued message", got)
+	}
+	if status := peerMessageStatus(t, cli, "lead", sent.MessageID); status.DeliveredAs != nil {
+		t.Fatalf("the interrupt's status = %+v, want it queued with no turn use", status)
+	}
+}
+
 func TestASteerOrInterruptToAWorkingServerWithoutTheAbilityQueuesWithTheReason(t *testing.T) {
 	for _, flag := range []string{"steer", "interrupt"} {
 		t.Run(flag, func(t *testing.T) {

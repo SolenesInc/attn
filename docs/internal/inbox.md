@@ -261,7 +261,12 @@ go idle, then starts the next turn with `turn/start`. An app server takes an
 interrupt as `conversation/interrupt`, then `conversation/submit`. With these,
 as with the Claude mod, the session stays working across the interrupt and no
 turn opens for the user: attn does not read the end of the turn it interrupted
-as a stop.
+as a stop. Inputs the interrupt withdrew from the conversation's queue, such as
+prompts the user queued in the tile, attn submits again after the message, each
+under its own author and without steer, so they run after it. When the server
+stops the run but refuses the message, attn reads the interrupted end as a stop,
+so the session leaves working, and the message waits as a queued message with
+the refusal in the sender's result.
 
 Once attn has placed a ring in the session, attn records the session as the
 reader of the ring's user input. attn never checks that the agent acted on

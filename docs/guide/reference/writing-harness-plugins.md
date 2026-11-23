@@ -288,7 +288,7 @@ ignored.
 | `targets` | `targets/list` | offers execution targets at launch |
 | `compact` | `conversation/compact` | compacts the conversation when an agent closes with `--compact` or stands by |
 | `steer` | `steer: true` on `conversation/submit` | sends input into the run in flight at its next step instead of after the run, and passes on another agent's `attn agent msg --steer` |
-| `interrupt` | `conversation/interrupt` that stops the run in flight at once, then a `conversation/submit` that starts the next run | passes on another agent's `attn agent msg --interrupt`: it interrupts the run, then submits the message without `steer`. Without it, Attn holds the message until the run ends |
+| `interrupt` | `conversation/interrupt` that stops the run in flight at once, then a `conversation/submit` that starts the next run | passes on another agent's `attn agent msg --interrupt`: it interrupts the run, submits the message without `steer`, then submits again the inputs the interrupt withdrew. Without it, Attn holds the message until the run ends |
 | `question_safe` | input while a call waits on an approval or a question | delivers input during that wait instead of holding it until the wait ends. Another agent's interrupt still waits for the wait to end |
 
 The executable, optional executable override, home variable and default home
@@ -376,7 +376,13 @@ The required calls are `initialize`, `status/watch`, `conversation/list`,
 - `conversation/interrupt {conversation, author: {id, name}}`, sent when the
   last session holding a conversation closes and `onClose` is `"interrupt"`,
   and, to a server that declares `interrupt`, before the submit that carries
-  another agent's interrupt. `onClose` does not declare `interrupt`.
+  another agent's interrupt. `onClose` does not declare `interrupt`. The
+  server may answer `{withdrawn: [{requestId, author, text}]}` with the inputs
+  waiting in the conversation's queue that it withdrew. After an agent's
+  interrupt, Attn submits each again behind the message, with its `author` and
+  without `steer`, so they run after it. When the server stops the run but refuses
+  the message, Attn shows the run's interrupted end and keeps the message
+  queued.
 
 A server that declares `compact` answers
 `conversation/compact {conversation, author: {id, name}}` once the compaction

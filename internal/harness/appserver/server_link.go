@@ -310,7 +310,7 @@ func (l *Link) observedCompletion(sessionID protocol.SessionID) int64 {
 
 func (l *Link) observe(sessionID protocol.SessionID, quiet bool, status string, ended *serverEnded) {
 	evidence, ok := l.c.host.Sessions().Evidence(sessionID)
-	if !ok || status == "idle" && l.endedByOwnInterrupt(sessionID, ended) {
+	if !ok || status == "idle" && l.holdsOwnInterruptedEnd(sessionID, ended) {
 		return
 	}
 	l.c.host.Sessions().TraceClaim(sessionID, quiet, status, time.Now())
@@ -400,25 +400,56 @@ func (l *Link) deliver(ctx context.Context, session protocol.SessionID, in harne
 		params["steer"] = true
 	}
 	c, err := l.ensureServer(ctx, nil)
-	call := func(method string, params any) error {
+	if err != nil {
+		return l.undelivered(conversation, err)
+	}
+	call := func(method string, params, answer any) error {
 		callCtx, cancel := context.WithTimeout(ctx, serverCallLimit)
 		defer cancel()
-		return c.Call(callCtx, method, params, nil)
+		return c.Call(callCtx, method, params, answer)
 	}
-	if err == nil && in.Turn == harness.Interrupt {
-		l.b.interrupting.Store(session, true)
-		err = call("conversation/interrupt", map[string]any{"conversation": conversation, "author": l.author(harness.VoiceAttn)})
-		if err != nil {
-			l.b.interrupting.Delete(session)
+	if in.Turn != harness.Interrupt {
+		if err := call("conversation/submit", params, nil); err != nil {
+			return l.undelivered(conversation, err)
+		}
+		return harness.Custody{Outcome: harness.Taken, At: time.Now(), TookAs: took}
+	}
+	l.b.interrupting.Store(session, &ownInterrupt{})
+	var interrupted serverInterrupted
+	if err := call("conversation/interrupt", map[string]any{"conversation": conversation, "author": l.author(harness.VoiceAttn)}, &interrupted); err != nil {
+		l.settleOwnInterrupt(session, false)
+		return l.undelivered(conversation, err)
+	}
+	err = call("conversation/submit", params, nil)
+	l.settleOwnInterrupt(session, err == nil)
+	for _, withdrawn := range interrupted.Withdrawn {
+		again := map[string]any{"conversation": conversation, "requestId": in.ID + ":" + withdrawn.RequestID, "author": withdrawn.Author, "text": withdrawn.Text}
+		if err := call("conversation/submit", again, nil); err != nil {
+			l.logf("submitting again input %s that the interrupt of conversation %s withdrew: %v", withdrawn.RequestID, conversation, err)
 		}
 	}
-	if err == nil {
-		err = call("conversation/submit", params)
-	}
 	if err != nil {
-		return harness.Custody{Reason: fmt.Sprintf("deliver to %s conversation %s: %v", l.b.name, conversation, err)}
+		return harness.Custody{Outcome: harness.Rejected, Reason: fmt.Sprintf("%s stopped its run but did not take the message: %v", l.b.name, err)}
 	}
 	return harness.Custody{Outcome: harness.Taken, At: time.Now(), TookAs: took}
+}
+
+func (l *Link) undelivered(conversation string, err error) harness.Custody {
+	return harness.Custody{Reason: fmt.Sprintf("deliver to %s conversation %s: %v", l.b.name, conversation, err)}
+}
+
+type serverInterrupted struct {
+	Withdrawn []struct {
+		RequestID string          `json:"requestId"`
+		Author    serverAuthorRef `json:"author"`
+		Text      string          `json:"text"`
+	} `json:"withdrawn"`
+}
+
+// ownInterrupt is an interrupt attn sent ahead of a message: the run it ended, once seen, and whether the message started the next run.
+type ownInterrupt struct {
+	ended    *serverEnded
+	replaced bool
 }
 
 type serverAuthorRef struct {
@@ -446,9 +477,42 @@ func (l *Link) inputAuthor(session protocol.SessionID, voice harness.Voice) serv
 	return author
 }
 
-func (l *Link) endedByOwnInterrupt(sessionID protocol.SessionID, ended *serverEnded) bool {
-	_, interrupting := l.b.interrupting.LoadAndDelete(sessionID)
-	return interrupting && ended != nil && ended.Outcome == "interrupted"
+func (l *Link) holdsOwnInterruptedEnd(sessionID protocol.SessionID, ended *serverEnded) bool {
+	held, ok := l.b.interrupting.Load(sessionID)
+	if !ok {
+		return false
+	}
+	own := held.(*ownInterrupt)
+	interrupted := ended != nil && ended.Outcome == "interrupted"
+	if interrupted && !own.replaced {
+		own.ended = ended
+		return true
+	}
+	l.b.interrupting.Delete(sessionID)
+	return interrupted
+}
+
+func (l *Link) settleOwnInterrupt(sessionID protocol.SessionID, replaced bool) {
+	p, err := l.connection()
+	if err != nil {
+		l.b.interrupting.Delete(sessionID)
+		return
+	}
+	p.events.run(l.c, func() {
+		held, ok := l.b.interrupting.Load(sessionID)
+		if !ok {
+			return
+		}
+		own := held.(*ownInterrupt)
+		if replaced && own.ended == nil {
+			own.replaced = true
+			return
+		}
+		l.b.interrupting.Delete(sessionID)
+		if !replaced && own.ended != nil {
+			l.observe(sessionID, false, "idle", own.ended)
+		}
+	})
 }
 
 func (l *Link) turnRefusal(turn harness.TurnUse) string {

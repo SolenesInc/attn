@@ -34,6 +34,8 @@ const (
 	methodSignIn           = "sign_in"
 	methodServerStarted    = "started"
 	methodLoseNextSubmit   = "lose_next_submit"
+	methodRefuseNextSubmit = "refuse_next_submit"
+	methodQueueFromTile    = "queue_from_tile"
 	methodSubmissions      = "submissions"
 	methodCompactions      = "compactions"
 	methodAnswerCompact    = "answer_compact"
@@ -274,25 +276,34 @@ func ServerTargets(cwd string) []ServerTarget {
 }
 
 type ServerConversation struct {
-	ID           string            `json:"id"`
-	Cwd          string            `json:"cwd"`
-	Provider     string            `json:"provider,omitempty"`
-	Model        string            `json:"model,omitempty"`
-	Effort       string            `json:"effort,omitempty"`
-	Approvals    string            `json:"approvals,omitempty"`
-	Instructions string            `json:"instructions,omitempty"`
-	Target       string            `json:"target,omitempty"`
-	MCPServers   []ServerMCPServer `json:"mcpServers,omitempty"`
-	Fork         *ServerFork       `json:"fork,omitempty"`
-	Lineage      *ServerLineage    `json:"lineage,omitempty"`
-	Ended        map[string]any    `json:"ended,omitempty"`
-	Status       string            `json:"status"`
-	requests     map[string]int
-	submitted    int
-	losesSubmit  bool
-	compactions  int
-	compactedMid int
-	compactsWith *ServerCompaction
+	ID            string            `json:"id"`
+	Cwd           string            `json:"cwd"`
+	Provider      string            `json:"provider,omitempty"`
+	Model         string            `json:"model,omitempty"`
+	Effort        string            `json:"effort,omitempty"`
+	Approvals     string            `json:"approvals,omitempty"`
+	Instructions  string            `json:"instructions,omitempty"`
+	Target        string            `json:"target,omitempty"`
+	MCPServers    []ServerMCPServer `json:"mcpServers,omitempty"`
+	Fork          *ServerFork       `json:"fork,omitempty"`
+	Lineage       *ServerLineage    `json:"lineage,omitempty"`
+	Ended         map[string]any    `json:"ended,omitempty"`
+	Status        string            `json:"status"`
+	requests      map[string]int
+	submitted     int
+	losesSubmit   bool
+	refusesSubmit string
+	waiting       []serverWithdrawn
+	compactions   int
+	compactedMid  int
+	compactsWith  *ServerCompaction
+}
+
+type serverWithdrawn struct {
+	Submission int          `json:"submission"`
+	RequestID  string       `json:"requestId"`
+	Author     ServerAuthor `json:"author"`
+	Text       string       `json:"text"`
 }
 
 // ServerFork is the conversation a fork was forked from, and the last entry it inherits.
@@ -614,12 +625,21 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		}
 		submission, admitted := conv.requests[p.RequestID]
 		fresh := !admitted
+		if refusal := conv.refusesSubmit; fresh && refusal != "" {
+			conv.refusesSubmit = ""
+			s.mu.Unlock()
+			return nil, refusal
+		}
+		steer := p.Steer != nil && *p.Steer
 		lost := fresh && conv.losesSubmit
 		if fresh {
 			conv.submitted++
 			submission = conv.submitted
 			conv.requests[p.RequestID] = submission
 			s.appendLocked(p.Conversation, serverEntry{Kind: "sigma.user", Data: map[string]any{"author": author, "requestId": p.RequestID}, Model: []json.RawMessage{message("user", map[string]any{"content": p.Text})}})
+			if !steer && conv.Status != "idle" {
+				conv.waiting = append(conv.waiting, serverWithdrawn{Submission: submission, RequestID: p.RequestID, Author: author, Text: p.Text})
+			}
 		}
 		if lost {
 			conv.losesSubmit = false
@@ -633,7 +653,7 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		} else if fresh && conv.Status == "idle" {
 			s.statusLocked(conv, "working", nil)
 		}
-		submitted := ServerSubmission{Conversation: p.Conversation, RequestID: p.RequestID, Author: author.Name, AuthorID: author.ID, Text: p.Text, Steer: p.Steer != nil && *p.Steer}
+		submitted := ServerSubmission{Conversation: p.Conversation, RequestID: p.RequestID, Author: author.Name, AuthorID: author.ID, Text: p.Text, Steer: steer}
 		s.mu.Unlock()
 		if fresh {
 			s.submissionsOf(p.Conversation) <- submitted
@@ -649,12 +669,14 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 			s.mu.Unlock()
 			return nil, "NoSuchConversation"
 		}
+		withdrawn := append([]serverWithdrawn{}, conv.waiting...)
+		conv.waiting = nil
 		if conv.Status != "idle" {
 			s.statusLocked(conv, "idle", s.endedLocked(conv, map[string]any{"outcome": "interrupted"}))
 		}
 		s.mu.Unlock()
 		s.interruptsOf(p.Conversation) <- struct{}{}
-		return nil, ""
+		return map[string]any{"withdrawn": withdrawn}, ""
 	case "conversation/compact":
 		if !s.flavor.compacts {
 			return nil, "UnknownMethod"
@@ -830,6 +852,21 @@ func (s *appServer) handleKit(_ *rpcPeer, method string, raw json.RawMessage) (a
 		}
 		s.statusLocked(conv, "waiting", s.endedLocked(conv, map[string]any{"outcome": "answered", "said": p.Text}))
 		return struct{}{}, nil
+	case methodQueueFromTile:
+		submit, _ := json.Marshal(map[string]any{"conversation": p.ThreadID, "requestId": uuid.NewString(), "text": p.Text, "author": ServerAuthor{ID: "tile", Name: "you"}})
+		if _, refused := s.handle(nil, 0, "conversation/submit", submit); refused != "" {
+			return nil, errors.New(refused)
+		}
+		return struct{}{}, nil
+	case methodRefuseNextSubmit:
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		conv := s.convs[p.ThreadID]
+		if conv == nil {
+			return nil, fmt.Errorf("no conversation %s", p.ThreadID)
+		}
+		conv.refusesSubmit = p.Outcome
+		return struct{}{}, nil
 	case methodAskApproval, methodWork, methodLoseNextSubmit, methodSubmissions, methodServerStarted, methodCompactions, methodAnswerCompact:
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -993,6 +1030,18 @@ func (s *AppServer) Work(conversation string) {
 func (s *AppServer) LoseNextSubmit(conversation string) {
 	s.t.Helper()
 	s.call(methodLoseNextSubmit, serverThreadParams{ThreadID: conversation}, nil)
+}
+
+// QueueFromTile submits text as the conversation's tile does while a run works: from the person at the tile, without steer, so it waits in the conversation's queue.
+func (s *AppServer) QueueFromTile(conversation, text string) {
+	s.t.Helper()
+	s.call(methodQueueFromTile, serverThreadParams{ThreadID: conversation, Text: text}, nil)
+}
+
+// RefuseNextSubmit makes the conversation's next new conversation/submit fail with the error tag, admitting nothing.
+func (s *AppServer) RefuseNextSubmit(conversation, tag string) {
+	s.t.Helper()
+	s.call(methodRefuseNextSubmit, serverThreadParams{ThreadID: conversation, Outcome: tag}, nil)
 }
 
 func (s *AppServer) Submissions(conversation string) int {
