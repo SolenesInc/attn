@@ -123,6 +123,28 @@ func TestOutpostForwardPreservesHalfCloseAndReportsBridgeLoss(t *testing.T) {
 	t.Log(strings.TrimSpace(result.Stderr))
 }
 
+func TestOutpostForwardReportsUnreachableWhenHomeDropsBeforeChannelOpens(t *testing.T) {
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	opening := outpost.PauseAt(pausepoint.ForwardChannelOpening)
+	pair.Start()
+
+	call := outpost.Launch(testworld.Invocation{Args: []string{"seed", "ls"}})
+	opening.Await()
+	home.Stop()
+	opening.Release()
+
+	result := call.Wait()
+	name, err := os.Hostname()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := name + " is unreachable; this needs it now"
+	if result.Code == 0 || !strings.Contains(result.Stderr, want) || strings.Contains(result.Stderr, "lost "+name+" during this call") {
+		t.Fatalf("forward while home dropped before channel open: %+v, want %q", result, want)
+	}
+}
+
 func TestOutpostForwardCallerHangupCancelsTerminalWaitAtHome(t *testing.T) {
 	home, outpost := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY)), testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
 	pair := testworld.PrepareOutpostPair(t, home, outpost)

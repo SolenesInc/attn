@@ -47,7 +47,7 @@ func TestAnOutpostSessionsSeedCommandsRunOnTheHomeAsThatSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	forwardFailed := func(text string) bool {
-		return text == name+" is unreachable; this needs it now" || text == "lost "+name+" during this call; it may have run"
+		return text == name+" is unreachable; this needs it now"
 	}
 	socketForward, commandForward := outpostReply(t, outpost, query), outpostReply(t, outpost, run)
 	if !forwardFailed(protocol.Deref(socketForward.Error)) || !forwardFailed(protocol.Deref(commandForward.Error)) {

@@ -59,13 +59,14 @@ func (r *Router) Forward(frame []byte, caller forwardRequest, input forwardInput
 	if err != nil {
 		return err
 	}
+	pausepoint.At(pausepoint.ForwardChannelOpening)
 	channel, requests, err := conn.Open(d.life.Context(), bridgeForward, header)
 	if err != nil {
 		var refused *bridge.CallRejected
 		if errors.As(err, &refused) {
 			return err
 		}
-		return lostError()
+		return d.homeUnreachable(name)
 	}
 	defer channel.Close()
 	completed := make(chan bool, 1)

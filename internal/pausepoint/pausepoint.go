@@ -114,6 +114,7 @@ const (
 	NotebookStreamErrorHandled     = "notebook-stream-error-handled"
 	BridgeConnectionClosed         = "bridge-connection-closed"
 	BridgeChannelOpening           = "bridge-channel-opening"
+	ForwardChannelOpening          = "forward-channel-opening"
 	RemoteInputAnswered            = "remote-input-answered"
 	BridgeSendQueued               = "bridge-send-queued"
 	HomeForwardFailed              = "home-forward-failed"

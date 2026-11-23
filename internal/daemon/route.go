@@ -143,6 +143,13 @@ func (r *Router) bridge(msg protocol.Placed) (*bridge.Conn, error) {
 	return conn, err
 }
 
+func (d *Daemon) homeUnreachable(name string) error {
+	if notice := d.homeUpdateNoticeText(name); notice != "" {
+		return &homeUnreachableError{home: name, message: notice + "; this call did not run"}
+	}
+	return &homeUnreachableError{home: name, message: name + " is unreachable; this needs it now"}
+}
+
 func (d *Daemon) homeConn(status enrollment.Status) (*bridge.Conn, string, error) {
 	name := status.HomeName
 	if name == "" {
@@ -151,10 +158,7 @@ func (d *Daemon) homeConn(status enrollment.Status) (*bridge.Conn, string, error
 	if conn := d.homeBridge(); conn != nil {
 		return conn, name, nil
 	}
-	if notice := d.homeUpdateNoticeText(name); notice != "" {
-		return nil, name, &homeUnreachableError{home: name, message: notice + "; this call did not run"}
-	}
-	return nil, name, &homeUnreachableError{home: name, message: name + " is unreachable; this needs it now"}
+	return nil, name, d.homeUnreachable(name)
 }
 
 type homeUnreachableError struct{ home, message string }

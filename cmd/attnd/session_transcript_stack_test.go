@@ -211,7 +211,7 @@ func TestSessionTranscriptFollowOnAnOutpostKeepsReadingAcrossAHomeRestart(t *tes
 		t.Fatal(err)
 	}
 	once := outpost.Attn("session", "transcript", id)
-	if refused := strings.TrimSpace(once.Stderr); once.Code != 1 || (refused != name+" is unreachable; this needs it now" && refused != "lost "+name+" during this call; it may have run") {
+	if refused := strings.TrimSpace(once.Stderr); once.Code != 1 || refused != name+" is unreachable; this needs it now" {
 		t.Errorf("session transcript without --follow on the outpost with the home away exited %d with stderr %q, want the refusal naming %s", once.Code, once.Stderr, name)
 	}
 	t.Logf("without --follow, the home away: %q", once.Stderr)
