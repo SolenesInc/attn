@@ -59,7 +59,7 @@ func (d *Daemon) derivedFactTraits(ev bus.Event) analytics.Derived {
 			return analytics.Derived{}
 		}
 		return analytics.Derived{Session: d.sessionTraitsOf(session), Repo: repoTraits(d.localDirectory(session))}
-	case strings.HasPrefix(ev.Name, worktreeFactPrefix):
+	case strings.HasPrefix(ev.Name, worktreeFactPrefix) && ev.Name != FactWorktreeSessionsRemoved:
 		return analytics.Derived{Repo: repoTraits(ev.Subject)}
 	default:
 		return analytics.Derived{}

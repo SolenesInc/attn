@@ -472,11 +472,17 @@ func (d *Daemon) recordWorktreeRemoval(wt *store.Worktree, opts deleteWorktreeOp
 	d.publishFact(FactWorktreeSwept, wt.Path, protocolSweepEntry(entry))
 }
 
-func (d *Daemon) seedsForWorktree(machine string, wt *store.Worktree) ([]string, error) {
-	wtPath := machinePath(machine, wt.Path)
-	mainRepo := machinePath(machine, wt.MainRepo)
+type normalizedExecution struct {
+	cwd            normalizedPath
+	repositoryRoot normalizedPath
+	branch         string
+}
+
+func (d *Daemon) seedsForWorktree(target machine, wt *store.Worktree) ([]string, error) {
+	wtPath := target.normalize(wt.Path)
+	mainRepo := target.normalize(wt.MainRepo)
 	var seeds []string
-	err := d.eachSeedExecutionOn(machine, false, func(seed garden.Seed, dispatch garden.Execution) {
+	err := d.eachSeedExecutionOn(target, false, func(seed garden.Seed, dispatch normalizedExecution) {
 		if normalizedWorktreeOwnsExecution(wtPath, mainRepo, wt.Branch, dispatch) {
 			seeds = append(seeds, seed.ID)
 		}
@@ -507,21 +513,22 @@ func (d *Daemon) seedOwnedWorktrees(ctx context.Context, repo string) (map[strin
 }
 
 func (d *Daemon) worktreeSeedOwnersHere(ctx context.Context, msg protocol.WorktreeSeedOwnersMessage) (protocol.WorktreeSeedOwners, error) {
-	machine := originMachine(ctx)
-	mainRepo := machinePath(machine, msg.MainRepo)
+	target := originPlace(ctx)
+	mainRepo := target.normalize(msg.MainRepo)
 	type normalizedCheckout struct {
-		raw, path, branch string
+		raw, branch string
+		path        normalizedPath
 	}
 	checkouts := make([]normalizedCheckout, len(msg.Worktrees))
 	for i, checkout := range msg.Worktrees {
 		checkouts[i] = normalizedCheckout{
 			raw:    checkout.Path,
-			path:   machinePath(machine, checkout.Path),
+			path:   target.normalize(checkout.Path),
 			branch: checkout.Branch,
 		}
 	}
 	owned := make(map[string]bool)
-	err := d.eachSeedExecutionOn(machine, true, func(_ garden.Seed, dispatch garden.Execution) {
+	err := d.eachSeedExecutionOn(target, true, func(_ garden.Seed, dispatch normalizedExecution) {
 		for _, checkout := range checkouts {
 			if !owned[checkout.raw] && normalizedWorktreeOwnsExecution(checkout.path, mainRepo, checkout.branch, dispatch) {
 				owned[checkout.raw] = true
@@ -540,15 +547,14 @@ func (d *Daemon) worktreeSeedOwnersHere(ctx context.Context, msg protocol.Worktr
 	return owners, nil
 }
 
-func normalizedWorktreeOwnsExecution(wtPath, mainRepo, branch string, dispatch garden.Execution) bool {
-	if normalizedPathAtOrBelow(dispatch.Cwd, wtPath) {
+func normalizedWorktreeOwnsExecution(wtPath, mainRepo normalizedPath, branch string, dispatch normalizedExecution) bool {
+	if dispatch.cwd.AtOrBelow(wtPath) {
 		return true
 	}
-	return branch != "" && strings.TrimSpace(dispatch.Branch) == branch &&
-		dispatch.RepositoryRoot == mainRepo
+	return branch != "" && dispatch.branch == branch && dispatch.repositoryRoot.Equal(mainRepo)
 }
 
-func (d *Daemon) eachSeedExecutionOn(machine string, openOnly bool, visit func(garden.Seed, garden.Execution)) error {
+func (d *Daemon) eachSeedExecutionOn(target machine, openOnly bool, visit func(garden.Seed, normalizedExecution)) error {
 	all, err := d.rememberedGardenSeeds()
 	if err != nil {
 		return fmt.Errorf("reading seeds: %w", err)
@@ -577,27 +583,17 @@ func (d *Daemon) eachSeedExecutionOn(machine string, openOnly bool, visit func(g
 			d.logf("worktree sweep: seed %s has an unreadable execution: %v", seed.ID, err)
 			continue
 		}
-		ran, known := d.executionMachine(dispatch)
-		if known && ran != machine {
+		place := executionPlace(dispatch)
+		if !place.CouldBe(target) {
 			continue
 		}
-		if machine == "" && known {
-			dispatch.Cwd = canonicalLocalPath(dispatch.Cwd)
-			dispatch.RepositoryRoot = canonicalLocalPath(dispatch.RepositoryRoot)
-		} else {
-			dispatch.Cwd = cleanPath(dispatch.Cwd)
-			dispatch.RepositoryRoot = cleanPath(dispatch.RepositoryRoot)
-		}
-		visit(seed, dispatch)
+		visit(seed, normalizedExecution{
+			cwd:            place.normalize(dispatch.Cwd),
+			repositoryRoot: place.normalize(dispatch.RepositoryRoot),
+			branch:         strings.TrimSpace(dispatch.Branch),
+		})
 	}
 	return nil
-}
-
-func (d *Daemon) executionMachine(execution garden.Execution) (machine string, known bool) {
-	if execution.Machine != nil {
-		return *execution.Machine, true
-	}
-	return d.sessionMachine(execution.SessionID)
 }
 
 func protocolSweepEntry(entry store.WorktreeSweepLogEntry) protocol.WorktreeSweepEntry {

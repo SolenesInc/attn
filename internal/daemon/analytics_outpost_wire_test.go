@@ -10,6 +10,8 @@ import (
 	"testing/synctest"
 
 	"github.com/victorarias/attn/internal/analytics"
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestTheHomeReadsNoRepoTraitsFromAnOutpostSessionsFolder(t *testing.T) {
@@ -25,6 +27,11 @@ func TestTheHomeReadsNoRepoTraitsFromAnOutpostSessionsFolder(t *testing.T) {
 		if err := w.InjectSessionOn("far", onOutpost, "far work", folder, "claude"); err != nil {
 			t.Fatal(err)
 		}
+		testworld.Request(app, protocol.DeleteWorktreeMessage{
+			Cmd: protocol.CmdDeleteWorktree, Path: folder, Host: protocol.Ptr("far"),
+		}, protocol.EventDeleteWorktreeResult, func(r protocol.DeleteWorktreeResultMessage) bool {
+			return r.Path == folder
+		})
 		synctest.Wait()
 
 		secret, err := hex.DecodeString(strings.TrimSpace(readSecret(t, filepath.Join(w.Dir, "analytics-secret"))))
@@ -32,22 +39,35 @@ func TestTheHomeReadsNoRepoTraitsFromAnOutpostSessionsFolder(t *testing.T) {
 			t.Fatal(err)
 		}
 		subject := analytics.HashSubject(secret, onOutpost)
-		var mirrored int
+		worktreeSubject := analytics.HashSubject(secret, folder)
+		var mirrored, mirroredWorktree int
 		for _, record := range mirroredRecords(t, app, "") {
-			if record.Subject != subject || !strings.HasPrefix(record.Name, "session.") {
+			isSession := record.Subject == subject && strings.HasPrefix(record.Name, "session.")
+			isWorktree := record.Subject == worktreeSubject && record.Name == "worktree.sessions.removed"
+			if !isSession && !isWorktree {
 				continue
 			}
-			mirrored++
+			if isSession {
+				mirrored++
+			} else {
+				mirroredWorktree++
+			}
+			if len(record.Props) == 0 {
+				continue
+			}
 			var derived analytics.Derived
 			if err := json.Unmarshal(record.Props, &derived); err != nil {
 				t.Fatalf("%s props %s: %v", record.Name, record.Props, err)
 			}
 			if derived.Repo != nil {
-				t.Errorf("the home's %s for the outpost session carries repo traits %+v read from the folder on its own disk; want none, since that folder is on the outpost", record.Name, *derived.Repo)
+				t.Errorf("the home's %s for the outpost carries repo traits %+v read from the folder on its own disk; want none, since that folder is on the outpost", record.Name, *derived.Repo)
 			}
 		}
 		if mirrored == 0 {
 			t.Fatal("the home mirrored no session facts for the outpost session")
+		}
+		if mirroredWorktree == 0 {
+			t.Fatal("the home mirrored no worktree.sessions.removed fact for the outpost worktree")
 		}
 	})
 }

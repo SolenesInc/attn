@@ -105,8 +105,10 @@ func (d *Daemon) prefillChiefFromLegacySession(member *crew.Member) {
 	if member.Model == "" && d.factsOrNone(member.Harness()).CrewModel != "" {
 		member.Model = crew.HarnessDefaultModel
 	}
-	if info, err := os.Stat(session.Directory); err == nil && info.IsDir() {
-		member.CWD = session.Directory
+	if dir := d.localDirectory(session); dir != "" {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			member.CWD = dir
+		}
 	}
 }
 

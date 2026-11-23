@@ -121,13 +121,11 @@ func (r *Router) bridge(msg protocol.Placed) (*bridge.Conn, error) {
 	case protocol.LocatorMachine:
 		host = msg.Locate()
 	case protocol.LocatorSession:
-		var known bool
-		host, known = d.sessionMachine(protocol.SessionID(msg.Locate()))
-		home = !known
+		place := d.sessionPlace(protocol.SessionID(msg.Locate()))
+		host, home = place.Outpost(), !place.Known()
 	case protocol.LocatorTerminal:
-		var known bool
-		host, known = d.sessionMachine(d.terminals().owner(harness.TerminalID(msg.Locate())))
-		home = !known
+		place := d.sessionPlace(d.terminals().owner(harness.TerminalID(msg.Locate())))
+		host, home = place.Outpost(), !place.Known()
 	}
 	if home {
 		status := d.enrollmentStatus()
@@ -223,30 +221,19 @@ func (d *Daemon) forwardCommand(c command.Caller, name string, args json.RawMess
 	}
 }
 
-func (d *Daemon) sessionMachine(id protocol.SessionID) (host string, known bool) {
-	if id == "" {
-		return "", false
-	}
-	host, copied, known := d.store.SessionHost(id)
-	if !known {
-		return "", false
-	}
-	if copied {
-		return "", true
-	}
-	return host, true
-}
-
 func (d *Daemon) sessionHost(id protocol.SessionID) string {
-	host, _ := d.sessionMachine(id)
-	return host
+	return d.sessionPlace(id).Outpost()
 }
 
 func (d *Daemon) localDirectory(session *protocol.Session) string {
-	if d.sessionHost(session.ID) != "" {
+	if session == nil {
 		return ""
 	}
-	return session.Directory
+	dir, ok := d.sessionPlace(session.ID).local(session.Directory)
+	if !ok {
+		return ""
+	}
+	return dir
 }
 
 func (d *Daemon) resolveOutpost(host string) (store.Outpost, error) {

@@ -321,8 +321,7 @@ func (d *Daemon) keepConversations(now time.Time) {
 		if len(files) == 0 {
 			continue
 		}
-		best := store.SessionConversation{NativeID: key.resumeID, TranscriptPath: files[0]}
-		bestInfo, err := os.Stat(best.TranscriptPath)
+		bestInfo, err := os.Stat(files[0])
 		if err != nil {
 			continue
 		}
@@ -348,6 +347,7 @@ func (d *Daemon) keepConversations(now time.Time) {
 			d.logf("conversation keep: read %s/%s archive before replacing: %v", key.agent, key.resumeID, err)
 			continue
 		}
+		best := store.SessionConversation{NativeID: key.resumeID, TranscriptPath: files[0]}
 		if err := d.copyConversation(key.agent, best, files, bestInfo.Size(), now); err != nil {
 			d.logf("conversation keep: copy %s/%s: %v", key.agent, key.resumeID, err)
 		} else {

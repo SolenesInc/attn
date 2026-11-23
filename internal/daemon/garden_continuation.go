@@ -84,22 +84,36 @@ func snapshotGardenExecution(session *protocol.Session, now time.Time) garden.Ex
 }
 
 func (d *Daemon) observedGardenExecution(session *protocol.Session, now time.Time) garden.Execution {
+	if session == nil {
+		return garden.Execution{}
+	}
+	return d.observedGardenExecutionOn(session, d.sessionPlace(session.ID), now)
+}
+
+func (d *Daemon) observedGardenExecutionOn(session *protocol.Session, place machine, now time.Time) garden.Execution {
 	execution := snapshotGardenExecution(session, now)
+	if place.Known() {
+		execution.Machine = protocol.Ptr(place.Outpost())
+	}
 	if execution.Cwd == "" {
 		return execution
 	}
-	if host := d.sessionHost(session.ID); host != "" {
+	if host := place.Outpost(); host != "" {
 		return d.observedRemoteGardenExecution(host, execution)
+	}
+	cwd, ok := place.local(execution.Cwd)
+	if !ok {
+		return execution
 	}
 	var checkoutRoot, mainRepo, branch string
 	err := d.gitExecution().Run(context.Background(), gitTask{Kind: gitTaskGarden, Lane: gitDeferred}, func(ctx context.Context, client *attngit.Client) error {
-		root, rootErr := client.GetRepoRoot(ctx, execution.Cwd)
+		root, rootErr := client.GetRepoRoot(ctx, cwd)
 		if rootErr != nil {
 			return rootErr
 		}
 		checkoutRoot = root
 		mainRepo = client.ResolveMainRepoPath(ctx, root)
-		if info, _ := client.GetBranchInfo(ctx, execution.Cwd); info != nil {
+		if info, _ := client.GetBranchInfo(ctx, cwd); info != nil {
 			branch = info.Branch
 		}
 		return nil
@@ -108,8 +122,8 @@ func (d *Daemon) observedGardenExecution(session *protocol.Session, now time.Tim
 		execution.Branch = strings.TrimSpace(protocol.Deref(session.Branch))
 		return execution
 	}
-	canonicalCwd := attngit.CanonicalizePath(execution.Cwd)
-	canonicalRoot := attngit.CanonicalizePath(checkoutRoot)
+	canonicalCwd := place.normalize(cwd).path
+	canonicalRoot := place.normalize(checkoutRoot).path
 	if rel, relErr := filepath.Rel(canonicalRoot, canonicalCwd); relErr == nil && rel != "." && rel != "" && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		execution.RepositorySubdir = rel
 	}
@@ -143,6 +157,9 @@ func mergeGardenExecution(current, observed garden.Execution) garden.Execution {
 	next := current
 	if observed.SessionID != "" {
 		next.SessionID = observed.SessionID
+	}
+	if next.Machine == nil && observed.Machine != nil {
+		next.Machine = observed.Machine
 	}
 	if observed.Cwd != "" {
 		next.Cwd = observed.Cwd
@@ -193,8 +210,8 @@ func (d *Daemon) updateGardenDispatch(
 		}
 		next.SessionID = sessionID
 		if next.Machine == nil {
-			if machine, known := d.sessionMachine(sessionID); known {
-				next.Machine = protocol.Ptr(machine)
+			if place := d.sessionPlace(sessionID); place.Known() {
+				next.Machine = protocol.Ptr(place.Outpost())
 				changed = true
 			}
 		}
@@ -335,10 +352,10 @@ func (d *Daemon) ensureGardenExecution(sessionID protocol.SessionID) (garden.Exe
 	return d.captureGardenSessionExecution(session)
 }
 
-func (d *Daemon) captureGardenExecutionsInDirectory(machine, path string) {
-	wanted := machinePath(machine, path)
+func (d *Daemon) captureGardenExecutionsInDirectory(target machine, path string) {
+	wanted := target.normalize(path)
 	for _, session := range d.store.List("") {
-		if d.sessionHost(session.ID) != machine || !normalizedPathAtOrBelow(machinePath(machine, session.Directory), wanted) {
+		if !d.sessionPlace(session.ID).SameAs(target) || !target.normalize(session.Directory).AtOrBelow(wanted) {
 			continue
 		}
 		if _, err := d.captureGardenSessionExecution(session); err != nil {
@@ -347,47 +364,15 @@ func (d *Daemon) captureGardenExecutionsInDirectory(machine, path string) {
 	}
 }
 
-func cleanPath(path string) string {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return ""
-	}
-	return filepath.Clean(path)
-}
-
-func canonicalLocalPath(path string) string {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return ""
-	}
-	return attngit.CanonicalizePath(path)
-}
-
-func machinePath(machine, path string) string {
-	if machine != "" {
-		return cleanPath(path)
-	}
-	return canonicalLocalPath(path)
-}
-
-func normalizedPathAtOrBelow(path, root string) bool {
-	if path == "" || root == "" {
-		return false
-	}
-	rel, err := filepath.Rel(root, path)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
-func (d *Daemon) gardenKeepsBranch(machine, repository, branch string) bool {
-	repository = machinePath(machine, repository)
+func (d *Daemon) gardenKeepsBranch(target machine, repository, branch string) bool {
+	repo := target.normalize(repository)
 	branch = strings.TrimSpace(branch)
-	if repository == "" || branch == "" {
+	if repo.Empty() || branch == "" {
 		return false
 	}
 	keeps := false
-	err := d.eachSeedExecutionOn(machine, true, func(_ garden.Seed, execution garden.Execution) {
-		if !keeps && strings.TrimSpace(execution.Branch) == branch &&
-			execution.RepositoryRoot == repository {
+	err := d.eachSeedExecutionOn(target, true, func(_ garden.Seed, execution normalizedExecution) {
+		if !keeps && execution.branch == branch && execution.repositoryRoot.Equal(repo) {
 			keeps = true
 		}
 	})
@@ -423,10 +408,11 @@ func (d *Daemon) normalizedSeedContinuation(seed garden.Seed) (garden.Execution,
 }
 
 func inspectContinuationDirectory(execution garden.Execution) string {
-	if strings.TrimSpace(execution.Cwd) == "" {
+	cwd, ok := executionPlace(execution).local(execution.Cwd)
+	if !ok {
 		return directoryUnknown
 	}
-	info, err := os.Stat(execution.Cwd)
+	info, err := os.Stat(cwd)
 	switch {
 	case err == nil && info.IsDir():
 		return directoryPresent
@@ -440,32 +426,36 @@ func inspectContinuationDirectory(execution garden.Execution) string {
 }
 
 func savedWorktreeRoot(execution garden.Execution) (string, bool) {
-	cwd := attngit.CanonicalizePath(strings.TrimSpace(execution.Cwd))
-	if cwd == "" {
+	place := executionPlace(execution)
+	if !place.IsLocal() {
+		return "", false
+	}
+	cwd := place.normalize(execution.Cwd)
+	if cwd.Empty() {
 		return "", false
 	}
 	subdir := filepath.Clean(strings.TrimSpace(execution.RepositorySubdir))
 	if subdir == "" || subdir == "." {
-		return cwd, true
+		return cwd.path, true
 	}
 	if filepath.IsAbs(subdir) || subdir == ".." || strings.HasPrefix(subdir, ".."+string(filepath.Separator)) {
 		return "", false
 	}
-	root := cwd
+	root := cwd.path
 	for range strings.Split(subdir, string(filepath.Separator)) {
 		root = filepath.Dir(root)
 	}
-	root = attngit.CanonicalizePath(root)
-	if attngit.CanonicalizePath(filepath.Join(root, subdir)) != cwd {
+	root = place.normalize(root).path
+	if place.normalize(filepath.Join(root, subdir)).path != cwd.path {
 		return "", false
 	}
 	return root, true
 }
 
 func (d *Daemon) branchCanBeRecreated(execution garden.Execution) (string, bool, string) {
-	repo := strings.TrimSpace(execution.RepositoryRoot)
+	repo, ok := executionPlace(execution).local(execution.RepositoryRoot)
 	branch := strings.TrimSpace(execution.Branch)
-	if repo == "" || branch == "" {
+	if !ok || branch == "" {
 		return "", false, "the saved execution has no verified repository and branch"
 	}
 	target, ok := savedWorktreeRoot(execution)
@@ -516,7 +506,11 @@ func (d *Daemon) continuationForSeedForeground(seed garden.Seed) *seedContinuati
 
 func (d *Daemon) continuationOnItsMachine(seed garden.Seed) *seedContinuation {
 	execution, _, _ := d.normalizedSeedContinuation(seed)
-	host, _ := d.executionMachine(execution)
+	place := executionPlace(execution)
+	if !place.Known() {
+		return d.continuationWithChecks(seed, unknownContinuationMachine())
+	}
+	host := place.Outpost()
 	if host == "" {
 		return d.continuationForSeedForeground(seed)
 	}
@@ -563,21 +557,33 @@ func (d *Daemon) continuationOnItsMachine(seed garden.Seed) *seedContinuation {
 
 func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResume func(harness.ConversationRef) harness.Availability) *seedContinuation {
 	execution, _, _ := d.normalizedSeedContinuation(seed)
-	if host, _ := d.executionMachine(execution); host != "" {
-		return d.continuationWithChecks(seed, d.uncheckedOutpost(host))
+	place := executionPlace(execution)
+	switch {
+	case place.IsRemote():
+		return d.continuationWithChecks(seed, d.uncheckedOutpost(place.Outpost()))
+	case place.IsLocal():
+		return d.continuationWithChecks(seed, continuationMachine{
+			inspectDirectory: func(execution garden.Execution) (string, error) { return inspectContinuationDirectory(execution), nil },
+			checkResume:      checkResume,
+		})
+	default:
+		return d.continuationWithChecks(seed, unknownContinuationMachine())
 	}
-	return d.continuationWithChecks(seed, continuationMachine{
-		inspectDirectory: func(execution garden.Execution) (string, error) { return inspectContinuationDirectory(execution), nil },
-		checkResume:      checkResume,
-	})
 }
 
 func (d *Daemon) continuationIgnoringReach(seed garden.Seed, checkResume func(harness.ConversationRef) harness.Availability) *seedContinuation {
 	execution, _, _ := d.normalizedSeedContinuation(seed)
-	if host, _ := d.executionMachine(execution); host != "" {
+	if host := executionPlace(execution).Outpost(); host != "" {
 		return d.continuationWithChecks(seed, d.outpostAssumedReachable(host))
 	}
 	return d.continuationForSeedWithResumeCheck(seed, checkResume)
+}
+
+func unknownContinuationMachine() continuationMachine {
+	return continuationMachine{
+		inspectDirectory: func(garden.Execution) (string, error) { return directoryUnknown, nil },
+		checkResume:      func(harness.ConversationRef) harness.Availability { return harness.Availability{} },
+	}
 }
 
 func (d *Daemon) uncheckedOutpost(host string) continuationMachine {

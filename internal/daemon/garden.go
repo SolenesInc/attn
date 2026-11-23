@@ -1349,10 +1349,12 @@ func (d *Daemon) recordGardenDispatchProtected(protection foregroundCleanupProte
 func (d *Daemon) observeGardenDispatchExecution(sessionID protocol.SessionID, cwd string, agent string) garden.Execution {
 	sessionID = protocol.TrimID(sessionID)
 	session := d.store.Get(sessionID)
+	place := d.sessionPlace(sessionID)
 	if session == nil {
 		session = &protocol.Session{ID: sessionID, Directory: cwd, Agent: protocol.SessionAgent(agent)}
+		place = localMachine()
 	}
-	return d.observedGardenExecution(session, d.gardenTime())
+	return d.observedGardenExecutionOn(session, place, d.gardenTime())
 }
 
 func (d *Daemon) recordGardenDispatchObservedProtected(_ foregroundCleanupProtection, sessionID protocol.SessionID, crown string, dispatcherSession protocol.SessionID, fromChief bool, observed garden.Execution) error {

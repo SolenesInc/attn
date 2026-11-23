@@ -68,6 +68,11 @@ the range into units, and give each unit a reviewer of its own.
 
 - Run `git reset --hard <head>` in your new worktree. It started at the latest
   `origin/main`, which may be past `<head>`. Then review your units.
+- If you spot a concrete pre-existing P0 or P1 bug in surrounding code, plant a
+  seed for it with `attn seed plant --discovered-from <seed>`. Omit
+  `--discovered-from` when the unit names no seed. Apply the trigger and proof
+  bar in `finding.md`, and never plant a seed for cleanup or speculation. Leave
+  pre-existing bugs out of your report to `<orchestrator>`.
 - Before reporting, check your findings with one fresh subagent of your
   harness. Give it only each claim, its `file:line`, `<head>` and finding.md,
   none of your reasoning. It confirms or refutes each claim at `<head>`. Report

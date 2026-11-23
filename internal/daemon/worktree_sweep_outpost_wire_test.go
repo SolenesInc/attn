@@ -203,6 +203,14 @@ func TestAClosedPreMachineOutpostSeedStillNamesItsOutpostAndDoesNotHoldTheHomesW
 		t.Errorf("closed pre-machine outpost seed read the home's own folder at %s as DirectoryState=%q", checkout, shown.Continuation.DirectoryState)
 	}
 
+	orphanShown := lifeShow(t, cli, orphanSeed).Seed
+	if orphanShown.Continuation == nil {
+		t.Fatalf("seed %s has no continuation after restart", orphanSeed)
+	}
+	if orphanShown.Continuation.DirectoryState == "present" {
+		t.Errorf("orphaned pre-machine outpost seed read the home's own folder at %s as DirectoryState=%q", alias, orphanShown.Continuation.DirectoryState)
+	}
+
 	refreshWorktrees(t, cli)
 	decided := testworld.AwaitEvent(app, "the home sweep's decision on its own worktree", func(e protocol.WebSocketEvent) bool {
 		switch e.Event {
@@ -220,6 +228,15 @@ func TestAClosedPreMachineOutpostSeedStillNamesItsOutpostAndDoesNotHoldTheHomesW
 
 func simulatePreMachineOutpostDispatches(t *testing.T, dbPath string, stripMachineIDs []string, deleteSessionID string) {
 	t.Helper()
+	s, err := store.NewWithDB(dbPath)
+	if err != nil {
+		t.Fatalf("open store for reaped session cleanup: %v", err)
+	}
+	s.Remove(protocol.SessionID(deleteSessionID))
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		t.Fatal(err)
@@ -249,15 +266,10 @@ func simulatePreMachineOutpostDispatches(t *testing.T, dbPath string, stripMachi
 			t.Fatalf("strip machine on dispatch %s: %v", id, err)
 		}
 	}
+	if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version = 1795466678307445`); err != nil {
+		t.Fatalf("roll back dispatch machine migration: %v", err)
+	}
 	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
-	s, err := store.NewWithDB(dbPath)
-	if err != nil {
-		t.Fatalf("open store for reaped session cleanup: %v", err)
-	}
-	s.Remove(protocol.SessionID(deleteSessionID))
-	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
 }

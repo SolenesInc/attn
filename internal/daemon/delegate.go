@@ -374,7 +374,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 				if inspectErr != nil {
 					return nil, inspectErr
 				}
-				observed := d.delegationExecution(sessionID, agent, inspection)
+				observed := d.delegationExecution(sessionID, protocol.Deref(msg.Host), agent, inspection)
 				if _, err := d.bindSeedHandoverProtected(protection, msg, operationID, sessionID, existing.Directory, agent, observed, delegatedByChief); err != nil {
 					return nil, fmt.Errorf("bind seed handover: %w", err)
 				}
@@ -386,7 +386,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 			if inspectErr != nil {
 				return nil, inspectErr
 			}
-			observed := d.delegationExecution(sessionID, agent, inspection)
+			observed := d.delegationExecution(sessionID, protocol.Deref(msg.Host), agent, inspection)
 			seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.By, msg.ParentSeedID, brief, cmp.Or(msg.SeedTitle, existing.Label), seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, existing.ProfileID)
 			if err != nil {
 				return nil, err
@@ -498,13 +498,13 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	if handover != nil {
 		seedID = strings.TrimSpace(msg.Handover.SeedID)
 		if !handover.alreadyBound {
-			observed := d.delegationExecution(sessionID, agent, inspection)
+			observed := d.delegationExecution(sessionID, protocol.Deref(msg.Host), agent, inspection)
 			if _, err := d.bindSeedHandoverProtected(protection, msg, operationID, sessionID, directory, agent, observed, delegatedByChief); err != nil {
 				return nil, fmt.Errorf("bind seed handover: %w", err)
 			}
 		}
 	} else {
-		observed := d.delegationExecution(sessionID, agent, inspection)
+		observed := d.delegationExecution(sessionID, protocol.Deref(msg.Host), agent, inspection)
 		seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.By, msg.ParentSeedID, brief, seedTitle, seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, profile.ID)
 		if err != nil {
 			return nil, err

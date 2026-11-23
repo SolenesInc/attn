@@ -241,6 +241,7 @@ check-go: lint-go
 lint-go: $(NATIVE_VT_DEP)
 	go tool staticcheck $(GO_PACKAGES)
 	go run ./scripts/lifetimelint
+	go run ./scripts/remotepathlint
 	go run ./scripts/testlint
 	go run ./scripts/harnesslint
 	@deps=$$(go list -deps ./cmd/...) || exit 1; \

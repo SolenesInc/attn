@@ -995,7 +995,8 @@ func (d *Daemon) sessionConversationSurvives(session *protocol.Session) bool {
 		return true
 	}
 	resumeID := d.resumeTarget(session.Agent, session.ID, "")
-	if host := d.sessionHost(session.ID); host != "" {
+	place := d.sessionPlace(session.ID)
+	if host := place.Outpost(); host != "" {
 		readiness, err := d.placedConversationReadiness(session.ID, host, session.Agent, session.ProfileID, resumeID, false)
 		if err != nil {
 			d.logf("recovery: keeping session %s after conversation lookup on %s failed: %v", session.ID, host, err)
@@ -1004,11 +1005,11 @@ func (d *Daemon) sessionConversationSurvives(session *protocol.Session) bool {
 		if readiness.Known {
 			return true
 		}
-	} else if resumeID != "" {
+	} else if place.IsLocal() && resumeID != "" {
 		if !d.knowsHarness(session.Agent) {
 			return true
 		}
-		dir := strings.TrimSpace(session.Directory)
+		dir := d.localDirectory(session)
 		dirMissing := false
 		if dir != "" {
 			_, err := os.Stat(dir)

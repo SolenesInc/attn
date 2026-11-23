@@ -37,7 +37,7 @@ func (d *Daemon) doCreateWorktreeFromBranchProtected(protection foregroundCleanu
 	if path == "" {
 		path = git.GenerateWorktreePath(mainRepo, localBranch)
 	}
-	path = git.ExpandPath(path)
+	path = git.CanonicalizePath(path)
 
 	if hookErr := d.dispatchWorktreeBeforeCreateHooks(mainRepo, localBranch, branch, requestedPath); hookErr != nil {
 		return "", hookErr

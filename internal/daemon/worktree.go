@@ -188,6 +188,7 @@ func (d *Daemon) doDeleteWorktree(path string, opts deleteWorktreeOptions) error
 }
 
 func (d *Daemon) doDeleteWorktreeProtected(protection foregroundCleanupProtection, path string, opts deleteWorktreeOptions) (err error) {
+	path = git.CanonicalizePath(path)
 	finishOperation := d.beginGitOperation(protocol.GitOperationKindDeleteWorktree, path)
 	defer func() {
 		finishOperation(err)
@@ -266,27 +267,20 @@ func (d *Daemon) removeWorktreeCheckout(protection worktreeCleanupProtection, wt
 }
 
 func (d *Daemon) prepareWorktreeRemovalHere(ctx context.Context, msg protocol.WorktreeRemovalPrepareMessage) (protocol.WorktreeRemovalPlan, error) {
-	machine := originMachine(ctx)
-	d.captureGardenExecutionsInDirectory(machine, msg.Path)
-	seeds, err := d.seedsForWorktree(machine, &store.Worktree{Path: msg.Path, MainRepo: msg.MainRepo, Branch: msg.Branch})
+	target := originPlace(ctx)
+	d.captureGardenExecutionsInDirectory(target, msg.Path)
+	seeds, err := d.seedsForWorktree(target, &store.Worktree{Path: msg.Path, MainRepo: msg.MainRepo, Branch: msg.Branch})
 	if err != nil {
 		return protocol.WorktreeRemovalPlan{}, err
 	}
 	return protocol.WorktreeRemovalPlan{
 		Seeds:      seeds,
-		KeepBranch: d.gardenKeepsBranch(machine, msg.MainRepo, msg.Branch),
+		KeepBranch: d.gardenKeepsBranch(target, msg.MainRepo, msg.Branch),
 	}, nil
 }
 
-func originMachine(ctx context.Context) string {
-	if origin, remote := OriginOf(ctx); remote {
-		return origin.Host
-	}
-	return ""
-}
-
 func (d *Daemon) worktreeRemovedHere(ctx context.Context, msg protocol.WorktreeRemovedMessage) (struct{}, error) {
-	d.closeWorktreeSessions(originMachine(ctx), msg.Path)
+	d.closeWorktreeSessions(originPlace(ctx), msg.Path)
 	for _, seedID := range msg.Seeds {
 		if _, err := d.appendSeedNote(seedID, protocol.Deref(msg.Note), who.Attn(), "", nil, false, ""); err != nil {
 			d.logf("worktree removal: noting %s on seed %s: %v", msg.Path, seedID, err)
@@ -363,10 +357,10 @@ func (d *Daemon) finalizeDeletedWorktree(protection worktreeCleanupProtection, w
 	return nil
 }
 
-func (d *Daemon) closeWorktreeSessions(machine, path string) {
-	wanted := machinePath(machine, path)
+func (d *Daemon) closeWorktreeSessions(target machine, path string) {
+	wanted := target.normalize(path)
 	for _, session := range d.store.List("") {
-		if d.sessionHost(session.ID) != machine || !normalizedPathAtOrBelow(machinePath(machine, session.Directory), wanted) {
+		if !d.sessionPlace(session.ID).SameAs(target) || !target.normalize(session.Directory).AtOrBelow(wanted) {
 			continue
 		}
 		d.terminateSession(session.ID, syscall.SIGTERM)

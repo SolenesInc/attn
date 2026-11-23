@@ -77,7 +77,7 @@ func sessionTranscriptRefusal(code string) *command.Refusal {
 }
 
 func (d *Daemon) inspectableTranscriptPath(sessionID protocol.SessionID, agent string) string {
-	if d.sessionHost(sessionID) != "" {
+	if !d.sessionPlace(sessionID).IsLocal() {
 		return ""
 	}
 	binding := d.store.GetSessionConversation(sessionID)

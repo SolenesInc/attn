@@ -87,6 +87,9 @@ func TestDelegationAndTerminalOpenDefaultToTheCallersMachine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if initial.Seed.Continuation == nil || protocol.Deref(initial.Seed.Continuation.Outpost) != "outpost" {
+		t.Fatalf("delegated outpost seed continuation = %+v; want Outpost=%q", initial.Seed.Continuation, "outpost")
+	}
 	announcements := []*testworld.Peer{pair.App}
 	checkReceipts := func(step string) {
 		t.Helper()
