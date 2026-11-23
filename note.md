@@ -1,0 +1,3 @@
+Adds the `verify-harness` skill. Before a landing that touches the harness contract, it runs `make lint-harness`, then has an agent read the change for leaks the lint can't see: generic code that parses or builds values a harness owns, facts only one harness sets, and migrations that assume one data shape. It checks each lead against Claude Code, Codex, Sigma, a plugin and a server-backed plugin. When the contract itself changes, a second, independent reader repeats the check.
+
+The provider/model join in the daemon was such a leak: it doubled attn-snipe's model ids and broke the Builder role's Copywriter launches. `docs/internal/harness-contract.md` now lists the skill among its checks.
