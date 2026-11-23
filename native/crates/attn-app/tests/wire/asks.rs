@@ -3134,6 +3134,21 @@ fn the_note_waits_behind_add_a_note_which_n_or_a_press_opens_with_the_keyboard_i
 }
 
 #[test]
+fn an_ask_with_no_question_shows_its_note_open() {
+    let heads_up = ask(
+        "a-heads-up",
+        "api",
+        "Shipping the cache fix",
+        3,
+        vec![prose("I will ship the cache fix after lunch.")],
+    );
+    let mut world = start(vec![heads_up], vec![api_working()]);
+    open_sheet(&mut world);
+    assert!(has(&world, NOTE), "the note is the only way to answer");
+    assert!(!has(&world, "asks.note.add"));
+}
+
+#[test]
 fn tab_reaches_a_picks_condition_inside_its_question() {
     let mut world = start(vec![release_plan()], vec![api_working()]);
     open_sheet(&mut world);
