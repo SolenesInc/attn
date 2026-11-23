@@ -97,8 +97,8 @@ func TestAnAsksImagesStayWithItAndOnesOverTheLimitAreRefused(t *testing.T) {
 	escaped := writeImage(t, filepath.Join(work, "a(b)&c.png"), 256)
 	inTable := writeImage(t, filepath.Join(work, "esc-key.png"), 128)
 	writeAskFile(t, filepath.Join(work, "notes", "ask.md"), "From the file: ![nested](nested.webp)\n")
-	stdinAsk := "Plain ![beside](beside.png), escaped ![escaped](a\\(b\\)&amp;c.png), remote ![remote](https://example.com/r.png), in code `![no](absent.png)`.\n\n" +
-		"```\n![no](also-absent.png)\n```\n\n" + escKeyTable("esc-key.png") + "\n:::question\nWhich?\n<img src=\"beside.png\">\n- [ ] One\n- [ ] Two\n:::\n"
+	stdinAsk := "Plain ![beside](beside.png), escaped ![escaped](a\\(b\\)&amp;c.png), in code `![no](absent.png)`.\n\n" +
+		"```\n![no](also-absent.png)\n```\n\n" + escKeyTable("esc-key.png") + "\n:::question\nWhich?\n![beside](beside.png)\n- [ ] One\n- [ ] Two\n:::\n"
 	fromStdin := askAs(t, s, asker, work, stdinAsk)
 	fromFile := askAs(t, s, asker, work, "", "--file", filepath.Join(work, "notes", "ask.md"))
 	removeAll(t, work)
@@ -134,6 +134,52 @@ func TestAnAsksImagesStayWithItAndOnesOverTheLimitAreRefused(t *testing.T) {
 	}
 	if listed, err := s.Client().AskList(protocol.SessionID(asker)); err != nil || len(listed.Asks) != 2 {
 		t.Fatalf("after the refusals the agent lists %+v (%v), want only its two asks", listed, err)
+	}
+}
+
+func TestAnAskOrAmendmentShowingAnImageThatWillNotRenderIsRefusedAndAStoredOneStillReads(t *testing.T) {
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Start()
+	app := s.App()
+	turnAsksOn(app)
+	asker := s.Spawn(app, fakeagent.Claude, s.Path("work"))
+	s.Launched(asker)
+	work := s.Path("work")
+	writeImage(t, filepath.Join(work, "arch.svg"), 256)
+	writeImage(t, filepath.Join(work, "shot.png"), 256)
+	question := "\n\n:::question\nShip it?\n- [ ] Yes\n- [ ] No\n:::\n"
+	opened := askAs(t, s, asker, work, "About the work."+question)
+
+	for markdown, says := range map[string]string{
+		"![arch](arch.svg)":                     "the ask shows the SVG image arch.svg, which the app and the phone do not draw",
+		"![r](https://example.com/r.png)":       "the ask shows the remote image https://example.com/r.png",
+		"![c](data:image/png;base64,iVBORw0KG)": "the ask shows an image written as a data: URL",
+		"![p](photo.heic)":                      "the ask shows photo.heic as an image",
+		"<img src=\"shot.png\" width=\"500\">":  "the ask shows shot.png in an HTML <img> tag, which the app leaves out",
+	} {
+		for _, args := range [][]string{{"ask"}, {"ask", "amend", opened.ID}} {
+			refused := s.Run(testworld.Invocation{Session: asker, Dir: work, Stdin: "Look:\n\n" + markdown + "\n", Args: args})
+			if refused.Code == 0 || !strings.Contains(refused.Stderr, says) || !strings.Contains(refused.Stderr, "mermaid") || !strings.Contains(refused.Stderr, "![alt](path)") {
+				t.Errorf("%v showing %s answered code %d and %q, want a refusal that says %q and points to a mermaid block and ![alt](path)", args, markdown, refused.Code, refused.Stderr, says)
+			}
+		}
+	}
+	if listed, err := s.Client().AskList(protocol.SessionID(asker)); err != nil || len(listed.Asks) != 1 || len(listed.Asks[0].Parts) != 2 {
+		t.Fatalf("after the refusals the agent lists %+v (%v), want its one ask, unamended", listed, err)
+	}
+
+	stored, err := s.Client().AskOpen(protocol.SessionID(asker), "", "Before refusals: ![arch](arch.svg) ![r](https://example.com/r.png) <img src=\"shot.png\">"+question, "", work)
+	if err != nil {
+		t.Fatalf("store an ask written before image refusals: %v", err)
+	}
+	s.Stop()
+	s.Start()
+	shown := s.Run(testworld.Invocation{Session: asker, Dir: work, Args: []string{"ask", "show", stored.ID, "--json"}})
+	if shown.Code != 0 || !strings.Contains(shown.Stdout, "arch.svg") {
+		t.Fatalf("a stored ask showing images that will not render, after a restart, shows %+v, want it read with its markdown", shown)
+	}
+	if got := askImage(t, s.App(), stored.ID, filepath.Join(work, "shot.png")); len(got) != 256 {
+		t.Fatalf("the stored ask's HTML image shows %d bytes on the phone's path, want its 256", len(got))
 	}
 }
 

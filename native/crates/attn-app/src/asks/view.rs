@@ -11,13 +11,13 @@ use attn_ui::system::{
 };
 use attn_ui::{Backdrop, Frame, Tokens, glyph};
 use rune::{El, Image, Key, KeyEvent, Side, SurfaceFit, Tx, col, row};
-use rune_kit::{ImageFrame, Markdown, TextArea, TextInput};
+use rune_kit::{Markdown, TextArea, TextInput};
 
 use super::inline::Line;
 use super::{Chip, Item, Kind, Lists, Stop, attach, mentions, questions};
 use crate::State;
 use crate::desktop::header_pop::{self, Pop, What};
-use crate::markdown::{images, links};
+use crate::markdown::{self, images, links};
 use crate::sidebar::queue;
 
 pub(super) const SNOOZE: &str = "asks.snooze";
@@ -369,7 +369,8 @@ fn list_row(item: &Item<'_>, selected: bool, now_ms: i64, t: &Tokens) -> El {
 struct Prose<'a> {
     names: &'a [AskSeedMention],
     measure: Option<f32>,
-    pictures: Rc<HashMap<String, Image>>,
+    pictures: Rc<HashMap<String, Option<Image>>>,
+    widths: &'a HashMap<String, u32>,
     document: String,
     t: &'a Tokens,
 }
@@ -380,6 +381,7 @@ impl<'a> Prose<'a> {
             names: mentions::of(state, &ask.id),
             measure,
             pictures: state.pictures.of_ask(&ask.id),
+            widths: &state.window.asks.widths,
             document: images::ask_document(ask),
             t,
         }
@@ -415,32 +417,41 @@ impl<'a> Prose<'a> {
         })
     }
 
-    fn markdown(&self, source: &str) -> El {
+    /// `source` read as the ask's markdown at `place`, which names its scroll boxes apart from
+    /// the ask's other markdown.
+    fn markdown(&self, place: &str, source: &str) -> El {
         let document = self.document();
-        let path = self.document.clone();
-        let pictures = self.pictures.clone();
-        Markdown::new(source)
+        let bars = format!("{place}.");
+        let read = Markdown::new(source)
+            .id(bars.clone())
             .selectable(true)
+            .scroll_wide(true);
+        let read = markdown::diagrams(read, bars, self.t);
+        let style = attn_ui::system::read_alone_style(self.t.text_secondary, self.measure, self.t);
+        let style = match self.widths.get(place) {
+            Some(&width) => style.text_width(width as f32),
+            None => style,
+        };
+        let place = place.to_owned();
+        let read = markdown::pictured(read, &document, self.pictures.clone(), self.t)
             .text_links(mentions::seed_links(self.names))
-            .style(attn_ui::system::read_alone_style(
-                self.t.text_secondary,
-                self.measure,
-                self.t,
-            ))
+            .style(style)
             .on_link_tx(move |state: &mut State, href: &str, tx: &mut Tx| {
                 follow_link(state, &document, href, tx)
             })
-            .images(move |src| match links::resolve(&path, src) {
-                Some(links::Target::Local(file)) => pictures.get(&file).cloned(),
-                _ => None,
+            .build(attn_ui::kit(self.t));
+        col()
+            .w_full()
+            .on_layout_tx(move |state: &mut State, [_, _, w, _], tx: &mut Tx| {
+                let width = w.round() as u32;
+                let widths = &mut state.window.asks.widths;
+                if widths.get(&place) == Some(&width) {
+                    tx.live_only();
+                } else {
+                    widths.insert(place.clone(), width);
+                }
             })
-            .image_frame(|shown: El, frame: &ImageFrame<'_>| {
-                let (image, alt) = (frame.image.clone(), frame.alt.to_owned());
-                shown.on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    images::show(state, image.clone(), &alt, tx)
-                })
-            })
-            .build(attn_ui::kit(self.t))
+            .child(read)
     }
 }
 
@@ -644,7 +655,10 @@ fn article(state: &State, item: &Item<'_>, measure: Option<f32>, t: &Tokens) -> 
                             None => said,
                         }
                     }))
-                    .child(prose.markdown(part.markdown.as_deref().unwrap_or_default())),
+                    .child(prose.markdown(
+                        &format!("asks.part.{at}"),
+                        part.markdown.as_deref().unwrap_or_default(),
+                    )),
             )
             .wide(),
         });
@@ -822,7 +836,9 @@ fn follows(state: &State, ask_id: &str, re: &AskThread, prose: &Prose, t: &Token
         Some(answer) => fold
             .push(Block::custom(
                 "asks.follows.answer.block",
-                col().w_full().child(prose.markdown(answer)),
+                col()
+                    .w_full()
+                    .child(prose.markdown("asks.follows.answer", answer)),
             ))
             .build(t),
         None => fold.disabled(true).build(t),
@@ -899,7 +915,9 @@ fn question_section(
         .map(|c| {
             Block::custom(
                 format!("asks.q.{}.context", question.key),
-                prose.markdown(c).w_full(),
+                prose
+                    .markdown(&format!("asks.q.{}.context", question.key), c)
+                    .w_full(),
             )
             .wide()
         });

@@ -44,7 +44,11 @@ func (d *Daemon) runAsk(_ context.Context, c command.Caller, a command.AskArgs) 
 	if err != nil {
 		return nil, err
 	}
-	images, err := readAskImages(ask.ImagePaths(parts, baseDir))
+	paths, err := ask.ShownImages(parts, baseDir)
+	if err != nil {
+		return nil, err
+	}
+	images, err := readAskImages(paths)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +80,11 @@ func (d *Daemon) runAskAmend(_ context.Context, c command.Caller, a command.AskA
 	if err != nil {
 		return nil, err
 	}
-	images, err := readAskImages(ask.ImagePaths(parts, baseDir))
+	paths, err := ask.ShownImages(parts, baseDir)
+	if err != nil {
+		return nil, err
+	}
+	images, err := readAskImages(paths)
 	if err != nil {
 		return nil, err
 	}

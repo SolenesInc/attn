@@ -2,11 +2,55 @@ package ask_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/ask"
 	"github.com/victorarias/attn/internal/protocol"
 )
+
+func TestShownImagesRefuseEachImageTheAppOrThePhoneCannotShow(t *testing.T) {
+	for name, tc := range map[string]struct {
+		markdown string
+		says     string
+	}{
+		"an svg file":                  {"![arch](arch.svg)", "the ask shows the SVG image arch.svg"},
+		"an svg file in capitals":      {"![arch](ARCH.SVG)", "the ask shows the SVG image ARCH.SVG"},
+		"an https url":                 {"![r](https://x.dev/r.png)", "the remote image https://x.dev/r.png"},
+		"an http url":                  {"![r](http://x.dev/r.png)", "the remote image http://x.dev/r.png"},
+		"a protocol-relative url":      {"![r](//x.dev/r.png)", "the remote image //x.dev/r.png"},
+		"a file url on another host":   {"![r](file://box/r.png)", "the image file://box/r.png from another machine"},
+		"a data url":                   {"![c](data:image/png;base64,iVBORw0K)", "an image written as a data: URL"},
+		"an unsupported extension":     {"![p](photo.heic)", "the ask shows photo.heic as an image, which is no image file"},
+		"a file with no extension":     {"![n](notes)", "the ask shows notes as an image"},
+		"an anchor":                    {"![h](#top)", "an image with no file (\"#top\")"},
+		"an html img":                  {`<img src="shot.png">`, "the ask shows shot.png in an HTML <img> tag"},
+		"an html img in a table cell":  {"| a |\n|---|\n| <img src=\"cell.png\"> |", "the ask shows cell.png in an HTML <img> tag"},
+		"a remote image after a local": {"![a](a.png) ![r](https://x.dev/r.png)", "the remote image https://x.dev/r.png"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			parts := []protocol.AskPart{{Markdown: protocol.Ptr(tc.markdown)}}
+			got, err := ask.ShownImages(parts, "/work")
+			if err == nil {
+				t.Fatalf("ShownImages(%q) = %q, want a refusal that says %q", tc.markdown, got, tc.says)
+			}
+			if !strings.Contains(err.Error(), tc.says) || !strings.Contains(err.Error(), "mermaid") || !strings.Contains(err.Error(), "![alt](path)") {
+				t.Fatalf("ShownImages(%q) refused with %q, want it to say %q and point to a mermaid block and ![alt](path)", tc.markdown, err, tc.says)
+			}
+			if refusal := protocol.RefusalOf(err); refusal == nil || *refusal != protocol.RefusalInvalidInput {
+				t.Fatalf("ShownImages(%q) refused as %v, want invalid input", tc.markdown, refusal)
+			}
+		})
+	}
+}
+
+func TestShownImagesListTheLocalImagesInReadingOrder(t *testing.T) {
+	markdown := "![b](b.png) ![a](/tmp/a.webp) in code `![s](x.svg)`\n\n```mermaid\nflowchart LR\n  A --> B\n```\n"
+	got, err := ask.ShownImages([]protocol.AskPart{{Markdown: protocol.Ptr(markdown)}}, "/work")
+	if want := []string{"/work/b.png", "/tmp/a.webp"}; err != nil || !slices.Equal(got, want) {
+		t.Fatalf("ShownImages = %q, %v; want %q", got, err, want)
+	}
+}
 
 func TestImagePathsResolveEachImageOnceAsTheAppShowsIt(t *testing.T) {
 	for name, tc := range map[string]struct {

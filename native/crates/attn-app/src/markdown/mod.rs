@@ -310,14 +310,6 @@ pub(crate) fn reader(
                 state.readings.fold(&folded, nth(at), open)
             },
         )
-        .diagram_frame({
-            let t = *t;
-            move |card, frame| leaves_out(framed(card, frame, &bars, &t), frame, &t)
-        })
-        .diagram_source_frame({
-            let t = *t;
-            move |source, _| not_drawn(source, &t)
-        })
         .code_frame({
             let (t, view, copied) = (*t, copied_in, kept.copied);
             move |card, frame| with_copy(card, frame, &view, copied, &t)
@@ -326,6 +318,7 @@ pub(crate) fn reader(
             let t = *t;
             move |_, yaml| front_matter::card(yaml, &t)
         });
+    let markdown = diagrams(markdown, bars, t);
     let markdown = linked(markdown, document, pictures, t);
     let markdown = markdown.style(style);
     let (
@@ -371,16 +364,35 @@ pub(crate) fn linked(
     pictures: Rc<HashMap<String, Option<Image>>>,
     t: &Tokens,
 ) -> Markdown {
-    let shows = document.clone();
-    let named = document.clone();
     let help = document.clone();
     let plain = document.clone();
     let text_color = t.text_primary;
-    markdown
+    pictured(markdown, &document, pictures, t)
         .on_link_tx(move |state: &mut State, href: &str, tx: &mut Tx| {
             links::follow(state, &document, href, tx)
         })
         .link_help(move |href| help.verdict(href).help)
+        .link_style(move |href| {
+            (!plain.verdict(href).follows).then(|| {
+                (
+                    Span::new(0, 0).color(text_color),
+                    LinkPaint::new().color(text_color),
+                )
+            })
+        })
+}
+
+/// `markdown`'s local images, read as a document at `document.path`, showing the ready
+/// `pictures` by the paths they resolve to and opening larger on a press, and saying what an
+/// image with no picture is waiting on.
+pub(crate) fn pictured(
+    markdown: Markdown,
+    document: &Document,
+    pictures: Rc<HashMap<String, Option<Image>>>,
+    t: &Tokens,
+) -> Markdown {
+    let (shows, named) = (document.clone(), document.clone());
+    markdown
         .missing_image_frame({
             let (pictures, t) = (pictures.clone(), *t);
             move |_, image| {
@@ -397,14 +409,17 @@ pub(crate) fn linked(
                 images::show(state, image.clone(), &alt, tx)
             })
         })
-        .link_style(move |href| {
-            (!plain.verdict(href).follows).then(|| {
-                (
-                    Span::new(0, 0).color(text_color),
-                    LinkPaint::new().color(text_color),
-                )
-            })
-        })
+}
+
+/// `markdown`'s Mermaid diagrams as a document frames them: one too wide to read fitted
+/// scrolls at its natural size and offers to focus it, one drawn in part says what it leaves
+/// out, and one that cannot draw shows its source under a note. `bars` names the reading's
+/// scroll boxes apart from every other reading's in the window.
+pub(crate) fn diagrams(markdown: Markdown, bars: String, t: &Tokens) -> Markdown {
+    let t = *t;
+    markdown
+        .diagram_frame(move |card, frame| leaves_out(framed(card, frame, &bars, &t), frame, &t))
+        .diagram_source_frame(move |source, _| not_drawn(source, &t))
 }
 
 /// Which of `source`'s `<details>` blocks the one whose tag starts at a source byte is, counted

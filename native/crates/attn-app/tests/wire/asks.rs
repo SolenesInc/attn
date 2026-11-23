@@ -2094,11 +2094,20 @@ fn an_asks_images_show_from_the_copy_the_home_keeps() {
         ]
     );
 
-    world.gesture(|app| app.click(Target::role("image").name("after")));
+    let said: Vec<String> = world
+        .screen()
+        .descendants(Target::key("asks.sheet"))
+        .into_iter()
+        .filter_map(|n| n.name.or(n.value))
+        .collect();
+    assert!(
+        said.iter().any(|t| t == "[missing image: after]"),
+        "an image whose copy the home lacks says so: {said:?}"
+    );
     assert!(
         world
             .screen()
-            .find(Target::key("image-preview.picture"))
+            .find(Target::role("image").name("after"))
             .is_none()
     );
     world.gesture(|app| app.click(Target::role("image").name("before")));
@@ -2115,6 +2124,76 @@ fn an_asks_images_show_from_the_copy_the_home_keeps() {
         world
             .screen()
             .find(Target::key("image-preview.picture"))
+            .is_none()
+    );
+    assert_eq!(shown(&world).as_deref(), Some("Cache store"));
+}
+
+#[test]
+fn an_asks_wide_diagram_opens_to_zoom_and_its_wide_table_scrolls_sideways() {
+    let participants: String = (0..13)
+        .map(|i| format!("  participant P{i} as Service number {i} in the path\n"))
+        .collect();
+    let messages: String = (0..12)
+        .map(|i| format!("  P{i}->>P{}: hand over\n", i + 1))
+        .collect();
+    let columns = 9;
+    let row = |cell: &str| format!("|{}\n", format!(" {cell} |").repeat(columns));
+    let table = format!(
+        "{}{}{}",
+        row("Option under comparison"),
+        row("---"),
+        row("a long reason it wins or loses")
+    );
+    let mut world = start(
+        vec![ask(
+            "a-cache1",
+            "api",
+            "Cache store",
+            30,
+            vec![prose(&format!(
+                "```mermaid\nsequenceDiagram\n{participants}{messages}```\n\n{table}"
+            ))],
+        )],
+        vec![api_working()],
+    );
+    open_sheet(&mut world);
+    world.settle();
+
+    let table_thumbs: Vec<[f32; 4]> = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .filter(|e| e.key.as_deref() == Some("thumb") && e.path.contains("wide-"))
+        .map(|e| e.rect)
+        .collect();
+    assert!(
+        table_thumbs.iter().any(|thumb| thumb[2] > 0.0),
+        "a table wider than the ask scrolls sideways under a thumb: {table_thumbs:?}"
+    );
+    let [x, y, w, h] = world
+        .screen()
+        .bounds(Target::key("asks.ask-scroll-area"))
+        .expect("the ask is shown");
+    world.gesture(|app| {
+        app.runtime
+            .wheel_event(rune::WheelEvent::new(0.0, 2000.0).at(x + w / 2.0, y + h / 2.0))
+    });
+    world.settle();
+    world.gesture(|app| app.click(Target::role("button").name("Focus diagram")));
+    world.settle();
+    assert!(
+        world
+            .screen()
+            .find(Target::key("diagram-preview.drawing"))
+            .is_some(),
+        "a diagram too wide to read fitted opens over the window to zoom"
+    );
+    plain(&mut world, Key::Escape);
+    assert!(
+        world
+            .screen()
+            .find(Target::key("diagram-preview.drawing"))
             .is_none()
     );
     assert_eq!(shown(&world).as_deref(), Some("Cache store"));

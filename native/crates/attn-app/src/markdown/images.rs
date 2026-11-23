@@ -154,14 +154,9 @@ impl Pictures {
         }))
     }
 
-    /// The ready pictures of ask `ask`, by the paths its images resolve to.
-    pub(crate) fn of_ask(&self, ask: &str) -> Rc<HashMap<String, Image>> {
-        Rc::new(
-            self.read_by(&Reader::Ask(ask.to_owned()))
-                .into_iter()
-                .filter_map(|(path, image)| Some((path, image?)))
-                .collect(),
-        )
+    /// The pictures of ask `ask`, by the paths its images resolve to, as `of` gives a tile's.
+    pub(crate) fn of_ask(&self, ask: &str) -> Rc<HashMap<String, Option<Image>>> {
+        Rc::new(self.read_by(&Reader::Ask(ask.to_owned())))
     }
 
     /// The pictures seed `seed`'s body shows, by the file names it gives them.

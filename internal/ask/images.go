@@ -2,6 +2,8 @@ package ask
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"net/url"
 	"path"
 	"path/filepath"
@@ -126,14 +128,15 @@ func rowCells(line text.Segment, source []byte) []text.Segment {
 }
 
 // ImagePaths lists the local images the ask's parts show, as the app resolves them against
-// baseDir: absolute paths with an image extension, each once, in reading order.
+// baseDir: absolute paths with an image extension, each once, in reading order. It passes over
+// every other image target, as reading an ask stored before ShownImages refused them must.
 func ImagePaths(parts []protocol.AskPart, baseDir string) []string {
 	var paths []string
 	seen := map[string]bool{}
 	for _, markdown := range renderedMarkdown(parts) {
 		for _, target := range imageTargets(markdown) {
-			resolved, ok := ResolveImage(baseDir, target)
-			if ok && !seen[resolved] {
+			resolved, err := resolveImage(baseDir, target.src)
+			if err == nil && !seen[resolved] {
 				seen[resolved] = true
 				paths = append(paths, resolved)
 			}
@@ -141,6 +144,24 @@ func ImagePaths(parts []protocol.AskPart, baseDir string) []string {
 	}
 	return paths
 }
+
+// ShownImages lists the images of ImagePaths for an ask being opened or amended, and refuses
+// the first image target that the app or the phone cannot show.
+func ShownImages(parts []protocol.AskPart, baseDir string) ([]string, error) {
+	for _, markdown := range renderedMarkdown(parts) {
+		for _, target := range imageTargets(markdown) {
+			if target.html {
+				return nil, protocol.Refuse(protocol.RefusalInvalidInput, "the ask shows %s in an HTML <img> tag, which the app leaves out; %s", target.src, whatAsksShow)
+			}
+			if _, err := resolveImage(baseDir, target.src); err != nil {
+				return nil, protocol.Refuse(protocol.RefusalInvalidInput, "%w; %s", err, whatAsksShow)
+			}
+		}
+	}
+	return ImagePaths(parts, baseDir), nil
+}
+
+const whatAsksShow = "an ask shows a diagram drawn in a ```mermaid code block, and a local PNG, JPEG, GIF, WebP, BMP or TIFF file written ![alt](path)"
 
 func renderedMarkdown(parts []protocol.AskPart) []string {
 	var out []string
@@ -155,16 +176,21 @@ func renderedMarkdown(parts []protocol.AskPart) []string {
 	return out
 }
 
-func imageTargets(markdown string) []string {
+type imageTarget struct {
+	src  string
+	html bool
+}
+
+func imageTargets(markdown string) []imageTarget {
 	source := []byte(markdown)
-	var targets []string
+	var targets []imageTarget
 	_ = ast.Walk(imageMarkdown.Parse(text.NewReader(source)), func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
 		}
 		switch n := node.(type) {
 		case *ast.Image:
-			targets = append(targets, string(util.ResolveEntityNames(util.ResolveNumericReferences(util.UnescapePunctuations(n.Destination)))))
+			targets = append(targets, imageTarget{src: string(util.ResolveEntityNames(util.ResolveNumericReferences(util.UnescapePunctuations(n.Destination))))})
 		case *ast.RawHTML:
 			targets = append(targets, htmlImageSources(segmentsText(n.Segments, source))...)
 		case *ast.HTMLBlock:
@@ -188,8 +214,8 @@ func segmentsText(segments *text.Segments, source []byte) []byte {
 	return out
 }
 
-func htmlImageSources(raw []byte) []string {
-	var sources []string
+func htmlImageSources(raw []byte) []imageTarget {
+	var sources []imageTarget
 	tokens := html.NewTokenizer(bytes.NewReader(raw))
 	for {
 		switch tokens.Next() {
@@ -202,7 +228,7 @@ func htmlImageSources(raw []byte) []string {
 			}
 			for _, attr := range token.Attr {
 				if attr.Key == "src" {
-					sources = append(sources, attr.Val)
+					sources = append(sources, imageTarget{src: attr.Val, html: true})
 				}
 			}
 		}
@@ -212,24 +238,39 @@ func htmlImageSources(raw []byte) []string {
 // ResolveImage resolves an image target, with its markdown escapes and HTML references already decoded, to the
 // absolute local path the app shows, or reports that the target is no local image.
 func ResolveImage(baseDir, target string) (string, bool) {
-	target = string(util.URLEscape([]byte(strings.TrimSpace(target)), false))
-	if target == "" || strings.HasPrefix(target, "#") || strings.HasPrefix(target, "//") {
-		return "", false
+	resolved, err := resolveImage(baseDir, target)
+	return resolved, err == nil
+}
+
+func resolveImage(baseDir, target string) (string, error) {
+	given := strings.TrimSpace(target)
+	target = string(util.URLEscape([]byte(given), false))
+	if target == "" || strings.HasPrefix(target, "#") {
+		return "", fmt.Errorf("the ask shows an image with no file (%q)", given)
+	}
+	if strings.HasPrefix(target, "//") {
+		return "", fmt.Errorf("the ask shows the remote image %s, which the app and the phone do not fetch", given)
 	}
 	ref, err := url.Parse(target)
 	if err != nil {
-		return "", false
+		return "", fmt.Errorf("the ask shows the image %q, which is no path", given)
+	}
+	if strings.EqualFold(ref.Scheme, "data") {
+		return "", errors.New("the ask shows an image written as a data: URL, which the app and the phone do not draw")
 	}
 	if ref.Scheme != "" && !strings.EqualFold(ref.Scheme, "file") {
-		return "", false
+		return "", fmt.Errorf("the ask shows the remote image %s, which the app and the phone do not fetch", given)
 	}
 	base := &url.URL{Scheme: "file", Path: filepath.ToSlash(filepath.Join(baseDir, "ask.md"))}
 	resolved := base.ResolveReference(ref)
 	if resolved.Host != "" {
-		return "", false
+		return "", fmt.Errorf("the ask shows the image %s from another machine, which the app and the phone do not fetch", given)
 	}
 	if _, ok := ImageType(resolved.Path); !ok {
-		return "", false
+		if strings.EqualFold(path.Ext(resolved.Path), ".svg") {
+			return "", fmt.Errorf("the ask shows the SVG image %s, which the app and the phone do not draw", given)
+		}
+		return "", fmt.Errorf("the ask shows %s as an image, which is no image file the app and the phone show", given)
 	}
-	return resolved.Path, true
+	return resolved.Path, nil
 }

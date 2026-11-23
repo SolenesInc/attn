@@ -62,6 +62,9 @@ pub struct Asks {
     /// The first text of the selection in the ask, by its key path, once no press is still making
     /// the selection: the Quote button floats over it.
     pub(crate) quotable: Option<String>,
+    /// The points each markdown reading of the ask last laid out across, by its place, so its
+    /// tables fit that width as a document's do.
+    pub(crate) widths: HashMap<String, u32>,
 }
 
 #[derive(Default)]
