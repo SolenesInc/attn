@@ -162,8 +162,8 @@ func TestEveryPullRequestUpdateReachesWatchersOnTheHomeAndTheOutpostWhileOnlyThe
 		for stepped := time.Duration(0); stepped <= time.Duration(times)*protocol.HeatHotInterval; stepped += bridgeSafeStep {
 			home.Advance(bridgeSafeStep)
 			home.AwaitTimer(bridge.StallTimer)
+			home.AwaitJobsSettled()
 		}
-		home.AwaitJobsSettled()
 	}
 	hears := func(when string, want map[pullRequestWatcher][]string, details ...string) {
 		t.Helper()
