@@ -9,6 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -204,5 +205,27 @@ func TestOnlyTheMemberItsChainAndTheChiefMayApplyItsSettings(t *testing.T) {
 	applied, err := cli.WithGardenProfile("", day.SessionID).CrewApply("trellis")
 	if err != nil || applied.Outcome != protocol.CrewApplyOutcomeReloaded {
 		t.Fatalf("trellis applying its own settings = %+v, %v", applied, err)
+	}
+}
+
+func TestAMemberAppliesItsSettingsWhileItsFirstPromptLandsAndReloadsInPlace(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	probed := w.PauseAt(pausepoint.ConversationReadinessProbed)
+	cli := w.Client()
+	day := startCrew(t, cli, "trellis", "")
+	run := w.Launched(string(day.SessionID))
+	applied := make(chan *protocol.CrewApplyResult, 1)
+	go func() {
+		result, err := cli.WithGardenProfile("", day.SessionID).CrewApply("trellis")
+		if err != nil {
+			t.Errorf("trellis applying its own settings: %v", err)
+		}
+		applied <- result
+	}()
+	probed.Await()
+	run.Prompted()
+	probed.Release()
+	if result := <-applied; result == nil || result.Outcome != protocol.CrewApplyOutcomeReloaded {
+		t.Fatalf("applying while the first prompt lands = %+v, want an in-place reload", result)
 	}
 }

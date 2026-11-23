@@ -81,6 +81,7 @@ const (
 	TerminalOpenCommandTyped       = "terminal-open-command-typed"
 	TerminalRuntimeEnding          = "terminal-runtime-ending"
 	AgentLaunchCommitReporting     = "agent-launch-commit-reporting"
+	ConversationReadinessProbed    = "conversation-readiness-probed"
 	CodexViewReleaseChecked        = "codex-view-release-checked"
 	ConversationCandidateTurn      = "conversation-candidate-turn"
 	ConversationDecision           = "conversation-decision"
