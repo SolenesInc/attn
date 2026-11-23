@@ -80,8 +80,12 @@ agent                   a harness that runs in a terminal, which the user talks
 session                 attn's record of one conversation in one profile; like
                         one chat in a chat app's history
 ├─ conversation (1)     the harness's chat history
-│  └─ lifetime (1)      where the conversation runs: in its terminal's process,
-│                       or in a server that outlives the terminal
+│  ├─ lifetime (1)      where the conversation runs: in its terminal's process,
+│  │                    or in a server that outlives the terminal
+│  └─ subagent (0..n)   a helper the agent starts inside the conversation; its
+│                       work counts as the session's. Claude Code's and Codex's
+│                       subagents, and Claude Code's inside Sigma; like a
+│                       function call
 ├─ terminal (0..n)      the terminals showing it; a terminal shows 1 session
 │                       at a time; when its agent moves to another
 │                       conversation (/clear, /new, /resume, Codex /agents),
@@ -252,6 +256,10 @@ delegation              one agent starts another agent to work on a seed
 │                       instructions, harness, model and effort
 ├─ dispatcher (1)       the session that started the delegation
 └─ delegate (1)         the session that does the work
+Sigma worker            a conversation a Sigma agent starts with its own task;
+                        like a delegation inside Sigma. Each Sigma worker is its
+                        own session, never a subagent of the session that
+                        started it
 handover                a new session takes over a seed and its claim
 ```
 

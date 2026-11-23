@@ -170,7 +170,8 @@ measurement uses that one.
   - A worker comes from the `start_worker` tool. Its lineage's `task` is its
     task name, such as `/root/explore`. It takes input and outlives its
     parent's turns. With `fork_turns: "all"` it is a fork of its parent
-    (`packages/sigma/src/agents.ts`, `packages/sigma/src/server.ts`).
+    (`packages/sigma/src/agents.ts`, `packages/sigma/src/server.ts`). It is a
+    Sigma worker in the glossary's sense.
   - A subagent is one of Claude Code's own subagents, which Sigma hosts. Its
     lineage has no `task`. It takes input only through its parent, refusing
     its own with `TakesNoInput`, and stops when its parent's run does
