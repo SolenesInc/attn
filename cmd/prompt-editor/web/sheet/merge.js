@@ -71,6 +71,13 @@ function sideOf(base, region, mine) {
 
 const same = (a, b) => a.length === b.length && a.every((line, index) => line === b[index]);
 
+const substitutions = (region) => region.hunks.every((hunk) => hunk.lines.length === hunk.to - hunk.from);
+
+function resolve(base, region, ours, disk, mineChanged) {
+  if (!substitutions(region)) return mineChanged ? ours : disk;
+  return ours.map((line, index) => (line === base[region.from + index] ? disk[index] : line));
+}
+
 function merge(baseText, mineText, theirsText) {
   const base = lines(baseText);
   const mine = lines(mineText);
@@ -85,7 +92,7 @@ function merge(baseText, mineText, theirsText) {
     const mineChanged = region.hunks.some((hunk) => hunk.mine);
     const diskChanged = region.hunks.some((hunk) => !hunk.mine);
     if (mineChanged && diskChanged && !same(ours, disk)) conflict = true;
-    merged.push(...(mineChanged ? ours : disk));
+    merged.push(...resolve(base, region, ours, disk, mineChanged));
     at = region.to;
   }
   merged.push(...base.slice(at));

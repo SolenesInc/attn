@@ -95,6 +95,10 @@ function showStale(stale) {
   $("stale").hidden = !stale;
 }
 
+async function showCatalogStale() {
+  showStale((await api("catalog").catch(() => ({}))).stale);
+}
+
 async function refreshDefinitions() {
   $("refresh").disabled = true;
   notice("Regenerating the catalog from the Go definitions…");
@@ -129,7 +133,7 @@ async function openTarget() {
     notice("");
   } catch (error) {
     failed = true;
-    showStale((await api("catalog").catch(() => ({}))).stale);
+    await showCatalogStale();
     showEmpty(`This page did not open: ${error.message}`, el("br"), "If a source file caused this, Ctrl K opens it as raw text to fix and save.");
     titleFor(target.file ? undefined : 0);
     notice(error.message, "error");
@@ -231,6 +235,7 @@ async function drainDisk() {
       else files.sync((await api("catalog")).sources);
     } catch (error) {
       notice(`Reading a change on disk failed: ${error.message}`, "error");
+      await showCatalogStale();
     }
   }
 }

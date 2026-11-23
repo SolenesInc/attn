@@ -112,10 +112,11 @@ leaves a page with unsaved edits. When a file changes on disk, the page takes
 the new text. If the page holds an unsaved edit of that file, it keeps both
 edits, including edits on adjacent lines. When both change the same lines, the
 fragment shows the text on disk with Keep mine and Use disk, and saving skips
-the file until the user chooses. Keep mine keeps the user's text on those lines
-and takes the disk's changes elsewhere in the file. Use disk takes the text on
-disk. A change to the catalog, a scenario or a situation redraws the page and
-keeps unsaved edits.
+the file until the user chooses. Keep mine keeps the user's text on the lines
+they changed and takes the disk's changes on every other line. Where either
+side added or removed lines in a stretch both changed, the user's text takes
+that whole stretch. Use disk takes the text on disk. A change to the catalog, a
+scenario or a situation redraws the page and keeps unsaved edits.
 
 A change to the Go definitions redraws the page too, but the catalog still
 holds the old composition. The page shows that composition under a warning, and

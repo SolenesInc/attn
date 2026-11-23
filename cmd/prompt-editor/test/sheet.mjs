@@ -8,29 +8,32 @@ import { fileURLToPath } from "node:url";
 import { chromium, expect } from "@playwright/test";
 import { merge3, mergeKeepingMine } from "../web/sheet/merge.js";
 
-// C15: merge3 against its rules. Each side's edits are base-relative line ranges; two ranges overlap when they share a base line, or are insertions at the same point. Disjoint edits merge, adjacent ones included; overlapping, different edits conflict, and keeping mine keeps the disk's other edits.
+// C15 and C18: merge3 against its rules. Each side's edits are base-relative line ranges; two ranges overlap when they share a base line, or are insertions at the same point. Disjoint edits merge, adjacent ones included; overlapping, different edits conflict. Keeping mine keeps the disk's other edits. Where mine and the disk's edits it overlaps all replace lines one for one, it also keeps the disk's text on each line mine left alone; otherwise mine's edit takes the overlapped lines. A side left with one empty line reads as an empty file, so the line model skips it.
 {
   let seed = 1;
   const random = (below) => {
-    seed = (seed * 1103515245 + 12345) % 2147483648;
-    return seed % below;
+    seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+    return Math.floor((seed / 2 ** 32) * below);
   };
   const overlaps = (a, b) => (a.from === a.to && b.from === b.to ? a.from === b.from : a.from < b.to && b.from < a.to);
   const sameEdit = (a, b) => a.from === b.from && a.to === b.to && a.lines.join() === b.lines.join();
-  const apply = (lines, edits) => {
+  const applied = (lines, edits) => {
     const out = [];
     let at = 0;
     for (const edit of [...edits].sort((a, b) => a.from - b.from || a.to - b.to)) {
       out.push(...lines.slice(at, edit.from), ...edit.lines);
       at = edit.to;
     }
-    return [...out, ...lines.slice(at)].join("\n");
+    return [...out, ...lines.slice(at)];
   };
+  const apply = (lines, edits) => applied(lines, edits).join("\n");
+  const onlyAnEmptyLine = (lines) => lines.length === 1 && lines[0] === "";
   let tokens = 0;
   const editWithin = (from, end, side) => {
     for (;;) {
       const start = from + random(end - from + 1);
-      const edit = { from: start, to: start + random(end - start + 1), lines: Array.from({ length: random(3) }, () => `${side}${tokens++}`) };
+      const to = start + random(end - start + 1);
+      const edit = { from: start, to, lines: Array.from({ length: random(2) ? to - start : random(3) }, () => `${side}${tokens++}`) };
       if (edit.from < edit.to || edit.lines.length) return edit;
     }
   };
@@ -41,13 +44,19 @@ import { merge3, mergeKeepingMine } from "../web/sheet/merge.js";
     const mine = editWithin(0, base.length, "mine ");
     const theirs = [random(5) ? editWithin(0, base.length, "disk ") : mine];
     if (theirs[0].to + 1 < base.length && random(2)) theirs.push(editWithin(theirs[0].to + 1, base.length, "disk "));
+    if (onlyAnEmptyLine(applied(base, [mine])) || onlyAnEmptyLine(applied(base, theirs))) continue;
     const kept = theirs.filter((edit) => !sameEdit(edit, mine));
     const apart = kept.filter((edit) => !overlaps(edit, mine));
     const cases = { baseText, mine, theirs };
     const merged = merge3(baseText, apply(base, [mine]), apply(base, theirs));
     if (apart.length === kept.length) assert.deepEqual(merged, { conflict: false, text: apply(base, [mine, ...kept]) }, JSON.stringify(cases));
     else assert.deepEqual(merged, { conflict: true }, JSON.stringify(cases));
-    assert.equal(mergeKeepingMine(baseText, apply(base, [mine]), apply(base, theirs)), apply(base, [mine, ...apart]), JSON.stringify(cases));
+    const near = kept.filter((edit) => overlaps(edit, mine));
+    const lineByLine = [mine, ...near].every((edit) => edit.lines.length === edit.to - edit.from);
+    const overlaid = base.slice();
+    if (lineByLine) for (const edit of near) overlaid.splice(edit.from, edit.lines.length, ...edit.lines);
+    const keptMine = apply(overlaid, [mine, ...apart]);
+    assert.equal(mergeKeepingMine(baseText, apply(base, [mine]), apply(base, theirs)), keptMine, JSON.stringify(cases));
   }
 }
 
@@ -280,6 +289,19 @@ try {
   await expect(editor(capture)).not.toContainText("Dropped.");
   await expect(saveState).toHaveText("All saved");
   assert.equal(await read(capture), disk);
+
+  // C18: Keep mine takes my line and keeps the disk's edit on the next line, which the disk changed in the same stretch.
+  const beforeBoth = (await read(capture)).split("\n");
+  await typeAtStart(capture, "Lone. ");
+  const diskBoth = beforeBoth.slice();
+  diskBoth[0] = "Disk first. " + beforeBoth[0];
+  diskBoth[1] = beforeBoth[1] + " Disk second.";
+  await fs.writeFile(source(capture), diskBoth.join("\n"));
+  await expect(row(capture).locator(".conflict")).toBeVisible();
+  await row(capture).getByRole("button", { name: "Keep mine" }).click();
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect(saveState).toHaveText("All saved");
+  assert.equal(await read(capture), ["Lone. " + beforeBoth[0], ...diskBoth.slice(1)].join("\n"));
   commit("C9 disk changes");
 
   // C9: the diff shows a changed fragment's change and folds unchanged fragments.
@@ -471,10 +493,32 @@ try {
   await expect(repairPage.locator(".event h2")).toHaveText(["session/launch", "session/garden-ready", "crew/new-session"]);
   await repairPage.close();
 
-  // C16 with C17: Go and a source changed together outside the page fail the old catalog; the error page offers the refresh, which opens the page.
+  // C19: a source renamed, then its Go binding, fail an open page's reload; the page shows the freshness warning and its refresh, and keeps unsaved edits.
   const switchSource = "crew/switch-requested.md";
-  await describe('Bind("agent", Input(TextField("agent",', 'Bind("harness", Input(TextField("harness",');
+  await fs.writeFile(source(switchSource), (await read(switchSource)).trimEnd() + "\n\nA line the rename leaves alone.\n");
+  const openPage = await context.newPage();
+  openPage.on("pageerror", (error) => pageErrors.push(String(error)));
+  await openPage.goto(show("crew/switch-requested"));
+  await expect(openPage.locator(".event h2")).toHaveText("crew/switch-requested");
+  await expect(openPage.locator("body")).toHaveAttribute("data-watching", "true");
+  await expect(openPage.locator("#stale")).toBeHidden();
+  const switchEditor = openPage.locator(`.row[data-path="content/${switchSource}"] .cm-content`);
+  await switchEditor.click();
+  await openPage.keyboard.press("ControlOrMeta+End");
+  await openPage.keyboard.type(" Unsaved.");
+  const markdownSynced = openPage.waitForResponse((response) => response.url().endsWith("/api/catalog"));
   await fs.writeFile(source(switchSource), (await read(switchSource)).replaceAll("{{agent}}", "{{harness}}"));
+  await markdownSynced;
+  const reloadFailed = openPage.waitForResponse((response) => response.url().endsWith("/api/page") && response.status() === 422);
+  await describe('Bind("agent", Input(TextField("agent",', 'Bind("harness", Input(TextField("harness",');
+  await reloadFailed;
+  await expect(openPage.locator("#notice")).toContainText("Reading a change on disk failed:");
+  await expect(openPage.locator("#stale")).toBeVisible();
+  await expect(openPage.getByRole("button", { name: "Refresh Go definitions" })).toBeVisible();
+  await expect(switchEditor).toContainText("A line the rename leaves alone. Unsaved.");
+  if (artifacts) await openPage.screenshot({ path: path.join(artifacts, "open-tab-stale.png") });
+
+  // C16 with C17: Go and a source changed together outside the page fail the old catalog; the error page offers the refresh, which opens the page.
   const renamePage = await context.newPage();
   renamePage.on("pageerror", (error) => pageErrors.push(String(error)));
   await renamePage.goto(show("crew/switch-requested"));
@@ -486,6 +530,13 @@ try {
   await expect(renamePage.locator("#stale")).toBeHidden();
   await expect(renamePage.locator('.chip[data-name="harness"]')).toHaveCount(placeholders(await read(switchSource)).filter((name) => name === "{{harness}}").length);
   await renamePage.close();
+
+  await expect(openPage.locator("#stale")).toBeHidden();
+  await expect(openPage.locator('.chip[data-name="harness"]')).toHaveCount(placeholders(await read(switchSource)).filter((name) => name === "{{harness}}").length);
+  await expect(switchEditor).toContainText("A line the rename leaves alone. Unsaved.");
+  await expect(openPage.locator("#save-state")).toHaveText(/1 unsaved file/);
+  assert.ok(!(await read(switchSource)).includes("Unsaved."));
+  await openPage.close({ runBeforeUnload: false });
   assert.deepEqual(pageErrors, []);
   console.log(JSON.stringify({ status: "passed", fixture: path.basename(fixture) }));
 } finally {
