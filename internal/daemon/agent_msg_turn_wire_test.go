@@ -430,7 +430,7 @@ func TestASteerOrInterruptToAWorkingServerWithoutTheAbilityQueuesWithTheReason(t
 			promptUntilWorking(app, session, view, server, "find the flaky checkout test")
 
 			sent := sendPeerMessage(t, cli, "lead", session, "Rename the flag to ttl_seconds.", flag)
-			if sent.Status != protocol.AgentMsgStatusQueued || !strings.Contains(sent.Detail, "cannot") {
+			if sent.Status != protocol.AgentMsgStatusQueued || !strings.HasSuffix(sent.Detail, "the message waits for the turn to end)") {
 				t.Fatalf("a %s to a working server without the ability = %+v, want queued with the reason", flag, sent)
 			}
 			server.Reply(view.ConversationID, "Found it. <!-- attn:state=idle -->")
@@ -457,7 +457,7 @@ func TestASteerOrInterruptToAWorkingPluginDriverQueuesWithTheReason(t *testing.T
 				testworld.AwaitSession(app, recipient, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 
 				sent := sendPeerMessage(t, w.Client(), author, recipient, "Rename the flag to ttl_seconds.", flag)
-				if sent.Status != protocol.AgentMsgStatusQueued || !strings.Contains(sent.Detail, "plugin driver cannot steer or interrupt") {
+				if sent.Status != protocol.AgentMsgStatusQueued || !strings.HasSuffix(sent.Detail, "the message waits for the turn to end)") {
 					t.Fatalf("a %s to a working plugin session = %+v, want queued with the reason", flag, sent)
 				}
 				if err := driver.state(run, 2, protocol.StateIdle); err != nil {

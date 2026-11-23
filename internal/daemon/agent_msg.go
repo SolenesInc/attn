@@ -162,6 +162,8 @@ func (d *Daemon) runAgentMsg(ctx context.Context, c command.Caller, a command.Ag
 	}
 	if receipt.Turn != "" && slices.Contains(receipt.Typed, message.ID) && holder != nil {
 		result.Status, result.Detail = tookMidTurn(receipt.Turn, sessionDisplayName(holder), a.AsUser)
+	} else if message.Turn != "" && !receipt.Rang && !slices.Contains(receipt.Typed, message.ID) && d.peerTurnLapsed(message.ID) {
+		result.Detail = fmt.Sprintf("queued (the recipient could not take the %s mid-turn%s", message.Turn, turnLapsedSuffix)
 	}
 	return result, nil
 }
@@ -216,6 +218,13 @@ func agentMessageQueuedDetail(err error) string {
 		return "queued (target is compacting before it closes; lands once it has closed, under its standby rules)"
 	}
 	return queuedNotTakingInput
+}
+
+const turnLapsedSuffix = "; the message waits for the turn to end)"
+
+func (d *Daemon) peerTurnLapsed(id string) bool {
+	record, err := d.store.PeerMessageRecord(id)
+	return err == nil && record.Message.Turn == ""
 }
 
 const queuedNotTakingInput = "queued (target is not taking input right now — lands when it is running again; don't wait for a reply)"

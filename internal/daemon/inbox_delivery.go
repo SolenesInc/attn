@@ -460,7 +460,8 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		if err := d.clearPendingInbox(a, state); err != nil {
 			return receipt, err
 		}
-		receipt.Detail = fmt.Sprintf("queued (%v; the message waits for the turn to end)", placement.Err)
+		receipt.Typed = ring.Typed
+		receipt.Detail = fmt.Sprintf("queued (%v%s", placement.Err, turnLapsedSuffix)
 		if stopped {
 			receipt.Detail = agentMessageQueuedDetail(placement.Err)
 		}
