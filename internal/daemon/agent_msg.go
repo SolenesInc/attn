@@ -160,12 +160,35 @@ func (d *Daemon) runAgentMsg(ctx context.Context, c command.Caller, a command.Ag
 	if a.AsUser {
 		result.AsUser = protocol.Ptr(true)
 	}
-	if receipt.Turn != "" && slices.Contains(receipt.Typed, message.ID) && holder != nil {
-		result.Status, result.Detail = tookMidTurn(receipt.Turn, sessionDisplayName(holder), a.AsUser)
-	} else if message.Turn != "" && !receipt.Rang && !slices.Contains(receipt.Typed, message.ID) && d.peerTurnLapsed(message.ID) {
-		result.Detail = fmt.Sprintf("queued (the recipient could not take the %s mid-turn%s", message.Turn, turnLapsedSuffix)
+	if message.Turn != "" && holder != nil {
+		if status, detail, settled := d.peerTurnResult(message, receipt, holder, a.AsUser); settled {
+			result.Status, result.Detail = status, detail
+		}
 	}
 	return result, nil
+}
+
+// peerTurnResult reads what became of a message's turn use from the message itself, whichever delivery placed or refused it.
+func (d *Daemon) peerTurnResult(message inbox.Message, receipt inbox.Receipt, holder *protocol.Session, asUser bool) (protocol.AgentMsgStatus, string, bool) {
+	if receipt.Turn != "" && slices.Contains(receipt.Typed, message.ID) {
+		status, detail := tookMidTurn(receipt.Turn, sessionDisplayName(holder), asUser)
+		return status, detail, true
+	}
+	record, err := d.store.PeerMessageRecord(message.ID)
+	switch {
+	case err != nil:
+		return "", "", false
+	case record.DeliveredAs != "":
+		status, detail := tookMidTurn(record.DeliveredAs, sessionDisplayName(holder), asUser)
+		return status, detail, true
+	case record.Message.Turn != "":
+		return "", "", false
+	case record.TurnLapse != "":
+		return protocol.AgentMsgStatusQueued, record.TurnLapse, true
+	case !receipt.Rang:
+		return protocol.AgentMsgStatusQueued, fmt.Sprintf("queued (the recipient could not take the %s mid-turn%s", message.Turn, turnLapsedSuffix), true
+	}
+	return "", "", false
 }
 
 func tookMidTurn(turn protocol.PeerTurn, recipient string, asUser bool) (protocol.AgentMsgStatus, string) {
@@ -221,11 +244,6 @@ func agentMessageQueuedDetail(err error) string {
 }
 
 const turnLapsedSuffix = "; the message waits for the turn to end)"
-
-func (d *Daemon) peerTurnLapsed(id string) bool {
-	record, err := d.store.PeerMessageRecord(id)
-	return err == nil && record.Message.Turn == ""
-}
 
 const queuedNotTakingInput = "queued (target is not taking input right now — lands when it is running again; don't wait for a reply)"
 

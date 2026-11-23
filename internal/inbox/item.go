@@ -61,6 +61,7 @@ type PeerRecord struct {
 	NotifiedAt  string
 	ReadAt      string
 	DeliveredAs protocol.PeerTurn
+	TurnLapse   string
 }
 
 func (r PeerRecord) State() State {

@@ -25,7 +25,7 @@ func scanPeerRecord(row peerRecordScanner) (inbox.PeerRecord, error) {
 	var address string
 	err := row.Scan(
 		&record.Message.ID, &record.Message.Sender, &record.Message.Body,
-		&record.Message.CreatedAt, &record.Message.Turn, &record.Message.AsUser, &record.DeliveredAs, &address,
+		&record.Message.CreatedAt, &record.Message.Turn, &record.Message.AsUser, &record.DeliveredAs, &record.TurnLapse, &address,
 		&record.NotifiedAt, &record.ReadAt, &record.ReadBy,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -41,7 +41,7 @@ func peerMessageRecord(queryer interface {
 	QueryRow(query string, args ...any) *sql.Row
 }, id string) (inbox.PeerRecord, error) {
 	record, err := scanPeerRecord(queryer.QueryRow(`
-		SELECT p.id, p.sender, p.body, p.created_at, p.turn, p.as_user, p.delivered_as,
+		SELECT p.id, p.sender, p.body, p.created_at, p.turn, p.as_user, p.delivered_as, p.turn_lapse,
 		       i.address, i.notified_at, i.read_at, i.read_by
 		FROM peer_messages p
 		JOIN inbox_items i ON i.kind = ? AND i.source_id = p.id
@@ -171,11 +171,11 @@ func (s *Store) PutPeerMessage(message inbox.Message, to who.Address) error {
 	return tx.Commit()
 }
 
-// DropPeerTurn makes the messages behind these inbox items wait for the turn to end, as messages sent without a turn use do.
-func (s *Store) DropPeerTurn(items []string) error {
+// DropPeerTurn makes the messages behind these inbox items wait for the turn to end, as messages sent without a turn use do, and keeps the sender's account of why.
+func (s *Store) DropPeerTurn(items []string, lapse string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec(`UPDATE peer_messages SET turn='' WHERE id IN (SELECT source_id FROM inbox_items WHERE kind=? AND id IN (SELECT value FROM json_each(?)))`, inbox.PeerMessage, jsonStrings(items))
+	_, err := s.db.Exec(`UPDATE peer_messages SET turn='', turn_lapse=? WHERE id IN (SELECT source_id FROM inbox_items WHERE kind=? AND id IN (SELECT value FROM json_each(?)))`, lapse, inbox.PeerMessage, jsonStrings(items))
 	return err
 }
 

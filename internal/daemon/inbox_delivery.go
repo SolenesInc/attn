@@ -455,17 +455,17 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 	}
 	stopped := errors.Is(placement.Err, sessionmonitor.ErrSessionStopped)
 	if ring.Turn != nil && (placement.Stage == sessionmonitor.Failed || stopped) {
-		if err := d.store.DropPeerTurn(ring.Typed); err != nil {
+		receipt.Detail = fmt.Sprintf("queued (%v%s", placement.Err, turnLapsedSuffix)
+		if stopped {
+			receipt.Detail = agentMessageQueuedDetail(placement.Err)
+		}
+		if err := d.store.DropPeerTurn(ring.Typed, receipt.Detail); err != nil {
 			return receipt, err
 		}
 		if err := d.clearPendingInbox(a, state); err != nil {
 			return receipt, err
 		}
 		receipt.Typed = ring.Typed
-		receipt.Detail = fmt.Sprintf("queued (%v%s", placement.Err, turnLapsedSuffix)
-		if stopped {
-			receipt.Detail = agentMessageQueuedDetail(placement.Err)
-		}
 		d.kickInbox(a)
 		return receipt, nil
 	}
@@ -513,7 +513,7 @@ func (d *Daemon) settleInboxRing(_ context.Context, msg protocol.InboxRingSettle
 		return struct{}{}, nil
 	}
 	if msg.Ring.Turn != nil {
-		if err := d.store.DropPeerTurn(msg.Ring.Typed); err != nil {
+		if err := d.store.DropPeerTurn(msg.Ring.Typed, ""); err != nil {
 			return struct{}{}, fmt.Errorf("inbox ring %s: %w", msg.DeliveryID, err)
 		}
 	}
@@ -610,7 +610,7 @@ func (d *Daemon) inboxPaste(a who.Address, profileID string, bell, working bool)
 		}
 	}
 	if len(lapsed) > 0 {
-		if err := d.store.DropPeerTurn(lapsed); err != nil {
+		if err := d.store.DropPeerTurn(lapsed, ""); err != nil {
 			return inboxPaste{}, err
 		}
 	}

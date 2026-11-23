@@ -96,7 +96,7 @@ CREATE TABLE notifications ( id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT
 CREATE TABLE "outpost_outbox" ( id INTEGER PRIMARY KEY AUTOINCREMENT, host TEXT NOT NULL, tbl TEXT NOT NULL, key TEXT NOT NULL, UNIQUE (host, tbl, key) );
 CREATE TABLE outposts ( id TEXT PRIMARY KEY, name TEXT NOT NULL, destination TEXT NOT NULL UNIQUE, host_key TEXT, daemon_id TEXT UNIQUE, added_at TEXT NOT NULL, paired_at TEXT , home TEXT);
 CREATE TABLE "paired_senders" ( id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, name TEXT NOT NULL COLLATE NOCASE, token_hash TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, last_used_at TEXT NOT NULL DEFAULT '', UNIQUE (profile_id, name) );
-CREATE TABLE peer_messages ( id TEXT PRIMARY KEY, sender TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL , turn TEXT NOT NULL DEFAULT '', as_user INTEGER NOT NULL DEFAULT 0, delivered_as TEXT NOT NULL DEFAULT '');
+CREATE TABLE peer_messages ( id TEXT PRIMARY KEY, sender TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL , turn TEXT NOT NULL DEFAULT '', as_user INTEGER NOT NULL DEFAULT 0, delivered_as TEXT NOT NULL DEFAULT '', turn_lapse TEXT NOT NULL DEFAULT '');
 CREATE TABLE phone_pairings ( device_id TEXT NOT NULL, profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE, device_sign_pub BLOB NOT NULL, device_noise_pub BLOB NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, PRIMARY KEY (device_id, profile_id) );
 CREATE TABLE plugin_server_owners ( agent TEXT PRIMARY KEY, plugin_name TEXT NOT NULL );
 CREATE TABLE pr_interactions ( pr_id TEXT PRIMARY KEY, last_visited_at TEXT, last_approved_at TEXT, last_seen_sha TEXT, last_seen_comment_count INTEGER , last_seen_ci_status TEXT);
