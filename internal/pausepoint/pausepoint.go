@@ -101,6 +101,7 @@ const (
 	PtyExitHandled                 = "pty-exit-handled"
 	DelegationLaunchRecovering     = "delegation-launch-recovering"
 	CodexServerExitHandled         = "codex-server-exit-handled"
+	CodexTurnStarting              = "codex-turn-starting"
 	TerminalExitReconciled         = "terminal-exit-reconciled"
 	CopyBatchStaged                = "copy-batch-staged"
 	CopyBatchApplied               = "copy-batch-applied"

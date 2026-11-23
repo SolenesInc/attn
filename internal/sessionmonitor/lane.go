@@ -147,6 +147,7 @@ type Attempt struct {
 	At        time.Time
 	Err       error
 	Held      bool
+	TakenAs   *protocol.PeerTurn
 	steered   bool
 }
 
@@ -429,7 +430,7 @@ func (l *lane) placeOverConversationLocked(ctx context.Context, delivery Deliver
 		return Attempt{Stage: Deferred, Err: errors.New(custody.Reason), Uncertain: custody.Uncertain}, true
 	}
 	held := custody.Outcome == harness.Held
-	return Attempt{Stage: Placed, At: custody.At, Held: held, steered: held}, true
+	return Attempt{Stage: Placed, At: custody.At, Held: held, TakenAs: PeerTurn(custody.TookAs), steered: held}, true
 }
 
 // tookLocked credits the user's words to the run going, or to the next turn start when none has started since placing began.

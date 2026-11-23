@@ -423,7 +423,7 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 			case strings.HasPrefix(p.Text, "state=working"):
 				modded.mod.turnStarted()
 			case strings.HasPrefix(p.Text, "state=error"):
-				modded.mod.turnCompleted()
+				modded.mod.turnCompleted(false)
 			}
 		}
 		return struct{}{}, nil

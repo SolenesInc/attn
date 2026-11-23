@@ -356,7 +356,7 @@ func (c *claude) stopWith(input map[string]any) error {
 	c.term.title(claudeRestingTitle)
 	c.reportStatus("state=done")
 	err := c.hooks.run("Stop", "", c.hookInput("Stop", input))
-	c.mod.turnCompleted()
+	c.mod.turnCompleted(false)
 	return err
 }
 

@@ -7908,7 +7908,9 @@ model AgentPeerMessage {
   created_at: string;
   notified_at?: string;
   read_at?: string;
-  // The running turn took it this way; unset when it waited for the turn to end.
+  // The way the sender asked for it; unset when it was sent without one, or lost it to wait for the turn to end.
+  turn?: PeerTurn;
+  // The running turn took it this way; unset when it waited for the turn to end or started the next turn.
   delivered_as?: PeerTurn;
   // Sent with --as-user: delivered as the user's words, without the sender's name.
   as_user?: boolean;
@@ -9199,6 +9201,7 @@ model SessionPlaceResult {
   retry_after_ms?: int32;
   uncertain?: boolean;
   held?: boolean; // The Claude mod took the input and has not placed it yet, so it can still give it back.
+  taken_as?: PeerTurn; // The running turn took the input this way; unset when it started a turn.
 }
 
 // All the home needs to take back one inbox ring, carried by the placement so it survives a home restart.
@@ -9222,6 +9225,8 @@ model InboxRingSettleMessage {
   delivery_id: string;
   outcome: InboxRingOutcome;
   ring: InboxRingRecord;
+  // Placed into the running turn: appended to it as a steer, or started the next turn after stopping it as an interrupt.
+  taken_as?: PeerTurn;
 }
 
 @extension("x-on", #{ session: "session_id" })

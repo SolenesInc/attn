@@ -23,27 +23,28 @@ import (
 )
 
 const (
-	claudeModPollHold          = 25 * time.Second
-	claudeModFirstPollTripwire = 30 * time.Second
-	claudeModReachWindow       = 5 * time.Second
-	claudeModAckWait           = 10 * time.Second
-	claudeVersionLimit         = 5 * time.Second
-	claudeModPollPath          = "/claude/next"
-	claudeModAckPath           = "/claude/ack"
-	claudeModReturnPath        = "/claude/return"
-	claudeModCompactedPath     = "/claude/compacted"
-	claudeModOutcomeHeld       = "held"
-	claudeModOutcomeAppended   = "appended"
-	claudeModOutcomeSubmitted  = "submitted"
-	claudeModOutcomeStopped    = "stopped"
-	claudeModOutcomeRefused    = "refused"
-	claudeModCompactCompacted  = "compacted"
-	claudeModCompactSkipped    = "skipped"
-	claudeModCompactBusy       = "busy"
-	claudeModCompactReady      = "ready"
-	claudeModCompactFailed     = "failed"
-	claudeVersionUnknown       = "Claude Code of unknown version"
-	claudeShortSessionLength   = 8
+	claudeModPollHold           = 25 * time.Second
+	claudeModFirstPollTripwire  = 30 * time.Second
+	claudeModReachWindow        = 5 * time.Second
+	claudeModAckWait            = 10 * time.Second
+	claudeVersionLimit          = 5 * time.Second
+	claudeModPollPath           = "/claude/next"
+	claudeModAckPath            = "/claude/ack"
+	claudeModReturnPath         = "/claude/return"
+	claudeModCompactedPath      = "/claude/compacted"
+	claudeModOutcomeHeld        = "held"
+	claudeModOutcomeAppended    = "appended"
+	claudeModOutcomeInterrupted = "interrupted"
+	claudeModOutcomeSubmitted   = "submitted"
+	claudeModOutcomeStopped     = "stopped"
+	claudeModOutcomeRefused     = "refused"
+	claudeModCompactCompacted   = "compacted"
+	claudeModCompactSkipped     = "skipped"
+	claudeModCompactBusy        = "busy"
+	claudeModCompactReady       = "ready"
+	claudeModCompactFailed      = "failed"
+	claudeVersionUnknown        = "Claude Code of unknown version"
+	claudeShortSessionLength    = 8
 )
 
 var errClaudeModStopping = errors.New("the daemon is stopping; retry once it is back")
@@ -478,6 +479,16 @@ type claudeModAck struct {
 	Ring     *protocol.InboxRingRecord `json:"ring"`
 }
 
+func (a claudeModAck) takenAs() *protocol.PeerTurn {
+	switch a.Outcome {
+	case claudeModOutcomeAppended:
+		return protocol.Ptr(protocol.PeerTurnSteer)
+	case claudeModOutcomeInterrupted:
+		return protocol.Ptr(protocol.PeerTurnInterrupt)
+	}
+	return nil
+}
+
 func (m *claudeMod) serveAck(w http.ResponseWriter, r *http.Request) {
 	var ack claudeModAck
 	if err := json.NewDecoder(r.Body).Decode(&ack); err != nil {
@@ -485,7 +496,7 @@ func (m *claudeMod) serveAck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch ack.Outcome {
-	case claudeModOutcomeHeld, claudeModOutcomeAppended, claudeModOutcomeSubmitted, claudeModOutcomeStopped, claudeModOutcomeRefused:
+	case claudeModOutcomeHeld, claudeModOutcomeAppended, claudeModOutcomeInterrupted, claudeModOutcomeSubmitted, claudeModOutcomeStopped, claudeModOutcomeRefused:
 	default:
 		http.Error(w, "unknown outcome "+ack.Outcome, http.StatusBadRequest)
 		return
@@ -502,7 +513,7 @@ func (m *claudeMod) acknowledge(ack claudeModAck) {
 		return
 	}
 	if ack.Ring != nil && (t == nil || t.held[ack.ID] == nil) {
-		m.settledLocked(ack.ID, *ack.Ring, true)
+		m.settledLocked(ack.ID, *ack.Ring, true, ack.takenAs())
 	}
 	if t == nil {
 		return
@@ -522,11 +533,11 @@ func (m *claudeMod) acknowledge(ack claudeModAck) {
 			t.held[ack.ID] = &claudeModHeld{session: delivery.session, input: delivery.input, accepted: t.accepted}
 		}
 		answer(harness.Custody{Outcome: harness.Held, At: taken.At})
-	case claudeModOutcomeSubmitted:
-		m.typedLocked(t, ack.ID)
+	case claudeModOutcomeSubmitted, claudeModOutcomeInterrupted:
+		m.typedLocked(t, ack.ID, ack.takenAs())
 		answer(taken)
 	case claudeModOutcomeAppended:
-		m.typedLocked(t, ack.ID)
+		m.typedLocked(t, ack.ID, ack.takenAs())
 	case claudeModOutcomeStopped:
 		answer(harness.Custody{Outcome: harness.Stopped})
 	case claudeModOutcomeRefused:
@@ -578,7 +589,7 @@ func (m *claudeMod) takeReturnsLocked(ret claudeModReturn, session protocol.Sess
 				if held {
 					known = append(known, back.ID)
 				} else {
-					m.settledLocked(back.ID, *back.Ring, false)
+					m.settledLocked(back.ID, *back.Ring, false, nil)
 				}
 			}
 		case held:
@@ -608,7 +619,7 @@ func (m *claudeMod) returnHeldLocked(t *claudeModTerminal, ids []string) {
 	for _, held := range back {
 		switch {
 		case held.input.Ring != nil:
-			m.settledLocked(held.input.ID, *held.input.Ring, false)
+			m.settledLocked(held.input.ID, *held.input.Ring, false, nil)
 		case held.input.Voice == harness.VoiceUser:
 			m.host.Events().Returned(held.session, held.input.ID, held.input.Text)
 		default:
@@ -617,16 +628,16 @@ func (m *claudeMod) returnHeldLocked(t *claudeModTerminal, ids []string) {
 	}
 }
 
-func (m *claudeMod) typedLocked(t *claudeModTerminal, id string) {
+func (m *claudeMod) typedLocked(t *claudeModTerminal, id string, takenAs *protocol.PeerTurn) {
 	held := t.held[id]
 	delete(t.held, id)
 	if held != nil && held.input.Ring != nil {
-		m.settledLocked(id, *held.input.Ring, true)
+		m.settledLocked(id, *held.input.Ring, true, takenAs)
 	}
 }
 
-func (m *claudeMod) settledLocked(id string, ring protocol.InboxRingRecord, placed bool) {
-	m.host.Events().Settled(id, ring, placed, func() { m.reported(id) })
+func (m *claudeMod) settledLocked(id string, ring protocol.InboxRingRecord, placed bool, takenAs *protocol.PeerTurn) {
+	m.host.Events().Settled(id, ring, placed, takenAs, func() { m.reported(id) })
 }
 
 func (m *claudeMod) reported(id string) {

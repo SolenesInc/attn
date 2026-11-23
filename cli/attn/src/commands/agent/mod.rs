@@ -288,9 +288,22 @@ fn msg_status_line(message: &AgentPeerMessage) -> String {
         message.message_id,
         short(&message.target_session_id)
     );
-    if let Some(turn) = &message.delivered_as {
+    let with_article = |turn: &str| {
         let article = if turn == "interrupt" { "an" } else { "a" };
-        let _ = write!(line, "; its running turn took it as {article} {turn}");
+        format!("{article} {turn}")
+    };
+    match (&message.delivered_as, &message.turn) {
+        (Some(turn), _) => {
+            let _ = write!(line, "; its running turn took it as {}", with_article(turn));
+        }
+        (None, Some(turn)) if message.state == "read" => {
+            let _ = write!(
+                line,
+                "; it arrived as its next prompt, not as {}",
+                with_article(turn)
+            );
+        }
+        _ => {}
     }
     if message.as_user == Some(true) {
         line.push_str("; sent as the user");

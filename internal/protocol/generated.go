@@ -397,6 +397,9 @@ type AgentPeerMessage struct {
 
 	// TargetSessionID corresponds to the JSON schema field "target_session_id".
 	TargetSessionID string `json:"target_session_id"`
+
+	// Turn corresponds to the JSON schema field "turn".
+	Turn *PeerTurn `json:"turn,omitempty,omitzero"`
 }
 
 type AgentReloadOutcome struct {
@@ -6321,6 +6324,9 @@ type InboxRingSettleMessage struct {
 
 	// Ring corresponds to the JSON schema field "ring".
 	Ring InboxRingRecord `json:"ring"`
+
+	// TakenAs corresponds to the JSON schema field "taken_as".
+	TakenAs *PeerTurn `json:"taken_as,omitempty,omitzero"`
 }
 
 type InitialStateMessage struct {
@@ -12856,6 +12862,9 @@ type SessionPlaceResult struct {
 
 	// Stage corresponds to the JSON schema field "stage".
 	Stage SessionPlaceStage `json:"stage"`
+
+	// TakenAs corresponds to the JSON schema field "taken_as".
+	TakenAs *PeerTurn `json:"taken_as,omitempty,omitzero"`
 
 	// Uncertain corresponds to the JSON schema field "uncertain".
 	Uncertain *bool `json:"uncertain,omitempty,omitzero"`

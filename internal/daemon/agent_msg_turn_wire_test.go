@@ -473,3 +473,150 @@ func TestASteerOrInterruptToAWorkingPluginDriverQueuesWithTheReason(t *testing.T
 		})
 	}
 }
+
+func TestASteerOrInterruptSentDuringAPermissionQuestionWaitsForItAndTheTurnGoesOnToTakeIt(t *testing.T) {
+	approve := func(t *testing.T, w *world, app *testworld.Peer, session string) {
+		t.Helper()
+		mark := len(app.Log())
+		if err := w.Client().UpdateState(protocol.TerminalID(w.Terminal(session)), protocol.StateWorking); err != nil {
+			t.Fatalf("approve: %v", err)
+		}
+		testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	}
+
+	t.Run("steer", func(t *testing.T) {
+		w, app, cli, session, run := leadAndWorkingClaude(t)
+		settled := w.PauseAt(pausepoint.InboxRingSettled)
+		permissionQuestion(t, w, app, session)
+
+		sent := sendPeerMessage(t, cli, "lead", session, "Use the existing cache helper.", "steer")
+		if sent.Status != protocol.AgentMsgStatusSteered {
+			t.Fatalf("a steer during the turn's permission question = %+v, want the mod to hold it for the turn", sent)
+		}
+		modEvent(t, run, fakeagent.ModEventHeld, "existing cache helper")
+		approve(t, w, app, session)
+		appended := run.ModToolBoundary()
+		if len(appended) != 1 || !strings.Contains(appended[0], "Use the existing cache helper.") || !strings.Contains(appended[0], steerLine) {
+			t.Fatalf("at the first tool call after the approval the mod appended %q, want the steer", appended)
+		}
+		settled.Await()
+		settled.Release()
+		if status := peerMessageStatus(t, cli, "lead", sent.MessageID); protocol.Deref(status.DeliveredAs) != protocol.PeerTurnSteer {
+			t.Fatalf("the steer's status = %+v, want delivered as a steer", status)
+		}
+	})
+
+	t.Run("interrupt", func(t *testing.T) {
+		w, app, cli, session, run := leadAndWorkingClaude(t)
+		settled := w.PauseAt(pausepoint.InboxRingSettled)
+		permissionQuestion(t, w, app, session)
+
+		sent := sendPeerMessage(t, cli, "lead", session, "Stop: the cache helper is being removed.", "interrupt")
+		if sent.Status != protocol.AgentMsgStatusQueued || !strings.Contains(sent.Detail, "approval") || !strings.Contains(sent.Detail, "interrupt") {
+			t.Fatalf("an interrupt during the turn's permission question = %+v, want it kept back until the question closes", sent)
+		}
+		approve(t, w, app, session)
+		modEvent(t, run, fakeagent.ModEventHeld, "cache helper is being removed")
+		run.ModAbortLands()
+		if got := run.Prompted(); !strings.Contains(got, "Stop: the cache helper is being removed.") || !strings.Contains(got, interruptOrigin) || !run.ThroughMod || run.AsUser {
+			t.Fatalf("after the approval the interrupt's abort started a turn with %q (through the mod: %t, as the user: %t), want the interrupt", got, run.ThroughMod, run.AsUser)
+		}
+		settled.Await()
+		settled.Release()
+		if status := peerMessageStatus(t, cli, "lead", sent.MessageID); protocol.Deref(status.DeliveredAs) != protocol.PeerTurnInterrupt {
+			t.Fatalf("the interrupt's status = %+v, want delivered as an interrupt", status)
+		}
+	})
+}
+
+func TestASteerOrInterruptHeldUntilTheTurnEndsOnItsOwnArrivesAsTheNextPrompt(t *testing.T) {
+	for _, flag := range []string{"steer", "interrupt"} {
+		t.Run(flag, func(t *testing.T) {
+			w, _, cli, session, run := leadAndWorkingClaude(t)
+			settled := w.PauseAt(pausepoint.InboxRingSettled)
+			sent := sendPeerMessage(t, cli, "lead", session, "Keep the cache key unchanged.", flag)
+			if sent.Status == protocol.AgentMsgStatusQueued {
+				t.Fatalf("the %s to a working agent = %+v, want the mod to hold it", flag, sent)
+			}
+			modEvent(t, run, fakeagent.ModEventHeld, "cache key unchanged")
+			run.Reply("Checked the cache. <!-- attn:state=waiting_input -->")
+			if got := run.Prompted(); !strings.Contains(got, "Keep the cache key unchanged.") || !run.ThroughMod {
+				t.Fatalf("after the turn ended on its own the agent took %q (through the mod: %t), want the held %s as its next prompt", got, run.ThroughMod, flag)
+			}
+			settled.Await()
+			settled.Release()
+			status := peerMessageStatus(t, cli, "lead", sent.MessageID)
+			if status.DeliveredAs != nil || protocol.Deref(status.Turn) != protocol.PeerTurn(flag) {
+				t.Fatalf("the %s's status = %+v, want it asked as a %s and taken as the next prompt, not by the running turn", flag, status, flag)
+			}
+		})
+	}
+}
+
+func TestASteerOrInterruptToACodexWhoseTurnEndedFirstStartsItsNextTurnAndSaysSo(t *testing.T) {
+	for _, flag := range []string{"steer", "interrupt"} {
+		t.Run(flag, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			app, cli := w.App(), w.Client()
+			registerSessions(t, w, cli, "lead")
+			session, run := sharedCodexInATurn(t, w, app)
+			starting := w.PauseAt(pausepoint.CodexTurnStarting)
+
+			type answer struct {
+				sent *protocol.AgentMsgResult
+				err  error
+			}
+			answered := make(chan answer, 1)
+			go func() {
+				sent, err := peerMessage(cli, "lead", session, "Keep the cache key unchanged.", flag)
+				answered <- answer{sent, err}
+			}()
+			starting.Await()
+			run.Reply("Checked the cache. <!-- attn:state=idle -->")
+			testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+			starting.Release()
+			got := <-answered
+			if got.err != nil {
+				t.Fatalf("the %s: %v", flag, got.err)
+			}
+			if got.sent.Status != protocol.AgentMsgStatusNotified {
+				t.Fatalf("a %s that reached Codex after its turn ended = %+v, want notified, not %s", flag, got.sent, flag)
+			}
+			if prompt := w.CodexServer().Prompted(run.ConversationID); !strings.Contains(prompt, "Keep the cache key unchanged.") {
+				t.Fatalf("Codex's next turn started with %q, want the %s", prompt, flag)
+			}
+			status := peerMessageStatus(t, cli, "lead", got.sent.MessageID)
+			if status.DeliveredAs != nil || protocol.Deref(status.Turn) != protocol.PeerTurn(flag) {
+				t.Fatalf("the %s's status = %+v, want it asked as a %s and taken as the next prompt", flag, status, flag)
+			}
+		})
+	}
+}
+
+func TestAnInterruptToSigmaDuringAnApprovalWaitsForTheApprovalAndThenStopsTheRun(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "lead")
+	session, view, server := appServerSession(t, w, app, fakeagent.Sigma)
+	promptUntilWorking(app, session, view, server, "find the flaky checkout test")
+	server.AskApproval(view.ConversationID)
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
+	submitted := server.Submissions(view.ConversationID)
+
+	sent := sendPeerMessage(t, cli, "lead", session, "Leave the migration for tonight.", "interrupt")
+	if sent.Status != protocol.AgentMsgStatusQueued || !strings.Contains(sent.Detail, "approval") {
+		t.Fatalf("an interrupt while Sigma waits on an approval = %+v, want it kept back until the approval closes", sent)
+	}
+	if got := server.Submissions(view.ConversationID); got != submitted {
+		t.Fatalf("Sigma took %d submissions during its approval, want none", got-submitted)
+	}
+	server.Work(view.ConversationID)
+	server.AwaitInterrupted(view.ConversationID)
+	if got := server.Prompted(view.ConversationID); got.Steer || !strings.Contains(got.Text, "Leave the migration for tonight.") || !strings.Contains(got.Text, interruptOrigin) {
+		t.Fatalf("after the approval Sigma took %+v, want the interrupt as its next run", got)
+	}
+	sendPeerMessage(t, cli, "lead", session, "The TTL lives in config/cache.yaml.")
+	if status := peerMessageStatus(t, cli, "lead", sent.MessageID); protocol.Deref(status.DeliveredAs) != protocol.PeerTurnInterrupt {
+		t.Fatalf("the interrupt's status = %+v, want delivered as an interrupt", status)
+	}
+}

@@ -30,6 +30,7 @@ const (
 	fakeModEventBacklog  = 64
 	fakeModOutcomeSubmit = "submitted"
 	fakeModOutcomeAppend = "appended"
+	fakeModOutcomeAbort  = "interrupted"
 	fakeModTurnSteer     = "steer"
 	fakeModTurnInterrupt = "interrupt"
 	fakeModKindCompact   = "compact"
@@ -242,11 +243,11 @@ func (m *fakeMod) place(instance string, message fakeModMessage) {
 	default:
 		m.working = true
 		m.mu.Unlock()
-		m.submit(instance, fakeModMessage{ID: message.ID, Text: message.Text, UserWords: message.UserWords})
+		m.submit(instance, false, fakeModMessage{ID: message.ID, Text: message.Text, UserWords: message.UserWords})
 	}
 }
 
-func (m *fakeMod) submit(instance string, messages ...fakeModMessage) {
+func (m *fakeMod) submit(instance string, interrupted bool, messages ...fakeModMessage) {
 	asUser := messages[0].UserWords
 	texts := make([]string, 0, len(messages))
 	for _, message := range messages {
@@ -259,7 +260,11 @@ func (m *fakeMod) submit(instance string, messages ...fakeModMessage) {
 	}
 	m.agent.placeThroughMod(strings.Join(texts, "\n\n"), asUser)
 	for _, message := range messages {
-		m.ackHeld(instance, message, fakeModOutcomeSubmit)
+		outcome := fakeModOutcomeSubmit
+		if interrupted && message.Turn == fakeModTurnInterrupt {
+			outcome = fakeModOutcomeAbort
+		}
+		m.ackHeld(instance, message, outcome)
 	}
 }
 
@@ -360,7 +365,7 @@ func (m *fakeMod) turnStarted() {
 	m.working, m.stopped = true, false
 }
 
-func (m *fakeMod) turnCompleted() {
+func (m *fakeMod) turnCompleted(interrupted bool) {
 	if m == nil {
 		return
 	}
@@ -393,7 +398,7 @@ func (m *fakeMod) turnCompleted() {
 		m.reportBetweenTurns(instance)
 	}
 	if len(prompt) > 0 {
-		go m.submit(instance, prompt...)
+		go m.submit(instance, interrupted, prompt...)
 	}
 }
 
@@ -412,7 +417,7 @@ func (m *fakeMod) handle(a *agent, method string, params json.RawMessage) (any, 
 		if !aborting {
 			return nil, errors.New("the mod holds no interrupt whose abort could land")
 		}
-		m.turnCompleted()
+		m.turnCompleted(true)
 		return struct{}{}, nil
 	case methodModEsc:
 		a.turn.Lock()

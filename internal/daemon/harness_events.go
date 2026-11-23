@@ -215,12 +215,12 @@ func (e harnessEvents) Returned(session protocol.SessionID, id, text string) {
 	e.daemon.returnInput(session, id, text)
 }
 
-func (e harnessEvents) Settled(delivery string, ring protocol.InboxRingRecord, placed bool, done func()) {
+func (e harnessEvents) Settled(delivery string, ring protocol.InboxRingRecord, placed bool, takenAs *protocol.PeerTurn, done func()) {
 	outcome := protocol.InboxRingOutcomeReturned
 	if placed {
 		outcome = protocol.InboxRingOutcomePlaced
 	}
-	e.daemon.enqueueHomeReport(protocol.InboxRingSettleMessage{Cmd: protocol.CmdInboxRingSettle, DeliveryID: delivery, Outcome: outcome, Ring: ring}, done)
+	e.daemon.enqueueHomeReport(protocol.InboxRingSettleMessage{Cmd: protocol.CmdInboxRingSettle, DeliveryID: delivery, Outcome: outcome, Ring: ring, TakenAs: takenAs}, done)
 }
 
 func (e harnessEvents) Reloaded(session protocol.SessionID) {

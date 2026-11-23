@@ -51,6 +51,7 @@ func (attempt Attempt) Result() protocol.SessionPlaceResult {
 	if attempt.Held {
 		result.Held = protocol.Ptr(true)
 	}
+	result.TakenAs = attempt.TakenAs
 	if attempt.Err == nil {
 		return result
 	}
@@ -80,7 +81,7 @@ func (attempt Attempt) Result() protocol.SessionPlaceResult {
 
 func AttemptFromResult(result protocol.SessionPlaceResult) Attempt {
 	stages := map[protocol.SessionPlaceStage]Stage{protocol.SessionPlaceStagePlaced: Placed, protocol.SessionPlaceStageDeferred: Deferred, protocol.SessionPlaceStageFailed: Failed}
-	attempt := Attempt{Stage: stages[result.Stage], Held: protocol.Deref(result.Held), Uncertain: protocol.Deref(result.Uncertain)}
+	attempt := Attempt{Stage: stages[result.Stage], Held: protocol.Deref(result.Held), TakenAs: result.TakenAs, Uncertain: protocol.Deref(result.Uncertain)}
 	if result.At != nil {
 		attempt.At, _ = time.Parse(time.RFC3339Nano, *result.At)
 	}

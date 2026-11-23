@@ -67,7 +67,15 @@ recipient that is not working takes the message at once whatever its turn use,
 as if it had none. `--as-user` sends the sender's text alone, as the user's
 words, by default or with `--interrupt`. attn keeps the turn use and
 `as_user` with the message, and records how a running turn took it, which
-`attn agent msg-status` shows as `delivered_as`.
+`attn agent msg-status` shows as `delivered_as`. The harness says how it took
+the message. When the turn ends before the harness can steer or interrupt it,
+the message reaches the recipient as its next prompt instead: a Claude steer
+that no tool call takes before the turn ends, an interrupt whose turn ends
+before the stop lands, or a turn that ended before Codex or an app server got
+the message. `msg-status` then shows the turn use with no `delivered_as`. An
+interrupt never reaches a session while it waits on an approval or a question,
+whatever the harness: attn keeps it until the wait ends, so it never answers or
+cancels the question.
 
 attn refuses a peer message, and gives the reason, when:
 
@@ -358,10 +366,12 @@ connected:
   would take during that turn and holds it until the question closes, because
   the mod's delivery cannot answer the question. An interrupt is the exception:
   attn keeps it until the question closes, so it never answers or cancels the
-  question. Refusing the question, with "No" or with Esc, does not stop the
-  session: Claude reports both the same way, and it takes the next prompt. A
-  held ring then starts a new turn, and later rings go out as usual. A question
-  outside a turn still holds every ring back.
+  question. A steer or an interrupt keeps its turn use through the question:
+  when the user approves and the turn goes on, the turn takes it as usual.
+  Refusing the question, with "No" or with Esc, does not stop the session:
+  Claude reports both the same way, and it takes the next prompt. A held ring
+  then starts a new turn, and later rings go out as usual. A question outside a
+  turn still holds every ring back.
 
 ### With a plugin driver
 
@@ -638,7 +648,8 @@ these:
 - The mail-start limit is used up. The reply also names the setting to change.
 
 `attn agent msg-status <id>` shows the sender whether the message is queued,
-notified, or read.
+notified, or read, and how the recipient took a steer or an interrupt: in its
+running turn, or as its next prompt.
 
 ## Limits
 

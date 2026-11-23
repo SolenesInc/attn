@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "bdb1dbf8d9c5";
+pub const PROTOCOL_VERSION: &str = "5721029ffb0e";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -277,6 +277,8 @@ pub struct AgentPeerMessage {
     pub sender: PartyView,
     pub state: AgentMessageState,
     pub target_session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn: Option<PeerTurn>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentReloadOutcome {
@@ -5655,6 +5657,8 @@ pub struct InboxRingSettleMessage {
     pub delivery_id: String,
     pub outcome: InboxRingOutcome,
     pub ring: InboxRingRecord,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub taken_as: Option<PeerTurn>,
 }
 
 impl InboxRingSettleMessage {
@@ -11240,6 +11244,8 @@ pub struct SessionPlaceResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retry_after_ms: Option<i64>,
     pub stage: SessionPlaceStage,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub taken_as: Option<PeerTurn>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub uncertain: Option<bool>,
 }

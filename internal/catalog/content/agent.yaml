@@ -118,7 +118,7 @@ commands:
     grant: own
     read_only: true
     doc: |
-      Inspects a message you sent as queued, notified, or read, and says whether a running turn took it as a steer or an interrupt, and whether you sent it as the user.
+      Inspects a message you sent as queued, notified, or read, and says whether a running turn took it as a steer or an interrupt or it arrived as the next prompt instead, and whether you sent it as the user.
     args:
       - {name: message, type: text, required: true, cli: pos, placeholder: "<message-id>", doc: "the id agent_msg answered"}
     result: AgentPeerMessage

@@ -124,8 +124,8 @@ type Events interface {
 	Compaction(session SessionID, c Compaction)
 	// Returned gives back the user's words the harness took but did not place, so attn places them again.
 	Returned(session SessionID, id, text string)
-	// Settled says how a ring the harness held ended: placed, or given back. done runs once the home has the report.
-	Settled(delivery string, ring protocol.InboxRingRecord, placed bool, done func())
+	// Settled says how a ring the harness held ended: placed, or given back. takenAs says when the running turn took it as a steer or an interrupt. done runs once the home has the report.
+	Settled(delivery string, ring protocol.InboxRingRecord, placed bool, takenAs *protocol.PeerTurn, done func())
 	// Reach says the harness's channel into the session came up or went down.
 	Reach(session SessionID, r Reach)
 	// Reloaded says the harness's instance in this session was replaced; anything handed to the old one may need placing again.

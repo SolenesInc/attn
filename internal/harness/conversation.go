@@ -87,6 +87,8 @@ type Custody struct {
 	Outcome Outcome
 	At      time.Time
 	Reason  string
+	// TookAs, with Taken: Steer when the running turn took the input, Interrupt when the input started the next turn after stopping a running one.
+	TookAs TurnUse
 	// Uncertain, with Deferred: the harness may have taken it.
 	Uncertain bool
 }

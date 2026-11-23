@@ -366,7 +366,7 @@ func (s serverConversation) Deliver(ctx context.Context, in harness.Input) harne
 	if refusal := s.link.turnRefusal(in.Turn); refusal != "" {
 		return harness.Custody{Outcome: harness.Rejected, Reason: refusal}
 	}
-	if in.PendingApproval && !s.link.Can(AbilityQuestionSafe) {
+	if in.PendingApproval && (!s.link.Can(AbilityQuestionSafe) || in.Turn == harness.Interrupt) {
 		return harness.Custody{Outcome: harness.NotMine}
 	}
 	return s.link.deliver(ctx, s.session, in)
@@ -392,6 +392,10 @@ func (l *Link) deliver(ctx context.Context, session protocol.SessionID, in harne
 		return harness.Custody{Reason: fmt.Sprintf("session %s holds no %s conversation", session, l.b.name)}
 	}
 	params := map[string]any{"conversation": conversation, "requestId": in.ID, "author": l.inputAuthor(session, in.Voice), "text": in.Text}
+	took := harness.Queue
+	if l.settlesOnServer(session) {
+		took = in.Turn
+	}
 	if l.Can(AbilitySteer) && in.Turn != harness.Interrupt {
 		params["steer"] = true
 	}
@@ -414,7 +418,7 @@ func (l *Link) deliver(ctx context.Context, session protocol.SessionID, in harne
 	if err != nil {
 		return harness.Custody{Reason: fmt.Sprintf("deliver to %s conversation %s: %v", l.b.name, conversation, err)}
 	}
-	return harness.Custody{Outcome: harness.Taken, At: time.Now()}
+	return harness.Custody{Outcome: harness.Taken, At: time.Now(), TookAs: took}
 }
 
 type serverAuthorRef struct {

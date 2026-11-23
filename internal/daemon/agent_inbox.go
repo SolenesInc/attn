@@ -240,6 +240,9 @@ func (d *Daemon) peerMessageResult(record inbox.PeerRecord) *protocol.AgentPeerM
 		Content: record.Message.Body, State: protocol.AgentMessageState(record.State()),
 		CreatedAt: record.Message.CreatedAt,
 	}
+	if record.Message.Turn != "" {
+		result.Turn = protocol.Ptr(record.Message.Turn)
+	}
 	if record.DeliveredAs != "" {
 		result.DeliveredAs = protocol.Ptr(record.DeliveredAs)
 	}

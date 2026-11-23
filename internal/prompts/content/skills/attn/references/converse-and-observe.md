@@ -100,7 +100,9 @@ The result always says what happened. Read it:
   same message again gets the same answer.
 
 `attn agent msg-status <message-id>` reads a message's state later, how its
-recipient's turn took it, and whether you sent it as the user.
+recipient's turn took it, and whether you sent it as the user. A steer or an
+interrupt reaches the recipient as its next prompt instead when its turn ends
+before taking it, and `msg-status` says so.
 
 The daemon writes the header, not you. It composes the attribution from the
 session that the request names as the sender, so you cannot forge that line

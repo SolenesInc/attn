@@ -89,13 +89,13 @@ func (r *runState) start() RunStart {
 
 func (m *Monitor) observeRunLocked(previous protocol.SessionState, cause Cause, stop runStop, now time.Time) []Run {
 	phase, open := m.state.State, m.runs.open
-	if runsIn(previous) && !runsIn(phase) {
+	if RunsIn(previous) && !RunsIn(phase) {
 		m.runs.unreadStop = now
 	}
 	switch {
 	case phase == protocol.SessionStateWorking && open == nil:
 		_, recovered := cause.(StartupRecovery)
-		if recovered || runsIn(previous) || m.input.run == nil {
+		if recovered || RunsIn(previous) || m.input.run == nil {
 			return nil
 		}
 		m.runs.open = &trackedRun{Run: Run{StartedBy: m.input.run.start(), StartedAt: now}, startKnown: m.input.run.prompted || !m.runStartInFlightLocked(), costAtStart: m.cost, awaitsBaseline: !m.runs.unreadStop.IsZero()}
@@ -116,7 +116,7 @@ func (m *Monitor) observeRunLocked(previous protocol.SessionState, cause Cause, 
 	return nil
 }
 
-func runsIn(state protocol.SessionState) bool {
+func RunsIn(state protocol.SessionState) bool {
 	return state == protocol.SessionStateWorking || state == protocol.SessionStatePendingApproval
 }
 

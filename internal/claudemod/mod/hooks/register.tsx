@@ -4,7 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Message, Request } from '../types'
 
 type Link = { terminal: string; socketPath: string }
-type Outcome = 'submitted' | 'held' | 'appended' | 'refused'
+type Outcome = 'submitted' | 'held' | 'appended' | 'interrupted' | 'refused'
 type Compacted = 'compacted' | 'skipped' | 'busy' | 'ready' | 'failed'
 
 const POLL_RETRY_MS = 1000
@@ -239,7 +239,7 @@ function nextPrompt(messages: Message[]): { prompt: Message[]; rest: Message[] }
   return { prompt: messages.filter(inVoice), rest: messages.filter(message => !inVoice(message)) }
 }
 
-async function submitPrompt($: EngineInterface, prompt: Message[]): Promise<void> {
+async function submitPrompt($: EngineInterface, prompt: Message[], interrupted: boolean): Promise<void> {
   const drop = await submit($, prompt.map(message => message.text).join('\n\n'), prompt[0]?.user_words === true)
   if (drop !== undefined) {
     const back = [...prompt, ...takeHeld()]
@@ -247,7 +247,7 @@ async function submitPrompt($: EngineInterface, prompt: Message[]): Promise<void
     return giveBack($, back)
   }
   for (const message of prompt) {
-    await ackHeld($, message, 'submitted')
+    await ackHeld($, message, interrupted && message.turn === 'interrupt' ? 'interrupted' : 'submitted')
   }
 }
 
@@ -288,6 +288,7 @@ export const register: Register = on => {
     if (e.agentId !== undefined) {
       return result
     }
+    const interrupted = e.isAborted && ownAbort
     isStopped = e.isAborted && !ownAbort
     ownAbort = false
     const held = takeHeld()
@@ -302,7 +303,7 @@ export const register: Register = on => {
     const { prompt, rest } = nextPrompt(held)
     await Promise.all([setQueued($, rest), setTurnRunning($, prompt.length > 0)])
     if (prompt.length > 0) {
-      void submitPrompt($, prompt)
+      void submitPrompt($, prompt, interrupted)
     }
     return result
   })

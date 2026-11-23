@@ -34,7 +34,7 @@ func (m *Monitor) openTurnLocked(now time.Time, quietStop bool) bool {
 }
 
 func (m *Monitor) keepCaptureReplyLocked(previous protocol.SessionState) {
-	if !m.captureReplyAtStop || !runsIn(previous) || runsIn(m.state.State) {
+	if !m.captureReplyAtStop || !RunsIn(previous) || RunsIn(m.state.State) {
 		return
 	}
 	m.captureReplyAtStop = false

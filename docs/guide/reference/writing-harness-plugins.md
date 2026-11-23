@@ -289,7 +289,7 @@ ignored.
 | `compact` | `conversation/compact` | compacts the conversation when an agent closes with `--compact` or stands by |
 | `steer` | `steer: true` on `conversation/submit` | sends input into the run in flight at its next step instead of after the run, and passes on another agent's `attn agent msg --steer` |
 | `interrupt` | `conversation/interrupt` that stops the run in flight at once, then a `conversation/submit` that starts the next run | passes on another agent's `attn agent msg --interrupt`: it interrupts the run, then submits the message without `steer`. Without it, Attn holds the message until the run ends |
-| `question_safe` | input while a call waits on an approval or a question | delivers input during that wait instead of holding it until the wait ends |
+| `question_safe` | input while a call waits on an approval or a question | delivers input during that wait instead of holding it until the wait ends. Another agent's interrupt still waits for the wait to end |
 
 The executable, optional executable override, home variable and default home
 resolve in the daemon's machine and login environment. `socketName` is a filename

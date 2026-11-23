@@ -12,6 +12,7 @@ import (
 
 	"github.com/victorarias/attn/internal/codexshared"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -76,8 +77,9 @@ func (c codexConversation) Deliver(_ context.Context, in harness.Input) harness.
 	ctx, cancel := context.WithTimeout(context.Background(), codexServerStartLimit)
 	defer cancel()
 	s, client, err := r.control(ctx, facts.Profile)
+	took := harness.Queue
 	if err == nil {
-		err = r.startTurn(ctx, s, client, facts.Session, conversation, in)
+		took, err = r.startTurn(ctx, s, client, facts.Session, conversation, in)
 	}
 	if err == nil && facts.Session != "" {
 		s.events.run(r.host, func() {
@@ -87,11 +89,12 @@ func (c codexConversation) Deliver(_ context.Context, in harness.Input) harness.
 	if err != nil {
 		return harness.Custody{Reason: fmt.Sprintf("deliver to shared Codex conversation %s: %v", conversation, err)}
 	}
-	return harness.Custody{Outcome: harness.Taken, At: time.Now()}
+	return harness.Custody{Outcome: harness.Taken, At: time.Now(), TookAs: took}
 }
 
-func (r *codexShared) startTurn(ctx context.Context, s *codexServer, client *codexshared.Client, sessionID protocol.SessionID, conversation string, in harness.Input) error {
-	return r.withResumed(ctx, client, sessionID, conversation, func(call codexCall, status codexThreadStatus) error {
+func (r *codexShared) startTurn(ctx context.Context, s *codexServer, client *codexshared.Client, sessionID protocol.SessionID, conversation string, in harness.Input) (took harness.TurnUse, err error) {
+	pausepoint.At(pausepoint.CodexTurnStarting)
+	err = r.withResumed(ctx, client, sessionID, conversation, func(call codexCall, status codexThreadStatus) error {
 		params := map[string]any{"threadId": conversation, "input": []any{map[string]any{"type": "text", "text": in.Text, "text_elements": []any{}}}}
 		if status.Type == "active" {
 			running, err := runningTurn(call, conversation)
@@ -111,13 +114,16 @@ func (r *codexShared) startTurn(ctx context.Context, s *codexServer, client *cod
 					r.tookOwnInterrupt(running)
 					return fmt.Errorf("interrupt turn %s: %w", running, err)
 				}
+				took = harness.Interrupt
 			default:
 				params["expectedTurnId"] = running
+				took = harness.Steer
 				return call("turn/steer", params, nil)
 			}
 		}
 		return call("turn/start", params, nil)
 	})
+	return took, err
 }
 
 func (r *codexShared) interrupting(turn string) {

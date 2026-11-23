@@ -359,7 +359,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 	fresh := pending == nil
 	if pending == nil {
 		bellWaitsForPrompt := attempt.Typed > 0 && !sessionmonitor.PromptReady(holder.State, d.stateReason(holder.ID))
-		paste, err := d.inboxPaste(a, holder.ProfileID, bellHeldUntil.IsZero() && !bellWaitsForPrompt, holder.State == protocol.SessionStateWorking)
+		paste, err := d.inboxPaste(a, holder.ProfileID, bellHeldUntil.IsZero() && !bellWaitsForPrompt, sessionmonitor.RunsIn(holder.State))
 		if err != nil {
 			return receipt, err
 		}
@@ -442,11 +442,12 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		}
 		receipt.Rang = true
 		receipt.Detail = "notified " + sessionDisplayName(holder)
-		if ring.Turn != nil {
+		switch {
+		case placement.Held && ring.Turn != nil:
 			receipt.Turn, receipt.Typed = *ring.Turn, ring.Typed
-		}
-		if ring.Turn != nil && !placement.Held {
-			if err := d.store.DeliverPeerAs(ring.Typed, *ring.Turn); err != nil {
+		case placement.TakenAs != nil:
+			receipt.Turn, receipt.Typed = *placement.TakenAs, ring.Typed
+			if err := d.store.DeliverPeerAs(ring.Typed, *placement.TakenAs); err != nil {
 				return receipt, err
 			}
 		}
@@ -475,6 +476,9 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		}
 	}
 	receipt.Detail = agentMessageQueuedDetail(placement.Err)
+	if ring.Turn != nil && errors.Is(placement.Err, sessionmonitor.ErrBlockedByApproval) {
+		receipt.Detail = fmt.Sprintf("queued (target is waiting on an approval; your %s reaches its turn once the question closes, or waits for the turn to end)", *ring.Turn)
+	}
 	if receipt.Detail == queuedNotTakingInput && finishingStart && memberID != "" {
 		receipt.Detail = d.memberStartQueuedDetail(memberID, holder.ID)
 	}
@@ -500,8 +504,8 @@ func (d *Daemon) settleInboxRing(_ context.Context, msg protocol.InboxRingSettle
 	state := d.lockInboxState(address)
 	defer state.unlock()
 	if msg.Outcome == protocol.InboxRingOutcomePlaced {
-		if msg.Ring.Turn != nil {
-			if err := d.store.DeliverPeerAs(msg.Ring.Typed, *msg.Ring.Turn); err != nil {
+		if msg.TakenAs != nil {
+			if err := d.store.DeliverPeerAs(msg.Ring.Typed, *msg.TakenAs); err != nil {
 				return struct{}{}, fmt.Errorf("inbox ring %s: %w", msg.DeliveryID, err)
 			}
 		}
