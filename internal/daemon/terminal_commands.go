@@ -36,6 +36,18 @@ type typedCommand struct {
 	typedAt       time.Time
 }
 
+const promptBlockUnreportedByRuntime = "0"
+
+func (typed typedCommand) finishedWhen(terminal protocol.TerminalID) protocol.TerminalWaitBlockMessage {
+	wait := protocol.TerminalWaitBlockMessage{Cmd: protocol.CmdTerminalWaitBlock, TerminalID: terminal, Until: protocol.TerminalWaitUntilPrompt}
+	if typed.promptBlockID == promptBlockUnreportedByRuntime {
+		wait.AfterBlockID = protocol.Ptr(typed.lastBlockID)
+	} else {
+		wait.PastPromptBlockID = protocol.Ptr(typed.promptBlockID)
+	}
+	return wait
+}
+
 func (d *Daemon) terminalCaller(id protocol.SessionID) (*protocol.Session, error) {
 	caller := d.store.Get(protocol.TrimID(id))
 	if caller == nil {
@@ -465,7 +477,7 @@ func (d *Daemon) awaitTypedCommandFinish(ctx context.Context, terminal protocol.
 	finishBy := typed.typedAt.Add(typedCommandFinishTripwire)
 	finishing, cancel := context.WithDeadline(ctx, finishBy)
 	defer cancel()
-	_, err := Call[protocol.TerminalWaitResult](finishing, d.router(), protocol.TerminalWaitBlockMessage{Cmd: protocol.CmdTerminalWaitBlock, TerminalID: terminal, Until: protocol.TerminalWaitUntilPrompt, PastPromptBlockID: protocol.Ptr(typed.promptBlockID)})
+	_, err := Call[protocol.TerminalWaitResult](finishing, d.router(), typed.finishedWhen(terminal))
 	if err == nil {
 		d.typedCommands.CompareAndDelete(terminal, typed)
 		return nil

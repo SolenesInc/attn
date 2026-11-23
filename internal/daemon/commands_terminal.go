@@ -108,13 +108,14 @@ func (d *Daemon) runTerminalWait(ctx context.Context, c command.Caller, a comman
 	wait := protocol.TerminalWaitBlockMessage{Until: until}
 	if stored, ok := d.typedCommands.Load(target.terminal); ok && until == protocol.TerminalWaitUntilPrompt {
 		if typed := stored.(typedCommand); time.Since(typed.typedAt) <= typedCommandFinishTripwire {
-			wait.PastPromptBlockID = &typed.promptBlockID
+			wait = typed.finishedWhen(target.terminal)
 		}
 	}
 	waited, err := d.waitTerminal(ctx, target, wait)
 	if err != nil {
 		return nil, timedOut(ctx, err)
 	}
+	waited.Block = nil
 	return waited, nil
 }
 
