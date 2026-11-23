@@ -85,11 +85,13 @@ measurement uses that one.
   Sigma's internal number for a conversation started without one, such as by
   `sigma exec` or `/fork` (measured on 69daaf7: a bare `sigma exec` sent `149`,
   a fork `173`).
-- `conversation/start` takes `instructions`, kept with the conversation and
-  not given to its subagents: OpenAI is told them after the `AGENTS.md` files,
-  and Claude Code appends them to its own system prompt. They are fixed once the
+- `conversation/start` takes `instructions`, kept with the conversation and not
+  given to its subagents: OpenAI is told them after the `AGENTS.md` files, and
+  Claude Code appends them to its own system prompt. They are fixed once the
   conversation starts, and `conversation/start` with an existing id changes
-  nothing (413f38d).
+  nothing (413f38d). A worker on its parent's provider keeps the instructions
+  its parent inherited, and a worker on another provider gets none
+  (`packages/sigma/src/agents.ts`, a9b3461).
 - A server's `instructions` reach the model by provider. On the Claude path
   Sigma hands Claude Code each server as an in-process MCP server with the
   instructions the server gave in `initialize` (`packages/claude/src/process.ts`),
@@ -128,7 +130,7 @@ measurement uses that one.
   either method 0.8 to 1.0 s.
 - `status/watch` opens with the busy conversation trees and then sends one
   status per change of a tree (working, waiting on an approval, idle), with
-  how its root's run ended. Subagents are part of their root's tree.
+  how its root's run ended. Subagents and workers are part of their root's tree.
 - `conversation/list` carries `ended` on each conversation that has run: how
   its last run ended, the same as `status/watch` says.
 - Sigma's tools refuse no path outside the conversation's folder. A path
@@ -160,12 +162,21 @@ measurement uses that one.
   tool call is a `pi.assistant` entry, and a tool's output a `pi.tool-result`
   entry. `pi.usage` holds each model's token and cost totals, and `pi.live`
   the compactions running.
-- A subagent is a conversation of its own, with its own entries and its own
-  `pi.usage`, which counts only that conversation's spend; the parent gets a
-  `sigma.subagent` entry pointing at it, and `conversation/list` gives each
-  subagent's `lineage` (`parent`, `root`) (`packages/kernel/docs/spec.md`,
-  `packages/protocol/src/index.ts`).
-- A conversation's `title` in `conversation/list` is a subagent's title, or
+- A child conversation has its own entries and its own `pi.usage`, which
+  counts only that conversation's spend. `conversation/list` gives each child's
+  `lineage` (`parent`, `root`, and `task` on a worker)
+  (`packages/kernel/docs/spec.md`, `packages/protocol/src/index.ts`). Read at
+  a9b3461, a child is one of two kinds:
+  - A worker comes from the `start_worker` tool. Its lineage's `task` is its
+    task name, such as `/root/explore`. It takes input and outlives its
+    parent's turns. With `fork_turns: "all"` it is a fork of its parent
+    (`packages/sigma/src/agents.ts`, `packages/sigma/src/server.ts`).
+  - A subagent is one of Claude Code's own subagents, which Sigma hosts. Its
+    lineage has no `task`. It takes input only through its parent, refusing
+    its own with `TakesNoInput`, and stops when its parent's run does
+    (`packages/hosted/src/transcript.ts`, `packages/protocol/src/index.ts`).
+    Its parent gets a `sigma.subagent` entry that points at it.
+- A conversation's `title` in `conversation/list` is a child's lineage title, or
   else the first line of the conversation's first prompt.
 - Sigma's own tools are `read`, `write` and `edit`, which take a `path`,
   `apply_patch`, which takes a `patch` in Codex's format, `bash`, `grep`,

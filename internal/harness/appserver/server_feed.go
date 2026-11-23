@@ -175,8 +175,12 @@ func (p *serverConnection) openSubagentFeeds(c *effectrpc.Client, listed []liste
 	if len(roots) == 0 {
 		return
 	}
+	byID := make(map[string]listedConversation, len(listed))
 	for _, each := range listed {
-		if !each.subagent() {
+		byID[each.ID] = each
+	}
+	for _, each := range listed {
+		if !subagentOfRoot(each, byID) {
 			continue
 		}
 		forkAt := int64(0)
@@ -187,6 +191,15 @@ func (p *serverConnection) openSubagentFeeds(c *effectrpc.Client, listed []liste
 			p.openSubagentFeed(c, id, l, each.ID, forkAt, live)
 		}
 	}
+}
+
+func subagentOfRoot(each listedConversation, byID map[string]listedConversation) bool {
+	for at := each; at.child(); at = byID[at.Lineage.Parent] {
+		if at.worker() {
+			return false
+		}
+	}
+	return each.child()
 }
 
 func (p *serverConnection) openSubagentFeed(c *effectrpc.Client, id protocol.SessionID, l *Link, conversation string, forkAt int64, live bool) {

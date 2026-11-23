@@ -312,12 +312,13 @@ type ServerFork struct {
 	At int64  `json:"at"`
 }
 
-// ServerLineage places a subagent conversation under its parent and root conversation.
+// ServerLineage places a child conversation under its parent and root conversation. A worker's lineage names its task.
 type ServerLineage struct {
 	Parent string `json:"parent"`
 	Root   string `json:"root"`
 	Call   string `json:"call"`
 	Title  string `json:"title"`
+	Task   string `json:"task,omitempty"`
 }
 
 // ServerCompaction is how Sigma answers conversation/compact: compacted, nothing_to_compact, failed or stopped.

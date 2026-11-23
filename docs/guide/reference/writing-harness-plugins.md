@@ -347,12 +347,13 @@ attn ends it when the last one is uninstalled or the user turns the tools off.
 
 Your server sends the registered headers on every request to attn's MCP
 server, and adds the declared header with the root conversation that makes the
-call: the conversation the user started, not a subagent. One registration
-covers every conversation of the server, and attn acts as the session that
-holds the named conversation. A conversation no session holds, such as a fork
-nobody opened in attn yet, is refused with a message that names it. Once the
-fork opens in attn, it is its own session, and its calls act as that session.
-`examples/plugins/sample-server` passes the name and description to its view.
+call: the conversation the user started, not a subagent or a worker. One
+registration covers every conversation of the server, and attn acts as the
+session that holds the named conversation. A conversation no session holds, such
+as a fork nobody opened in attn yet, is refused with a message that names it.
+Once the fork opens in attn, it is its own session, and its calls act as that
+session. `examples/plugins/sample-server` passes the name and description to its
+view.
 
 ### Shared server RPC contract
 
@@ -409,7 +410,13 @@ conversations, then streams `{conversation, status, ended?}` changes.
 `status` is `working`, `waiting` for approval, or `idle`.
 `ended` has `outcome` (`answered`, `interrupted`, or a failure), optional
 `message`, `said`, and, with numbered recovery, `completion`.
-`conversation/list` returns `[{id, ended?}]` for recovery of the last run.
+`conversation/list` returns `[{id, ended?, fork?, lineage?}]`. `ended` recovers
+the last run. `fork: {of, at}` names the conversation a fork came from and the
+last entry it inherits. `lineage: {parent, root, task?}` places a child
+conversation under the conversation that started it and the root of its tree.
+A worker has a `task`, its task name such as `/root/explore`, and takes input
+of its own. A child with no `task` is a subagent: it takes input only through
+its parent.
 Numbered recovery accepts `status/watch {after: {conversation: completion}}`
 and replays newer idle completions. Completion numbers ascend per conversation.
 
@@ -451,6 +458,10 @@ and the list of a running server no longer holds cannot be resumed.
   `path`, and in `apply_patch` calls. It finds a pull request in a `bash`,
   `shell` or `exec_command` call that runs `gh pr create`, by the pull request
   URL in its output.
+- Attn watches each subagent under a session's conversation the same way, and
+  counts its files, pull requests and `pi.usage` toward that session. Attn
+  counts nothing of a worker, or of any child under a worker, toward the
+  session whose conversation started it.
 
 ## The wire, for any language
 

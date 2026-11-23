@@ -235,6 +235,50 @@ func TestAnAppServerSessionsSubagentsReportFilesPullRequestsAndSpendOnceAcrossRe
 	})
 }
 
+func TestASigmaWorkersFilesPullRequestsAndSpendStayOutOfTheSessionThatStartedIt(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app := w.App()
+		session, view, server := appServerSession(t, w, app, h)
+		conversation := view.ConversationID
+		parentDoc, workerDoc, forkDoc, nestedDoc, subDoc := markdownFile(t, w, "parent.md"), markdownFile(t, w, "worker.md"), markdownFile(t, w, "fork.md"), markdownFile(t, w, "nested.md"), markdownFile(t, w, "sub.md")
+		promptUntilWorking(app, session, view, server, "start a worker")
+		server.ToolCall(conversation, writeMarkdownCall(parentDoc))
+		awaitServerFeed(app, session, conversation, server, 1000)
+
+		server.Worker(conversation, "worker", "refactor")
+		server.ToolCall("worker", writeMarkdownCall(workerDoc))
+		server.ToolCall("worker", fakeagent.ServerToolCall{Name: "bash", Input: map[string]any{"command": "gh pr create --fill"}, Output: shopPull(9) + "\n"})
+		server.SetUsage("worker", "anthropic/claude-haiku-4-5", serverUsage(400))
+		server.Subagent("worker", "worker-sub", "research for the worker")
+		server.ToolCall("worker-sub", writeMarkdownCall(nestedDoc))
+		server.SetUsage("worker-sub", "anthropic/claude-haiku-4-5", serverUsage(200))
+		server.ForkedWorker(conversation, "forked-worker", "review")
+		server.ToolCall("forked-worker", writeMarkdownCall(forkDoc))
+		server.SetUsage("forked-worker", "anthropic/claude-haiku-4-5", serverUsage(300))
+
+		server.Subagent(conversation, "sub", "research")
+		server.ToolCall("sub", writeMarkdownCall(subDoc))
+		server.SetUsage("sub", "anthropic/claude-haiku-4-5", serverUsage(100))
+		awaitUsageTokens(app, session, 1100)
+
+		if got := recentCount(app, subDoc); got != 1 {
+			t.Errorf("sub.md written by the session's subagent counts %d, want 1", got)
+		}
+		if got := recentCount(app, parentDoc); got != 1 {
+			t.Errorf("parent.md counts %d, want 1", got)
+		}
+		for _, doc := range []string{workerDoc, nestedDoc, forkDoc} {
+			if got := recentCount(app, doc); got != 0 {
+				t.Errorf("%s written under a worker counts %d in the session that started it, want 0", doc, got)
+			}
+		}
+		if got := pullNumbers(testworld.AwaitSession(app, session, func(protocol.Session) bool { return true })); slices.Contains(got, 9) {
+			t.Errorf("pull requests = %v, want none from the worker", got)
+		}
+	})
+}
+
 func TestAResumedAppServerSessionSkipsPreLaunchSubagentHistoryAndCountsOnlyNewSubagentSpend(t *testing.T) {
 	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
 		w := newWorld(t, h)

@@ -22,6 +22,8 @@ const (
 	methodStartedElsewhere   = "started_elsewhere"
 	methodServerSubagent     = "server_subagent"
 	methodServerForkSubagent = "server_fork_subagent"
+	methodServerWorker       = "server_worker"
+	methodServerForkWorker   = "server_fork_worker"
 
 	serverWindowMin = 50
 	serverWindowMax = 2 * serverWindowMin
@@ -289,7 +291,7 @@ func (s *appServer) handleTranscriptKit(method string, raw json.RawMessage) (any
 			serverEntry{Kind: "sigma.user", Data: map[string]any{"author": "you"}, Model: []json.RawMessage{message("user", map[string]any{"content": p.Text})}},
 			serverEntry{Kind: "pi.assistant", Model: []json.RawMessage{message("assistant", map[string]any{"content": []any{map[string]any{"type": "text", "text": "Started."}}})}},
 		)
-	case methodServerSubagent, methodServerForkSubagent:
+	case methodServerSubagent, methodServerForkSubagent, methodServerWorker, methodServerForkWorker:
 		parent := s.convs[p.ThreadID]
 		if parent == nil {
 			return nil, os.ErrNotExist, true
@@ -307,8 +309,11 @@ func (s *appServer) handleTranscriptKit(method string, raw json.RawMessage) (any
 			Status:   "idle",
 			requests: map[string]int{},
 		}
+		if method == methodServerWorker || method == methodServerForkWorker {
+			child.Lineage.Task = p.Text
+		}
 		var inherited []serverEntry
-		if method == methodServerForkSubagent {
+		if method == methodServerForkSubagent || method == methodServerForkWorker {
 			parentEntries := s.transcriptLocked(parent.ID).Entries
 			if len(parentEntries) > 0 {
 				at := parentEntries[len(parentEntries)-1].ID
@@ -446,4 +451,14 @@ func (s *AppServer) Subagent(parent, id, title string) {
 func (s *AppServer) ForkedSubagent(parent, id, title string) {
 	s.t.Helper()
 	s.call(methodServerForkSubagent, serverKitParams{ThreadID: parent, Key: id, Text: title}, nil)
+}
+
+func (s *AppServer) Worker(parent, id, task string) {
+	s.t.Helper()
+	s.call(methodServerWorker, serverKitParams{ThreadID: parent, Key: id, Text: task}, nil)
+}
+
+func (s *AppServer) ForkedWorker(parent, id, task string) {
+	s.t.Helper()
+	s.call(methodServerForkWorker, serverKitParams{ThreadID: parent, Key: id, Text: task}, nil)
 }

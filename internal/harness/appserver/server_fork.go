@@ -17,12 +17,18 @@ type listedConversation struct {
 		At int64  `json:"at"`
 	} `json:"fork"`
 	Lineage *struct {
-		Root string `json:"root"`
+		Parent string `json:"parent"`
+		Root   string `json:"root"`
+		Task   string `json:"task"`
 	} `json:"lineage"`
 }
 
-func (c listedConversation) subagent() bool {
+func (c listedConversation) child() bool {
 	return c.Lineage != nil && c.Lineage.Root != "" && c.Lineage.Root != c.ID
+}
+
+func (c listedConversation) worker() bool {
+	return c.child() && c.Lineage.Task != ""
 }
 
 // UnfollowedFork is the fork terminal t's program moved on to without attn following it, as after a /fork no prompt followed yet, or "".
@@ -59,7 +65,7 @@ func (l *Link) forkShownBy(ctx context.Context, c *effectrpc.Client, author, hel
 	}
 	forks := make(map[string][]listedConversation)
 	for _, each := range listed {
-		if each.Fork != nil && each.Fork.Of != "" && !each.subagent() {
+		if each.Fork != nil && each.Fork.Of != "" && !each.child() {
 			forks[each.Fork.Of] = append(forks[each.Fork.Of], each)
 		}
 	}
