@@ -12,8 +12,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/prreadiness"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -320,4 +322,165 @@ func TestSigningOutOfAHostRemovesItsPullRequests(t *testing.T) {
 		return !slices.ContainsFunc(e.Prs, func(pr protocol.PR) bool { return pr.Host == hostB })
 	})
 	assertMuted(t, queryPRs(t, w.Client(), ""), hostA)
+}
+
+type routedGitHub struct {
+	mu       sync.Mutex
+	requests []string
+}
+
+func (gh *routedGitHub) RoundTrip(req *http.Request) (*http.Response, error) {
+	endpoint := req.Method + " https://" + req.URL.Hostname() + req.URL.Path
+	gh.mu.Lock()
+	gh.requests = append(gh.requests, endpoint)
+	gh.mu.Unlock()
+
+	host := req.URL.Hostname()
+	path := req.URL.Path
+	var canonicalHost, repoURLPrefix string
+	switch {
+	case host == "ghec-dr-api.acme.net" && (path == "/search/issues" || path == "/graphql" || strings.HasPrefix(path, "/repos/")):
+		canonicalHost, repoURLPrefix = "acme.ghe.com", "https://ghec-dr-api.acme.net"
+	case host == "api.direct.ghe.com" && (path == "/search/issues" || strings.HasPrefix(path, "/repos/")):
+		canonicalHost, repoURLPrefix = "direct.ghe.com", "https://api.direct.ghe.com"
+	case host == "api-gw.corp.example" && (path == "/api/v3/search/issues" || strings.HasPrefix(path, "/api/v3/repos/")):
+		canonicalHost, repoURLPrefix = "ghe.corp.example", "https://api-gw.corp.example/api/v3"
+	default:
+		return nil, fmt.Errorf("remote error: tls: access denied (%s)", endpoint)
+	}
+
+	var answer any = map[string]any{}
+	switch {
+	case strings.HasSuffix(path, "/search/issues"):
+		items := []any{}
+		if strings.Contains(req.URL.Query().Get("q"), "author:@me") {
+			items = append(items, map[string]any{
+				"number":         431,
+				"title":          "Routed PR on " + canonicalHost,
+				"html_url":       "https://" + canonicalHost + "/team/repo/pull/431",
+				"repository_url": repoURLPrefix + "/repos/team/repo",
+				"user":           map[string]string{"login": "ada"},
+			})
+		}
+		answer = map[string]any{"total_count": len(items), "items": items}
+	case strings.HasSuffix(path, "/reviews"):
+		answer = []any{}
+	case strings.HasSuffix(path, "/pulls/431"):
+		answer = map[string]any{
+			"number": 431, "html_url": "https://" + canonicalHost + "/team/repo/pull/431",
+			"title": "Routed PR on " + canonicalHost, "state": "open", "mergeable_state": "clean",
+			"head": map[string]any{"sha": "head-431", "ref": "fix-tls"},
+		}
+	case path == "/graphql":
+		body, _ := io.ReadAll(req.Body)
+		switch {
+		case strings.Contains(string(body), "PullRequestReadiness"):
+			answer = map[string]any{"data": map[string]any{"repository": map[string]any{"pullRequest": map[string]any{
+				"number": 431, "url": "https://acme.ghe.com/team/repo/pull/431", "title": "Routed PR on acme.ghe.com",
+				"state": "OPEN", "merged": false, "headRefOid": "head-431", "headRefName": "fix-tls",
+				"mergeStateStatus": "CLEAN", "reviewDecision": "APPROVED",
+				"reactions": map[string]any{"nodes": []any{}}, "latestOpinionatedReviews": map[string]any{"nodes": []any{}},
+				"reviews": map[string]any{"nodes": []any{}}, "reviewRequests": map[string]any{"nodes": []any{}},
+				"commits": map[string]any{"nodes": []any{}},
+			}}}}
+		case strings.Contains(string(body), "PullRequestFeedback"):
+			answer = map[string]any{"data": map[string]any{"repository": map[string]any{"pullRequest": map[string]any{
+				"comments": map[string]any{"nodes": []any{}}, "reviews": map[string]any{"nodes": []any{}},
+				"reviewThreads": map[string]any{"nodes": []any{}},
+			}}}}
+		}
+	}
+	encoded, err := json.Marshal(answer)
+	if err != nil {
+		return nil, err
+	}
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(string(encoded))),
+		Request:    req,
+	}, nil
+}
+
+func (gh *routedGitHub) saw(endpoint string) bool {
+	gh.mu.Lock()
+	defer gh.mu.Unlock()
+	return slices.Contains(gh.requests, endpoint)
+}
+
+func TestHostDiscoveryUsesConfiguredAPIHostAndGHEComSubdomains(t *testing.T) {
+	dir := t.TempDir()
+	status, err := json.Marshal(map[string]any{
+		"hosts": map[string][]map[string]any{
+			"acme.ghe.com":     {{"state": "success", "active": true, "login": "ada"}},
+			"direct.ghe.com":   {{"state": "success", "active": true, "login": "ada"}},
+			"ghe.corp.example": {{"state": "success", "active": true, "login": "ada"}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "status.json"), status, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	script := `#!/bin/sh
+case "$1 $2" in
+  "--version "*) echo 'gh version 2.104.0 (2026-11-12)' ;;
+  "auth status") /bin/cat "$FAKE_GH_DIR/status.json" ;;
+  "auth token") echo 'test-token' ;;
+  "config get")
+    if [ "$3" = "api_host" ]; then
+      case "$5" in
+        "acme.ghe.com") echo 'ghec-dr-api.acme.net' ;;
+        "ghe.corp.example") echo 'api-gw.corp.example' ;;
+      esac
+    fi
+    ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FAKE_GH_DIR", dir)
+	t.Setenv("ATTN_MOCK_GH_URL", "")
+	t.Setenv("ATTN_GITHUB_POLLING", "on")
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+ghWarningPath(t, ""))
+	gh := &routedGitHub{}
+	original := http.DefaultTransport
+	http.DefaultTransport = gh
+	t.Cleanup(func() { http.DefaultTransport = original })
+
+	w := &world{World: prepareWorld(t, fakeagent.Claude)}
+	w.start()
+	app, cli := w.App(), w.Client()
+	if len(app.Initial.GithubHosts) != 3 {
+		testworld.Await(app, protocol.EventGitHubHostsUpdated, func(m protocol.GitHubHostsUpdatedMessage) bool {
+			return len(m.GithubHosts) == 3
+		})
+	}
+
+	refreshPRs(t, app)
+	prs := queryPRs(t, cli, "")
+	for _, host := range []string{"acme.ghe.com", "direct.ghe.com", "ghe.corp.example"} {
+		pr := hostPR(t, prs, host)
+		if pr.Title != "Routed PR on "+host {
+			t.Errorf("PR for %s has title %q, want %q", host, pr.Title, "Routed PR on "+host)
+		}
+	}
+
+	pane := spawnPanes(w, app, w.Path("s1"))[0]
+	prURL := "https://acme.ghe.com/team/repo/pull/431"
+	recordPullRequest(t, cli, pane.session, prURL)
+	if err := cli.WatchSessionPullRequest(protocol.SessionID(pane.session), "", prURL, protocol.PullRequestWatchModeGreen, ""); err != nil {
+		t.Fatalf("watch pull request on acme.ghe.com: %v", err)
+	}
+	watched := awaitWatchedPullRequest(app, pane.session, func(pr protocol.SessionPullRequest) bool {
+		return protocol.Deref(pr.ReadinessState) == prreadiness.StateReady
+	})
+	if health := protocol.Deref(watched.WatchHealth); health != "current" {
+		t.Fatalf("watch health = %q (error %q), want current", health, protocol.Deref(watched.WatchError))
+	}
+	if !gh.saw("POST https://ghec-dr-api.acme.net/graphql") {
+		t.Fatalf("GraphQL requests = %v, want POST https://ghec-dr-api.acme.net/graphql", gh.requests)
+	}
 }

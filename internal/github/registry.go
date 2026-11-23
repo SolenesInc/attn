@@ -90,7 +90,7 @@ func NewClientForHost(stopPacing context.Context, logf func(format string, args 
 
 func resolveAPIURL(host, apiURL string) string {
 	if apiURL == "" {
-		return mapHostToAPIURL(host)
+		return mapHostToAPIURL(host, "")
 	}
 	return apiURL
 }

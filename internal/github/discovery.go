@@ -21,7 +21,32 @@ func DiscoverHosts(ctx context.Context) ([]HostInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseAuthStatusHosts(output)
+	hosts, err := parseAuthStatusHosts(output)
+	if err != nil {
+		return nil, err
+	}
+	for i := range hosts {
+		if !hosts[i].Usable || hosts[i].Host == "" {
+			continue
+		}
+		apiHost, err := getAPIHostForHost(ctx, hosts[i].Host)
+		if err != nil && ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if apiHost != "" {
+			hosts[i].APIURL = mapHostToAPIURL(hosts[i].Host, apiHost)
+		}
+	}
+	return hosts, nil
+}
+
+func getAPIHostForHost(ctx context.Context, host string) (string, error) {
+	cmd := exec.CommandContext(ctx, "gh", "config", "get", "api_host", "-h", host)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
 }
 
 func GetTokenForHost(ctx context.Context, host string) (string, error) {
@@ -56,7 +81,7 @@ func parseAuthStatusHosts(output []byte) ([]HostInfo, error) {
 
 	var results []HostInfo
 	for host, entries := range payload.Hosts {
-		selected := &HostInfo{Host: host, APIURL: mapHostToAPIURL(host)}
+		selected := &HostInfo{Host: host, APIURL: mapHostToAPIURL(host, "")}
 		for _, entry := range entries {
 			state, _ := entry["state"].(string)
 			if state != "success" {
@@ -80,7 +105,7 @@ func parseAuthStatusHosts(output []byte) ([]HostInfo, error) {
 
 			info := &HostInfo{
 				Host:   host,
-				APIURL: mapHostToAPIURL(host),
+				APIURL: mapHostToAPIURL(host, ""),
 				Login:  login,
 				Active: active,
 				Usable: true,
@@ -96,9 +121,22 @@ func parseAuthStatusHosts(output []byte) ([]HostInfo, error) {
 	return results, nil
 }
 
-func mapHostToAPIURL(host string) string {
-	if host == "github.com" {
-		return "https://api.github.com"
+func mapHostToAPIURL(host, apiHost string) string {
+	host = strings.TrimSpace(host)
+	apiHost = strings.TrimRight(strings.TrimSpace(apiHost), "/")
+	if isSubdomainAPIHost(host) {
+		if apiHost != "" {
+			return "https://" + apiHost
+		}
+		return "https://api." + strings.ToLower(host)
+	}
+	if apiHost != "" {
+		return "https://" + apiHost + "/api/v3"
 	}
 	return "https://" + host + "/api/v3"
+}
+
+func isSubdomainAPIHost(host string) bool {
+	lower := strings.ToLower(host)
+	return lower == "github.com" || (strings.HasSuffix(lower, ".ghe.com") && len(lower) > len(".ghe.com"))
 }
