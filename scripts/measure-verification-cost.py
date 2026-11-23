@@ -4,7 +4,7 @@
 usage: scripts/measure-verification-cost.py [--runs N] [--keep] [--ci-run ID]... [--workers N,...] [baseline...]
 
 Baselines (all by default):
-  land     one scripts/land.sh landing a one-file Go change
+  land     one `land` landing a one-file Go change
   lands3   three concurrent lands on one machine, each from its own worktree
   suites   scripts/test-go.sh -count=1
   daemon   scripts/test-go.sh --packages -count=1 on ./internal/daemon, then on
@@ -25,8 +25,8 @@ takes a lock on /tmp/attn-verification-cost.lock, waits while another process
 holds it and prints the holder. The kernel releases the lock when its process
 exits.
 
-Concurrent lands start together and wait for each other in land.sh's land
-queue. Their wall time runs from the start to the last land.
+Concurrent lands start together from separate worktrees and land side by side
+through `land`. Their wall time runs from the start to the last land.
 
 Every land commits a change no earlier land compiled, so Go builds the changed
 package cold, as a real land does, instead of reusing the shared build cache.
@@ -132,8 +132,9 @@ class Scratch:
         for name in ("ATTN_SESSION_ID", "ATTN_INSTANCE", "ATTN_DATA_DIR", "ATTN_DB_PATH", "ATTN_SOCKET_PATH", "ATTN_CONFIG_PATH", "ATTN_PLUGIN_DIR", "GIT_DIR", "GIT_WORK_TREE"):
             self.env.pop(name, None)
         self.env["ATTN_TEST_HISTORY_DIR"] = str(root / "spool")
-        self.land_env = {**self.env, "XDG_CONFIG_HOME": str(root / "config"), "GIT_CONFIG_GLOBAL": os.devnull}
+        self.land_env = {**self.env, "XDG_CONFIG_HOME": str(root / "config"), "XDG_STATE_HOME": str(root / "state"), "GIT_CONFIG_GLOBAL": os.devnull}
         (root / "config").mkdir(exist_ok=True)
+        (root / "state").mkdir(exist_ok=True)
         with measurement("scratch setup"):
             self.make_origin()
             self.make_spool()
@@ -182,11 +183,11 @@ class Scratch:
             git("commit", "--quiet", "--no-verify", "-m", f"Verification cost change {i + 1}, run {run}", cwd=path)
 
     def land(self, label, run, worktrees):
-        jobs = [(["scripts/land.sh"], path, self.land_env, self.logs / f"{label}-{run}-wt{i + 1}.log") for i, path in enumerate(worktrees)]
+        jobs = [(["land"], path, self.land_env, self.logs / f"{label}-{run}-wt{i + 1}.log") for i, path in enumerate(worktrees)]
         results = run_concurrently(jobs)
         for result in results:
             text = Path(result["log"]).read_text()
-            result["ok"] = "land: main is at" in text
+            result["ok"] = "land: push   main is at" in text
             result["checks"] = len(re.findall(r"^landing tests \(", text, re.MULTILINE))
         return results
 

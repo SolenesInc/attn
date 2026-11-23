@@ -1,0 +1,4 @@
+gate = "scripts/land-gate.sh"
+resolve = "scripts/land-resolve.sh"
+record = "scripts/land-record.sh"
+feed = "https://land-feed.caketroll.cloud"

@@ -110,7 +110,7 @@ func TestLandRunsTheNamedGroupsAndEachFailureUntilItClears(t *testing.T) {
 	service.mu.Unlock()
 	out, units, code = land("go")
 	if code != 0 || units != "go ./p TestA, go ./p TestRenamed, go ./q TestRecent, native native-chief-slot" {
-		t.Fatalf("land --group go exited %d and chose %s, want the go group's baseline, though the change touches only docs, and the uncleared failures on this host's platform, the native scenario that failed on Linux included and the one that failed only on macOS left out, for land.sh's scenario step on Linux:\n%s", code, units, out)
+		t.Fatalf("land --group go exited %d and chose %s, want the go group's baseline, though the change touches only docs, and the uncleared failures on this host's platform, the native scenario that failed on Linux included and the one that failed only on macOS left out, for land-gate.sh's scenario step on Linux:\n%s", code, units, out)
 	}
 	for _, want := range []string{
 		"landing tests for " + short(head) + ":",
@@ -139,6 +139,6 @@ func TestLandRunsTheNamedGroupsAndEachFailureUntilItClears(t *testing.T) {
 	}
 
 	if _, _, code := land("missing"); code == 0 {
-		t.Fatal("land with a group the list lacks must fail, so land.sh runs its groups itself")
+		t.Fatal("land with a group the list lacks must fail, so land-gate.sh runs its groups itself")
 	}
 }

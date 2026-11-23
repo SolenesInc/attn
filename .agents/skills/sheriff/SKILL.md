@@ -5,9 +5,10 @@ description: Use when main's CI is red, or when asked to check whether main is g
 
 # Sheriff
 
-Keep `main` green and keep landings fast. `scripts/land.sh` is a fast filter,
-not full CI. Occasional breaks will reach `main`, and repairing them quickly is
-your job. Never slow down normal landings to prevent rare breaks.
+Keep `main` green and keep landings fast. `land`'s gate (`scripts/land-gate.sh`)
+is a fast filter, not full CI. Occasional breaks will reach `main`, and
+repairing them quickly is your job. Never slow down normal landings to prevent
+rare breaks.
 
 You triage failures, route small fixes to live authors, and delegate Builders
 or Pathfinders. Never edit code, reproduce bugs, commit, or re-run CI yourself.
@@ -196,8 +197,8 @@ self-contained for a reader with no context.
     seconds.
   - For a revert, revert only the culprit (`git revert <culprit>`), name the
     run and failure in the commit message, and report the landed revert SHA.
-  - Land with [land-on-main](../land-on-main/SKILL.md), report checks, and
-    harvest. Do not watch or re-run CI.
+  - Land with `land` (`land guide` and [land-on-main](../land-on-main/SKILL.md)),
+    report checks, and harvest. Do not watch or re-run CI.
 
 ### 5. Leave a clean trail and guard zero-tax repeat classes
 
@@ -214,6 +215,12 @@ seeds that keep landings fast.
   the repair confirms the repair (run, job, test, culprit SHA and `Attn-Seed:`,
   owner, repair SHA, claims labeled measured or inferred).
   `node scripts/workflow-scorecard.mjs escapes` reads these notes.
+- **Land feed (best effort)**: when a repair lands, post it with
+  `land event <repair-sha> --kind repair --state pass --title "<fix|revert>: <failure>" --repairs <culprit-sha> --url <failed-run>`,
+  and when the failure traced to a real defect in `<culprit-sha>` (not a flake
+  or runner outage), also record
+  `land bug <culprit-sha> --title "<failure>" --severity p1 --source ci --fixed-by <repair-sha> --url <failed-run>`.
+  If posting fails, note it on the Branch health issue and continue.
 - **Recurring classes**: when the exact same failure mechanism repeats, follow
   [Corrected failure classes](corrected-classes.md). Never dispatch unsolicited
   Pathfinders to propose slower landing gates.
@@ -273,4 +280,4 @@ Write every question for a reader with **no context on the run, test, or seed**:
 - Re-run CI, a failed job, or a whole run.
 - Skip, disable, or quarantine a test.
 - Propose or add slow pre-landing gates that tax normal landings.
-- Push `main` any way except `scripts/land.sh`, or force-push anything.
+- Push `main` any way except `land`, or force-push anything.

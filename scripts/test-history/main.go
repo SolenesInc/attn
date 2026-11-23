@@ -38,7 +38,7 @@ const usage = `usage: go tool test-history <command>
 
   land --units-out <file> --group <group>... [--main <ref>]
       Run sync, then choose the landing tests for HEAD's change against <ref>
-      (default origin/main), as scripts/land.sh does, for the groups it
+      (default origin/main), as scripts/land-gate.sh does, for the groups it
       matched: their baseline units, the tests the change touches, and every
       test that failed on main and has since passed there, until it passes on
       30 later main revisions; one still red on main is listed, not run.

@@ -209,7 +209,7 @@ A full run is eleven `go test` jobs run at once: `packages`,
 the jobs they name, as CI does to spread the suite across runners:
 `./scripts/test-go.sh --job daemon-3 --job attn-1`.
 The runner, Makefile and CI use `-trimpath` so unchanged packages can reuse build
-artifacts across worktrees. They and `scripts/land.sh` also read `CGO_CFLAGS`
+artifacts across worktrees. They and `scripts/land-gate.sh` also read `CGO_CFLAGS`
 from `go-cgo-cflags`, which builds SQLite without memory statistics, so every daemon does less work
 per allocation. attn calls nothing that needs them. A bare `go build` or
 `go test` still works, but it compiles go-sqlite3 again and keeps the statistics.

@@ -5,7 +5,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-land-test.XXXXXX")"
 release_held_checks() {
   local fifo
-  for fifo in "$work/hold/release" "$work/soak-release"; do
+  for fifo in "$work/soak-release"; do
     [ -p "$fifo" ] || continue
     exec 4<>"$fifo"
     echo release >&4
@@ -21,19 +21,17 @@ set -euo pipefail
 [ "${2:-}" != compile-go ] || exit "${LAND_COMPILE_EXIT:-0}"
 printf '%s\n' "$*" >>"$LAND_CHECK_LOG"
 echo "make ran: $*"
-if [ -e "$LAND_MOVE_MAIN" ]; then
-  rm "$LAND_MOVE_MAIN"
-  git -C "$LAND_OTHER" pull -q origin main
-  git -C "$LAND_OTHER" commit -q --allow-empty -m 'Landed during the gate'
-  git -C "$LAND_OTHER" push -q origin HEAD:main
+if [ "$1" = generate-types ]; then
+  printf 'regenerated\n' >internal/protocol/generated.go
+  exit 0
+fi
+if [ "$1" = generate-prompts ]; then
+  printf '{"regenerated":true}\n' >internal/prompts/catalog.generated.json
+  exit 0
 fi
 if [ -p "${LAND_GATE_AWAITS_SOAK:-}" ]; then
   read -r _ <"$LAND_GATE_AWAITS_SOAK"
   rm "$LAND_GATE_AWAITS_SOAK"
-fi
-if [ -n "${LAND_HOLD:-}" ]; then
-  echo started >"$LAND_HOLD/started"
-  read -r _ <"$LAND_HOLD/release"
 fi
 exit "${LAND_CHECK_EXIT:-0}"
 EOF
@@ -56,10 +54,21 @@ case "$3" in
     ;;
   summary) echo 'PASS cargo example --lib (0.0s)' ;;
   land)
-    printf '%s\n' "land ${*:6}" >>"$LAND_CHECK_LOG"
+    shift 3
+    units_out=""
+    groups=()
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --units-out) units_out="$2"; shift 2 ;;
+        --main) shift 2 ;;
+        --group) groups+=(--group "$2"); shift 2 ;;
+        *) echo "unexpected test-history land arg $1" >&2; exit 2 ;;
+      esac
+    done
+    printf '%s\n' "land ${groups[*]}" >>"$LAND_CHECK_LOG"
     [ "${LAND_SELECT_EXIT:-0}" -eq 0 ] || exit "$LAND_SELECT_EXIT"
-    [ "$4" = --units-out ] || exit 2
-    printf '%s' "${LAND_SELECTED-$selected}" >"$5"
+    [ -n "$units_out" ] || exit 2
+    printf '%s' "${LAND_SELECTED-$selected}" >"$units_out"
     ;;
 esac
 EOF
@@ -126,23 +135,13 @@ esac
 EOF
 chmod +x "$work/bin/pnpm"
 export PATH="$work/bin:$PATH"
-export LAND_CHECK_LOG="$work/checks" LAND_MOVE_MAIN="$work/move-main" LAND_OTHER="$work/other"
-export LAND_REMOTE="$work/remote" LAND_SOAK_REFS="$work/soak-refs" LAND_REJECT_MAIN="$work/reject-main"
+export LAND_CHECK_LOG="$work/checks" LAND_OTHER="$work/other"
+export LAND_REMOTE="$work/remote" LAND_SOAK_REFS="$work/soak-refs"
 export selected=$'go ./internal/example TestExample\ncargo example --lib'
 selected_units="--unit go ./internal/example TestExample --unit cargo example --lib"
 go_choice=('land --group go --group prompts' "landing-tests --no-go-vet $selected_units")
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 git init -q --bare "$work/remote"
-cat >"$work/remote/hooks/pre-receive" <<'EOF'
-#!/usr/bin/env bash
-while read -r _ _ ref; do
-  if [ "$ref" = refs/heads/main ] && [ -e "$LAND_REJECT_MAIN" ]; then
-    echo 'main rejects pushes for this test' >&2
-    exit 1
-  fi
-done
-EOF
-chmod +x "$work/remote/hooks/pre-receive"
 cd "$work/repo"
 git init -q
 git config user.name 'Landing Test'
@@ -165,6 +164,8 @@ exit "${LAND_TESTS_EXIT:-0}"
 EOF
 chmod +x scripts/landing-tests.sh
 cp "$root/scripts/land-linux.sh" scripts/land-linux.sh
+cp "$root/scripts/land-resolve.sh" scripts/land-resolve.sh
+cp "$root/scripts/land-record.sh" scripts/land-record.sh
 mkdir -p app/scripts/real-app-harness
 cp "$root"/app/scripts/real-app-harness/{landing-scenarios,scenarioCatalog,matrixDigest}.mjs app/scripts/real-app-harness/
 git add .
@@ -175,18 +176,105 @@ git clone -q -b main "$work/remote" "$LAND_OTHER"
 git -C "$LAND_OTHER" config user.name 'Other Landing'
 git -C "$LAND_OTHER" config user.email 'other@example.invalid'
 
-land() {
+expect_output() {
+  grep -qF -- "$1" "$work/output" || { echo "missing from the landing output: $1" >&2; cat "$work/output" >&2; exit 1; }
+}
+
+# 1. Retired scripts/land.sh refuses to run and guides callers to `land`.
+if bash "$root/scripts/land.sh" >"$work/output" 2>&1; then
+  echo 'retired scripts/land.sh exited 0' >&2
+  exit 1
+fi
+expect_output 'scripts/land.sh is retired'
+expect_output 'land guide'
+expect_output 'ATTN_LAND_BASELINE=1 land'
+
+# 2. .githooks/pre-push refuses plain pushes and ATTN_LANDING=1, and allows LAND_LANDING=1.
+if printf 'refs/heads/work 1 refs/heads/main 2\n' | bash "$root/.githooks/pre-push" >"$work/output" 2>&1; then
+  echo 'pre-push allowed a plain push to main' >&2
+  exit 1
+fi
+expect_output 'Land on main with land'
+if printf 'refs/heads/work 1 refs/heads/main 2\n' | ATTN_LANDING=1 bash "$root/.githooks/pre-push" >"$work/output" 2>&1; then
+  echo 'pre-push still allowed ATTN_LANDING=1' >&2
+  exit 1
+fi
+printf 'refs/heads/work 1 refs/heads/main 2\n' | LAND_LANDING=1 bash "$root/.githooks/pre-push"
+
+# 3. scripts/land-record.sh forwards arguments to scripts/pr-evidence.sh into $LAND_MEDIA.
+if bash scripts/land-record.sh demo --instance dev >"$work/output" 2>&1; then
+  echo 'land-record.sh succeeded without LAND_MEDIA' >&2
+  exit 1
+fi
+cat >scripts/pr-evidence.sh <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >"$LAND_MEDIA/called.txt"
+EOF
+chmod +x scripts/pr-evidence.sh
+mkdir -p "$work/media"
+LAND_MEDIA="$work/media" bash scripts/land-record.sh demo --instance dev --seconds 5
+grep -qxF "record --instance dev --seconds 5 --out $work/media/demo.mp4" "$work/media/called.txt"
+# Empty optional flags must not crash under set -u on Bash 3.2.
+LAND_MEDIA="$work/media" bash scripts/land-record.sh plain
+grep -qxF "record --out $work/media/plain.mp4" "$work/media/called.txt"
+# Reject path separators, dotfiles, and empty names.
+for bad_name in 'sub/demo' '.hidden' '.mp4'; do
+  if LAND_MEDIA="$work/media" bash scripts/land-record.sh "$bad_name" --instance dev >"$work/output" 2>&1; then
+    echo "land-record.sh accepted invalid clip name $bad_name" >&2
+    exit 1
+  fi
+done
+rm -f scripts/pr-evidence.sh
+
+# 4. scripts/land-resolve.sh regenerates generated conflicts (types before prompts) and refuses handwritten conflicts.
+printf 'base\n' >internal/protocol/generated.go
+printf '{"base":true}\n' >internal/prompts/catalog.generated.json
+git add internal/protocol/generated.go internal/prompts/catalog.generated.json
+git commit -qm 'Add generated fixtures'
+git push -q origin HEAD:main
+git -C "$LAND_OTHER" pull -q origin main
+printf 'theirs\n' >"$LAND_OTHER/internal/protocol/generated.go"
+printf '{"theirs":true}\n' >"$LAND_OTHER/internal/prompts/catalog.generated.json"
+git -C "$LAND_OTHER" commit -qam 'Theirs generated'
+git -C "$LAND_OTHER" push -q origin HEAD:main
+printf 'ours\n' >internal/protocol/generated.go
+printf '{"ours":true}\n' >internal/prompts/catalog.generated.json
+git commit -qam 'Ours generated'
+git fetch -q origin main
+git rebase -q origin/main >/dev/null 2>&1 || true
+: >"$LAND_CHECK_LOG"
+bash scripts/land-resolve.sh >"$work/output" 2>&1 || { cat "$work/output" >&2; exit 1; }
+diff -u <(printf 'generate-types\ngenerate-prompts\n') "$LAND_CHECK_LOG"
+[ -z "$(git diff --name-only --diff-filter=U)" ]
+GIT_EDITOR=true git rebase --continue >/dev/null 2>&1
+grep -qxF 'regenerated' internal/protocol/generated.go
+grep -qxF '{"regenerated":true}' internal/prompts/catalog.generated.json
+git push -q origin HEAD:main
+
+git -C "$LAND_OTHER" pull -q origin main
+printf 'theirs-handwritten\n' >"$LAND_OTHER/README.md"
+git -C "$LAND_OTHER" commit -qam 'Theirs README'
+git -C "$LAND_OTHER" push -q origin HEAD:main
+printf 'ours-handwritten\n' >README.md
+git commit -qam 'Ours README'
+git fetch -q origin main
+git rebase -q origin/main >/dev/null 2>&1 || true
+if bash scripts/land-resolve.sh >"$work/output" 2>&1; then
+  echo 'land-resolve.sh accepted a handwritten conflict' >&2
+  exit 1
+fi
+git rebase --abort
+git reset -q --hard origin/main
+
+# 5. scripts/land-gate.sh path selection, landing tests, and scenario runner behavior.
+gate() {
   local message="$1"
   shift
   : >"$LAND_CHECK_LOG"
   git add -A
   git commit -qm "$message"
-  env "$@" bash "$root/scripts/land.sh" ${LAND_FLAGS:-} >"$work/output" 2>&1 || { cat "$work/output" >&2; return 1; }
-  [ "$(git rev-parse HEAD)" = "$(git --git-dir="$work/remote" rev-parse main)" ]
-}
-
-expect_output() {
-  grep -qF -- "$1" "$work/output" || { echo "missing from the landing output: $1" >&2; cat "$work/output" >&2; exit 1; }
+  env LAND_BASE="$(git rev-parse origin/main)" "$@" bash "$root/scripts/land-gate.sh" ${LAND_FLAGS:-} >"$work/output" 2>&1 || { cat "$work/output" >&2; return 1; }
+  git push -q origin HEAD:main
 }
 
 go_checks_last() {
@@ -198,102 +286,74 @@ expect_checks() {
   diff -u <(go_checks_last "$work/expected") <(go_checks_last "$LAND_CHECK_LOG")
 }
 
-printf 'kept\n' >kept.txt
-land 'Add the kept file'
-if grep -qF 'WARNING' "$work/output"; then
-  echo 'a landing that undoes nothing warned' >&2
-  cat "$work/output" >&2
-  exit 1
-fi
-kept_commit="$(git log -1 --format='%h Add the kept file')"
-git rm -q kept.txt
-land 'Drop the kept file'
-expect_output 'WARNING: this landing undoes earlier commits on main'
-expect_output "$kept_commit"
-[ "$(tail -1 "$work/output" | cut -c1-5)" = 'land:' ] || { echo 'the warning is not the end of the output' >&2; cat "$work/output" >&2; exit 1; }
-seq 1 20 >counted.txt
-land 'Add the counted file'
-{ seq 1 3; echo kept; seq 4 20; } >counted.txt
-land 'Keep a line'
-seq 1 20 >counted.txt
-land 'Drop the line'
-expect_output 'Keep a line'
-{ seq 1 20; echo later; } >counted.txt
-land 'Add a later line'
-if grep -qF 'WARNING' "$work/output"; then
-  echo 'a landing warned about a commit an earlier landing undid' >&2
-  cat "$work/output" >&2
-  exit 1
-fi
-
 printf '\n' >>internal/example/example.go
-land 'Go change'
+gate 'Go change'
 expect_checks 'check-go GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
 
 git rm -q internal/example/other.go internal/removed/removed.go
-land 'Go deletions'
+gate 'Go deletions'
 expect_checks 'check-go GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
 
 printf '\n' >>go.mod
-land 'Module change'
+gate 'Module change'
 expect_checks "${go_choice[0]}" 'check-types' 'check-go GO_PACKAGES=./...' "${go_choice[1]}" sync
 
 mkdir -p app/scripts/real-app-harness
 printf 'export {};\n' >app/scripts/real-app-harness/example.mjs
-land 'Harness change'
+gate 'Harness change'
 expect_checks 'check-harness lint-js' sync
 
 mkdir -p native/browser-runtime/src
 printf 'export {};\n' >native/browser-runtime/src/example.ts
-land 'Browser runtime change'
+gate 'Browser runtime change'
 expect_checks 'land --group native' 'lint-harness-apps check-browser-runtime check-native NATIVE_CLIPPY=' "landing-tests $selected_units" sync
 
 mkdir -p native/crates/demo/src
 printf '[workspace]\n' >native/Cargo.toml
 printf '[package]\n' >native/crates/demo/Cargo.toml
 printf '\n' >native/crates/demo/src/lib.rs
-land 'Native workspace arrives'
+gate 'Native workspace arrives'
 expect_checks 'land --group native' 'lint-harness-apps check-native NATIVE_CLIPPY=--workspace' "landing-tests $selected_units" sync
 
 printf '\n' >>native/crates/demo/src/lib.rs
-land 'Native crate change'
+gate 'Native crate change'
 expect_checks 'land --group native' 'lint-harness-apps check-native NATIVE_CLIPPY=-p demo' "landing-tests $selected_units" sync
 
 mkdir -p mobile/src
 printf 'export {};\n' >mobile/src/example.ts
-land 'Mobile change'
+gate 'Mobile change'
 expect_checks 'lint-harness-apps check-mobile' sync
 
 mkdir -p pty-host/src
 printf '\n' >pty-host/src/example.rs
-land 'PTY host change'
+gate 'PTY host change'
 expect_checks 'land --group pty-host' lint-harness-apps "landing-tests $selected_units" sync
 
 mkdir -p scripts/harnesslint
 printf '\n' >scripts/harnesslint/allow.txt
-land 'Harness lint allowance change'
+gate 'Harness lint allowance change'
 expect_checks lint-harness sync
 
 mkdir -p sdk/plugin/src
 printf 'export {};\n' >sdk/plugin/src/example.ts
-land 'SDK change'
+gate 'SDK change'
 expect_checks lint-js sync
 
 mkdir -p scripts internal/protocol/schema internal/prompts
 printf 'true\n' >scripts/example.sh
 printf 'schema\n' >internal/protocol/schema/example.tsp
 printf 'prompt\n' >internal/prompts/example.md
-land 'Scripts and generated inputs'
+gate 'Scripts and generated inputs'
 expect_checks 'land --group prompts --group native' 'check-types check-prompts check-native NATIVE_CLIPPY=' "landing-tests $selected_units" sync
 expect_output 'the checkout has no script tests'
 
 mkdir -p internal/setting
 printf 'setting\n' >internal/setting/example.txt
-land 'Settings declaration change'
+gate 'Settings declaration change'
 expect_checks 'check-types' sync
 
 printf 'Home Gateway\n' >internal/protocol/schema/home_gateway.tsp
-land 'HomeGateway API change'
+gate 'HomeGateway API change'
 expect_checks 'land --group old-phones --group native' 'check-types check-home-gateway-compat check-native NATIVE_CLIPPY=' "landing-tests $selected_units" sync
 
 mkdir -p scripts/lib
@@ -301,53 +361,53 @@ printf 'true\n' >scripts/lib/shared.sh
 printf 'bash scripts/example.sh\nsource scripts/lib/shared.sh\n' >scripts/example_test.sh
 printf 'source scripts/lib/shared.sh\n' >scripts/other_test.sh
 printf 'true\n' >scripts/unrelated_test.sh
-land 'Script tests arrive'
+gate 'Script tests arrive'
 expect_checks 'test-scripts SCRIPT_TESTS=scripts/example_test.sh scripts/other_test.sh scripts/unrelated_test.sh' sync
 
 printf '\n' >>scripts/example.sh
-land 'Script change'
+gate 'Script change'
 expect_checks 'test-scripts SCRIPT_TESTS=scripts/example_test.sh' sync
 expect_output 'script test scripts/example_test.sh, for scripts/example.sh'
 
 printf '\n' >>scripts/lib/shared.sh
-land 'Shared script change'
+gate 'Shared script change'
 expect_checks 'test-scripts SCRIPT_TESTS=scripts/example_test.sh scripts/other_test.sh' sync
 
 mkdir -p .github/workflows fixtures
 printf 'on: push\n' >.github/workflows/example.yml
 printf 'one\n' >fixtures/one.txt
 printf 'grep -q push "$root/.github/workflows/example.yml"\ncp -R "$root/fixtures" "$work"\n' >scripts/reads_test.sh
-land 'Script test that reads checkout files arrives'
+gate 'Script test that reads checkout files arrives'
 expect_checks 'test-scripts SCRIPT_TESTS=scripts/reads_test.sh' sync
 
 printf '\n' >>scripts/example.sh
 printf '\n' >>.github/workflows/example.yml
-land 'Script and workflow change'
+gate 'Script and workflow change'
 expect_checks 'test-scripts SCRIPT_TESTS=scripts/example_test.sh scripts/reads_test.sh' sync
 expect_output 'script test scripts/reads_test.sh, for .github/workflows/example.yml'
 
 printf 'two\n' >fixtures/two.txt
-land 'Change inside a directory a script test reads'
+gate 'Change inside a directory a script test reads'
 expect_checks 'test-scripts SCRIPT_TESTS=scripts/reads_test.sh' sync
 
 printf 'source scripts/lib/deep.sh\n' >scripts/chain.sh
 printf 'true\n' >scripts/lib/deep.sh
 printf 'bash scripts/chain.sh\n' >scripts/chain_test.sh
-land 'Chained script test arrives'
+gate 'Chained script test arrives'
 expect_checks 'test-scripts SCRIPT_TESTS=scripts/chain_test.sh' sync
 
 printf '\n' >>scripts/lib/deep.sh
-land 'Change to a script a tested script sources'
+gate 'Change to a script a tested script sources'
 expect_checks 'test-scripts SCRIPT_TESTS=scripts/chain_test.sh' sync
 expect_output 'script test scripts/chain_test.sh, for scripts/lib/deep.sh'
 
 printf 'true\n' >scripts/lonely.sh
-land 'Script no test names'
+gate 'Script no test names'
 expect_checks 'test-scripts SCRIPT_TESTS=scripts/chain_test.sh scripts/example_test.sh scripts/other_test.sh scripts/reads_test.sh scripts/unrelated_test.sh' sync
 expect_output 'no script test names scripts/lonely.sh; running every script test'
 
 printf '\n' >>README.md
-land 'Documentation change'
+gate 'Documentation change'
 expect_checks sync
 
 no_land_scenario_refs() {
@@ -357,7 +417,7 @@ no_land_scenario_refs() {
 mkdir -p app/scripts/real-app-harness
 printf '// changed\n' >app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
 : >"$LAND_SOAK_REFS"
-land 'Change a scenario'
+gate 'Change a scenario'
 grep -qF 'soak workflow run acceptance-soak.yml' "$LAND_CHECK_LOG" || { echo 'a changed scenario did not run before the push' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 grep -qF -- '-f scenarios=native-shelf-moves -f repeat=1' "$LAND_CHECK_LOG" || { echo 'the soak did not name the changed scenario' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 grep -qF 'check-harness' "$LAND_CHECK_LOG" || { echo 'the gate did not run beside the scenarios' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
@@ -366,71 +426,56 @@ no_land_scenario_refs
 expect_output 'passed on CI'
 
 printf '// changed\n' >app/scripts/real-app-harness/scenario-native-quick-capture.mjs
-land 'Change a macOS-only scenario'
+gate 'Change a macOS-only scenario'
 if grep -qF 'soak' "$LAND_CHECK_LOG"; then echo 'a macOS-only scenario ran on Linux' >&2; exit 1; fi
 expect_output 'scenario native-quick-capture changed and does not run on Linux'
 
 mkdir -p .agents/skills/drive-attn/features
 printf '## Tests\n\n- Wire: `internal/example/example_wire_test.go`.\n- Scenario: `native-shelf-layout`, `native-quick-capture`, `native-shelf-peek`.\n' >.agents/skills/drive-attn/features/example.md
-land 'Reword a feature file without changing the product'
+gate 'Reword a feature file without changing the product'
 if grep -qF 'soak' "$LAND_CHECK_LOG"; then echo 'a feature file alone ran its scenarios' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; fi
 
 printf '\n' >>internal/example/example.go
-land 'Change the product without changing a feature file'
+gate 'Change the product without changing a feature file'
 if grep -qF 'soak' "$LAND_CHECK_LOG"; then echo 'a product change alone ran a scenario' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; fi
 
 printf '\n' >>internal/example/example.go
 printf '\n' >>.agents/skills/drive-attn/features/example.md
-land 'Change the product and the feature file that describes it'
+gate 'Change the product and the feature file that describes it'
 grep -qF -- '-f scenarios=native-shelf-peek,native-shelf-layout -f repeat=1' "$LAND_CHECK_LOG" || { echo 'the soak did not name the feature file scenarios that run on Linux' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 no_land_scenario_refs
 
-touch "$LAND_MOVE_MAIN"
 printf '\n' >>internal/example/example.go
-land 'Go change while main moves'
-expect_checks 'check-go GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
-expect_output 'main moved after the checks ran on'
-
-printf '\n' >>internal/example/example.go
-LAND_FLAGS=--baseline land 'Go change landed on the baseline'
+ATTN_LAND_BASELINE=1 gate 'Go change landed on the baseline'
 expect_checks 'check-go GO_PACKAGES=./internal/example' 'landing-tests --no-go-vet go prompts'
-expect_output 'running the baseline landing tests (--baseline)'
+expect_output 'running the baseline landing tests (ATTN_LAND_BASELINE=1)'
 
 printf '\n' >>internal/example/example.go
-land 'Go change when choosing fails' LAND_SELECT_EXIT=1
+gate 'Go change when choosing fails' LAND_SELECT_EXIT=1
 expect_checks 'land --group go --group prompts' 'check-go GO_PACKAGES=./internal/example' 'landing-tests --no-go-vet go prompts' sync
 expect_output 'choosing landing tests failed; running the baseline groups go prompts'
 
 printf '\n' >>internal/example/example.go
-land 'Go change when sync fails' LAND_SYNC_EXIT=1
+gate 'Go change when sync fails' LAND_SYNC_EXIT=1
 expect_checks 'check-go GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
 expect_output "this landing's test receipts upload at the next sync"
 
 printf '\n' >>internal/example/example.go
-land 'Go change when choosing writes nothing' LAND_SELECTED=
+gate 'Go change when choosing writes nothing' LAND_SELECTED=
 expect_checks 'land --group go --group prompts' 'check-go GO_PACKAGES=./internal/example' 'landing-tests --no-go-vet go prompts' sync
 expect_output 'choosing landing tests failed; running the baseline groups go prompts'
 
 refuses() {
-  local before changing="${3:-internal/example/example.go}"
+  local changing="${3:-internal/example/example.go}"
   printf '\n' >>"$changing"
   git add -A
   git commit -qm "$1"
-  before="$(git --git-dir="$work/remote" rev-parse main)"
-  if env "$2" bash "$root/scripts/land.sh" >"$work/failure" 2>&1; then
-    echo "landing pushed despite $1" >&2
+  if env LAND_BASE="$(git rev-parse origin/main)" "$2" bash "$root/scripts/land-gate.sh" >"$work/failure" 2>&1; then
+    echo "gate exited 0 despite $1" >&2
     exit 1
   fi
-  [ "$before" = "$(git --git-dir="$work/remote" rev-parse main)" ]
   git reset -q --hard origin/main
 }
-
-printf '[user]\n\temail = global@example.invalid\n' >"$work/global-identity"
-refuses 'a commit whose author is not the global identity' GIT_CONFIG_GLOBAL="$work/global-identity"
-grep -qF 'landing@example.invalid' "$work/failure" && grep -qF 'global@example.invalid' "$work/failure" || { echo 'the refusal did not name both identities' >&2; cat "$work/failure" >&2; exit 1; }
-printf '[user]\n\temail = landing@example.invalid\n' >"$work/matching-identity"
-printf '\n' >>README.md
-land 'A commit by the global identity' GIT_CONFIG_GLOBAL="$work/matching-identity"
 
 refuses 'a failed Go check' LAND_CHECK_EXIT=1 internal/example/example.go
 grep -qF 'make ran: check-go' "$work/failure" || { echo 'the failed Go check left no output' >&2; cat "$work/failure" >&2; exit 1; }
@@ -453,42 +498,39 @@ printf '// gate fails\n' >>app/scripts/real-app-harness/scenario-native-shelf-mo
 git add -A
 git commit -qm 'Scenario change whose gate fails while its scenario runs'
 : >"$LAND_CHECK_LOG"
-before="$(git --git-dir="$work/remote" rev-parse main)"
-if env LAND_SOAK_HOLD="$work/soak-hold" LAND_GATE_AWAITS_SOAK="$work/soak-hold/watching" LAND_CHECK_EXIT=1 bash "$root/scripts/land.sh" >"$work/output" 2>&1; then
-  echo 'a landing whose gate failed pushed' >&2
+if env LAND_BASE="$(git rev-parse origin/main)" LAND_SOAK_HOLD="$work/soak-hold" LAND_GATE_AWAITS_SOAK="$work/soak-hold/watching" LAND_CHECK_EXIT=1 bash "$root/scripts/land-gate.sh" >"$work/output" 2>&1; then
+  echo 'a gate failure exited 0' >&2
   exit 1
 fi
-[ "$before" = "$(git --git-dir="$work/remote" rev-parse main)" ]
 grep -qxF 'soak run cancel 7' "$LAND_CHECK_LOG" || { echo 'a failed gate did not cancel the running scenarios' >&2; cat "$LAND_CHECK_LOG" "$work/output" >&2; exit 1; }
 expect_output 'stopped the scenario step'
 no_land_scenario_refs
 [ ! -e "$(record_for_landing)" ] || { echo 'a stopped scenario step recorded a pass' >&2; exit 1; }
 
-touch "$LAND_REJECT_MAIN"
+# Scenario pass record survives a rebase with the same diff, and invalidates when diff changes.
 : >"$LAND_CHECK_LOG"
-if bash "$root/scripts/land.sh" >"$work/output" 2>&1; then echo 'main accepted a push it rejects' >&2; exit 1; fi
+env LAND_BASE="$(git rev-parse origin/main)" bash "$root/scripts/land-gate.sh" >"$work/output" 2>&1 || { cat "$work/output" >&2; exit 1; }
 grep -qF 'soak workflow run' "$LAND_CHECK_LOG" || { echo 'the scenario did not run' >&2; cat "$work/output" >&2; exit 1; }
 grep -qxF 'native-shelf-moves github https://example.invalid/runs/7' "$(record_for_landing)" || { echo 'a passed scenario left no pass record' >&2; exit 1; }
 git -C "$LAND_OTHER" pull -q origin main
 printf 'moved\n' >"$LAND_OTHER/moved.md"
 git -C "$LAND_OTHER" add -A
-git -C "$LAND_OTHER" commit -qm 'Main moves before the landing runs again'
-rm "$LAND_REJECT_MAIN"
+git -C "$LAND_OTHER" commit -qm 'Main moves before the gate runs again'
 git -C "$LAND_OTHER" push -q origin HEAD:main
-touch "$LAND_REJECT_MAIN"
+git fetch -q origin main
+git rebase -q origin/main
 : >"$LAND_CHECK_LOG"
-if bash "$root/scripts/land.sh" >"$work/output" 2>&1; then echo 'main accepted a push it rejects' >&2; exit 1; fi
+env LAND_BASE="$(git rev-parse origin/main)" bash "$root/scripts/land-gate.sh" >"$work/output" 2>&1 || { cat "$work/output" >&2; exit 1; }
 if grep -qF soak "$LAND_CHECK_LOG"; then echo 'an unchanged diff ran its scenario again after a rebase' >&2; cat "$work/output" >&2; exit 1; fi
 expect_output 'scenario native-shelf-moves passed on this diff already: https://example.invalid/runs/7'
-grep -qF 'check-harness' "$LAND_CHECK_LOG" || { echo 'a landing with recorded scenarios skipped its gate' >&2; exit 1; }
-rm "$LAND_REJECT_MAIN"
+grep -qF 'check-harness' "$LAND_CHECK_LOG" || { echo 'a gate with recorded scenarios skipped its checks' >&2; exit 1; }
 printf 'changed diff\n' >>README.md
 git add -A
 git commit -q --amend --no-edit
 : >"$LAND_CHECK_LOG"
-bash "$root/scripts/land.sh" >"$work/output" 2>&1 || { cat "$work/output" >&2; exit 1; }
-[ "$(git rev-parse HEAD)" = "$(git --git-dir="$work/remote" rev-parse main)" ]
+env LAND_BASE="$(git rev-parse origin/main)" bash "$root/scripts/land-gate.sh" >"$work/output" 2>&1 || { cat "$work/output" >&2; exit 1; }
 grep -qF 'soak workflow run' "$LAND_CHECK_LOG" || { echo 'a changed diff did not run its scenario again' >&2; cat "$work/output" >&2; exit 1; }
+git push -q origin HEAD:main
 
 recently_failed="$selected"$'\nnative native-shelf-peek\nnative native-quick-capture\nnative retired-scenario'
 expect_recent_scenarios_ran() {
@@ -497,7 +539,7 @@ expect_recent_scenarios_ran() {
   expect_output 'scenario retired-scenario failed on main recently and is no longer in the scenario catalog'
 }
 printf '\n' >>internal/example/example.go
-land 'Go change while a scenario that failed on main has since passed there' LAND_SELECTED="$recently_failed"
+gate 'Go change while a scenario that failed on main has since passed there' LAND_SELECTED="$recently_failed"
 grep -qF -- '-f scenarios=native-shelf-peek -f repeat=1' "$LAND_CHECK_LOG" || { echo 'the scenario step did not run the scenario the landing tests chose' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 expect_output 'land: scenarios native-shelf-peek passed on CI'"'"'s Linux'
 expect_recent_scenarios_ran
@@ -505,13 +547,13 @@ no_land_scenario_refs
 
 git config attn.landRunner ssh:runner.invalid
 printf '// on the landing runner\n' >>internal/example/example.go
-land 'Go change on the landing runner while a scenario that failed on main has since passed there' LAND_SELECTED="$recently_failed"
+gate 'Go change on the landing runner while a scenario that failed on main has since passed there' LAND_SELECTED="$recently_failed"
 grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --turn-limit 654 --scenario native-shelf-peek --out ' "$LAND_CHECK_LOG" || { echo 'the landing runner did not run the scenario the landing tests chose' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 expect_output 'scenario native-shelf-peek passed on runner.invalid in 2s'
 expect_recent_scenarios_ran
 
 printf '\n' >>app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
-land 'Change a scenario on the landing runner' LAND_RUNNER_WAITED=7
+gate 'Change a scenario on the landing runner' LAND_RUNNER_WAITED=7
 grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --turn-limit 654 --scenario native-shelf-moves --out ' "$LAND_CHECK_LOG" || { echo 'the scenario did not run on the landing runner' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 if grep -qF 'workflow run' "$LAND_CHECK_LOG"; then echo 'a scenario that passed on the landing runner ran on CI' >&2; exit 1; fi
 expect_output 'scenario native-shelf-moves passed on runner.invalid in 2s'
@@ -520,20 +562,20 @@ grep -rqE '^native-shelf-moves ssh:runner.invalid /.*/runner.log$' "$records" ||
 
 printf '\n' >>app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
 printf '// busy runner\n' >>app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
-land 'Change a scenario while the landing runner stays busy past the turn limit' LAND_RUNNER_GAVE_UP=655
+gate 'Change a scenario while the landing runner stays busy past the turn limit' LAND_RUNNER_GAVE_UP=655
 grep -qF -- '-f scenarios=native-shelf-moves -f repeat=1' "$LAND_CHECK_LOG" || { echo 'a landing that gave up its wait for the landing runner did not run on CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 expect_output "waited 655s for a turn on the landing runner runner.invalid, past its 654s limit, so the scenarios run on CI's Linux instead"
 grep -qE '^native-shelf-moves github ' "$(ls -t "$records"/* | head -1)" || { echo 'a scenario that passed on CI after the wait left no pass record' >&2; exit 1; }
 
 printf '\n' >>app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
-land 'Change a scenario while the landing runner is down' LAND_RUNNER_REACH_EXIT=255
+gate 'Change a scenario while the landing runner is down' LAND_RUNNER_REACH_EXIT=255
 if grep -qF runner "$LAND_CHECK_LOG"; then echo 'a scenario ran on an unreachable landing runner' >&2; exit 1; fi
 grep -qF -- '-f scenarios=native-shelf-moves -f repeat=1' "$LAND_CHECK_LOG" || { echo 'an unreachable landing runner did not fall back to CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 expect_output 'the landing runner runner.invalid cannot be reached'
 
 git config --add attn.landRunner ssh:second.invalid
 printf '// two runners\n' >>app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
-land 'Change a scenario while the first of two landing runners is busy' LAND_RUNNER_BUSY=runner.invalid
+gate 'Change a scenario while the first of two landing runners is busy' LAND_RUNNER_BUSY=runner.invalid
 grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --turn-limit 0 ' "$LAND_CHECK_LOG" || { echo 'a landing with two runners waited on the first one' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 expect_output 'the landing runner runner.invalid is busy with another landing'
 expect_output 'scenario native-shelf-moves passed on second.invalid in 2s'
@@ -541,7 +583,7 @@ if grep -qF 'workflow run' "$LAND_CHECK_LOG"; then echo 'a scenario that passed 
 grep -rqE '^native-shelf-moves ssh:second.invalid ' "$records" || { echo 'a scenario that passed on the second landing runner left no pass record' >&2; exit 1; }
 
 printf '// both busy\n' >>app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
-land 'Change a scenario while both landing runners are busy' LAND_RUNNER_BUSY=runner.invalid LAND_RUNNER_ALSO_BUSY=second.invalid
+gate 'Change a scenario while both landing runners are busy' LAND_RUNNER_BUSY=runner.invalid LAND_RUNNER_ALSO_BUSY=second.invalid
 grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --turn-limit 654 ' "$LAND_CHECK_LOG" || { echo 'a landing that found every runner busy did not wait for the first' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 expect_output 'scenario native-shelf-moves passed on runner.invalid in 2s'
 git config --unset-all attn.landRunner
@@ -549,7 +591,7 @@ git config attn.landRunner ssh:runner.invalid
 
 printf '\n' >>internal/example/example.go
 printf '\n' >>.agents/skills/drive-attn/features/example.md
-land 'Change the product while a scenario fails on the landing runner' LAND_RUNNER_FAIL=native-shelf-peek
+gate 'Change the product while a scenario fails on the landing runner' LAND_RUNNER_FAIL=native-shelf-peek
 [ "$(grep -c '^runner soak ' "$LAND_CHECK_LOG")" = 1 ] && grep -qE -- '--scenario (native-shelf-layout,native-shelf-peek|native-shelf-peek,native-shelf-layout) ' "$LAND_CHECK_LOG" || { echo 'the landing runner did not run every scenario in one run' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 grep -qF -- '-f scenarios=native-shelf-peek -f repeat=1' "$LAND_CHECK_LOG" || { echo 'only the scenario that failed on the landing runner should run on CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 expect_output 'scenario native-shelf-peek failed on runner.invalid in 3s, so it runs again on CI'
@@ -558,7 +600,7 @@ no_land_scenario_refs
 
 printf '// runner dies\n' >>internal/example/example.go
 printf 'runner dies\n' >>.agents/skills/drive-attn/features/example.md
-land 'Change the product while the landing runner dies before its last scenario' LAND_RUNNER_CRASH_AT=native-shelf-layout
+gate 'Change the product while the landing runner dies before its last scenario' LAND_RUNNER_CRASH_AT=native-shelf-layout
 grep -qF -- '-f scenarios=native-shelf-layout -f repeat=1' "$LAND_CHECK_LOG" || { echo 'a scenario the landing runner did not finish should run on CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 expect_output 'scenario native-shelf-layout did not finish on runner.invalid, so it runs again on CI'
 record="$(grep -rlE '^native-shelf-layout github ' "$records" | xargs ls -t | head -1)"
@@ -578,12 +620,10 @@ printf '// gate fails on the runner\n' >>app/scripts/real-app-harness/scenario-n
 git add -A
 git commit -qm 'Scenario change whose gate fails while it runs on the landing runner'
 : >"$LAND_CHECK_LOG"
-before="$(git --git-dir="$work/remote" rev-parse main)"
-if env LAND_RUNNER_HOLD="$work/runner-hold" LAND_GATE_AWAITS_SOAK="$work/runner-hold/watching" LAND_CHECK_EXIT=1 bash "$root/scripts/land.sh" >"$work/output" 2>&1; then
-  echo 'a landing whose gate failed pushed' >&2
+if env LAND_BASE="$(git rev-parse origin/main)" LAND_RUNNER_HOLD="$work/runner-hold" LAND_GATE_AWAITS_SOAK="$work/runner-hold/watching" LAND_CHECK_EXIT=1 bash "$root/scripts/land-gate.sh" >"$work/output" 2>&1; then
+  echo 'a gate failure exited 0' >&2
   exit 1
 fi
-[ "$before" = "$(git --git-dir="$work/remote" rev-parse main)" ]
 grep -qxF 'runner child stopped' "$LAND_CHECK_LOG" || { echo 'a failed gate did not stop the processes of the scenario on the landing runner' >&2; cat "$LAND_CHECK_LOG" "$work/output" >&2; exit 1; }
 first="$(sed -n 's/^runner soak .*--scenario \([^,]*\),.*/\1/p' "$LAND_CHECK_LOG")"
 [ -n "$first" ] || { echo 'the landing runner did not run both scenarios in one run' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
@@ -591,7 +631,7 @@ first="$(sed -n 's/^runner soak .*--scenario \([^,]*\),.*/\1/p' "$LAND_CHECK_LOG
 git reset -q --hard origin/main
 
 printf '// native\n' >>native/crates/demo/src/lib.rs
-land 'Native change' LAND_SELECTED='cargo .'
+gate 'Native change' LAND_SELECTED='cargo .'
 if grep -qF runner "$LAND_CHECK_LOG"; then echo 'a native change ran the wire suite on the landing runner, though the wire suite gives the same result on every host' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; fi
 
 git config attn.landRunner runner.invalid
@@ -599,30 +639,7 @@ refuses 'a landing runner that names no runner' GIT_CONFIG_NOSYSTEM=1 app/script
 grep -qF 'set it to github or ssh:<target>' "$work/failure" || { cat "$work/failure" >&2; exit 1; }
 git config --unset attn.landRunner
 
-hold="$work/hold" second="$work/second"
-mkdir "$hold"
-mkfifo "$hold/started" "$hold/release"
-git worktree add -q -b second "$second" origin/main
-
-printf '\n' >>internal/example/example.go
-git add -A
-git commit -qm 'Go change whose checks run beside another land'
-LAND_HOLD="$hold" bash "$root/scripts/land.sh" >"$work/holder-output" 2>&1 &
-holder=$!
-read -r _ <"$hold/started"
-git -C "$second" pull -q --rebase origin main
-printf 'beside\n' >"$second/beside.md"
-git -C "$second" add -A
-git -C "$second" commit -qm 'Land beside running checks'
-(cd "$second" && exec bash "$root/scripts/land.sh") >"$work/output" 2>&1 || { cat "$work/output" >&2; exit 1; }
-[ "$(git -C "$second" rev-parse HEAD)" = "$(git --git-dir="$work/remote" rev-parse main)" ] || { echo 'a land did not push while another land of the clone ran its checks' >&2; exit 1; }
-echo release >"$hold/release"
-wait "$holder" || { cat "$work/holder-output" >&2; exit 1; }
-[ "$(git rev-parse HEAD)" = "$(git --git-dir="$work/remote" rev-parse main)" ]
-[ "$(grep -c '^make ran:' "$work/holder-output")" = 1 ] || { echo 'a land ran its checks again after main moved' >&2; cat "$work/holder-output" >&2; exit 1; }
-grep -qF 'main moved after the checks ran on' "$work/holder-output" || { cat "$work/holder-output" >&2; exit 1; }
-git reset -q --hard origin/main
-
+# 6. scripts/landing-tests.sh standalone options.
 mkdir -p "$work/tests-repo/scripts"
 cd "$work/tests-repo"
 git init -q

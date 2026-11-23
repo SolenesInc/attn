@@ -354,7 +354,7 @@ disconnects.
 
 `scripts/measure-verification-cost.py` measures what checking a change costs:
 one land, three concurrent lands on one machine, the full Go suite,
-and CI. Run it to show that a change to `scripts/land.sh`, the test runners or
+and CI. Run it to show that a change to `scripts/land-gate.sh`, the test runners or
 `ci.yml` makes verification cheaper, on the same machine before and after. The
 local baselines measure the checkout's committed `HEAD`:
 

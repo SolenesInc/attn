@@ -108,10 +108,11 @@ pnpm --dir app real-app:linux stop
 
 ## Landing runner
 
-`scripts/land.sh` can run a landing's scenarios on a Linux machine of your own
-instead of the Acceptance soak workflow. The machine keeps its build output
-between landings, so a landing waits for an incremental build instead of a
-cold one on a fresh GitHub runner.
+`land` (through `scripts/land-gate.sh` and `scripts/land-linux.sh`) can run a
+landing's scenarios on a Linux machine of your own instead of the Acceptance
+soak workflow. The machine keeps its build output between landings, so a
+landing waits for an incremental build instead of a cold one on a fresh GitHub
+runner.
 
 1. Take an Ubuntu 24.04 machine you reach with `ssh <target>` without a
    password prompt, and whose user has passwordless sudo.
@@ -152,7 +153,7 @@ reproductions, to `attn-linux` instead, with
 `soak --checkout diag --scenario native-sidebar-session` passed it in 10 s.
 
 The landing prints where it keeps the log from the machine.
-[What land.sh does](trunk-based-development.md#what-landsh-does) says what
+[What land does](trunk-based-development.md#what-land-does) says what
 happens when the machine is down or a scenario fails there.
 
 Reprovision after a change to `packages.txt`, `go.mod`, `.tool-versions` or

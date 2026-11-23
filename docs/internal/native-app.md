@@ -65,7 +65,7 @@ moves it.
 [Test history](test-history.md) records `cargo test` runs as the `cargo`
 runner. A landing that changes `native/`, the protocol schema or `cli/protocol`
 runs `make check-native` and every test of the workspace, as
-[Trunk-based development](trunk-based-development.md#what-landsh-does) says.
+[Trunk-based development](trunk-based-development.md#what-land-does) says.
 CI's `Native / ubuntu-24.04` job runs the same checks when those paths change,
 and on every push to `main`.
 

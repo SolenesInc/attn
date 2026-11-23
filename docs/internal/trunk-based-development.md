@@ -8,22 +8,25 @@ Contributors working from a fork use [pull requests](pull-requests.md).
 
 ## Landing
 
-A landing is one push of finished commits to `main` through `scripts/land.sh`.
-Work lands in slices, each as soon as it works, so no branch waits and collects
-conflicts. Unfinished work lands unwired, or behind an experimental
-setting that is off by default. The `land-on-main` skill is the
-procedure, from the working branch to the report after the push.
+A landing is one push of finished commits to `main` through `land` (configured
+by `land.toml`). Work lands in slices, each as soon as it works, so no branch
+waits and collects conflicts. Unfinished work lands unwired, or behind an
+experimental setting that is off by default. `land guide` holds the universal
+landing procedure, and the `land-on-main` skill holds attn's additions.
+`scripts/land.sh` is retired and exits non-zero with a pointer to `land`.
 
 After the push, these run without you. `main`'s CI runs the test suites and the
 scenario matrices whose inputs changed. When a landing breaks `main`, the sheriff gets `main` green
 again. The review automation reviews the commits and messages their author or
 dispatches a fixer. The release process writes release notes from the commits.
 
-### What land.sh does
+### What land does
 
-`scripts/land.sh` rebases onto `origin/main`, runs the catalog scenarios the
-landing selects on Linux beside a fast gate for the paths the landing
-changes, and pushes.
+`land` rebases onto `origin/main` (auto-regenerating protocol and prompt
+conflicts through `scripts/land-resolve.sh`), runs `scripts/land-gate.sh`
+(which runs the catalog scenarios the landing selects on Linux beside a fast
+gate for the paths the landing changes), and pushes `main` together with
+`refs/landings/<head>` to `https://land-feed.caketroll.cloud/SolenesInc/attn`.
 
 Each check runs in one of two places:
 
@@ -41,12 +44,12 @@ A landing selects three kinds of the native app's scenarios:
   expecting the old behavior
 - each scenario that failed on `main` on Linux and has since passed there,
   until it clears, when the landing runs landing tests (below): the landing
-  tests choose it as they choose any test with that history, and `land.sh`
+  tests choose it as they choose any test with that history, and `land-gate.sh`
   hands it to the scenario step. A scenario that failed only on macOS is not
   chosen, because its Linux runs here never clear that failure. A landing prints each scenario of this kind that does not run
   on Linux or is gone from the scenario catalog.
 
-`land.sh` starts the Acceptance soak workflow for them on a temporary
+`land-gate.sh` starts the Acceptance soak workflow for them on a temporary
 `land-scenarios/` branch, waits for it, and deletes the branch. Scenarios
 skipped on Linux are not run.
 
@@ -68,15 +71,15 @@ a Mac and measures text only with fonts kept in the repository, as
 acts as Linux shows after the push, in CI's Native job.
 
 A scenario that passed for the landing's diff does not run again. The diff is
-`git diff origin/main...HEAD`, identified by `git patch-id --verbatim`, so it
+`git diff $LAND_BASE...HEAD`, identified by `git patch-id --verbatim`, so it
 survives a rebase that leaves the landing's own change as it was. Each pass
 adds a line `<scenario> github <run URL>` to
 `<git common dir>/attn-land-scenarios/<patch-id>`, which every worktree of the
-clone shares, and `land.sh` names the earlier run when it skips one. Of 201
+clone shares, and `land-linux.sh` names the earlier run when it skips one. Of 201
 passed runs followed by another run of the same change from 6 to 17 November
-2026, 65 had an identical diff. `land.sh` deletes records older than 7 days
-after a push. A pass record ignores what `main` gained since the pass, as a
-rebase under the queue already does.
+2026, 65 had an identical diff. `land-gate.sh` deletes records older than 7 days
+after a passing gate. A pass record ignores what `main` gained since the pass,
+as a post-gate rebase already does.
 
 Over 884 `main` commits ending at 582e27999, the first two kinds run a scenario for
 17% of landings, up from 8% for changed scenarios alone, with a median of 3
@@ -110,61 +113,59 @@ fast gate:
   also covers each file it or those scripts read from the checkout, written as
   `$root/<path>`, and every file under a directory read that way, so a change
   to a workflow a test checks runs that test. When no test names a changed
-  script, `land.sh` runs every script test. `land.sh` prints each test it chose
-  and the changed files that chose it. `make test-scripts` runs them all, as
-  CI does.
-- The landing tests. `land.sh` chooses a few tests for the commit it is about to
-  push, not a suite: the groups of `scripts/landing-tests` that match the
-  changed paths, the tests the landing changes, and every test that failed on
-  `main` in a lane the landing runs it in and has since passed there, until it
-  clears. A change under `native/`
+  script, `land-gate.sh` runs every script test. `land-gate.sh` prints each
+  test it chose and the changed files that chose it. `make test-scripts` runs
+  them all, as CI does.
+- The landing tests. `land-gate.sh` chooses a few tests for the commit it is
+  about to push, not a suite: the groups of `scripts/landing-tests` that match
+  the changed paths, the tests the landing changes, and every test that failed
+  on `main` in a lane the landing runs it in and has since passed there, until
+  it clears. A change under `native/`
   runs every test of the `native/` workspace, and a change under
   `app/scripts/real-app-harness/` runs the harness's tests, and a change under
-  `native/browser-runtime/` the browser runtime's. A test that is still red on `main` is
-  listed, not run. `land.sh` prints each test it added and why.
+  `native/browser-runtime/` the browser runtime's. A test that is still red on
+  `main` is listed, not run. `land-gate.sh` prints each test it added and why.
   [Test history](test-history.md#selection) specifies the choice, and
-  `scripts/land.sh --baseline` lands with the baseline groups alone.
+  `ATTN_LAND_BASELINE=1 land` lands with the baseline groups alone.
 
-`land.sh` chooses the landing tests before it starts the scenarios and the gate,
-because the choice names scenarios for the scenario step. The Go checks and the
-landing tests run side by side. `land.sh` first compiles the changed packages
-and the packages of the matching groups' Go tests in one process. Both then
-read that one build. It waits for both and prints both outcomes, and a failure
-in either stops the push. The other checks run before them, because some
-rewrite tracked files.
+`land-gate.sh` chooses the landing tests before it starts the scenarios and the
+gate, because the choice names scenarios for the scenario step. The Go checks
+and the landing tests run side by side. `land-gate.sh` first compiles the
+changed packages and the packages of the matching groups' Go tests in one
+process. Both then read that one build. It waits for both and prints both
+outcomes, and a failure in either stops the push. The other checks run before
+them, because some rewrite tracked files.
 
-Before all of this, `land.sh` refuses a landing with a commit whose author email
-differs from the global git identity, and names the commits. Running `git config`
+Before all of this, `land` refuses a landing with uncommitted changes,
+non-ignored untracked files, or a commit whose author email differs from the
+global git identity, and names the commits or files. Running `git config`
 in a linked worktree writes to the config that every worktree of the clone
 shares, and nothing else would stop the wrong author from reaching `main`. On a
-machine with no global identity, it skips this check.
+machine with no global identity, `land` skips the author check.
 
-`land.sh` also warns, without stopping the push, when the landing undoes an
+`land` also warns after pushing, without failing, when the landing undoes an
 earlier commit. It compares the landing with the last 30 commits on `main` that
 share a file with it, and names each commit whose whole change could be applied
 again on top of the landing. It misses a commit that the landing only partly
 undoes, and one whose lines a later commit changed.
 
 The scenarios and the gate run side by side, once each. From 6 to 17 November
-2026 the rest of `land.sh` after the scenarios took 145 s at the median, against
+2026 the rest of the gate after the scenarios took 145 s at the median, against
 291 s for one scenario on CI, so a gate failure stops the landing minutes before
-the scenarios finish: `land.sh` cancels the scenario run and deletes its
-branch. A scenario failure stops the push once the gate is done. Lands of one
-clone also run side by side. Only the push waits: `land.sh` then takes the
-clone's land queue, a lock that every worktree of the clone shares, fetches,
-rebases onto `origin/main` and pushes. The queue keeps two lands of one clone
-from fetching into the shared `origin/main` ref at once, and a land that finds
-it taken prints the holder's PID, worktree and start time, waits, and says when
-it takes the queue. The lock
-dies with its process, so a land that crashes or is killed holds nothing.
+the scenarios finish: `land-gate.sh` cancels the scenario run and deletes its
+branch. A scenario failure stops the push once the gate is done. Lands from
+multiple worktrees of one clone also run side by side with no shared lock:
+`land` fetches into a per-worktree ref (`refs/worktree/land/main`) and pushes
+directly to the remote URL.
 
-When `main` moved after the checks, `land.sh` says so, naming the commit the
-checks ran on, and pushes the rebased commits without running the checks again.
+When `main` moved after the gate ran, `land` says so, naming the commit the
+gate ran on, and pushes the rebased commits without running the gate again.
 Rerunning would make every land behind a push start over, so that concurrent
 lands mostly reran each other's gates. Two changes that pass alone can still
 break `main` together. CI on `main` catches that, and the sheriff fixes it. When
-only protocol types or prompt catalogs conflict, `land.sh` regenerates them;
-any other conflict stops the land before the push.
+only protocol types or prompt catalogs conflict during rebase,
+`scripts/land-resolve.sh` regenerates them; any other conflict stops `land`
+before the push and leaves your branch as it was.
 
 ## Verifying before landing
 
@@ -237,7 +238,7 @@ path. For a small, clear fix forward, the sheriff messages the culprit's live
 session first, or delegates a Builder if that session is gone or stalled. For a
 larger break with a clean revert, the sheriff delegates a Builder to revert. The fix lands like any other, and the next push run on
 `main` shows whether the fix worked. Fast landings are intentional: occasional
-breaks on `main` are why the sheriff exists, so repairs keep `land.sh` fast
+breaks on `main` are why the sheriff exists, so repairs keep `scripts/land-gate.sh` fast
 instead of gating landings on slow suites. The issue records each failure once, with
 the failure's owner and the repair that landed, so the sheriff does not fix a
 failure that already has an owner or a repair. Every revert gets an owner who

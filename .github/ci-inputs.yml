@@ -20,6 +20,7 @@ every_group:
   - 'README.md'
   - 'AGENTS.md'
   - 'CLAUDE.md'
+  - 'land.toml'
   - 'CONTRIBUTING.md'
   - 'CODE_OF_CONDUCT.md'
   - 'LICENSE'

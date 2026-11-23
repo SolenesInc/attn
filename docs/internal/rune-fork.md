@@ -149,8 +149,8 @@ move with `git checkout -- native/Cargo.toml native/Cargo.lock`, and run the
 script again. When someone pushed `main` while the suite ran, the push is
 refused; drop the pin move and run the script again.
 
-Commit the pin move with the attn change and land both with `scripts/land.sh`,
-which runs the native suite again on CI's Linux. Between the push and that
+Commit the pin move with the attn change and land both with `land`,
+which runs the native suite again before pushing. Between the push and that
 landing, `main` is ahead of attn's: another agent's run that merges onto it
 builds attn without your attn side, and fails if the Rune change breaks attn.
 Land soon after the push, and ask that agent to wait for your landing. The

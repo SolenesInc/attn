@@ -109,8 +109,9 @@ Syncs of one spool take turns, because every worktree shares `mirror/` and
 and starts when the other ends, from the cursor the other saved. A sync killed
 midway releases its turn, and the next sync resumes from the last page it saved.
 
-A sync never changes a test's result. `land` runs sync before choosing landing
-tests, and `scripts/land.sh` runs sync after a push. No test command runs sync.
+A sync never changes a test's result. `test-history land` runs sync before
+choosing landing tests, and `scripts/land-gate.sh` runs sync after the gate
+passes. No test command runs sync.
 `ATTN_TEST_HISTORY_URL` points sync at another service. Each request has a
 2-minute budget, and connecting has a 10-second budget. A connection to the
 service takes about 0.15 seconds, and off the tailnet a connection never
@@ -183,11 +184,11 @@ fixture projects, and native matrix results from CI and local runs.
 
 ## Selection
 
-After every rebase, `scripts/land.sh` chooses landing tests for the commit it
-is about to push, with
-`go tool test-history land --units-out <file> --group <group>...`. The `--group`
-arguments name the groups whose path pattern matched the change. `land.sh`
-runs:
+Before pushing, `land` runs `scripts/land-gate.sh`, which chooses landing tests
+for the commit it is about to push with
+`go tool test-history land --units-out <file> --main "$LAND_BASE" --group <group>...`.
+The `--group` arguments name the groups whose path pattern matched the change.
+`land-gate.sh` runs:
 
 - the baseline: every unit of those groups in `scripts/landing-tests`, including
   `cargo .`, every test of the `native/` workspace in one run
@@ -203,16 +204,16 @@ runs:
   A red `native/` test is not left out of `cargo .`, so it blocks every landing
   that changes `native/` until it is fixed.
 
-`land.sh` runs the tests through `scripts/landing-tests.sh --unit`, and any
-failure stops the push. `land.sh` prints each test's result, skipped tests
-included, and the command that reruns a failed test. `cargo .` prints its
+`land-gate.sh` runs the tests through `scripts/landing-tests.sh --unit`, and
+any failure stops the push. `land-gate.sh` prints each test's result, skipped
+tests included, and the command that reruns a failed test. `cargo .` prints its
 failures, a count of the test targets that passed, and its log only when a
 target failed. `landing-tests.sh` runs its Go and cargo tests at once, and
 splits `./cmd/attnd`'s tests across five `go test` runs, each with its own
-receipt. When a landing runs the Go
-checks, `land.sh` passes `--no-go-vet`, which leaves out `go test`'s own vet,
-because those checks run `go vet` on every package. Every other run keeps it,
-and only the first `./cmd/attnd` run vets that package.
+receipt. When a landing runs the Go checks, `land-gate.sh` passes
+`--no-go-vet`, which leaves out `go test`'s own vet, because those checks run
+`go vet` on every package. Every other run keeps it, and only the first
+`./cmd/attnd` run vets that package.
 
 Go's test cache answers for Go landing tests whose inputs did not change, so
 after a rebase only the tests the new commits reach run again, and the others
@@ -225,20 +226,25 @@ package, must be listed in `scripts/landing-tests.sh`, which runs it with
 `-count=1`. The daemon's upload test, which builds attn-ingest, is listed
 there.
 
-- `land` prints each added test with the commit and lane where it failed, its
-  passes since, and how many more passes clear it. `land` also prints each red test, each missing baseline unit, and each unavailable test with its reason, the baseline's size, and how many failures have cleared or are gone from the checkout. `land`
-  requests a baseline unit missing from the checkout, such as a renamed test,
-  anyway. The run reports the unit `MISSING`, and the landing fails until the
-  unit's line in `scripts/landing-tests` names a test again.
-- Before choosing, `land` runs `sync` with the rebased checkout's own code, so
-  the choice reads the history that code keeps. After a push, `land.sh` runs
-  `sync` again, so the landing's own receipt reaches the shared history. When
-  the sync before choosing fails, `land` prints when a sync last succeeded and
-  chooses from the history already in the spool.
-- With no successful sync in the spool, `land` chooses the baseline and says so.
-- When `land` fails or chooses nothing, `land.sh` prints that it is running the
-  baseline groups, and runs them.
-- `scripts/land.sh --baseline` runs the baseline groups without syncing or
+- `test-history land` prints each added test with the commit and lane where it
+  failed, its passes since, and how many more passes clear it. It also prints
+  each red test, each missing baseline unit, and each unavailable test with its
+  reason, the baseline's size, and how many failures have cleared or are gone
+  from the checkout. It requests a baseline unit missing from the checkout,
+  such as a renamed test, anyway. The run reports the unit `MISSING`, and the
+  landing fails until the unit's line in `scripts/landing-tests` names a test
+  again.
+- Before choosing, `test-history land` runs `sync` with the rebased checkout's
+  own code, so the choice reads the history that code keeps. After the gate
+  passes, `land-gate.sh` runs `sync` again, so the landing's own receipt
+  reaches the shared history. When the sync before choosing fails,
+  `test-history land` prints when a sync last succeeded and chooses from the
+  history already in the spool.
+- With no successful sync in the spool, `test-history land` chooses the
+  baseline and says so.
+- When `test-history land` fails or chooses nothing, `land-gate.sh` prints that
+  it is running the baseline groups, and runs them.
+- `ATTN_LAND_BASELINE=1 land` runs the baseline groups without syncing or
   choosing. Use it when the history or the choice misbehaves, and never to
   skip a failing test.
 
@@ -247,7 +253,7 @@ failure runs in seconds, the sheriff's repair adds the test to its group in
 `scripts/landing-tests` in the same landing.
 
 ```sh
-go tool test-history land --units-out units --group go  # what land.sh would run
+go tool test-history land --units-out units --group go  # what land-gate.sh would run
 go tool test-history select                 # the same for the checkout, cleared failures included
 go tool test-history explain --test 'go ./internal/daemon TestStateExplain'
 go tool test-history replay --from <rev>    # what the baseline and the rule would have run
@@ -328,10 +334,10 @@ the checkout's inventory does not hold them, and only its Linux lanes count,
 as above. The macOS scenario lane runs only when someone dispatches it: on
 19 November 2026 one dispatch at e967baa4c failed 30 scenarios, the lane had 3 passes in 524 main commits, and with macOS failures
 counted, the scenarios landings added cost each landing 461 s at the median and cleared none. `land`
-writes a chosen scenario as `native <scenario>`, and `land.sh` hands it to
+writes a chosen scenario as `native <scenario>`, and `land-gate.sh` hands it to
 `scripts/land-linux.sh`, which runs it with the scenarios the landing selects
 for other reasons, as
-[Trunk-based development](trunk-based-development.md#what-landsh-does) says.
+[Trunk-based development](trunk-based-development.md#what-land-does) says.
 The scenario step, not this selection, says when one does not run on Linux or
 is gone from the scenario catalog.
 

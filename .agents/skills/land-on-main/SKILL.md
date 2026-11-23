@@ -1,61 +1,46 @@
 ---
 name: land-on-main
-description: Use when landing a change on attn's main, from checking and reviewing it to pushing it with scripts/land.sh.
+description: attn-specific additions to `land guide` when landing a change on attn's main with `land`.
 ---
 
 # Land on main
 
-attn lands changes straight on `main`, with no pull request.
-`docs/internal/trunk-based-development.md` explains the system around that. A
-landing is one push of finished commits through `scripts/land.sh`. Your work
-ends when `scripts/land.sh` pushes. After that, CI, the sheriff and the review
-on `main` take over.
-
-## Branch
-
-Work on a private, short-lived branch from the latest `main`. Never open a
-pull request from it, and never push it under its own name.
-
-```bash
-git fetch origin main && git switch -c <name> origin/main
-```
-
-Rebase onto `origin/main` at the start of every step. Land each slice as soon
-as it works, because commits held back on the branch turn into conflicts. Land
-unfinished work unwired, or behind an experimental setting that is off by
-default.
+attn lands straight on `main` with `land`, with no pull request. Run
+`land guide` first for the universal landing steps. This skill holds what attn
+adds to them. [Trunk-based development](../../../docs/internal/trunk-based-development.md)
+explains the system around landing.
 
 ## Commit
 
-Inside attn, the commit hook adds the `Attn-Session:` and `Attn-Seed:`
-trailers, as `AGENTS.md` describes. Check that every commit carries them.
-Outside attn, leave them out.
+Inside attn, `.githooks/prepare-commit-msg` adds the `Attn-Session:` and
+`Attn-Seed:` trailers, as `AGENTS.md` describes. Check that every commit
+carries them. Outside attn, leave them out.
 
-When the slice adds code that nothing uses yet, say in one line of the commit
+When a slice adds code that nothing uses yet, state in one line of the commit
 message what will use the code and which seed or plan section says so.
 Reviewers on `main` read that line.
 
 ## Check
 
-Run targeted tests for the behavior you changed. Then check the change on the
+Run targeted tests for the behavior you changed. Then check the change on every
 surface it touches: the CLI, the daemon over `wsctl`, a non-production
-instance, or the app. The drive-attn skill's feature map lists every way into
-a feature. Do not run a full suite. CI runs the full suites on `main` after
-landing, as `AGENTS.md` "Commands and verification" says.
+instance, or the app. The `drive-attn` skill's feature map lists every way into
+a feature. Do not run a full suite locally. CI runs the full suites on `main`
+after landing, as `AGENTS.md` "Commands and verification" says.
 
 When the machine has the capacity, you may run the scenarios that cover an
-app-observable change on a non-production instance. When no scenario covers
-the change, add one or tell the user. `scripts/land.sh` runs on Linux each
-scenario you add or change and, when you change product code, each scenario
-listed by a feature file you change, so a scenario you ran on a Mac still gets
-its Linux run before the push.
+app-observable change on a non-production instance. When no scenario covers the
+change, add one or tell the user. `land`'s gate (`scripts/land-gate.sh`) runs
+on Linux each scenario you add or change and, when you change product code,
+each scenario listed by a feature file you change, so a scenario you ran on a
+Mac still gets its Linux run before the push.
 
-Before you land, clean every instance the check started, as the drive-attn
+Before you land, clean every instance the check started, as the `drive-attn`
 skill's Cleanup says.
 
 ## Review
 
-Review the slice before it lands. Scale the review to the risk of the slice:
+Scale the pre-landing review to the slice's risk:
 
 | Slice | Review |
 |---|---|
@@ -65,23 +50,9 @@ Review the slice before it lands. Scale the review to the risk of the slice:
 | Risky: PTY, harness integration, migration, wire protocol, daemon lifecycle | the matching `verify-*` skills and up to three adversarial readers |
 
 A `verify-*` skill matches when its description covers the change. An
-adversarial reader looks for findings as
-[finding.md](../review-main/finding.md) defines them. Give each reader of a
-risky slice its own scope:
-
-- Correctness: edge cases, concurrency, restarts, Linux, and what the user
-  sees.
-- Every surface: the parallel paths the change should reach. These are the
-  other entry points, clients and platforms, the wire contract, the docs, and
-  the way back out of anything new.
-- Extra machinery: each new layer, option, fallback, cache or copy of state,
-  and the current requirement that it serves.
-
-Run each reviewer as an independent reader. Its only context is the diff
-(`git diff origin/main...HEAD`), the direction of the slice, and the guidance
-that the slice names. When your runtime has native subagents, run the
-reviewers as subagents in parallel. Otherwise, run each reviewer as its own
-fresh pass. Reviewers report. They do not edit.
+adversarial reader judges findings against
+[finding.md](../review-main/finding.md), using the three scopes in `land guide`
+(Correctness, Every surface, Extra machinery).
 
 Run reviewers on the model one step below yours in the table, at one reasoning
 level above yours. If you already run at the highest reasoning level, run them
@@ -97,104 +68,76 @@ own reasoning level.
 
 ### Direction
 
-A slice often builds toward later slices. Reviewers therefore judge the slice
-against the direction it is heading, as finding.md describes. Give every
-reviewer:
+Give every reviewer:
 
-- the seed from the commits' `Attn-Seed:` trailers, and the plan of the
-  seed's plot
+- the seed from the commits' `Attn-Seed:` trailers, and the plan of the seed's
+  plot
 - which slice of the plan this is
-- what the next slices will use from this slice
+- what later slices will use from this slice
 
 ### Settle the findings
 
-When every reviewer has reported, merge duplicate findings. Check each finding
-yourself against the code or text. Judge an adversarial reader's finding
-against [finding.md](../review-main/finding.md), and judge a `verify-*`
-finding against that skill's rules.
+When every reviewer has reported, merge duplicate findings and check each
+against the code or text. Judge adversarial findings against
+[finding.md](../review-main/finding.md), and `verify-*` findings against that
+skill's rules. For any uncertain adversarial finding, run one independent
+verifier with the finding, its `file:line`, `HEAD`, the direction, and
+`finding.md`. Fix confirmed findings, re-check, and commit.
 
-If you are still uncertain about an adversarial finding, run a verifier as an
-independent reader, using a subagent or a fresh pass as above. Give the
-verifier the finding, its `file:line`, `HEAD`, the direction, and `finding.md`.
+## Note
 
-Fix the confirmed findings, check the fixes as in [Check](#check), and commit.
-If a finding stays uncertain, ask the user.
+Write a short `.land/note.md` for readers of the feed
+(`https://land-feed.caketroll.cloud/SolenesInc/attn`): one or two sentences on
+what changed for users or maintainers and why. For an app-visible change on
+macOS, you can capture a clip with `land record <name> --instance <instance>
+[--seconds N]` (which wraps `scripts/pr-evidence.sh record` into `$LAND_MEDIA`)
+and paste the printed markdown line into `.land/note.md`.
 
 ## Land
 
 ```bash
-scripts/land.sh
+land
 ```
 
-Push with `scripts/land.sh`. It rebases onto `origin/main`, runs the scenarios
-your change selects on Linux beside a fast gate for the changed paths, and
-pushes. `.githooks/pre-push` refuses a plain
-`git push`. Use `git push --no-verify` only when `scripts/land.sh` cannot run,
-after you run its checks yourself.
+`land` reads `land.toml`:
 
-`scripts/land.sh` refuses commits whose author is not your global git identity,
-and says how to fix them. Set a throwaway identity with `git -c user.email=…`,
-never `git config` in a worktree, because that writes to the config every
-worktree of the clone shares.
+- `resolve = "scripts/land-resolve.sh"` automatically regenerates conflicts
+  that touch only protocol or prompt generated files during rebase.
+- `gate = "scripts/land-gate.sh"` runs the selected Linux scenarios
+  (`scripts/land-linux.sh`) beside the fast host gate and landing tests from
+  shared test history (`scripts/landing-tests`, `go tool test-history land`),
+  then syncs test receipts.
+- `feed = "https://land-feed.caketroll.cloud"` publishes the landing ref,
+  `.land/note.md`, and any linked recordings.
 
-The last lines of the output warn when the landing undid earlier commits on
-`main`, and name them. The push has already happened. If you did not mean to
-undo a commit, restore it right away in a new landing with `git cherry-pick`,
-and say so in your report.
+`.githooks/pre-push` refuses a plain `git push` to `main`. Use
+`git push --no-verify` only when `land` cannot run, after you run
+`scripts/land-gate.sh` yourself.
 
-Lands run their checks side by side. Only the push waits for the clone's land
-queue: when another land of the clone is pushing, `scripts/land.sh` prints
-`land: waiting for the land queue: held by pid <pid> (<worktree>) since <time>`,
-waits a few seconds, and prints `land: took the land queue`. Leave it running.
+One selected scenario adds about five minutes, and 23 added about 17. The gate
+prints the run's URL while checks run, cancels the scenario run if checks fail,
+and skips any scenario that already passed for the same diff.
 
-When `main` moves during landing, `scripts/land.sh` rebases and pushes without
-running its checks again, and prints `land: main moved after the checks ran on
-<commit>`. Your checks still count; name that commit in your report. When
-`scripts/land.sh` stops on a conflict in your code, resolve the conflict with
-`git rebase origin/main`, rerun the checks that the resolution touches, and
-run `scripts/land.sh` again.
-
-One selected scenario adds about five minutes, and 23 added about 17. The land
-prints the run's URL while the gate runs. When the gate fails, the land cancels
-the scenario run. When a scenario fails there, the land stops before the
-push and prints how to read the failure. Fix it and land again: when your change
-meant to alter what the scenario expects, update the scenario in this landing. A
-product failure on Linux is a finding, as `app/scripts/real-app-harness/AGENTS.md`
-says.
-
-A scenario that passed for the same diff in an earlier land, one that stopped
-after the pass, does not run again. The land prints the run that passed.
-
-The landing tests of the gate come from the shared test history. They are the
-groups of `scripts/landing-tests` that the changed paths match, which include
-every native test for a change under `native/`, the tests you
-changed, and every test that failed on `main` on your host's platform and has
-since passed there. A test stays in the gate until it has passed on 30 later
-`main` commits. A catalog scenario with that history on Linux runs in the
-scenario step instead, with the scenarios your change selects, whatever your
-host. A test that failed only on another platform does not run. The gate prints each test it added, and why. It lists the tests that are still red
-on `main` without running them, because the sheriff owns those.
-
-A failing landing test stops the push like any other check, whether you
-touched the test or not. If the test passes on `origin/main` and on a second
-run of `scripts/land.sh`, it is a flake. Land, and name the test in your
-report. Run `scripts/land.sh --baseline`, which runs the baseline groups
-alone, only when the shared test history or the test selection misbehaves. Never use it to skip a
-failing test.
+A failing landing test stops the push like any other check, whether you touched
+the test or not. If it passes on `origin/main` and on a second run of `land`,
+it is a flake: land, and name the test in your report. Run
+`ATTN_LAND_BASELINE=1 land` (baseline groups alone) only when shared test
+history or test selection misbehaves, never to skip a failing test.
 
 ## Report
 
 Report on the seed and in the conversation:
 
-- the landed commits, and the commit your checks ran on when a rebase moved
-  the landed commits
-- the seed's checks. For each check, run
-  `attn seed check report <seed> <C#> -m "<summary line>" --evidence
-  <file|artifact|url> --commit <rev>`. The command copies a local file onto the
-  seed. If the seed has no checks, put the evidence in a note
-- the review: which readers ran, the confirmed findings and their fixes, and
-  the findings you refuted
-- any landing test that failed and passed on a rerun, and whether you used
-  `scripts/land.sh --baseline`, and why
+- the landed commits (`land: push   main is at <commit>`), the landing feed
+  URL (`land: feed   <address>`), and the commit the gate ran on when a rebase
+  moved the landed commits
+- the seed's checks: run
+  `attn seed check report <seed> <C#> -m "<summary line>" --evidence <file|artifact|url> --commit <rev>`.
+  If the seed has no checks, put the evidence in a note
+- the review: which readers ran, confirmed findings and their fixes, and
+  findings you refuted
+- any landing test that failed and passed on a rerun, any undone-commit
+  warning you acted on, and whether you used `ATTN_LAND_BASELINE=1 land` and
+  why
 
 Then harvest. Do not watch CI, because the sheriff watches `main`.

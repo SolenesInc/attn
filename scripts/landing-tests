@@ -1,12 +1,13 @@
-# The baseline: tests scripts/land.sh always runs before it pushes, chosen by
-# the paths a landing changes. land.sh adds tests that failed on main and tests
-# the landing changes; docs/internal/test-history.md says how it chooses them.
+# The baseline: tests `land` (via scripts/land-gate.sh) always runs before it
+# pushes, chosen by the paths a landing changes. land-gate.sh adds tests that
+# failed on main and tests the landing changes; docs/internal/test-history.md
+# says how it chooses them.
 # Run groups by hand with scripts/landing-tests.sh <group>..., or single tests
 # with scripts/landing-tests.sh --unit '<unit>'...
 #
-# "group <name> <pattern>" starts a group. land.sh runs it when a changed path
-# matches the pattern, an extended regular expression. The lines under it name
-# the tests:
+# "group <name> <pattern>" starts a group. land-gate.sh runs it when a changed
+# path matches the pattern, an extended regular expression. The lines under it
+# name the tests:
 #
 #   go <package> <TestName>   a top-level Go test and its subtests
 #   cargo .                   the whole native/ workspace, in one run

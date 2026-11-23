@@ -138,14 +138,15 @@ count.
 
 ## Trunk-based development
 
-attn is developed trunk-based: changes land straight on `main`, are reviewed
-before landing and again on `main`, and releases ship only reviewed, green
-commits.
-[Trunk-based development](docs/internal/trunk-based-development.md) explains the
-system.
+This repository lands on `main` with `land`, with no pull request.
+Before you land a change, run `land guide` and follow it.
 
-- Land with the `land-on-main` skill: check, review, then `scripts/land.sh`.
-  Your work is done when `scripts/land.sh` pushes.
+[Trunk-based development](docs/internal/trunk-based-development.md) explains the
+system, and the `land-on-main` skill (`.agents/skills/land-on-main`) holds
+attn's additions to `land guide` (seed direction, reviewer model table,
+`drive-attn` cleanup, Linux scenarios, and seed check reports).
+
+- Your work ends when `land` pushes.
 - An Orchestrator reviews its Builders after landing. Corrections are new
   landings.
 
@@ -185,17 +186,17 @@ system.
 - `cd native && cargo test -p attn-app --test wire`: The app's wire tests
   (`cargo test` alone runs the whole native workspace)
 - `make check-mobile`: The phone app's format, lint, type check and tests
-- `scripts/land.sh`: Run on Linux, on CI or the clone's landing runner, each
-  catalog scenario the landing adds or changes and, when it changes product
-  code, each scenario listed by a feature file it changes; on the landing host
-  run fast compile,
-  typecheck, lint, generated-file and script checks, and the landing tests, then
-  push to `main`. The landing tests are the
-  `scripts/landing-tests` groups the changed paths match, the tests the change
-  touches, and every test that failed on `main` in a lane the landing runs it
-  in and has since passed there, until it has passed on 30 later `main`
-  commits. `--baseline` runs the groups
-  alone
+- `land`: Rebase onto `origin/main` (auto-regenerating protocol and prompt
+  conflicts through `scripts/land-resolve.sh`), run `scripts/land-gate.sh`, and
+  push `main` with `refs/landings/<head>`. The gate runs on Linux (on CI or the
+  clone's landing runner) each catalog scenario the landing adds or changes and,
+  when it changes product code, each scenario listed by a feature file it
+  changes; on the landing host it runs fast compile, typecheck, lint,
+  generated-file and script checks, and the landing tests. The landing tests are
+  the `scripts/landing-tests` groups the changed paths match, the tests the
+  change touches, and every test that failed on `main` in a lane the landing
+  runs it in and has since passed there, until it has passed on 30 later `main`
+  commits. `ATTN_LAND_BASELINE=1 land` runs the baseline groups alone
 - `make test`: Full Go suite (`make test-v` verbose, `make test-watch` on file
   changes), for CI or diagnosing a suite-wide failure
 - `make test-native`: Every test of the native workspace; `make check-native`
@@ -209,8 +210,9 @@ system.
 
 Before landing or reporting done, run targeted tests for what you changed and
 check the affected surface. Do not run `make test`, `make lint`, or another
-full suite locally: `scripts/land.sh` runs every native test for a change under
-`native/`, and CI on `main` runs the full suites after landing.
+full suite locally: `land`'s gate (`scripts/land-gate.sh`) runs every native
+test for a change under `native/`, and CI on `main` runs the full suites after
+landing.
 
 `make test` skips the Go suite when only `docs/` (except `docs/guide`'s Go code
 and the pages it embeds) and root Markdown changed since
@@ -414,7 +416,8 @@ entry names:
   docs/internal/inbox.md
 - Agent-facing content in `internal/prompts/content/**`, its Go definitions, or
   CLI help => docs/internal/prompt-authoring.md
-- Landing a change => the land-on-main skill (.agents/skills/land-on-main)
+- Landing a change => run `land guide`, plus the land-on-main skill
+  (.agents/skills/land-on-main) for attn's additions
 - Review on main, a red main, or why attn lands this way =>
   docs/internal/trunk-based-development.md
 - Pull requests, or waiting on their reviews => docs/internal/pull-requests.md
