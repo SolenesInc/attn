@@ -1935,6 +1935,110 @@ fn a_picture_in_an_ask_runs_wider_than_its_lines_and_centred_with_them() {
 }
 
 #[test]
+fn a_picture_or_table_in_an_asks_list_or_quote_runs_past_its_lines_to_the_column_end() {
+    let nested = |name: &str| {
+        format!(
+            "- The {name} banner overlaps the field, and the item wraps on the ask's lines like any other text.\n\n  ![{name} in a list](shots/banner.png)\n\n  | Placement | Before the change | After the change | Points across | Window | Keymap |\n  |---|---|---|---|---|---|\n  | In a list item | Narrower than the column | Out to the column end | Nine hundred | Wide | macOS |\n\n> The {name} banner overlaps the field, and the quote wraps on the ask's lines like any other text.\n>\n> ![{name} in a quote](shots/banner.png)\n"
+        )
+    };
+    let mut shot = ask(
+        "a-cache1",
+        "api",
+        "Cache store",
+        30,
+        vec![
+            prose(&nested("prose")),
+            AskPart {
+                question: Some(AskQuestion {
+                    key: "q1".into(),
+                    kind: "one".into(),
+                    prompt: "Ship it?".into(),
+                    context: Some(nested("context")),
+                    choices: vec![choice("Yes"), choice("No")],
+                    ..AskQuestion::default()
+                }),
+                ..AskPart::default()
+            },
+        ],
+    );
+    shot.base_dir = "/tmp/api".into();
+    let mut world = start(vec![shot], vec![api_working()]);
+    world.daemon.on("ask_image", |r| {
+        serde_json::json!({
+            "event": "ask_image_result",
+            "request_id": r["request_id"],
+            "success": true,
+            "mime_type": "image/png",
+            "data_base64": WIDE_PNG,
+        })
+    });
+    world.resize((1512.0, 945.0));
+    open_sheet(&mut world);
+    world.settle();
+
+    let subject = world.rect("asks.subject.block");
+    let column = world.rect("asks.part.0.block");
+    let (lines_end, column_end) = (subject[0] + subject[2], column[0] + column[2]);
+    let end = |r: [f64; 4]| r[0] + r[2];
+    let screen = world.screen();
+    for name in ["prose", "context"] {
+        for placement in ["list", "quote"] {
+            let picture = screen
+                .bounds(Target::role("image").name(format!("{name} in a {placement}")))
+                .map(|r| r.map(f64::from))
+                .expect("the picture shows");
+            assert_eq!(
+                end(picture),
+                column_end,
+                "the {name} picture in a {placement}: {picture:?}"
+            );
+            assert!(
+                picture[2] > subject[2],
+                "the {name} picture in a {placement} runs wider than the lines: {picture:?}"
+            );
+        }
+    }
+    let lines: Vec<_> = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .filter(|e| {
+            e.text
+                .as_deref()
+                .is_some_and(|t| t.contains("banner overlaps"))
+        })
+        .map(|e| e.rect[0] as f64 + e.rect[2] as f64)
+        .collect();
+    assert_eq!(
+        lines.len(),
+        4,
+        "a list item and a quote in prose and context"
+    );
+    assert!(
+        lines.iter().all(|end| *end <= lines_end),
+        "the words keep the ask's lines: {lines:?} past {lines_end}"
+    );
+    let tables: Vec<_> = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .filter(|e| e.role == "table")
+        .map(|e| e.rect.map(f64::from))
+        .collect();
+    assert_eq!(tables.len(), 2, "a table in prose and in context");
+    for table in tables {
+        assert!(
+            end(table) > lines_end,
+            "the table runs past the ask's lines: {table:?} past {lines_end}"
+        );
+        assert!(
+            end(table) <= column_end,
+            "the table stays in the column: {table:?}"
+        );
+    }
+}
+
+#[test]
 fn an_asks_images_show_from_the_copy_the_home_keeps() {
     let mut screenshot = ask(
         "a-cache1",

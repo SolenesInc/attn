@@ -617,6 +617,64 @@ fn a_large_image_on_a_wide_document_tile_holds_the_width_it_draws_past_the_prose
     rest(&mut world);
 }
 
+#[test]
+fn a_large_image_or_table_in_a_list_or_quote_on_a_wide_document_tile_runs_past_the_prose_measure() {
+    use base64::Engine;
+    let mut world = start();
+    world.resize((3600.0, 900.0));
+    world.daemon.on("tile_asset_read", |r| {
+        let data = base64::engine::general_purpose::STANDARD.encode(WIDE_STRIP);
+        serde_json::to_value(TileAssetReadResultMessage {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            success: true,
+            data_uri: Some(format!("data:image/png;base64,{data}")),
+            ..TileAssetReadResultMessage::new()
+        })
+        .unwrap()
+    });
+    let row = "| Placement in the document | Before the change | After the change | Points across | Window size | Keymap | Notes on it |\n";
+    world.daemon.emit(content(&format!(
+        "- An item long enough to wrap at the reading measure if it had to, and then some more words after that, and more.\n\n  ![in a list](shot.png)\n\n  {row}  |---|---|---|---|---|---|---|\n  {row}\n> A quote long enough to wrap at the reading measure if it had to, and then some more words after that, and more.\n>\n> ![in a quote](shot.png)\n"
+    )));
+    world.settle();
+    let elements = world.runtime().elements();
+    let line = |start: &str| {
+        elements
+            .iter()
+            .find(|e| e.text.as_deref().is_some_and(|t| t.starts_with(start)))
+            .unwrap_or_else(|| panic!("no text {start:?}"))
+            .rect
+    };
+    let item = line("An item");
+    let lines = [item[0] + item[2], line("A quote")[0] + line("A quote")[2]];
+    for name in ["in a list", "in a quote"] {
+        let [x, _, drawn, _] = world
+            .screen()
+            .bounds(Target::role("image").name(name))
+            .unwrap();
+        assert!(
+            drawn > item[2] + 360.0,
+            "the picture {name} runs well wider than the lines: {drawn} against {}",
+            item[2]
+        );
+        assert!(
+            x + drawn > lines[0],
+            "the picture {name} runs past the lines: {} past {lines:?}",
+            x + drawn
+        );
+    }
+    let table = elements
+        .iter()
+        .find(|e| e.role == "table")
+        .expect("the table");
+    assert!(
+        table.rect[0] + table.rect[2] > lines[0],
+        "the table runs past the lines: {:?} past {lines:?}",
+        table.rect
+    );
+    rest(&mut world);
+}
+
 /// An 8×2 green PNG.
 const GREEN: &str = "iVBORw0KGgoAAAANSUhEUgAAAAgAAAACCAIAAADq9gq6AAAAEElEQVR4nGNg+M+AHeGSAACOsQ/xb1SVcwAAAABJRU5ErkJggg==";
 
@@ -1284,9 +1342,9 @@ fn a_press_on_a_control_in_an_inactive_document_tile_takes_the_tile_and_the_cont
 
 const MEASURED: &str = "---\ntitle: Launch plan\n---\n# The plan\n\nA paragraph that runs long enough to wrap well before it could reach across a wide tile, so its width is the reading measure and not the words in it.\n\n> a quote that also runs long enough to wrap before it reaches across a wide tile, as prose does\n\n| One | Two |\n| --- | --- |\n| 1 | 2 |\n\n```sh\nmake check\n```\n";
 
-/// The document's prose (heading, paragraph, quote) and its wide blocks (front matter, table,
-/// code block), each as its left edge and width, and the document view's, in a window `width`
-/// wide.
+/// The document's prose (heading, paragraph, a quote to the end of its lines) and its wide
+/// blocks (front matter, table, code block), each as its left edge and width, and the document
+/// view's, in a window `width` wide.
 fn measured_at(width: f32) -> (Vec<[f32; 2]>, Vec<[f32; 2]>, [f32; 2]) {
     let mut world = start_with(document_tile("m", PLAN));
     world.resize((width, 900.0));
@@ -1305,7 +1363,13 @@ fn measured_at(width: f32) -> (Vec<[f32; 2]>, Vec<[f32; 2]>, [f32; 2]) {
         span_of(Target::role("label").name(
             "A paragraph that runs long enough to wrap well before it could reach across a wide tile, so its width is the reading measure and not the words in it.",
         )),
-        span_of(Target::role("blockquote")),
+        {
+            let [x, _] = span_of(Target::role("blockquote"));
+            let [lines, w] = span_of(Target::role("label").name(
+                "a quote that also runs long enough to wrap before it reaches across a wide tile, as prose does",
+            ));
+            [x, lines + w - x]
+        },
     ];
     let wide = vec![
         span_of(Target::role("note").name("Front matter")),
