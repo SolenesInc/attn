@@ -157,3 +157,53 @@ func reloadRespawned(t *testing.T, app *testworld.Peer, session string) {
 	terminal := app.Terminal(session)
 	testworld.Await(app, protocol.EventRuntimeRespawned, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.ID) == terminal })
 }
+
+func TestReloadingAnExitedSigmaSessionFollowsItsServerStateAgain(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	app := w.App()
+	session, view, server := appServerSession(t, w, app, fakeagent.Sigma)
+	conversation := view.ConversationID
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+	mark := app.EventCount()
+	view.Exit(130)
+	testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateIdle && protocol.Deref(s.StateReason) == "process_exited" && s.TerminalExit != nil
+	})
+
+	mark = app.EventCount()
+	reloadRespawned(t, app, session)
+	reloaded := w.Launched(session)
+	testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool {
+		return s.TerminalExit == nil && protocol.Deref(s.StateReason) != "process_exited"
+	})
+
+	mark = app.EventCount()
+	server.Work(conversation)
+	testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateWorking && protocol.Deref(s.StateReason) != "process_exited"
+	})
+
+	mark = app.EventCount()
+	server.Reply(conversation, "All set. <!-- attn:state=idle -->")
+	testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateIdle && protocol.Deref(s.StateReason) != "process_exited"
+	})
+
+	mark = app.EventCount()
+	server.Work(conversation)
+	testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+
+	mark = app.EventCount()
+	reloaded.Exit(130)
+	testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateIdle && protocol.Deref(s.StateReason) == "process_exited" && s.TerminalExit != nil
+	})
+
+	mark = app.EventCount()
+	reloadRespawned(t, app, session)
+	w.Launched(session)
+	testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateWorking && s.TerminalExit == nil && protocol.Deref(s.StateReason) != "process_exited"
+	})
+}

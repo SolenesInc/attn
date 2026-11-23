@@ -3,6 +3,8 @@ package sessionmonitor
 import (
 	"maps"
 	"time"
+
+	"github.com/victorarias/attn/internal/sessionstate"
 )
 
 func (m *Monitor) ReportHarnessTitle(title string) bool {
@@ -100,14 +102,29 @@ func (m *Monitor) ClearExitBefore(before time.Time) (cleared, applied bool) {
 		return false, false
 	}
 	m.mu.Lock()
-	if m.exit == nil || !m.exit.At.Before(before) {
+	cleared = m.exit != nil && m.exit.At.Before(before)
+	if cleared {
+		m.exit = nil
+	}
+	m.watch.mu.Lock()
+	processCleared := m.exit == nil &&
+		m.watch.terminal.Process != nil &&
+		m.watch.terminal.Process.Claim == sessionstate.ClaimExited &&
+		(cleared || !m.watch.terminal.Process.ObservedAt.After(before))
+	if processCleared {
+		m.watch.terminal.Process = nil
+	}
+	m.watch.mu.Unlock()
+	if !cleared && !processCleared {
 		m.mu.Unlock()
 		return false, false
 	}
-	m.exit = nil
+	if processCleared {
+		m.resolveSoonLocked()
+	}
 	view := m.viewLocked()
 	m.mu.Unlock()
-	return true, m.publish(view)
+	return cleared, m.publish(view)
 }
 
 func (m *Monitor) ForgetPullRequest(id string) bool {
