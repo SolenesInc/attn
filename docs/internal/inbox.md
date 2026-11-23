@@ -355,9 +355,9 @@ when to ring.
 
 A notification run is a run that attn's own input started: a ring, or a crew
 member's heartbeat. A Quick Capture is the user's own input, so a ring that
-carries one starts the user's run. When other items were unread with the
-capture, the 📬 ring that follows for them starts the user's run too, so the
-turn that the capture's reply opened stays owed. If the user types into the
+carries one starts the user's run. The next 📬 ring after it, while the
+session still owes the user a turn, starts the user's run too, so the turn that
+the capture's reply opened stays owed. If the user types into the
 agent during a notification run, or a Quick Capture reaches it, the run becomes
 the user's. The user's answer to an ask and a change to a seed's authorization
 go in the user's voice, but they do not change whose run it is.

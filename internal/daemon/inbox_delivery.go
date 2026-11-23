@@ -50,7 +50,6 @@ type inboxRing struct {
 	FinishingStart     bool                         `json:"finishing_start"`
 	BellWaitsForPrompt bool                         `json:"bell_waits_for_prompt"`
 	HeldUntil          time.Time                    `json:"held_until"`
-	BellSplitOff       bool                         `json:"bell_split_off,omitempty"`
 	At                 time.Time                    `json:"at"`
 }
 
@@ -216,7 +215,10 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		if err := d.clearPendingInbox(a, state); err != nil {
 			return receipt, err
 		}
-		state.startedSession, state.tenderResume, state.captureBell = "", nil, ""
+		state.startedSession, state.tenderResume = "", nil
+		if state.captureBell != "" && d.store.Get(state.captureBell) == nil {
+			state.captureBell = ""
+		}
 		return receipt, nil
 	}
 	holder, memberID, err := d.inboxRecipient(a)
@@ -381,7 +383,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		input.UserWords = len(paste.typed) > 0
 		at := time.Now()
 		input.Ring = &protocol.InboxRingRecord{Address: a.String(), ProfileID: holder.ProfileID, Stamp: store.InboxRingStamp(at), Typed: paste.typed, Notified: paste.notified, Captures: paste.captures, AuthorizedSeeds: paste.authorizedSeeds}
-		if paste.notified && state.captureBell == holder.ID {
+		if paste.notified && state.captureBell == holder.ID && holder.TurnOpenedAt != nil && !protocol.Deref(holder.TurnByAgent) {
 			input.Ring.FollowsCaptures = protocol.Ptr(true)
 		}
 		run := d.store.GetAgentDriverRun(holder.ID)
@@ -389,7 +391,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 			input.ExpectedDriverRun = run.RunID
 			input.ExpectedConversation = d.store.GetSessionConversation(holder.ID).NativeID
 		}
-		pending = &inboxRing{Message: input.Message(holder.ID), FinishingStart: finishingStart, BellWaitsForPrompt: bellWaitsForPrompt, HeldUntil: bellHeldUntil, BellSplitOff: paste.bellSplitOff, At: at}
+		pending = &inboxRing{Message: input.Message(holder.ID), FinishingStart: finishingStart, BellWaitsForPrompt: bellWaitsForPrompt, HeldUntil: bellHeldUntil, At: at}
 		if input.ExpectedDriverRun != "" {
 			raw, err := json.Marshal(pending)
 			if err != nil {
@@ -428,7 +430,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		switch {
 		case ring.Notified:
 			state.captureBell = ""
-		case len(ring.Captures) > 0 && pending.BellSplitOff:
+		case len(ring.Captures) > 0:
 			state.captureBell = holder.ID
 		}
 		for _, captureID := range ring.Captures {
@@ -556,7 +558,6 @@ type inboxPaste struct {
 	captures        []string
 	authorizedSeeds []string
 	notified        bool
-	bellSplitOff    bool
 }
 
 func (d *Daemon) inboxPaste(a who.Address, profileID string, bell bool) (inboxPaste, error) {
@@ -589,7 +590,6 @@ func (d *Daemon) inboxPaste(a who.Address, profileID string, bell bool) (inboxPa
 		paste.typed = append(paste.typed, item.ID)
 	}
 	paste.notified = bell && untyped && len(paste.typed) == 0
-	paste.bellSplitOff = bell && untyped && len(paste.typed) > 0
 	if paste.notified {
 		texts = append(texts, inboxRingText())
 	}

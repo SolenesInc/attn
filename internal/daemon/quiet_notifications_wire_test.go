@@ -354,6 +354,35 @@ func TestAQuickCaptureRungWithOtherItemsOpensItsTurn(t *testing.T) {
 	})
 }
 
+func TestTheReplyToACaptureClaudeHeldThroughItsTurnStaysOwedAfterTheDoorbellsRun(t *testing.T) {
+	w, _, cli := quietNotificationsWorld(t, true)
+	app := w.TrustedApp()
+	session, run := moddedClaude(t, w, app)
+	workingOn(t, app, run, session, "write the essay")
+
+	sendQuickCapture(t, app, sessionMailbox(session), "what did the reviewer say?")
+	modEvent(t, run, fakeagent.ModEventHeld, "what did the reviewer say?")
+	submittedAtTurnEnd(t, run, "what did the reviewer say?", true)
+	sendAgentMessage(t, cli, "reviewer", session, "the review is in")
+
+	replying := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	run.Reply("They approved. <!-- attn:state=idle -->")
+	replied := testworld.AwaitStateAfter(app, replying, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if !protocol.Deref(replied.TurnOwed) {
+		t.Fatal("the reply to the user's capture stopped without opening the user's turn")
+	}
+	if got := run.Prompted(); !strings.Contains(got, inboxDoorbell) || run.AsUser {
+		t.Fatalf("after the capture's reply the agent took %q (as the user: %t), want the doorbell in attn's voice", got, run.AsUser)
+	}
+	working := testworld.AwaitStateAfter(app, replied, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	run.Reply("Read the review. <!-- attn:state=idle -->")
+	stopped := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if !protocol.Deref(stopped.TurnOwed) || protocol.Deref(stopped.TurnByAgent) {
+		t.Fatalf("after the doorbell's run the session shows owed=%v by_agent=%v, want the capture's reply still owed to the user",
+			protocol.Deref(stopped.TurnOwed), protocol.Deref(stopped.TurnByAgent))
+	}
+}
+
 func TestWithTheQueueFlowOffAnAgentOpensAndSettlesItsOwnTurn(t *testing.T) {
 	w, app, cli := quietNotificationsWorld(t, true)
 	setSetting(t, app, "queue_mode_enabled", "false")
