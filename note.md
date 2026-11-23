@@ -1,0 +1,1 @@
+The glossary names the default turn use of a peer message the turn queue, beside steer and interrupt, and renames the user's queue to the attention queue (with its flow, sidebar and bar), listing the old names as legacy.
