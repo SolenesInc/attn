@@ -22,7 +22,7 @@ async function api(path, body) {
     body: JSON.stringify(body),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw Object.assign(new Error(data.error ?? `${path} answered ${response.status}`), { status: response.status });
+  if (!response.ok) throw Object.assign(new Error(data.error ?? `${path} answered ${response.status}`), { status: response.status, stale: data.stale });
   return data;
 }
 
@@ -69,7 +69,7 @@ function showEmpty(...content) {
 
 async function loadFile(path) {
   const { sources, stale } = await api("catalog");
-  if (!sources[path]) throw new Error(`${path} is not a registered source`);
+  if (!sources[path]) throw Object.assign(new Error(`${path} is not a registered source`), { stale });
   const scroll = window.scrollY;
   files.take({ [path]: sources[path] });
   files.destroyFragments();
@@ -93,10 +93,6 @@ async function load() {
 
 function showStale(stale) {
   $("stale").hidden = !stale;
-}
-
-async function showCatalogStale() {
-  showStale((await api("catalog").catch(() => ({}))).stale);
 }
 
 async function refreshDefinitions() {
@@ -133,7 +129,7 @@ async function openTarget() {
     notice("");
   } catch (error) {
     failed = true;
-    await showCatalogStale();
+    showStale(error.stale);
     showEmpty(`This page did not open: ${error.message}`, el("br"), "If a source file caused this, Ctrl K opens it as raw text to fix and save.");
     titleFor(target.file ? undefined : 0);
     notice(error.message, "error");
@@ -235,7 +231,7 @@ async function drainDisk() {
       else files.sync((await api("catalog")).sources);
     } catch (error) {
       notice(`Reading a change on disk failed: ${error.message}`, "error");
-      await showCatalogStale();
+      showStale(error.stale);
     }
   }
 }
@@ -348,8 +344,12 @@ async function start() {
   const [situations, scenarios, fresh] = await Promise.all([
     api("operation", { op: "situations" }),
     api("operation", { op: "scenarios" }),
-    api("catalog"),
+    api("catalog").catch((error) => {
+      notice(error.message, "error");
+      return { recipients: [], sources: {}, stale: error.stale };
+    }),
   ]);
+  showStale(fresh.stale);
   catalog = { situations, scenarios, recipients: fresh.recipients, sources: Object.keys(fresh.sources).sort() };
   await chooseBase().catch((error) => notice(`Diff is unavailable: ${error.message}`, "error"));
   watchDisk();

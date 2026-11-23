@@ -116,7 +116,8 @@ func (e *editor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		result, err := e.page(r.Context(), q)
 		if err != nil {
-			problem(w, 422, err)
+			snapshot, _ := e.snapshot()
+			catalogProblem(w, err, e.stale(snapshot))
 		} else {
 			respond(w, result)
 		}
@@ -148,18 +149,32 @@ func decodeRequest(w http.ResponseWriter, r *http.Request, value any) bool {
 func (e *editor) catalog(w http.ResponseWriter) {
 	snapshot, err := e.snapshot()
 	if err != nil {
-		problem(w, 422, err)
+		catalogProblem(w, err, e.stale(snapshot))
 		return
 	}
 	catalog, err := snapshotView(snapshot)
 	if err != nil {
-		problem(w, 422, err)
+		catalogProblem(w, err, e.stale(snapshot))
 		return
 	}
-	if err := e.freshness(snapshot); err != nil {
-		catalog.Stale = err.Error()
-	}
+	catalog.Stale = e.stale(snapshot)
 	respond(w, catalog)
+}
+
+func (e *editor) stale(snapshot catalogSnapshot) string {
+	if snapshot.Manifest == nil {
+		return ""
+	}
+	if err := e.freshness(snapshot); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+func catalogProblem(w http.ResponseWriter, err error, stale string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error(), "code": "validation_failed", "stale": stale})
 }
 
 type overlayFS struct {

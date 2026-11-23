@@ -537,6 +537,49 @@ try {
   await expect(openPage.locator("#save-state")).toHaveText(/1 unsaved file/);
   assert.ok(!(await read(switchSource)).includes("Unsaved."));
   await openPage.close({ runBeforeUnload: false });
+
+  // A source's path renamed in Go, then the file moved to match, fails the old catalog's read; an open page and a fresh tab keep the freshness warning and its refresh, and unsaved edits stay.
+  const movedFrom = "crew/v2/new-session.md";
+  const movedTo = "crew/v2/session-start.md";
+  const movePage = await context.newPage();
+  movePage.on("pageerror", (error) => pageErrors.push(String(error)));
+  await movePage.goto(situationLink);
+  await expect(movePage.locator(".event h2")).toHaveText(["session/launch", "session/garden-ready", "crew/new-session"]);
+  await expect(movePage.locator("body")).toHaveAttribute("data-watching", "true");
+  const moveKept = editor(refreshKept, movePage);
+  await moveKept.click();
+  await movePage.keyboard.press("ControlOrMeta+Home");
+  await movePage.keyboard.type("Unsaved across the move. ");
+  await describe("content/" + movedFrom, "content/" + movedTo);
+  await expect(movePage.locator("#stale")).toBeVisible();
+  const moveRead = movePage.waitForResponse((response) => response.url().endsWith("/api/catalog") && response.status() === 422);
+  await fs.rename(source(movedFrom), source(movedTo));
+  await moveRead;
+  await expect(movePage.locator("#notice")).toContainText("Reading a change on disk failed:");
+  await expect(movePage.locator("#stale")).toBeVisible();
+  await expect(movePage.getByRole("button", { name: "Refresh Go definitions" })).toBeVisible();
+  await expect(moveKept).toContainText("Unsaved across the move. ");
+  if (artifacts) await movePage.screenshot({ path: path.join(artifacts, "moved-open-tab.png") });
+
+  const movedFresh = await context.newPage();
+  movedFresh.on("pageerror", (error) => pageErrors.push(String(error)));
+  await movedFresh.goto(situationLink);
+  await expect(movedFresh.locator("#document")).toContainText("This page did not open:");
+  await expect(movedFresh.locator("#stale")).toBeVisible();
+  if (artifacts) await movedFresh.screenshot({ path: path.join(artifacts, "moved-fresh-tab.png") });
+  const movedRefresh = movedFresh.waitForResponse((response) => response.url().endsWith("/api/operation") && response.request().postDataJSON().op === "refresh");
+  await movedFresh.getByRole("button", { name: "Refresh Go definitions" }).click();
+  assert.equal((await movedRefresh).status(), 200);
+  await expect(movedFresh.locator("#stale")).toBeHidden();
+  await expect(row(movedTo, movedFresh)).toBeVisible();
+  await movedFresh.close();
+
+  await expect(movePage.locator("#stale")).toBeHidden();
+  await expect(row(movedTo, movePage)).toBeVisible();
+  await expect(moveKept).toContainText("Unsaved across the move. ");
+  await expect(movePage.locator("#save-state")).toHaveText(/1 unsaved file/);
+  assert.ok(!(await read(refreshKept)).startsWith("Unsaved across the move."));
+  await movePage.close({ runBeforeUnload: false });
   assert.deepEqual(pageErrors, []);
   console.log(JSON.stringify({ status: "passed", fixture: path.basename(fixture) }));
 } finally {
