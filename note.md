@@ -1,0 +1,1 @@
+Dropped the unused `trust` mutex reference from `codexShared` and derived built-in harness facts, IDs, and caller envs from `launchers()` instead of maintaining a duplicate `facts()` list in `internal/harness/builtin/builtin.go` (`s-vtya00`).
