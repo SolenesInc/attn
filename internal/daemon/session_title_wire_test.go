@@ -122,6 +122,38 @@ func TestTheFirstPromptTheUserTypesTitlesTheSession(t *testing.T) {
 	}
 }
 
+func TestAQuickCaptureAsTheFirstWordsTitlesTheSession(t *testing.T) {
+	const capture = "the checkout page charges twice on retry"
+	titledFromCapture := func(t *testing.T, w *world, app *testworld.Peer, session string) {
+		t.Helper()
+		sendQuickCapture(t, app, sessionMailbox(session), capture)
+		task := w.HeadlessTask()
+		if !strings.Contains(task.Prompt, capture) {
+			t.Fatalf("the title task asked %q, want it asked about the user's capture", task.Prompt)
+		}
+		task.Answer("Fix double checkout charge")
+		awaitLabel(app, session, "Fix double checkout charge")
+	}
+	t.Run(string(fakeagent.Claude), func(t *testing.T) {
+		w := newTitlingWorld(t, fakeagent.Claude)
+		app := w.TrustedApp()
+		session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+		agent := w.Launched(session)
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+		titledFromCapture(t, w, app, session)
+		if got := agent.Prompted(); !strings.Contains(got, capture) {
+			t.Fatalf("Claude took %q, want the user's capture", got)
+		}
+	})
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newTitlingWorld(t, h, fakeagent.Claude)
+		app := w.TrustedApp()
+		session, _, _ := appServerSession(t, w, app, h)
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+		titledFromCapture(t, w, app, session)
+	})
+}
+
 func TestASharedCodexTitleStaysWithItsConversationWhenTheTileMovesOn(t *testing.T) {
 	w := newTitlingWorld(t, fakeagent.Codex)
 	app := w.App()
