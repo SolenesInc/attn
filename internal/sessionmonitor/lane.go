@@ -348,7 +348,7 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	if steering {
 		m.runSteeredLocked()
 	}
-	credited := l.tookLocked(delivery)
+	credited := l.tookLocked(delivery, epochAtPlacing)
 	if !steering && !attempt.steered {
 		if delivery.origin.kind == originMaintenance {
 			l.notificationTookLocked(delivery.origin.source, epochAtPlacing)
@@ -420,20 +420,22 @@ func (l *lane) placeOverConversationLocked(ctx context.Context, delivery Deliver
 	return Attempt{Stage: Placed, At: custody.At, Held: held, steered: held}, true
 }
 
-// tookLocked credits the user's words to the run going, or to the next turn start when none runs.
-func (l *lane) tookLocked(delivery Delivery) runRef {
+// tookLocked credits the user's words to the run going, or to the next turn start when none has started since placing began.
+func (l *lane) tookLocked(delivery Delivery, epochAtPlacing uint64) runRef {
 	if delivery.origin.kind == originUserConversation {
 		l.titleLocked(delivery)
 	}
 	if !delivery.speaksForUser() {
 		return runRef{}
 	}
-	if l.run == nil {
-		l.creditNextRun = true
-		return runRef{}
+	if l.run != nil {
+		l.run.credited = true
+		return l.run.ref
 	}
-	l.run.credited = true
-	return l.run.ref
+	if l.epoch == epochAtPlacing {
+		l.creditNextRun = true
+	}
+	return runRef{}
 }
 
 func (l *lane) titleLocked(delivery Delivery) {
