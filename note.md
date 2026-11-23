@@ -1,0 +1,1 @@
+`attn delegate roles apply` takes a role table exported before models were named by their catalog id again. Such exports name a provider in every selection, and apply refused them with `unknown field "provider"`. It now folds each provider into its model the way the upgrade's migration folded saved tables, and keeps the revision check and the refusal of other unknown fields.
