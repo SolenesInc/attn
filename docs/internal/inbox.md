@@ -59,8 +59,8 @@ session. The recipient's reply line names the member, so a reply reaches the
 member's current session or starts one for the member, even after the session that
 sent it has ended. A session sender is named by its short id.
 
-The sender chooses how a working recipient takes the message, its turn use. By
-default the message queues: it waits for the recipient's turn to end.
+The sender chooses how a working recipient takes the message, its turn use. The
+default is the turn queue: the message waits for the recipient's turn to end.
 `--steer` puts it into the running turn at the recipient's next step, and
 `--interrupt` stops the turn and makes the message the next prompt. A
 recipient that is not working takes the message at once whatever its turn use,

@@ -122,7 +122,12 @@ address                 who an item is for: a session or a mailbox
 │                       mailbox (support@) that whoever holds the job reads
 ├─ inbox (1)
 │  └─ item (0..n)       peer message, seed update, user input,
-│                       PR watch update or notice
+│     │                 PR watch update or notice
+│     └─ turn use (1)   how a working agent takes a peer message
+│        ├─ turn queue  the message waits for the running turn to end;
+│        │              the default; like a queued message in a chat app
+│        ├─ steer       joins the running turn at its next step
+│        └─ interrupt   stops the running turn; the message starts the next one
 └─ ask (0..n)           a question an agent sends the user, who answers in
                         their own time; like a decision request
    ├─ seed (at most 1)  the work the ask is about; the ask is addressed to
@@ -152,11 +157,11 @@ model call spare        a harness process that attn starts before a model call
 ```text
 flow (1)                  how the user works with attn and their agents:
                           what asks for attention and how they move to it
-├─ queue flow             attn brings the next turn to the user; like working
+├─ attention queue flow   attn brings the next turn to the user; like working
 │                         an inbox to zero
 └─ desktop flow           the user goes to their agents on their desktops;
                           like spatial work across macOS Spaces
-queue                     agents in order of the attention they are owed
+attention queue           agents in order of the attention they are owed
 └─ turn (at most 1 per agent)  attention that an agent is owed; opens when the
                                agent stops, or when it asks (attn turn open)
 run                       one stretch of agent work, from the moment the
@@ -302,9 +307,10 @@ setting                 a daemon option, read and set with attn settings
 window (1..n)           one macOS app window
 ├─ home screen          the dashboard: what asks for attention, across agents
 ├─ sidebar (1)          its shape follows the profile's flow
-│  ├─ queue sidebar     queue flow: crew, the oldest turns, the rest of the
-│  │                    agents, automations, desktop chips
-│  │  └─ queue bar      the queue sidebar collapsed into a strip across the top
+│  ├─ attention queue sidebar  attention queue flow: crew, the oldest
+│  │                    turns, the rest of the agents, automations, desktop chips
+│  │  └─ attention queue bar  the attention queue sidebar collapsed into a
+│  │                    strip across the top
 │  └─ desktop sidebar   desktop flow: each desktop and its tiles
 │     └─ collapsed      a thin column of desktop chips
 ├─ drawer (0..n)        a panel that slides in from the right: attention,
@@ -354,7 +360,10 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 - thread (Codex) → conversation
 - role (as an address), seat → mailbox
 - nudge (inbox) → ring
-- queue mode → queue flow
+- queue mode, queue flow → attention queue flow
+- queue (the user's) → attention queue
+- queue sidebar → attention queue sidebar
+- queue bar → attention queue bar
 - wake (a snooze) → unsnooze
 - wake (a crew member) → start
 - sleep (a crew member) → close
