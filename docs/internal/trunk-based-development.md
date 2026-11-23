@@ -235,8 +235,10 @@ workflows on `main` and counts a run as red when any job in it failed, even when
 concluded `cancelled`. The sheriff never re-runs CI. As soon as a job fails, the
 sheriff reads the job's log, finds the commit that broke `main`, and picks a
 path. For a small, clear fix forward, the sheriff messages the culprit's live
-session first, or delegates a Builder if that session is gone or stalled. For a
-larger break with a clean revert, the sheriff delegates a Builder to revert. The fix lands like any other, and the next push run on
+session first, or delegates a Builder if that session is gone or stalled. While
+`main` stays red, a fresh sheriff runs at least every 30 minutes, so a stalled
+repair always reaches a later run. For a larger break with a clean revert, the
+sheriff delegates a Builder to revert. The fix lands like any other, and the next push run on
 `main` shows whether the fix worked. Fast landings are intentional: occasional
 breaks on `main` are why the sheriff exists, so repairs keep `scripts/land-gate.sh` fast
 instead of gating landings on slow suites. The issue records each failure once, with

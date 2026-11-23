@@ -67,7 +67,10 @@ git rev-parse origin/main
 - Inspect queued or running push runs for already failed or timed-out jobs
   right away:
   `gh run view <id> --json jobs --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | {databaseId, name}'`.
-- Inspect every `<run-id> <attempt>` line from `scripts/ci-main-red.sh`.
+- Inspect every `<run-id> <attempt>` line from `scripts/ci-main-red.sh`. Its
+  last line, `window <UTC half hour>`, names no run: it changes every 30
+  minutes while anything is red so the automation's guard starts fresh runs
+  ([Step 6](#6-wrap-up-when-the-pass-is-settled)).
 - Call `main` green only when `scripts/ci-main-red.sh` prints nothing, no
   in-progress run has a failed job, and the newest completed push run of both
   `ci.yml` and `ci-macos.yml` passed at `origin/main`. When nothing is red, note
@@ -249,8 +252,9 @@ is running.
 
 Do not wait on CI or on a delegate from an earlier run, because that delegate's
 ring goes to the earlier run. Never put your seed on standby
-(`attn seed standby`). The automation starts a fresh run on its schedule while
-`main` stays red.
+(`attn seed standby`). While `main` stays red, the automation starts a fresh run
+at least every 30 minutes, even when CI shows the same red run, and that run's
+Step 0 reclaims a live-author repair that stalled.
 
 Finish the pass according to its state:
 

@@ -27,6 +27,11 @@ elif [ -f "$FAKE_RUNS/$workflow-${event:-all}.json" ]; then
 fi
 EOF
 chmod +x "$work/bin/gh"
+cat >"$work/bin/date" <<'EOF'
+#!/usr/bin/env bash
+echo "$FAKE_UTC_HOUR_MINUTE"
+EOF
+chmod +x "$work/bin/date"
 
 fixture() {
   local name="$1"
@@ -40,7 +45,7 @@ fixture() {
 
 expect() {
   local name="$1" want_status="$2" want_out="$3" status=0 out
-  out="$(FAKE_RUNS="$work/$name" PATH="$work/bin:$PATH" "$script" 2>"$work/$name.err")" || status=$?
+  out="$(FAKE_UTC_HOUR_MINUTE="${now:-2026-11-23T22 17}" FAKE_RUNS="$work/$name" PATH="$work/bin:$PATH" "$script" 2>"$work/$name.err")" || status=$?
   if [ "$status" != "$want_status" ] || [ "$out" != "$want_out" ]; then
     echo "FAIL $name: status $status, output '$out', stderr '$(cat "$work/$name.err")'; want status $want_status, output '$want_out'" >&2
     exit 1
@@ -52,23 +57,33 @@ fixture cancelled-with-failed-job \
   3 '{"attempt":1,"conclusion":"cancelled","jobs":[]}' \
   2 '{"attempt":1,"conclusion":"cancelled","jobs":[{"conclusion":"success"},{"conclusion":"failure"},{"conclusion":"cancelled"}]}' \
   1 '{"attempt":1,"conclusion":"success","jobs":[]}'
-expect cancelled-with-failed-job 0 "2 1"
+expect cancelled-with-failed-job 0 "2 1
+window 2026-11-23T22:00Z"
 
 fixture failed-rerun ci.yml-push '[{"databaseId":7}]' \
   7 '{"attempt":2,"conclusion":"failure","jobs":[{"conclusion":"timed_out"}]}'
-expect failed-rerun 0 "7 2"
+expect failed-rerun 0 "7 2
+window 2026-11-23T22:00Z"
+now="2026-11-23T22 29" expect failed-rerun 0 "7 2
+window 2026-11-23T22:00Z"
+now="2026-11-23T22 30" expect failed-rerun 0 "7 2
+window 2026-11-23T22:30Z"
+now="2026-11-23T23 05" expect failed-rerun 0 "7 2
+window 2026-11-23T23:00Z"
 
 fixture green-after-cancelled ci.yml-push '[{"databaseId":5},{"databaseId":4}]' \
   5 '{"attempt":1,"conclusion":"cancelled","jobs":[{"conclusion":"success"},{"conclusion":"cancelled"}]}' \
   4 '{"attempt":1,"conclusion":"success","jobs":[{"conclusion":"success"}]}'
 expect green-after-cancelled 0 ""
+now="2026-11-23T22 30" expect green-after-cancelled 0 ""
 
 fixture red-macos-push-beside-green-linux \
   ci.yml-push '[{"databaseId":21}]' \
   ci-macos.yml-push '[{"databaseId":22}]' \
   21 '{"attempt":1,"conclusion":"success","jobs":[]}' \
   22 '{"attempt":1,"conclusion":"failure","jobs":[{"conclusion":"failure"}]}'
-expect red-macos-push-beside-green-linux 0 "22 1"
+expect red-macos-push-beside-green-linux 0 "22 1
+window 2026-11-23T22:00Z"
 
 fixture red-nightly-behind-green-pushes \
   ci.yml-push '[{"databaseId":9}]' \
@@ -77,14 +92,16 @@ fixture red-nightly-behind-green-pushes \
   9 '{"attempt":1,"conclusion":"success","jobs":[]}' \
   13 '{"attempt":1,"conclusion":"success","jobs":[]}' \
   8 '{"attempt":1,"conclusion":"failure","jobs":[{"conclusion":"success"},{"conclusion":"failure"}]}'
-expect red-nightly-behind-green-pushes 0 "8 1"
+expect red-nightly-behind-green-pushes 0 "8 1
+window 2026-11-23T22:00Z"
 
 fixture red-ci-nightly-behind-green-pushes \
   ci.yml-push '[{"databaseId":31}]' \
   ci.yml-all '[{"databaseId":31,"event":"push"},{"databaseId":30,"event":"workflow_dispatch"}]' \
   31 '{"attempt":1,"conclusion":"success","jobs":[]}' \
   30 '{"attempt":1,"conclusion":"failure","jobs":[{"conclusion":"failure"}]}'
-expect red-ci-nightly-behind-green-pushes 0 "30 1"
+expect red-ci-nightly-behind-green-pushes 0 "30 1
+window 2026-11-23T22:00Z"
 
 fixture red-push-and-green-nightly \
   ci.yml-push '[{"databaseId":11}]' \
@@ -92,7 +109,8 @@ fixture red-push-and-green-nightly \
   12 '{"attempt":1,"conclusion":"success","jobs":[]}' \
   11 '{"attempt":1,"conclusion":"failure","jobs":[{"conclusion":"failure"}]}' \
   10 '{"attempt":1,"conclusion":"success","jobs":[]}'
-expect red-push-and-green-nightly 0 "11 1"
+expect red-push-and-green-nightly 0 "11 1
+window 2026-11-23T22:00Z"
 
 fixture red-in-every-stream \
   ci.yml-push '[{"databaseId":31}]' \
@@ -103,7 +121,8 @@ fixture red-in-every-stream \
   33 '{"attempt":1,"conclusion":"failure","jobs":[]}'
 expect red-in-every-stream 0 "31 1
 32 1
-33 1"
+33 1
+window 2026-11-23T22:00Z"
 
 fixture undecided ci.yml-push '[{"databaseId":6}]' \
   6 '{"attempt":1,"conclusion":"cancelled","jobs":[]}'

@@ -2,6 +2,8 @@
 set -euo pipefail
 
 run_limit=20
+sheriff_takeover_minutes=30
+found_red=""
 
 newest_red() {
   local workflow="$1" kind="$2" runs run verdict
@@ -27,7 +29,7 @@ newest_red() {
     )"
     case "$verdict" in
       green) return 0 ;;
-      red*) echo "$run ${verdict#red }"; return 0 ;;
+      red*) echo "$run ${verdict#red }"; found_red=1; return 0 ;;
     esac
   done
   [ -z "$runs" ] && return 0
@@ -39,3 +41,8 @@ newest_red ci.yml push
 newest_red ci.yml full
 newest_red ci-macos.yml push
 newest_red ci-macos.yml full
+
+if [ -n "$found_red" ]; then
+  read -r hour minute < <(date -u '+%Y-%m-%dT%H %M')
+  printf 'window %s:%02dZ\n' "$hour" $((10#$minute / sheriff_takeover_minutes * sheriff_takeover_minutes))
+fi
