@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { join, resolve } from "node:path"
+import { ASK_TASKS } from "./asks.ts"
 import { PROBES } from "./probes.ts"
 import { TASKS } from "./tasks.ts"
 import { attnCalls, type Check, metrics, type Metrics, run, type Task, type World } from "./world.ts"
@@ -44,8 +45,9 @@ const runs = Number(arg("runs") ?? (grid ? 2 : 1))
 const parallel = Number(arg("parallel") ?? 2)
 const keep = flag("keep")
 
-const ALL = [...TASKS, ...PROBES]
-const taskIds = list(arg("tasks"), TASKS.map((t) => t.id).join(",")).flatMap((id) => (id === "probes" ? PROBES.map((p) => p.id) : [id]))
+const ALL = [...TASKS, ...ASK_TASKS, ...PROBES]
+const groups: Record<string, Task[]> = { probes: PROBES, asks: ASK_TASKS }
+const taskIds = list(arg("tasks"), TASKS.map((t) => t.id).join(",")).flatMap((id) => groups[id]?.map((t) => t.id) ?? [id])
 const tasks = taskIds.map((id) => ALL.find((t) => t.id === id) ?? (() => { throw new Error(`no task ${id}; tasks: ${ALL.map((t) => t.id).join(", ")}`) })())
 
 /** A harness as a cell names it: the agent attn launches, whether Claude Code's code mode is on, and the model. */
@@ -153,7 +155,8 @@ const transcript = (session: string): any[] =>
     .filter((line) => line.startsWith("{"))
     .map((line) => JSON.parse(line))
 
-/** Waits for the turn the prompt started to end: the session is back at its prompt after answering, or it closed itself. */
+/** Waits for the turn the prompt started to end: the session is back at its prompt after answering, it waits on the user
+ * in its harness's own question or approval prompt, or it closed itself. */
 async function settled(session: string): Promise<string> {
   const deadline = Date.now() + RUN_DEADLINE_MS
   let state = ""
@@ -162,7 +165,7 @@ async function settled(session: string): Promise<string> {
     const me = agents().find((a) => a.id === session)
     if (!me) return "closed itself"
     state = me.state
-    if (["idle", "waiting_input"].includes(state) && transcript(session).some((e) => e.role === "assistant" || e.kind === "tool_call")) return state
+    if (["idle", "waiting_input", "pending_approval"].includes(state) && transcript(session).some((e) => e.role === "assistant" || e.kind === "tool_call")) return state
   }
   throw new Error(`deadline ${RUN_DEADLINE_MS / 1000}s in state ${state}`)
 }
@@ -229,6 +232,7 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
         return id
       },
       sessions: mine,
+      mermaid: drawsMermaid,
     }
     const prompt = await task.setup(w)
     wsctl(["input", "--id", session, "--text", prompt])
@@ -247,6 +251,7 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
     const calls = attnCalls(events)
     const result = { task: task.id, cell: cell.id, n, ...check, ended, metrics: metrics(events, calls), usage: usage(session), ms: Date.now() - started }
     writeFileSync(join(evidence, "calls.json"), JSON.stringify(calls, null, 1))
+    if (ended !== "closed itself") writeFileSync(join(evidence, "asks.json"), JSON.stringify(w.attnJson(["ask", "list"], { session }), null, 1))
     writeFileSync(join(evidence, "result.json"), JSON.stringify(result, null, 1))
     return result
   } catch (error) {
@@ -327,6 +332,17 @@ function forgetCodexTrust() {
 
 const build = spawnSync("go", ["build", "-o", wsctlBinary, "./scripts/wsctl"], { cwd: repository, encoding: "utf8" })
 if (build.status !== 0) throw new Error(`go build ./scripts/wsctl: ${build.stderr}`)
+const mermaidCheck = join(process.env.CARGO_TARGET_DIR ?? join(repository, "native", "target"), "debug", "examples", "mermaid_check")
+if (tasks.some((t) => t.mermaid)) {
+  const built = spawnSync("cargo", ["build", "--example", "mermaid_check", "-p", "attn-app"], { cwd: join(repository, "native"), encoding: "utf8", stdio: ["ignore", "inherit", "inherit"] })
+  if (built.status !== 0) throw new Error("cargo build --example mermaid_check -p attn-app failed")
+}
+function drawsMermaid(source: string) {
+  const r = run(mermaidCheck, [], process.env, { stdin: source })
+  if (r.status === 2) return { drawn: false, skipped: [] }
+  if (r.status !== 0 && r.status !== 1) throw new Error(`mermaid_check exited ${r.status}: ${r.stderr.trim()}`)
+  return { drawn: true, skipped: r.stdout.split("\n").filter(Boolean) }
+}
 const taskSettings = [...new Set(tasks.flatMap((t) => Object.keys(t.settings ?? {})))]
 const results: RunResult[] = []
 try {

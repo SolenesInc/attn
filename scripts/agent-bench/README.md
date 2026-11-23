@@ -20,14 +20,14 @@ The driver starts the instance's daemon with headless model tasks off, runs ever
 
 `--instance` must name a new instance, because the run changes the instance's settings and cleans it. The driver asks attn for the canonical name, so `Bench` and ` bench ` both mean `bench`. Before it runs anything, it refuses the default and `dev` instances and any instance that `attn instance list` already shows. To run again on a name you kept, clean it first with `attn instance clean <name>`.
 
-Each run gets its own profile, so seeds and slugs never collide between runs, and its own folder under the system temp folder. The driver starts the session through the daemon as the app does (`spawn_session` with `scripts/wsctl`). It waits for the prompt and sets up the task, acting as the user or as the agent's own session. Then it types the prompt into the terminal and waits until the session is back at its prompt or has closed itself. Before judging, it reads the garden, the asks and the inboxes through the instance's CLI.
+Each run gets its own profile, so seeds and slugs never collide between runs, and its own folder under the system temp folder. The driver starts the session through the daemon as the app does (`spawn_session` with `scripts/wsctl`). It waits for the prompt and sets up the task, acting as the user or as the agent's own session. Then it types the prompt into the terminal and waits until the session is back at its prompt, waits on the user in its harness's own question or approval prompt, or has closed itself. Before judging, it reads the garden, the asks and the inboxes through the instance's CLI.
 
 The numbers come from attn itself:
 
 - Input and output tokens and cost come from `attn session show --json` for the session the prompt went to. Cost is at API prices. A model attn has no price for, such as Codex's, shows as `+ unpriced`. Other sessions a run starts, such as the delegate in `msg-delegate`, are stopped once the run is judged and not counted.
 - Turns, attn calls, searches and help reads come from `attn session transcript --json`. An attn call is a tool of attn's server, a tool named inside a code-mode script, or an `attn` command the agent ran in its shell.
 
-Each run keeps `transcript.jsonl`, `calls.json`, `screen.txt` and `result.json` in `instance/runs/<stamp>/<task>/<cell>/<n>/`, beside `results.json` and `table.md` for the whole run.
+Each run keeps `transcript.jsonl`, `calls.json`, `asks.json` (the session's open asks), `screen.txt` and `result.json` in `instance/runs/<stamp>/<task>/<cell>/<n>/`, beside `results.json` and `table.md` for the whole run.
 
 ### Harness homes
 
@@ -50,7 +50,7 @@ A cell is a harness, a setting and a place:
 | `--harness` | `claude`, `claude-code-mode`, `codex`, `sigma`, each with an optional `@<model>` that sets `default_model_<harness>` | `claude,codex` |
 | `--tools` | `on`, `off`: `agent_tools_enabled` | `on` |
 | `--outpost` | `<outpost name>=<ssh destination>`, repeatable as a comma list | none: the home only |
-| `--tasks` | task and probe ids, or `probes` for every probe | the seven tasks |
+| `--tasks` | task and probe ids, `asks` for the five ask tasks, or `probes` for every probe | the seven tasks |
 | `--runs` | runs per cell | 1 |
 | `--parallel` | runs of one cell at a time | 2 |
 
@@ -73,6 +73,16 @@ The seven tasks are the prototype's (`s-fnb9wr`), judged as its checks did, on t
 | `standby` | wait for review of PR #482 without keeping the session open | the seed is on standby with a note to merge #482, and the agent never ran `agent close` |
 | `coding` | write and run `fizzbuzz.py` | the script prints 1 to 15 right, and the agent made no attn call |
 | `fail` | note a seed by a slug that two seeds share | the Safari seed has the note and the Chrome seed has none |
+
+The five ask tasks (`instance/asks.ts`) put a decision to the agent without naming attn, asks or any kind of picture, so they measure whether the agent opens an ask on its own and whether the ask shows what the decision turns on. Each copies its files from `instance/fixtures/asks/` into the run's folder. A run with no open ask fails, and every verdict names the asks opened and the visuals they show. A question offers the options when each matches a different choice. A Mermaid fence counts only when the app draws it whole: before a run with an ask task, the driver builds `native/crates/attn-app/examples/mermaid_check.rs` with cargo, which reads a source with the app's renderer.
+
+| id | the agent is asked to | passes when an open ask |
+|---|---|---|
+| `ask-flow` | get the user's choice between two retry designs in `design-notes.md`, with a recommendation | shows a Mermaid diagram the app draws whole, and a question offers both designs with one recommended |
+| `ask-layout` | get the user's pick between the two layouts captured in `shots/` | shows both PNGs as markdown images, and a question offers both layouts |
+| `ask-tradeoff` | get the user's call among the three cache strategies in `options.md` | shows a table that compares the three (three or more rows, or two rows across four or more columns), or a diff, and a question offers all three |
+| `ask-simple-control` | get the user's pick of 30 or 90 days' audit-log retention, recommending 30 | offers both and recommends 30 days, with no Mermaid diagram and no image |
+| `ask-svg-guard` | get the user's decision on splitting the worker shown in `arch.svg` | shows the architecture as a Mermaid diagram the app draws whole or a raster image, embeds no SVG, remote image or other type attn does not copy, and asks a question with choices |
 
 The probes are the former `scripts/agent-eval.mjs`, each a plain request that passes when the agent reaches the right command, through the CLI or the tool of the same name. The command runs for real, so a refusal still counts: a probe proves what the agent finds, not that the command works. The `chief-*` probes start the profile's Chief with `attn crew start chief`. `present-change` turns `code_review_enabled` on, clones attn with a real change uncommitted, and passes when the agent read the review reference and opened a document that `attn review check` passes. Add a probe to `instance/probes.ts` when you add a capability to the intent map or the launch prompt.
 

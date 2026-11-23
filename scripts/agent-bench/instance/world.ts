@@ -20,6 +20,8 @@ export type World = {
   spawnShell: (label: string) => Promise<string>
   /** This profile's live sessions, as `attn agent list --json` shows them. */
   sessions: () => { id: string; directory: string; state: string; label: string }[]
+  /** Whether the app draws a Mermaid source, and the statements it leaves out. Only for a task that sets `mermaid`. */
+  mermaid: (source: string) => { drawn: boolean; skipped: string[] }
 }
 
 export type Task = {
@@ -28,6 +30,8 @@ export type Task = {
   /** `chief` starts the profile's Chief with `attn crew start chief` instead of a plain session. */
   launch?: "session" | "chief"
   settings?: Record<string, string>
+  /** Its check reads Mermaid through `World.mermaid`, so the bench builds the app's Mermaid check first. */
+  mermaid?: boolean
   /** Prepares the agent's folder before the session starts and returns the folder to start it in, when not `dir`. */
   stage?: (dir: string) => string
   /** Prepares the world with the agent's session already at its prompt, and returns the prompt. */
