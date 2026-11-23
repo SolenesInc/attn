@@ -1,0 +1,1 @@
+Moving the window to a display of another scale no longer resizes terminals that sit on the shelf. Only tiles the window shows refit on a scale change, and a tile coming back from the shelf takes its size when it lays out again, so a shelved program never redraws for a monitor it is not shown on.
