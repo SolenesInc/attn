@@ -1,0 +1,1 @@
+Document the harness contract in docs/internal/harness-contract.md, generate the capability table in docs/guide/reference/harnesses.md from builtin adapters via scripts/harnessdoc, align glossary terms, and strip HTML comment markers when rendering guide pages in the terminal.
