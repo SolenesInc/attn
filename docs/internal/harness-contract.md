@@ -80,7 +80,7 @@ These features stay isolated in their adapter, dedicated command or UI folders, 
 
 ### Remaining violations
 
-`scripts/harnesslint/violations.txt` records only remaining unapproved leaks that must shrink, never new violations. Currently it holds three fallback lines: `classifierHarness` in `internal/daemon/monitor_home_calls.go` and `titleProviderAgent` in `internal/daemon/session_title.go`.
+`scripts/harnesslint/violations.txt` records only remaining unapproved leaks that must shrink, never new violations. Currently it holds three fallback lines: one in `classifierHarness` in `internal/daemon/monitor_home_calls.go` and two in `titleProviderAgent` in `internal/daemon/session_title.go`.
 
 ### What is not a leak
 
