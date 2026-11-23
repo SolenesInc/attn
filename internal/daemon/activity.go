@@ -26,6 +26,8 @@ const sessionActivityConcurrency = 3
 
 const activityMaxTurns = 2
 
+const activityStartCursor = "start"
+
 const (
 	sessionActivityScanKind     = "session_activity_scan"
 	sessionActivityScanInterval = 30 * time.Second
@@ -202,7 +204,11 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	if stored.Cursor == "" {
 		return nil, d.reseedSessionActivity(ctx, sessionID, resumeID)
 	}
-	read, err := d.transcriptActivity(ctx, sessionID, "events", stored.Cursor)
+	readCursor := stored.Cursor
+	if readCursor == activityStartCursor {
+		readCursor = ""
+	}
+	read, err := d.transcriptActivity(ctx, sessionID, "events", readCursor)
 	if err == nil && !read.Available {
 		return nil, nil
 	}
@@ -337,11 +343,14 @@ func (d *Daemon) advanceSessionActivityCursor(sessionID protocol.SessionID, resu
 
 func (d *Daemon) clearAllSessionActivity() {
 	for _, session := range d.store.List("") {
-		if d.store.GetSessionActivity(session.ID).Line == "" {
+		stored := d.store.GetSessionActivity(session.ID)
+		if stored.Line == "" && stored.Cursor == "" {
 			continue
 		}
 		d.store.UpdateSessionActivity(session.ID, "", time.Time{}, "")
-		d.publishFact(FactSessionActivityChanged, string(session.ID), nil)
+		if stored.Line != "" {
+			d.publishFact(FactSessionActivityChanged, string(session.ID), nil)
+		}
 	}
 }
 

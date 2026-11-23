@@ -229,8 +229,6 @@ func TestOnAHomeWithOnlySigmaTheActivityLineIsWrittenBySigma(t *testing.T) {
 	})
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, DashboardVisible: true})
-	serverActivityTurn(t, w, app, view, server, session, "start on the tests", "Starting on the tests.")
-	awaitActivityTask(app, session, func(task protocol.Task) bool { return task.State == "done" })
 
 	serverActivityTurn(t, w, app, view, server, session, "run the frontend tests", "The frontend suite is running.")
 	sigmaTask(t, w, "The frontend suite is running.").Answer("Running the frontend test suite.")

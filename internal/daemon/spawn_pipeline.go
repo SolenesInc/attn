@@ -405,6 +405,9 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		d.logf("spawn: %v", err)
 	}
 	d.recordLaunchConversation(session.ID, plan.planned, "spawn")
+	if req.existingSession == nil && req.resumeSessionID == "" && !protocol.Deref(msg.ResumePicker) && d.activityEnabled() && d.sessionGeneratesActivity(session) {
+		d.store.SetSessionActivityCursor(session.ID, activityStartCursor)
+	}
 	if !req.isShell {
 		var err error
 		plan.agent, err = d.buildAgentSpawnLaunch(req, plan)

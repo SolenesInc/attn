@@ -81,10 +81,16 @@ func (l *Link) lastWritten(ctx context.Context, conversation string) (time.Time,
 	var written time.Time
 	found := false
 	err := l.entriesFrom(ctx, false, map[string]any{"conversation": conversation, "order": "descending", "limit": serverEntriesPerCall}, func(entry transcript.ServerEntry) bool {
+		if len(entry.Model) == 0 {
+			return true
+		}
 		found = true
 		at, dated := entry.Written()
-		written = at
-		return !dated
+		if dated {
+			written = at
+			return false
+		}
+		return true
 	})
 	return written, found, err
 }

@@ -30,15 +30,20 @@ func TestTheActivityLineSaysWhatTheAgentDidSinceTheLastLineWhileTheUserWatches(t
 
 	app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, DashboardVisible: true})
 	activityTurn(t, w, app, agent, session, "start on the tests", "Starting on the tests.")
-	awaitActivityTask(app, session, func(task protocol.Task) bool { return task.State == "done" })
-
-	activityTurn(t, w, app, agent, session, "run the frontend tests", "The frontend suite is running.")
 	task := w.HeadlessTask()
 	if task.Harness != fakeagent.Claude || task.Model != "claude-haiku-fake" || task.Effort != "" {
 		t.Errorf("the activity task ran %s %q at effort %q, want Claude's default claude-haiku-fake", task.Harness, task.Model, task.Effort)
 	}
+	if !strings.Contains(task.Prompt, "Starting on the tests.") {
+		t.Errorf("the activity prompt %q, want the first watched turn's output", task.Prompt)
+	}
+	task.Answer("Starting on the tests.")
+	awaitActivity(app, session, "Starting on the tests")
+
+	activityTurn(t, w, app, agent, session, "run the frontend tests", "The frontend suite is running.")
+	task = w.HeadlessTask()
 	if !strings.Contains(task.Prompt, "The frontend suite is running.") || strings.Contains(task.Prompt, "Starting on the tests.") || strings.Contains(task.Prompt, "I read the plan.") {
-		t.Errorf("the activity prompt %q, want only the output since the line was last seeded", task.Prompt)
+		t.Errorf("the activity prompt %q, want only the output since the line was last updated", task.Prompt)
 	}
 	task.Answer("Running the frontend test suite.")
 	awaitActivity(app, session, "Running the frontend test suite")
@@ -93,21 +98,138 @@ func TestAnAppServerSessionsActivityLineSaysWhatItDidSinceTheLastLine(t *testing
 		app := w.App()
 		setSetting(t, app, "activity.enabled", "true")
 		setSetting(t, app, "activity.config", `{"agent":"claude"}`)
+		app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, DashboardVisible: true})
 		session, view, server := appServerSession(t, w, app, h, func(m *protocol.SpawnSessionMessage) {
 			m.Label = protocol.Ptr("checkout")
 		})
 		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-		app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, DashboardVisible: true})
 		serverActivityTurn(t, w, app, view, server, session, "start on the tests", "Starting on the tests.")
-		awaitActivityTask(app, session, func(task protocol.Task) bool { return task.State == "done" })
+		task := w.HeadlessTask()
+		if !strings.Contains(task.Prompt, "Starting on the tests.") {
+			t.Errorf("first-turn activity prompt %q, want the first turn's output", task.Prompt)
+		}
+		task.Answer("Starting on the tests.")
+		awaitActivity(app, session, "Starting on the tests")
 
 		serverActivityTurn(t, w, app, view, server, session, "run the frontend tests", "The frontend suite is running.")
-		task := w.HeadlessTask()
+		task = w.HeadlessTask()
 		if !strings.Contains(task.Prompt, "The frontend suite is running.") || strings.Contains(task.Prompt, "Starting on the tests.") {
-			t.Errorf("the activity prompt %q, want only the output since the line was last seeded", task.Prompt)
+			t.Errorf("the activity prompt %q, want only the output since the last line", task.Prompt)
 		}
 		task.Answer("Running the frontend test suite.")
 		awaitActivity(app, session, "Running the frontend test suite")
+	})
+}
+
+func TestANewSessionsFirstTurnGetsAnActivityLineOnEveryHarnessAndResumedSessionsStillReseed(t *testing.T) {
+	t.Run("claude", func(t *testing.T) {
+		w := newTitlingWorld(t, fakeagent.Claude)
+		app := w.App()
+		setSetting(t, app, "activity.enabled", "true")
+		setSetting(t, app, "activity.config", `{"agent":"claude"}`)
+		app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, DashboardVisible: true})
+		session, agent := spawnActivitySession(w, app)
+
+		activityTurn(t, w, app, agent, session, "inspect the parser", "Found a bug in the parser.")
+		task := w.HeadlessTask()
+		if !strings.Contains(task.Prompt, "Found a bug in the parser.") {
+			t.Errorf("Claude first-turn activity prompt = %q, want first turn output", task.Prompt)
+		}
+		task.Answer("Inspecting parser bug")
+		awaitActivity(app, session, "Inspecting parser bug")
+	})
+
+	t.Run("codex", func(t *testing.T) {
+		w := newTitlingWorld(t, fakeagent.Codex, fakeagent.Claude)
+		app := w.App()
+		setSetting(t, app, "activity.enabled", "true")
+		setSetting(t, app, "activity.config", `{"agent":"claude"}`)
+		app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, DashboardVisible: true})
+		session := w.Spawn(app, fakeagent.Codex, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+			m.Label = protocol.Ptr("checkout")
+		})
+		agent := w.Launched(session)
+
+		activityTurn(t, w, app, agent, session, "inspect the parser", "Found a bug in the parser.")
+		task := w.HeadlessTask()
+		if !strings.Contains(task.Prompt, "Found a bug in the parser.") {
+			t.Errorf("Codex first-turn activity prompt = %q, want first turn output", task.Prompt)
+		}
+		task.Answer("Inspecting parser bug")
+		awaitActivity(app, session, "Inspecting parser bug")
+	})
+
+	t.Run("app_server_regardless_of_startup_order", func(t *testing.T) {
+		eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+			for _, watchBeforeSpawn := range []bool{true, false} {
+				name := "watch_after_launch_idle"
+				if watchBeforeSpawn {
+					name = "watch_before_spawn"
+				}
+				t.Run(name, func(t *testing.T) {
+					w := newTitlingWorld(t, h, fakeagent.Claude)
+					app := w.App()
+					setSetting(t, app, "activity.enabled", "true")
+					setSetting(t, app, "activity.config", `{"agent":"claude"}`)
+					if watchBeforeSpawn {
+						app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, DashboardVisible: true})
+					}
+					session, view, server := appServerSession(t, w, app, h, func(m *protocol.SpawnSessionMessage) {
+						m.Label = protocol.Ptr("checkout")
+					})
+					testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+					if !watchBeforeSpawn {
+						app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, DashboardVisible: true})
+					}
+					serverActivityTurn(t, w, app, view, server, session, "inspect the parser", "Found a bug in the parser.")
+					task := w.HeadlessTask()
+					if !strings.Contains(task.Prompt, "Found a bug in the parser.") {
+						t.Errorf("%s (%s) first-turn activity prompt = %q, want first turn output", h, name, task.Prompt)
+					}
+					task.Answer("Inspecting parser bug")
+					awaitActivity(app, session, "Inspecting parser bug")
+				})
+			}
+		})
+	})
+
+	t.Run("resumed_app_server_skips_pre_resume_history", func(t *testing.T) {
+		eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+			w := newTitlingWorld(t, h, fakeagent.Claude)
+			app := w.App()
+			setSetting(t, app, "activity.enabled", "true")
+			setSetting(t, app, "activity.config", `{"agent":"claude"}`)
+			_, _, server := appServerSession(t, w, app, h, func(m *protocol.SpawnSessionMessage) {
+				m.Label = protocol.Ptr("seed-server")
+			})
+			server.StartedElsewhere("earlier-activity", w.Path("shop"), "old work from yesterday")
+
+			resume := protocol.SpawnSessionMessage{
+				Cmd: protocol.CmdSpawnSession, ID: protocol.SessionID(uuid.NewString()), Agent: string(h),
+				Cwd: w.Path("shop"), Label: protocol.Ptr("resumed"), ProfileID: app.SelectedProfile(), Placement: &protocol.SessionPlacement{}, Cols: 100, Rows: 30,
+				ResumeSessionID: protocol.Ptr("earlier-activity"),
+			}
+			app.Send(resume)
+			resumed := testworld.Await(app, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == resume.ID })
+			if !resumed.Success {
+				t.Fatalf("resume earlier-activity: %s", protocol.Deref(resumed.Error))
+			}
+			session := string(resumed.ID)
+			view := w.Launched(session)
+			testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+			app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, DashboardVisible: true})
+
+			serverActivityTurn(t, w, app, view, server, session, "first turn after resume", "Reseeded cleanly.")
+			awaitActivityTask(app, session, func(task protocol.Task) bool { return task.State == "done" })
+
+			serverActivityTurn(t, w, app, view, server, session, "second turn after resume", "Fixed the tax calculation.")
+			task := w.HeadlessTask()
+			if !strings.Contains(task.Prompt, "Fixed the tax calculation.") || strings.Contains(task.Prompt, "old work from yesterday") {
+				t.Errorf("resumed session activity prompt = %q, want only post-reseed output without pre-resume history", task.Prompt)
+			}
+			task.Answer("Fixed tax calculation")
+			awaitActivity(app, session, "Fixed tax calculation")
+		})
 	})
 }
 
@@ -121,9 +243,22 @@ func TestAnAppServerSessionsActivityLineCatchesUpWithARunThatEndedWhileTheUserWa
 			app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: visible, DashboardVisible: visible})
 			listTasks(app)
 		}
-		session, view, server := appServerSession(t, w, app, h, func(m *protocol.SpawnSessionMessage) {
-			m.Label = protocol.Ptr("checkout")
+		_, _, server := appServerSession(t, w, app, h, func(m *protocol.SpawnSessionMessage) {
+			m.Label = protocol.Ptr("seed-server")
 		})
+		server.StartedElsewhere("earlier-catchup", w.Path("shop"), "earlier work")
+		resume := protocol.SpawnSessionMessage{
+			Cmd: protocol.CmdSpawnSession, ID: protocol.SessionID(uuid.NewString()), Agent: string(h),
+			Cwd: w.Path("shop"), Label: protocol.Ptr("checkout"), ProfileID: app.SelectedProfile(), Placement: &protocol.SessionPlacement{}, Cols: 100, Rows: 30,
+			ResumeSessionID: protocol.Ptr("earlier-catchup"),
+		}
+		app.Send(resume)
+		resumed := testworld.Await(app, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == resume.ID })
+		if !resumed.Success {
+			t.Fatalf("resume earlier-catchup: %s", protocol.Deref(resumed.Error))
+		}
+		session := string(resumed.ID)
+		view := w.Launched(session)
 		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 		present(true)
 		serverActivityTurn(t, w, app, view, server, session, "read the plan", "I read the plan.")
@@ -137,8 +272,8 @@ func TestAnAppServerSessionsActivityLineCatchesUpWithARunThatEndedWhileTheUserWa
 		present(true)
 		w.advance(time.Minute)
 		task := w.HeadlessTask()
-		if !strings.Contains(task.Prompt, "The cart test is fixed.") {
-			t.Errorf("the activity prompt %q, want the run that ended while the user was away", task.Prompt)
+		if !strings.Contains(task.Prompt, "The cart test is fixed.") || strings.Contains(task.Prompt, "I read the plan.") {
+			t.Errorf("the activity prompt %q, want only the run that ended while the user was away", task.Prompt)
 		}
 		task.Answer("Fixed the cart test")
 		awaitActivity(app, session, "Fixed the cart test")
@@ -204,8 +339,6 @@ func watchedActivityWorld(t *testing.T) (*world, *testworld.Peer, *client.Client
 	setSetting(t, app, "activity.config", `{"agent":"claude"}`)
 	app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, DashboardVisible: true})
 	session, agent := spawnActivitySession(w, app)
-	activityTurn(t, w, app, agent, session, "start on the tests", "Starting on the tests.")
-	awaitActivityTask(app, session, func(task protocol.Task) bool { return task.State == "done" })
 	return w, app, cli, session, agent
 }
 

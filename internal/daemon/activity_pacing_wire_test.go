@@ -60,7 +60,10 @@ func TestAWorkingSessionsActivityLineIsWrittenOnlyForNewOutputAndAtMostOncePerIn
 		}
 		transcript := fakeagent.WriteClaudeTranscript(t, cwd, "")
 		transcript.Answer("Reading the checkout plan.")
-		w.Spawn(app, fakeagent.Claude, cwd, func(m *protocol.SpawnSessionMessage) { m.ID = "s1" })
+		w.Spawn(app, fakeagent.Claude, cwd, func(m *protocol.SpawnSessionMessage) {
+			m.ID = "s1"
+			m.ResumeSessionID = protocol.Ptr(transcript.ConversationID)
+		})
 		if err := cli.ObserveAgentConversation(protocol.TerminalID(w.Terminal("s1")), transcript.ConversationID, transcript.Path); err != nil {
 			t.Fatalf("bind the conversation: %v", err)
 		}
