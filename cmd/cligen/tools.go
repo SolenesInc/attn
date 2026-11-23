@@ -36,8 +36,8 @@ func writeTools(c *catalog.Catalog, goRoot string) error {
 		tool := toolDefinition{
 			Command:     cmd.Name,
 			Name:        cmd.ToolName(),
-			Title:       g.expand(where, cmd.Summary),
-			Description: strings.TrimSpace(g.expand(where, cmd.Doc)),
+			Title:       g.expand(where, cmd.Summary, toolSurface),
+			Description: strings.TrimSpace(g.expand(where, cmd.Doc, toolSurface)),
 			Core:        cmd.Core,
 			ReadOnly:    cmd.ReadOnly,
 			InputSchema: g.inputSchema(cmd),
@@ -109,7 +109,7 @@ func (g *generator) inputSchema(cmd *catalog.Command) map[string]any {
 			value = map[string]any{"type": "array", "items": value}
 		}
 		if doc := g.argDoc(a, toolSurface); doc != "" {
-			value["description"] = g.expand(where, doc)
+			value["description"] = g.expand(where, doc, toolSurface)
 		}
 		properties[a.Name] = value
 		if a.Required && a.Unless == "" {

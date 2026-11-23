@@ -5667,6 +5667,26 @@
           }
         },
         {
+          "id": "visuals",
+          "delivery": "message_fragment",
+          "description": "Which visual shows what a decision turns on, for the ask tool's description and attn ask --help.",
+          "body": {
+            "kind": "text",
+            "id": "ask.visuals",
+            "source": "content/ask/visuals.md"
+          }
+        },
+        {
+          "id": "example",
+          "delivery": "message_fragment",
+          "description": "A worked ask's markdown, for the ask tool's description and attn ask --help.",
+          "body": {
+            "kind": "text",
+            "id": "ask.example",
+            "source": "content/ask/example.md"
+          }
+        },
+        {
           "id": "answer",
           "delivery": "inbox_content",
           "description": "The user's answer, typed into the conversation of the ask's addressee: the seed's tender, or the asking agent when the ask is about no seed. A seed also keeps it as a note. The adapter validates answers against the ask.",
@@ -8048,5 +8068,5 @@
       ]
     }
   ],
-  "definitions_hash": "c944d66363c63da5c3cab15a5baad532b41ea25e326c09c2227ee82cf8876789"
+  "definitions_hash": "e49006461da8e3308a9924be4e70b21ac13edbcb8386bec3fef5ea2891e07009"
 }

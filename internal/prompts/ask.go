@@ -1,6 +1,10 @@
 package prompts
 
-var askGuidance = Use("ask.guidance", "content/ask/guidance.md")
+var (
+	askGuidance = Use("ask.guidance", "content/ask/guidance.md")
+	askVisuals  = Use("ask.visuals", "content/ask/visuals.md")
+	askExample  = Use("ask.example", "content/ask/example.md")
+)
 
 func askRecipient() Recipient {
 	text := func(name, description string) Field { return TextField(name, description) }
@@ -43,6 +47,8 @@ func askRecipient() Recipient {
 		Bind("text", Input(text("text", "The user's follow-up, quoted by the adapter."))))
 	return Recipient{ID: "ask", Description: "Asks: questions an agent asks the user through attn, and the answers that come back.", Events: []Event{
 		On("guidance", "message_fragment", "Launch guidance for a session that launched with asks.", askGuidance),
+		On("visuals", "message_fragment", "Which visual shows what a decision turns on, for the ask tool's description and attn ask --help.", askVisuals),
+		On("example", "message_fragment", "A worked ask's markdown, for the ask tool's description and attn ask --help.", askExample),
 		On("answer", "inbox_content", "The user's answer, typed into the conversation of the ask's addressee: the seed's tender, or the asking agent when the ask is about no seed. A seed also keeps it as a note. The adapter validates answers against the ask.", reply),
 		On("follow-up", "inbox_content", "The user's follow-up on an ask they already answered, typed into the conversation of whoever holds the ask now, as the answer was. A seed also keeps it as a note.", followUp),
 		On("entry", "message_fragment", "One question and the user's answer to it.", entry),

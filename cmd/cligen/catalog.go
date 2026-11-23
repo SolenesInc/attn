@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/catalog"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
+	"github.com/victorarias/attn/internal/prompts"
 )
 
 const (
@@ -32,6 +33,15 @@ var catalogValues = map[string]string{
 	"max_note_kib":            fmt.Sprint(garden.MaxNoteBytes >> 10),
 	"max_inbox":               fmt.Sprint(inbox.MaxInboxLimit),
 	"vent_text_limit":         fmt.Sprint(analytics.VentTextLimit),
+	"ask_visuals":             prompts.RenderText("ask", "visuals", nil),
+	"ask_example":             prompts.RenderText("ask", "example", nil),
+}
+
+var surfaceValues = map[string]map[surface]string{
+	"ask_image_base": {
+		cliSurface:  "resolve against the working directory, or beside the file passed to --file",
+		toolSurface: "resolve against the folder the session started in",
+	},
 }
 
 var (
@@ -108,20 +118,24 @@ func (g *generator) fail() error {
 	return fmt.Errorf("catalog:\n%s", strings.Join(g.problems, "\n"))
 }
 
-func (g *generator) expand(where, text string) string {
+func (g *generator) expand(where, text string, on surface) string {
 	return catalogValuePattern.ReplaceAllStringFunc(text, func(match string) string {
 		name := match[1 : len(match)-1]
-		value, ok := catalogValues[name]
-		if !ok {
-			g.problems = append(g.problems, fmt.Sprintf("%s: {%s} names no value; the values are %s", where, name, strings.Join(sortedKeys(catalogValues), ", ")))
-			return match
+		if value, ok := catalogValues[name]; ok {
+			return value
 		}
-		return value
+		if values, ok := surfaceValues[name]; ok {
+			return values[on]
+		}
+		names := append(sortedKeys(catalogValues), sortedKeys(surfaceValues)...)
+		sort.Strings(names)
+		g.problems = append(g.problems, fmt.Sprintf("%s: {%s} names no value; the values are %s", where, name, strings.Join(names, ", ")))
+		return match
 	})
 }
 
 func (g *generator) cliText(cmd *catalog.Command, where, text string) string {
-	text = g.expand(where, text)
+	text = g.expand(where, text, cliSurface)
 	return backtickedPattern.ReplaceAllStringFunc(text, func(match string) string {
 		word := match[1 : len(match)-1]
 		if cmd != nil {
@@ -203,6 +217,8 @@ func (g *generator) argDoc(a catalog.Arg, on surface) string {
 		return ""
 	}
 	switch {
+	case on == cliSurface && a.Piped:
+		return doc + "; read from this file, or from stdin without one"
 	case on == cliSurface && a.Stdin && !a.File:
 		return doc + "; - reads stdin"
 	case on == cliSurface && a.Type == "path":
@@ -607,24 +623,109 @@ func (g *generator) reference(group *catalog.Group) (string, error) {
 }
 
 func writeWrapped(out *strings.Builder, text, indent string) {
-	for i, paragraph := range strings.Split(strings.TrimSpace(text), "\n\n") {
+	for i, block := range helpBlocks(strings.TrimSpace(text)) {
 		if i > 0 {
 			out.WriteByte('\n')
 		}
-		words := strings.Fields(paragraph)
-		line := indent
-		for _, word := range words {
-			if line != indent && len(line)+1+len(word) > helpWidth {
-				out.WriteString(strings.TrimRight(line, " ") + "\n")
-				line = indent
+		switch block.kind {
+		case verbatimBlock:
+			for _, line := range block.lines {
+				out.WriteString(strings.TrimRight(indent+line, " ") + "\n")
 			}
-			if line != indent {
-				line += " "
+		case listItemBlock:
+			for _, item := range block.lines {
+				marker := listMarker.FindString(item)
+				writeWords(out, item[len(marker):], indent+marker, indent+strings.Repeat(" ", len(marker)))
 			}
-			line += word
+		default:
+			writeWords(out, strings.Join(block.lines, " "), indent, indent)
 		}
-		out.WriteString(line + "\n")
 	}
+}
+
+type helpBlockKind int
+
+const (
+	proseBlock helpBlockKind = iota
+	listItemBlock
+	verbatimBlock
+)
+
+type helpBlock struct {
+	kind  helpBlockKind
+	lines []string
+}
+
+var (
+	listMarker = regexp.MustCompile(`^\s*(?:[-*+]|\d+[.)])\s+`)
+	fenceOpen  = regexp.MustCompile("^\\s*(`{3,}|~{3,})")
+)
+
+func helpBlocks(text string) []helpBlock {
+	var blocks []helpBlock
+	lines := strings.Split(text, "\n")
+	for i := 0; i < len(lines); {
+		line := lines[i]
+		switch {
+		case strings.TrimSpace(line) == "":
+			i++
+		case fenceOpen.MatchString(line):
+			fence := strings.TrimSpace(fenceOpen.FindStringSubmatch(line)[1])
+			end := i + 1
+			for end < len(lines) && !closesFence(lines[end], fence) {
+				end++
+			}
+			end = min(end+1, len(lines))
+			blocks = append(blocks, helpBlock{verbatimBlock, lines[i:end]})
+			i = end
+		case strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "\t"):
+			end := i
+			for end < len(lines) && (strings.HasPrefix(lines[end], "    ") || strings.HasPrefix(lines[end], "\t") || strings.TrimSpace(lines[end]) == "" && end+1 < len(lines) && strings.HasPrefix(lines[end+1], "    ")) {
+				end++
+			}
+			blocks = append(blocks, helpBlock{verbatimBlock, lines[i:end]})
+			i = end
+		case listMarker.MatchString(line):
+			var items []string
+			for i < len(lines) && strings.TrimSpace(lines[i]) != "" && !fenceOpen.MatchString(lines[i]) {
+				if listMarker.MatchString(lines[i]) {
+					items = append(items, strings.TrimRight(lines[i], " "))
+				} else {
+					items[len(items)-1] += " " + strings.TrimSpace(lines[i])
+				}
+				i++
+			}
+			blocks = append(blocks, helpBlock{listItemBlock, items})
+		default:
+			var prose []string
+			for i < len(lines) && strings.TrimSpace(lines[i]) != "" && !fenceOpen.MatchString(lines[i]) && !listMarker.MatchString(lines[i]) {
+				prose = append(prose, lines[i])
+				i++
+			}
+			blocks = append(blocks, helpBlock{proseBlock, prose})
+		}
+	}
+	return blocks
+}
+
+func closesFence(line, fence string) bool {
+	trimmed := strings.TrimSpace(line)
+	return len(trimmed) >= len(fence) && strings.Trim(trimmed, fence[:1]) == ""
+}
+
+func writeWords(out *strings.Builder, text, first, rest string) {
+	line, lead := first, first
+	for _, word := range strings.Fields(text) {
+		if line != lead && len(line)+1+len(word) > helpWidth {
+			out.WriteString(strings.TrimRight(line, " ") + "\n")
+			line, lead = rest, rest
+		}
+		if line != lead {
+			line += " "
+		}
+		line += word
+	}
+	out.WriteString(line + "\n")
 }
 
 func sortedKeys[V any](m map[string]V) []string {

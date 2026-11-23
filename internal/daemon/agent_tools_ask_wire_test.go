@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -110,7 +111,7 @@ func TestAnAgentCannotSeeOrCloseAnAskOfAnotherProfile(t *testing.T) {
 	}
 }
 
-func TestTheAskToolRequiresItsMarkdownAndRefusesAnEmptyOneInToolWords(t *testing.T) {
+func TestTheAskToolRequiresItsMarkdownAndSpeaksOnlyInToolWords(t *testing.T) {
 	s := newSessionTools(t, "asks_enabled")
 	session, err := s.agent.connect(t, "")
 	if err != nil {
@@ -124,7 +125,17 @@ func TestTheAskToolRequiresItsMarkdownAndRefusesAnEmptyOneInToolWords(t *testing
 		if tool.Name != "ask" {
 			continue
 		}
+		if !strings.Contains(tool.Description, "```mermaid\nflowchart") {
+			t.Errorf("the ask tool's description has no worked Mermaid example:\n%s", tool.Description)
+		}
 		schema, _ := tool.InputSchema.(map[string]any)
+		properties, _ := schema["properties"].(map[string]any)
+		markdown, _ := properties["markdown"].(map[string]any)
+		for _, cliWord := range []string{"attn ask", "--file", "stdin", "the CLI", "working directory"} {
+			if text := tool.Description + " " + fmt.Sprint(markdown["description"]); strings.Contains(text, cliWord) {
+				t.Errorf("the ask tool's description says %q, a CLI word:\n%s", cliWord, text)
+			}
+		}
 		if required, _ := schema["required"].([]any); !slices.Contains(required, any("markdown")) {
 			t.Errorf("the ask tool's input schema requires %v, want markdown among them", required)
 		}
