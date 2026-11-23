@@ -568,16 +568,16 @@ func TestAMergeLeavesASeedOpenWhileItsAskWaitsForTheUser(t *testing.T) {
 		setSetting(t, w.App(), "asks_enabled", "true")
 		registerSessions(t, w, cli, "closer")
 		seed := gardenNudgePlant(t, cli, "closer", "armed with a question out", "")
+		harvestArm(t, cli, "closer", seed, github.open(83, "Ship the cache"))
 		gardenNudgeMove(t, cli, "closer", seed, "tend")
 		asked, err := cli.AskOpen("closer", seed, cacheAsk, "", w.Path("closer"))
 		if err != nil {
 			t.Fatalf("ask about %s: %v", seed, err)
 		}
-		harvestArm(t, cli, "closer", seed, github.open(83, "Ship the cache"))
 		github.merge(83, "Ship the cache")
 		w.advance(protocol.HeatHotInterval)
 		shown := lifeShow(t, cli, seed).Seed
-		if shown.Status != "parked" || shown.HarvestWhen != nil {
+		if shown.Status != "growing" || shown.HarvestWhen != nil {
 			t.Fatalf("the merge closed the seed over an open ask or left the condition armed: %+v", shown)
 		}
 		notes := strings.Join(lifeNoteBodies(t, cli, seed), "\n")

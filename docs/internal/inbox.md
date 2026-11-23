@@ -150,7 +150,11 @@ item.
 - An answer goes to the ask's address: the asking session or its mailbox, or
   the seed when the ask is about one, so it reaches whoever tends the seed by
   then. An answer to an ask about a seed is also a note on the seed, and that
-  note does not ring.
+  note does not ring. An ask without `--seed` is about the session's delegation
+  stake only while the session holds the stake's mailbox. Once it parks or
+  replants the stake, or another session takes it, the ask goes to the session.
+  Opening, listing, withdrawing and delivering an ask all use that one holder
+  rule.
 - A Quick Capture goes to the chief or the crew member the user picked, or to
   the agent session that a paired sender names with `attn send`.
 - A change to a seed's authorization goes to the seed's tender, addressed as a
@@ -565,12 +569,23 @@ after any of them.
 a seed the session tends is on standby and has unread seed mail. The refusal names
 `attn agent inbox`.
 
+`attn agent close --self` also refuses while closing would leave an ask the
+session holds with no agent to take the answer. That covers an ask about no seed,
+which the close withdraws, and an ask about a seed that no other open session
+tends, unless the seed is on standby with `garden.tender_resume` at `any` and its
+resume is not blocked. A close by another session or by the user goes through.
+The tender's park and replant of a seed with an open ask refuse too, and so does
+arming `--when-merged` by anyone but the user. A wither or the user's harvest
+withdraws the seed's asks and tells each asking session that is still open,
+other than the caller.
+
 `attn seed standby` without `--stay` also refuses while the session holds an
 open ask, by the rule `attn ask list` uses for its own asks, whichever seed the
 ask is about, and names each ask: a session that waits on the user stays open. The
-refusal names the two commands for a user who asked the agent to close:
-`attn seed standby <seed> --stay`, then `attn agent close --self`. That close
-leaves the seed on standby, so the answer resumes the tender.
+refusal names the two commands for a user who asked the agent to close while an
+ask about the seed is open: `attn seed standby <seed> --stay`, then
+`attn agent close --self`. That close leaves the seed on standby, so the answer
+resumes the tender.
 
 A compacting close, which `attn agent close --self --compact` asks for and
 `attn seed standby` makes when the session can compact, places the compact in

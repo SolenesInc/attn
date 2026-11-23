@@ -109,6 +109,9 @@ func (d *Daemon) beginAgentClose(msg *agentCloseRequest) (*protocol.AgentCloseRe
 		if err := d.unreadStandbyMailRefusal(target, ""); err != nil {
 			return nil, sessionCloseInFlight{}, &agentCloseRefusal{"standby_mail_unread", err.Error()}
 		}
+		if err := d.refuseStrandingSelfClose(target.ID); err != nil {
+			return nil, sessionCloseInFlight{}, &agentCloseRefusal{"asks_stranded", err.Error()}
+		}
 	}
 	if protectErr := d.sessionCloseError(target.ID); protectErr != nil {
 		return nil, sessionCloseInFlight{}, &agentCloseRefusal{"session_close_protected", protectErr.Error()}

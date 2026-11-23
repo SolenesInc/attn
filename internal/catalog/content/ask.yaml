@@ -13,7 +13,7 @@ groups:
     doc: |
       Ask the user what you cannot settle alone. They answer from attn, without opening your terminal.
 
-      After you ask, carry on with work that does not depend on the answer, then end your turn. Your session stays open, so the user can find you, talk to you and run commands in your terminal, and attn types the answer into this conversation as the user's message. While any of your asks is open, attn refuses a standby that would close your session, and names each ask.
+      After you ask, carry on with work that does not depend on the answer, then end your turn. Your session stays open, so the user can find you, talk to you and run commands in your terminal, and attn types the answer into this conversation as the user's message. While any of your asks is open, attn refuses a standby that would close your session, and an `attn agent close --self` that would leave the answer with no agent, and names each ask.
 
       You can also read and withdraw the asks of the agents you oversee: the agents below you in your delegation chain, or every agent in your profile when you are the Chief. They are not your asks, and only the user answers them.
     sections:
@@ -39,11 +39,11 @@ commands:
       {ask_example}
       ````
 
-      When a delegation assigned you a seed, the ask is about that seed; `seed` makes it about another seed you tend. The user sees which seed it concerns. The answer goes to whoever tends the seed by then. The seed stays open until the user answers: attn refuses an agent's harvest and names the open ask. Harvest after you act on the answer. Withering the seed withdraws its open asks.
+      When a delegation assigned you a seed and you still tend it, the ask is about that seed; otherwise it is about no seed, and the answer comes to this session. `seed` makes it about another seed you tend. The user sees which seed it concerns. The answer goes to whoever tends the seed by then. Until the user answers, attn refuses an agent's harvest, the tender's park and replant, and arming `--when-merged`, and names the open ask. Act on the answer first. Withering the seed withdraws its open asks, and attn tells the session that asked.
 
       Images (![alt](path)) {ask_image_base}. Name an image elsewhere by its absolute path. attn copies them when the ask opens, at most 5 MiB in all, so the user sees them as they were. An image that cannot be read refuses the ask, and so does one the app or the phone cannot show: an SVG, a remote or data: URL, a file of another type, or an HTML <img> tag. Draw a diagram in a mermaid code block instead.
 
-      Carry on with work that does not depend on the answer; when none is left, end your turn, and do not wait or poll. While any of your asks is open, attn refuses a standby that would close your session. Withdraw an ask that no longer matters with `ask_close`. When the user answers, attn types the answer into the conversation as their message, approvals included. By then they have likely moved on and will not read what you write back there. If their answer asks you something, reply with a new ask that names theirs in `re`, so the user sees the question and the answer it follows. If you still need them, ask again.
+      Carry on with work that does not depend on the answer; when none is left, end your turn, and do not wait or poll. While any of your asks is open, attn refuses a standby that would close your session, and a close of your own session that would leave the answer with no agent. Withdraw an ask that no longer matters with `ask_close`. When the user answers, attn types the answer into the conversation as their message, approvals included. By then they have likely moved on and will not read what you write back there. If their answer asks you something, reply with a new ask that names theirs in `re`, so the user sees the question and the answer it follows. If you still need them, ask again.
     args:
       - {name: markdown, type: markdown, required: true, piped: true, cli: "--file", placeholder: "<path>", doc: "the ask's markdown, required"}
       - {name: subject, type: text, cli: "--subject", doc: "the ask's subject (defaults to its first question)"}

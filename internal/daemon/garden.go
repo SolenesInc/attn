@@ -1802,7 +1802,12 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 		}
 		next := outcome.Seed
 		if verb == garden.VerbHarvest && outcome.Moved && ask.Actor != who.User() {
-			if err := d.refuseHarvestWithOpenAsks(seed.ID); err != nil {
+			if err := d.refuseReleaseWithOpenAsks(seed.ID, string(verb)); err != nil {
+				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
+			}
+		}
+		if (verb == garden.VerbPark || verb == garden.VerbReplant) && outcome.Moved && !seed.Tender.IsZero() && ask.Actor == seed.Tender.Actor() {
+			if err := d.refuseReleaseWithOpenAsks(seed.ID, string(verb)); err != nil {
 				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 			}
 		}
@@ -1939,7 +1944,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 			}
 			d.queueConversationKeepIfReferenceMoved(seed, next)
 			if garden.Closed(next.Status) {
-				notes.ClosedAsks = d.closeSeedAsks(next.ID)
+				notes.ClosedAsks = d.closeSeedAsks(next, ask.Actor)
 				if err := d.stopSeedPullRequestWatches(next.ID); err != nil {
 					return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
 						"%s succeeded, but its pull request watches could not be stopped: %w", verb, err)

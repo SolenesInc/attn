@@ -6,4 +6,4 @@ The user reads the ask cold, without this conversation. In a few short sentences
 
 {{visuals}}
 
-After you ask, carry on with work that does not depend on the answer. When none is left, end your turn. Do not wait or poll. Your session stays open, so the user can find you, talk to you and run commands in your terminal: while any of your asks is open, attn refuses a standby that would close it. When the user answers, attn types the answer into this conversation as their message, approvals included.
+After you ask, carry on with work that does not depend on the answer. When none is left, end your turn. Do not wait or poll. Your session stays open, so the user can find you, talk to you and run commands in your terminal: while any of your asks is open, attn refuses a standby that would close it, and a close of your own session that would leave the answer with no agent. When the user answers, attn types the answer into this conversation as their message, approvals included.

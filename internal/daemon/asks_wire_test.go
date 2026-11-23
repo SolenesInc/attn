@@ -1133,3 +1133,114 @@ func TestAFollowUpOnARepliedSeedAskIsTypedToTheSeedsTenderNowOrWaitsForItsNextTe
 		t.Fatalf("a follow-up on a forgotten ask got %+v, want it refused", forgotten)
 	}
 }
+
+func TestADelegateThatParkedItsStakeAsksAboutNoSeedAndTheAnswerIsTypedIntoIt(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	cwd := registerDelegationCaller(t, w, cli, "caller")
+	delegated, err := cli.Delegate(delegateFrom("caller", cwd, "Migrate the store", fakeagent.Codex))
+	if err != nil {
+		t.Fatal(err)
+	}
+	delegate := w.Launched(string(delegated.SessionID))
+	moveDelegationSeed(t, cli, string(delegated.SessionID), delegated.SeedID, "park", "")
+
+	asked, err := cli.AskOpen(delegated.SessionID, "", cacheAsk, "", cwd)
+	if err != nil || asked.SeedID != nil {
+		t.Fatalf("a delegate whose stake is parked asked %+v (%v), want an ask about no seed", asked, err)
+	}
+	if listed, err := cli.AskList(delegated.SessionID); err != nil || len(listed.Asks) != 1 || listed.Asks[0].ID != asked.ID {
+		t.Fatalf("the delegate lists %+v (%v), want %s", listed, err, asked.ID)
+	}
+
+	delegate.Prompted()
+	delegate.Reply("Asked about the store. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, string(delegated.SessionID), func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateWaitingInput && protocol.Deref(s.TurnOwed)
+	})
+	answered := testworld.Request(app, protocol.AskAnswerMessage{
+		Cmd: protocol.CmdAskAnswer, RequestID: "answer", AskID: asked.ID,
+		Answers: []protocol.AskAnswer{{Key: "q1", Picked: []string{"Postgres"}}},
+	}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == "answer" })
+	if !answered.Success {
+		t.Fatalf("answering failed: %s", protocol.Deref(answered.Error))
+	}
+	if got := delegate.DeliveredPrompt(); !strings.Contains(got, "Answer: Postgres (the recommended choice)") {
+		t.Fatalf("the delegate was typed %q, want the answer", got)
+	}
+}
+
+func TestAnAgentWaitingOnTheUserCannotLetGoOfItsSeedOrCloseItselfButItsOverseerCan(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	cwd := registerDelegationCaller(t, w, cli, "caller")
+	delegated, err := cli.Delegate(delegateFrom("caller", cwd, "Migrate the store", fakeagent.Codex))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(string(delegated.SessionID))
+	asker := delegated.SessionID
+	stakeAsk, err := cli.AskOpen(asker, "", cacheAsk, "", cwd)
+	if err != nil || protocol.Deref(stakeAsk.SeedID) != delegated.SeedID {
+		t.Fatalf("the delegate asked %+v (%v), want an ask about its stake", stakeAsk, err)
+	}
+	refusedNaming := func(what string, err error, ask *protocol.Ask, wants ...string) {
+		t.Helper()
+		for _, want := range append([]string{ask.ID, ask.Subject, "end your turn", "attn ask close"}, wants...) {
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Fatalf("%s with an open ask: %v; want a refusal naming %q", what, err, want)
+			}
+		}
+	}
+
+	for _, verb := range []string{"park", "replant"} {
+		_, err := cli.SeedTransition(asker, delegated.SeedID, verb, "", false, client.SeedTransitionOptions{})
+		refusedNaming("the tender's "+verb, err, stakeAsk, verb+" after you act on the answer")
+	}
+	_, err = cli.SeedTransition(asker, delegated.SeedID, "harvest", "", false, client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: shopPull(7)})
+	refusedNaming("arming the harvest on merge", err, stakeAsk, "--when-merged")
+	_, err = cli.AgentClose(string(asker), asker, "done")
+	refusedNaming("the delegate's close of itself", err, stakeAsk, delegated.SeedID)
+	if shown := seedStatus(t, cli, delegated.SeedID); shown != "growing" {
+		t.Fatalf("after the refusals the stake is %q, want growing", shown)
+	}
+
+	moveDelegationSeed(t, cli, "caller", delegated.SeedID, "park", "")
+	seedless, err := cli.AskOpen(asker, "", cacheAsk, "", cwd)
+	if err != nil || seedless.SeedID != nil {
+		t.Fatalf("after its overseer parked the stake the delegate asked %+v (%v), want an ask about no seed", seedless, err)
+	}
+	_, err = cli.AgentClose(string(asker), asker, "done")
+	refusedNaming("the delegate's close of itself", err, seedless)
+	if _, err := cli.AgentClose(string(asker), "caller", "work cancelled"); err != nil {
+		t.Fatalf("the overseer's close of the delegate: %v", err)
+	}
+}
+
+func TestAWitherTellsTheAskerItsAskWasWithdrawn(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	cwd := registerDelegationCaller(t, w, cli, "caller")
+	delegated, err := cli.Delegate(delegateFrom("caller", cwd, "Migrate the store", fakeagent.Codex))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(string(delegated.SessionID))
+	asked, err := cli.AskOpen(delegated.SessionID, "", cacheAsk, "", cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withered, err := cli.SeedTransition("caller", delegated.SeedID, "wither", "superseded", true, client.SeedTransitionOptions{})
+	if err != nil || len(withered.ClosedAsks) != 1 {
+		t.Fatalf("the overseer's wither = %+v, %v; want it to withdraw %s", withered, err, asked.ID)
+	}
+	told := inboxContents(readInbox(t, cli, string(delegated.SessionID), 0).Items)
+	for _, want := range []string{"withered " + delegated.SeedID, asked.ID, asked.Subject, "no answer will come"} {
+		if !strings.Contains(told, want) {
+			t.Errorf("the asker read %q, missing %q", told, want)
+		}
+	}
+}

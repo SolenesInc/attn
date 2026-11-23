@@ -222,12 +222,11 @@ func (d *Daemon) askAddressOf(session *protocol.Session, ref string) (who.Addres
 			return who.Address{}, err
 		}
 	}
-	stake := d.openStake(session.ID)
-	if seedID == "" || seedID == stake {
-		if stake == "" {
-			return d.inboxAddressOf(session.ID), nil
+	if seedID == "" {
+		if stake, ok := d.gardenDispatchCrown(session.ID); ok && stake != "" && d.holdsInbox(session.ID, who.ToTenderOf(stake)) {
+			return who.ToTenderOf(stake), nil
 		}
-		return who.ToTenderOf(stake), nil
+		return d.inboxAddressOf(session.ID), nil
 	}
 	seed, _, err := d.readSeed(seedID)
 	if err != nil {
@@ -237,7 +236,7 @@ func (d *Daemon) askAddressOf(session *protocol.Session, ref string) (who.Addres
 		return who.Address{}, d.requireSeedInProfile(seed.ID, session.ProfileID, false)
 	}
 	to := who.ToTenderOf(seed.ID)
-	if holder := d.inboxHolder(to); holder != nil && holder.ID == session.ID {
+	if d.holdsInbox(session.ID, to) {
 		return to, nil
 	}
 	if !seed.Tender.IsZero() {
@@ -246,31 +245,18 @@ func (d *Daemon) askAddressOf(session *protocol.Session, ref string) (who.Addres
 	return who.Address{}, protocol.Refuse(protocol.RefusalWrongState, "nobody is tending %s, and an ask is about a seed you tend; tend it first ({attn seed tend %s}), or ask without naming a seed", seed.ID, seed.ID)
 }
 
-func (d *Daemon) openStake(sessionID protocol.SessionID) string {
-	stake, ok := d.gardenDispatchCrown(sessionID)
-	if !ok {
-		return ""
-	}
-	if seed, _, err := d.readSeed(stake); err != nil || garden.Closed(seed.Status) {
-		return ""
-	}
-	return stake
+func (d *Daemon) holdsInbox(sessionID protocol.SessionID, a who.Address) bool {
+	holder := d.inboxHolder(a)
+	return holder != nil && holder.ID == sessionID
 }
 
 func (d *Daemon) askAddressHeldBy(sessionID protocol.SessionID) func(who.Address) bool {
 	roles := d.inboxRoleAddresses(sessionID)
-	stake, _ := d.gardenDispatchCrown(sessionID)
 	return func(to who.Address) bool {
-		seedID, seed := to.TenderOf()
-		switch {
-		case !seed:
-			return slices.Contains(roles, to)
-		case seedID == stake:
-			return true
-		default:
-			holder := d.inboxHolder(to)
-			return holder != nil && holder.ID == sessionID
+		if _, seed := to.TenderOf(); seed {
+			return d.holdsInbox(sessionID, to)
 		}
+		return slices.Contains(roles, to)
 	}
 }
 
@@ -641,6 +627,7 @@ func (d *Daemon) askRepliesForgetHandler(_ context.Context, _ *jobs.Job) (any, e
 
 type openAsksError struct {
 	seedID string
+	then   string
 	asks   []store.Ask
 }
 
@@ -653,17 +640,21 @@ func (e *openAsksError) Mentioned() string {
 	for i, ask := range e.asks {
 		asks[i] = fmt.Sprintf("%s (%q)", ask.ID, ask.Subject)
 	}
-	return fmt.Sprintf("%s has %d open ask(s) to the user: %s. The answer comes to whoever tends the seed: end your turn, and harvest after you act on the answer. Withdraw an ask that no longer matters with `{attn ask close <id>}`. If you do not tend the seed, `{attn seed tend %s}` first",
-		e.seedID, len(asks), strings.Join(asks, ", "), e.seedID)
+	refusal := fmt.Sprintf("%s has %d open ask(s) to the user: %s. The answer comes to whoever tends the seed: end your turn, and %s after you act on the answer. Withdraw an ask that no longer matters with `{attn ask close <id>}`",
+		e.seedID, len(asks), strings.Join(asks, ", "), e.then)
+	if e.then == string(garden.VerbHarvest) {
+		refusal += fmt.Sprintf(". If you do not tend the seed, `{attn seed tend %s}` first", e.seedID)
+	}
+	return refusal
 }
 
-func (d *Daemon) refuseHarvestWithOpenAsks(seedID string) error {
+func (d *Daemon) refuseReleaseWithOpenAsks(seedID, then string) error {
 	asks, err := d.store.OpenAsksTo(who.ToTenderOf(seedID))
 	if err != nil {
 		return fmt.Errorf("reading the open asks about %s: %w", seedID, err)
 	}
 	if len(asks) > 0 {
-		return &openAsksError{seedID: seedID, asks: asks}
+		return &openAsksError{seedID: seedID, then: then, asks: asks}
 	}
 	return nil
 }
@@ -686,8 +677,8 @@ func (e *heldAsksError) Mentioned() string {
 			asks[i] = fmt.Sprintf("%s (%q)", ask.ID, ask.Subject)
 		}
 	}
-	return fmt.Sprintf("this session has %d open ask(s) to the user: %s. A session that waits on the user stays open, so the user can find it: end your turn, and attn types the answer into this conversation. If the user told you to close, run `{attn seed standby %s --stay -m \"…\"}`, then `{attn agent close --self -m \"…\"}`",
-		len(asks), strings.Join(asks, ", "), e.standbySeedID)
+	return fmt.Sprintf("this session has %d open ask(s) to the user: %s. A session that waits on the user stays open, so the user can find it: end your turn, and attn types the answer into this conversation. If the user told you to close and the ask is about %s, run `{attn seed standby %s --stay -m \"…\"}`, then `{attn agent close --self -m \"…\"}`",
+		len(asks), strings.Join(asks, ", "), e.standbySeedID, e.standbySeedID)
 }
 
 func (d *Daemon) refuseClosingStandbyWithHeldAsks(sessionID protocol.SessionID, standbySeedID string) error {
@@ -708,8 +699,8 @@ func (d *Daemon) refuseClosingStandbyWithHeldAsks(sessionID protocol.SessionID, 
 	return nil
 }
 
-func (d *Daemon) closeSeedAsks(seedID string) []protocol.SeedClosedAsk {
-	to := who.ToTenderOf(seedID)
+func (d *Daemon) closeSeedAsks(seed garden.Seed, by who.Actor) []protocol.SeedClosedAsk {
+	to := who.ToTenderOf(seed.ID)
 	open, err := d.store.OpenAsksTo(to)
 	if err != nil {
 		d.logf("asks: reading the open asks to %s: %v", to, err)
@@ -722,8 +713,86 @@ func (d *Daemon) closeSeedAsks(seedID string) []protocol.SeedClosedAsk {
 	var closed []protocol.SeedClosedAsk
 	for _, ask := range open {
 		closed = append(closed, protocol.SeedClosedAsk{ID: ask.ID, Subject: ask.Subject})
+		d.tellAskerOfClosedSeed(ask, seed, by)
 	}
 	return closed
+}
+
+func (d *Daemon) tellAskerOfClosedSeed(withdrawn store.Ask, seed garden.Seed, by who.Actor) {
+	if d.store.Get(withdrawn.SessionID) == nil || d.partyOfSession(withdrawn.SessionID).Actor() == by {
+		return
+	}
+	text := fmt.Sprintf("%s %s %s, which withdrew your ask %s (%q) from the user, so no answer will come.",
+		d.actorView(by).Name, seed.Status, seed.ID, withdrawn.ID, withdrawn.Subject)
+	to := who.ToSession(withdrawn.SessionID)
+	if _, err := d.store.PutInbox(inbox.Item{ID: uuid.NewString(), To: to, Kind: inbox.Notice, Text: text}, time.Now()); err != nil {
+		d.logf("asks: telling %s that %s was withdrawn: %v", withdrawn.SessionID, withdrawn.ID, err)
+		return
+	}
+	d.kickInbox(to)
+}
+
+func (d *Daemon) askStranded(a store.Ask, closing protocol.SessionID) bool {
+	if _, member := a.To.Member(); member {
+		return false
+	}
+	if id, session := a.To.Session(); session {
+		return id == closing || d.store.Get(id) == nil
+	}
+	seedID, _ := a.To.TenderOf()
+	holder, memberID, err := d.inboxRecipient(a.To)
+	switch {
+	case err != nil:
+		return true
+	case memberID != "", holder != nil && holder.ID != closing:
+		return false
+	}
+	seed, _, err := d.readSeed(seedID)
+	if err != nil {
+		return true
+	}
+	standby, err := d.seedStandby(seed)
+	if err != nil || standby == nil {
+		return true
+	}
+	return d.tenderResumeSetting(seed.ProfileID) != tenderResumeAny || d.tenderResumes.blockedReason(seed.ID) != ""
+}
+
+type strandedAsksError struct{ asks []store.Ask }
+
+func (e *strandedAsksError) Refusal() protocol.Refusal { return protocol.RefusalWrongState }
+
+func (e *strandedAsksError) Error() string { return protocol.CLIText(e.Mentioned()) }
+
+func (e *strandedAsksError) Mentioned() string {
+	asks := make([]string, len(e.asks))
+	for i, ask := range e.asks {
+		if seedID, ok := ask.To.TenderOf(); ok {
+			asks[i] = fmt.Sprintf("%s (%q, about %s)", ask.ID, ask.Subject, seedID)
+		} else {
+			asks[i] = fmt.Sprintf("%s (%q)", ask.ID, ask.Subject)
+		}
+	}
+	return fmt.Sprintf("closing this session leaves %d open ask(s) to the user with no agent to take the answer: %s. A session that waits on the user stays open, so the user can find it: end your turn, and attn types the answer into this conversation. Withdraw an ask that no longer matters with `{attn ask close <id>}`",
+		len(asks), strings.Join(asks, ", "))
+}
+
+func (d *Daemon) refuseStrandingSelfClose(sessionID protocol.SessionID) error {
+	stored, err := d.store.Asks()
+	if err != nil {
+		return fmt.Errorf("reading the open asks of %s: %w", sessionID, err)
+	}
+	held := d.askAddressHeldBy(sessionID)
+	var stranded []store.Ask
+	for _, a := range stored {
+		if a.Reply == nil && held(a.To) && d.askStranded(a, sessionID) {
+			stranded = append(stranded, a)
+		}
+	}
+	if len(stranded) > 0 {
+		return &strandedAsksError{asks: stranded}
+	}
+	return nil
 }
 
 func (d *Daemon) announceClosedAsks(ids []string) {

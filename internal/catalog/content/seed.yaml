@@ -71,7 +71,7 @@ groups:
           Harvest and wither refuse on a plot while any direct child is planted, growing or parked, even with `--force` or `--when-merged`. The refusal names each open child. To close the plot, first close each open child or move its follow-ups out. To give up your claim on the plot without closing it, run `attn seed replant <plot>`. When the last open child closes, attn adds a ringing note to the plot and names the plot in the output. The plot keeps its state.
       - title: Harvesting on a merge
         text: |
-          When the only thing left on a seed is a pull request merging, say so once with `attn seed harvest <id> --when-merged -m "<outcome and verification>"` and let attn close it. With no pull request url, the command takes this session's single open pull request. A seed you were growing is parked, and attn releases your claim. Every surface then shows `harvests when owner/repo#n merges`. When the merge lands, attn harvests the seed as the member `attn`, with your reason. If a pull request closes without merging, attn clears the arming and rings instead, and the seed stays where it was. If the seed has gained open children or an open ask, attn clears the arming at the merge and explains why. `--when-merged --clear` takes the arming back.
+          When the only thing left on a seed is a pull request merging, say so once with `attn seed harvest <id> --when-merged -m "<outcome and verification>"` and let attn close it. With no pull request url, the command takes this session's single open pull request. A seed you were growing is parked, and attn releases your claim. Every surface then shows `harvests when owner/repo#n merges`. When the merge lands, attn harvests the seed as the member `attn`, with your reason. If a pull request closes without merging, attn clears the arming and rings instead, and the seed stays where it was. attn refuses to arm a seed with an open ask. If the seed has gained open children or an open ask since, attn clears the arming at the merge and explains why. `--when-merged --clear` takes the arming back.
 
           Use `--when-merged` only when the merge is genuinely the last step. Review notes to answer, docs to write, and evidence to attach are work, and work belongs to a tender.
       - title: Checks
@@ -88,7 +88,7 @@ groups:
         commands: [seed watch, seed unwatch]
       - title: Standby
         text: |
-          Standby closes your session for a wait that needs nobody in it: a time, a pull request, another seed or another agent. If you tend no seed for the work, plant one first. A wait on the user is different. Ask with `attn ask` and end your turn. Your session stays open, so the user can find you, talk to you and run commands in your terminal, and attn types the answer into this conversation. While you have an open ask, about this seed, another seed or none, attn refuses a standby that would close you, and names each ask. When the user tells you to close while an ask is open, run `attn seed standby <id> --stay -m "…"`, then `attn agent close --self`: the seed stays on standby, and the answer resumes you.
+          Standby closes your session for a wait that needs nobody in it: a time, a pull request, another seed or another agent. If you tend no seed for the work, plant one first. A wait on the user is different. Ask with `attn ask` and end your turn. Your session stays open, so the user can find you, talk to you and run commands in your terminal, and attn types the answer into this conversation. While you have an open ask, about this seed, another seed or none, attn refuses a standby that would close you, and names each ask. When the user tells you to close while an ask about the seed is open, run `attn seed standby <id> --stay -m "…"`, then `attn agent close --self`: the seed stays on standby, and the answer resumes you.
 
           Only the seed's tender puts it on standby, from its own session, with a note that says what to do next. The seed stays claimed while the session is closed. `--in` and `--at` also set the seed's reminder, so the session resumes at that time if nothing else arrives first. A seed holds one reminder; `attn seed remind` sets one without closing the session.
 
@@ -315,7 +315,7 @@ commands:
     runs: home
     grant: own
     doc: |
-      Pauses the seed deliberately: it is parked and lets go of its tender. An optional `reason` lands on the log in the same move. Tending it again picks it back up. Parking it again keeps the state and adds only the reason. Moves print who they rang.
+      Pauses the seed deliberately: it is parked and lets go of its tender. An optional `reason` lands on the log in the same move. Tending it again picks it back up. Parking it again keeps the state and adds only the reason. The tender's park refuses while the seed has an ask the user has not answered, and names the ask: end your turn, park after you act on the answer, or withdraw the ask with `attn ask close`. Moves print who they rang.
     args:
       - {name: seed, type: seed, required: true, cli: pos}
       - {name: reason, type: text, cli: "-m", stdin: true, placeholder: '"<where you left it>"', doc: "where you left it, saved on the move"}
@@ -327,7 +327,7 @@ commands:
     runs: home
     grant: full
     doc: |
-      Puts the seed back in the pool: planted, unclaimed, ready for whoever is free. Reopens a closed seed, takes a parked one off hold, and hands back one being grown. Replanting an already planted seed changes nothing and rings nobody. Moves print who they rang.
+      Puts the seed back in the pool: planted, unclaimed, ready for whoever is free. Reopens a closed seed, takes a parked one off hold, and hands back one being grown. Replanting an already planted seed changes nothing and rings nobody. The tender's replant refuses while the seed has an ask the user has not answered, as park does. Moves print who they rang.
     args:
       - {name: seed, type: seed, required: true, cli: pos}
       - {name: reason, type: text, cli: "-m", stdin: true, placeholder: '"<why>"', doc: "why, saved on the move"}
@@ -339,7 +339,7 @@ commands:
     runs: home
     grant: full
     doc: |
-      Closes the seed as abandoned: nobody is picking this up. Repeating it keeps the earlier reason and adds a different reason to the log. A harvested seed must be replanted first. A plot refuses while any direct child is open. Closing a plot's last child leaves a ringing note on the plot and names the plot in the output. Withering withdraws the seed's open asks from the user and names them in the output. Moves print who they rang.
+      Closes the seed as abandoned: nobody is picking this up. Repeating it keeps the earlier reason and adds a different reason to the log. A harvested seed must be replanted first. A plot refuses while any direct child is open. Closing a plot's last child leaves a ringing note on the plot and names the plot in the output. Withering withdraws the seed's open asks from the user, names them in the output, and tells each asking session that is still open. Moves print who they rang.
     args:
       - {name: seed, type: seed, required: true, cli: pos}
       - {name: reason, type: text, cli: "-m", stdin: true, placeholder: '"<why>"', doc: "why, saved on the move"}
@@ -364,7 +364,7 @@ commands:
     doc: |
       Closes the seed as done, with a required `reason` unless `when_merged` is set. Repeating a harvest succeeds with the earlier reason; a different reason goes on its log. A withered seed must be replanted first. A plot refuses while any direct child is open. A seed with an ask the user has not answered refuses and names the ask: end your turn, harvest after you act on the answer, or withdraw the ask with `attn ask close`. Closing a plot's last child leaves a ringing note on the plot and names the plot in the output. Moves print who they rang.
 
-      `when_merged` releases your claim and harvests the seed with your `reason` when the pull request merges. Without a reason it uses "PR #N merged: <title>". This command merges nothing. With no `pr` it takes this session's single open pull request, and names the pull requests when there is more than one; `when_merged` with `clear` takes the arming back.
+      `when_merged` releases your claim and harvests the seed with your `reason` when the pull request merges. It refuses while the seed has an ask the user has not answered, as harvest does. Without a reason it uses "PR #N merged: <title>". This command merges nothing. With no `pr` it takes this session's single open pull request, and names the pull requests when there is more than one; `when_merged` with `clear` takes the arming back.
     args:
       - {name: seed, type: seed, required: true, cli: pos}
       - {name: pr, type: url, cli: pos, placeholder: "<pr-url>", doc: "the pull request to wait for (with --when-merged)"}
@@ -562,7 +562,7 @@ commands:
     doc: |
       Puts a seed you tend on standby with `next`, a note saying what to do next, and closes this session. When mail reaches the seed, attn resumes the session and delivers the note; for a crew member it starts a session. `in` and `at` also set the seed's reminder to that time, with the note as its message, as `seed_remind` does. When the session can compact, attn compacts it before closing; end your turn right after the command. `stay` keeps this session open.
 
-      attn refuses while the seed has mail you have not read; read it with `attn agent inbox` first. attn also refuses to close the session while it has an open ask, about this seed, another seed or none, and names each ask: a wait on the user keeps the session open, so ask with `attn ask` and end your turn. When the user tells you to close while an ask is open, put the seed on standby with `stay`, then run `attn agent close --self`: the seed stays on standby, and the answer resumes you.
+      attn refuses while the seed has mail you have not read; read it with `attn agent inbox` first. attn also refuses to close the session while it has an open ask, about this seed, another seed or none, and names each ask: a wait on the user keeps the session open, so ask with `attn ask` and end your turn. When the user tells you to close while an ask about the seed is open, put the seed on standby with `stay`, then run `attn agent close --self`: the seed stays on standby, and the answer resumes you.
 
       Only the seed's tender sets standby, from its own session, and the seed stays claimed while the session is closed. A new standby replaces the note. Standby ends once you have read all of the seed's mail, and when the seed is parked, harvested, withered or gets a new tender. If the session closes before reading the mail, the mail resumes it again. `clear` ends standby and leaves the reminder.
     args:

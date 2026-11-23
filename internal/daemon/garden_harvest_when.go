@@ -75,6 +75,11 @@ func (d *Daemon) armHarvestWhenMerged(
 	if err := garden.CheckPlotClose(seed, garden.OpenChildren(read.seeds, seed.ID)); err != nil {
 		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 	}
+	if ask.Actor != who.User() {
+		if err := d.refuseReleaseWithOpenAsks(seed.ID, "run `{attn seed harvest "+seed.ID+" --when-merged}`"); err != nil {
+			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
+		}
+	}
 	rec, err := d.harvestWhenPullRequest(seed.ID, url, sessionID)
 	if err != nil {
 		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
