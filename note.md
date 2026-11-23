@@ -1,0 +1,1 @@
+A phone push for a new ask now shows its subject without inline markdown, so the lock screen reads "Sign in to Sigma", not "Sign in to *Sigma*". This follows the change that renders markdown in ask subjects, prompts and choices. The desktop app has no new-ask notification of its own.
