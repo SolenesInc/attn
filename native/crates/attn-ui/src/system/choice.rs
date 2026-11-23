@@ -104,10 +104,10 @@ impl Choice {
         press: impl Fn(&mut S, &mut Tx) + 'static,
     ) -> Control {
         let marked = self.chosen && !self.disabled;
-        let (edge, ink) = match (marked, self.chosen) {
-            (true, _) => (t.primary, t.text_primary),
-            (false, true) => (t.border_hover, t.text_primary),
-            (false, false) => (t.border, t.text_secondary),
+        let ink = if self.chosen {
+            t.text_primary
+        } else {
+            t.text_secondary
         };
         let fill = if self.chosen {
             t.bg_elevated
@@ -176,7 +176,6 @@ impl Choice {
             } else {
                 Color::TRANSPARENT
             })
-            .border(1.0, edge)
             .child(dot)
             .child(said)
             .children(self.trailing);

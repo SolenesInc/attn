@@ -246,6 +246,11 @@ fn click(world: &mut World, key: &str) {
     world.gesture(|app| app.click(Target::key(key)));
 }
 
+pub(super) fn add_note(world: &mut World) {
+    scroll_to(world, "asks.note.add");
+    click(world, "asks.note.add");
+}
+
 fn type_into(world: &mut World, key: &str, text: &str) {
     scroll_to(world, key);
     click(world, key);
@@ -440,6 +445,7 @@ fn a_drag_that_starts_at_the_edge_of_a_part_in_a_wide_window_selects_its_first_l
     let mut world = start(vec![cache_store()], vec![api_working()]);
     world.resize((1200.0, 800.0));
     open_sheet(&mut world);
+    add_note(&mut world);
     type_into(&mut world, NOTE, "draft");
 
     drag_from_edge(&mut world, "asks.part.0");
@@ -454,6 +460,7 @@ fn a_drag_that_starts_at_the_edge_of_a_part_in_a_wide_window_selects_its_first_l
 fn the_copy_key_copies_the_selection_though_a_field_held_the_keyboard() {
     let mut world = start(vec![cache_store()], vec![api_working()]);
     open_sheet(&mut world);
+    add_note(&mut world);
     type_into(&mut world, NOTE, "draft");
     assert_eq!(focused(&world).as_deref(), Some(NOTE));
 
@@ -559,8 +566,10 @@ fn the_sheets_letter_keys_work_after_a_drag_across_the_ask_text() {
         vec![cache_store(), release_day()],
         vec![api_working(), web_waiting()],
     );
+    world.resize((1000.0, 1000.0));
     open_sheet(&mut world);
     click(&mut world, "asks.row.a-cache1");
+    add_note(&mut world);
     type_into(&mut world, NOTE, "draft");
     drag_across(&mut world, "asks.subject");
 
@@ -702,6 +711,7 @@ fn sending_sends_the_picked_answers_and_the_note_then_brings_the_next_ask() {
 
     click(&mut world, "asks.q.q1.choice.0");
     type_into(&mut world, "asks.q.q2.text.field", "Welcome back");
+    add_note(&mut world);
     type_into(&mut world, "asks.note.field", "Keep it boring.");
     click(&mut world, "asks.send");
     update_asks(
@@ -747,6 +757,7 @@ fn a_refused_answer_keeps_what_was_written_and_says_why() {
 
     click(&mut world, "asks.q.q1.choice.1");
     type_into(&mut world, "asks.q.q1.other.field", "FreeBSD");
+    add_note(&mut world);
     click(&mut world, "asks.note.field");
     send_key(&mut world);
 
@@ -807,6 +818,7 @@ fn nothing_is_sent_until_a_question_is_answered_or_a_note_written() {
     open_sheet(&mut world);
 
     assert!(disabled(&world, "asks.send"));
+    add_note(&mut world);
     click(&mut world, "asks.note.field");
     send_key(&mut world);
 
@@ -2008,6 +2020,7 @@ fn an_ask_from_a_member_between_sessions_names_the_member_and_leaves_attn_lowerc
 fn the_note_starts_lines_high_and_its_grip_drags_it_taller_but_never_shorter() {
     let mut world = start(vec![release_day()], vec![api_working(), web_waiting()]);
     open_sheet(&mut world);
+    add_note(&mut world);
     scroll_to(&mut world, "asks.note.field-grip");
     let height = |world: &mut World| world.rect("asks.note.field-resizable")[3];
     let three_lines = height(&mut world);
@@ -2141,6 +2154,7 @@ fn a_drag_that_starts_on_a_link_selects_and_the_copy_key_copies_it_though_the_no
         (MIGRATION_LINK, "cache-migration lands."),
     ] {
         let mut world = start_on_links();
+        add_note(&mut world);
         type_into(&mut world, NOTE, "draft");
         assert_eq!(focused(&world).as_deref(), Some(NOTE));
 
@@ -2155,6 +2169,7 @@ fn a_drag_that_starts_on_a_link_selects_and_the_copy_key_copies_it_though_the_no
 #[test]
 fn a_click_on_a_link_in_an_asks_words_still_opens_it() {
     let mut world = start_on_links();
+    add_note(&mut world);
     type_into(&mut world, NOTE, "draft");
 
     world.gesture(|app| app.click(Target::key(NOTES)));
@@ -2286,11 +2301,11 @@ fn tab_walks_the_questions_and_the_note_then_the_sheets_controls_and_never_the_l
             "asks.q.q2.choice.0",
             "asks.q.q3.text.field",
             "asks.q.q3.suggestion",
-            "asks.note.field",
+            "asks.note.add",
             "asks.attach",
+            "asks.keys",
             "asks.replied",
             "asks.close",
-            "asks.copy",
         ]
     );
     let mut back = Vec::new();
@@ -2301,10 +2316,10 @@ fn tab_walks_the_questions_and_the_note_then_the_sheets_controls_and_never_the_l
     assert_eq!(
         back,
         [
-            "asks.close",
             "asks.replied",
+            "asks.keys",
             "asks.attach",
-            "asks.note.field",
+            "asks.note.add",
             "asks.q.q3.suggestion",
             "asks.q.q3.text.field",
             "asks.q.q2.choice.0",
@@ -2333,9 +2348,18 @@ fn a_click_in_a_question_makes_it_the_one_the_number_keys_pick_in() {
 }
 
 #[test]
-fn the_footer_names_the_number_keys_tab_and_quote() {
+fn the_keys_button_and_question_mark_list_the_number_keys_tab_and_quote() {
     let mut world = start(vec![release_plan()], vec![api_working()]);
     open_sheet(&mut world);
+    assert!(
+        !has(&world, "asks.hints"),
+        "the keys wait behind the Keys button"
+    );
+    click(&mut world, "asks.keys");
+    assert!(has(&world, "asks.hints"));
+    click(&mut world, "asks.keys");
+    assert!(!has(&world, "asks.hints"));
+    letter(&mut world, "?");
     let hints = name(&world, "asks.hints");
     assert!(hints.contains("1–2 pick"), "{hints}");
     assert!(hints.contains("⇥ next question"), "{hints}");
@@ -2350,6 +2374,7 @@ fn q_quotes_the_selected_passage_into_the_note_and_puts_the_keyboard_there() {
     let mut world = start(vec![release_plan()], vec![api_working()]);
     world.resize((1000.0, 1000.0));
     open_sheet(&mut world);
+    add_note(&mut world);
     type_into(&mut world, NOTE, "Looks fine.");
     drag_across(&mut world, "asks.part.0");
 
@@ -2495,6 +2520,7 @@ fn in_the_smallest_window_the_list_gives_way_so_the_ask_has_room_to_read_and_its
         "the ask has {} points to show itself",
         ask[3]
     );
+    add_note(&mut world);
     scroll_to(&mut world, "asks.note.field-grip");
     let grip = world.rect("asks.note.field-grip");
     assert!(
@@ -3073,6 +3099,8 @@ fn the_arrows_stay_in_a_written_answer_and_walk_the_note_s_controls() {
 
     plain(&mut world, Key::Tab);
     plain(&mut world, Key::Tab);
+    assert_eq!(focused(&world).as_deref(), Some("asks.note.add"));
+    world.gesture(|d| d.press("space"));
     assert_eq!(focused(&world).as_deref(), Some(NOTE));
     world.gesture(|app| app.type_text("thanks"));
     plain(&mut world, Key::Down);
@@ -3080,6 +3108,28 @@ fn the_arrows_stay_in_a_written_answer_and_walk_the_note_s_controls() {
     plain(&mut world, Key::Tab);
     assert_eq!(focused(&world).as_deref(), Some("asks.attach"));
     plain(&mut world, Key::Up);
+    assert_eq!(focused(&world).as_deref(), Some(NOTE));
+}
+
+#[test]
+fn the_note_waits_behind_add_a_note_which_n_or_a_press_opens_with_the_keyboard_in_it() {
+    let mut world = start(vec![release_plan()], vec![api_working()]);
+    world.resize((1000.0, 1000.0));
+    open_sheet(&mut world);
+    assert!(!has(&world, NOTE), "an empty note waits behind Add a note");
+    letter(&mut world, "n");
+    assert_eq!(focused(&world).as_deref(), Some(NOTE));
+    world.gesture(|app| app.type_text("thanks"));
+    click(&mut world, "asks.q.q1.choice.0");
+    assert_eq!(
+        field_text(&world, NOTE),
+        "thanks",
+        "a written note stays open"
+    );
+
+    let mut world = start(vec![release_plan()], vec![api_working()]);
+    open_sheet(&mut world);
+    add_note(&mut world);
     assert_eq!(focused(&world).as_deref(), Some(NOTE));
 }
 

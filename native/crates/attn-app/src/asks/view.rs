@@ -28,7 +28,6 @@ const SHEET_W: f32 = 1020.0;
 const SHEET_H: f32 = 880.0;
 const RAIL_W: f32 = 264.0;
 const MEASURE: f32 = 700.0;
-const NO_PROSE_MEASURE: f32 = 0.0;
 /// Under its greatest size the sheet stays 96 points narrower than the window and 120 points
 /// shorter, centred under the title bar. Past the least size below, its margins give way to
 /// it, down to the tightest.
@@ -74,6 +73,7 @@ pub(super) fn text_key(question: &str) -> String {
 }
 
 pub(super) const NOTE: &str = "asks.note.field";
+pub(super) const ADD_NOTE: &str = "asks.note.add";
 pub(super) const ATTACH: &str = "asks.attach";
 
 pub(super) fn remove_file_key(file: &str) -> String {
@@ -298,22 +298,24 @@ fn divider(key: &str, said: &'static str, t: &Tokens) -> El {
 
 fn list_row(item: &Item<'_>, selected: bool, now_ms: i64, t: &Tokens) -> El {
     let ask = item.ask;
-    let mut about = vec![item.from.clone()];
-    if item.questions > 1 {
-        about.push(format!("{} questions", item.questions));
-    }
+    let mut timed = Vec::new();
     if let Some(due) = super::default_of(ask).filter(|_| ask.reply.is_none()) {
-        about.push(format!(
+        timed.push(format!(
             "default {}",
             queue::wake_time_short(Some(&due.due_at), now_ms)
         ));
     }
     if let Some(until) = item.snoozed_until {
-        about.push(format!(
+        timed.push(format!(
             "until {}",
             queue::wake_time_short(Some(until), now_ms)
         ));
     }
+    let mut about = vec![item.from.clone()];
+    if item.questions > 1 {
+        about.push(format!("{} questions", item.questions));
+    }
+    about.extend(timed.iter().cloned());
     let waiting = ask.reply.is_none()
         && item.snoozed_until.is_none()
         && item.holder.is_some_and(|s| s.turn_owed == Some(true));
@@ -336,11 +338,13 @@ fn list_row(item: &Item<'_>, selected: bool, now_ms: i64, t: &Tokens) -> El {
     } else {
         row
     };
-    row.role("option")
-        .unfocusable()
-        .title(ask.subject.clone())
-        .subtitle(about.join(" · "), t)
-        .aside(words(age, Type::Mono, t.text_tertiary))
+    let row = row.role("option").unfocusable().title(ask.subject.clone());
+    let row = if timed.is_empty() {
+        row
+    } else {
+        row.subtitle(timed.join(" · "), t)
+    };
+    row.aside(words(age, Type::Mono, t.text_tertiary))
         .selected(selected)
         .dimmed(ask.reply.is_some() || item.snoozed_until.is_some())
         .build(t)
@@ -390,7 +394,7 @@ impl<'a> Prose<'a> {
         Markdown::new(source)
             .selectable(true)
             .text_links(mentions::seed_links(self.names))
-            .style(crate::markdown::look(self.t).prose_measure(NO_PROSE_MEASURE))
+            .style(attn_ui::system::note_style(self.t.text_secondary, self.t))
             .on_link_tx(move |state: &mut State, href: &str, tx: &mut Tx| {
                 match mentions::seed_of(href) {
                     Some(seed) => super::open_seed(state, seed, tx),
@@ -420,7 +424,39 @@ fn header(state: &State, item: &Item<'_>, t: &Tokens) -> El {
         .filter(|s| !crate::outpost::offline(s, &state.facts.outposts));
     let snoozed = snoozable
         .is_some_and(|s| queue::is_snoozed(s.turn_snoozed_until.as_deref(), state.window.now_ms));
-    let from = Inline::loose()
+    let seed = ask.seed_id.as_ref().map(|seed| {
+        let title = ask
+            .seed_title
+            .clone()
+            .filter(|title| !title.is_empty() && *title != item.from);
+        Inline::loose()
+            .key("asks.seed")
+            .min_w(0.0)
+            .shrink()
+            .child(words(
+                ask.seed_slug.clone().unwrap_or_else(|| seed.clone()),
+                Type::Mono,
+                t.text_tertiary,
+            ))
+            .children(title.map(|title| {
+                words(title, Type::Small, t.text_tertiary)
+                    .min_w(0.0)
+                    .shrink()
+                    .truncate()
+            }))
+    });
+    let open_seed = ask.seed_id.clone().map(|id| {
+        ask_button(
+            OPEN_SEED,
+            "Open in Garden",
+            "Open the seed in the garden (g)",
+            &attn_ui::icon::GARDEN,
+            t,
+            move |state: &mut State, tx: &mut Tx| super::open_seed(state, &id, tx),
+        )
+    });
+    Inline::loose()
+        .key("asks.header")
         .w_full()
         .children(item.holder.map(|s| {
             crate::sidebar::lead(
@@ -437,7 +473,7 @@ fn header(state: &State, item: &Item<'_>, t: &Tokens) -> El {
             )
         }))
         .child(
-            words(item.from.clone(), Type::Name, t.text_primary)
+            words(item.from.clone(), Type::Small, t.text_secondary)
                 .key("asks.from")
                 .min_w(0.0)
                 .shrink()
@@ -450,49 +486,19 @@ fn header(state: &State, item: &Item<'_>, t: &Tokens) -> El {
                 .shrink()
                 .truncate()
         }))
+        .children(seed)
         .child(rune::el().grow(1.0))
         .child(ask_button(
             "asks.copy",
             "Copy ask",
             "Copy the ask as markdown (c)",
+            glyph::COPY,
             t,
             super::copy,
         ))
         .children(item.holder.map(|s| open_agent(s, &item.from, t)))
-        .children(snoozable.map(|_| snooze_button(snoozed, &item.from, t)));
-    let seed = ask.seed_id.as_ref().map(|seed| {
-        let id = seed.clone();
-        Inline::loose()
-            .key("asks.seed")
-            .w_full()
-            .child(words(
-                ask.seed_slug.clone().unwrap_or_else(|| seed.clone()),
-                Type::Mono,
-                t.text_tertiary,
-            ))
-            .child(
-                words(
-                    ask.seed_title.clone().unwrap_or_default(),
-                    Type::Small,
-                    t.text_secondary,
-                )
-                .grow(1.0)
-                .min_w(0.0)
-                .truncate(),
-            )
-            .child(ask_button(
-                OPEN_SEED,
-                "Open in Garden",
-                "Open the seed in the garden (g)",
-                t,
-                move |state: &mut State, tx: &mut Tx| super::open_seed(state, &id, tx),
-            ))
-    });
-    Stack::tight()
-        .key("asks.header")
-        .w_full()
-        .child(from)
-        .children(seed)
+        .children(snoozable.map(|_| snooze_button(snoozed, &item.from, t)))
+        .children(open_seed)
 }
 
 /// What the asker is doing, as the ask's header says it beside its name.
@@ -533,7 +539,7 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
     blocks.push(Block::custom(
         "asks.subject.block",
         prose.text(
-            words(ask.subject.clone(), Type::Heading, t.text_primary)
+            words(ask.subject.clone(), Type::PageTitle, t.text_primary)
                 .key("asks.subject")
                 .role("heading")
                 .selectable(true)
@@ -637,6 +643,14 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
             }
         }
         None => {
+            let on_note: Vec<&attach::File> = draft
+                .into_iter()
+                .flat_map(|d| d.files_on(&Stop::Note))
+                .collect();
+            if !super::note_open(state, ask) {
+                blocks.push(Block::custom("asks.note.block", note_closed(&ask.id, t)));
+                return with_errors(state, ask, draft, blocks, t);
+            }
             let (id, pressed) = (ask.id.clone(), ask.id.clone());
             blocks.push(Block::custom(
                 "asks.note.block",
@@ -652,16 +666,23 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
                     super::activate(state, &pressed, Stop::Note)
                 }),
             ));
-            let on_note: Vec<&attach::File> = draft
-                .into_iter()
-                .flat_map(|d| d.files_on(&Stop::Note))
-                .collect();
             blocks.push(Block::custom(
                 "asks.files.block",
                 drafted_files(&ask.id, &on_note, t),
             ));
         }
     }
+    with_errors(state, ask, draft, blocks, t)
+}
+
+/// The ask's blocks, then why the daemon refused its answer or its draft's save, if it did.
+fn with_errors(
+    state: &State,
+    ask: &Ask,
+    draft: Option<&super::Draft>,
+    mut blocks: Vec<Block>,
+    t: &Tokens,
+) -> Vec<Block> {
     let refused = state
         .window
         .asks
@@ -694,18 +715,23 @@ fn open_agent(session: &Session, from: &str, t: &Tokens) -> El {
         "asks.open-agent",
         "Open agent",
         &format!("Open {from} (o)"),
+        glyph::POP_OUT,
         t,
         move |state: &mut State, tx: &mut Tx| super::open_agent(state, &id, tx),
     )
 }
 
 fn snooze_button(snoozed: bool, from: &str, t: &Tokens) -> El {
-    let (said, help) = if snoozed {
-        ("Wake", format!("Wake {from} (s)"))
+    let (said, help, mark) = if snoozed {
+        ("Wake", format!("Wake {from} (s)"), glyph::SUNRISE)
     } else {
-        ("Snooze", format!("Snooze {from} and its asks (s)"))
+        (
+            "Snooze",
+            format!("Snooze {from} and its asks (s)"),
+            glyph::MOON,
+        )
     };
-    ask_button(SNOOZE, said, &help, t, super::toggle_snooze)
+    ask_button(SNOOZE, said, &help, mark, t, super::toggle_snooze)
 }
 
 /// What a follow-up ask follows: the earlier ask's subject and when the person answered it, which
@@ -758,21 +784,20 @@ fn follows(state: &State, ask_id: &str, re: &AskThread, prose: &Prose, t: &Token
     }
 }
 
-/// Copy ask, Open agent, Snooze and Open in Garden: what to do with the ask besides answering it.
+/// Copy ask, Open agent, Snooze and Open in Garden: what to do with the ask besides answering it,
+/// each an icon named `said` whose help gives its key.
 fn ask_button(
     key: &str,
     said: &'static str,
     help: &str,
+    mark: impl Into<attn_ui::Glyph>,
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
-    Button::new(said)
-        .size(Size::Compact)
-        .look(Look::Plain)
+    icon_button(key.to_owned(), said, mark, IconSize::Regular)
         .help(help)
         .on_press_tx(press)
         .build(t)
-        .key(key.to_owned())
         .into()
 }
 
@@ -811,7 +836,7 @@ fn question_section(
         .child(words(index.to_string(), Type::Mono, number_ink))
         .child(
             prose.text(
-                words(question.prompt.clone(), Type::Name, t.text_primary)
+                words(question.prompt.clone(), Type::Heading, t.text_primary)
                     .selectable(true)
                     .wrap()
                     .grow(1.0)
@@ -858,28 +883,12 @@ fn question_section(
         ))
         .build(t)
         .map(|section| {
-            let section = section
+            section
                 .a11y_value(if active { "active" } else { "" })
                 .on_press_within(move |state: &mut State, _: &mut Tx| {
                     super::activate(state, &ask_id, Stop::Question(key.clone()))
-                });
-            match active {
-                true => section.child(active_bar(t)),
-                false => section,
-            }
+                })
         })
-}
-
-/// How far left of its question the active question's bar stands, and how wide it is.
-const BAR_LEFT: f32 = 14.0;
-const BAR_W: f32 = 2.0;
-
-fn active_bar(t: &Tokens) -> El {
-    rune::el()
-        .key("asks.active-bar")
-        .pin(Some(-BAR_LEFT), Some(0.0), None, Some(0.0))
-        .w(BAR_W)
-        .fill(t.accent)
 }
 
 /// The key that picks choice `n` of a question, drawn in the active question alone; the
@@ -966,12 +975,10 @@ fn choice_list(
             shown = shown.trailing(cap);
         }
         if recommended {
-            shown = shown.tag(tag(
-                format!("{}.recommended", choice_key(&question.key, i)),
-                "Recommended",
-                Tone::Accent,
-                t,
-            ));
+            shown = shown.tag(
+                words("Recommended", Type::Small, t.accent)
+                    .key(format!("{}.recommended", choice_key(&question.key, i))),
+            );
         }
         El::from(
             shown.build((i, n), t, move |state: &mut State, tx: &mut Tx| {
@@ -1214,17 +1221,44 @@ fn drop_zone(ask: &str, question: &str, files: &[&attach::File], dropping: bool,
         })
 }
 
-/// The files an answer will carry on its note, each with its remove button, then Attach file.
-fn drafted_files(ask: &str, files: &[&attach::File], t: &Tokens) -> El {
+/// The note while nothing is written or attached on it and the keyboard is elsewhere: Add a
+/// note, which opens it, and Attach file.
+fn note_closed(ask: &str, t: &Tokens) -> El {
+    let add = El::from(
+        Button::new("Add a note")
+            .size(Size::Compact)
+            .look(Look::Quiet)
+            .trailing(keycaps(["n"], t))
+            .help("Add a note to your answer (n)")
+            .on_press_tx(|state: &mut State, tx: &mut Tx| {
+                super::open_note(state, tx);
+            })
+            .build(t)
+            .key(ADD_NOTE),
+    )
+    .label("Add a note n");
+    Inline::loose()
+        .key("asks.files")
+        .w_full()
+        .child(add)
+        .child(attach_button(ask, t))
+}
+
+fn attach_button(ask: &str, t: &Tokens) -> El {
     let id = ask.to_owned();
-    let pick = El::from(
+    El::from(
         Button::new("Attach file")
             .size(Size::Compact)
             .look(Look::Plain)
             .on_press_tx(move |_: &mut State, tx: &mut Tx| attach::pick(&id, Stop::Note, tx))
             .build(t)
             .key(ATTACH),
-    );
+    )
+}
+
+/// The files an answer will carry on its note, each with its remove button, then Attach file.
+fn drafted_files(ask: &str, files: &[&attach::File], t: &Tokens) -> El {
+    let pick = attach_button(ask, t);
     let paste = if rune::Platform::current() == rune::Platform::Mac {
         "⌘V pastes a screenshot"
     } else {
@@ -1425,11 +1459,39 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> Block {
             .label(format!("{said} {}", send_chord()))
         }
     };
+    let showing_keys = state.window.asks.keys_shown;
+    let keys = El::from(
+        Button::new("Keys")
+            .size(Size::Compact)
+            .look(Look::Quiet)
+            .chosen(showing_keys)
+            .trailing(keycaps(["?"], t))
+            .help(if showing_keys {
+                "Hide the sheet's keys (?)"
+            } else {
+                "Show the sheet's keys (?)"
+            })
+            .on_press_tx(toggle_keys)
+            .build(t)
+            .key("asks.keys"),
+    )
+    .label("Keys ?");
     let hints_said = hints
         .iter()
         .map(|(keys, said)| format!("{} {said}", keys.join(" ")))
         .collect::<Vec<_>>()
         .join(" · ");
+    let hints = showing_keys.then(|| {
+        Inline::loose()
+            .key("asks.hints")
+            .label(hints_said)
+            .min_w(0.0)
+            .children(
+                hints
+                    .into_iter()
+                    .map(|(keys, said)| keys_hint(keys.iter().copied(), said, t).a11y_hidden()),
+            )
+    });
     Block::custom(
         "asks.footer.block",
         Inline::loose()
@@ -1437,13 +1499,10 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> Block {
             .w_full()
             .child(
                 Inline::loose()
-                    .key("asks.hints")
-                    .label(hints_said)
                     .grow(1.0)
                     .min_w(0.0)
-                    .children(hints.into_iter().map(|(keys, said)| {
-                        keys_hint(keys.iter().copied(), said, t).a11y_hidden()
-                    })),
+                    .child(keys)
+                    .children(hints),
             )
             .children(accept)
             .child(action),
@@ -1531,6 +1590,10 @@ fn follow_up_button(state: &State, ask: &Ask, t: &Tokens) -> El {
     .label(format!("{said} {}", send_chord()))
 }
 
+fn toggle_keys(state: &mut State, _: &mut Tx) {
+    state.window.asks.keys_shown = !state.window.asks.keys_shown;
+}
+
 fn toggle_replied(state: &mut State, tx: &mut Tx) {
     state.window.asks.show_replied = !state.window.asks.show_replied;
     state.tick(tx);
@@ -1581,6 +1644,8 @@ fn sheet_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         "r" => toggle_replied(state, tx),
         "c" if ask.is_some() => super::copy(state, tx),
         "q" => return super::quote(state, tx),
+        "n" => return super::open_note(state, tx),
+        "?" => toggle_keys(state, tx),
         "f" if ask.as_ref().is_some_and(|a| a.reply.is_some()) => super::follow_up(state, tx),
         "a" => match &ask {
             Some(ask) if ask.reply.is_none() && super::recommended(ask).len() > 1 => {

@@ -39,6 +39,10 @@ pub struct Asks {
     /// picked or the one picked is gone.
     pub(crate) selected: Option<String>,
     pub(crate) show_replied: bool,
+    /// The footer lists the sheet's keys, which it otherwise leaves behind its Keys button.
+    pub(crate) keys_shown: bool,
+    /// The ask whose note the person opened with Add a note.
+    pub(crate) noting: Option<String>,
     /// The ask whose "Follows …" line is unfolded to show the earlier answer.
     pub(crate) follows_open: Option<String>,
     pub(crate) drafts: HashMap<String, Draft>,
@@ -182,15 +186,15 @@ fn stop_of(state: &State, ask: &Ask, focused: &str) -> Option<Stop> {
 /// chosen or first choice, the note.
 fn input_of(state: &State, ask: &Ask, stop: &Stop) -> String {
     let Stop::Question(key) = stop else {
-        return view::NOTE.to_owned();
+        return note_input(state, ask);
     };
     let Some(question) = questions(ask).find(|q| &q.key == key) else {
-        return view::NOTE.to_owned();
+        return note_input(state, ask);
     };
     match Kind::of(question) {
         Kind::Text => return view::text_key(key),
         Kind::File => return view::drop_key(key),
-        Kind::Unknown => return view::NOTE.to_owned(),
+        Kind::Unknown => return note_input(state, ask),
         Kind::One | Kind::Any => {}
     }
     let picked = state
@@ -222,13 +226,13 @@ fn controls(state: &State, ask: &Ask, stop: &Stop) -> Vec<String> {
         .flat_map(|d| d.files_on(stop))
         .map(|f| view::remove_file_key(&f.id));
     let Stop::Question(key) = stop else {
-        return std::iter::once(view::NOTE.to_owned())
+        return std::iter::once(note_input(state, ask))
             .chain(removes)
             .chain([view::ATTACH.to_owned()])
             .collect();
     };
     let Some(question) = questions(ask).find(|q| &q.key == key) else {
-        return vec![view::NOTE.to_owned()];
+        return vec![note_input(state, ask)];
     };
     let answer = draft.and_then(|d| d.answers.get(key));
     match Kind::of(question) {
@@ -429,6 +433,34 @@ pub(crate) fn pick(
     if let Some(next) = next {
         enter(state, &found, next, tx);
     }
+}
+
+/// The note of `ask` shows its field: the person opened it, it holds words or files, or the ask
+/// asks no question, so the note is its whole answer. Otherwise it shows Add a note.
+pub(crate) fn note_open(state: &State, ask: &Ask) -> bool {
+    let draft = state.window.asks.drafts.get(&ask.id);
+    state.window.asks.noting.as_deref() == Some(ask.id.as_str())
+        || questions(ask).next().is_none()
+        || draft
+            .is_some_and(|d| !d.note.text.is_empty() || d.files_on(&Stop::Note).next().is_some())
+}
+
+fn note_input(state: &State, ask: &Ask) -> String {
+    if note_open(state, ask) {
+        view::NOTE.to_owned()
+    } else {
+        view::ADD_NOTE.to_owned()
+    }
+}
+
+/// Opens the note of the ask shown and puts the keyboard in it.
+pub(crate) fn open_note(state: &mut State, tx: &mut Tx) -> bool {
+    let Some(ask) = shown_open(state) else {
+        return false;
+    };
+    state.window.asks.noting = Some(ask.id.clone());
+    enter(state, &ask, Stop::Note, tx);
+    true
 }
 
 /// Appends the text selected in the ask shown to its note as `> ` lines, and puts the

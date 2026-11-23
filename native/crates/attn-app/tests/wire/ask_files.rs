@@ -7,7 +7,9 @@ use base64::Engine;
 use rune::{ClipboardContent, ClipboardImage};
 use serde_json::Value;
 
-use super::asks::{api_working, ask, open_sheet, question, start, update_asks, web_waiting};
+use super::asks::{
+    add_note, api_working, ask, open_sheet, question, start, update_asks, web_waiting,
+};
 
 const NOTE: &str = "asks.note.field";
 
@@ -114,6 +116,7 @@ fn pasted_and_dropped_files_ride_on_the_answer_but_a_removed_one_does_not() {
     std::fs::write(&dropped, &report).unwrap();
     open_sheet(&mut world);
 
+    add_note(&mut world);
     paste_into_note(
         &mut world,
         ClipboardContent::new("").with_image(ClipboardImage::from_png(png()).unwrap()),
@@ -193,6 +196,7 @@ fn send_waits_for_a_file_still_uploading_then_sends_it_though_another_ask_shows(
     let mut world = start(vec![shipping(), later], vec![api_working(), web_waiting()]);
     world.daemon.on("attachment_put", |_| Vec::<Value>::new());
     open_sheet(&mut world);
+    add_note(&mut world);
     paste_into_note(
         &mut world,
         ClipboardContent::new("").with_image(ClipboardImage::from_png(png()).unwrap()),
@@ -246,6 +250,7 @@ fn an_ask_closed_while_its_send_waits_on_a_file_leaves_send_working_for_the_next
     world.daemon.on("attachment_put", |_| Vec::<Value>::new());
     world.daemon.on("attachment_discard", discarded);
     open_sheet(&mut world);
+    add_note(&mut world);
     paste_into_note(
         &mut world,
         ClipboardContent::new("").with_image(ClipboardImage::from_png(png()).unwrap()),
@@ -352,6 +357,7 @@ fn a_file_question_takes_what_is_pasted_or_dropped_while_it_is_active_and_sends_
     );
     assert!(tray_in(&world, "asks.files").is_empty());
 
+    add_note(&mut world);
     world.gesture(|app| app.click(Target::key(NOTE)));
     world.gesture(|app| app.runtime.drop_files(vec![notes.clone()], Some(beside)));
     world.settle();
@@ -586,15 +592,15 @@ fn mod_v_of_text_and_an_image_into_a_field_of_the_sheet_types_the_text() {
                 "asks.q.q1.condition.field",
             ][..],
         ),
-        (NOTE, &["asks.q.q3.text.field"][..]),
+        (NOTE, &[][..]),
     ] {
         let mut world = start(vec![three_kinds()], vec![api_working(), web_waiting()]);
         open_sheet(&mut world);
         for &key in presses.iter() {
             world.gesture(|app| app.click(Target::key(key)));
         }
-        while field == NOTE && focused_key(&world).as_deref() != Some(NOTE) {
-            world.gesture(|app| app.press("tab"));
+        if field == NOTE {
+            add_note(&mut world);
         }
         assert_eq!(focused_key(&world).as_deref(), Some(field));
         press_paste(&mut world, ClipboardContent::new("only on Safari"));

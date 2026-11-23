@@ -119,7 +119,8 @@ Cmd+Shift+R (Ctrl+Alt+R on Linux) opens Asks, a sheet in the middle of the
 window, where you answer them without opening the agent's terminal. It opens on
 the ask of the agent on screen, or else on the ask it showed last, and the list
 beside the ask holds the others. Escape, the same keys or a click outside the
-sheet close it. **Open agent** (`o`) and **Open in Garden** (`g`) close the
+sheet close it. **Open agent** (`o`) and **Open in Garden** (`g`), icons at
+the top of the ask beside **Copy ask** (`c`) and **Snooze** (`s`), close the
 sheet and show the agent that asked, or the ask's seed.
 
 Attn types your answer into the agent's conversation as your message. When the ask is about a seed, the answer
@@ -168,8 +169,8 @@ You can select any text of an ask, such as its subject, a paragraph, a question
 or a choice, and copy it with Cmd+C (Ctrl+C on Linux). `c` copies the whole ask
 as the markdown the agent wrote, with its id and the agent that asked.
 
-One question of an ask is active, marked by a bar beside it, and only its
-choices show their numbers. The keys 1–9 pick the choice with that number, and
+One question of an ask is active: its number takes the accent colour, and only
+its choices show their numbers. The keys 1–9 pick the choice with that number, and
 the number after the last choice puts the cursor in **Other**. When you pick
 the answer of a one-choice question, the next question with no pick becomes
 active. The Up and Down arrows move through the active question's controls in
@@ -182,6 +183,10 @@ condition field, Tab visits **Other** first. Past the note, Tab goes on through
 the sheet's buttons. A click in a question makes it active. To quote part of an
 ask in your note, select the text and press `q`, or click **Quote** above the
 selection. The note gets the passage as `> ` lines.
+
+Your note waits behind **Add a note** (or `n`) until you open it, write in it or
+attach a file to it. An ask with no question shows its note open. **Keys** at the
+bottom of the sheet, or `?`, lists every key the sheet takes.
 
 ## Roles
 

@@ -11,7 +11,8 @@ use rune::{ClipboardContent, ClipboardImage};
 use serde_json::Value;
 
 use super::asks::{
-    api_working, ask, checked, field_text, open_sheet, question, start, update_asks, web_waiting,
+    add_note, api_working, ask, checked, field_text, open_sheet, question, start, update_asks,
+    web_waiting,
 };
 
 const NOTE: &str = "asks.note.field";
@@ -123,6 +124,7 @@ fn a_half_written_answer_is_saved_once_writing_pauses_and_comes_back_after_a_rel
     world.gesture(|app| app.type_text("after the eu freeze"));
     world.gesture(|app| app.click(Target::key("asks.q.q3.choice.0")));
     type_into(&mut world, "asks.q.q3.other.field", "soak");
+    add_note(&mut world);
     type_into(&mut world, NOTE, "Ask me before Friday");
     world.gesture(|app| {
         app.runtime.paste_content(
@@ -254,6 +256,7 @@ fn an_answered_or_closed_ask_saves_no_draft() {
     update_asks(&mut world, vec![answered, other.clone()]);
 
     world.gesture(|app| app.click(Target::key("asks.row.a-other")));
+    add_note(&mut world);
     type_into(&mut world, NOTE, "Not yet");
     update_asks(&mut world, vec![]);
     world.advance(Duration::from_millis(400));
@@ -272,6 +275,7 @@ fn a_save_the_daemon_never_answered_is_sent_again_once_it_is_back() {
     let mut world = launched(vec![launch()]);
     world.daemon.on("ask_draft_save", |_| Vec::<Value>::new());
     open_sheet(&mut world);
+    add_note(&mut world);
     type_into(&mut world, NOTE, "Ask me before Friday");
     world.advance(Duration::from_millis(400));
     assert_eq!(saves(&world).len(), 1);
@@ -306,6 +310,7 @@ fn a_refused_save_says_the_draft_was_not_saved_and_the_next_edit_saves_it_again(
         })
     });
     open_sheet(&mut world);
+    add_note(&mut world);
     type_into(&mut world, NOTE, "Ask me before Friday");
     world.advance(Duration::from_millis(400));
     assert_eq!(saves(&world).len(), 1);
@@ -361,6 +366,7 @@ fn the_not_saved_message_stays_through_a_save_with_no_reply_until_the_daemon_tak
         })
     });
     open_sheet(&mut world);
+    add_note(&mut world);
     type_into(&mut world, NOTE, "Ask me before Friday");
     world.advance(Duration::from_millis(400));
     let not_saved = |world: &World| {
@@ -413,6 +419,7 @@ fn a_save_refused_because_the_ask_was_answered_meanwhile_says_nothing() {
         })
     });
     open_sheet(&mut world);
+    add_note(&mut world);
     type_into(&mut world, NOTE, "Too late");
     let mut answered = launch();
     answered.reply = Some(attn_protocol::AskReply::default());
