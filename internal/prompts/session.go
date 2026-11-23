@@ -3,6 +3,7 @@ package prompts
 import (
 	"embed"
 	"io/fs"
+	"slices"
 	"strconv"
 	"sync"
 )
@@ -63,6 +64,14 @@ var attnMapRows = []attnMapRow{
 	{"settings", []string{"settings"}},
 }
 
+func attnMapFamilies(rows []attnMapRow) []string {
+	var families []string
+	for _, row := range rows {
+		families = append(families, row.families...)
+	}
+	return families
+}
+
 func attnMapTable(rows []attnMapRow, launch bool) []Node {
 	nodes := make([]Node, 0, len(rows))
 	for _, row := range rows {
@@ -82,11 +91,13 @@ func attnMapNode(launch bool) Node {
 		bullets = []Node{cliTeaching(bullets[0], "skill"), cliTeaching(bullets[1], "guide")}
 	}
 	parts := append([]Node{head}, bullets...)
-	parts = append(parts, attnMapPart("table"))
-	parts = append(parts, attnMapTable(attnMapRows, launch)...)
-	if launch {
-		parts = append(parts, When(Enabled(codeReviewEnabled), Join("", attnMapTable([]attnMapRow{{"review", []string{"review"}}, {"nav", []string{"nav"}}}, true)...)))
+	if !launch {
+		return Trim(Join("", append(append(parts, attnMapPart("table")), attnMapTable(attnMapRows, false)...)...))
 	}
+	reviewRows := []attnMapRow{{"review", []string{"review"}}, {"nav", []string{"nav"}}}
+	parts = append(parts, cliTeaching(attnMapPart("table"), attnMapFamilies(append(slices.Clone(attnMapRows), reviewRows...))...))
+	parts = append(parts, attnMapTable(attnMapRows, true)...)
+	parts = append(parts, When(Enabled(codeReviewEnabled), Join("", attnMapTable(reviewRows, true)...)))
 	return Trim(Join("", parts...))
 }
 
@@ -126,7 +137,7 @@ var session = Recipient{
 				agentGuidance,
 				When(Enabled(gardenAvailable), Compose(gardenRules, cliTeaching(gardenCLI, "seed"))),
 				cliTeaching(queueGuidance, "turn", "agent"),
-				When(Enabled(asksEnabled), cliTeaching(askGuidance, "ask")),
+				When(Enabled(asksEnabled), Compose(askRules, cliTeaching(askCLI, "ask"))),
 				When(Enabled(ventEnabled), cliTeaching(ventGuidance, "vent")),
 				When(Enabled(selfReportPullRequests), cliTeaching(pullRequestGuidance, "pr")),
 			)),

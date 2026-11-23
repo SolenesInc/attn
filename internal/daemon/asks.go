@@ -122,7 +122,7 @@ func (d *Daemon) askThread(sessionID protocol.SessionID, earlierID string) (*pro
 		return nil, err
 	}
 	if d.askReach(sessionID, d.askAddressHeldBy(sessionID), earlier) == askOutOfReach {
-		return nil, protocol.Refuse(protocol.RefusalInvalidInput, "%s is not an ask of this session or of an agent it oversees, so a new ask cannot follow it; ask without --re", earlierID)
+		return nil, protocol.Refuse(protocol.RefusalInvalidInput, "%s is not an ask of this session or of an agent it oversees, so a new ask cannot follow it; ask without naming an earlier ask", earlierID)
 	}
 	thread := &protocol.AskThread{AskID: earlier.stored.ID, Subject: protocol.Ptr(earlier.stored.Subject)}
 	if reply := earlier.wire.Reply; reply != nil {
@@ -241,9 +241,9 @@ func (d *Daemon) askAddressOf(session *protocol.Session, ref string) (who.Addres
 		return to, nil
 	}
 	if !seed.Tender.IsZero() {
-		return who.Address{}, fmt.Errorf("%s is being tended by %s, and an ask is about a seed you tend; ask without --seed", seed.ID, d.partyName(seed.Tender))
+		return who.Address{}, fmt.Errorf("%s is being tended by %s, and an ask is about a seed you tend; ask without naming a seed", seed.ID, d.partyName(seed.Tender))
 	}
-	return who.Address{}, protocol.Refuse(protocol.RefusalWrongState, "nobody is tending %s, and an ask is about a seed you tend; tend it first ({attn seed tend %s}), or ask without --seed", seed.ID, seed.ID)
+	return who.Address{}, protocol.Refuse(protocol.RefusalWrongState, "nobody is tending %s, and an ask is about a seed you tend; tend it first ({attn seed tend %s}), or ask without naming a seed", seed.ID, seed.ID)
 }
 
 func (d *Daemon) openStake(sessionID protocol.SessionID) string {

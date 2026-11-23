@@ -109,10 +109,26 @@
                         ]
                       },
                       {
-                        "kind": "text",
-                        "id": "session.attn-map.table",
-                        "source": "content/session/attn-map/table.md",
-                        "keep_final_newline": true
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map.table",
+                            "source": "content/session/attn-map/table.md",
+                            "keep_final_newline": true
+                          }
+                        ]
                       },
                       {
                         "kind": "choose",
@@ -650,23 +666,53 @@
                 },
                 "children": [
                   {
-                    "kind": "choose",
-                    "condition": {
-                      "field": {
-                        "name": "agent_tools",
-                        "kind": "flag",
-                        "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
-                      },
-                      "test": "enabled"
-                    },
+                    "kind": "compose",
                     "children": [
                       {
-                        "kind": "compose"
+                        "kind": "text",
+                        "id": "ask.rules",
+                        "source": "content/ask/rules.md",
+                        "bindings": [
+                          {
+                            "name": "visuals",
+                            "node": {
+                              "kind": "text",
+                              "id": "ask.visuals",
+                              "source": "content/ask/visuals.md"
+                            }
+                          }
+                        ]
                       },
                       {
-                        "kind": "text",
-                        "id": "ask.guidance",
-                        "source": "content/ask/guidance.md"
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "ask.cli",
+                            "source": "content/ask/cli.md",
+                            "bindings": [
+                              {
+                                "name": "example",
+                                "node": {
+                                  "kind": "text",
+                                  "id": "ask.example",
+                                  "source": "content/ask/example.md"
+                                }
+                              }
+                            ]
+                          }
+                        ]
                       }
                     ]
                   }
@@ -5657,13 +5703,43 @@
       "description": "Asks: questions an agent asks the user through attn, and the answers that come back.",
       "events": [
         {
-          "id": "guidance",
+          "id": "rules",
           "delivery": "message_fragment",
-          "description": "Launch guidance for a session that launched with asks.",
+          "description": "Launch guidance for every session that launched with asks, whether it asks through attn's tools or the CLI: when to ask, how to write for a cold reader, and which visual to show.",
           "body": {
             "kind": "text",
-            "id": "ask.guidance",
-            "source": "content/ask/guidance.md"
+            "id": "ask.rules",
+            "source": "content/ask/rules.md",
+            "bindings": [
+              {
+                "name": "visuals",
+                "node": {
+                  "kind": "text",
+                  "id": "ask.visuals",
+                  "source": "content/ask/visuals.md"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "cli",
+          "delivery": "message_fragment",
+          "description": "Launch guidance for a session that launched with asks and asks through the CLI: the attn ask syntax with a worked example.",
+          "body": {
+            "kind": "text",
+            "id": "ask.cli",
+            "source": "content/ask/cli.md",
+            "bindings": [
+              {
+                "name": "example",
+                "node": {
+                  "kind": "text",
+                  "id": "ask.example",
+                  "source": "content/ask/example.md"
+                }
+              }
+            ]
           }
         },
         {
@@ -8068,5 +8144,5 @@
       ]
     }
   ],
-  "definitions_hash": "e49006461da8e3308a9924be4e70b21ac13edbcb8386bec3fef5ea2891e07009"
+  "definitions_hash": "5ec64fc795cfb185afa976b76e24e992a8317848c3d6a4c84461bcade1b36063"
 }

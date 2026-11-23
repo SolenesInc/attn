@@ -1,9 +1,10 @@
 package prompts
 
 var (
-	askGuidance = Use("ask.guidance", "content/ask/guidance.md")
-	askVisuals  = Use("ask.visuals", "content/ask/visuals.md")
-	askExample  = Use("ask.example", "content/ask/example.md")
+	askVisuals = Use("ask.visuals", "content/ask/visuals.md")
+	askExample = Use("ask.example", "content/ask/example.md")
+	askRules   = Use("ask.rules", "content/ask/rules.md", Bind("visuals", askVisuals))
+	askCLI     = Use("ask.cli", "content/ask/cli.md", Bind("example", askExample))
 )
 
 func askRecipient() Recipient {
@@ -46,7 +47,8 @@ func askRecipient() Recipient {
 		Bind("ask_id", Input(text("ask_id", "Ask ID."))),
 		Bind("text", Input(text("text", "The user's follow-up, quoted by the adapter."))))
 	return Recipient{ID: "ask", Description: "Asks: questions an agent asks the user through attn, and the answers that come back.", Events: []Event{
-		On("guidance", "message_fragment", "Launch guidance for a session that launched with asks.", askGuidance),
+		On("rules", "message_fragment", "Launch guidance for every session that launched with asks, whether it asks through attn's tools or the CLI: when to ask, how to write for a cold reader, and which visual to show.", askRules),
+		On("cli", "message_fragment", "Launch guidance for a session that launched with asks and asks through the CLI: the attn ask syntax with a worked example.", askCLI),
 		On("visuals", "message_fragment", "Which visual shows what a decision turns on, for the ask tool's description and attn ask --help.", askVisuals),
 		On("example", "message_fragment", "A worked ask's markdown, for the ask tool's description and attn ask --help.", askExample),
 		On("answer", "inbox_content", "The user's answer, typed into the conversation of the ask's addressee: the seed's tender, or the asking agent when the ask is about no seed. A seed also keeps it as a note. The adapter validates answers against the ask.", reply),

@@ -6,9 +6,10 @@ over long ones, and a sketch wherever it says more than the sentences it
 replaces. Pick the smallest view that makes the key point clear, and
 skip the preamble.
 
-A seed and a markdown file render markdown and Mermaid. A reply in the terminal
-conversation shows plain text, so draw pictures there as text and use Mermaid
-only in a seed or a markdown file.
+A seed, a markdown file and an ask to the user render markdown and Mermaid, and
+an ask also shows local screenshots. A reply in the terminal conversation shows
+plain text, so draw pictures there as text and use Mermaid only in a seed, a
+markdown file or an ask.
 
 - Show logic or an algorithm as pseudocode:
 
@@ -49,7 +50,7 @@ src/
 └── transport/      # sends API requests
 ```
 
-- In a seed or a markdown file, show component interaction, control flow, or data flow with Mermaid. In a reply in the terminal, draw the same as labeled arrows or a text sequence:
+- In a seed, a markdown file or an ask, show component interaction, control flow, or data flow with Mermaid. In a reply in the terminal, draw the same as labeled arrows or a text sequence:
 
 ```mermaid
 sequenceDiagram

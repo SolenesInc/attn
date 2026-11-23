@@ -22,7 +22,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-const askGuidanceLead = "ask it with `attn ask`"
+const askGuidanceLead = "open an ask in attn instead of stopping to ask in this conversation"
 
 const cacheAsk = `Deploys empty the cache.
 
@@ -537,17 +537,6 @@ func TestAsksBelongToTheAskingSessionsProfile(t *testing.T) {
 	testworld.Await(app, protocol.EventAsksUpdated, only(side.ID, sideAsk.ID))
 	if shown := w.AppOn(home).Initial.Asks; len(shown) != 1 || shown[0].ID != homeAsk.ID {
 		t.Fatalf("the home profile starts with %+v, want only its own ask", shown)
-	}
-}
-
-func TestEachHarnessLaunchedWithAsksIsTaughtThem(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
-	app := w.App()
-	setSetting(t, app, "asks_enabled", "true")
-	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
-		if guidance := launchGuidance(t, w, w.Launched(w.Spawn(app, h, w.Path(string(h))))); !strings.Contains(guidance, askGuidanceLead) {
-			t.Errorf("%s launched with asks on was not taught them:\n%s", h, guidance)
-		}
 	}
 }
 

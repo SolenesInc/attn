@@ -55,6 +55,9 @@ func TestALaunchThatCarriesTheToolsLeavesTheirFamiliesCLITeachingToTheServer(t *
 				t.Errorf("%s launched without %q, which no tool teaches yet", launch, kept)
 			}
 		}
+		if header := strings.Contains(text, "| When you need to | Run | Reference |"); header == taught {
+			t.Errorf("%s launched with the attn map's table header %t, want it only while a row of the table is left:\n%s", launch, header, text)
+		}
 		if dropped := !strings.Contains(text, "Use `attn agent msg` to reach sessions attn runs."); dropped != taught {
 			t.Errorf("%s left out the agent and session families' CLI teaching: %t, want %t:\n%s", launch, dropped, taught, text)
 		}
@@ -85,4 +88,73 @@ func TestASharedServerViewTakesTheServersTeachingOnlyWhileTheServerHoldsTheTools
 	if refused := spawnToolsServerView(w, app, driver); refused.tools != nil || !taught(refused) {
 		t.Errorf("a view of a server that refused attn's MCP server launched with agent_tools %+v and the garden's CLI teaching %t, want no tools and the teaching:\n%s", refused.tools, taught(refused), refused.instructions)
 	}
+}
+
+const (
+	askVisualsTeaching = "draw a compact `mermaid` code block"
+	askInlineTeaching  = "take inline markdown only"
+	askCLITeaching     = "Pipe the ask as markdown to `attn ask`"
+)
+
+func askSection(launch string) string {
+	_, section, found := strings.Cut(launch, "## Asking the user")
+	if !found {
+		return ""
+	}
+	if end := strings.Index(section, "\n## "); end >= 0 {
+		section = section[:end]
+	}
+	return section
+}
+
+func TestEveryLaunchWithAsksTeachesTheirRulesAndVisualsAndLeavesTheCLIToLaunchesWithoutTheTools(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex, fakeagent.Sigma)
+	app := w.App()
+	setSetting(t, app, "asks_enabled", "true")
+	offerAppServer(t, w, app, fakeagent.Sigma)
+	withTools := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"launch_instructions": true, "agent_tools": true, "resume": true})
+	awaitDriverAvailable(app, "snipe")
+	withoutTools := connectDriver(t, w, "plain-plugin", "plain", map[string]bool{"launch_instructions": true, "resume": true})
+	awaitDriverAvailable(app, "plain")
+
+	launches := func() map[string]string {
+		_, snipe := spawnDriven(w, app, withTools, w.Path("shop"))
+		_, plain := spawnDriven(w, app, withoutTools, w.Path("shop"))
+		sigmaRun := w.Launched(w.Spawn(app, fakeagent.Sigma, w.Path("shop")))
+		return map[string]string{
+			"claude":                      launchGuidance(t, w, w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("shop")))),
+			"shared codex":                launchGuidance(t, w, w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("shop")))),
+			"sigma":                       w.AppServer(fakeagent.Sigma).Started(sigmaRun.ConversationID).Instructions,
+			"a plugin that takes tools":   snipe.Instructions.Content,
+			"a plugin that takes no tool": plain.Instructions.Content,
+		}
+	}
+	check := func(toolsOn bool) {
+		t.Helper()
+		for launch, text := range launches() {
+			section := askSection(text)
+			for _, rule := range []string{askGuidanceLead, askVisualsTeaching, askInlineTeaching} {
+				if !strings.Contains(section, rule) {
+					t.Errorf("with agent_tools_enabled %t, %s launched without the ask rule %q:\n%s", toolsOn, launch, rule, section)
+				}
+			}
+			carried := toolsOn && launch != "a plugin that takes no tool"
+			if taught := strings.Contains(section, askCLITeaching); taught == carried {
+				t.Errorf("with agent_tools_enabled %t, %s launched with the ask CLI teaching %t, want it only without attn's tools:\n%s", toolsOn, launch, taught, section)
+			}
+			if !carried {
+				continue
+			}
+			for _, cliWord := range []string{"attn ask", "--re", "--seed", "--help"} {
+				if strings.Contains(section, cliWord) {
+					t.Errorf("%s carries attn's tools, yet its ask guidance says the CLI word %q:\n%s", launch, cliWord, section)
+				}
+			}
+		}
+	}
+
+	check(false)
+	setSetting(t, app, "agent_tools_enabled", "true")
+	w.AppServer(fakeagent.Sigma).AwaitMCPRegistration("attn", true)
+	check(true)
 }
