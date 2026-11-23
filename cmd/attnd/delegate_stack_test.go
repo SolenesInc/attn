@@ -319,6 +319,56 @@ func TestDelegateRolesEditWalkBackAndRestoreTheDaemonsTable(t *testing.T) {
 	requireLines(t, "roles history", roles("history", "--limit", "7"), "revision 7 (live)", "restores 4", "from the CLI", `"the user wants a builder"`, "added role build (claude opus high)")
 }
 
+func TestDelegateRolesApplyTakesATableExportedWhileSelectionsNamedAProvider(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.Start()
+	roles := func(args ...string) string {
+		t.Helper()
+		got := s.Attn(append([]string{"delegate", "roles"}, args...)...)
+		if got.Code != 0 {
+			t.Fatalf("attn delegate roles %q exited %d: %s", args, got.Code, got.Stderr)
+		}
+		return got.Stdout
+	}
+	roles("add", "build", "--name", "Build", "--agent", "claude", "--model", "opus")
+	roles("add", "build/hard", "--when", "Concurrency", "--agent", "codex", "--model", "gpt-5.6-sol")
+	roles("add", "build/named", "--when", "Named", "--agent", "codex", "--model", "openai/gpt-5.6-sol")
+
+	var exported map[string]any
+	s.Attn("delegate", "roles", "show", "--json").JSON(t, &exported)
+	choices := exported["roles"].([]any)[0].(map[string]any)["choices"].([]any)
+	choices[0].(map[string]any)["selection"].(map[string]any)["provider"] = ""
+	choices[1].(map[string]any)["selection"].(map[string]any)["provider"] = "openai"
+	choices[2].(map[string]any)["selection"].(map[string]any)["provider"] = "openai"
+	exported["fallback"].(map[string]any)["selection"].(map[string]any)["provider"] = ""
+	raw, err := json.Marshal(exported)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := s.Path("legacy-roles.json")
+	if err := os.MkdirAll(filepath.Dir(legacy), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacy, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	requireLines(t, "roles apply", roles("apply", legacy), "revision 4", "build/hard: codex gpt-5.6-sol → codex openai/gpt-5.6-sol")
+	var applied protocol.DelegationPreferences
+	s.Attn("delegate", "roles", "show", "--json").JSON(t, &applied)
+	models := []string{}
+	for _, choice := range applied.Roles[0].Choices {
+		models = append(models, choice.Selection.Model)
+	}
+	if want := []string{"opus", "openai/gpt-5.6-sol", "openai/gpt-5.6-sol"}; !slices.Equal(models, want) {
+		t.Errorf("after applying the table with providers, the models are %q, want %q", models, want)
+	}
+	if got := s.Attn("delegate", "roles", "apply", legacy); got.Code == 0 || !strings.Contains(got.Stderr, "the table changed after revision 3") {
+		t.Errorf("applying the table with providers again exited %d with stderr %q, want a refusal naming revision 3", got.Code, got.Stderr)
+	}
+}
+
 func TestDelegateRolesInstallAddsAttnRolesBesideCustomOnesOnce(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex))

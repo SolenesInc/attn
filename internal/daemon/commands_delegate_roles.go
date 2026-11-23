@@ -189,7 +189,7 @@ func (d *Daemon) runDelegateRolesInstall(ctx context.Context, c command.Caller, 
 
 func (d *Daemon) runDelegateRolesApply(ctx context.Context, c command.Caller, a command.DelegateRolesApplyArgs) (any, error) {
 	var table protocol.DelegationPreferences
-	decoder := json.NewDecoder(bytes.NewReader(a.Table))
+	decoder := json.NewDecoder(bytes.NewReader(withProvidersFoldedIntoModels(a.Table)))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&table); err != nil {
 		return nil, command.Refuse("not_a_table", "read the table: %v; the table takes the fields {attn delegate roles show --json} prints", err)
@@ -206,6 +206,44 @@ func (d *Daemon) runDelegateRolesApply(ctx context.Context, c command.Caller, a 
 		return nil, err
 	}
 	return delegateRolesChange(saved, nil, a.Render), nil
+}
+
+func withProvidersFoldedIntoModels(raw []byte) []byte {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var table map[string]any
+	if decoder.Decode(&table) != nil {
+		return raw
+	}
+	roles, _ := table["roles"].([]any)
+	for _, role := range roles {
+		role, _ := role.(map[string]any)
+		choices, _ := role["choices"].([]any)
+		for _, choice := range choices {
+			choice, _ := choice.(map[string]any)
+			foldProviderIntoModel(choice["selection"])
+		}
+	}
+	fallback, _ := table["fallback"].(map[string]any)
+	foldProviderIntoModel(fallback["selection"])
+	folded, err := json.Marshal(table)
+	if err != nil {
+		return raw
+	}
+	return folded
+}
+
+func foldProviderIntoModel(selection any) {
+	fields, _ := selection.(map[string]any)
+	provider, isString := fields["provider"].(string)
+	if !isString {
+		return
+	}
+	delete(fields, "provider")
+	model, _ := fields["model"].(string)
+	if provider != "" && model != "" && !strings.HasPrefix(model, provider+"/") {
+		fields["model"] = provider + "/" + model
+	}
 }
 
 func (d *Daemon) editDelegationRoles(message string, render bool, edit delegationRolesEdit) (any, error) {
