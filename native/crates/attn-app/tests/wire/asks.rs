@@ -1881,7 +1881,20 @@ fn a_picture_in_an_ask_runs_wider_than_its_lines_and_centred_with_them() {
         "api",
         "Cache store",
         30,
-        vec![prose("The banner overlaps:\n\n![banner](shots/banner.png)")],
+        vec![
+            prose("The banner overlaps:\n\n![banner](shots/banner.png)"),
+            AskPart {
+                question: Some(AskQuestion {
+                    key: "q1".into(),
+                    kind: "one".into(),
+                    prompt: "Ship it?".into(),
+                    context: Some("As it shows now:\n\n![now](shots/now.png)".into()),
+                    choices: vec![choice("Yes"), choice("No")],
+                    ..AskQuestion::default()
+                }),
+                ..AskPart::default()
+            },
+        ],
     );
     shot.base_dir = "/tmp/api".into();
     let mut world = start(vec![shot], vec![api_working()]);
@@ -1898,20 +1911,27 @@ fn a_picture_in_an_ask_runs_wider_than_its_lines_and_centred_with_them() {
     open_sheet(&mut world);
     world.settle();
 
-    let picture = world
-        .screen()
-        .bounds(Target::role("image").name("banner"))
-        .map(|r| r.map(f64::from))
-        .expect("the picture shows");
     let subject = world.rect("asks.subject.block");
     let middle = |r: [f64; 4]| r[0] + r[2] / 2.0;
     assert_eq!(subject[2], 620.0, "the ask's lines");
-    assert_eq!(picture[2], 980.0, "the picture: {picture:?}");
-    assert_eq!(
-        middle(picture),
-        middle(subject),
-        "the picture centred on the lines"
-    );
+    for name in ["banner", "now"] {
+        let picture = world
+            .screen()
+            .bounds(Target::role("image").name(name))
+            .map(|r| r.map(f64::from))
+            .expect("the picture shows");
+        assert_eq!(picture[2], 980.0, "the picture {name}: {picture:?}");
+        assert_eq!(
+            middle(picture),
+            middle(subject),
+            "{name} centred on the lines"
+        );
+    }
+    for key in ["asks.q.q1.prompt", "asks.q.q1.choices"] {
+        let line = world.rect(key);
+        assert!(line[2] <= 620.0, "{key} on the ask's lines: {line:?}");
+        assert_eq!(line[0], subject[0], "{key} starts on the ask's column");
+    }
 }
 
 #[test]

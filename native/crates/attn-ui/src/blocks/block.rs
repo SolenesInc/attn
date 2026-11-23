@@ -77,15 +77,20 @@ impl Block {
         Block { wide: true, ..self }
     }
 
-    /// The block at most `text` wide, or `wide` when it is wide, centred in its column.
-    pub(crate) fn measured(self, text: f32, wide: f32) -> Block {
-        let most = if self.wide { wide } else { text };
+    /// The block at most `text` wide, or when it is wide at most `wide` or its column's width,
+    /// centred in its column.
+    pub(crate) fn measured(self, text: f32, wide: Option<f32>) -> Block {
         let el = match self.slot {
             Some(key) => col().key(key).w_full().child(self.el),
             None => self.el,
         };
+        let el = match (self.wide, wide) {
+            (false, _) => el.w_full().max_w(text),
+            (true, Some(wide)) => el.w_full().max_w(wide),
+            (true, None) => el.w_full(),
+        };
         Block {
-            el: el.w_full().max_w(most).self_center(),
+            el: el.self_center(),
             slot: None,
             ..self
         }

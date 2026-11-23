@@ -877,6 +877,7 @@ fn question_section(
                 format!("asks.q.{}.context", question.key),
                 prose.markdown(c).w_full(),
             )
+            .wide()
         });
     let body = match kind {
         Kind::Text => written(ask, question, &answer, t),
@@ -898,7 +899,12 @@ fn question_section(
         .wrap(),
     };
     let (ask_id, key) = (ask.to_owned(), question.key.clone());
-    Section::new(format!("asks.q.{}", question.key), question.prompt.clone())
+    let section = Section::new(format!("asks.q.{}", question.key), question.prompt.clone());
+    let section = match prose.measure {
+        Some(points) => section.measure(points),
+        None => section,
+    };
+    section
         .heading(heading)
         .push_all(context)
         .push(Block::custom(
@@ -913,6 +919,7 @@ fn question_section(
                     super::activate(state, &ask_id, Stop::Question(key.clone()))
                 })
         })
+        .wide()
 }
 
 /// The key that picks choice `n` of a question, drawn in the active question alone; the

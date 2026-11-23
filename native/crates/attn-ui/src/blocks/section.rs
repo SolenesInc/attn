@@ -17,6 +17,7 @@ pub struct Section {
     controls: Vec<El>,
     found_as: FoundAs,
     reachable: bool,
+    measure: Option<f32>,
     blocks: Vec<Block>,
 }
 
@@ -38,8 +39,17 @@ impl Section {
             controls: Vec::new(),
             found_as: FoundAs::Group,
             reachable: false,
+            measure: None,
             blocks: Vec::new(),
         }
+    }
+
+    /// Its heading and blocks run at most `text` wide, centred, and its wide blocks
+    /// ([`Block::wide`]) across it: a section read at a page's measure whose pictures want more
+    /// room, such as an ask's question. Such a section is itself wide on its page.
+    pub fn measure(mut self, text: f32) -> Self {
+        self.measure = Some(text);
+        self
     }
 
     /// The title as its feature builds it, such as a question whose words link to what they
@@ -143,13 +153,23 @@ impl Section {
                     .max_w(READING)
             }),
         );
+        let (head, blocks) = match self.measure {
+            Some(text) => (
+                head.max_w(text).self_center(),
+                self.blocks
+                    .into_iter()
+                    .map(|block| block.measured(text, None))
+                    .collect(),
+            ),
+            None => (head, self.blocks),
+        };
         let section = col()
             .key(self.key)
             .role(role)
             .label(label)
             .w_full()
             .child(head)
-            .children((!self.blocks.is_empty()).then(|| spaced(self.blocks, inner_gap, None)));
+            .children((!blocks.is_empty()).then(|| spaced(blocks, inner_gap, None)));
         Block::new(Kind::Section, door::gap(section, Space::S12))
     }
 }

@@ -264,7 +264,7 @@ impl Sheet {
                     Some((text, wide)) => self
                         .blocks
                         .into_iter()
-                        .map(|block| block.measured(text, wide))
+                        .map(|block| block.measured(text, Some(wide)))
                         .collect(),
                     None => self.blocks,
                 };
