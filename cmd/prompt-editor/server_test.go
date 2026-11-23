@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
+	"io"
 	"io/fs"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -186,5 +190,71 @@ func TestCatalogAllowsRepairingInvalidMarkdown(t *testing.T) {
 	e.ServeHTTP(w, httptest.NewRequest("GET", "http://127.0.0.1:1234/api/catalog", nil))
 	if w.Code != 200 || !strings.Contains(w.Body.String(), "missing bindings") {
 		t.Fatalf("catalog: %d %s", w.Code, w.Body)
+	}
+}
+
+func TestSecondEditorPrintsTheRunningEditorAndLeavesItServing(t *testing.T) {
+	e := testEditor(t)
+	ctx, stop := context.WithCancel(t.Context())
+	output, writer := io.Pipe()
+	served := make(chan int)
+	go func() {
+		served <- runCLI(ctx, []string{"--repo", e.repo, "serve"}, nil, writer, io.Discard)
+		writer.Close()
+	}()
+	lines := bufio.NewScanner(output)
+	if !lines.Scan() {
+		t.Fatal("the first editor printed nothing")
+	}
+	address, ok := strings.CutPrefix(lines.Text(), "Prompt editor: ")
+	if !ok {
+		t.Fatalf("first editor: %q", lines.Text())
+	}
+	go func() {
+		for lines.Scan() {
+		}
+	}()
+
+	secondOutput, secondWriter := io.Pipe()
+	secondDone := make(chan int, 1)
+	go func() {
+		secondDone <- runCLI(ctx, []string{"--repo", e.repo, "serve"}, nil, secondWriter, io.Discard)
+		secondWriter.Close()
+	}()
+	second := bufio.NewScanner(secondOutput)
+	second.Scan()
+	if second.Text() != "Prompt editor already running: "+address+"/" {
+		stop()
+		t.Fatalf("second editor: %q", second.Text())
+	}
+	for second.Scan() {
+	}
+	if code := <-secondDone; code != 0 {
+		t.Fatalf("second editor exited %d", code)
+	}
+
+	path := "content/crew/v2/new-session.md"
+	disk, _ := e.root.ReadFile(path)
+	text := string(disk) + "\nSaved through the running editor.\n"
+	body, _ := json.Marshal(saveRequest{Files: []saveFile{{path, text, revision(disk)}}})
+	save, _ := http.NewRequest("POST", address+"/api/save", bytes.NewReader(body))
+	save.Header.Set("X-Prompt-Editor", "1")
+	save.Header.Set("Origin", address)
+	response, err := http.DefaultClient.Do(save)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var answer saveResponse
+	if response.StatusCode != 200 || json.NewDecoder(response.Body).Decode(&answer) != nil || answer.Saved[path] != revision([]byte(text)) {
+		t.Fatalf("save through the running editor: %d %+v", response.StatusCode, answer)
+	}
+	if now, _ := e.root.ReadFile(path); string(now) != text {
+		t.Fatalf("%s on disk is %q", path, now)
+	}
+
+	stop()
+	if code := <-served; code != 0 {
+		t.Fatalf("first editor exited %d", code)
 	}
 }

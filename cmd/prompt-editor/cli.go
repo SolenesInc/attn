@@ -333,7 +333,8 @@ A maintainer tool for the checkout's prompt catalog. Omitting the command starts
 Every operation supports --repo PATH and --json. --values accepts - for stdin.
 Start prompt changes with context. Read its workflow and complete instructions before editing.
 
-  serve [--port N] [--base REF]           start the browser editor; --base is the diff's default branch
+  serve [--port N] [--base REF]           start the browser editor; --base is the diff's default branch;
+                                         when one already serves this checkout, print its link and exit 0
   show [RECIPIENT/EVENT] [--open]         print the running editor's link to an event
   show --situation ID [--open]            print the running editor's link to a situation
   authoring                              read the prompt revision workflow

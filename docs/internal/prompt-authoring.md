@@ -91,9 +91,10 @@ go run ./cmd/prompt-editor show crew/new-session --open
 
 `show` prints the URL of a situation or an event, and `--open` opens the
 browser. Prefer a situation: the page then shows everything the agent receives,
-in delivery order. Reuse the editor for this checkout. If `show` reports that no
-editor is running, start `make prompt-editor` in a persistent terminal, then
-retry. Keep the editor running while the user reviews.
+in delivery order. A checkout has one editor: starting another prints the
+running editor's URL and exits. If `show` reports that no editor is running,
+start `make prompt-editor` in a persistent terminal, then retry. Keep the
+editor running while the user reviews.
 
 The page shows the composed prompt as one document. Each fragment is the text a
 definition takes from a source file, usually the whole file and sometimes one
