@@ -1,0 +1,1 @@
+The prompt editor's Sheet keeps the stale-definitions warning and its Refresh when a source path renamed in Go and the moved Markdown file make the old catalog fail to read. Failed catalog and page reads now carry freshness, so an open page keeps recovery and a fresh tab opens with Refresh instead of a dead page.
