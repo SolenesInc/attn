@@ -1,0 +1,1 @@
+Fixes a P1 from the main review of the asks sheet (`review-a9e4b76e-asks-sheet`). Clearing a note that had opened on its own, from a restored draft or a quote, hid the note and lost what you typed next. The note now stays open on its ask once you have been in it.
