@@ -1,0 +1,12 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Clearing a note that opened on its own hides it and loses keystrokes",
+  "at": "2026-11-23T12:50:48.108Z",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/asks/mod.rs"
+  },
+  "culprit": "3264856fed3632a4afbdde5f1a022287cf4e02c5"
+}
