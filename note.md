@@ -1,0 +1,1 @@
+A Sigma session's tile now follows `/fork` (including chained `/fork`s) to a new session while leaving the forked-from session open and hidden, with its title, usage, recent files, and pull requests starting at the fork (`s-e7jfjm`). Outpost succession also preserves `lifetime` so server-linked sessions on outposts keep their server feed and delivery after `/fork` or `/new`.
