@@ -255,7 +255,7 @@ func TestMessagingACrewMemberReachesItsDayWakingItIfNeeded(t *testing.T) {
 	}
 	trellisDay := w.Launched(string(first.TargetSessionID))
 	second := sendAgentMessage(t, cli, sender, "trellis", "and the flaky test")
-	if second.Status != protocol.AgentMsgStatusQueued || second.TargetSessionID != first.TargetSessionID {
+	if second.Status != protocol.AgentMsgStatusQueued || !strings.Contains(second.Detail, "started Trellis") || second.TargetSessionID != first.TargetSessionID {
 		t.Fatalf("a message while Trellis wakes = %+v, want it queued behind the same day", second)
 	}
 	wake := trellisDay.Prompted()

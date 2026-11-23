@@ -335,7 +335,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 						return receipt, err
 					}
 				}
-				receipt.Detail = fmt.Sprintf("started %s in session %s; notification queued until it reaches a safe prompt", d.crewMemberName(member), shortSessionID(result.SessionID))
+				receipt.Detail = d.memberStartQueuedDetail(member, result.SessionID)
 				return receipt, nil
 			}
 			if seedID, seed := a.TenderOf(); seed {
@@ -450,6 +450,9 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		}
 	}
 	receipt.Detail = agentMessageQueuedDetail(placement.Err)
+	if receipt.Detail == queuedNotTakingInput && finishingStart && memberID != "" {
+		receipt.Detail = d.memberStartQueuedDetail(memberID, holder.ID)
+	}
 	delay, retry := sessionmonitor.RetryDelay(placement.Err)
 	if retry {
 		d.armInboxLocked(a, state, delay)
@@ -579,6 +582,9 @@ func (d *Daemon) logInboxExhaustion(a who.Address) {
 	if err == nil && attempt.Unread > 0 && attempt.Live == 0 {
 		d.logf("inbox: stopped ringing %s after %d attempts (inbox.MaxAttempts=%d); %d unread wait for a read or a new item", a, inbox.MaxAttempts, inbox.MaxAttempts, attempt.Unread)
 	}
+}
+func (d *Daemon) memberStartQueuedDetail(memberID string, sessionID protocol.SessionID) string {
+	return fmt.Sprintf("started %s in session %s; notification queued until it reaches a safe prompt", d.crewMemberName(memberID), shortSessionID(sessionID))
 }
 func (d *Daemon) armInboxLocked(a who.Address, state *inboxDeliveryState, delay time.Duration) {
 	if state.timer != nil {
