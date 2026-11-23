@@ -92,6 +92,7 @@ type serverView struct {
 	args         parsedArgs
 	client       *effectrpc.Client
 	conversation string
+	stopShowing  context.CancelFunc
 }
 
 func (n *serverView) launch() launch {
@@ -138,7 +139,38 @@ func (n *serverView) begin(*terminal) error {
 		}
 		start["mcpServers"] = []ServerMCPServer{{Name: name, Description: description}}
 	}
-	return n.call("conversation/start", start)
+	if err := n.call("conversation/start", start); err != nil {
+		return err
+	}
+	return n.show()
+}
+
+// show says the view shows its conversation, as Sigma's TUI does once it opens one, until it moves on.
+func (n *serverView) show() error {
+	if n.flavor.harness != Sigma {
+		return nil
+	}
+	if n.stopShowing != nil {
+		n.stopShowing()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	n.stopShowing = cancel
+	reported := make(chan struct{})
+	failed := make(chan error, 1)
+	go func() {
+		var once sync.Once
+		failed <- n.client.Stream(ctx, "client/shows", map[string]any{"conversation": n.conversation, "author": n.author()}, func(json.RawMessage) {
+			once.Do(func() { close(reported) })
+		})
+	}()
+	select {
+	case <-reported:
+		return nil
+	case err := <-failed:
+		return err
+	case <-time.After(HangGuard):
+		return errors.New("client/shows was never answered")
+	}
 }
 
 func (n *serverView) submit(prompt string) error {
@@ -181,7 +213,7 @@ func (n *serverView) fork() error {
 		return err
 	}
 	n.conversation = forked.Conversation
-	return nil
+	return n.show()
 }
 
 func (n *serverView) reply(text string, _ bool) error {
@@ -360,6 +392,14 @@ type appServer struct {
 	providers   []ServerProvider
 	healthRead  map[string]string
 	ephemeral   map[ephemeralKey]*rpcPeer
+	shown       []serverShown
+}
+
+type serverShown struct {
+	conn         *appServerConn
+	request      uint64
+	Author       ServerAuthor `json:"author"`
+	Conversation string       `json:"conversation"`
 }
 
 func runAppServer(cfg config, flavor appServerFlavor) int {
@@ -464,6 +504,7 @@ func (s *appServer) serveConn(c *appServerConn) {
 					s.interruptEphemeral(c, interrupted.RequestID)
 					s.mu.Lock()
 					s.unwatchLocked(c, &interrupted.RequestID)
+					s.unshowLocked(c, &interrupted.RequestID)
 					s.mu.Unlock()
 				}
 			}
@@ -496,8 +537,19 @@ func (s *appServer) serveConn(c *appServerConn) {
 		}
 	}
 	s.unwatchLocked(c, nil)
+	s.unshowLocked(c, nil)
 	s.mu.Unlock()
 	s.idleSoon()
+}
+
+func (s *appServer) unshowLocked(c *appServerConn, id *uint64) {
+	kept := s.shown[:0]
+	for _, shown := range s.shown {
+		if shown.conn != c || (id != nil && shown.request != *id) {
+			kept = append(kept, shown)
+		}
+	}
+	s.shown = kept
 }
 
 const replyLost = "\x00lost"
@@ -717,6 +769,25 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		return s.entriesLocked(raw)
+	case "client/shows":
+		var shows struct {
+			Author ServerAuthor `json:"author"`
+		}
+		_ = json.Unmarshal(raw, &shows)
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.convs[p.Conversation] == nil {
+			return nil, "NoSuchConversation"
+		}
+		s.shown = append(s.shown, serverShown{conn: c, request: id, Author: shows.Author, Conversation: p.Conversation})
+		item := map[string]any{"_tag": "shown", "author": shows.Author, "conversation": p.Conversation}
+		for other := range s.conns {
+			if other.watch != nil {
+				other.send(map[string]any{"jsonrpc": "2.0", "chunk": true, "id": *other.watch, "result": []any{item}})
+			}
+		}
+		c.send(map[string]any{"jsonrpc": "2.0", "chunk": true, "id": id, "result": []any{map[string]any{"conversation": p.Conversation}}})
+		return nil, replyLost
 	case "status/watch":
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -730,7 +801,9 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 				trees = append(trees, map[string]any{"_tag": "tree", "conversation": conv.ID, "seq": s.seq, "status": conv.Status})
 			}
 		}
-		items := []any{map[string]any{"_tag": "trees", "seq": s.seq, "trees": trees}}
+		shown := make([]serverShown, 0, len(s.shown))
+		shown = append(shown, s.shown...)
+		items := []any{map[string]any{"_tag": "trees", "seq": s.seq, "trees": trees, "shown": shown}}
 		for conversation, applied := range p.After {
 			if conv := s.convs[conversation]; s.flavor.completions && conv != nil && conv.Status == "idle" && completionOf(conv.Ended) > applied {
 				items = append(items, map[string]any{"_tag": "tree", "conversation": conversation, "status": "idle", "ended": conv.Ended})

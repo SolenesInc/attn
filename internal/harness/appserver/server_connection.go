@@ -32,7 +32,6 @@ type serverConnection struct {
 	ended              map[string]serverEnded
 	tools              *serverToolsRegistration
 	feeds              map[feedKey]*serverFeed
-	judged             map[string]bool
 	subagentScanClient *effectrpc.Client
 	subagentScanAgain  bool
 	subagentScanLive   bool
@@ -433,13 +432,20 @@ func (p *serverConnection) statusWatchParams() any {
 }
 
 func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
+	switch tree.Tag {
+	case "shown":
+		p.followShown([]serverShown{{Author: tree.Author, Conversation: tree.Conversation}})
+		return
+	case "trees", "tree":
+	default:
+		return
+	}
 	if tree.Tag == "trees" {
 		p.busy = make(map[string]string, len(tree.Trees))
-		p.judged = nil
 		for _, t := range tree.Trees {
 			p.busy[t.Conversation] = t.Status
-			p.followFork(c, t.Conversation)
 		}
+		p.followShown(tree.Shown)
 		var last map[string]*serverEnded
 		for id, l := range p.sessions() {
 			conversation := p.c.host.Sessions().Conversation(id)
@@ -478,7 +484,6 @@ func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 		p.busy[tree.Conversation] = tree.Status
 	}
 	if tree.Status != "idle" {
-		p.followFork(c, tree.Conversation)
 		p.openFeeds(c, map[string]bool{tree.Conversation: true}, true)
 	} else if p.holder(tree.Conversation) != "" {
 		p.scheduleSubagentScan(c, true)

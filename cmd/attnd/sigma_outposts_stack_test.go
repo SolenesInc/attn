@@ -3,7 +3,6 @@ package main_test
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -238,10 +237,11 @@ func TestAnAnnotationAndAReloadOfAnOutpostSigmaSessionStartNoHomeSigmaServer(t *
 	requireNoHomeSigmaServer(t, pair)
 }
 
-func TestAnAnnotationRightAfterAnIdleForkOfAnOutpostSigmaSessionReachesTheFork(t *testing.T) {
+func TestAnIdleForkOfAnOutpostSigmaSessionMovesTheHomeTileToTheFork(t *testing.T) {
 	pair := sigmaOutpostPair(t)
 	id := spawnOnOutpost(pair, fakeagent.Sigma)
-	tui := pair.Outpost.LaunchedCarrying(pair.App.Terminal(id))
+	terminal := pair.App.Terminal(id)
+	tui := pair.Outpost.LaunchedCarrying(terminal)
 	server := pair.Outpost.AppServer(fakeagent.Sigma)
 	original := tui.ConversationID
 	pair.App.TypeLine(id, "work on the outpost")
@@ -249,44 +249,30 @@ func TestAnAnnotationRightAfterAnIdleForkOfAnOutpostSigmaSessionReachesTheFork(t
 	server.Prompted(original)
 	server.Reply(original, "Ready. <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	mark := pair.App.EventCount()
 	pair.App.TypeLine(id, "/fork")
 	tui.Prompted()
 	forks := server.Forks(original)
 	if len(forks) != 1 {
 		t.Fatalf("the /fork made %v, want one fork", forks)
 	}
-	annotated := testworld.Request(pair.App, protocol.SessionAnnotationsSubmitMessage{Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: "outpost-fork-annotation", SessionID: protocol.SessionID(id), Text: "check the totals"},
-		protocol.EventSessionAnnotationsSubmitResult, func(r protocol.SessionAnnotationsSubmitResultMessage) bool {
-			return r.RequestID == "outpost-fork-annotation"
-		})
-	if !annotated.Success {
-		t.Fatalf("annotation: %+v", annotated)
+	var shown string
+	testworld.AwaitSince(pair.App, mark, protocol.EventProfileArrangementChanged, func(e protocol.ProfileArrangementChangedMessage) bool {
+		for _, desktop := range e.Desktops {
+			for _, pane := range desktop.Panes {
+				if string(pane.RuntimeID) == terminal && string(pane.SessionID) != id {
+					shown = string(pane.SessionID)
+					return true
+				}
+			}
+		}
+		return false
+	})
+	workMark := pair.App.EventCount()
+	pair.App.TypeLine(shown, "work in the fork")
+	if got := server.Prompted(forks[0]); got.Text != "work in the fork" {
+		t.Fatalf("the fork %s took %+v, want the prompt typed in the tile", forks[0], got)
 	}
-	if got := server.Prompted(forks[0]); got.Text != "check the totals" {
-		t.Fatalf("the fork %s took %+v, want the annotation", forks[0], got)
-	}
-	requireNoHomeSigmaServer(t, pair)
-}
-
-func TestStandbyUntilRightAfterAnIdleForkOfAnOutpostSigmaSessionAsksTheSelectedSession(t *testing.T) {
-	pair := sigmaOutpostPair(t)
-	id := spawnOnOutpost(pair, fakeagent.Sigma)
-	tui := pair.Outpost.LaunchedCarrying(pair.App.Terminal(id))
-	server := pair.Outpost.AppServer(fakeagent.Sigma)
-	original := tui.ConversationID
-	pair.App.TypeLine(id, "work on the outpost")
-	tui.Prompted()
-	server.Prompted(original)
-	server.Reply(original, "Ready. <!-- attn:state=waiting_input -->")
-	testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
-	pair.App.TypeLine(id, "/fork")
-	tui.Prompted()
-	if forks := server.Forks(original); len(forks) != 1 {
-		t.Fatalf("the /fork made %v, want one fork", forks)
-	}
-	pair.App.Send(protocol.StandbySessionMessage{Cmd: protocol.CmdStandbySession, SessionID: protocol.SessionID(id), Until: time.Now().Add(time.Hour)})
-	if got := server.Prompted(original); !strings.Contains(got.Text, "standby") {
-		t.Fatalf("the selected session's conversation %s took %+v, want the standby request", original, got)
-	}
+	testworld.AwaitSessionSince(pair.App, workMark, shown, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	requireNoHomeSigmaServer(t, pair)
 }

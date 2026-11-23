@@ -131,6 +131,17 @@ measurement uses that one.
 - `status/watch` opens with the busy conversation trees and then sends one
   status per change of a tree (working, waiting on an approval, idle), with
   how its root's run ended. Subagents and workers are part of their root's tree.
+- A client says which conversation it shows with `client/shows
+  {conversation, author}`, a stream that lasts while the client keeps it
+  open. `status/watch` sends `{_tag: "shown", author, conversation}` when one
+  starts, and its opening snapshot lists every current one in `shown`, oldest
+  first. Nothing is sent when one ends, and a server restart forgets them.
+  The TUI holds one for the conversation on its screen, opened once the screen
+  is up and again after each reconnect, so a fork it never opened is never
+  shown (`packages/sigma/src/status.ts`, `packages/sigma/src/tui/main.tsx`,
+  read at 40fb517).
+  attn moves the tile whose author is `attn-terminal:<terminal>` to the
+  newest conversation shown under that author.
 - `conversation/list` carries `ended` on each conversation that has run: how
   its last run ended, the same as `status/watch` says.
 - Sigma's tools refuse no path outside the conversation's folder. A path
@@ -184,10 +195,12 @@ measurement uses that one.
   `glob` and tool search (`packages/tools/src`). Sigma has no tool that sends
   the user a file.
 - `/fork` in the TUI starts a new conversation that inherits the entries up to
-  a point. The original conversation's watch gets nothing, and `status/watch`
-  says nothing of the fork until it works or waits: the tracker reports a tree
-  only when a commit changes either (source, `packages/sigma/src/status.ts`).
-  The fork's first entry is `sigma.forked`, naming the client's
+  a point, then opens it, which `status/watch` reports as `shown` (above).
+  The original conversation's watch gets nothing, and the fork's tree status
+  says nothing until it works or waits: the tracker reports a tree only when a
+  commit changes either (source, `packages/sigma/src/status.ts`). Two
+  `/fork` typed at once make two forks, and the TUI opens the one answered
+  last. The fork's first entry is `sigma.forked`, naming the client's
   `SIGMA_AUTHOR_ID`. `conversation/list` gives the fork's `fork.of` (probe)
   and `fork.at`, the last entry it inherits (source,
   `packages/protocol/src/index.ts`). `conversation/list` takes a null payload

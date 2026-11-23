@@ -265,6 +265,7 @@ func (s *AppServer) MCPHeader(server, header string) string {
 type forkParams struct {
 	Conversation string `json:"conversation"`
 	ID           string `json:"id"`
+	Author       string `json:"author"`
 }
 
 func (s *appServer) fork(raw json.RawMessage) (any, error) {
@@ -279,7 +280,11 @@ func (s *appServer) fork(raw json.RawMessage) (any, error) {
 	if len(entries) > 0 {
 		at = entries[len(entries)-1].ID
 	}
-	if _, refused := s.forkLocked(p.Conversation, p.ID, at, ServerAuthor{ID: "you", Name: "you"}); refused != "" {
+	author := ServerAuthor{ID: "you", Name: "you"}
+	if p.Author != "" {
+		author.ID = p.Author
+	}
+	if _, refused := s.forkLocked(p.Conversation, p.ID, at, author); refused != "" {
 		return nil, errors.New(refused)
 	}
 	return struct{}{}, nil
@@ -349,4 +354,10 @@ func (s *AppServer) Forks(of string) []string {
 func (s *AppServer) Fork(conversation, id string) {
 	s.t.Helper()
 	s.call(methodFork, forkParams{Conversation: conversation, ID: id}, nil)
+}
+
+// ForkAs forks conversation as id under author, as a client writing as author does when it forks and never opens the fork.
+func (s *AppServer) ForkAs(conversation, id, author string) {
+	s.t.Helper()
+	s.call(methodFork, forkParams{Conversation: conversation, ID: id, Author: author}, nil)
 }

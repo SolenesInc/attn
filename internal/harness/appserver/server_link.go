@@ -24,11 +24,13 @@ type Link struct {
 }
 
 type serverTree struct {
-	Tag          string       `json:"_tag"`
-	Conversation string       `json:"conversation"`
-	Status       string       `json:"status"`
-	Ended        *serverEnded `json:"ended"`
-	Trees        []serverTree `json:"trees"`
+	Tag          string        `json:"_tag"`
+	Conversation string        `json:"conversation"`
+	Status       string        `json:"status"`
+	Ended        *serverEnded  `json:"ended"`
+	Trees        []serverTree  `json:"trees"`
+	Author       serverAuthor  `json:"author"`
+	Shown        []serverShown `json:"shown"`
 }
 
 type serverEnded struct {
