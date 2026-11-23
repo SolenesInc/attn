@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Host discovery wire test strips /usr/bin from PATH, fake agent never launches on Linux",
+  "at": "2026-11-23T18:59:11.240Z",
+  "repairs": "349dcc38e968e080d2e003f4eed1f21644c4ccda"
+}
