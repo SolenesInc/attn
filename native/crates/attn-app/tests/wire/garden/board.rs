@@ -196,6 +196,78 @@ fn puts_parked_work_under_parked_and_counts_closed_work_until_shown() {
 }
 
 #[test]
+fn keeps_a_closed_plot_on_the_board_while_work_below_it_is_open_and_folds_it_once_that_closes() {
+    let world = &mut open_board(shipped(), Vec::new());
+
+    assert_eq!(column(world, "Ready"), ["unrelated work"]);
+    assert_eq!(column(world, "Closed"), ["shipped plot"]);
+    assert!(shows(world, "1 harvested"));
+    let counted = world
+        .screen()
+        .find(Target::role("region").name("Closed, 2"))
+        .is_some();
+    assert!(counted, "{}", world.screen());
+
+    click(world, "Open the plot under shipped plot");
+    assert_eq!(column(world, "Closed"), ["shipped part"]);
+    assert!(shows(world, "0 harvested · 1 withered"));
+    click(world, "Open the plot under shipped part");
+    assert_eq!(column(world, "Ready"), ["open follow-up"]);
+    assert!(column(world, "Closed").is_empty());
+
+    click(world, "Garden");
+    push_change(world, &shipped(), last_follow_up_harvested());
+    assert!(column(world, "Closed").is_empty());
+    assert!(shows(world, "2 harvested"));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn shows_the_folded_closed_work_beside_the_plot_the_board_keeps() {
+    let world = &mut open_board(shipped(), Vec::new());
+
+    click(world, "show");
+    assert_eq!(column(world, "Closed"), ["shipped plot", "finished plot"]);
+    click(world, "hide");
+    assert_eq!(column(world, "Closed"), ["shipped plot"]);
+
+    push(
+        world,
+        shipped()
+            .into_iter()
+            .filter(|s| s.id != "s-over11" && s.id != "s-last11")
+            .collect(),
+    );
+    assert_eq!(column(world, "Closed"), ["shipped plot"]);
+    for gone in [
+        Target::role("button").name("show"),
+        Target::key("garden.board.closed.summary"),
+    ] {
+        assert!(world.screen().find(gone).is_none(), "nothing is folded");
+    }
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn walks_the_arrows_to_the_follow_up_below_a_closed_plot_the_board_keeps() {
+    let world = &mut open_board(shipped(), Vec::new());
+
+    key(world, Key::Down);
+    assert_eq!(focused_card(world).as_deref(), Some("unrelated work"));
+    key(world, Key::Right);
+    assert_eq!(focused_card(world).as_deref(), Some("shipped plot"));
+    key(world, Key::Down);
+    assert_eq!(focused_card(world).as_deref(), Some("shipped plot"));
+    key(world, Key::Right);
+    key(world, Key::Down);
+    assert_eq!(focused_card(world).as_deref(), Some("shipped part"));
+    key(world, Key::Right);
+    key(world, Key::Down);
+    assert_eq!(focused_card(world).as_deref(), Some("open follow-up"));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn says_what_an_armed_card_waits_on_instead_of_repeating_its_column_and_keeps_it_beside_ready() {
     let world = &mut open_board(garden(), Vec::new());
 
@@ -620,6 +692,53 @@ fn drags_a_card_onto_a_move_its_target_column_offers() {
             .is_none()
     );
     assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn drops_a_card_onto_each_closing_move_beside_more_kept_plots_than_the_column_holds() {
+    let mut seeds = vec![held_by(
+        status("s-work11", "owned work", "growing"),
+        "member:trellis",
+        "Trellis",
+        true,
+    )];
+    for i in 0..16 {
+        let id = format!("s-kept{i:02}");
+        seeds.push(tallied(
+            closed(plot(&id, &format!("shipped plot {i}"), ""), "harvested"),
+            3,
+            0,
+            1,
+        ));
+        seeds.push(part_of(&id, &format!("s-next{i:02}"), "open follow-up"));
+    }
+    for (verb, asks) in [
+        ("harvest", "Harvest s-work11: what got done"),
+        ("wither", "Wither s-work11: why nobody should pick this up"),
+    ] {
+        let world = &mut open_board(seeds.clone(), Vec::new());
+        let from = card_key(world, "owned work");
+        let closed = world
+            .runtime()
+            .find("garden.board.column.closed")
+            .expect("the Closed column is laid out");
+        world.gesture(|app| app.drag_over(Target::key(from.clone()), closed));
+        let zone = world
+            .runtime()
+            .find(&format!("garden.board.zone.{verb}"))
+            .expect("the zone is laid out");
+        world.gesture(|app| {
+            app.move_to(zone);
+            app.release(zone);
+        });
+        assert_eq!(
+            focused(world).and_then(|n| n.name).as_deref(),
+            Some(asks),
+            "{}",
+            world.screen()
+        );
+        assert!(world.runtime_is_at_rest());
+    }
 }
 
 #[test]

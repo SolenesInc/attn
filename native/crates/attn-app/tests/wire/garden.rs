@@ -78,6 +78,19 @@ fn plot(id: &str, title: &str, parent: &str) -> Seed {
     })
 }
 
+/// A plot with `done` harvested and `withered` seeds at any level below it, and `planted` open
+/// seeds that are neither ready nor blocked.
+fn tallied(seed: Seed, done: i64, withered: i64, planted: i64) -> Seed {
+    with(seed, |s| {
+        s.plot_progress = Some(SeedPlotProgress {
+            total: done + withered + planted,
+            done,
+            withered,
+            ..SeedPlotProgress::default()
+        })
+    })
+}
+
 fn closed(mut seed: Seed, status: &str) -> Seed {
     seed.status = status.into();
     seed
@@ -178,6 +191,18 @@ fn open_garden_sized(daemon: Daemon, size: (f32, f32)) -> World {
     let mut world = World::start_sized(daemon, size);
     world.gesture(|app| app.key(board()));
     world
+}
+
+/// Sends only the seeds of `garden` that changed.
+fn push_change(world: &mut World, garden: &[Seed], changed: Vec<Seed>) {
+    world.daemon.emit(GardenSeedsChangedMessage {
+        profile_id: PROFILE.into(),
+        order: garden.iter().map(|s| s.id.clone()).collect(),
+        seeds: changed,
+        total: garden.len() as i64,
+        ..GardenSeedsChangedMessage::new()
+    });
+    world.settle();
 }
 
 fn push(world: &mut World, seeds: Vec<Seed>) {
@@ -611,6 +636,113 @@ fn drills_into_a_plot_keeps_its_closed_seeds_behind_a_toggle_and_climbs_back_out
     click(&mut world, "Garden");
 
     assert!(has_row(&world, "unrelated work"));
+    assert!(world.runtime_is_at_rest());
+}
+
+/// Two harvested plots, one with an open follow-up two levels down, and one open loose seed.
+fn shipped() -> Vec<Seed> {
+    vec![
+        tallied(
+            closed(plot("s-ship11", "shipped plot", ""), "harvested"),
+            1,
+            1,
+            1,
+        ),
+        tallied(
+            closed(plot("s-part11", "shipped part", "s-ship11"), "harvested"),
+            0,
+            0,
+            1,
+        ),
+        part_of("s-part11", "s-next11", "open follow-up"),
+        closed(part_of("s-ship11", "s-drop11", "dropped idea"), "withered"),
+        tallied(
+            closed(plot("s-over11", "finished plot", ""), "harvested"),
+            1,
+            0,
+            0,
+        ),
+        closed(
+            part_of("s-over11", "s-last11", "finished work"),
+            "harvested",
+        ),
+        seed("s-alone1", "unrelated work"),
+    ]
+}
+
+/// The seeds the daemon resends when the last open follow-up in `shipped` is harvested: it and
+/// the plots above it.
+fn last_follow_up_harvested() -> Vec<Seed> {
+    shipped()
+        .into_iter()
+        .filter_map(|s| match s.id.as_str() {
+            "s-ship11" => Some(tallied(s, 2, 1, 0)),
+            "s-part11" => Some(tallied(s, 1, 0, 0)),
+            "s-next11" => Some(closed(s, "harvested")),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn lists_a_closed_plot_while_work_below_it_is_open_and_hides_it_once_that_closes() {
+    let mut world = open_garden(shipped());
+    assert_eq!(rows(&world), ["shipped plot", "unrelated work"]);
+    let row = world.screen().get(Target::key("garden.row.s-ship11"));
+    assert_eq!(row.value.as_deref(), Some("harvested"));
+
+    open_row(&mut world, "shipped plot");
+    assert_eq!(rows(&world), ["shipped part"]);
+    open_row(&mut world, "shipped part");
+    assert_eq!(rows(&world), ["open follow-up"]);
+
+    click(&mut world, "Garden");
+    push_change(&mut world, &shipped(), last_follow_up_harvested());
+    assert_eq!(rows(&world), ["unrelated work"]);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn counts_behind_the_closed_toggle_only_the_closed_seeds_the_list_leaves_out() {
+    let mut world = open_garden(shipped());
+
+    click(&mut world, "1 closed");
+    assert_eq!(
+        rows(&world),
+        ["shipped plot", "finished plot", "unrelated work"]
+    );
+
+    click(&mut world, "hide 1 closed");
+    assert_eq!(rows(&world), ["shipped plot", "unrelated work"]);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn keeps_a_status_filter_to_the_seeds_that_hold_the_status() {
+    let mut world = open_garden(shipped());
+
+    type_query(&mut world, "is:open");
+    assert_eq!(rows(&world), ["unrelated work"]);
+
+    let mut world = open_garden(shipped());
+    type_query(&mut world, "is:closed");
+    assert_eq!(rows(&world), ["shipped plot", "finished plot"]);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn walks_through_a_closed_plot_to_its_open_follow_up_in_the_window() {
+    let mut world = open_garden_sized(daemon(shipped(), Vec::new()), TWO_COLUMNS);
+    click(&mut world, "Expand the garden");
+    assert_eq!(rows(&world), ["shipped plot", "unrelated work"]);
+
+    open_row(&mut world, "shipped plot");
+    assert!(has_row(&world, "shipped part"));
+    assert!(!has_row(&world, "dropped idea"));
+
+    open_row(&mut world, "shipped part");
+    open_row(&mut world, "open follow-up");
+    assert_eq!(heading(&world).as_deref(), Some("open follow-up"));
     assert!(world.runtime_is_at_rest());
 }
 

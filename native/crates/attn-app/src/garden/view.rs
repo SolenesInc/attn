@@ -162,7 +162,10 @@ impl Place {
         let look = self.look();
         seeds
             .iter()
-            .filter(|s| search::satisfies_lens(s, &self.query.is, &look))
+            .filter(|s| {
+                search::satisfies_lens(s, &self.query.is, &look)
+                    || (self.query.is.is_empty() && model::has_open_work_below(s))
+            })
             .cloned()
             .collect()
     }
@@ -419,9 +422,12 @@ fn closed_toggle(place: &Place) -> Option<(usize, bool)> {
         Some(here) => place.index.children_of(&here.id),
         None => &place.index.roots,
     };
-    let closed_here = level.iter().filter(|s| model::is_closed(s)).count();
+    let hidden_here = level
+        .iter()
+        .filter(|s| model::is_closed(s) && !model::has_open_work_below(s))
+        .count();
     let count = if !place.query.searches {
-        closed_here
+        hidden_here
     } else if on {
         place
             .answers

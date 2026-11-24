@@ -180,6 +180,12 @@ struct Compose {
     verb: Verb,
 }
 
+impl Board {
+    fn composing_into(&self, column: Column) -> Option<&Compose> {
+        self.compose.as_ref().filter(|c| c.verb.target() == column)
+    }
+}
+
 struct Drag {
     seed: Arc<Seed>,
     start: [f32; 2],
@@ -189,13 +195,16 @@ struct Drag {
     zone: Option<Verb>,
 }
 
-/// The seeds of the place the board stands in, sorted into columns.
+/// The seeds of the place the board stands in: the cards each column shows, and the closed seeds
+/// with nothing open below them, which fold away.
 struct Place {
     index: model::Index,
     trail: Vec<String>,
     scoped: usize,
     columns: [Vec<Arc<Seed>>; 4],
     ready: usize,
+    foldable: Vec<Arc<Seed>>,
+    folded: bool,
 }
 
 impl Place {
@@ -225,12 +234,25 @@ impl Place {
         }
         let ready = columns[0].iter().filter(|s| s.ready).count();
         let scoped = scoped.len();
+        let walk = &state.window.garden.board_walk;
+        let closed = &mut columns[slot(Column::Closed)];
+        let foldable: Vec<Arc<Seed>> = closed
+            .iter()
+            .filter(|s| !model::has_open_work_below(s))
+            .cloned()
+            .collect();
+        let folded = !walk.closed_open && walk.composing_into(Column::Closed).is_none();
+        if folded {
+            closed.retain(|s| model::has_open_work_below(s));
+        }
         Place {
             index,
             trail,
             scoped,
             columns,
             ready,
+            foldable,
+            folded,
         }
     }
 
@@ -241,16 +263,11 @@ impl Place {
     fn count(&self, column: Column) -> usize {
         match column {
             Column::Ready => self.ready,
+            Column::Closed if self.folded => {
+                self.column(Column::Closed).len() + self.foldable.len()
+            }
             other => self.column(other).len(),
         }
-    }
-
-    /// The columns the arrows walk: every one, and Closed once it is open.
-    fn lanes(&self, closed_open: bool) -> Vec<Column> {
-        COLUMNS
-            .into_iter()
-            .filter(|c| *c != Column::Closed || closed_open)
-            .collect()
     }
 
     fn find(&self, id: &str) -> Option<(Column, usize)> {
@@ -571,13 +588,8 @@ fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     }
     let place = Place::of(state);
     let walk = &state.window.garden.board_walk;
-    let lanes = place.lanes(walk.closed_open);
-    let here = walk
-        .selected
-        .as_deref()
-        .and_then(|id| place.find(id))
-        .filter(|(column, _)| lanes.contains(column));
-    let first = lanes
+    let here = walk.selected.as_deref().and_then(|id| place.find(id));
+    let first = COLUMNS
         .iter()
         .find_map(|c| place.column(*c).first())
         .map(|s| s.id.clone());
@@ -622,11 +634,11 @@ fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
                     true
                 });
             };
-            let at = lanes.iter().position(|c| *c == column).unwrap_or(0);
+            let at = slot(column);
             let toward: Vec<Column> = if ev.key == Key::Right {
-                lanes[at + 1..].to_vec()
+                COLUMNS[at + 1..].to_vec()
             } else {
-                lanes[..at].iter().rev().copied().collect()
+                COLUMNS[..at].iter().rev().copied().collect()
             };
             for lane in toward {
                 let cards = place.column(lane);
@@ -903,8 +915,8 @@ fn column_view(
 ) -> El {
     let walk = &state.window.garden.board_walk;
     let cards = place.column(column);
-    let composing = walk.compose.as_ref().filter(|c| c.verb.target() == column);
-    let collapsed = column == Column::Closed && !walk.closed_open && composing.is_none();
+    let composing = walk.composing_into(column);
+    let folded = column == Column::Closed && place.folded;
     let dragging = walk.drag.as_ref().filter(|d| d.armed);
     let zones = dragging.map_or_else(Vec::new, |d| legal_verbs(&d.seed.status, column));
     let hovered = dragging.is_some_and(|d| d.column == Some(column)) && !zones.is_empty();
@@ -917,7 +929,7 @@ fn column_view(
     )
     .lit(hovered)
     .faded(dragging.is_some() && zones.is_empty());
-    if column == Column::Closed && !cards.is_empty() {
+    if column == Column::Closed && !place.foldable.is_empty() {
         lane = lane.aside(
             super::view::quiet(if walk.closed_open { "hide" } else { "show" })
                 .expanded(walk.closed_open)
@@ -932,18 +944,7 @@ fn column_view(
     if let Some(compose) = composing {
         lane = lane.push(composer(compose, &walk.words, names, t));
     }
-    if collapsed {
-        let harvested = cards.iter().filter(|s| s.status == "harvested").count();
-        let withered = cards.len() - harvested;
-        let said = if cards.is_empty() {
-            "Nothing has finished here yet.".to_owned()
-        } else if withered > 0 {
-            format!("{harvested} harvested · {withered} withered")
-        } else {
-            format!("{harvested} harvested")
-        };
-        lane = lane.push(note("garden.board.closed.summary", said, t));
-    } else if cards.is_empty() {
+    if cards.is_empty() && !folded {
         lane = lane.push(note(
             &format!("garden.board.empty.{}", column.name()),
             empty_line(column, place),
@@ -964,9 +965,25 @@ fn column_view(
             lane = lane.push(card(state, place, names, column, seed, t));
         }
     }
+    if folded && (cards.is_empty() || !place.foldable.is_empty()) {
+        let harvested = place
+            .foldable
+            .iter()
+            .filter(|s| s.status == "harvested")
+            .count();
+        let withered = place.foldable.len() - harvested;
+        let said = if cards.is_empty() && place.foldable.is_empty() {
+            "Nothing has finished here yet.".to_owned()
+        } else if withered > 0 {
+            format!("{harvested} harvested · {withered} withered")
+        } else {
+            format!("{harvested} harvested")
+        };
+        lane = lane.push(note("garden.board.closed.summary", said, t));
+    }
     if hovered && let Some(held) = dragging {
         for verb in &zones {
-            lane = lane.push(
+            lane = lane.landing(
                 Card::new(format!("{ZONE_PREFIX}{}", verb.name()))
                     .control("button", format!("{} {}", verb.label(), held.seed.id))
                     .standing(if held.zone == Some(*verb) {

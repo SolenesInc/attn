@@ -35,6 +35,12 @@ pub(crate) fn is_plot(seed: &Seed) -> bool {
     seed.plot_progress.is_some()
 }
 
+pub(crate) fn has_open_work_below(seed: &Seed) -> bool {
+    seed.plot_progress
+        .as_ref()
+        .is_some_and(|p| p.total > p.done + p.withered)
+}
+
 impl Index {
     pub(crate) fn of(seeds: &[Arc<Seed>]) -> Index {
         let mut index = Index::default();

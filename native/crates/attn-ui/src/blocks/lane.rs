@@ -11,6 +11,7 @@ pub struct Lane {
     count: usize,
     aside: Vec<El>,
     body_key: String,
+    landings: Vec<El>,
     cards: Vec<El>,
     lit: bool,
     faded: bool,
@@ -30,6 +31,7 @@ impl Lane {
             count,
             aside: Vec::new(),
             body_key: body_key.into(),
+            landings: Vec::new(),
             cards: Vec::new(),
             lit: false,
             faded: false,
@@ -39,6 +41,12 @@ impl Lane {
     /// A control after the count, such as the button that shows what the lane folds away.
     pub fn aside(mut self, control: impl Into<El>) -> Self {
         self.aside.push(control.into());
+        self
+    }
+
+    /// Where something carried over the lane can land, above the cards' scroll.
+    pub fn landing(mut self, place: impl Into<El>) -> Self {
+        self.landings.push(place.into());
         self
     }
 
@@ -71,6 +79,8 @@ impl Lane {
         let head = door::gaps(row().flex_wrap().items_center(), Space::S0, Space::S8)
             .child(named)
             .children(self.aside);
+        let landings = (!self.landings.is_empty())
+            .then(|| door::gap(col().w_full(), Space::S6).children(self.landings));
         let cards = door::gap(col().w_full(), Space::S6).children(self.cards);
         let body = col()
             .key(self.body_key)
@@ -93,6 +103,7 @@ impl Lane {
             .fill(if self.lit { t.bg_selected } else { t.bg_app })
             .opacity(if self.faded { FADED } else { 1.0 })
             .child(head)
+            .children(landings)
             .child(body);
         door::corner(
             door::gap(door::inset(lane, Space::S8, Space::S8), Space::S8),
