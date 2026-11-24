@@ -1,0 +1,3 @@
+Agents now draw the flow when an ask's options differ in how work moves between components. A trade-off table goes beside the diagram, not in place of it. The CLI ask example also moved off the webhook retry case, which was nearly the agent bench's own ask-flow task.
+
+In the treatment eval (168 real-agent runs: Claude Code, code mode, Codex and Sigma, attn's tools on and off), flow asks with a Mermaid diagram went from 0/24 before this plot, and 2/24 with the plot's guidance alone, to 20/24. Every other ask task holds at 24/24, and asks open unprompted in 120/120 runs.
