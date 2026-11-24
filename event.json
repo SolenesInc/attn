@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Outpost bed captures home seeds through a symlink",
+  "at": "2026-11-24T23:42:25.431Z",
+  "detail": "At pinned head 5ec9f5d43de6c60b63d8df1960ad39f2adb9d386, bind an outpost Shop checkout by its absolute path and a home Billing repository by name. If the same path on home is a symlink to Billing, a newly planted home Billing seed is stored under Shop. Both home plants went to Billing on the parent routing implementation. A real CLI against an isolated wire world and a fresh independent reviewer reproduced the result; the outpost bridge was simulated. Evidence: s-6ghb7w/garden-bed-routing-review-ce7a3ec.md and garden-bed-routing-evidence-ce7a3ec.tar.gz.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/garden_beds.go",
+    "line": 287
+  },
+  "culprit": "ce7a3ec85f865ab0101852e29d7b93786e927db9"
+}
