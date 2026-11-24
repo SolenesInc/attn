@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Cross-machine Claude sharing warning lost",
+  "at": "2026-11-24T06:13:40.975Z",
+  "repairs": "47d54474c3cc9510a1aa959e8b2ed11ddd90fcc3"
+}
