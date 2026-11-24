@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Garden Board cards hide readiness reasons",
+  "at": "2026-11-24T23:51:09.047Z",
+  "detail": "Garden v2 Board keeps blocked work in the unready portion of a lane but drops the blocker and other readiness reasons from its compact card; the lifecycle menu does not expose them. A native probe and independent review reproduced this on both keymaps. Evidence: s-ma3jmt/garden-display-review.md.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/garden/board.rs",
+    "line": 1142
+  },
+  "culprit": "5ec9f5d43de6c60b63d8df1960ad39f2adb9d386"
+}
