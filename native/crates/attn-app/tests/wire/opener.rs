@@ -43,6 +43,18 @@ struct Setup {
     active: &'static str,
     /// The smallest window at the largest text, where the list scrolls.
     small: bool,
+    outposts: Vec<OutpostInfo>,
+}
+
+fn studio(reach: &str, state: &str) -> OutpostInfo {
+    OutpostInfo {
+        id: "studio".into(),
+        name: "Studio".into(),
+        destination: "studio:2200".into(),
+        reach: reach.into(),
+        state: state.into(),
+        ..OutpostInfo::default()
+    }
 }
 
 impl Default for Setup {
@@ -55,6 +67,7 @@ impl Default for Setup {
             tiles: Vec::new(),
             active: "p1",
             small: false,
+            outposts: vec![studio("reachable", "connected")],
         }
     }
 }
@@ -75,6 +88,9 @@ fn start(setup: Setup) -> World {
     if setup.small {
         settings.insert("uiScale".to_owned(), "1.5".to_owned());
     }
+    if !setup.outposts.is_empty() {
+        settings.insert("outposts_enabled".to_owned(), "true".to_owned());
+    }
     if !setup.notebook.is_empty() {
         settings.insert(
             "notebook.root.effective".to_owned(),
@@ -90,12 +106,7 @@ fn start(setup: Setup) -> World {
             ..Profile::default()
         }]),
         settings: Some(settings),
-        outposts: Some(vec![OutpostInfo {
-            id: "studio".into(),
-            name: "Studio".into(),
-            destination: "studio:2200".into(),
-            ..OutpostInfo::default()
-        }]),
+        outposts: Some(setup.outposts),
         sessions: Some(vec![
             Session {
                 id: "s1".into(),
@@ -253,6 +264,52 @@ fn press(world: &mut World, chord: &str) {
 
 fn sent(world: &World, cmd: &str) -> Vec<Request> {
     world.daemon.sent_of(cmd)
+}
+
+/// What each listed row says at its end, by the part's key suffix: its machine, `.offline` and
+/// its touch.
+fn row_parts(world: &World, part: &str) -> Vec<Option<String>> {
+    let screen = world.screen();
+    screen
+        .all(Target::role("list-box-option"))
+        .into_iter()
+        .filter_map(|n| n.key.filter(|k| k.starts_with("opener.row.")))
+        .map(|key| {
+            screen
+                .find(Target::key(format!("{key}.{part}")))
+                .map(|n| n.name.unwrap_or_default())
+        })
+        .collect()
+}
+
+/// A machine name wider than the smallest window's opener, as the screenshot tour's worst case
+/// makes them; its chip must leave the field room to take keys.
+const LONG_LAB: &str = "lab-build-and-release-platform-本番の権限を移行する作業ツリー-tokyo-region-primary-build-and-release-platform-本番の権限を移行する作業ツリー-tokyo-region-primary";
+
+/// The machine the opener lists, when it lists one machine's files.
+fn scope(world: &World) -> Option<String> {
+    world
+        .screen()
+        .find(Target::key("opener.scope"))
+        .and_then(|n| n.name)
+}
+
+fn far_and_here() -> Vec<FileActivity> {
+    let mut edited = recent("/far/notes.md", "2026-07-24T10:00:00Z", Some("studio"));
+    edited.source = "edited".into();
+    vec![
+        edited,
+        recent("/repo/docs/plan.md", "2026-07-23T10:00:00Z", None),
+    ]
+}
+
+fn notices(world: &World) -> Vec<String> {
+    world
+        .screen()
+        .all(Target::role("status"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect()
 }
 
 #[test]
@@ -626,4 +683,175 @@ fn with_no_folder_and_no_notebook_the_opener_lists_recents_without_an_index() {
     });
     assert!(sent(&world, "fs_index").is_empty());
     assert_eq!(rows(&world).len(), 2);
+}
+
+#[test]
+fn each_recent_file_names_its_machine_and_its_latest_touch_only_while_an_outpost_exists() {
+    let world = start(Setup {
+        recents: far_and_here(),
+        ..Setup::default()
+    });
+    assert_eq!(
+        rows(&world),
+        ["notes.md /far/notes.md on Studio", "plan.md docs/plan.md"]
+    );
+    assert_eq!(
+        row_parts(&world, "machine"),
+        [Some("Studio".to_owned()), Some("This Mac".to_owned())]
+    );
+    let touched = row_parts(&world, "touched");
+    assert!(
+        touched[0]
+            .as_deref()
+            .is_some_and(|t| t.starts_with("edited "))
+            && touched[1]
+                .as_deref()
+                .is_some_and(|t| t.starts_with("opened ")),
+        "{touched:?}"
+    );
+
+    let alone = start(Setup {
+        recents: far_and_here(),
+        outposts: Vec::new(),
+        ..Setup::default()
+    });
+    assert_eq!(
+        rows(&alone),
+        ["plan.md docs/plan.md"],
+        "with outposts off, an outpost's files are not listed"
+    );
+    assert_eq!(row_parts(&alone, "machine"), [None]);
+}
+
+#[test]
+fn tab_and_shift_tab_cycle_the_machine_listed_and_backspace_on_an_empty_field_lists_every_machine()
+{
+    let mut lab = studio("reachable", "connected");
+    lab.id = "lab".into();
+    lab.name = LONG_LAB.into();
+    let mut files = far_and_here();
+    files.push(recent("/lab/log.md", "2026-07-22T10:00:00Z", Some("lab")));
+    let mut world = start(Setup {
+        recents: files,
+        outposts: vec![studio("reachable", "connected"), lab],
+        small: true,
+        ..Setup::default()
+    });
+    let every = [
+        "notes.md /far/notes.md on Studio".to_owned(),
+        "plan.md docs/plan.md".to_owned(),
+        format!("log.md /lab/log.md on {LONG_LAB}"),
+    ];
+    assert_eq!(scope(&world), None);
+
+    press(&mut world, "tab");
+    assert_eq!(scope(&world).as_deref(), Some("This Mac"));
+    assert_eq!(rows(&world), ["plan.md docs/plan.md"]);
+    assert_eq!(
+        row_parts(&world, "machine"),
+        [None],
+        "one machine's rows carry no tag"
+    );
+
+    press(&mut world, "tab");
+    assert_eq!(scope(&world).as_deref(), Some("Studio"));
+    assert_eq!(rows(&world), ["notes.md /far/notes.md on Studio"]);
+
+    press(&mut world, "tab");
+    assert_eq!(scope(&world).as_deref(), Some(LONG_LAB));
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some("opener.field"),
+        "a long machine's chip leaves the field room to keep the keyboard"
+    );
+    press(&mut world, "tab");
+    assert_eq!(scope(&world), None);
+    assert_eq!(rows(&world), every);
+
+    press(&mut world, "shift+tab");
+    assert_eq!(scope(&world).as_deref(), Some(LONG_LAB));
+    press(&mut world, "shift+tab");
+    assert_eq!(scope(&world).as_deref(), Some("Studio"));
+    search(&mut world, "notes");
+    press(&mut world, "backspace");
+    assert_eq!(
+        scope(&world).as_deref(),
+        Some("Studio"),
+        "Backspace in typed text edits it"
+    );
+    press(&mut world, "mod+a");
+    press(&mut world, "backspace");
+    assert_eq!(scope(&world).as_deref(), Some("Studio"));
+    press(&mut world, "backspace");
+    assert_eq!(scope(&world), None);
+    assert_eq!(rows(&world), every);
+}
+
+#[test]
+fn an_offline_outposts_files_are_marked_offline_and_opening_one_says_so_and_opens_nothing() {
+    let mut world = start(Setup {
+        recents: far_and_here(),
+        outposts: vec![studio("unreachable", "lost")],
+        ..Setup::default()
+    });
+    assert_eq!(
+        row_parts(&world, "offline"),
+        [Some("offline".to_owned()), None]
+    );
+    press(&mut world, "enter");
+    assert!(sent(&world, "open_markdown").is_empty());
+    assert!(is_open(&world), "the opener stays open for another file");
+    assert!(
+        notices(&world)
+            .iter()
+            .any(|n| n.contains("Could not open notes.md: Studio is offline")),
+        "{:?}",
+        notices(&world)
+    );
+}
+
+#[test]
+fn a_typed_path_browses_the_machine_listed_and_its_file_opens_on_that_machine() {
+    let mut world = start(Setup {
+        recents: far_and_here(),
+        ..Setup::default()
+    });
+    search(&mut world, "~/notes/");
+    let asked = |world: &World| {
+        sent(world, "browse_directory")
+            .last()
+            .map(|r| r["host"].clone())
+    };
+    assert_eq!(asked(&world), Some(Value::Null));
+
+    press(&mut world, "shift+tab");
+    assert_eq!(scope(&world).as_deref(), Some("Studio"));
+    assert_eq!(
+        asked(&world),
+        Some(json!("studio")),
+        "Tab lists the typed folder again on the new machine at once"
+    );
+    assert_eq!(
+        rows(&world),
+        [
+            "archive/ ~/notes/archive on Studio",
+            "ideas.md ~/notes/ideas.md on Studio"
+        ]
+    );
+    press(&mut world, "down");
+    press(&mut world, "enter");
+    let opened = &sent(&world, "open_markdown")[0];
+    assert_eq!(
+        (&opened["path"], &opened["host"]),
+        (&json!("/home/victor/notes/ideas.md"), &json!("studio"))
+    );
+
+    open_opener(&mut world);
+    press(&mut world, "shift+tab");
+    search(&mut world, "./docs/");
+    assert_eq!(
+        empty(&world).as_deref(),
+        Some("No folder to resolve this path against."),
+        "a relative path has no folder on an outpost"
+    );
 }

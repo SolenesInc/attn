@@ -156,11 +156,15 @@ the outpost and don't open. A file with the same path on the Mac is never shown.
 Annotations in these tiles belong to the outpost's file, apart from any Mac
 file with the same path.
 
-Markdown files an outpost agent sends or edits show in the file opener (Cmd+P)
-with the outpost's name, also those from while the outpost was away, and open
-on the outpost. The outpost checks them on its own disk, so a file deleted
+Markdown files an outpost agent sends or edits show in the file opener (Cmd+P),
+also those from while the outpost was away, and open on the outpost. Each row
+names its machine, This Mac included. **Tab** lists one machine's files at a
+time, This Mac first and then each outpost, its name in the field, and
+**Shift+Tab** goes back. **Backspace** in the empty field lists every machine
+again. While one machine is listed, a path that starts with `/` or `~` browses
+that machine. The outpost checks its files on its own disk, so a file deleted
 there leaves the opener. While the outpost can't be reached, its files stay
-listed.
+listed, marked offline, and don't open.
 
 Other files on an outpost don't open on the Mac yet. **Open in editor** and
 Cmd-clicked paths in an outpost shell fail and name the outpost, and nothing
@@ -221,7 +225,7 @@ asks where the new agent should work and starts it on the home.
 The Chief and the rest of the crew run only at the home. Attn refuses to start
 or hand off a crew member on an outpost, and the refusal names that limit.
 
-Outpost conversations have no kept copy at the home. If the harness deleted the conversation, Attn says the conversation is no longer in storage when you resume it. Files sent by an outpost agent enter no recent-file list. Transcript
+Outpost conversations have no kept copy at the home. If the harness deleted the conversation, Attn says the conversation is no longer in storage when you resume it. Transcript
 reads go to the outpost, so they need its connection.
 
 ## Start on an outpost from the launcher

@@ -26,7 +26,7 @@ use crate::picker::{
 pub(crate) use address::{
     Address, Machine, address_of, machine_for, machine_prefix, parse, this_mac,
 };
-pub(crate) use view::framed;
+pub(crate) use view::{age, age_column, framed, machine_tag, quiet};
 
 const OUTPOSTS_ENABLED: &str = "outposts_enabled";
 /// How often the launcher redraws while it waits on an outpost's listing, so the time it has

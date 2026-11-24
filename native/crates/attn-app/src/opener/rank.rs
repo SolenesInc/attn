@@ -9,13 +9,16 @@ pub(crate) struct File {
     pub(crate) path: String,
     pub(crate) label: String,
     pub(crate) recent_at: Option<String>,
+    pub(crate) edited: bool,
     pub(crate) host: Option<String>,
 }
 
-/// A recently opened file: its absolute path, when, and the outpost that holds it.
+/// A recently touched file: its absolute path, when, whether an agent's edit was its latest
+/// touch, and the outpost that holds it.
 pub(crate) struct Recent {
     pub(crate) path: String,
     pub(crate) at: String,
+    pub(crate) edited: bool,
     pub(crate) host: Option<String>,
 }
 
@@ -46,6 +49,7 @@ pub(crate) fn merged(recents: &[Recent], root: Option<&str>, index: &[String]) -
                 _ => r.path.clone(),
             },
             recent_at: Some(r.at.clone()),
+            edited: r.edited,
             host: r.host.clone(),
         })
         .collect();
@@ -64,6 +68,7 @@ pub(crate) fn merged(recents: &[Recent], root: Option<&str>, index: &[String]) -
                 path,
                 label: relative.clone(),
                 recent_at: None,
+                edited: false,
                 host: None,
             });
         }

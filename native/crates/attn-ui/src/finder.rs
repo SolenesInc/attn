@@ -120,17 +120,17 @@ pub fn field(input: TextInput) -> TextInput {
 }
 
 /// A finder's input row: `field` between what goes before and after it, its words on the
-/// line the options' words start on.
+/// line the options' words start on. What goes before gives way to the field's floor.
 pub fn input_row(prefix: Option<El>, field: El, suffix: Option<El>) -> El {
     let field = door::inset(
         el().grow(1.0)
-            .min_w(0.0)
+            .min_w(FIELD_FLOOR + 2.0 * PLAIN_FIELD_INSET.pt())
             .child(door::hang_left(field.w_full(), PLAIN_FIELD_INSET)),
         Space::S0,
         Space::S8,
     );
     let line = door::gap(row().w_full().items_center(), Space::S8)
-        .children(prefix)
+        .children(prefix.map(|p| p.shrink().min_w(0.0)))
         .child(field)
         .children(suffix);
     door::sides(line, OPTION_LINE, OPTION_LINE)
@@ -138,6 +138,11 @@ pub fn input_row(prefix: Option<El>, field: El, suffix: Option<El>) -> El {
 
 /// How far a plain text field sets its words in from its own edge.
 const PLAIN_FIELD_INSET: Space = Space::S2;
+
+/// The narrowest a finder's field gets beside a long prefix: "Open a markdown file…" in `Body`
+/// measures 146 points, and the floor leaves the field's own insets room past it, so a machine
+/// chip never cuts what the field asks for.
+const FIELD_FLOOR: f32 = 160.0;
 
 /// Where everything in a finder starts: its title, its field's box, its headings, its rows'
 /// words and its footer. A row's ground reaches out from it by the row's own inset.

@@ -1771,6 +1771,89 @@ fn opener(dark: bool) {
     snap(&mut world, "opener", dark);
 }
 
+/// The markdown opener with two outposts, ai-sandbox connected and field-lab lost: every
+/// machine's recent files, each tagged with its machine and its latest touch, or, when `scoped`,
+/// ai-sandbox's alone, its chip in the field.
+fn opener_outposts(dark: bool, scoped: bool) {
+    let outpost = |id: &str, name: &str, state: &str, reach: &str| OutpostInfo {
+        id: id.into(),
+        name: name.into(),
+        destination: format!("{name}:2200"),
+        state: state.into(),
+        reach: reach.into(),
+        state_since: "2026-11-13T08:00:00Z".into(),
+        ..OutpostInfo::default()
+    };
+    let mut world = popover_world(
+        dark,
+        |state| {
+            if let Some(settings) = state.settings.as_mut() {
+                settings.insert("outposts_enabled".into(), "true".into());
+            }
+            state.outposts = Some(vec![
+                outpost("outpost-ai", "ai-sandbox", "connected", "reachable"),
+                outpost("outpost-field", "field-lab", "lost", "unreachable"),
+            ]);
+        },
+        |daemon| {
+            daemon.on("recent_files", |r: &Request| {
+                let recent =
+                    |path: &str, at: &str, source: &str, host: Option<&str>| FileActivity {
+                        path: path.into(),
+                        last_at: at.into(),
+                        count: 1,
+                        source: source.into(),
+                        host: host.map(str::to_owned),
+                        ..FileActivity::default()
+                    };
+                message(RecentFilesResultMessage {
+                    request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                    success: true,
+                    files: vec![
+                        recent(
+                            "/home/me/shop/docs/checkout.md",
+                            "2026-11-12T08:56:00Z",
+                            "edited",
+                            Some("outpost-ai"),
+                        ),
+                        recent("/repo/plan.md", "2026-11-12T06:40:00Z", "open", None),
+                        recent(
+                            "/home/me/sensor-data/README.md",
+                            "2026-11-11T16:00:00Z",
+                            "open",
+                            Some("outpost-field"),
+                        ),
+                        recent(
+                            "/home/me/shop/notes/launch.md",
+                            "2026-11-10T09:00:00Z",
+                            "open",
+                            Some("outpost-ai"),
+                        ),
+                        recent(
+                            "/repo/docs/colors.md",
+                            "2026-11-09T12:00:00Z",
+                            "edited",
+                            None,
+                        ),
+                    ],
+                    ..RecentFilesResultMessage::new()
+                })
+            });
+        },
+    );
+    press(&mut world, Action::FileOpen);
+    if scoped {
+        world.gesture(|app| app.press("shift+tab"));
+        world.gesture(|app| app.press("shift+tab"));
+    }
+    let name = if scoped {
+        "opener-outpost-scope"
+    } else {
+        "opener-outposts"
+    };
+    snap(&mut world, name, dark);
+}
+
 /// The prompt for the agent on screen's context window cap, from the palette.
 fn context_cap(dark: bool) {
     let mut world = with_document(dark);
@@ -8294,6 +8377,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("palette", || palette(dark));
         scene("palette_no_match", || palette_no_match(dark));
         scene("opener", || opener(dark));
+        scene("opener_outposts", || opener_outposts(dark, false));
+        scene("opener_outpost_scope", || opener_outposts(dark, true));
         scene("context_cap", || context_cap(dark));
         scene("sender_pairing", || sender_pairing(dark));
         scene("terminal_overlays", || terminal_overlays(dark));

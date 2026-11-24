@@ -261,13 +261,13 @@ fn list_row(key: String, name: &str, highlighted: bool) -> ListRow {
         .title(name.to_owned())
 }
 
-fn quiet(word: String, t: &Tokens) -> El {
+pub(crate) fn quiet(word: String, t: &Tokens) -> El {
     words(word.clone(), Type::Small, t.text_tertiary)
         .label(word)
         .single_line()
 }
 
-fn age_column(age: String, t: &Tokens) -> El {
+pub(crate) fn age_column(age: String, t: &Tokens) -> El {
     row()
         .w(AGE_W)
         .justify_end()
@@ -342,6 +342,30 @@ fn locations(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> 
         .scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
+/// A machine's dot and name, keyed `key`, read as its name and how the home reaches it.
+pub(crate) fn machine_tag(
+    key: String,
+    outposts: &[attn_protocol::OutpostInfo],
+    host: Option<&str>,
+    t: &Tokens,
+) -> El {
+    let reach_word = match host {
+        None => "local".to_owned(),
+        Some(h) => {
+            outpost(outposts, h).map_or_else(|| "unreachable".to_owned(), |o| o.reach.clone())
+        }
+    };
+    let name = machine_name(outposts, host);
+    let shown = host.map(|h| outpost(outposts, h).map_or("lost", |o| o.state.as_str()));
+    Inline::joined()
+        .key(key)
+        .label(name.clone())
+        .description(reach_word)
+        .shrink()
+        .child(machine_dot(shown, t))
+        .child(quiet(name, t).truncate().shrink().min_w(0.0))
+}
+
 /// The dot before a machine's name: green while connected, amber while stalled, red once lost
 /// or refused, a ring for this machine and any other state.
 fn machine_dot(state: Option<&str>, t: &Tokens) -> El {
@@ -405,22 +429,8 @@ fn location_row(
         }
     });
     let reach = host.map(|h| outpost(outposts, h).map(|o| o.reach.clone()));
-    let machine =
-        (matches!(r.kind, Kind::Recent | Kind::Elsewhere) && !outposts.is_empty()).then(|| {
-            let reach_word = match &reach {
-                None => "local".to_owned(),
-                Some(reach) => reach.clone().unwrap_or_else(|| "unreachable".to_owned()),
-            };
-            let name = machine_name(outposts, host);
-            let shown = host.map(|h| outpost(outposts, h).map_or("lost", |o| o.state.as_str()));
-            Inline::joined()
-                .key(format!("{w}.row.{i}.machine"))
-                .label(name.clone())
-                .description(reach_word)
-                .shrink()
-                .child(machine_dot(shown, t))
-                .child(quiet(name, t).truncate().shrink().min_w(0.0))
-        });
+    let machine = (matches!(r.kind, Kind::Recent | Kind::Elsewhere) && !outposts.is_empty())
+        .then(|| machine_tag(format!("{w}.row.{i}.machine"), outposts, host, t));
     let unreachable = r.kind != Kind::Machine
         && reach
             .as_ref()

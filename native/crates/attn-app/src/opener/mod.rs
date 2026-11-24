@@ -9,7 +9,8 @@ mod view;
 
 use attn_protocol::{
     BrowseDirectoryMessage, BrowseDirectoryResultMessage, FsIndexMessage, FsIndexResultMessage,
-    OpenMarkdownMessage, OpenMarkdownResultMessage, RecentFilesMessage, RecentFilesResultMessage,
+    OpenMarkdownMessage, OpenMarkdownResultMessage, OutpostInfo, RecentFilesMessage,
+    RecentFilesResultMessage,
 };
 use rune::{Key, KeyEvent, TextEdit, Tx};
 
@@ -36,16 +37,55 @@ pub struct Opener {
     truncated: bool,
     indexing: bool,
     browse: Browse,
+    pub(crate) scope: Scope,
     /// The highlighted row, by key, so it stays on its file as the list changes.
     highlighted: Option<String>,
     /// Counts openings, so an answer to an earlier opening is dropped.
     opening: u64,
 }
 
+/// Which machine's files the opener lists: every machine's, or one machine's, `None` for this
+/// Mac.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) enum Scope {
+    #[default]
+    Every,
+    Machine(Option<String>),
+}
+
+impl Scope {
+    /// The outpost a typed path browses: the scope's outpost, or none for this Mac.
+    fn host(&self) -> Option<String> {
+        match self {
+            Scope::Machine(Some(host)) => Some(host.clone()),
+            _ => None,
+        }
+    }
+
+    fn holds(&self, host: Option<&str>) -> bool {
+        match self {
+            Scope::Every => true,
+            Scope::Machine(machine) => machine.as_deref() == host,
+        }
+    }
+
+    /// The scope after this one: every machine, this Mac, then each outpost, and round again.
+    fn step(&self, outposts: &[OutpostInfo], forward: bool) -> Scope {
+        let ring: Vec<Scope> = [Scope::Every, Scope::Machine(None)]
+            .into_iter()
+            .chain(outposts.iter().map(|o| Scope::Machine(Some(o.id.clone()))))
+            .collect();
+        let at = ring.iter().position(|s| s == self).unwrap_or(0);
+        let next = if forward { at + 1 } else { at + ring.len() - 1 };
+        ring[next % ring.len()].clone()
+    }
+}
+
 #[derive(Default)]
 struct Browse {
     /// When the typed folder is due to be listed.
     at: Option<f64>,
+    host: Option<String>,
     entries: Vec<Entry>,
     listing: bool,
     failed: bool,
@@ -65,7 +105,10 @@ pub(crate) struct Row {
     pub(crate) detail: String,
     target: String,
     folder: bool,
-    host: Option<String>,
+    pub(crate) host: Option<String>,
+    /// When the file was last touched, for a recent file.
+    pub(crate) at: Option<String>,
+    pub(crate) edited: bool,
 }
 
 /// Opens the opener on the agent behind the screen, or the notebook when there is none.
@@ -112,6 +155,7 @@ pub(crate) fn open(state: &mut State, tx: &mut Tx) {
                     .files
                     .into_iter()
                     .map(|f| rank::Recent {
+                        edited: f.source == "edited",
                         path: f.path,
                         at: f.last_at,
                         host: f.host.filter(|h| !h.is_empty()),
@@ -164,7 +208,7 @@ pub(crate) fn close(state: &mut State, tx: &mut Tx) {
 }
 
 /// The rows the query lists now, with the empty list's message.
-pub(crate) fn rows(state: &State) -> (Vec<Row>, &'static str) {
+pub(crate) fn rows(state: &State) -> (Vec<Row>, String) {
     let opener = &state.opener;
     let query = opener.query.text.as_str();
     if paths::is_path(query) {
@@ -186,10 +230,12 @@ pub(crate) fn rows(state: &State) -> (Vec<Row>, &'static str) {
                     e.path.clone()
                 },
                 folder: e.folder,
-                host: None,
+                host: opener.browse.host.clone(),
+                at: None,
+                edited: false,
             })
             .collect();
-        let empty = if paths::browse_input(query, opener.root.as_deref()).is_none() {
+        let empty = if paths::browse_input(query, browse_root(opener)).is_none() {
             "No folder to resolve this path against."
         } else if opener.browse.listing || opener.browse.at.is_some() {
             "Listing…"
@@ -198,9 +244,15 @@ pub(crate) fn rows(state: &State) -> (Vec<Row>, &'static str) {
         } else {
             "Nothing here matches."
         };
-        return (rows, empty);
+        return (rows, empty.to_owned());
     }
-    let files = rank::merged(&opener.recents, opener.root.as_deref(), &opener.index);
+    let outposts = crate::launcher::outposts(state);
+    let mut files = rank::merged(&opener.recents, opener.root.as_deref(), &opener.index);
+    files.retain(|f| {
+        let host = f.host.as_deref();
+        host.is_none_or(|h| crate::launcher::outpost(outposts, h).is_some())
+            && opener.scope.holds(host)
+    });
     let rows = rank::ranked(&files, query)
         .into_iter()
         .map(|f| Row {
@@ -209,29 +261,55 @@ pub(crate) fn rows(state: &State) -> (Vec<Row>, &'static str) {
                 None => f.path.clone(),
             },
             title: rank::basename(&f.label).to_owned(),
-            detail: match &f.host {
-                Some(host) => format!(
-                    "{} on {}",
-                    f.label,
-                    crate::desktop::outpost_name(host, &state.facts.outposts)
-                ),
-                None => f.label.clone(),
-            },
+            detail: f.label.clone(),
             target: f.path,
             folder: false,
             host: f.host,
+            at: f.recent_at,
+            edited: f.edited,
         })
         .collect();
-    let empty = if opener.indexing {
-        "Loading files…"
-    } else if query.trim().is_empty() {
-        "No recently opened files. Type to search, or a path to browse."
-    } else if opener.truncated {
-        "No files match (the index is capped, so some files are missing). Type a path to browse."
-    } else {
-        "No files match. Type a path to browse."
+    let empty = match &opener.scope {
+        Scope::Machine(host) if query.trim().is_empty() => format!(
+            "No recent files on {}.",
+            crate::launcher::machine_name(crate::launcher::outposts(state), host.as_deref())
+        ),
+        _ if opener.indexing => "Loading files…".to_owned(),
+        _ if query.trim().is_empty() => {
+            "No recently opened files. Type to search, or a path to browse.".to_owned()
+        }
+        _ if opener.truncated => {
+            "No files match (the index is capped, so some files are missing). Type a path to browse."
+                .to_owned()
+        }
+        _ => "No files match. Type a path to browse.".to_owned(),
     };
     (rows, empty)
+}
+
+/// Lists the next machine's files, or the previous one's, from the top; a typed path is listed
+/// again, at once, on the new machine.
+fn step_scope(state: &mut State, forward: bool, tx: &mut Tx) {
+    state.opener.scope = state
+        .opener
+        .scope
+        .step(crate::launcher::outposts(state), forward);
+    state.opener.highlighted = None;
+    state.opener.browse = Browse::default();
+    if paths::is_path(&state.opener.query.text) {
+        state.opener.browse.at = Some(tx.clock());
+        tx.wake_at(tx.clock());
+    }
+    attn_ui::finder::reveal(tx, view::LIST, None);
+}
+
+/// The folder a relative path resolves against: the opener's root on this Mac, none on an
+/// outpost.
+fn browse_root(opener: &Opener) -> Option<&str> {
+    match opener.scope {
+        Scope::Machine(Some(_)) => None,
+        _ => opener.root.as_deref(),
+    }
 }
 
 /// The highlighted row: the one it was on while it is still listed, else the first.
@@ -274,14 +352,16 @@ pub(crate) fn browse_due(state: &mut State, tx: &mut Tx) -> bool {
     {
         return false;
     }
-    let Some(input) = paths::browse_input(&state.opener.query.text, state.opener.root.as_deref())
+    let Some(input) = paths::browse_input(&state.opener.query.text, browse_root(&state.opener))
     else {
         return true;
     };
-    let (opening, asked) = (state.opener.opening, input.clone());
+    let host = state.opener.scope.host();
+    let (opening, asked) = (state.opener.opening, (input.clone(), host.clone()));
     state.opener.browse.listing = true;
     state.ask(
         |id| BrowseDirectoryMessage {
+            host,
             input_path: input,
             extensions: Some(EXTENSIONS.map(str::to_owned).to_vec()),
             request_id: Some(id),
@@ -289,10 +369,9 @@ pub(crate) fn browse_due(state: &mut State, tx: &mut Tx) -> bool {
         },
         move |state, answer, tx| {
             let opener = &mut state.opener;
-            if opener.opening != opening
-                || paths::browse_input(&opener.query.text, opener.root.as_deref()).as_ref()
-                    != Some(&asked)
-            {
+            let now = paths::browse_input(&opener.query.text, browse_root(opener))
+                .map(|input| (input, opener.scope.host()));
+            if opener.opening != opening || now.as_ref() != Some(&asked) {
                 return;
             }
             let result = answer
@@ -303,6 +382,7 @@ pub(crate) fn browse_due(state: &mut State, tx: &mut Tx) -> bool {
                 .and_then(|r| r.home_path.clone())
                 .unwrap_or_default();
             opener.browse = Browse {
+                host: asked.1.clone(),
                 failed: result.is_none(),
                 entries: result
                     .map(|r| r.entries)
@@ -350,6 +430,21 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             close(state, tx);
             true
         }
+        Key::Tab
+            if !crate::launcher::outposts(state).is_empty()
+                && !(ev.mods.cmd || ev.mods.alt || ev.mods.ctrl) =>
+        {
+            step_scope(state, !ev.mods.shift, tx);
+            true
+        }
+        Key::Backspace
+            if state.opener.query.text.is_empty() && state.opener.scope != Scope::Every =>
+        {
+            state.opener.scope = Scope::Every;
+            state.opener.highlighted = None;
+            attn_ui::finder::reveal(tx, view::LIST, None);
+            true
+        }
         _ => false,
     }
 }
@@ -368,6 +463,15 @@ fn pick(state: &mut State, row: Row, tx: &mut Tx) {
         state.opener.query.set_caret(end);
         state.opener.highlighted = None;
         edited(state, tx);
+        return;
+    }
+    let outposts = crate::launcher::outposts(state);
+    if crate::outpost::reach(row.host.as_deref(), outposts).offline() {
+        let machine = crate::launcher::machine_name(outposts, row.host.as_deref());
+        state.window.notify(
+            format!("Could not open {}: {machine} is offline", row.title),
+            tx,
+        );
         return;
     }
     close(state, tx);
