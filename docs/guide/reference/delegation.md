@@ -265,7 +265,8 @@ hear about it in its inbox. A watch sends:
 - Feedback: comments, review comments, review bodies and reopened review
   threads. By default, a watch skips the feedback your own account wrote.
 - Monitoring outages that last 10 minutes. A shorter failure only shows the
-  watch as delayed in `attn pr status`.
+  watch as delayed in `attn pr status`. A daemon restart starts the 10 minutes
+  again, so an outage that ends before they pass can go unreported.
 
 Agents post to GitHub with your account, so a comment from your account usually
 comes from an agent. So that an agent doesn't hear about its own `gh pr comment`,

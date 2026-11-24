@@ -184,11 +184,21 @@ ready, checks failed, changes requested, merged, closed, new review feedback, a
 reopened thread, or that monitoring is delayed. attn sends the delay update
 only once refreshes have failed for 10 minutes in a row, so a brief network,
 DNS or GitHub failure never interrupts the watcher; the watch shows as delayed
-in `attn pr status` from the first failure. When GitHub has answered that it
-cannot find the pull request on every refresh for 10 minutes, the watcher gets
-a last update saying the watch ended and why, attn removes the watch and
-records the pull request closed. Until then, a not-found is a failure like a
-network failure, a server error or a rate limit.
+in `attn pr status` from the first failure.
+
+A daemon restart before the delay update is sent starts the 10 minutes again,
+counted from the first refresh that fails after the restart. If GitHub recovers
+before they pass, the watcher gets no delay update for that outage. Victor
+accepted this missed update on purpose (seed `s-zabqmw`): carrying the wait
+across a restart would need a database migration and more timing rules, which
+cost more than this narrow case is worth. Revisit the decision only when the
+requirements or the evidence change.
+
+When GitHub has answered that it cannot find the pull request on every refresh
+for 10 minutes, the watcher gets a last update saying the watch ended and why,
+attn removes the watch and records the pull request closed. Until then, a
+not-found is a failure like a network failure, a server error or a rate limit.
+
 Feedback that attn's GitHub
 account for the host wrote, and reopened threads that account started on its own
 pull request, make no update unless the profile sets
