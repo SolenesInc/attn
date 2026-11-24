@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Wide Garden List arrow navigation skips open plot children",
+  "at": "2026-11-24T23:50:40.474Z",
+  "detail": "In the wide Garden v2 List, focus a plot and press Right then Down. The open plot's children are visible, but focus returns to the root row rather than entering the children, unlike the flag-off List. A native probe and independent review reproduced this on both keymaps. Evidence: s-ma3jmt/garden-display-review.md.\n"
+}
