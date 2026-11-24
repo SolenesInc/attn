@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Relative repository bindings do not route seeds",
+  "at": "2026-11-24T22:48:08.301Z",
+  "detail": "With garden_v2_enabled, the CLI accepts a relative repository binding such as ../repos/checkout and displays it on the bed, but a root seed planted from that checkout is left unassigned. The same binding as an absolute path routes the next seed correctly. The mismatch was reproduced with the real CLI and confirmed by a fresh source review. See s-4wqqsw and its evidence.\n"
+}
