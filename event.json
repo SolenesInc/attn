@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Details shortcut pins Ask previews",
+  "at": "2026-11-24T23:16:49.505Z",
+  "detail": "At head 66928ba60569d42b7800e18832d5ad9e46edb28a, hover an Ask chip, press the details shortcut, move over the PR chip, and click the terminal. The Ask preview remains pinned and blocks the PR hover until dismissed. The shortcut is intended for the chain and PR cards. Reproduced on both keymaps and independently confirmed. Review evidence: s-xf59qy/popover-review.md.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/desktop/header_pop.rs",
+    "line": 289
+  },
+  "culprit": "28eb7e9cb2a98e431847a6d34cc6f107419797d8"
+}
