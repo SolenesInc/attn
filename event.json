@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "PR conflict hides exact review state",
+  "at": "2026-11-24T23:17:03.747Z",
+  "detail": "At head 66928ba60569d42b7800e18832d5ad9e46edb28a, an open PR with a merge conflict shows the same amber Review cell for pending review and changes requested, with no tooltip, so the exact review state is hidden visually. The prior card showed it and the approved design exposed it on hover. Reproduced on both keymaps and independently confirmed. Review evidence: s-xf59qy/popover-review.md.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/desktop/provenance.rs",
+    "line": 425
+  },
+  "culprit": "28eb7e9cb2a98e431847a6d34cc6f107419797d8"
+}
