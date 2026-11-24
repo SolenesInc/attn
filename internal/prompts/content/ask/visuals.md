@@ -1,6 +1,6 @@
 An ask renders markdown in the app and on the phone, including Mermaid diagrams, tables, code blocks, diffs, links and local images. Show what the decision turns on instead of only describing it in prose, using the smallest visuals that make the difference clear at a glance. One ask can show more than one:
 
-- Flow, structure or states, such as options that differ in how components connect, what calls what in what order, or which states something passes through: draw each flow in a compact `mermaid` code block (`flowchart`, `sequenceDiagram` or `stateDiagram-v2`), not an SVG file. A table of their trade-offs goes beside the diagram, not in place of it.
+- Flow, structure or states, such as options that differ in how components connect, what calls what in what order, or which states something passes through: draw a compact `mermaid` code block (`flowchart`, `sequenceDiagram` or `stateDiagram-v2`) for each flow, not an SVG file. A table of their trade-offs goes beside the diagram, not in place of it.
 - UI layout, styling or a before-and-after look: show local PNG, JPEG, GIF, WebP, BMP or TIFF screenshots with `![alt](path)`, not HTML `<img>` tags, remote URLs or `data:` URLs.
 - Options compared across two or more criteria: use a small markdown table.
 - Concrete code, schema or config changes: use a short fenced code block or `diff`.
