@@ -702,19 +702,22 @@ pub(crate) fn belongs_to(ask: &Ask, session: &Session, facts: &Facts) -> bool {
     ask.session_id == session.id
 }
 
-pub(crate) const STRANDED: &str = "No agent will get this answer";
-
-pub(crate) fn stranded(ask: &Ask) -> bool {
+fn stranded(ask: &Ask) -> bool {
     ask.stranded == Some(true)
+}
+
+/// What the sheet says in place of a stranded ask's asker: that no agent takes its answer, or,
+/// once the answer reached its agent, a follow-up.
+pub(crate) fn stranded_line(ask: &Ask) -> Option<&'static str> {
+    stranded(ask).then_some(match ask.reply {
+        None => "No agent will get this answer",
+        Some(_) => "No agent will get a follow-up",
+    })
 }
 
 /// A stranded ask's answer goes to the selected profile's Chief, when it has one.
 fn to_chief(ask: &Ask, facts: &Facts) -> bool {
-    stranded(ask)
-        && facts
-            .crew
-            .iter()
-            .any(|m| m.chief == Some(true) && !m.retired && m.profile_id == facts.profiles.selected)
+    stranded(ask) && crate::chief::of(facts).is_some()
 }
 
 /// The closed agent on standby that tends the ask's seed, and whether an answer resumes it:

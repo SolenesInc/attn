@@ -57,9 +57,12 @@ pub(crate) struct View {
 
 /// The selected profile's Chief.
 pub(crate) fn member(state: &State) -> Option<&CrewMember> {
-    let profile = &state.facts.profiles.selected;
-    state
-        .facts
+    of(&state.facts)
+}
+
+pub(crate) fn of(facts: &attn_client::Facts) -> Option<&CrewMember> {
+    let profile = &facts.profiles.selected;
+    facts
         .crew
         .iter()
         .find(|m| m.chief == Some(true) && &m.profile_id == profile)

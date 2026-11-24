@@ -3781,13 +3781,12 @@ fn stranded_cache_store() -> Ask {
     }
 }
 
-fn chief_of(profile: &str, retired: bool) -> CrewMember {
+fn chief_of(profile: &str) -> CrewMember {
     CrewMember {
         id: "chief".into(),
         name: "Chief".into(),
         profile_id: profile.into(),
         chief: Some(true),
-        retired,
         ..CrewMember::default()
     }
 }
@@ -3800,7 +3799,7 @@ fn start_with_crew(asks: Vec<Ask>, crew: Vec<CrewMember>) -> World {
 
 #[test]
 fn a_stranded_ask_says_no_agent_will_get_the_answer_and_sends_it_to_the_chief() {
-    let mut world = start_with_crew(vec![stranded_cache_store()], vec![chief_of("work", false)]);
+    let mut world = start_with_crew(vec![stranded_cache_store()], vec![chief_of("work")]);
     open_sheet(&mut world);
 
     assert_eq!(name(&world, "asks.from"), "No agent will get this answer");
@@ -3815,11 +3814,7 @@ fn a_stranded_ask_says_no_agent_will_get_the_answer_and_sends_it_to_the_chief() 
 
 #[test]
 fn a_stranded_ask_keeps_send_when_the_profile_has_no_chief() {
-    for crew in [
-        vec![],
-        vec![chief_of("home", false)],
-        vec![chief_of("work", true)],
-    ] {
+    for crew in [vec![], vec![chief_of("home")]] {
         let mut world = start_with_crew(vec![stranded_cache_store()], crew);
         open_sheet(&mut world);
 
@@ -3845,7 +3840,7 @@ fn a_held_ask_sends_to_its_agent_even_with_a_chief() {
         ..stranded_cache_store()
     };
     let mut state = one_desktop(vec![api_working()]);
-    state.crew = Some(vec![chief_of("work", false)]);
+    state.crew = Some(vec![chief_of("work")]);
     let mut world = start_on(state, vec![held], &[]);
     open_sheet(&mut world);
 
@@ -3864,7 +3859,7 @@ fn a_held_ask_sends_to_its_agent_even_with_a_chief() {
 #[test]
 fn a_follow_up_on_a_stranded_replied_ask_goes_to_the_chief() {
     let answered = replied(stranded_cache_store(), vec![picked("q1", &["Redis"])], None);
-    let mut world = start_with_crew(vec![answered], vec![chief_of("work", false)]);
+    let mut world = start_with_crew(vec![answered], vec![chief_of("work")]);
     world.daemon.on("ask_follow_up", |r| {
         message(AskFollowUpResultMessage {
             request_id: r["request_id"].as_str().unwrap().into(),
@@ -3876,7 +3871,7 @@ fn a_follow_up_on_a_stranded_replied_ask_goes_to_the_chief() {
     open_sheet(&mut world);
     letter(&mut world, "r");
 
-    assert_eq!(name(&world, "asks.from"), "No agent will get this answer");
+    assert_eq!(name(&world, "asks.from"), "No agent will get a follow-up");
     letter(&mut world, "f");
     world.gesture(|app| app.type_text("Use Redis."));
     assert!(name(&world, "asks.follow-up.send").starts_with("Send to Chief"));

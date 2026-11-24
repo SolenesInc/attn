@@ -521,11 +521,9 @@ fn header(state: &State, item: &Item<'_>, t: &Tokens) -> El {
         }))
         .child(
             words(
-                if super::stranded(ask) {
-                    super::STRANDED.to_owned()
-                } else {
-                    item.from.clone()
-                },
+                super::stranded_line(ask)
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| item.from.clone()),
                 Type::Small,
                 t.text_secondary,
             )
