@@ -1,0 +1,1 @@
+Garden beds now route new seeds, plots, and delegations using the checkout on its own machine, and relative `--repo` paths resolve from the caller's working directory. Re-enter relative bindings saved by older builds with `attn seed bed set`.
