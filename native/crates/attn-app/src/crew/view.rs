@@ -1015,7 +1015,7 @@ fn seeds_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<Block> {
             status_line(
                 "crew.seeds.cap",
                 format!(
-                    "Showing matches in the newest {} of {} seeds.",
+                    "Showing matches in {} of {} seeds (every open seed and the newest closed).",
                     all.len(),
                     garden.total
                 ),

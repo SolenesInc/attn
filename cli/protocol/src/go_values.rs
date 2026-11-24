@@ -106,6 +106,7 @@ pub struct Feature {
 pub const SETTINGS: &[Setting] = &[
     Setting { key: "asks_enabled", machine: false, default_on: true },
     Setting { key: "new_session_launcher_enabled", machine: false, default_on: false },
+    Setting { key: "garden_v2_enabled", machine: false, default_on: false },
     Setting { key: "outposts_enabled", machine: false, default_on: false },
     Setting { key: "phone_access_enabled", machine: false, default_on: false },
     Setting { key: "analytics.enabled", machine: false, default_on: false },
@@ -199,6 +200,7 @@ pub const SETTINGS: &[Setting] = &[
 pub const FEATURES: &[Feature] = &[
     Feature { key: "asks_enabled", name: "Asks", summary: "Answer agents' questions from one drawer.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "on by default", applies: "New agents", search: "questions answer decisions drawer" },
     Feature { key: "new_session_launcher_enabled", name: "Launcher 2.0", summary: "Pick a path, repository and worktree for a new agent or terminal in one dialog.", note: "", group: "Interface", timing: "", stage: "experimental", applies: "Now", search: "one-screen one screen new-session new session project path" },
+    Feature { key: "garden_v2_enabled", name: "Garden v2", summary: "Refuse self-close on growing seeds not on standby, and park them when another agent closes their session.", note: "", group: "Interface", timing: "", stage: "experimental", applies: "Now", search: "garden v2 close guard growing seed park standby" },
     Feature { key: "outposts_enabled", name: "Outposts", summary: "Connect this home to attn on other computers.", note: "", group: "Connections", timing: "", stage: "experimental", applies: "Now", search: "remote computers bridge ssh" },
     Feature { key: "phone_access_enabled", name: "Phone access", summary: "Let phones you pair see this home's agents.", note: "Turning it off disconnects every phone.", group: "Connections", timing: "", stage: "experimental", applies: "Now", search: "mobile iphone pair" },
     Feature { key: "analytics.enabled", name: "Usage analytics", summary: "Keep a redacted record of how attn is used, here and on outposts.", note: "Nothing is sent unless you turn on sharing.", group: "Data", timing: "", stage: "experimental", applies: "Now", search: "telemetry vents record" },

@@ -69,7 +69,11 @@ commands:
     runs: home
     grant: own
     doc: |
-      Closes a session for good. A session may close itself and agents below it in its delegation chain, including delegates of delegates; the profile's Chief may close any agent of that profile. The reason is required: the session row stays in the ledger, and the reason is what the next reader gets. Without `compact` it is immediate, so say what you have to say first. A seed id closes whoever tends it, and the seed keeps its tender with a note about the close. `self` closes the caller without its id and takes no target. `self` refuses while the close would leave one of your open asks with no agent to take the answer, and names each ask: an ask about no seed, which the close withdraws, or one about a seed that nobody else tends and no standby resumes you for. End your turn and wait for the answer, or withdraw the ask with `attn ask close`. With `compact` the check runs again once the compact has an outcome, so an ask you open before then keeps the session open, and attn leaves a notice in your inbox that names each ask. A close by another session goes through.
+      Closes a session for good. A session may close itself and agents below it in its delegation chain, including delegates of delegates. The profile's Chief may close any agent of that profile. The reason is required because the session row stays in the ledger, and the reason is what the next reader gets. Without `compact` the close is immediate, so say what you have to say first. Pass a session id, a seed id to close whoever tends it, or `self` to close yourself with no target.
+
+      When a session closes, each seed it tends keeps its tender and gets a note about the close. When `garden_v2_enabled` is on, closing another session instead parks its growing seeds that are not on standby. Seeds on standby still keep their tender with a note.
+
+      Closing yourself refuses in two cases, while a close by another session goes through. First, closing yourself refuses while you have an open ask that nobody can answer after the close, and names each one. That covers an ask about no seed, which the close withdraws, or one on a seed with no other tender or standby. End your turn and wait for the answer, or withdraw the ask with `attn ask close`. Second, when `garden_v2_enabled` is on, closing yourself refuses while you tend a growing seed that is not on standby. Harvest, park, wither, or put each one on standby first. With `compact`, both checks run again once the compact has an outcome. An ask opened or a growing seed kept before then keeps the session open, and attn leaves a notice in your inbox naming why.
 
       `compact` goes only with `self`: attn waits for your turn to end, compacts your conversation through the harness, then closes the session. End your turn right after: you get no turn after the compact. When the compact fails, the session still closes, and the reason says the compact did not run. Only a Claude session with the Claude mod and a Codex session on the shared Codex app server compact, on the home machine or an outpost, and a Sigma session on the home machine; attn refuses any other session and says why. Compact only a session that will resume as itself, as a seed's tender does when its standby resumes it. A crew member's next session starts fresh.
     args:
@@ -82,6 +86,7 @@ commands:
       - {code: no_sender, usage: true, fix: "Pass {session}, or run it inside an attn session."}
       - {code: close_reason_required, usage: true, fix: "Pass {reason}: why this session is done."}
       - {code: session_not_found, fix: "Pass a session id agent_list names, or {self} to close yourself."}
+      - {code: growing_seeds_held, fix: "Harvest, park, wither, or put each growing seed on standby, then close again."}
 
   - name: agent reload
     summary: interrupt and reload agents in place

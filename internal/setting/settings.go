@@ -20,6 +20,15 @@ var (
 		Since:   "2026-10-16",
 		Search:  "one-screen one screen new-session new session project path",
 	})
+	GardenV2Enabled = feature("garden_v2_enabled", "Refuse self-close on growing seeds not on standby, and park them when another session closes their tender: true or false. Experimental; off by default.", Info{
+		Name:    "Garden v2",
+		Summary: "Refuse self-close on growing seeds not on standby, and park them when another agent closes their session.",
+		Group:   Interface,
+		Applies: Now,
+		Stage:   Experimental,
+		Since:   "2026-11-24",
+		Search:  "garden v2 close guard growing seed park standby",
+	})
 	OutpostsEnabled = feature("outposts_enabled", "Connect to outposts from this home: true or false. Experimental; off by default.", Info{
 		Name:    "Outposts",
 		Summary: "Connect this home to attn on other computers.",

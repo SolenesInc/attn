@@ -10,13 +10,12 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
 
 const agentCloseReasonMaxChars = garden.MaxReasonChars
-
-const agentCloseTendedSeedLimit = 100
 
 func (d *Daemon) runAgentClose(ctx context.Context, c command.Caller, a command.AgentCloseArgs) (any, error) {
 	target := strings.TrimSpace(a.Target)
@@ -111,6 +110,11 @@ func (d *Daemon) beginAgentClose(msg *agentCloseRequest) (*protocol.AgentCloseRe
 		}
 		if err := d.refuseStrandingSelfClose(target.ID); err != nil {
 			return nil, sessionCloseInFlight{}, &agentCloseRefusal{"asks_stranded", err.Error()}
+		}
+		if d.on(setting.GardenV2Enabled) {
+			if err := d.refuseGrowingSeedsSelfClose(target, ""); err != nil {
+				return nil, sessionCloseInFlight{}, &agentCloseRefusal{"growing_seeds_held", protocol.MentionedText(err)}
+			}
 		}
 	}
 	if protectErr := d.sessionCloseError(target.ID); protectErr != nil {
@@ -223,34 +227,108 @@ func (d *Daemon) resolveAgentCloseSession(reference protocol.SessionID) (*protoc
 	return match, ""
 }
 
+func (d *Daemon) refuseGrowingSeedsSelfClose(session *protocol.Session, goingOnStandby string) error {
+	all, err := d.rememberedGardenSeeds()
+	if err != nil {
+		if docstore.IsUndeclaredCollection(err) {
+			return nil
+		}
+		return fmt.Errorf("reading the seeds %s tends: %w", session.ID, err)
+	}
+	tender := who.Session(session.ID)
+	var held []string
+	for _, seed := range all.seeds {
+		if seed.ProfileID != session.ProfileID || seed.Status != garden.StatusGrowing || seed.Tender != tender || seed.ID == goingOnStandby {
+			continue
+		}
+		standby, err := d.seedStandby(seed)
+		if err != nil {
+			return fmt.Errorf("reading standby for %s: %w", seed.ID, err)
+		}
+		if standby != nil {
+			continue
+		}
+		held = append(held, fmt.Sprintf("%s (%s)", seed.ID, seed.Title))
+	}
+	if len(held) == 0 {
+		return nil
+	}
+	if goingOnStandby != "" {
+		return protocol.Refuse(protocol.RefusalWrongState,
+			"%s was not placed on standby because closing this session leaves %d other growing seed(s) untended: %s. Finish or park them first, or keep the session open while putting earlier seeds on standby (`{attn seed standby <id> --stay -m \"…\"}`) before putting the last seed on standby to close",
+			goingOnStandby, len(held), strings.Join(held, ", "))
+	}
+	standbyHint := "`{attn seed standby <id> -m \"…\"}`"
+	if len(held) > 1 {
+		standbyHint = "`{attn seed standby <id> --stay -m \"…\"}` for earlier seeds and `{attn seed standby <id> -m \"…\"}` on the last"
+	}
+	return protocol.Refuse(protocol.RefusalWrongState,
+		"closing this session leaves %d growing seed(s) untended: %s. Finish or hand off each seed first with `{attn seed harvest <id> -m \"…\"}`, `{attn seed park <id> -m \"…\"}`, `{attn seed wither <id> -m \"…\"}`, or %s",
+		len(held), strings.Join(held, ", "), standbyHint)
+}
+
 func (d *Daemon) noteCloseOnTendedSeeds(
 	target, caller *protocol.Session, rule protocol.AgentCloseRule, reason string,
 ) []string {
 	noted := []string{}
-	read, _, err := d.runDocQuery(docstore.Query{
-		Namespace:  garden.Namespace,
-		Collection: garden.CollectionSeeds,
-		Filters:    []docstore.Filter{{Field: "tender", Op: docstore.OpEq, Value: who.Session(target.ID).String()}, {Field: "profile_id", Op: docstore.OpEq, Value: caller.ProfileID}},
-		Limit:      agentCloseTendedSeedLimit,
-	})
+	all, err := d.rememberedGardenSeeds()
 	if err != nil {
-		d.logf("agent close: reading the seeds %s tended: %v", target.ID, err)
+		if !docstore.IsUndeclaredCollection(err) {
+			d.logf("agent close: reading the seeds %s tended: %v", target.ID, err)
+		}
 		return noted
 	}
-	for _, doc := range read.Documents {
-		standby, err := d.store.SeedStandby(doc.ID)
-		if err != nil {
-			d.logf("agent close: reading the standby of %s: %v", doc.ID, err)
-		}
-		onStandby := standby != nil && standby.Tender == who.Session(target.ID)
-		body := agentCloseSeedNote(target, caller, rule, reason, onStandby)
-		if _, err := d.appendSeedNote(doc.ID, body, d.partyOfSession(caller.ID).Actor(), garden.NoteKindNote, nil, false, caller.ID); err != nil {
-			d.logf("agent close: noting the close of %s on %s: %v", target.ID, doc.ID, err)
+	tender := who.Session(target.ID)
+	autoPark := d.on(setting.GardenV2Enabled) && rule != protocol.AgentCloseRuleSelf
+	for _, seed := range all.seeds {
+		if seed.ProfileID != target.ProfileID || seed.Tender != tender {
 			continue
 		}
-		noted = append(noted, doc.ID)
+		standby, err := d.seedStandby(seed)
+		if err != nil {
+			d.logf("agent close: reading the standby of %s: %v", seed.ID, err)
+		}
+		onStandby := standby != nil
+		if autoPark && seed.Status == garden.StatusGrowing && !onStandby {
+			comment := agentCloseAutoParkNote(target, caller, rule, reason)
+			ask := garden.Ask{Actor: d.partyOfSession(caller.ID).Actor(), CauseSession: caller.ID}
+			if _, _, _, err := d.applySeedTransitionDetailed(seed.ID, garden.VerbPark, ask, comment); err == nil {
+				noted = append(noted, seed.ID)
+				continue
+			} else {
+				d.logf("agent close: auto-parking %s after closing %s: %v", seed.ID, target.ID, err)
+			}
+		}
+		body := agentCloseSeedNote(target, caller, rule, reason, onStandby)
+		if _, err := d.appendSeedNote(seed.ID, body, d.partyOfSession(caller.ID).Actor(), garden.NoteKindNote, nil, false, caller.ID); err != nil {
+			d.logf("agent close: noting the close of %s on %s: %v", target.ID, seed.ID, err)
+			continue
+		}
+		noted = append(noted, seed.ID)
 	}
 	return noted
+}
+
+func agentCloseCloser(caller *protocol.Session, rule protocol.AgentCloseRule) string {
+	closer := agentCloseSessionRef(caller)
+	switch rule {
+	case protocol.AgentCloseRuleSelf:
+		return "itself"
+	case protocol.AgentCloseRuleChiefOfStaff:
+		return "the chief of staff, " + closer
+	case protocol.AgentCloseRuleDispatcher:
+		return "its dispatcher, " + closer
+	default:
+		return closer
+	}
+}
+
+func agentCloseAutoParkNote(target, caller *protocol.Session, rule protocol.AgentCloseRule, reason string) string {
+	return fmt.Sprintf(
+		"Session %s was closed by %s while tending this seed. Reason: %s\n\n"+
+			"The seed was parked automatically so whoever comes next can pick it up. "+
+			"`attn session show %s` reads the closed row back.",
+		agentCloseSessionRef(target), agentCloseCloser(caller, rule), reason, shortSessionID(target.ID))
 }
 
 func agentCloseSessionRef(session *protocol.Session) string {
@@ -261,15 +339,7 @@ func agentCloseSessionRef(session *protocol.Session) string {
 }
 
 func agentCloseSeedNote(target, caller *protocol.Session, rule protocol.AgentCloseRule, reason string, onStandby bool) string {
-	closer := agentCloseSessionRef(caller)
-	switch rule {
-	case protocol.AgentCloseRuleSelf:
-		closer = "itself"
-	case protocol.AgentCloseRuleChiefOfStaff:
-		closer = "the chief of staff, " + closer
-	case protocol.AgentCloseRuleDispatcher:
-		closer = "its dispatcher, " + closer
-	}
+	closer := agentCloseCloser(caller, rule)
 	next := "so whoever comes next takes it or parks it"
 	if onStandby {
 		next = "and the seed is on standby, so its next seed mail reopens that session"

@@ -838,7 +838,7 @@ pub(super) fn view(state: &State, t: &Tokens) -> El {
     }
     if total > seeds.len() as i64 {
         let said = format!(
-            "The garden holds {total} seeds; this board has the newest {}.",
+            "The garden holds {total} seeds; this board has {} (every open seed and the newest closed).",
             seeds.len()
         );
         parts.push(Prose::empty("garden.board.capped", said).el(t));

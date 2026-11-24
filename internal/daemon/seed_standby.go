@@ -8,6 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
@@ -56,6 +57,11 @@ func (d *Daemon) seedStandbyRequest(msg *seedStandbyRequest, setter who.Actor) (
 		}
 		if err := d.refuseClosingStandbyWithHeldAsks(caller.ID, seed.ID); err != nil {
 			return nil, nil, err
+		}
+		if d.on(setting.GardenV2Enabled) {
+			if err := d.refuseGrowingSeedsSelfClose(caller, seed.ID); err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 	result, err := d.writeSeedStandby(seedID, &standby, reminder, setter)

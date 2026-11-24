@@ -396,6 +396,9 @@ func (g gardenRead) row(seed garden.Seed, doc docstore.Document) protocol.SeedRo
 	if !seed.Tender.IsZero() {
 		row.Tender = protocol.Ptr(g.parties.view(seed.Tender))
 	}
+	if seed.AutomationID > 0 {
+		row.AutomationID = protocol.Ptr(seed.AutomationID)
+	}
 	for _, e := range seed.Edges {
 		row.Edges = append(row.Edges, protocol.SeedEdge{Kind: e.Kind, To: e.To})
 	}
@@ -473,6 +476,9 @@ func (g gardenRead) seedToProtocol(seed garden.Seed, doc docstore.Document) prot
 	}
 	if protocol.TrimID(seed.LastExecutionID) == "" {
 		out.LastExecutionID = nil
+	}
+	if seed.AutomationID > 0 {
+		out.AutomationID = protocol.Ptr(seed.AutomationID)
 	}
 	if !seed.Tender.IsZero() {
 		out.Tender = protocol.Ptr(g.parties.view(seed.Tender))
@@ -553,7 +559,7 @@ func (d *Daemon) seedsForBroadcast(profileID ...string) (seeds []protocol.Seed, 
 		}
 		return nil, 0
 	}
-	return read.wireWithoutBodies(read.seeds[:min(len(read.seeds), gardenSnapshotLimit)]), len(read.seeds)
+	return read.wireWithoutBodies(garden.Window(read.seeds, gardenSnapshotLimit)), len(read.seeds)
 }
 
 func (d *Daemon) projectGardenSeeds() {
@@ -931,7 +937,7 @@ func (d *Daemon) seedList(msg *seedListRequest) (*protocol.SeedListResult, error
 		seeds = read.onStandby(seeds)
 		result.Total = len(seeds)
 	}
-	result.Seeds = read.rows(seeds[:min(len(seeds), gardenSnapshotLimit)])
+	result.Seeds = read.rows(garden.Window(seeds, gardenSnapshotLimit))
 	return result, nil
 }
 

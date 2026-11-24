@@ -1954,7 +1954,7 @@ fn the_seeds_tab_says_when_its_list_is_only_the_newest_part_of_the_garden() {
     push_seeds(&mut world, others, 481);
     assert_eq!(
         named(&world, "crew.seeds.cap").as_deref(),
-        Some("Showing matches in the newest 4 of 481 seeds.")
+        Some("Showing matches in 4 of 481 seeds (every open seed and the newest closed).")
     );
     assert_eq!(
         named(&world, "crew.seeds.empty").as_deref(),

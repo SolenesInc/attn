@@ -313,3 +313,40 @@ func TestACompactingCloseKeepsTheSessionOpenForAnAskOpenedInALaterTurnAndSaysWhy
 	}
 	stillOpen(t, cli, session, "after the answer")
 }
+
+func TestACompactingCloseKeepsTheSessionOpenForAGrowingSeedTendedInALaterTurnAndSaysWhy(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "garden_v2_enabled", "true")
+	registerSessions(t, w, cli, "sender")
+	session, codex := sharedCodexInATurn(t, w, app)
+	conversation := codex.ConversationID
+
+	closeCompacting(t, cli, session)
+	placing := w.PauseAt(pausepoint.CompactingClosePlacing)
+	sendAgentMessage(t, cli, "sender", session, "Pick up the follow-up seed before closing")
+	codex.Reply("Fixed and closing. <!-- attn:state=idle -->")
+	placing.Await()
+	if rang := w.CodexServer().Prompted(conversation); rang == "" {
+		t.Fatal("the queued message did not start a turn")
+	}
+	if _, err := cli.AgentInboxBatch(protocol.SessionID(session), 10); err != nil {
+		t.Fatalf("read the ring's message: %v", err)
+	}
+	seed := plantSeedAs(t, cli, session, "Follow-up started before compact finished")
+	lifeMove(t, cli, session, seed, "tend", "", "")
+	placing.Release()
+	codex.Reply("Started the follow-up seed. <!-- attn:state=idle -->")
+
+	if rang := w.CodexServer().Prompted(conversation); rang == "" {
+		t.Fatal("no ring after the compact that found the growing seed")
+	}
+	told, err := cli.AgentInboxBatch(protocol.SessionID(session), 10)
+	if err != nil || len(told.Items) != 1 || !strings.Contains(told.Items[0].Content, seed) || !strings.Contains(told.Items[0].Content, "Follow-up started before compact finished") {
+		t.Fatalf("after its compact the agent's inbox holds %+v (%v), want one notice naming %s", told, err, seed)
+	}
+	stillOpen(t, cli, session, "after the compact that found the growing seed")
+	if got := w.CodexServer().Compactions(conversation); got != 1 {
+		t.Errorf("the conversation compacted %d times, want once", got)
+	}
+}

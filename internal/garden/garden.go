@@ -56,6 +56,7 @@ type Seed struct {
 	Planter         who.Actor          `json:"planter,omitzero"`
 	Tender          who.Party          `json:"tender,omitzero"`
 	LastExecutionID protocol.SessionID `json:"last_execution_id,omitempty"`
+	AutomationID    int                `json:"automation_id,omitempty"`
 	StateChangedAt  string             `json:"state_changed_at,omitempty"`
 	Edges           []Edge             `json:"edges"`
 	Template        bool               `json:"template"`

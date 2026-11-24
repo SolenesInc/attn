@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "7fc37e95d240";
+pub const PROTOCOL_VERSION: &str = "4b4cc0ede0f7";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -9048,6 +9048,8 @@ impl RuntimeRespawnedMessage {
 pub struct Seed {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authorization: Option<SeedAuthorization>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub automation_id: Option<i64>,
     pub body: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checks: Option<Vec<SeedCheck>>,
@@ -9768,6 +9770,8 @@ pub struct SeedOutlinePart {
 pub struct SeedPlantResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authorization: Option<SeedAuthorization>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub automation_id: Option<i64>,
     pub body: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checks: Option<Vec<SeedCheck>>,
@@ -9918,6 +9922,8 @@ pub struct SeedRollbackResult {
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedRow {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub automation_id: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub check_tally: Option<SeedCheckTally>,
     pub claimed: bool,

@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
@@ -364,6 +365,12 @@ func (d *Daemon) finishCompactingClose(ctx context.Context, msg protocol.Compact
 	if err := d.refuseStrandingSelfClose(target.ID); err != nil {
 		d.tellDeferredCloseStaysOpen(target.ID, err)
 		return compactingCloseVerdict(err.Error()), nil
+	}
+	if d.on(setting.GardenV2Enabled) {
+		if err := d.refuseGrowingSeedsSelfClose(target, ""); err != nil {
+			d.tellDeferredCloseStaysOpen(target.ID, err)
+			return compactingCloseVerdict(err.Error()), nil
+		}
 	}
 	teardown, err := d.prepareSessionTeardown(target.ID)
 	if err != nil {

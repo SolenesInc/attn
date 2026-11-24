@@ -5954,6 +5954,8 @@ model Seed {
   // The most recent attn session that worked this seed. It survives Park and
   // session removal; the current claim is tender.
   "last_execution_id"?: SessionID;
+  // Present when this seed was planted by an automation definition.
+  "automation_id"?: safeint;
   // The latest lifecycle state transition. Legacy seeds use updated_at as a
   // conservative fallback and say so through state_changed_at_exact.
   "state_changed_at": string;
@@ -6013,6 +6015,7 @@ model SeedRow {
   "step_slug": string;
   "tender"?: PartyView;
   "claimed": boolean;
+  "automation_id"?: safeint;
   "ready": boolean;
   "edges": SeedEdge[];
   // Present exactly when the seed is a crown, as on Seed.

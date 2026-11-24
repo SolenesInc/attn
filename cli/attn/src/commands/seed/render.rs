@@ -457,7 +457,7 @@ pub fn list(result: &SeedListResult, view: &ListView) -> String {
         let shown = result.seeds.len();
         let _ = writeln!(
             out,
-            "\nshowing the newest {shown} of {} seeds — one read is capped at {shown}. The {} not shown are the oldest; `attn seed show <id>` still reaches any of them.",
+            "\nshowing {shown} of {} seeds (every open seed and the newest closed). The {} not shown are older closed seeds; `attn seed show <id>` still reaches any of them.",
             result.total,
             result.total - count(shown)
         );

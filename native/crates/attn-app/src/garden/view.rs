@@ -837,9 +837,9 @@ fn capped(state: &State, place: &Place, t: &Tokens) -> Option<El> {
     let total = state.facts.garden.total_of(&state.facts.profiles.selected);
     (total > shown).then(|| {
         let words = if place.query.active {
-            format!("Search covers the newest {shown} of {total} seeds.")
+            format!("Search covers {shown} of {total} seeds (every open seed and the newest closed).")
         } else {
-            format!("The garden holds {total} seeds; this panel has the newest {shown}.")
+            format!("The garden holds {total} seeds; this panel has {shown} (every open seed and the newest closed).")
         };
         Prose::empty("garden.capped", words).el(t)
     })

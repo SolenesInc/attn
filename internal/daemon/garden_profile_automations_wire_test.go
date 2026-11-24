@@ -36,6 +36,42 @@ func TestProfileDeletionRefusesAnAutomationUntilItIsDeleted(t *testing.T) {
 		}
 		first := runs[0]
 		worker, seed := protocol.Deref(first.SessionID), protocol.Deref(first.SeedID)
+		if shown := lifeShow(t, cli, seed).Seed; protocol.Deref(shown.AutomationID) != applied.Definition.ID {
+			t.Fatalf("automation-planted seed show automation_id = %v, want %d", shown.AutomationID, applied.Definition.ID)
+		}
+		listed := gardenPlotList(t, cli, false, 0)
+		var sawRow bool
+		for _, row := range listed.Seeds {
+			if row.ID == seed {
+				sawRow = true
+				if protocol.Deref(row.AutomationID) != applied.Definition.ID {
+					t.Fatalf("automation-planted seed ls automation_id = %v, want %d", row.AutomationID, applied.Definition.ID)
+				}
+			}
+		}
+		if !sawRow {
+			t.Fatalf("automation-planted seed %s missing from seed ls", seed)
+		}
+		manualID := plantSeedAs(t, cli, "", "Manual seed")
+		if manual := lifeShow(t, cli, manualID).Seed; manual.AutomationID != nil {
+			t.Fatalf("manual seed automation_id = %v, want nil", manual.AutomationID)
+		}
+		var sawPushed bool
+		for _, pushed := range w.AppOn(side.ID).Initial.Seeds {
+			if pushed.ID == seed {
+				sawPushed = true
+				if protocol.Deref(pushed.AutomationID) != applied.Definition.ID {
+					t.Fatalf("automation-planted seed push automation_id = %v, want %d", pushed.AutomationID, applied.Definition.ID)
+				}
+			}
+			if pushed.ID == manualID && pushed.AutomationID != nil {
+				t.Fatalf("manual seed push automation_id = %v, want nil", pushed.AutomationID)
+			}
+		}
+		if !sawPushed {
+			t.Fatalf("automation-planted seed %s missing from Initial.Seeds", seed)
+		}
+		lifeMove(t, cli, "", manualID, "harvest", "done", "")
 		lifeMove(t, cli, string(worker), seed, "harvest", "finished", "")
 		if _, err := cli.AgentClose(string(worker), worker, "finished this automation run"); err != nil {
 			t.Fatal(err)

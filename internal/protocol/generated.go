@@ -10028,6 +10028,9 @@ type Seed struct {
 	// Authorization corresponds to the JSON schema field "authorization".
 	Authorization *SeedAuthorization `json:"authorization,omitempty,omitzero"`
 
+	// AutomationID corresponds to the JSON schema field "automation_id".
+	AutomationID *int `json:"automation_id,omitempty,omitzero"`
+
 	// Body corresponds to the JSON schema field "body".
 	Body string `json:"body"`
 
@@ -11015,6 +11018,9 @@ type SeedPlantResult struct {
 	// Authorization corresponds to the JSON schema field "authorization".
 	Authorization *SeedAuthorization `json:"authorization,omitempty,omitzero"`
 
+	// AutomationID corresponds to the JSON schema field "automation_id".
+	AutomationID *int `json:"automation_id,omitempty,omitzero"`
+
 	// Body corresponds to the JSON schema field "body".
 	Body string `json:"body"`
 
@@ -11255,6 +11261,9 @@ type SeedRollbackResult struct {
 }
 
 type SeedRow struct {
+	// AutomationID corresponds to the JSON schema field "automation_id".
+	AutomationID *int `json:"automation_id,omitempty,omitzero"`
+
 	// CheckTally corresponds to the JSON schema field "check_tally".
 	CheckTally *SeedCheckTally `json:"check_tally,omitempty,omitzero"`
 

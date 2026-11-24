@@ -552,7 +552,7 @@ fn carries_how_many_seeds_the_garden_holds_not_just_the_ones_it_sent() {
     world.settle();
     assert!(shows(
         &world,
-        "The garden holds 1421 seeds; this panel has the newest 1."
+        "The garden holds 1421 seeds; this panel has 1 (every open seed and the newest closed)."
     ));
 
     push(&mut world, vec![seed("s-bbb222", "the newest one")]);
