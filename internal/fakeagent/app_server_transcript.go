@@ -3,6 +3,7 @@ package fakeagent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -24,6 +25,7 @@ const (
 	methodServerForkSubagent = "server_fork_subagent"
 	methodServerWorker       = "server_worker"
 	methodServerForkWorker   = "server_fork_worker"
+	methodServerMail         = "server_mail"
 
 	serverWindowMin = 50
 	serverWindowMax = 2 * serverWindowMin
@@ -335,6 +337,25 @@ func (s *appServer) handleTranscriptKit(method string, raw json.RawMessage) (any
 		if !isWorker {
 			s.appendLocked(parent.ID, serverEntry{Kind: "sigma.subagent", Data: map[string]any{"call": callID, "conversation": childTranscript.Number, "title": p.Text}})
 		}
+	case methodServerMail:
+		conv := s.convs[p.ThreadID]
+		if conv == nil {
+			return nil, os.ErrNotExist, true
+		}
+		conv.submitted++
+		task := "/root"
+		if conv.Lineage != nil && conv.Lineage.Task != "" {
+			task = conv.Lineage.Task
+		}
+		body := fmt.Sprintf("Message Type: NEW_TASK\nTask name: %s\nSender: %s\nPayload:\n%s", task, p.Key, p.Text)
+		s.appendLocked(conv.ID, serverEntry{
+			Kind:  "sigma.mail",
+			Data:  map[string]any{"kind": "new_task", "task": task, "sender": p.Key},
+			Model: []json.RawMessage{message("user", map[string]any{"content": body})},
+		})
+		if conv.Status == "idle" {
+			s.statusLocked(conv, "working", nil)
+		}
 	case methodForget:
 		delete(s.convs, p.ThreadID)
 		delete(s.transcripts, p.ThreadID)
@@ -468,4 +489,9 @@ func (s *AppServer) Worker(parent, id, task string) {
 func (s *AppServer) ForkedWorker(parent, id, task string) {
 	s.t.Helper()
 	s.call(methodServerForkWorker, serverKitParams{ThreadID: parent, Key: id, Text: task}, nil)
+}
+
+func (s *AppServer) Mail(conversation, sender, text string) {
+	s.t.Helper()
+	s.call(methodServerMail, serverKitParams{ThreadID: conversation, Key: sender, Text: text}, nil)
 }

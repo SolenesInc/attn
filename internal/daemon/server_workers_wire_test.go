@@ -492,3 +492,94 @@ func TestServerBackedPluginAdoptsWorkersOverMCPAndWithoutWatchOrResume(t *testin
 		driver.leave(w)
 	})
 }
+
+func TestAppServerWorkerStopsAndApprovalsOpenTurnsForMailAndUserRuns(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app := w.App()
+		setSetting(t, app, "queue_mode_enabled", "true")
+		parent, view, server := appServerSession(t, w, app, h)
+		parentConv := view.ConversationID
+		promptUntilWorking(app, parent, view, server, "start a worker")
+		parentMark := len(app.Log())
+		server.Reply(parentConv, "Started. <!-- attn:state=idle -->")
+		testworld.AwaitSessionSince(app, parentMark, parent, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+		server.Worker(parentConv, "turn-worker", "audit")
+		server.Mail("turn-worker", "/root", "audit the billing path")
+		adopted := awaitAdoptedSession(app, "audit")
+		workerID := string(adopted.ID)
+		testworld.AwaitSession(app, workerID, func(s protocol.Session) bool {
+			return s.State == protocol.SessionStateWorking && !protocol.Deref(s.Hidden)
+		})
+		workerTile := w.Launched(workerID)
+
+		firstStopMark := len(app.Log())
+		server.Reply("turn-worker", "Initial pass done. <!-- attn:state=idle -->")
+		firstStopped := testworld.AwaitSessionSince(app, firstStopMark, workerID, func(s protocol.Session) bool {
+			return s.State == protocol.SessionStateIdle
+		})
+		if !protocol.Deref(firstStopped.TurnOwed) {
+			t.Fatalf("initial parent-mailed worker stop did not open a turn: %+v", firstStopped)
+		}
+		settled := settleFromApp(app, firstStopped)
+		if protocol.Deref(settled.TurnOwed) {
+			t.Fatalf("settled worker still owes a turn: %+v", settled)
+		}
+
+		mailStartMark := len(app.Log())
+		server.Mail("turn-worker", "/root", "audit the refund path")
+		mailWorking := testworld.AwaitSessionSince(app, mailStartMark, workerID, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+		if protocol.Deref(mailWorking.TurnOwed) {
+			t.Fatalf("settled worker opened a turn before parent-mailed run stopped: %+v", mailWorking)
+		}
+		mailStopMark := len(app.Log())
+		server.Reply("turn-worker", "Refund path audited. <!-- attn:state=idle -->")
+		mailStopped := testworld.AwaitSessionSince(app, mailStopMark, workerID, func(s protocol.Session) bool {
+			return s.State == protocol.SessionStateIdle
+		})
+		if !protocol.Deref(mailStopped.TurnOwed) {
+			t.Fatalf("parent-mailed worker stop did not open a turn: %+v", mailStopped)
+		}
+		settled = settleFromApp(app, mailStopped)
+		if protocol.Deref(settled.TurnOwed) {
+			t.Fatalf("settled worker still owes a turn after parent-mailed run: %+v", settled)
+		}
+
+		userStartMark := len(app.Log())
+		app.TypeLine(workerID, "check the edge cases")
+		workerTile.Prompted()
+		server.Prompted("turn-worker")
+		userWorking := testworld.AwaitSessionSince(app, userStartMark, workerID, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+		if protocol.Deref(userWorking.TurnOwed) {
+			t.Fatalf("settled worker opened a turn before person run stopped: %+v", userWorking)
+		}
+		userStopMark := len(app.Log())
+		server.Reply("turn-worker", "Edge cases checked. <!-- attn:state=idle -->")
+		userStopped := testworld.AwaitSessionSince(app, userStopMark, workerID, func(s protocol.Session) bool {
+			return s.State == protocol.SessionStateIdle
+		})
+		if !protocol.Deref(userStopped.TurnOwed) {
+			t.Fatalf("person-started worker stop did not open a turn: %+v", userStopped)
+		}
+		settled = settleFromApp(app, userStopped)
+		if protocol.Deref(settled.TurnOwed) {
+			t.Fatalf("settled worker still owes a turn after person run: %+v", settled)
+		}
+
+		approvalStartMark := len(app.Log())
+		server.Mail("turn-worker", "/root", "apply the fix")
+		approvalWorking := testworld.AwaitSessionSince(app, approvalStartMark, workerID, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+		if protocol.Deref(approvalWorking.TurnOwed) {
+			t.Fatalf("settled worker opened a turn before approval wait: %+v", approvalWorking)
+		}
+		approvalMark := len(app.Log())
+		server.AskApproval("turn-worker")
+		approvalWait := testworld.AwaitSessionSince(app, approvalMark, workerID, func(s protocol.Session) bool {
+			return s.State == protocol.SessionStatePendingApproval
+		})
+		if !protocol.Deref(approvalWait.TurnOwed) {
+			t.Fatalf("worker approval wait did not open a turn: %+v", approvalWait)
+		}
+	})
+}

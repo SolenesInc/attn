@@ -177,10 +177,15 @@ measurement uses that one.
   idle (probe).
 - Entry ids ascend across the server, not within one conversation.
   `conversation/entries` pages a conversation's entries in either order.
-- A prompt is a `sigma.user` entry, whose data names its author. A reply or a
-  tool call is a `pi.assistant` entry, and a tool's output a `pi.tool-result`
-  entry. `pi.usage` holds each model's token and cost totals, and `pi.live`
-  the compactions running.
+- A prompt is a `sigma.user` entry, whose data names its author. A message
+  between agents is a `sigma.mail` entry (`data: {kind, task, sender}`, where
+  `task` is the recipient's task path, `sender` is the sender's, and `kind` is
+  `new_task` for a task assigned to a worker, `message` for peer or wake mail,
+  or `final_answer` for a worker's reply to its parent, read in
+  `packages/sigma/src/agents.ts` at e69ff71). A reply or a tool call is a
+  `pi.assistant` entry, and a tool's output a `pi.tool-result` entry.
+  `pi.usage` holds each model's token and cost totals, and `pi.live` the
+  compactions running.
 - A child conversation has its own entries and its own `pi.usage`, which
   counts only that conversation's spend. `conversation/list` gives each child's
   `lineage` (`parent`, `root`, `title`, and `task` on a worker)

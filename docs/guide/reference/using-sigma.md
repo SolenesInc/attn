@@ -102,9 +102,11 @@ A **worker** is an independent conversation that a Sigma agent starts with
 `start_worker`. Each worker starts a tree of its own, so Attn opens it as its
 own Sigma session titled by the worker's task, taking its profile, folder and
 launch settings from the session that started it and opening a tile beside it
-running `sigma --conversation <id>`. A worker session tracks its own state,
-files, pull requests and spend from zero, folds its own hosted subagents into
-itself, and answers `attn` CLI and MCP calls as itself. If you close a worker
+running `sigma --conversation <id>`. A worker session tracks its own state, files, pull requests and spend from
+zero, folds its own hosted subagents into itself, and answers `attn` CLI and
+MCP calls as itself. Like any other session, it follows your
+[attention queue](queue.md#quiet-notifications) rules, so its stops (including
+runs its parent starts) and approval waits open a turn. If you close a worker
 session and its worker runs again or calls Attn while an ancestor session is
 open, Attn resumes it. A worker started under a conversation outside Attn stays
 outside Attn. On an outpost, the outpost asks the home to open the worker
