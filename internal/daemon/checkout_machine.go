@@ -107,9 +107,9 @@ const remoteCheckoutInspectTripwire = 10 * time.Second
 
 const remoteCheckoutInspectTimer stepclock.Name = "remote-checkout-inspect"
 
-func (d *Daemon) inspectRemoteCheckout(host, cwd string) (protocol.CheckoutInspection, error) {
+func (d *Daemon) inspectRemoteCheckout(ctx context.Context, host, cwd string) (protocol.CheckoutInspection, error) {
 	expired := fmt.Errorf("%s did not answer checkout_inspect for %s within %s", host, cwd, remoteCheckoutInspectTripwire)
-	ctx, cancel := context.WithCancelCause(context.Background())
+	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	deadline := d.clock.AfterFunc(remoteCheckoutInspectTimer, remoteCheckoutInspectTripwire, func() { cancel(expired) })
 	defer deadline.Stop()

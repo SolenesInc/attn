@@ -584,7 +584,7 @@ func (d *Daemon) recordRecentLocation(host, cwd string) {
 }
 
 func (d *Daemon) resolveRemoteRecentLocation(host, cwd string) (folder, repoRoot string) {
-	inspection, err := d.inspectRemoteCheckout(host, cwd)
+	inspection, err := d.inspectRemoteCheckout(context.Background(), host, cwd)
 	if err != nil {
 		d.logf("recent location %s on %s recorded unresolved: %v", cwd, host, err)
 		return cwd, ""

@@ -40,7 +40,7 @@ func newGardenDaemon(t *testing.T) *Daemon {
 func plant(t *testing.T, d *Daemon, msg seedPlantRequest) protocol.Seed {
 	t.Helper()
 	msg.Cmd = cmdSeedPlant
-	planted, err := d.seedPlant(&msg, d.sessionOrOwner(protocol.TrimID(protocol.Deref(msg.SourceSessionID))))
+	planted, err := d.seedPlant(t.Context(), &msg, d.sessionOrOwner(protocol.TrimID(protocol.Deref(msg.SourceSessionID))))
 	if err != nil {
 		t.Fatalf("plant %q: %v", msg.Title, err)
 	}

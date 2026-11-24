@@ -138,7 +138,7 @@ func (d *Daemon) observedGardenExecutionOn(session *protocol.Session, place mach
 }
 
 func (d *Daemon) observedRemoteGardenExecution(host string, execution garden.Execution) garden.Execution {
-	inspection, err := d.inspectRemoteCheckout(host, execution.Cwd)
+	inspection, err := d.inspectRemoteCheckout(context.Background(), host, execution.Cwd)
 	if err != nil {
 		d.logf("garden: kept the monitor view of %s: %v", execution.SessionID, err)
 		return execution
@@ -527,7 +527,7 @@ func (d *Daemon) continuationOnItsMachine(seed garden.Seed) *seedContinuation {
 			return directoryUnknown, nil
 		}
 		pausepoint.At(pausepoint.TenderDirectoryInspecting)
-		checkout, err := d.inspectRemoteCheckout(host, execution.Cwd)
+		checkout, err := d.inspectRemoteCheckout(context.Background(), host, execution.Cwd)
 		switch {
 		case err != nil:
 			if bridgeAnswered(err) {

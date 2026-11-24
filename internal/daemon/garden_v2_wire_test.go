@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -8,6 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/crypto/ssh"
+
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -471,13 +475,39 @@ func TestGardenV2AutoRoutesWorktreesSubdirsAndSymlinks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	bed := mustRunSeedCmd[protocol.SeedBedResult](t, cli, "seed bed add", "", map[string]any{
-		"name":  "Payments",
-		"repos": []string{symlinkRoot},
-	}).Bed
-
 	attnBin := testworld.AttnBinary(t)
 	cliEnv := append(os.Environ(), "ATTN_SOCKET_PATH="+w.Socket, "ATTN_DATA_DIR="+filepath.Dir(w.Socket), "ATTN_SESSION_ID=")
+	addCmd := exec.Command(attnBin, "seed", "bed", "add", "Payments", "--repo", "./payments-link", "--json")
+	addCmd.Dir = filepath.Dir(symlinkRoot)
+	addCmd.Env = cliEnv
+	created, err := addCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("attn seed bed add with relative repo: %v\n%s", err, created)
+	}
+	var added protocol.SeedBedResult
+	if err := json.Unmarshal(created, &added); err != nil {
+		t.Fatalf("decode bed add result: %v\n%s", err, created)
+	}
+	bed := added.Bed
+	canonicalRepo, err := filepath.EvalSymlinks(realRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bed.Repos) != 1 || bed.Repos[0] != canonicalRepo {
+		t.Fatalf("relative local repo saved as %v, want %q", bed.Repos, canonicalRepo)
+	}
+	if _, err := runSeedCmd[protocol.SeedBedResult](t, cli, "seed bed add", "", map[string]any{
+		"name": "Duplicate", "repos": []string{symlinkRoot},
+	}); err == nil || !strings.Contains(err.Error(), bed.Name) {
+		t.Fatalf("duplicate local repo alias = %v, want refusal naming %s", err, bed.Name)
+	}
+	boundAlias := mustRunSeedCmd[protocol.SeedBedResult](t, cli, "seed bed set", "", map[string]any{
+		"bed": bed.ID, "repos": []string{symlinkRoot},
+	}).Bed
+	if len(boundAlias.Repos) != 1 || boundAlias.Repos[0] != symlinkRoot {
+		t.Fatalf("absolute local alias saved as %v, want %q", boundAlias.Repos, symlinkRoot)
+	}
+
 	plantCmd := exec.Command(attnBin, "seed", "plant", "--json", "Planted from linked worktree")
 	plantCmd.Dir = wtDir
 	plantCmd.Env = cliEnv
@@ -530,4 +560,86 @@ func TestGardenV2AutoRoutesWorktreesSubdirsAndSymlinks(t *testing.T) {
 	if protocol.Deref(subShow.Seed.BedID) != bareBed.ID {
 		t.Fatalf("subdir session seed bed_id = %q, want %q", protocol.Deref(subShow.Seed.BedID), bareBed.ID)
 	}
+}
+
+func TestGardenV2KeepsTheOutpostsRepositoryWhenTheHomeHasASymlink(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "garden_v2_enabled", "true")
+	homeRepo := newRepo(t, "billing")
+	outpostRepo := filepath.Join(t.TempDir(), "shop")
+	if err := os.Symlink(homeRepo, outpostRepo); err != nil {
+		t.Fatal(err)
+	}
+	outpostSubdir := filepath.Join(outpostRepo, "web")
+	host, peer := connectFarOutpost(t, w, app, func(_ *bridge.Conn, incoming ssh.NewChannel) {
+		bridge.Answer(incoming, func(_ context.Context, payload []byte) (any, error) {
+			var inspect protocol.CheckoutInspectMessage
+			if err := json.Unmarshal(payload, &inspect); err != nil {
+				return nil, err
+			}
+			if inspect.Cmd == protocol.CmdCheckoutInspect {
+				return protocol.CheckoutInspection{Exists: true, IsDirectory: true, Cwd: inspect.Cwd, MainRepo: outpostRepo}, nil
+			}
+			return struct{}{}, nil
+		})
+	})
+	absolute := mustRunSeedCmd[protocol.SeedBedResult](t, cli, "seed bed add", "", map[string]any{
+		"name": "Shop path", "repos": []string{outpostRepo},
+	}).Bed
+	mustRunSeedCmd[protocol.SeedBedResult](t, cli, "seed bed add", "", map[string]any{
+		"name": "Billing", "repos": []string{"billing"},
+	})
+	saved := testworld.Request(app, protocol.GardenBedSaveMessage{
+		Cmd: protocol.CmdGardenBedSave, RequestID: "edit-shop-note", ID: &absolute.ID, Name: absolute.Name,
+		Note: protocol.Ptr("Project note"), Repos: absolute.Repos,
+	}, protocol.EventGardenBedSaveResult, func(msg protocol.GardenBedSaveResultMessage) bool {
+		return msg.RequestID == "edit-shop-note"
+	})
+	if !saved.Success {
+		t.Fatalf("saving shop bed note: %s", protocol.Deref(saved.Error))
+	}
+	const session = "outpost-shop"
+	if err := w.InjectSessionOn(host, session, "Shop on the outpost", outpostRepo, "claude"); err != nil {
+		t.Fatal(err)
+	}
+	checkBed := func(id string) {
+		t.Helper()
+		shown, err := cli.SeedShow("", id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := protocol.Deref(shown.Seed.Bed); got != absolute.Name {
+			t.Fatalf("outpost seed belongs to bed %q, want %q", got, absolute.Name)
+		}
+	}
+	checkBed(plantSeedAs(t, cli, session, "Work in the outpost shop"))
+	mustRunSeedCmd[protocol.SeedBedResult](t, cli, "seed bed set", "", map[string]any{
+		"bed": absolute.ID, "repos": []string{"shop"},
+	})
+
+	ctx, cancel := context.WithTimeout(t.Context(), fakeagent.HangGuard)
+	defer cancel()
+	channel, requests, err := peer.Open(ctx, "forward", []byte(frozenForwardHeader))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer channel.Close()
+	defer context.AfterFunc(ctx, func() { _ = channel.Close() })()
+	go ssh.DiscardRequests(requests)
+	request := protocol.RunCommandMessage{
+		Cmd: protocol.CmdRunCommand, Command: "seed plant", Directory: &outpostSubdir,
+		Args: json.RawMessage(`{"title":"Work from a sessionless outpost shell"}`),
+	}
+	if err := json.NewEncoder(channel).Encode(request); err != nil {
+		t.Fatal(err)
+	}
+	var response struct {
+		Ok     bool                     `json:"ok"`
+		Result protocol.SeedPlantResult `json:"command_result"`
+	}
+	if err := json.NewDecoder(channel).Decode(&response); err != nil || !response.Ok {
+		t.Fatalf("outpost plant response = %+v, %v", response, err)
+	}
+	checkBed(response.Result.ID)
 }

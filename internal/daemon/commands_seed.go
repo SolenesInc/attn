@@ -161,7 +161,7 @@ func plantChecks(raw []string) []protocol.SeedCheckDefinition {
 	return checks
 }
 
-func (d *Daemon) runSeedPlant(_ context.Context, c command.Caller, args command.SeedPlantArgs) (any, error) {
+func (d *Daemon) runSeedPlant(ctx context.Context, c command.Caller, args command.SeedPlantArgs) (any, error) {
 	msg := seedPlantRequest{
 		Cmd:             cmdSeedPlant,
 		Title:           args.Title,
@@ -176,7 +176,7 @@ func (d *Daemon) runSeedPlant(_ context.Context, c command.Caller, args command.
 	if err := d.scoped(&msg, msg.Cmd); err != nil {
 		return nil, err
 	}
-	return d.seedPlant(&msg, d.sessionOrOwner(c.Session))
+	return d.seedPlant(ctx, &msg, d.sessionOrOwner(c.Session))
 }
 
 type plotPayload struct {
@@ -200,7 +200,7 @@ func decodeStrict(raw json.RawMessage, into any) error {
 	return decoder.Decode(into)
 }
 
-func (d *Daemon) runSeedPlot(_ context.Context, c command.Caller, args command.SeedPlotArgs) (any, error) {
+func (d *Daemon) runSeedPlot(ctx context.Context, c command.Caller, args command.SeedPlotArgs) (any, error) {
 	var plot plotPayload
 	if err := decodeStrict(args.Plot, &plot); err != nil {
 		return nil, command.Refuse(command.CodeNotAPlot, "this is not a plot payload: %v", err)
@@ -223,7 +223,7 @@ func (d *Daemon) runSeedPlot(_ context.Context, c command.Caller, args command.S
 	if err := d.scoped(&msg, msg.Cmd); err != nil {
 		return nil, err
 	}
-	return d.seedPlot(&msg, d.sessionOrOwner(c.Session))
+	return d.seedPlot(ctx, &msg, d.sessionOrOwner(c.Session))
 }
 
 func (d *Daemon) runSeedLink(c command.Caller, a, relation, b string, unlink bool) (any, error) {

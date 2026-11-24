@@ -78,7 +78,8 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 		if repo == "" {
 			repo = strings.TrimSpace(observed.Cwd)
 		}
-		if bed, ok := d.matchBedForRepo(seed.ProfileID, repo); ok {
+		beds, _, _, _ := d.bedsInProfile(seed.ProfileID)
+		if bed, ok := matchBedForRepo(beds, executionPlace(observed).normalize(repo)); ok {
 			seed.BedID = bed.ID
 		}
 	}

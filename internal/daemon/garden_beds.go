@@ -1,11 +1,12 @@
 package daemon
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"maps"
-	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -220,20 +221,47 @@ func gardenV2OffRefusal() error {
 	return &command.Refusal{Code: "setting_off", Message: setting.GardenV2Enabled.Refusal().Error()}
 }
 
-func expandBedRepos(raw []string) ([]string, error) {
-	home, _ := os.UserHomeDir()
-	expanded := make([]string, len(raw))
-	for i, entry := range raw {
-		trimmed := strings.TrimSpace(entry)
-		if home != "" && namesHome(trimmed) {
-			trimmed = expandHome(trimmed, home)
+func (d *Daemon) resolveBedRepos(ctx context.Context, caller command.Caller, raw []string) ([]string, error) {
+	repos := make([]string, 0, len(raw))
+	for _, entry := range raw {
+		repo := strings.TrimSpace(entry)
+		switch {
+		case filepath.IsAbs(repo):
+			repos = append(repos, filepath.Clean(repo))
+			continue
+		case repo == "~":
+			repo = "~/"
+		case repo != "." && repo != ".." && !strings.Contains(repo, "/"):
+			repos = append(repos, repo)
+			continue
 		}
-		if strings.Contains(trimmed, "/") {
-			trimmed = git.CanonicalizePath(trimmed)
+		if !namesHome(repo) {
+			folder, _ := d.callerFolder(caller)
+			if folder == "" {
+				return nil, protocol.Refuse(protocol.RefusalInvalidInput, "repo %q is relative and this caller has no working directory; pass an absolute path", repo)
+			}
+			repo = filepath.Join(folder, repo)
 		}
-		expanded[i] = trimmed
+		place := d.bedCallerPlace(ctx, caller)
+		if place.IsRemote() {
+			inspected, err := d.inspectRemoteCheckout(ctx, place.Outpost(), repo)
+			if err != nil {
+				return nil, err
+			}
+			repo = inspected.Cwd
+		} else {
+			repo = git.CanonicalizePath(repo)
+		}
+		repos = append(repos, repo)
 	}
-	return garden.NormalizeBedRepos(expanded)
+	return garden.NormalizeBedRepos(repos)
+}
+
+func (d *Daemon) bedCallerPlace(ctx context.Context, caller command.Caller) machine {
+	if caller.Directory == "" && caller.Session != "" {
+		return d.sessionPlace(caller.Session)
+	}
+	return originPlace(ctx)
 }
 
 func (d *Daemon) resolveBedInProfile(profileID, ref string) (garden.Bed, error) {
@@ -256,68 +284,51 @@ func (d *Daemon) resolveBedInProfile(profileID, ref string) (garden.Bed, error) 
 		"no bed %q exists in this profile; existing beds are %s ({attn seed bed ls})", strings.TrimSpace(ref), strings.Join(names, ", "))
 }
 
-func (d *Daemon) matchBedForRepo(profileID, repoPath string) (garden.Bed, bool) {
-	repoPath = strings.TrimSpace(repoPath)
-	if repoPath == "" || profileID == "" {
-		return garden.Bed{}, false
+func matchBedForRepo(beds []garden.Bed, repo normalizedPath) (garden.Bed, bool) {
+	var resolveAlias func(string) string
+	if repo.on.IsLocal() {
+		resolveAlias = git.CanonicalizePath
 	}
-	if strings.Contains(repoPath, "/") {
-		repoPath = git.CanonicalizePath(repoPath)
+	return garden.MatchBedForRepo(beds, repo.path, resolveAlias)
+}
+
+func (d *Daemon) callerRepoForBedRouting(ctx context.Context, sessionID protocol.SessionID, callerDir string) normalizedPath {
+	if callerDir = strings.TrimSpace(callerDir); callerDir != "" {
+		return d.bedRepoAt(ctx, originPlace(ctx), callerDir)
 	}
-	beds, _, _, err := d.bedsInProfile(profileID)
+	sessionID = protocol.TrimID(sessionID)
+	session := d.store.Get(sessionID)
+	if session == nil {
+		return normalizedPath{}
+	}
+	place := d.sessionPlace(sessionID)
+	if repo := cmp.Or(protocol.Deref(session.MainRepo), protocol.Deref(session.Repository)); repo != "" {
+		return place.normalize(repo)
+	}
+	if repo := d.bedRepoAt(ctx, place, session.Directory); !repo.Empty() {
+		return repo
+	}
+	return place.normalize(session.Directory)
+}
+
+func (d *Daemon) bedRepoAt(ctx context.Context, place machine, dir string) normalizedPath {
+	if dir == "" {
+		return normalizedPath{}
+	}
+	var inspected protocol.CheckoutInspection
+	var err error
+	if place.IsRemote() {
+		inspected, err = d.inspectRemoteCheckout(ctx, place.Outpost(), dir)
+	} else {
+		inspected, err = d.inspectCheckout(ctx, protocol.CheckoutInspectMessage{Cwd: dir})
+	}
 	if err != nil {
-		return garden.Bed{}, false
+		return normalizedPath{}
 	}
-	return garden.MatchBedForRepo(beds, repoPath)
+	return normalizedPath{on: place, path: cmp.Or(inspected.MainRepo, inspected.RepoRoot, inspected.Cwd)}
 }
 
-func (d *Daemon) callerRepoForBedRouting(sessionID protocol.SessionID, callerDir string) string {
-	callerDir = strings.TrimSpace(callerDir)
-	var session *protocol.Session
-	if sessionID = protocol.TrimID(sessionID); sessionID != "" && d.store != nil {
-		session = d.store.Get(sessionID)
-	}
-	if session != nil && strings.TrimSpace(protocol.Deref(session.Host)) != "" {
-		if repo := strings.TrimSpace(protocol.Deref(session.MainRepo)); repo != "" {
-			return repo
-		}
-		if repo := strings.TrimSpace(protocol.Deref(session.Repository)); repo != "" {
-			return repo
-		}
-		if dir := strings.TrimSpace(session.Directory); dir != "" {
-			return dir
-		}
-		return callerDir
-	}
-	var localGit git.Client
-	if callerDir != "" {
-		if root, err := localGit.RepositoryRoot(context.Background(), callerDir); err == nil && root != "" {
-			return root
-		}
-	}
-	if session != nil {
-		if repo := strings.TrimSpace(protocol.Deref(session.MainRepo)); repo != "" {
-			return repo
-		}
-		if repo := strings.TrimSpace(protocol.Deref(session.Repository)); repo != "" {
-			return repo
-		}
-		if dir := d.localDirectory(session); dir != "" {
-			if root, err := localGit.RepositoryRoot(context.Background(), dir); err == nil && root != "" {
-				return root
-			}
-		}
-	}
-	if callerDir != "" {
-		return git.CanonicalizePath(callerDir)
-	}
-	if dir := d.localDirectory(session); dir != "" {
-		return git.CanonicalizePath(dir)
-	}
-	return ""
-}
-
-func (d *Daemon) validateBedUniqueness(existing []garden.Bed, selfID, name, slug string, repos []string) error {
+func validateBedUniqueness(existing []garden.Bed, selfID, name, slug string, repos []string, place machine) error {
 	for _, other := range existing {
 		if other.ID == selfID {
 			continue
@@ -326,17 +337,26 @@ func (d *Daemon) validateBedUniqueness(existing []garden.Bed, selfID, name, slug
 			return protocol.Refuse(protocol.RefusalConflict, "a bed named %q (%s) already exists in this profile", other.Name, other.ID)
 		}
 	}
+	if len(repos) == 0 {
+		return nil
+	}
+	repoKey := func(repo string) string {
+		if place.IsLocal() && filepath.IsAbs(repo) {
+			repo = git.CanonicalizePath(repo)
+		}
+		return garden.RepoKey(repo)
+	}
 	ownerByRepo := map[string]garden.Bed{}
 	for _, other := range existing {
 		if other.ID == selfID {
 			continue
 		}
 		for _, repo := range other.Repos {
-			ownerByRepo[garden.RepoKey(repo)] = other
+			ownerByRepo[repoKey(repo)] = other
 		}
 	}
 	for _, repo := range repos {
-		if other, taken := ownerByRepo[garden.RepoKey(repo)]; taken {
+		if other, taken := ownerByRepo[repoKey(repo)]; taken {
 			return protocol.Refuse(protocol.RefusalConflict, "repo %q is already assigned to bed %q (%s); remove it there first", repo, other.Name, other.ID)
 		}
 	}
@@ -383,7 +403,7 @@ func (d *Daemon) seedBedList(profileID string) (*protocol.SeedBedListResult, err
 	return &protocol.SeedBedListResult{Beds: out}, nil
 }
 
-func (d *Daemon) seedBedAdd(profileID, rawName, rawNote string, rawRepos []string) (*protocol.SeedBedResult, error) {
+func (d *Daemon) seedBedAdd(ctx context.Context, caller command.Caller, profileID, rawName, rawNote string, rawRepos []string) (*protocol.SeedBedResult, error) {
 	if !d.on(setting.GardenV2Enabled) {
 		return nil, gardenV2OffRefusal()
 	}
@@ -395,7 +415,7 @@ func (d *Daemon) seedBedAdd(profileID, rawName, rawNote string, rawRepos []strin
 	if err != nil {
 		return nil, err
 	}
-	repos, err := expandBedRepos(rawRepos)
+	repos, err := d.resolveBedRepos(ctx, caller, rawRepos)
 	if err != nil {
 		return nil, err
 	}
@@ -408,7 +428,7 @@ func (d *Daemon) seedBedAdd(profileID, rawName, rawNote string, rawRepos []strin
 	if err != nil {
 		return nil, err
 	}
-	if err := d.validateBedUniqueness(existing, "", name, slug, repos); err != nil {
+	if err := validateBedUniqueness(existing, "", name, slug, repos, d.bedCallerPlace(ctx, caller)); err != nil {
 		return nil, err
 	}
 	schema, err := d.bedsCollection()
@@ -465,9 +485,24 @@ type bedPatch struct {
 	setRepos bool
 }
 
-func (d *Daemon) seedBedSet(profileID, ref string, patch bedPatch) (*protocol.SeedBedResult, error) {
+func (d *Daemon) seedBedSet(ctx context.Context, caller command.Caller, profileID, ref string, patch bedPatch) (*protocol.SeedBedResult, error) {
 	if !d.on(setting.GardenV2Enabled) {
 		return nil, gardenV2OffRefusal()
+	}
+	if patch.setRepos && caller.Directory == "" && caller.Session == "" {
+		bed, err := d.resolveBedInProfile(profileID, ref)
+		if err != nil {
+			return nil, err
+		}
+		ref = bed.ID
+		patch.setRepos = !slices.Equal(bed.Repos, patch.repos)
+	}
+	if patch.setRepos {
+		repos, err := d.resolveBedRepos(ctx, caller, patch.repos)
+		if err != nil {
+			return nil, err
+		}
+		patch.repos = repos
 	}
 
 	d.gardenBedsMu.Lock()
@@ -499,16 +534,16 @@ func (d *Daemon) seedBedSet(profileID, ref string, patch bedPatch) (*protocol.Se
 		next.Note = note
 	}
 	if patch.setRepos {
-		repos, err := expandBedRepos(patch.repos)
-		if err != nil {
-			return nil, err
-		}
-		next.Repos = repos
+		next.Repos = patch.repos
 	}
 	if next.Name == current.Name && next.Slug == current.Slug && next.Note == current.Note && slices.Equal(next.Repos, current.Repos) {
 		return &protocol.SeedBedResult{Bed: bedToProtocol(current, docs[current.ID]), Changed: protocol.Ptr(false)}, nil
 	}
-	if err := d.validateBedUniqueness(existing, current.ID, next.Name, next.Slug, next.Repos); err != nil {
+	var changedRepos []string
+	if !slices.Equal(next.Repos, current.Repos) {
+		changedRepos = next.Repos
+	}
+	if err := validateBedUniqueness(existing, current.ID, next.Name, next.Slug, changedRepos, d.bedCallerPlace(ctx, caller)); err != nil {
 		return nil, err
 	}
 	schema, err := d.bedsCollection()
@@ -744,7 +779,7 @@ func (d *Daemon) seedPulse(seedID, rawText string, clear bool, setter who.Actor,
 	return nil, protocol.Refuse(protocol.RefusalConflict, "%s was rewritten under all %d attempts to update its pulse; try again", seedID, attempts)
 }
 
-func (d *Daemon) resolveBedForPlanting(profileID, requestedBed, partOf string, sourceSession protocol.SessionID, callerDir string) (string, error) {
+func (d *Daemon) resolveBedForPlanting(ctx context.Context, profileID, requestedBed, partOf string, sourceSession protocol.SessionID, callerDir string) (string, error) {
 	requestedBed = strings.TrimSpace(requestedBed)
 	if requestedBed != "" && !d.on(setting.GardenV2Enabled) {
 		return "", gardenV2OffRefusal()
@@ -763,10 +798,16 @@ func (d *Daemon) resolveBedForPlanting(profileID, requestedBed, partOf string, s
 		}
 		return bed.ID, nil
 	}
-	if repo := d.callerRepoForBedRouting(sourceSession, callerDir); repo != "" {
-		if bed, ok := d.matchBedForRepo(profileID, repo); ok {
-			return bed.ID, nil
-		}
+	beds, _, _, err := d.bedsInProfile(profileID)
+	if err != nil || len(beds) == 0 {
+		return "", nil
+	}
+	repo := d.callerRepoForBedRouting(ctx, sourceSession, callerDir)
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if bed, ok := matchBedForRepo(beds, repo); ok {
+		return bed.ID, nil
 	}
 	return "", nil
 }
@@ -784,20 +825,20 @@ func (d *Daemon) runSeedBedLs(_ context.Context, c command.Caller, _ command.See
 	return result, nil
 }
 
-func (d *Daemon) runSeedBedAdd(_ context.Context, c command.Caller, args command.SeedBedAddArgs) (any, error) {
+func (d *Daemon) runSeedBedAdd(ctx context.Context, c command.Caller, args command.SeedBedAddArgs) (any, error) {
 	msg := seedBedScopeRequest{Cmd: cmdSeedBed}
 	msg.SourceSessionID, msg.ProfileID = gardenScope(c)
 	if err := d.scoped(&msg, msg.Cmd); err != nil {
 		return nil, err
 	}
-	result, err := d.seedBedAdd(protocol.Deref(msg.ProfileID), args.Name, args.Note, args.Repos)
+	result, err := d.seedBedAdd(ctx, c, protocol.Deref(msg.ProfileID), args.Name, args.Note, args.Repos)
 	if err != nil {
 		return nil, gardenFailure("bed add", err)
 	}
 	return result, nil
 }
 
-func (d *Daemon) runSeedBedSet(_ context.Context, c command.Caller, args command.SeedBedSetArgs) (any, error) {
+func (d *Daemon) runSeedBedSet(ctx context.Context, c command.Caller, args command.SeedBedSetArgs) (any, error) {
 	if args.ClearNote && strings.TrimSpace(args.Note) != "" {
 		return nil, command.Refuse(command.CodeNoteAndClear, "pass {note} or {clear_note}, not both")
 	}
@@ -828,7 +869,7 @@ func (d *Daemon) runSeedBedSet(_ context.Context, c command.Caller, args command
 	if !args.ClearRepos && hasRepos {
 		patch.repos = args.Repos
 	}
-	result, err := d.seedBedSet(protocol.Deref(msg.ProfileID), args.Bed, patch)
+	result, err := d.seedBedSet(ctx, c, protocol.Deref(msg.ProfileID), args.Bed, patch)
 	if err != nil {
 		return nil, gardenFailure("bed set", err)
 	}
@@ -904,9 +945,9 @@ func (d *Daemon) handleGardenBedSaveWS(client *wsClient, msg *protocol.GardenBed
 		err error
 	)
 	if id := strings.TrimSpace(protocol.Deref(msg.ID)); id == "" {
-		res, err = d.seedBedAdd(profileID, msg.Name, protocol.Deref(msg.Note), msg.Repos)
+		res, err = d.seedBedAdd(context.Background(), command.Caller{}, profileID, msg.Name, protocol.Deref(msg.Note), msg.Repos)
 	} else {
-		res, err = d.seedBedSet(profileID, id, bedPatch{
+		res, err = d.seedBedSet(context.Background(), command.Caller{}, profileID, id, bedPatch{
 			name:     protocol.Ptr(msg.Name),
 			note:     protocol.Deref(msg.Note),
 			setNote:  true,

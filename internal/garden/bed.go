@@ -191,7 +191,7 @@ func FindBed(beds []Bed, ref string) (Bed, bool) {
 	return Bed{}, false
 }
 
-func MatchBedForRepo(beds []Bed, repoPath string) (Bed, bool) {
+func MatchBedForRepo(beds []Bed, repoPath string, resolveAlias func(string) string) (Bed, bool) {
 	cleaned := strings.TrimSpace(repoPath)
 	if cleaned == "" {
 		return Bed{}, false
@@ -202,16 +202,22 @@ func MatchBedForRepo(beds []Bed, repoPath string) (Bed, bool) {
 	}
 	var pathMatch Bed
 	bestLen := -1
+	bestDirect := false
 	for _, bed := range beds {
 		for _, repo := range bed.Repos {
 			if !strings.Contains(repo, "/") {
 				continue
 			}
 			target := cleanRepoPath(repo)
-			if cleaned == target || (target != "/" && strings.HasPrefix(cleaned, target+"/")) {
-				if len(target) > bestLen || (len(target) == bestLen && bed.ID < pathMatch.ID) {
-					pathMatch, bestLen = bed, len(target)
-				}
+			direct := repoPathMatches(cleaned, target)
+			if !direct && resolveAlias != nil && filepath.IsAbs(target) {
+				target = resolveAlias(target)
+			}
+			if !direct && !repoPathMatches(cleaned, target) {
+				continue
+			}
+			if len(target) > bestLen || (len(target) == bestLen && (direct && !bestDirect || direct == bestDirect && bed.ID < pathMatch.ID)) {
+				pathMatch, bestLen, bestDirect = bed, len(target), direct
 			}
 		}
 	}
@@ -234,6 +240,10 @@ func MatchBedForRepo(beds []Bed, repoPath string) (Bed, bool) {
 		}
 	}
 	return nameMatch, hasName
+}
+
+func repoPathMatches(path, target string) bool {
+	return path == target || target != "/" && strings.HasPrefix(path, target+"/")
 }
 
 func EffectiveBedID(seed Seed, plots PlotTree) string {

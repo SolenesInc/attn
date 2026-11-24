@@ -91,21 +91,21 @@ func TestMatchBedForRepoExactPathBeatsBasenameProperty(t *testing.T) {
 		orderA := []Bed{bedBase, bedNoise, bedExact}
 		orderB := []Bed{bedExact, bedBase, bedNoise}
 
-		gotA, okA := MatchBedForRepo(orderA, full+"/")
-		gotB, okB := MatchBedForRepo(orderB, full)
+		gotA, okA := MatchBedForRepo(orderA, full+"/", nil)
+		gotB, okB := MatchBedForRepo(orderB, full, nil)
 		if !okA || !okB || gotA.ID != bedExact.ID || gotB.ID != bedExact.ID {
 			t.Fatalf("exact path match failed: A=(%q,%v) B=(%q,%v) want %q", gotA.ID, okA, gotB.ID, okB, bedExact.ID)
 		}
 		// Subdirectory inside a bound repo path matches its parent repo, while a sibling prefix does not.
-		gotSub, okSub := MatchBedForRepo(orderA, filepath.Join(full, "pkg", "sub"))
+		gotSub, okSub := MatchBedForRepo(orderA, filepath.Join(full, "pkg", "sub"), nil)
 		if !okSub || gotSub.ID != bedExact.ID {
 			t.Fatalf("subdir path match failed: got (%q,%v) want %q", gotSub.ID, okSub, bedExact.ID)
 		}
-		if gotSib, okSib := MatchBedForRepo(orderA, full+"-sibling"); okSib {
+		if gotSib, okSib := MatchBedForRepo(orderA, full+"-sibling", nil); okSib {
 			t.Fatalf("sibling prefix unexpectedly matched bed %q", gotSib.ID)
 		}
 
-		gotFallback, okFallback := MatchBedForRepo(orderA, other)
+		gotFallback, okFallback := MatchBedForRepo(orderA, other, nil)
 		if !okFallback || gotFallback.ID != bedBase.ID {
 			t.Fatalf("basename fallback failed: got (%q,%v) want %q", gotFallback.ID, okFallback, bedBase.ID)
 		}

@@ -648,8 +648,8 @@ func gardenFailure(verb string, err error) error {
 	return fmt.Errorf("seed %s: %w", verb, err)
 }
 
-func (d *Daemon) seedPlant(msg *seedPlantRequest, by who.Actor) (*protocol.SeedPlantResult, error) {
-	seed, read, err := d.plantSeedRequest(msg, by)
+func (d *Daemon) seedPlant(ctx context.Context, msg *seedPlantRequest, by who.Actor) (*protocol.SeedPlantResult, error) {
+	seed, read, err := d.plantSeedRequest(ctx, msg, by)
 	if err != nil {
 		return nil, gardenFailure("plant", err)
 	}
@@ -679,7 +679,7 @@ func widen[Result any](part any) (Result, error) {
 	return result, nil
 }
 
-func (d *Daemon) plantSeedRequest(msg *seedPlantRequest, by who.Actor) (protocol.Seed, gardenRead, error) {
+func (d *Daemon) plantSeedRequest(ctx context.Context, msg *seedPlantRequest, by who.Actor) (protocol.Seed, gardenRead, error) {
 	title := strings.TrimSpace(msg.Title)
 	body := protocol.Deref(msg.Body)
 	if err := garden.ValidatePlant(title, body); err != nil {
@@ -707,7 +707,7 @@ func (d *Daemon) plantSeedRequest(msg *seedPlantRequest, by who.Actor) (protocol
 		}
 		seed.Edges = append(seed.Edges, garden.Edge{Kind: garden.EdgePartOf, To: plot})
 	}
-	bedID, err := d.resolveBedForPlanting(seed.ProfileID, protocol.Deref(msg.Bed), plot, protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.CallerDirectory))
+	bedID, err := d.resolveBedForPlanting(ctx, seed.ProfileID, protocol.Deref(msg.Bed), plot, protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.CallerDirectory))
 	if err != nil {
 		return protocol.Seed{}, gardenRead{}, err
 	}
@@ -743,7 +743,7 @@ func (d *Daemon) plantSeedRequest(msg *seedPlantRequest, by who.Actor) (protocol
 	return read.seed(seed, doc), read, nil
 }
 
-func (d *Daemon) seedPlot(msg *seedPlotRequest, by who.Actor) (*protocol.SeedPlotResult, error) {
+func (d *Daemon) seedPlot(ctx context.Context, msg *seedPlotRequest, by who.Actor) (*protocol.SeedPlotResult, error) {
 	spec := garden.PlotSpec{
 		Title: strings.TrimSpace(msg.Title), Body: protocol.Deref(msg.Body), Checks: checkDefinitionsFromProtocol(msg.Checks),
 		PartOf: protocol.Deref(msg.PartOf), DiscoveredFrom: protocol.Deref(msg.DiscoveredFrom), Bed: strings.TrimSpace(protocol.Deref(msg.Bed)),
@@ -759,7 +759,7 @@ func (d *Daemon) seedPlot(msg *seedPlotRequest, by who.Actor) (*protocol.SeedPlo
 	if err := garden.ValidatePlotSpec(spec); err != nil {
 		return nil, gardenFailure("plot", err)
 	}
-	bedID, err := d.resolveBedForPlanting(protocol.Deref(msg.ProfileID), spec.Bed, spec.PartOf, protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.CallerDirectory))
+	bedID, err := d.resolveBedForPlanting(ctx, protocol.Deref(msg.ProfileID), spec.Bed, spec.PartOf, protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.CallerDirectory))
 	if err != nil {
 		return nil, gardenFailure("plot", err)
 	}
