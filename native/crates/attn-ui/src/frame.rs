@@ -37,6 +37,11 @@ impl Frame {
         }
     }
 
+    /// Edged in `ink`, such as the panel that holds the keyboard.
+    pub fn edged(self, ink: Color) -> Frame {
+        Frame { edge: ink, ..self }
+    }
+
     /// A dialog, a finder, or anything else over the window that holds it until it closes.
     pub fn dialog(t: &Tokens) -> Frame {
         Frame {

@@ -205,6 +205,11 @@ pub(crate) fn shows_usage(session: &attn_protocol::Session) -> bool {
     usage::shown(session).is_some()
 }
 
+/// Whether `session`'s tile header shows its pull requests.
+pub(crate) fn shows_pull_requests(session: &attn_protocol::Session) -> bool {
+    provenance::pull_request(session).is_some()
+}
+
 pub(crate) fn shows_chain(session: &attn_protocol::Session, facts: &attn_client::Facts) -> bool {
     chain::shown(session, facts)
 }

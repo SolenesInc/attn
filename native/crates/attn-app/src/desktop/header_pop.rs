@@ -1,6 +1,11 @@
-use rune::{El, Tx};
+use attn_client::Facts;
+use attn_ui::Tokens;
+use attn_ui::blocks::Actions;
+use attn_ui::system::keys_hint;
+use rune::{El, Key, KeyEvent, Tx};
 
 use crate::State;
+use crate::action::Action;
 
 /// What a header popover shows about its tile's agent.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -27,7 +32,7 @@ impl What {
         }
     }
 
-    fn shown_for(self, session: &attn_protocol::Session, facts: &attn_client::Facts) -> bool {
+    fn shown_for(self, session: &attn_protocol::Session, facts: &Facts) -> bool {
         match self {
             What::Usage => super::usage::shown(session).is_some(),
             What::Details => super::provenance::pull_request(session).is_some(),
@@ -38,7 +43,7 @@ impl What {
     }
 
     /// The row a popover listing several things picks first.
-    fn first_pick(self, session: &str, facts: &attn_client::Facts) -> usize {
+    fn first_pick(self, session: &str, facts: &Facts) -> usize {
         match self {
             What::Chain => super::chain::current_row(session, facts),
             What::Seed => super::seed_chip::first_pick(session, facts),
@@ -63,6 +68,14 @@ impl What {
     }
 }
 
+fn has(what: What, session: &str, facts: &Facts) -> bool {
+    facts
+        .sessions
+        .iter()
+        .find(|s| s.id == session)
+        .is_some_and(|s| what.shown_for(s, facts))
+}
+
 /// Where a popover hangs: a piece of a tile's header, or a sidebar row's delegation chain.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Host {
@@ -71,7 +84,8 @@ pub(crate) enum Host {
 }
 
 /// A tile header's popover, or a sidebar row's chain: the piece it hangs from, and whether a
-/// click or the Action menu pinned it, which keeps it until Escape or a press outside it.
+/// click, the keyboard or the Action menu pinned it, which keeps it until Escape or a press
+/// outside it and gives it the keyboard.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Pop {
     pub(crate) host: Host,
@@ -95,6 +109,17 @@ impl Pop {
     /// The popover's own key.
     pub(crate) fn surface(&self) -> String {
         format!("{}.popover", self.anchor())
+    }
+
+    /// Of a tile's delegation chain and its pull requests, the one the popover is not, while the
+    /// tile shows it.
+    pub(crate) fn other(&self, facts: &Facts) -> Option<What> {
+        let other = match (&self.host, self.what) {
+            (Host::Tile(_), What::Chain) => What::Details,
+            (Host::Tile(_), What::Details) => What::Chain,
+            _ => return None,
+        };
+        has(other, &self.session, facts).then_some(other)
     }
 }
 
@@ -240,19 +265,149 @@ pub(crate) fn pinned_on(state: &State, host: &Host, what: What) -> bool {
 
 fn pinned(state: &mut State, host: Host, session: &str, what: What, tx: &mut Tx) {
     let first = what.first_pick(session, &state.facts);
-    let pop = &mut state.window.desk.header_pop;
-    pop.timer = None;
-    pop.picked = first;
     let open = Pop {
         host,
         session: session.to_owned(),
         what,
         pinned: true,
     };
+    hold(state, open, first, tx);
+}
+
+fn hold(state: &mut State, open: Pop, picked: usize, tx: &mut Tx) {
+    let pop = &mut state.window.desk.header_pop;
+    pop.timer = None;
+    pop.picked = picked;
     tx.focus(open.surface(), true);
-    what.reveal(&open, first, tx);
+    open.what.reveal(&open, picked, tx);
     pop.open = Some(open);
     crate::garden::follow(state, tx);
+}
+
+/// Gives the open popover the keyboard where it is, or closes the one that has it. With none
+/// open, pins the delegation chain of the agent on screen, or its pull requests when it sits in
+/// no chain.
+pub(crate) fn take_keyboard(state: &mut State, tx: &mut Tx) {
+    let pop = &state.window.desk.header_pop;
+    match pop.open.clone() {
+        Some(open) if open.pinned => close(state),
+        Some(open) => {
+            let picked = pop.picked;
+            hold(
+                state,
+                Pop {
+                    pinned: true,
+                    ..open
+                },
+                picked,
+                tx,
+            );
+        }
+        None => {
+            let Some(session) = state.window.on_screen(&state.facts) else {
+                return;
+            };
+            let what = [What::Chain, What::Details]
+                .into_iter()
+                .find(|what| has(*what, &session, &state.facts));
+            if let Some(what) = what {
+                pin(state, &session, what, tx);
+            }
+        }
+    }
+}
+
+/// How a sidebar row's agent stands in the open delegation chain or pull requests.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub(crate) struct Shown {
+    /// The popover opened from this agent.
+    pub(crate) opened: bool,
+    /// The popover's pick is this agent.
+    pub(crate) picked: bool,
+}
+
+/// The agents of the open delegation chain or pull requests that their sidebar rows mark: the one
+/// it opened from, and the one it picks.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub(crate) struct Marked {
+    opened: Option<String>,
+    picked: Option<String>,
+}
+
+impl Marked {
+    pub(crate) fn of(state: &State) -> Marked {
+        let pop = &state.window.desk.header_pop;
+        match &pop.open {
+            Some(open) if open.what == What::Chain => Marked {
+                opened: Some(open.session.clone()),
+                picked: super::chain::agent_at(&open.session, pop.picked, &state.facts),
+            },
+            Some(open) if open.what == What::Details => Marked {
+                opened: Some(open.session.clone()),
+                picked: None,
+            },
+            _ => Marked::default(),
+        }
+    }
+
+    pub(crate) fn shown(&self, session: &str) -> Shown {
+        Shown {
+            opened: self.opened.as_deref() == Some(session),
+            picked: self.picked.as_deref() == Some(session),
+        }
+    }
+}
+
+/// Tab in a tile's pinned delegation chain or pull requests goes to the other one.
+pub(crate) fn switch_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    let m = ev.mods;
+    if ev.key != Key::Tab || m.cmd || m.ctrl || m.alt {
+        return false;
+    }
+    let Some(open) = state.window.desk.header_pop.open.clone() else {
+        return false;
+    };
+    let Some(other) = open.other(&state.facts) else {
+        return false;
+    };
+    pinned(state, open.host, &open.session, other, tx);
+    true
+}
+
+/// The line under a delegation chain or pull requests that says what its keys do: `pinned` and
+/// the key to the tile's other one while it has the keyboard, the key that gives it the keyboard
+/// otherwise. `end` stands at its far end where no key does.
+pub(crate) fn foot(
+    state: &State,
+    pop: &Pop,
+    pinned: impl IntoIterator<Item = El>,
+    end: Option<El>,
+    t: &Tokens,
+) -> Option<Actions> {
+    let (keys, end) = if pop.pinned {
+        let other = pop.other(&state.facts).map(|other| {
+            let said = match other {
+                What::Details => "pull requests",
+                _ => "chain",
+            };
+            keys_hint(["⇥"], said, t)
+        });
+        (pinned.into_iter().collect::<Vec<_>>(), other.or(end))
+    } else {
+        let take = state
+            .keymap
+            .binding(&Action::SessionDetails)
+            .map(|keys| keys_hint(state.keymap.keycaps(keys), "use the keyboard", t));
+        (take.into_iter().collect(), end)
+    };
+    if keys.is_empty() && end.is_none() {
+        return None;
+    }
+    let line = keys.into_iter().fold(Actions::new("keys"), Actions::push);
+    Some(match end {
+        Some(end) => line.then_end().push(end),
+        None => line,
+    })
 }
 
 /// Pins the popover of `what` on the tile on screen that shows `session`.

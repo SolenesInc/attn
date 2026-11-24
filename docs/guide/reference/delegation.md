@@ -13,7 +13,12 @@ the row on your agent's desktop, without taking your focus, or on whichever
 desktop you ask for.
 
 Attn records your delegation chain. Cmd+Shift+Up (Ctrl+Alt+O on Linux)
-takes you from a delegate back to the agent that started it. To go the other way, click the chain button on an agent's sidebar row. The button lists everyone in the chain, and clicking an agent in the list takes you to that agent.
+takes you from a delegate back to the agent that started it. Cmd+I (Ctrl+Shift+I
+on Linux) opens the whole chain of the agent you're on, or its pull requests when
+it has no chain. Walk the chain with the arrow keys, press Enter to go to an
+agent, and press Tab to switch between the chain and the agent's pull requests.
+You can also point at an agent's sidebar row or at its tile's header. The terminal
+keeps the keyboard while you point, and Cmd+I moves it into what you see.
 
 ### The `attn delegate` command
 

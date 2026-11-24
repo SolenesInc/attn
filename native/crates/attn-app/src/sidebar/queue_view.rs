@@ -12,6 +12,7 @@ use super::queue::{self, Bands, QueueRow};
 use super::{ROWS_BUILT, home_row, lead, open_agent};
 use crate::State;
 use crate::action::Action;
+use crate::desktop::header_pop::{Marked, Shown};
 
 pub(crate) const FILTER_FIELD: &str = "queue.filter.field";
 pub(crate) const LIST: &str = "sidebar.queue";
@@ -225,14 +226,17 @@ fn agent(
 }
 
 /// The Chief's slot as the desktop sidebar draws it, above the crew between sessions.
-pub(super) fn chief_slot(state: &State, t: &Tokens) -> Option<El> {
+pub(super) fn chief_slot(state: &State, marked: &Marked, t: &Tokens) -> Option<El> {
     let chief = crate::chief::view(state)?;
     let bands = queue::bands(&state.facts, state.window.now_ms);
     let on_screen = crate::desktop::on_screen_sessions(state);
     let line = chief_line(state, &on_screen, &bands, chief);
     let key = line.key();
     Some(match &line {
-        QLine::Agent(agent) => queue_row(state, key, agent, false, super::logos(state), t),
+        QLine::Agent(agent) => {
+            let shown = marked.shown(&agent.agent.id);
+            queue_row(state, key, agent, false, shown, super::logos(state), t)
+        }
         QLine::ChiefSetup(chief) => {
             super::crew::chief_setup_row(state, key, chief, super::logos(state), t)
         }
@@ -477,6 +481,7 @@ fn runs(state: &State, on_screen: &[String], lines: &mut Vec<QLine>) {
 pub(crate) fn view(state: &State, t: &Tokens) -> El {
     let facts = &state.facts;
     let window = &state.window;
+    let marked = Marked::of(state);
     let reads = (
         std::sync::Arc::as_ptr(&facts.sessions) as usize,
         std::sync::Arc::as_ptr(&facts.desktops) as usize,
@@ -500,7 +505,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
             window.run_groups_open.clone(),
         ),
         window.now_ms,
-        crate::desktop::on_screen_sessions(state),
+        (crate::desktop::on_screen_sessions(state), marked.clone()),
         super::width::of(state).to_bits(),
         window.desk.drag.as_ref().and_then(|d| d.desktop_marks()),
         (
@@ -534,7 +539,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                 move |state: &State, i| {
                     let line_key = lines[i].key();
                     let reached = cursor.as_deref() == Some(line_key.as_str());
-                    line(state, &lines[i], reached, &t)
+                    line(state, &lines[i], reached, &marked, &t)
                 },
             )
             .focusable(true)
@@ -575,8 +580,12 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
     })
 }
 
-fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
+fn line(state: &State, line: &QLine, cursor: bool, marked: &Marked, t: &Tokens) -> El {
     let key = line.key();
+    let shown = match line {
+        QLine::Agent(a) => marked.shown(&a.agent.id),
+        _ => Shown::default(),
+    };
     if let QLine::Filter = line {
         return filter(state, key, t);
     }
@@ -594,7 +603,16 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
     let logo_rev = if logos { state.logos.revision() } else { 0 };
     memo(
         key.clone(),
-        (line, draining, cursor, keys.clone(), logos, logo_rev, *t),
+        (
+            line,
+            draining,
+            cursor,
+            shown,
+            keys.clone(),
+            logos,
+            logo_rev,
+            *t,
+        ),
         || {
             ROWS_BUILT.with(|n| n.set(n.get() + 1));
             match line {
@@ -617,7 +635,7 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
                 }
                 QLine::Agent(agent) => {
                     let bar = super::settling_bar(state, &key, &agent.agent, t);
-                    queue_row(state, key, agent, cursor, logos, t).children(bar)
+                    queue_row(state, key, agent, cursor, shown, logos, t).children(bar)
                 }
                 QLine::CrewRule => crew_rule(key, t),
                 QLine::Member(member) => super::crew::row_view(state, key, member, t),
@@ -837,6 +855,7 @@ fn queue_row(
     key: String,
     a: &QueueAgent,
     cursor: bool,
+    shown: Shown,
     logos: bool,
     t: &Tokens,
 ) -> El {
@@ -861,7 +880,7 @@ fn queue_row(
         .lead(badged_lead(state, &key, a, logos, t))
         .title_el(name)
         .in_view(a.agent.selected)
-        .tint(a.agent.offline.then_some(t.error))
+        .tint(super::row_tint(&a.agent, shown, t))
         .hover_controls(row_controls(&key, a));
     if let Some(chain) = &a.agent.chain {
         row = crate::desktop::chain::on_row(row, &key, &a.agent.id, chain, t);
@@ -877,6 +896,7 @@ fn queue_row(
         .a11y_value(a.agent.state.wire())
         .help(a.agent.hover())
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open_agent(state, &id, tx));
+    let row = super::outlined(row, shown, t);
     match &a.agent.chain {
         Some(_) => crate::desktop::chain::row_hovers(row, &key, &a.agent.id),
         None => row,

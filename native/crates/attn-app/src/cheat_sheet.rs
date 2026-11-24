@@ -112,6 +112,11 @@ const SECTIONS: &[Section] = &[
             line("Asks", &[Of(Action::DockAsks)]),
             line("Toggle session priority", &[Of(Action::SessionPriority)]),
             line("Snooze this agent", &[Of(Action::SessionSnooze)]),
+            noted(
+                "Delegation chain or pull requests",
+                &[Of(Action::SessionDetails)],
+                |_| "Gives a popover under the pointer the keyboard.".into(),
+            ),
             line(
                 "Stop the countdown, or keep the next turn",
                 &[Of(Action::SessionCancelCountdown)],

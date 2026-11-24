@@ -696,6 +696,22 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
                 .pin(),
             );
         }
+        if crate::desktop::shows_pull_requests(session) {
+            commands.push(
+                Command::new(
+                    "show-pull-requests",
+                    "Show pull requests",
+                    &[
+                        "pr", "prs", "github", "review", "checks", "merge", "agent", "session",
+                    ],
+                    Action::ShowPullRequests {
+                        session: session.id.clone(),
+                    },
+                )
+                .describe("Checks, review and merge of this agent’s pull requests")
+                .pin(),
+            );
+        }
         if crate::harness::catalog::options(&state.facts.harnesses, &session.agent)
             .is_some_and(|o| o.context_cap)
         {

@@ -2,10 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use attn_client::Facts;
 use attn_protocol::{ActorView, Seed, Session, StandbyTender};
-use attn_ui::blocks::{Actions, Block, HeaderPiece, Inline, Popover, Prose, Stack};
+use attn_ui::blocks::{Block, HeaderPiece, Inline, Popover, Prose, Stack};
 use attn_ui::system::{
-    DotShape, DotSize, IconSize, ListRow, TreeLines, Type, dot, glyph, icon_button, keycaps,
-    keys_hint, press_area, tinted_pill, words,
+    Button, DotShape, DotSize, IconSize, ListRow, Size, Tone, TreeLines, Type, dot, glyph, icon,
+    keycaps, keys_hint, tag, tinted_pill, words,
 };
 use attn_ui::{Tokens, glyph};
 use rune::{Color, El, Key, KeyEvent, Tx, col};
@@ -189,6 +189,15 @@ pub(crate) fn current_row(session: &str, facts: &Facts) -> usize {
         .unwrap_or(0)
 }
 
+/// The live agent on row `i` of the chain of `session`.
+pub(crate) fn agent_at(session: &str, i: usize, facts: &Facts) -> Option<String> {
+    let (rows, _) = tree(session, facts);
+    match rows.get(i.min(rows.len().checked_sub(1)?))?.0 {
+        Link::Live(session) => Some(session.id.clone()),
+        Link::Dormant(..) => None,
+    }
+}
+
 /// The role's ink: the accent while it leads its chain.
 fn ink(trigger: &Trigger, t: &Tokens) -> Color {
     if trigger.leads {
@@ -272,12 +281,12 @@ pub(crate) fn row_hovers(row_el: El, row: &str, session: &str) -> El {
 /// whole beside a "waiting for you" badge and its role.
 const CHAIN_W: f32 = 400.0;
 
-/// One agent as the chain shows it: its row in the tree and, while picked, its details.
+/// One agent as the chain shows it: its row in the tree and, while picked, the card's top.
 struct Agent<'a> {
     link: Link<'a>,
     depth: usize,
     name: String,
-    /// The name less the start it shares with its dispatcher's, as "…-terms".
+    /// The name less the start it shares with its dispatcher's, as "-terms".
     folded: Option<String>,
     lines: TreeLines,
     needs: Option<Needs>,
@@ -310,13 +319,24 @@ impl Needs {
         }
     }
 
-    fn badge(&self, key: String, t: &Tokens) -> El {
+    fn said(&self) -> String {
         match self {
-            Needs::Approval => tinted_pill(key, "wants approval", t.state_approval, t),
-            Needs::Turn => tinted_pill(key, "waiting for you", t.state_waiting, t),
-            Needs::Asks(1) => tinted_pill(key, "1 ask", t.state_waiting, t),
-            Needs::Asks(n) => tinted_pill(key, format!("{n} asks"), t.state_waiting, t),
+            Needs::Approval => "wants approval".to_owned(),
+            Needs::Turn => "waiting for you".to_owned(),
+            Needs::Asks(1) => "1 ask".to_owned(),
+            Needs::Asks(n) => format!("{n} asks"),
         }
+    }
+
+    fn ink(&self, t: &Tokens) -> Color {
+        match self {
+            Needs::Approval => t.state_approval,
+            Needs::Turn | Needs::Asks(_) => t.state_waiting,
+        }
+    }
+
+    fn badge(&self, key: String, t: &Tokens) -> El {
+        tinted_pill(key, self.said(), self.ink(t), t)
     }
 }
 
@@ -327,12 +347,12 @@ fn name_of(link: Link<'_>, harnesses: &[attn_protocol::Harness]) -> String {
     }
 }
 
-/// `name` less the start it shares with its dispatcher's name, "…-terms" for
+/// `name` less the start it shares with its dispatcher's name, "-terms" for
 /// "attn--glossary-sweep-terms" under "attn--glossary-sweep": a delegate's worktree is named after
 /// its dispatcher's, so the end is what tells delegates apart.
 fn folded(name: &str, dispatcher: &str) -> Option<String> {
     let rest = name.strip_prefix(dispatcher)?;
-    (rest.chars().count() > 1 && rest.starts_with(['-', '_', '/', ' '])).then(|| format!("…{rest}"))
+    (rest.chars().count() > 1 && rest.starts_with(['-', '_', '/', ' '])).then(|| rest.to_owned())
 }
 
 /// The lines of the row at `i` of a tree listed in order at these depths.
@@ -386,9 +406,9 @@ fn first_delegate_row(depths: &[usize], i: usize) -> Option<usize> {
         .map(|_| i + 1)
 }
 
-/// The open delegation chain, under its role, or beside the sidebar for a sidebar row: its
-/// agents as a tree, each with its state, what it needs from the user and its role, the one on
-/// screen marked, and the picked agent's details under the tree.
+/// The open delegation chain, under its role, or beside the sidebar for a sidebar row: who the
+/// picked agent is, what it does and where that leads, over the chain's agents as a tree, each with
+/// its state, what it needs from the user and its role.
 pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     state.facts.sessions.iter().find(|s| s.id == pop.session)?;
     let (rows, earlier) = tree(&pop.session, &state.facts);
@@ -401,14 +421,6 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         .picked
         .min(agents.len().checked_sub(1)?);
     let surface_key = pop.surface();
-    let close = icon_button(
-        format!("{surface_key}.close"),
-        "Close delegation chain",
-        glyph::TIMES,
-        IconSize::Large,
-    )
-    .on_press(|state: &mut State| header_pop::close(state))
-    .build(t);
     let tree_el = col()
         .key(agents_key(pop))
         .role("tree")
@@ -430,26 +442,28 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     }));
     blocks.push(Block::custom(format!("{surface_key}.tree"), tree_el));
     let need = agents.iter().filter(|a| a.needs.is_some()).count();
-    let keys = Actions::new("keys")
-        .push(keys_hint(["↑", "↓", "←", "→"], "move", t))
-        .push(keys_hint(["↵"], "open", t));
-    let surface = Popover::new(surface_key.clone(), "Delegation chain");
-    let surface = if need > 0 {
-        surface.aside(
-            words(format!("{need} need you"), Type::Small, t.state_waiting)
-                .key(format!("{surface_key}.needs")),
-        )
-    } else {
-        surface
+    let need = (need > 0).then(|| {
+        words(format!("{need} need you"), Type::Small, t.state_waiting)
+            .single_line()
+            .key(format!("{surface_key}.needs"))
+    });
+    let moves = [
+        keys_hint(["↑", "↓", "←", "→"], "move", t),
+        keys_hint(["↵"], "open", t),
+    ];
+    let surface = Popover::new(surface_key.clone(), "Delegation chain")
+        .sectioned()
+        .holding(pop.pinned)
+        .about(Block::custom(
+            details_key(pop),
+            details(pop, &agents, picked, state, t),
+        ))
+        .push_all(blocks);
+    let surface = match header_pop::foot(state, pop, moves, need, t) {
+        Some(foot) => surface.actions(foot),
+        None => surface,
     };
     let surface = surface
-        .aside(close)
-        .push_all(blocks)
-        .footing(Block::custom(
-            details_key(pop),
-            details(pop, &agents[picked], state, t),
-        ))
-        .actions(keys)
         .build(t)
         .w(CHAIN_W)
         .active_descendant(row_key(pop, picked))
@@ -522,6 +536,20 @@ fn role_slot(role: Option<&attn_protocol::SessionDelegationRole>, t: &Tokens) ->
     }
 }
 
+/// An agent's name on its row, the picked one's bold, a closed one's quiet, cut in the middle.
+fn row_name(key: &str, agent: &Agent<'_>, picked: bool, t: &Tokens) -> El {
+    let (kind, ink) = match (picked, agent.link) {
+        (true, _) => (Type::Name, t.text_primary),
+        (false, Link::Live(_)) => (Type::Body, t.text_primary),
+        (false, Link::Dormant(..)) => (Type::Body, t.text_secondary),
+    };
+    words(agent.shown_name(), kind, ink)
+        .key(format!("{key}.title"))
+        .single_line()
+        .truncate_middle()
+        .shrink()
+}
+
 fn agent_row(
     pop: &Pop,
     i: usize,
@@ -549,14 +577,17 @@ fn agent_row(
             let id = session.id.clone();
             let row = ListRow::new(key.clone(), label)
                 .lead(dot(ink, DotShape::Filled, DotSize::Regular))
-                .title(agent.shown_name())
-                .cut_middle();
+                .title_el(row_name(&key, agent, picked, t));
+            let row = if current && !picked {
+                row.aside(tag(format!("{key}.here"), "here", Tone::Accent, t))
+            } else {
+                row
+            };
             let row = match &agent.needs {
                 Some(needs) => row.aside(needs.badge(format!("{key}.needs"), t)),
                 None => row,
             };
             row.aside(role_slot(session.delegation_role.as_ref(), t))
-                .in_view(current)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| select(state, &id, tx))
         }
         Link::Dormant(seed, _) => {
@@ -576,10 +607,9 @@ fn agent_row(
                 words("standby", Type::Small, t.text_tertiary)
             };
             let opens = (seed.id.clone(), pop.session.clone());
-            ListRow::new(key, format!("{} · {kind}", agent.name))
+            ListRow::new(key.clone(), format!("{} · {kind}", agent.name))
                 .lead(dot(t.text_muted, DotShape::Hollow, DotSize::Regular))
-                .quiet_title(agent.shown_name())
-                .cut_middle()
+                .title_el(row_name(&key, agent, picked, t))
                 .aside(said.single_line())
                 .aside(role_slot(None, t))
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
@@ -592,6 +622,8 @@ fn agent_row(
         .depth(agent.depth.min(u8::MAX as usize) as u8)
         .tree_lines(agent.lines.clone())
         .cursor(picked)
+        .chosen(picked)
+        .tint(picked.then_some(t.accent))
         .build(t)
         .level(agent.depth as u32 + 1)
         .focus_selected(picked)
@@ -605,16 +637,15 @@ fn agent_row(
         })
 }
 
-/// How long ago `iso` was, as "for 3m", or "just now".
-fn held_for(iso: &str, now_ms: i64) -> Option<String> {
+/// How long ago `iso` was, as "3m", once a minute has passed.
+fn held(iso: &str, now_ms: i64) -> Option<String> {
     let at = crate::sidebar::queue::epoch_ms(iso)?;
-    let seconds = (now_ms - at).max(0) / 1000;
-    Some(match seconds {
-        s if s < 60 => "just now".to_owned(),
-        s if s < 3600 => format!("for {}m", s / 60),
-        s if s < 86_400 => format!("for {}h", s / 3600),
-        s => format!("for {}d", s / 86_400),
-    })
+    match (now_ms - at).max(0) / 1000 {
+        s if s < 60 => None,
+        s if s < 3600 => Some(format!("{}m", s / 60)),
+        s if s < 86_400 => Some(format!("{}h", s / 3600)),
+        s => Some(format!("{}d", s / 86_400)),
+    }
 }
 
 /// What the picked agent's details lead to, each by its letter.
@@ -667,27 +698,30 @@ fn find_seed<'a>(facts: &'a Facts, id: &str) -> Option<&'a Seed> {
         .find(|s| s.id == id)
 }
 
-/// One way out of the picked agent's details: its letter's keycap and what it opens.
-fn go_line(key: String, go: &Go, link: Link<'_>, facts: &Facts, session: &str, t: &Tokens) -> El {
-    let (label, shown): (String, El) = match go {
+/// One way out of the picked agent's details: a button with its mark, and its letter while the
+/// chain has the keyboard.
+fn go_button(
+    key: String,
+    go: &Go,
+    link: Link<'_>,
+    pinned: bool,
+    facts: &Facts,
+    session: &str,
+    t: &Tokens,
+) -> El {
+    let (label, said, mark): (String, String, El) = match go {
         Go::Seed(id) => {
             let seed = find_seed(facts, id);
-            let (named, kind) = match seed {
-                Some(s) if !s.step_slug.is_empty() => (s.step_slug.clone(), Type::Mono),
-                Some(s) if !s.title.is_empty() => (s.title.clone(), Type::Body),
-                _ => (id.clone(), Type::Mono),
+            let named = match seed {
+                Some(s) if !s.step_slug.is_empty() => s.step_slug.clone(),
+                Some(s) if !s.title.is_empty() => s.title.clone(),
+                _ => id.clone(),
             };
             let mark = attn_ui::icon::seed(seed.map_or("", |s| s.status.as_str()));
             (
                 format!("Open seed {named}"),
-                Inline::joined()
-                    .child(glyph(mark, IconSize::Small, t.text_tertiary))
-                    .child(
-                        words(named, kind, t.text_secondary)
-                            .single_line()
-                            .truncate()
-                            .shrink(),
-                    ),
+                named,
+                glyph(mark, IconSize::Small, t.text_tertiary),
             )
         }
         Go::PullRequest(url) => {
@@ -698,17 +732,17 @@ fn go_line(key: String, go: &Go, link: Link<'_>, facts: &Facts, session: &str, t
             match pr {
                 Some(pr) => (
                     format!(
-                        "Open pull request {} on GitHub",
-                        super::provenance::name(pr)
+                        "Open pull request {} on GitHub, {}",
+                        super::provenance::name(pr),
+                        super::provenance::status_said(pr),
                     ),
-                    super::provenance::status_mark(pr, t),
+                    format!("#{}", pr.number),
+                    super::provenance::status_dot(pr, t),
                 ),
                 None => (
                     format!("Open {url}"),
-                    words(url.clone(), Type::Mono, t.text_secondary)
-                        .single_line()
-                        .truncate()
-                        .shrink(),
+                    url.clone(),
+                    dot(t.text_tertiary, DotShape::Hollow, DotSize::Small),
                 ),
             }
         }
@@ -721,134 +755,180 @@ fn go_line(key: String, go: &Go, link: Link<'_>, facts: &Facts, session: &str, t
                 .unwrap_or_default();
             (
                 format!("Answer ask: {subject}"),
-                Inline::joined()
-                    .child(glyph(glyph::COMMENT, IconSize::Small, t.state_waiting))
-                    .child(
-                        words(subject, Type::Body, t.text_secondary)
-                            .single_line()
-                            .truncate()
-                            .shrink(),
-                    ),
+                subject,
+                glyph(glyph::COMMENT, IconSize::Small, t.state_waiting),
             )
         }
     };
-    let content = Inline::top()
-        .min_w(0.0)
-        .child(keycaps([go.letter().to_uppercase()], t))
-        .child(shown);
+    let letter = go.letter().to_uppercase();
+    let leading = Inline::joined()
+        .children(pinned.then(|| keycaps([letter.as_str()], t).a11y_hidden()))
+        .child(mark.a11y_hidden());
+    let button = Button::new(said).size(Size::Compact).leading(leading);
+    let button = match go {
+        Go::PullRequest(_) => button.whole(),
+        Go::Seed(_) | Go::Ask(_) => button,
+    };
     let (go, session) = (go.clone(), session.to_owned());
-    El::from(press_area(
-        key,
-        &label,
-        false,
-        false,
-        content,
-        t,
-        move |state: &mut State, tx: &mut Tx| follow(state, &go, &session, tx),
-    ))
+    El::from(
+        button
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| follow(state, &go, &session, tx))
+            .build(t),
+    )
+    .key(key)
+    .label(label)
 }
 
-/// The picked agent's details: its whole name, its role, harness, outpost and how long it has
-/// been in its state, what it is doing, and where its letters lead.
-fn details(pop: &Pop, agent: &Agent<'_>, state: &State, t: &Tokens) -> El {
-    let key = details_key(pop);
+/// Who an agent is: its face, its whole name, its role, harness and outpost, and its state with
+/// how long it has been in it. `key` names the parts of the one shown.
+fn who(key: Option<&str>, agent: &Agent<'_>, state: &State, t: &Tokens) -> El {
     let facts = &state.facts;
     let now_ms = state.window.now_ms;
-    let name = words(agent.name.clone(), Type::Name, t.text_primary)
-        .wrap()
-        .key(format!("{key}.name"));
-    let (about, doing): (El, Option<El>) = match agent.link {
+    let (face, meta, said, ink): (El, Vec<El>, String, Color) = match agent.link {
         Link::Live(session) => {
-            let spoken = AgentState::parse(&session.state).spoken();
-            let held = held_for(&session.state_since, now_ms)
-                .map_or_else(|| spoken.to_owned(), |held| format!("{spoken} {held}"));
+            let standing = AgentState::parse(&session.state);
+            let state_ink = crate::sidebar::state_color(standing, t);
+            let face = if crate::sidebar::logos(state) {
+                icon(
+                    crate::harness::logo::of(state, &session.agent),
+                    IconSize::Large,
+                    state_ink,
+                )
+            } else {
+                dot(state_ink, DotShape::Filled, DotSize::Regular)
+            };
             let role = session.delegation_role.as_ref();
-            let said = [
+            let about = [
                 role.map(|r| r.name.clone()),
                 Some(harness_label(&facts.harnesses, &session.agent)),
                 session.host.clone().filter(|h| !h.is_empty()),
-                Some(held),
             ]
             .into_iter()
             .flatten()
             .collect::<Vec<_>>()
             .join(" · ");
-            let about = Inline::top()
-                .min_w(0.0)
-                .children(role.map(|role| {
+            let meta = role
+                .map(|role| {
                     glyph(
                         Mark::of(Some(role)).glyph(),
                         IconSize::Small,
                         role_ink(role, t),
                     )
-                }))
-                .child(words(said, Type::Small, t.text_tertiary).wrap().shrink());
-            let doing = session
-                .activity
-                .clone()
-                .filter(|a| !a.trim().is_empty())
-                .map(|a| words(a, Type::Body, t.text_secondary).wrap().max_lines(2));
-            (about, doing)
+                })
+                .into_iter()
+                .chain([about_line(about, t)])
+                .collect();
+            let (said, ink) = match &agent.needs {
+                Some(needs @ (Needs::Approval | Needs::Turn)) => (needs.said(), needs.ink(t)),
+                Some(Needs::Asks(_)) | None => (standing.spoken().to_owned(), state_ink),
+            };
+            let said = match held(&session.state_since, now_ms) {
+                Some(held) => format!("{said} {held}"),
+                None => said,
+            };
+            (face, meta, said, ink)
         }
-        Link::Dormant(seed, _) => {
-            let standby = crate::garden::model::standby_of(seed, now_ms);
-            let blocked = standby.as_ref().and_then(|s| s.blocked_words());
-            let waits = standby
+        Link::Dormant(seed, tender) => {
+            let waits = crate::garden::model::standby_of(seed, now_ms)
                 .map(|s| s.waits())
                 .filter(|w| !w.is_empty())
-                .map_or_else(|| "On standby".to_owned(), |w| format!("On standby · {w}"));
+                .unwrap_or_else(|| harness_label(&facts.harnesses, &tender.agent));
             (
-                words(waits, Type::Small, t.text_tertiary).wrap(),
-                blocked.map(|b| words(b, Type::Body, t.warning).wrap()),
+                dot(t.text_muted, DotShape::Hollow, DotSize::Regular),
+                vec![about_line(waits, t)],
+                "on standby".to_owned(),
+                t.text_tertiary,
             )
         }
     };
-    let session = pop.session.clone();
-    let lines = goes(agent.link, facts)
-        .iter()
+    let keyed = |part: El, name: &str| match key {
+        Some(key) => part.key(format!("{key}.{name}")),
+        None => part,
+    };
+    Inline::top()
+        .min_w(0.0)
+        .child(face.a11y_hidden())
+        .child(
+            Stack::tight()
+                .grow(1.0)
+                .min_w(0.0)
+                .child(keyed(
+                    words(agent.name.clone(), Type::Name, t.text_primary).wrap_anywhere(),
+                    "name",
+                ))
+                .child(keyed(Inline::joined().children(meta), "about")),
+        )
+        .child(keyed(words(said, Type::Small, ink).single_line(), "state"))
+}
+
+fn about_line(said: String, t: &Tokens) -> El {
+    words(said, Type::Small, t.text_tertiary)
+        .single_line()
+        .truncate()
+        .shrink()
+}
+
+/// What an agent is doing now, or why a closed one cannot resume.
+fn doing(agent: &Agent<'_>, now_ms: i64, t: &Tokens) -> Option<El> {
+    let (said, ink) = match agent.link {
+        Link::Live(session) => (
+            session.activity.clone().filter(|a| !a.trim().is_empty())?,
+            t.text_secondary,
+        ),
+        Link::Dormant(seed, _) => (
+            crate::garden::model::standby_of(seed, now_ms)?.blocked_words()?,
+            t.warning,
+        ),
+    };
+    Some(words(said, Type::Body, ink).wrap().max_lines(2))
+}
+
+/// The picked agent: who it is, what it is doing, and a button for each of its seed, its pull
+/// request and its oldest open ask. Each part keeps the room the chain's agents need at most, so
+/// the tree under it holds still while the pick moves.
+fn details(pop: &Pop, agents: &[Agent<'_>], picked: usize, state: &State, t: &Tokens) -> El {
+    let key = details_key(pop);
+    let facts = &state.facts;
+    let now_ms = state.window.now_ms;
+    let agent = &agents[picked];
+    let others = || agents.iter().enumerate().filter(move |(i, _)| *i != picked);
+    let goes_of = |agent: &Agent<'_>| goes(agent.link, facts);
+    let buttons = goes_of(agent)
+        .into_iter()
         .map(|go| {
-            go_line(
+            go_button(
                 format!("{key}.{}", go.letter()),
-                go,
+                &go,
                 agent.link,
+                pop.pinned,
                 facts,
-                &session,
+                &pop.session,
                 t,
             )
         })
         .collect::<Vec<_>>();
+    let shown_doing = doing(agent, now_ms, t);
+    let room_doing: Vec<El> = others().filter_map(|(_, a)| doing(a, now_ms, t)).collect();
+    let acts = shown_doing.is_some() || !room_doing.is_empty();
+    let leads = agents.iter().any(|a| !goes_of(a).is_empty());
     Stack::loose()
         .w_full()
         .min_w(0.0)
-        .child(name)
-        .child(about.key(format!("{key}.about")))
-        .children(doing.map(|d| d.key(format!("{key}.doing"))))
-        .children((!lines.is_empty()).then(|| {
-            Stack::tight()
+        .child(Stack::steady(
+            who(Some(&key), agent, state, t),
+            others().map(|(_, a)| who(None, a, state, t)),
+        ))
+        .children(acts.then(|| {
+            let shown = shown_doing.map(|d| d.key(format!("{key}.doing")));
+            Stack::steady(shown.unwrap_or_else(rune::el), room_doing)
+        }))
+        .children(leads.then(|| {
+            Inline::joined()
                 .key(format!("{key}.goes"))
                 .w_full()
-                .min_w(0.0)
-                .children(lines)
+                .h(Size::Compact.height())
+                .children(buttons)
         }))
-}
-
-/// Up, Down, Home, End, Left, Right and Enter on a chain shown by hover, which takes them the way
-/// a pinned chain does. Its letters wait for a pin: under a resting pointer they are the user
-/// typing.
-pub(crate) fn hover_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    let shown = state
-        .window
-        .desk
-        .header_pop
-        .open
-        .as_ref()
-        .is_some_and(|p| !p.pinned && p.what == What::Chain);
-    let m = ev.mods;
-    shown && !(m.shift || m.cmd || m.alt || m.ctrl || m.logo) && chain_key(state, ev, false, tx)
-}
-
-fn pinned_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    chain_key(state, ev, true, tx)
 }
 
 /// What a key reaches from one row of the chain.
@@ -858,7 +938,10 @@ struct Target {
     goes: Vec<Go>,
 }
 
-fn chain_key(state: &mut State, ev: &KeyEvent, letters: bool, tx: &mut Tx) -> bool {
+fn pinned_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    if header_pop::switch_key(state, ev, tx) {
+        return true;
+    }
     let Some(session) = state
         .window
         .desk
@@ -901,7 +984,7 @@ fn chain_key(state: &mut State, ev: &KeyEvent, letters: bool, tx: &mut Tx) -> bo
             }
             return true;
         }
-        Key::Text(c) if letters && plain => {
+        Key::Text(c) if plain => {
             let Some(go) = targets
                 .get(at)
                 .and_then(|t| t.goes.iter().find(|g| g.letter() == c.as_str()))

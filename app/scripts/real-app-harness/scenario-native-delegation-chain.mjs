@@ -28,6 +28,7 @@ runner.registerFailureEvidence('native_screenshot', () => driver.screenshot(path
 
 const created = [];
 const seedOf = new Map();
+const detailsChord = process.platform === 'darwin' ? 'mod+i' : 'mod+shift+i';
 const shot = (name) => driver.screenshot(path.join(runner.runDir, `${name}.png`));
 
 function preferences(cmd, prefs) {
@@ -140,17 +141,25 @@ try {
     await picked(rowCard, 'Build chain navigator');
     await shot('hover-chain');
     await driver.pressKey('Up');
+    await picked(rowCard, 'Build chain navigator');
+    await driver.pressKey(detailsChord);
+    await driver.pressKey('Up');
     await picked(rowCard, 'Coordinate role identity');
-    await driver.pressKey('Escape');
+    await shot('pinned-chain');
+    await driver.pressKey(detailsChord);
     await driver.waitFor({ key: rowCard }, { gone: true });
     const header = `tile.${pane}.role`;
     await driver.hover({ key: header });
     const headerCard = `${header}.popover`;
     await driver.waitFor({ key: headerCard });
     await picked(headerCard, 'Build chain navigator');
+    await driver.pressKey('Escape');
+    await driver.waitFor({ key: headerCard }, { gone: true });
+    await driver.pressKey(detailsChord);
+    await driver.waitFor({ key: headerCard });
     await driver.pressKey('Down');
     await picked(headerCard, 'Check keyboard flow');
-    await driver.pressKey('Escape');
+    await driver.pressKey(detailsChord);
     await driver.waitFor({ key: headerCard }, { gone: true });
   });
 

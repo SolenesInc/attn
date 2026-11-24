@@ -15,10 +15,11 @@ pub struct Popover {
     aside: Vec<El>,
     about: Option<Block>,
     body: Vec<Block>,
-    footing: Option<Block>,
     actions: Option<Actions>,
     focusable: bool,
     reading: bool,
+    sectioned: bool,
+    holding: bool,
 }
 
 /// A popover's width: its harness segments and its effort segments keep one line each, and a
@@ -35,10 +36,11 @@ impl Popover {
             aside: Vec::new(),
             about: None,
             body: Vec::new(),
-            footing: None,
             actions: None,
             focusable: true,
             reading: false,
+            sectioned: false,
+            holding: false,
         }
     }
 
@@ -79,10 +81,16 @@ impl Popover {
         self
     }
 
-    /// What stands under the body, across a rule, and stays in view while the body scrolls, such
-    /// as the details of the row the body's list picks.
-    pub fn footing(mut self, block: Block) -> Self {
-        self.footing = Some(block);
+    /// A popover whose content names it: its title is read and not drawn, and rules part what it
+    /// is about, its body and its actions.
+    pub fn sectioned(mut self) -> Self {
+        self.sectioned = true;
+        self
+    }
+
+    /// The popover holds the keyboard: its edge takes the accent.
+    pub fn holding(mut self, holding: bool) -> Self {
+        self.holding = holding;
         self
     }
 
@@ -111,16 +119,29 @@ impl Popover {
         let head = door::gap(row().w_full().items_start(), Space::S12)
             .child(col().grow(1.0).min_w(0.0).child(title))
             .child(beside);
-        let head = door::gap(col().w_full(), Space::S4)
-            .child(head)
-            .children(self.about.map(|about| spaced(vec![about], gap, None)));
-        let head = door::inset(head, INSET, Space::S0);
+        let about = self.about.map(|about| spaced(vec![about], gap, None));
+        let head = if self.sectioned {
+            about.map(|about| {
+                let about = door::rows(about, Space::S0, Space::S12)
+                    .border_sides([0.0, 0.0, 1.0, 0.0], t.border);
+                door::inset(col().w_full().child(about), INSET, Space::S0)
+            })
+        } else {
+            let head = door::gap(col().w_full(), Space::S4)
+                .child(head)
+                .children(about);
+            Some(door::inset(head, INSET, Space::S0))
+        };
         let actions = self.actions.map(|actions| {
-            door::inset(
-                actions.build().el.key(format!("{}.actions", self.key)),
-                INSET,
-                Space::S0,
-            )
+            let line = actions.build().el.key(format!("{}.actions", self.key));
+            let line = if self.sectioned {
+                let line = door::rows(line, Space::S12, Space::S0)
+                    .border_sides([1.0, 0.0, 0.0, 0.0], t.border);
+                col().w_full().child(line)
+            } else {
+                line
+            };
+            door::inset(line, INSET, Space::S0)
         });
         let body = (!self.body.is_empty()).then(|| {
             let content =
@@ -133,30 +154,18 @@ impl Popover {
                 t,
             )
         });
-        let footing = self.footing.map(|block| {
-            door::rows(
-                door::inset(spaced(vec![block], gap, None), INSET, Space::S0),
-                Space::S12,
-                Space::S0,
-            )
-            .border_sides([1.0, 0.0, 0.0, 0.0], t.border)
-        });
-        let foot = match (footing, actions) {
-            (None, actions) => actions,
-            (footing, actions) => Some(
-                door::gap(col().w_full(), Space::S12)
-                    .children(footing)
-                    .children(actions),
-            ),
-        };
-        let surface = door::gap(bounded(head, body, foot, Room::Fit), Space::S12)
+        let surface = door::gap(bounded(head, body, actions, Room::Fit), Space::S12)
             .key(self.key)
             .role("dialog")
             .label(self.title.text())
             .focusable(self.focusable)
             .tab_index(-1)
             .no_focus_ring();
-        let panel = Frame::panel(t).draw_clipped(door::inset(surface, Space::S0, INSET));
+        let frame = match self.holding {
+            true => Frame::panel(t).edged(t.accent),
+            false => Frame::panel(t),
+        };
+        let panel = frame.draw_clipped(door::inset(surface, Space::S0, INSET));
         let panel = if self.reading {
             panel.max_w(DOCUMENT)
         } else {

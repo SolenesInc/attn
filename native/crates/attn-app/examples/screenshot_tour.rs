@@ -6975,6 +6975,22 @@ fn session_chain_row(dark: bool) {
     snap(&mut world, "session-chain-row", dark);
 }
 
+/// The delegation chain the pointer shows beside the sidebar, its dispatcher picked under the
+/// pointer.
+fn session_chain_hover(dark: bool) {
+    let mut world = plain(dark);
+    for key in [
+        "sidebar.session.s2",
+        "sidebar.session.s2.chain.popover.agent.0",
+    ] {
+        world.gesture(|app| {
+            let [x, y, w, h] = app.runtime.presented(key).unwrap().0;
+            app.move_to((x + w / 2.0, y + h / 2.0));
+        });
+    }
+    snap(&mut world, "session-chain-hover", dark);
+}
+
 /// Terminal `a`'s agent was started by an automation run on a pull request and opened two of
 /// its own, the newest with a title longer than the popover; its details pinned open.
 fn session_pr_details(dark: bool) {
@@ -8520,6 +8536,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("snooze_menu", || snooze_menu(dark));
         scene("rename_session", || rename_session(dark));
         scene("session_chain_row", || session_chain_row(dark));
+        scene("session_chain_hover", || session_chain_hover(dark));
         scene("session_chain_tile", || session_chain_tile(dark));
         scene("session_pr_details", || session_pr_details(dark));
         scene("session_chain_wide", || session_chain_wide(dark));

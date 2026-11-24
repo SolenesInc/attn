@@ -63,6 +63,23 @@ impl Stack {
         door::gap(col(), Space::S12)
     }
 
+    /// `shown` in the room of the tallest of `others`, which are never seen, so what stands under
+    /// a part that changes with the pick stays where it is.
+    pub fn steady(shown: El, others: impl IntoIterator<Item = El>) -> El {
+        let cell = |part: El| part.w_full().min_w(0.0).grid_cell(0);
+        col()
+            .w_full()
+            .min_w(0.0)
+            .equal_columns(1)
+            .items_start()
+            .children(
+                others
+                    .into_iter()
+                    .map(|other| cell(other).opacity(0.0).inert().a11y_hidden()),
+            )
+            .child(cell(shown))
+    }
+
     /// The parts of a document one under another, each given as the room it wants above and
     /// below it: two parts stand as far apart as the larger of the room between them wants, and
     /// the first stands at the top.

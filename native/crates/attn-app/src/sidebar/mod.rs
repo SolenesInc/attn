@@ -30,6 +30,7 @@ use model::{DesktopHeader, TileRow};
 use crate::State;
 use crate::action::Action;
 use crate::desktop::DesktopMark;
+use crate::desktop::header_pop::{Marked, Shown};
 use crate::shell::View;
 
 pub(crate) const HARNESS_LOGOS: &str = "sidebar_harness_logos_enabled";
@@ -204,6 +205,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
     let overview_keys = crate::palette::label_of(state, &Action::DesktopOverview);
     let has_crew = !crate::crew::members(state).is_empty();
     let chief = crate::chief::view(state);
+    let marked = Marked::of(state);
     let resting: Vec<crew::Resting> = crew::between_sessions(state)
         .into_iter()
         .filter(|m| chief.as_ref().is_none_or(|c| c.key != m.id))
@@ -223,7 +225,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
             std::sync::Arc::as_ptr(&facts.harnesses) as usize,
             state.logos.revision(),
         ),
-        home,
+        (home, marked.clone()),
         on_screen.clone(),
         width::of(state).to_bits(),
         (
@@ -275,7 +277,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                             .label("Crew between sessions")
                             .w_full()
                             .child(queue_view::crew_rule("sidebar.rule.crew".into(), &t))
-                            .children(queue_view::chief_slot(state, &t))
+                            .children(queue_view::chief_slot(state, &marked, &t))
                             .children(resting.iter().map(|m| {
                                 crew::row_view(
                                     state,
@@ -297,7 +299,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                                 lines.len(),
                                 ListRow::height(),
                                 move |_: &State, i| keys[i].key().into(),
-                                move |state: &State, i| line(state, &lines, i, &t),
+                                move |state: &State, i| line(state, &lines, i, &marked, &t),
                             ),
                     )
                     .children(new_desktop.map(|over| new_desktop_drop(over, &t)))
@@ -357,9 +359,13 @@ fn nav_row(
     }
 }
 
-fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
+fn line(state: &State, lines: &[Line], index: usize, marked: &Marked, t: &Tokens) -> El {
     let line = &lines[index];
     let key = line.key();
+    let shown = match line {
+        Line::Agent { row, .. } => marked.shown(&row.id),
+        _ => Shown::default(),
+    };
     let draining = match line {
         Line::Agent { row, .. } => state.window.countdowns.contains_key(&row.id),
         _ => false,
@@ -388,6 +394,7 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
             logos,
             logo_rev,
             keys.clone(),
+            shown,
             *t,
         ),
         || {
@@ -402,7 +409,8 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
                         .then(|| settle_button(&key, row))
                         .into_iter()
                         .chain([actions_button(&key, row, tile)]);
-                    agent_row(state, key.clone(), row, logos, controls.collect(), t).children(bar)
+                    agent_row(state, key.clone(), row, shown, logos, controls.collect(), t)
+                        .children(bar)
                 }
                 Line::Tile(tile) => tile_row(key.clone(), tile, t),
             };
@@ -506,6 +514,7 @@ fn agent_row(
     state: &State,
     key: String,
     agent: &AgentRow,
+    shown: Shown,
     logos: bool,
     controls: Vec<system::IconButton>,
     t: &Tokens,
@@ -522,7 +531,7 @@ fn agent_row(
         .lead(lead(state, &key, agent, logos, t))
         .title_el(name)
         .in_view(agent.selected)
-        .tint(agent.offline.then_some(t.error))
+        .tint(row_tint(agent, shown, t))
         .hover_controls(controls);
     if let Some(pr) = &agent.pr {
         row = row.badge(crate::desktop::provenance::badge_view(&key, pr, t));
@@ -567,9 +576,30 @@ fn agent_row(
         .on_drag(|state: &mut State, d: &mut rune::Drag, tx: &mut Tx| {
             crate::desktop::drag::gesture(state, d, tx, crate::desktop::drag::Owner::Sidebar)
         });
+    let row = outlined(row, shown, t);
     match &agent.chain {
         Some(_) => crate::desktop::chain::row_hovers(row, &key, &agent.id),
         None => row,
+    }
+}
+
+/// An agent's row takes the error tint while its machine is unreachable, and the accent's while
+/// the open delegation chain picks it.
+fn row_tint(agent: &AgentRow, shown: Shown, t: &Tokens) -> Option<rune::Color> {
+    if shown.picked {
+        Some(t.accent)
+    } else {
+        agent.offline.then_some(t.error)
+    }
+}
+
+/// An agent's row outlined while the open delegation chain or pull requests are the ones its agent
+/// opened.
+fn outlined(row: El, shown: Shown, t: &Tokens) -> El {
+    if shown.opened {
+        row.border(1.0, t.accent)
+    } else {
+        row
     }
 }
 

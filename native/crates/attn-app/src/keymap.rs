@@ -334,6 +334,7 @@ fn kept(action: &Action, binding: Binding, platform: Platform) -> Kept {
         | Action::TerminalFind
         | Action::SessionPrev
         | Action::SessionNext
+        | Action::SessionDetails
         | Action::MarkdownSendAnnotations
         | Action::TerminalSendAnnotations => Kept::ByFieldsAndPages,
         Action::SessionToggleSidebar if platform == Platform::Mac => Kept::ByFieldsAndPages,
@@ -567,6 +568,7 @@ const MAC: &[(Action, &str)] = &[
     (Action::SessionSettle, "mod+shift+e"),
     (Action::SessionPriority, "mod+shift+i"),
     (Action::SessionSnooze, "mod+shift+s"),
+    (Action::SessionDetails, "mod+i"),
     (Action::SessionCancelCountdown, "mod+."),
     (Action::SessionToggleSidebar, "mod+b"),
     (Action::SessionRefreshPrs, "mod+r"),
@@ -655,6 +657,7 @@ const LINUX: &[(Action, &str)] = &[
     (Action::SessionSettle, "mod+alt+e"),
     (Action::SessionPriority, "mod+alt+i"),
     (Action::SessionSnooze, "mod+alt+s"),
+    (Action::SessionDetails, "mod+shift+i"),
     (Action::SessionCancelCountdown, "mod+shift+."),
     (Action::SessionToggleSidebar, "mod+alt+b"),
     (Action::SessionRefreshPrs, "mod+shift+r"),

@@ -47,6 +47,8 @@ macro_rules! actions {
             ShowSessionUsage { session: String },
             /// Pin the delegation chain in an agent's tile header.
             ShowDelegationChain { session: String },
+            /// Pin the pull requests in an agent's tile header.
+            ShowPullRequests { session: String },
             /// Ask for the token budget an agent compacts at.
             CapContextWindow { session: String },
             /// Pin the seeds an agent tends, and the one it reports to, in its tile header.
@@ -126,6 +128,7 @@ macro_rules! actions {
                     Action::OpenInEditor { .. } => "session.openInEditor",
                     Action::ShowSessionUsage { .. } => "session.showUsage",
                     Action::ShowDelegationChain { .. } => "session.showDelegationChain",
+                    Action::ShowPullRequests { .. } => "session.showPullRequests",
                     Action::CapContextWindow { .. } => "session.capContextWindow",
                     Action::ShowSessionSeeds { .. } => "session.showSeeds",
                     Action::WakeSession { .. } => "session.wake",
@@ -171,6 +174,7 @@ macro_rules! actions {
                     Action::OpenInEditor { .. } => "Open in editor",
                     Action::ShowSessionUsage { .. } => "Show an agent's usage",
                     Action::ShowDelegationChain { .. } => "Show an agent's delegation chain",
+                    Action::ShowPullRequests { .. } => "Show an agent's pull requests",
                     Action::CapContextWindow { .. } => "Cap an agent's context window",
                     Action::ShowSessionSeeds { .. } => "Show an agent's seeds",
                     Action::WakeSession { .. } => "Unsnooze an agent",
@@ -240,6 +244,7 @@ actions! {
     SessionSettle = "session.settle", Sessions, "Settle turn";
     SessionPriority = "session.priority", Sessions, "Toggle session priority";
     SessionSnooze = "session.snooze", Sessions, "Snooze this agent";
+    SessionDetails = "session.details", Sessions, "Delegation chain or pull requests";
     SessionCancelCountdown = "session.cancelCountdown", Sessions, "Stop the countdown, or keep the next turn";
     SessionToggleSidebar = "session.toggleSidebar", Sessions, "Toggle sidebar";
     DesktopSelect1 = "desktop.select1", Sessions, "Switch to desktop 1";

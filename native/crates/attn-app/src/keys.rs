@@ -73,9 +73,6 @@ fn route(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> bool
         return true;
     }
     let field = tx.in_text_field();
-    if !field && crate::desktop::chain::hover_key(state, ev, tx) {
-        return true;
-    }
     if !field && crate::markdown::annotating::on_key(state, ev, tx) {
         return true;
     }

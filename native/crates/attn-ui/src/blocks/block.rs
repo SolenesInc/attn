@@ -163,7 +163,12 @@ pub(crate) enum Room {
 /// A surface bounded by its container, as a dialog, a popover or a sheet is: `head` and `foot`
 /// keep their size, and `body`, built with [`scrolling`], gives way to the room left between
 /// them, shrinking where the surface fits what it holds and growing where it fills.
-pub(crate) fn bounded(head: El, body: Option<El>, foot: Option<El>, room: Room) -> El {
+pub(crate) fn bounded(
+    head: impl Into<Option<El>>,
+    body: Option<El>,
+    foot: Option<El>,
+    room: Room,
+) -> El {
     let column = match room {
         Room::Fit => col().shrink(),
         Room::Fill => col().grow(1.0),
@@ -175,7 +180,7 @@ pub(crate) fn bounded(head: El, body: Option<El>, foot: Option<El>, room: Room) 
     column
         .w_full()
         .min_h(0.0)
-        .child(head)
+        .children(head.into())
         .children(body)
         .children(foot)
 }

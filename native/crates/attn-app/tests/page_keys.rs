@@ -17,6 +17,7 @@ enum Owner {
 const SPLIT: &[(Action, Owner)] = &[
     (Action::TerminalFind, Owner::Page),
     (Action::SessionToggleSidebar, Owner::Page),
+    (Action::SessionDetails, Owner::Page),
     (Action::UiActionMenu, Owner::Page),
     (Action::TerminalSplitVertical, Owner::Page),
     (Action::SessionPrev, Owner::Page),

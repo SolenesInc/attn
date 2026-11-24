@@ -646,11 +646,14 @@ fn the_pull_request_details_open_on_hover_and_close_soon_after_the_pointer_leave
         "Change 71",
         "Waiting for GitHub",
         "victorarias/attn#71",
-        "↵ open",
-        "c copy url",
+        &format!("{} use the keyboard", shortcut_caps()),
     ] {
         assert!(shown.lines().any(|l| l == line), "{line:?} in {shown}");
     }
+    assert!(
+        !shown.contains("copy link"),
+        "a hovered popover names only the keys it takes: {shown}"
+    );
     assert!(
         world
             .screen()
@@ -688,7 +691,7 @@ fn pinned_pull_request_details_pick_with_the_arrows_open_with_return_and_copy_wi
     );
     world.gesture(|app| app.click(Target::key("tile.a.details")));
     let shown = details(&world).expect("a press pins the details");
-    for line in ["Ready to merge", "↑ ↓ pick", "↵ open", "c copy url"] {
+    for line in ["Ready to merge", "↑ ↓ move", "↵ open", "C copy link"] {
         assert!(shown.lines().any(|l| l == line), "{line:?} in {shown}");
     }
 
@@ -1295,7 +1298,10 @@ fn at_the_smallest_window_with_large_text_pinned_details_keep_every_pull_request
     );
     world.gesture(|app| app.click(Target::key("tile.a.details")));
     world.settle();
-    for key in ["tile.a.details.popover.pr.1", "tile.a.details.popover.keys"] {
+    for key in [
+        "tile.a.details.popover.pr.1",
+        "tile.a.details.popover.actions",
+    ] {
         let elements = world.runtime().elements();
         let shown = elements
             .iter()
@@ -1321,8 +1327,7 @@ fn at_the_smallest_window_with_large_text_pinned_details_keep_every_pull_request
 }
 
 #[test]
-fn the_details_of_a_pull_request_lead_with_what_stands_before_its_merge_and_leave_out_what_is_fine()
-{
+fn the_details_of_a_pull_request_say_its_checks_review_and_merge_then_what_stands_in_the_way() {
     let fetched =
         |pr: SessionPullRequest, checks: &str, review: &str, merge: &str| SessionPullRequest {
             status_fetched_at: Some("2026-08-30T12:05:00Z".into()),
@@ -1373,51 +1378,52 @@ fn the_details_of_a_pull_request_lead_with_what_stands_before_its_merge_and_leav
     assert_eq!(
         picked(&world),
         [
+            "victorarias/attn#71",
+            "74d ago",
             "Change 71",
             "Checks failed",
-            "review waiting on a reviewer",
-            "victorarias/attn#71",
-            "opened 74d ago",
+            "Review waiting on a reviewer",
+            "Merge no conflicts",
+            "Checks failed",
         ],
-        "an unwatched pull request leads with its status and leaves out its clean merge"
+        "an unwatched pull request's verdict is the first thing in its way"
     );
     key(&mut world, Key::Down);
     assert_eq!(
         picked(&world),
         [
+            "victorarias/attn#72",
+            "75d ago",
             "Change 72",
+            "Checks failed",
+            "Review changes requested",
+            "Merge conflicts",
             "Blocked",
             "It has merge conflicts",
-            "checks failed",
-            "review changes requested",
-            "octo watch",
             "Watch delayed: GitHub rate limit reached",
-            "victorarias/attn#72",
-            "opened 75d ago",
         ],
-        "a watched pull request leads with its watch's verdict and names its conflicts once"
+        "a watched pull request's verdict is its watch's"
     );
     key(&mut world, Key::Down);
     assert_eq!(
         picked(&world),
         [
+            "victorarias/attn#70",
+            "76d ago",
             "Change 70",
+            "Checks none reported",
+            "Review approved",
+            "Merge behind the base",
             "Approved",
             "Its branch is behind the base",
-            "victorarias/attn#70",
-            "opened 76d ago",
         ],
         "an approved pull request is not ready to merge while its branch is behind the base"
     );
     key(&mut world, Key::Down);
     assert_eq!(
         picked(&world),
-        [
-            "Change 60",
-            "Merged",
-            "victorarias/attn#60",
-            "opened 103d ago",
-        ]
+        ["victorarias/attn#60", "103d ago", "Change 60", "Merged"],
+        "a merged pull request has no checks, review or merge left to show"
     );
     rest(&mut world);
 }
@@ -1545,7 +1551,7 @@ fn a_pinned_chain_opens_the_picked_agents_seed_pull_request_and_ask_by_letter_an
     world.gesture(|app| app.click(Target::key("tile.a.role")));
     for (go, said) in [
         ("s", "Open seed Sweep the ledger"),
-        ("p", "Open pull request attn#71 on GitHub"),
+        ("p", "Open pull request attn#71 on GitHub, open"),
         ("a", "Answer ask: Cache store"),
     ] {
         assert_eq!(
@@ -1625,8 +1631,8 @@ fn a_chain_marks_what_each_agent_needs_from_the_user_counts_them_and_folds_the_n
         Some("3 need you")
     );
     for (i, shown, needs) in [
-        (1, "…-terms", "waiting for you"),
-        (2, "…-links", "wants approval"),
+        (1, "-terms", "waiting for you"),
+        (2, "-links", "wants approval"),
         (3, "release notes", "2 asks"),
     ] {
         let said = texts(&world, &format!("{surface}.agent.{i}"));
@@ -2267,8 +2273,37 @@ fn a_pinned_chain_stays_open_under_a_wheel_inside_it_and_closes_when_the_user_wh
     rest(&mut world);
 }
 
+fn shortcut(action: &Action) -> KeyEvent {
+    match Keymap::from_setting(None, attn_testkit::platform()).binding(action) {
+        Some(Binding::Chord(chord)) => key_event(&chord),
+        other => panic!("{action:?} has no single chord: {other:?}"),
+    }
+}
+
+fn shortcut_caps() -> String {
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
+    let keys = keymap.binding(&Action::SessionDetails).expect("a binding");
+    keymap.keycaps(keys).join(" ")
+}
+
+fn details_shortcut(world: &mut World) {
+    let ev = shortcut(&Action::SessionDetails);
+    world.gesture(|app| app.key(ev));
+}
+
+fn typed_into(world: &World, runtime: &str) -> Vec<String> {
+    world
+        .daemon
+        .sent_of("pty_input")
+        .into_iter()
+        .filter(|r| r["id"] == runtime)
+        .map(|r| r["data"].as_str().unwrap_or_default().to_owned())
+        .collect()
+}
+
 #[test]
-fn a_chain_shown_by_hover_takes_the_arrows_and_enter_before_the_terminal() {
+fn a_chain_shown_by_hover_leaves_its_keys_to_the_terminal_until_the_shortcut_pins_it_on_the_agent_it_picks()
+ {
     let mut world = start_with(vec![
         session("a", "root session", None),
         with_role(
@@ -2277,33 +2312,38 @@ fn a_chain_shown_by_hover_takes_the_arrows_and_enter_before_the_terminal() {
             delegate_of("b", "Build navigator", "a"),
         ),
     ]);
-    let picked = |world: &World| {
-        (0..2).position(|i| {
-            world
-                .screen()
-                .find(Target::key(format!(
-                    "sidebar.session.s-b.chain.popover.agent.{i}"
-                )))
-                .is_some_and(|n| n.is("selected"))
-        })
-    };
-    let typed = world.daemon.sent_of("pty_input").len();
+    let surface = "sidebar.session.s-b.chain.popover";
+    let pane = middle(&world, "tile.a");
+    world.gesture(|app| app.click_at(pane));
     rest_on(&mut world, "sidebar.session.s-b");
-    assert_eq!(picked(&world), Some(1), "hover picks the agent of the row");
+    assert_eq!(
+        picked_agent(&world, surface),
+        Some(1),
+        "hover picks the agent of the row"
+    );
+    for pressed in [Key::Up, Key::Enter, Key::Home, Key::Tab] {
+        key(&mut world, pressed);
+    }
+    assert_eq!(
+        typed_into(&world, "r-a"),
+        ["\u{1b}[A", "\r", "\u{1b}[H", "\t"],
+        "the terminal hears every key"
+    );
+    assert_eq!(picked_agent(&world, surface), Some(1));
+    assert!(world.daemon.sent_of("desktop_show_session").is_empty());
+
+    rest_on(&mut world, &format!("{surface}.agent.0"));
+    assert_eq!(picked_agent(&world, surface), Some(0));
+    details_shortcut(&mut world);
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some(surface),
+        "the shortcut gives the hovered chain the keyboard"
+    );
+    assert_eq!(picked_agent(&world, surface), Some(0), "and keeps its pick");
+    key(&mut world, Key::Down);
+    assert_eq!(picked_agent(&world, surface), Some(1));
     key(&mut world, Key::Up);
-    assert_eq!(
-        picked(&world),
-        Some(0),
-        "Up moves the pick on the hovered chain"
-    );
-    key(&mut world, Key::End);
-    key(&mut world, Key::Home);
-    assert_eq!(picked(&world), Some(0));
-    assert_eq!(
-        world.daemon.sent_of("pty_input").len(),
-        typed,
-        "the terminal hears none of the chain's keys"
-    );
     key(&mut world, Key::Enter);
     assert_eq!(chain(&world), None, "Enter closes the chain");
     assert_eq!(
@@ -2315,6 +2355,172 @@ fn a_chain_shown_by_hover_takes_the_arrows_and_enter_before_the_terminal() {
         Some("s-a".into()),
         "and opens the picked agent"
     );
+    assert_eq!(
+        typed_into(&world, "r-a").len(),
+        4,
+        "the terminal hears none of the pinned chain's keys"
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn the_shortcut_opens_the_active_agents_chain_or_its_pull_requests_and_gives_the_keyboard_back_when_it_closes_them()
+ {
+    let pr = || Some(vec![pull_request(71, "open", "2026-08-30T12:00:00Z")]);
+    let delegate = || delegate_of("delegate", "glossary rework", "a");
+    for (what, agent, others, opens) in [
+        (
+            "a chain",
+            session("a", "ledger sweep", None),
+            vec![delegate()],
+            Some("tile.a.role.popover"),
+        ),
+        (
+            "a chain and a pull request",
+            Session {
+                pull_requests: pr(),
+                ..session("a", "ledger sweep", None)
+            },
+            vec![delegate()],
+            Some("tile.a.role.popover"),
+        ),
+        (
+            "a pull request",
+            Session {
+                pull_requests: pr(),
+                ..session("a", "ledger sweep", None)
+            },
+            vec![],
+            Some("tile.a.details.popover"),
+        ),
+        ("neither", session("a", "ledger sweep", None), vec![], None),
+    ] {
+        let mut sessions = vec![agent, session("b", "docs", None)];
+        sessions.extend(others);
+        let mut world = start_with(sessions);
+        details_shortcut(&mut world);
+        let opened = focused(&world).filter(|key| key.ends_with(".popover"));
+        assert_eq!(opened.as_deref(), opens, "{what}");
+        assert!(typed_into(&world, "r-a").is_empty(), "{what}");
+        if opens.is_some() {
+            key(&mut world, Key::Text("x".into()));
+            assert!(typed_into(&world, "r-a").is_empty(), "{what}");
+            details_shortcut(&mut world);
+        }
+        assert_eq!(chain(&world), None, "{what}");
+        assert_eq!(details(&world), None, "{what}");
+        key(&mut world, Key::Text("y".into()));
+        assert_eq!(typed_into(&world, "r-a"), ["y"], "{what}");
+        rest(&mut world);
+    }
+}
+
+#[test]
+fn tab_in_a_pinned_popover_switches_between_the_agents_chain_and_its_pull_requests() {
+    let mut world = start_with(vec![
+        with_pull_requests(vec![pull_request(71, "open", "2026-08-30T12:00:00Z")]),
+        session("b", "docs", None),
+        delegate_of("delegate", "glossary rework", "a"),
+    ]);
+    let offers = |world: &World, surface: &str, hint: &str| {
+        texts(world, surface).iter().any(|said| said == hint)
+    };
+    details_shortcut(&mut world);
+    assert!(offers(&world, "tile.a.role.popover", "⇥ pull requests"));
+    key(&mut world, Key::Tab);
+    assert_eq!(chain(&world), None);
+    assert_eq!(focused(&world).as_deref(), Some("tile.a.details.popover"));
+    assert!(offers(&world, "tile.a.details.popover", "⇥ chain"));
+    key(&mut world, Key::Tab);
+    assert_eq!(details(&world), None);
+    assert_eq!(focused(&world).as_deref(), Some("tile.a.role.popover"));
+    assert!(typed_into(&world, "r-a").is_empty());
+    rest(&mut world);
+}
+
+#[test]
+fn the_command_palette_pins_the_pull_requests_of_the_agent_on_screen() {
+    let mut world = start(
+        with_pull_requests(vec![pull_request(71, "open", "2026-08-30T12:00:00Z")]),
+        session("b", "docs", None),
+    );
+    run_command(&mut world, "show pull requests");
+    assert_eq!(focused(&world).as_deref(), Some("tile.a.details.popover"));
+    rest(&mut world);
+}
+
+/// Whether the element keyed `key` is drawn with the accent around it.
+fn edged_in_accent(world: &World, key: &str) -> bool {
+    let runtime = world.runtime();
+    let t = attn_ui::colors::scheme_for(None).colors(true).ui;
+    let accent = [t.accent.r, t.accent.g, t.accent.b].map(rune::theme::srgb_encode);
+    let to_pixels = runtime.zoom() * runtime.window_scale();
+    let rect = runtime
+        .presented(key)
+        .unwrap_or_else(|| panic!("{key} is drawn"))
+        .0
+        .map(|v| v * to_pixels);
+    runtime.instances.iter().any(|i| {
+        (0..4).all(|e| (i.rect[e] - rect[e]).abs() < 1.0)
+            && i.params[0] > 0.0
+            && (0..3).all(|c| (i.border[c] - accent[c]).abs() < 0.01)
+    })
+}
+
+#[test]
+fn an_open_chain_marks_the_agent_it_opened_from_and_the_one_it_picks_in_the_chain_and_in_the_sidebar()
+ {
+    let mut world = start_with(vec![
+        session("a", "root session", None),
+        delegate_of("b", "Build navigator", "a"),
+    ]);
+    let rows = ["sidebar.session.s-a", "sidebar.session.s-b"];
+    let fill = |world: &World, key: &str| {
+        world
+            .runtime()
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .map(|e| e.fill)
+            .unwrap_or_else(|| panic!("{key} is drawn"))
+    };
+    let plain = rows.map(|row| fill(&world, row));
+    let outlined = |world: &World| rows.map(|row| edged_in_accent(world, row));
+    let lit = |world: &World| [0, 1].map(|i| fill(world, rows[i]) != plain[i]);
+    assert_eq!(outlined(&world), [false, false]);
+
+    let surface = "sidebar.session.s-b.chain.popover";
+    let here = |world: &World, row: usize| {
+        texts(world, &format!("{surface}.agent.{row}"))
+            .iter()
+            .any(|said| said == "here")
+    };
+    rest_on(&mut world, rows[1]);
+    assert_eq!(outlined(&world), [false, true]);
+    assert_eq!(lit(&world), [false, true]);
+    assert!(
+        !edged_in_accent(&world, surface),
+        "a hovered chain does not hold the keyboard"
+    );
+
+    details_shortcut(&mut world);
+    assert!(
+        edged_in_accent(&world, surface),
+        "the pinned chain's edge says it holds the keyboard"
+    );
+    assert!(!here(&world, 1), "the picked row needs no second mark");
+    key(&mut world, Key::Up);
+    assert_eq!(
+        outlined(&world),
+        [false, true],
+        "the sidebar keeps the outline on the agent the chain opened from"
+    );
+    assert!(lit(&world)[0], "and lights the one the chain picks");
+    assert!(here(&world, 1), "the chain says which agent it opened from");
+
+    key(&mut world, Key::Escape);
+    assert_eq!(outlined(&world), [false, false]);
+    assert!(!lit(&world)[0]);
     rest(&mut world);
 }
 
@@ -2404,13 +2610,11 @@ fn a_headers_chain_shown_by_hover_stays_while_the_pointer_rests_on_it_after_comi
         Some(2),
         "the row the pointer left does not take away the header's chain"
     );
-    key(&mut world, Key::Up);
-    assert!(
-        world
-            .screen()
-            .find(Target::key("tile.b.role.popover.agent.0"))
-            .is_some_and(|n| n.is("selected")),
-        "and the chain still takes the arrows"
+    details_shortcut(&mut world);
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some("tile.b.role.popover"),
+        "and the shortcut gives the header's chain the keyboard"
     );
     rest(&mut world);
 }

@@ -25,6 +25,10 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         ShowDelegationChain { session } => {
             super::header_pop::pin(state, session, super::header_pop::What::Chain, tx)
         }
+        ShowPullRequests { session } => {
+            super::header_pop::pin(state, session, super::header_pop::What::Details, tx)
+        }
+        SessionDetails => super::header_pop::take_keyboard(state, tx),
         ShowSessionSeeds { session } => {
             super::header_pop::pin(state, session, super::header_pop::What::Seed, tx)
         }
