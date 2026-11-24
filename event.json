@@ -1,0 +1,9 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Cross-machine Claude sharing warning lost",
+  "at": "2026-11-24T06:13:38.955Z",
+  "severity": "p1",
+  "source": "agent",
+  "culprit": "47d54474c3cc9510a1aa959e8b2ed11ddd90fcc3"
+}
