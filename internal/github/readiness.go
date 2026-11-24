@@ -104,7 +104,7 @@ query PullRequestReadiness($owner:String!,$name:String!,$number:Int!){
     reactions(first:100){nodes{id content user{__typename login}} pageInfo{hasNextPage endCursor}}
 	latestOpinionatedReviews(first:100){nodes{id state bodyText submittedAt author{__typename login}} pageInfo{hasNextPage endCursor}}
 	reviews(first:100){nodes{id state bodyText submittedAt author{__typename login}} pageInfo{hasNextPage endCursor}}
-	reviewRequests(first:100){nodes{requestedReviewer{__typename ... on Bot{login} ... on User{login} ... on Mannequin{login} ... on Team{slug} ... on EnterpriseTeam{slug}}} pageInfo{hasNextPage endCursor}}
+	reviewRequests(first:100){nodes{requestedReviewer{__typename ... on Bot{login} ... on User{login} ... on Mannequin{login} ... on Team{slug}}} pageInfo{hasNextPage endCursor}}
     commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){
       nodes{__typename ... on CheckRun{id name status conclusion detailsUrl} ... on StatusContext{id context state targetUrl}}
       pageInfo{hasNextPage endCursor}
@@ -140,7 +140,7 @@ const pullRequestReviewRequestPageQuery = `
 query PullRequestReviewRequests($owner:String!,$name:String!,$number:Int!,$cursor:String!){
   repository(owner:$owner,name:$name){pullRequest(number:$number){
     headRefOid
-    reviewRequests(first:100,after:$cursor){nodes{requestedReviewer{__typename ... on Bot{login} ... on User{login} ... on Mannequin{login} ... on Team{slug} ... on EnterpriseTeam{slug}}} pageInfo{hasNextPage endCursor}}
+    reviewRequests(first:100,after:$cursor){nodes{requestedReviewer{__typename ... on Bot{login} ... on User{login} ... on Mannequin{login} ... on Team{slug}}} pageInfo{hasNextPage endCursor}}
   }}
 }`
 
