@@ -135,6 +135,10 @@ func (d *Daemon) monitorInTerminal(terminal harness.TerminalID, session protocol
 }
 
 func (d *Daemon) bindMonitorTerminals() {
+	d.bindMonitorTerminalsSkipping("")
+}
+
+func (d *Daemon) bindMonitorTerminalsSkipping(skip protocol.SessionID) {
 	for _, source := range d.monitors().each() {
 		proposed, ok := source.PendingConversation()
 		if !ok {
@@ -175,5 +179,12 @@ func (d *Daemon) bindMonitorTerminals() {
 		if session := d.store.Get(shown); session != nil {
 			d.resumeMonitor(session, live)
 		}
+	}
+	for _, session := range d.store.List("") {
+		if session.ID == skip || !d.copiedSession(session.ID) || !d.serverOwns(session.ID) || d.sessionMonitor(session.ID) != nil {
+			continue
+		}
+		d.startSessionMonitor(session.ID)
+		d.appServer.Reconcile(session.ID)
 	}
 }

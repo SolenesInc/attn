@@ -203,6 +203,8 @@ type Daemon struct {
 	teardownMu            sync.Mutex
 	tearingDown           map[protocol.SessionID]chan struct{}
 	releasing             map[protocol.SessionID]int
+	pendingAdoptionsMu    sync.Mutex
+	pendingAdoptions      map[pendingAdoptionKey]harness.Adoption
 	sessionLifecycleLocks sessionLocks
 	terminalEndLocks      sessionLocks
 	spawnLocksMu          sync.Mutex
@@ -2308,7 +2310,15 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 		}
 		return err
 	}
-	if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "committed"}); err != nil {
+	var closeCopy []protocol.CopyRow
+	if session != nil && d.sessionHost(sessionID) != "" {
+		if rows, err := d.store.SessionCopy(sessionID); err == nil {
+			closeCopy = rows
+		} else {
+			d.logf("build close copy for %s: %v", sessionID, err)
+		}
+	}
+	if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "committed", Copy: closeCopy}); err != nil {
 		d.logf("machine close: %v", err)
 	}
 	if endRelease != nil {
@@ -2319,7 +2329,7 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 			lifecycle := d.sessionLifecycleLockFor(sessionID)
 			lifecycle.Lock()
 			defer lifecycle.Unlock()
-			if len(d.store.OpenSessionsHolding(released)) > 0 {
+			if len(d.store.OpenSessionsHoldingOnHost(protocol.Deref(session.Host), released)) > 0 {
 				released = ""
 			}
 			if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "released", Agent: protocol.Ptr(session.Agent), Profile: protocol.Ptr(profile), Conversation: protocol.Ptr(released)}); err != nil {

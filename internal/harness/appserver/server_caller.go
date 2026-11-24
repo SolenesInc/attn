@@ -56,7 +56,7 @@ func (c *Client) declares(variable string) bool {
 func (c *Client) callerOwner(variable, conversation string) (protocol.SessionID, bool) {
 	var owner protocol.SessionID
 	for _, id := range c.host.Sessions().Holding(conversation) {
-		if l := c.serverHolding(id); l != nil && l.callerConversationEnv() == variable {
+		if l := c.serverHolding(id); l != nil && l.runsHere(id) && l.callerConversationEnv() == variable {
 			if owner != "" {
 				return "", true
 			}

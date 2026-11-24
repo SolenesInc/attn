@@ -57,6 +57,31 @@ type AddOutpostMessage struct {
 	Name string `json:"name"`
 }
 
+type AdoptServerConversationMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Conversation corresponds to the JSON schema field "conversation".
+	Conversation string `json:"conversation"`
+
+	// ParentSessionID corresponds to the JSON schema field "parent_session_id".
+	ParentSessionID SessionID `json:"parent_session_id"`
+
+	// Resume corresponds to the JSON schema field "resume".
+	Resume *bool `json:"resume,omitempty,omitzero"`
+
+	// Title corresponds to the JSON schema field "title".
+	Title *string `json:"title,omitempty,omitzero"`
+}
+
+type AdoptServerConversationResult struct {
+	// Copy corresponds to the JSON schema field "copy".
+	Copy []CopyRow `json:"copy,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
+}
+
 type AgentCatalogMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -201,6 +226,9 @@ type AgentLaunchCloseMessage struct {
 
 	// Conversation corresponds to the JSON schema field "conversation".
 	Conversation *string `json:"conversation,omitempty,omitzero"`
+
+	// Copy corresponds to the JSON schema field "copy".
+	Copy []CopyRow `json:"copy,omitempty,omitzero"`
 
 	// Driver corresponds to the JSON schema field "driver".
 	Driver *string `json:"driver,omitempty,omitzero"`

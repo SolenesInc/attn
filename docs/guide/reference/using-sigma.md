@@ -107,8 +107,9 @@ files, pull requests and spend from zero, folds its own hosted subagents into
 itself, and answers `attn` CLI and MCP calls as itself. If you close a worker
 session and its worker runs again or calls Attn while an ancestor session is
 open, Attn resumes it. A worker started under a conversation outside Attn stays
-outside Attn. Worker adoption currently runs on the home machine only; workers
-started on an outpost are not yet adopted.
+outside Attn. On an outpost, the outpost asks the home to open the worker
+session with the outpost as its host (retrying once the bridge reconnects if
+the outpost was offline).
 
 ## State
 

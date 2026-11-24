@@ -152,6 +152,10 @@ func (d *Daemon) applyCopyCall(ctx context.Context, home string, request []byte)
 }
 
 func (d *Daemon) applyOutpostCopy(ctx context.Context, home string, rows []protocol.CopyRow) error {
+	return d.applyOutpostCopyForLaunch(ctx, home, rows, "")
+}
+
+func (d *Daemon) applyOutpostCopyForLaunch(ctx context.Context, home string, rows []protocol.CopyRow, launching protocol.SessionID) error {
 	released := make(map[string]string)
 	for _, row := range rows {
 		if row.Table == protocol.CopyTableSessions && row.Columns == nil {
@@ -174,7 +178,7 @@ func (d *Daemon) applyOutpostCopy(ctx context.Context, home string, rows []proto
 		d.refreshChangedSettings(before)
 	}
 	d.replayPendingConversations()
-	d.bindMonitorTerminals()
+	d.bindMonitorTerminalsSkipping(launching)
 	for profile, agent := range released {
 		d.life.Go("linkReleasedAfterCopy", func() { d.released(agent, profile) })
 	}

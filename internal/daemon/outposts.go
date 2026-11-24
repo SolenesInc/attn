@@ -217,6 +217,9 @@ func (d *Daemon) setOutpostConn(id string, run *outpostDial, conn *bridge.Conn) 
 		return false
 	}
 	run.conn = conn
+	if conn != nil && (run.state == bridge.StateLost || run.state == bridge.StateRefused) {
+		run.state = bridge.StateConnecting
+	}
 	r.notifyChangedLocked()
 	return true
 }

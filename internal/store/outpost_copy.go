@@ -261,11 +261,11 @@ func (s *Store) ApplyCopy(ctx context.Context, home string, rows []protocol.Copy
 		if row.Table != protocol.CopyTableSessions {
 			continue
 		}
-		if row.Columns == nil {
-			delete(s.copiedSessionSeq, row.Key)
-			s.forgetSessionCost(protocol.SessionID(row.Key))
-		} else {
+		if row.Seq > s.copiedSessionSeq[row.Key] {
 			s.copiedSessionSeq[row.Key] = row.Seq
+		}
+		if row.Columns == nil {
+			s.forgetSessionCost(protocol.SessionID(row.Key))
 		}
 	}
 	if settingsChanged {
@@ -423,6 +423,21 @@ func jsonList(values []string) string {
 	return string(encoded)
 }
 
+func (s *Store) SessionCopy(session protocol.SessionID) ([]protocol.CopyRow, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	seq, err := copySeq(s.db)
+	if err != nil {
+		return nil, err
+	}
+	row, err := copyRow(s.db, protocol.CopyTableSessions, string(session), `SELECT * FROM sessions WHERE id = ? AND closed_at = ''`, session)
+	if err != nil {
+		return nil, err
+	}
+	row.Seq = seq
+	return []protocol.CopyRow{row}, nil
+}
+
 func (s *Store) LaunchCopy(session protocol.SessionID, terminal protocol.TerminalID) ([]protocol.CopyRow, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -430,7 +445,7 @@ func (s *Store) LaunchCopy(session protocol.SessionID, terminal protocol.Termina
 	if err != nil {
 		return nil, err
 	}
-	row, err := copyRow(s.db, protocol.CopyTableSessions, string(session), `SELECT * FROM sessions WHERE id = ?`, session)
+	row, err := copyRow(s.db, protocol.CopyTableSessions, string(session), `SELECT * FROM sessions WHERE id = ? AND closed_at = ''`, session)
 	if err != nil {
 		return nil, err
 	}

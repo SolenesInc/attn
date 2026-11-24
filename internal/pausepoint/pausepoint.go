@@ -114,6 +114,7 @@ const (
 	NotebookStreamOpen             = "notebook-stream-open"
 	NotebookReportSent             = "notebook-report-sent"
 	OutpostBridgeAccept            = "outpost-bridge-accept"
+	OutpostAdoptionDeferred        = "outpost-adoption-deferred"
 	OutpostViewsSending            = "outpost-views-sending"
 	OutpostBridgeDialed            = "outpost-bridge-dialed"
 	NotebookStreamError            = "notebook-stream-error"

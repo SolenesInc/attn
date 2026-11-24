@@ -3474,6 +3474,7 @@ model AgentLaunchCloseMessage {
   signal?: string;
   profile?: string;
   conversation?: string;
+  copy?: CopyRow[];
 }
 model AgentLaunchCloseResult {
   driver?: string;
@@ -9151,6 +9152,20 @@ model ApplyMonitorViewMessage {
 
 model ApplyMonitorViewResult {
   outcome?: ConversationOutcome;
+}
+
+@extension("x-on", #{ home: true })
+model AdoptServerConversationMessage {
+  cmd: "adopt_server_conversation";
+  parent_session_id: SessionID;
+  conversation: string;
+  title?: string;
+  resume?: boolean;
+}
+
+model AdoptServerConversationResult {
+  session_id?: SessionID;
+  copy?: CopyRow[];
 }
 
 model ConversationOutcome {

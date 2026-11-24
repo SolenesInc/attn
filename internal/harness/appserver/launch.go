@@ -22,7 +22,7 @@ func (l *Link) Launch(req harness.LaunchRequest) error {
 	if l == nil || req.Lifetime != harness.InServer {
 		return nil
 	}
-	if err := l.admit(req.Profile, req.Conversation); err != nil {
+	if err := l.admit(req.Profile, "", req.Conversation); err != nil {
 		return err
 	}
 	if req.Reason == harness.Reload {
@@ -36,7 +36,7 @@ func (l *Link) Admit(ref harness.ConversationRef) error {
 	if l == nil || ref.Lifetime != harness.InServer {
 		return nil
 	}
-	return l.admit(ref.Profile, ref.ID)
+	return l.admit(ref.Profile, ref.Host, ref.ID)
 }
 
 func (l *Link) Recover(ctx context.Context, point harness.RecoverPoint) {
@@ -76,3 +76,13 @@ func (l *Link) SharedTools() *harness.AgentTools {
 func (l *Link) Plugin() string { return l.b.plugin }
 
 func (c *Client) Terminal(t harness.TerminalID, e harness.TerminalEvent) { c.terminal(t, e) }
+
+func (c *Client) Reconcile(sessionID harness.SessionID) {
+	if l := c.serverHolding(sessionID); l != nil {
+		if p, err := l.connection(); err == nil {
+			p.c.host.Life().Go("reconcileSession", func() {
+				p.reconcile(l, []harness.SessionID{sessionID}, false)
+			})
+		}
+	}
+}

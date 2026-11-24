@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "618c2d59c9e1";
+pub const PROTOCOL_VERSION: &str = "947fa6b2022e";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -56,6 +56,33 @@ impl AddOutpostMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AdoptServerConversationMessage {
+    pub cmd: String,
+    pub conversation: String,
+    pub parent_session_id: SessionID,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resume: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
+impl AdoptServerConversationMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "adopt_server_conversation".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AdoptServerConversationResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copy: Option<Vec<CopyRow>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<SessionID>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentCatalogMessage {
@@ -163,6 +190,8 @@ pub struct AgentLaunchCloseMessage {
     pub cmd: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conversation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copy: Option<Vec<CopyRow>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub driver: Option<String>,
     pub phase: String,

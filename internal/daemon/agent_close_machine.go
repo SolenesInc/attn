@@ -54,6 +54,13 @@ func (d *Daemon) closeAgentMachine(_ context.Context, msg protocol.AgentLaunchCl
 		result.View = protocol.Ptr(string(raw))
 		pausepoint.At(pausepoint.AgentCloseDrained)
 	case "committed":
+		if len(msg.Copy) > 0 {
+			if home := d.homeBridge(); home != nil {
+				if err := d.applyOutpostCopy(home.Context(), home.Peer().DaemonID, msg.Copy); err != nil {
+					d.logf("apply closed session copy for %s: %v", msg.SessionID, err)
+				}
+			}
+		}
 		d.forgetMonitor(msg.SessionID)
 	case "released":
 		d.harnessOf(protocol.Deref(msg.Agent)).End(d.life.Context(), harness.Ending{Session: msg.SessionID, Profile: protocol.Deref(msg.Profile), Released: protocol.Deref(msg.Conversation)})

@@ -28,6 +28,7 @@ type Placed interface {
 }
 
 var Placements = map[string][]Placement{
+	"adopt_server_conversation":      {Placement{LocatorHome, ""}},
 	"agent_catalog":                  {Placement{LocatorMachine, "host"}},
 	"agent_launch_close":             {Placement{LocatorSession, "session_id"}},
 	"apply_monitor_view":             {Placement{LocatorHome, ""}},
@@ -228,6 +229,18 @@ func SocketPlacement(command string, frame []byte) (Placement, bool) {
 		}
 	}
 	return places[len(places)-1], true
+}
+
+func (AdoptServerConversationMessage) CommandName() string {
+	return "adopt_server_conversation"
+}
+
+func (m AdoptServerConversationMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AdoptServerConversationMessage) Locate() string {
+	return ""
 }
 
 func (AgentCatalogMessage) CommandName() string {

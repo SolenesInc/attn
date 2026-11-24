@@ -57,12 +57,19 @@ func (l *Link) enabledForNewLaunches() bool {
 	return l.b.declaration.Load() != nil && l.b.enabled != nil && l.b.enabled()
 }
 
-func (l *Link) admit(profile, conversation string) error {
+func (l *Link) admit(profile, host, conversation string) error {
 	for _, holder := range l.c.host.Sessions().Holding(conversation) {
 		if l.c.serverHolding(holder) == nil {
 			continue
 		}
 		if session := l.c.host.Sessions().Get(holder); session != nil {
+			if host != "" {
+				if protocol.Deref(session.Host) != host {
+					continue
+				}
+			} else if l.c.host.Sessions().Remote(holder) {
+				continue
+			}
 			if session.ProfileID != profile {
 				return fmt.Errorf("conversation %s is open in a session of profile %s; close it there first", conversation, session.ProfileID)
 			}

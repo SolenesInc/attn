@@ -205,13 +205,13 @@ func (s *Store) ConversationsOpenInManySessions() [][]protocol.SessionID {
 	if s.db == nil {
 		return nil
 	}
-	rows, err := s.db.Query(`SELECT id, profile_id, agent, resume_session_id FROM sessions
+	rows, err := s.db.Query(`SELECT id, profile_id, host, agent, resume_session_id FROM sessions
 		WHERE closed_at = '' AND resume_session_id != ''
-		AND (profile_id, agent, resume_session_id) IN (
-			SELECT profile_id, agent, resume_session_id FROM sessions
+		AND (profile_id, host, agent, resume_session_id) IN (
+			SELECT profile_id, host, agent, resume_session_id FROM sessions
 			WHERE closed_at = '' AND resume_session_id != ''
-			GROUP BY profile_id, agent, resume_session_id HAVING COUNT(*) > 1)
-		ORDER BY profile_id, agent, resume_session_id, id`)
+			GROUP BY profile_id, host, agent, resume_session_id HAVING COUNT(*) > 1)
+		ORDER BY profile_id, host, agent, resume_session_id, id`)
 	if err != nil {
 		log.Printf("[store] ConversationsOpenInManySessions: %v", err)
 		return nil
@@ -220,12 +220,12 @@ func (s *Store) ConversationsOpenInManySessions() [][]protocol.SessionID {
 	var groups [][]protocol.SessionID
 	var last string
 	for rows.Next() {
-		var id, profile, agent, native string
-		if err := rows.Scan(&id, &profile, &agent, &native); err != nil {
+		var id, profile, host, agent, native string
+		if err := rows.Scan(&id, &profile, &host, &agent, &native); err != nil {
 			log.Printf("[store] ConversationsOpenInManySessions: %v", err)
 			return nil
 		}
-		if key := profile + "\x00" + agent + "\x00" + native; key != last || len(groups) == 0 {
+		if key := profile + "\x00" + host + "\x00" + agent + "\x00" + native; key != last || len(groups) == 0 {
 			groups = append(groups, nil)
 			last = key
 		}

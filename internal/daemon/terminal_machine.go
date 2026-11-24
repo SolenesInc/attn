@@ -23,6 +23,7 @@ func (d *Daemon) machineParts() map[string]machinePart {
 	parts := map[string]machinePart{}
 	runs(parts, false, d.applySetting)
 	runs(parts, false, d.applyMonitorView)
+	runs(parts, false, d.adoptServerConversationHere)
 	runs(parts, false, d.receiveHomeUpdateNotice)
 	runs(parts, false, d.terminalExited)
 	d.registerMonitorParts(parts)
@@ -111,7 +112,11 @@ func (d *Daemon) startTerminal(ctx context.Context, msg protocol.TerminalStartMe
 		if home == nil {
 			return struct{}{}, errors.New("home bridge is not connected")
 		}
-		if err := d.applyOutpostCopy(home.Context(), home.Peer().DaemonID, msg.Copy); err != nil {
+		launching := session.ID
+		if agent != nil && agent.AddedTerminal {
+			launching = ""
+		}
+		if err := d.applyOutpostCopyForLaunch(home.Context(), home.Peer().DaemonID, msg.Copy, launching); err != nil {
 			return struct{}{}, err
 		}
 		if agent == nil || !agent.AddedTerminal {

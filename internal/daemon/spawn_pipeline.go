@@ -650,12 +650,12 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 		return placementOutcome{}, rejection
 	}
 	if h := d.harnessOf(harness.ID(req.agent)); !req.isShell && h.Facts().Recovery == harness.ByServer {
-		ref := harness.ConversationRef{Harness: h.Facts().ID, Profile: req.profile.ID, ID: protocol.Deref(msg.ResumeSessionID), Lifetime: harness.InServer}
+		ref := harness.ConversationRef{Harness: h.Facts().ID, Profile: req.profile.ID, Host: protocol.Deref(msg.Host), ID: protocol.Deref(msg.ResumeSessionID), Lifetime: harness.InServer}
 		if err := h.Conversations().Admit(ref); err != nil {
 			return placementOutcome{}, &spawnRejection{err: err}
 		}
 	}
-	if holder := d.serverHolder(req.profile.ID, protocol.Deref(msg.ResumeSessionID)); holder != "" && holder != msg.ID {
+	if holder := d.serverHolder(req.profile.ID, protocol.Deref(msg.Host), protocol.Deref(msg.ResumeSessionID)); holder != "" && holder != msg.ID {
 		return d.showHolderProtected(protection, holder, msg, policy)
 	}
 	releaseSpawnLock := d.acquireSpawnLock(msg.ID)

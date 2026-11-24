@@ -113,6 +113,41 @@ func (s *Store) OpenSessionHoldingOutside(profileID, nativeID string) protocol.S
 	return id
 }
 
+func (s *Store) OpenSessionHoldingOnHost(profileID, host, nativeID string) protocol.SessionID {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil || nativeID == "" {
+		return ""
+	}
+	var id protocol.SessionID
+	if err := s.db.QueryRow(`SELECT id FROM sessions WHERE profile_id = ? AND host = ? AND resume_session_id = ? AND closed_at = '' LIMIT 1`, profileID, host, nativeID).Scan(&id); err != nil {
+		return ""
+	}
+	return id
+}
+
+func (s *Store) OpenSessionsHoldingOnHost(host, nativeID string) []protocol.SessionID {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil || nativeID == "" {
+		return nil
+	}
+	rows, err := s.db.Query(`SELECT id FROM sessions WHERE host = ? AND resume_session_id = ? AND closed_at = '' ORDER BY id`, host, nativeID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var ids []protocol.SessionID
+	for rows.Next() {
+		var id protocol.SessionID
+		if err := rows.Scan(&id); err != nil {
+			return nil
+		}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 func (s *Store) OpenSessionHolding(profileID, nativeID string) protocol.SessionID {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

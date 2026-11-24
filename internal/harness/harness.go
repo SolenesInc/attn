@@ -212,6 +212,7 @@ type ConversationRef struct {
 	Harness    ID
 	Session    SessionID
 	Profile    string
+	Host       string
 	Dir        string
 	DirMissing bool
 	ID         string

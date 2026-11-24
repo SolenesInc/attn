@@ -52,7 +52,7 @@ func (d *Daemon) admitConversation(session *protocol.Session, conversation strin
 	if !d.serverOwns(session.ID) {
 		return nil
 	}
-	return d.harnessOf(session.Agent).Conversations().Admit(harness.ConversationRef{Harness: harness.ID(session.Agent), Session: session.ID, Profile: session.ProfileID, ID: conversation, Lifetime: harness.InServer})
+	return d.harnessOf(session.Agent).Conversations().Admit(harness.ConversationRef{Harness: harness.ID(session.Agent), Session: session.ID, Profile: session.ProfileID, Host: protocol.Deref(session.Host), ID: conversation, Lifetime: harness.InServer})
 }
 
 func (d *Daemon) released(agent, profile string) {
@@ -115,8 +115,8 @@ func (d *Daemon) decorateLedgerEntryHidden(entry *protocol.SessionLedgerEntry) {
 	}
 }
 
-func (d *Daemon) serverHolder(profile, conversation string) protocol.SessionID {
-	sessionID := d.store.OpenSessionHolding(profile, conversation)
+func (d *Daemon) serverHolder(profile, host, conversation string) protocol.SessionID {
+	sessionID := d.store.OpenSessionHoldingOnHost(profile, host, conversation)
 	if sessionID == "" || d.lifetime(sessionID) != harness.InServer {
 		return ""
 	}

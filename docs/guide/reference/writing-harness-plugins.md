@@ -76,7 +76,7 @@ await client.connect();
 | You provide | Capability | Attn then |
 |---|---|---|
 | `spawn` (required) | | starts the harness with the argv, `env` and `cwd` you return |
-| `resume` | `resume` | reopens a closed session and `attn agent reload` |
+| `resume` | `resume` | resumes a closed session and runs `attn agent reload` |
 | `resumeAvailable` | `resume_availability` | checks that a conversation still exists before offering a resume |
 | `models` | `model_discovery` | lists the harness's models in Settings |
 | `deliver` | `message_delivery` | hands annotations, messages and compaction notices to the plugin instead of typing them |
@@ -428,8 +428,8 @@ first). Attn opens a visible tile for the adopted worker with `driver.resume`
 (or `driver.spawn` carrying `conversation_id` when the driver omits `resume`).
 A worker whose chain reaches no Attn session stays outside Attn. A closed worker
 session resumes when its worker runs again or calls Attn while an ancestor
-session is open. Worker adoption currently runs on the home machine only;
-workers started on an outpost are not yet adopted. A child with no `task` is a
+session is open. On an outpost, the outpost asks the home to adopt the worker
+with the outpost as its host and retries when the bridge reconnects. A child with no `task` is a
 subagent: its `lineage.root` is its nearest worker or user-started root, it
 stays in that root's tree and takes input only through its parent.
 Numbered recovery accepts `status/watch {after: {conversation: completion}}`

@@ -4,16 +4,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func sigmaOutpostPair(t *testing.T) *testworld.OutpostPair {
+func sigmaOutpostPair(t *testing.T, beforeStart ...func(*testworld.OutpostPair)) *testworld.OutpostPair {
 	t.Helper()
 	home := testworld.NewStack(t, testworld.WithAgents(fakeagent.Sigma))
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Sigma))
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	for _, fn := range beforeStart {
+		fn(pair)
+	}
 	pair.Start()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 	requireStdout(t, home.Attn("settings", "set", "sigma_enabled", "true"), "true")
@@ -212,6 +217,244 @@ func TestAnOpenOutpostSigmaSessionRevivesAfterSigmaIsTurnedOffWhileANewOneIsRefu
 	}
 	requireNoHomeSigmaServer(t, pair)
 	t.Logf("with sigma_enabled off, %s revived on the outpost into conversation %s; a new launch was refused: %s", id, tui.ConversationID, protocol.Deref(denied.Error))
+}
+
+func awaitHomeAdoptedSession(app *testworld.Peer, label string) protocol.Session {
+	app.T.Helper()
+	for _, s := range app.Initial.Sessions {
+		if s.Label == label {
+			return s
+		}
+	}
+	return *testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
+		return e.Session != nil && e.Session.Label == label
+	}).Session
+}
+
+func homeSessionsWithLabel(t *testing.T, pair *testworld.OutpostPair, label string) []protocol.Session {
+	t.Helper()
+	list, err := pair.Home.Client().List("")
+	if err != nil {
+		t.Fatalf("list home sessions: %v", err)
+	}
+	var matches []protocol.Session
+	for _, s := range list.Sessions {
+		if s.Label == label {
+			matches = append(matches, s)
+		}
+	}
+	return matches
+}
+
+func TestAnOutpostSigmaWorkerAdoptsAtHomeAndActsAsItsOwnSessionOnTheOutpost(t *testing.T) {
+	pair := sigmaOutpostPair(t)
+	parent, server, parentConv := outpostSigmaAtWork(t, pair)
+	mark := pair.App.EventCount()
+	server.Reply(parentConv, "Parent ready. <!-- attn:state=idle -->")
+	testworld.AwaitSessionSince(pair.App, mark, parent, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+	var planted struct {
+		ID string `json:"id"`
+	}
+	pair.Home.Run(testworld.Invocation{Args: []string{"seed", "plant", "outpost worker target", "--json"}}).JSON(t, &planted)
+	if planted.ID == "" {
+		t.Fatal("seed plant returned empty id")
+	}
+
+	server.Worker(parentConv, "outpost-worker", "audit")
+	presence := pair.Outpost.Run(testworld.Invocation{
+		Args: []string{"presence", "--session-id"},
+		Env:  []string{"SIGMA_ROOT_CONVERSATION=outpost-worker"},
+	})
+	if presence.Code != 0 {
+		t.Fatalf("outpost worker presence failed (%d): %s%s", presence.Code, presence.Stdout, presence.Stderr)
+	}
+	workerID := strings.TrimSpace(presence.Stdout)
+	if workerID == "" || workerID == parent {
+		t.Fatalf("outpost worker presence = %q, want distinct adopted worker session (parent=%s)", workerID, parent)
+	}
+
+	adopted := awaitHomeAdoptedSession(pair.App, "audit")
+	if string(adopted.ID) != workerID {
+		t.Errorf("home adopted worker id = %s, want %s from outpost presence", adopted.ID, workerID)
+	}
+	if protocol.Deref(adopted.Host) != pair.Host || adopted.Agent != "sigma" {
+		t.Errorf("adopted worker metadata = host %q agent %q, want sigma on %q", protocol.Deref(adopted.Host), adopted.Agent, pair.Host)
+	}
+	testworld.AwaitSessionFromConnect(pair.App, workerID, func(s protocol.Session) bool {
+		return !protocol.Deref(s.Hidden)
+	})
+	workerTile := pair.Outpost.LaunchedCarrying(pair.App.Terminal(workerID))
+	if workerTile.ConversationID != "outpost-worker" {
+		t.Errorf("outpost worker tile opened %q, want outpost-worker", workerTile.ConversationID)
+	}
+
+	note := pair.Outpost.Run(testworld.Invocation{
+		Args: []string{"seed", "note", planted.ID, "-m", "Note from outpost worker."},
+		Env:  []string{"SIGMA_ROOT_CONVERSATION=outpost-worker"},
+	})
+	if note.Code != 0 {
+		t.Fatalf("outpost worker seed note failed (%d): %s%s", note.Code, note.Stdout, note.Stderr)
+	}
+	var notes struct {
+		Notes []protocol.SeedNote `json:"notes"`
+	}
+	pair.Home.Run(testworld.Invocation{Args: []string{"seed", "notes", planted.ID, "--json"}}).JSON(t, &notes)
+	if len(notes.Notes) == 0 || string(notes.Notes[0].Author.Ref) != "session:"+workerID {
+		t.Fatalf("seed notes = %+v, want newest author.ref session:%s", notes.Notes, workerID)
+	}
+
+	mark = pair.App.EventCount()
+	server.Work("outpost-worker")
+	testworld.AwaitSessionSince(pair.App, mark, workerID, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	mark = pair.App.EventCount()
+	server.Reply("outpost-worker", "Audit finished. <!-- attn:state=idle -->")
+	testworld.AwaitSessionSince(pair.App, mark, workerID, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if got := homeSessionsWithLabel(t, pair, "audit"); len(got) != 1 {
+		t.Fatalf("home sessions titled audit = %d, want 1", len(got))
+	}
+	requireNoHomeSigmaServer(t, pair)
+}
+
+func TestAnOutpostSigmaWorkerCreatedWhileOfflineAdoptsWhenTheBridgeReturnsAndSurvivesOutpostRestart(t *testing.T) {
+	var deferred *testworld.Pause
+	pair := sigmaOutpostPair(t, func(p *testworld.OutpostPair) {
+		deferred = p.Outpost.PauseAt(pausepoint.OutpostAdoptionDeferred)
+	})
+	outpostApp := pair.Outpost.App()
+	parent, server, parentConv := outpostSigmaAtWork(t, pair)
+	mark := pair.App.EventCount()
+	server.Reply(parentConv, "Parent idle. <!-- attn:state=idle -->")
+	testworld.AwaitSessionSince(pair.App, mark, parent, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+	outpostMark := outpostApp.EventCount()
+	mark = pair.App.EventCount()
+	requireStdout(t, pair.Home.Attn("settings", "set", "outposts_enabled", "false"), "false")
+	outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachUnreachable)
+	testworld.AwaitSince(outpostApp, outpostMark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["outpost_state"] == "off"
+	})
+
+	server.Worker(parentConv, "offline-worker", "offline audit")
+	server.Work("offline-worker")
+	deferred.Await()
+	deferred.Release()
+
+	mark = pair.App.EventCount()
+	requireStdout(t, pair.Home.Attn("settings", "set", "outposts_enabled", "true"), "true")
+	outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
+
+	adopted := awaitHomeAdoptedSession(pair.App, "offline audit")
+	workerID := string(adopted.ID)
+	if protocol.Deref(adopted.Host) != pair.Host || adopted.Agent != "sigma" {
+		t.Fatalf("offline-adopted worker = host %q agent %q, want sigma on %q", protocol.Deref(adopted.Host), adopted.Agent, pair.Host)
+	}
+	testworld.AwaitSessionFromConnect(pair.App, workerID, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateWorking && !protocol.Deref(s.Hidden)
+	})
+	workerTile := pair.Outpost.LaunchedCarrying(pair.App.Terminal(workerID))
+	if workerTile.ConversationID != "offline-worker" {
+		t.Errorf("offline worker tile opened %q, want offline-worker", workerTile.ConversationID)
+	}
+	requireNoHomeSigmaServer(t, pair)
+
+	mark = pair.App.EventCount()
+	pair.Disconnect()
+	outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachUnreachable)
+	pair.Outpost.Stop()
+	pair.Outpost.Start()
+	mark = pair.App.EventCount()
+	pair.Reconnect()
+	stopRetries := pair.Home.FireTimers(bridge.RetryTimer)
+	defer stopRetries()
+	outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
+
+	replyMark := pair.App.EventCount()
+	server.Reply("offline-worker", "Done after outpost restart. <!-- attn:state=idle -->")
+	testworld.AwaitSessionSince(pair.App, replyMark, workerID, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if got := homeSessionsWithLabel(t, pair, "offline audit"); len(got) != 1 {
+		t.Fatalf("home sessions titled offline audit after outpost restart = %d, want 1", len(got))
+	}
+	requireNoHomeSigmaServer(t, pair)
+}
+
+func TestHomeAndOutpostSigmaWorkersWithTheSameConversationIDStaySeparate(t *testing.T) {
+	pair := sigmaOutpostPair(t)
+	awaitAgentAvailable(pair.App, fakeagent.Sigma)
+
+	homeParent := pair.Home.Spawn(pair.App, fakeagent.Sigma, pair.Home.Path("home-agent"))
+	homeTUI := pair.Home.LaunchedCarrying(pair.App.Terminal(homeParent))
+	homeServer := pair.Home.AppServer(fakeagent.Sigma)
+	pair.App.TypeLine(homeParent, "work at home")
+	homeServer.Prompted(homeTUI.ConversationID)
+	testworld.AwaitSession(pair.App, homeParent, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	mark := pair.App.EventCount()
+	homeServer.Reply(homeTUI.ConversationID, "Home ready. <!-- attn:state=idle -->")
+	testworld.AwaitSessionSince(pair.App, mark, homeParent, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+	outpostParent, outpostServer, outpostConv := outpostSigmaAtWork(t, pair)
+	mark = pair.App.EventCount()
+	outpostServer.Reply(outpostConv, "Outpost ready. <!-- attn:state=idle -->")
+	testworld.AwaitSessionSince(pair.App, mark, outpostParent, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+	homeServer.Worker(homeTUI.ConversationID, "2", "home worker")
+	homeServer.Work("2")
+	outpostServer.Worker(outpostConv, "2", "outpost worker")
+	outpostServer.Work("2")
+
+	homeWorker := awaitHomeAdoptedSession(pair.App, "home worker")
+	outpostWorker := awaitHomeAdoptedSession(pair.App, "outpost worker")
+	if homeWorker.ID == outpostWorker.ID {
+		t.Fatalf("home and outpost workers with conversation id 2 collided into %s", homeWorker.ID)
+	}
+	if protocol.Deref(homeWorker.Host) != "" || protocol.Deref(outpostWorker.Host) != pair.Host {
+		t.Fatalf("hosts = home:%q outpost:%q, want \"\" and %q", protocol.Deref(homeWorker.Host), protocol.Deref(outpostWorker.Host), pair.Host)
+	}
+	testworld.AwaitSessionFromConnect(pair.App, string(homeWorker.ID), func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateWorking && !protocol.Deref(s.Hidden)
+	})
+	testworld.AwaitSessionFromConnect(pair.App, string(outpostWorker.ID), func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateWorking && !protocol.Deref(s.Hidden)
+	})
+	if got := pair.Home.LaunchedCarrying(pair.App.Terminal(string(homeWorker.ID))).ConversationID; got != "2" {
+		t.Errorf("home worker tile opened %q, want 2", got)
+	}
+	if got := pair.Outpost.LaunchedCarrying(pair.App.Terminal(string(outpostWorker.ID))).ConversationID; got != "2" {
+		t.Errorf("outpost worker tile opened %q, want 2", got)
+	}
+
+	homePresence := pair.Home.Run(testworld.Invocation{
+		Args: []string{"presence", "--session-id"},
+		Env:  []string{"SIGMA_ROOT_CONVERSATION=2"},
+	})
+	if homePresence.Code != 0 || strings.TrimSpace(homePresence.Stdout) != string(homeWorker.ID) {
+		t.Fatalf("home presence for SIGMA_ROOT_CONVERSATION=2 = (%d) %q %s, want %s", homePresence.Code, homePresence.Stdout, homePresence.Stderr, homeWorker.ID)
+	}
+	outpostPresence := pair.Outpost.Run(testworld.Invocation{
+		Args: []string{"presence", "--session-id"},
+		Env:  []string{"SIGMA_ROOT_CONVERSATION=2"},
+	})
+	if outpostPresence.Code != 0 || strings.TrimSpace(outpostPresence.Stdout) != string(outpostWorker.ID) {
+		t.Fatalf("outpost presence for SIGMA_ROOT_CONVERSATION=2 = (%d) %q %s, want %s", outpostPresence.Code, outpostPresence.Stdout, outpostPresence.Stderr, outpostWorker.ID)
+	}
+
+	for _, label := range []string{"home worker", "outpost worker"} {
+		matches := homeSessionsWithLabel(t, pair, label)
+		if len(matches) != 1 || len(matches[0].ConversationSharedWith) != 0 {
+			t.Fatalf("%s session list = %+v, want 1 session with empty conversation_shared_with", label, matches)
+		}
+	}
+
+	if err := pair.Home.Client().Unregister(outpostWorker.ID); err != nil {
+		t.Fatalf("close outpost worker: %v", err)
+	}
+	testworld.Await(pair.App, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
+		return e.SessionLedgerEntry != nil && e.SessionLedgerEntry.ID == outpostWorker.ID
+	})
+	outpostServer.AwaitInterrupted("2")
+	if still := homeSessionsWithLabel(t, pair, "home worker"); len(still) != 1 || still[0].State != protocol.SessionStateWorking {
+		t.Fatalf("home worker after closing outpost worker = %+v, want still open and working", still)
+	}
 }
 
 func TestAnAnnotationAndAReloadOfAnOutpostSigmaSessionStartNoHomeSigmaServer(t *testing.T) {
