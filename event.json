@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Plugin replacement can strand the working copy after restart",
+  "at": "2026-11-24T22:43:59.327Z",
+  "detail": "A daemon stop during plugin replacement can leave the working plugin unavailable after restart. The replacement has already published its candidate and moved the previous copy aside, but the caller that would roll it back has stopped. Startup discovers the candidate and skips the backup; a later replacement may remove the backup.\n\nAn isolated Linux stack probe installed a working plugin, confirmed an existing session accepted input, started a replacement that never connected, and stopped and restarted the daemon. The candidate was listed disconnected and the original session refused input. A fresh reviewer independently confirmed the source chain at d7fc2abebc854bf7c4785d5da71d51867584a9fa.\n\nEvidence: seed s-7y9s94, plugin-restart-repro.sh and plugin-restart-repro.log. The fix should preserve a working plugin and its existing sessions across an interrupted replacement.\n"
+}
