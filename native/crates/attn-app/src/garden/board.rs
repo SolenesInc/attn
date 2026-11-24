@@ -6,11 +6,12 @@ use attn_ui::blocks::{
     Bar, Byline, Card, Inline, Lane, Prose, Stack, Standing, Surface, Trail, board as board_body,
     lanes,
 };
-use attn_ui::system::{FieldState, Link, ListRow, Type, line_box, words};
-use rune::{El, Key, KeyEvent, Phase, TextEdit, Tx, col, el, memo};
+use attn_ui::system::{DotSize, FieldState, Link, ListRow, Type, dot, line_box, words};
+use rune::{El, Key, KeyEvent, Phase, TextEdit, Tx, col, el, memo, row};
 use rune_kit::TextInput;
 
 use super::model::{self, SessionNames};
+use super::v2::{self, Attention, BedFilter};
 use crate::State;
 use crate::sidebar::queue::epoch_ms;
 
@@ -175,6 +176,17 @@ pub(crate) struct Board {
     drag: Option<Drag>,
 }
 
+impl Board {
+    pub(crate) fn clear_walk(&mut self) {
+        self.trail.clear();
+        self.selected = None;
+        self.menu_for = None;
+        self.compose = None;
+        self.error = None;
+        self.drag = None;
+    }
+}
+
 struct Compose {
     seed: Arc<Seed>,
     verb: Verb,
@@ -205,11 +217,13 @@ struct Place {
     ready: usize,
     foldable: Vec<Arc<Seed>>,
     folded: bool,
+    v2: v2::Snapshot,
 }
 
 impl Place {
     fn of(state: &State) -> Place {
         let index = model::Index::of(super::seeds(state));
+        let v2_snap = v2::Snapshot::of(state, &index);
         let trail: Vec<String> = state
             .window
             .garden
@@ -219,21 +233,39 @@ impl Place {
             .take_while(|id| index.by_id.contains_key(*id))
             .cloned()
             .collect();
-        let scoped = match trail.last() {
-            Some(plot) => index.children_of(plot),
-            None => &index.roots,
+        let scoped_seeds: Vec<Arc<Seed>> = match trail.last() {
+            Some(plot) => index.children_of(plot).to_vec(),
+            None if v2_snap.on => index
+                .roots
+                .iter()
+                .filter(|s| v2::matches_bed(s, &v2_snap.bed))
+                .cloned()
+                .collect(),
+            None => index.roots.clone(),
         };
         let mut columns: [Vec<Arc<Seed>>; 4] = Default::default();
-        for seed in scoped {
+        for seed in &scoped_seeds {
             columns[slot(column_of(seed))].push(seed.clone());
         }
         let at = |iso: &str| epoch_ms(iso).unwrap_or(0);
         columns[0].sort_by_key(|s| (!s.ready, at(&s.created_at)));
-        for column in &mut columns[1..] {
-            column.sort_by_key(|s| std::cmp::Reverse(at(&s.updated_at)));
+        if v2_snap.on {
+            columns[1].sort_by_key(|s| {
+                (
+                    v2_snap.attention_of(s),
+                    std::cmp::Reverse(at(&s.updated_at)),
+                )
+            });
+            for column in &mut columns[2..] {
+                column.sort_by_key(|s| std::cmp::Reverse(at(&s.updated_at)));
+            }
+        } else {
+            for column in &mut columns[1..] {
+                column.sort_by_key(|s| std::cmp::Reverse(at(&s.updated_at)));
+            }
         }
         let ready = columns[0].iter().filter(|s| s.ready).count();
-        let scoped = scoped.len();
+        let scoped = scoped_seeds.len();
         let walk = &state.window.garden.board_walk;
         let closed = &mut columns[slot(Column::Closed)];
         let foldable: Vec<Arc<Seed>> = closed
@@ -253,6 +285,7 @@ impl Place {
             ready,
             foldable,
             folded,
+            v2: v2_snap,
         }
     }
 
@@ -325,23 +358,6 @@ fn held_by_other(seed: &Seed, names: &SessionNames) -> String {
         model::tender_of(seed, names)
     } else {
         String::new()
-    }
-}
-
-/// How long ago `iso` was, as a card says it: now, 5m, 3h, 2d.
-fn age(iso: &str, now_ms: i64) -> String {
-    let Some(at) = epoch_ms(iso) else {
-        return String::new();
-    };
-    let seconds = ((now_ms - at) as f64 / 1000.0).round() as i64;
-    if seconds < 60 {
-        "now".into()
-    } else if seconds < 3600 {
-        format!("{}m", (seconds as f64 / 60.0).round() as i64)
-    } else if seconds < 86_400 {
-        format!("{}h", (seconds as f64 / 3600.0).round() as i64)
-    } else {
-        format!("{}d", (seconds as f64 / 86_400.0).round() as i64)
     }
 }
 
@@ -586,6 +602,15 @@ fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if walk.menu_for.is_some() {
         return menu_key(state, ev, tx);
     }
+    if v2::enabled(state)
+        && let Key::Text(ref t) = ev.key
+        && t == "b"
+        && let Some(selected) = walk.selected.clone()
+    {
+        let back = tx.focused().map(str::to_owned);
+        v2::open_bed_picker(state, &selected, back, tx);
+        return true;
+    }
     let place = Place::of(state);
     let walk = &state.window.garden.board_walk;
     let here = walk.selected.as_deref().and_then(|id| place.find(id));
@@ -593,24 +618,26 @@ fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         .iter()
         .find_map(|c| place.column(*c).first())
         .map(|s| s.id.clone());
+    let down = ev.key == Key::Down || (place.v2.on && matches!(&ev.key, Key::Text(t) if t == "j"));
+    let up = ev.key == Key::Up || (place.v2.on && matches!(&ev.key, Key::Text(t) if t == "k"));
+    if down || up {
+        let Some((column, row)) = here else {
+            return first.is_some_and(|id| {
+                select(state, &id, tx);
+                true
+            });
+        };
+        let cards = place.column(column);
+        let next = if down {
+            (row + 1).min(cards.len() - 1)
+        } else {
+            row.saturating_sub(1)
+        };
+        let id = cards[next].id.clone();
+        select(state, &id, tx);
+        return true;
+    }
     match ev.key {
-        Key::Down | Key::Up => {
-            let Some((column, row)) = here else {
-                return first.is_some_and(|id| {
-                    select(state, &id, tx);
-                    true
-                });
-            };
-            let cards = place.column(column);
-            let next = if ev.key == Key::Down {
-                (row + 1).min(cards.len() - 1)
-            } else {
-                row.saturating_sub(1)
-            };
-            let id = cards[next].id.clone();
-            select(state, &id, tx);
-            true
-        }
         Key::Right | Key::Left => {
             let selected = walk.selected.clone();
             let plot = selected
@@ -811,10 +838,13 @@ pub(super) fn view(state: &State, t: &Tokens) -> El {
         .min_h(0.0)
         .on_key(key)
         .child(header(state, &place, t));
+    if place.v2.on && !super::view::columns(state) {
+        page = page.child(v2::dock_bed_chips(state, &place.v2.counts, t));
+    }
     if !place.trail.is_empty() {
         page = page.child(
             Bar::new("garden.board.where")
-                .lead(trail(&place, t))
+                .lead(trail(state, &place, t))
                 .build(t),
         );
     }
@@ -855,7 +885,20 @@ pub(super) fn view(state: &State, t: &Tokens) -> El {
         );
         parts.push(Prose::empty("garden.board.capped", said).el(t));
     }
-    page = page.child(board_body("garden.board.page", parts));
+    let body = board_body("garden.board.page", parts);
+    if place.v2.on && super::view::columns(state) {
+        page = page.child(
+            row()
+                .key("garden.board.layout")
+                .w_full()
+                .grow(1.0)
+                .min_h(0.0)
+                .child(v2::beds_rail(state, &place.v2.counts, t))
+                .child(body),
+        );
+    } else {
+        page = page.child(body);
+    }
     let mut layer = el().w_full().h_full().child(page);
     if let Some(carry) = carry(walk, t) {
         layer = layer.child(carry);
@@ -864,8 +907,24 @@ pub(super) fn view(state: &State, t: &Tokens) -> El {
 }
 
 fn header(state: &State, place: &Place, t: &Tokens) -> El {
+    let lead = if place.v2.on && place.v2.bed != BedFilter::All {
+        let root: El = Link::new("garden.board.bed.root", "Garden").build(t).into();
+        let root = root.on_press_tx(|state: &mut State, tx: &mut Tx| {
+            v2::select_bed(state, BedFilter::All, tx)
+        });
+        Trail::new("garden.board.bed.trail", "Selected bed")
+            .step(root)
+            .here(
+                "garden.board.bed.here",
+                v2::bed_label(state, &place.v2.bed),
+                t,
+            )
+            .build(t)
+    } else {
+        words("The garden", Type::Small, t.text_secondary)
+    };
     Bar::new("garden.board.header")
-        .lead(words("The garden", Type::Small, t.text_secondary))
+        .lead(lead)
         .push(super::view::view_switch(state, t))
         .push(
             words(place.scoped.to_string(), Type::Small, t.text_tertiary).key("garden.board.total"),
@@ -879,14 +938,19 @@ fn header(state: &State, place: &Place, t: &Tokens) -> El {
         .build(t)
 }
 
-fn trail(place: &Place, t: &Tokens) -> El {
+fn trail(state: &State, place: &Place, t: &Tokens) -> El {
     let step = |key: String, said: String, depth: usize| -> El {
         let link: El = Link::new(key, said).build(t).into();
         link.on_press_tx(move |state: &mut State, tx: &mut Tx| climb_to(state, depth, tx))
     };
+    let root_label = if place.v2.on && place.v2.bed != BedFilter::All {
+        v2::bed_label(state, &place.v2.bed)
+    } else {
+        "Garden".into()
+    };
     let mut nav = Trail::new("garden.board.trail", "Where you are").step(step(
         "garden.board.trail.0".into(),
-        "Garden".into(),
+        root_label,
         0,
     ));
     let last = place.trail.len() - 1;
@@ -1025,7 +1089,7 @@ fn card(
         menu_open: walk.menu_for.as_deref() == Some(seed.id.as_str()),
         blockers: place.index.blockers(&seed.id),
         tender: model::tender_of(seed, names),
-        age: age(
+        age: model::short_age(
             if seed.updated_at.is_empty() {
                 &seed.created_at
             } else {
@@ -1034,6 +1098,9 @@ fn card(
             state.window.now_ms,
         ),
         standby: model::standby_of(seed, state.window.now_ms),
+        v2: place.v2.on,
+        attention: place.v2.attention_of(seed),
+        show_bed: place.v2.on && place.v2.bed == BedFilter::All,
     };
     memo(
         format!("garden.board.slot.{}", seed.id),
@@ -1056,6 +1123,9 @@ struct CardLook {
     tender: String,
     age: String,
     standby: Option<model::Standby>,
+    v2: bool,
+    attention: Attention,
+    show_bed: bool,
 }
 
 fn card_face(seed: &Arc<Seed>, look: &CardLook, t: &Tokens) -> El {
@@ -1064,28 +1134,86 @@ fn card_face(seed: &Arc<Seed>, look: &CardLook, t: &Tokens) -> El {
     let id = seed.id.clone();
     let pressed = seed.id.clone();
     let dragged = seed.id.clone();
-    let mut facts = Byline::new().wrap().push_all(card_meta(look, seed, t));
-    if let Some(tally) = model::check_tally(seed) {
-        facts = facts.push(words(
-            model::tally_words(&tally),
-            Type::Small,
-            t.text_secondary,
-        ));
-    }
-    let facts = facts
-        .id(seed.id.clone(), t.text_tertiary)
-        .said(look.age.clone(), t);
-    let face = Card::new(card_key(&seed.id))
-        .control("button", seed.title.clone())
-        .standing(if selected {
-            Standing::Picked
+    let standing = if selected {
+        Standing::Picked
+    } else {
+        Standing::Resting
+    };
+    let face = if look.v2 {
+        let (dot_color, dot_shape) = look.attention.dot_look(t);
+        let head = Inline::joined()
+            .w_full()
+            .child(dot(dot_color, dot_shape, DotSize::Small).a11y_hidden())
+            .child(
+                words(seed.title.clone(), Type::Body, t.text_primary)
+                    .single_line()
+                    .truncate()
+                    .grow(1.0)
+                    .min_w(0.0),
+            );
+        let pulse = seed
+            .pulse
+            .as_deref()
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .map(|p| {
+                words(p.to_owned(), Type::Small, t.text_tertiary)
+                    .key(format!("garden.board.pulse.{}", seed.id))
+                    .single_line()
+                    .truncate()
+            });
+        let left_tag = if look.show_bed {
+            seed.bed
+                .as_deref()
+                .filter(|b| !b.is_empty())
+                .map_or_else(|| seed.id.clone(), str::to_owned)
         } else {
-            Standing::Resting
-        })
-        .push(words(seed.title.clone(), Type::Body, t.text_primary).wrap())
-        .push_all(look.standby.as_ref().map(|s| standby_marker(s, t)))
-        .push(facts.build(t))
-        .build(t)
+            seed.id.clone()
+        };
+        let left_meta = match &seed.plot_progress {
+            Some(p) => format!("{left_tag} · {}/{}", p.done, p.total),
+            None => left_tag,
+        };
+        let foot = Inline::joined()
+            .w_full()
+            .justify_between()
+            .child(
+                words(left_meta, Type::Mono, t.text_muted)
+                    .single_line()
+                    .truncate()
+                    .shrink()
+                    .min_w(0.0),
+            )
+            .child(words(look.age.clone(), Type::Mono, t.text_muted));
+        Card::new(card_key(&seed.id))
+            .control("button", seed.title.clone())
+            .standing(standing)
+            .push(head)
+            .push_all(pulse)
+            .push_all(look.standby.as_ref().map(|s| standby_marker(s, t)))
+            .push(foot)
+            .build(t)
+    } else {
+        let mut facts = Byline::new().wrap().push_all(card_meta(look, seed, t));
+        if let Some(tally) = model::check_tally(seed) {
+            facts = facts.push(words(
+                model::tally_words(&tally),
+                Type::Small,
+                t.text_secondary,
+            ));
+        }
+        let facts = facts
+            .id(seed.id.clone(), t.text_tertiary)
+            .said(look.age.clone(), t);
+        Card::new(card_key(&seed.id))
+            .control("button", seed.title.clone())
+            .standing(standing)
+            .push(words(seed.title.clone(), Type::Body, t.text_primary).wrap())
+            .push_all(look.standby.as_ref().map(|s| standby_marker(s, t)))
+            .push(facts.build(t))
+            .build(t)
+    };
+    let face = face
         .expanded(menu_open)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| press_card(state, &pressed, tx))
         .on_drag(move |state: &mut State, d: &mut rune::Drag, tx: &mut Tx| {

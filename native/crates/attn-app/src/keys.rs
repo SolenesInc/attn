@@ -453,6 +453,7 @@ pub(crate) fn on_field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> boo
 fn modal(state: &State) -> bool {
     use crate::shell::Layer;
     state.window.snooze.is_some()
+        || crate::garden::v2::modal_open(state)
         || matches!(
             state.window.layer,
             Some(Layer::NewSession | Layer::CloseDesktop | Layer::SharedCodex)

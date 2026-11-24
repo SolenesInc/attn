@@ -11,6 +11,7 @@ pub(crate) const IS_VALUES: [&str; 7] = [
 pub(crate) enum Partial {
     Is,
     Tender,
+    Bed,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -20,16 +21,17 @@ pub(crate) struct Query {
     /// `is:` values, unioned. Empty means the default lens: open seeds only.
     pub(crate) is: Vec<&'static str>,
     pub(crate) tenders: Vec<String>,
+    pub(crate) beds: Vec<String>,
     /// Operator tokens with no such filter, verbatim.
     pub(crate) unknown: Vec<String>,
     /// The operator the reader is mid-way through typing.
     pub(crate) partial: Option<Partial>,
     pub(crate) active: bool,
-    /// Text or a tender searches the subtree; a bare `is:` only filters what is on screen.
+    /// Text, a tender or a bed searches the subtree; a bare `is:` only filters what is on screen.
     pub(crate) searches: bool,
 }
 
-pub(crate) fn parse(raw: &str) -> Query {
+pub(crate) fn parse(raw: &str, bed_op: bool) -> Query {
     let mut q = Query::default();
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -40,20 +42,33 @@ pub(crate) fn parse(raw: &str) -> Query {
     for (i, token) in tokens.iter().enumerate() {
         let last = i == tokens.len() - 1 && open_end;
         let op = token.split_once(':').filter(|(name, _)| {
-            name.eq_ignore_ascii_case("is") || name.eq_ignore_ascii_case("tender")
+            name.eq_ignore_ascii_case("is")
+                || name.eq_ignore_ascii_case("tender")
+                || (bed_op && name.eq_ignore_ascii_case("bed"))
         });
         let Some((name, value)) = op else {
             q.terms.push(token.to_lowercase());
             continue;
         };
         let is = name.eq_ignore_ascii_case("is");
+        let is_bed = name.eq_ignore_ascii_case("bed");
         let value = value.to_lowercase();
         if value.is_empty() {
             if last {
-                q.partial = Some(if is { Partial::Is } else { Partial::Tender });
+                q.partial = Some(if is {
+                    Partial::Is
+                } else if is_bed {
+                    Partial::Bed
+                } else {
+                    Partial::Tender
+                });
             } else {
                 q.unknown.push((*token).to_owned());
             }
+            continue;
+        }
+        if is_bed {
+            q.beds.push(value);
             continue;
         }
         if !is {
@@ -70,7 +85,8 @@ pub(crate) fn parse(raw: &str) -> Query {
             q.unknown.push((*token).to_owned());
         }
     }
-    q.searches = !q.terms.is_empty() || !q.tenders.is_empty() || !q.unknown.is_empty();
+    q.searches =
+        !q.terms.is_empty() || !q.tenders.is_empty() || !q.beds.is_empty() || !q.unknown.is_empty();
     q.active = q.searches || !q.is.is_empty();
     q
 }
@@ -110,6 +126,9 @@ pub(crate) struct Match {
 pub(crate) trait Lookups {
     fn tender_of(&self, seed: &Seed) -> String;
     fn blockers_of(&self, seed: &Seed) -> usize;
+    fn bed_slug_of(&self, _seed: &Seed) -> Option<&str> {
+        None
+    }
 }
 
 pub(crate) fn satisfies_lens(seed: &Seed, is: &[&str], lookups: &impl Lookups) -> bool {
@@ -199,6 +218,25 @@ pub(crate) fn match_seed(seed: &Arc<Seed>, q: &Query, lookups: &impl Lookups) ->
     {
         return None;
     }
+    if !q.beds.is_empty() {
+        let bed_name = seed.bed.as_deref().unwrap_or("").to_lowercase();
+        let bed_id = seed.bed_id.as_deref().unwrap_or("").to_lowercase();
+        let bed_slug = lookups.bed_slug_of(seed).unwrap_or("").to_lowercase();
+        let is_auto = super::v2::is_automation(seed);
+        let hit_bed = q.beds.iter().any(|want| match want.as_str() {
+            "unassigned" | "none" => !is_auto && bed_id.is_empty() && bed_name.is_empty(),
+            "automations" | "auto" => is_auto,
+            _ => {
+                !is_auto
+                    && ((!bed_name.is_empty() && bed_name.contains(want.as_str()))
+                        || (!bed_slug.is_empty() && bed_slug.contains(want.as_str()))
+                        || (!bed_id.is_empty() && bed_id == *want))
+            }
+        });
+        if !hit_bed {
+            return None;
+        }
+    }
     let found = |seed: Arc<Seed>, rank| Match {
         seed,
         rank,
@@ -211,11 +249,16 @@ pub(crate) fn match_seed(seed: &Arc<Seed>, q: &Query, lookups: &impl Lookups) ->
     }
     let title = seed.title.to_lowercase();
     let id = seed.id.to_lowercase();
+    let pulse = seed.pulse.as_deref().unwrap_or("").to_lowercase();
     let body = seed.body.to_lowercase();
     let every = |field: &str| q.terms.iter().all(|t| field.contains(t.as_str()));
     let hits = q.terms.iter().all(|t| {
         let t = t.as_str();
-        title.contains(t) || id.contains(t) || tender.contains(t) || body.contains(t)
+        title.contains(t)
+            || id.contains(t)
+            || tender.contains(t)
+            || pulse.contains(t)
+            || body.contains(t)
     });
     if !hits {
         return None;
@@ -241,7 +284,11 @@ pub(crate) fn match_seed(seed: &Arc<Seed>, q: &Query, lookups: &impl Lookups) ->
         hit.title_ranges = ranges_of(&seed.title, &q.terms);
     }
     if rank == 40 {
-        hit.snippet = snippet_of(&seed.body, &body, &q.terms);
+        hit.snippet = snippet_of(&seed.body, &body, &q.terms).or_else(|| {
+            seed.pulse
+                .as_deref()
+                .and_then(|raw| snippet_of(raw, &pulse, &q.terms))
+        });
     }
     Some(hit)
 }
@@ -271,6 +318,7 @@ mod tests {
     #[derive(Default)]
     struct Fixed {
         blockers: HashMap<String, usize>,
+        bed_slugs: HashMap<String, String>,
     }
 
     impl Lookups for Fixed {
@@ -282,6 +330,11 @@ mod tests {
         }
         fn blockers_of(&self, seed: &Seed) -> usize {
             self.blockers.get(&seed.id).copied().unwrap_or(0)
+        }
+        fn bed_slug_of(&self, seed: &Seed) -> Option<&str> {
+            seed.bed_id
+                .as_deref()
+                .and_then(|id| self.bed_slugs.get(id).map(String::as_str))
         }
     }
 
@@ -309,7 +362,7 @@ mod tests {
     }
 
     fn titles(seeds: &[Arc<Seed>], raw: &str, lookups: &Fixed) -> Vec<String> {
-        search(seeds, &parse(raw), lookups)
+        search(seeds, &parse(raw, true), lookups)
             .into_iter()
             .map(|m| m.seed.title.clone())
             .collect()
@@ -317,7 +370,7 @@ mod tests {
 
     #[test]
     fn separates_operators_from_the_words_that_are_just_words() {
-        let q = parse("reconnect is:ready tender:hazel socket");
+        let q = parse("reconnect is:ready tender:hazel socket", false);
         assert_eq!(q.terms, ["reconnect", "socket"]);
         assert_eq!(q.is, ["ready"]);
         assert_eq!(q.tenders, ["hazel"]);
@@ -326,39 +379,39 @@ mod tests {
 
     #[test]
     fn names_a_value_its_operator_does_not_have() {
-        let q = parse("is:done");
+        let q = parse("is:done", false);
         assert_eq!(q.unknown, ["is:done"]);
         assert!(q.terms.is_empty());
     }
 
     #[test]
     fn leaves_every_other_colon_alone() {
-        let q = parse("GardenPanel.tsx:250");
+        let q = parse("GardenPanel.tsx:250", false);
         assert_eq!(q.terms, ["gardenpanel.tsx:250"]);
         assert!(q.unknown.is_empty());
     }
 
     #[test]
     fn treats_the_operator_being_typed_as_a_request_for_the_values() {
-        assert_eq!(parse("is:").partial, Some(Partial::Is));
-        assert_eq!(parse("is:re").partial, Some(Partial::Is));
-        assert_eq!(parse("tender:").partial, Some(Partial::Tender));
-        assert!(parse("is:").unknown.is_empty());
+        assert_eq!(parse("is:", false).partial, Some(Partial::Is));
+        assert_eq!(parse("is:re", false).partial, Some(Partial::Is));
+        assert_eq!(parse("tender:", false).partial, Some(Partial::Tender));
+        assert!(parse("is:", false).unknown.is_empty());
     }
 
     #[test]
     fn stops_forgiving_a_half_typed_value_once_the_reader_moved_past_it() {
-        assert_eq!(parse("is:re socket").unknown, ["is:re"]);
-        assert_eq!(parse("is:re socket").partial, None);
+        assert_eq!(parse("is:re socket", false).unknown, ["is:re"]);
+        assert_eq!(parse("is:re socket", false).partial, None);
     }
 
     #[test]
     fn separates_a_search_from_a_lens() {
-        assert!(parse("is:any").active);
-        assert!(!parse("is:any").searches);
-        assert!(parse("socket").searches);
-        assert!(parse("tender:hazel").searches);
-        assert!(!parse("   ").active);
+        assert!(parse("is:any", false).active);
+        assert!(!parse("is:any", false).searches);
+        assert!(parse("socket", false).searches);
+        assert!(parse("tender:hazel", false).searches);
+        assert!(!parse("   ", false).active);
     }
 
     #[test]
@@ -417,6 +470,7 @@ mod tests {
         all.push(Arc::new(seed("s-blok01", "blocked work")));
         let blocked = Fixed {
             blockers: HashMap::from([("s-blok01".to_owned(), 1)]),
+            ..Fixed::default()
         };
         assert_eq!(titles(&all, "work is:blocked", &blocked), ["blocked work"]);
     }
@@ -505,8 +559,8 @@ mod tests {
     fn gives_a_snippet_only_to_a_row_whose_title_does_not_explain_itself() {
         let pool = matching_pool();
         let none = Fixed::default();
-        let body_hit = match_seed(&pool[1], &parse("pushed"), &none).unwrap();
-        let title_hit = match_seed(&pool[1], &parse("garden"), &none).unwrap();
+        let body_hit = match_seed(&pool[1], &parse("pushed", false), &none).unwrap();
+        let title_hit = match_seed(&pool[1], &parse("garden", false), &none).unwrap();
         assert!(body_hit.snippet.unwrap().text.contains("pushed"));
         assert!(title_hit.snippet.is_none());
         assert_eq!(title_hit.title_ranges, [(0, 6)]);
@@ -518,7 +572,7 @@ mod tests {
             s.body =
                 "a paragraph\n\n    that wraps around the\n    word beacon and keeps going".into()
         });
-        let text = match_seed(&wordy, &parse("beacon"), &Fixed::default())
+        let text = match_seed(&wordy, &parse("beacon", false), &Fixed::default())
             .unwrap()
             .snippet
             .unwrap()
@@ -540,7 +594,44 @@ mod tests {
     #[test]
     fn merges_overlapping_hits_so_a_highlight_never_doubles_up() {
         let seed = Arc::new(seed("s-ovl001", "searching search"));
-        let hit = match_seed(&seed, &parse("sea search"), &Fixed::default()).unwrap();
+        let hit = match_seed(&seed, &parse("sea search", false), &Fixed::default()).unwrap();
         assert_eq!(hit.title_ranges, [(0, 6), (10, 16)]);
+    }
+
+    #[test]
+    fn filters_by_bed_operator_and_matches_pulse_text() {
+        let pool = vec![
+            with(seed("s-pay001", "Checkout"), |s| {
+                s.bed_id = Some("b-pay001".into());
+                s.bed = Some("Cloud Payments".into());
+                s.pulse = Some("Waiting on Stripe webhook".into());
+            }),
+            with(seed("s-un0001", "Misc"), |_| {}),
+            with(seed("s-aut001", "Nightly sweep"), |s| {
+                s.automation_id = Some(9);
+            }),
+        ];
+        let lookups = Fixed {
+            bed_slugs: HashMap::from([("b-pay001".to_owned(), "cloud-payments".to_owned())]),
+            ..Fixed::default()
+        };
+        assert_eq!(titles(&pool, "bed:payments", &lookups), ["Checkout"]);
+        assert_eq!(titles(&pool, "bed:cloud-payments", &lookups), ["Checkout"]);
+        assert_eq!(titles(&pool, "bed:unassigned", &lookups), ["Misc"]);
+        assert_eq!(
+            titles(&pool, "bed:automations", &lookups),
+            ["Nightly sweep"]
+        );
+        assert_eq!(titles(&pool, "webhook", &lookups), ["Checkout"]);
+        let hit = match_seed(&pool[0], &parse("webhook", true), &lookups).unwrap();
+        assert_eq!(
+            hit.snippet.as_ref().map(|s| s.text.as_str()),
+            Some("Waiting on Stripe webhook")
+        );
+        assert_eq!(parse("bed:", true).partial, Some(Partial::Bed));
+        let off = parse("bed:payments", false);
+        assert!(off.beds.is_empty());
+        assert_eq!(off.terms, ["bed:payments"]);
+        assert_eq!(parse("bed:", false).partial, None);
     }
 }

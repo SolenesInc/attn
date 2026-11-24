@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use attn_protocol::{Seed, Session};
+use attn_protocol::{Ask, Seed, Session};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Reader, Room};
 use rune::{El, Tx};
@@ -15,6 +15,8 @@ pub(crate) struct Reads<'a> {
     pub(crate) garden: &'a Garden,
     pub(crate) seeds: &'a [Arc<Seed>],
     pub(crate) sessions: &'a [Session],
+    pub(crate) asks: &'a [Ask],
+    pub(crate) v2: bool,
     pub(crate) readings: &'a crate::markdown::Readings,
     pub(crate) pictures: &'a crate::markdown::Pictures,
     pub(crate) now_ms: i64,
@@ -50,6 +52,9 @@ pub(crate) fn body(
         names: &names,
         garden: reads.garden,
         seeds: reads.seeds,
+        sessions: reads.sessions,
+        asks: reads.asks,
+        v2: reads.v2,
         chief: reads.chief,
         readings: reads.readings,
         pictures: reads.pictures,
@@ -91,7 +96,8 @@ pub(crate) fn body(
                 .collect()
         })
         .unwrap_or_default();
-    let related = Index::of(reads.seeds).relations(id);
+    let index = Index::of(reads.seeds);
+    let related = index.relations(id);
     let parent = model::parent_of(here);
     let back = (!parent.is_empty()).then(|| {
         let title = reads
@@ -121,7 +127,7 @@ pub(crate) fn body(
     }
     let page = page
         .head(sheet.head(here, actions, Vec::new()))
-        .push_all(sheet.head_after(here))
+        .push_all(sheet.head_after(here, &index, None))
         .push_all(sheet.handover_form(document))
         .push_all(sheet.chief_form(document))
         .push_all(sheet.seeds_saying("plot", "Plot", children, |seed| {

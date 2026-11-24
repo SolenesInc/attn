@@ -9,6 +9,7 @@ pub(crate) mod search;
 mod sheet;
 mod spot;
 mod tile;
+pub(crate) mod v2;
 mod view;
 
 use std::collections::{HashMap, HashSet};
@@ -25,6 +26,7 @@ use crate::requests::Refused;
 use crate::shell::Drawer;
 
 pub(crate) use tile::{Reads as TileReads, body as tile_body, climb as climb_tile};
+pub(crate) use v2::overlay;
 pub(crate) use view::{frame_layer, panel};
 
 /// How many times its size the garden draws inside a window the app's text size already
@@ -106,6 +108,11 @@ pub(crate) struct Garden {
     folds: HashSet<String>,
     pub(super) check_focus: Option<CheckFocus>,
     pub(crate) board_walk: board::Board,
+    last_profile: String,
+    pub(crate) bed: v2::BedFilter,
+    pub(crate) lens: v2::Lens,
+    pub(crate) bed_form: Option<v2::BedForm>,
+    pub(crate) bed_picker: Option<v2::BedPicker>,
 }
 
 /// A garden push, by its address, and the count of outpost reach changes, which a seed's
@@ -217,6 +224,8 @@ pub(crate) fn toggle_from_icon(state: &mut State, tx: &mut Tx) {
 pub(crate) fn close(state: &mut State) {
     let window = &mut state.window;
     window.garden.full = false;
+    window.garden.bed_form = None;
+    window.garden.bed_picker = None;
     window.close_drawer(Drawer::Garden);
 }
 
@@ -255,6 +264,21 @@ fn shown_seeds(state: &State) -> HashSet<String> {
 /// Reads each shown seed's document whenever the seed or the garden around it changes, or an
 /// outpost's reach does. Only a seed's latest read counts.
 pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
+    let selected_profile = state.facts.profiles.selected.clone();
+    if state.window.garden.last_profile != selected_profile {
+        if !state.window.garden.last_profile.is_empty() {
+            let garden = &mut state.window.garden;
+            garden.bed = v2::BedFilter::All;
+            garden.bed_form = None;
+            garden.bed_picker = None;
+            garden.board_walk.clear_walk();
+        }
+        state.window.garden.last_profile = selected_profile;
+    }
+    if !v2::enabled(state) {
+        state.window.garden.bed_form = None;
+        state.window.garden.bed_picker = None;
+    }
     mark_in_terminals(state);
     let shown = shown_seeds(state);
     let reach: Vec<_> = state
@@ -516,6 +540,8 @@ pub(crate) fn select_at(state: &mut State, level: usize, id: &str, tx: &mut Tx) 
 pub(crate) fn open_seed(state: &mut State, id: &str, tx: &mut Tx) {
     if mode(state) == Mode::Closed {
         show(state, Mode::Dock, tx);
+    } else if shows_board(state) {
+        state.window.garden.board = Some(false);
     }
     open_found(state, id, tx);
 }
@@ -556,7 +582,33 @@ pub(crate) fn open_tile_beside(state: &mut State, id: &str, session: Option<Stri
 
 /// Opens a found seed under the whole path of plots above it, and ends the search.
 pub(crate) fn open_found(state: &mut State, id: &str, tx: &mut Tx) {
-    let path = view::index(state).path_to(id);
+    let index = view::index(state);
+    let path = index.path_to(id);
+    if v2::enabled(state)
+        && let Some(root) = path.first().and_then(|root_id| index.by_id.get(root_id))
+    {
+        let current_bed = v2::active_bed(state);
+        if !v2::matches_bed(root, &current_bed) {
+            state.window.garden.bed = v2::filter_for_root(root);
+        }
+        if state.window.garden.lens != v2::Lens::All {
+            let att = v2::AttentionIndex::of(&state.facts.sessions, &state.facts.asks)
+                .attention(root, &index);
+            let shown_in_lens = match state.window.garden.lens {
+                v2::Lens::Now => att.is_now(),
+                v2::Lens::Triage => {
+                    matches!(att, v2::Attention::Quiet | v2::Attention::Parked)
+                        || (!v2::beds(state).is_empty()
+                            && !v2::is_automation(root)
+                            && root.bed_id.as_deref().unwrap_or("").is_empty())
+                }
+                v2::Lens::All => true,
+            };
+            if !shown_in_lens || model::is_closed(root) {
+                state.window.garden.lens = v2::Lens::All;
+            }
+        }
+    }
     let garden = &mut state.window.garden;
     garden.trail = path;
     garden.query = TextEdit::default();
@@ -659,6 +711,23 @@ pub(crate) fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     }
     if tx.in_text_field() || ev.mods.cmd || ev.mods.ctrl || ev.mods.alt {
         return false;
+    }
+    if v2::enabled(state)
+        && let Key::Text(ref t) = ev.key
+    {
+        match t.as_str() {
+            "b" => {
+                let target = focused_row(tx).or_else(|| living_trail(state).pop());
+                if let Some(seed_id) = target {
+                    let back = tx.focused().map(str::to_owned);
+                    v2::open_bed_picker(state, &seed_id, back, tx);
+                    return true;
+                }
+            }
+            "j" => return walk_rows(state, true, tx),
+            "k" => return walk_rows(state, false, tx),
+            _ => {}
+        }
     }
     match ev.key {
         Key::Left => {

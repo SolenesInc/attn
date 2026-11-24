@@ -1,13 +1,17 @@
 use std::sync::Arc;
 
-use attn_protocol::{DesktopUpdateTileMessage, Seed, SeedCheckTally, SeedDocument};
+use attn_protocol::{Ask, DesktopUpdateTileMessage, Seed, SeedCheckTally, SeedDocument, Session};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Block, Byline, Entry, Head, Inline, Prose, Section, Stack, entries};
-use attn_ui::system::{FieldState, Link, Said, Type, area_box, dot_on_line, meter, words};
+use attn_ui::system::{
+    Button, FieldState, Link, Look, Said, Size, Tone, Type, area_box, dot_on_line, meter, tag,
+    words,
+};
 use rune::{El, KeyEvent, TextEdit, Tx, col, memo, row};
 use rune_kit::TextArea;
 
-use super::model::{self, Relation, SessionNames};
+use super::model::{self, Index, Relation, SessionNames};
+use super::v2;
 use crate::State;
 
 /// Where a seed's page shows: the keys its parts take, the scroll its body reads in, and where
@@ -19,6 +23,9 @@ pub(super) struct Sheet<'a> {
     pub(super) names: &'a SessionNames,
     pub(super) garden: &'a super::Garden,
     pub(super) seeds: &'a [Arc<Seed>],
+    pub(super) sessions: &'a [Session],
+    pub(super) asks: &'a [Ask],
+    pub(super) v2: bool,
     pub(super) chief: bool,
     pub(super) readings: &'a crate::markdown::Readings,
     pub(super) pictures: &'a crate::markdown::Pictures,
@@ -104,6 +111,34 @@ impl Sheet<'_> {
         if let Some((sentence, _)) = model::harvest_when(here) {
             facts = facts.push(self.harvest_when(here, sentence));
         }
+        if self.v2 {
+            let bed_name = here.bed.as_deref().filter(|b| !b.is_empty());
+            let is_root = model::parent_of(here).is_empty();
+            if is_root && !v2::is_automation(here) {
+                let label = bed_name.unwrap_or("Unassigned");
+                let bed_key = self.key("head.bed");
+                let return_key = bed_key.clone();
+                let seed_id = here.id.clone();
+                let btn: El = Button::new(label.to_owned())
+                    .look(Look::Plain)
+                    .size(Size::Compact)
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                        v2::open_bed_picker(state, &seed_id, Some(return_key.clone()), tx)
+                    })
+                    .build(t)
+                    .key(bed_key)
+                    .label(format!("Bed: {label}. Press to assign bed"))
+                    .into();
+                facts = facts.push(btn);
+            } else if let Some(name) = bed_name {
+                let bed_tag: El =
+                    tag(self.key("head.bed"), name.to_owned(), Tone::Neutral, t).into();
+                facts = facts.push(bed_tag.help("Inherited from root plot"));
+            } else if v2::is_automation(here) {
+                let auto_tag: El = tag(self.key("head.bed"), "automation", Tone::Neutral, t).into();
+                facts = facts.push(auto_tag);
+            }
+        }
         let tender = model::tender_of(here, self.names);
         if !tender.is_empty() {
             facts = facts.said(format!("tended by {tender}"), t);
@@ -142,9 +177,38 @@ impl Sheet<'_> {
 
     /// Why the seed closed, and how far its plot has drained: what the head says after its
     /// facts.
-    pub(super) fn head_after(&self, here: &Seed) -> Vec<Block> {
+    pub(super) fn head_after(
+        &self,
+        here: &Seed,
+        index: &Index,
+        attention: Option<v2::Attention>,
+    ) -> Vec<Block> {
         let t = self.t;
         let mut after = Vec::new();
+        if self.v2 {
+            let att = attention.unwrap_or_else(|| {
+                v2::AttentionIndex::of(self.sessions, self.asks).attention(here, index)
+            });
+            let live = v2::live_session(here, self.sessions).map(|(session, agent_state)| {
+                let name = self
+                    .names
+                    .get(&session.id)
+                    .cloned()
+                    .filter(|n| !n.is_empty())
+                    .unwrap_or_else(|| session.label.clone());
+                (session.id.clone(), name, agent_state)
+            });
+            if let Some(strip) = v2::pulse_strip(
+                self.key("head.pulse"),
+                here.pulse.as_deref(),
+                att,
+                live,
+                matches!(self.go, Go::Garden),
+                t,
+            ) {
+                after.push(Block::custom(self.key("head.pulse.block"), strip));
+            }
+        }
         if let Some(reason) = here.reason.as_ref().filter(|r| !r.is_empty()) {
             after.push(Prose::empty(self.key("head.reason"), reason.clone()).build(t));
         }

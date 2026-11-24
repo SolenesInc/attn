@@ -850,6 +850,7 @@ pub(crate) fn covers_tiles(state: &State) -> bool {
 fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
     let window = &state.window;
     let mut layers: Vec<El> = crate::garden::frame_layer(state, t).into_iter().collect();
+    crate::garden::overlay(state, t, &mut layers);
     match window.layer {
         Some(Layer::Palette(Palette::Search)) => layers.push(crate::palette::view(state, t)),
         Some(Layer::Palette(Palette::Files)) => layers.push(crate::opener::view(state, t)),

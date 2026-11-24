@@ -452,7 +452,9 @@ pub(crate) fn view(state: &State, cx: &mut rune::Cx<State>) -> El {
             }
         })
         .children(shown);
-    crate::markdown::with_image_preview(root, Vec::new(), state, cx.is_reduced_motion(), &t)
+    let mut layers = Vec::new();
+    crate::garden::overlay(state, &t, &mut layers);
+    crate::markdown::with_image_preview(root, layers, state, cx.is_reduced_motion(), &t)
         .children(crate::markdown::annotating::layers(state, cx, &t))
         .children(crate::markdown::sending::layers(state, cx, &t))
 }

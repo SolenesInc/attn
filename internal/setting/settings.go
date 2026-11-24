@@ -20,14 +20,14 @@ var (
 		Since:   "2026-10-16",
 		Search:  "one-screen one screen new-session new session project path",
 	})
-	GardenV2Enabled = feature("garden_v2_enabled", "Enable Garden v2 close guards, curated beds with repository auto-routing, and one-line seed pulses: true or false. Experimental; off by default.", Info{
+	GardenV2Enabled = feature("garden_v2_enabled", "Enable Garden v2: curated project beds with repository auto-routing, one-line seed pulses, calm Beds/lenses Garden views, and growing-seed close guards: true or false. Experimental; off by default.", Info{
 		Name:    "Garden v2",
-		Summary: "Curate project beds with repository auto-routing, keep one-line seed pulses, and guard growing seeds on agent close.",
+		Summary: "Organize seeds into curated beds with repository auto-routing, Now/Triage/All lenses, one-line seed pulses, and growing-seed close guards.",
 		Group:   Interface,
 		Applies: Now,
 		Stage:   Experimental,
 		Since:   "2026-11-24",
-		Search:  "garden v2 beds pulse close guard growing seed park standby",
+		Search:  "garden v2 beds lens now triage pulse close guard growing seed park standby",
 	})
 	OutpostsEnabled = feature("outposts_enabled", "Connect to outposts from this home: true or false. Experimental; off by default.", Info{
 		Name:    "Outposts",

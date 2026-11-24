@@ -21,21 +21,21 @@ use attn_protocol::{
     CrewCharterGetResultMessage, CrewHandoffsGetResultMessage, CrewMember, DelegationChoice,
     DelegationFallback, DelegationPreferences, DelegationPreferencesResultMessage, DelegationRole,
     DelegationSelection, Desktop, DesktopPane, DesktopTileContentMessage, DirectoryEntry,
-    FileActivity, FsIndexResultMessage, GetCommandUsageResultMessage, GetRepoInfoResultMessage,
-    Harness, HarnessModel, HarnessModelsResultMessage, InitialStateMessage,
-    InspectPathResultMessage, InstallCodexUpdateResultMessage, LaunchDesktopResultMessage,
-    LaunchDesktopSetting, Notification, NotificationListResultMessage, OutpostInfo, OutpostUpdate,
-    PR, PartyView, PathInspection, PhoneLink, PhonesUpdatedMessage, Profile, RateLimitedMessage,
-    RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage,
-    RecordCommandUsageResultMessage, RefreshPRsResultMessage, RepoInfo, ReviewBundle, ReviewFile,
-    ReviewFlow, ReviewFlowGroup, ReviewFlowMessage, ReviewFlowParticipant, ReviewNotShown,
-    ReviewNote, ReviewRow, ReviewStop, Seed, SeedCheck, SeedContinuation, SeedDocument,
-    SeedDocumentGetResultMessage, SeedEdge, SeedNote, SeedPlotProgress, Session,
-    SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionLedgerEntry,
-    SessionListResult, SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage,
-    SessionPullRequest, SessionUsage, SessionUsageModel, SharedCodexBlocker, SharedCodexState,
-    UpdateChangedMessage, UpdateOutpostProgress, UpdateRun, Worktree, WorktreeListResult,
-    WorktreeListResultEvent,
+    FileActivity, FsIndexResultMessage, GardenBed, GetCommandUsageResultMessage,
+    GetRepoInfoResultMessage, Harness, HarnessModel, HarnessModelsResultMessage,
+    InitialStateMessage, InspectPathResultMessage, InstallCodexUpdateResultMessage,
+    LaunchDesktopResultMessage, LaunchDesktopSetting, Notification, NotificationListResultMessage,
+    OutpostInfo, OutpostUpdate, PR, PartyView, PathInspection, PhoneLink, PhonesUpdatedMessage,
+    Profile, RateLimitedMessage, RecentFilesResultMessage, RecentLocation,
+    RecentLocationsResultMessage, RecordCommandUsageResultMessage, RefreshPRsResultMessage,
+    RepoInfo, ReviewBundle, ReviewFile, ReviewFlow, ReviewFlowGroup, ReviewFlowMessage,
+    ReviewFlowParticipant, ReviewNotShown, ReviewNote, ReviewRow, ReviewStop, Seed, SeedCheck,
+    SeedContinuation, SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedNote,
+    SeedPlotProgress, Session, SessionAnnotationsGetResultMessage,
+    SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
+    SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, SessionPullRequest,
+    SessionUsage, SessionUsageModel, SharedCodexBlocker, SharedCodexState, UpdateChangedMessage,
+    UpdateOutpostProgress, UpdateRun, Worktree, WorktreeListResult, WorktreeListResultEvent,
 };
 use attn_term::{FONT_SIZE, Metrics};
 use attn_testkit::tree::{pane, row};
@@ -1495,6 +1495,237 @@ fn garden_board_plot(dark: bool) {
     world.gesture(|app| app.click(Target::key("garden.board.drill.s-plot")));
     tap(&mut world, Key::Tab);
     snap(&mut world, "garden-board-plot", dark);
+}
+
+fn garden_v2_world(dark: bool) -> World {
+    let beds = vec![
+        GardenBed {
+            id: "b-attn01".into(),
+            profile_id: PROFILE.into(),
+            name: "attn".into(),
+            slug: "attn".into(),
+            note: Some("Desktop app, daemon & CLI".into()),
+            repos: vec!["attn".into()],
+            created_at: "2026-11-13T09:00:00Z".into(),
+            updated_at: "2026-11-13T09:00:00Z".into(),
+        },
+        GardenBed {
+            id: "b-rel001".into(),
+            profile_id: PROFILE.into(),
+            name: "relay".into(),
+            slug: "relay".into(),
+            note: Some("Cloud relay & gateway".into()),
+            repos: vec!["cloud-relay".into()],
+            created_at: "2026-11-13T09:00:00Z".into(),
+            updated_at: "2026-11-13T09:00:00Z".into(),
+        },
+        GardenBed {
+            id: "b-mob001".into(),
+            profile_id: PROFILE.into(),
+            name: "mobile".into(),
+            slug: "mobile".into(),
+            note: None,
+            repos: vec!["mobile".into()],
+            created_at: "2026-11-13T09:00:00Z".into(),
+            updated_at: "2026-11-13T09:00:00Z".into(),
+        },
+    ];
+    let v2_seeds = vec![
+        Seed {
+            id: "s-g7k2m1".into(),
+            profile_id: PROFILE.into(),
+            title: "Garden organization & Beds".into(),
+            status: "growing".into(),
+            claimed: true,
+            bed_id: Some("b-attn01".into()),
+            bed: Some("attn".into()),
+            pulse: Some("Step 4 UI verified · awaiting final sign-off".into()),
+            body: "Keep multi-project gardens calm with curated Beds, Now/Triage/All lenses, and one-line seed pulses.".into(),
+            tender: Some(PartyView {
+                name: "waiting_input agent".into(),
+                r#ref: "session:s1".into(),
+                session_id: Some("s1".into()),
+            }),
+            plot_progress: Some(SeedPlotProgress {
+                total: 2,
+                done: 1,
+                growing: 1,
+                ..SeedPlotProgress::default()
+            }),
+            created_at: "2026-11-13T08:00:00Z".into(),
+            updated_at: "2026-11-13T09:18:00Z".into(),
+            rev: 3,
+            ..Seed::default()
+        },
+        Seed {
+            id: "s-g7k2c1".into(),
+            profile_id: PROFILE.into(),
+            edges: vec![SeedEdge {
+                kind: "part-of".into(),
+                to: "s-g7k2m1".into(),
+            }],
+            title: "Curated Beds & repo auto-routing".into(),
+            status: "harvested".into(),
+            bed_id: Some("b-attn01".into()),
+            bed: Some("attn".into()),
+            created_at: "2026-11-13T08:05:00Z".into(),
+            updated_at: "2026-11-13T08:45:00Z".into(),
+            rev: 2,
+            ..Seed::default()
+        },
+        Seed {
+            id: "s-g7k2c2".into(),
+            profile_id: PROFILE.into(),
+            edges: vec![SeedEdge {
+                kind: "part-of".into(),
+                to: "s-g7k2m1".into(),
+            }],
+            title: "Calm List, Board & Dock UI".into(),
+            status: "growing".into(),
+            claimed: true,
+            bed_id: Some("b-attn01".into()),
+            bed: Some("attn".into()),
+            pulse: Some("Visual polish verified in dark and light".into()),
+            tender: Some(PartyView {
+                name: "waiting_input agent".into(),
+                r#ref: "session:s1".into(),
+                session_id: Some("s1".into()),
+            }),
+            created_at: "2026-11-13T08:50:00Z".into(),
+            updated_at: "2026-11-13T09:18:00Z".into(),
+            rev: 1,
+            ..Seed::default()
+        },
+        Seed {
+            id: "s-r4n9p2".into(),
+            profile_id: PROFILE.into(),
+            title: "Home gateway reconnect storms".into(),
+            status: "growing".into(),
+            claimed: true,
+            bed_id: Some("b-rel001".into()),
+            bed: Some("relay".into()),
+            pulse: Some("Waiting for approval to roll out prod relay".into()),
+            tender: Some(PartyView {
+                name: "pending_approval agent".into(),
+                r#ref: "session:s2".into(),
+                session_id: Some("s2".into()),
+            }),
+            created_at: "2026-11-13T07:30:00Z".into(),
+            updated_at: "2026-11-13T09:05:00Z".into(),
+            rev: 2,
+            ..Seed::default()
+        },
+        Seed {
+            id: "s-m3q8d1".into(),
+            profile_id: PROFILE.into(),
+            title: "TestFlight push notifications".into(),
+            status: "growing".into(),
+            claimed: true,
+            bed_id: Some("b-mob001".into()),
+            bed: Some("mobile".into()),
+            pulse: Some("Building archive for build 142".into()),
+            tender: Some(PartyView {
+                name: "working agent".into(),
+                r#ref: "session:s0".into(),
+                session_id: Some("s0".into()),
+            }),
+            created_at: "2026-11-13T06:00:00Z".into(),
+            updated_at: "2026-11-13T09:12:00Z".into(),
+            rev: 1,
+            ..Seed::default()
+        },
+        Seed {
+            id: "s-f2w6b8".into(),
+            profile_id: PROFILE.into(),
+            title: "Worktree sweep edge case on detached HEAD".into(),
+            status: "growing".into(),
+            claimed: false,
+            bed_id: Some("b-attn01".into()),
+            bed: Some("attn".into()),
+            created_at: "2026-11-08T09:00:00Z".into(),
+            updated_at: "2026-11-08T09:00:00Z".into(),
+            rev: 1,
+            ..Seed::default()
+        },
+        Seed {
+            id: "s-q5j3h7".into(),
+            profile_id: PROFILE.into(),
+            title: "Outpost binary auto-prune".into(),
+            status: "planted".into(),
+            ready: true,
+            created_at: "2026-11-10T09:00:00Z".into(),
+            updated_at: "2026-11-10T09:00:00Z".into(),
+            rev: 1,
+            ..Seed::default()
+        },
+        Seed {
+            id: "s-a101x".into(),
+            profile_id: PROFILE.into(),
+            title: "Daily main review".into(),
+            status: "growing".into(),
+            claimed: true,
+            automation_id: Some(7),
+            pulse: Some("Reading 6 commits landed since yesterday".into()),
+            created_at: "2026-11-13T09:00:00Z".into(),
+            updated_at: "2026-11-13T09:15:00Z".into(),
+            rev: 1,
+            ..Seed::default()
+        },
+    ];
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), v2_seeds.clone());
+    if let Some(ref mut map) = state.settings {
+        map.insert("garden_v2_enabled".into(), "true".into());
+    }
+    state.garden_beds = Some(beds);
+    let daemon = scripted().state(state);
+    let known = v2_seeds;
+    daemon.on("seed_document_get", move |r: &Request| {
+        message(SeedDocumentGetResultMessage {
+            request_id: r["request_id"].as_str().unwrap_or_default().into(),
+            success: true,
+            document: known
+                .iter()
+                .find(|s| s.id == r["seed_id"])
+                .cloned()
+                .map(|seed| SeedDocument {
+                    seed,
+                    notes_total: 1,
+                    notes: vec![log_note(
+                        "n-v2",
+                        "note",
+                        "Step 3 landed; native List, Board and Dock wired behind garden_v2_enabled.",
+                        "2026-11-13T09:16:00Z",
+                    )],
+                    ..SeedDocument::default()
+                }),
+            ..SeedDocumentGetResultMessage::new()
+        })
+    });
+    let mut world = start(daemon);
+    deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
+    world
+}
+
+fn garden_v2_list(dark: bool) {
+    let mut world = garden_v2_world(dark);
+    press(&mut world, Action::BoardOpen);
+    click(&mut world, Target::role("button").name("Expand the garden"));
+    click(&mut world, Target::key("garden.row.s-g7k2m1"));
+    snap(&mut world, "garden-v2-list", dark);
+}
+
+fn garden_v2_board(dark: bool) {
+    let mut world = garden_v2_world(dark);
+    press(&mut world, Action::BoardOpen);
+    click(&mut world, Target::role("button").name("Expand the garden"));
+    click(&mut world, Target::key("garden.view.board"));
+    snap(&mut world, "garden-v2-board", dark);
+}
+
+fn garden_v2_dock(dark: bool) {
+    let mut world = garden_v2_world(dark);
+    press(&mut world, Action::BoardOpen);
+    snap(&mut world, "garden-v2-dock", dark);
 }
 
 /// A seed whose agent runs on an outpost out of reach, Tab on its unavailable Resume.
@@ -8379,6 +8610,9 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("garden_search_body", || garden_search_body(dark, true));
         scene("garden_board_menu", || garden_board_menu(dark));
         scene("garden_board_plot", || garden_board_plot(dark));
+        scene("garden_v2_list", || garden_v2_list(dark));
+        scene("garden_v2_board", || garden_v2_board(dark));
+        scene("garden_v2_dock", || garden_v2_dock(dark));
         scene("garden_seed_resume_unreachable", || {
             garden_seed_resume_unreachable(dark)
         });

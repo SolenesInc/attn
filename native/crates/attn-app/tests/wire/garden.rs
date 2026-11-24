@@ -27,6 +27,7 @@ mod seed_chip;
 mod standby;
 mod terminal_seeds;
 mod tile;
+mod v2;
 
 const PROFILE: &str = "work";
 

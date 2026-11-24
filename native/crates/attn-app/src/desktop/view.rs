@@ -147,6 +147,8 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                 desktop
                     .is_some_and(holds_a_seed)
                     .then_some(state.window.now_ms / 60_000),
+                (desktop.is_some_and(holds_a_seed) && crate::garden::v2::enabled(state))
+                    .then(|| (version(&facts.sessions), version(&facts.asks))),
                 crate::garden::model::has_chief(&facts.sessions, &facts.profiles.selected),
             ),
             (
@@ -1117,6 +1119,8 @@ fn seed_reads(state: &State) -> crate::garden::TileReads<'_> {
         garden: &state.window.garden,
         seeds: crate::garden::seeds(state),
         sessions: &state.facts.sessions,
+        asks: &state.facts.asks,
+        v2: crate::garden::v2::enabled(state),
         readings: &state.readings,
         pictures: &state.pictures,
         now_ms: state.window.now_ms,

@@ -431,6 +431,23 @@ pub(crate) fn ago(iso: &str, now_ms: i64) -> String {
     }
 }
 
+/// How long ago `iso` was, as a compact row or card says it: now, 5m, 3h, 2d.
+pub(crate) fn short_age(iso: &str, now_ms: i64) -> String {
+    let Some(at) = crate::sidebar::queue::epoch_ms(iso) else {
+        return String::new();
+    };
+    let seconds = ((now_ms - at).max(0) as f64 / 1000.0).round() as i64;
+    if seconds < 60 {
+        "now".into()
+    } else if seconds < 3600 {
+        format!("{}m", (seconds as f64 / 60.0).round() as i64)
+    } else if seconds < 86_400 {
+        format!("{}h", (seconds as f64 / 3600.0).round() as i64)
+    } else {
+        format!("{}d", (seconds as f64 / 86_400.0).round() as i64)
+    }
+}
+
 /// Whether the profile `profile` has a Chief to send seeds to.
 pub(crate) fn has_chief(sessions: &[Session], profile: &str) -> bool {
     sessions
