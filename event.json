@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Closed session transcripts on an outpost are refused",
+  "at": "2026-11-24T06:13:36.953Z",
+  "repairs": "e535adbbc30615df3bce71348a576702baf69aba"
+}
