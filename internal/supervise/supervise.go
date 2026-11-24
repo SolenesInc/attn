@@ -257,6 +257,41 @@ func (s *Supervisor) ensure(name string, start StartFunc, revive bool) error {
 	return err
 }
 
+func (s *Supervisor) Restart(name string, start StartFunc) error {
+	if err := validateName(name); err != nil {
+		return err
+	}
+	if start == nil {
+		return fmt.Errorf("supervise: child %q needs a start function", name)
+	}
+	s.mu.Lock()
+	if s.shutdown {
+		s.mu.Unlock()
+		return fmt.Errorf("supervise: supervisor is shut down, cannot restart %q", name)
+	}
+	c := s.children[name]
+	if c == nil {
+		c = &child{name: name}
+		s.children[name] = c
+	}
+	c.start = start
+	c.desired = DesiredRunning
+	c.restartAttempt = 0
+	c.connectedAt = time.Time{}
+	stopTimer(&c.restartTimer)
+	stopTimer(&c.disconnectTimer)
+	stopTimer(&c.stabilityTimer)
+	previous := c.process
+	c.process = nil
+	err := s.spawnLocked(c)
+	s.mu.Unlock()
+	if previous != nil {
+		_ = previous.Kill()
+	}
+	s.notify(name)
+	return err
+}
+
 func (s *Supervisor) Stop(name string) {
 	s.mu.Lock()
 	c := s.children[name]

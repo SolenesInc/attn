@@ -568,6 +568,77 @@ func TestEnsureRefusesUnusableNames(t *testing.T) {
 	})
 }
 
+func TestRestartReplacesTheChildWithTheNewStartWhateverStateItIsIn(t *testing.T) {
+	cases := []struct {
+		name  string
+		reach func(t *testing.T, supervisor *Supervisor, clock *fakeClock, old *fakeLauncher)
+		phase Phase
+	}{
+		{name: "running", phase: PhaseStarting, reach: func(t *testing.T, supervisor *Supervisor, clock *fakeClock, old *fakeLauncher) {}},
+		{name: "backoff", phase: PhaseBackoff, reach: func(t *testing.T, supervisor *Supervisor, clock *fakeClock, old *fakeLauncher) {
+			old.handle(0).exit(Exit{Error: "crash"})
+			waitFor(t, func() bool {
+				snapshot, _ := supervisor.Snapshot("fixture")
+				return snapshot.Phase == PhaseBackoff
+			})
+		}},
+		{name: "parked", phase: PhaseParked, reach: func(t *testing.T, supervisor *Supervisor, clock *fakeClock, old *fakeLauncher) {
+			for attempt := 1; attempt <= 2; attempt++ {
+				old.handle(attempt - 1).exit(Exit{Error: "crash"})
+				waitFor(t, func() bool {
+					snapshot, _ := supervisor.Snapshot("fixture")
+					return snapshot.Phase == PhaseBackoff && snapshot.RestartAttempt == attempt
+				})
+				clock.Advance(RestartBackoff[attempt-1])
+				waitFor(t, func() bool { return old.count() == attempt+1 })
+			}
+			old.handle(2).exit(Exit{Error: "crash"})
+			waitFor(t, func() bool {
+				snapshot, _ := supervisor.Snapshot("fixture")
+				return snapshot.Phase == PhaseParked
+			})
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				clock := newFakeClock()
+				old, replacement := &fakeLauncher{}, &fakeLauncher{}
+				supervisor := New(Options{Clock: clock, GiveUpAfter: 2})
+				t.Cleanup(supervisor.Shutdown)
+				if err := supervisor.Ensure("fixture", old.start); err != nil {
+					t.Fatalf("Ensure: %v", err)
+				}
+				tc.reach(t, supervisor, clock, old)
+				before, _ := supervisor.Snapshot("fixture")
+				if before.Phase != tc.phase {
+					t.Fatalf("phase before Restart=%s, want %s", before.Phase, tc.phase)
+				}
+				oldStarts := old.count()
+
+				if err := supervisor.Restart("fixture", replacement.start); err != nil {
+					t.Fatalf("Restart: %v", err)
+				}
+				after, _ := supervisor.Snapshot("fixture")
+				if replacement.count() != 1 || after.Phase != PhaseStarting || !after.Running ||
+					after.Generation <= before.Generation || after.RestartAttempt != 0 || !after.ParkedAt.IsZero() {
+					t.Fatalf("after Restart: snapshot=%+v starts=%d; want one fresh start of the new child at a later generation than %d with no backoff or park", after, replacement.count(), before.Generation)
+				}
+				if before.Running && old.handle(oldStarts-1).killCount() != 1 {
+					t.Fatalf("the running process was killed %d times, want 1", old.handle(oldStarts-1).killCount())
+				}
+				if !supervisor.NoteConnected("fixture", after.Generation) || supervisor.NoteConnected("fixture", before.Generation) {
+					t.Fatal("only the restarted generation may connect")
+				}
+				clock.Advance(time.Hour)
+				if old.count() != oldStarts {
+					t.Fatalf("the old start ran %d more times after Restart, want none", old.count()-oldStarts)
+				}
+			})
+		})
+	}
+}
+
 type fakeLauncher struct {
 	mu          sync.Mutex
 	handles     []*fakeProcess

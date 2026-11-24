@@ -99,7 +99,15 @@ func newPluginSupervisor(
 }
 
 func (s *pluginSupervisor) Ensure(manifest pluginManifest) error {
-	return s.Supervisor.Ensure(manifest.Name, func(req supervise.StartRequest) (supervise.Process, error) {
+	return s.Supervisor.Ensure(manifest.Name, s.starter(manifest))
+}
+
+func (s *pluginSupervisor) Restart(manifest pluginManifest) error {
+	return s.Supervisor.Restart(manifest.Name, s.starter(manifest))
+}
+
+func (s *pluginSupervisor) starter(manifest pluginManifest) supervise.StartFunc {
+	return func(req supervise.StartRequest) (supervise.Process, error) {
 		return s.launcher.Start(manifest, s.env(manifest, req.Generation), req.Log)
-	})
+	}
 }
