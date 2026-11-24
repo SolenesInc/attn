@@ -3,7 +3,9 @@ package daemon
 import (
 	"context"
 	"os"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -69,7 +71,7 @@ func (d *Daemon) handleGetRecentLocationsWS(client *wsClient, msg *protocol.GetR
 
 func (d *Daemon) handleRecentFilesWS(client *wsClient, msg *protocol.RecentFilesMessage) {
 	limit := 20
-	if msg.Limit != nil {
+	if msg.Limit != nil && *msg.Limit > 0 {
 		limit = int(*msg.Limit)
 	}
 	d.sendToClient(client, &protocol.RecentFilesResultMessage{
@@ -82,47 +84,68 @@ func (d *Daemon) handleRecentFilesWS(client *wsClient, msg *protocol.RecentFiles
 
 const recentFileStatDeadline = 500 * time.Millisecond
 
-// An outpost answers within its own stat deadline plus a bridge round trip;
-// checkout_inspect round trips took 35-89ms in the bridge receipts.
-const outpostMissingFilesTripwire = time.Second
+// All of a request's checks of one outpost share this. Each batch costs a bridge
+// round trip, 35-89ms in the checkout_inspect receipts.
+const outpostMissingFilesBudget = time.Second
 
 func (d *Daemon) openableRecentFiles(limit int) []protocol.FileActivity {
 	d.recentFilePruneGate <- struct{}{}
 	defer func() { <-d.recentFilePruneGate }()
-	checked := map[store.HostPath]bool{}
-	for {
-		files := d.store.GetRecentFiles(limit)
-		unchecked := map[string][]string{}
-		for _, file := range files {
-			key := store.HostPath{Host: protocol.Deref(file.Host), Path: file.Path}
-			if !checked[key] {
-				checked[key] = true
-				unchecked[key.Host] = append(unchecked[key.Host], key.Path)
-			}
-		}
-		if len(unchecked) == 0 {
-			return files
-		}
-		d.forgetMissingFiles(unchecked)
+	ranked := d.store.GetRecentFiles()
+	byMachine := map[string][]string{}
+	for _, file := range ranked {
+		host := protocol.Deref(file.Host)
+		byMachine[host] = append(byMachine[host], file.Path)
 	}
-}
-
-func (d *Daemon) forgetMissingFiles(byMachine map[string][]string) {
+	var mu sync.Mutex
+	missing := map[store.HostPath]bool{}
 	tasks := make([]func(), 0, len(byMachine))
 	for host, paths := range byMachine {
-		tasks = append(tasks, func() { d.store.DeleteFileActivity(host, d.findMissingFiles(host, paths)...) })
+		tasks = append(tasks, func() {
+			forgotten := d.forgetMissingFiles(host, paths, limit)
+			mu.Lock()
+			defer mu.Unlock()
+			for _, path := range forgotten {
+				missing[store.HostPath{Host: host, Path: path}] = true
+			}
+		})
 	}
 	runJoined(tasks...)
+	listed := map[string]int{}
+	return slices.DeleteFunc(ranked, func(file protocol.FileActivity) bool {
+		key := store.HostPath{Host: protocol.Deref(file.Host), Path: file.Path}
+		if missing[key] || listed[key.Host] == limit {
+			return true
+		}
+		listed[key.Host]++
+		return false
+	})
 }
 
-func (d *Daemon) findMissingFiles(host string, paths []string) []string {
-	ask := protocol.FindMissingFilesMessage{Cmd: protocol.CmdFindMissingFiles, Paths: paths}
+func (d *Daemon) forgetMissingFiles(host string, ranked []string, limit int) []string {
 	ctx := d.life.Context()
 	if host != "" {
-		ask.Host = protocol.Ptr(host)
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, outpostMissingFilesTripwire)
+		ctx, cancel = context.WithTimeout(ctx, outpostMissingFilesBudget)
 		defer cancel()
+	}
+	var missing []string
+	batch := limit
+	for present := 0; present < limit && len(ranked) > 0; batch *= 2 {
+		paths := ranked[:min(batch, len(ranked))]
+		ranked = ranked[len(paths):]
+		gone := d.findMissingFiles(ctx, host, paths)
+		d.store.DeleteFileActivity(host, gone...)
+		missing = append(missing, gone...)
+		present += len(paths) - len(gone)
+	}
+	return missing
+}
+
+func (d *Daemon) findMissingFiles(ctx context.Context, host string, paths []string) []string {
+	ask := protocol.FindMissingFilesMessage{Cmd: protocol.CmdFindMissingFiles, Paths: paths}
+	if host != "" {
+		ask.Host = protocol.Ptr(host)
 	}
 	found, err := Call[protocol.MissingFiles](ctx, d.router(), ask)
 	if err != nil {

@@ -40,6 +40,7 @@ var allowedWaits = map[string]string{
 	"internal/daemon/world_test.go (*world).elapse":                                                                  "moves the synctest clock of a world inBubble; refuses outside a bubble",
 	"internal/daemon/desktop_tiles_protocol_test.go (*desktopTilesWorld).deliver":                                    "runs in tileContentWorld's synctest bubble, so the sleep moves its clock past the tile watcher's tick",
 	"internal/daemon/exit_screen_wire_test.go TestAnExitReleasesItsRuntimeAtOnceAndReportsTheExitOnceStorageReturns": "runs inBubbleWithAgents, so the sleep moves the synctest clock",
+	"internal/daemon/recent_files_wire_test.go (*outpostFiles).answer":                                               "runs in the synctest bubble of a world inBubble, so the bridge round trip it simulates moves the synctest clock",
 	"internal/jobs/stores_test.go TestDueJobsRunByPriorityThenByScheduleWithinASecond":                               "runs in onTheJobDatabase's synctest bubble",
 	"internal/jobs/stores_test.go TestRetentionTrimsCompletedJobsBySubSecondAgeAndKeepsDeadOnes":                     "runs in onTheJobDatabase's synctest bubble",
 	"internal/fakeagent/codex_remote.go (*codexRemote).stayConnected":                                                "the fake Codex's own reconnect backoff, which the real Codex has too",

@@ -114,13 +114,8 @@ func halved(age, halfLife time.Duration) float64 {
 	return math.Exp2(-max(age, 0).Seconds() / halfLife.Seconds())
 }
 
-// GetRecentFiles ranks every machine's files best first, keeping at most limit
-// files of each machine.
-func (s *Store) GetRecentFiles(limit int) []protocol.FileActivity {
-	if limit <= 0 {
-		limit = 20
-	}
-
+// GetRecentFiles ranks every machine's files best first.
+func (s *Store) GetRecentFiles() []protocol.FileActivity {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -200,13 +195,8 @@ func (s *Store) GetRecentFiles(limit int) []protocol.FileActivity {
 		return ki.Host < kj.Host
 	})
 
-	perMachine := map[string]int{}
 	best := make([]protocol.FileActivity, 0, len(order))
 	for _, key := range order {
-		if perMachine[key.Host] == limit {
-			continue
-		}
-		perMachine[key.Host]++
 		best = append(best, merged[key].file)
 	}
 	return best

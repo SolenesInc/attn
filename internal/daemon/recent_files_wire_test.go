@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -133,14 +134,15 @@ func TestRecentFilesFillTheLimitPastDeletedFiles(t *testing.T) {
 }
 
 type outpostFiles struct {
-	mu      sync.Mutex
-	missing map[string]bool
-	asked   [][]string
-	stall   chan struct{}
+	mu        sync.Mutex
+	missing   map[string]bool
+	asked     [][]string
+	stall     chan struct{}
+	roundTrip time.Duration
 }
 
 func (f *outpostFiles) answer(_ *bridge.Conn, incoming ssh.NewChannel) {
-	bridge.Answer(incoming, func(ctx context.Context, raw []byte) (any, error) {
+	go bridge.Answer(incoming, func(ctx context.Context, raw []byte) (any, error) {
 		var call struct {
 			Cmd   string   `json:"cmd"`
 			Paths []string `json:"paths"`
@@ -154,8 +156,13 @@ func (f *outpostFiles) answer(_ *bridge.Conn, incoming ssh.NewChannel) {
 		case protocol.CmdFindMissingFiles:
 			f.mu.Lock()
 			f.asked = append(f.asked, slices.Clone(call.Paths))
-			stall := f.stall
+			stall, roundTrip := f.stall, f.roundTrip
 			f.mu.Unlock()
+			select {
+			case <-time.After(roundTrip):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
 			if stall != nil {
 				select {
 				case <-stall:
@@ -191,26 +198,115 @@ func (f *outpostFiles) takeAsked() [][]string {
 	return asked
 }
 
+func (f *outpostFiles) connect(t *testing.T, w *world) (far *farOutpost, app *testworld.Peer, open func(path string)) {
+	t.Helper()
+	far = startFarOutpostWith(t, w, nil, bridge.Handlers{daemon.BridgeCall: f.answer})
+	app = w.App()
+	placeSessions(t, w, app, w.Client(), "s1")
+	setSetting(t, app, "outposts_enabled", "true")
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "far", Destination: outpostAddress.String()})
+	host := testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+		return len(m.Outposts) == 1 && m.Outposts[0].State == protocol.OutpostStateConnected
+	}).Outposts[0].ID
+	return far, app, func(path string) {
+		t.Helper()
+		requestID := uuid.NewString()
+		opened := testworld.Request(app, protocol.OpenMarkdownMessage{Cmd: protocol.CmdOpenMarkdown, Host: protocol.Ptr(host), Path: path, SessionID: protocol.Ptr(protocol.SessionID("s1")), RequestID: protocol.Ptr(requestID)},
+			protocol.EventOpenMarkdownResult, func(r protocol.OpenMarkdownResultMessage) bool { return protocol.Deref(r.RequestID) == requestID })
+		if !opened.Success {
+			t.Fatalf("open %s on the outpost: %s", path, protocol.Deref(opened.Error))
+		}
+	}
+}
+
+func TestRecentFilesAnswerWithinASecondHoweverManyOfAnOutpostsFilesWereDeleted(t *testing.T) {
+	for _, outpost := range []struct {
+		name      string
+		roundTrip time.Duration
+		want      func(home string, deletedNewestFirst []string) []string
+	}{
+		{"that answers promptly lists the files that exist", 89 * time.Millisecond, func(home string, _ []string) []string {
+			return []string{"/far/newest.md", home, "/far/oldest.md"}
+		}},
+		{"too slow to check them all lists the rest unchecked", 600 * time.Millisecond, func(home string, deleted []string) []string {
+			return []string{"/far/newest.md", home, deleted[1]}
+		}},
+	} {
+		t.Run(outpost.name, func(t *testing.T) {
+			inBubble(t, func(t *testing.T, w *world) {
+				files := &outpostFiles{missing: map[string]bool{}}
+				_, app, openOnOutpost := files.connect(t, w)
+				openOnOutpost("/far/oldest.md")
+				var deleted []string
+				for i := range 22 {
+					w.advance(time.Minute)
+					path := fmt.Sprintf("/far/removed-worktree/%02d.md", i)
+					openOnOutpost(path)
+					deleted = append([]string{path}, deleted...)
+				}
+				w.advance(time.Minute)
+				home := markdownFile(t, w, "home.md")
+				openMarkdown(t, app, "s1", home)
+				w.advance(time.Minute)
+				openOnOutpost(home)
+				deleted = append([]string{home}, deleted...)
+				w.advance(time.Minute)
+				openOnOutpost("/far/newest.md")
+				files.set(func(f *outpostFiles) {
+					f.roundTrip = outpost.roundTrip
+					for _, path := range deleted {
+						f.missing[path] = true
+					}
+				})
+
+				answer := make(chan []protocol.FileActivity, 1)
+				go func() { answer <- recentFiles(app, 2) }()
+				w.advance(time.Second)
+				select {
+				case got := <-answer:
+					if want := outpost.want(home, deleted); !slices.Equal(paths(got), want) {
+						t.Fatalf("recent files up to two per machine = %v, want %v", paths(got), want)
+					}
+				default:
+					t.Fatal("recent files, the home's included, still wait on the outpost after a second")
+				}
+			})
+		})
+	}
+}
+
+func TestAFileReopenedAfterItsOutpostReportedItMissingStaysListed(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		files := &outpostFiles{missing: map[string]bool{}}
+		_, app, openOnOutpost := files.connect(t, w)
+		for _, path := range []string{"/far/older.md", "/far/recreated.md", "/far/newest.md"} {
+			openOnOutpost(path)
+			w.advance(time.Minute)
+		}
+		files.set(func(f *outpostFiles) {
+			f.roundTrip = 600 * time.Millisecond
+			f.missing["/far/recreated.md"] = true
+		})
+		answer := make(chan []protocol.FileActivity, 1)
+		go func() { answer <- recentFiles(w.App(), 2) }()
+		w.advance(700 * time.Millisecond)
+		files.set(func(f *outpostFiles) {
+			f.roundTrip = 0
+			f.missing = map[string]bool{}
+		})
+		openOnOutpost("/far/recreated.md")
+		w.advance(300 * time.Millisecond)
+		<-answer
+		if got, want := paths(recentFiles(app, 3)), []string{"/far/recreated.md", "/far/newest.md", "/far/older.md"}; !slices.Equal(got, want) {
+			t.Fatalf("after recreated.md was deleted, recreated and reopened while its outpost was being asked = %v, want %v", got, want)
+		}
+	})
+}
+
 func TestRecentFilesKeepAnOutpostsOwnLimitAndCheckItsFilesOnTheOutpost(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		files := &outpostFiles{missing: map[string]bool{}}
-		far := startFarOutpostWith(t, w, nil, bridge.Handlers{daemon.BridgeCall: files.answer})
-		app, cli := w.App(), w.Client()
-		placeSessions(t, w, app, cli, "s1")
-		setSetting(t, app, "outposts_enabled", "true")
-		app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "far", Destination: outpostAddress.String()})
-		host := testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
-			return len(m.Outposts) == 1 && m.Outposts[0].State == protocol.OutpostStateConnected
-		}).Outposts[0].ID
-		openOnOutpost := func(path string) {
-			t.Helper()
-			requestID := uuid.NewString()
-			opened := testworld.Request(app, protocol.OpenMarkdownMessage{Cmd: protocol.CmdOpenMarkdown, Host: protocol.Ptr(host), Path: path, SessionID: protocol.Ptr(protocol.SessionID("s1")), RequestID: protocol.Ptr(requestID)},
-				protocol.EventOpenMarkdownResult, func(r protocol.OpenMarkdownResultMessage) bool { return protocol.Deref(r.RequestID) == requestID })
-			if !opened.Success {
-				t.Fatalf("open %s on the outpost: %s", path, protocol.Deref(opened.Error))
-			}
-		}
+		far, app, openOnOutpost := files.connect(t, w)
 		home1, home2, home3 := markdownFile(t, w, "home1.md"), markdownFile(t, w, "home2.md"), markdownFile(t, w, "home3.md")
 		for _, open := range []func(){
 			func() { openMarkdown(t, app, "s1", home1) }, func() { openOnOutpost("/far/a.md") },
@@ -244,7 +340,7 @@ func TestRecentFilesKeepAnOutpostsOwnLimitAndCheckItsFilesOnTheOutpost(t *testin
 		w.advance(999 * time.Millisecond)
 		select {
 		case got := <-answer:
-			t.Fatalf("recent files answered %v before the stalled outpost's tripwire", paths(got))
+			t.Fatalf("recent files answered %v before the stalled outpost's second was up", paths(got))
 		default:
 		}
 		w.advance(time.Millisecond)
@@ -254,7 +350,7 @@ func TestRecentFilesKeepAnOutpostsOwnLimitAndCheckItsFilesOnTheOutpost(t *testin
 				t.Fatalf("with the outpost stalled = %v, want its files unchecked %v", paths(got), unchecked)
 			}
 		default:
-			t.Fatal("recent files still waits on a stalled outpost past its tripwire")
+			t.Fatal("recent files still waits on a stalled outpost past its second")
 		}
 		files.set(func(f *outpostFiles) { f.stall = nil })
 		files.takeAsked()
