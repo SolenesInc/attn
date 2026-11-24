@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Outpost bed routing ignores the caller directory",
+  "at": "2026-11-24T22:47:46.345Z",
+  "detail": "With garden_v2_enabled, an outpost agent launched in repository Alpha can change to repository Beta and plant a root seed or plot from there. The operation succeeds but routes to Alpha's bed. A paired home/outpost CLI probe reproduced both operations; the home CLI and an outpost CLI still in Alpha were controls. The caller directory reaches the home, but routing prefers launch metadata. See s-mnw09n and s-4wqqsw for the independent reports and evidence.\n"
+}
