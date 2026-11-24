@@ -331,7 +331,7 @@ func TestAGitInstallRecordsItsRedactedSourceAndCommitAndUpdatesFromThem(t *testi
 		cloned = append(cloned, source)
 		return exec.CommandContext(ctx, "git", "clone", "-q", "--depth", "1", "file://"+repo, target).CombinedOutput()
 	}
-	source := "https://user:hunter2@git.example.com/team/sample.git"
+	source := "ssh://git@git.example.com/team/sample.git"
 	installed, swap, err := ReplaceSourceWithOptionsContext(context.Background(), source, w.pluginDir, w.opts)
 	if err != nil {
 		t.Fatal(err)
@@ -346,9 +346,8 @@ func TestAGitInstallRecordsItsRedactedSourceAndCommitAndUpdatesFromThem(t *testi
 	if err := json.Unmarshal(body, &recorded); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(body), "hunter2") || recorded.Kind != SourceKindGit || recorded.Commit != firstCommit ||
-		recorded.InstalledAt.IsZero() || !strings.Contains(recorded.Source, "git.example.com/team/sample.git") {
-		t.Fatalf("%s = %s; want a git source without the password, commit %s and an install time", ProvenanceName, body, firstCommit)
+	if recorded.Kind != SourceKindGit || recorded.Commit != firstCommit || recorded.InstalledAt.IsZero() || recorded.Source != source {
+		t.Fatalf("%s = %s; want git source %s, commit %s and an install time", ProvenanceName, body, source, firstCommit)
 	}
 	discovered, _ := Discover(w.pluginDir)
 	if len(discovered) != 1 || discovered[0].Source != recorded.Source || discovered[0].SourceKind != SourceKindGit || installed.Source != recorded.Source {
@@ -374,6 +373,41 @@ func TestAGitInstallRecordsItsRedactedSourceAndCommitAndUpdatesFromThem(t *testi
 	}
 	if got, left := w.installedVersion("sample"), w.leftovers(); got != "0.2.0" || len(left) != 0 {
 		t.Fatalf("the refused update left live %q and %v; want 0.2.0 untouched", got, left)
+	}
+}
+
+func TestAGitSourceWithCredentialsIsRecordedWithoutThemAndCannotBeUpdated(t *testing.T) {
+	w := newPluginWorld(t)
+	repo := filepath.Join(w.root, "repo")
+	writePluginFiles(t, repo, "sample", "0.1.0")
+	gitIn(t, w.opts.Env, repo, "init", "-q", "-b", "main")
+	gitIn(t, w.opts.Env, repo, "add", ".")
+	gitIn(t, w.opts.Env, repo, "commit", "-q", "-m", "v1")
+	cloned := 0
+	w.opts.CloneGit = func(ctx context.Context, source, target string, env []string) ([]byte, error) {
+		cloned++
+		return exec.CommandContext(ctx, "git", "clone", "-q", "--depth", "1", "file://"+repo, target).CombinedOutput()
+	}
+	for _, source := range []string{
+		"https://user:hunter2@git.example.com/team/sample.git",
+		"https://ghp_hunter2@git.example.com/team/sample.git",
+		"https://git.example.com/team/sample.git?access_token=hunter2",
+	} {
+		t.Run(source, func(t *testing.T) {
+			_, swap, err := ReplaceSourceWithOptionsContext(context.Background(), source, w.pluginDir, w.opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = swap.Commit()
+			body, err := os.ReadFile(filepath.Join(w.pluginDir, "sample", ProvenanceName))
+			if err != nil || strings.Contains(string(body), "hunter2") || !strings.Contains(string(body), "git.example.com/team/sample.git") {
+				t.Fatalf("%s = %s (%v); want the source without its credentials", ProvenanceName, body, err)
+			}
+			before := cloned
+			if _, _, err := UpdateWithOptionsContext(context.Background(), "sample", w.pluginDir, w.opts); err == nil || !strings.Contains(err.Error(), "without its credentials") || cloned != before {
+				t.Fatalf("updating a plugin recorded without its credentials = %v after %d clones, want a refusal before cloning", err, cloned-before)
+			}
+		})
 	}
 }
 

@@ -639,6 +639,35 @@ func TestRestartReplacesTheChildWithTheNewStartWhateverStateItIsIn(t *testing.T)
 	}
 }
 
+func TestRestartStartsTheNewChildOnlyAfterTheOldOneHasExited(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		old, replacement := &fakeLauncher{}, &fakeLauncher{}
+		supervisor := New(Options{Clock: newFakeClock()})
+		t.Cleanup(supervisor.Shutdown)
+		if err := supervisor.Ensure("fixture", old.start); err != nil {
+			t.Fatal(err)
+		}
+		lingering := old.handle(0)
+		lingering.mu.Lock()
+		lingering.ignoreKill = true
+		lingering.mu.Unlock()
+
+		restarted := make(chan error, 1)
+		go func() { restarted <- supervisor.Restart("fixture", replacement.start) }()
+		synctest.Wait()
+		if lingering.killCount() != 1 || replacement.count() != 0 {
+			t.Fatalf("while the old process lingers: kills=%d new starts=%d; want it signalled and nothing new started", lingering.killCount(), replacement.count())
+		}
+		lingering.exit(Exit{Signal: "killed"})
+		if err := <-restarted; err != nil {
+			t.Fatalf("Restart: %v", err)
+		}
+		if replacement.count() != 1 {
+			t.Fatalf("new starts after the old process exited=%d, want 1", replacement.count())
+		}
+	})
+}
+
 type fakeLauncher struct {
 	mu          sync.Mutex
 	handles     []*fakeProcess
@@ -672,10 +701,11 @@ func (l *fakeLauncher) handle(index int) *fakeProcess {
 }
 
 type fakeProcess struct {
-	mu     sync.Mutex
-	wait   chan Exit
-	exited bool
-	kills  int
+	mu         sync.Mutex
+	wait       chan Exit
+	exited     bool
+	kills      int
+	ignoreKill bool
 }
 
 func (p *fakeProcess) Wait() Exit { return <-p.wait }
@@ -683,7 +713,7 @@ func (p *fakeProcess) Wait() Exit { return <-p.wait }
 func (p *fakeProcess) Kill() error {
 	p.mu.Lock()
 	p.kills++
-	alreadyExited := p.exited
+	alreadyExited := p.exited || p.ignoreKill
 	if !alreadyExited {
 		p.exited = true
 	}

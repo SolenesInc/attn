@@ -142,6 +142,7 @@ type child struct {
 	parkedAt       time.Time
 	lastExit       *Exit
 
+	exited          chan struct{}
 	restartTimer    Timer
 	disconnectTimer Timer
 	stabilityTimer  Timer
@@ -278,16 +279,27 @@ func (s *Supervisor) Restart(name string, start StartFunc) error {
 	c.desired = DesiredRunning
 	c.restartAttempt = 0
 	c.connectedAt = time.Time{}
+	c.parkedAt = time.Time{}
 	stopTimer(&c.restartTimer)
 	stopTimer(&c.disconnectTimer)
 	stopTimer(&c.stabilityTimer)
-	previous := c.process
-	c.process = nil
+	if previous, exited := c.process, c.exited; previous != nil {
+		c.generation++
+		c.phase = PhaseStarting
+		generation := c.generation
+		s.mu.Unlock()
+		s.notify(name)
+		_ = previous.Kill()
+		<-exited
+		s.mu.Lock()
+		if s.shutdown || s.children[name] != c || c.generation != generation || c.desired != DesiredRunning {
+			s.mu.Unlock()
+			return fmt.Errorf("supervise: %q was stopped while it restarted", name)
+		}
+		c.process = nil
+	}
 	err := s.spawnLocked(c)
 	s.mu.Unlock()
-	if previous != nil {
-		_ = previous.Kill()
-	}
 	s.notify(name)
 	return err
 }
@@ -454,9 +466,12 @@ func (s *Supervisor) spawnLocked(c *child) error {
 	c.disconnectTimer = s.clock.AfterFunc(DisconnectGrace, func() {
 		s.disconnectExpired(name, generation, capturedProcess)
 	})
+	exited := make(chan struct{})
+	c.exited = exited
 	go func(name string, generation uint64, process Process) {
 		exit := process.Wait()
 		s.processExited(name, generation, process, exit)
+		close(exited)
 	}(name, generation, process)
 	return nil
 }

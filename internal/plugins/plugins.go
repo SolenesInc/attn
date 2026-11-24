@@ -422,6 +422,9 @@ func UpdateWithOptionsContext(ctx context.Context, name, pluginDir string, opts 
 	if current.Source == "" {
 		return Manifest{}, nil, fmt.Errorf("plugin %q has no recorded source; install it again from its source", current.Name)
 	}
+	if strings.Contains(current.Source, redactedSecret) {
+		return Manifest{}, nil, fmt.Errorf("plugin %q was installed from %s, recorded without its credentials; install it again from its source", current.Name, current.Source)
+	}
 	staged, err := stageSource(ctx, current.Source, pluginDir, opts)
 	if err != nil {
 		return Manifest{}, nil, err
@@ -687,15 +690,21 @@ func directGitClone(ctx context.Context, source, targetDir string, env []string)
 	return cmd.CombinedOutput()
 }
 
+const redactedSecret = "REDACTED"
+
 func redactGitOutput(output, source string) string {
 	output = strings.ReplaceAll(output, source, redactGitSource(source))
 	parsed, err := url.Parse(source)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return output
 	}
-	for _, secret := range []string{parsed.User.String(), parsed.RawQuery, parsed.Fragment} {
+	secrets := []string{parsed.RawQuery, parsed.Fragment}
+	if gitUserIsSecret(parsed) {
+		secrets = append(secrets, parsed.User.String())
+	}
+	for _, secret := range secrets {
 		if secret != "" {
-			output = strings.ReplaceAll(output, secret, "REDACTED")
+			output = strings.ReplaceAll(output, secret, redactedSecret)
 		}
 	}
 	return output
@@ -706,16 +715,24 @@ func redactGitSource(source string) string {
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return source
 	}
-	if parsed.User != nil {
-		parsed.User = url.User("REDACTED")
+	if gitUserIsSecret(parsed) {
+		parsed.User = url.User(redactedSecret)
 	}
 	if parsed.RawQuery != "" {
-		parsed.RawQuery = "REDACTED"
+		parsed.RawQuery = redactedSecret
 	}
 	if parsed.Fragment != "" {
-		parsed.Fragment = "REDACTED"
+		parsed.Fragment = redactedSecret
 	}
 	return parsed.String()
+}
+
+func gitUserIsSecret(parsed *url.URL) bool {
+	if parsed.User == nil {
+		return false
+	}
+	_, hasPassword := parsed.User.Password()
+	return hasPassword || parsed.Scheme != "ssh"
 }
 
 func Remove(pluginDir, name string) error {
