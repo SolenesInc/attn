@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Fake plug driver accepts relays before restoring active runs; update test flakes with unknown plug relay token",
+  "at": "2026-11-24T23:02:49.037Z",
+  "repairs": "1d8997e78e4ed8d73061904ede37dae4d676dbd0"
+}
