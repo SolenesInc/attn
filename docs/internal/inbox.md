@@ -154,7 +154,14 @@ item.
   stake only while the session holds the stake's mailbox. Once it parks or
   replants the stake, or another session takes it, the ask goes to the session.
   Opening, listing, withdrawing and delivering an ask all use that one holder
-  rule.
+  rule. An ask is stranded when no agent would take the answer: the asking
+  session closed, or nobody tends the seed and the answer resumes no tender
+  from standby. The user can send the answer or a follow-up to a stranded ask
+  to the profile's Chief instead (`to_chief`). attn writes it to the Chief's
+  member address under a header naming the asker, the seed and why, in the
+  same write as the reply and the seed's note, which keeps the answer without
+  the header. attn refuses `to_chief` while an agent would take the answer,
+  and when the profile has no Chief.
 - A Quick Capture goes to the chief or the crew member the user picked, or to
   the agent session that a paired sender names with `attn send`.
 - A change to a seed's authorization goes to the seed's tender, addressed as a

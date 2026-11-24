@@ -6363,6 +6363,98 @@
           }
         },
         {
+          "id": "to-chief",
+          "delivery": "inbox_content",
+          "description": "The user's answer or follow-up to a stranded ask, sent to the profile's Chief because no agent would take it. It names the asker, the seed and why the reply came to the Chief, then carries the reply as the addressee would have read it.",
+          "body": {
+            "kind": "text",
+            "id": "ask.to-chief",
+            "source": "content/ask/to-chief.md",
+            "bindings": [
+              {
+                "name": "asker",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "asker",
+                    "kind": "text",
+                    "description": "The name of the session that asked."
+                  }
+                }
+              },
+              {
+                "name": "why",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "why",
+                    "kind": "text",
+                    "description": "Why no agent takes the reply, as a clause."
+                  }
+                }
+              },
+              {
+                "name": "body",
+                "node": {
+                  "kind": "compose",
+                  "children": [
+                    {
+                      "kind": "when",
+                      "condition": {
+                        "field": {
+                          "name": "seed_id",
+                          "kind": "text",
+                          "description": "The seed the ask is about."
+                        },
+                        "test": "present"
+                      },
+                      "children": [
+                        {
+                          "kind": "text",
+                          "id": "ask.to-chief-seed",
+                          "source": "content/ask/to-chief-seed.md",
+                          "bindings": [
+                            {
+                              "name": "seed_id",
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "seed_id",
+                                  "kind": "text",
+                                  "description": "The seed the ask is about."
+                                }
+                              }
+                            },
+                            {
+                              "name": "seed_title",
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "seed_title",
+                                  "kind": "text",
+                                  "description": "Quoted seed title."
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "input",
+                      "field": {
+                        "name": "answer",
+                        "kind": "text",
+                        "description": "The answer or follow-up as the ask's own addressee would have read it."
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
           "id": "default-due",
           "delivery": "inbox_content",
           "description": "A notice to the ask's addressee once its default falls due with no answer: the agent goes with the default, and the ask stays open.",
@@ -8144,5 +8236,5 @@
       ]
     }
   ],
-  "definitions_hash": "5ec64fc795cfb185afa976b76e24e992a8317848c3d6a4c84461bcade1b36063"
+  "definitions_hash": "e93252a6ec937e87cee11172f743071e8dca77061aeacf88286d10abff540e4c"
 }

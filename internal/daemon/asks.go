@@ -7,16 +7,20 @@ import (
 	"fmt"
 	"net"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/ask"
+	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/command"
+	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/pausepoint"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
@@ -430,10 +434,14 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) err
 	if !askShownIn(profileID, shown.profileID) {
 		return errAskGone
 	}
-	if err := d.commitAnswer(profileID, stored, shown.wire, msg); err != nil {
+	to, err := d.answerAddress(profileID, stored, protocol.Deref(msg.ToChief))
+	if err != nil {
 		return err
 	}
-	d.kickInboxAfterCommit(stored.To)
+	if err := d.commitAnswer(profileID, stored, shown.wire, msg, to); err != nil {
+		return err
+	}
+	d.kickInboxAfterCommit(to)
 	d.publishFact(FactAskClosed, stored.ID, nil)
 	if holder := d.inboxHolder(stored.To); holder != nil && holder.State != protocol.SessionStatePendingApproval {
 		d.handBackTurn(holder.ID)
@@ -441,7 +449,7 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) err
 	return nil
 }
 
-func (d *Daemon) commitAnswer(profileID string, stored store.Ask, wire protocol.Ask, msg *protocol.AskAnswerMessage) error {
+func (d *Daemon) commitAnswer(profileID string, stored store.Ask, wire protocol.Ask, msg *protocol.AskAnswerMessage, to who.Address) error {
 	d.attachmentMu.Lock()
 	defer d.attachmentMu.Unlock()
 	ids := slices.Clone(msg.Attachments)
@@ -457,9 +465,9 @@ func (d *Daemon) commitAnswer(profileID string, stored store.Ask, wire protocol.
 		return err
 	}
 	reply := protocol.AskReply{Answers: msg.Answers, Note: msg.Note, Attachments: files}
-	answer := inbox.Item{ID: uuid.NewString(), To: stored.To, Kind: inbox.AskAnswer, Source: stored.ID, Text: text}
+	answer := inbox.Item{ID: uuid.NewString(), To: to, Kind: inbox.AskAnswer, Source: stored.ID, Text: d.addressedText(stored, to, text)}
 	if seedID, seed := stored.To.TenderOf(); seed {
-		err = d.noteAnswer(profileID, stored.ID, seedID, reply, answer)
+		err = d.noteAnswer(profileID, stored.ID, seedID, reply, answer, text)
 	} else {
 		err = d.store.AnswerAsk(profileID, stored.ID, reply, answer, time.Now())
 	}
@@ -548,8 +556,8 @@ func (d *Daemon) answerFiles(profileID, askID string, ids []string) ([]protocol.
 	return files, nil
 }
 
-func (d *Daemon) noteAnswer(profileID, askID, seedID string, reply protocol.AskReply, answer inbox.Item) error {
-	note := garden.Note{Seed: seedID, Kind: garden.NoteKindAnswer, Body: answer.Text}
+func (d *Daemon) noteAnswer(profileID, askID, seedID string, reply protocol.AskReply, answer inbox.Item, body string) error {
+	note := garden.Note{Seed: seedID, Kind: garden.NoteKindAnswer, Body: body}
 	_, _, err := d.mintAndWriteNote(note, false, "", func(write store.DocumentWrite, fact store.BusEvent, events []store.BusEvent, now time.Time) (store.DocumentWriteResult, []int64, error) {
 		return d.store.AnswerAskWithNote(profileID, askID, reply, answer, write, fact, events, now)
 	})
@@ -592,11 +600,15 @@ func (d *Daemon) followUpAsk(msg *protocol.AskFollowUpMessage, profileID string)
 	if stored.Reply == nil {
 		return nil, errAskStillOpen
 	}
+	to, err := d.answerAddress(profileID, stored, protocol.Deref(msg.ToChief))
+	if err != nil {
+		return nil, err
+	}
 	text, err := ask.FollowUp(shown.wire, msg.Text)
 	if err != nil {
 		return nil, err
 	}
-	followUp := inbox.Item{ID: uuid.NewString(), To: stored.To, Kind: inbox.AskAnswer, Source: stored.ID, Text: text}
+	followUp := inbox.Item{ID: uuid.NewString(), To: to, Kind: inbox.AskAnswer, Source: stored.ID, Text: d.addressedText(stored, to, text)}
 	if seedID, seed := stored.To.TenderOf(); seed {
 		note := garden.Note{Seed: seedID, Kind: garden.NoteKindAnswer, Body: text}
 		_, _, err = d.mintAndWriteNote(note, false, "", func(write store.DocumentWrite, fact store.BusEvent, events []store.BusEvent, now time.Time) (store.DocumentWriteResult, []int64, error) {
@@ -608,12 +620,62 @@ func (d *Daemon) followUpAsk(msg *protocol.AskFollowUpMessage, profileID string)
 	if err != nil {
 		return nil, fmt.Errorf("save the follow-up: %w", err)
 	}
-	d.kickInboxAfterCommit(stored.To)
-	holder := d.inboxHolder(stored.To)
-	if holder != nil && holder.State != protocol.SessionStatePendingApproval {
+	d.kickInboxAfterCommit(to)
+	holder := d.inboxHolder(to)
+	if holder != nil && to == stored.To && holder.State != protocol.SessionStatePendingApproval {
 		d.handBackTurn(holder.ID)
 	}
 	return holder, nil
+}
+
+func (d *Daemon) answerAddress(profileID string, stored store.Ask, toChief bool) (who.Address, error) {
+	if !toChief {
+		return stored.To, nil
+	}
+	if !d.askStranded(stored, "") {
+		return who.Address{}, protocol.Refuse(protocol.RefusalWrongState, "%s is not stranded: %s takes the answer, so send it there instead of to the Chief", stored.ID, d.askTaker(stored))
+	}
+	chief, ok := d.chiefParty(profileID)
+	if !ok {
+		return who.Address{}, protocol.Refuse(protocol.RefusalWrongState, "this profile has no Chief to take the answer to %s", stored.ID)
+	}
+	return chief.Address(), nil
+}
+
+func (d *Daemon) askTaker(a store.Ask) string {
+	if holder := d.inboxHolder(a.To); holder != nil {
+		return d.partyView(d.partyOfSession(holder.ID)).Name
+	}
+	if key, member := a.To.Member(); member {
+		return d.crewMemberName(key.String())
+	}
+	seedID, _ := a.To.TenderOf()
+	return fmt.Sprintf("the tender of %s, whom an answer resumes from standby", seedID)
+}
+
+func (d *Daemon) askerName(id protocol.SessionID) string {
+	if entry := d.store.SessionLedgerEntry(id); d.store.Get(id) == nil && entry != nil && entry.Label != "" {
+		return fmt.Sprintf("%s (session %s)", entry.Label, shortSessionID(id))
+	}
+	return d.partyView(d.partyOfSession(id)).Name
+}
+
+func (d *Daemon) addressedText(stored store.Ask, to who.Address, text string) string {
+	if to == stored.To {
+		return text
+	}
+	values := prompts.Values{
+		"asker":  d.askerName(stored.SessionID),
+		"why":    d.whyStranded(stored, ""),
+		"answer": text,
+	}
+	if seedID, seed := stored.To.TenderOf(); seed {
+		values["seed_id"] = seedID
+		if seed, _, err := d.readSeed(seedID); err == nil {
+			values["seed_title"] = strconv.Quote(seed.Title)
+		}
+	}
+	return prompts.RenderText("ask", "to-chief", values)
 }
 
 func (d *Daemon) askRepliesForgetHandler(_ context.Context, _ *jobs.Job) (any, error) {
@@ -733,29 +795,47 @@ func (d *Daemon) tellAskerOfClosedSeed(withdrawn store.Ask, seed garden.Seed, by
 }
 
 func (d *Daemon) askStranded(a store.Ask, closing protocol.SessionID) bool {
+	return d.whyStranded(a, closing) != ""
+}
+
+func (d *Daemon) whyStranded(a store.Ask, closing protocol.SessionID) string {
 	if _, member := a.To.Member(); member {
-		return false
+		return ""
 	}
 	if id, session := a.To.Session(); session {
-		return id == closing || d.store.Get(id) == nil
+		if id == closing || d.store.Get(id) == nil {
+			return "the session that asked has closed"
+		}
+		return ""
 	}
 	seedID, _ := a.To.TenderOf()
 	holder, memberID, err := d.inboxRecipient(a.To)
 	switch {
 	case err != nil:
-		return true
+		return fmt.Sprintf("attn cannot tell who tends %s: %v", seedID, err)
 	case memberID != "", holder != nil && holder.ID != closing:
-		return false
+		return ""
 	}
 	seed, _, err := d.readSeed(seedID)
 	if err != nil {
-		return true
+		return fmt.Sprintf("attn cannot read %s: %v", seedID, err)
 	}
 	standby, err := d.seedStandby(seed)
-	if err != nil || standby == nil {
-		return true
+	switch {
+	case err != nil:
+		return fmt.Sprintf("attn cannot read the standby of %s: %v", seedID, err)
+	case standby == nil && seed.Tender.IsZero():
+		return fmt.Sprintf("nobody tends %s", seedID)
+	case standby == nil:
+		return fmt.Sprintf("the session tending %s has closed, and the seed is not on standby", seedID)
 	}
-	return d.tenderResumeSetting(seed.ProfileID) != tenderResumeAny || d.tenderResumes.blockedReason(seed.ID) != ""
+	if chosen := d.tenderResumeSetting(seed.ProfileID); chosen != tenderResumeAny {
+		return fmt.Sprintf("%s is on standby, but garden.tender_resume=%s does not resume its tender for an answer", seedID, chosen)
+	}
+	if blocked := d.tenderResumes.blockedReason(seed.ID); blocked != "" {
+		return fmt.Sprintf("%s is on standby, but attn cannot resume its tender: %s", seedID, blocked)
+	}
+	return ""
 }
 
 type strandedAsksError struct{ asks []store.Ask }
@@ -793,6 +873,42 @@ func (d *Daemon) refuseStrandingSelfClose(sessionID protocol.SessionID) error {
 		return &strandedAsksError{asks: stranded}
 	}
 	return nil
+}
+
+var askStrandingFacts = bus.Filter{
+	FactSessionRegistered,
+	FactSessionReregistered,
+	FactSessionClosed,
+	FactSessionUnregistered,
+	FactDocumentChanged,
+	FactSeedStandbyViewChanged,
+	FactSettingChanged,
+}
+
+func (d *Daemon) mayStrandShownAsks(ev bus.Event) bool {
+	var shown bool
+	var err error
+	switch ev.Name {
+	case FactDocumentChanged:
+		seedID, seed := strings.CutPrefix(ev.Subject, docstore.Target(garden.Namespace, garden.CollectionSeeds)+"/")
+		if !seed {
+			return false
+		}
+		shown, err = d.store.HasAsksTo(who.ToTenderOf(seedID))
+	case FactSeedStandbyViewChanged:
+		shown, err = d.store.HasAsksTo(who.ToTenderOf(ev.Subject))
+	case FactSettingChanged:
+		if ev.Subject != setting.GardenTenderResume.Key {
+			return false
+		}
+		shown, err = d.store.HasAsks()
+	default:
+		shown, err = d.store.HasAsks()
+	}
+	if err != nil {
+		d.logf("asks: reading whether %s changes a shown ask: %v", ev.Name, err)
+	}
+	return shown
 }
 
 func (d *Daemon) announceClosedAsks(ids []string) {
@@ -881,6 +997,9 @@ func (d *Daemon) describeAsk(a store.Ask, parts []protocol.AskPart) (shownAsk, e
 	}}
 	for _, amendment := range a.Amendments {
 		shown.wire.Parts = append(shown.wire.Parts, protocol.AskPart{Markdown: protocol.Ptr(amendment.Markdown), AmendedAt: protocol.Ptr(amendment.AmendedAt)})
+	}
+	if d.askStranded(a, "") {
+		shown.wire.Stranded = protocol.Ptr(true)
 	}
 	seedID, toSeed := a.To.TenderOf()
 	memberKey, toMember := a.To.Member()

@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "id": "ask-to-chief",
+  "description": "The user's answer to an ask about a parked seed, sent to the Chief because nobody tends the seed.",
+  "recipient": "ask",
+  "event": "to-chief",
+  "values": {
+    "asker": "release-notes-builder",
+    "why": "nobody tends s-7k3f9m",
+    "seed_id": "s-7k3f9m",
+    "seed_title": "\"Write the 0.9 release notes\"",
+    "answer": "🙋 The user answered the ask \"Which highlights lead?\" (a-p3d8w1).\n\n**1. Which change leads the notes?**\n\nAnswer: Quick Capture\n\n---\n\nThey have likely moved on and will not read what you write back here. If the user asks you something in their answer, reply with a new ask that follows this one: the ask tool with `re` set to a-p3d8w1, or `attn ask --re a-p3d8w1`. If you still need them, ask again."
+  }
+}

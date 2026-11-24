@@ -406,6 +406,15 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, _ bus.Event) { d.projectAsks() },
 		},
 		{
+			filter: askStrandingFacts,
+			apply: func(d *Daemon, ev bus.Event) {
+				if d.mayStrandShownAsks(ev) {
+					d.projectAsks()
+					d.homeGateway.nudge()
+				}
+			},
+		},
+		{
 			filter: bus.Filter{FactVentChanged},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectVents() },
 		},

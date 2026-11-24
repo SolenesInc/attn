@@ -46,6 +46,14 @@ func askRecipient() Recipient {
 		Bind("subject", Input(text("subject", "Quoted ask subject."))),
 		Bind("ask_id", Input(text("ask_id", "Ask ID."))),
 		Bind("text", Input(text("text", "The user's follow-up, quoted by the adapter."))))
+	answered := text("answer", "The answer or follow-up as the ask's own addressee would have read it.")
+	seedID := text("seed_id", "The seed the ask is about.")
+	toChief := Use("ask.to-chief", "content/ask/to-chief.md",
+		Bind("asker", Input(text("asker", "The name of the session that asked."))),
+		Bind("why", Input(text("why", "Why no agent takes the reply, as a clause."))),
+		Bind("body", Compose(
+			When(Present(seedID), fragment("to-chief-seed", seedID, text("seed_title", "Quoted seed title."))),
+			Input(answered))))
 	return Recipient{ID: "ask", Description: "Asks: questions an agent asks the user through attn, and the answers that come back.", Events: []Event{
 		On("rules", "message_fragment", "Launch guidance for every session that launched with asks, whether it asks through attn's tools or the CLI: when to ask, how to write for a cold reader, and which visual to show.", askRules),
 		On("cli", "message_fragment", "Launch guidance for a session that launched with asks and asks through the CLI: the attn ask syntax with a worked example.", askCLI),
@@ -55,6 +63,7 @@ func askRecipient() Recipient {
 		On("follow-up", "inbox_content", "The user's follow-up on an ask they already answered, typed into the conversation of whoever holds the ask now, as the answer was. A seed also keeps it as a note.", followUp),
 		On("entry", "message_fragment", "One question and the user's answer to it.", entry),
 		On("entry-answer", "message_fragment", "The user's answer to one question, without the question: what a follow-up ask shows the user under the earlier question.", answer),
+		On("to-chief", "inbox_content", "The user's answer or follow-up to a stranded ask, sent to the profile's Chief because no agent would take it. It names the asker, the seed and why the reply came to the Chief, then carries the reply as the addressee would have read it.", toChief),
 		On("default-due", "inbox_content", "A notice to the ask's addressee once its default falls due with no answer: the agent goes with the default, and the ask stays open.", defaultDue),
 	}}
 }

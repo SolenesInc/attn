@@ -97,6 +97,7 @@ func homeGatewayAsk(wire protocol.Ask) homegateway.HomeGatewayAsk {
 		SeedSlug:   wire.SeedSlug,
 		SeedTitle:  wire.SeedTitle,
 		CrewMember: wire.CrewMember,
+		Stranded:   wire.Stranded,
 	}
 	if wire.Re != nil {
 		out.Re = &homegateway.HomeGatewayAskThread{AskID: wire.Re.AskID, Subject: wire.Re.Subject, Answer: wire.Re.Answer}
@@ -165,7 +166,7 @@ func (d *Daemon) homeGatewayAnswerAsk(conn *homeGatewayConn, command homegateway
 		answers = append(answers, protocol.AskAnswer{Key: answer.Key, Picked: answer.Picked, Other: answer.Other, Text: answer.Text, Condition: answer.Condition})
 	}
 	result := homegateway.HomeGatewayAskAnswerResult{Event: "ask_answer_result", RequestID: command.RequestID, AskID: command.AskID}
-	err := d.answerAsk(&protocol.AskAnswerMessage{AskID: command.AskID, Answers: answers, Note: command.Note}, conn.phone.ProfileID)
+	err := d.answerAsk(&protocol.AskAnswerMessage{AskID: command.AskID, Answers: answers, Note: command.Note, ToChief: command.ToChief}, conn.phone.ProfileID)
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 	}

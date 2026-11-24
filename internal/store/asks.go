@@ -108,6 +108,25 @@ func (s *Store) Asks() ([]Ask, error) {
 	return s.queryAsks("SELECT " + askColumns + " FROM asks ORDER BY answered_at != '', created_at, id")
 }
 
+func (s *Store) HasAsks() (bool, error) {
+	return s.askExists("SELECT EXISTS(SELECT 1 FROM asks)")
+}
+
+func (s *Store) HasAsksTo(to who.Address) (bool, error) {
+	return s.askExists("SELECT EXISTS(SELECT 1 FROM asks WHERE address = ?)", to.String())
+}
+
+func (s *Store) askExists(query string, args ...any) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return false, nil
+	}
+	var exists bool
+	err := s.db.QueryRow(query, args...).Scan(&exists)
+	return exists, err
+}
+
 func (s *Store) OpenAsksTo(to who.Address) ([]Ask, error) {
 	return s.queryAsks("SELECT "+askColumns+" FROM asks WHERE address = ? AND "+openAsk+" ORDER BY created_at, id", to.String())
 }
