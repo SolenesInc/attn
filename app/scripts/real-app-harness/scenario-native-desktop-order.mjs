@@ -42,6 +42,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 async function arrangedAs(ids, description) {
   await observer.waitFor(() => same(observer.desktops.map((d) => d.id), ids), description);
+  await driver.state('desktops', { expect: ids.map((id) => ({ id })) });
   const shown = sidebarOrder(await driver.tree(), ids);
   runner.assert(same(shown, ids), `the sidebar lists the desktops ${description}`, { shown, ids });
 }
