@@ -1,0 +1,1 @@
+If attn restarts before a replacement plugin connects, it restores the previous plugin so open sessions can use their driver again. Once the replacement connects, attn keeps the new version across restarts.
