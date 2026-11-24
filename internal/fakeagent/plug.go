@@ -311,7 +311,6 @@ func (p *plugDriver) connect() error {
 	}
 	p.daemon = newRPCPeer(conn, p.handleDaemon)
 	p.daemon.start()
-	go p.acceptRelays(relay)
 	var hello struct {
 		okResult
 		ActiveRuns []struct {
@@ -334,6 +333,7 @@ func (p *plugDriver) connect() error {
 		p.runs[active.SessionID] = &plugRun{sessionID: active.SessionID, runID: active.RunID, seq: active.Seq}
 	}
 	p.mu.Unlock()
+	go p.acceptRelays(relay)
 	var registered okResult
 	registration := map[string]any{
 		"agent":        plugAgentName(),
