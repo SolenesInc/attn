@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "4b4cc0ede0f7";
+pub const PROTOCOL_VERSION: &str = "c02d7e64c015";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -5002,6 +5002,114 @@ impl FsWriteResultMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GardenBed {
+    pub created_at: String,
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    pub profile_id: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub repos: Vec<String>,
+    pub slug: String,
+    pub updated_at: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GardenBedDeleteMessage {
+    pub cmd: String,
+    pub id: String,
+    pub request_id: String,
+}
+
+impl GardenBedDeleteMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "garden_bed_delete".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GardenBedDeleteResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    pub request_id: String,
+    pub success: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unassigned_seeds: Option<i64>,
+}
+
+impl GardenBedDeleteResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "garden_bed_delete_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GardenBedSaveMessage {
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub repos: Vec<String>,
+    pub request_id: String,
+}
+
+impl GardenBedSaveMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "garden_bed_save".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GardenBedSaveResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bed: Option<GardenBed>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    pub request_id: String,
+    pub success: bool,
+}
+
+impl GardenBedSaveResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "garden_bed_save_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GardenBedsUpdatedMessage {
+    #[serde(deserialize_with = "null_as_default")]
+    pub beds: Vec<GardenBed>,
+    pub event: String,
+    pub profile_id: String,
+}
+
+impl GardenBedsUpdatedMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "garden_beds_updated".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GardenSeedsChangedMessage {
     pub event: String,
     #[serde(deserialize_with = "null_as_default")]
@@ -5023,6 +5131,8 @@ impl GardenSeedsChangedMessage {
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GardenSeedsUpdatedMessage {
+    #[serde(deserialize_with = "null_as_default")]
+    pub beds: Vec<GardenBed>,
     pub event: String,
     pub profile_id: String,
     #[serde(deserialize_with = "null_as_default")]
@@ -5641,6 +5751,8 @@ pub struct InitialStateMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub desktops: Option<Vec<Desktop>>,
     pub event: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub garden_beds: Option<Vec<GardenBed>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub github_hosts: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -9050,6 +9162,10 @@ pub struct Seed {
     pub authorization: Option<SeedAuthorization>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub automation_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bed: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bed_id: Option<String>,
     pub body: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checks: Option<Vec<SeedCheck>>,
@@ -9069,6 +9185,10 @@ pub struct Seed {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plot_progress: Option<SeedPlotProgress>,
     pub profile_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pulse: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pulse_at: Option<String>,
     pub ready: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
@@ -9366,6 +9486,82 @@ pub struct SeedAuthorizationUpdate {
     pub recipient: PartyView,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub typed_at: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SeedBedAssignResult {
+    pub changed: bool,
+    pub seed: Seed,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SeedBedDeleteResult {
+    pub id: String,
+    pub name: String,
+    pub unassigned_seeds: i64,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SeedBedListResult {
+    #[serde(deserialize_with = "null_as_default")]
+    pub beds: Vec<SeedBedSummary>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SeedBedResult {
+    pub bed: GardenBed,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changed: Option<bool>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SeedBedSetMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bed_id: Option<String>,
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_id: Option<String>,
+    pub request_id: String,
+    pub seed_id: String,
+}
+
+impl SeedBedSetMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "seed_bed_set".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SeedBedSetResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    pub request_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed: Option<Seed>,
+    pub success: bool,
+}
+
+impl SeedBedSetResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "seed_bed_set_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SeedBedSummary {
+    pub created_at: String,
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    pub open_count: i64,
+    pub profile_id: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub repos: Vec<String>,
+    pub slug: String,
+    pub updated_at: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedBoardRow {
@@ -9772,6 +9968,10 @@ pub struct SeedPlantResult {
     pub authorization: Option<SeedAuthorization>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub automation_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bed: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bed_id: Option<String>,
     pub body: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checks: Option<Vec<SeedCheck>>,
@@ -9791,6 +9991,10 @@ pub struct SeedPlantResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plot_progress: Option<SeedPlotProgress>,
     pub profile_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pulse: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pulse_at: Option<String>,
     pub ready: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
@@ -9834,6 +10038,11 @@ pub struct SeedPlotResult {
     pub crown: Seed,
     #[serde(deserialize_with = "null_as_default")]
     pub similar: Vec<SeedSimilar>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SeedPulseResult {
+    pub changed: bool,
+    pub seed: Seed,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedReadyResult {
@@ -9925,6 +10134,10 @@ pub struct SeedRow {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub automation_id: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bed: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bed_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub check_tally: Option<SeedCheckTally>,
     pub claimed: bool,
     pub created_at: String,
@@ -9936,6 +10149,10 @@ pub struct SeedRow {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plot_progress: Option<SeedPlotProgress>,
     pub profile_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pulse: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pulse_at: Option<String>,
     pub ready: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reminder: Option<SeedReminder>,

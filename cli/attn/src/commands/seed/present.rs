@@ -10,9 +10,10 @@ use attn::go::quote::quote;
 use attn_protocol::go_values::NOTE_KIND_HANDOFF;
 use attn_protocol::go_values::prompts::AUTHORING_AGENT_SEED_GUIDE;
 use attn_protocol::{
-    SeedArtifactTransferResult, SeedAuthorizationResult, SeedCheckResult, SeedEditResult,
-    SeedExportResult, SeedLinkResult, SeedListResult, SeedNoteResult, SeedNotesResult,
-    SeedPlantResult, SeedPlotResult, SeedReadyResult, SeedReminderResult, SeedRollbackResult,
+    SeedArtifactTransferResult, SeedAuthorizationResult, SeedBedAssignResult, SeedBedDeleteResult,
+    SeedBedListResult, SeedBedResult, SeedCheckResult, SeedEditResult, SeedExportResult,
+    SeedLinkResult, SeedListResult, SeedNoteResult, SeedNotesResult, SeedPlantResult,
+    SeedPlotResult, SeedPulseResult, SeedReadyResult, SeedReminderResult, SeedRollbackResult,
     SeedSearchResult, SeedSendToChiefResult, SeedShowResult, SeedStandbyResult,
     SeedTransitionResult, SeedWatchResult,
 };
@@ -76,14 +77,18 @@ impl Family for Seed {
                 json!({"title": child.title, "body": child.body, "checks": checks_json(&child.checks), "after": child.after})
             })
             .collect();
-        Ok(json!({
+        let mut value = json!({
             "title": spec.title,
             "body": spec.body,
             "part_of": spec.part_of,
             "discovered_from": spec.discovered_from,
             "checks": checks_json(&spec.checks),
             "children": children,
-        }))
+        });
+        if !spec.bed.trim().is_empty() {
+            value["bed"] = Json::from(spec.bed);
+        }
+        Ok(value)
     }
 
     fn read_stdin_error(&self, _arg: &Arg) -> &'static str {
@@ -145,6 +150,7 @@ impl Family for Seed {
                 &command::decode::<SeedListResult>(run, &Seed, cmd, &result)?,
                 &ListView {
                     plot_id: parsed.text("plot").trim().to_string(),
+                    bed: parsed.text("bed").trim().to_string(),
                     flat: parsed.on("flat"),
                     stale: parsed.on("stale"),
                     standby: parsed.on("standby"),
@@ -204,11 +210,46 @@ impl Family for Seed {
                 &command::decode::<SeedCheckResult>(run, &Seed, cmd, &result)?,
                 parsed.on("ring"),
             ),
+            name if name.starts_with("bed ") => present_bed(run, cmd, parsed, &result)?,
+            "pulse" => render::pulse_reply(
+                &command::decode::<SeedPulseResult>(run, &Seed, cmd, &result)?,
+                parsed.on("clear"),
+            ),
             other => unreachable!("seed {other} has no renderer"),
         };
         print_stdout(&out);
         Ok(())
     }
+}
+
+fn present_bed(
+    run: &mut Run<'_>,
+    cmd: &Command,
+    parsed: &Parsed,
+    result: &Reply,
+) -> Result<String, Stop> {
+    let out = match cmd.name {
+        "bed ls" => render::bed_list(&command::decode::<SeedBedListResult>(
+            run, &Seed, cmd, result,
+        )?),
+        "bed add" => render::bed_saved(
+            &command::decode::<SeedBedResult>(run, &Seed, cmd, result)?,
+            true,
+        ),
+        "bed set" => render::bed_saved(
+            &command::decode::<SeedBedResult>(run, &Seed, cmd, result)?,
+            false,
+        ),
+        "bed rm" => render::bed_deleted(&command::decode::<SeedBedDeleteResult>(
+            run, &Seed, cmd, result,
+        )?),
+        "bed assign" => render::bed_assigned(
+            &command::decode::<SeedBedAssignResult>(run, &Seed, cmd, result)?,
+            parsed.on("clear"),
+        ),
+        other => unreachable!("seed {other} has no renderer"),
+    };
+    Ok(out)
 }
 
 fn plant(result: &SeedPlantResult) -> String {

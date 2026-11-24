@@ -101,6 +101,9 @@ func writeConstants(out *strings.Builder) {
 		{"MAX_CHECKS_PER_SEED", garden.MaxChecksPerSeed},
 		{"MAX_CHECK_TEXT_CHARS", garden.MaxCheckTextChars},
 		{"MAX_CHECK_SUMMARY_CHARS", garden.MaxCheckSummaryChars},
+		{"MAX_BED_NAME_CHARS", garden.MaxBedNameChars},
+		{"MAX_BED_NOTE_CHARS", garden.MaxBedNoteChars},
+		{"MAX_PULSE_CHARS", garden.MaxPulseChars},
 		{"DOC_DEFAULT_LIMIT", docstore.DefaultLimit},
 		{"DOC_MAX_LIMIT", docstore.MaxLimit},
 		{"DOC_FIRST_REV", docstore.FirstRev},
@@ -118,6 +121,7 @@ func writeConstants(out *strings.Builder) {
 		{"ROUTING_OVERRIDE_ENV", config.RoutingOverrideEnv()},
 		{"ENTRY_KINDS", garden.EntryKinds},
 		{"CHECK_VERBS", checkVerbs},
+		{"BED_VERBS", garden.BedVerbs},
 		{"GIT_REPOSITORY_ENV", attngit.RepositoryEnv},
 	} {
 		items := make([]string, len(c.value))

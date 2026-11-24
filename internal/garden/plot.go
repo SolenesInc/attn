@@ -139,6 +139,7 @@ type PlotSpec struct {
 	Checks         []Check         `json:"checks,omitempty"`
 	PartOf         string          `json:"part_of,omitempty"`
 	DiscoveredFrom string          `json:"discovered_from,omitempty"`
+	Bed            string          `json:"bed,omitempty"`
 	Children       []PlotChildSpec `json:"children"`
 }
 

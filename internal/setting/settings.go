@@ -20,14 +20,14 @@ var (
 		Since:   "2026-10-16",
 		Search:  "one-screen one screen new-session new session project path",
 	})
-	GardenV2Enabled = feature("garden_v2_enabled", "Refuse self-close on growing seeds not on standby, and park them when another session closes their tender: true or false. Experimental; off by default.", Info{
+	GardenV2Enabled = feature("garden_v2_enabled", "Enable Garden v2 close guards, curated beds with repository auto-routing, and one-line seed pulses: true or false. Experimental; off by default.", Info{
 		Name:    "Garden v2",
-		Summary: "Refuse self-close on growing seeds not on standby, and park them when another agent closes their session.",
+		Summary: "Curate project beds with repository auto-routing, keep one-line seed pulses, and guard growing seeds on agent close.",
 		Group:   Interface,
 		Applies: Now,
 		Stage:   Experimental,
 		Since:   "2026-11-24",
-		Search:  "garden v2 close guard growing seed park standby",
+		Search:  "garden v2 beds pulse close guard growing seed park standby",
 	})
 	OutpostsEnabled = feature("outposts_enabled", "Connect to outposts from this home: true or false. Experimental; off by default.", Info{
 		Name:    "Outposts",

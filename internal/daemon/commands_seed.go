@@ -80,6 +80,12 @@ func (d *Daemon) seedCommands() map[string]command.Handler {
 			}
 			return d.runSeedArtifact(ctx, c, "detach", artifactArgs{a.Seed, a.Path, a.Repo, a.Notebook, a.URL, "", to, a.Reference, a.Note})
 		}),
+		"seed bed ls":     command.Typed(d.runSeedBedLs),
+		"seed bed add":    command.Typed(d.runSeedBedAdd),
+		"seed bed set":    command.Typed(d.runSeedBedSet),
+		"seed bed rm":     command.Typed(d.runSeedBedRm),
+		"seed bed assign": command.Typed(d.runSeedBedAssign),
+		"seed pulse":      command.Typed(d.runSeedPulse),
 	}
 	for _, verb := range []string{"add", "edit", "remove", "restore", "report", "confirm", "reject", "uncheck", "reopen"} {
 		handlers["seed check "+verb] = d.checkCommand(verb)
@@ -157,12 +163,14 @@ func plantChecks(raw []string) []protocol.SeedCheckDefinition {
 
 func (d *Daemon) runSeedPlant(_ context.Context, c command.Caller, args command.SeedPlantArgs) (any, error) {
 	msg := seedPlantRequest{
-		Cmd:            cmdSeedPlant,
-		Title:          args.Title,
-		Checks:         plantChecks(args.Checks),
-		Body:           optionalText(args.Body),
-		PartOf:         optionalText(strings.TrimSpace(args.PartOf)),
-		DiscoveredFrom: optionalText(strings.TrimSpace(args.DiscoveredFrom)),
+		Cmd:             cmdSeedPlant,
+		Title:           args.Title,
+		Checks:          plantChecks(args.Checks),
+		Body:            optionalText(args.Body),
+		Bed:             optionalText(strings.TrimSpace(args.Bed)),
+		CallerDirectory: optionalText(strings.TrimSpace(c.Directory)),
+		PartOf:          optionalText(strings.TrimSpace(args.PartOf)),
+		DiscoveredFrom:  optionalText(strings.TrimSpace(args.DiscoveredFrom)),
 	}
 	msg.SourceSessionID, msg.ProfileID = gardenScope(c)
 	if err := d.scoped(&msg, msg.Cmd); err != nil {
@@ -174,6 +182,7 @@ func (d *Daemon) runSeedPlant(_ context.Context, c command.Caller, args command.
 type plotPayload struct {
 	Title          string                         `json:"title"`
 	Body           string                         `json:"body"`
+	Bed            string                         `json:"bed"`
 	PartOf         string                         `json:"part_of"`
 	DiscoveredFrom string                         `json:"discovered_from"`
 	Checks         []protocol.SeedCheckDefinition `json:"checks"`
@@ -197,13 +206,15 @@ func (d *Daemon) runSeedPlot(_ context.Context, c command.Caller, args command.S
 		return nil, command.Refuse(command.CodeNotAPlot, "this is not a plot payload: %v", err)
 	}
 	msg := seedPlotRequest{
-		Cmd:            cmdSeedPlot,
-		Title:          plot.Title,
-		Checks:         plot.Checks,
-		Body:           optionalText(plot.Body),
-		PartOf:         optionalText(plot.PartOf),
-		DiscoveredFrom: optionalText(plot.DiscoveredFrom),
-		Children:       []seedPlotChild{},
+		Cmd:             cmdSeedPlot,
+		Title:           plot.Title,
+		Checks:          plot.Checks,
+		Body:            optionalText(plot.Body),
+		Bed:             optionalText(strings.TrimSpace(plot.Bed)),
+		CallerDirectory: optionalText(strings.TrimSpace(c.Directory)),
+		PartOf:          optionalText(plot.PartOf),
+		DiscoveredFrom:  optionalText(plot.DiscoveredFrom),
+		Children:        []seedPlotChild{},
 	}
 	for _, child := range plot.Children {
 		msg.Children = append(msg.Children, seedPlotChild{Title: child.Title, Body: optionalText(child.Body), Checks: child.Checks, After: child.After})
@@ -238,6 +249,7 @@ func parseWindow(raw string) (time.Duration, error) {
 
 func (d *Daemon) runSeedList(_ context.Context, c command.Caller, args command.SeedLsArgs) (any, error) {
 	plot := strings.TrimSpace(args.Plot)
+	bed := strings.TrimSpace(args.Bed)
 	if !args.Stale && args.Window != "" {
 		return nil, command.Refuse(command.CodeWindowWithoutStale, "{window} is the stale window; it only means something with {stale}")
 	}
@@ -247,7 +259,10 @@ func (d *Daemon) runSeedList(_ context.Context, c command.Caller, args command.S
 	if args.Standby && (plot != "" || args.Stale) {
 		return nil, command.Refuse(command.CodeStandbyWithScope, "{standby} narrows the whole garden to seeds on standby; pass it without {plot} or {stale}")
 	}
-	msg := seedListRequest{Cmd: cmdSeedList}
+	if bed != "" && plot != "" {
+		return nil, command.Refuse(command.CodeBedWithPlot, "{plot} lists every child of one plot and {bed} filters across beds; pass one of them")
+	}
+	msg := seedListRequest{Cmd: cmdSeedList, Bed: optionalText(bed)}
 	switch {
 	case plot != "":
 		msg.Plot = protocol.Ptr(plot)

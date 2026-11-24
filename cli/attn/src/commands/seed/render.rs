@@ -17,9 +17,10 @@ use attn_protocol::go_values::{
 };
 use attn_protocol::{
     ActorView, AgentCloseResult, PartyView, Seed, SeedArtifact, SeedArtifactReference,
-    SeedAuthorization, SeedAuthorizationResult, SeedAuthorizationUpdate, SeedBoardRow,
-    SeedClosedAsk, SeedClosedCount, SeedHarvestCondition, SeedListResult, SeedNote, SeedOpenAsk,
-    SeedPlotProgress, SeedReadyResult, SeedRelation, SeedReminder, SeedRow, SeedSearchResult,
+    SeedAuthorization, SeedAuthorizationResult, SeedAuthorizationUpdate, SeedBedAssignResult,
+    SeedBedDeleteResult, SeedBedListResult, SeedBedResult, SeedBoardRow, SeedClosedAsk,
+    SeedClosedCount, SeedHarvestCondition, SeedListResult, SeedNote, SeedOpenAsk, SeedPlotProgress,
+    SeedPulseResult, SeedReadyResult, SeedRelation, SeedReminder, SeedRow, SeedSearchResult,
     SeedShowResult, SeedSimilar, SeedSinceExpired, SeedStandbyView, SeedTransitionResult,
     SeedWatchResult,
 };
@@ -387,6 +388,13 @@ fn standby_suffix(standby: Option<&SeedStandbyView>, reminder: Option<&SeedRemin
     format!("  [{line}]")
 }
 
+fn bed_suffix(bed: Option<&str>) -> String {
+    match bed.map(str::trim).filter(|b| !b.is_empty()) {
+        Some(name) => format!("  [bed: {name}]"),
+        None => String::new(),
+    }
+}
+
 fn row_suffix(row: &SeedRow) -> String {
     let harvest = harvest_when_line(row.harvest_when.as_ref());
     let harvest = if harvest.is_empty() {
@@ -395,7 +403,8 @@ fn row_suffix(row: &SeedRow) -> String {
         format!("  [{harvest}]")
     };
     format!(
-        "{}{}{harvest}{}",
+        "{}{}{}{harvest}{}",
+        bed_suffix(row.bed.as_deref()),
         plot_suffix(row.plot_progress.as_ref()),
         tally_short(&row_tally(row)),
         standby_suffix(row.standby.as_ref(), row.reminder.as_ref())
@@ -404,6 +413,7 @@ fn row_suffix(row: &SeedRow) -> String {
 
 pub struct ListView {
     pub plot_id: String,
+    pub bed: String,
     pub flat: bool,
     pub stale: bool,
     pub standby: bool,
@@ -427,6 +437,10 @@ pub fn list(result: &SeedListResult, view: &ListView) -> String {
         );
     }
     if result.seeds.is_empty() {
+        if !view.bed.is_empty() {
+            let _ = writeln!(out, "no seeds in bed {}", view.bed);
+            return out;
+        }
         out.push_str(if view.stale {
             "none — every open seed has moved inside the window\n"
         } else if view.standby {
@@ -866,6 +880,16 @@ fn header(seed: &Seed, watching: bool) -> String {
     let _ = writeln!(rows, "{}\t{}", seed.id, seed.title);
     let _ = writeln!(rows, "slug\t{}", seed.step_slug);
     let _ = writeln!(rows, "status\t{}", seed.status);
+    if let Some(bed) = seed.bed.as_deref().filter(|b| !b.is_empty()) {
+        let _ = writeln!(rows, "bed\t{bed}");
+    }
+    if let Some(pulse) = seed.pulse.as_deref().filter(|p| !p.is_empty()) {
+        if let Some(at) = seed.pulse_at.as_deref().filter(|a| !a.is_empty()) {
+            let _ = writeln!(rows, "pulse\t{pulse}  ({})", last_active(at));
+        } else {
+            let _ = writeln!(rows, "pulse\t{pulse}");
+        }
+    }
     let _ = writeln!(
         rows,
         "planted\t{} by {}",
@@ -1414,4 +1438,92 @@ pub fn agent_close(out: &mut String, result: &AgentCloseResult) {
         out,
         "the session is kept: `attn session show {id}` reads it back"
     );
+}
+
+pub fn bed_list(result: &SeedBedListResult) -> String {
+    if result.beds.is_empty() {
+        return "no beds in this profile — `attn seed bed add \"<name>\"` creates one\n"
+            .to_string();
+    }
+    let mut rows = String::from("ID\tNAME\tOPEN\tREPOS\tNOTE\n");
+    for bed in &result.beds {
+        let repos = if bed.repos.is_empty() {
+            "-".to_string()
+        } else {
+            bed.repos.join(", ")
+        };
+        let note = bed.note.as_deref().unwrap_or_default();
+        let _ = writeln!(
+            rows,
+            "{}\t{}\t{}\t{}\t{}",
+            bed.id,
+            bed.name,
+            bed.open_count,
+            repos,
+            or_dash(note)
+        );
+    }
+    table(&rows)
+}
+
+pub fn bed_saved(result: &SeedBedResult, added: bool) -> String {
+    let bed = &result.bed;
+    let verb = if added {
+        "added bed"
+    } else if result.changed == Some(false) {
+        "bed unchanged"
+    } else {
+        "updated bed"
+    };
+    let mut out = format!("{verb} {}  {} ({})\n", bed.id, bed.name, bed.slug);
+    if !bed.repos.is_empty() {
+        let _ = writeln!(out, "  repos  {}", bed.repos.join(", "));
+    }
+    if let Some(note) = bed.note.as_deref().filter(|n| !n.is_empty()) {
+        let _ = writeln!(out, "  note   {note}");
+    }
+    out
+}
+
+pub fn bed_deleted(result: &SeedBedDeleteResult) -> String {
+    if result.unassigned_seeds == 0 {
+        format!("removed bed {} ({})\n", result.name, result.id)
+    } else {
+        format!(
+            "removed bed {} ({}) — {} left unassigned\n",
+            result.name,
+            result.id,
+            plural(result.unassigned_seeds, "seed")
+        )
+    }
+}
+
+pub fn bed_assigned(result: &SeedBedAssignResult, cleared: bool) -> String {
+    let seed = &result.seed;
+    if cleared {
+        if !result.changed {
+            return format!("{} already has no bed.\n", seed.id);
+        }
+        return format!("{} bed cleared.\n", seed.id);
+    }
+    let bed = seed.bed.as_deref().unwrap_or_default();
+    if !result.changed {
+        return format!("{} is already in bed {bed}.\n", seed.id);
+    }
+    format!("{} assigned to bed {bed}.\n", seed.id)
+}
+
+pub fn pulse_reply(result: &SeedPulseResult, cleared: bool) -> String {
+    let seed = &result.seed;
+    if cleared {
+        if !result.changed {
+            return format!("{} already has no pulse.\n", seed.id);
+        }
+        return format!("{} pulse cleared.\n", seed.id);
+    }
+    let pulse = seed.pulse.as_deref().unwrap_or_default();
+    if !result.changed {
+        return format!("{} pulse unchanged: {}\n", seed.id, q(pulse));
+    }
+    format!("{} pulse: {}\n", seed.id, q(pulse))
 }

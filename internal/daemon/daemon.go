@@ -134,6 +134,8 @@ type Daemon struct {
 	agentToolSet        agentToolServers
 	store               *store.Store
 	gardenSeeds         store.DocumentsMemo[gardenSeeds]
+	gardenBeds          store.DocumentsMemo[gardenBeds]
+	gardenBedsMu        sync.Mutex
 	// Serializes PR fetches with review-request edge reconciliation.
 	prRefreshMu             sync.Mutex
 	launchFetch             launchFetch

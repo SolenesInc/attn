@@ -26,6 +26,7 @@ groups:
         - {need: "Track new work, find existing work, split a plan", tools: [seed_search, seed_plant, seed_plot, seed_link]}
         - {need: "Change a seed's body, checks, files or reminders", tools: [seed_edit, seed_check_add, seed_attach, seed_remind]}
         - {need: "Wait for a time, a pull request or another seed, with your session closed", tools: [seed_standby]}
+        - {need: "Update a seed's one-line pulse or assign its bed", tools: [seed_pulse, seed_bed_ls, seed_bed_assign]}
       notes: |
         Tools take a seed's id or its slug. Besides its body, a seed has checks (C1, C2) and a log.
 
@@ -108,6 +109,12 @@ groups:
 
           The Garden labels old path associations as linked files. Bring a linked file into seed ownership explicitly with Move or Copy. A failed transfer leaves the link alone.
         commands: [seed attach, seed detach]
+      - title: Beds and pulse
+        text: |
+          When `garden_v2_enabled` is on, a profile can hold curated beds that group root seeds and plots by project or initiative. Beds are user-curated: do not create, edit or remove beds unless the user asks. Root seeds auto-route into the bed bound to their repository (exact path match before bare repository name), or take an existing bed explicitly; child seeds inherit their root plot's bed.
+
+          A pulse is a seed's current one-line status (at most 160 characters), replaced in place without adding a log entry. Update it when starting a phase, reaching a milestone, or hitting a blocker. Closing or replanting a seed clears its pulse.
+        commands: [seed bed ls, seed bed add, seed bed set, seed bed rm, seed bed assign, seed pulse]
       - title: Packets
         text: |
           A packet is a plot flagged as a template with declared variables. attn cannot yet create seeds from a packet. `attn seed show` says `packet yes`, and `attn seed ready` skips the packet's subtree.
@@ -116,6 +123,11 @@ groups:
     summary: define, report, or judge what a seed must prove
     doc: |
       Define, report, or judge what a seed must prove. Each move has its own --help. Checks never block a move. harvest lists the checks still open or rejected.
+
+  - name: seed bed
+    summary: list, curate, or assign garden beds
+    doc: |
+      A bed groups root seeds and plots in your profile by project or initiative. Beds are curated by the user; do not create, edit or remove them unless the user asks. Requires `garden_v2_enabled`.
 
 commands:
   - name: seed search
@@ -137,12 +149,13 @@ commands:
     runs: home
     grant: own
     doc: |
-      Plants a seed and prints its id, slug and title. `body` takes markdown; if the seed gains children, that body is the plot's plan. `part_of` plants it under a plot. `checks` defines what the seed must prove; attn numbers each check unless C#= names the id, and prints each id. Lists up to 3 similar open seeds in your profile, leaving out that plot. Planting always proceeds. If one is the same work, wither the new seed.
+      Plants a seed and prints its id, slug and title. `body` takes markdown; if the seed gains children, that body is the plot's plan. `part_of` plants it under a plot. `bed` assigns a root seed to an existing curated bed when `garden_v2_enabled` is on (otherwise a root seed auto-routes by repository if a bed matches). `checks` defines what the seed must prove; attn numbers each check unless C#= names the id, and prints each id. Lists up to 3 similar open seeds in your profile, leaving out that plot. Planting always proceeds. If one is the same work, wither the new seed.
     args:
       - {name: title, type: text, required: true, cli: pos, placeholder: '"<title>"', doc: "the seed's title"}
       - {name: body, type: markdown, cli: "-m", stdin: true, doc: "markdown; empty text is refused"}
       - {name: part_of, type: seed, cli: "--part-of", placeholder: "<plot>", doc: "plant under a plot"}
       - {name: discovered_from, type: seed, cli: "--discovered-from", placeholder: "<seed>", doc: "record the seed this work came from"}
+      - {name: bed, type: text, cli: "--bed", placeholder: "<bed>", doc: "assign a root seed to this existing curated bed (requires garden_v2_enabled)"}
       - {name: checks, type: check_definition, list: true, cli: "--check", doc: "a check the seed must prove; attn picks the id unless C#= names it; repeats"}
     result: SeedPlantResult
     examples:
@@ -153,9 +166,9 @@ commands:
     runs: home
     grant: full
     doc: |
-      Plants a whole plot in one move from a JSON payload, read from the `plot` file, or from stdin when the file is - or omitted: {"title": …, "body": …, "checks": [{"id": "C5", "text": …, "shared": true}], "part_of": "<plot>", "discovered_from": "<seed>", "children": [{"title": …, "body": …, "checks": […], "after": ["<sibling step slug>"]}]}.
+      Plants a whole plot in one move from a JSON payload, read from the `plot` file, or from stdin when the file is - or omitted: {"title": …, "body": …, "bed": "<bed>", "checks": [{"id": "C5", "text": …, "shared": true}], "part_of": "<plot>", "discovered_from": "<seed>", "children": [{"title": …, "body": …, "checks": […], "after": ["<sibling step slug>"]}]}.
 
-      Children are parallel by default; `after` names the siblings a child waits for, by step slug or full title. `part_of` plants the plot inside another plot, and `discovered_from` records the seed whose work turned up the plot; give each by id or slug. A shared check is proven by each seed below the plot that has no children. The plot, its children and their edges commit together. Prints the plot's id and each child's id and step slug, then up to 3 similar open seeds across all planted titles, each naming the new seed it resembles. Planting always proceeds; wither a new seed if a suggestion is the same work.
+      Children are parallel by default; `after` names the siblings a child waits for, by step slug or full title. `part_of` plants the plot inside another plot, and `discovered_from` records the seed whose work turned up the plot; give each by id or slug. `bed` assigns a root plot to an existing curated bed when `garden_v2_enabled` is on; children inherit their root plot's bed. A shared check is proven by each seed below the plot that has no children. The plot, its children and their edges commit together. Prints the plot's id and each child's id and step slug, then up to 3 similar open seeds across all planted titles, each naming the new seed it resembles. Planting always proceeds; wither a new seed if a suggestion is the same work.
     args:
       - {name: plot, type: plot, required: true, cli: "-f", file: true, stdin: true, doc: "the plot payload to read; - or omitted reads stdin"}
     result: SeedPlotResult
@@ -206,18 +219,20 @@ commands:
     grant: own
     read_only: true
     doc: |
-      Lists the garden, newest first, with children nested under their plot, without bodies or checks; `seed_show` reads one seed whole. `plot` lists every child of one plot, oldest first, harvested and withered included. `stale` narrows to open seeds whose log has not moved for `window` (default {stale_window}): a query for your judgment, never a reaper. `standby` narrows to seeds on standby, each with the pull requests it watches and their readiness, its reminder, and why a resume is blocked when one is.
+      Lists the garden, newest first, with children nested under their plot, without bodies or checks; `seed_show` reads one seed whole. `plot` lists every child of one plot, oldest first, harvested and withered included. `stale` narrows to open seeds whose log has not moved for `window` (default {stale_window}): a query for your judgment, never a reaper. `standby` narrows to seeds on standby, each with the pull requests it watches and their readiness, its reminder, and why a resume is blocked when one is. `bed` narrows to seeds whose effective bed matches that curated bed (or `unassigned`) when `garden_v2_enabled` is on.
     args:
       - {name: plot, type: seed, cli: "--plot", placeholder: "<plot>", one_of: filter, doc: "list every child of this plot"}
       - {name: stale, type: bool, cli: "--stale", one_of: filter, doc: "only open seeds whose log has not moved"}
       - {name: window, type: window, cli: "--window", doc: "the stale window, like 72h or 14d (with --stale)"}
       - {name: standby, type: bool, cli: "--standby", one_of: filter, doc: "only seeds on standby"}
+      - {name: bed, type: text, cli: "--bed", placeholder: "<bed|unassigned>", doc: "only seeds in this bed, or unassigned (requires garden_v2_enabled)"}
       - {name: flat, type: bool, cli: "--flat", doc: "print a listing without nesting"}
     result: SeedListResult
     errors:
       - {code: window_without_stale, fix: 'Pass {window} together with {stale}, or leave it out.'}
       - {code: plot_and_stale, usage: true, fix: 'Pass {plot} or {stale}, not both.'}
       - {code: standby_with_scope, usage: true, fix: 'Pass {standby} alone.'}
+      - {code: bed_with_plot, usage: true, fix: 'Pass {bed} or {plot}, not both.'}
       - {code: bad_window, fix: 'Say the window as a duration like 72h or a number of days like 14d.'}
 
   - name: seed show
@@ -684,3 +699,91 @@ commands:
     examples:
       - {seed: s-7k3f9m, path: retry.log, to: ./retry.log}
       - {seed: s-7k3f9m, path: notes.md, reference: true}
+
+  - name: seed bed ls
+    summary: list the profile's curated beds, their repos and open seed counts
+    runs: home
+    grant: own
+    read_only: true
+    doc: |
+      Lists every curated bed in this profile, alphabetically by name, with its slug, optional note, bound auto-routing repositories, and count of open seeds. Requires `garden_v2_enabled`.
+    result: SeedBedListResult
+
+  - name: seed bed add
+    summary: create a curated bed
+    runs: home
+    grant: full
+    doc: |
+      Creates a curated bed in this profile. Only create a bed when the user asks for one. `repos` binds repository paths or bare repository names so new root seeds planted from those repositories land in this bed automatically. Exact path matches take precedence over bare names; no two beds in a profile may claim the same repository entry. Requires `garden_v2_enabled`.
+    args:
+      - {name: name, type: name, required: true, cli: pos, placeholder: '"<name>"', doc: "the bed's display name (one line, at most 60 characters)"}
+      - {name: note, type: text, cli: "-m", stdin: true, placeholder: '"<one-line note>"', doc: "optional one-line description (at most 200 characters)"}
+      - {name: repos, type: text, list: true, cli: "--repo", placeholder: "<path|name>", doc: "repository path or bare repository name that auto-routes into this bed; repeats"}
+    result: SeedBedResult
+    examples:
+      - {name: "Payments", note: "Checkout and billing", repos: ["payments-api"]}
+
+  - name: seed bed set
+    summary: update a bed's name, note or repos
+    runs: home
+    grant: full
+    doc: |
+      Updates an existing bed in this profile by id, name or slug. Only edit a bed when the user asks. Passing `repos` replaces the bed's repository list; `clear_repos` clears it. Requires `garden_v2_enabled`.
+    args:
+      - {name: bed, type: text, required: true, cli: pos, placeholder: "<bed>", doc: "the bed's id, name or slug"}
+      - {name: name, type: name, cli: "--name", placeholder: '"<name>"', doc: "new display name"}
+      - {name: note, type: text, cli: "-m", stdin: true, one_of: note_change, placeholder: '"<one-line note>"', doc: "new one-line description"}
+      - {name: clear_note, type: bool, cli: "--clear-note", one_of: note_change, doc: "remove the bed's note"}
+      - {name: repos, type: text, list: true, cli: "--repo", one_of: repo_change, placeholder: "<path|name>", doc: "replace the bed's auto-routing repositories; repeats"}
+      - {name: clear_repos, type: bool, cli: "--clear-repos", one_of: repo_change, doc: "remove all auto-routing repositories"}
+    result: SeedBedResult
+    errors:
+      - {code: note_and_clear, usage: true, fix: 'Pass {note} or {clear_note}, not both.'}
+      - {code: repos_and_clear, usage: true, fix: 'Pass {repos} or {clear_repos}, not both.'}
+      - {code: nothing_to_change, usage: true, fix: 'Pass at least one of {name}, {note}, {clear_note}, {repos} or {clear_repos}.'}
+
+  - name: seed bed rm
+    summary: remove a curated bed and leave its seeds unassigned
+    runs: home
+    grant: full
+    doc: |
+      Removes a curated bed by id, name or slug. Seeds assigned to that bed keep their state and become unassigned. Only remove a bed when the user asks. Requires `garden_v2_enabled`.
+    args:
+      - {name: bed, type: text, required: true, cli: pos, placeholder: "<bed>", doc: "the bed's id, name or slug"}
+    result: SeedBedDeleteResult
+
+  - name: seed bed assign
+    summary: assign a root seed or plot to an existing bed, or clear its bed
+    runs: home
+    grant: own
+    doc: |
+      Assigns a root seed or plot to an existing curated bed in this profile, or clears its bed with `clear`. Child seeds inherit their root plot's bed and cannot be assigned separately. Refuses unknown beds and lists the profile's beds. Requires `garden_v2_enabled`.
+    args:
+      - {name: seed, type: seed, required: true, cli: pos}
+      - {name: bed, type: text, cli: pos, one_of: target, placeholder: "<bed>", doc: "the existing bed's id, name or slug"}
+      - {name: clear, type: bool, cli: "--clear", one_of: target, doc: "clear the seed's bed assignment"}
+    result: SeedBedAssignResult
+    errors:
+      - {code: bed_and_clear, usage: true, fix: 'Pass a bed or {clear}, not both.'}
+      - {code: needs_bed, usage: true, fix: 'Pass an existing bed or {clear}.'}
+    examples:
+      - {seed: s-7k3f9m, bed: "Payments"}
+      - {seed: s-7k3f9m, clear: true}
+
+  - name: seed pulse
+    summary: set or clear a seed's one-line status pulse
+    runs: home
+    grant: own
+    doc: |
+      Sets or clears a seed's current one-line status pulse (single line, at most 160 characters) shown in the Garden without writing a log note. Update it when starting a phase, hitting a milestone, or blocking on something. Who may change it follows seed moves: the tender, sessions above it in the delegation chain, the profile's chief, or anyone while unclaimed. Refused on closed seeds. Requires `garden_v2_enabled`.
+    args:
+      - {name: seed, type: seed, required: true, cli: pos}
+      - {name: text, type: text, cli: "-m", stdin: true, one_of: change, maxLength: 160, placeholder: '"<one-line status>"', doc: "one-line summary of where the work stands"}
+      - {name: clear, type: bool, cli: "--clear", one_of: change, doc: "clear the seed's pulse"}
+    result: SeedPulseResult
+    errors:
+      - {code: text_and_clear, usage: true, fix: 'Pass {text} or {clear}, not both.'}
+      - {code: needs_pulse, usage: true, fix: 'Pass a one-line status in {text}, or {clear}.'}
+    examples:
+      - {seed: s-7k3f9m, text: "Wire tests green; verifying live CLI output"}
+      - {seed: s-7k3f9m, clear: true}

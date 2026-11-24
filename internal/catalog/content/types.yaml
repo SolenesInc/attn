@@ -93,6 +93,7 @@ types:
         body: {type: string}
         part_of: {type: string, description: "A plot to plant this plot under, by id or slug."}
         discovered_from: {type: string, description: "The seed whose work turned up this plot, by id or slug."}
+        bed: {type: string, description: "An existing curated bed to assign the crown to, by id, name or slug (requires garden_v2_enabled)."}
         checks:
           type: array
           items: {$ref: "#/$defs/check"}

@@ -30,6 +30,7 @@ pub struct PlotSpec {
     pub checks: Vec<Check>,
     pub part_of: String,
     pub discovered_from: String,
+    pub bed: String,
     pub children: Vec<Child>,
 }
 
@@ -234,6 +235,7 @@ impl Decoder {
             "checks",
             "part_of",
             "discovered_from",
+            "bed",
             "children",
         ];
         let mut spec = PlotSpec::default();
@@ -244,6 +246,7 @@ impl Decoder {
                 Some("body") => this.string(item, &mut spec.body),
                 Some("part_of") => this.string(item, &mut spec.part_of),
                 Some("discovered_from") => this.string(item, &mut spec.discovered_from),
+                Some("bed") => this.string(item, &mut spec.bed),
                 Some("checks") => spec.checks = this.checks(item),
                 Some("children") => spec.children = this.children(item),
                 _ => {}

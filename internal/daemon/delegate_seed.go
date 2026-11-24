@@ -8,6 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/who"
 
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
@@ -71,6 +72,15 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	seed.ProfileID, profileErr = d.seedBirthProfile(seed)
 	if profileErr != nil {
 		return "", profileErr
+	}
+	if createSeed && strings.TrimSpace(parentSeedID) == "" && d.on(setting.GardenV2Enabled) {
+		repo := strings.TrimSpace(observed.RepositoryRoot)
+		if repo == "" {
+			repo = strings.TrimSpace(observed.Cwd)
+		}
+		if bed, ok := d.matchBedForRepo(seed.ProfileID, repo); ok {
+			seed.BedID = bed.ID
+		}
 	}
 	before := seed
 	outcome, err := garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: who.Session(sessionID).Actor(), Claimant: who.Session(sessionID)}, gardenStanding{daemon: d, profileID: seed.ProfileID, releasesSessions: true}, nil)

@@ -283,6 +283,10 @@ func buildWireProjections() []projection {
 				if isGardenSeedsFact(ev.Subject) {
 					d.projectGardenSeeds()
 				}
+				if isGardenBedsFact(ev.Subject) {
+					d.projectGardenBeds()
+					d.projectGardenSeeds()
+				}
 			},
 		},
 		{
@@ -364,6 +368,10 @@ func buildWireProjections() []projection {
 				}
 				if settingShapesCrewLaunch(ev.Subject) {
 					d.projectCrewRoster()
+				}
+				if ev.Subject == setting.GardenV2Enabled.Key {
+					d.projectGardenBeds()
+					d.projectGardenSeeds()
 				}
 			},
 		},
@@ -579,6 +587,7 @@ func (d *Daemon) queueSnapshot(key string, push func(), replacePending bool) {
 const (
 	snapshotSessions       = "sessions_updated"
 	snapshotGarden         = "garden_seeds_updated"
+	snapshotGardenBeds     = "garden_beds_updated"
 	snapshotAsks           = "asks_updated"
 	snapshotVents          = "vents_updated"
 	snapshotPhones         = "phones_updated"

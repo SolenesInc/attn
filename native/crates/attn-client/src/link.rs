@@ -6,17 +6,18 @@ use std::time::Duration;
 use attn_protocol::{
     AppPerformanceResultMessage, AsksUpdatedMessage, AttachResultMessage, AuthorsUpdatedMessage,
     ClientHelloMessage, CommandErrorMessage, CrewUpdatedMessage, FsChangedMessage,
-    GardenSeedsChangedMessage, GardenSeedsUpdatedMessage, GitHubHostsUpdatedMessage,
-    GitOperationStartedMessage, HarnessCatalogMessage, InitialStateMessage,
-    InstallCodexUpdateResultMessage, KittyImageResultMessage, KittyPlacementsMessage,
-    NotificationListResultMessage, NotificationsUpdatedMessage, OutpostsUpdatedMessage,
-    PROTOCOL_VERSION, PRsUpdatedMessage, PluginsUpdatedMessage, ProfileArrangementChangedMessage,
-    ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage, QuickCaptureReadMessage,
-    QuickCaptureUnreadMessage, RateLimitedMessage, ReposUpdatedMessage, RuntimeRespawnedMessage,
-    SessionClosedMessage, SessionExitedMessage, SessionMessagesChangedMessage,
-    SessionRegisteredMessage, SessionUnregisteredMessage, SessionsUpdatedMessage,
-    SettingsUpdatedMessage, SharedCodexChangedMessage, UpdateChangedMessage, VentsUpdatedMessage,
-    WorktreeStateChangedEvent, WorktreeSweptEvent, go_values,
+    GardenBedsUpdatedMessage, GardenSeedsChangedMessage, GardenSeedsUpdatedMessage,
+    GitHubHostsUpdatedMessage, GitOperationStartedMessage, HarnessCatalogMessage,
+    InitialStateMessage, InstallCodexUpdateResultMessage, KittyImageResultMessage,
+    KittyPlacementsMessage, NotificationListResultMessage, NotificationsUpdatedMessage,
+    OutpostsUpdatedMessage, PROTOCOL_VERSION, PRsUpdatedMessage, PluginsUpdatedMessage,
+    ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage,
+    QuickCaptureReadMessage, QuickCaptureUnreadMessage, RateLimitedMessage, ReposUpdatedMessage,
+    RuntimeRespawnedMessage, SessionClosedMessage, SessionExitedMessage,
+    SessionMessagesChangedMessage, SessionRegisteredMessage, SessionUnregisteredMessage,
+    SessionsUpdatedMessage, SettingsUpdatedMessage, SharedCodexChangedMessage,
+    UpdateChangedMessage, VentsUpdatedMessage, WorktreeStateChangedEvent, WorktreeSweptEvent,
+    go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -661,8 +662,17 @@ impl Task {
             }
             "garden_seeds_updated" => {
                 let message: GardenSeedsUpdatedMessage = parse(&header.event, text)?;
-                self.store
-                    .set_garden(message.profile_id, message.seeds, message.total);
+                self.store.set_garden(
+                    message.profile_id,
+                    message.seeds,
+                    message.total,
+                    message.beds,
+                );
+                None
+            }
+            "garden_beds_updated" => {
+                let message: GardenBedsUpdatedMessage = parse(&header.event, text)?;
+                self.store.set_garden_beds(message.profile_id, message.beds);
                 None
             }
             "garden_seeds_changed" => {

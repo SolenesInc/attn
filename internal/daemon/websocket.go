@@ -1291,6 +1291,12 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleSeedAuthorizationWS(client, msg.(*protocol.SeedAuthorizationMessage))
 	case protocol.CmdSeedCheck:
 		d.handleSeedCheckWS(client, msg.(*protocol.SeedCheckMessage))
+	case protocol.CmdGardenBedSave:
+		d.handleGardenBedSaveWS(client, msg.(*protocol.GardenBedSaveMessage))
+	case protocol.CmdGardenBedDelete:
+		d.handleGardenBedDeleteWS(client, msg.(*protocol.GardenBedDeleteMessage))
+	case protocol.CmdSeedBedSet:
+		d.handleSeedBedSetWS(client, msg.(*protocol.SeedBedSetMessage))
 	case protocol.CmdSessionMessagesGet:
 		messages := msg.(*protocol.SessionMessagesGetMessage)
 		d.inSessionOrder(client, messages.SessionID, func() { d.handleSessionMessagesGet(client, messages) })

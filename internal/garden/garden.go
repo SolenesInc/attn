@@ -57,6 +57,9 @@ type Seed struct {
 	Tender          who.Party          `json:"tender,omitzero"`
 	LastExecutionID protocol.SessionID `json:"last_execution_id,omitempty"`
 	AutomationID    int                `json:"automation_id,omitempty"`
+	BedID           string             `json:"bed_id,omitempty"`
+	Pulse           string             `json:"pulse,omitempty"`
+	PulseAt         string             `json:"pulse_at,omitempty"`
 	StateChangedAt  string             `json:"state_changed_at,omitempty"`
 	Edges           []Edge             `json:"edges"`
 	Template        bool               `json:"template"`

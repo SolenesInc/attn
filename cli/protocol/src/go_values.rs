@@ -74,6 +74,9 @@ pub const MAX_NOTE_BYTES: i64 = 32768;
 pub const MAX_CHECKS_PER_SEED: i64 = 200;
 pub const MAX_CHECK_TEXT_CHARS: i64 = 2000;
 pub const MAX_CHECK_SUMMARY_CHARS: i64 = 400;
+pub const MAX_BED_NAME_CHARS: i64 = 60;
+pub const MAX_BED_NOTE_CHARS: i64 = 200;
+pub const MAX_PULSE_CHARS: i64 = 160;
 pub const DOC_DEFAULT_LIMIT: i64 = 100;
 pub const DOC_MAX_LIMIT: i64 = 1000;
 pub const DOC_FIRST_REV: i64 = 1;
@@ -83,6 +86,7 @@ pub const LINKABLE_KINDS: &[&str] = &["blocks", "part-of", "discovered-from"];
 pub const ROUTING_OVERRIDE_ENV: &[&str] = &["ATTN_DATA_DIR", "ATTN_HARNESS_DATA_DIR", "ATTN_HARNESS_NOTEBOOK_ROOT", "ATTN_SOCKET_PATH", "ATTN_DB_PATH", "ATTN_CONFIG_PATH", "ATTN_PLUGIN_DIR", "ATTN_WS_PORT"];
 pub const ENTRY_KINDS: &[&str] = &["note", "handoff", "attach", "detach", "check", "edit", "move", "link", "answer", "authorization"];
 pub const CHECK_VERBS: &[&str] = &["add", "edit", "remove", "restore", "report", "confirm", "reject", "uncheck", "reopen"];
+pub const BED_VERBS: &[&str] = &["ls", "add", "set", "rm", "assign"];
 pub const GIT_REPOSITORY_ENV: &[&str] = &["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE", "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM"];
 
 pub struct Setting {
@@ -200,7 +204,7 @@ pub const SETTINGS: &[Setting] = &[
 pub const FEATURES: &[Feature] = &[
     Feature { key: "asks_enabled", name: "Asks", summary: "Answer agents' questions from one drawer.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "on by default", applies: "New agents", search: "questions answer decisions drawer" },
     Feature { key: "new_session_launcher_enabled", name: "Launcher 2.0", summary: "Pick a path, repository and worktree for a new agent or terminal in one dialog.", note: "", group: "Interface", timing: "", stage: "experimental", applies: "Now", search: "one-screen one screen new-session new session project path" },
-    Feature { key: "garden_v2_enabled", name: "Garden v2", summary: "Refuse self-close on growing seeds not on standby, and park them when another agent closes their session.", note: "", group: "Interface", timing: "", stage: "experimental", applies: "Now", search: "garden v2 close guard growing seed park standby" },
+    Feature { key: "garden_v2_enabled", name: "Garden v2", summary: "Curate project beds with repository auto-routing, keep one-line seed pulses, and guard growing seeds on agent close.", note: "", group: "Interface", timing: "", stage: "experimental", applies: "Now", search: "garden v2 beds pulse close guard growing seed park standby" },
     Feature { key: "outposts_enabled", name: "Outposts", summary: "Connect this home to attn on other computers.", note: "", group: "Connections", timing: "", stage: "experimental", applies: "Now", search: "remote computers bridge ssh" },
     Feature { key: "phone_access_enabled", name: "Phone access", summary: "Let phones you pair see this home's agents.", note: "Turning it off disconnects every phone.", group: "Connections", timing: "", stage: "experimental", applies: "Now", search: "mobile iphone pair" },
     Feature { key: "analytics.enabled", name: "Usage analytics", summary: "Keep a redacted record of how attn is used, here and on outposts.", note: "Nothing is sent unless you turn on sharing.", group: "Data", timing: "", stage: "experimental", applies: "Now", search: "telemetry vents record" },

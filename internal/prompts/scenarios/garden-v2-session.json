@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "id": "garden-v2-session",
+  "description": "Ordinary session that launched with garden_v2_enabled on and curated beds in its profile.",
+  "recipient": "session",
+  "event": "launch",
+  "values": {
+    "garden_available": "true",
+    "garden_v2_enabled": "true",
+    "garden_beds": "Core, Payments",
+    "asks_enabled": "true",
+    "vent_enabled": "false",
+    "crew_priming": "",
+    "self_report_pull_requests": "false",
+    "tool_vents_enabled": "false",
+    "code_review_enabled": "false"
+  }
+}

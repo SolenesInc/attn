@@ -5576,6 +5576,108 @@ type FsWriteResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type GardenBed struct {
+	// CreatedAt corresponds to the JSON schema field "created_at".
+	CreatedAt string `json:"created_at"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Note corresponds to the JSON schema field "note".
+	Note *string `json:"note,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// Repos corresponds to the JSON schema field "repos".
+	Repos []string `json:"repos"`
+
+	// Slug corresponds to the JSON schema field "slug".
+	Slug string `json:"slug"`
+
+	// UpdatedAt corresponds to the JSON schema field "updated_at".
+	UpdatedAt string `json:"updated_at"`
+}
+
+type GardenBedDeleteMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type GardenBedDeleteResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+
+	// UnassignedSeeds corresponds to the JSON schema field "unassigned_seeds".
+	UnassignedSeeds *int `json:"unassigned_seeds,omitempty,omitzero"`
+}
+
+type GardenBedSaveMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID *string `json:"id,omitempty,omitzero"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Note corresponds to the JSON schema field "note".
+	Note *string `json:"note,omitempty,omitzero"`
+
+	// Repos corresponds to the JSON schema field "repos".
+	Repos []string `json:"repos"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type GardenBedSaveResultMessage struct {
+	// Bed corresponds to the JSON schema field "bed".
+	Bed *GardenBed `json:"bed,omitempty,omitzero"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type GardenBedsUpdatedMessage struct {
+	// Beds corresponds to the JSON schema field "beds".
+	Beds []GardenBed `json:"beds"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+}
+
 type GardenSeedsChangedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
@@ -5594,6 +5696,9 @@ type GardenSeedsChangedMessage struct {
 }
 
 type GardenSeedsUpdatedMessage struct {
+	// Beds corresponds to the JSON schema field "beds".
+	Beds []GardenBed `json:"beds"`
+
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
@@ -6251,6 +6356,9 @@ type InitialStateMessage struct {
 
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
+
+	// GardenBeds corresponds to the JSON schema field "garden_beds".
+	GardenBeds []GardenBed `json:"garden_beds,omitempty,omitzero"`
 
 	// GithubHosts corresponds to the JSON schema field "github_hosts".
 	GithubHosts []string `json:"github_hosts,omitempty,omitzero"`
@@ -10031,6 +10139,12 @@ type Seed struct {
 	// AutomationID corresponds to the JSON schema field "automation_id".
 	AutomationID *int `json:"automation_id,omitempty,omitzero"`
 
+	// Bed corresponds to the JSON schema field "bed".
+	Bed *string `json:"bed,omitempty,omitzero"`
+
+	// BedID corresponds to the JSON schema field "bed_id".
+	BedID *string `json:"bed_id,omitempty,omitzero"`
+
 	// Body corresponds to the JSON schema field "body".
 	Body string `json:"body"`
 
@@ -10069,6 +10183,12 @@ type Seed struct {
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID string `json:"profile_id"`
+
+	// Pulse corresponds to the JSON schema field "pulse".
+	Pulse *string `json:"pulse,omitempty,omitzero"`
+
+	// PulseAt corresponds to the JSON schema field "pulse_at".
+	PulseAt *string `json:"pulse_at,omitempty,omitzero"`
 
 	// Ready corresponds to the JSON schema field "ready".
 	Ready bool `json:"ready"`
@@ -10447,6 +10567,101 @@ type SeedAuthorizationUpdate struct {
 
 	// TypedAt corresponds to the JSON schema field "typed_at".
 	TypedAt *string `json:"typed_at,omitempty,omitzero"`
+}
+
+type SeedBedAssignResult struct {
+	// Changed corresponds to the JSON schema field "changed".
+	Changed bool `json:"changed"`
+
+	// Seed corresponds to the JSON schema field "seed".
+	Seed Seed `json:"seed"`
+}
+
+type SeedBedDeleteResult struct {
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// UnassignedSeeds corresponds to the JSON schema field "unassigned_seeds".
+	UnassignedSeeds int `json:"unassigned_seeds"`
+}
+
+type SeedBedListResult struct {
+	// Beds corresponds to the JSON schema field "beds".
+	Beds []SeedBedSummary `json:"beds"`
+}
+
+type SeedBedResult struct {
+	// Bed corresponds to the JSON schema field "bed".
+	Bed GardenBed `json:"bed"`
+
+	// Changed corresponds to the JSON schema field "changed".
+	Changed *bool `json:"changed,omitempty,omitzero"`
+}
+
+type SeedBedSetMessage struct {
+	// BedID corresponds to the JSON schema field "bed_id".
+	BedID *string `json:"bed_id,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+}
+
+type SeedBedSetResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Seed corresponds to the JSON schema field "seed".
+	Seed *Seed `json:"seed,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type SeedBedSummary struct {
+	// CreatedAt corresponds to the JSON schema field "created_at".
+	CreatedAt string `json:"created_at"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Note corresponds to the JSON schema field "note".
+	Note *string `json:"note,omitempty,omitzero"`
+
+	// OpenCount corresponds to the JSON schema field "open_count".
+	OpenCount int `json:"open_count"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// Repos corresponds to the JSON schema field "repos".
+	Repos []string `json:"repos"`
+
+	// Slug corresponds to the JSON schema field "slug".
+	Slug string `json:"slug"`
+
+	// UpdatedAt corresponds to the JSON schema field "updated_at".
+	UpdatedAt string `json:"updated_at"`
 }
 
 type SeedBoardRow struct {
@@ -11021,6 +11236,12 @@ type SeedPlantResult struct {
 	// AutomationID corresponds to the JSON schema field "automation_id".
 	AutomationID *int `json:"automation_id,omitempty,omitzero"`
 
+	// Bed corresponds to the JSON schema field "bed".
+	Bed *string `json:"bed,omitempty,omitzero"`
+
+	// BedID corresponds to the JSON schema field "bed_id".
+	BedID *string `json:"bed_id,omitempty,omitzero"`
+
 	// Body corresponds to the JSON schema field "body".
 	Body string `json:"body"`
 
@@ -11059,6 +11280,12 @@ type SeedPlantResult struct {
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID string `json:"profile_id"`
+
+	// Pulse corresponds to the JSON schema field "pulse".
+	Pulse *string `json:"pulse,omitempty,omitzero"`
+
+	// PulseAt corresponds to the JSON schema field "pulse_at".
+	PulseAt *string `json:"pulse_at,omitempty,omitzero"`
 
 	// Ready corresponds to the JSON schema field "ready".
 	Ready bool `json:"ready"`
@@ -11145,6 +11372,14 @@ type SeedPlotResult struct {
 
 	// Similar corresponds to the JSON schema field "similar".
 	Similar []SeedSimilar `json:"similar"`
+}
+
+type SeedPulseResult struct {
+	// Changed corresponds to the JSON schema field "changed".
+	Changed bool `json:"changed"`
+
+	// Seed corresponds to the JSON schema field "seed".
+	Seed Seed `json:"seed"`
 }
 
 type SeedReadyResult struct {
@@ -11264,6 +11499,12 @@ type SeedRow struct {
 	// AutomationID corresponds to the JSON schema field "automation_id".
 	AutomationID *int `json:"automation_id,omitempty,omitzero"`
 
+	// Bed corresponds to the JSON schema field "bed".
+	Bed *string `json:"bed,omitempty,omitzero"`
+
+	// BedID corresponds to the JSON schema field "bed_id".
+	BedID *string `json:"bed_id,omitempty,omitzero"`
+
 	// CheckTally corresponds to the JSON schema field "check_tally".
 	CheckTally *SeedCheckTally `json:"check_tally,omitempty,omitzero"`
 
@@ -11287,6 +11528,12 @@ type SeedRow struct {
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID string `json:"profile_id"`
+
+	// Pulse corresponds to the JSON schema field "pulse".
+	Pulse *string `json:"pulse,omitempty,omitzero"`
+
+	// PulseAt corresponds to the JSON schema field "pulse_at".
+	PulseAt *string `json:"pulse_at,omitempty,omitzero"`
 
 	// Ready corresponds to the JSON schema field "ready".
 	Ready bool `json:"ready"`

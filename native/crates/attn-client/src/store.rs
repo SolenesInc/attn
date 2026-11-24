@@ -3,10 +3,11 @@ use std::sync::{Arc, Mutex, Weak};
 
 use crate::layout::{Leaf, Node};
 use attn_protocol::{
-    Ask, AuthorState, CrewMember, DaemonWarning, DesktopTileContentMessage, GitOperation, Harness,
-    InitialStateMessage, OutpostInfo, PR, PairedSender, PhonesUpdatedMessage, PluginInfo,
-    PluginIssue, Profile, RepoState, Seed, SenderPairingRequest, SendersUpdatedMessage, Session,
-    SessionLedgerEntry, SharedCodexState, UpdateRun, Vent, Worktree, WorktreeSweepEntry,
+    Ask, AuthorState, CrewMember, DaemonWarning, DesktopTileContentMessage, GardenBed,
+    GitOperation, Harness, InitialStateMessage, OutpostInfo, PR, PairedSender,
+    PhonesUpdatedMessage, PluginInfo, PluginIssue, Profile, RepoState, Seed, SenderPairingRequest,
+    SendersUpdatedMessage, Session, SessionLedgerEntry, SharedCodexState, UpdateRun, Vent,
+    Worktree, WorktreeSweepEntry,
 };
 
 /// A desktop as the daemon sent it, with its layout tree read once on arrival.
@@ -298,6 +299,7 @@ pub struct Garden {
     pub profile: String,
     pub seeds: Vec<Arc<Seed>>,
     pub total: i64,
+    pub beds: Vec<GardenBed>,
 }
 
 impl Garden {
@@ -316,6 +318,15 @@ impl Garden {
             self.total
         } else {
             0
+        }
+    }
+
+    /// The curated beds of the profile `selected` names; none for another's.
+    pub fn beds_of(&self, selected: &str) -> &[GardenBed] {
+        if self.profile == selected {
+            &self.beds
+        } else {
+            &[]
         }
     }
 }
@@ -548,6 +559,7 @@ impl Store {
                 profile: facts.profiles.selected.clone(),
                 total: state.seeds_total.unwrap_or(seeds.len() as i64),
                 seeds,
+                beds: state.garden_beds.unwrap_or_default(),
             });
             facts.asks = Arc::new(state.asks.unwrap_or_default());
             facts.warnings = Arc::new(state.warnings.unwrap_or_default());
@@ -642,7 +654,13 @@ impl Store {
 
     /// The selected profile's whole garden window, as the daemon sends it on connect and profile
     /// switch. A window for another profile arrived late and is dropped.
-    pub(crate) fn set_garden(&self, profile: String, seeds: Vec<Seed>, total: i64) {
+    pub(crate) fn set_garden(
+        &self,
+        profile: String,
+        seeds: Vec<Seed>,
+        total: i64,
+        beds: Vec<GardenBed>,
+    ) {
         self.change(|facts| {
             if facts.profiles.selected != profile {
                 return Slices::NONE;
@@ -651,6 +669,28 @@ impl Store {
                 profile,
                 seeds: seeds.into_iter().map(Arc::new).collect(),
                 total,
+                beds,
+            });
+            Slices::GARDEN
+        });
+    }
+
+    /// The selected profile's curated beds, as the daemon pushes them on bed changes.
+    pub(crate) fn set_garden_beds(&self, profile: String, beds: Vec<GardenBed>) {
+        self.change(|facts| {
+            if facts.profiles.selected != profile {
+                return Slices::NONE;
+            }
+            let (seeds, total) = if facts.garden.profile == profile {
+                (facts.garden.seeds.clone(), facts.garden.total)
+            } else {
+                (Vec::new(), 0)
+            };
+            facts.garden = Arc::new(Garden {
+                profile,
+                seeds,
+                total,
+                beds,
             });
             Slices::GARDEN
         });
@@ -701,6 +741,7 @@ impl Store {
                 profile,
                 seeds,
                 total,
+                beds: facts.garden.beds.clone(),
             });
             Slices::GARDEN
         });

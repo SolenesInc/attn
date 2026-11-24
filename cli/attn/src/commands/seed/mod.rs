@@ -8,7 +8,7 @@ use super::{Run, Stop, print_stdout};
 use crate::command::{Command, Family, flags_of};
 use attn::go::flag::{FlagError, FlagSet};
 use attn::go::quote::quote;
-use attn_protocol::go_values::CHECK_VERBS;
+use attn_protocol::go_values::{BED_VERBS, CHECK_VERBS};
 use table_generated::COMMANDS;
 
 const GROUP: Command = Command {
@@ -37,6 +37,7 @@ pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     }
     let name = match verb.as_str() {
         "check" => check_move(run, rest)?,
+        "bed" => bed_move(run, rest)?,
         _ => verb.clone(),
     };
     let Some(cmd) = COMMANDS.iter().find(|cmd| cmd.name == name) else {
@@ -90,6 +91,30 @@ fn check_move(run: &mut Run<'_>, args: &[String]) -> Result<String, Stop> {
         ));
     }
     Ok(format!("check {verb}"))
+}
+
+fn bed_move(run: &mut Run<'_>, args: &[String]) -> Result<String, Stop> {
+    let first = args.first();
+    if first.is_none_or(|arg| arg.starts_with('-')) {
+        group_flags(run, "bed", args)?;
+        return Err(usage_error(
+            "bed",
+            &format!("needs a move: {}", BED_VERBS.join(", ")),
+        ));
+    }
+    let raw = first.expect("checked above");
+    let verb = raw.trim().to_lowercase();
+    if !BED_VERBS.contains(&verb.as_str()) {
+        return Err(usage_error(
+            "bed",
+            &format!(
+                "{} is not something a bed does; the moves are {}",
+                quote(raw.as_bytes()),
+                BED_VERBS.join(", ")
+            ),
+        ));
+    }
+    Ok(format!("bed {verb}"))
 }
 
 fn usage_error(name: &str, message: &str) -> Stop {

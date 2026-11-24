@@ -16,10 +16,21 @@ const (
 	cmdSeedWatch    = "seed_watch"
 	cmdSeedLink     = "seed_link"
 	cmdSeedReady    = "seed_ready"
+	cmdSeedBed      = "seed_bed"
+	cmdSeedPulse    = "seed_pulse"
 )
 
+type seedBedScopeRequest struct {
+	Cmd             string              `json:"cmd"`
+	ProfileID       *string             `json:"profile_id,omitempty"`
+	SeedID          string              `json:"seed_id,omitempty"`
+	SourceSessionID *protocol.SessionID `json:"source_session_id,omitempty"`
+}
+
 type seedPlantRequest struct {
+	Bed             *string                        `json:"bed,omitempty"`
 	Body            *string                        `json:"body,omitempty"`
+	CallerDirectory *string                        `json:"caller_directory,omitempty"`
 	Checks          []protocol.SeedCheckDefinition `json:"checks,omitempty"`
 	Cmd             string                         `json:"cmd"`
 	DiscoveredFrom  *string                        `json:"discovered_from,omitempty"`
@@ -30,7 +41,9 @@ type seedPlantRequest struct {
 }
 
 type seedPlotRequest struct {
+	Bed             *string                        `json:"bed,omitempty"`
 	Body            *string                        `json:"body,omitempty"`
+	CallerDirectory *string                        `json:"caller_directory,omitempty"`
 	Checks          []protocol.SeedCheckDefinition `json:"checks,omitempty"`
 	Children        []seedPlotChild                `json:"children"`
 	Cmd             string                         `json:"cmd"`
@@ -42,6 +55,7 @@ type seedPlotRequest struct {
 }
 
 type seedListRequest struct {
+	Bed                *string             `json:"bed,omitempty"`
 	Cmd                string              `json:"cmd"`
 	Plot               *string             `json:"plot,omitempty"`
 	ProfileID          *string             `json:"profile_id,omitempty"`

@@ -18,6 +18,8 @@ const (
 	CodeBadMode                     = "bad_mode"
 	CodeBadUntil                    = "bad_until"
 	CodeBadWindow                   = "bad_window"
+	CodeBedAndClear                 = "bed_and_clear"
+	CodeBedWithPlot                 = "bed_with_plot"
 	CodeClearWithPR                 = "clear_with_pr"
 	CodeClearWithReason             = "clear_with_reason"
 	CodeClearWithReminder           = "clear_with_reminder"
@@ -47,8 +49,10 @@ const (
 	CodeMessageNotNotified          = "message_not_notified"
 	CodeModelUnavailable            = "model_unavailable"
 	CodeNavOff                      = "nav_off"
+	CodeNeedsBed                    = "needs_bed"
 	CodeNeedsMessage                = "needs_message"
 	CodeNeedsNext                   = "needs_next"
+	CodeNeedsPulse                  = "needs_pulse"
 	CodeNeedsStatement              = "needs_statement"
 	CodeNeedsTime                   = "needs_time"
 	CodeNoAlternative               = "no_alternative"
@@ -67,11 +71,14 @@ const (
 	CodeNotExported                 = "not_exported"
 	CodeNotOnScreen                 = "not_on_screen"
 	CodeNotStamped                  = "not_stamped"
+	CodeNoteAndClear                = "note_and_clear"
+	CodeNothingToChange             = "nothing_to_change"
 	CodeNothingToSet                = "nothing_to_set"
 	CodeOtherSeed                   = "other_seed"
 	CodePlotAndStale                = "plot_and_stale"
 	CodePRWithoutWhenMerged         = "pr_without_when_merged"
 	CodeReferenceNeedsPath          = "reference_needs_path"
+	CodeReposAndClear               = "repos_and_clear"
 	CodeReviewOff                   = "review_off"
 	CodeReviewerWithoutFormalReview = "reviewer_without_formal_review"
 	CodeRevisionConflict            = "revision_conflict"
@@ -82,6 +89,7 @@ const (
 	CodeSteerAndInterrupt           = "steer_and_interrupt"
 	CodeStepNeedsText               = "step_needs_text"
 	CodeStepTooLong                 = "step_too_long"
+	CodeTextAndClear                = "text_and_clear"
 	CodeTimeout                     = "timeout"
 	CodeTooManySteps                = "too_many_steps"
 	CodeTranscriptUnavailable       = "transcript_unavailable"
@@ -200,7 +208,7 @@ var specs = sync.OnceValue(func() map[string]spec {
 		"seed link":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"seed unlink":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"seed ready":              {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
-		"seed ls":                 {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"window_without_stale": "Pass {window} together with {stale}, or leave it out.", "plot_and_stale": "Pass {plot} or {stale}, not both.", "standby_with_scope": "Pass {standby} alone.", "bad_window": "Say the window as a duration like 72h or a number of days like 14d."}},
+		"seed ls":                 {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"window_without_stale": "Pass {window} together with {stale}, or leave it out.", "plot_and_stale": "Pass {plot} or {stale}, not both.", "standby_with_scope": "Pass {standby} alone.", "bed_with_plot": "Pass {bed} or {plot}, not both.", "bad_window": "Say the window as a duration like 72h or a number of days like 14d."}},
 		"seed show":               {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"since_and_section": "Pass {since} or {section}, not both.", "bad_bookmark": "Pass the bookmark number a read of the seed printed."}},
 		"seed notes":              {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"bad_bookmark": "Pass the bookmark number a read of the seed printed."}},
 		"seed prime":              {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
@@ -231,6 +239,12 @@ var specs = sync.OnceValue(func() map[string]spec {
 		"seed authorization":      {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"empty_words": "Pass the words, or {clear} to remove the authorization.", "words_and_clear": "Pass the words or {clear}, not both."}},
 		"seed attach":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_document": "Name one document with {path}, {notebook} or {url}.", "two_documents": "Name one document per call.", "transfer_with_note": "Leave out {note}; a managed transfer records its own receipt.", "transfer_needs_local_path": "Pass a local {path} without {repo}, or leave out {mode}.", "transfer_needs_mode": "Pass {mode}: move is recommended, copy keeps the source."}},
 		"seed detach":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"reference_needs_path": "Pass the linked {path} without {repo}.", "no_document": "Name one document with {path}, {notebook} or {url}.", "two_documents": "Name one document per call.", "transfer_with_note": "Leave out {note}; a managed transfer records its own receipt.", "transfer_needs_managed_path": "Pass the managed filename in {path} without {repo}, or leave out {to}.", "detach_needs_to": "Pass {to} with the destination, or {reference} to remove an old linked path."}},
+		"seed bed ls":             {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+		"seed bed add":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+		"seed bed set":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"note_and_clear": "Pass {note} or {clear_note}, not both.", "repos_and_clear": "Pass {repos} or {clear_repos}, not both.", "nothing_to_change": "Pass at least one of {name}, {note}, {clear_note}, {repos} or {clear_repos}."}},
+		"seed bed rm":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+		"seed bed assign":         {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"bed_and_clear": "Pass a bed or {clear}, not both.", "needs_bed": "Pass an existing bed or {clear}."}},
+		"seed pulse":              {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"text_and_clear": "Pass {text} or {clear}, not both.", "needs_pulse": "Pass a one-line status in {text}, or {clear}."}},
 		"session instructions":    {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"session_not_found": "Pass the id of a session in the ledger.", "transcript_unavailable": "Ask again once the session has written its conversation.", "conversation_too_large": "Read the conversation with session_transcript instead.", "model_unavailable": "Choose a model for session instructions in Settings, or read the conversation with session_transcript.", "invalid_response": "Ask again, or read the conversation with session_transcript.", "invalid_evidence": "Ask again, or read the conversation with session_transcript."}},
 		"session transcript":      {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"session_not_found": "Pass the id of a session in the ledger.", "transcript_unavailable": "Read again once the session has written its conversation.", "invalid_cursor": "Pass a cursor an earlier read ended on, or leave out {after}.", "cursor_mismatch": "Pass a cursor from a read of this session, or leave out {after}.", "cursor_past_end": "Pass the cursor the last read ended on."}},
 		"session list":            {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"unknown_session": "Pass to {before} the id a previous page's notice named."}},
@@ -765,6 +779,7 @@ type SeedPlantArgs struct {
 	Body           string   `json:"body,omitempty"`
 	PartOf         string   `json:"part_of,omitempty"`
 	DiscoveredFrom string   `json:"discovered_from,omitempty"`
+	Bed            string   `json:"bed,omitempty"`
 	Checks         []string `json:"checks,omitempty"`
 }
 
@@ -794,6 +809,7 @@ type SeedLsArgs struct {
 	Stale   bool   `json:"stale,omitempty"`
 	Window  string `json:"window,omitempty"`
 	Standby bool   `json:"standby,omitempty"`
+	Bed     string `json:"bed,omitempty"`
 	Flat    bool   `json:"flat,omitempty"`
 }
 
@@ -995,6 +1011,40 @@ type SeedDetachArgs struct {
 	Reference bool   `json:"reference,omitempty"`
 	Repo      string `json:"repo,omitempty"`
 	Note      string `json:"note,omitempty"`
+}
+
+type SeedBedLsArgs struct {
+}
+
+type SeedBedAddArgs struct {
+	Name  string   `json:"name,omitempty"`
+	Note  string   `json:"note,omitempty"`
+	Repos []string `json:"repos,omitempty"`
+}
+
+type SeedBedSetArgs struct {
+	Bed        string   `json:"bed,omitempty"`
+	Name       string   `json:"name,omitempty"`
+	Note       string   `json:"note,omitempty"`
+	ClearNote  bool     `json:"clear_note,omitempty"`
+	Repos      []string `json:"repos,omitempty"`
+	ClearRepos bool     `json:"clear_repos,omitempty"`
+}
+
+type SeedBedRmArgs struct {
+	Bed string `json:"bed,omitempty"`
+}
+
+type SeedBedAssignArgs struct {
+	Seed  string `json:"seed,omitempty"`
+	Bed   string `json:"bed,omitempty"`
+	Clear bool   `json:"clear,omitempty"`
+}
+
+type SeedPulseArgs struct {
+	Seed  string `json:"seed,omitempty"`
+	Text  string `json:"text,omitempty"`
+	Clear bool   `json:"clear,omitempty"`
 }
 
 type SessionInstructionsArgs struct {

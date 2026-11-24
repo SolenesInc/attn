@@ -17,6 +17,7 @@ import (
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
@@ -33,6 +34,7 @@ func (d *Daemon) ensureGardenCollections() {
 		garden.NotesSchema(),
 		garden.BodyVersionsSchema(),
 		garden.DispatchesSchema(),
+		garden.BedsSchema(),
 	} {
 		redeclared, err := d.store.DefineDocumentCollection(schema, time.Now())
 		if err != nil {
@@ -208,6 +210,7 @@ type gardenRead struct {
 	parties   parties
 	seeds     []garden.Seed
 	docs      map[string]docstore.Document
+	beds      map[string]garden.Bed
 	ready     map[string]bool
 	plots     garden.PlotTree
 	reminders map[string]garden.Reminder
@@ -257,8 +260,17 @@ func (d *Daemon) readGarden(profileID ...string) (gardenRead, error) {
 			return gardenRead{}, err
 		}
 	}
-	seeds := all.inProfile(firstProfile(profileID))
-	out := gardenRead{daemon: d, parties: parties, seeds: seeds.seeds, docs: seeds.docs, plots: seeds.plots, ready: map[string]bool{}, reminders: reminders, watches: watches}
+	profile := firstProfile(profileID)
+	var bedsByID map[string]garden.Bed
+	if d.on(setting.GardenV2Enabled) {
+		var bedErr error
+		_, _, bedsByID, bedErr = d.bedsInProfile(profile)
+		if bedErr != nil {
+			return gardenRead{}, bedErr
+		}
+	}
+	seeds := all.inProfile(profile)
+	out := gardenRead{daemon: d, parties: parties, seeds: seeds.seeds, docs: seeds.docs, beds: bedsByID, plots: seeds.plots, ready: map[string]bool{}, reminders: reminders, watches: watches}
 	for _, seed := range garden.Ready(out.seeds, parties.claimHolds) {
 		out.ready[seed.ID] = true
 	}
@@ -375,6 +387,20 @@ func (g gardenRead) rows(seeds []garden.Seed) []protocol.SeedRow {
 	return out
 }
 
+func (g gardenRead) effectiveBed(seed garden.Seed) (string, string) {
+	if len(g.beds) == 0 {
+		return "", ""
+	}
+	effID := garden.EffectiveBedID(seed, g.plots)
+	if effID == "" {
+		return "", ""
+	}
+	if bed, ok := g.beds[effID]; ok {
+		return bed.ID, bed.Name
+	}
+	return "", ""
+}
+
 func (g gardenRead) row(seed garden.Seed, doc docstore.Document) protocol.SeedRow {
 	row := protocol.SeedRow{
 		ProfileID:    seed.ProfileID,
@@ -398,6 +424,16 @@ func (g gardenRead) row(seed garden.Seed, doc docstore.Document) protocol.SeedRo
 	}
 	if seed.AutomationID > 0 {
 		row.AutomationID = protocol.Ptr(seed.AutomationID)
+	}
+	if bedID, bedName := g.effectiveBed(seed); bedID != "" {
+		row.BedID = protocol.Ptr(bedID)
+		row.Bed = protocol.Ptr(bedName)
+	}
+	if seed.Pulse != "" && g.daemon != nil && g.daemon.on(setting.GardenV2Enabled) {
+		row.Pulse = protocol.Ptr(seed.Pulse)
+		if seed.PulseAt != "" {
+			row.PulseAt = protocol.Ptr(seed.PulseAt)
+		}
 	}
 	for _, e := range seed.Edges {
 		row.Edges = append(row.Edges, protocol.SeedEdge{Kind: e.Kind, To: e.To})
@@ -479,6 +515,16 @@ func (g gardenRead) seedToProtocol(seed garden.Seed, doc docstore.Document) prot
 	}
 	if seed.AutomationID > 0 {
 		out.AutomationID = protocol.Ptr(seed.AutomationID)
+	}
+	if bedID, bedName := g.effectiveBed(seed); bedID != "" {
+		out.BedID = protocol.Ptr(bedID)
+		out.Bed = protocol.Ptr(bedName)
+	}
+	if seed.Pulse != "" && g.daemon != nil && g.daemon.on(setting.GardenV2Enabled) {
+		out.Pulse = protocol.Ptr(seed.Pulse)
+		if seed.PulseAt != "" {
+			out.PulseAt = protocol.Ptr(seed.PulseAt)
+		}
 	}
 	if !seed.Tender.IsZero() {
 		out.Tender = protocol.Ptr(g.parties.view(seed.Tender))
@@ -661,6 +707,11 @@ func (d *Daemon) plantSeedRequest(msg *seedPlantRequest, by who.Actor) (protocol
 		}
 		seed.Edges = append(seed.Edges, garden.Edge{Kind: garden.EdgePartOf, To: plot})
 	}
+	bedID, err := d.resolveBedForPlanting(seed.ProfileID, protocol.Deref(msg.Bed), plot, protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.CallerDirectory))
+	if err != nil {
+		return protocol.Seed{}, gardenRead{}, err
+	}
+	seed.BedID = bedID
 	if plot != "" && len(checks) > 0 {
 		d.checkIDsMu.Lock()
 		defer d.checkIDsMu.Unlock()
@@ -695,7 +746,7 @@ func (d *Daemon) plantSeedRequest(msg *seedPlantRequest, by who.Actor) (protocol
 func (d *Daemon) seedPlot(msg *seedPlotRequest, by who.Actor) (*protocol.SeedPlotResult, error) {
 	spec := garden.PlotSpec{
 		Title: strings.TrimSpace(msg.Title), Body: protocol.Deref(msg.Body), Checks: checkDefinitionsFromProtocol(msg.Checks),
-		PartOf: protocol.Deref(msg.PartOf), DiscoveredFrom: protocol.Deref(msg.DiscoveredFrom),
+		PartOf: protocol.Deref(msg.PartOf), DiscoveredFrom: protocol.Deref(msg.DiscoveredFrom), Bed: strings.TrimSpace(protocol.Deref(msg.Bed)),
 	}
 	for _, child := range msg.Children {
 		spec.Children = append(spec.Children, garden.PlotChildSpec{
@@ -706,6 +757,10 @@ func (d *Daemon) seedPlot(msg *seedPlotRequest, by who.Actor) (*protocol.SeedPlo
 		})
 	}
 	if err := garden.ValidatePlotSpec(spec); err != nil {
+		return nil, gardenFailure("plot", err)
+	}
+	bedID, err := d.resolveBedForPlanting(protocol.Deref(msg.ProfileID), spec.Bed, spec.PartOf, protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.CallerDirectory))
+	if err != nil {
 		return nil, gardenFailure("plot", err)
 	}
 	checks := slices.Clone(spec.Checks)
@@ -732,6 +787,9 @@ func (d *Daemon) seedPlot(msg *seedPlotRequest, by who.Actor) (*protocol.SeedPlo
 	seeds, bodies, err := d.plotSeeds(*schema, spec, protocol.Deref(msg.ProfileID), by)
 	if err != nil {
 		return nil, gardenFailure("plot", err)
+	}
+	if bedID != "" && len(seeds) > 0 {
+		seeds[0].BedID = bedID
 	}
 
 	var result protocol.SeedPlotResult
@@ -935,6 +993,28 @@ func (d *Daemon) seedList(msg *seedListRequest) (*protocol.SeedListResult, error
 	}
 	if protocol.Deref(msg.Standby) {
 		seeds = read.onStandby(seeds)
+		result.Total = len(seeds)
+	}
+	if bedFilter := strings.TrimSpace(protocol.Deref(msg.Bed)); bedFilter != "" {
+		if !d.on(setting.GardenV2Enabled) {
+			return nil, gardenFailure("ls", gardenV2OffRefusal())
+		}
+		targetBedID := ""
+		if !strings.EqualFold(bedFilter, "unassigned") {
+			bed, err := d.resolveBedInProfile(protocol.Deref(msg.ProfileID), bedFilter)
+			if err != nil {
+				return nil, gardenFailure("ls", err)
+			}
+			targetBedID = bed.ID
+		}
+		filtered := make([]garden.Seed, 0, len(seeds))
+		for _, seed := range seeds {
+			effID, _ := read.effectiveBed(seed)
+			if effID == targetBedID {
+				filtered = append(filtered, seed)
+			}
+		}
+		seeds = filtered
 		result.Total = len(seeds)
 	}
 	result.Seeds = read.rows(garden.Window(seeds, gardenSnapshotLimit))
@@ -1219,6 +1299,9 @@ func (d *Daemon) seedLink(msg *seedLinkRequest, by who.Actor) (*protocol.SeedLin
 			return &protocol.SeedLinkResult{
 				Seed: read.seed(next, read.docs[next.ID]), Changed: false,
 			}, nil
+		}
+		if verb == "link" && kind == garden.EdgePartOf {
+			next.BedID = ""
 		}
 		var occurrence seedEvents.Occurrence
 		source := protocol.TrimID(protocol.Deref(msg.SourceSessionID))

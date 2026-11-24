@@ -628,6 +628,83 @@
                             "source": "content/garden-cli.md"
                           }
                         ]
+                      },
+                      {
+                        "kind": "when",
+                        "condition": {
+                          "field": {
+                            "name": "garden_v2_enabled",
+                            "kind": "flag",
+                            "description": "Include Garden v2 beds and pulse guidance when garden_v2_enabled is on."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose",
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "session.garden-v2",
+                                "source": "content/garden-v2.md"
+                              },
+                              {
+                                "kind": "when",
+                                "condition": {
+                                  "field": {
+                                    "name": "garden_beds",
+                                    "kind": "text",
+                                    "description": "Comma-separated curated bed names in the session's profile when garden_v2_enabled is on.",
+                                    "trim_space": true
+                                  },
+                                  "test": "present"
+                                },
+                                "children": [
+                                  {
+                                    "kind": "text",
+                                    "id": "session.garden-v2-beds",
+                                    "source": "content/garden-v2-beds.md",
+                                    "bindings": [
+                                      {
+                                        "name": "beds",
+                                        "node": {
+                                          "kind": "input",
+                                          "field": {
+                                            "name": "garden_beds",
+                                            "kind": "text",
+                                            "description": "Comma-separated curated bed names in the session's profile when garden_v2_enabled is on.",
+                                            "trim_space": true
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "kind": "choose",
+                                "condition": {
+                                  "field": {
+                                    "name": "agent_tools",
+                                    "kind": "flag",
+                                    "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                                  },
+                                  "test": "enabled"
+                                },
+                                "children": [
+                                  {
+                                    "kind": "compose"
+                                  },
+                                  {
+                                    "kind": "text",
+                                    "id": "session.garden-v2-cli",
+                                    "source": "content/garden-v2-cli.md"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
                       }
                     ]
                   }
@@ -8174,5 +8251,5 @@
       ]
     }
   ],
-  "definitions_hash": "2f8641ff76650ea16e7a042c8957686d87b3b74f0caa5c2fd640db3b291ae82d"
+  "definitions_hash": "9ed0c4c60b752b121701ea0c82cad4e749211a6b15fe7abb2adace656ca2f189"
 }

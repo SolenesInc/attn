@@ -14,6 +14,8 @@ var content embed.FS
 var (
 	selfReportPullRequests = FlagField("self_report_pull_requests", "Ask the agent to record PRs when the harness cannot report them.")
 	gardenAvailable        = FlagField("garden_available", "Include Garden guidance.")
+	gardenV2Enabled        = FlagField("garden_v2_enabled", "Include Garden v2 beds and pulse guidance when garden_v2_enabled is on.")
+	gardenBeds             = Trimmed(TextField("garden_beds", "Comma-separated curated bed names in the session's profile when garden_v2_enabled is on."))
 	asksEnabled            = FlagField("asks_enabled", "Include ask guidance when the session launched with asks.")
 	ventEnabled            = FlagField("vent_enabled", "Include vent guidance when the session launched with usage analytics on.")
 	toolVentsEnabled       = FlagField("tool_vents_enabled", "Offer tool vents when the session launched with analytics.tool_vents on.")
@@ -112,6 +114,9 @@ var (
 	crewCleared          = Use("crew.cleared", "content/crew/cleared.md")
 	gardenRules          = Use("session.garden", "content/garden.md")
 	gardenCLI            = Use("session.garden-cli", "content/garden-cli.md")
+	gardenV2Rules        = Use("session.garden-v2", "content/garden-v2.md")
+	gardenV2Beds         = Use("session.garden-v2-beds", "content/garden-v2-beds.md", Bind("beds", Input(gardenBeds)))
+	gardenV2CLI          = Use("session.garden-v2-cli", "content/garden-v2-cli.md")
 	gardenGuidance       = Compose(gardenRules, gardenCLI)
 	queueGuidance        = Use("session.queue", "content/session/queue.md")
 	attnMap              = attnMapNode(false)
@@ -135,7 +140,15 @@ var session = Recipient{
 				When(Present(crewPriming), Compose(crewCleared, Input(crewPriming), quickCaptureGuidance)),
 				launchAttnMap,
 				agentGuidance,
-				When(Enabled(gardenAvailable), Compose(gardenRules, cliTeaching(gardenCLI, "seed"))),
+				When(Enabled(gardenAvailable), Compose(
+					gardenRules,
+					cliTeaching(gardenCLI, "seed"),
+					When(Enabled(gardenV2Enabled), Compose(
+						gardenV2Rules,
+						When(Present(gardenBeds), gardenV2Beds),
+						cliTeaching(gardenV2CLI, "seed"),
+					)),
+				)),
 				cliTeaching(queueGuidance, "turn", "agent"),
 				When(Enabled(asksEnabled), Compose(askRules, cliTeaching(askCLI, "ask"))),
 				When(Enabled(ventEnabled), cliTeaching(ventGuidance, "vent")),
@@ -168,6 +181,8 @@ func Files() fs.FS                       { return content }
 type Launch struct {
 	SelfReportPullRequests bool
 	Garden                 bool
+	GardenV2               bool
+	GardenBeds             string
 	Asks                   bool
 	Vent                   bool
 	ToolVents              bool
@@ -180,6 +195,8 @@ func (l Launch) Values() Values {
 	return Values{
 		selfReportPullRequests.Name: strconv.FormatBool(l.SelfReportPullRequests),
 		gardenAvailable.Name:        strconv.FormatBool(l.Garden),
+		gardenV2Enabled.Name:        strconv.FormatBool(l.GardenV2),
+		gardenBeds.Name:             l.GardenBeds,
 		asksEnabled.Name:            strconv.FormatBool(l.Asks),
 		ventEnabled.Name:            strconv.FormatBool(l.Vent),
 		toolVentsEnabled.Name:       strconv.FormatBool(l.ToolVents),

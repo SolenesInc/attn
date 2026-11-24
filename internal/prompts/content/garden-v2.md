@@ -1,0 +1,1 @@
+Keep a seed's one-line pulse current at phase changes, milestones, or blockers. Beds are user-curated: root seeds auto-route by repository, or pick an existing bed; never invent new beds unless the user asks.

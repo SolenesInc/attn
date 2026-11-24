@@ -160,6 +160,7 @@ func (d *Daemon) sendInitialArrangement(client *wsClient, event *protocol.Initia
 	garden := d.gardenWindow(client.selectedProfile())
 	event.Seeds = garden.withBodies()
 	event.SeedsTotal = protocol.Ptr(garden.held.total)
+	event.GardenBeds = d.gardenBedsForBroadcast(client.selectedProfile())
 	data, err := json.Marshal(event)
 	if err != nil {
 		d.logf("initial state: encoding: %v", err)

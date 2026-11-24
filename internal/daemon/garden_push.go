@@ -48,6 +48,7 @@ func (w gardenWindow) full() *protocol.GardenSeedsUpdatedMessage {
 	return &protocol.GardenSeedsUpdatedMessage{
 		Event: protocol.EventGardenSeedsUpdated, ProfileID: w.held.profileID,
 		Seeds: w.withBodies(), Total: w.held.total,
+		Beds: w.daemon.gardenBedsForBroadcast(w.held.profileID),
 	}
 }
 

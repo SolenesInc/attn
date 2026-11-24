@@ -7,7 +7,7 @@ Every command prints a seed as `id  slug  title`. The garden section of your lau
 ## Planting work
 
 - `attn seed search <words> [--limit <n>] [--json]`: find seeds by words, closed ones included
-- `attn seed plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [--check "[C#=]<statement>"]... [--json]`: plant a seed and print its id, slug and title
+- `attn seed plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [--bed <bed>] [--check "[C#=]<statement>"]... [--json]`: plant a seed and print its id, slug and title
 
 ## Planting a plot
 
@@ -22,7 +22,7 @@ Keep the shared plan in the parent, and give each child the work prompt your lau
 Every change to a seed adds an entry to the seed's log: notes, handoffs, moves, links, edits, checks, attachments and answers. `attn seed show <id>` prints a bookmark under the seed's header, `bookmark  attn seed show <id> --since <N>`, then the newest entries. `attn seed notes <id>` lists the whole log and ends with its own bookmark line. Run a bookmark later to get only the entries saved after N, on the seed and every seed below it, each labeled with its seed. That read ends with a new bookmark. Keep the bookmark from your last read and read since that bookmark, instead of reading the whole seed again. When a bookmark is older than the entries the event log keeps, the read says so and gives the full seed instead.
 
 - `attn seed ready [--plot <plot> | --all] [--json]`: what you can tend right now
-- `attn seed ls [--plot <plot> | --stale | --standby] [--window <d>] [--flat] [--json]`: the garden, newest first, with children nested under their plot
+- `attn seed ls [--plot <plot> | --stale | --standby] [--window <d>] [--bed <bed|unassigned>] [--flat] [--json]`: the garden, newest first, with children nested under their plot
 - `attn seed show <id> [--since <bookmark> | --section <heading|id>] [--json]`: one seed, news first
 - `attn seed notes <id> [--since <bookmark>] [--kind <kind>] [--limit <n>] [--json]`: the whole log, newest first
 - `attn seed prime`: the standing garden contract and this session's garden position
@@ -122,6 +122,19 @@ The Garden labels old path associations as linked files. Bring a linked file int
 
 - `attn seed attach <id> [--path <file> | --notebook <id> | --url <url>] [--move | --copy] [--repo <repository>] [-m "<note>"] [--json]`: give the seed a file or a document to keep
 - `attn seed detach <id> [--path <filename> | --notebook <id> | --url <url>] [--to <destination>] [--reference] [--repo <repository>] [-m "<note>"] [--json]`: move a managed artifact back out, or drop an association
+
+## Beds and pulse
+
+When `garden_v2_enabled` is on, a profile can hold curated beds that group root seeds and plots by project or initiative. Beds are user-curated: do not create, edit or remove beds unless the user asks. Root seeds auto-route into the bed bound to their repository (exact path match before bare repository name), or take an existing bed explicitly; child seeds inherit their root plot's bed.
+
+A pulse is a seed's current one-line status (at most 160 characters), replaced in place without adding a log entry. Update it when starting a phase, reaching a milestone, or hitting a blocker. Closing or replanting a seed clears its pulse.
+
+- `attn seed bed ls [--json]`: list the profile's curated beds, their repos and open seed counts
+- `attn seed bed add "<name>" [-m "<one-line note>"] [--repo <path|name>]... [--json]`: create a curated bed
+- `attn seed bed set <bed> [--name "<name>"] [-m "<one-line note>" | --clear-note] [--repo <path|name> | --clear-repos] [--json]`: update a bed's name, note or repos
+- `attn seed bed rm <bed> [--json]`: remove a curated bed and leave its seeds unassigned
+- `attn seed bed assign <id> [<bed> | --clear] [--json]`: assign a root seed or plot to an existing bed, or clear its bed
+- `attn seed pulse <id> [-m "<one-line status>" | --clear] [--json]`: set or clear a seed's one-line status pulse
 
 ## Packets
 

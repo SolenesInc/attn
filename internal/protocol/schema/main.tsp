@@ -4268,6 +4268,8 @@ model InitialStateMessage {
   // as well as on garden pushes so a client that connects to an over-large
   // garden knows it is short before anything moves.
   seeds_total?: int32;
+  // The selected profile's curated Garden beds, alphabetically by name.
+  garden_beds?: GardenBed[];
   // The crew roster, so the sidebar draws every member — in session or between sessions — from
   // the first push rather than asking for one.
   crew?: CrewMember[];
@@ -5956,6 +5958,14 @@ model Seed {
   "last_execution_id"?: SessionID;
   // Present when this seed was planted by an automation definition.
   "automation_id"?: safeint;
+  // Effective curated bed id (inherited from the root plot for children).
+  "bed_id"?: string;
+  // Display name of the effective curated bed.
+  "bed"?: string;
+  // Agent-authored one-line status pulse for the seed.
+  "pulse"?: string;
+  // RFC3339 timestamp of the latest pulse update.
+  "pulse_at"?: string;
   // The latest lifecycle state transition. Legacy seeds use updated_at as a
   // conservative fallback and say so through state_changed_at_exact.
   "state_changed_at": string;
@@ -6016,6 +6026,10 @@ model SeedRow {
   "tender"?: PartyView;
   "claimed": boolean;
   "automation_id"?: safeint;
+  "bed_id"?: string;
+  "bed"?: string;
+  "pulse"?: string;
+  "pulse_at"?: string;
   "ready": boolean;
   "edges": SeedEdge[];
   // Present exactly when the seed is a crown, as on Seed.
@@ -7054,6 +7068,98 @@ model SeedSendToChiefResultMessage {
   "result"?: SeedSendToChiefResult;
 }
 
+// A user-curated project/initiative grouping for root seeds in one profile.
+model GardenBed {
+  "id": string;
+  "profile_id": string;
+  "name": string;
+  "slug": string;
+  "note"?: string;
+  "repos": string[];
+  "created_at": string;
+  "updated_at": string;
+}
+
+model SeedBedSummary {
+  ...GardenBed;
+  "open_count": int32;
+}
+
+model SeedBedListResult {
+  "beds": SeedBedSummary[];
+}
+
+model SeedBedResult {
+  "bed": GardenBed;
+  "changed"?: boolean;
+}
+
+model SeedBedDeleteResult {
+  "id": string;
+  "name": string;
+  "unassigned_seeds": int32;
+}
+
+model SeedBedAssignResult {
+  "seed": Seed;
+  "changed": boolean;
+}
+
+model SeedPulseResult {
+  "seed": Seed;
+  "changed": boolean;
+}
+
+// Create or update a curated bed in the selected profile from the native app.
+model GardenBedSaveMessage {
+  "cmd": "garden_bed_save";
+  "request_id": string;
+  "id"?: string;
+  "name": string;
+  "note"?: string;
+  "repos": string[];
+}
+
+model GardenBedSaveResultMessage {
+  "event": "garden_bed_save_result";
+  "request_id": string;
+  "success": boolean;
+  "bed"?: GardenBed;
+  "error"?: string;
+}
+
+// Remove a curated bed in the selected profile from the native app.
+model GardenBedDeleteMessage {
+  "cmd": "garden_bed_delete";
+  "request_id": string;
+  "id": string;
+}
+
+model GardenBedDeleteResultMessage {
+  "event": "garden_bed_delete_result";
+  "request_id": string;
+  "success": boolean;
+  "unassigned_seeds"?: int32;
+  "error"?: string;
+}
+
+// Assign a root seed or plot to a curated bed, or clear its bed (empty bed_id).
+model SeedBedSetMessage {
+  "profile_id"?: string;
+  "cmd": "seed_bed_set";
+  "request_id": string;
+  "seed_id": string;
+  "bed_id"?: string;
+}
+
+model SeedBedSetResultMessage {
+  "event": "seed_bed_set_result";
+  "request_id": string;
+  "success": boolean;
+  "seed"?: Seed;
+  "error"?: string;
+}
+
 // The selected profile's whole push window, sent when a client connects or
 // switches profile; later seed changes arrive as garden_seeds_changed.
 model GardenSeedsUpdatedMessage {
@@ -7063,6 +7169,14 @@ model GardenSeedsUpdatedMessage {
   // How many seeds the garden holds. Equal to `seeds`'s length until the
   // garden outgrows one push, and then the receipt that says so.
   total: int32;
+  beds: GardenBed[];
+}
+
+// The selected profile's curated beds, sent whenever a bed is added, changed or removed.
+model GardenBedsUpdatedMessage {
+  profile_id: string;
+  event: "garden_beds_updated";
+  beds: GardenBed[];
 }
 
 // What changed in the push window since this client's last garden message:
@@ -8830,6 +8944,10 @@ alias DaemonEvent =
   | SessionContextWindowCapResultMessage
   | GardenSeedsUpdatedMessage
   | GardenSeedsChangedMessage
+  | GardenBedsUpdatedMessage
+  | GardenBedSaveResultMessage
+  | GardenBedDeleteResultMessage
+  | SeedBedSetResultMessage
   | SeedResumeResultMessage
   | SeedSendToChiefResultMessage
   | SeedDocumentGetResultMessage
