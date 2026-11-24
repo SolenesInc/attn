@@ -1,0 +1,1 @@
+The pull request popover no longer calls an approved pull request "ready to merge" while GitHub can't merge it yet: a branch behind its base reads "Approved" with "Its branch is behind the base". With one pull request, the title link's accessible name is now the title, so screen readers hear it; "Open <repo>#<n> on GitHub" is its description.
