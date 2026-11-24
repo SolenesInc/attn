@@ -48,7 +48,7 @@ var localFSSinks = []sinkSpec{
 }
 
 var allowed = map[string]string{
-	"internal/daemon/session_transcript.go (*Daemon).inspectableTranscriptPath": "checks d.sessionPlace(sessionID).IsLocal() before statting the session's transcript path",
+	"internal/daemon/session_transcript.go (*Daemon).inspectableTranscriptPath": "checks that the session is local or copied from the home before statting the session's transcript path",
 	"internal/daemon/terminal_machine.go (*Daemon).startTerminal":               "runs on the machine that owns the session's terminal",
 }
 

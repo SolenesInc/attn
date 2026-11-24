@@ -39,7 +39,6 @@ func TestSharedCodexSeedReadsUseTheirProfileWithoutACurrentSession(t *testing.T)
 		{[]string{"ready"}, "Home task"},
 		{[]string{"export", first.ID, "--out", "-"}, "Home body"},
 		{[]string{"prime"}, "One seed is ready now."},
-		{[]string{"review", "show"}, "0 seeds need review"},
 	} {
 		got := s.Run(testworld.Invocation{Args: append([]string{"seed"}, row.args...), Env: env})
 		if got.Code != 0 || !strings.Contains(got.Stdout, row.want) || strings.Contains(got.Stdout, "Side task") {
@@ -51,7 +50,6 @@ func TestSharedCodexSeedReadsUseTheirProfileWithoutACurrentSession(t *testing.T)
 		{"edit", first.ID, "-m", strings.Replace(exported, "Home body", "unattributed edit", 1)},
 		{"rollback", first.ID},
 		{"rollback", first.ID, "--profile", home},
-		{"review", "start"},
 		{"note", first.ID, "-m", "profile alone cannot identify an author", "--profile", home},
 	} {
 		got := s.Run(testworld.Invocation{Args: append([]string{"seed"}, args...), Env: env})

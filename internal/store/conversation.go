@@ -205,13 +205,16 @@ func (s *Store) ConversationsOpenInManySessions() [][]protocol.SessionID {
 	if s.db == nil {
 		return nil
 	}
-	rows, err := s.db.Query(`SELECT id, profile_id, host, agent, resume_session_id FROM sessions
-		WHERE closed_at = '' AND resume_session_id != ''
-		AND (profile_id, host, agent, resume_session_id) IN (
-			SELECT profile_id, host, agent, resume_session_id FROM sessions
-			WHERE closed_at = '' AND resume_session_id != ''
-			GROUP BY profile_id, host, agent, resume_session_id HAVING COUNT(*) > 1)
-		ORDER BY profile_id, host, agent, resume_session_id, id`)
+	rows, err := s.db.Query(`WITH held AS (
+			SELECT id, profile_id, agent, resume_session_id,
+				CASE WHEN MAX(lifetime = 'server') OVER (PARTITION BY profile_id, agent, resume_session_id)
+					THEN host ELSE '' END AS server_host
+			FROM sessions WHERE closed_at = '' AND resume_session_id != '')
+		SELECT id, profile_id, server_host, agent, resume_session_id FROM held
+		WHERE (profile_id, server_host, agent, resume_session_id) IN (
+			SELECT profile_id, server_host, agent, resume_session_id FROM held
+			GROUP BY profile_id, server_host, agent, resume_session_id HAVING COUNT(*) > 1)
+		ORDER BY profile_id, server_host, agent, resume_session_id, id`)
 	if err != nil {
 		log.Printf("[store] ConversationsOpenInManySessions: %v", err)
 		return nil
