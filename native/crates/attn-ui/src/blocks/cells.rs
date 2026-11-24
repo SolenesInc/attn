@@ -25,7 +25,7 @@ impl Cells {
         }
     }
 
-    /// A cell that shows `mark` before `said` and is read as `label`.
+    /// A cell that shows `mark` before `said` and gives `label` on hover and to assistive tools.
     pub fn marked(
         mut self,
         label: impl Into<String>,
@@ -70,6 +70,7 @@ impl Cells {
                 Tone::Warn | Tone::Bad => t.text_primary,
                 _ => t.text_secondary,
             };
+            let marked = cell.mark.is_some();
             let line = door::gap(row().h_full().items_center().justify_center(), Space::S6)
                 .min_w(0.0)
                 .children(cell.mark.map(|mark| mark.a11y_hidden()))
@@ -80,10 +81,9 @@ impl Cells {
                         .shrink()
                         .a11y_hidden(),
                 );
-            col()
+            let el = col()
                 .key(format!("{}.{i}", self.key))
                 .role("img")
-                .label(cell.label)
                 .h(Cells::height())
                 .min_w(0.0)
                 .fill(fill)
@@ -91,7 +91,13 @@ impl Cells {
                     [0.0, 0.0, 0.0, if i > 0 { 1.0 } else { 0.0 }],
                     t.border_hover,
                 )
-                .child(line)
+                .child(line);
+            let el = if marked {
+                el.help(cell.label.clone())
+            } else {
+                el
+            };
+            el.label(cell.label)
         });
         let line = col()
             .key(self.key.clone())

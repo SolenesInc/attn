@@ -284,12 +284,16 @@ fn hold(state: &mut State, open: Pop, picked: usize, tx: &mut Tx) {
     crate::garden::follow(state, tx);
 }
 
-/// Gives the open popover the keyboard where it is, or closes the one that has it. With none
-/// open, pins the delegation chain of the agent on screen, or its pull requests when it sits in
-/// no chain.
+/// Gives the open chain or pull requests the keyboard, or closes them if pinned. Otherwise pins
+/// the chain of the agent on screen, or its pull requests when it sits in no chain.
 pub(crate) fn take_keyboard(state: &mut State, tx: &mut Tx) {
     let pop = &state.window.desk.header_pop;
-    match pop.open.clone() {
+    let open = pop
+        .open
+        .as_ref()
+        .filter(|open| matches!(open.what, What::Chain | What::Details))
+        .cloned();
+    match open {
         Some(open) if open.pinned => close(state),
         Some(open) => {
             let picked = pop.picked;

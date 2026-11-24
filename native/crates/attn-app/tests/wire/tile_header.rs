@@ -1384,6 +1384,15 @@ fn the_details_of_a_pull_request_say_its_checks_review_and_merge_then_what_stand
     );
     world.gesture(|app| app.click(Target::key("tile.a.details")));
     let picked = |world: &World| texts(world, "tile.a.details.popover.picked");
+    let gate_tooltip = |world: &mut World, gate: usize, expected: &str| {
+        rest_on(world, &format!("tile.a.details.popover.gates.{gate}"));
+        world.advance(Duration::from_secs(1));
+        assert_eq!(
+            world.runtime().help_tooltip().map(|(text, _)| text),
+            Some(expected)
+        );
+        rest_on(world, "tile.a.details.popover.title");
+    };
     assert_eq!(
         picked(&world),
         [
@@ -1397,6 +1406,7 @@ fn the_details_of_a_pull_request_say_its_checks_review_and_merge_then_what_stand
         ],
         "an unwatched pull request's verdict is the first thing in its way"
     );
+    gate_tooltip(&mut world, 1, "Review waiting on a reviewer");
     key(&mut world, Key::Down);
     assert_eq!(
         picked(&world),
@@ -1413,6 +1423,9 @@ fn the_details_of_a_pull_request_say_its_checks_review_and_merge_then_what_stand
         ],
         "a watched pull request's verdict is its watch's"
     );
+    gate_tooltip(&mut world, 0, "Checks failed");
+    gate_tooltip(&mut world, 1, "Review changes requested");
+    gate_tooltip(&mut world, 2, "Merge conflicts");
     key(&mut world, Key::Down);
     assert_eq!(
         picked(&world),
@@ -2420,6 +2433,56 @@ fn the_shortcut_opens_the_active_agents_chain_or_its_pull_requests_and_gives_the
         assert_eq!(details(&world), None, "{what}");
         key(&mut world, Key::Text("y".into()));
         assert_eq!(typed_into(&world, "r-a"), ["y"], "{what}");
+        rest(&mut world);
+    }
+}
+
+#[test]
+fn the_details_shortcut_leaves_ask_previews_transient_and_opens_the_active_agents_pull_requests() {
+    let ask = "tile.a.ask.popover";
+    let prs = "tile.a.details.popover";
+    for has_pr in [false, true] {
+        let mut world = start_from(InitialStateMessage {
+            desktops: Some(vec![desktop("a")]),
+            sessions: Some(vec![
+                Session {
+                    pull_requests: has_pr
+                        .then(|| vec![pull_request(71, "open", "2026-08-30T12:00:00Z")]),
+                    ..session("a", "ledger sweep", None)
+                },
+                session("b", "docs", None),
+            ]),
+            asks: Some(vec![super::asks::ask(
+                "a-cache",
+                "s-a",
+                "Cache store",
+                5,
+                vec![super::asks::question(
+                    "store",
+                    "text",
+                    "Which store should keep the cache?",
+                    &[],
+                )],
+            )]),
+            ..InitialStateMessage::new()
+        });
+        rest_on(&mut world, "tile.a.ask");
+        world.advance(Duration::from_millis(160));
+        world.screen().get(Target::key(ask));
+
+        details_shortcut(&mut world);
+        if has_pr {
+            assert_eq!(focused(&world).as_deref(), Some(prs));
+            assert!(world.screen().find(Target::key(ask)).is_none());
+            details_shortcut(&mut world);
+        } else {
+            world.screen().get(Target::key(ask));
+            rest_on(&mut world, "tile.b");
+            world.advance(Duration::from_millis(240));
+            assert!(world.screen().find(Target::key(ask)).is_none());
+        }
+        key(&mut world, Key::Text("x".into()));
+        assert_eq!(typed_into(&world, "r-a"), ["x"]);
         rest(&mut world);
     }
 }
