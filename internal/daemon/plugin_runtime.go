@@ -129,11 +129,21 @@ func (d *Daemon) startDiscoveredPlugins() (discovered int) {
 	}
 	d.armPluginDriverSilenceWatchForEveryRun()
 	for _, manifest := range catalog {
+		if err := plugins.CheckNoPendingSwap(d.pluginDir, manifest.Name); err != nil {
+			d.logf("plugin %s could not start: %v", manifest.Name, err)
+			continue
+		}
 		if err := d.startInstalledPlugin(manifest); err != nil {
 			d.logf("plugin %s failed to start: %v", manifest.Name, err)
 		}
 	}
 	return len(catalog)
+}
+
+func (d *Daemon) recoverInterruptedPluginSwaps() {
+	for _, issue := range plugins.RecoverInterruptedSwaps(d.pluginDir) {
+		d.logf("plugin replacement recovery: %v", issue)
+	}
 }
 
 func (d *Daemon) startInstalledPlugin(manifest pluginManifest) error {

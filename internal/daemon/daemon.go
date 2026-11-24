@@ -726,6 +726,8 @@ func (d *Daemon) Start() error {
 	if err := d.recoverAttachments(); err != nil {
 		d.logf("attachment recovery incomplete: %v", err)
 	}
+	d.reapStrandedPluginRuntimes()
+	d.recoverInterruptedPluginSwaps()
 	if err := d.startBridgeSocket(); err != nil {
 		return fmt.Errorf("start bridge socket: %w", err)
 	}
@@ -769,7 +771,6 @@ func (d *Daemon) Start() error {
 	for _, session := range d.store.List("") {
 		d.startSessionMonitor(session.ID)
 	}
-	d.reapStrandedPluginRuntimes()
 	d.reapStrandedLanguageServers()
 	d.life.Go("followLoginEnv", d.followLoginEnv)
 

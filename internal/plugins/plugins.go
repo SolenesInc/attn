@@ -190,6 +190,9 @@ func installedPlugin(pluginDir, name string) (Manifest, error) {
 	if !validInstallName(name) {
 		return Manifest{}, fmt.Errorf("invalid plugin name %q", name)
 	}
+	if err := CheckNoPendingSwap(pluginDir, name); err != nil {
+		return Manifest{}, err
+	}
 	manifest, issue := loadInstalled(filepath.Join(pluginDir, name))
 	if issue != nil {
 		if os.IsNotExist(issue.Err) {
@@ -203,9 +206,15 @@ func installedPlugin(pluginDir, name string) (Manifest, error) {
 	return manifest, nil
 }
 
+const (
+	pendingSwapSuffix   = ".replacing"
+	discardedSwapSuffix = ".replaced"
+)
+
 type SwapHandle struct {
-	target string
-	backup string
+	target    string
+	backup    string
+	discarded string
 }
 
 func (h *SwapHandle) Replaced() bool {
@@ -213,10 +222,20 @@ func (h *SwapHandle) Replaced() bool {
 }
 
 func (h *SwapHandle) Commit() error {
-	if h.backup == "" {
+	if !h.Replaced() {
 		return nil
 	}
-	if err := os.RemoveAll(h.backup); err != nil {
+	if err := os.Rename(h.backup, h.discarded); err != nil {
+		return fmt.Errorf("commit plugin replacement: %w", err)
+	}
+	return nil
+}
+
+func (h *SwapHandle) DiscardPrevious() error {
+	if !h.Replaced() {
+		return nil
+	}
+	if err := os.RemoveAll(h.discarded); err != nil {
 		return fmt.Errorf("remove previous plugin copy: %w", err)
 	}
 	return nil
@@ -236,22 +255,25 @@ func (h *SwapHandle) Rollback() error {
 }
 
 func swapIn(pluginDir, name string, place func(target string) error) (*SwapHandle, error) {
-	target := filepath.Join(pluginDir, name)
-	if err := removeStaleBackups(pluginDir, name); err != nil {
+	if err := CheckNoPendingSwap(pluginDir, name); err != nil {
 		return nil, err
 	}
-	handle := &SwapHandle{target: target}
-	if _, err := os.Lstat(target); err == nil {
-		handle.backup = filepath.Join(pluginDir, fmt.Sprintf(".%s.old-%d", name, time.Now().UnixNano()))
-		if err := os.Rename(target, handle.backup); err != nil {
+	handle := &SwapHandle{target: filepath.Join(pluginDir, name)}
+	if _, err := os.Lstat(handle.target); err == nil {
+		handle.backup = filepath.Join(pluginDir, "."+name+pendingSwapSuffix)
+		handle.discarded = filepath.Join(pluginDir, "."+name+discardedSwapSuffix)
+		if err := handle.DiscardPrevious(); err != nil {
+			return nil, err
+		}
+		if err := os.Rename(handle.target, handle.backup); err != nil {
 			return nil, fmt.Errorf("set aside plugin %q: %w", name, err)
 		}
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("inspect plugin %q: %w", name, err)
 	}
-	if err := place(target); err != nil {
-		if handle.backup != "" {
-			if restoreErr := os.Rename(handle.backup, target); restoreErr != nil {
+	if err := place(handle.target); err != nil {
+		if handle.Replaced() {
+			if restoreErr := os.Rename(handle.backup, handle.target); restoreErr != nil {
 				return nil, fmt.Errorf("publish plugin %q: %w; restore previous plugin: %v", name, err, restoreErr)
 			}
 		}
@@ -260,17 +282,50 @@ func swapIn(pluginDir, name string, place func(target string) error) (*SwapHandl
 	return handle, nil
 }
 
-func removeStaleBackups(pluginDir, name string) error {
-	stale, err := filepath.Glob(filepath.Join(pluginDir, "."+name+".old-*"))
-	if err != nil {
-		return err
+func CheckNoPendingSwap(pluginDir, name string) error {
+	_, err := os.Lstat(filepath.Join(pluginDir, "."+name+pendingSwapSuffix))
+	switch {
+	case os.IsNotExist(err):
+		return nil
+	case err != nil:
+		return fmt.Errorf("inspect pending replacement of plugin %q: %w", name, err)
+	default:
+		return fmt.Errorf("plugin %q has a pending replacement; restart the daemon to recover it", name)
 	}
-	for _, path := range stale {
-		if err := os.RemoveAll(path); err != nil {
-			return fmt.Errorf("remove stale plugin copy %s: %w", path, err)
+}
+
+func RecoverInterruptedSwaps(pluginDir string) []ManifestIssue {
+	entries, err := os.ReadDir(pluginDir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return []ManifestIssue{{Path: pluginDir, Err: err}}
+	}
+	var issues []ManifestIssue
+	for _, entry := range entries {
+		hiddenName, hidden := strings.CutPrefix(entry.Name(), ".")
+		if !hidden {
+			continue
+		}
+		path := filepath.Join(pluginDir, entry.Name())
+		switch {
+		case strings.HasSuffix(hiddenName, discardedSwapSuffix):
+			if err := os.RemoveAll(path); err != nil {
+				issues = append(issues, ManifestIssue{Path: path, Err: err})
+			}
+		case strings.HasSuffix(hiddenName, pendingSwapSuffix):
+			name := strings.TrimSuffix(hiddenName, pendingSwapSuffix)
+			if name == "" || !validInstallName(name) {
+				continue
+			}
+			swap := SwapHandle{target: filepath.Join(pluginDir, name), backup: path}
+			if err := swap.Rollback(); err != nil {
+				issues = append(issues, ManifestIssue{Path: path, Err: err})
+			}
 		}
 	}
-	return nil
+	return issues
 }
 
 type stagedPlugin struct {
@@ -715,6 +770,9 @@ func Remove(pluginDir, name string) error {
 	name = strings.TrimSpace(name)
 	if !validInstallName(name) {
 		return fmt.Errorf("invalid plugin name %q", name)
+	}
+	if err := CheckNoPendingSwap(pluginDir, name); err != nil {
+		return err
 	}
 	path := filepath.Join(pluginDir, name)
 	info, err := os.Lstat(path)

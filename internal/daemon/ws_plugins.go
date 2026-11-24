@@ -121,6 +121,10 @@ func (d *Daemon) finishPluginSwap(client *wsClient, action string, manifest plug
 		return
 	}
 	if err := swap.Commit(); err != nil {
+		d.sendPluginActionResult(client, action, manifest.Name, false, d.restorePreviousPlugin(manifest.Name, swap, err))
+		return
+	}
+	if err := swap.DiscardPrevious(); err != nil {
 		d.logf("plugin %s replaced but its previous copy stayed behind: %v", manifest.Name, err)
 	}
 	d.sendPluginActionResult(client, action, manifest.Name, true, "")

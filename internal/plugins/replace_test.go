@@ -58,6 +58,13 @@ func (w *pluginWorld) link(source string) error {
 	return swap.Commit()
 }
 
+func commitSwap(swap *SwapHandle) error {
+	if err := swap.Commit(); err != nil {
+		return err
+	}
+	return swap.DiscardPrevious()
+}
+
 func (w *pluginWorld) checkout(rel, name, version string) string {
 	w.t.Helper()
 	dir := filepath.Join(w.root, rel)
@@ -150,6 +157,9 @@ func TestReplacingAPluginSwapsInTheNewCopyAndRollbackRestoresThePreviousOne(t *t
 	if err := swap.Commit(); err != nil {
 		t.Fatal(err)
 	}
+	if issues := RecoverInterruptedSwaps(w.pluginDir); len(issues) != 0 {
+		t.Fatalf("recover committed replacement before cleanup: %v", issues)
+	}
 	if got, left := w.installedVersion("sample"), w.leftovers(); got != "0.2.0" || len(left) != 0 {
 		t.Fatalf("after commit: live %q, leftovers %v; want 0.2.0 and no previous copy", got, left)
 	}
@@ -159,18 +169,28 @@ func TestReplacingAPluginSwapsInTheNewCopyAndRollbackRestoresThePreviousOne(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := swap.Commit(); err != nil {
+	if err := commitSwap(swap); err != nil {
 		t.Fatal(err)
 	}
 	if info, err := os.Lstat(filepath.Join(w.pluginDir, "sample")); err != nil || info.Mode()&os.ModeSymlink == 0 || linked.LinkTarget != linkedCheckout || linked.Source != "" {
 		t.Fatalf("after linking: %+v (%v); want a symlink to %s with no managed source", linked, err, linkedCheckout)
 	}
 
+	if _, _, err := ReplaceSourceWithOptionsContext(context.Background(), v1, w.pluginDir, w.opts); err != nil {
+		t.Fatal(err)
+	}
+	if issues := RecoverInterruptedSwaps(w.pluginDir); len(issues) != 0 {
+		t.Fatalf("recover interrupted replacement of a link: %v", issues)
+	}
+	if target, err := os.Readlink(filepath.Join(w.pluginDir, "sample")); err != nil || target != linkedCheckout {
+		t.Fatalf("recovered link points to %q (%v), want %s", target, err, linkedCheckout)
+	}
+
 	managed, swap, err := ReplaceSourceWithOptionsContext(context.Background(), v1, w.pluginDir, w.opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := swap.Commit(); err != nil {
+	if err := commitSwap(swap); err != nil {
 		t.Fatal(err)
 	}
 	info, err := os.Lstat(filepath.Join(w.pluginDir, "sample"))
@@ -376,7 +396,9 @@ func TestAGitInstallRecordsItsRedactedSourceAndCommitAndUpdatesFromThem(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = swap.Commit()
+	if err := commitSwap(swap); err != nil {
+		t.Fatal(err)
+	}
 	updatedProvenance, _ := readProvenance(updated.Dir)
 	if updated.Version != "0.2.0" || updatedProvenance.Commit != gitIn(t, w.opts.Env, repo, "rev-parse", "HEAD") || cloned[len(cloned)-1] != recorded.Source {
 		t.Fatalf("update installed %+v at %+v from %q; want 0.2.0 at the new commit, fetched from the recorded source", updated, updatedProvenance, cloned[len(cloned)-1])
@@ -414,7 +436,9 @@ func TestAGitSourceWithCredentialsIsRecordedWithoutThemAndCannotBeUpdated(t *tes
 			if err != nil {
 				t.Fatal(err)
 			}
-			_ = swap.Commit()
+			if err := commitSwap(swap); err != nil {
+				t.Fatal(err)
+			}
 			body, err := os.ReadFile(filepath.Join(w.pluginDir, "sample", ProvenanceName))
 			if err != nil || strings.Contains(string(body), "hunter2") || !strings.Contains(string(body), "git.example.com/team/sample.git") {
 				t.Fatalf("%s = %s (%v); want the source without its credentials", ProvenanceName, body, err)

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/google/uuid"
@@ -187,4 +188,52 @@ func TestPluginCommandsReplaceReloadAndUpdateAHarnessWhileItsSessionTakesInput(t
 		t.Fatalf("after reloading the daemon lists %+v, want 0.4.0 connected", p)
 	}
 	requireFailure(t, s.Attn("plugin", "update", "sample-harness"), "plugin update: ", "plugin \"sample-harness\" is linked to "+plugin+"; use reload to pick up its changes")
+}
+
+func TestDaemonRestartRestoresThePreviousPluginWhenReplacementHasNotConnected(t *testing.T) {
+	t.Parallel()
+	const name = "sample-harness"
+	const agent = fakeagent.Harness("rollback_probe")
+	working := authorsPlugin(t, string(agent), packSDK(t))
+	s := testworld.NewStack(t)
+	s.Start()
+	app := s.App()
+	s.Attn("plugin", "install", working).JSON(t, &pluginResult{})
+	awaitAgentAvailable(app, agent)
+	session := s.Spawn(app, agent, s.Path("shop"))
+	app.AwaitScreen(session, "sample harness started conversation")
+
+	replacement, ready := s.Path("replacement"), s.Path("replacement-ready.fifo")
+	writePluginSource(t, replacement, name)
+	setPluginVersion(t, replacement, "0.2.0")
+	if err := syscall.Mkfifo(ready, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	entrypoint := filepath.Join(replacement, "bin", "run")
+	idle, err := os.ReadFile(entrypoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := fmt.Sprintf("#!/bin/sh\nexec 3>%q\n%s", ready, strings.TrimPrefix(string(idle), "#!/bin/sh\n"))
+	if err := os.WriteFile(entrypoint, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	install := s.Launch(testworld.Invocation{Args: []string{"plugin", "install", replacement}})
+	openHeldPipe(t, ready)
+	if stop := s.Attn("daemon", "stop"); stop.Code != 0 {
+		t.Fatalf("daemon stop exited %d: %s", stop.Code, stop.Stderr)
+	}
+	s.AwaitStopped()
+	requireFailure(t, install.Wait(), "plugin install: wait for daemon response:")
+	s.Start()
+
+	if p := listedPlugin(t, s, name); p.Version != "0.1.0" || protocol.Deref(p.Source) != working {
+		t.Fatalf("after daemon restart plugin list shows %+v, want the previous 0.1.0", p)
+	}
+	app = s.App()
+	awaitAgentAvailable(app, agent)
+	if result := submitDirectInput(app, session, "after daemon restart"); !result.Success {
+		t.Fatalf("the original session refused input: %s", protocol.Deref(result.Error))
+	}
+	app.AwaitScreen(session, "[user] after daemon restart")
 }
