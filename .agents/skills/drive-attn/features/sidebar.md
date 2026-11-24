@@ -22,7 +22,7 @@ queue bar's contents too. The sidebar has no header.
 - `resize`: drag the open sidebar's right edge. The tile area keeps its width during the drag and fits once on release. A double-click clears the width.
 - `width-steps`: keys and palette commands move the open sidebar by 40px and name a limit they can't pass. The limits are 200px, 600px and the window less 480px for tiles.
 - `width-setting`: the width in Settings → Appearance and in `sidebar_width`, with a way back to the default of 240px.
-- `session-rows`: one row per agent with its state, harness mark and actions menu. A clipped name shows in full on hover. Clicking the row of an off-screen tile brings the tile beside the active tile, and hovering the row opens its peek panel ([desktops.md](desktops.md)).
+- `session-rows`: one row per agent with its state, harness mark and actions menu. A clipped name shows in full on hover. Clicking the row of an off-screen tile brings the tile beside the active tile, and hovering the row opens its peek panel ([desktops.md](desktops.md)). The row a delegation chain or pull requests popover opened from is outlined, and the row of the agent the chain picks is lit ([delegation.md](delegation.md)).
 
 ## How to get to it
 

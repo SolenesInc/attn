@@ -15,7 +15,7 @@ top. Commands the user picks often rise in the list.
 - `palette-switch`: ⌘K and ⌘⇧K switch between the two and keep the typed text. The same key again closes the palette.
 - `palette-actions`: in the agent palette, ⌘⇧E settles, ⌘⇧I marks priority and ⌘⇧S snoozes the highlighted agent, without closing.
 - `palette-order`: commands rank first by how well they match, then by whether they are pinned, then by how often and how lately the user picked them in this profile.
-- `palette-pins`: commands about the agent on screen come first: settle, reload, rename, priority, delegation chain, seeds, usage, context cap, open in editor, and in queue flow snooze and unsnooze.
+- `palette-pins`: commands about the agent on screen come first: settle, reload, rename, priority, delegation chain, pull requests, seeds, usage, context cap, open in editor, and in queue flow snooze and unsnooze.
 
 ## How to get to it
 

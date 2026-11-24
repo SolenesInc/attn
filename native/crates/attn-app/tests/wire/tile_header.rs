@@ -654,6 +654,15 @@ fn the_pull_request_details_open_on_hover_and_close_soon_after_the_pointer_leave
         !shown.contains("copy link"),
         "a hovered popover names only the keys it takes: {shown}"
     );
+    for pressed in [Key::Enter, Key::Text("c".into())] {
+        key(&mut world, pressed);
+    }
+    assert_eq!(
+        typed_into(&world, "r-a"),
+        ["\r", "c"],
+        "and leaves the rest to the terminal"
+    );
+    assert!(world.opened_links().is_empty());
     assert!(
         world
             .screen()
@@ -2435,6 +2444,15 @@ fn tab_in_a_pinned_popover_switches_between_the_agents_chain_and_its_pull_reques
     assert_eq!(details(&world), None);
     assert_eq!(focused(&world).as_deref(), Some("tile.a.role.popover"));
     assert!(typed_into(&world, "r-a").is_empty());
+    key(&mut world, Key::Escape);
+
+    world.gesture(|app| app.click(Target::key("sidebar.session.s-a.chain")));
+    key(&mut world, Key::Tab);
+    assert!(
+        chain(&world).is_some(),
+        "a row's chain has no other popover"
+    );
+    assert_eq!(details(&world), None);
     rest(&mut world);
 }
 
