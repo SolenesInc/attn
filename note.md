@@ -1,0 +1,1 @@
+The drive-attn feature map no longer names moved or deleted source paths, and its settings recipes press the keys the native app has (`settings.setting.<key>`, the header `close` button). It also lists ways in the last audit found missing, and the What's new tour, delegate and vision-check recipes now match what attn prints.
