@@ -1,0 +1,1 @@
+⌘P's markdown opener now shows which machine each recent file is on and whether an agent edited it or you opened it, and **Tab** lists one machine's files at a time. Outposts that can't be reached keep their files listed as offline, and a finder's field keeps room beside a long machine chip instead of losing the keyboard.
