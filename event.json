@@ -1,0 +1,9 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Closed session transcripts on an outpost are refused",
+  "at": "2026-11-24T06:13:34.649Z",
+  "severity": "p1",
+  "source": "agent",
+  "culprit": "e535adbbc30615df3bce71348a576702baf69aba"
+}
