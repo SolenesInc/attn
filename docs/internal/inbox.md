@@ -154,7 +154,8 @@ item.
   stake only while the session holds the stake's mailbox. Once it parks or
   replants the stake, or another session takes it, the ask goes to the session.
   Opening, listing, withdrawing and delivering an ask all use that one holder
-  rule. An ask is stranded when no agent would take the answer: the asking
+  rule.
+- An ask is stranded when no agent would take the answer: the asking
   session closed, or nobody tends the seed and the answer resumes no tender
   from standby. The user can send the answer or a follow-up to a stranded ask
   to the profile's Chief instead (`to_chief`). attn writes it to the Chief's

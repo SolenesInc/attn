@@ -380,18 +380,19 @@ attn seed standby s-7k3f9m --at 2026-11-13T09:00:00+01:00 -m "Pick this up Frida
 ```
 
 The note says what to do next, and standby closes the agent's session. `--stay`
-keeps it open. An agent that waits on you asks with `attn ask` and ends its turn,
-and its session stays open, so you can find it, talk to it and run commands in
-its terminal. Attn refuses a standby that would close a session while the
-session has an open ask, whichever seed it is about. When you tell such an
-agent to close and its ask is about the seed, it puts the seed on standby with
-`--stay` and then closes itself, and your answer resumes it. Attn refuses the
-agent's close of itself while your answer would then reach no agent: when the
-ask is about no seed, or when **Seeds on standby** below resumes no agent for
-an answer. The agent then stays open, waiting for you. `--in` and `--at` also set the seed's
-reminder to that time, with the note as its message, so the agent resumes then
-if no other mail arrives first.
-`attn seed standby --clear` ends standby and leaves the reminder.
+keeps it open. `--in` and `--at` also set the seed's reminder to that time,
+with the note as its message, so the agent resumes then if no other mail arrives
+first. `attn seed standby --clear` ends standby and leaves the reminder.
+
+An agent that waits on you asks with `attn ask` and ends its turn, and its
+session stays open, so you can find it, talk to it and run commands in its
+terminal. Attn refuses a standby that would close a session while the session
+has an open ask, whichever seed it is about. When you tell such an agent to
+close and its ask is about the seed, it puts the seed on standby with `--stay`
+and then closes itself, and your answer resumes it. Attn refuses the agent's
+close of itself when your answer would then reach no agent: the ask is about no
+seed, or the Seeds on standby setting below does not resume an agent for an
+answer. The agent stays open, waiting for you.
 
 When mail reaches the seed, Attn resumes the closed session as
 itself, or starts a session for the crew member that tends the seed, and hands over the mail

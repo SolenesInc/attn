@@ -9,4 +9,4 @@ If you have an open ask, attn refuses a standby that closes this session. When t
     attn seed standby <seed> --at {{until}} -m "<what to do next>" --stay
     attn agent close --self -m "The user asked me to go on standby until {{until}}."
 
-attn refuses that close while the user's answer would then reach no agent: when the ask is about no seed, or when the profile's garden.tender_resume resumes no tender for an answer. Then stay open and end your turn.
+attn refuses that `attn agent close --self` while the user's answer would then reach no agent: the ask is about no seed or about another seed that nobody else tends, or the user's settings do not resume a tender for an answer. Then stay open and end your turn.
