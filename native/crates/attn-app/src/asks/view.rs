@@ -1538,7 +1538,7 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> Block {
                 .asks
                 .drafts
                 .get(&ask.id)
-                .is_some_and(|d| d.sends_after_upload);
+                .is_some_and(|d| d.sends_after_upload.is_some());
             let sendable = sendable && !waiting;
             let said = if sending || waiting {
                 "Sending…"

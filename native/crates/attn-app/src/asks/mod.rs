@@ -77,8 +77,9 @@ pub(crate) struct Draft {
     /// choice question until then.
     pub active: Option<Stop>,
     pub files: Vec<attach::File>,
-    /// Send was pressed while a file still uploaded: the answer goes once every file is up.
-    pub sends_after_upload: bool,
+    /// Send was pressed while a file still uploaded: the answer goes once every file is up, to
+    /// the Chief when the press was Send to Chief.
+    pub sends_after_upload: Option<ToChief>,
     generation: i64,
     saved: saving::Held,
     /// Why the daemon refused a save, until it takes one: a pending save or a missing reply
@@ -715,6 +716,9 @@ pub(crate) fn stranded_line(ask: &Ask) -> Option<&'static str> {
     })
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct ToChief(bool);
+
 /// A stranded ask's answer goes to the selected profile's Chief, when it has one.
 fn to_chief(ask: &Ask, facts: &Facts) -> bool {
     stranded(ask) && crate::chief::of(facts).is_some()
@@ -1197,26 +1201,31 @@ pub(crate) fn accept_recommended(state: &mut State, ask: &str) {
 /// or before it, or stays to show the reply; a refusal keeps what was written and says why.
 pub(crate) fn send(state: &mut State, tx: &mut Tx) {
     match state.shown_ask() {
-        Some((id, false)) => send_ask(state, id, tx),
+        Some((id, false)) => {
+            let Some(ask) = state.facts.asks.iter().find(|a| a.id == id) else {
+                return;
+            };
+            let to_chief = ToChief(to_chief(ask, &state.facts));
+            send_ask(state, id, to_chief, tx)
+        }
         Some((id, true)) => send_follow_up(state, id, tx),
         None => {}
     }
 }
 
-fn send_ask(state: &mut State, id: String, tx: &mut Tx) {
+fn send_ask(state: &mut State, id: String, ToChief(chief): ToChief, tx: &mut Tx) {
     if state.window.asks.sending.is_some() {
         return;
     }
     let Some(ask) = state.facts.asks.iter().find(|a| a.id == id).cloned() else {
         return;
     };
-    let chief = to_chief(&ask, &state.facts);
     let draft = state.draft(&id);
     if !draft.sendable(&ask) {
         return;
     }
     if draft.files.iter().any(attach::File::uploading) {
-        draft.sends_after_upload = true;
+        draft.sends_after_upload = Some(ToChief(chief));
         state.window.asks.error = None;
         return;
     }
@@ -1269,12 +1278,14 @@ fn uploaded(state: &mut State, ask: &str, tx: &mut Tx) {
     let Some(draft) = state.window.asks.drafts.get_mut(ask) else {
         return;
     };
-    if !draft.sends_after_upload || draft.files.iter().any(attach::File::uploading) {
+    if draft.files.iter().any(attach::File::uploading) {
         return;
     }
-    draft.sends_after_upload = false;
+    let Some(to_chief) = draft.sends_after_upload.take() else {
+        return;
+    };
     if draft.files.iter().all(|f| f.failed().is_none()) {
-        send_ask(state, ask.to_owned(), tx);
+        send_ask(state, ask.to_owned(), to_chief, tx);
     }
 }
 

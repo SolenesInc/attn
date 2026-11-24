@@ -1,14 +1,17 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use attn_protocol::{AttachmentPutResult, AttachmentResult, AttachmentResultMessage};
+use attn_protocol::{
+    Ask, AskAnswerResultMessage, AttachmentPutResult, AttachmentResult, AttachmentResultMessage,
+    CrewMember, CrewUpdatedMessage,
+};
 use attn_testkit::{Request, Target, World, message};
 use base64::Engine;
 use rune::{ClipboardContent, ClipboardImage};
 use serde_json::Value;
 
 use super::asks::{
-    add_note, api_working, ask, open_sheet, question, start, update_asks, web_waiting,
+    add_note, api_working, ask, checked, open_sheet, question, start, update_asks, web_waiting,
 };
 
 const NOTE: &str = "asks.note.field";
@@ -630,4 +633,111 @@ fn mod_v_of_text_and_an_image_with_no_field_focused_attaches_the_image() {
         .map(|(_, n, _)| n)
         .collect();
     assert_eq!(names, ["Pasted screenshot.png"]);
+}
+
+fn shipping_on_seed(stranded: bool) -> Ask {
+    Ask {
+        seed_id: Some("s-ship".into()),
+        stranded: stranded.then_some(true),
+        ..shipping()
+    }
+}
+
+/// Answers the shipping ask with a file still uploading, with Send to Chief when it starts
+/// stranded, and turns the ask stranded or held before the file is up. Returns the answer sent
+/// once the upload finishes.
+fn answer_while_an_upload_changes_stranding(world: &mut World, started_stranded: bool) -> Request {
+    let mut ask = shipping_on_seed(started_stranded);
+    world.daemon.emit(CrewUpdatedMessage {
+        members: vec![CrewMember {
+            id: "chief".into(),
+            name: "Chief".into(),
+            profile_id: "work".into(),
+            chief: Some(true),
+            ..CrewMember::default()
+        }],
+        ..CrewUpdatedMessage::new()
+    });
+    world.daemon.on("attachment_put", |_| Vec::<Value>::new());
+    world.settle();
+    open_sheet(world);
+    add_note(world);
+    paste_into_note(
+        world,
+        ClipboardContent::new("").with_image(ClipboardImage::from_png(png()).unwrap()),
+    );
+    world.gesture(|app| app.click(Target::key("asks.q.q1.choice.1")));
+    let send = world
+        .screen()
+        .get(Target::key("asks.send"))
+        .name
+        .unwrap_or_default();
+    assert_eq!(
+        send.starts_with("Send to Chief"),
+        started_stranded,
+        "{send}"
+    );
+    world.gesture(|app| app.click(Target::key("asks.send")));
+    assert!(answers(world).is_empty(), "the answer left before its file");
+
+    ask.stranded = (!started_stranded).then_some(true);
+    update_asks(world, vec![ask]);
+    let put = world.daemon.sent_of("attachment_put").remove(0);
+    world.daemon.emit(upload_answer(&put, png().len()));
+    world.settle();
+    let mut sent = answers(world);
+    assert_eq!(sent.len(), 1);
+    assert_eq!(
+        sent[0]["attachments"],
+        serde_json::json!([put["attachment_id"]])
+    );
+    sent.remove(0)
+}
+
+#[test]
+fn send_to_chief_pressed_during_an_upload_still_goes_to_the_chief_after_a_tender_takes_the_ask() {
+    let mut world = start(vec![shipping_on_seed(true)], vec![web_waiting()]);
+    let refusal =
+        "a-ship is not stranded: web takes the answer, so send it there instead of to the Chief";
+    world.daemon.on("ask_answer", move |r| {
+        message(AskAnswerResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            ask_id: r["ask_id"].as_str().unwrap().into(),
+            success: false,
+            error: Some(refusal.into()),
+            ..AskAnswerResultMessage::new()
+        })
+    });
+    let sent = answer_while_an_upload_changes_stranding(&mut world, true);
+    assert_eq!(sent["to_chief"], serde_json::json!(true), "sent as {sent}");
+
+    let screen = world.screen();
+    assert_eq!(
+        screen.get(Target::key("asks.error")).name.as_deref(),
+        Some(refusal)
+    );
+    assert!(
+        checked(&world, "asks.q.q1.choice.1"),
+        "the refusal dropped the picked choice"
+    );
+    let files = tray(&world);
+    assert_eq!(files.len(), 1, "the refusal dropped the file");
+    assert_eq!(files[0].0, sent["attachments"][0].as_str().unwrap());
+    assert!(
+        screen
+            .get(Target::key("asks.send"))
+            .name
+            .unwrap_or_default()
+            .starts_with("Send ")
+    );
+}
+
+#[test]
+fn send_pressed_during_an_upload_still_goes_to_the_ask_after_its_tender_closes() {
+    let mut world = start(vec![shipping_on_seed(false)], vec![web_waiting()]);
+    let sent = answer_while_an_upload_changes_stranding(&mut world, false);
+    assert!(
+        sent.get("to_chief").is_none_or(Value::is_null),
+        "sent as {sent}"
+    );
 }
