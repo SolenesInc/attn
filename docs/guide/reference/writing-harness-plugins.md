@@ -237,6 +237,9 @@ drives:
   directory, archive or Git URL it was installed from. `attn plugin list` shows
   that source. A linked plugin has none: reload it instead.
 
+Settings → Plugins offers them as buttons: Reload on a linked plugin, and
+Update on a copied plugin whose source Attn recorded, which the card shows.
+
 When a command replaces a running plugin, it answers once the new plugin has
 connected; a first install answers once the plugin is installed and started. A
 replacement or update

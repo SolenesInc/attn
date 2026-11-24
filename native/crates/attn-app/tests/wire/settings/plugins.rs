@@ -46,6 +46,8 @@ fn serving(plugins: Vec<PluginInfo>) -> Daemon {
     daemon.on("list_plugins", move |_| listing(plugins.clone()));
     daemon.on("install_plugin", |r| succeeded("install", r));
     daemon.on("remove_plugin", |r| succeeded("remove", r));
+    daemon.on("reload_plugin", |r| succeeded("reload", r));
+    daemon.on("update_plugin", |r| succeeded("update", r));
     daemon.on("set_plugin_priority", |r| succeeded("set_priority", r));
     daemon
 }
@@ -795,4 +797,148 @@ fn tab_shows_every_plugin_whole_in_the_smallest_window() {
         reached.iter().any(|k| k.contains("plugin-11")),
         "Tab never reached the last plugin: {reached:?}"
     );
+}
+
+fn linked() -> PluginInfo {
+    PluginInfo {
+        name: "attn-snipe".into(),
+        dir: "/Users/me/.attn/plugins/attn-snipe".into(),
+        link_target: Some("/Users/me/src/attn-snipe".into()),
+        ..installed()
+    }
+}
+
+fn managed_from_git() -> PluginInfo {
+    PluginInfo {
+        source: Some("https://ghe.example.com/victora/attn-snipe.git".into()),
+        source_kind: Some("git".into()),
+        ..installed()
+    }
+}
+
+fn sent_names(world: &World, cmd: &str) -> Vec<String> {
+    world
+        .daemon
+        .sent_of(cmd)
+        .iter()
+        .map(|r| r["name"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+#[test]
+fn reload_on_a_linked_plugin_reloads_it_and_reads_the_list_again() {
+    let mut world = World::start(serving(vec![linked()]));
+    on_plugins(&mut world);
+    let before = lists(&world);
+    assert!(
+        world
+            .screen()
+            .find(Target::key(plugin_part("attn-snipe", "update")))
+            .is_none()
+    );
+
+    click(&mut world, &plugin_part("attn-snipe", "reload"));
+
+    assert_eq!(sent_names(&world, "reload_plugin"), ["attn-snipe"]);
+    assert!(world.daemon.sent_of("reload_plugin")[0]["skip_install"].is_null());
+    assert!(lists(&world) > before);
+    rest(&mut world);
+}
+
+#[test]
+fn update_on_a_plugin_installed_from_a_source_updates_it_and_shows_the_source() {
+    let mut world = World::start(serving(vec![managed_from_git()]));
+    on_plugins(&mut world);
+    let name = "services-pilot-worktrees";
+    let before = lists(&world);
+    assert_eq!(
+        named(&world, &plugin_part(name, "source")).as_deref(),
+        Some("Source https://ghe.example.com/victora/attn-snipe.git")
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key(plugin_part(name, "reload")))
+            .is_none()
+    );
+
+    click(&mut world, &plugin_part(name, "update"));
+
+    assert_eq!(sent_names(&world, "update_plugin"), [name]);
+    assert!(lists(&world) > before);
+    rest(&mut world);
+}
+
+#[test]
+fn a_plugin_installed_before_sources_were_recorded_offers_neither_reload_nor_update() {
+    let mut world = World::start(serving(vec![installed()]));
+    on_plugins(&mut world);
+    let name = "services-pilot-worktrees";
+    for part in ["reload", "update", "source"] {
+        assert!(
+            world
+                .screen()
+                .find(Target::key(plugin_part(name, part)))
+                .is_none(),
+            "{part} shows on a plugin with no recorded source"
+        );
+    }
+    assert!(
+        world
+            .screen()
+            .find(Target::key(plugin_part(name, "remove")))
+            .is_some()
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn a_refused_reload_or_update_shows_its_reason_under_the_plugin_and_frees_the_row() {
+    for (plugin, cmd, action, why) in [
+        (
+            linked(),
+            "reload_plugin",
+            "reload",
+            r#"plugin "attn-snipe" exited before it connected: signal: killed"#,
+        ),
+        (
+            managed_from_git(),
+            "update_plugin",
+            "update",
+            "fetch failed: repository not found",
+        ),
+    ] {
+        let name = plugin.name.clone();
+        let daemon = serving(vec![plugin]);
+        daemon.on(cmd, move |r| {
+            message(PluginActionResultMessage {
+                action: action.into(),
+                name: r["name"].as_str().map(str::to_owned),
+                success: false,
+                error: Some(why.into()),
+                ..PluginActionResultMessage::new()
+            })
+        });
+        let mut world = World::start(daemon);
+        on_plugins(&mut world);
+        let pressed = plugin_part(&name, action);
+
+        let rec = world.record(60.0, 0.5, |_, app| app.click(Target::key(&pressed)));
+
+        crate::wire::whole_on_its_first_frame(&rec, &plugin_part(&name, "error"));
+        assert_eq!(
+            named(&world, &plugin_part(&name, "error")).as_deref(),
+            Some(why),
+            "{action}"
+        );
+        assert!(
+            named(&world, "settings.plugins.error").is_none(),
+            "{action}"
+        );
+        assert!(
+            !world.screen().get(Target::key(&pressed)).is("disabled"),
+            "{action}"
+        );
+        rest(&mut world);
+    }
 }

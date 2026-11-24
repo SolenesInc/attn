@@ -1,5 +1,5 @@
-//! Settings → Plugins: install a plugin from a folder or a Git repository, remove one, and set
-//! each one's provider priority. The list is read when the dialog opens and after each change,
+//! Settings → Plugins: install a plugin from a folder or a Git repository; reload a linked one,
+//! update one installed from a recorded source, remove one, and set each one's provider priority. The list is read when the dialog opens and after each change,
 //! and follows every list the daemon pushes.
 
 use std::collections::BTreeMap;
@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use attn_client::{LIST_PLUGINS, plugin_action};
 use attn_protocol::{
     InstallPluginMessage, ListPluginsMessage, PluginInfo, PluginsUpdatedMessage,
-    RemovePluginMessage, SetPluginPriorityMessage,
+    ReloadPluginMessage, RemovePluginMessage, SetPluginPriorityMessage, UpdatePluginMessage,
 };
 use attn_ui::Tokens;
 use attn_ui::blocks::{Actions, Block, Facts, Field, Inline, List, Notice, Prose, Status};
@@ -27,6 +27,8 @@ const SAVED_MARK_SECONDS: f64 = 1.6;
 const INSTALL: &str = "install";
 const SET_PRIORITY: &str = "set_priority";
 const REMOVE: &str = "remove";
+const RELOAD: &str = "reload";
+const UPDATE: &str = "update";
 const INSTALL_BUTTON: &str = "settings.plugins.install";
 const PRIORITY_PREFIX: &str = "settings.plugin.";
 const PRIORITY_SUFFIX: &str = ".priority";
@@ -38,7 +40,8 @@ pub(crate) struct Plugins {
     priorities: BTreeMap<String, TextEdit>,
     loading: bool,
     refused: Option<Refused>,
-    /// What is mid-flight: an install, or the plugin a removal or priority change is for.
+    /// What is mid-flight: an install, or the plugin a reload, update, removal or priority
+    /// change is for.
     busy: Option<String>,
     /// The change that finishes once the list it read again lands, and whose priority it set.
     finishing: Option<Option<String>>,
@@ -50,8 +53,8 @@ pub(crate) struct Plugins {
 enum Refused {
     /// Above the list: reading it, or an install.
     Page(String),
-    /// Under the plugin's row, beside its Remove.
-    Removal { plugin: String, why: String },
+    /// Under the plugin's row, beside the Reload, Update or Remove the person pressed.
+    Row { plugin: String, why: String },
     /// Under the plugin's priority field.
     Priority { plugin: String, why: String },
 }
@@ -146,9 +149,9 @@ fn run<M: serde::Serialize>(
             Err(why) => {
                 panel(state).busy = None;
                 let refused = match action_of.as_str() {
+                    INSTALL => Refused::Page(why),
                     SET_PRIORITY => Refused::Priority { plugin, why },
-                    REMOVE => Refused::Removal { plugin, why },
-                    _ => Refused::Page(why),
+                    _ => Refused::Row { plugin, why },
                 };
                 refuse(state, refused, cause, tx);
             }
@@ -179,12 +182,12 @@ fn install(state: &mut State, tx: &mut Tx) {
     );
 }
 
-/// Lands a refusal the person's install, removal or priority caused, shown to them while they
+/// Lands a refusal the person's install, row action or priority caused, shown to them while they
 /// are still where they acted.
 fn refuse(state: &mut State, refused: Refused, cause: Cause, tx: &mut Tx) {
     let shown = match &refused {
         Refused::Page(_) => "settings.plugins.error".to_owned(),
-        Refused::Removal { plugin, .. } => format!("{PRIORITY_PREFIX}{plugin}.error"),
+        Refused::Row { plugin, .. } => format!("{PRIORITY_PREFIX}{plugin}.error"),
         Refused::Priority { plugin, .. } => format!("{}.error", priority_key(plugin)),
     };
     panel(state).refused = Some(refused);
@@ -203,6 +206,38 @@ fn remove(state: &mut State, name: &str, tx: &mut Tx) {
         command,
         None,
         Cause::at(format!("{PRIORITY_PREFIX}{name}.remove"), tx),
+        tx,
+    );
+}
+
+fn reload(state: &mut State, name: &str, tx: &mut Tx) {
+    let command = ReloadPluginMessage {
+        name: name.to_owned(),
+        ..ReloadPluginMessage::new()
+    };
+    run(
+        state,
+        name.to_owned(),
+        RELOAD,
+        command,
+        None,
+        Cause::at(format!("{PRIORITY_PREFIX}{name}.reload"), tx),
+        tx,
+    );
+}
+
+fn update(state: &mut State, name: &str, tx: &mut Tx) {
+    let command = UpdatePluginMessage {
+        name: name.to_owned(),
+        ..UpdatePluginMessage::new()
+    };
+    run(
+        state,
+        name.to_owned(),
+        UPDATE,
+        command,
+        None,
+        Cause::at(format!("{PRIORITY_PREFIX}{name}.update"), tx),
         tx,
     );
 }
@@ -371,9 +406,8 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> (ListRow, Vec<Block>)
             .role("status")
             .label("Saved")
     });
-    let removing = name.clone();
     let mut under: Vec<Block> = Vec::new();
-    if let Some(Refused::Removal { plugin, why }) = &plugins.refused
+    if let Some(Refused::Row { plugin, why }) = &plugins.refused
         && *plugin == name
     {
         under.push(Notice::error(id("error"), why.clone()).build(t));
@@ -387,9 +421,13 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> (ListRow, Vec<Block>)
     if let Some(exit) = plugin.last_exit.as_ref().filter(|e| !e.is_empty()) {
         under.push(Notice::warn(id("last-exit"), format!("Last exit: {exit}")).build(t));
     }
+    let linked_to = plugin.link_target.as_ref().filter(|l| !l.is_empty());
+    let source = plugin.source.as_ref().filter(|s| !s.is_empty());
     let mut facts = Facts::new(id("details")).code(id("path"), "Path", plugin.dir.clone());
-    if let Some(target) = plugin.link_target.as_ref().filter(|l| !l.is_empty()) {
+    if let Some(target) = linked_to {
         facts = facts.code(id("linked-to"), "Linked to", target.clone());
+    } else if let Some(source) = source {
+        facts = facts.code(id("source"), "Source", source.clone());
     }
     if let Some(attempt) = plugin.restart_attempt {
         facts = facts.code(
@@ -412,6 +450,12 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> (ListRow, Vec<Block>)
     if plugins.busy.as_deref() == Some(name.as_str()) {
         under.push(Status::new(id("busy"), format!("Updating {name}..."), true).build(t));
     }
+    type Act = fn(&mut State, &str, &mut Tx);
+    let refresher: Option<(&str, &str, Act)> = match (linked_to, source) {
+        (Some(_), _) => Some(("Reload", RELOAD, reload)),
+        (None, Some(_)) => Some(("Update", UPDATE, update)),
+        (None, None) => None,
+    };
     let tagged =
         |key: String, said: Said, tone: Tone| El::from(tag(key, said, tone, t)).role("status");
     let tags = Inline::tight()
@@ -420,13 +464,7 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> (ListRow, Vec<Block>)
             format!("v{}", plugin.version).into(),
             Tone::Neutral,
         ))
-        .children(
-            plugin
-                .link_target
-                .as_ref()
-                .filter(|l| !l.is_empty())
-                .map(|_| tagged(id("linked"), "Linked".into(), Tone::Neutral)),
-        )
+        .children(linked_to.map(|_| tagged(id("linked"), "Linked".into(), Tone::Neutral)))
         .child(tagged(
             id("runtime"),
             phase.clone().into(),
@@ -443,14 +481,33 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> (ListRow, Vec<Block>)
         .title(name.clone())
         .subtitle_el(tags)
         .controls(
-            [Button::new("Remove")
-                .look(Look::Danger)
-                .size(Size::Compact)
-                .disabled(busy || !plugin.can_uninstall)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| remove(state, &removing, tx))
-                .build(t)
-                .key(id("remove"))
-                .into()],
+            refresher
+                .map(|(label, part, act)| {
+                    let refreshing = name.clone();
+                    Button::new(label)
+                        .size(Size::Compact)
+                        .disabled(busy)
+                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                            act(state, &refreshing, tx)
+                        })
+                        .build(t)
+                        .key(id(part))
+                        .into()
+                })
+                .into_iter()
+                .chain([{
+                    let removing = name.clone();
+                    Button::new("Remove")
+                        .look(Look::Danger)
+                        .size(Size::Compact)
+                        .disabled(busy || !plugin.can_uninstall)
+                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                            remove(state, &removing, tx)
+                        })
+                        .build(t)
+                        .key(id("remove"))
+                        .into()
+                }]),
             Reveal::Always,
         );
     (row, under)

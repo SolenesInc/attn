@@ -359,7 +359,7 @@ struct Header {
 pub const LIST_PLUGINS: &str = "list_plugins";
 
 /// The request id under which a plugin command waits for the `plugin_action_result` that
-/// names its `action`: `install`, `remove` or `set_priority`.
+/// names its `action`: `install`, `reload`, `update`, `remove` or `set_priority`.
 pub fn plugin_action(action: &str) -> String {
     format!("plugin_action:{action}")
 }
