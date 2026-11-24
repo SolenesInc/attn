@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Search misclassifies automation descendants",
+  "at": "2026-11-24T23:48:22.650Z",
+  "detail": "A seed delegated under an automation run is shown under Automations in List and Board but disappears from bed:automations search and appears under bed:unassigned. Native wire probes and independent review confirmed this at 5ec9f5d. Evidence: s-kf0c7c/garden-v2-state-review.md.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/garden/search.rs",
+    "line": 225
+  },
+  "culprit": "5ec9f5d43de6c60b63d8df1960ad39f2adb9d386"
+}
