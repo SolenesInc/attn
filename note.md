@@ -1,0 +1,1 @@
+Fixes the red Daemon shard on main. The fake plug driver used in daemon tests accepted terminal reconnects before it restored the runs attn hands it on `hello`, so `TestUpdatingAPluginInstalledFromGitFetchesItsNewCommit` sometimes failed with "unknown plug relay token". No product code changes.
