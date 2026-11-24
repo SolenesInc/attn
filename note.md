@@ -1,0 +1,1 @@
+Removed Garden Review and Garden Advisor across the daemon, CLI, MCP tools, protocol, native app, docs, and prompts, along with a migration clearing retired `garden_review_classify` jobs and task notifications. Analytics showed zero usage across installs, and dropping the unused subsystem clears ~9.6k lines ahead of Garden v2.
