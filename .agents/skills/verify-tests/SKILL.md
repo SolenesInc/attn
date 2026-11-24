@@ -59,6 +59,10 @@ first. When you are done, remove the worktree with
   promise through the same entry? Name the test to keep.
 - Can the test fail? Does it assert only on its own fakes, check what the
   compiler guarantees, or test a helper?
+- Does the change silence a flaky test instead of fixing its cause? Widening
+  assertions to accept a broken state or error (such as adding a fallback `||`
+  branch), adding retries, or raising timeouts to make a flake pass is a
+  finding.
 - Could the test fail on a good run? Look for sleeps, polls, wall-clock
   deadlines, shared state between tests, order between tests, and fixed ports
   or paths.

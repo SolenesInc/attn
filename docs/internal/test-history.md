@@ -206,7 +206,7 @@ The `--group` arguments name the groups whose path pattern matched the change.
 
 `land-gate.sh` runs the tests through `scripts/landing-tests.sh --unit`, and
 any failure stops the push. `land-gate.sh` prints each test's result, skipped
-tests included, and the command that reruns a failed test. `cargo .` prints its
+tests included, and the diagnostic repro and history commands for a failed test. `cargo .` prints its
 failures, a count of the test targets that passed, and its log only when a
 target failed. `landing-tests.sh` runs its Go and cargo tests at once, and
 splits `./cmd/attnd`'s tests across five `go test` runs, each with its own

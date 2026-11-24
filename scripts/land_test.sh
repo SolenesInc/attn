@@ -679,4 +679,46 @@ grep -qF -- "--unit cargo example --test wire --receipt-out" "$LAND_CHECK_LOG" &
 if scripts/landing-tests.sh --unit 'cargo example' >"$work/output" 2>&1; then echo 'a cargo unit without a target ran' >&2; exit 1; fi
 expect_output "'cargo .', 'cargo <package> --lib', 'cargo <package> --doc' or 'cargo <package> --test|--bin <name>'"
 
+# Failing Go and cargo units print diagnostic repro and history commands rather than a single-run rerun.
+cat >"$work/bin/go" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[ "$1 $2" = "tool test-history" ] || { echo "unexpected go $*" >&2; exit 2; }
+case "$3" in
+  capture)
+    while [ "$#" -gt 0 ]; do
+      [ "$1" != --receipt-out ] || : >"$2"
+      shift
+    done
+    exit 1
+    ;;
+  summary)
+    if [ "${LAND_SUMMARY_KIND:-go}" = cargo ]; then
+      echo 'FAIL cargo example --test wire (0.2s)'
+    else
+      echo 'FAIL go ./internal/example TestExample (0.2s)'
+    fi
+    exit 1
+    ;;
+esac
+EOF
+chmod +x "$work/bin/go"
+if scripts/landing-tests.sh --unit 'go ./internal/example TestExample' >"$work/output" 2>&1; then
+  echo 'a failing Go unit exited 0' >&2
+  exit 1
+fi
+expect_output "repro: ./scripts/test-go.sh --packages -count=10 -race -run '^TestExample$' ./internal/example"
+expect_output "history: go tool test-history explain --test 'go ./internal/example TestExample'"
+if grep -qF -- '-count=1 ' "$work/output"; then
+  echo 'failing Go unit still suggested a single-run -count=1 rerun' >&2
+  cat "$work/output" >&2
+  exit 1
+fi
+if LAND_SUMMARY_KIND=cargo scripts/landing-tests.sh --unit 'cargo example --test wire' >"$work/output" 2>&1; then
+  echo 'a failing cargo unit exited 0' >&2
+  exit 1
+fi
+expect_output 'repro: (cd native && cargo test -p example --test wire)'
+expect_output "history: go tool test-history explain --test 'cargo example --test wire'"
+
 echo 'landing fast gate: OK'

@@ -110,7 +110,10 @@ settle_go_units() {
   if ! summarize "$work/$name.json" "$(cat "$work/$name.status")" "${units[@]}"; then
     cat "$work/$name.log" >&2
     failed=1
-    awk '$1 != "PASS" && $1 != "SKIP" { print "rerun: ./scripts/test-go.sh --packages -count=1 -run '\''^" $4 "$'\'' " $3 }' "$work/lines" >>"$work/reruns"
+    awk '$1 != "PASS" && $1 != "SKIP" {
+      print "repro: ./scripts/test-go.sh --packages -count=10 -race -run '\''^" $4 "$'\'' " $3
+      print "history: go tool test-history explain --test '\''" $2 " " $3 " " $4 "'\''"
+    }' "$work/lines" >>"$work/reruns"
   fi
 }
 
@@ -165,9 +168,19 @@ settle_cargo_units() {
       failed=1
       cat "$work/cargo-$run.log" >&2
       awk '$1 != "PASS" && $1 != "SKIP" {
-        args = "-p " $3 " " $4
-        if ($4 == "--test" || $4 == "--bin") args = args " " $5
-        print "rerun: (cd native && cargo test " args ")"
+        if ($3 == ".") {
+          print "repro: (cd native && cargo test --workspace)"
+          print "history: go tool test-history explain --test '\''cargo .'\''"
+        } else {
+          args = "-p " $3 " " $4
+          unit = $2 " " $3 " " $4
+          if ($4 == "--test" || $4 == "--bin") {
+            args = args " " $5
+            unit = unit " " $5
+          }
+          print "repro: (cd native && cargo test " args ")"
+          print "history: go tool test-history explain --test '\''" unit "'\''"
+        }
       }' "$work/lines" >>"$work/reruns"
     fi
   done <"$work/cargo-units"

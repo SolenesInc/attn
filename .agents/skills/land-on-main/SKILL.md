@@ -119,9 +119,42 @@ prints the run's URL while checks run, cancels the scenario run if checks fail,
 and skips any scenario that already passed for the same diff.
 
 A failing landing test stops the push like any other check, whether you touched
-the test or not. If it passes on `origin/main` and on a second run of `land`,
-it is a flake: land, and name the test in your report. Run
-`ATTN_LAND_BASELINE=1 land` (baseline groups alone) only when shared test
+the test or not. Never re-run `land` or the test blindly hoping it passes:
+`land` refuses a second run on an unchanged diff until you change the diff or
+pass `--ack-flake '<unit>' --owner <seed-or-fix-sha>`.
+
+When a landing test fails:
+
+1. Read the failure output, the failing test, and the product code. Check the
+   test's history with the printed `history:` command
+   (`go tool test-history explain --test '<unit>'`).
+2. Check whether a newer commit on `origin/main` already fixed the failure. If
+   one did and your diff stays unchanged, run
+   `land --ack-flake '<unit>' --owner <fix-sha>`.
+3. Otherwise, run a paired reproduction with the printed `repro:` command
+   (`-count=10 -race` for Go, or repeated runs for Cargo) on `HEAD` and on
+   `origin/main` in a scratch worktree. Never treat a single passing run as
+   proof of a flake.
+4. If the test fails only on `HEAD`, or fails more often on `HEAD` than on
+   `origin/main`, your change caused or worsened it. Fix it before landing.
+5. If the test fails on `origin/main` at the same rate, or if both checkouts
+   pass all runs while `history:` or the failure trace shows an existing flake
+   outside your change:
+   - Fix the root cause now when it is small, clear (such as a missing signal,
+     a wall-clock wait, or a narrow product race), and within your
+     authorization. Land it in its own commit or a separate landing from
+     `origin/main`, without widening assertions, adding retries, or raising
+     timeouts.
+   - Otherwise, attach your failure log and paired counts to an open repair
+     seed with a live tender or active sheriff repair for that exact
+     `(test, error)`. If none exists and you report to an Orchestrator, report
+     the failing line, root mechanism, paired counts, and log to your
+     Orchestrator so it can plant or dispatch the repair seed and give you the
+     seed id. If you have no Orchestrator, plant a flake seed with those
+     details and send it to the chief (`attn seed send-to-chief <seed-id>`).
+     Then run `land --ack-flake '<unit>' --owner <seed-id>`.
+
+Run `ATTN_LAND_BASELINE=1 land` (baseline groups alone) only when shared test
 history or test selection misbehaves, never to skip a failing test.
 
 ## Report
@@ -136,8 +169,8 @@ Report on the seed and in the conversation:
   If the seed has no checks, put the evidence in a note
 - the review: which readers ran, confirmed findings and their fixes, and
   findings you refuted
-- any landing test that failed and passed on a rerun, any undone-commit
-  warning you acted on, and whether you used `ATTN_LAND_BASELINE=1 land` and
-  why
+- any acknowledged flake (`--ack-flake` and its `--owner` seed or fix commit),
+  any undone-commit warning you acted on, and whether you used
+  `ATTN_LAND_BASELINE=1 land` and why
 
 Then harvest. Do not watch CI, because the sheriff watches `main`.

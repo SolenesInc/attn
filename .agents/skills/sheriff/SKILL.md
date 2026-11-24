@@ -110,10 +110,12 @@ same track. Match each failure by `(job, test, error)`, not run id:
   [Attack the premise](../../../internal/prompts/content/skills/attn-workflow/principles/attack-the-premise.md),
   test the shared assumption against the code or evidence, and bring the owner
   a redesign. Escalate if the owner disagrees.
-- **One-off past failure now green on a newer `main` commit**: if a newer run
-  on that track passed the same job and test and `CI flake ledger` lists no
-  prior failure, log the failure once and skip this failure. Act if the failure
-  repeats.
+- **Flaky failure now green on a newer `main` commit**: do not skip it. A test
+  that failed on `main` and then passed enters `test-history` selection and
+  taxes unrelated landings until it passes on 30 later `main` commits in that
+  lane. Check whether an open repair seed already tracks that exact
+  `(test, error)`. If not, dispatch a root-cause fix or investigation in Step 4
+  instead of waiting for a second red run.
 
 If no failure needs action, wrap up in
 [Step 6](#6-wrap-up-when-the-pass-is-settled).
@@ -131,9 +133,12 @@ gathered through fast reads without reproducing bugs or burning context.
   For App acceptance failures, note the evidence artifact
   (`app-acceptance-evidence-native-<attempt>-shard-<n>` or
   `app-acceptance-macos-native-evidence-<attempt>`).
-- Check `CI flake ledger` (or run `go tool test-history sync` and
-  `go tool test-history explain --test '<unit>'`). Repeating flakes still need
-  a root-cause fix.
+- Check `CI flake ledger`, or run `go tool test-history sync` and
+  `go tool test-history report` to inspect every lane (`go tool test-history
+  explain --test '<unit>'` checks only this host's OS lane and Linux native
+  scenarios). Use that history to see whether the failure is recurring or
+  already tracked. Step 2 owns the decision to dispatch every unowned flake
+  without waiting for it to repeat.
 - The ledger's `Fixed waits` section lists tests that pass but sit out the same
   timer on every CI run; they are slow, not red, so plant a seed for a new
   entry instead of a repair.

@@ -29,8 +29,10 @@ Report a finding only when all of these hold:
     security hole, or blocks a release.
   - P1: a real bug on a path users or agents take; a new layer, option,
     fallback, cache or copy of state that no current requirement needs,
-    including code that nothing uses and nothing explains; or a slice that
-    moves away from its plan or that a later slice will have to undo.
+    including code that nothing uses and nothing explains; weakening a test to
+    silence a flake (widening assertions to accept a broken state, adding
+    retries, or raising timeouts); or a slice that moves away from its plan or
+    that a later slice will have to undo.
 
 These are not P1, unless they lose data or open a security hole:
 
@@ -51,7 +53,8 @@ Look in this order:
    requirement it serves. If none does, say what to remove and why behavior
    stays the same.
 2. Behavior. Edge cases, concurrency, restarts, Linux, what the user sees.
-3. Tests that pass while the behavior they guard is broken.
+3. Tests that pass while the behavior they guard is broken, including
+   assertions widened or retries or timeouts added to silence a flake.
 
 Leave out style, naming, anything CI checks, and what predates the unit.
 When you are not sure, leave the finding out. Return no finding rather than a
