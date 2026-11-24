@@ -1,0 +1,1 @@
+The phone now says "No agent will get this answer" on a stranded ask, and when the profile has a Chief its Send becomes "Send to Chief", so the answer reaches the Chief instead of nobody. New wire tests pin the phone's `to_chief` and keep `stranded` on an ask too large for one phone message.
