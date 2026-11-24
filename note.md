@@ -1,0 +1,1 @@
+A daemon restart during a GitHub outage starts the 10-minute wait for the PR watch delay notice again, so an agent can miss that notice if GitHub recovers first. `docs/internal/inbox.md` now says so and that Victor accepted it on purpose: keeping the wait across a restart needs a migration and timing rules that cost more than the narrow case is worth. No behavior changes.
