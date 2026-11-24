@@ -196,6 +196,7 @@ func (d *Daemon) refreshSessionPullRequestsContext(ctx context.Context, now time
 			}
 			d.logf("session pull requests: GitHub has not found %s for %s, so its watches end and it is recorded closed: %v", group.prID, protocol.HeatColdInterval, err)
 			delete(d.sessionPRNotFoundSince, group.prID)
+			delete(d.sessionPRFailingSince, group.prID)
 			status = group.previous
 			status.State = sessionPullRequestClosed
 			changedSessions = append(changedSessions, d.endPullRequestWatches(group, status, err, now)...)
@@ -205,6 +206,7 @@ func (d *Daemon) refreshSessionPullRequestsContext(ctx context.Context, now time
 			}
 		} else {
 			delete(d.sessionPRNotFoundSince, group.prID)
+			delete(d.sessionPRFailingSince, group.prID)
 			fetched++
 			if observation != nil {
 				changedSessions = append(changedSessions, d.processPullRequestWatches(group, *observation, feedbackErr, status, now)...)
@@ -525,13 +527,30 @@ func sessionPullRequestRecordsForWatches(selected, all []store.SessionPullReques
 	return selected
 }
 
+func (d *Daemon) failingForAColdInterval(prID string, now time.Time) bool {
+	since, seen := d.sessionPRFailingSince[prID]
+	if !seen {
+		if d.sessionPRFailingSince == nil {
+			d.sessionPRFailingSince = make(map[string]time.Time)
+		}
+		d.sessionPRFailingSince[prID] = now
+		return false
+	}
+	return now.Sub(since) >= protocol.HeatColdInterval
+}
+
 func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, fetchErr error, now time.Time) []string {
 	changed := make([]string, 0, len(group.watches))
+	sustained := d.failingForAColdInterval(group.prID, now)
 	for _, watch := range group.watches {
-		item := pullRequestWatchMailboxItem(
-			watch, "outage:"+now.UTC().Format(time.RFC3339Nano), store.PullRequestWatchOutageCoalesceKey(watch.PRID),
-			"monitoring is delayed", []string{fetchErr.Error()},
-		)
+		var item *inbox.Item
+		if sustained {
+			outage := pullRequestWatchMailboxItem(
+				watch, "outage:"+now.UTC().Format(time.RFC3339Nano), store.PullRequestWatchOutageCoalesceKey(watch.PRID),
+				"monitoring is delayed", []string{fetchErr.Error()},
+			)
+			item = &outage
+		}
 		delivery, projectionChanged, err := d.store.RecordPullRequestWatchFailure(
 			watch.To, watch.SessionID, watch.PRID, watch.CreatedAt, watch.Mode, watch.Reviewer,
 			fetchErr.Error(), item, now,

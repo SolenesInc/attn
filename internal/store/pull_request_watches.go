@@ -387,7 +387,7 @@ func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]I
 	return deliveries, projectionChanged, nil
 }
 
-func (s *Store) RecordPullRequestWatchFailure(to who.Address, sessionID protocol.SessionID, prID string, createdAt string, mode prreadiness.Mode, reviewer, message string, outage inbox.Item, at time.Time) (*InboxDelivery, bool, error) {
+func (s *Store) RecordPullRequestWatchFailure(to who.Address, sessionID protocol.SessionID, prID string, createdAt string, mode prreadiness.Mode, reviewer, message string, outage *inbox.Item, at time.Time) (*InboxDelivery, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
@@ -404,18 +404,18 @@ func (s *Store) RecordPullRequestWatchFailure(to who.Address, sessionID protocol
 		return nil, false, sql.ErrNoRows
 	}
 	stamp := at.UTC().Format(sortableTimeFormat)
-	if _, err := tx.Exec(`UPDATE pull_request_watches SET last_error=?, outage_active=1, last_checked_at=? WHERE address=? AND pr_id=?`, message, stamp, to.String(), prID); err != nil {
+	if _, err := tx.Exec(`UPDATE pull_request_watches SET last_error=?, outage_active=(outage_active OR ?), last_checked_at=? WHERE address=? AND pr_id=?`, message, outage != nil, stamp, to.String(), prID); err != nil {
 		return nil, false, err
 	}
 	if _, err := tx.Exec(`UPDATE session_pull_requests SET status_checked_at=? WHERE session_id=? AND pr_id=?`, stamp, sessionID, prID); err != nil {
 		return nil, false, err
 	}
 	var delivery *InboxDelivery
-	if !active {
-		if err := putInbox(tx, outage, at); err != nil {
+	if outage != nil && !active {
+		if err := putInbox(tx, *outage, at); err != nil {
 			return nil, false, err
 		}
-		delivery = &InboxDelivery{Item: InboxItem{Item: outage}}
+		delivery = &InboxDelivery{Item: InboxItem{Item: *outage}}
 
 	}
 	if err := tx.Commit(); err != nil {

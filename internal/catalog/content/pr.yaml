@@ -57,7 +57,7 @@ commands:
     runs: home
     grant: full
     doc: |
-      Records the pull request if needed and watches it until it merges or closes, or until `pr_unwatch`. Updates arrive in the agent inbox: state changes (ready, changes requested, failed checks, merged, closed), feedback (comments, review comments, review bodies, reopened review threads) and monitoring outages. The call returns at once.
+      Records the pull request if needed and watches it until it merges or closes, or until `pr_unwatch`. Updates arrive in the agent inbox: state changes (ready, changes requested, failed checks, merged, closed), feedback (comments, review comments, review bodies, reopened review threads) and monitoring outages that last 10 minutes. The call returns at once.
 
       `mode` says when the pull request is ready: green waits for passing checks, codex also for Codex's review, and formal-review for an approving review, from `reviewer` when given. Watching again changes the mode.
 

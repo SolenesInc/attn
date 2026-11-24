@@ -240,9 +240,7 @@ func TestEveryPullRequestUpdateReachesWatchersOnTheHomeAndTheOutpostWhileOnlyThe
 
 	gh.UpdatePR(repo, 74, func(pr *mockserver.MockPR) { pr.Gone = true })
 	pastHotInterval(1)
-	hears("once GitHub cannot find #74", map[pullRequestWatcher][]string{
-		onHome: {"monitoring is delayed #74"},
-	})
+	hears("once GitHub cannot find #74 briefly", map[pullRequestWatcher][]string{})
 	pastHotInterval(int(protocol.HeatColdInterval/protocol.HeatHotInterval) + 1)
 	hears("after GitHub cannot find #74 for longer than the cold interval", map[pullRequestWatcher][]string{
 		onHome: {"watch ended #74"},

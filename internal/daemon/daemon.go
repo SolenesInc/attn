@@ -326,6 +326,7 @@ type Daemon struct {
 	sessionPRHosts         func(host string) (sessionPRHost, bool)
 	sessionPRRefreshMu     sync.Mutex
 	sessionPRNotFoundSince map[string]time.Time
+	sessionPRFailingSince  map[string]time.Time
 	beforeSeedMoveWrite    func(seedID string)
 
 	harvestWhenMu        sync.Mutex

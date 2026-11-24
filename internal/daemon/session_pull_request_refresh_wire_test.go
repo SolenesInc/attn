@@ -485,7 +485,7 @@ func TestStoppingWhileAWatchWaitsForGitHubBudgetIsNotAnOutage(t *testing.T) {
 	})
 }
 
-func TestAWatchOutageTellsTheAgentOnceAndRecoveryTellsItTheNews(t *testing.T) {
+func TestAWatchTellsTheAgentAboutAnOutageOnceItLastsAColdInterval(t *testing.T) {
 	gh := serveRefreshedPullRequest(t)
 	gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = true })
 	inBubble(t, func(t *testing.T, w *world) {
@@ -493,8 +493,20 @@ func TestAWatchOutageTellsTheAgentOnceAndRecoveryTellsItTheNews(t *testing.T) {
 		registerSessions(t, w, cli, "s1")
 		watchPullRequestOn(t, cli, "s1", protocol.PullRequestWatchModeGreen)
 		w.advance(3 * protocol.HeatHotInterval)
+		if pr := onlyPullRequest(t, cli, "s1"); protocol.Deref(pr.WatchHealth) != "delayed" {
+			t.Errorf("after three failed polls the watch = %+v, want it delayed", pr)
+		}
+		if items := readInbox(t, cli, "s1", 0).Items; len(items) != 0 {
+			t.Errorf("after three failed polls the agent's inbox = %q, want nothing yet", inboxContents(items))
+		}
+
+		w.advance(protocol.HeatColdInterval)
 		if inbox := inboxContents(readInbox(t, cli, "s1", 0).Items); strings.Count(inbox, "monitoring is delayed") != 1 {
-			t.Errorf("after three failed polls the agent's inbox = %q, want one note that monitoring is delayed", inbox)
+			t.Errorf("after failing for a cold interval the agent's inbox = %q, want one note that monitoring is delayed", inbox)
+		}
+		w.advance(protocol.HeatColdInterval)
+		if items := readInbox(t, cli, "s1", 0).Items; len(items) != 0 {
+			t.Errorf("while the outage goes on the agent's inbox = %q, want no second note", inboxContents(items))
 		}
 
 		gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = false })
@@ -508,9 +520,11 @@ func TestAWatchOutageTellsTheAgentOnceAndRecoveryTellsItTheNews(t *testing.T) {
 		}
 
 		gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = true })
-		w.advance(protocol.HeatHotInterval)
-		if inbox := inboxContents(readInbox(t, cli, "s1", 0).Items); !strings.Contains(inbox, "monitoring is delayed") {
-			t.Errorf("after a second outage the agent's inbox = %q, want a new note that monitoring is delayed", inbox)
+		w.advance(3 * protocol.HeatHotInterval)
+		gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = false })
+		w.advance(protocol.HeatColdInterval)
+		if inbox := inboxContents(readInbox(t, cli, "s1", 0).Items); strings.Contains(inbox, "monitoring is delayed") {
+			t.Errorf("after a brief second outage the agent's inbox = %q, want no note that monitoring is delayed", inbox)
 		}
 	})
 }
@@ -545,8 +559,8 @@ func TestAWatchEndsOnceGitHubCannotFindThePullRequestForAColdIntervalAndOutlives
 				t.Errorf("after %s the watch = mode %v health %q error %q, want it kept and delayed by %q",
 					failure.name, pr.WatchMode, protocol.Deref(pr.WatchHealth), protocol.Deref(pr.WatchError), failure.error)
 			}
-			if inbox := inboxContents(readInbox(t, cli, "s1", 0).Items); !strings.Contains(inbox, "monitoring is delayed") {
-				t.Errorf("after %s the agent's inbox = %q, want a note that monitoring is delayed", failure.name, inbox)
+			if inbox := inboxContents(readInbox(t, cli, "s1", 0).Items); strings.Contains(inbox, "monitoring is delayed") {
+				t.Errorf("after brief %s the agent's inbox = %q, want no note that monitoring is delayed", failure.name, inbox)
 			}
 			gh.set(func(gh *refreshedPullRequest) {
 				gh.readinessFails, gh.readinessDrops, gh.graphQLMissing, gh.nestedNotFound = false, false, false, false
@@ -568,8 +582,8 @@ func TestAWatchEndsOnceGitHubCannotFindThePullRequestForAColdIntervalAndOutlives
 		if pr := onlyPullRequest(t, cli, "s1"); pr.WatchMode == nil || pr.State != "open" || protocol.Deref(pr.WatchHealth) != "delayed" {
 			t.Errorf("after GitHub's first not-found the watch = %+v, want it kept, open and delayed", pr)
 		}
-		if inbox := inboxContents(readInbox(t, cli, "s1", 0).Items); !strings.Contains(inbox, "monitoring is delayed") {
-			t.Errorf("after GitHub's first not-found the agent's inbox = %q, want a note that monitoring is delayed", inbox)
+		if inbox := inboxContents(readInbox(t, cli, "s1", 0).Items); strings.Contains(inbox, "monitoring is delayed") {
+			t.Errorf("after GitHub's first not-found the agent's inbox = %q, want no note that monitoring is delayed", inbox)
 		}
 		gh.set(func(gh *refreshedPullRequest) { gh.gone, gh.checkFails = false, false })
 		w.advance(protocol.HeatHotInterval)
@@ -804,8 +818,8 @@ func TestAWatchRetriesAReusedConnectionResetBeforeReportingDelay(t *testing.T) {
 						t.Errorf("readiness attempts = %d, want %d", attempts, tc.attempts)
 					}
 					if tc.persistent || tc.fresh {
-						if protocol.Deref(pr.WatchHealth) != "delayed" || !strings.Contains(inbox, "monitoring is delayed") {
-							t.Fatalf("reset: watch=%+v inbox=%q, want visible delay", pr, inbox)
+						if protocol.Deref(pr.WatchHealth) != "delayed" {
+							t.Fatalf("reset: watch=%+v inbox=%q, want it delayed", pr, inbox)
 						}
 					} else if protocol.Deref(pr.WatchHealth) != "current" || strings.Contains(inbox, "monitoring is delayed") {
 						t.Fatalf("one reset: watch=%+v inbox=%q, want current without delay", pr, inbox)
@@ -834,7 +848,7 @@ func TestAMembersPullRequestWatchSurvivesItsCreatingDayAndCanBeStoppedFromTheNex
 			t.Fatal(err)
 		}
 		gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = true })
-		w.advance(protocol.HeatHotInterval)
+		w.advance(protocol.HeatColdInterval + protocol.HeatHotInterval)
 		nextID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
 		if nextID == "" || string(nextID) == first.id {
 			t.Fatalf("watch did not wake next day: %q", nextID)
@@ -929,7 +943,7 @@ func TestRewatchingAPullRequestKeepsOneWatchThatUnwatchAndForgetStop(t *testing.
 		}
 		watchPullRequestOn(t, cli, "watcher", protocol.PullRequestWatchModeGreen)
 		gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = true })
-		w.advance(protocol.HeatHotInterval)
+		w.advance(protocol.HeatColdInterval + protocol.HeatHotInterval)
 		items := readInbox(t, cli, "watcher", 0).Items
 		if len(items) != 1 || items[0].Address != "session:watcher" {
 			t.Fatalf("rewatch duplicated or rewrote the watch: %+v", items)
