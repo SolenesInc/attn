@@ -643,7 +643,7 @@ fn the_pull_request_details_open_on_hover_and_close_soon_after_the_pointer_leave
     let shown = details(&world).expect("the details open at once");
     for line in [
         "Pull request attn#71",
-        "Open attn#71 on GitHub",
+        "Change 71",
         "Waiting for GitHub",
         "victorarias/attn#71",
         "↵ open",
@@ -828,6 +828,18 @@ fn a_headers_pull_request_status_names_the_first_thing_in_its_way() {
             "approved",
         ),
         (
+            "only approved while its branch is behind the base",
+            vec![with(71, "open", None, Some("approved"), Some("behind"))],
+            "attn#71",
+            "approved",
+        ),
+        (
+            "ready to merge once approved with a merge that runs hooks",
+            vec![with(71, "open", None, Some("approved"), Some("has_hooks"))],
+            "attn#71",
+            "ready to merge",
+        ),
+        (
             "merged whatever its checks did",
             vec![with(71, "merged", Some("failure"), None, None)],
             "attn#71",
@@ -876,8 +888,16 @@ fn the_details_list_every_pull_request_open_then_merged_then_closed_newest_first
         .filter_map(|n| n.name?.split(' ').next().map(str::to_owned))
         .collect();
     assert_eq!(listed, ["#74", "#72", "#69", "#68", "#60"]);
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::role("button").name("Change 74"))
+            .and_then(|n| n.description)
+            .as_deref(),
+        Some("Open attn#74 on GitHub")
+    );
 
-    world.gesture(|app| app.click(Target::role("button").name("Open attn#74 on GitHub")));
+    world.gesture(|app| app.click(Target::role("button").name("Change 74")));
     assert_eq!(
         world.opened_links(),
         ["https://github.com/victorarias/attn/pull/74"]
@@ -1332,6 +1352,12 @@ fn the_details_of_a_pull_request_lead_with_what_stands_before_its_merge_and_leav
             "dirty",
         )
     };
+    let behind = fetched(
+        pull_request(70, "open", "2026-08-28T12:00:00Z"),
+        "none",
+        "approved",
+        "behind",
+    );
     let merged = fetched(
         pull_request(60, "merged", "2026-08-01T12:00:00Z"),
         "success",
@@ -1339,7 +1365,7 @@ fn the_details_of_a_pull_request_lead_with_what_stands_before_its_merge_and_leav
         "clean",
     );
     let mut world = start(
-        with_pull_requests(vec![merged, watched, failing]),
+        with_pull_requests(vec![merged, behind, watched, failing]),
         session("b", "docs", None),
     );
     world.gesture(|app| app.click(Target::key("tile.a.details")));
@@ -1347,7 +1373,7 @@ fn the_details_of_a_pull_request_lead_with_what_stands_before_its_merge_and_leav
     assert_eq!(
         picked(&world),
         [
-            "Open attn#71 on GitHub",
+            "Change 71",
             "Checks failed",
             "review waiting on a reviewer",
             "victorarias/attn#71",
@@ -1359,7 +1385,7 @@ fn the_details_of_a_pull_request_lead_with_what_stands_before_its_merge_and_leav
     assert_eq!(
         picked(&world),
         [
-            "Open attn#72 on GitHub",
+            "Change 72",
             "Blocked",
             "It has merge conflicts",
             "checks failed",
@@ -1375,7 +1401,19 @@ fn the_details_of_a_pull_request_lead_with_what_stands_before_its_merge_and_leav
     assert_eq!(
         picked(&world),
         [
-            "Open attn#60 on GitHub",
+            "Change 70",
+            "Approved",
+            "Its branch is behind the base",
+            "victorarias/attn#70",
+            "opened 76d ago",
+        ],
+        "an approved pull request is not ready to merge while its branch is behind the base"
+    );
+    key(&mut world, Key::Down);
+    assert_eq!(
+        picked(&world),
+        [
+            "Change 60",
             "Merged",
             "victorarias/attn#60",
             "opened 103d ago",

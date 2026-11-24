@@ -257,10 +257,10 @@ fn status(pr: &SessionPullRequest) -> Said {
     } else if pr.state == "draft" {
         ("draft", Neutral)
     } else if review == Some("approved") {
-        if matches!(merge, Some("blocked" | "unstable")) {
-            ("approved", Ok)
-        } else {
+        if matches!(merge, Some("clean" | "has_hooks")) {
             ("ready to merge", Ok)
+        } else {
+            ("approved", Ok)
         }
     } else if review == Some("pending") {
         ("in review", Neutral)
@@ -433,8 +433,9 @@ fn review(pr: &SessionPullRequest) -> Said {
 
 fn merge(pr: &SessionPullRequest) -> Said {
     match pr.mergeable_state.as_deref() {
-        Some("clean") => ("no conflicts", Tone::Ok),
+        Some("clean" | "has_hooks") => ("no conflicts", Tone::Ok),
         Some("dirty") => ("conflicts", Tone::Bad),
+        Some("behind") => ("behind the base", Tone::Warn),
         Some("blocked") => ("blocked", Tone::Warn),
         Some("unstable") => ("unstable", Tone::Warn),
         _ => ("unknown", Tone::Neutral),
@@ -502,12 +503,22 @@ fn verdict(pr: &SessionPullRequest, now_ms: i64) -> (String, Tone, Option<String
         _ => {
             let (said, tone) = status(pr);
             let why = match said {
-                "approved" => Some("GitHub still blocks the merge".to_owned()),
+                "approved" => Some(merge_hold(pr).to_owned()),
                 "draft" => Some("Mark it ready for review to merge it".to_owned()),
                 _ => None,
             };
             (capitalized(said), tone, why)
         }
+    }
+}
+
+/// Why GitHub does not merge an approved pull request yet, from its merge state.
+fn merge_hold(pr: &SessionPullRequest) -> &'static str {
+    match pr.mergeable_state.as_deref() {
+        Some("behind") => "Its branch is behind the base",
+        Some("unstable") => "Some checks are not green",
+        Some("blocked") => "GitHub still blocks the merge",
+        _ => "GitHub has not yet said whether it can merge",
     }
 }
 
@@ -614,9 +625,9 @@ fn details(key: &str, pr: &SessionPullRequest, now_ms: i64, t: &Tokens) -> El {
         .kind(Type::Name)
         .ink(t.text_primary)
         .wrap()
-        .build(t)
-        .label(format!("Open {identity} on GitHub")),
+        .build(t),
     )
+    .description(format!("Open {identity} on GitHub"))
     .min_w(0.0)
     .on_press_tx(move |state: &mut State, tx: &mut Tx| open(state, &url, tx));
     let (word, tone, why) = verdict(pr, now_ms);
