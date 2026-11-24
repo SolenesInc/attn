@@ -22,6 +22,7 @@ export type AskRow = {
   readonly pairing: Pairing
   readonly from: string
   readonly live: boolean
+  readonly toChief: boolean
 }
 
 export type AskActions<Message> = MarkdownContext<Message> & {
@@ -327,6 +328,12 @@ export const askScreen = <Message>(
       ask.re ? followsLine(ask.re, now, age, mentionActions, h) : h.empty,
       h.h2([h.Class('subject')], renderInline(ask.subject, mentionActions, h)),
       h.p([h.Class('ask-from')], [`${row.from} · ${where(row.pairing)} · ${age(ask.createdAt, now)}`]),
+      ask.stranded && !ask.reply
+        ? h.p(
+            [h.Class('stranded'), h.DataAttribute('testid', 'ask-stranded')],
+            ['No agent will get this answer'],
+          )
+        : h.empty,
       ...body,
       ask.reply
         ? h.div(
@@ -372,7 +379,7 @@ export const askScreen = <Message>(
                     h.DataAttribute('testid', 'ask-send'),
                     h.OnClick(actions.send),
                   ],
-                  [open.sending ? 'Sending…' : 'Send'],
+                  [open.sending ? 'Sending…' : row.toChief ? 'Send to Chief' : 'Send'],
                 ),
               ],
             ),

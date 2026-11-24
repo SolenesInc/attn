@@ -46,6 +46,7 @@ export const PhoneAsk = Schema.Struct({
   seedTitle: Schema.NullOr(Schema.String),
   crewMember: Schema.NullOr(Schema.String),
   chief: Schema.Boolean,
+  stranded: Schema.Boolean,
   re: Schema.NullOr(
     Schema.Struct({
       askId: Schema.String,
@@ -104,6 +105,7 @@ export const fromHomeGatewayAsk = (ask: HomeGatewayAsk): PhoneAsk => ({
   seedTitle: ask.seed_title ?? null,
   crewMember: ask.crew_member ?? null,
   chief: ask.chief ?? false,
+  stranded: ask.stranded ?? false,
   re: ask.re
     ? {
         askId: ask.re.ask_id,

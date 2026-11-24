@@ -48,6 +48,7 @@ import {
   crewRowKey,
   fromHomeGatewayCrewMemberBetweenSessions,
   fromHomeGatewaySession,
+  hasChief,
   waitingAgents,
   type BetweenSessionsRow,
   type HomeRow,
@@ -432,11 +433,18 @@ export const SendAnswer = Command.define('SendAnswer', {
     askId: Schema.String,
     answers: Schema.Array(Schema.Unknown),
     note: Schema.String,
+    toChief: Schema.Boolean,
   },
   messages: [Message.SentAnswer, Message.FailedAnswer],
-  execute: ({ pairingId, askId, answers, note }) =>
+  execute: ({ pairingId, askId, answers, note, toChief }) =>
     Effect.tryPromise(async () => {
-      const reply = await linkTo(pairingId).request({ cmd: 'ask_answer', ask_id: askId, answers, note })
+      const reply = await linkTo(pairingId).request({
+        cmd: 'ask_answer',
+        ask_id: askId,
+        answers,
+        note,
+        ...(toChief ? { to_chief: true } : {}),
+      })
       if (reply.event !== 'ask_answer_result') throw new Error(`the home answered ${reply.event}`)
       if (reply.error) throw new Error(reply.error)
     }).pipe(
@@ -665,9 +673,10 @@ const withAnswer = (model: Model, key: string, change: (answer: Answer) => Answe
   }))
 
 const sendDraft = (model: Model): Update.Return<Model, Message> => {
-  const ask = openAskOf(model)
+  const row = openAskRowOf(model)
   const key = openAskKey(model)
-  if (!ask || !model.openAsk || !key || answeringOpenAsk(model)?.status === 'sending') return { model }
+  if (!row || !model.openAsk || !key || answeringOpenAsk(model)?.status === 'sending') return { model }
+  const { ask } = row
   const draft = draftOf(model)
   return {
     model: modifyFields(model, {
@@ -679,6 +688,7 @@ const sendDraft = (model: Model): Update.Return<Model, Message> => {
         askId: ask.id,
         answers: draftAnswers(ask, draft),
         note: draft.note.trim(),
+        toChief: row.toChief,
       }),
     ],
   }
@@ -1746,6 +1756,7 @@ const askRowsOf = (home: Home): ReadonlyArray<AskRow> =>
     pairing: home.pairing,
     from: askFrom(ask, home.sessions.find((session) => session.id === ask.sessionId)?.title),
     live: home.status === 'online',
+    toChief: ask.stranded && hasChief(home),
   }))
 
 export const askRows = (homes: ReadonlyArray<Home>): ReadonlyArray<AskRow> =>
@@ -2090,14 +2101,17 @@ const sessionView = (model: Model, h: HtmlBuilder<Message>): Html => {
 
 const waitingCount = (model: Model) => waitingAgents(buildQueue(model.homes)) + askRows(model.homes).length
 
-const openAskView = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const answering = answeringOpenAsk(model)
+const openAskRowOf = (model: Model): AskRow | undefined => {
   const open = model.openAsk
   const home = open ? model.homes.find((home) => home.pairing.id === open.pairingId) : undefined
-  const row = home && open ? askRowsOf(home).find((row) => row.ask.id === open.askId) : undefined
+  return home && open ? askRowsOf(home).find((row) => row.ask.id === open.askId) : undefined
+}
+
+const openAskView = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const answering = answeringOpenAsk(model)
   return askScreen(
     {
-      row,
+      row: openAskRowOf(model),
       draft: draftOf(model),
       sending: answering?.status === 'sending',
       error: answering?.status === 'failed' ? answering.message : (model.mentionError ?? ''),

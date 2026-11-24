@@ -173,3 +173,35 @@ func TestSendToChiefIsRefusedWhenTheProfileHasNoChief(t *testing.T) {
 		t.Fatalf("Send to Chief in a profile without a Chief got %+v, want it refused", refused)
 	}
 }
+
+func TestThePhoneSendsAStrandedAnswerToTheChief(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	setSetting(t, app, "phone_access_enabled", "true")
+	chief := startConfiguredChief(t, w, cli)
+	phone := connectPhone(t, w, "phone-a", app.SelectedProfile())
+	phone.welcomed()
+	cwd := registerDelegationCaller(t, w, cli, "caller")
+	seed := plantDelegationSeed(t, cli, "caller", "Migrate the store")
+	delegated, err := cli.Delegate(delegateAtSeed("caller", cwd, seed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(string(delegated.SessionID))
+	asked, err := cli.AskOpen(delegated.SessionID, "", cacheAsk, "", cwd)
+	if err != nil {
+		t.Fatalf("the delegate asks: %v", err)
+	}
+	moveDelegationSeed(t, cli, "caller", seed, "park", "")
+	phone.showsAsks(func(asks []homegateway.HomeGatewayAsk) bool {
+		return len(asks) == 1 && asks[0].ID == asked.ID && protocol.Deref(asks[0].Stranded)
+	})
+
+	if sent := phone.answerToChief(asked.ID, []homegateway.HomeGatewayAskAnswer{{Key: "q1", Picked: []string{"Postgres"}}}); sent.Error != nil {
+		t.Fatalf("the phone's Send to Chief failed: %s", *sent.Error)
+	}
+	if typed := chief.Prompted(); !strings.Contains(typed, "would reach no agent") || !strings.Contains(typed, "Answer: Postgres") {
+		t.Errorf("the Chief was typed %q, want the phone's answer under the Chief's header", typed)
+	}
+}

@@ -421,6 +421,7 @@ describe('the crew stays anchored at the top', () => {
               seedTitle: null,
               crewMember: 'keel',
               chief: false,
+              stranded: false,
               re: null,
               reply: null,
               tooLarge: null,

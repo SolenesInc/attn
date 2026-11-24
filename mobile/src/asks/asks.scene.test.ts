@@ -104,6 +104,7 @@ const ask = (
   seedTitle: 'Cache store',
   crewMember: null,
   chief: false,
+  stranded: false,
   re: null,
   reply: null,
   tooLarge: null,
@@ -212,6 +213,7 @@ describe('asks on the phone', () => {
           askId: 'a-sign',
           answers: [{ key: 'q1', picked: ['**Signed in**'] }],
           note: '',
+          toChief: false,
         }),
         Message.SentAnswer({ pairingId: personal.id, askId: 'a-sign' }),
       ),
@@ -322,6 +324,7 @@ describe('asks on the phone', () => {
           askId: 'a-store',
           answers: [{ key: 'q1', picked: ['Redis'] }],
           note: '',
+          toChief: false,
         }),
         Message.SentAnswer({ pairingId: personal.id, askId: 'a-store' }),
       ),
@@ -329,6 +332,52 @@ describe('asks on the phone', () => {
       Scene.expectAll(Scene.all.testId('ask-entry')).toHaveCount(1),
       arrive(personal, [{ ...storeAsk, reply: { answers: [], note: '', files: [], answeredAt: now } }]),
       Scene.expectAll(Scene.all.testId('ask-entry')).toHaveCount(0),
+    )
+  })
+
+  it('says no agent will get a stranded answer, and sends it to the Chief when the profile has one', () => {
+    const lost = { ...ask('a-lost', 3, [{ markdown: null, question: choiceQuestion }]), stranded: true }
+    const sent = (toChief: boolean) =>
+      Scene.Command.resolve(
+        SendAnswer({
+          pairingId: personal.id,
+          askId: 'a-lost',
+          answers: [{ key: 'q1', picked: ['Redis'] }],
+          note: '',
+          toChief,
+        }),
+        Message.SentAnswer({ pairingId: personal.id, askId: 'a-lost' }),
+      )
+    Scene.scene(
+      { update, view },
+      Scene.given(online(personal)),
+      arrive(personal, [lost]),
+      Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
+      Scene.expect(Scene.testId('ask-stranded')).toHaveText('No agent will get this answer'),
+      Scene.expect(Scene.testId('ask-send')).toHaveText('Send'),
+      Scene.click(Scene.role('radio', { name: /Redis/ })),
+      sent(false),
+    )
+    Scene.scene(
+      { update, view },
+      Scene.given(online(personal)),
+      Scene.Subscription.emit(
+        Message.ReceivedSessions({
+          pairingId: personal.id,
+          sessions: [],
+          crewBetweenSessions: [{ crewMember: 'chief', name: 'Chief', chief: true }],
+        }),
+      ),
+      arrive(personal, [lost]),
+      Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
+      Scene.expect(Scene.testId('ask-stranded')).toHaveText('No agent will get this answer'),
+      Scene.expect(Scene.testId('ask-send')).toHaveText('Send to Chief'),
+      Scene.click(Scene.role('radio', { name: /Redis/ })),
+      sent(true),
+      arrive(personal, [{ ...lost, stranded: false }]),
+      Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
+      Scene.expectAll(Scene.all.testId('ask-stranded')).toHaveCount(0),
+      Scene.expect(Scene.testId('ask-send')).toHaveText('Send'),
     )
   })
 
@@ -422,6 +471,7 @@ describe('asks on the phone', () => {
           askId: 'a-name',
           answers: [{ key: 'q1', picked: [], text: 'phone_asks' }],
           note: 'Short is fine.',
+          toChief: false,
         }),
         Message.FailedAnswer({ pairingId: personal.id, askId: 'a-name', message: 'Mac is not connected' }),
       ),
@@ -467,6 +517,7 @@ describe('asks on the phone', () => {
             { key: 'q2', picked: ['eu'] },
           ],
           note: '',
+          toChief: false,
         }),
         Message.FailedAnswer({ pairingId: personal.id, askId: 'a-multi', message: 'Mac is not connected' }),
       ),

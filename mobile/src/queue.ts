@@ -55,6 +55,9 @@ export const Home = Schema.Struct({
 })
 export type Home = typeof Home.Type
 
+export const hasChief = (home: Home): boolean =>
+  home.sessions.some((session) => session.chief) || home.crewBetweenSessions.some((member) => member.chief)
+
 export const fromHomeGatewaySession = (session: HomeGatewaySession): QueueSession => ({
   id: session.id,
   title: session.title,

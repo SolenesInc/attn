@@ -352,6 +352,12 @@ button.row.ask {
   overflow-wrap: anywhere;
 }
 
+.ask-from + .stranded {
+  margin: -8px 0 12px;
+  font-size: 13px;
+  color: var(--waiting);
+}
+
 .markdown {
   overflow-wrap: anywhere;
 }

@@ -379,8 +379,19 @@ func (p *testPhone) welcomed() {
 
 func (p *testPhone) answer(askID string, answers []homegateway.HomeGatewayAskAnswer, note string) homegateway.HomeGatewayAskAnswerResult {
 	p.t.Helper()
+	return p.sendAnswer(homegateway.HomeGatewayAskAnswerCommand{AskID: askID, Answers: answers, Note: &note})
+}
+
+func (p *testPhone) answerToChief(askID string, answers []homegateway.HomeGatewayAskAnswer) homegateway.HomeGatewayAskAnswerResult {
+	p.t.Helper()
+	return p.sendAnswer(homegateway.HomeGatewayAskAnswerCommand{AskID: askID, Answers: answers, ToChief: protocol.Ptr(true)})
+}
+
+func (p *testPhone) sendAnswer(command homegateway.HomeGatewayAskAnswerCommand) homegateway.HomeGatewayAskAnswerResult {
+	p.t.Helper()
 	requestID := uuid.NewString()
-	p.send(homegateway.HomeGatewayAskAnswerCommand{Cmd: "ask_answer", RequestID: requestID, AskID: askID, Answers: answers, Note: &note})
+	command.Cmd, command.RequestID = "ask_answer", requestID
+	p.send(command)
 	var result homegateway.HomeGatewayAskAnswerResult
 	p.next("ask_answer_result", &result)
 	if result.RequestID != requestID {
@@ -461,8 +472,10 @@ func TestHomeGatewayTellsThePhoneAnAskIsTooLargeForAFrame(t *testing.T) {
 	setSetting(t, app, "asks_enabled", "true")
 	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	w.Launched(asker)
+	seed := plantSeedAs(t, cli, asker, "Migrate the store")
+	moveDelegationSeed(t, cli, asker, seed, "tend", "")
 	long := strings.Repeat("A \"quoted\" line.\n", (64<<10-len(cacheAsk))/18) + cacheAsk
-	asked, err := cli.AskOpen(protocol.SessionID(asker), "", long, "", w.Path("shop"))
+	asked, err := cli.AskOpen(protocol.SessionID(asker), seed, long, "", w.Path("shop"))
 	if err != nil {
 		t.Fatalf("ask of %d bytes: %v", len(long), err)
 	}
@@ -473,6 +486,13 @@ func TestHomeGatewayTellsThePhoneAnAskIsTooLargeForAFrame(t *testing.T) {
 	if len(asks) != 1 || asks[0].ID != asked.ID || len(asks[0].Parts) != 0 || asks[0].TooLargeBytes == nil || asks[0].MaxFrameBytes == nil || *asks[0].TooLargeBytes <= *asks[0].MaxFrameBytes {
 		t.Fatalf("the phone shows %+v, want the ask without parts, with its size past the frame's", asks)
 	}
+
+	if closed := closeFromApp(app, asker); !closed.Accepted {
+		t.Fatalf("the user's close of the asker: %+v", closed)
+	}
+	phone.showsAsks(func(asks []homegateway.HomeGatewayAsk) bool {
+		return len(asks) == 1 && asks[0].TooLargeBytes != nil && protocol.Deref(asks[0].Stranded)
+	})
 }
 
 func TestHomeGatewayKeepsAPhoneConnectedWhateverAnAnswersNoteHolds(t *testing.T) {

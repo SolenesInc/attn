@@ -78,6 +78,7 @@ func tooLargeAsk(full homegateway.HomeGatewayAsk, size int) homegateway.HomeGate
 		CreatedAt:     full.CreatedAt,
 		SeedSlug:      full.SeedSlug,
 		CrewMember:    full.CrewMember,
+		Stranded:      full.Stranded,
 		TooLargeBytes: protocol.Ptr(size),
 		MaxFrameBytes: protocol.Ptr(cloudlink.MaxMessageBytes),
 	}
