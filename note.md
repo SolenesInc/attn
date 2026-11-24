@@ -1,0 +1,3 @@
+⌘P no longer waits on files deleted from an outpost. When many of a machine's recent files were gone, the daemon refilled the list one row at a time, a call each, and the app waits for the whole reply before listing anything. With 50 files deleted on an outpost and 60 ms per call (simulated), the reply took 51 calls and 3.06 s; it now takes 2 calls and 120 ms.
+
+Rows are checked in batches that double, and all of a request's checks of one outpost share one second. The trade-off: rows an outpost has not answered for by then are listed unchecked, as for an unreachable outpost, so a deleted file can show for one request on a slow link. Each batch's missing rows are forgotten as soon as it answers.
