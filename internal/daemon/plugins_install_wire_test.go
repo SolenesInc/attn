@@ -32,10 +32,17 @@ func TestAPluginInstallsOnceAndNeverUnderANameThatLeavesThePluginDirectory(t *te
 	checkout := pluginsCheckout(t, w.Path("checkouts", "worktree-provider"), "worktree-provider", "0.1.0", pluginsIdle)
 
 	pluginsAct(t, app, protocol.InstallPluginMessage{Cmd: protocol.CmdInstallPlugin, Source: checkout}, "install", "worktree-provider")
-	pluginsRefused(t, app, protocol.InstallPluginMessage{Cmd: protocol.CmdInstallPlugin, Source: checkout}, "install", `plugin "worktree-provider" is already installed`)
-	pluginsListed(app, "worktree-provider installed once", func(plugins []protocol.PluginInfo) bool {
-		_, ok := pluginsNamed(plugins, "worktree-provider")
-		return ok && len(plugins) == 1
+	uninstallable := pluginsCheckout(t, w.Path("checkouts", "worktree-provider-2"), "worktree-provider", "0.2.0", pluginsIdle)
+	if err := os.WriteFile(filepath.Join(uninstallable, "package.json"), []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, source := range []string{checkout, uninstallable} {
+		pluginsRefused(t, app, protocol.InstallPluginMessage{Cmd: protocol.CmdInstallPlugin, Source: source}, "install", `plugin "worktree-provider" is already installed`)
+	}
+	pluginsRefused(t, app, protocol.InstallPluginMessage{Cmd: protocol.CmdInstallPlugin, Source: uninstallable, Link: protocol.Ptr(true)}, "link", `plugin "worktree-provider" is already installed`)
+	pluginsListed(w.App(), "the installed worktree-provider still running, alone", func(plugins []protocol.PluginInfo) bool {
+		plugin, ok := pluginsNamed(plugins, "worktree-provider")
+		return ok && len(plugins) == 1 && plugin.Version == "0.1.0" && plugin.Running
 	})
 
 	escaping := pluginsCheckout(t, w.Path("checkouts", "escaping"), "../escaping", "0.1.0", pluginsIdle)
