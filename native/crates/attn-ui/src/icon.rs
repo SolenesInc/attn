@@ -167,6 +167,12 @@ outline!(
     r#"<circle cx="8" cy="8" r="6"/><path d="M8 4.8V8l2.2 1.4"/>"#
 );
 outline!(
+    OPENED,
+    16.0,
+    "1.6",
+    r#"<path d="M5 11 11 5"/><path d="M6 5h5v5"/>"#
+);
+outline!(
     FOLDER,
     16.0,
     "1.6",

@@ -10,7 +10,7 @@ current while the user reads it. For review notes on a markdown tile, see
 ## Sub-features
 
 - `file-open`: `attn open <file.md>` docks a markdown tile beside the caller, or beside the active tile when no session calls. A seed id opens a seed tile instead ([garden.md](garden.md)).
-- `file-opener`: ⌘P lists recent files on an empty query, fuzzy-searches the active agent's folder, and browses folders for a query starting with `/`, `~`, `./` or `../`. A recent file's row ends with its latest touch, a pencil for an agent's edit or a clock for an open, and how long ago. With outposts on, each row is tagged with its machine, ⇥ and ⇧⇥ list one machine's files at a time with its chip in the field, and ⌫ in the empty field lists every machine again.
+- `file-opener`: ⌘P lists recent files on an empty query, fuzzy-searches the active agent's folder, and browses folders for a query starting with `/`, `~`, `./` or `../`. A recent file's row ends with its latest touch, a pencil for an agent's edit or an arrow for an open, and how long ago. With outposts on, each row is tagged with its machine, ⇥ and ⇧⇥ list one machine's files at a time with its chip in the field, and ⌫ in the empty field lists every machine again.
 - `recent-files`: files opened or edited before, best first. A file used often and lately ranks above one used long ago, and a file touched just now ranks first, with a lead that fades over the next couple of hours, so a file an agent just edited comes first. Picking one returns to the file's tile when that tile is still open.
 - `markdown-render`: headings, tables, alerts, code with highlighting, images, Mermaid diagrams and frontmatter.
 - `live-reload`: the tile re-reads its file when the file changes.

@@ -118,7 +118,7 @@ fn option(state: &State, r: &Row, highlighted: bool, tagged: bool, t: &Tokens) -
         let (mark, verb) = if r.edited {
             (&icon::PENCIL, "edited")
         } else {
-            (&icon::RECENT, "opened")
+            (&icon::OPENED, "opened")
         };
         let ago = age(at, state.window.now_ms);
         line = line.aside(
