@@ -138,7 +138,8 @@ address                 who an item is for: a session or a mailbox
    │                    the seed's tender
    ├─ question (0..n)   pick one, pick any, or write an answer
    └─ answer (at most 1) the user's reply, typed into the conversation of
-                        the ask's addressee as the user's message; a seed
+                        the ask's addressee, or of the chief when no agent
+                        holds that address, as the user's message; a seed
                         also keeps it as a note
 ring                    a prompt that delivers an agent's unread items:
                         answers, quick captures and messages sent as the
