@@ -5,13 +5,15 @@ import { join, resolve } from "node:path"
 import { ASK_TASKS } from "./asks.ts"
 import { PROBES } from "./probes.ts"
 import { TASKS } from "./tasks.ts"
-import { attnCalls, type Check, metrics, type Metrics, run, type Task, type World } from "./world.ts"
+import { attnCalls, type Call, type Check, isCommand, metrics, type Metrics, run, type Task, toolOutcomes, type World } from "./world.ts"
 
 const repository = resolve(import.meta.dir, "../../..")
 /** Tripwires. The prototype's runs took 13 to 38 s and C16's under a minute; a run that reaches these is stuck. */
 const LAUNCH_DEADLINE_MS = 3 * 60_000
 const RUN_DEADLINE_MS = 10 * 60_000
-const POLL_MS = 2_000
+/** Tripwire for a delegation that attn accepted: its agent starts as any session does. */
+const DELEGATE_DEADLINE_MS = LAUNCH_DEADLINE_MS
+const POLL_MS = 500
 
 const arg = (name: string) => {
   const i = process.argv.indexOf(`--${name}`)
@@ -23,7 +25,7 @@ const list = (value: string | undefined, fallback: string) => (value ?? fallback
 const grid = flag("grid")
 const attnBinary = resolve(arg("attn") ?? join(repository, "attn"))
 if (!existsSync(attnBinary)) throw new Error(`${attnBinary} does not exist: run make build, or pass --attn <binary>`)
-const withoutAttnEnv = () => Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(ATTN_|CLAUDE|CODEX_)/.test(key)))
+const withoutAttnEnv = () => Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(ATTN_|CLAUDE|CODEX_|SIGMA_)/.test(key)))
 
 function newInstance(requested: string | undefined) {
   const usage = "pass --instance <name>: a new instance this run creates, changes and cleans"
@@ -51,12 +53,13 @@ const taskIds = list(arg("tasks"), TASKS.map((t) => t.id).join(",")).flatMap((id
 const tasks = taskIds.map((id) => ALL.find((t) => t.id === id) ?? (() => { throw new Error(`no task ${id}; tasks: ${ALL.map((t) => t.id).join(", ")}`) })())
 
 /** A harness as a cell names it: the agent attn launches, whether Claude Code's code mode is on, and the model. */
-type Harness = { name: string; agent: "claude" | "codex" | "sigma"; codeMode: boolean; model: string }
+type Harness = { name: string; agent: "claude" | "codex" | "sigma"; codeMode: boolean; model: string; effort: string }
 const harnesses: Harness[] = list(arg("harness"), grid ? "claude,claude-code-mode,codex,sigma" : "claude,codex").map((spec) => {
-  const [name, model = ""] = spec.split("@") as [string, string?]
+  const [name, pin = ""] = spec.split("@") as [string, string?]
+  const [model = "", effort = ""] = pin.split(":")
   const agent = name === "claude-code-mode" ? "claude" : name
-  if (agent !== "claude" && agent !== "codex" && agent !== "sigma") throw new Error(`no harness ${name}: claude, claude-code-mode, codex or sigma, each with an optional @model`)
-  return { name: spec, agent, codeMode: name === "claude-code-mode", model }
+  if (agent !== "claude" && agent !== "codex" && agent !== "sigma") throw new Error(`no harness ${name}: claude, claude-code-mode, codex or sigma, each with an optional @model or @model:effort`)
+  return { name: spec, agent, codeMode: name === "claude-code-mode", model, effort }
 })
 const outposts = list(arg("outpost"), "").map((spec) => {
   const [name, ssh] = spec.split("=")
@@ -77,6 +80,7 @@ cells.sort((a, b) => Number(a.harness.codeMode) - Number(b.harness.codeMode))
 
 const stamp = new Date().toISOString().replace(/[:.]/g, "-")
 const out = join(import.meta.dir, "runs", stamp)
+const dataDir: string = JSON.parse(run(attnBinary, ["instance", "resolve", "--instance", instance], withoutAttnEnv()).stdout).dataDir
 const workRoot = mkdtempSync(join(realpathSync(tmpdir()), "attn-agent-bench-"))
 mkdirSync(out, { recursive: true })
 
@@ -136,10 +140,16 @@ async function atPrompt(session: string, agent: Harness["agent"]) {
   const deadline = Date.now() + LAUNCH_DEADLINE_MS
   let trusted = false
   while (Date.now() < deadline) {
-    if (!trusted && /Trust this folder\?|Do you trust the files in this folder\?/.test(screen(session))) {
-      wsctl(["input", "--id", session, "--enter"])
-      trusted = true
-      continue
+    if (!trusted) {
+      const shown = screen(session)
+      const claudeRefuses = /❯ No, exit\s+Yes, I trust this folder/.test(shown)
+      if (claudeRefuses) wsctl(["input", "--id", session, "--text", "\x1b[B"])
+      if (claudeRefuses) await wait(POLL_MS)
+      if (claudeRefuses || /Trust this folder\?|Do you trust the files in this folder\?/.test(shown)) {
+        wsctl(["input", "--id", session, "--enter"])
+        trusted = true
+        continue
+      }
     }
     const me = agents().find((a) => a.id === session)
     if (me && ["idle", "waiting_input"].includes(me.state) && (agent !== "sigma" || SIGMA_COMPOSER.test(screen(session)))) return
@@ -155,9 +165,12 @@ const transcript = (session: string): any[] =>
     .filter((line) => line.startsWith("{"))
     .map((line) => JSON.parse(line))
 
-/** Waits for the turn the prompt started to end: the session is back at its prompt after answering, it waits on the user
- * in its harness's own question or approval prompt, or it closed itself. */
-async function settled(session: string): Promise<string> {
+const isAnswer = (e: any) => e.role === "assistant" || e.kind === "tool_call"
+const atRest = ["idle", "waiting_input", "pending_approval"]
+
+/** Waits until the session is at rest and its transcript holds an answer after the first `before` events, or it closed
+ * itself. At rest means back at its prompt, or waiting on the user in its harness's own question or approval prompt. */
+async function settled(session: string, before: number): Promise<string> {
   const deadline = Date.now() + RUN_DEADLINE_MS
   let state = ""
   while (Date.now() < deadline) {
@@ -165,27 +178,129 @@ async function settled(session: string): Promise<string> {
     const me = agents().find((a) => a.id === session)
     if (!me) return "closed itself"
     state = me.state
-    if (["idle", "waiting_input", "pending_approval"].includes(state) && transcript(session).some((e) => e.role === "assistant" || e.kind === "tool_call")) return state
+    if (atRest.includes(state) && transcript(session).slice(before).some(isAnswer)) return state
   }
   throw new Error(`deadline ${RUN_DEADLINE_MS / 1000}s in state ${state}`)
 }
 
-/** `unpriced` when attn has no price for a model the session used, so `cost` leaves that model out. */
-type Usage = { input: number; output: number; cost: number; unpriced: boolean }
-function usage(session: string): Usage {
-  const models: any[] = json(attnRaw(["session", "show", session, "--json"])).entry.usage?.models ?? []
-  const sum = (f: (m: any) => number) => models.reduce((a, m) => a + f(m), 0)
+/** The session's own tokens by kind, and `reviewer` for those Codex's auto-review spends beside it. `unpriced` when attn
+ * has no price for a model, so `cost` leaves that model out. `incomplete` when attn could not measure all of it. */
+type Usage = { input: number; cacheRead: number; cacheWrite: number; output: number; reviewer: number; cost: number; unpriced: boolean; incomplete: boolean; models: string[] }
+const NO_USAGE: Usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, reviewer: 0, cost: 0, unpriced: false, incomplete: false, models: [] }
+function readUsage(session: string): Usage {
+  const entry = json(attnRaw(["session", "show", session, "--json"])).entry.usage
+  const models: any[] = entry?.models ?? []
+  const own = models.filter((m) => m.purpose === "agent")
+  const sum = (rows: any[], f: (m: any) => number) => rows.reduce((a, m) => a + f(m), 0)
   return {
-    input: sum((m) => m.input_tokens + m.cache_read_tokens + m.cache_write_5m_tokens + m.cache_write_1h_tokens + m.cache_write_unclassified_tokens),
-    output: sum((m) => m.output_tokens),
-    cost: sum((m) => m.cost_usd ?? 0),
+    input: sum(own, (m) => m.input_tokens),
+    cacheRead: sum(own, (m) => m.cache_read_tokens),
+    cacheWrite: sum(own, (m) => m.cache_write_5m_tokens + m.cache_write_1h_tokens + m.cache_write_unclassified_tokens),
+    output: sum(own, (m) => m.output_tokens),
+    reviewer: sum(models.filter((m) => m.purpose !== "agent"), (m) => m.total_tokens),
+    cost: sum(models, (m) => m.cost_usd ?? 0),
     unpriced: models.some((m) => m.has_unpriced_usage),
+    incomplete: entry?.measurement_incomplete === true,
+    models: own.map((m) => m.model),
   }
+}
+
+/** attn reads usage after the harness writes it, so this waits until two reads agree on a measured total. The limit is a
+ * tripwire: a harness that reports nothing leaves zeros, which the run's fault names. */
+const USAGE_DEADLINE_MS = 15_000
+async function steadyUsage(session: string): Promise<Usage> {
+  const deadline = Date.now() + USAGE_DEADLINE_MS
+  let last = readUsage(session)
+  while (Date.now() < deadline) {
+    await wait(1_000)
+    const now = readUsage(session)
+    if (now.output > 0 && JSON.stringify(now) === JSON.stringify(last)) return now
+    last = now
+  }
+  return last
+}
+
+const since = (now: Usage, before: Usage): Usage => ({
+  ...now,
+  input: now.input - before.input,
+  cacheRead: now.cacheRead - before.cacheRead,
+  cacheWrite: now.cacheWrite - before.cacheWrite,
+  output: now.output - before.output,
+  reviewer: now.reviewer - before.reviewer,
+  cost: now.cost - before.cost,
+})
+
+const onPlace = (place: Place, command: string) => (place.ssh ? run("ssh", [place.ssh, command], process.env) : run("bash", ["-c", command], daemonEnv)).stdout
+
+/** Whether the session's harness recorded attn's tools when its conversation started: Claude Code, also under Sigma's
+ * Claude path, in the conversation's `mcp_instructions_delta` or `deferred_tools_delta`, and Codex in the rollout's `additional_tools`. Sigma's own
+ * loop keeps no such file, so it answers `unknown`. */
+function toolsHeld(cell: Cell, directory: string, startedAt: number): "on" | "off" | "unknown" {
+  const newer = `-newermt @${Math.floor(startedAt / 1000) - 1}`
+  if (cell.harness.agent === "codex") {
+    const home = !cell.place.ssh && toolHome ? join(toolHome, ".codex") : "~/.codex"
+    const lines = onPlace(cell.place, `find ${home}/sessions ${home}/archived_sessions -name 'rollout-*.jsonl' ${newer} -print0 2>/dev/null | xargs -0 -r grep -lF '"cwd":"${directory}"' | xargs -r grep -hE '"type":"(session_meta|additional_tools)"'`).split("\n").filter(Boolean)
+    const offered = lines.filter((line) => line.includes('"additional_tools"'))
+    if (offered.length === 0) return "unknown"
+    return offered.some((line) => line.includes("mcp__attn")) ? "on" : "off"
+  }
+  const home = !cell.place.ssh && toolHome ? join(toolHome, ".claude") : "~/.claude"
+  const folder = directory.replace(/[^a-zA-Z0-9]/g, "-")
+  const lines = onPlace(cell.place, `find ${home}/projects/${folder} -maxdepth 1 -name '*.jsonl' ${newer} -print0 2>/dev/null | xargs -0 -r cat`).split("\n").filter((line) => line.startsWith("{"))
+  if (lines.length === 0) return "unknown"
+  const added = lines.map((line) => JSON.parse(line).attachment).filter((a) => a?.type === "mcp_instructions_delta" || a?.type === "deferred_tools_delta")
+  return added.some((a) => (a.addedNames ?? []).some((n: string) => n === "attn" || n.startsWith("mcp__attn"))) ? "on" : "off"
+}
+
+/** A Claude Code that runs with code mode off, whatever the user's settings say: their `env` beats the process environment,
+ * and only the settings attn passes on the command line beat it. */
+const plainClaude = join(out, "claude-code-mode-off")
+function writePlainClaude() {
+  const claude = spawnSync("bash", ["-c", "command -v claude"], { encoding: "utf8" }).stdout.trim()
+  const env = '"env":{"CLAUDE_CODE_EXPERIMENTAL_CODE_MODE":"0"}'
+  writeFileSync(
+    plainClaude,
+    `#!/bin/bash
+args=("$@")
+found=
+for i in "\${!args[@]}"; do
+  if [ "\${args[$i]}" = --settings ]; then
+    s="\${args[$((i + 1))]}"
+    args[$((i + 1))]='{${env},'"\${s#\\{}"
+    found=1
+  fi
+done
+[ -n "$found" ] || args+=(--settings '{${env}}')
+exec '${claude}' "\${args[@]}"
+`,
+    { mode: 0o755 },
+  )
+}
+
+const pinned = (harness: Harness) => harness.model.split("/").at(-1)!
+
+/** Why a run measures something other than its cell, if it does. */
+function faultOf(cell: Cell, held: string, used: Usage, events: any[]): string {
+  if (cell.harness.agent === "claude" && !cell.harness.codeMode && events.some((e) => e.tool_name === "REPL")) return "Claude Code ran in code mode"
+  if (held !== "unknown" && held !== cell.tools) return `the session launched with attn's tools ${held}`
+  const other = used.models.filter((m) => m !== pinned(cell.harness))
+  if (cell.harness.model && (used.models.length === 0 || other.length > 0)) return `pinned ${pinned(cell.harness)}, but attn reports ${used.models.join(", ") || "no model"}`
+  return ""
 }
 
 let profiles = 0
 
-type RunResult = { task: string; cell: string; n: number; pass: boolean; why: string; ended: string; metrics: Metrics; usage: Usage; ms: number }
+/** `fault` says why a run measures something other than its cell, such as another model; such a run fails and stays out
+ * of the comparisons. `launchMs` is from the run's start to the prompt being typed; `turnMs` from its Enter to settled. */
+type RunResult = { task: string; cell: string; n: number; pass: boolean; why: string; fault: string; ended: string; tools: string; toolsHeld: string; metrics: Metrics; usage: Usage; launchMs: number; turnMs: number }
+
+async function judged(task: Task, w: World, calls: Call[], ended: string): Promise<Check> {
+  try {
+    return await task.check(w, calls, ended)
+  } catch (error) {
+    return { pass: false, why: `the check failed: ${(error as Error).message}` }
+  }
+}
 
 async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
   const evidence = join(out, task.id, cell.id.replace(/ /g, "_"), String(n))
@@ -201,19 +316,28 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
   const profileName = `bench ${++profiles} ${task.id} ${cell.id}`
   const mine = () => agents().filter((a) => a.profile === profileName)
   let session = ""
+  let directory = dir
   let ended = ""
   let events: any[] = []
+  let baseline = NO_USAGE
+  let turn = { at: 0, launchMs: 0, turnMs: 0 }
   try {
     const created = json(wsctl(["request", "--json", JSON.stringify({ cmd: "profile_create", request_id: crypto.randomUUID(), name: profileName }), "--event", "profile_action_result"]))
     if (!created.success) throw new Error(`profile_create ${profileName}: ${created.error}`)
     const profile = created.profile.id
+    const notebook = join(workRoot, `notebook-${profiles}`)
+    mkdirSync(notebook, { recursive: true })
+    attnRaw(["settings", "set", "notebook.root", notebook, "--profile", profile])
     if (task.launch === "chief") {
+      attnRaw(["onboarding", "done", "--profile", profile])
+      directory = json(attnRaw(["crew", "list", "--profile", profile, "--json"])).find((m: any) => m.chief).home_dir
       session = json(attnRaw(["crew", "start", "chief", "--agent", cell.harness.agent, "--profile", profile, "--json"])).session_id
     } else {
       session = crypto.randomUUID()
       wsctl(["add-session", "--cwd", dir, "--agent", cell.harness.agent, "--profile", profile, "--label", label, "--id", session, ...(remote ? ["--host", cell.place.name] : [])])
     }
     await atPrompt(session, cell.harness.agent)
+    if (task.launch === "chief") await settled(session, 0)
     const scoped = (args: string[], who?: string) => [...args, ...(who ? ["--session", who] : ["--profile", profile])]
     const w: World = {
       dir,
@@ -221,6 +345,7 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
       session,
       state: {},
       attn: (args, opts = {}) => attnRaw(scoped(args, opts.session), { stdin: opts.stdin, cwd: opts.cwd }),
+      instance: (args) => attnRaw(args),
       attnJson: (args, opts = {}) => json(attnRaw(scoped([...args, "--json"], opts.session), { stdin: opts.stdin })),
       sh: (command, stdin) => {
         const r = remote ? run("ssh", [cell.place.ssh!, `cd '${remote}' && ${command}`], process.env, { stdin }) : run("bash", ["-c", command], process.env, { stdin, cwd: dir })
@@ -232,36 +357,57 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
         return id
       },
       sessions: mine,
+      delegated: async (folder, calls) => {
+        const deadline = Date.now() + DELEGATE_DEADLINE_MS
+        const there = () => mine().filter((a) => a.directory === folder && a.id !== session)
+        if (!calls.some((c) => isCommand(c, "delegate") && c.refused === undefined)) return there()
+        while (there().length === 0 && Date.now() < deadline) await wait(POLL_MS)
+        return there()
+      },
       mermaid: drawsMermaid,
     }
     const prompt = await task.setup(w)
+    const before = transcript(session).length
+    const toolLog = () => (remote ? undefined : toolOutcomes(readFileSync(join(dataDir, "daemon.log"), "utf8"), session))
+    const loggedBefore = toolLog()?.length ?? 0
+    if (before > 0) baseline = await steadyUsage(session)
     wsctl(["input", "--id", session, "--text", prompt])
     await wait(500)
+    turn = { at: Date.now(), launchMs: Date.now() - started, turnMs: 0 }
     wsctl(["input", "--id", session, "--enter"])
-    let check: Check
+    let stopped = ""
     try {
-      ended = await settled(session)
-      events = transcript(session)
-      check = task.check(w, attnCalls(events))
+      ended = await settled(session, before)
     } catch (error) {
-      ended = (error as Error).message
-      events = transcript(session)
-      check = { pass: false, why: ended }
+      stopped = ended = (error as Error).message
     }
-    const calls = attnCalls(events)
-    const result = { task: task.id, cell: cell.id, n, ...check, ended, metrics: metrics(events, calls), usage: usage(session), ms: Date.now() - started }
+    turn.turnMs = Date.now() - turn.at
+    events = transcript(session).slice(before)
+    const outcomes = toolLog()?.slice(loggedBefore)
+    const calls = attnCalls(events, outcomes)
+    const verdict: Check = stopped ? { pass: false, why: stopped } : await judged(task, w, calls, ended)
+    const used = since(await steadyUsage(session), baseline)
+    const held = toolsHeld(cell, directory, started)
+    const fault = faultOf(cell, held, used, events)
+    const result: RunResult = {
+      task: task.id, cell: cell.id, n, pass: verdict.pass && !fault, why: fault ? `bench: ${fault}; ${verdict.why}` : verdict.why, fault, ended,
+      tools: cell.tools, toolsHeld: held, metrics: metrics(events, calls, outcomes), usage: used, launchMs: turn.launchMs, turnMs: turn.turnMs,
+    }
     writeFileSync(join(evidence, "calls.json"), JSON.stringify(calls, null, 1))
+    if (outcomes) writeFileSync(join(evidence, "tool-log.json"), JSON.stringify(outcomes, null, 1))
     if (ended !== "closed itself") writeFileSync(join(evidence, "asks.json"), JSON.stringify(w.attnJson(["ask", "list"], { session }), null, 1))
     writeFileSync(join(evidence, "result.json"), JSON.stringify(result, null, 1))
     return result
   } catch (error) {
-    return { task: task.id, cell: cell.id, n, pass: false, why: `bench: ${(error as Error).message}`, ended, metrics: metrics(events, []), usage: { input: 0, output: 0, cost: 0, unpriced: false }, ms: Date.now() - started }
+    const fault = (error as Error).message
+    return { task: task.id, cell: cell.id, n, pass: false, why: `bench: ${fault}`, fault, ended, tools: cell.tools, toolsHeld: "unknown", metrics: metrics(events, []), usage: NO_USAGE, launchMs: turn.launchMs, turnMs: turn.turnMs }
   } finally {
     if (session) {
       writeFileSync(join(evidence, "screen.txt"), screen(session))
       writeFileSync(join(evidence, "transcript.jsonl"), events.map((e) => JSON.stringify(e)).join("\n") + "\n")
     }
     for (const a of mine()) run(wsctlBinary, ["rm-session", "--id", a.id], daemonEnv)
+    task.restore?.((args, stdin) => attnRaw(args, { stdin }))
   }
 }
 
@@ -272,47 +418,68 @@ const median = (xs: number[]) => {
 
 function table(results: RunResult[]) {
   const lines = [
-    `${runs} run(s) per cell on instance ${instance}, attn ${attnRaw(["version"]).trim()}, ${new Date().toISOString().slice(0, 10)}. Turns, input tokens (input + cache read + cache write), output tokens, attn calls, searches and help reads are medians per run; cost is the mean per run at API prices, as attn accounts it; "+ unpriced" marks a model attn has no price for.`,
+    `${runs} run(s) per cell on instance ${instance}, attn ${attnRaw(["version"]).trim()}, ${new Date().toISOString().slice(0, 10)}. Turns, tokens in thousands (uncached input, cache reads, cache writes), output tokens, calls and seconds are medians per run. Tool and CLI show calls, then failed ones in parentheses. Help is --help reads, ref is skill and guide reads. Cost is the mean per run at API prices, as attn accounts it; "+ unpriced" marks a model attn has no price for. Runs whose fault says they measured something else fail.`,
     "",
-    "| task | harness | tools | place | pass | turns | in k | out | attn calls | searches | help | cost/run | failures |",
-    "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+    "| task | harness | models | tools | place | pass | turns | in k | read k | write k | out | tool | CLI | searches | help | ref | turn s | cost/run | failures |",
+    "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
   ]
   for (const task of tasks)
     for (const cell of cells) {
       const rs = results.filter((r) => r.task === task.id && r.cell === cell.id)
       if (rs.length === 0) continue
       const m = (f: (r: RunResult) => number) => median(rs.map(f))
+      const k = (f: (r: RunResult) => number) => (m(f) / 1000).toFixed(1)
       const fails = rs.filter((r) => !r.pass).map((r) => `#${r.n}: ${r.why}`.slice(0, 160).replace(/\|/g, "/"))
+      const cli = rs.filter((r) => cell.tools === "on" && r.metrics.cliCalls > 0).map((r) => `#${r.n} used the CLI`)
       lines.push(
-        `| ${task.id} | ${cell.harness.name} | ${cell.tools} | ${cell.place.name} | ${rs.filter((r) => r.pass).length}/${rs.length} | ${m((r) => r.metrics.turns)} | ${(m((r) => r.usage.input) / 1000).toFixed(1)} | ${m((r) => r.usage.output)} | ${m((r) => r.metrics.attnCalls)} | ${m((r) => r.metrics.searches)} | ${m((r) => r.metrics.helpReads)} | $${(rs.reduce((a, r) => a + r.usage.cost, 0) / rs.length).toFixed(3)}${rs.some((r) => r.usage.unpriced) ? " + unpriced" : ""} | ${fails.join("<br>") || "-"} |`,
+        `| ${task.id} | ${cell.harness.name} | ${[...new Set(rs.flatMap((r) => r.usage.models))].join(" ") || "-"} | ${cell.tools} | ${cell.place.name} | ${rs.filter((r) => r.pass).length}/${rs.length} | ${m((r) => r.metrics.turns)} | ${k((r) => r.usage.input)} | ${k((r) => r.usage.cacheRead)} | ${k((r) => r.usage.cacheWrite)} | ${m((r) => r.usage.output)} | ${m((r) => r.metrics.toolCalls)} (${m((r) => r.metrics.toolRefusals)}) | ${m((r) => r.metrics.cliCalls)} (${m((r) => r.metrics.cliFailures)}) | ${m((r) => r.metrics.searches)} | ${m((r) => r.metrics.cliHelpReads)} | ${m((r) => r.metrics.referenceReads)} | ${(m((r) => r.turnMs) / 1000).toFixed(1)} | $${(rs.reduce((a, r) => a + r.usage.cost, 0) / rs.length).toFixed(3)}${rs.some((r) => r.usage.unpriced) ? " + unpriced" : ""} | ${[...fails, ...cli].join("<br>") || "-"} |`,
       )
     }
   return lines.join("\n")
 }
 
-/** D22: on every task, Sigma reaches the right end state at least as often as Claude Code and as Codex, per setting
- * and place. */
+/** A 95% percentile interval for the mean of `xs`, from 10,000 resamples with a fixed seed. */
+function interval(xs: number[]): [number, number] {
+  let state = 1
+  const next = () => {
+    state = (state * 1664525 + 1013904223) >>> 0
+    return state / 2 ** 32
+  }
+  const means = Array.from({ length: 10_000 }, () => xs.reduce((a) => a + xs[Math.floor(next() * xs.length)]!, 0) / xs.length).sort((a, b) => a - b)
+  return [means[Math.floor(means.length * 0.025)]!, means[Math.floor(means.length * 0.975)]!]
+}
+
+const strata: [string, Task[]][] = [["the seven tasks", TASKS], ["the ask tasks", ASK_TASKS], ["the probes", PROBES]]
+
+/** D22, with the task as the paired unit: over a group of tasks, Sigma's mean pass-rate difference to Claude Code and to
+ * Codex per setting and place. It fails when the 95% interval lies below zero. A task flags for a rerun only on a clear
+ * gap: Sigma in at most 1 of 3 runs against every run of the other. Faulted runs are left out. */
 function judgeD22(results: RunResult[]) {
   const lines: string[] = []
-  const rate = (cell: Cell, task: string) => {
-    const rs = results.filter((r) => r.task === task && r.cell === cell.id)
-    return rs.length === 0 ? undefined : rs.filter((r) => r.pass).length / rs.length
+  const rate = (cell: Cell, task: Task) => {
+    const rs = results.filter((r) => r.task === task.id && r.cell === cell.id && !r.fault)
+    return rs.length === 0 ? undefined : { rate: rs.filter((r) => r.pass).length / rs.length, n: rs.length }
   }
-  for (const task of tasks)
-    for (const t of tools)
-      for (const place of [...new Set(cells.map((c) => c.place.name))]) {
-        const here = cells.filter((c) => c.tools === t && c.place.name === place)
-        const sigma = here.filter((c) => c.harness.agent === "sigma")
-        const others = here.filter((c) => c.harness.agent !== "sigma")
-        if (sigma.length === 0 || others.length === 0) continue
-        const best = Math.max(...others.map((c) => rate(c, task.id) ?? 0))
-        for (const s of sigma) {
-          const r = rate(s, task.id)
-          if (r === undefined) continue
-          lines.push(`${r >= best ? "holds" : "FAILS"}  ${task.id}, tools ${t}, ${place}: ${s.harness.name} ${(r * 100).toFixed(0)}% against the best of the others ${(best * 100).toFixed(0)}%`)
-        }
+  const points = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(0)}`
+  for (const sigma of cells.filter((c) => c.harness.agent === "sigma"))
+    for (const other of cells.filter((c) => c.harness.agent !== "sigma" && c.tools === sigma.tools && c.place.name === sigma.place.name)) {
+      const against = `tools ${sigma.tools}, ${sigma.place.name}: ${sigma.harness.name} against ${other.harness.name}`
+      for (const [group, members] of strata) {
+        const pairs = tasks.filter((t) => members.includes(t)).flatMap((task) => {
+          const [s, o] = [rate(sigma, task), rate(other, task)]
+          return s && o ? [{ task, s, o, gap: s.rate - o.rate }] : []
+        })
+        if (pairs.length === 0) continue
+        const [low, high] = interval(pairs.map((p) => p.gap))
+        const mean = pairs.reduce((a, p) => a + p.gap, 0) / pairs.length
+        lines.push(`${high < 0 ? "FAILS" : "holds"}  ${group}, ${against}: ${points(mean)} points (95% ${points(low)} to ${points(high)}) over ${pairs.length} tasks, better on ${pairs.filter((p) => p.gap > 0).length}, worse on ${pairs.filter((p) => p.gap < 0).length}`)
+        for (const p of pairs.filter((p) => Math.min(p.s.n, p.o.n) >= 3 && p.s.rate <= 1 / 3 && p.o.rate === 1))
+          lines.push(`RERUN  ${p.task.id}, ${against}: ${Math.round(p.s.rate * p.s.n)}/${p.s.n} against ${p.o.n}/${p.o.n}`)
       }
-  return lines.length === 0 ? "D22 not judged: the run had no Sigma cell beside a Claude Code or Codex cell." : `D22 (Sigma at least as often right as Claude Code and Codex):\n${lines.join("\n")}`
+    }
+  const faults = results.filter((r) => r.fault).length
+  if (faults > 0) lines.push(`${faults} faulted run(s) left out`)
+  return lines.length === 0 ? "D22 not judged: the run had no Sigma cell beside a Claude Code or Codex cell." : `D22 (Sigma at least as often right as Claude Code and Codex, paired by task):\n${lines.join("\n")}`
 }
 
 /** Codex saves a trust entry for each folder whose trust screen the bench answered; remove the ones under this run's
@@ -343,6 +510,7 @@ function drawsMermaid(source: string) {
   if (r.status !== 0 && r.status !== 1) throw new Error(`mermaid_check exited ${r.status}: ${r.stderr.trim()}`)
   return { drawn: true, skipped: r.stdout.split("\n").filter(Boolean) }
 }
+writePlainClaude()
 const taskSettings = [...new Set(tasks.flatMap((t) => Object.keys(t.settings ?? {})))]
 const results: RunResult[] = []
 try {
@@ -350,19 +518,21 @@ try {
     const group = cells.filter((c) => c.harness.codeMode === codeMode)
     if (group.length === 0) continue
     startDaemon(codeMode)
-    for (const cell of group) {
-      setting("agent_tools_enabled", cell.tools === "on" ? "true" : "false")
-      setting(`default_model_${cell.harness.agent}`, cell.harness.model)
-      if (cell.harness.agent === "sigma") setting("sigma_enabled", "true")
-      for (const task of tasks) {
-        for (const name of taskSettings) setting(name, task.settings?.[name] ?? "")
+    for (const [index, task] of tasks.entries()) {
+      for (const name of taskSettings) setting(name, task.settings?.[name] ?? "")
+      for (const cell of index % 2 ? [...group].reverse() : group) {
+        setting("agent_tools_enabled", cell.tools === "on" ? "true" : "false")
+        setting(`default_model_${cell.harness.agent}`, cell.harness.model)
+        setting(`default_effort_${cell.harness.agent}`, cell.harness.effort)
+        if (cell.harness.agent === "claude") setting("claude_executable", cell.harness.codeMode ? "" : plainClaude)
+        if (cell.harness.agent === "sigma") setting("sigma_enabled", "true")
         const jobs = Array.from({ length: runs }, (_, i) => i + 1)
         await Promise.all(
-          Array.from({ length: Math.min(parallel, jobs.length) }, async () => {
+          Array.from({ length: task.restore ? 1 : Math.min(parallel, jobs.length) }, async () => {
             for (let n = jobs.shift(); n !== undefined; n = jobs.shift()) {
               const r = await runOnce(cell, task, n)
               results.push(r)
-              console.error(`${r.pass ? "PASS" : "FAIL"} ${r.task} ${r.cell} #${r.n} turns=${r.metrics.turns} in=${r.usage.input} cost=$${r.usage.cost.toFixed(3)} ${Math.round(r.ms / 1000)}s ${r.pass ? "" : r.why}`)
+              console.error(`${r.pass ? "PASS" : "FAIL"} ${r.task} ${r.cell} #${r.n} models=${r.usage.models.join("+")} held=${r.toolsHeld} turns=${r.metrics.turns} tool=${r.metrics.toolCalls} cli=${r.metrics.cliCalls} in=${r.usage.input}+${r.usage.cacheRead}r+${r.usage.cacheWrite}w cost=$${r.usage.cost.toFixed(3)} ${Math.round(r.turnMs / 1000)}s ${r.pass ? "" : r.why}`)
             }
           }),
         )

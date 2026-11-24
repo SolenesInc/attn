@@ -1,5 +1,6 @@
 import { join } from "node:path"
-import { type Check, isCommand, type Task, type World } from "./world.ts"
+import { offers, openAsks, recommends } from "./asks.ts"
+import { type Check, isCommand, STAYS, type Task, type World } from "./world.ts"
 
 const verdict = (problems: string[], ok: string): Check =>
   problems.length === 0 ? { pass: true, why: ok } : { pass: false, why: problems.join("; ") }
@@ -88,10 +89,10 @@ const ask: Task = {
   setup: () =>
     "I need a decision from the user, not from you: should session data be stored in Postgres or in SQLite? Postgres is already deployed for the API; SQLite would mean no extra service for the desktop build. Recommend Postgres. Put the question to the user through attn, then you are done for now.",
   check: (w) => {
-    const asks = JSON.stringify(w.attnJson(["ask", "list"], { session: w.session })).toLowerCase()
+    const question = offers(openAsks(w), /postgres/i, /sqlite/i)
     const problems: string[] = []
-    if (!asks.includes("postgres") || !asks.includes("sqlite")) problems.push(`no open ask names Postgres and SQLite: ${asks.slice(0, 200)}`)
-    else if (!/"recommended[a-z_]*":\s*"[^"]*postgres/.test(asks)) problems.push("the ask recommends no Postgres choice")
+    if (!question) problems.push("no open ask offers Postgres and SQLite as choices")
+    else if (!recommends(question, /postgres/i)) problems.push(`recommends ${question.recommended ?? "nothing"}, not Postgres`)
     return verdict(problems, "asked Postgres or SQLite, recommending Postgres")
   },
 }
@@ -104,15 +105,17 @@ const msgDelegate: Task = {
     w.sh("mkdir -p docs")
     return `The api-v2 branch is ready for review. Tell the agent named api-review that it can start reviewing api-v2. Then delegate writing the migration guide for api-v2 to a new agent working in ${join(w.dir, "docs")} (a plain folder, not a Git repository). You are authorized to start that delegation.`
   },
-  check: (w) => {
+  check: async (w, calls) => {
     const inbox = JSON.stringify(w.attnJson(["agent", "inbox", "--limit", "50"], { session: w.state.reviewer as string })).toLowerCase()
     const docs = join(w.dir, "docs")
-    const delegates = w.sessions().filter((s) => s.directory === docs)
+    const delegates = await w.delegated(docs, calls)
     const problems: string[] = []
     if (!inbox.includes("api-v2")) problems.push("api-review got no message naming api-v2")
     if (delegates.length !== 1) problems.push(`${delegates.length} sessions in ${docs}, want one delegation`)
-    else if (!JSON.stringify(w.attnJson(["seed", "search", "migration", "guide"])).toLowerCase().includes("migration guide"))
-      problems.push("no seed briefs the migration guide")
+    else {
+      const planted = w.attnJson(["seed", "ls"]).seeds.map((s: any) => show(w, s.id).seed)
+      if (!planted.some((s: any) => s.tender?.session_id === delegates[0]!.id && /migration[\s-]+guide/i.test(`${s.title} ${s.body}`))) problems.push("the delegate tends no seed that briefs the migration guide")
+    }
     return verdict(problems, "messaged api-review and delegated the guide into docs")
   },
 }
@@ -130,6 +133,7 @@ const standby: Task = {
     const note = String(show(w, w.state.seed as string).seed.standby?.note ?? "")
     const problems: string[] = []
     if (!/482|merge/i.test(note)) problems.push(`not on standby with a note to merge #482: ${JSON.stringify(note.slice(0, 120))}`)
+    if (calls.some((c) => isCommand(c, "seed standby") && STAYS.test(c.text))) problems.push("kept the session open with stay")
     if (calls.some((c) => isCommand(c, "agent close"))) problems.push("called agent close instead of relying on standby")
     return verdict(problems, "on standby with a note to merge #482")
   },

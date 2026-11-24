@@ -69,12 +69,12 @@ function shown(markdown: string): Shown {
 
 /** The image types attn copies when an ask opens (`internal/ask/images.go`); it refuses an ask whose copy fails. */
 const COPIED = /\.(png|jpe?g|gif|webp|bmp|tiff?)([?#]|$)/i
-const isRemote = (target: string) => /^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith("//")
+const isRemote = (target: string) => (/^[a-z][a-z0-9+.-]*:/i.test(target) && !/^file:/i.test(target)) || target.startsWith("//")
 const localPath = (ask: Ask, target: string) => resolve(ask.base_dir, decodeURI(target.replace(/^file:\/\//i, "")))
 
 /** Every open ask the session opened, each with what it shows: its markdown parts and its questions' context lines,
  * where the app renders markdown. Choice labels and notes render as plain text, so they show nothing. */
-function openAsks(w: World) {
+export function openAsks(w: World) {
   const asks: Ask[] = w.attnJson(["ask", "list"], { session: w.session }).asks ?? []
   return asks.map((ask) => {
     const texts = ask.parts.flatMap((p) => [p.markdown, p.question?.context].filter((t): t is string => t !== undefined))
@@ -118,9 +118,9 @@ const matchesDistinct = (choices: Choice[], patterns: RegExp[], taken: Set<numbe
   return choices.some((c, i) => !taken.has(i) && first.test(choiceText(c)) && matchesDistinct(choices, rest, new Set([...taken, i])))
 }
 /** A one-choice question that offers one choice for each pattern, each a different choice. */
-const offers = (asks: Opened[], ...patterns: RegExp[]) =>
+export const offers = (asks: Opened[], ...patterns: RegExp[]) =>
   asks.flatMap((a) => a.questions).find((q) => q.kind === "one" && matchesDistinct(q.choices, patterns))
-const recommends = (q: Question | undefined, pattern: RegExp) => {
+export const recommends = (q: Question | undefined, pattern: RegExp) => {
   const choice = q?.choices.find((c) => c.label === q.recommended)
   return choice !== undefined && pattern.test(choiceText(choice))
 }
@@ -131,7 +131,7 @@ function brokenImages(asks: Opened[]) {
   for (const a of asks)
     for (const i of a.images) {
       if (i.html) broken.push(`html img ${i.target}`)
-      else if (isRemote(i.target) && !/^file:/i.test(i.target)) broken.push(`remote ${i.target.slice(0, 40)}`)
+      else if (isRemote(i.target)) broken.push(`remote ${i.target.slice(0, 40)}`)
       else if (!COPIED.test(i.target)) broken.push(`not copied ${i.target}`)
     }
   return broken
