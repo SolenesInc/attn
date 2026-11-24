@@ -39,8 +39,61 @@ func (d *Daemon) handleInstallPluginWS(client *wsClient, msg *protocol.InstallPl
 		d.sendPluginActionResult(client, action, "", false, "plugin source is required")
 		return
 	}
+	var manifest plugins.Manifest
+	var swap *plugins.SwapHandle
+	var err error
+	if link {
+		manifest, swap, err = plugins.ReplaceLinkPath(source, d.pluginDir, d.pluginInstallOptions())
+	} else {
+		manifest, swap, err = plugins.ReplaceSourceWithOptionsContext(d.life.Context(), source, d.pluginDir, d.pluginInstallOptions())
+	}
+	if err != nil {
+		d.sendPluginActionResult(client, action, "", false, err.Error())
+		return
+	}
+	d.finishPluginSwap(client, action, manifest, swap)
+}
 
-	options := plugins.InstallOptions{
+func (d *Daemon) handleUpdatePluginWS(client *wsClient, msg *protocol.UpdatePluginMessage) {
+	d.pluginActionMu.Lock()
+	defer d.pluginActionMu.Unlock()
+	name := strings.TrimSpace(msg.Name)
+	if name == "" {
+		d.sendPluginActionResult(client, "update", "", false, "plugin name is required")
+		return
+	}
+	manifest, swap, err := plugins.UpdateWithOptionsContext(d.life.Context(), name, d.pluginDir, d.pluginInstallOptions())
+	if err != nil {
+		d.sendPluginActionResult(client, "update", name, false, err.Error())
+		return
+	}
+	d.finishPluginSwap(client, "update", manifest, swap)
+}
+
+func (d *Daemon) handleReloadPluginWS(client *wsClient, msg *protocol.ReloadPluginMessage) {
+	d.pluginActionMu.Lock()
+	defer d.pluginActionMu.Unlock()
+	name := strings.TrimSpace(msg.Name)
+	if name == "" {
+		d.sendPluginActionResult(client, "reload", "", false, "plugin name is required")
+		return
+	}
+	manifest, err := plugins.PrepareReload(name, d.pluginDir, plugins.ReloadOptions{Env: d.pluginCommandEnv(), SkipInstall: protocol.Deref(msg.SkipInstall)})
+	if err != nil {
+		d.sendPluginActionResult(client, "reload", name, false, err.Error())
+		return
+	}
+	err = d.restartInstalledPlugin(manifest)
+	d.publishFact(FactPluginInstalled, name, nil)
+	if err != nil {
+		d.sendPluginActionResult(client, "reload", name, false, err.Error())
+		return
+	}
+	d.sendPluginActionResult(client, "reload", name, true, "")
+}
+
+func (d *Daemon) pluginInstallOptions() plugins.InstallOptions {
+	return plugins.InstallOptions{
 		Env: d.pluginCommandEnv(),
 		CloneGit: func(ctx context.Context, source, target string, environment []string) ([]byte, error) {
 			var output []byte
@@ -52,23 +105,39 @@ func (d *Daemon) handleInstallPluginWS(client *wsClient, msg *protocol.InstallPl
 			return output, err
 		},
 	}
-	var manifest plugins.Manifest
-	var err error
-	if link {
-		manifest, err = plugins.LinkPath(source, d.pluginDir, options)
-	} else {
-		manifest, err = plugins.InstallSourceWithOptions(source, d.pluginDir, options)
-	}
-	if err != nil {
-		d.sendPluginActionResult(client, action, "", false, err.Error())
+}
+
+func (d *Daemon) finishPluginSwap(client *wsClient, action string, manifest plugins.Manifest, swap *plugins.SwapHandle) {
+	defer d.publishFact(FactPluginInstalled, manifest.Name, nil)
+	if !swap.Replaced() {
+		if err := d.startInstalledPlugin(manifest); err != nil {
+			d.logf("plugin %s installed but failed to start: %v", manifest.Name, err)
+		}
+		d.sendPluginActionResult(client, action, manifest.Name, true, "")
 		return
 	}
-	if err := d.startInstalledPlugin(manifest); err != nil {
-		d.logf("plugin %s installed but failed to start: %v", manifest.Name, err)
+	if err := d.restartInstalledPlugin(manifest); err != nil {
+		d.sendPluginActionResult(client, action, manifest.Name, false, d.restorePreviousPlugin(manifest.Name, swap, err))
+		return
 	}
-
-	d.publishFact(FactPluginInstalled, manifest.Name, nil)
+	if err := swap.Commit(); err != nil {
+		d.logf("plugin %s replaced but its previous copy stayed behind: %v", manifest.Name, err)
+	}
 	d.sendPluginActionResult(client, action, manifest.Name, true, "")
+}
+
+func (d *Daemon) restorePreviousPlugin(name string, swap *plugins.SwapHandle, cause error) string {
+	if err := swap.Rollback(); err != nil {
+		return fmt.Sprintf("%v; restoring the previous copy failed: %v", cause, err)
+	}
+	previous, err := plugins.PrepareReload(name, d.pluginDir, plugins.ReloadOptions{SkipInstall: true})
+	if err == nil {
+		err = d.restartInstalledPlugin(previous)
+	}
+	if err != nil {
+		return fmt.Sprintf("%v; restored the previous copy, which did not start again: %v", cause, err)
+	}
+	return fmt.Sprintf("%v; restored the previous copy", cause)
 }
 
 func (d *Daemon) handleRemovePluginWS(client *wsClient, msg *protocol.RemovePluginMessage) {
@@ -116,10 +185,14 @@ func (d *Daemon) uninstallPlugin(client *wsClient, name, action string) {
 
 func (d *Daemon) stopAndUnregisterPlugin(name string) {
 	d.stopInstalledPlugin(name)
+	d.disconnectPlugin(name, fmt.Errorf("plugin %q was uninstalled", name))
+}
+
+func (d *Daemon) disconnectPlugin(name string, reason error) {
 	registry := d.ensurePluginRegistry()
 	if connection := registry.get(name); connection != nil {
 		registry.unregister(connection)
-		connection.closePending(fmt.Errorf("plugin %q was uninstalled", name))
+		connection.closePending(reason)
 		if connection.conn != nil {
 			_ = connection.conn.Close()
 		}
@@ -208,6 +281,10 @@ func (d *Daemon) pluginsUpdatedMessage() *protocol.PluginsUpdatedMessage {
 		}
 		if manifest.LinkTarget != "" {
 			info.LinkTarget = protocol.Ptr(manifest.LinkTarget)
+		}
+		if manifest.Source != "" {
+			info.Source = protocol.Ptr(manifest.Source)
+			info.SourceKind = protocol.Ptr(string(manifest.SourceKind))
 		}
 		if healthMessage != "" {
 			info.HealthMessage = protocol.Ptr(healthMessage)

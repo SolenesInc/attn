@@ -102,7 +102,7 @@ func (s *pluginSupervisor) Ensure(manifest pluginManifest) error {
 	return s.Supervisor.Ensure(manifest.Name, s.starter(manifest))
 }
 
-func (s *pluginSupervisor) Restart(manifest pluginManifest) error {
+func (s *pluginSupervisor) Restart(manifest pluginManifest) (uint64, error) {
 	return s.Supervisor.Restart(manifest.Name, s.starter(manifest))
 }
 

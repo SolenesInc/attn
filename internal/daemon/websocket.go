@@ -1111,7 +1111,11 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdListPlugins:
 		d.handleListPluginsWS(client)
 	case protocol.CmdInstallPlugin:
-		d.handleInstallPluginWS(client, msg.(*protocol.InstallPluginMessage))
+		d.life.Go("handleInstallPluginWS", func() { d.handleInstallPluginWS(client, msg.(*protocol.InstallPluginMessage)) })
+	case protocol.CmdReloadPlugin:
+		d.life.Go("handleReloadPluginWS", func() { d.handleReloadPluginWS(client, msg.(*protocol.ReloadPluginMessage)) })
+	case protocol.CmdUpdatePlugin:
+		d.life.Go("handleUpdatePluginWS", func() { d.handleUpdatePluginWS(client, msg.(*protocol.UpdatePluginMessage)) })
 	case protocol.CmdUninstallPlugin:
 		d.handleUninstallPluginWS(client, msg.(*protocol.UninstallPluginMessage))
 	case protocol.CmdRemovePlugin:

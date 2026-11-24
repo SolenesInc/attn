@@ -186,6 +186,8 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdInstallPlugin:              decodeInto[InstallPluginMessage],
 	CmdUninstallPlugin:            decodeInto[UninstallPluginMessage],
 	CmdRemovePlugin:               decodeInto[RemovePluginMessage],
+	CmdReloadPlugin:               decodeInto[ReloadPluginMessage],
+	CmdUpdatePlugin:               decodeInto[UpdatePluginMessage],
 	CmdSetPluginPriority:          decodeInto[SetPluginPriorityMessage],
 	CmdApprovePR:                  decodeInto[ApprovePRMessage],
 	CmdMergePR:                    decodeInto[MergePRMessage],

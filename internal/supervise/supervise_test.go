@@ -616,7 +616,7 @@ func TestRestartReplacesTheChildWithTheNewStartWhateverStateItIsIn(t *testing.T)
 				}
 				oldStarts := old.count()
 
-				if err := supervisor.Restart("fixture", replacement.start); err != nil {
+				if _, err := supervisor.Restart("fixture", replacement.start); err != nil {
 					t.Fatalf("Restart: %v", err)
 				}
 				after, _ := supervisor.Snapshot("fixture")
@@ -653,7 +653,10 @@ func TestRestartStartsTheNewChildOnlyAfterTheOldOneHasExited(t *testing.T) {
 		lingering.mu.Unlock()
 
 		restarted := make(chan error, 1)
-		go func() { restarted <- supervisor.Restart("fixture", replacement.start) }()
+		go func() {
+			_, err := supervisor.Restart("fixture", replacement.start)
+			restarted <- err
+		}()
 		synctest.Wait()
 		if lingering.killCount() != 1 || replacement.count() != 0 {
 			t.Fatalf("while the old process lingers: kills=%d new starts=%d; want it signalled and nothing new started", lingering.killCount(), replacement.count())

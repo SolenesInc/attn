@@ -467,6 +467,9 @@ model PluginInfo {
   can_uninstall: boolean;
   // Source checkout a linked plugin points at; absent for copied plugins.
   link_target?: string;
+  // Where a copied plugin was installed from, which update fetches again; absent for linked plugins and plugins installed before attn recorded sources.
+  source?: string;
+  source_kind?: string; // "git" | "path" | "archive"
   // "starting" | "connected" | "backoff" | "stopped". Plain string keeps
   // generated Go/TypeScript consumers aligned with other runtime status fields.
   runtime_phase?: string;
@@ -2034,6 +2037,19 @@ model InstallPluginMessage {
 
 model UninstallPluginMessage {
   cmd: "uninstall_plugin";
+  name: string;
+}
+
+// Restarts an installed plugin from its current files, running bun install first unless skip_install.
+model ReloadPluginMessage {
+  cmd: "reload_plugin";
+  name: string;
+  skip_install?: boolean;
+}
+
+// Installs a copied plugin again from the source it recorded and restarts it.
+model UpdatePluginMessage {
+  cmd: "update_plugin";
   name: string;
 }
 

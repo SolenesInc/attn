@@ -208,6 +208,10 @@ type SwapHandle struct {
 	backup string
 }
 
+func (h *SwapHandle) Replaced() bool {
+	return h.backup != ""
+}
+
 func (h *SwapHandle) Commit() error {
 	if h.backup == "" {
 		return nil
@@ -290,41 +294,18 @@ func (s stagedPlugin) publish(pluginDir string) (Manifest, *SwapHandle, error) {
 	return installed, handle, nil
 }
 
-func (s stagedPlugin) installNew(pluginDir string) (Manifest, error) {
-	defer s.discard()
-	if err := refuseInstalledName(pluginDir, s.manifest.Name); err != nil {
-		return Manifest{}, err
-	}
-	installed, handle, err := s.publish(pluginDir)
-	if err != nil {
-		return Manifest{}, err
-	}
-	return installed, handle.Commit()
-}
-
 func (s stagedPlugin) replace(pluginDir string) (Manifest, *SwapHandle, error) {
 	defer s.discard()
 	return s.publish(pluginDir)
 }
 
-type nameAdmission func(pluginDir, name string) error
-
-func refuseInstalledName(pluginDir, name string) error {
-	if _, err := os.Lstat(filepath.Join(pluginDir, name)); err == nil {
-		return fmt.Errorf("plugin %q is already installed", name)
-	}
-	return nil
-}
-
-func allowInstalledName(string, string) error { return nil }
-
-func stageSource(ctx context.Context, source, pluginDir string, opts InstallOptions, admit nameAdmission) (stagedPlugin, error) {
+func stageSource(ctx context.Context, source, pluginDir string, opts InstallOptions) (stagedPlugin, error) {
 	source = strings.TrimSpace(source)
 	if source == "" {
 		return stagedPlugin{}, errors.New("plugin source is required")
 	}
 	switch {
-	case isGitSource(source):
+	case IsGitSource(source):
 		cloneRoot, err := os.MkdirTemp("", "attn-plugin-source-*")
 		if err != nil {
 			return stagedPlugin{}, fmt.Errorf("create plugin clone directory: %w", err)
@@ -338,7 +319,7 @@ func stageSource(ctx context.Context, source, pluginDir string, opts InstallOpti
 		if err != nil {
 			return stagedPlugin{}, err
 		}
-		return stageDir(checkoutDir, pluginDir, Provenance{Source: redactGitSource(source), Kind: SourceKindGit, Commit: commit}, opts, admit)
+		return stageDir(checkoutDir, pluginDir, Provenance{Source: redactGitSource(source), Kind: SourceKindGit, Commit: commit}, opts)
 	case isArchiveSource(source):
 		archive, err := filepath.Abs(source)
 		if err != nil {
@@ -356,26 +337,23 @@ func stageSource(ctx context.Context, source, pluginDir string, opts InstallOpti
 		if err != nil {
 			return stagedPlugin{}, err
 		}
-		return stageDir(root, pluginDir, Provenance{Source: archive, Kind: SourceKindArchive}, opts, admit)
+		return stageDir(root, pluginDir, Provenance{Source: archive, Kind: SourceKindArchive}, opts)
 	default:
 		sourceDir, err := filepath.Abs(source)
 		if err != nil {
 			return stagedPlugin{}, fmt.Errorf("resolve source directory: %w", err)
 		}
-		return stageDir(sourceDir, pluginDir, Provenance{Source: sourceDir, Kind: SourceKindPath}, opts, admit)
+		return stageDir(sourceDir, pluginDir, Provenance{Source: sourceDir, Kind: SourceKindPath}, opts)
 	}
 }
 
-func stageDir(sourceDir, pluginDir string, provenance Provenance, opts InstallOptions, admit nameAdmission) (stagedPlugin, error) {
+func stageDir(sourceDir, pluginDir string, provenance Provenance, opts InstallOptions) (stagedPlugin, error) {
 	sourceManifest, err := LoadManifest(filepath.Join(sourceDir, ManifestName))
 	if err != nil {
 		return stagedPlugin{}, fmt.Errorf("load source manifest: %w", err)
 	}
 	if !validInstallName(sourceManifest.Name) {
 		return stagedPlugin{}, fmt.Errorf("name %q cannot be used as an install directory", sourceManifest.Name)
-	}
-	if err := admit(pluginDir, sourceManifest.Name); err != nil {
-		return stagedPlugin{}, err
 	}
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		return stagedPlugin{}, fmt.Errorf("create plugin directory: %w", err)
@@ -409,16 +387,8 @@ func stageDir(sourceDir, pluginDir string, provenance Provenance, opts InstallOp
 	return staged, nil
 }
 
-func InstallSourceWithOptions(source, pluginDir string, opts InstallOptions) (Manifest, error) {
-	staged, err := stageSource(context.Background(), source, pluginDir, opts, refuseInstalledName)
-	if err != nil {
-		return Manifest{}, err
-	}
-	return staged.installNew(pluginDir)
-}
-
 func ReplaceSourceWithOptionsContext(ctx context.Context, source, pluginDir string, opts InstallOptions) (Manifest, *SwapHandle, error) {
-	staged, err := stageSource(ctx, source, pluginDir, opts, allowInstalledName)
+	staged, err := stageSource(ctx, source, pluginDir, opts)
 	if err != nil {
 		return Manifest{}, nil, err
 	}
@@ -439,7 +409,7 @@ func UpdateWithOptionsContext(ctx context.Context, name, pluginDir string, opts 
 	if strings.Contains(current.Source, redactedSecret) {
 		return Manifest{}, nil, fmt.Errorf("plugin %q was installed from %s, recorded without its credentials; install it again from its source", current.Name, current.Source)
 	}
-	staged, err := stageSource(ctx, current.Source, pluginDir, opts, allowInstalledName)
+	staged, err := stageSource(ctx, current.Source, pluginDir, opts)
 	if err != nil {
 		return Manifest{}, nil, err
 	}
@@ -468,23 +438,15 @@ func PrepareReload(name, pluginDir string, opts ReloadOptions) (Manifest, error)
 	return manifest, nil
 }
 
-func LinkPath(sourceDir, pluginDir string, opts InstallOptions) (Manifest, error) {
-	staged, err := stageLink(sourceDir, pluginDir, opts, refuseInstalledName)
-	if err != nil {
-		return Manifest{}, err
-	}
-	return staged.installNew(pluginDir)
-}
-
 func ReplaceLinkPath(sourceDir, pluginDir string, opts InstallOptions) (Manifest, *SwapHandle, error) {
-	staged, err := stageLink(sourceDir, pluginDir, opts, allowInstalledName)
+	staged, err := stageLink(sourceDir, pluginDir, opts)
 	if err != nil {
 		return Manifest{}, nil, err
 	}
 	return staged.replace(pluginDir)
 }
 
-func stageLink(sourceDir, pluginDir string, opts InstallOptions, admit nameAdmission) (stagedPlugin, error) {
+func stageLink(sourceDir, pluginDir string, opts InstallOptions) (stagedPlugin, error) {
 	sourceDir, err := filepath.Abs(strings.TrimSpace(sourceDir))
 	if err != nil {
 		return stagedPlugin{}, fmt.Errorf("resolve source directory: %w", err)
@@ -501,9 +463,6 @@ func stageLink(sourceDir, pluginDir string, opts InstallOptions, admit nameAdmis
 	}
 	if pathWithinDir(pluginDir, sourceDir) {
 		return stagedPlugin{}, fmt.Errorf("source %q is inside the plugin directory; use install instead", sourceDir)
-	}
-	if err := admit(pluginDir, sourceManifest.Name); err != nil {
-		return stagedPlugin{}, err
 	}
 	if err := installDependencies(sourceDir, opts.Env); err != nil {
 		return stagedPlugin{}, err
@@ -669,7 +628,7 @@ func linkedPluginTarget(linkPath string) (string, error) {
 	return filepath.Clean(target), nil
 }
 
-func isGitSource(source string) bool {
+func IsGitSource(source string) bool {
 	if strings.HasPrefix(source, "git@") {
 		return strings.Contains(source, ":")
 	}

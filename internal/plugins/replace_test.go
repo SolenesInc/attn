@@ -42,6 +42,22 @@ func newPluginWorld(t *testing.T) *pluginWorld {
 	return w
 }
 
+func (w *pluginWorld) install(source string) error {
+	_, swap, err := ReplaceSourceWithOptionsContext(context.Background(), source, w.pluginDir, w.opts)
+	if err != nil {
+		return err
+	}
+	return swap.Commit()
+}
+
+func (w *pluginWorld) link(source string) error {
+	_, swap, err := ReplaceLinkPath(source, w.pluginDir, w.opts)
+	if err != nil {
+		return err
+	}
+	return swap.Commit()
+}
+
 func (w *pluginWorld) checkout(rel, name, version string) string {
 	w.t.Helper()
 	dir := filepath.Join(w.root, rel)
@@ -106,7 +122,7 @@ func TestReplacingAPluginSwapsInTheNewCopyAndRollbackRestoresThePreviousOne(t *t
 	w := newPluginWorld(t)
 	v1 := w.checkout("v1", "sample", "0.1.0")
 	v2 := w.checkout("v2", "sample", "0.2.0")
-	if _, err := InstallSourceWithOptions(v1, w.pluginDir, w.opts); err != nil {
+	if err := w.install(v1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -168,7 +184,7 @@ func TestReplacingAPluginSwapsInTheNewCopyAndRollbackRestoresThePreviousOne(t *t
 
 func TestAReplacementThatFailsToStageLeavesTheLivePluginUntouched(t *testing.T) {
 	w := newPluginWorld(t)
-	if _, err := InstallSourceWithOptions(w.checkout("v1", "sample", "0.1.0"), w.pluginDir, w.opts); err != nil {
+	if err := w.install(w.checkout("v1", "sample", "0.1.0")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -414,7 +430,7 @@ func TestAGitSourceWithCredentialsIsRecordedWithoutThemAndCannotBeUpdated(t *tes
 func TestUpdateRefusesPluginsItCannotFetchAgain(t *testing.T) {
 	w := newPluginWorld(t)
 	linked := w.checkout("linked", "linked", "0.1.0")
-	if _, err := LinkPath(linked, w.pluginDir, w.opts); err != nil {
+	if err := w.link(linked); err != nil {
 		t.Fatal(err)
 	}
 	writePluginFiles(t, filepath.Join(w.pluginDir, "unrecorded"), "unrecorded", "0.1.0")
@@ -433,7 +449,7 @@ func TestUpdateRefusesPluginsItCannotFetchAgain(t *testing.T) {
 func TestPrepareReloadValidatesThePluginAndRefreshesDependenciesUnlessSkipped(t *testing.T) {
 	w := newPluginWorld(t)
 	checkout := w.checkout("linked", "sample", "0.1.0")
-	if _, err := LinkPath(checkout, w.pluginDir, w.opts); err != nil {
+	if err := w.link(checkout); err != nil {
 		t.Fatal(err)
 	}
 	before := w.bunRuns()

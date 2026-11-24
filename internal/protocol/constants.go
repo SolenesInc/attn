@@ -191,6 +191,8 @@ const (
 	CmdInstallPlugin              = "install_plugin"
 	CmdUninstallPlugin            = "uninstall_plugin"
 	CmdRemovePlugin               = "remove_plugin"
+	CmdReloadPlugin               = "reload_plugin"
+	CmdUpdatePlugin               = "update_plugin"
 	CmdSetPluginPriority          = "set_plugin_priority"
 	CmdApprovePR                  = "approve_pr"
 	CmdMergePR                    = "merge_pr"

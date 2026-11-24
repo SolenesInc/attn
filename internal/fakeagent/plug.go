@@ -199,7 +199,19 @@ func (p *plugTerminal) submit(prompt string) error {
 	if conversation, ok := strings.CutPrefix(strings.TrimSpace(prompt), "/resume "); ok {
 		return p.moveTo(strings.TrimSpace(conversation))
 	}
-	return p.relay.call(context.Background(), "report_state", relayState{State: "working"}, nil)
+	return p.callRelay("report_state", relayState{State: "working"})
+}
+
+func (p *plugTerminal) callRelay(method string, params any) error {
+	err := p.relay.call(context.Background(), method, params, nil)
+	var broken *net.OpError
+	if !errors.Is(err, errPeerClosed) && !errors.As(err, &broken) {
+		return err
+	}
+	if err := p.connectRelay(); err != nil {
+		return err
+	}
+	return p.relay.call(context.Background(), method, params, nil)
 }
 
 func (p *plugTerminal) moveTo(conversation string) error {
@@ -215,7 +227,7 @@ func (p *plugTerminal) reply(text string, afterStop bool) error {
 		return errors.New("plug has no Stop hook to reply after")
 	}
 	p.term.print(text)
-	return p.relay.call(context.Background(), "report_stop", relayStop{AssistantText: text}, nil)
+	return p.callRelay("report_stop", relayStop{AssistantText: text})
 }
 
 type plugDriver struct {
@@ -300,7 +312,14 @@ func (p *plugDriver) connect() error {
 	p.daemon = newRPCPeer(conn, p.handleDaemon)
 	p.daemon.start()
 	go p.acceptRelays(relay)
-	var hello okResult
+	var hello struct {
+		okResult
+		ActiveRuns []struct {
+			SessionID string `json:"session_id"`
+			RunID     string `json:"run_id"`
+			Seq       uint64 `json:"seq"`
+		} `json:"active_runs"`
+	}
 	err = p.daemon.call(context.Background(), "hello", map[string]any{
 		"name":             os.Getenv("ATTN_PLUGIN_NAME"),
 		"version":          plugVersion,
@@ -310,6 +329,11 @@ func (p *plugDriver) connect() error {
 	if err != nil || !hello.OK {
 		return fmt.Errorf("attn refused hello: %v", err)
 	}
+	p.mu.Lock()
+	for _, active := range hello.ActiveRuns {
+		p.runs[active.SessionID] = &plugRun{sessionID: active.SessionID, runID: active.RunID, seq: active.Seq}
+	}
+	p.mu.Unlock()
 	var registered okResult
 	registration := map[string]any{
 		"agent":        plugAgentName(),

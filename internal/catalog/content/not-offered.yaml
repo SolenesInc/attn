@@ -9,7 +9,7 @@ commands:
   - {name: db, usage: "<command>", summary: "database maintenance (restore from backup)", offered: false, reason: *installation}
   - {name: update, usage: "status [--json]", summary: "how attn was installed and whether an update is available", offered: false, reason: *installation}
   - {name: enrollment, usage: "<command>", summary: "this data folder's enrollment: status, leave", offered: false, reason: *installation}
-  - {name: plugin, usage: "<command>", summary: "install, link, list or remove plugins", offered: false, reason: *installation}
+  - {name: plugin, usage: "<command>", summary: "install, link, reload, update, list or remove plugins", offered: false, reason: *installation}
   - {name: preflight, summary: "diagnose tools, paths, routing, and launch settings", offered: false, reason: *installation}
   - {name: version, usage: "[--json]", summary: "print version, channel and commit", offered: false, reason: *installation}
   - {name: codex, usage: "status|update|restart", summary: "shared Codex versions, its update and restart", offered: false, reason: *installation}

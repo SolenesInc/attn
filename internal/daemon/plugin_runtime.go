@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -137,6 +138,24 @@ func (d *Daemon) startDiscoveredPlugins() (discovered int) {
 
 func (d *Daemon) startInstalledPlugin(manifest pluginManifest) error {
 	return d.ensurePluginSupervisor().Ensure(manifest)
+}
+
+const pluginRestartConnectDeadline = 15 * time.Second
+
+func (d *Daemon) restartInstalledPlugin(manifest pluginManifest) error {
+	d.armPluginDriverSilenceWatch(manifest.Name)
+	d.disconnectPlugin(manifest.Name, fmt.Errorf("plugin %q is restarting", manifest.Name))
+	supervisor := d.ensurePluginSupervisor()
+	generation, err := supervisor.Restart(manifest)
+	if err != nil {
+		return fmt.Errorf("restart plugin: %w", err)
+	}
+	ctx, cancel := context.WithTimeoutCause(d.life.Context(), pluginRestartConnectDeadline, fmt.Errorf("no connection within %s", pluginRestartConnectDeadline))
+	defer cancel()
+	if err := supervisor.AwaitConnected(ctx, manifest.Name, generation); err != nil {
+		return fmt.Errorf("plugin %w", err)
+	}
+	return nil
 }
 
 func (d *Daemon) pluginCommandEnv(extra ...string) []string {

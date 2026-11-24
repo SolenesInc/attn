@@ -1,6 +1,7 @@
 package supervise
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -158,6 +159,7 @@ type Supervisor struct {
 	onGiveUp    func(string, Snapshot)
 	logf        func(string, ...any)
 	shutdown    bool
+	changed     chan struct{}
 }
 
 func New(opts Options) *Supervisor {
@@ -181,6 +183,7 @@ func New(opts Options) *Supervisor {
 		onChange:    opts.OnChange,
 		onGiveUp:    opts.OnGiveUp,
 		logf:        logf,
+		changed:     make(chan struct{}),
 	}
 }
 
@@ -258,17 +261,17 @@ func (s *Supervisor) ensure(name string, start StartFunc, revive bool) error {
 	return err
 }
 
-func (s *Supervisor) Restart(name string, start StartFunc) error {
+func (s *Supervisor) Restart(name string, start StartFunc) (uint64, error) {
 	if err := validateName(name); err != nil {
-		return err
+		return 0, err
 	}
 	if start == nil {
-		return fmt.Errorf("supervise: child %q needs a start function", name)
+		return 0, fmt.Errorf("supervise: child %q needs a start function", name)
 	}
 	s.mu.Lock()
 	if s.shutdown {
 		s.mu.Unlock()
-		return fmt.Errorf("supervise: supervisor is shut down, cannot restart %q", name)
+		return 0, fmt.Errorf("supervise: supervisor is shut down, cannot restart %q", name)
 	}
 	c := s.children[name]
 	if c == nil {
@@ -294,14 +297,48 @@ func (s *Supervisor) Restart(name string, start StartFunc) error {
 		s.mu.Lock()
 		if s.shutdown || s.children[name] != c || c.generation != generation || c.desired != DesiredRunning {
 			s.mu.Unlock()
-			return fmt.Errorf("supervise: %q was stopped while it restarted", name)
+			return 0, fmt.Errorf("supervise: %q was stopped while it restarted", name)
 		}
 		c.process = nil
 	}
 	err := s.spawnLocked(c)
+	generation := c.generation
 	s.mu.Unlock()
 	s.notify(name)
-	return err
+	return generation, err
+}
+
+func (s *Supervisor) AwaitConnected(ctx context.Context, name string, generation uint64) error {
+	for {
+		s.mu.Lock()
+		c := s.children[name]
+		changed := s.changed
+		var err error
+		connected := false
+		switch {
+		case c == nil || c.desired != DesiredRunning:
+			err = fmt.Errorf("%q was stopped before it connected", name)
+		case c.generation != generation:
+			err = fmt.Errorf("%q was restarted again before it connected", name)
+		case c.phase == PhaseConnected:
+			connected = true
+		case c.process == nil:
+			detail := "no exit recorded"
+			if c.lastExit != nil {
+				detail = c.lastExit.String()
+			}
+			err = fmt.Errorf("%q exited before it connected: %s", name, detail)
+		}
+		s.mu.Unlock()
+		if connected || err != nil {
+			return err
+		}
+		select {
+		case <-changed:
+		case <-ctx.Done():
+			return fmt.Errorf("%q did not connect: %w", name, context.Cause(ctx))
+		}
+	}
 }
 
 func (s *Supervisor) Stop(name string) {
@@ -601,6 +638,10 @@ func (s *Supervisor) disconnectExpired(name string, generation uint64, process P
 }
 
 func (s *Supervisor) notify(name string) {
+	s.mu.Lock()
+	close(s.changed)
+	s.changed = make(chan struct{})
+	s.mu.Unlock()
 	if s.onChange != nil {
 		s.onChange(name)
 	}

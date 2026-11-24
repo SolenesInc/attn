@@ -26,7 +26,7 @@ func TestAFailedPluginCloneNeverShowsTheSourcesCredentials(t *testing.T) {
 	}
 }
 
-func TestAPluginInstallsOnceAndNeverUnderANameThatLeavesThePluginDirectory(t *testing.T) {
+func TestADuplicateWhoseDependenciesFailLeavesTheInstalledPluginRunningAndNoNameLeavesThePluginDirectory(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
 	checkout := pluginsCheckout(t, w.Path("checkouts", "worktree-provider"), "worktree-provider", "0.1.0", pluginsIdle)
@@ -36,11 +36,9 @@ func TestAPluginInstallsOnceAndNeverUnderANameThatLeavesThePluginDirectory(t *te
 	if err := os.WriteFile(filepath.Join(uninstallable, "package.json"), []byte("{"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	for _, source := range []string{checkout, uninstallable} {
-		pluginsRefused(t, app, protocol.InstallPluginMessage{Cmd: protocol.CmdInstallPlugin, Source: source}, "install", `plugin "worktree-provider" is already installed`)
-	}
-	pluginsRefused(t, app, protocol.InstallPluginMessage{Cmd: protocol.CmdInstallPlugin, Source: uninstallable, Link: protocol.Ptr(true)}, "link", `plugin "worktree-provider" is already installed`)
-	pluginsListed(w.App(), "the installed worktree-provider still running, alone", func(plugins []protocol.PluginInfo) bool {
+	pluginsRefused(t, app, protocol.InstallPluginMessage{Cmd: protocol.CmdInstallPlugin, Source: uninstallable}, "install", "run bun install")
+	pluginsRefused(t, app, protocol.InstallPluginMessage{Cmd: protocol.CmdInstallPlugin, Source: uninstallable, Link: protocol.Ptr(true)}, "link", "run bun install")
+	pluginsListed(app, "the installed worktree-provider still running, alone", func(plugins []protocol.PluginInfo) bool {
 		plugin, ok := pluginsNamed(plugins, "worktree-provider")
 		return ok && len(plugins) == 1 && plugin.Version == "0.1.0" && plugin.Running
 	})

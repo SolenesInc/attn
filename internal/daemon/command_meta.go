@@ -107,6 +107,8 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdInstallPlugin:              commandMetadata(false, true),
 	protocol.CmdUninstallPlugin:            commandMetadata(false, true),
 	protocol.CmdRemovePlugin:               commandMetadata(false, true),
+	protocol.CmdReloadPlugin:               commandMetadata(false, true),
+	protocol.CmdUpdatePlugin:               commandMetadata(false, true),
 	protocol.CmdSetPluginPriority:          commandMetadata(false, true),
 	protocol.CmdApprovePR:                  commandMetadata(false, true),
 	protocol.CmdMergePR:                    commandMetadata(false, true),

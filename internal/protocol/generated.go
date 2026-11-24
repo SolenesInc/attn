@@ -8470,6 +8470,12 @@ type PluginInfo struct {
 	// RuntimeState corresponds to the JSON schema field "runtime_state".
 	RuntimeState string `json:"runtime_state"`
 
+	// Source corresponds to the JSON schema field "source".
+	Source *string `json:"source,omitempty,omitzero"`
+
+	// SourceKind corresponds to the JSON schema field "source_kind".
+	SourceKind *string `json:"source_kind,omitempty,omitzero"`
+
 	// Version corresponds to the JSON schema field "version".
 	Version string `json:"version"`
 }
@@ -9216,6 +9222,17 @@ const RefusalNotFound Refusal = "not_found"
 const RefusalNotTender Refusal = "not_tender"
 const RefusalUnclassified Refusal = "unclassified"
 const RefusalWrongState Refusal = "wrong_state"
+
+type ReloadPluginMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// SkipInstall corresponds to the JSON schema field "skip_install".
+	SkipInstall *bool `json:"skip_install,omitempty,omitzero"`
+}
 
 type ReloadSessionMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
@@ -14757,6 +14774,14 @@ const UpdatePhaseHomeRestarted UpdatePhase = "home_restarted"
 const UpdatePhaseOutposts UpdatePhase = "outposts"
 const UpdatePhasePreparing UpdatePhase = "preparing"
 const UpdatePhaseStaging UpdatePhase = "staging"
+
+type UpdatePluginMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+}
 
 type UpdateRequestMessage struct {
 	// CallerSessionID corresponds to the JSON schema field "caller_session_id".

@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "c02d7e64c015";
+pub const PROTOCOL_VERSION: &str = "bdf6806897aa";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -7650,6 +7650,10 @@ pub struct PluginInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_phase: Option<String>,
     pub runtime_state: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_kind: Option<String>,
     pub version: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -8422,6 +8426,23 @@ impl RefreshPRsResultMessage {
     }
 }
 pub type Refusal = String;
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReloadPluginMessage {
+    pub cmd: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skip_install: Option<bool>,
+}
+
+impl ReloadPluginMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "reload_plugin".to_string(),
+            ..Self::default()
+        }
+    }
+}
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ReloadSessionMessage {
     pub cmd: String,
@@ -13003,6 +13024,21 @@ pub struct UpdateOutpostProgress {
 }
 pub type UpdateOutpostState = String;
 pub type UpdatePhase = String;
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UpdatePluginMessage {
+    pub cmd: String,
+    pub name: String,
+}
+
+impl UpdatePluginMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "update_plugin".to_string(),
+            ..Self::default()
+        }
+    }
+}
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct UpdateRequestMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -31,19 +31,46 @@ type pluginListResult struct {
 	Issues  []protocol.PluginIssue `json:"issues,omitempty"`
 }
 
+const pluginUsage = `usage: attn plugin <command> [arguments]
+
+Commands:
+  install <source>          install a copy from a directory, a .tgz archive or a Git URL, replacing an installed copy
+  link <dir>                link a local checkout, replacing an installed copy
+  reload <name> [--no-install]
+                            restart a plugin from its current files, running bun install first unless --no-install
+  update <name>             install a copied plugin again from the source it was installed from
+  list                      list installed plugins
+  uninstall <name>          remove a plugin that drives no open session
+  remove <name>             same as uninstall
+
+install and link also take the source as --path <dir>. Replacing, reloading and
+updating a plugin restart it without closing the sessions it drives; when a
+replacement fails to start, attn restores the previous copy.
+`
+
+const pluginActionTimeout = 5 * time.Minute
+
 func runPluginCommand() {
 	if len(os.Args) < 3 {
-		fmt.Fprintln(os.Stderr, "usage: attn plugin <install|link|list|uninstall|remove> ...")
+		fmt.Fprint(os.Stderr, pluginUsage)
 		exit(1)
 	}
 
 	switch os.Args[2] {
+	case "-h", "--help", "help":
+		fmt.Print(pluginUsage)
 	case "install":
 		setCommandPath("plugin install")
-		runPluginInstall()
+		runPluginInstallFromSource("install", false)
 	case "link":
 		setCommandPath("plugin link")
-		runPluginLink()
+		runPluginInstallFromSource("link", true)
+	case "reload":
+		setCommandPath("plugin reload")
+		runPluginReload()
+	case "update":
+		setCommandPath("plugin update")
+		runPluginUpdate()
 	case "list":
 		setCommandPath("plugin list")
 		runPluginList()
@@ -55,41 +82,86 @@ func runPluginCommand() {
 		runPluginRemove()
 	default:
 		recordUsageError("plugin", usageErrorUnknownCommand)
-		fmt.Fprintf(os.Stderr, "unknown plugin command: %s\n", os.Args[2])
+		fmt.Fprintf(os.Stderr, "unknown plugin command: %s\n%s", os.Args[2], pluginUsage)
 		exit(1)
 	}
 }
 
-func runPluginInstall() {
-	runPluginInstallFromPath("install", false)
+func parsePluginArgs(fs *flag.FlagSet, args []string) []string {
+	var positional []string
+	for {
+		_ = parseFlags(fs, args)
+		rest := fs.Args()
+		if len(rest) == 0 {
+			return positional
+		}
+		positional = append(positional, rest[0])
+		args = rest[1:]
+	}
 }
 
-func runPluginLink() {
-	runPluginInstallFromPath("link", true)
-}
-
-func runPluginInstallFromPath(verb string, link bool) {
+func runPluginInstallFromSource(verb string, link bool) {
 	fs := flag.NewFlagSet("plugin "+verb, flag.ExitOnError)
 	path := fs.String("path", "", "local plugin directory")
-	_ = parseFlags(fs, os.Args[3:])
-	sourcePath := strings.TrimSpace(*path)
-	if sourcePath == "" {
-		fmt.Fprintf(os.Stderr, "plugin %s: --path is required\n", verb)
-		exit(1)
-	}
-	sourcePath, err := resolveCLIPath(sourcePath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "plugin %s: %v\n", verb, err)
-		exit(1)
-	}
-	var result pluginCommandResult
+	positional := parsePluginArgs(fs, os.Args[3:])
+	usage := fmt.Sprintf("usage: attn plugin %s <source>", verb)
 	if link {
-		result, err = linkPluginViaDaemon(sourcePath)
-	} else {
-		result, err = installPluginViaDaemon(sourcePath)
+		usage = "usage: attn plugin link <dir>"
 	}
+	source := strings.TrimSpace(*path)
+	switch {
+	case len(positional) > 1 || (len(positional) == 1 && source != ""):
+		fmt.Fprintln(os.Stderr, usage)
+		exit(1)
+	case len(positional) == 1:
+		source = strings.TrimSpace(positional[0])
+	}
+	if source == "" {
+		fmt.Fprintln(os.Stderr, usage)
+		exit(1)
+	}
+	if link || !plugins.IsGitSource(source) {
+		resolved, err := resolveCLIPath(source)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "plugin %s: %v\n", verb, err)
+			exit(1)
+		}
+		source = resolved
+	}
+	payload := map[string]any{"cmd": protocol.CmdInstallPlugin, "source": source}
+	if link {
+		payload["link"] = true
+	}
+	printPluginAction(verb, payload)
+}
+
+func runPluginReload() {
+	fs := flag.NewFlagSet("plugin reload", flag.ExitOnError)
+	noInstall := fs.Bool("no-install", false, "restart without running bun install")
+	positional := parsePluginArgs(fs, os.Args[3:])
+	if len(positional) != 1 || strings.TrimSpace(positional[0]) == "" {
+		fmt.Fprintln(os.Stderr, "usage: attn plugin reload <name> [--no-install]")
+		exit(1)
+	}
+	payload := map[string]any{"cmd": protocol.CmdReloadPlugin, "name": strings.TrimSpace(positional[0])}
+	if *noInstall {
+		payload["skip_install"] = true
+	}
+	printPluginAction("reload", payload)
+}
+
+func runPluginUpdate() {
+	if len(os.Args) != 4 || strings.TrimSpace(os.Args[3]) == "" {
+		fmt.Fprintln(os.Stderr, "usage: attn plugin update <name>")
+		exit(1)
+	}
+	printPluginAction("update", map[string]any{"cmd": protocol.CmdUpdatePlugin, "name": strings.TrimSpace(os.Args[3])})
+}
+
+func printPluginAction(action string, payload map[string]any) {
+	result, err := installedPluginViaDaemon(payload, action)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "plugin %s: %v\n", verb, err)
+		fmt.Fprintf(os.Stderr, "plugin %s: %v\n", action, err)
 		exit(1)
 	}
 	printJSON(result)
@@ -137,16 +209,8 @@ func runPluginRemove() {
 	printJSON(result)
 }
 
-func installPluginViaDaemon(sourcePath string) (pluginCommandResult, error) {
-	return installedPluginViaDaemon(map[string]any{"cmd": protocol.CmdInstallPlugin, "source": sourcePath}, "install")
-}
-
-func linkPluginViaDaemon(sourcePath string) (pluginCommandResult, error) {
-	return installedPluginViaDaemon(map[string]any{"cmd": protocol.CmdInstallPlugin, "source": sourcePath, "link": true}, "link")
-}
-
 func installedPluginViaDaemon(payload map[string]any, action string) (pluginCommandResult, error) {
-	event, err := pluginDaemonRequest(payload, protocol.EventPluginActionResult, action, 30*time.Second)
+	event, err := pluginDaemonRequest(payload, protocol.EventPluginActionResult, action, pluginActionTimeout)
 	if err != nil {
 		return pluginCommandResult{}, err
 	}

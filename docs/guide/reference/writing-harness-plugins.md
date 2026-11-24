@@ -27,17 +27,17 @@ your own from it:
 cp -R examples/plugins/sample-harness my-harness && cd my-harness
 # In attn-plugin.toml, change name to your plugin's name, such as "my-harness".
 # In src/index.ts, change harnessId to your harness's ID, such as "my-agent".
-attn plugin install --path .
+attn plugin install .
 ```
 
 The plugin's name and the harness's ID are two things: the name is the
 installed folder and what `attn plugin remove` takes, and the ID is what the
 picker shows. Install runs `bun install` in a copy, so `package.json` has to
-name a version of `@victorarias/attn-plugin` that exists. Use
-`attn plugin link --path .` while you develop, so Attn runs your directory in
-place. To pick up a change, close the harness's sessions, run
-`attn plugin remove my-harness` and install again: Attn refuses to remove a
-plugin that still owns a running session.
+name a version of `@victorarias/attn-plugin` that exists. `attn plugin install`
+also takes a `.tgz` archive or a Git URL. Use `attn plugin link .` while you
+develop, so Attn runs your directory in place, and `attn plugin reload
+my-harness` to pick up a change. [Replace, reload and update](#replace-reload-and-update)
+says how each works while sessions run.
 
 Open the picker with Cmd+N. Your ID is a choice in the "Session agent" group.
 `attn delegate --agent my-agent` starts it from a shell, and
@@ -223,6 +223,32 @@ then registers the driver, and Attn can deliver input again. The sample keeps
 nothing in memory: its socket path comes from the `run_id`, and the harness
 deduplicates input by ID.
 
+## Replace, reload and update
+
+These commands restart the plugin the same way, without closing the sessions it
+drives:
+
+- `attn plugin install <source>` and `attn plugin link <dir>` replace an
+  installed plugin of the same name, so one command switches between a copy and
+  a linked checkout.
+- `attn plugin reload <name>` runs `bun install` in the installed plugin and
+  restarts it from its current files. `--no-install` skips `bun install`.
+- `attn plugin update <name>` installs a copied plugin again from the
+  directory, archive or Git URL it was installed from. `attn plugin list` shows
+  that source. A linked plugin has none: reload it instead.
+
+Each command answers once the new plugin has connected. A replacement or update
+that exits or does not connect within 15 seconds is taken back: Attn restores
+the previous copy, restarts it, and the command fails with the reason. A reload
+has no previous copy to restore, so it fails and Attn keeps restarting the
+plugin as it would after a crash.
+
+The restart reaches only the plugin's own process. Code the harness loaded from
+the plugin's folder, such as an extension a TUI agent runs in its own process,
+keeps the version it loaded until its session reloads or a new session starts.
+
+`attn plugin remove` still refuses a plugin that owns a running session.
+
 ## Bind a shared app-server
 
 A harness with a shared server can declare `server` instead of a `deliver`
@@ -237,7 +263,7 @@ capability, and a daemon on v2 refuses a declaration of `attn-app-server-v1`. To
 ```bash
 cp -R examples/plugins/sample-server /tmp/my-server-plugin
 # In src/index.ts, change harnessId to your own ID and adapt view() to your CLI.
-attn plugin install --path /tmp/my-server-plugin
+attn plugin install /tmp/my-server-plugin
 ```
 
 The sample expects an executable speaking `attn-app-server-v2`, supplied by
