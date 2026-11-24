@@ -257,3 +257,59 @@ func TestACompactingCloseAskedAgainAfterTheUserClosedTheSessionDuringItsCompactC
 		t.Errorf("the conversation compacted %d times by the second close, want once: closing the session archived the conversation and ended the first compact", got)
 	}
 }
+
+func TestACompactingCloseKeepsTheSessionOpenForAnAskOpenedInALaterTurnAndSaysWhy(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	registerSessions(t, w, cli, "sender")
+	session, codex := sharedCodexInATurn(t, w, app)
+	conversation := codex.ConversationID
+
+	closeCompacting(t, cli, session)
+	placing := w.PauseAt(pausepoint.CompactingClosePlacing)
+	sendAgentMessage(t, cli, "sender", session, "Check with the user about the cache store")
+	codex.Reply("Fixed and closing. <!-- attn:state=idle -->")
+	placing.Await()
+	if rang := w.CodexServer().Prompted(conversation); rang == "" {
+		t.Fatal("the queued message did not start a turn")
+	}
+	if _, err := cli.AgentInboxBatch(protocol.SessionID(session), 10); err != nil {
+		t.Fatalf("read the ring's message: %v", err)
+	}
+	opened, err := cli.AskOpen(protocol.SessionID(session), "", cacheAsk, "", w.Path("shop"))
+	if err != nil {
+		t.Fatalf("open an ask during the ring's turn: %v", err)
+	}
+	placing.Release()
+	codex.Reply("Which store should we use? <!-- attn:state=waiting_input -->")
+
+	if rang := w.CodexServer().Prompted(conversation); rang == "" {
+		t.Fatal("no ring after the compact that found the open ask")
+	}
+	told, err := cli.AgentInboxBatch(protocol.SessionID(session), 10)
+	if err != nil || len(told.Items) != 1 || !strings.Contains(told.Items[0].Content, opened.ID) || !strings.Contains(told.Items[0].Content, opened.Subject) {
+		t.Fatalf("after its compact the agent's inbox holds %+v (%v), want one notice of why its close did not happen, naming %s", told, err, opened.ID)
+	}
+	stillOpen(t, cli, session, "after the compact that found the open ask")
+	if got := w.CodexServer().Compactions(conversation); got != 1 {
+		t.Errorf("the conversation compacted %d times, want once", got)
+	}
+	codex.Reply("Waiting for the user. <!-- attn:state=waiting_input -->")
+
+	answer := testworld.Request(app, protocol.AskAnswerMessage{
+		Cmd:       protocol.CmdAskAnswer,
+		RequestID: "answer-after-compacting-close",
+		AskID:     opened.ID,
+		Answers:   []protocol.AskAnswer{{Key: "q1", Picked: []string{"Postgres"}}},
+	}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool {
+		return r.RequestID == "answer-after-compacting-close"
+	})
+	if !answer.Success {
+		t.Fatalf("answering %s after the compacting close: %s", opened.ID, protocol.Deref(answer.Error))
+	}
+	if typed := w.CodexServer().Prompted(conversation); !strings.Contains(typed, "Postgres") {
+		t.Fatalf("the answer typed into the agent is %q, want Postgres", typed)
+	}
+	stillOpen(t, cli, session, "after the answer")
+}

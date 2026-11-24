@@ -202,6 +202,9 @@ Notices are attn's own messages to an agent:
 - a reminder that came due on a seed (`attn seed remind`), addressed to the
   seed
 - crew close requests, from the user or when the user is away
+- a compacting close that an open ask kept from closing the session, addressed
+  to the session and naming each ask (see
+  [A seed on standby](#a-seed-on-standby))
 - a delegation that failed after attn accepted it, addressed to the session
   that started it, so an agent whose `delegate` tool call returned at
   acceptance learns of the failure
@@ -582,8 +585,11 @@ a seed the session tends is on standby and has unread seed mail. The refusal nam
 session holds with no agent to take the answer. That covers an ask about no seed,
 which the close withdraws, and an ask about a seed that no other open session
 tends, unless the seed is on standby with `garden.tender_resume` at `any` and its
-resume is not blocked. A close by another session or by the user goes through.
-The tender's park and replant of a seed with an open ask refuse too, and so does
+resume is not blocked. A compacting close, from `attn agent close --self --compact`
+or from `attn seed standby`, checks again once its compact has an outcome: when
+a turn in between opened such an ask, the session stays open, its lane opens
+again, and its inbox gets a notice that names each ask. A close by another
+session or by the user goes through. The tender's park and replant of a seed with an open ask refuse too, and so does
 arming `--when-merged` by anyone but the user. A wither or the user's harvest
 withdraws the seed's asks and tells each asking session that is still open,
 other than the caller.
@@ -615,8 +621,8 @@ failure opens the lane again and the compact is placed again when the session's
 state changes, so the close still waits for the turn that asked for it. A
 failure once the session is prompt-ready closes it. A ring placed before the
 compact starts a turn, and the compact waits for that turn's end. Once the compact is
-placed and taken, the lane holds every later item until the session has closed,
-and seed mail that arrives then resumes the closed tender as above. Nothing the
+placed and taken, the lane holds every later item until the session has closed
+or an open ask keeps it open, as above, and seed mail that arrives then resumes the closed tender as above. Nothing the
 user types or sends stops the close. User input that attn would place while the
 lane is held fails and tells the sender that the session is closing.
 If no outcome arrives within `compact_outcome_tripwire`, the session closes with

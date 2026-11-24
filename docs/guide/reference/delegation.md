@@ -448,6 +448,9 @@ session, so the next run resumes the compacted conversation. Work the agent
 leaves running in the background, such as a shell or a monitor, does not hold
 the close. Mail the
 agent reads before the compact ends the standby, and the session stays open.
+An ask the agent opens before the compact ends, about no seed or about a seed
+that no agent would take your answer for, also keeps the session open, and
+Attn tells the agent why.
 Mail the agent hasn't read doesn't cancel the close: the session compacts and
 closes, and the unread mail resumes it again. Mail that arrives during the compact
 waits until the session has closed, then resumes the agent. Nothing you type or

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
@@ -360,6 +361,10 @@ func (d *Daemon) finishCompactingClose(ctx context.Context, msg protocol.Compact
 	}
 	target := d.store.Get(msg.SessionID)
 	pausepoint.At(pausepoint.CompactingCloseFinishing)
+	if err := d.refuseStrandingSelfClose(target.ID); err != nil {
+		d.tellDeferredCloseStaysOpen(target.ID, err)
+		return compactingCloseVerdict(err.Error()), nil
+	}
 	teardown, err := d.prepareSessionTeardown(target.ID)
 	if err != nil {
 		return compactingCloseVerdict(fmt.Sprintf("it is still running: %v", err)), nil
@@ -372,6 +377,13 @@ func (d *Daemon) finishCompactingClose(ctx context.Context, msg protocol.Compact
 	d.noteCloseOnTendedSeeds(target, target, protocol.AgentCloseRuleSelf, msg.Reason)
 	d.finishSessionClose(target.ID, closing)
 	return protocol.CompactingCloseVerdict{}, nil
+}
+
+func (d *Daemon) tellDeferredCloseStaysOpen(session protocol.SessionID, refused error) {
+	text := fmt.Sprintf("The close that waited for your compact did not happen, so this session stays open: %s", refused.Error())
+	if _, err := d.sendToInbox(inbox.Item{To: who.ToSession(session), Kind: inbox.Notice, Text: text}); err != nil {
+		d.logf("compacting close: telling %s why it stays open: %v", session, err)
+	}
 }
 
 func (d *Daemon) receiveSessionInputReopened(_ context.Context, msg protocol.SessionInputReopenedMessage) (struct{}, error) {
