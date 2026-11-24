@@ -37,7 +37,7 @@ func topLevelCommands() []topLevelCommand {
 		{names: []string{"update"}, run: runUpdate, banner: true,
 			help: func(w io.Writer) { fmt.Fprintln(w, updateUsage) }},
 		{names: []string{"plugin"}, run: runPluginCommand, banner: true,
-			help: writePluginHelp},
+			help: func(w io.Writer) { fmt.Fprint(w, pluginUsage) }},
 		{names: []string{"debug"}, run: runDebug, banner: true},
 		{names: []string{"db"}, run: runDB, banner: true},
 		{names: []string{"bus"}, run: runBus, banner: true},
@@ -160,15 +160,4 @@ func runCheckSchema() {
 		fmt.Fprintln(os.Stderr, err)
 		exit(1)
 	}
-}
-
-func writePluginHelp(w io.Writer) {
-	fmt.Fprint(w, `usage: attn plugin <command>
-
-commands:
-  install --path <dir>      install the plugin in a local directory
-  link --path <dir>         link a local plugin directory in place instead of copying it
-  list                      print installed plugins and manifest issues as JSON
-  uninstall|remove <name>   remove an installed plugin
-`)
 }

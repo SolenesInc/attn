@@ -57,7 +57,7 @@ func runPluginCommand() {
 	}
 
 	switch os.Args[2] {
-	case "-h", "--help", "help":
+	case "help":
 		fmt.Print(pluginUsage)
 	case "install":
 		setCommandPath("plugin install")

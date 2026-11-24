@@ -237,7 +237,9 @@ drives:
   directory, archive or Git URL it was installed from. `attn plugin list` shows
   that source. A linked plugin has none: reload it instead.
 
-Each command answers once the new plugin has connected. A replacement or update
+When a command replaces a running plugin, it answers once the new plugin has
+connected; a first install answers once the plugin is installed and started. A
+replacement or update
 that exits or does not connect within 15 seconds is taken back: Attn restores
 the previous copy, restarts it, and the command fails with the reason. A reload
 has no previous copy to restore, so it fails and Attn keeps restarting the

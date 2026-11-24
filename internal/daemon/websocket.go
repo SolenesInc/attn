@@ -1117,9 +1117,9 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdUpdatePlugin:
 		d.life.Go("handleUpdatePluginWS", func() { d.handleUpdatePluginWS(client, msg.(*protocol.UpdatePluginMessage)) })
 	case protocol.CmdUninstallPlugin:
-		d.handleUninstallPluginWS(client, msg.(*protocol.UninstallPluginMessage))
+		d.life.Go("handleUninstallPluginWS", func() { d.handleUninstallPluginWS(client, msg.(*protocol.UninstallPluginMessage)) })
 	case protocol.CmdRemovePlugin:
-		d.handleRemovePluginWS(client, msg.(*protocol.RemovePluginMessage))
+		d.life.Go("handleRemovePluginWS", func() { d.handleRemovePluginWS(client, msg.(*protocol.RemovePluginMessage)) })
 	case protocol.CmdSetPluginPriority:
 		d.handleSetPluginPriorityWS(client, msg.(*protocol.SetPluginPriorityMessage))
 	case protocol.CmdUnregister:

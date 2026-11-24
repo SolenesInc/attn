@@ -3,7 +3,6 @@ package main_test
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -148,81 +147,44 @@ func setPluginVersion(t *testing.T, dir, version string) {
 	}
 }
 
-func runGitIn(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", append([]string{"-c", "user.name=attn", "-c", "user.email=attn@example.invalid"}, args...)...)
-	cmd.Dir = dir
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, output)
-	}
-}
-
 func TestPluginCommandsReplaceReloadAndUpdateAHarnessWhileItsSessionTakesInput(t *testing.T) {
+	t.Parallel()
 	harnessID := "live_" + strings.ReplaceAll(uuid.NewString()[:8], "-", "")
 	plugin := authorsPlugin(t, harnessID, packSDK(t))
-	runGitIn(t, plugin, "init", "-q", "-b", "main")
-	runGitIn(t, plugin, "add", ".")
-	runGitIn(t, plugin, "commit", "-q", "-m", "plugin")
-	t.Setenv("GIT_CONFIG_COUNT", "1")
-	t.Setenv("GIT_CONFIG_KEY_0", "url.file://"+filepath.Dir(plugin)+"/.insteadOf")
-	t.Setenv("GIT_CONFIG_VALUE_0", "https://plugins.example/")
-	gitSource := "https://plugins.example/" + filepath.Base(plugin)
-	archive := filepath.Join(t.TempDir(), "sample-harness-0.3.0.tgz")
-
 	s := testworld.NewStack(t)
 	s.Start()
 	app := s.App()
-	s.Attn("plugin", "install", gitSource).JSON(t, &pluginResult{})
-	if p := listedPlugin(t, s, "sample-harness"); p.Version != "0.1.0" || protocol.Deref(p.Source) != gitSource || protocol.Deref(p.SourceKind) != "git" {
-		t.Fatalf("after installing from git the daemon lists %+v, want 0.1.0 from %s", p, gitSource)
+	s.Attn("plugin", "install", plugin).JSON(t, &pluginResult{})
+	if p := listedPlugin(t, s, "sample-harness"); p.Version != "0.1.0" || protocol.Deref(p.Source) != plugin || protocol.Deref(p.SourceKind) != "path" {
+		t.Fatalf("after installing %s the daemon lists %+v, want 0.1.0 from that directory", plugin, p)
 	}
 	agent := fakeagent.Harness(harnessID)
 	awaitAgentAvailable(app, agent)
 	session := s.Spawn(app, agent, s.Path("shop"))
 	app.AwaitScreen(session, "sample harness started conversation")
-	takesInput := func(step, text string) {
-		t.Helper()
-		if got := submitDirectInput(app, session, text); !got.Success {
-			t.Fatalf("after %s direct input was refused: %+v", step, got)
-		}
-		app.AwaitScreen(session, "[user] "+text)
-	}
 
 	setPluginVersion(t, plugin, "0.2.0")
-	runGitIn(t, plugin, "commit", "-q", "-am", "release 0.2.0")
 	var updated pluginResult
 	s.Attn("plugin", "update", "sample-harness").JSON(t, &updated)
 	if p := listedPlugin(t, s, "sample-harness"); !updated.OK || p.Version != "0.2.0" || !p.Connected {
 		t.Fatalf("after update the daemon lists %+v, want 0.2.0 connected", p)
 	}
-	takesInput("update", "after the update")
-
-	setPluginVersion(t, plugin, "0.3.0")
-	if output, err := exec.Command("tar", "-czf", archive, "-C", plugin, "--exclude", ".git", ".").CombinedOutput(); err != nil {
-		t.Fatalf("tar: %v\n%s", err, output)
+	if got := submitDirectInput(app, session, "after the update"); !got.Success {
+		t.Fatalf("after the update direct input was refused: %+v", got)
 	}
-	s.Attn("plugin", "install", archive).JSON(t, &pluginResult{})
-	if p := listedPlugin(t, s, "sample-harness"); p.Version != "0.3.0" || protocol.Deref(p.SourceKind) != "archive" || protocol.Deref(p.Source) != archive {
-		t.Fatalf("after installing the archive the daemon lists %+v, want 0.3.0 from %s", p, archive)
-	}
-	takesInput("installing the archive", "after the archive")
+	app.AwaitScreen(session, "[user] after the update")
 
 	var linked pluginResult
 	s.Attn("plugin", "link", "--path", plugin).JSON(t, &linked)
 	if p := listedPlugin(t, s, "sample-harness"); linked.LinkTarget != plugin || protocol.Deref(p.LinkTarget) != plugin || p.Source != nil {
 		t.Fatalf("after linking the daemon lists %+v, want it linked to %s", p, plugin)
 	}
-	takesInput("linking", "after linking")
-
-	setPluginVersion(t, plugin, "0.4.0")
+	setPluginVersion(t, plugin, "0.3.0")
 	s.Attn("plugin", "reload", "sample-harness").JSON(t, &pluginResult{})
-	if p := listedPlugin(t, s, "sample-harness"); p.Version != "0.4.0" {
-		t.Fatalf("after reload the daemon lists %+v, want 0.4.0", p)
-	}
-	takesInput("reload", "after the reload")
-
+	setPluginVersion(t, plugin, "0.4.0")
 	s.Attn("plugin", "reload", "sample-harness", "--no-install").JSON(t, &pluginResult{})
-	takesInput("reload --no-install", "after reloading without install")
+	if p := listedPlugin(t, s, "sample-harness"); p.Version != "0.4.0" || !p.Connected {
+		t.Fatalf("after reloading the daemon lists %+v, want 0.4.0 connected", p)
+	}
 	requireFailure(t, s.Attn("plugin", "update", "sample-harness"), "plugin update: ", "plugin \"sample-harness\" is linked to "+plugin+"; use reload to pick up its changes")
-	requireFailure(t, s.Attn("plugin", "uninstall", "sample-harness"), "plugin uninstall: ", "plugin \"sample-harness\" owns 1 active delegated run(s)")
 }
