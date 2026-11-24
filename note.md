@@ -1,0 +1,3 @@
+The delegation chain and pull request popovers have a keyboard way in. ⌘I (Ctrl+Shift+I on Linux) pins the popover under the pointer and gives it the keyboard, or opens the chain of the agent on screen, or its pull requests; again it closes. Under a resting pointer they take no key but Escape, so what you type reaches the terminal. Tab switches between the two, and the palette has Show pull requests.
+
+Both popovers now lead with the picked agent or pull request, in parts instead of sentences, and say only the keys that work. The sidebar outlines the row a popover opened from and lights the agent it picks.
