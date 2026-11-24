@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Closed automation history disappears from ordinary search",
+  "at": "2026-11-24T23:50:34.133Z",
+  "detail": "When all automation runs are closed, the Automations selectors disappear and a harvested run cannot be found by exact ID with is:any from All, even though the daemon sends it. An explicit bed:automations query finds it. A native probe and independent review reproduced this on both keymaps. Evidence: s-ma3jmt/garden-display-review.md.\n"
+}
