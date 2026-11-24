@@ -18,7 +18,6 @@ func TestASigmaForkFollowedJustBeforeACrashLinksOnlyItsOwnPullRequests(t *testin
 	tui := stack.Launched(first)
 	original := tui.ConversationID
 	server := stack.AppServer(fakeagent.Sigma)
-	terminal := app.Terminal(first)
 	promptUntilWorking(app, first, tui, server, "review checkout tests")
 	server.ToolCall(original, fakeagent.ServerToolCall{Name: "bash", Input: map[string]any{"command": "gh pr create --fill"}, Output: shopPull(7) + "\n"})
 	server.Reply(original, "Checkout ready. <!-- attn:state=waiting_input -->")
@@ -37,17 +36,14 @@ func TestASigmaForkFollowedJustBeforeACrashLinksOnlyItsOwnPullRequests(t *testin
 
 	stack.StartCrashingAt("succession-committed")
 	app = stack.App()
-	typeInto(app, terminal, "/fork\r")
+	app.TypeLine(first, "/fork")
 	tui.Prompted()
+	stack.AwaitCrash()
 	forks := server.Forks(original)
 	if len(forks) != 1 {
 		t.Fatalf("the /fork made %v, want one fork", forks)
 	}
 	branch := forks[0]
-	typeInto(app, terminal, "review shipping tests instead\r")
-	tui.Prompted()
-	server.Prompted(branch)
-	stack.AwaitCrash()
 
 	stack.Start()
 	app = stack.App()
@@ -55,6 +51,11 @@ func TestASigmaForkFollowedJustBeforeACrashLinksOnlyItsOwnPullRequests(t *testin
 	if !found {
 		successor = awaitSuccessor(app, first)
 	}
+	mark = app.EventCount()
+	app.TypeLine(string(successor.ID), "review shipping tests instead")
+	tui.Prompted()
+	server.Prompted(branch)
+	testworld.AwaitSessionSince(app, mark, string(successor.ID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	mark = app.EventCount()
 	server.ToolCall(branch, fakeagent.ServerToolCall{Name: "bash", Input: map[string]any{"command": "gh pr create --fill"}, Output: shopPull(8) + "\n"})
 	server.Reply(branch, "Shipping ready. <!-- attn:state=waiting_input -->")
