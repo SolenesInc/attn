@@ -27,7 +27,7 @@ writers never collide. The chief treats the notebook as its home.
 
 - Keys (`native/crates/attn-app/src/keymap.rs`): ⌥⌘N opens an editor tile (`notebook.openTile`), ⇧⌥⌘N opens the notebook fullscreen (`notebook.openFullscreen`).
 - Palette (`native/crates/attn-app/src/palette/commands.rs`): `notebook` ("Open the notebook") and `notebook-tile` ("Open Editor tile").
-- Title bar: the "Open Notebook (⇧⌥⌘N)" button, `titlebar.notebook` (`native/crates/attn-app/src/sidebar/chrome.rs`).
+- Title bar: the "Open Notebook (⇧⌥⌘N)" button, `titlebar.notebook` (`native/crates/attn-app/src/title_bar.rs`).
 - Fullscreen and tile (`native/crates/attn-app/src/notebook/view.rs`): the "Notebook files" list, the document with its save status, the Outline and Backlinks sections, the "chief: active" or "chief: idle" status, and "Close" (Esc) fullscreen.
 - Editor tile: its "Editor root" picker (`native/crates/attn-app/src/notebook/root_picker.rs`) and its note finder, "Find a note…" (`native/crates/attn-app/src/notebook/finder.rs`).
 - **Settings → Notebook Folder** (`native/crates/attn-app/src/settings/desktop.rs`): "Notebook folder" sets `notebook.root` for the profile the window shows, and a blank value means the default folder. "This profile uses:" shows `notebook.root.effective`.
@@ -87,7 +87,7 @@ Preconditions:
   - Run `./attn crew close chief`. An agent cannot close the Chief's session.
 - **Notebook Folder in Settings.**
   - Open Settings as [settings.md](settings.md) says and press `settings.nav.desktop`.
-  - Run `bridge type '{"target":{"key":"settings.input.notebook.root.field"},"text":"<folder>"}'` with a folder under the home folder, such as `$HOME/attn-nbprof-<name>` written out, and press Enter: `settings.notebook.effective` reads `This profile uses:` that folder, and `./attn settings get notebook.root` prints it.
+  - Run `bridge type '{"target":{"key":"settings.setting.notebook.root"},"text":"<folder>"}'` with a folder under the home folder, such as `$HOME/attn-nbprof-<name>` written out, and press Enter: `settings.notebook.effective` reads `This profile uses:` that folder, and `./attn settings get notebook.root` prints it.
   - Clear the field (`mod+a`, Backspace, Enter): the effective folder is `$NB` again and the setting is empty.
   - Set and clear the folder from the shell with `./attn settings set notebook.root <folder>` and `""`: the open field and `This profile uses:` follow without reopening Settings.
   - Press Escape.

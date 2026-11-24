@@ -23,11 +23,11 @@ only for the model. Attn Lens refines dictation this way.
 ### People
 
 - A program the user paired with `attn send pair` (Attn Lens, a script), allowed in the app's approval dialog, as [Quick capture](quick-capture.md) describes.
-- Settings: `model_calls.agent` and `model_calls.model`, through `attn settings set` or the settings dialog.
+- Settings: `model_calls.agent` and `model_calls.model`, through `attn settings set`. The settings dialog has no control for them.
 
 ### Agents
 
-- None. Agents in sessions use `attn vision-check` for their own model questions.
+- `attn model log` (`cli/attn/src/commands/model.rs`) lists the profile's calls from a session. Agents in sessions use `attn vision-check` for their own model questions.
 
 ## Driving it
 

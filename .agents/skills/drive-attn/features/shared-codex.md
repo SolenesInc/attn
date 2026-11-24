@@ -30,8 +30,8 @@ the tiles still on the old Codex.
 ### People
 
 - **Settings → Attention queue** (`native/crates/attn-app/src/settings/hygiene.rs`): "Show hidden sessions in the queue" (`settings.switch.queue_show_hidden_sessions`, setting `queue_show_hidden_sessions`, on by default).
-- The Codex updates band at the top of the window, `codex-updates`, whose `codex-updates.text` says the stage, with Install (`.install`), Restart now (`.restart`), Retry (`.retry`) or Reload tiles (`.reload`) as each applies, and a confirmation, `shared-codex-confirm-dialog`, before a restart or a reload (`native/crates/attn-app/src/shared_codex.rs`). `.dismiss-update` and `.dismiss-old-tiles` close the band. After the user closes the band, the same offer stays under the bell.
-- Palette, while each applies (`native/crates/attn-app/src/shared_codex.rs`): `install-codex-update` ("Install Codex update"), `restart-shared-codex-now` ("Restart shared Codex now"), `retry-shared-codex-restart` ("Retry shared Codex restart") and `reload-old-codex-tiles` ("Reload old Codex tiles").
+- The Codex updates band at the top of the window, `codex-updates`, whose `codex-updates.text` says the stage, with Install (`.install`), Restart now (`.restart`), Retry (`.retry`) or Reload tiles (`.reload`) as each applies, and a confirmation, `shared-codex-confirm-dialog`, before a restart or a reload (`native/crates/attn-app/src/harness/codex/mod.rs`). `.dismiss-update` and `.dismiss-old-tiles` close the band. After the user closes the band, the same offer stays under the bell.
+- Palette, while each applies (`native/crates/attn-app/src/harness/codex/mod.rs`): `install-codex-update` ("Install Codex update"), `restart-shared-codex-now` ("Restart shared Codex now"), `retry-shared-codex-restart` ("Retry shared Codex restart") and `reload-old-codex-tiles` ("Reload old Codex tiles").
 - In a shared Codex terminal, `/new`, `/resume <id>` and `/agents` switch the terminal's conversation.
 - In a shared Codex terminal, `/side` opens a side conversation, ctrl-/ switches between it and its parent, and ctrl-c closes it.
 - Where people see what agents do: a hidden session is marked `hidden` in the ledger ([ledger.md](ledger.md)) and queues without a desktop chip ([queue-flow.md](queue-flow.md)).
@@ -44,10 +44,10 @@ the tiles still on the old Codex.
 
 ### Triggers
 
-- When the first shared terminal opens, attn starts the app-server as a terminal of its own. attn stops the app-server when no open session and no shared terminal needs it (`internal/daemon/codex_shared.go`).
-- Once a day attn asks `codex doctor` for the latest Codex, and attn reads the installed Codex when a shared terminal opens, when the app-server starts and when an update it ran finishes (`internal/daemon/codex_update.go`).
-- When the installed Codex differs from the one the app-server runs, attn restarts the app-server once no turn runs and every shared terminal has finished starting (`internal/daemon/codex_restart.go`).
-- `--now` relaunches terminals still starting. Like any reload, it gives a Codex that has not taken the prompt it was started with, such as an automation's, that prompt again. A relaunch that fails settles the run or delegation with the reason (`relaunchStarting`, `internal/daemon/codex_restart.go`).
+- When the first shared terminal opens, attn starts the app-server as a terminal of its own. attn stops the app-server when no open session and no shared terminal needs it (`internal/harness/internal/codex/shared.go`).
+- Once a day attn asks `codex doctor` for the latest Codex, and attn reads the installed Codex when a shared terminal opens, when the app-server starts and when an update it ran finishes (`internal/harness/internal/codex/versions.go` and `update.go`).
+- When the installed Codex differs from the one the app-server runs, attn restarts the app-server once no turn runs and every shared terminal has finished starting (`internal/harness/internal/codex/restart.go`).
+- `--now` relaunches terminals still starting. Like any reload, it gives a Codex that has not taken the prompt it was started with, such as an automation's, that prompt again. A relaunch that fails settles the run or delegation with the reason (`relaunchStarting`, `internal/harness/internal/codex/restart.go`).
 - attn answers Codex's folder trust question for a folder where an agent session already started a conversation, or whose repository Codex already trusts (`docs/guide/reference/using-shared-codex.md`).
 
 ## Driving it

@@ -49,7 +49,7 @@ and signatures of both clients by `internal/cloudlink/testdata/cloud_relay_vecto
 
 ### Agents
 
-- None. Phones are paired and revoked by the person.
+- Phones are paired and revoked by the person. An agent sees a phone through the `inbox-phone-silent` prompt (`internal/prompts/content/session/inbox-phone-silent.md`), which tells it to run `attn turn open` before it stops, and through ask markdown, which the phone renders.
 
 ## Driving it
 

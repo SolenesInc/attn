@@ -21,6 +21,7 @@ with the mock agent and the mock GitHub, the doctor and the cleanup are in
 - `build-identity`: `attn version` names the build and its source fingerprint. The app refuses a daemon of another instance.
 - `instance-marker`: a non-production app shows `<name>` beside the profile pill in the title bar.
 - `instance-origin`: `attn instance set-origin` records the worktree an install came from, and `list` shows it.
+- `instance-port`: `attn instance claim-port` gives the instance a WebSocket port no other instance holds, keeps it and prints it.
 - `linux-scheme`: `attn instance register-scheme` claims the instance's deep-link scheme on Linux.
 
 ## How to get to it
@@ -33,7 +34,7 @@ with the mock agent and the mock GitHub, the doctor and the cleanup are in
 
 ### Agents
 
-- `attn instance status|resolve|list|clean|stop-app|set-origin|register-scheme` (`cmd/attnd/instance.go`), `attn instance env` (`cli/attn/src/commands/instance_env.rs`). `attn instance-env <name>|--unset`, with `--fish` for fish (`cli/attn/src/commands/instance_env.rs`). `attn daemon ensure|stop [--terminals]` and `attn version [--json]` (`cmd/attnd/main.go`).
+- `attn instance status|list|clean|claim-port|stop-app|set-origin|register-scheme` (`cmd/attnd/instance.go`), `attn instance resolve` (`cli/attn/src/commands/instance_resolve.rs`), `attn instance env` (`cli/attn/src/commands/instance_env.rs`). `attn instance-env <name>|--unset`, with `--fish` for fish (`cli/attn/src/commands/instance_env.rs`). `attn daemon ensure|stop [--terminals]` and `attn version [--json]` (`cmd/attnd/main.go`).
 - No prompt attn sends names these verbs. The agents an instance runs reach that instance with their own `attn` commands, because every terminal the instance starts carries the instance's routing: `ATTN_INSTANCE`, `ATTN_SOCKET_PATH`, `ATTN_DATA_DIR` and the rest (`internal/daemon/spawn_routing.go`).
 
 ### Triggers

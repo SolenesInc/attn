@@ -40,11 +40,11 @@ in [crew.md](crew.md), delegation openings and the attn-workflow skill in
 - `attn prompts` (`cmd/attnd/prompts.go`): `list`, `show <recipient>`, `render <recipient> <event>` and `explain <recipient> <event>`, with `--set name=value` and `--json`.
 - `attn presence` (`cmd/attnd/main.go`), which tells a shell whether it runs inside attn, and the tool `presence` over `/mcp` (`internal/catalog/content/presence.yaml`, `internal/daemon/commands_presence.go`).
 - `attn --help` and each verb's help, which the attn map names as the authority for syntax.
-- Prompts: the launch instructions, composed in `internal/prompts/session.go` from `internal/prompts/content/agent.md` with `internal/prompts/content/delegation-boundary.md`, then `internal/prompts/content/session/attn-map.md` with `internal/prompts/content/session/attn-map-review.md` when `code_review_enabled` is on, then, as they apply, `internal/prompts/content/garden.md` with `internal/prompts/content/garden-cli.md`, `internal/prompts/content/session/queue.md`, `internal/prompts/content/ask/rules.md` with `visuals.md`, then `cli.md` with `example.md` when the launch does not carry attn's tools, `internal/prompts/content/session/vent-guidance.md`, then `vent-tools.md` or `vent-attn-only.md`, then `vent-rules.md`, all in the same folder, `internal/prompts/content/session/pull-request-guidance.md`, a crew member's priming and `internal/prompts/content/session/quick-capture.md`. The references are in `internal/prompts/content/skills/attn/references/`.
+- Prompts: the launch instructions, composed in `internal/prompts/session.go` from `internal/prompts/content/agent.md` with `internal/prompts/content/delegation-boundary.md`, then `internal/prompts/content/session/attn-map.md` and its rows in `internal/prompts/content/session/attn-map/`, with `review.md` and `nav.md` added when `code_review_enabled` is on, then, as they apply, `internal/prompts/content/garden.md` with `internal/prompts/content/garden-cli.md`, `internal/prompts/content/session/queue.md`, `internal/prompts/content/ask/rules.md` with `visuals.md`, then `cli.md` with `example.md` when the launch does not carry attn's tools, `internal/prompts/content/session/vent-guidance.md`, then `vent-tools.md` or `vent-attn-only.md`, then `vent-rules.md`, all in the same folder, `internal/prompts/content/session/pull-request-guidance.md`, a crew member's priming and `internal/prompts/content/session/quick-capture.md`. The references are in `internal/prompts/content/skills/attn/references/`.
 
 ### Triggers
 
-- Every launch composes the launch instructions and hands them over the harness's own channel: appended system instructions for Claude Code (`internal/agent/claude.go`), developer instructions for Codex (`internal/hooks/codex.go`), and the driver of a plugin that takes them (`internal/harness/internal/plugin/plugin.go`).
+- Every launch composes the launch instructions and hands them over the harness's own channel: appended system instructions for Claude Code (`internal/harness/internal/claude/cli.go`), developer instructions for Codex (`internal/harness/internal/codex/hooks.go`), and the driver of a plugin that takes them (`internal/harness/internal/plugin/plugin.go`).
 - At startup, and when a harness executable setting is saved, the daemon replaces the retired `attn` skill in `~/.claude/skills/attn` and `~/.agents/skills/attn` with its pointer (`internal/prompts/content/skills/attn/SKILL.md`), then syncs the enabled workflow skill (`internal/attnskill/attnskill.go`). A named instance other than `dev` skips this unless the shell sets `ATTN_AUTOMATION=1`, `ATTN_HARNESS_SKILL_SYNC=1` and `ATTN_TOOL_HOME`. A scenario sets all three.
 
 ## Driving it
@@ -64,7 +64,7 @@ Preconditions:
 
 `<terminal>` below is the agent's terminal id from `wsctl list`.
 
-- **Read the map and references.** Run `./attn skill | head -1`: it prints `## What attn can do`. `./attn --help` prints the same map. `./attn skill --list` prints `browser`, `callouts`, `charter`, `converse-and-observe`, `delegated-agent`, `delegation-roles`, `delegation`, `garden`, `markdown`, `notebook`, `onboarding`, `review`, `showing`, `terminal` and `wrap-up`, one per line. `./attn skill --reference garden` prints the garden reference. `./attn skill --reference nope` exits 1 with `skill: no bundled reference "nope"; bundled references:` and the list.
+- **Read the map and references.** Run `./attn skill | head -1`: it prints `## What attn can do`. `./attn --help` prints the same map. `./attn skill --list` prints `browser`, `callouts`, `charter`, `code-navigation`, `converse-and-observe`, `delegated-agent`, `delegation-roles`, `delegation`, `delivery`, `garden`, `markdown`, `notebook`, `onboarding`, `review`, `showing`, `terminal` and `wrap-up`, one per line. `./attn skill --reference garden` prints the garden reference. `./attn skill --reference nope` exits 1 with `skill: no bundled reference "nope"; bundled references:` and the list.
 - **Wrap up with real harnesses.** This checks model judgment, so the baseline mock cannot prove it.
   - On a named instance set `ATTN_AUTOMATION=1`, `ATTN_HARNESS_SKILL_SYNC=1` and `ATTN_TOOL_HOME` to an isolated home, with Claude and Codex configured to keep their transcripts in that home.
   - Use authorized authentication and real harness executables.
@@ -96,7 +96,7 @@ Preconditions:
 - Wire: `internal/daemon/agent_tools_reading_wire_test.go` calls the `skill` and `guide` tools.
 - Stack: `cmd/attnd/skill_stack_test.go`, `cmd/attnd/prompts_stack_test.go`, each skill check with no daemon and through one.
 - Stack: `cmd/prompt-editor/test/sheet.mjs` drives the prompt editor's page in Chromium against a copy of the prompts (`make test-prompt-editor`).
-- Kernel: `native/crates/attn-app/tests/prompts.rs`, `internal/prompts/*_test.go`, `cmd/prompt-editor/*_test.go`, `cmd/attnd/prompt_compatibility_test.go`, `internal/*/prompt_compatibility_test.go`.
+- Kernel: `native/crates/attn-app/tests/prompts.rs`, `internal/prompts/*_test.go`, `cmd/prompt-editor/*_test.go`, `internal/*/prompt_compatibility_test.go`.
 
 ## Gotchas
 

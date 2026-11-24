@@ -61,6 +61,6 @@ printf 'PNG pixels' > $P/shot.png
 ## Gotchas
 
 - The verb runs the `claude` it finds, not the instance's mock agent. Neither `ATTN_CLAUDE_EXECUTABLE` nor the baseline's refusal of headless model tasks affects the verb. Without the stand-in, the verb sends the image to a real model and costs money.
-- `./attn vision-check --help` prints `vision-check: flag: help requested` and exits 2. Run the verb with no arguments to see the usage line.
+- `./attn vision-check --help` alone prints the usage line and exits 0. With another argument first, such as `./attn vision-check x.png --help`, it parses `--help` as a flag and prints `vision-check: flag: help requested`. Run the verb with no arguments to see the usage line with exit 2.
 - The verb reads the image type from the file extension, not the bytes: a JPEG named `.png` goes out as `image/png`.
 - Working but wrong: over the size limit, the verb says to "capture with --crop/--max-dim first". Those flags belong to the maintainers' `app/scripts/real-app-harness/capture-app-screenshot.mjs`. The agents that attn runs have no such tool.

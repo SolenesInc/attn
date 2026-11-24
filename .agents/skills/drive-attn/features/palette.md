@@ -22,9 +22,9 @@ top. Commands the user picks often rise in the list.
 ### People
 
 - ⌘K (`ui.actionMenu`) opens the agent palette and ⌘⇧K (`ui.commandPalette`) the command palette (`native/crates/attn-app/src/keymap.rs`).
-- The title bar's left group holds the Commands button, `titlebar.commands`, which opens the command palette. On the queue bar, the waiting pill `queue-bar.pill` opens the agent palette (both in `native/crates/attn-app/src/sidebar/chrome.rs`). ⌘⇧A opens the agent palette wherever the queue sidebar is not showing ([sidebar.md](sidebar.md)).
+- The title bar's left group holds the Commands button, `titlebar.commands`, which opens the command palette. On the queue bar, the waiting pill `queue-bar.pill` opens the agent palette (`titlebar.commands` in `native/crates/attn-app/src/title_bar.rs`, `queue-bar.pill` in `native/crates/attn-app/src/sidebar/chips.rs`). ⌘⇧A opens the agent palette wherever the queue sidebar is not showing ([sidebar.md](sidebar.md)).
 - In the palette (`native/crates/attn-app/src/palette/`): the dialog `palette.dialog` is named `Agents`, or `Commands` in command mode. ↑ and ↓ move, Enter runs, and Escape closes. Typing `>` switches to commands, and deleting it switches back. `palette.count` reads `<shown> of <all>`. Rows are `palette.row.agent:<session>`, `palette.row.tile:<desktop>:<tile>` and `palette.row.command:<id>`. The footer hints `palette.hint.<n>` name the settle and snooze keys.
-- The commands come from `native/crates/attn-app/src/palette/commands.rs` and `native/crates/attn-app/src/shared_codex.rs`. Each command belongs to a feature, and that feature's file covers how to drive it.
+- The commands come from `native/crates/attn-app/src/palette/commands.rs` and `native/crates/attn-app/src/harness/codex/mod.rs`. Each command belongs to a feature, and that feature's file covers how to drive it.
 - ⌘P opens other finders, not this palette: the markdown opener ([markdown.md](markdown.md)), or the note finder inside the notebook or an editor tile ([notebook.md](notebook.md)).
 - Where people see what agents do: each agent row's status (`chief`, `waiting`, `approval`, `working`, `idle`, `snoozed`, or `between sessions` for a crew member), its turn age, its desktop's number, the priority flag, and ⌘J beside the head of the queue.
 

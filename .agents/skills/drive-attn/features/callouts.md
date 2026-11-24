@@ -25,7 +25,7 @@ ends the callout with Esc. Callouts are always on.
 
 - `attn callout anchors [--json]` and `attn callout show <anchor> <text> [<anchor> <text>]... [--json] [--session <id>]`. The catalog defines both (`internal/catalog/content/callout.yaml`); the CLI presents them (`cli/attn/src/commands/callout/mod.rs`) and the command layer runs them (`internal/daemon/callouts.go`).
 - Tools, with `agent_tools_enabled` on: `callout_anchors` and `callout_show` over `/mcp`. `callout_show` takes `steps`, a list of `{anchor, text}`.
-- Prompts: `attn skill --reference callouts` covers when to point, the anchors and the limits. The catalog generates it (`internal/prompts/content/skills/attn/references/callouts.md`). The skill's capability index names the reference (`internal/prompts/content/skills/attn/SKILL.md`).
+- Prompts: `attn skill --reference callouts` covers when to point, the anchors and the limits. The catalog generates it (`internal/prompts/content/skills/attn/references/callouts.md`). The attn map names it in a row of its own (`internal/prompts/content/session/attn-map/callout.md`).
 
 ## Driving it
 

@@ -33,7 +33,7 @@ restarts.
 
 ### Agents
 
-None. An agent can only read or reset `keybindings_config` as a setting. See [settings.md](settings.md) for that setting.
+None as a verb. An agent can only read or reset `keybindings_config` as a setting, see [settings.md](settings.md). The Chief's onboarding prompt (`internal/prompts/content/skills/attn/references/onboarding.md`) names ⌘K, ⇧⌘K, ⌘, and ⌘/, points the user to "Customize keyboard shortcuts" and has the Chief read `attn settings get keybindings_config`.
 
 ## Driving it
 

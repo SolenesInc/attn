@@ -28,7 +28,7 @@ opens on its first profile with each old workspace on its own desktop.
 
 ### Agents
 
-None. An agent's attn commands act in its session's profile and cannot name another.
+None. An agent's attn commands act in its session's profile and cannot name another. From a plain shell, `--profile <name|id>` is also taken by `attn crew`, `attn onboarding`, `attn settings`, `attn send senders|unpair` and `attn model log`, and `attn list` shows every profile's sessions.
 
 ### Triggers
 
