@@ -1,0 +1,13 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Sigma fork crash stack test races its crash: succession now commits at /fork, test still prompted the dying daemon",
+  "at": "2026-11-24T07:12:04.207Z",
+  "severity": "p2",
+  "source": "agent",
+  "location": {
+    "path": "internal/daemon/sigma_fork_stack_test.go",
+    "line": 47
+  },
+  "culprit": "0f30ac9ce379f18cd8eb4d7675a16bef882dd1d8"
+}
