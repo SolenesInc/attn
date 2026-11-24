@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Garden duplicates descendant attention aggregation",
+  "at": "2026-11-24T23:48:27.563Z",
+  "detail": "Garden adds two traversals implementing the same descendant-attention aggregation. The existing memoized traversal can serve a single branch as well as the whole view, so the extra rule can be removed without changing behavior. Independently confirmed at 5ec9f5d. Evidence: s-kf0c7c/garden-v2-state-review.md.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/garden/v2.rs",
+    "line": 350
+  },
+  "culprit": "5ec9f5d43de6c60b63d8df1960ad39f2adb9d386"
+}
