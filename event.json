@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Bed edits can corrupt comma-bearing repository routes",
+  "at": "2026-11-24T23:48:06.664Z",
+  "detail": "Editing a Garden bed name or note can split an existing valid repository path containing a comma into two saved routes. The native wire probe captured the split request and the daemon write path persists it. This can lose the intended route and assign another repository. Independently confirmed at 5ec9f5d. Evidence: s-kf0c7c/garden-v2-state-review.md.\n",
+  "severity": "p0",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/garden/v2.rs",
+    "line": 808
+  },
+  "culprit": "5ec9f5d43de6c60b63d8df1960ad39f2adb9d386"
+}
