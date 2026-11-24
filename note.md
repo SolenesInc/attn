@@ -1,0 +1,4 @@
+The delegation chain and pull request popovers are redesigned for reading at a glance and acting from the keyboard. The chain shows one line per agent under tree lines, with a badge for what each agent needs from you before its role's mark, and the picked agent's details underneath. On a pinned card, ← and → step to the dispatcher and the first delegate, and S, P and A open the agent's seed, pull request and ask. The pull request popover leads with a verdict on what stands before the merge and lists only what isn't fine yet.
+
+![Delegation chain](https://land-feed.caketroll.cloud/m/SolenesInc/attn/b01e99b78d822354aa88b9eb407489e0fdb8cf1d4b1f7602e2e89a1c2f9cfa32.png)
+![Pull requests](https://land-feed.caketroll.cloud/m/SolenesInc/attn/3f83d07b56b16a9b7fdbd2ee46e2754da7c9a277e85795ce334cbb64e47ca0ba.png)
