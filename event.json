@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Home symlinks can misroute outpost repositories",
+  "at": "2026-11-24T22:48:02.763Z",
+  "detail": "With garden_v2_enabled, a home path that is a symlink to a different repository can change the bed selected for an outpost checkout at the same path. An isolated outpost bridge probe planted a seed from shop and read it back in billing's bed; a second reviewer independently reproduced the same behavior. The matcher resolves the outpost path against the home's filesystem. Root delegation reaches the same matcher by source trace. See s-mnw09n and s-engvyg.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/garden_beds.go",
+    "line": 265
+  },
+  "culprit": "e5366217324d5b4b6299dc9dcd89cecfea6dcb18"
+}
