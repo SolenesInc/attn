@@ -162,7 +162,8 @@ item.
   member address under a header naming the asker, the seed and why, in the
   same write as the reply and the seed's note, which keeps the answer without
   the header. attn refuses `to_chief` while an agent would take the answer,
-  and when the profile has no Chief.
+  when the profile has no Chief, and while the Chief has neither a session nor
+  a harness to start one.
 - A Quick Capture goes to the chief or the crew member the user picked, or to
   the agent session that a paired sender names with `attn send`.
 - A change to a seed's authorization goes to the seed's tender, addressed as a

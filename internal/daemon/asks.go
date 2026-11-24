@@ -639,6 +639,9 @@ func (d *Daemon) answerAddress(profileID string, stored store.Ask, toChief bool)
 	if !ok {
 		return who.Address{}, protocol.Refuse(protocol.RefusalWrongState, "this profile has no Chief to take the answer to %s", stored.ID)
 	}
+	if member, _ := d.chiefMember(profileID); member.Harness() == "" && d.inboxHolder(chief.Address()) == nil {
+		return who.Address{}, memberHasNoHarness(member)
+	}
 	return chief.Address(), nil
 }
 

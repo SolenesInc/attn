@@ -205,3 +205,34 @@ func TestThePhoneSendsAStrandedAnswerToTheChief(t *testing.T) {
 		t.Errorf("the Chief was typed %q, want the phone's answer under the Chief's header", typed)
 	}
 }
+
+func TestSendToChiefIsRefusedUntilTheChiefHasAHarness(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	cwd := registerDelegationCaller(t, w, cli, "caller")
+	seed := plantDelegationSeed(t, cli, "caller", "Migrate the store")
+	delegated, err := cli.Delegate(delegateAtSeed("caller", cwd, seed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(string(delegated.SessionID))
+	asked, err := cli.AskOpen(delegated.SessionID, "", cacheAsk, "", cwd)
+	if err != nil {
+		t.Fatalf("the delegate asks: %v", err)
+	}
+	moveDelegationSeed(t, cli, "caller", seed, "park", "")
+	awaitAskStranded(t, app, asked.ID, true)
+
+	if refused := answerToChief(app, asked.ID); refused.Success || !strings.Contains(protocol.Deref(refused.Error), "no harness") {
+		t.Fatalf("Send to Chief before the Chief has a harness got %+v, want it refused", refused)
+	}
+
+	chief := startConfiguredChief(t, w, cli)
+	if sent := answerToChief(app, asked.ID); !sent.Success {
+		t.Fatalf("Send to Chief once the Chief has a harness failed: %s", protocol.Deref(sent.Error))
+	}
+	if typed := chief.Prompted(); !strings.Contains(typed, "Answer: Postgres") {
+		t.Errorf("the Chief was typed %q, want the answer", typed)
+	}
+}
