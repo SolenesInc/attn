@@ -1,0 +1,1 @@
+The Sigma fork crash stack test no longer races its own crash. Since 0f30ac9ce attn follows a fork at `/fork`, so the armed crash fires there, but the test still typed the fork's prompt into the dying daemon. It now awaits the crash and types the prompt into the restarted daemon. Test only; no product change.
