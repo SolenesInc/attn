@@ -15,44 +15,31 @@ type seedResumeOutcome struct {
 	AlreadyRunning bool
 }
 
-func (d *Daemon) resumeSeedFromReview(
+func (d *Daemon) resumeSeed(
 	seedID string,
-	review *protocol.SeedReviewActionContext,
 	by who.Actor,
 ) (*seedResumeOutcome, error) {
 	var outcome *seedResumeOutcome
 	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var resumeErr error
-		outcome, resumeErr = d.resumeSeedFromReviewProtected(protection, seedID, review, by)
+		outcome, resumeErr = d.resumeSeedProtected(protection, seedID, by)
 		return resumeErr
 	})
 	return outcome, err
 }
 
-func (d *Daemon) resumeSeedFromReviewProtected(
+func (d *Daemon) resumeSeedProtected(
 	protection foregroundCleanupProtection,
 	seedID string,
-	review *protocol.SeedReviewActionContext,
 	by who.Actor,
 ) (*seedResumeOutcome, error) {
 	seedID = strings.TrimSpace(seedID)
 	if seedID == "" {
 		return nil, protocol.Refuse(protocol.RefusalInvalidInput, "seed_id is required")
 	}
-	expectedRev := int64(0)
-	if review != nil {
-		item, err := d.validateGardenReviewAction(review, seedID, "resume")
-		if err != nil {
-			return nil, err
-		}
-		expectedRev = item.SeedRev
-	}
-	seed, seedDoc, err := d.readSeed(seedID)
+	seed, _, err := d.readSeed(seedID)
 	if err != nil {
 		return nil, err
-	}
-	if expectedRev > 0 && seedDoc.Rev != expectedRev {
-		return nil, protocol.Refuse(protocol.RefusalConflict, "%s changed since you reviewed it; refresh the garden", seedID)
 	}
 	if garden.Closed(seed.Status) {
 		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s is %s; replant it before resuming its agent", seed.ID, seed.Status)
@@ -61,22 +48,16 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 		by: by,
 		tend: func(claimant who.Party, actor who.Actor) error {
 			_, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
-				seedID, garden.VerbTend, garden.Ask{Actor: actor, Claimant: claimant}, "", expectedRev)
+				seedID, garden.VerbTend, garden.Ask{Actor: actor, Claimant: claimant}, "", 0)
 			return err
-		},
-		settle: func() {
-			if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {
-				d.logf("Garden review: settle %s after Resume: %v", seedID, err)
-			}
 		},
 	})
 }
 
 type tenderResumeCause struct {
-	by     who.Actor
-	tend   func(claimant who.Party, actor who.Actor) error
-	settle func()
-	mail   bool
+	by   who.Actor
+	tend func(claimant who.Party, actor who.Actor) error
+	mail bool
 }
 
 type tenderResumeBlocked struct{ err error }
@@ -92,13 +73,13 @@ func (d *Daemon) resumeSeedTender(protection foregroundCleanupProtection, seed g
 
 func (d *Daemon) resumeFromContinuation(protection foregroundCleanupProtection, seed garden.Seed, continuation *seedContinuation, cause tenderResumeCause) (*seedResumeOutcome, error) {
 	seedID := seed.ID
-	tend, settle := cause.tend, cause.settle
+	tend := cause.tend
 	var executed protocol.SessionID
 	if continuation != nil {
 		executed = continuation.Execution.SessionID
 	}
 	if key, member := d.seedResumeMember(seed, executed); member {
-		return d.resumeMemberSeed(seed, key, cause.by, tend, settle, seed.Tender.IsZero())
+		return d.resumeMemberSeed(seed, key, cause.by, tend, seed.Tender.IsZero())
 	}
 	if continuation == nil {
 		if !seed.Tender.IsZero() {
@@ -124,7 +105,6 @@ func (d *Daemon) resumeFromContinuation(protection foregroundCleanupProtection, 
 		if err := tend(actor, actor.Actor()); err != nil {
 			return nil, err
 		}
-		settle()
 		return &seedResumeOutcome{
 			SessionID: existing.ID, ProfileID: existing.ProfileID, AlreadyRunning: true,
 		}, nil
@@ -154,7 +134,6 @@ func (d *Daemon) resumeFromContinuation(protection foregroundCleanupProtection, 
 	if err := tend(actor, actor.Actor()); err != nil {
 		return nil, err
 	}
-	settle()
 	reopened, err := d.reopenSessionRuntimeWithProtection(protection, sessionReopenPlan{
 		SessionID:       sessionID,
 		Directory:       execution.Cwd,
@@ -185,7 +164,7 @@ func (d *Daemon) seedResumeMember(seed garden.Seed, executed protocol.SessionID)
 }
 
 func (d *Daemon) resumeMemberSeed(
-	seed garden.Seed, key who.MemberKey, by who.Actor, tend func(who.Party, who.Actor) error, settle func(), claim bool,
+	seed garden.Seed, key who.MemberKey, by who.Actor, tend func(who.Party, who.Actor) error, claim bool,
 ) (*seedResumeOutcome, error) {
 	if retired, ok := d.retiredCrewMember(key.String()); ok {
 		return nil, blockedResume(retiredMemberError(retired))
@@ -199,7 +178,6 @@ func (d *Daemon) resumeMemberSeed(
 	if err != nil {
 		return nil, err
 	}
-	settle()
 	profileID := started.ProfileID
 	if profileID == "" {
 		profileID = seed.ProfileID
@@ -209,7 +187,7 @@ func (d *Daemon) resumeMemberSeed(
 
 func (d *Daemon) handleSeedResume(client *wsClient, msg *protocol.SeedResumeMessage) {
 	requestID := protocol.Deref(msg.RequestID)
-	outcome, err := d.resumeSeedFromReview(msg.SeedID, msg.Review, client.caller)
+	outcome, err := d.resumeSeed(msg.SeedID, client.caller)
 	response := protocol.SeedResumeResultMessage{
 		Event:     protocol.EventSeedResumeResult,
 		RequestID: requestID,

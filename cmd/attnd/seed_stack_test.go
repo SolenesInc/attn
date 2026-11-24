@@ -68,7 +68,6 @@ func TestSeedHelpAndFlagsBelongToEachVerb(t *testing.T) {
 	s := testworld.NewStack(t)
 	for _, verb := range []string{
 		"plant", "plot", "ls", "search", "ready", "link", "unlink", "show",
-		"review", "review start", "review show", "review cancel", "review retry", "review keep",
 		"watch", "unwatch", "edit", "rollback", "send-to-chief", "tend", "park", "harvest", "wither", "replant", "note",
 		"check", "check add", "check edit", "check remove", "check restore", "check report",
 		"check confirm", "check reject", "check uncheck", "check reopen",
@@ -106,7 +105,6 @@ func TestSeedHelpAndFlagsBelongToEachVerb(t *testing.T) {
 		{"ls", "s-missing"},
 		{"edit"},
 		{"check", "report"},
-		{"review", "cancel"},
 	} {
 		ran := s.Attn(append([]string{"seed"}, args...)...)
 		if ran.Code != 2 || ran.Stdout != "" || strings.Count(ran.Stderr, "\n") != 2 || !strings.Contains(ran.Stderr, "\nusage: attn seed "+args[0]) {
@@ -120,7 +118,6 @@ func TestSeedHelpAndFlagsBelongToEachVerb(t *testing.T) {
 		{[]string{"search"}, "seed search: needs words, got none\nusage: attn seed search <words>"},
 		{[]string{"ready", "extra"}, `seed ready: takes no arguments, got 1: "extra"` + "\nusage: attn seed ready "},
 		{[]string{"show"}, "seed show: takes 1 argument (seed), got none\nusage: attn seed show <id>"},
-		{[]string{"review", "show", "a", "b"}, `seed review show: takes at most 1 argument ([review]), got 2: "a" "b"`},
 		{[]string{"link", "s-a", "blocks"}, `seed link: takes 3 arguments (a, relation, b), got 2: "s-a" "blocks"` + "\nusage: attn seed link <a> <blocks|part-of|discovered-from> <b>"},
 		{[]string{"rollback"}, "seed rollback: takes 1 or 2 arguments (seed, [version]), got none"},
 	} {
@@ -309,12 +306,8 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		{[]string{"seed", "attach", "s-7k3f9m", "--path", "plan.bin", "--move", "--copy"}, "exactly one of --move or --copy", 1},
 		{[]string{"seed", "attach", "s-7k3f9m", "--path", "docs/plan.md", "--repo", "attn", "--copy"}, "apply only to a local --path without --repo", 1},
 		{[]string{"seed", "detach", "s-7k3f9m", "--path", "report.pdf"}, "requires --to <destination>", 1},
-		{[]string{"seed", "review", "show", "--model", "sonnet"}, `flag provided but not defined: -model`, 2},
 	} {
 		verb := strings.Join(row.args[:2], " ")
-		if row.args[1] == "review" {
-			verb = strings.Join(row.args[:3], " ")
-		}
 		ran := s.Attn(row.args...)
 		refused(t, ran, row.code, verb+": ")
 		requireLines(t, verb, ran.Stderr, row.want)
@@ -590,66 +583,6 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		}
 		if !slices.Equal(owned, []string{"plan.bin"}) {
 			t.Errorf("the seed owns %q, want only the moved plan", owned)
-		}
-	})
-
-	t.Run("review show counts candidates as text or JSON", func(t *testing.T) {
-		requireStdout(t, s.Attn("seed", "review", "show"), "0 seeds need review\n")
-		var review protocol.SeedReviewResult
-		s.Attn("seed", "review", "show", "--json").JSON(t, &review)
-		if review.Review != nil || review.CandidateCount != 0 {
-			t.Errorf("review show --json = %+v", review)
-		}
-		requireFailure(t, s.Attn("seed", "review", "keep", "r-missing", "--json", "s-7k3f9m"), "seed review keep: ", "no Garden review r-missing exists")
-	})
-
-	t.Run("review show lists what each seed offers, and keep takes an id or a slug", func(t *testing.T) {
-		register(t, s, "drifter", "drifter")
-		seed := plant(t, s, "Drifted work")
-		bySlug := plant(t, s, "Kept by slug")
-		seedAs(t, s, "drifter", "tend", seed.ID)
-		seedAs(t, s, "drifter", "tend", bySlug.ID)
-		if err := s.Client().Unregister("drifter"); err != nil {
-			t.Fatal(err)
-		}
-		if advisor := s.Attn("settings", "set", "garden.advisor", `{"agent":"claude"}`); advisor.Code != 0 {
-			t.Fatal(advisor)
-		}
-		var started protocol.SeedReviewResult
-		s.Attn("seed", "review", "start", "--json").JSON(t, &started)
-		if started.Review == nil {
-			t.Fatalf("review start --json = %+v", started)
-		}
-		review := started.Review.Run.ID
-		requireLines(t, "review show", seedAs(t, s, "", "review", "show", review),
-			"\n"+seed.ID+"  Drifted work\n", "\nactions\tsend_to_chief, keep_growing, park, harvest, wither\n")
-
-		kept := func(id string) string {
-			t.Helper()
-			var shown protocol.SeedReviewResult
-			s.Attn("seed", "review", "show", review, "--json").JSON(t, &shown)
-			for _, item := range shown.Review.Items {
-				if item.SeedID == id {
-					return protocol.Deref(item.ResolvedAction)
-				}
-			}
-			t.Fatalf("review %s has no item for %s", review, id)
-			return ""
-		}
-		seedAs(t, s, "", "review", "keep", review, bySlug.StepSlug)
-		if action := kept(bySlug.ID); action != "keep_growing" {
-			t.Errorf("keep by slug %s resolved its item as %q", bySlug.StepSlug, action)
-		}
-
-		twin := plant(t, s, "Drifted work")
-		requireFailure(t, s.Attn("seed", "review", "keep", review, seed.StepSlug), "seed review keep: ",
-			"the slug "+seed.StepSlug+" names 2 seeds", seed.ID, twin.ID)
-		if action := kept(seed.ID); action != "" {
-			t.Errorf("an ambiguous slug resolved the item as %q", action)
-		}
-		seedAs(t, s, "", "review", "keep", review, seed.ID)
-		if action := kept(seed.ID); action != "keep_growing" {
-			t.Errorf("keep by id %s resolved its item as %q", seed.ID, action)
 		}
 	})
 

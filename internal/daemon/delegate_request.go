@@ -34,7 +34,6 @@ type resolvedDelegationLaunch struct {
 	Role                 *string
 	Choice               *string
 	Fallback             *bool
-	Review               *protocol.SeedReviewActionContext
 	Desktop              *string
 	Authorization        string
 
@@ -57,7 +56,7 @@ func resolveLaunchInput(msg *protocol.DelegateMessage) resolvedDelegationLaunch 
 		Agent: msg.Agent, Label: msg.Label, YoloMode: msg.YoloMode, Priority: msg.Priority,
 		Model: msg.Model, Effort: msg.Effort, AllowWorktreeReuse: msg.AllowWorktreeReuse,
 		Role: msg.Role, Choice: msg.Choice, Fallback: msg.Fallback,
-		Review: msg.Review, Desktop: msg.Desktop, Authorization: strings.TrimSpace(protocol.Deref(msg.Authorization)),
+		Desktop: msg.Desktop, Authorization: strings.TrimSpace(protocol.Deref(msg.Authorization)),
 	}
 }
 
@@ -78,9 +77,6 @@ func validateDelegateRequestShape(msg *protocol.DelegateMessage) error {
 		}
 	default:
 		return fmt.Errorf("unsupported assignment kind %q", msg.Assignment.Kind)
-	}
-	if msg.Review != nil && msg.Assignment.Handover == nil {
-		return fmt.Errorf("review evidence is valid only for a seed handover")
 	}
 	if strings.TrimSpace(msg.Cwd) == "" {
 		return fmt.Errorf("cwd is required")
@@ -182,7 +178,7 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 				}
 			}
 			runtime.Handover = &protocol.SeedHandoverRequest{
-				SeedID: seedID, ExpectedRev: int(doc.Rev), Review: msg.Review,
+				SeedID: seedID, ExpectedRev: int(doc.Rev),
 			}
 			if note := strings.TrimSpace(protocol.Deref(msg.Assignment.Handover.Note)); note != "" {
 				runtime.Handover.Handoff = protocol.Ptr(note)

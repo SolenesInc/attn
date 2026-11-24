@@ -72,8 +72,7 @@ func Facts() harness.Facts {
 		ReservesServer: func(kind string) bool {
 			return kind == codexLinkKind || strings.HasPrefix(kind, codexServerTerminalPrefix)
 		},
-		Tiers:   map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "gpt-6-luna", Effort: "low"}, modeltiers.Standard: {Model: "gpt-5.6-terra"}, modeltiers.Deep: {Model: "gpt-6.1-sol"}},
-		Advisor: harness.ModelChoice{Model: "gpt-5.6-luna", Effort: "xhigh"},
+		Tiers: map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "gpt-6-luna", Effort: "low"}, modeltiers.Standard: {Model: "gpt-5.6-terra"}, modeltiers.Deep: {Model: "gpt-6.1-sol"}},
 		Signals: harness.Signals{
 			TurnStarts:            harness.TurnStartsReported,
 			Heartbeat:             500 * time.Millisecond,

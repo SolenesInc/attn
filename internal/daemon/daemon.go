@@ -304,7 +304,6 @@ type Daemon struct {
 	gardenWatchMu          sync.Mutex
 	// gardenBellsResolvedThrough is the last bus seq whose seed bells were resolved; gardenWatchMu guards it.
 	gardenBellsResolvedThrough int64
-	gardenReviewMu             sync.Mutex
 	dispatchSeedsMu            sync.Mutex
 	dispatchSeeds              map[protocol.SessionID]string
 	dispatchersBySession       map[protocol.SessionID]who.Actor
@@ -3131,18 +3130,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleSeedNote(conn, msg.(*protocol.SeedNoteMessage), by.Actor())
 	case protocol.CmdSeedCheck:
 		d.handleSeedCheck(ctx, conn, msg.(*protocol.SeedCheckMessage), by.Actor())
-	case protocol.CmdSeedReviewStart:
-		d.handleSeedReviewStart(conn, msg.(*protocol.SeedReviewStartMessage))
 	case protocol.CmdSeedSendToChief:
 		d.handleSeedSendToChief(conn, msg.(*protocol.SeedSendToChiefMessage), by.Actor())
-	case protocol.CmdSeedReviewShow:
-		d.handleSeedReviewShow(conn, msg.(*protocol.SeedReviewShowMessage))
-	case protocol.CmdSeedReviewCancel:
-		d.handleSeedReviewCancel(conn, msg.(*protocol.SeedReviewCancelMessage))
-	case protocol.CmdSeedReviewRetry:
-		d.handleSeedReviewRetry(conn, msg.(*protocol.SeedReviewRetryMessage))
-	case protocol.CmdSeedReviewKeep:
-		d.handleSeedReviewKeep(conn, msg.(*protocol.SeedReviewKeepMessage))
 	case protocol.CmdCrewCharterGet:
 		d.handleCrewCharterGet(conn, msg.(*protocol.CrewCharterGetMessage))
 	case protocol.CmdCrewCharterSet:

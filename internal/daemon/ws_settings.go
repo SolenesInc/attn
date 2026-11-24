@@ -280,11 +280,6 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 			settings[setting.ActivityIntervals.Key] = string(encoded)
 		}
 	}
-	if advisor, err := d.parseGardenAdvisorConfig(stored[setting.GardenAdvisor.Key]); err == nil {
-		if encoded, err := json.Marshal(advisor); err == nil {
-			settings[setting.GardenAdvisor.Key] = string(encoded)
-		}
-	}
 	settings[setting.CrewHeartbeatEnabled.Key] = strconv.FormatBool(d.crewBoolSetting(setting.CrewHeartbeatEnabled))
 	settings[setting.CrewAwayCloseEnabled.Key] = strconv.FormatBool(d.crewBoolSetting(setting.CrewAwayCloseEnabled))
 	settings[setting.CrewCacheTTLSeconds.Key] = strconv.Itoa(int(d.crewCacheTTL("") / time.Second))

@@ -37,11 +37,15 @@ func everyTaskSettled(p *testworld.Peer) bool {
 	return true
 }
 
+func trySetSetting(app *testworld.Peer, key, value string) protocol.SettingsUpdatedMessage {
+	requestID := uuid.NewString()
+	return testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: key, Value: value, RequestID: protocol.Ptr(requestID)},
+		protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == requestID })
+}
+
 func setSetting(t *testing.T, app *testworld.Peer, key, value string) {
 	t.Helper()
-	requestID := uuid.NewString()
-	result := testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: key, Value: value, RequestID: protocol.Ptr(requestID)},
-		protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == requestID })
+	result := trySetSetting(app, key, value)
 	if !protocol.Deref(result.Success) {
 		t.Fatalf("set %s = %s: %s", key, value, protocol.Deref(result.Error))
 	}

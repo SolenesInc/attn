@@ -79,7 +79,7 @@ Preconditions:
 - The profile pill is always in the title bar, and the profile list opens under it at the right end.
 - A second profile changes every shell recipe: outside a session, `attn seed` and the other profile-scoped verbs refuse without `--profile` once two profiles exist. Delete the profiles a run creates, or later recipes fail for a reason that is not theirs.
 - The switcher orders profiles by most recent use and starts on the current one, so the arrow presses to reach a profile depend on what was used last.
-- Delete refuses while the profile holds live agents, crew members, automations, tiles, open seeds, pending delegations or running garden reviews. Harvest or wither the profile's seeds first. A new profile's empty desktop does not count.
+- Delete refuses while the profile holds live agents, crew members, automations, tiles, open seeds or pending delegations. Harvest or wither the profile's seeds first. A new profile's empty desktop does not count.
 - `wsctl add-session` without `--profile` lands in the daemon's selected profile, not necessarily the one the window shows.
 - Placing the old workspaces needs a database from before profiles, which a hand-made home lacks. The daemon wire tests build one at schema 153; the live step above covers only the launch half.
 - Working but wrong: switching profile never changes the flow. A ledger request that names no profile may list every profile's sessions (glossary, Changes to make).

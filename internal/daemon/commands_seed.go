@@ -80,11 +80,6 @@ func (d *Daemon) seedCommands() map[string]command.Handler {
 			}
 			return d.runSeedArtifact(ctx, c, "detach", artifactArgs{a.Seed, a.Path, a.Repo, a.Notebook, a.URL, "", to, a.Reference, a.Note})
 		}),
-		"seed review start":  command.Typed(d.runSeedReviewStart),
-		"seed review show":   command.Typed(d.runSeedReviewShow),
-		"seed review cancel": command.Typed(d.runSeedReviewCancel),
-		"seed review retry":  command.Typed(d.runSeedReviewRetry),
-		"seed review keep":   command.Typed(d.runSeedReviewKeep),
 	}
 	for _, verb := range []string{"add", "edit", "remove", "restore", "report", "confirm", "reject", "uncheck", "reopen"} {
 		handlers["seed check "+verb] = d.checkCommand(verb)
@@ -784,94 +779,4 @@ func (d *Daemon) transferArtifact(ctx context.Context, c command.Caller, verb st
 		return nil, gardenFailure("artifact", err)
 	}
 	return result, nil
-}
-
-func (d *Daemon) reviewResult(verb string, run *garden.ReviewRun, items []garden.ReviewItem, candidates int, err error) (*protocol.SeedReviewResult, error) {
-	if err != nil {
-		return nil, gardenFailure("review "+verb, err)
-	}
-	result := &protocol.SeedReviewResult{CandidateCount: candidates}
-	if run != nil {
-		review := gardenReviewToProtocol(*run, items)
-		result.Review = &review
-	}
-	return result, nil
-}
-
-func (d *Daemon) runSeedReviewStart(_ context.Context, c command.Caller, _ command.SeedReviewStartArgs) (any, error) {
-	msg := protocol.SeedReviewStartMessage{Cmd: protocol.CmdSeedReviewStart}
-	msg.SourceSessionID, msg.ProfileID = gardenScope(c)
-	if err := d.scoped(&msg, msg.Cmd); err != nil {
-		return nil, err
-	}
-	run, items, err := d.startGardenReview(context.Background(), protocol.Deref(msg.ProfileID))
-	return d.reviewResult("start", &run, items, unresolvedGardenReviewItemCount(items), err)
-}
-
-func (d *Daemon) showReview(c command.Caller, reviewID string) (*protocol.SeedReviewResult, error) {
-	msg := protocol.SeedReviewShowMessage{Cmd: protocol.CmdSeedReviewShow, ReviewID: optionalText(reviewID)}
-	msg.SourceSessionID, msg.ProfileID = gardenScope(c)
-	if err := d.scoped(&msg, msg.Cmd); err != nil {
-		return nil, err
-	}
-	if reviewID == "" {
-		run, items, count, err := d.gardenReviewOverview(protocol.Deref(msg.ProfileID))
-		return d.reviewResult("show", run, items, count, err)
-	}
-	run, items, err := d.showGardenReview(reviewID, protocol.Deref(msg.ProfileID))
-	return d.reviewResult("show", &run, items, unresolvedGardenReviewItemCount(items), err)
-}
-
-func (d *Daemon) runSeedReviewShow(_ context.Context, c command.Caller, args command.SeedReviewShowArgs) (any, error) {
-	return d.showReview(c, args.Review)
-}
-
-func (d *Daemon) runSeedReviewCancel(_ context.Context, c command.Caller, args command.SeedReviewCancelArgs) (any, error) {
-	msg := protocol.SeedReviewCancelMessage{Cmd: protocol.CmdSeedReviewCancel, ReviewID: args.Review}
-	msg.SourceSessionID, msg.ProfileID = gardenScope(c)
-	if err := d.scoped(&msg, msg.Cmd); err != nil {
-		return nil, err
-	}
-	run, items, err := d.cancelGardenReview(msg.ReviewID)
-	return d.reviewResult("cancel", &run, items, unresolvedGardenReviewItemCount(items), err)
-}
-
-func (d *Daemon) runSeedReviewRetry(_ context.Context, c command.Caller, args command.SeedReviewRetryArgs) (any, error) {
-	msg := protocol.SeedReviewRetryMessage{Cmd: protocol.CmdSeedReviewRetry, ReviewID: args.Review, SeedID: args.Seed}
-	msg.SourceSessionID, msg.ProfileID = gardenScope(c)
-	if err := d.scoped(&msg, msg.Cmd); err != nil {
-		return nil, err
-	}
-	run, _, err := d.retryGardenReviewItem(msg.ReviewID, msg.SeedID)
-	var items []garden.ReviewItem
-	if err == nil {
-		run, items, err = d.showGardenReview(run.ID)
-	}
-	return d.reviewResult("retry", &run, items, unresolvedGardenReviewItemCount(items), err)
-}
-
-func (d *Daemon) runSeedReviewKeep(_ context.Context, c command.Caller, args command.SeedReviewKeepArgs) (any, error) {
-	shown, err := d.showReview(c, args.Review)
-	if err != nil {
-		return nil, err
-	}
-	msg := protocol.SeedReviewKeepMessage{Cmd: protocol.CmdSeedReviewKeep, SeedID: args.Seed, Review: protocol.SeedReviewActionContext{ReviewID: args.Review}}
-	msg.SourceSessionID, msg.ProfileID = gardenScope(c)
-	if err := d.scoped(&msg, msg.Cmd); err != nil {
-		return nil, err
-	}
-	var receipt *protocol.GardenReviewItem
-	if shown.Review != nil {
-		for i := range shown.Review.Items {
-			if shown.Review.Items[i].SeedID == msg.SeedID {
-				receipt = &shown.Review.Items[i]
-			}
-		}
-	}
-	if receipt == nil {
-		return nil, command.Refuse(command.CodeNotInReview, "seed %s is not part of Garden review %s", args.Seed, args.Review)
-	}
-	msg.Review.EvidenceVersion = receipt.EvidenceVersion
-	run, items, err := d.keepGardenReviewItem(msg.Review, msg.SeedID)
-	return d.reviewResult("keep", &run, items, unresolvedGardenReviewItemCount(items), err)
 }

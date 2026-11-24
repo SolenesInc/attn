@@ -497,11 +497,19 @@ func (d *Daemon) branchCanBeRecreated(execution garden.Execution) (string, bool,
 }
 
 func (d *Daemon) continuationForSeed(seed garden.Seed) *seedContinuation {
-	return d.continuationForSeedForeground(seed)
-}
-
-func (d *Daemon) continuationForSeedForeground(seed garden.Seed) *seedContinuation {
-	return d.continuationForSeedWithResumeCheck(seed, d.conversationResumable)
+	execution, _, _ := d.normalizedSeedContinuation(seed)
+	place := executionPlace(execution)
+	switch {
+	case place.IsRemote():
+		return d.continuationWithChecks(seed, d.uncheckedOutpost(place.Outpost()))
+	case place.IsLocal():
+		return d.continuationWithChecks(seed, continuationMachine{
+			inspectDirectory: func(execution garden.Execution) (string, error) { return inspectContinuationDirectory(execution), nil },
+			checkResume:      d.conversationResumable,
+		})
+	default:
+		return d.continuationWithChecks(seed, unknownContinuationMachine())
+	}
 }
 
 func (d *Daemon) continuationOnItsMachine(seed garden.Seed) *seedContinuation {
@@ -512,7 +520,7 @@ func (d *Daemon) continuationOnItsMachine(seed garden.Seed) *seedContinuation {
 	}
 	host := place.Outpost()
 	if host == "" {
-		return d.continuationForSeedForeground(seed)
+		return d.continuationForSeed(seed)
 	}
 	inspect := func(execution garden.Execution) (string, error) {
 		if strings.TrimSpace(execution.Cwd) == "" {
@@ -555,30 +563,6 @@ func (d *Daemon) continuationOnItsMachine(seed garden.Seed) *seedContinuation {
 	})
 }
 
-func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResume func(harness.ConversationRef) harness.Availability) *seedContinuation {
-	execution, _, _ := d.normalizedSeedContinuation(seed)
-	place := executionPlace(execution)
-	switch {
-	case place.IsRemote():
-		return d.continuationWithChecks(seed, d.uncheckedOutpost(place.Outpost()))
-	case place.IsLocal():
-		return d.continuationWithChecks(seed, continuationMachine{
-			inspectDirectory: func(execution garden.Execution) (string, error) { return inspectContinuationDirectory(execution), nil },
-			checkResume:      checkResume,
-		})
-	default:
-		return d.continuationWithChecks(seed, unknownContinuationMachine())
-	}
-}
-
-func (d *Daemon) continuationIgnoringReach(seed garden.Seed, checkResume func(harness.ConversationRef) harness.Availability) *seedContinuation {
-	execution, _, _ := d.normalizedSeedContinuation(seed)
-	if host := executionPlace(execution).Outpost(); host != "" {
-		return d.continuationWithChecks(seed, d.outpostAssumedReachable(host))
-	}
-	return d.continuationForSeedWithResumeCheck(seed, checkResume)
-}
-
 func unknownContinuationMachine() continuationMachine {
 	return continuationMachine{
 		inspectDirectory: func(garden.Execution) (string, error) { return directoryUnknown, nil },
@@ -587,20 +571,7 @@ func unknownContinuationMachine() continuationMachine {
 }
 
 func (d *Daemon) uncheckedOutpost(host string) continuationMachine {
-	machine := d.outpostAssumedReachable(host)
-	if _, _, err := d.outpostConn(host); err != nil {
-		machine.inspectDirectory = func(execution garden.Execution) (string, error) {
-			if strings.TrimSpace(execution.Cwd) == "" {
-				return directoryUnknown, nil
-			}
-			return directoryUnreachable, nil
-		}
-	}
-	return machine
-}
-
-func (d *Daemon) outpostAssumedReachable(host string) continuationMachine {
-	return continuationMachine{
+	machine := continuationMachine{
 		outpost:     d.outpostName(host),
 		unreachable: d.outpostUnreachableReason(host),
 		inspectDirectory: func(execution garden.Execution) (string, error) {
@@ -613,6 +584,15 @@ func (d *Daemon) outpostAssumedReachable(host string) continuationMachine {
 			return harness.Availability{Resumable: true}
 		},
 	}
+	if _, _, err := d.outpostConn(host); err != nil {
+		machine.inspectDirectory = func(execution garden.Execution) (string, error) {
+			if strings.TrimSpace(execution.Cwd) == "" {
+				return directoryUnknown, nil
+			}
+			return directoryUnreachable, nil
+		}
+	}
+	return machine
 }
 
 func (d *Daemon) outpostUnreachableReason(host string) string {

@@ -53,7 +53,7 @@ func TestSettingsSnapshotsLeaveInstalledSkillsAlone(t *testing.T) {
 		unchanged(t)
 	})
 	t.Run("refused setting", func(t *testing.T) {
-		if refused := gardenAdvisorSetSetting(app, "theme", "invalid"); protocol.Deref(refused.Success) {
+		if refused := trySetSetting(app, "theme", "invalid"); protocol.Deref(refused.Success) {
 			t.Fatal("invalid theme accepted")
 		}
 		unchanged(t)

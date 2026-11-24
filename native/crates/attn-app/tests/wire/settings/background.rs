@@ -8,7 +8,6 @@ use super::harness_catalogs::{
 use super::{accepting, click, field, keeping, open, press, rest, retype, state, value, writes};
 
 const ACTIVITY: &str = "settings.route.activity";
-const ADVISOR: &str = "settings.route.garden-advisor";
 
 fn on_background(settings: &[(&str, &str)]) -> World {
     to_background(World::start(serving(settings)))
@@ -210,14 +209,6 @@ fn claude_activity_recommends_light_over_a_deep_pick_and_default_effort_labels_f
     if picker_open(&world) {
         press(&mut world, rune::Key::Escape);
     }
-    open_route(&mut world, "Garden advisor model");
-    preview_harness(&mut world, "Claude");
-    assert_eq!(effort_first(&world).as_deref(), Some("default (medium)"));
-    preview_harness(&mut world, "Codex");
-    assert_eq!(effort_first(&world).as_deref(), Some("default (xhigh)"));
-    preview_harness(&mut world, "Sigma");
-    assert_eq!(effort_first(&world).as_deref(), Some("default"));
-    press(&mut world, rune::Key::Escape);
     rest(&mut world);
 }
 
@@ -247,105 +238,44 @@ fn a_stored_activity_model_missing_from_discovery_stays_and_an_exact_id_saves() 
 }
 
 #[test]
-fn an_unset_advisor_asks_for_an_agent_and_writes_nothing() {
-    let mut world = on_background(&[]);
-    let shown = route_value(&world, ADVISOR);
-    assert!(
-        !shown.contains("Codex") && !shown.contains("Claude"),
-        "{shown}"
-    );
-    assert!(
-        world
-            .screen()
-            .find(Target::key("settings.garden-advisor.unset"))
-            .is_some()
-    );
-    assert!(writes(&world).is_empty());
-    rest(&mut world);
-}
-
-#[test]
-fn the_advisor_browses_claude_without_saving_then_saves_its_light_default() {
-    let mut world = on_background(&[]);
-    open_route(&mut world, "Garden advisor model");
-    preview_harness(&mut world, "Claude");
-    assert!(writes(&world).is_empty());
-    pick_model(&mut world, "Light default → Haiku 5.5");
-    pick_effort(&mut world, "default (medium)");
-    assert_eq!(
-        writes(&world).last().unwrap(),
-        &(
-            "garden.advisor".to_owned(),
-            r#"{"agent":"claude","model":""}"#.to_owned()
-        )
-    );
-    rest(&mut world);
-}
-
-#[test]
-fn the_advisor_keeps_its_model_unpinned_when_only_effort_changes() {
+fn activity_keeps_model_unpinned_on_effort_change_and_clears_pins_to_defaults() {
     for agent in ["codex", "claude"] {
-        let stored = format!(r#"{{"agent":"{agent}","model":"","effort":""}}"#);
-        let mut world = on_background(&[("garden.advisor", &stored)]);
+        let stored = format!(r#"{{"agent":"{agent}"}}"#);
+        let mut world = on_background(&[("activity.config", &stored)]);
         assert!(writes(&world).is_empty());
-        open_route(&mut world, "Garden advisor model");
+        open_route(&mut world, "Session activity model");
         pick_effort(&mut world, "high");
         assert_eq!(
             writes(&world).last().unwrap(),
             &(
-                "garden.advisor".to_owned(),
-                format!(r#"{{"agent":"{agent}","model":"","effort":"high"}}"#)
+                "activity.config".to_owned(),
+                format!(r#"{{"agent":"{agent}","effort":"high"}}"#)
             )
         );
         rest(&mut world);
     }
-}
 
-#[test]
-fn the_advisor_clears_its_pins_back_to_the_discovered_defaults() {
     let mut world = on_background(&[(
-        "garden.advisor",
+        "activity.config",
         r#"{"agent":"codex","model":"gpt-6-luna","effort":"high"}"#,
     )]);
-    open_route(&mut world, "Garden advisor model");
+    open_route(&mut world, "Session activity model");
     pick_model(&mut world, "Light default → gpt-6-luna");
     assert_eq!(
         writes(&world).last().unwrap().1,
-        r#"{"agent":"codex","model":"","effort":"high"}"#
+        r#"{"agent":"codex","effort":"high"}"#
     );
     pick_effort(&mut world, "default");
-    assert_eq!(
-        writes(&world).last().unwrap().1,
-        r#"{"agent":"codex","model":""}"#
-    );
+    assert_eq!(writes(&world).last().unwrap().1, r#"{"agent":"codex"}"#);
     rest(&mut world);
 }
 
 #[test]
-fn the_advisor_saves_an_explicit_model_and_effort_and_shows_the_model_s_tier() {
-    let mut world = on_background(&[]);
-    open_route(&mut world, "Garden advisor model");
-    preview_harness(&mut world, "Codex");
-    pick_model(&mut world, "gpt-6-luna");
-    pick_effort(&mut world, "max");
-    let shown = route_value(&world, ADVISOR);
-    assert!(shown.contains("light") && shown.contains("max"), "{shown}");
-    assert_eq!(
-        writes(&world).last().unwrap(),
-        &(
-            "garden.advisor".to_owned(),
-            r#"{"agent":"codex","model":"gpt-6-luna","effort":"max"}"#.to_owned()
-        )
-    );
-    rest(&mut world);
-}
-
-#[test]
-fn an_unavailable_saved_advisor_stays_shown_and_cannot_be_picked() {
+fn an_unavailable_saved_activity_harness_stays_shown_and_cannot_be_picked() {
     let mut listed = harnesses();
     listed[1].installation = "missing".into();
     let (daemon, stored) = accepting(&[(
-        "garden.advisor",
+        "activity.config",
         r#"{"agent":"codex","model":"saved-model"}"#,
     )]);
     serve(&daemon, &stored, listed);
@@ -353,20 +283,22 @@ fn an_unavailable_saved_advisor_stays_shown_and_cannot_be_picked() {
     open(&mut world);
     click(&mut world, "settings.nav.backgroundAgents");
     world.settle();
-    open_route(&mut world, "Garden advisor model");
+    open_route(&mut world, "Session activity model");
     let codex = options(&world, "harnesses")
         .into_iter()
         .find(|(name, _, _)| name.starts_with("Codex"))
         .unwrap();
     assert!(!codex.2, "Codex is disabled");
-    press(&mut world, rune::Key::Escape);
-    assert!(route_value(&world, ADVISOR).contains("saved-model"));
     assert!(
         world
             .screen()
-            .find(Target::key("settings.garden-advisor.unavailable"))
+            .find(Target::key(
+                "settings.route-picker.harness.codex.unavailable"
+            ))
             .is_some()
     );
+    press(&mut world, rune::Key::Escape);
+    assert!(route_value(&world, ACTIVITY).contains("saved-model"));
     assert!(writes(&world).is_empty());
     rest(&mut world);
 }
@@ -392,7 +324,6 @@ fn the_headless_context_cap_shows_its_default_and_saves_only_a_change() {
 #[test]
 fn background_agents_have_their_own_page_with_no_save_and_no_reviewer_model() {
     let mut world = on_background(&[("reviewer_model", "claude-opus-4-6")]);
-    assert!(world.screen().find(Target::key(ADVISOR)).is_some());
     assert!(world.screen().find(Target::key(ACTIVITY)).is_some());
     assert!(
         world
@@ -414,16 +345,16 @@ fn background_agents_have_their_own_page_with_no_save_and_no_reviewer_model() {
 }
 
 #[test]
-fn a_refused_advisor_pick_shows_why_and_keeps_settings_open_on_it() {
+fn a_refused_activity_pick_shows_why_and_keeps_settings_open_on_it() {
     let (daemon, stored) = keeping(&[], |key, _| {
-        (key == "garden.advisor").then(|| "garden.advisor is not writable".to_owned())
+        (key == "activity.config").then(|| "activity.config is not writable".to_owned())
     });
     serve(&daemon, &stored, harnesses());
     let mut world = World::start(daemon);
     open(&mut world);
     click(&mut world, "settings.nav.backgroundAgents");
     world.settle();
-    open_route(&mut world, "Garden advisor model");
+    open_route(&mut world, "Session activity model");
     preview_harness(&mut world, "Claude");
     pick_model(&mut world, "Light default → Haiku 5.5");
     if picker_open(&world) {
@@ -431,17 +362,17 @@ fn a_refused_advisor_pick_shows_why_and_keeps_settings_open_on_it() {
     }
     let refusal = world
         .screen()
-        .find(Target::key("settings.refusal.garden.advisor"))
+        .find(Target::key("settings.refusal.activity.config"))
         .expect("the refusal shows");
     assert_eq!(
         refusal.name.as_deref(),
-        Some("garden.advisor is not writable")
+        Some("activity.config is not writable")
     );
     press(&mut world, rune::Key::Escape);
     assert_eq!(state(&mut world)["open"], true);
     assert_eq!(
         world.screen().focused().and_then(|n| n.key).as_deref(),
-        Some("settings.retry.garden.advisor"),
+        Some("settings.retry.activity.config"),
         "a refused close leaves the keyboard on the refusal's Retry"
     );
     rest(&mut world);
@@ -549,26 +480,25 @@ fn a_sigma_activity_model_saves_and_reads_back_as_its_catalog_id() {
 
 #[test]
 fn the_background_routes_disable_a_sigma_model_that_cannot_answer_a_one_shot_call() {
-    for label in ["Session activity model", "Garden advisor model"] {
-        let mut world = on_sigma_background(&[]);
-        open_route(&mut world, label);
-        preview_harness(&mut world, "Sigma");
-        let enabled = |name: &str| {
-            options(&world, "models")
-                .into_iter()
-                .find(|(shown, _, _)| shown.starts_with(name))
-                .unwrap_or_else(|| panic!("{label} lists {name}"))
-                .2
-        };
-        assert!(!enabled("Gemini 4 Neon"), "{label} disables agy's model");
-        assert!(enabled("Work Luna"), "{label} offers openai-work's model");
-        assert!(
-            options(&world, "models")
-                .iter()
-                .any(|(name, _, _)| name.starts_with("Light default → Luna")),
-            "{label} defaults to the first light model that answers: {:?}",
-            options(&world, "models")
-        );
-        rest(&mut world);
-    }
+    let label = "Session activity model";
+    let mut world = on_sigma_background(&[]);
+    open_route(&mut world, label);
+    preview_harness(&mut world, "Sigma");
+    let enabled = |name: &str| {
+        options(&world, "models")
+            .into_iter()
+            .find(|(shown, _, _)| shown.starts_with(name))
+            .unwrap_or_else(|| panic!("{label} lists {name}"))
+            .2
+    };
+    assert!(!enabled("Gemini 4 Neon"), "{label} disables agy's model");
+    assert!(enabled("Work Luna"), "{label} offers openai-work's model");
+    assert!(
+        options(&world, "models")
+            .iter()
+            .any(|(name, _, _)| name.starts_with("Light default → Luna")),
+        "{label} defaults to the first light model that answers: {:?}",
+        options(&world, "models")
+    );
+    rest(&mut world);
 }

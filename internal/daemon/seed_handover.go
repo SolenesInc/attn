@@ -53,15 +53,6 @@ func (d *Daemon) prepareSeedHandover(
 			return nil, err
 		}
 	}
-	if request.Review != nil {
-		item, reviewErr := d.validateGardenReviewAction(request.Review, seedID, "handover")
-		if reviewErr != nil {
-			return nil, reviewErr
-		}
-		if item.SeedRev != doc.Rev {
-			return nil, protocol.Refuse(protocol.RefusalConflict, "%s changed since you reviewed it; refresh the garden", seedID)
-		}
-	}
 	if garden.Closed(seed.Status) {
 		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s is %s; replant it before handing it over", seed.ID, seed.Status)
 	}
@@ -96,13 +87,7 @@ func (d *Daemon) bindSeedHandoverProtected(
 		return nil, errors.New("missing Handover request")
 	}
 	if d.handoverAlreadyBound(operationID, sessionID, request.SeedID) {
-		if err := d.resolveGardenReviewAction(request.Review, request.SeedID, "handover"); err != nil {
-			d.logf("Garden review: settle %s after recovered Handover: %v", request.SeedID, err)
-		}
 		return nil, nil
-	}
-	if _, err := d.validateGardenReviewAction(request.Review, request.SeedID, "handover"); err != nil {
-		return nil, err
 	}
 	seed, doc, err := d.readSeed(request.SeedID)
 	if err != nil {
@@ -193,9 +178,6 @@ func (d *Daemon) bindSeedHandoverProtected(
 	d.rememberDispatchProjection(sessionID, dispatches.newDispatch, written[1].Rev)
 	if dispatches.oldExecutionID != "" {
 		d.rememberDispatchProjection(dispatches.oldExecutionID, dispatches.oldDispatch, written[2].Rev)
-	}
-	if err := d.resolveGardenReviewAction(request.Review, seed.ID, "handover"); err != nil {
-		d.logf("Garden review: settle %s after Handover: %v", seed.ID, err)
 	}
 
 	if handoff == nil {

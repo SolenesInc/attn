@@ -216,5 +216,5 @@ Zoom stays on for its desktop while you switch desktops, and it applies to which
 <details>
 <summary>Why can't I delete a profile?</summary>
 
-Attn deletes only an empty profile, and never your last one. Empty means the profile holds no running agents or shells, no Chief in session, no crew members other than the Chief and retired members, no automations, no browser, markdown, seed or editor tiles, no open seeds (planted, growing or parked), no pending delegations and no running garden reviews. [The Chief](chief.md) says how to close the Chief. When something is left, Attn refuses and counts each kind, so you can clean up or ask an agent to do it.
+Attn deletes only an empty profile, and never your last one. Empty means the profile holds no running agents or shells, no Chief in session, no crew members other than the Chief and retired members, no automations, no browser, markdown, seed or editor tiles, no open seeds (planted, growing or parked) and no pending delegations. [The Chief](chief.md) says how to close the Chief. When something is left, Attn refuses and counts each kind, so you can clean up or ask an agent to do it.
 </details>

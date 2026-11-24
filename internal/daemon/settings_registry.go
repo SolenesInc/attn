@@ -82,9 +82,6 @@ var settingValidators = map[*setting.Setting]func(*Daemon, string, string) error
 	setting.ActivityConfig: func(d *Daemon, key, value string) error {
 		return d.validateActivitySetting(value)
 	},
-	setting.GardenAdvisor: func(d *Daemon, key, value string) error {
-		return d.validateGardenAdvisorSetting(value)
-	},
 	setting.ModelCallsAgent: func(d *Daemon, key, value string) error {
 		return d.validateModelCallsAgent(value)
 	},

@@ -64,7 +64,6 @@ const (
 	CodeNotAPRURL                   = "not_a_pr_url"
 	CodeNotATable                   = "not_a_table"
 	CodeNotExported                 = "not_exported"
-	CodeNotInReview                 = "not_in_review"
 	CodeNotOnScreen                 = "not_on_screen"
 	CodeNotStamped                  = "not_stamped"
 	CodeNothingToSet                = "nothing_to_set"
@@ -231,11 +230,6 @@ var specs = sync.OnceValue(func() map[string]spec {
 		"seed authorization":      {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"empty_words": "Pass the words, or {clear} to remove the authorization.", "words_and_clear": "Pass the words or {clear}, not both."}},
 		"seed attach":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_document": "Name one document with {path}, {notebook} or {url}.", "two_documents": "Name one document per call.", "transfer_with_note": "Leave out {note}; a managed transfer records its own receipt.", "transfer_needs_local_path": "Pass a local {path} without {repo}, or leave out {mode}.", "transfer_needs_mode": "Pass {mode}: move is recommended, copy keeps the source."}},
 		"seed detach":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"reference_needs_path": "Pass the linked {path} without {repo}.", "no_document": "Name one document with {path}, {notebook} or {url}.", "two_documents": "Name one document per call.", "transfer_with_note": "Leave out {note}; a managed transfer records its own receipt.", "transfer_needs_managed_path": "Pass the managed filename in {path} without {repo}, or leave out {to}.", "detach_needs_to": "Pass {to} with the destination, or {reference} to remove an old linked path."}},
-		"seed review start":       {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
-		"seed review show":        {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
-		"seed review cancel":      {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
-		"seed review retry":       {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
-		"seed review keep":        {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_in_review": "Pass a seed the review lists; seed review show lists them."}},
 		"session instructions":    {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"session_not_found": "Pass the id of a session in the ledger.", "transcript_unavailable": "Ask again once the session has written its conversation.", "conversation_too_large": "Read the conversation with session_transcript instead.", "model_unavailable": "Choose a model for session instructions in Settings, or read the conversation with session_transcript.", "invalid_response": "Ask again, or read the conversation with session_transcript.", "invalid_evidence": "Ask again, or read the conversation with session_transcript."}},
 		"session transcript":      {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"session_not_found": "Pass the id of a session in the ledger.", "transcript_unavailable": "Read again once the session has written its conversation.", "invalid_cursor": "Pass a cursor an earlier read ended on, or leave out {after}.", "cursor_mismatch": "Pass a cursor from a read of this session, or leave out {after}.", "cursor_past_end": "Pass the cursor the last read ended on."}},
 		"session list":            {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"unknown_session": "Pass to {before} the id a previous page's notice named."}},
@@ -1000,27 +994,6 @@ type SeedDetachArgs struct {
 	Reference bool   `json:"reference,omitempty"`
 	Repo      string `json:"repo,omitempty"`
 	Note      string `json:"note,omitempty"`
-}
-
-type SeedReviewStartArgs struct {
-}
-
-type SeedReviewShowArgs struct {
-	Review string `json:"review,omitempty"`
-}
-
-type SeedReviewCancelArgs struct {
-	Review string `json:"review,omitempty"`
-}
-
-type SeedReviewRetryArgs struct {
-	Review string `json:"review,omitempty"`
-	Seed   string `json:"seed,omitempty"`
-}
-
-type SeedReviewKeepArgs struct {
-	Review string `json:"review,omitempty"`
-	Seed   string `json:"seed,omitempty"`
 }
 
 type SessionInstructionsArgs struct {

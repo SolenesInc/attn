@@ -290,27 +290,6 @@ func (d *Daemon) renderSessionTitleFailure(t *jobs.Job) store.NotificationRecord
 	return record
 }
 
-func (d *Daemon) renderGardenReviewFailure(t *jobs.Job) store.NotificationRecord {
-	name := "a Garden review item"
-	profileID := ""
-	var payload gardenReviewJobPayload
-	if err := t.DecodePayload(&payload); err == nil && d.store != nil {
-		if item, _, found, readErr := d.readGardenReviewItem(payload.ItemID); readErr == nil && found && strings.TrimSpace(item.Title) != "" {
-			name = fmt.Sprintf("%q", item.Title)
-		}
-		if run, _, found, readErr := d.readGardenReviewRun(payload.RunID); readErr == nil && found {
-			profileID = run.ProfileID
-		}
-	}
-	record := taskFailureNotification(t,
-		"Couldn’t classify "+name,
-		"A Garden review asked an agent to classify this item.",
-		"The item remains unresolved in the Garden review.",
-		[]store.NotificationAction{retryTaskAction(t)})
-	record.ProfileID = profileID
-	return record
-}
-
 func (d *Daemon) projectNotificationsUpdated() {
 	if d.wsHub == nil {
 		return

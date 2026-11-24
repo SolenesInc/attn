@@ -33,7 +33,6 @@ func TestAMalformedDelegationIsRefusedAndLeavesNoOperation(t *testing.T) {
 		}, "seed assignment requires seed_id"},
 		{"a choice without a role", func(m *protocol.DelegateMessage) { m.Choice = protocol.Ptr("deep") }, "choice requires role"},
 		{"a role and the fallback", func(m *protocol.DelegateMessage) { m.Role = protocol.Ptr("build"); m.Fallback = protocol.Ptr(true) }, "role and fallback cannot be combined"},
-		{"review evidence without a handover", func(m *protocol.DelegateMessage) { m.Review = &protocol.SeedReviewActionContext{} }, "review evidence is valid only for a seed handover"},
 		{"a reuse with a path", func(m *protocol.DelegateMessage) {
 			m.Checkout = &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindReuse, Branch: "main", Path: protocol.Ptr("/tmp/w")}
 		}, "reuse checkout accepts branch only"},

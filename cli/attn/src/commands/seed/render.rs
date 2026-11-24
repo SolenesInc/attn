@@ -16,12 +16,12 @@ use attn_protocol::go_values::{
     STATUS_HARVESTED, STATUS_WITHERED,
 };
 use attn_protocol::{
-    ActorView, AgentCloseResult, GardenReview, PartyView, Seed, SeedArtifact,
-    SeedArtifactReference, SeedAuthorization, SeedAuthorizationResult, SeedAuthorizationUpdate,
-    SeedBoardRow, SeedClosedAsk, SeedClosedCount, SeedHarvestCondition, SeedListResult, SeedNote,
-    SeedOpenAsk, SeedPlotProgress, SeedReadyResult, SeedRelation, SeedReminder, SeedRow,
-    SeedSearchResult, SeedShowResult, SeedSimilar, SeedSinceExpired, SeedStandbyView,
-    SeedTransitionResult, SeedWatchResult,
+    ActorView, AgentCloseResult, PartyView, Seed, SeedArtifact, SeedArtifactReference,
+    SeedAuthorization, SeedAuthorizationResult, SeedAuthorizationUpdate, SeedBoardRow,
+    SeedClosedAsk, SeedClosedCount, SeedHarvestCondition, SeedListResult, SeedNote, SeedOpenAsk,
+    SeedPlotProgress, SeedReadyResult, SeedRelation, SeedReminder, SeedRow, SeedSearchResult,
+    SeedShowResult, SeedSimilar, SeedSinceExpired, SeedStandbyView, SeedTransitionResult,
+    SeedWatchResult,
 };
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write;
@@ -461,71 +461,6 @@ pub fn list(result: &SeedListResult, view: &ListView) -> String {
             result.total,
             result.total - count(shown)
         );
-    }
-    out
-}
-
-pub fn review(review: &GardenReview, detailed: bool) -> String {
-    let mut out = String::new();
-    let run = &review.run;
-    let _ = writeln!(
-        out,
-        "review {}\t{}\t{} seeds",
-        run.id,
-        run.status,
-        review.items.len()
-    );
-    let _ = write!(
-        out,
-        "captured {}\tadvisor {} / {}",
-        run.captured_at, run.recipe.agent, run.recipe.model
-    );
-    if let Some(effort) = run.recipe.effort.as_deref().filter(|e| !e.is_empty()) {
-        let _ = write!(out, " / {effort}");
-    }
-    out.push('\n');
-    if review.items.is_empty() {
-        out.push_str("no seeds needed review when this run started\n");
-        return out;
-    }
-    if !detailed {
-        out.push('\n');
-        let mut rows = String::from("SEED\tSTATUS\tRECOMMENDATION\tTITLE\n");
-        for item in &review.items {
-            let _ = writeln!(
-                rows,
-                "{}\t{}\t{}\t{}",
-                item.seed_id,
-                item.status,
-                or_dash(item.recommendation.as_deref().unwrap_or_default()),
-                item.title
-            );
-        }
-        out.push_str(&table(&rows));
-        return out;
-    }
-    for item in &review.items {
-        let _ = writeln!(out, "\n{}  {}", item.seed_id, item.title);
-        let _ = writeln!(out, "status\t{}", item.status);
-        if let Some(recommendation) = item.recommendation.as_deref().filter(|r| !r.is_empty()) {
-            let _ = writeln!(
-                out,
-                "advice\t{recommendation}: {}",
-                item.explanation.as_deref().unwrap_or_default()
-            );
-        }
-        if item.resolution != "unresolved" {
-            let _ = writeln!(out, "resolution\t{}", item.resolution);
-        }
-        if !item.actions.is_empty() {
-            let _ = writeln!(out, "actions\t{}", item.actions.join(", "));
-        }
-        if let Some(error) = item.error.as_deref().filter(|e| !e.is_empty()) {
-            let _ = writeln!(out, "error\t{error}");
-        }
-        for evidence in &item.evidence {
-            let _ = writeln!(out, "{}\t{}", evidence.label, evidence.text);
-        }
     }
     out
 }

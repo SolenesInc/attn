@@ -34,7 +34,6 @@ func main() {
 	runs := flag.Int("n", 10, "runs per command")
 	show := flag.String("show", "", "also run seed show for this seed id")
 	search := flag.String("search", "", "also run seed search for this query")
-	review := flag.Bool("review", false, "also send seed_review_show, the request the Garden panel sends")
 	vars := flag.String("vars", "", "report daemon CPU per request above idle from this /debug/vars URL")
 	var clis binaries
 	flag.Var(&clis, "cli", "run seed ls and seed ready --all through this attn binary; repeat to interleave binaries")
@@ -64,9 +63,6 @@ func main() {
 	}
 	if *search != "" {
 		requests = append(requests, request{"search", map[string]any{"cmd": "run_command", "command": "seed search", "args": map[string]any{"words": *search}}, nil})
-	}
-	if *review {
-		requests = append(requests, request{"review", map[string]any{"cmd": "seed_review_show"}, nil})
 	}
 	for _, r := range requests {
 		r.msg["profile_id"] = *profile
@@ -162,7 +158,7 @@ func items(reply []byte) string {
 			if json.Unmarshal(value, &list) == nil && len(list) > 0 {
 				parts = append(parts, fmt.Sprintf("%s=%d", key, len(list)))
 			}
-			if key == "total" || key == "matched" || key == "searched" || key == "candidate_count" {
+			if key == "total" || key == "matched" || key == "searched" {
 				parts = append(parts, key+"="+string(value))
 			}
 		}

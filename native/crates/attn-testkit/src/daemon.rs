@@ -673,7 +673,6 @@ pub fn built_in_harnesses() -> Vec<Harness> {
             name: "Claude Code".into(),
             installation: "installed".into(),
             offered: true,
-            advisor_effort: Some("medium".into()),
             options: HarnessOptions {
                 resume: true,
                 yolo: true,
@@ -699,7 +698,6 @@ pub fn built_in_harnesses() -> Vec<Harness> {
             installation: "installed".into(),
             offered: true,
             activity_effort: Some("low".into()),
-            advisor_effort: Some("xhigh".into()),
             options: HarnessOptions {
                 resume: true,
                 yolo: true,

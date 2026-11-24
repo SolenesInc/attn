@@ -240,10 +240,9 @@ func (d *Daemon) resumeStandbyTenderLocked(a who.Address, seedID string, state *
 		count = d.tenderResumes.charge(seed.ID, d.clock.Now())
 		var resumeErr error
 		outcome, resumeErr = d.resumeFromContinuation(protection, seed, continuation, tenderResumeCause{
-			mail:   true,
-			by:     who.Attn(),
-			tend:   func(who.Party, who.Actor) error { return nil },
-			settle: func() {},
+			mail: true,
+			by:   who.Attn(),
+			tend: func(who.Party, who.Actor) error { return nil },
 		})
 		return resumeErr
 	})

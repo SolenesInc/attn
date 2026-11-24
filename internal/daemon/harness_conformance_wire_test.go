@@ -39,14 +39,14 @@ func TestEveryHarnessAnswersTheContractWithItsFake(t *testing.T) {
 	home := conformance.Home
 	conformance.Run(t, w.daemon.Harnesses(), []conformance.Row{
 		{
-			Facts: harness.Facts{ID: "claude", DisplayName: "Claude Code", Logo: adapterLogo(t, 1200, "../harness/internal/claude/logo.svg"), Options: terminalOptions, Executable: harness.Executable{Default: "claude", Env: "ATTN_CLAUDE_EXECUTABLE"}, CacheTTL: time.Hour, Tiers: map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "haiku"}, modeltiers.Standard: {Model: "sonnet"}, modeltiers.Deep: {Model: "opus"}}, Advisor: harness.ModelChoice{Model: "sonnet", Effort: "medium"}, CrewModel: "fable", ModelDiscovery: true, Activity: true, ConversationIsSession: true,
+			Facts: harness.Facts{ID: "claude", DisplayName: "Claude Code", Logo: adapterLogo(t, 1200, "../harness/internal/claude/logo.svg"), Options: terminalOptions, Executable: harness.Executable{Default: "claude", Env: "ATTN_CLAUDE_EXECUTABLE"}, CacheTTL: time.Hour, Tiers: map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "haiku"}, modeltiers.Standard: {Model: "sonnet"}, modeltiers.Deep: {Model: "opus"}}, CrewModel: "fable", ModelDiscovery: true, Activity: true, ConversationIsSession: true,
 				Signals: harness.Signals{TurnStarts: harness.TurnStartsReported, ReportsTools: true, Heartbeat: 1500 * time.Millisecond, Titles: harness.TitlesClaude, StopsReadable: true, StopsClassified: true}},
 			SkillDirs: []string{home + "/.claude/skills"},
 			Offered:   true,
 			OneShot:   true,
 		},
 		{
-			Facts: harness.Facts{ID: "codex", DisplayName: "Codex", Logo: adapterLogo(t, 24, "../harness/internal/codex/logo.svg"), Options: codexOptions, Executable: harness.Executable{Default: "codex", Env: "ATTN_CODEX_EXECUTABLE"}, CacheTTL: 30 * time.Minute, Tiers: map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "gpt-6-luna", Effort: "low"}, modeltiers.Standard: {Model: "gpt-5.6-terra"}, modeltiers.Deep: {Model: "gpt-6.1-sol"}}, Advisor: harness.ModelChoice{Model: "gpt-5.6-luna", Effort: "xhigh"}, ModelDiscovery: true, Activity: true, ConversationIsSession: true,
+			Facts: harness.Facts{ID: "codex", DisplayName: "Codex", Logo: adapterLogo(t, 24, "../harness/internal/codex/logo.svg"), Options: codexOptions, Executable: harness.Executable{Default: "codex", Env: "ATTN_CODEX_EXECUTABLE"}, CacheTTL: 30 * time.Minute, Tiers: map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "gpt-6-luna", Effort: "low"}, modeltiers.Standard: {Model: "gpt-5.6-terra"}, modeltiers.Deep: {Model: "gpt-6.1-sol"}}, ModelDiscovery: true, Activity: true, ConversationIsSession: true,
 				Caller:  harness.CallerEnv{Scope: "ATTN_CODEX_SHARED_PROFILE", Conversation: "CODEX_THREAD_ID"},
 				Signals: harness.Signals{TurnStarts: harness.TurnStartsReported, ReportsTools: true, Heartbeat: 500 * time.Millisecond, ReviewerDwell: time.Minute, ConfirmsFirstTurn: true, Titles: harness.TitlesCodex, StopsReadable: true, StopsClassified: true, ForgetsRecoveredClaim: true}},
 			SkillDirs:      []string{home + "/.agents/skills"},

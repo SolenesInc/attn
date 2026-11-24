@@ -123,14 +123,6 @@ The Garden labels old path associations as linked files. Bring a linked file int
 - `attn seed attach <id> [--path <file> | --notebook <id> | --url <url>] [--move | --copy] [--repo <repository>] [-m "<note>"] [--json]`: give the seed a file or a document to keep
 - `attn seed detach <id> [--path <filename> | --notebook <id> | --url <url>] [--to <destination>] [--reference] [--repo <repository>] [-m "<note>"] [--json]`: move a managed artifact back out, or drop an association
 
-## Garden review
-
-- `attn seed review start [--json]`: start an advisory Garden review
-- `attn seed review show [<review-id>] [--json]`: inspect a review and its progressive results
-- `attn seed review cancel <review-id> [--json]`: cancel unfinished classification
-- `attn seed review retry <review-id> <seed-id> [--json]`: retry one failed or changed review item
-- `attn seed review keep <review-id> <seed-id> [--json]`: keep a seed growing and review it again later
-
 ## Packets
 
 A packet is a plot flagged as a template with declared variables. attn cannot yet create seeds from a packet. `attn seed show` says `packet yes`, and `attn seed ready` skips the packet's subtree.

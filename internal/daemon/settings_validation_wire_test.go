@@ -56,7 +56,7 @@ func TestTheDaemonAcceptsOnlyValidSettingValues(t *testing.T) {
 		{"new_session_destination_local_/Users/v/projects/attn", "", true},
 		{"new_session_destination_local_/Users/v/projects/attn", "somewhere_else", false},
 	} {
-		ack := gardenAdvisorSetSetting(app, tc.key, tc.value)
+		ack := trySetSetting(app, tc.key, tc.value)
 		if got := protocol.Deref(ack.Success); got != tc.accepted {
 			t.Errorf("set %s = %q was accepted=%v (%s), want accepted=%v", tc.key, tc.value, got, protocol.Deref(ack.Error), tc.accepted)
 		}

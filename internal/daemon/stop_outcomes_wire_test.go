@@ -13,45 +13,40 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestStoppingTheDaemonLetsTheLastGardenAdviceAttemptFinish(t *testing.T) {
+func TestStoppingTheDaemonLetsTheLastTitleAttemptFinish(t *testing.T) {
 	tasks := make(chan *fakeagent.HeadlessTask, 1)
 	inBubbleAnsweringHeadlessTasks(t, []fakeagent.Harness{fakeagent.Claude}, func(t *testing.T, w *world) {
 		w.AnswerHeadlessTasks(func(task *fakeagent.HeadlessTask) { tasks <- task })
-		app, cli := w.App(), w.Client()
-		setSetting(t, app, "garden.advisor", `{"agent":"claude"}`)
-		seed := gardenReviewRegisteredAbandonedSeed(t, w, cli, "gardener", "unfinished work")
-		review := gardenReviewStart(t, cli)
+		app := w.App()
+		session := w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+			m.InitialPrompt = protocol.Ptr("fix the flaky checkout test")
+		})
 		for _, backoff := range []time.Duration{time.Minute, 2 * time.Minute} {
 			(<-tasks).Fail("the provider is unavailable")
-			gardenReviewAwaitFailedFirstAdvice(app, review.Run.ID)
+			awaitTitleTask(app, session, func(task protocol.Task) bool { return task.State == "failed" })
 			w.elapse(backoff)
 		}
 		last := <-tasks
-		item := gardenReviewItem(t, gardenReviewShow(t, cli, review.Run.ID).Review, seed)
-		if protocol.Deref(item.AdvisorAttempt) != protocol.Deref(item.AdvisorMaxAttempts) || protocol.Deref(item.AdvisorAttempt) != 3 {
-			t.Fatalf("before stop the advice is on attempt %d of %d, want the last attempt", protocol.Deref(item.AdvisorAttempt), protocol.Deref(item.AdvisorMaxAttempts))
-		}
 		finish := w.beginStop(t)
-		last.Answer(`{"recommendation":"keep_growing","explanation":"Work remains.","evidence":["The seed is unfinished."]}`)
+		last.Answer("Fix checkout test")
 		finish()
 		w.start()
-		item = gardenReviewItem(t, gardenReviewShow(t, w.Client(), review.Run.ID).Review, seed)
-		if item.Status != "ready" || protocol.Deref(item.Recommendation) != "keep_growing" || protocol.Deref(item.Error) != "" {
-			t.Errorf("after restart the last advice attempt is %+v, want genuine advice without a shutdown failure", item)
+		if got := w.sessionLabel(session); got != "Fix checkout test" {
+			t.Errorf("after restart the session label is %q, want Fix checkout test", got)
 		}
 		listed := testworld.Request(w.App(), protocol.TaskListMessage{Cmd: protocol.CmdTaskList},
 			protocol.EventTaskListResult, func(protocol.TaskListResultMessage) bool { return true })
 		var found bool
 		for _, task := range listed.Tasks {
-			if task.Kind == "garden_review_classify" && task.Subject == item.ID {
+			if task.Kind == "session_title" && task.Subject == session {
 				found = true
 				if task.State != "done" || task.Attempts != 3 || protocol.Deref(task.LastError) != "" {
-					t.Errorf("after restart the advice task is %+v, want done after three attempts without a shutdown error", task)
+					t.Errorf("after restart the title task is %+v, want done after three attempts without a shutdown error", task)
 				}
 			}
 		}
 		if !found {
-			t.Error("the advice task disappeared after restart")
+			t.Error("the title task disappeared after restart")
 		}
 	})
 }

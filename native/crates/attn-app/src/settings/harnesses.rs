@@ -176,11 +176,7 @@ pub(crate) fn listed(state: &State) -> Vec<Harness> {
 
 /// The harnesses a background route offers: offered harnesses that can answer one-shot calls here,
 /// in catalog order (with preferred first), plus `configured` after them when saved but ineligible.
-pub(crate) fn headless(
-    state: &State,
-    configured: &str,
-    default_effort: fn(&Harness) -> Option<&str>,
-) -> Vec<RouteHarness> {
+pub(crate) fn headless(state: &State, configured: &str) -> Vec<RouteHarness> {
     let preferred = catalog::picked_default(&state.facts.settings, &state.facts.harnesses);
     let mut out: Vec<RouteHarness> = catalog::ordered(&state.facts.harnesses, Some(&preferred))
         .into_iter()
@@ -189,7 +185,7 @@ pub(crate) fn headless(
             let mut route = RouteHarness::from(h);
             route.model_pin = true;
             route.effort_pin = true;
-            route.default_effort = default_effort(h).unwrap_or_default().to_owned();
+            route.default_effort = h.activity_effort.as_deref().unwrap_or_default().to_owned();
             route
         })
         .collect();
@@ -204,7 +200,7 @@ pub(crate) fn headless(
             effort_pin: true,
             discovery: entry.is_some_and(|h| h.options.discovery),
             default_effort: entry
-                .and_then(default_effort)
+                .and_then(|h| h.activity_effort.as_deref())
                 .unwrap_or_default()
                 .to_owned(),
         });

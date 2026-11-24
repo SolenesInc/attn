@@ -33,8 +33,6 @@ func (d *Daemon) ensureGardenCollections() {
 		garden.NotesSchema(),
 		garden.BodyVersionsSchema(),
 		garden.DispatchesSchema(),
-		garden.ReviewRunsSchema(),
-		garden.ReviewItemsSchema(),
 	} {
 		redeclared, err := d.store.DefineDocumentCollection(schema, time.Now())
 		if err != nil {
@@ -1720,13 +1718,7 @@ type seedTransitionDetails struct {
 func (d *Daemon) applySeedTransitionDetailed(
 	id string, verb garden.Verb, ask garden.Ask, comment string,
 ) (garden.Seed, docstore.Document, seedTransitionDetails, error) {
-	return d.applySeedTransitionDetailedAtRevision(id, verb, ask, comment, 0)
-}
-
-func (d *Daemon) applySeedTransitionDetailedAtRevision(
-	id string, verb garden.Verb, ask garden.Ask, comment string, expectedRev int64,
-) (garden.Seed, docstore.Document, seedTransitionDetails, error) {
-	return d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, comment, expectedRev)
+	return d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, comment, 0)
 }
 
 var errSeedRevisionMoved = errors.New("")
@@ -1785,7 +1777,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 		}
 		if expectedRev > 0 && doc.Rev != expectedRev {
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalConflict,
-				"%s changed since you reviewed it; refresh the garden%w", id, errSeedRevisionMoved)
+				"%s changed since it was read; refresh the garden%w", id, errSeedRevisionMoved)
 		}
 		var read gardenRead
 		var children []garden.Seed
@@ -1831,7 +1823,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 				}
 				if docstore.IsConflict(err) {
 					return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalConflict,
-						"%s changed while the reviewed action was being applied; refresh the garden%w", id, errSeedRevisionMoved)
+						"%s changed while the transition was being applied; refresh the garden%w", id, errSeedRevisionMoved)
 				}
 				if err != nil {
 					return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
@@ -1974,7 +1966,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 		}
 		if expectedRev > 0 {
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalConflict,
-				"%s changed while the reviewed action was being applied; refresh the garden%w", id, errSeedRevisionMoved)
+				"%s changed while the transition was being applied; refresh the garden%w", id, errSeedRevisionMoved)
 		}
 	}
 	return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalConflict,

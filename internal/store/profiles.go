@@ -568,12 +568,8 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, members int) (p
 		if err != nil {
 			return err
 		}
-		reviews, err := countRunningProfileReviews(tx, id)
-		if err != nil {
-			return err
-		}
-		if sessions != 0 || members != 0 || automations != 0 || tiles != 0 || seeds != 0 || pending != 0 || reviews != 0 {
-			return fmt.Errorf("profile %q is not empty: %d live agents, %d crew members, %d automations, %d tiles, %d open seeds and %d pending delegations and %d running Garden reviews; clean up the profile yourself or ask your agent before deleting it", profile.Name, sessions, members, automations, tiles, seeds, pending, reviews)
+		if sessions != 0 || members != 0 || automations != 0 || tiles != 0 || seeds != 0 || pending != 0 {
+			return fmt.Errorf("profile %q is not empty: %d live agents, %d crew members, %d automations, %d tiles, %d open seeds and %d pending delegations; clean up the profile yourself or ask your agent before deleting it", profile.Name, sessions, members, automations, tiles, seeds, pending)
 		}
 		if err := deleteProfileDesktops(tx, id); err != nil {
 			return err

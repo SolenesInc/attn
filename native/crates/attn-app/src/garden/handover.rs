@@ -373,7 +373,6 @@ fn hand_over(spot: &Spot, state: &mut State, tx: &mut Tx) {
     let request = draft.request.clone();
     let note = Some(spot.words(state)).filter(|n| !n.is_empty());
     let source_session_id = source_session(state);
-    let review = super::review::receipt(spot, state);
     let seed_id = spot.seed().to_owned();
     let id = request.unwrap_or_else(|| state.next_request_id());
     if let Some(draft) = spot.handover_mut(state) {
@@ -395,7 +394,6 @@ fn hand_over(spot: &Spot, state: &mut State, tx: &mut Tx) {
             checkout,
             allow_worktree_reuse: share,
             agent,
-            review,
             ..DelegateMessage::new()
         },
         spot.key("open"),
@@ -410,7 +408,6 @@ fn hand_over(spot: &Spot, state: &mut State, tx: &mut Tx) {
 /// Goes to the agent a handover started. A refusal takes a new request for the next try; a
 /// handover the daemon never answered keeps its request, so it can tell a retry from another.
 fn settled(spot: &Spot, state: &mut State, answer: &Answer, tx: &mut Tx) {
-    super::review::settled(spot, state, tx);
     match answer {
         Answer::Reply(reply) if reply.body["success"] == true => {
             spot.forget(state);

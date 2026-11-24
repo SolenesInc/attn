@@ -12,8 +12,8 @@ use attn_protocol::go_values::prompts::AUTHORING_AGENT_SEED_GUIDE;
 use attn_protocol::{
     SeedArtifactTransferResult, SeedAuthorizationResult, SeedCheckResult, SeedEditResult,
     SeedExportResult, SeedLinkResult, SeedListResult, SeedNoteResult, SeedNotesResult,
-    SeedPlantResult, SeedPlotResult, SeedReadyResult, SeedReminderResult, SeedReviewResult,
-    SeedRollbackResult, SeedSearchResult, SeedSendToChiefResult, SeedShowResult, SeedStandbyResult,
+    SeedPlantResult, SeedPlotResult, SeedReadyResult, SeedReminderResult, SeedRollbackResult,
+    SeedSearchResult, SeedSendToChiefResult, SeedShowResult, SeedStandbyResult,
     SeedTransitionResult, SeedWatchResult,
 };
 use serde::Serialize;
@@ -204,13 +204,6 @@ impl Family for Seed {
                 &command::decode::<SeedCheckResult>(run, &Seed, cmd, &result)?,
                 parsed.on("ring"),
             ),
-            name if name.starts_with("review ") => {
-                let result: SeedReviewResult = command::decode(run, &Seed, cmd, &result)?;
-                match &result.review {
-                    None => format!("{} seeds need review\n", result.candidate_count),
-                    Some(review) => render::review(review, name == "review show"),
-                }
-            }
             other => unreachable!("seed {other} has no renderer"),
         };
         print_stdout(&out);

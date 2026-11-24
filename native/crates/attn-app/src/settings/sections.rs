@@ -111,8 +111,8 @@ pub(crate) const GROUPS: &[Group] = &[
             item(
                 Section::BackgroundAgents,
                 "Background agents",
-                "The agents that summarize session activity, review the garden, and coordinate work.",
-                "chief model effort headless context cap session activity summary refresh garden advisor",
+                "The agents that summarize session activity and coordinate work.",
+                "chief model effort headless context cap session activity summary refresh",
             ),
             item(
                 Section::Delegation,

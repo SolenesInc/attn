@@ -464,7 +464,7 @@ func newAutomationStoreReviewWorld(t *testing.T) (*automationReviewWorld, string
 	own := filepath.Join(projects, "shop")
 	runGit(t, projects, "init", "-b", "main", own)
 	runGit(t, own, "remote", "add", "origin", "git@github.test:acme/shop.git")
-	if updated := gardenAdvisorSetSetting(r.app, "projects_directory", projects); !protocol.Deref(updated.Success) {
+	if updated := trySetSetting(r.app, "projects_directory", projects); !protocol.Deref(updated.Success) {
 		t.Fatalf("set projects_directory: %+v", updated)
 	}
 	store := filepath.Join(r.w.Dir, "repos", base64.RawURLEncoding.EncodeToString([]byte("github.test/acme/shop")))

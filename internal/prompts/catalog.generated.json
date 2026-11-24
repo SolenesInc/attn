@@ -4889,68 +4889,6 @@
       ]
     },
     {
-      "id": "garden-advisor",
-      "description": "Tool-free model recommending a seed action or drafting its handoff.",
-      "events": [
-        {
-          "id": "instructions",
-          "delivery": "system_prompt",
-          "description": "Shared output contract for the Garden advisor.",
-          "body": {
-            "kind": "text",
-            "id": "garden-advisor.instructions",
-            "source": "content/garden-advisor/instructions.md"
-          }
-        },
-        {
-          "id": "advice",
-          "delivery": "user_message",
-          "description": "Recommend one available action for a seed.",
-          "body": {
-            "kind": "text",
-            "id": "garden-advisor.advice",
-            "source": "content/garden-advisor/advice.md",
-            "bindings": [
-              {
-                "name": "evidence",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "evidence",
-                    "kind": "text",
-                    "description": "Bounded seed and evidence serialized as JSON by the daemon."
-                  }
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "handoff",
-          "delivery": "user_message",
-          "description": "Draft a handoff for a seed's next tender.",
-          "body": {
-            "kind": "text",
-            "id": "garden-advisor.handoff",
-            "source": "content/garden-advisor/handoff.md",
-            "bindings": [
-              {
-                "name": "evidence",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "evidence",
-                    "kind": "text",
-                    "description": "Bounded seed and evidence serialized as JSON by the daemon."
-                  }
-                }
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
       "id": "attn-workflow-skill",
       "description": "Installed workflow skill and process references. Availability does not establish that the harness loaded them.",
       "events": [
@@ -8236,5 +8174,5 @@
       ]
     }
   ],
-  "definitions_hash": "e93252a6ec937e87cee11172f743071e8dca77061aeacf88286d10abff540e4c"
+  "definitions_hash": "2f8641ff76650ea16e7a042c8957686d87b3b74f0caa5c2fd640db3b291ae82d"
 }

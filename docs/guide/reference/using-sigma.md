@@ -159,8 +159,8 @@ files to a tile.
 
 Sigma answers the model calls Attn makes in the background, as Claude Code and
 Codex do. Sigma titles its own sessions and judges how their turns end. In
-Settings, you can also choose Sigma for the activity line, the Garden advisor
-and dictation, and `attn model call` takes `"harness": "sigma"`. So a machine
+Settings, you can also choose Sigma for the activity line and dictation, and
+`attn model call` takes `"harness": "sigma"`. So a machine
 with Sigma alone needs neither Claude Code nor Codex. Each call is one prompt
 that Sigma answers on its server with no tools, and Sigma keeps nothing of it:
 no conversation and no usage. Attn starts the server for a call if none runs.
@@ -172,8 +172,8 @@ that can answer it, such as `claude/haiku` or `openai/gpt-6-luna`: one you are
 signed in to, and not `agy`, whose models answer only in a conversation. When
 Attn cannot read the server's list, the call goes to Sigma's default model,
 and `attn model log` names the model that answered. Settings refuse a model
-that cannot answer for the activity line or the Garden advisor, and their
-pickers show it disabled.
+that cannot answer for the activity line, and its
+picker shows it disabled.
 
 ## Messages
 

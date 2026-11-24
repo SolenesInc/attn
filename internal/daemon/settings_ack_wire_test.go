@@ -27,7 +27,7 @@ func TestASettingIsAcknowledgedOnlyOnceItPersistsAndRefusalsLeaveItUnchanged(t *
 		{"pty_backend_mode", "elsewhere"},
 		{"default_context_window_cap_codex", "1"},
 	} {
-		ack := gardenAdvisorSetSetting(app, refused.key, refused.value)
+		ack := trySetSetting(app, refused.key, refused.value)
 		if protocol.Deref(ack.Success) || protocol.Deref(ack.Error) == "" || protocol.Deref(ack.ChangedKey) != refused.key {
 			t.Errorf("set %s = %s acknowledged %+v, want a failure naming its reason", refused.key, refused.value, ack)
 		}
@@ -40,7 +40,7 @@ func TestASettingIsAcknowledgedOnlyOnceItPersistsAndRefusalsLeaveItUnchanged(t *
 		"queue_mode_enabled":               "true",
 		"default_context_window_cap_codex": "128000",
 	} {
-		if ack := gardenAdvisorSetSetting(app, key, value); !protocol.Deref(ack.Success) || protocol.Deref(ack.ChangedKey) != key {
+		if ack := trySetSetting(app, key, value); !protocol.Deref(ack.Success) || protocol.Deref(ack.ChangedKey) != key {
 			t.Errorf("set %s = %s acknowledged %+v, want success", key, value, ack)
 		}
 		if got := w.App().Initial.Settings[key]; got != value {
@@ -51,7 +51,7 @@ func TestASettingIsAcknowledgedOnlyOnceItPersistsAndRefusalsLeaveItUnchanged(t *
 	defaults := map[string]string{"theme": "dark", "projects_directory": "~/projects"}
 	for key, changed := range map[string]string{"theme": "light", "projects_directory": t.TempDir()} {
 		for _, value := range []string{changed, ""} {
-			if ack := gardenAdvisorSetSetting(app, key, value); !protocol.Deref(ack.Success) {
+			if ack := trySetSetting(app, key, value); !protocol.Deref(ack.Success) {
 				t.Errorf("set %s = %q acknowledged %+v, want success", key, value, ack)
 			}
 		}
@@ -78,7 +78,7 @@ func TestQuickCaptureShortcutIsDurableAndCanBeDisabled(t *testing.T) {
 	w := newWorld(t)
 	for _, binding := range []string{"Control+Alt+B", ""} {
 		app := w.App()
-		ack := gardenAdvisorSetSetting(app, "capture.shortcut", binding)
+		ack := trySetSetting(app, "capture.shortcut", binding)
 		if !protocol.Deref(ack.Success) || protocol.Deref(ack.ChangedKey) != "capture.shortcut" {
 			t.Fatalf("capture shortcut %q was refused: %+v", binding, ack)
 		}
@@ -99,7 +99,7 @@ func TestHiddenSessionsQueueByDefaultUntilTheUserTurnsThatOff(t *testing.T) {
 	}
 	set := func(value string) {
 		t.Helper()
-		if answer := gardenAdvisorSetSetting(app, key, value); !protocol.Deref(answer.Success) {
+		if answer := trySetSetting(app, key, value); !protocol.Deref(answer.Success) {
 			t.Fatalf("set %s = %s: %s", key, value, protocol.Deref(answer.Error))
 		}
 	}

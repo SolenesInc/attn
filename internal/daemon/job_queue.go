@@ -111,17 +111,6 @@ func (d *Daemon) startJobQueue(home bool) error {
 		); err != nil {
 			d.logf("session activity: register session_activity: %v", err)
 		}
-		if err := d.registerTaskWithFailureRenderer(
-			runner,
-			gardenReviewClassifyKind,
-			d.gardenReviewClassifyHandler,
-			jobs.HandlerConfig{
-				Timeout:       gardenReviewClassifyTimeout,
-				MaxConcurrent: gardenReviewClassifyConcurrency,
-			}, d.renderGardenReviewFailure,
-		); err != nil {
-			d.logf("garden review: register classification: %v", err)
-		}
 		if err := runner.RegisterCron(
 			sessionActivityScanKind,
 			sessionActivityScanInterval,
@@ -182,10 +171,6 @@ func (d *Daemon) startJobQueue(home bool) error {
 	runner.OnChange(func(jobID string) { d.publishFact(FactTaskChanged, jobID, nil) })
 	runner.OnTerminalFailure(func(j *jobs.Job) {
 		d.notifyTaskTerminalFailure(j)
-		// The runner outlives the lifetime and reports a death once; nothing redoes it, so it lands inline.
-		if !d.life.Go("failGardenReviewJob", func() { d.failGardenReviewJob(j) }) {
-			d.failGardenReviewJob(j)
-		}
 	})
 	runner.OnSuccess(d.resolveTaskFailure)
 	if !home && sqlQueue != nil {
@@ -202,7 +187,6 @@ func (d *Daemon) startJobQueue(home bool) error {
 		d.logf("conversation keep: enqueue startup: %v", err)
 	}
 	d.enqueueHomeCronsOnStart(runner)
-	d.resumeGardenReviews()
 	d.settleHarvestConditions()
 	return nil
 }

@@ -12,35 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestProfileDeletionRefusesARunningGardenReview(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
-	side := createProfile(app, "Side")
-	selectProfile(app, side.ID)
-	scoped := cli.WithGardenProfile(side.ID, "")
-	seed := gardenReviewAbandonedSeed(t, w, w.AppOn(side.ID), scoped, "side-review", "Side review candidate")
-	setSetting(t, app, "garden.advisor", `{"agent":"claude"}`)
-	t.Setenv("ATTN_HEADLESS_TASKS", "on")
-	review := gardenReviewStart(t, scoped)
-	task := w.HeadlessTask()
-	lifeMove(t, scoped, "", seed, "harvest", "completed outside the review", "")
-	for _, current := range w.AppOn(side.ID).Initial.Profiles {
-		if current.ID == side.ID {
-			side = current
-		}
-	}
-	id := uuid.NewString()
-	result := profileRequest(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: id, ProfileID: side.ID, ExpectedRevision: side.Revision}, id)
-	if result.Success || !strings.Contains(protocol.Deref(result.Error), "1 running Garden reviews") {
-		t.Fatalf("running review deletion: %+v", result)
-	}
-	shown, err := scoped.SeedReviewShow(review.Run.ID)
-	if err != nil || shown.Review.Run.Status != "running" {
-		t.Fatalf("refusal changed review: %+v %v", shown, err)
-	}
-	task.Fail("done checking deletion")
-}
-
 func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
@@ -284,28 +255,4 @@ func TestDeletingAProfileWithAClosedSeedAndALiveDelegate(t *testing.T) {
 			})
 		})
 	}
-}
-
-func TestGardenReviewsBelongToTheRequestingProfile(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
-		setSetting(t, app, "garden.advisor", `{"agent":"claude"}`)
-		original := app.SelectedProfile()
-		side := createProfile(app, "Side")
-		first, err := cli.WithGardenProfile(original, "").SeedReviewStart()
-		if err != nil || first.Review == nil || first.Review.Run.ProfileID != original {
-			t.Fatalf("Default review: %+v %v", first, err)
-		}
-		second, err := cli.WithGardenProfile(side.ID, "").SeedReviewStart()
-		if err != nil || second.Review == nil || second.Review.Run.ProfileID != side.ID || second.Review.Run.ID == first.Review.Run.ID {
-			t.Fatalf("Side review: %+v %v", second, err)
-		}
-		if _, err := cli.WithGardenProfile(original, "").SeedReviewShow(second.Review.Run.ID); err == nil || !strings.Contains(err.Error(), "Side") || !strings.Contains(err.Error(), "Default") {
-			t.Fatalf("cross-profile review: %v", err)
-		}
-		shown, err := cli.WithGardenProfile(original, "").SeedReviewShow(first.Review.Run.ID)
-		if err != nil || shown.Review == nil || shown.Review.Run.ID != first.Review.Run.ID {
-			t.Fatalf("Default latest: %+v %v", shown, err)
-		}
-	})
 }

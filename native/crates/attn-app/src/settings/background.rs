@@ -1,5 +1,5 @@
-//! Settings → Background agents: the agent that writes session activity lines, the Garden
-//! advisor, and the context cap of headless runs.
+//! Settings → Background agents: the agent that writes session activity lines and the context
+//! cap of headless runs.
 
 use attn_ui::Tokens;
 use attn_ui::blocks::{Block, Field, Notice, Prose, Section, SettingRow};
@@ -17,7 +17,6 @@ use crate::State;
 const ACTIVITY_ENABLED: &str = "activity.enabled";
 const ACTIVITY_CONFIG: &str = "activity.config";
 const ACTIVITY_INTERVALS: &str = "activity.intervals";
-const GARDEN_ADVISOR: &str = "garden.advisor";
 pub(super) const HEADLESS_CONTEXT_CAP: &str = "headless_context_window_cap";
 const DEFAULT_CONTEXT_WINDOW_CAP: u64 = 128_000;
 const INTERVAL_MIN_SECONDS: i64 = 30;
@@ -32,7 +31,7 @@ pub(crate) struct Background {
     mirrored: Option<String>,
 }
 
-/// A route as the activity and advisor settings keep it, and as their drafts hold it.
+/// A route as the activity setting keeps it, and as its draft holds it.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 struct Config {
     #[serde(default)]
@@ -47,15 +46,6 @@ fn parse_activity(raw: Option<&str>) -> Config {
     raw.filter(|r| !r.trim().is_empty())
         .and_then(|r| serde_json::from_str::<Config>(r).ok())
         .unwrap_or_default()
-}
-
-fn parse_advisor(raw: Option<&str>) -> Config {
-    let parsed = parse_activity(raw);
-    Config {
-        agent: parsed.agent.trim().to_lowercase(),
-        model: parsed.model.trim().to_owned(),
-        effort: parsed.effort.trim().to_owned(),
-    }
 }
 
 /// A route as the daemon stores it.
@@ -91,21 +81,6 @@ const ACTIVITY_CODEC: Codec = Codec {
             agent: &config.agent,
             model: Some(config.model.trim()).filter(|m| !m.is_empty()),
             effort: Some(config.effort.as_str()).filter(|e| !e.is_empty()),
-        }))
-    },
-};
-
-const ADVISOR_CODEC: Codec = Codec {
-    actual: |settings, key| draft(&parse_advisor(settings.get(key).map(String::as_str))),
-    serialize: |_, raw| {
-        let config = draft_config(raw);
-        if config.agent.is_empty() {
-            return Ok(String::new());
-        }
-        Ok(stored(&Stored {
-            agent: &config.agent,
-            model: Some(config.model.trim()),
-            effort: Some(config.effort.trim()).filter(|e| !e.is_empty()),
         }))
     },
 };
@@ -185,7 +160,6 @@ pub(super) fn fields() -> Vec<(String, Codec)> {
     vec![
         (ACTIVITY_CONFIG.into(), ACTIVITY_CODEC),
         (ACTIVITY_INTERVALS.into(), INTERVALS_CODEC),
-        (GARDEN_ADVISOR.into(), ADVISOR_CODEC),
         (HEADLESS_CONTEXT_CAP.into(), CONTEXT_CAP_CODEC),
     ]
 }
@@ -241,7 +215,6 @@ fn write(state: &mut State, key: &str, route: Route, tx: &mut Tx) {
 }
 
 const ACTIVITY_ROUTE: &str = "activity";
-const ADVISOR_ROUTE: &str = "garden-advisor";
 
 fn read_route(state: &State, id: &str) -> Option<(Route, Rules)> {
     match id {
@@ -250,25 +223,8 @@ fn read_route(state: &State, id: &str) -> Option<(Route, Rules)> {
             Some((
                 route_of(current.clone()),
                 Rules {
-                    harnesses: harnesses::headless(state, &current.agent, |h| {
-                        h.activity_effort.as_deref()
-                    }),
+                    harnesses: harnesses::headless(state, &current.agent),
                     allow_none: true,
-                    require_available: true,
-                    tier: Some("light"),
-                    one_shot: true,
-                    ..Rules::default()
-                },
-            ))
-        }
-        ADVISOR_ROUTE => {
-            let current = config(state, GARDEN_ADVISOR);
-            Some((
-                route_of(current.clone()),
-                Rules {
-                    harnesses: harnesses::headless(state, &current.agent, |h| {
-                        h.advisor_effort.as_deref()
-                    }),
                     require_available: true,
                     tier: Some("light"),
                     one_shot: true,
@@ -281,10 +237,8 @@ fn read_route(state: &State, id: &str) -> Option<(Route, Rules)> {
 }
 
 fn write_route(state: &mut State, id: &str, route: Route, tx: &mut Tx) {
-    match id {
-        ACTIVITY_ROUTE => write(state, ACTIVITY_CONFIG, route, tx),
-        ADVISOR_ROUTE => write(state, GARDEN_ADVISOR, route, tx),
-        _ => {}
+    if id == ACTIVITY_ROUTE {
+        write(state, ACTIVITY_CONFIG, route, tx);
     }
 }
 
@@ -298,9 +252,8 @@ fn target(id: &str) -> Target {
 
 /// The harnesses the page's route fields show, whose models it discovers.
 pub(super) fn wanted(state: &State) -> Vec<(String, bool)> {
-    [ACTIVITY_ROUTE, ADVISOR_ROUTE]
+    route::wanted(state, &target(ACTIVITY_ROUTE))
         .into_iter()
-        .filter_map(|id| route::wanted(state, &target(id)))
         .collect()
 }
 
@@ -441,40 +394,6 @@ fn session_activity(state: &State, t: &Tokens) -> Block {
         .build(t)
 }
 
-fn garden_advisor(state: &State, t: &Tokens) -> Block {
-    let agent = config(state, GARDEN_ADVISOR).agent;
-    let can_run = crate::harness::catalog::by_id(&state.facts.harnesses, &agent)
-        .is_some_and(|h| h.offered && h.available() && h.options.one_shot);
-    let mut section = Section::new("settings.block.garden-advisor", "Garden advisor")
-        .description("Classifies seeds during Review garden and can draft a handoff. It runs in the background with this saved agent and cannot change a seed.");
-    if agent.is_empty() {
-        section = section.push(
-            Notice::warn(
-                "settings.garden-advisor.unset",
-                "Choose an agent first: Review garden waits for one.",
-            )
-            .build(t),
-        );
-    } else if state.facts.harnesses_loaded && !can_run {
-        section = section.push(
-            Notice::warn(
-                "settings.garden-advisor.unavailable",
-                format!(
-                    "{} is saved for Garden review but cannot run headless tasks here.",
-                    crate::harness::catalog::name(&state.facts.harnesses, &agent)
-                ),
-            )
-            .build(t),
-        );
-    }
-    section
-        .push(Block::custom(
-            "settings.route.garden-advisor.block",
-            route::field_chip(state, t, target(ADVISOR_ROUTE), "Garden advisor model"),
-        ))
-        .build(t)
-}
-
 fn compaction(state: &State, t: &Tokens) -> Block {
     Section::new("settings.block.compaction", "Compaction")
         .description(format!(
@@ -503,9 +422,5 @@ pub(super) fn thousands(n: u64) -> String {
 }
 
 pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
-    vec![
-        session_activity(state, t),
-        garden_advisor(state, t),
-        compaction(state, t),
-    ]
+    vec![session_activity(state, t), compaction(state, t)]
 }

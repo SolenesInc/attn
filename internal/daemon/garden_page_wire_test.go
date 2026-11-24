@@ -16,8 +16,12 @@ import (
 func TestTheGardenIsReadWholePastOnePageOfSeedsAndNotes(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
-		abandoned := gardenReviewRegisteredAbandonedSeed(t, w, cli, "gone", "work its tender walked away from")
-		registerSessions(t, w, cli, "tender", "closer")
+		registerSessions(t, w, cli, "gone", "tender", "closer")
+		abandoned := plantSeedAs(t, cli, "", "work its tender walked away from")
+		lifeMove(t, cli, "gone", abandoned, "tend", "", "")
+		if err := cli.Unregister("gone"); err != nil {
+			t.Fatal(err)
+		}
 		panel := plantSeedAs(t, cli, "", "Garden panel renders a seed body as markdown")
 		gardenSearchNote(t, cli, "", panel, "Waiting on the markdown renderer landing in next.")
 		gardenArtifactNote(t, cli, "", panel, garden.NoteKindAttach, "", gardenArtifactMarkdown("plan.md"))
@@ -141,11 +145,5 @@ func TestTheGardenIsReadWholePastOnePageOfSeedsAndNotes(t *testing.T) {
 		}
 		w.advance(0)
 		rippleRung(t, cli, "the old dependent", oldDependent, "tender")
-
-		setSetting(t, w.App(), "garden.advisor", `{"agent":"claude"}`)
-		review := gardenReviewStart(t, cli)
-		if !slices.ContainsFunc(review.Items, func(item protocol.GardenReviewItem) bool { return item.SeedID == abandoned }) {
-			t.Errorf("the review holds %d items, none for the oldest abandoned seed %s", len(review.Items), abandoned)
-		}
 	})
 }

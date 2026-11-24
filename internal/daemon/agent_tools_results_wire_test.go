@@ -10,13 +10,11 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/testworld"
 )
 
 type offeredTools map[string]*jsonschema.Resolved
@@ -116,7 +114,6 @@ func TestEverySeedToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) 
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	setSetting(t, app, "agent_tools_enabled", "true")
-	setSetting(t, app, "garden.advisor", `{"agent":"claude"}`)
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
 	tools := listOfferedTools(t, agent)
@@ -193,41 +190,6 @@ func TestEverySeedToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) 
 	call("seed_replant", map[string]any{"seed": y})
 	call("seed_harvest", map[string]any{"seed": z, "reason": "Documented"})
 	call("seed_send_to_chief", map[string]any{"seed": y, "guidance": "Pick a builder"})
-
-	abandoned := gardenReviewAbandonedSeed(t, w, app, w.Client(), "gardener", "old work")
-	gardenReviewAbandonedSeed(t, w, app, w.Client(), "planter", "older work")
-	review := call("seed_review_start", map[string]any{})
-	var started struct {
-		Review struct {
-			Run struct {
-				ID string `json:"id"`
-			} `json:"run"`
-		} `json:"review"`
-	}
-	if data, err := json.Marshal(review.StructuredContent); err == nil {
-		_ = json.Unmarshal(data, &started)
-	}
-	call("seed_review_show", map[string]any{"review": started.Review.Run.ID})
-	everyItem := func(want func(protocol.GardenReviewItem) bool) {
-		t.Helper()
-		testworld.Await(app, protocol.EventGardenReviewUpdated, func(m protocol.GardenReviewUpdatedMessage) bool {
-			return m.Review.Run.ID == started.Review.Run.ID && !slices.ContainsFunc(m.Review.Items, func(item protocol.GardenReviewItem) bool { return !want(item) })
-		})
-	}
-	w.advance(0)
-	for attempt, wait := range []time.Duration{time.Minute, 2 * time.Minute} {
-		everyItem(func(item protocol.GardenReviewItem) bool {
-			return protocol.Deref(item.AdvisorState) == "retrying" && protocol.Deref(item.AdvisorAttempt) == attempt+1
-		})
-		w.advance(wait)
-	}
-	everyItem(func(item protocol.GardenReviewItem) bool { return item.Status == "failed" })
-	if _, err := editSeedBody(t, w.Client(), abandoned, "A newer body for the retry."); err != nil {
-		t.Fatal(err)
-	}
-	call("seed_review_retry", map[string]any{"review": started.Review.Run.ID, "seed": abandoned})
-	call("seed_review_keep", map[string]any{"review": started.Review.Run.ID, "seed": abandoned})
-	call("seed_review_cancel", map[string]any{"review": started.Review.Run.ID})
 
 	shapes.finish("seed_")
 }

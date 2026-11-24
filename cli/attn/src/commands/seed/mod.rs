@@ -11,8 +11,6 @@ use attn::go::quote::quote;
 use attn_protocol::go_values::CHECK_VERBS;
 use table_generated::COMMANDS;
 
-const REVIEW_VERBS: &str = "start, show, cancel, retry, or keep";
-
 const GROUP: Command = Command {
     name: "",
     result: false,
@@ -39,7 +37,6 @@ pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     }
     let name = match verb.as_str() {
         "check" => check_move(run, rest)?,
-        "review" => review_move(run, rest)?,
         _ => verb.clone(),
     };
     let Some(cmd) = COMMANDS.iter().find(|cmd| cmd.name == name) else {
@@ -93,24 +90,6 @@ fn check_move(run: &mut Run<'_>, args: &[String]) -> Result<String, Stop> {
         ));
     }
     Ok(format!("check {verb}"))
-}
-
-fn review_move(run: &mut Run<'_>, args: &[String]) -> Result<String, Stop> {
-    let Some(verb) = args.first().filter(|first| !first.starts_with('-')) else {
-        group_flags(run, "review", args)?;
-        return Err(usage_error("review", &format!("needs {REVIEW_VERBS}")));
-    };
-    if !["start", "show", "cancel", "retry", "keep"].contains(&verb.as_str()) {
-        run.usage_error = Some(super::USAGE_UNKNOWN_COMMAND);
-        return Err(usage_error(
-            "review",
-            &format!(
-                "unknown command {}; use {REVIEW_VERBS}",
-                quote(verb.as_bytes())
-            ),
-        ));
-    }
-    Ok(format!("review {verb}"))
 }
 
 fn usage_error(name: &str, message: &str) -> Stop {

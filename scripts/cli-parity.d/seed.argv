@@ -7,7 +7,6 @@ usage seed plot
 usage seed ls
 usage seed search
 usage seed show
-usage seed review
 usage seed edit
 usage seed rollback
 usage seed authorization
@@ -66,11 +65,6 @@ write seed wither $child -m "probe finished"
 write seed harvest $probe -m "probe finished"
 write seed show $probe --json
 
-usage seed review start
-usage seed review show
-usage seed review cancel
-usage seed review retry
-usage seed review keep
 usage seed check add
 usage seed check edit
 usage seed check remove
@@ -122,18 +116,6 @@ read seed notes a b
 read seed notes s-000000 --since -1
 read seed notes s-000000 --kind handoff --limit 1
 read seed notes s-000000 --limit 0 --json
-read seed review
-read seed review nope
-read seed review --no-such-flag
-read seed review start extra
-read seed review show a b
-read seed review show no-such-review
-read seed review cancel
-read seed review cancel no-such-review
-read seed review retry only-one
-read seed review retry no-such-review s-000000
-read seed review keep only-one
-read seed review keep no-such-review s-000000
 read seed plot extra
 read seed plot -f /no/such/plot.json
 read seed plot

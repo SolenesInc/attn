@@ -83,16 +83,14 @@ func (d *Daemon) scopeGardenRequest(cmd string, msg any, selected string) error 
 		return err
 	}
 	var scope struct {
-		SourceSessionID protocol.SessionID                `json:"source_session_id"`
-		ProfileID       string                            `json:"profile_id"`
-		SeedID          string                            `json:"seed_id"`
-		ToSeedID        string                            `json:"to_seed_id"`
-		PartOf          string                            `json:"part_of"`
-		DiscoveredFrom  string                            `json:"discovered_from"`
-		Plot            string                            `json:"plot"`
-		Member          string                            `json:"member"`
-		ReviewID        string                            `json:"review_id"`
-		Review          *protocol.SeedReviewActionContext `json:"review"`
+		SourceSessionID protocol.SessionID `json:"source_session_id"`
+		ProfileID       string             `json:"profile_id"`
+		SeedID          string             `json:"seed_id"`
+		ToSeedID        string             `json:"to_seed_id"`
+		PartOf          string             `json:"part_of"`
+		DiscoveredFrom  string             `json:"discovered_from"`
+		Plot            string             `json:"plot"`
+		Member          string             `json:"member"`
 	}
 	if err := json.Unmarshal(raw, &scope); err != nil {
 		return err
@@ -140,23 +138,6 @@ func (d *Daemon) scopeGardenRequest(cmd string, msg any, selected string) error 
 		}
 		if found {
 			resolved["member"] = member.ID
-		}
-	}
-	reviewID := scope.ReviewID
-	if scope.Review != nil {
-		reviewID = scope.Review.ReviewID
-	}
-	if reviewID != "" {
-		run, _, found, err := d.readGardenReviewRun(reviewID)
-		if err != nil {
-			return err
-		}
-		if found && run.ProfileID != profile.ID {
-			owner, err := d.store.GetProfile(run.ProfileID)
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("garden review %s belongs to profile %q; caller belongs to profile %q", reviewID, owner.Name, profile.Name)
 		}
 	}
 	rewritten, err := json.Marshal(resolved)
@@ -237,8 +218,5 @@ func (d *Daemon) sendGardenScopeError(client *wsClient, cmd string, msg any, err
 	}
 	_ = json.Unmarshal(raw, &request)
 	event := cmd + "_result"
-	if strings.HasPrefix(cmd, "seed_review_") && cmd != protocol.CmdSeedReviewDraft {
-		event = protocol.EventSeedReviewResult
-	}
-	d.sendToClient(client, map[string]any{"event": event, "profile_id": client.selectedProfile(), "request_id": request.RequestID, "success": false, "error": err.Error(), "operation": strings.TrimPrefix(cmd, "seed_review_")})
+	d.sendToClient(client, map[string]any{"event": event, "profile_id": client.selectedProfile(), "request_id": request.RequestID, "success": false, "error": err.Error()})
 }

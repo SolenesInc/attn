@@ -86,7 +86,7 @@ func TestInvalidTierOverridesAreRefusedAndKeepTheSavedMapping(t *testing.T) {
 	const saved = `[{"harness":"claude","model":"claude-sonnet-fake","tier":"light"}]`
 	setSetting(t, app, "model_tier_overrides", saved)
 	for _, raw := range []string{`null`, `{}`, `[{"harness":"claude","model":"sonnet","tier":"fast"}]`, `[{"harness":"claude","model":"sonnet","tier":"light","typo":true}]`, `[] []`} {
-		refused := gardenAdvisorSetSetting(app, "model_tier_overrides", raw)
+		refused := trySetSetting(app, "model_tier_overrides", raw)
 		if protocol.Deref(refused.Success) || refused.Error == nil {
 			t.Errorf("accepted %s: %+v", raw, refused)
 		}
@@ -112,15 +112,6 @@ func TestActivityUsesTheLightTierWhenModelDiscoveryFails(t *testing.T) {
 	}
 	task.Answer("Running tests")
 	awaitActivity(app, session, "Running tests")
-}
-
-func TestUnsetAdvisorModelAndEffortStayUnsetInEditableSettings(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app := w.App()
-	setSetting(t, app, "garden.advisor", `{"agent":"claude","model":"","effort":""}`)
-	if got := gardenAdvisorRecipe(t, w.App().Initial.Settings); got.Model != "" || got.Effort != "" {
-		t.Errorf("editable advisor setting = %+v, want both pins unset", got)
-	}
 }
 
 func TestATierCallUsesTheSavedOverrideOnceAMissingExecutableReturns(t *testing.T) {

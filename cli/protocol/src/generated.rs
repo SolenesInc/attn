@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "5a7aa8652536";
+pub const PROTOCOL_VERSION: &str = "7fc37e95d240";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -3316,8 +3316,6 @@ pub struct DelegateMessage {
     pub profile_id: Option<String>,
     pub request_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub review: Option<SeedReviewActionContext>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_session_id: Option<SessionID>,
@@ -5004,97 +5002,6 @@ impl FsWriteResultMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct GardenReview {
-    #[serde(deserialize_with = "null_as_default")]
-    pub items: Vec<GardenReviewItem>,
-    pub run: GardenReviewRun,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct GardenReviewEvidence {
-    pub label: String,
-    pub text: String,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct GardenReviewItem {
-    #[serde(deserialize_with = "null_as_default")]
-    pub actions: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub advisor_attempt: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub advisor_error: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub advisor_max_attempts: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub advisor_retry_at: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub advisor_state: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub advisor_updated_at: Option<String>,
-    pub body: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cited_evidence: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub completed_at: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-    #[serde(deserialize_with = "null_as_default")]
-    pub evidence: Vec<GardenReviewEvidence>,
-    pub evidence_version: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub explanation: Option<String>,
-    pub id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub outpost: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub recommendation: Option<String>,
-    pub resolution: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub resolved_action: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub review_again_at: Option<String>,
-    pub run_id: String,
-    pub seed_id: String,
-    pub seed_rev: i64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub started_at: Option<String>,
-    pub status: String,
-    pub title: String,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct GardenReviewRecipe {
-    pub agent: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub effort: Option<String>,
-    pub model: String,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct GardenReviewRun {
-    #[serde(deserialize_with = "null_as_default")]
-    pub candidate_ids: Vec<String>,
-    pub captured_at: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub completed_at: Option<String>,
-    pub id: String,
-    pub profile_id: String,
-    pub recipe: GardenReviewRecipe,
-    pub status: String,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct GardenReviewUpdatedMessage {
-    pub event: String,
-    pub review: GardenReview,
-}
-
-impl GardenReviewUpdatedMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            event: "garden_review_updated".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GardenSeedsChangedMessage {
     pub event: String,
     #[serde(deserialize_with = "null_as_default")]
@@ -5431,8 +5338,6 @@ pub type GitOperationStatus = String;
 pub struct Harness {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub activity_effort: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub advisor_effort: Option<String>,
     pub id: String,
     pub installation: HarnessInstallation,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -8702,8 +8607,6 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed_note_result: Option<SeedNoteResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed_review_result: Option<SeedReviewResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed_send_to_chief_result: Option<SeedSendToChiefResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed_transition_result: Option<SeedTransitionResult>,
@@ -9732,8 +9635,6 @@ pub struct SeedHandoverRequest {
     pub handoff: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub review: Option<SeedReviewActionContext>,
     pub seed_id: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -9969,8 +9870,6 @@ pub struct SeedResumeMessage {
     pub cmd: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub review: Option<SeedReviewActionContext>,
     pub seed_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_session_id: Option<SessionID>,
@@ -10005,188 +9904,6 @@ impl SeedResumeResultMessage {
     pub fn new() -> Self {
         Self {
             event: "seed_resume_result".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedReviewActionContext {
-    pub evidence_version: String,
-    pub review_id: String,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedReviewCancelMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
-    pub review_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-}
-
-impl SeedReviewCancelMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_review_cancel".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedReviewDraftMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    pub request_id: String,
-    pub review: SeedReviewActionContext,
-    pub seed_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-}
-
-impl SeedReviewDraftMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_review_draft".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedReviewDraftResultMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-    pub event: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub handoff: Option<String>,
-    pub request_id: String,
-    pub success: bool,
-}
-
-impl SeedReviewDraftResultMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            event: "seed_review_draft_result".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedReviewKeepMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
-    pub review: SeedReviewActionContext,
-    pub seed_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-}
-
-impl SeedReviewKeepMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_review_keep".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedReviewResult {
-    pub candidate_count: i64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub review: Option<GardenReview>,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedReviewResultMessage {
-    pub candidate_count: i64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-    pub event: String,
-    pub operation: String,
-    pub profile_id: String,
-    pub request_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub review: Option<GardenReview>,
-    pub success: bool,
-}
-
-impl SeedReviewResultMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            event: "seed_review_result".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedReviewRetryMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
-    pub review_id: String,
-    pub seed_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-}
-
-impl SeedReviewRetryMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_review_retry".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedReviewShowMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub review_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-}
-
-impl SeedReviewShowMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_review_show".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedReviewStartMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-}
-
-impl SeedReviewStartMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_review_start".to_string(),
             ..Self::default()
         }
     }
@@ -10251,8 +9968,6 @@ pub struct SeedSendToChiefMessage {
     pub profile_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub review: Option<SeedReviewActionContext>,
     pub seed_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_session_id: Option<SessionID>,
@@ -10390,8 +10105,6 @@ pub struct SeedTransitionMessage {
     pub reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub review: Option<SeedReviewActionContext>,
     pub seed_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_session_id: Option<SessionID>,
@@ -13778,9 +13491,6 @@ impl ResponseField for SeedCheckResult {
 }
 impl ResponseField for SeedNoteResult {
     const FIELD: &'static str = "seed_note_result";
-}
-impl ResponseField for SeedReviewResult {
-    const FIELD: &'static str = "seed_review_result";
 }
 impl ResponseField for SeedSendToChiefResult {
     const FIELD: &'static str = "seed_send_to_chief_result";

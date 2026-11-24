@@ -140,7 +140,7 @@ fn keeping(profiles: Vec<Profile>, selected: &str, not_empty: &[&str]) -> Daemon
         let name = kept.profiles.iter().find(|p| p.id == id).unwrap().name.clone();
         if kept.not_empty.contains(&id) {
             let refusal = format!(
-                "profile {name:?} is not empty: 1 live agents, 0 crew members, 0 automations, 0 tiles, 1 open seeds and 0 pending delegations and 0 running Garden reviews; clean up the profile yourself or ask your agent before deleting it"
+                "profile {name:?} is not empty: 1 live agents, 0 crew members, 0 automations, 0 tiles, 1 open seeds and 0 pending delegations; clean up the profile yourself or ask your agent before deleting it"
             );
             return vec![refused("profile_delete", &refusal, "invalid")];
         }

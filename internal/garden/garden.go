@@ -13,13 +13,12 @@ import (
 )
 
 const (
-	Namespace             = "core/garden"
-	CollectionSeeds       = "seeds"
-	CollectionSeedBodies  = "seed_bodies"
-	CollectionNotes       = "notes"
-	CollectionDispatches  = "dispatches"
-	CollectionReviewRuns  = "review-runs"
-	CollectionReviewItems = "review-items"
+	Namespace            = "core/garden"
+	CollectionSeeds      = "seeds"
+	CollectionSeedBodies = "seed_bodies"
+	CollectionNotes      = "notes"
+	CollectionDispatches = "dispatches"
+	CollectionReviewRuns = "review-runs"
 )
 
 const (

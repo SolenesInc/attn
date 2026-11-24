@@ -44,11 +44,6 @@ pub(crate) fn harness(id: &str, name: &str) -> Harness {
         installation: "installed".into(),
         offered: true,
         activity_effort: (id == "codex").then(|| "low".into()),
-        advisor_effort: match id {
-            "claude" => Some("medium".into()),
-            "codex" => Some("xhigh".into()),
-            _ => None,
-        },
         options,
         ..Harness::default()
     }

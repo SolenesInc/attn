@@ -80,9 +80,6 @@ types:
   revision:
     json: {type: string, minLength: 1}
     placeholder: "<rev>"
-  review_id:
-    json: {type: string, minLength: 1}
-    placeholder: "<review-id>"
   entry_kind:
     json: {type: string, minLength: 1}
     placeholder: "<kind>"

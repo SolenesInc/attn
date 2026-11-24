@@ -159,7 +159,6 @@ pub const SETTINGS: &[Setting] = &[
     Setting { key: "auto_settle_countdown_seconds", machine: false, default_on: false },
     Setting { key: "headless_context_window_cap", machine: false, default_on: false },
     Setting { key: "activity.config", machine: false, default_on: false },
-    Setting { key: "garden.advisor", machine: false, default_on: false },
     Setting { key: "model_calls.agent", machine: false, default_on: false },
     Setting { key: "model_calls.model", machine: false, default_on: false },
     Setting { key: "activity.intervals", machine: false, default_on: false },

@@ -15,7 +15,6 @@ import (
 
 func chiefSeedAssignmentNote(
 	continuation *seedContinuation,
-	item garden.ReviewItem,
 	guidance string,
 ) string {
 	var body strings.Builder
@@ -45,14 +44,6 @@ func chiefSeedAssignmentNote(
 	if value := strings.TrimSpace(guidance); value != "" {
 		body.WriteString("\n\nUser guidance:\n")
 		body.WriteString(value)
-	}
-	if item.Recommendation != "" {
-		body.WriteString("\n\nAdvisor suggested ")
-		body.WriteString(item.Recommendation)
-		if value := strings.TrimSpace(item.Explanation); value != "" {
-			body.WriteString(": ")
-			body.WriteString(value)
-		}
 	}
 	return body.String()
 }
@@ -85,18 +76,6 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, profileID
 		return nil, protocol.Refuse(protocol.RefusalLimit, "chief guidance is %d bytes and the limit is %d", len(guidance), garden.MaxNoteBytes/2)
 	}
 
-	var reviewItem garden.ReviewItem
-	if msg.Review != nil {
-		item, err := d.validateGardenReviewAction(msg.Review, seedID, "send_to_chief")
-		if err != nil {
-			return nil, err
-		}
-		reviewItem = item
-		if item.SeedRev != int64(msg.ExpectedRev) {
-			return nil, protocol.Refuse(protocol.RefusalConflict, "%s changed since you reviewed it; refresh the garden", seedID)
-		}
-	}
-
 	seed, doc, err := d.readSeed(seedID)
 	if err != nil {
 		return nil, err
@@ -120,7 +99,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, profileID
 		next.StateChangedAt = formatGardenTime(d.gardenTime())
 	}
 
-	noteBody := chiefSeedAssignmentNote(d.continuationForSeed(seed), reviewItem, guidance)
+	noteBody := chiefSeedAssignmentNote(d.continuationForSeed(seed), guidance)
 	if err := garden.ValidateNote(noteBody); err != nil {
 		return nil, err
 	}
@@ -151,9 +130,6 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, profileID
 			return nil, protocol.Refuse(protocol.RefusalConflict, "%s changed while it was being sent to Chief; refresh the garden", seed.ID)
 		}
 		return nil, err
-	}
-	if err := d.resolveGardenReviewAction(msg.Review, seed.ID, "send_to_chief"); err != nil {
-		d.logf("Garden review: settle %s after Send to Chief: %v", seed.ID, err)
 	}
 	status, detail := d.deliverChiefSeedAssignment(chiefSessionID, seed.ID)
 

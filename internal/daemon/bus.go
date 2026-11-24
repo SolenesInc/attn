@@ -101,8 +101,6 @@ const (
 	FactDocumentCollectionRemoved    = "document.collection.removed"
 	FactDocumentCollectionRedeclared = "document.collection.redeclared"
 
-	FactGardenReviewChanged = "garden.review.changed"
-
 	FactSeedStandbyViewChanged = "seed.standby_view.changed"
 
 	FactCrewRegistered         = "crew.registered"
@@ -299,10 +297,6 @@ func buildWireProjections() []projection {
 			},
 		},
 		{
-			filter: bus.Filter{FactGardenReviewChanged},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectGardenReview(ev.Subject) },
-		},
-		{
 			filter: bus.Filter{"crew.*"},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectCrewRoster() },
 		},
@@ -396,9 +390,8 @@ func buildWireProjections() []projection {
 		},
 		{
 			filter: bus.Filter{FactTaskChanged},
-			apply: func(d *Daemon, ev bus.Event) {
+			apply: func(d *Daemon, _ bus.Event) {
 				d.projectTasksChanged()
-				d.projectGardenReviewJob(ev.Subject)
 			},
 		},
 		{

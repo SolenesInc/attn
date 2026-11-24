@@ -5,7 +5,6 @@ mod checks;
 mod continuation;
 mod handover;
 pub(crate) mod model;
-mod review;
 pub(crate) mod search;
 mod sheet;
 mod spot;
@@ -107,14 +106,6 @@ pub(crate) struct Garden {
     folds: HashSet<String>,
     pub(super) check_focus: Option<CheckFocus>,
     pub(crate) board_walk: board::Board,
-    pub(crate) review: review::Review,
-}
-
-impl Garden {
-    /// The parts of the open review that hold an edit.
-    fn review_spots(&self) -> impl Iterator<Item = &spot::Spot> {
-        self.edits.keys().filter(|s| s.at() == review::AT)
-    }
 }
 
 /// A garden push, by its address, and the count of outpost reach changes, which a seed's
@@ -190,9 +181,6 @@ fn show(state: &mut State, frame: Mode, tx: &mut Tx) {
     let window = &mut state.window;
     window.garden.full = frame == Mode::Full;
     window.open_drawer(Drawer::Garden);
-    if was == Mode::Closed {
-        review::opened(state);
-    }
     if was != frame {
         focus_frame(state, tx);
     }
@@ -261,14 +249,12 @@ fn shown_seeds(state: &State) -> HashSet<String> {
         shown.extend(living_trail(state).pop());
     }
     shown.extend(crate::desktop::seed_chip::told(state));
-    shown.extend(review::browsed(state));
     shown
 }
 
 /// Reads each shown seed's document whenever the seed or the garden around it changes, or an
 /// outpost's reach does. Only a seed's latest read counts.
 pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
-    review::follow(state, tx);
     mark_in_terminals(state);
     let shown = shown_seeds(state);
     let reach: Vec<_> = state

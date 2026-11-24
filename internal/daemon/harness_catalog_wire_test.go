@@ -27,26 +27,26 @@ func TestTheAppGetsEveryHarnessAtConnectIncludingOneThatIsInstalledButNotOffered
 	w := newWorld(t, fakeagent.Sigma)
 	app := w.App()
 
-	catalog := testworld.Await(app, protocol.EventHarnessCatalog, func(protocol.HarnessCatalogMessage) bool { return true })
-	sigma, listed := catalogEntry(catalog, "sigma")
-	if !listed {
-		t.Fatalf("the catalog at connect lists %+v, want Sigma although sigma_enabled is off", catalog.Harnesses)
-	}
+	catalog := testworld.Await(app, protocol.EventHarnessCatalog, func(m protocol.HarnessCatalogMessage) bool {
+		h, ok := catalogEntry(m, "sigma")
+		return ok && h.Installation != protocol.HarnessInstallationChecking
+	})
+	sigma, _ := catalogEntry(catalog, "sigma")
 	if sigma.Offered || sigma.Installation != protocol.HarnessInstallationInstalled ||
 		!sigma.Options.AutoApproveUnreviewed || !sigma.Options.AutomationExecutable || sigma.Options.KeepsConversations ||
-		protocol.Deref(sigma.ActivityEffort) != "" || protocol.Deref(sigma.AdvisorEffort) != "" {
+		protocol.Deref(sigma.ActivityEffort) != "" {
 		t.Fatalf("Sigma at connect = %+v; want installed, unoffered, unreviewed auto-approve, automation executable, no default efforts", sigma)
 	}
 	claude, _ := catalogEntry(catalog, "claude")
 	if !claude.Offered || !claude.Options.ExecutableSetting || !claude.Options.Resume || !claude.Options.InitialPrompt ||
 		!claude.Options.Discovery || !claude.Options.AutomationExecutable || !claude.Options.KeepsConversations || claude.Options.AutoApproveUnreviewed ||
-		protocol.Deref(claude.ActivityEffort) != "" || protocol.Deref(claude.AdvisorEffort) != "medium" {
-		t.Fatalf("Claude Code at connect = %+v, want offered, executable setting, resume, initial prompts, discovery, automation executable, keeps conversations, advisor effort medium", claude)
+		protocol.Deref(claude.ActivityEffort) != "" {
+		t.Fatalf("Claude Code at connect = %+v, want offered, executable setting, resume, initial prompts, discovery, automation executable, keeps conversations", claude)
 	}
 	codex, _ := catalogEntry(catalog, "codex")
 	if !codex.Offered || !codex.Options.Discovery || codex.Options.AutomationExecutable || codex.Options.KeepsConversations || codex.Options.AutoApproveUnreviewed ||
-		protocol.Deref(codex.ActivityEffort) != "low" || protocol.Deref(codex.AdvisorEffort) != "xhigh" {
-		t.Fatalf("Codex at connect = %+v, want offered, discovery, no automation executable, activity effort low, advisor effort xhigh", codex)
+		protocol.Deref(codex.ActivityEffort) != "low" {
+		t.Fatalf("Codex at connect = %+v, want offered, discovery, no automation executable, activity effort low", codex)
 	}
 
 	mark := len(app.Log())

@@ -148,11 +148,6 @@ var Placements = map[string][]Placement{
 	"seed_authorization":             {Placement{LocatorHome, ""}},
 	"seed_check":                     {Placement{LocatorHome, ""}},
 	"seed_note":                      {Placement{LocatorHome, ""}},
-	"seed_review_cancel":             {Placement{LocatorHome, ""}},
-	"seed_review_keep":               {Placement{LocatorHome, ""}},
-	"seed_review_retry":              {Placement{LocatorHome, ""}},
-	"seed_review_show":               {Placement{LocatorHome, ""}},
-	"seed_review_start":              {Placement{LocatorHome, ""}},
 	"seed_send_to_chief":             {Placement{LocatorHome, ""}},
 	"seed_transition":                {Placement{LocatorHome, ""}},
 	"sender_list":                    {Placement{LocatorHome, ""}},
@@ -1759,66 +1754,6 @@ func (m SeedNoteMessage) Placement() Placement {
 }
 
 func (m SeedNoteMessage) Locate() string {
-	return ""
-}
-
-func (SeedReviewCancelMessage) CommandName() string {
-	return "seed_review_cancel"
-}
-
-func (m SeedReviewCancelMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SeedReviewCancelMessage) Locate() string {
-	return ""
-}
-
-func (SeedReviewKeepMessage) CommandName() string {
-	return "seed_review_keep"
-}
-
-func (m SeedReviewKeepMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SeedReviewKeepMessage) Locate() string {
-	return ""
-}
-
-func (SeedReviewRetryMessage) CommandName() string {
-	return "seed_review_retry"
-}
-
-func (m SeedReviewRetryMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SeedReviewRetryMessage) Locate() string {
-	return ""
-}
-
-func (SeedReviewShowMessage) CommandName() string {
-	return "seed_review_show"
-}
-
-func (m SeedReviewShowMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SeedReviewShowMessage) Locate() string {
-	return ""
-}
-
-func (SeedReviewStartMessage) CommandName() string {
-	return "seed_review_start"
-}
-
-func (m SeedReviewStartMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SeedReviewStartMessage) Locate() string {
 	return ""
 }
 

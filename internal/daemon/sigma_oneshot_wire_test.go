@@ -143,15 +143,13 @@ func TestSettingsRefuseASigmaModelWhoseProviderCannotAnswerABackgroundCall(t *te
 	if oneShot["agy/gemini-4-neon"] != protocol.ModelCapabilitySupportUnsupported || oneShot["openai/gpt-6-luna"] != protocol.ModelCapabilitySupportSupported {
 		t.Fatalf("Sigma's catalog says of background calls %v, want agy unable and openai able", oneShot)
 	}
-	for _, key := range []string{"activity.config", "garden.advisor"} {
-		requestID := uuid.NewString()
-		refused := testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: key, Value: `{"agent":"sigma","model":"agy/gemini-4-neon"}`, RequestID: protocol.Ptr(requestID)},
-			protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == requestID })
-		if protocol.Deref(refused.Success) || !strings.Contains(protocol.Deref(refused.Error), "agy/gemini-4-neon cannot answer a background call") {
-			t.Errorf("%s with agy's model = success %v, error %q; want it refused naming the model", key, protocol.Deref(refused.Success), protocol.Deref(refused.Error))
-		}
-		setSetting(t, app, key, `{"agent":"sigma","model":"openai/gpt-6-luna"}`)
+	requestID := uuid.NewString()
+	refused := testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "activity.config", Value: `{"agent":"sigma","model":"agy/gemini-4-neon"}`, RequestID: protocol.Ptr(requestID)},
+		protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == requestID })
+	if protocol.Deref(refused.Success) || !strings.Contains(protocol.Deref(refused.Error), "agy/gemini-4-neon cannot answer a background call") {
+		t.Errorf("activity.config with agy's model = success %v, error %q; want it refused naming the model", protocol.Deref(refused.Success), protocol.Deref(refused.Error))
 	}
+	setSetting(t, app, "activity.config", `{"agent":"sigma","model":"openai/gpt-6-luna"}`)
 }
 
 func TestAProviderSignedInAfterSigmaListedItsModelsAnswersBackgroundCalls(t *testing.T) {
@@ -203,9 +201,7 @@ func TestRefreshOffersTheModelsOfAProviderSignedInWhileSigmaRuns(t *testing.T) {
 	if access := claudeAccess(true); len(access) == 0 || slices.Contains(access, protocol.ModelCapabilitySupportUnsupported) {
 		t.Fatalf("after signing in and pressing Refresh, Sigma's Claude models have access %v, want them offered", access)
 	}
-	for _, key := range []string{"activity.config", "garden.advisor"} {
-		setSetting(t, app, key, `{"agent":"sigma","model":"claude/haiku"}`)
-	}
+	setSetting(t, app, "activity.config", `{"agent":"sigma","model":"claude/haiku"}`)
 }
 
 func TestOnAHomeWithOnlySigmaASigmaSessionIsTitledAndItsStopClassifiedBySigma(t *testing.T) {
@@ -248,7 +244,6 @@ func TestSettingsOfferSigmaForBackgroundCallsAndAnAbandonedDictationStopsItsSigm
 		t.Fatal("sigma one_shot = false, want Sigma offered for background model calls")
 	}
 	setSetting(t, app, "activity.config", `{"agent":"sigma"}`)
-	setSetting(t, app, "garden.advisor", `{"agent":"sigma"}`)
 	setSetting(t, app, "model_calls.agent", "sigma")
 	session, _, _ := appServerSession(t, w, app, fakeagent.Sigma, func(m *protocol.SpawnSessionMessage) {
 		m.Label = protocol.Ptr("checkout")

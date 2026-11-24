@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/bridge"
-	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
@@ -795,39 +794,33 @@ func TestEnrollmentLeavesHomeJobsIdleUntilTheMachineLeaves(t *testing.T) {
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	outpost.Vars = append(outpost.Vars, "ATTN_HEADLESS_TASKS=")
 	outpost.AnswerHeadlessTasks(func(task *fakeagent.HeadlessTask) {
-		if strings.Contains(strings.Join(task.Argv, " "), "--json-schema") {
+		switch {
+		case strings.Contains(task.Prompt, "Classify how this assistant message ends"):
+			task.Answer(`{"verdict":"DONE"}`)
+		case strings.Contains(strings.Join(task.Argv, " "), "--json-schema"):
 			task.Answer(`{"state":"waiting_input"}`)
-		} else {
+		case strings.Contains(task.Prompt, "Starting on the local activity."):
+			task.Fail("activity provider unavailable")
+		default:
 			task.Answer("Machine work title")
 		}
 	})
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	home.Start()
 	outpost.Start()
-	requireStdout(t, outpost.Attn("settings", "set", "headless_tasks.enabled", "false"), "false")
-	if advisor := outpost.Attn("settings", "set", "garden.advisor", `{"agent":"claude"}`); advisor.Code != 0 {
-		t.Fatal(advisor)
+	requireStdout(t, outpost.Attn("settings", "set", "activity.enabled", "true"), "true")
+	if cfg := outpost.Attn("settings", "set", "activity.config", `{"agent":"claude"}`); cfg.Code != 0 {
+		t.Fatal(cfg)
 	}
 	app := outpost.App()
-	id := outpost.Spawn(app, fakeagent.Claude, outpost.Path("abandoned"))
-	outpost.Launched(id)
-	cli := outpost.Client()
-	planted, err := cli.SeedPlant(protocol.SessionID(id), "Interrupted local work", "Finish the interrupted work.", "", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := cli.SeedTransition(protocol.SessionID(id), planted.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
-		t.Fatal(err)
-	}
-	if err := cli.Unregister(protocol.SessionID(id)); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.RemoveAll(outpost.Path("abandoned")); err != nil {
-		t.Fatal(err)
-	}
-	if review, err := cli.SeedReviewStart(); err != nil || review.Review == nil {
-		t.Fatalf("start local review: %+v, %v", review, err)
-	}
+	app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, DashboardVisible: true})
+	id := outpost.Spawn(app, fakeagent.Claude, outpost.Path("activity-local"), func(m *protocol.SpawnSessionMessage) {
+		m.Label = protocol.Ptr("activity-local")
+	})
+	localAgent := outpost.Launched(id)
+	app.TypeLine(id, "start on the local activity")
+	localAgent.Prompted()
+	localAgent.Reply("Starting on the local activity. <!-- attn:state=idle -->")
 	awaitTask := func(kind string, predicate func(protocol.Task) bool) protocol.Task {
 		t.Helper()
 		for {
@@ -841,7 +834,7 @@ func TestEnrollmentLeavesHomeJobsIdleUntilTheMachineLeaves(t *testing.T) {
 			testworld.AwaitSince(app, mark, protocol.EventTasksChanged, func(protocol.WebSocketEvent) bool { return true })
 		}
 	}
-	failed := awaitTask("garden_review_classify", func(task protocol.Task) bool { return task.State == "failed" })
+	failed := awaitTask("session_activity", func(task protocol.Task) bool { return task.State == "failed" })
 	pair.Connect()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 	mark := len(pair.App.Log())
@@ -853,7 +846,7 @@ func TestEnrollmentLeavesHomeJobsIdleUntilTheMachineLeaves(t *testing.T) {
 	outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
 	stopRetries()
 	app = outpost.App()
-	retried := testworld.Request(app, protocol.TaskRetryMessage{Cmd: protocol.CmdTaskRetry, TaskID: failed.ID, RequestID: protocol.Ptr("retry-local-review")}, protocol.EventTaskRetryResult, func(r protocol.TaskRetryResultMessage) bool { return r.RequestID == "retry-local-review" })
+	retried := testworld.Request(app, protocol.TaskRetryMessage{Cmd: protocol.CmdTaskRetry, TaskID: failed.ID, RequestID: protocol.Ptr("retry-local-activity")}, protocol.EventTaskRetryResult, func(r protocol.TaskRetryResultMessage) bool { return r.RequestID == "retry-local-activity" })
 	if !retried.Success || retried.Task == nil || retried.Task.State != "queued" {
 		t.Fatalf("retry while enrolled: %+v", retried)
 	}
@@ -868,13 +861,13 @@ func TestEnrollmentLeavesHomeJobsIdleUntilTheMachineLeaves(t *testing.T) {
 	agent.Reply("Title work. <!-- attn:state=waiting_input -->")
 	awaitTask("session_title", func(task protocol.Task) bool { return task.Attempts > 0 && task.State != "running" })
 	testworld.AwaitSession(pair.App, local, func(s protocol.Session) bool { return s.Label == "Machine work title" })
-	kept := awaitTask("garden_review_classify", func(task protocol.Task) bool { return task.ID == failed.ID })
+	kept := awaitTask("session_activity", func(task protocol.Task) bool { return task.ID == failed.ID })
 	if kept.State != "queued" || kept.Attempts != 0 {
 		t.Fatalf("enrolled home job was consumed: %+v", kept)
 	}
 	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "false"), "false")
 	requireStdout(t, outpost.Attn("enrollment", "leave"), "no longer enrolled")
-	ran := awaitTask("garden_review_classify", func(task protocol.Task) bool { return task.ID == failed.ID && task.Attempts > 0 })
+	ran := awaitTask("session_activity", func(task protocol.Task) bool { return task.ID == failed.ID && task.Attempts > 0 })
 	t.Logf("home job %s stayed queued at attempt 0 while a machine job ran; after leave: %s, attempt %d", ran.ID, ran.State, ran.Attempts)
 }
 

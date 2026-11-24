@@ -97,16 +97,6 @@ func countOpenProfileSeeds(tx *sql.Tx, profileID string) (int, error) {
 	return count, err
 }
 
-func countRunningProfileReviews(tx *sql.Tx, profileID string) (int, error) {
-	_, table, found, err := readCollectionTx(tx, garden.Namespace, garden.CollectionReviewRuns)
-	if err != nil || !found {
-		return 0, err
-	}
-	var count int
-	err = tx.QueryRow(fmt.Sprintf(`SELECT count(*) FROM %s WHERE json_extract(body, '$.profile_id') = ? AND json_extract(body, '$.status') = 'running'`, table), profileID).Scan(&count)
-	return count, err
-}
-
 func countPendingProfileDelegations(tx *sql.Tx, profileID string) (int, error) {
 	var count int
 	err := tx.QueryRow(`SELECT count(*) FROM delegation_operations

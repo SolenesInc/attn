@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -110,11 +111,14 @@ func markNotificationRead(app *testworld.Peer, id *string) protocol.Notification
 }
 
 func TestATaskThatFailsForGoodLeavesOneWarningWhoseRetryRequeuesIt(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
-		setSetting(t, app, "garden.advisor", `{"agent":"claude"}`)
-		gardenReviewRegisteredAbandonedSeed(t, w, cli, "gardener", "Old checkout work")
-		gardenReviewStart(t, cli)
+	inBubbleAnsweringHeadlessTasks(t, []fakeagent.Harness{fakeagent.Claude}, func(t *testing.T, w *world) {
+		w.AnswerHeadlessTasks(func(task *fakeagent.HeadlessTask) {
+			task.Fail("API Error: 529 overloaded")
+		})
+		app := w.App()
+		session := w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+			m.InitialPrompt = protocol.Ptr("the login form rejects valid passwords")
+		})
 		w.advance(0)
 		w.advance(time.Minute)
 		w.advance(2 * time.Minute)
@@ -125,15 +129,16 @@ func TestATaskThatFailsForGoodLeavesOneWarningWhoseRetryRequeuesIt(t *testing.T)
 		}
 		warning := feed.Notifications[0]
 		if warning.Kind != "task_failed" || warning.Severity != protocol.NotificationSeverityWarning || warning.SourceKind != "task" ||
-			!strings.Contains(warning.Title, "Old checkout work") || warning.Trigger == "" || warning.Impact == "" || warning.Cause == "" {
-			t.Errorf("the warning = %+v, want a task_failed warning naming the item, its trigger, impact and cause", warning)
+			!strings.Contains(warning.Title, "shop") || warning.Trigger == "" || warning.Impact == "" || warning.Cause == "" {
+			t.Errorf("the warning = %+v, want a task_failed warning naming the session, its trigger, impact and cause", warning)
 		}
-		if len(warning.Actions) != 1 || warning.Actions[0].Kind != "retry_task" || warning.Actions[0].TargetID != warning.SourceID {
-			t.Fatalf("the warning offers %+v, want one retry of its task", warning.Actions)
+		if len(warning.Actions) != 2 || warning.Actions[0].Kind != "open_session" || warning.Actions[0].TargetID != session ||
+			warning.Actions[1].Kind != "retry_task" || warning.Actions[1].TargetID != warning.SourceID {
+			t.Fatalf("the warning offers %+v, want open_session and retry_task", warning.Actions)
 		}
 
 		requestID := uuid.NewString()
-		retried := testworld.Request(app, protocol.TaskRetryMessage{Cmd: protocol.CmdTaskRetry, TaskID: warning.Actions[0].TargetID, RequestID: protocol.Ptr(requestID)},
+		retried := testworld.Request(app, protocol.TaskRetryMessage{Cmd: protocol.CmdTaskRetry, TaskID: warning.Actions[1].TargetID, RequestID: protocol.Ptr(requestID)},
 			protocol.EventTaskRetryResult, func(r protocol.TaskRetryResultMessage) bool { return r.RequestID == requestID })
 		if !retried.Success || retried.Task == nil || retried.Task.State != "queued" || retried.Task.Attempts != 0 {
 			t.Fatalf("retrying the dead task = %+v, want it queued with its attempts reset", retried)
@@ -145,40 +150,42 @@ func TestATaskThatFailsForGoodLeavesOneWarningWhoseRetryRequeuesIt(t *testing.T)
 	})
 }
 
-func TestAGardenReviewFailureWarnsOnlyTheProfileUnderReview(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
+func TestATaskFailureWarnsOnlyTheSessionsProfile(t *testing.T) {
+	inBubbleAnsweringHeadlessTasks(t, []fakeagent.Harness{fakeagent.Claude}, func(t *testing.T, w *world) {
+		w.AnswerHeadlessTasks(func(task *fakeagent.HeadlessTask) {
+			if strings.HasPrefix(task.Prompt, "Classify how this assistant message ends") {
+				task.Answer(`{"verdict":"DONE"}`)
+				return
+			}
+			task.Fail("API Error: 529 overloaded")
+		})
 		defaultApp := w.App()
-		setSetting(t, defaultApp, "garden.advisor", `{"agent":"claude"}`)
 		side := createProfile(defaultApp, "Side")
-		scoped := w.Client().WithGardenProfile(side.ID, "")
-		if err := w.InjectSession("side-gardener", "side-gardener", w.Path("side-gardener"), "claude", side.ID); err != nil {
-			t.Fatal(err)
-		}
-		gardenReviewPlantTended(t, scoped, "side-gardener", "Side checkout work")
-		if err := scoped.Unregister("side-gardener"); err != nil {
-			t.Fatal(err)
-		}
-		gardenReviewStart(t, scoped)
+		sideApp := w.AppOn(side.ID)
+		w.Spawn(sideApp, fakeagent.Claude, w.Path("side-shop"), func(m *protocol.SpawnSessionMessage) {
+			m.InitialPrompt = protocol.Ptr("the login form rejects valid passwords")
+		})
 		w.advance(0)
 		w.advance(time.Minute)
 		w.advance(2 * time.Minute)
 
-		sideFeed := listNotifications(w.AppOn(side.ID))
-		if len(sideFeed.Notifications) != 1 || !strings.Contains(sideFeed.Notifications[0].Title, "Side checkout work") {
-			t.Fatalf("Side's feed = %+v, want one warning naming its review item", sideFeed)
+		sideFeed := listNotifications(sideApp)
+		if len(sideFeed.Notifications) != 1 || sideFeed.UnreadCount != 1 || sideFeed.Notifications[0].Kind != "task_failed" ||
+			!strings.Contains(sideFeed.Notifications[0].Title, "side-shop") {
+			t.Fatalf("Side's feed = %+v, want one unread warning naming its session", sideFeed)
 		}
-		if defaultFeed := listNotifications(defaultApp); len(defaultFeed.Notifications) != 0 {
-			t.Fatalf("a failure in Side's Garden review reached Default: %+v", defaultFeed)
+		if defaultFeed := listNotifications(defaultApp); len(defaultFeed.Notifications) != 0 || defaultFeed.UnreadCount != 0 {
+			t.Fatalf("a failure in Side's session reached Default: %+v", defaultFeed)
 		}
 
 		warning := sideFeed.Notifications[0]
 		if read := markNotificationRead(defaultApp, protocol.Ptr(warning.ID)); !read.Success || read.UnreadCount != 0 {
 			t.Errorf("Default marking Side's warning read = %+v, want it harmless to Default", read)
 		}
-		if after := listNotifications(w.AppOn(side.ID)); after.UnreadCount != 1 || after.Notifications[0].ReadAt != "" {
+		if after := listNotifications(sideApp); after.UnreadCount != 1 || after.Notifications[0].ReadAt != "" {
 			t.Fatalf("Default marked Side's warning read: %+v", after)
 		}
-		if read := markNotificationRead(w.AppOn(side.ID), protocol.Ptr(warning.ID)); !read.Success || read.UnreadCount != 0 {
+		if read := markNotificationRead(sideApp, protocol.Ptr(warning.ID)); !read.Success || read.UnreadCount != 0 {
 			t.Errorf("Side marking its own warning read = %+v, want nothing unread", read)
 		}
 	})

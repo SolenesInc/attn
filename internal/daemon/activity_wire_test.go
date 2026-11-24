@@ -37,7 +37,7 @@ func TestActivityStaysOffUntilTheUserNamesAnAgentItCanRun(t *testing.T) {
 		{`{"agent":"claude"} and more`, "invalid session activity configuration"},
 		{`claude`, "invalid session activity configuration"},
 	} {
-		result := gardenAdvisorSetSetting(app, "activity.config", refused.raw)
+		result := trySetSetting(app, "activity.config", refused.raw)
 		if protocol.Deref(result.Success) || !strings.Contains(protocol.Deref(result.Error), refused.names) {
 			t.Errorf("setting the activity config to %s = success %t, error %q; want a refusal naming %q", refused.raw, protocol.Deref(result.Success), protocol.Deref(result.Error), refused.names)
 		}
@@ -55,7 +55,7 @@ func TestActivityIntervalsDefaultAndClampIntoTheirRange(t *testing.T) {
 	if got := w.App().Initial.Settings["activity.intervals"]; got != `{"watching":30,"present":3600}` {
 		t.Errorf("out-of-range intervals are reported as %v, want them clamped to 30 and 3600 seconds", got)
 	}
-	if refused := gardenAdvisorSetSetting(app, "activity.intervals", `{"watching":120,"away":0}`); protocol.Deref(refused.Success) {
+	if refused := trySetSetting(app, "activity.intervals", `{"watching":120,"away":0}`); protocol.Deref(refused.Success) {
 		t.Error("an away interval was accepted; away stops generation rather than setting a rate")
 	}
 }

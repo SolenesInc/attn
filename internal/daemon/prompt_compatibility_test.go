@@ -61,10 +61,6 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 		}
 	}
 
-	out["garden-advisor/system"] = gardenAdvisorSystemPrompt()
-	for _, task := range []gardenAdvisorTask{gardenAdviceTask, gardenHandoffTask} {
-		out["garden-advisor/"+task.name] = task.prompt(`{"body":"Task λ {{literal}}"}`)
-	}
 	out["chief/assignment"] = chiefSeedAssignmentPrompt("s-example")
 	for _, body := range []string{"", " Task λ {{literal}} "} {
 		for _, handoff := range []string{"", " Next {{literal}} "} {

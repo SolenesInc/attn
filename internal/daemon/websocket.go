@@ -912,18 +912,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.life.Go("handleSeedResume", func() { d.handleSeedResume(client, msg.(*protocol.SeedResumeMessage)) })
 	case protocol.CmdSeedSendToChief:
 		d.life.Go("handleSeedSendToChiefWS", func() { d.handleSeedSendToChiefWS(client, msg.(*protocol.SeedSendToChiefMessage)) })
-	case protocol.CmdSeedReviewStart:
-		d.life.Go("handleSeedReviewStartWS", func() { d.handleSeedReviewStartWS(client, msg.(*protocol.SeedReviewStartMessage)) })
-	case protocol.CmdSeedReviewShow:
-		d.life.Go("handleSeedReviewShowWS", func() { d.handleSeedReviewShowWS(client, msg.(*protocol.SeedReviewShowMessage)) })
-	case protocol.CmdSeedReviewCancel:
-		d.life.Go("handleSeedReviewCancelWS", func() { d.handleSeedReviewCancelWS(client, msg.(*protocol.SeedReviewCancelMessage)) })
-	case protocol.CmdSeedReviewRetry:
-		d.life.Go("handleSeedReviewRetryWS", func() { d.handleSeedReviewRetryWS(client, msg.(*protocol.SeedReviewRetryMessage)) })
-	case protocol.CmdSeedReviewKeep:
-		d.life.Go("handleSeedReviewKeepWS", func() { d.handleSeedReviewKeepWS(client, msg.(*protocol.SeedReviewKeepMessage)) })
-	case protocol.CmdSeedReviewDraft:
-		d.life.Go("handleSeedReviewDraftWS", func() { d.handleSeedReviewDraftWS(client, msg.(*protocol.SeedReviewDraftMessage)) })
 	case protocol.CmdQuickCaptureSend, protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList:
 		selected := client.selectedProfile()
 		d.life.Go("handleQuickCaptureWS", func() { d.handleQuickCaptureWS(client, selected, msg) })

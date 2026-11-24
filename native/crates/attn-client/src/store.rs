@@ -3,11 +3,10 @@ use std::sync::{Arc, Mutex, Weak};
 
 use crate::layout::{Leaf, Node};
 use attn_protocol::{
-    Ask, AuthorState, CrewMember, DaemonWarning, DesktopTileContentMessage, GardenReview,
-    GitOperation, Harness, InitialStateMessage, OutpostInfo, PR, PairedSender,
-    PhonesUpdatedMessage, PluginInfo, PluginIssue, Profile, RepoState, Seed, SenderPairingRequest,
-    SendersUpdatedMessage, Session, SessionLedgerEntry, SharedCodexState, UpdateRun, Vent,
-    Worktree, WorktreeSweepEntry,
+    Ask, AuthorState, CrewMember, DaemonWarning, DesktopTileContentMessage, GitOperation, Harness,
+    InitialStateMessage, OutpostInfo, PR, PairedSender, PhonesUpdatedMessage, PluginInfo,
+    PluginIssue, Profile, RepoState, Seed, SenderPairingRequest, SendersUpdatedMessage, Session,
+    SessionLedgerEntry, SharedCodexState, UpdateRun, Vent, Worktree, WorktreeSweepEntry,
 };
 
 /// A desktop as the daemon sent it, with its layout tree read once on arrival.
@@ -101,9 +100,6 @@ pub struct Facts {
     /// What each document tile holds, as the daemon last sent it.
     pub tile_contents: Arc<TileContents>,
     pub garden: Arc<Garden>,
-    /// The selected profile's garden review as the daemon last broadcast it; `None` until it
-    /// broadcasts one on this connection.
-    pub garden_review: Arc<Option<GardenReview>>,
     /// The selected profile's open asks, then the ones answered in the last day.
     pub asks: Arc<Vec<Ask>>,
     /// What the daemon warned of at the last handshake, such as terminals it could not
@@ -413,12 +409,11 @@ impl Slices {
     pub const SENDERS: Slices = Slices(1 << 22);
     pub const HARNESSES: Slices = Slices(1 << 23);
     pub const FILES: Slices = Slices(1 << 24);
-    pub const GARDEN_REVIEW: Slices = Slices(1 << 25);
-    pub const CREW: Slices = Slices(1 << 26);
-    pub const CAPTURE_READS: Slices = Slices(1 << 27);
-    pub const SHARED_CODEX: Slices = Slices(1 << 28);
-    pub const AUTOMATIONS: Slices = Slices(1 << 29);
-    pub const ALL: Slices = Slices((1 << 30) - 1);
+    pub const CREW: Slices = Slices(1 << 25);
+    pub const CAPTURE_READS: Slices = Slices(1 << 26);
+    pub const SHARED_CODEX: Slices = Slices(1 << 27);
+    pub const AUTOMATIONS: Slices = Slices(1 << 28);
+    pub const ALL: Slices = Slices((1 << 29) - 1);
 
     pub const fn union(self, other: Slices) -> Slices {
         Slices(self.0 | other.0)
@@ -554,7 +549,6 @@ impl Store {
                 total: state.seeds_total.unwrap_or(seeds.len() as i64),
                 seeds,
             });
-            facts.garden_review = Arc::default();
             facts.asks = Arc::new(state.asks.unwrap_or_default());
             facts.warnings = Arc::new(state.warnings.unwrap_or_default());
             facts.vents = Arc::new(state.vents.unwrap_or_default());
@@ -713,17 +707,6 @@ impl Store {
     }
 
     /// A profile's asks; another profile's change nothing here.
-    /// A garden review the daemon broadcast; another profile's changes nothing here.
-    pub(crate) fn set_garden_review(&self, review: GardenReview) {
-        self.change(|facts| {
-            if review.run.profile_id != facts.profiles.selected {
-                return Slices::NONE;
-            }
-            facts.garden_review = Arc::new(Some(review));
-            Slices::GARDEN_REVIEW
-        });
-    }
-
     pub(crate) fn set_asks(&self, profile: &str, asks: Vec<Ask>) {
         self.change(|facts| {
             if profile != facts.profiles.selected {
@@ -896,8 +879,7 @@ impl Store {
                 profiles.selected = profile.id.clone();
                 facts.asks = Arc::default();
                 facts.vents = Arc::default();
-                facts.garden_review = Arc::default();
-                changed |= Slices::ASKS | Slices::VENTS | Slices::GARDEN_REVIEW;
+                changed |= Slices::ASKS | Slices::VENTS;
             }
             match profiles.all.iter_mut().find(|p| p.id == profile.id) {
                 Some(known) => *known = profile,

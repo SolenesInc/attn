@@ -54,7 +54,6 @@ func Facts() harness.Facts {
 		},
 		CacheTTL:  time.Hour,
 		Tiers:     map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "haiku"}, modeltiers.Standard: {Model: "sonnet"}, modeltiers.Deep: {Model: "opus"}},
-		Advisor:   harness.ModelChoice{Model: "sonnet", Effort: "medium"},
 		CrewModel: "fable",
 		Signals: harness.Signals{
 			TurnStarts:      harness.TurnStartsReported,

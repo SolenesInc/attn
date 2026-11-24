@@ -36,23 +36,11 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 		d.sendToClient(client, result)
 		return
 	}
-	expectedRev := int64(0)
-	if msg.Review != nil {
-		item, reviewErr := d.validateGardenReviewAction(msg.Review, msg.SeedID, string(verb))
-		if reviewErr != nil {
-			fail(reviewErr)
-			return
-		}
-		expectedRev = item.SeedRev
-	}
-	seed, doc, _, err := d.applySeedTransitionDetailedAtRevision(
-		msg.SeedID, verb, ask, protocol.Deref(msg.Comment), expectedRev)
+	seed, doc, _, err := d.applySeedTransitionDetailed(
+		msg.SeedID, verb, ask, protocol.Deref(msg.Comment))
 	if err != nil {
 		fail(err)
 		return
-	}
-	if err := d.resolveGardenReviewAction(msg.Review, msg.SeedID, string(verb)); err != nil {
-		d.logf("Garden review: settle %s after %s: %v", msg.SeedID, verb, err)
 	}
 	wire := d.seedWire(seed, doc)
 

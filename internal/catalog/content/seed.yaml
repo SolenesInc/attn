@@ -108,8 +108,6 @@ groups:
 
           The Garden labels old path associations as linked files. Bring a linked file into seed ownership explicitly with Move or Copy. A failed transfer leaves the link alone.
         commands: [seed attach, seed detach]
-      - title: Garden review
-        commands: [seed review start, seed review show, seed review cancel, seed review retry, seed review keep]
       - title: Packets
         text: |
           A packet is a plot flagged as a template with declared variables. attn cannot yet create seeds from a packet. `attn seed show` says `packet yes`, and `attn seed ready` skips the packet's subtree.
@@ -118,11 +116,6 @@ groups:
     summary: define, report, or judge what a seed must prove
     doc: |
       Define, report, or judge what a seed must prove. Each move has its own --help. Checks never block a move. harvest lists the checks still open or rejected.
-
-  - name: seed review
-    summary: an advisory Garden review
-    doc: |
-      Start an advisory Garden review, inspect its progressive results, cancel unfinished classification, retry one failed or changed item, or keep one seed growing and review it again after seven quiet days. The review never changes a seed's state.
 
 commands:
   - name: seed search
@@ -691,56 +684,3 @@ commands:
     examples:
       - {seed: s-7k3f9m, path: retry.log, to: ./retry.log}
       - {seed: s-7k3f9m, path: notes.md, reference: true}
-
-  - name: seed review start
-    summary: start an advisory Garden review
-    runs: home
-    grant: full
-    doc: |
-      Starts an advisory Garden review. The review never changes a seed's state.
-    result: SeedReviewResult
-
-  - name: seed review show
-    summary: inspect a review and its progressive results
-    runs: home
-    grant: full
-    read_only: true
-    doc: |
-      Inspects the review and its progressive results. With no `review`, shows the latest review.
-    args:
-      - {name: review, type: review_id, cli: pos}
-    result: SeedReviewResult
-
-  - name: seed review cancel
-    summary: cancel unfinished classification
-    runs: home
-    grant: full
-    doc: |
-      Cancels unfinished classification.
-    args:
-      - {name: review, type: review_id, required: true, cli: pos}
-    result: SeedReviewResult
-
-  - name: seed review retry
-    summary: retry one failed or changed review item
-    runs: home
-    grant: full
-    doc: |
-      Retries one failed or changed review item.
-    args:
-      - {name: review, type: review_id, required: true, cli: pos}
-      - {name: seed, type: seed, required: true, cli: pos, placeholder: "<seed-id>"}
-    result: SeedReviewResult
-
-  - name: seed review keep
-    summary: keep a seed growing and review it again later
-    runs: home
-    grant: full
-    doc: |
-      Keeps a seed growing and reviews it again after seven quiet days.
-    args:
-      - {name: review, type: review_id, required: true, cli: pos}
-      - {name: seed, type: seed, required: true, cli: pos, placeholder: "<seed-id>"}
-    result: SeedReviewResult
-    errors:
-      - {code: not_in_review, fix: 'Pass a seed the review lists; seed review show lists them.'}

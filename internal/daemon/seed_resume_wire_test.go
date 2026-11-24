@@ -5,14 +5,11 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/fakeagent"
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 	"github.com/victorarias/attn/internal/toolhome"
@@ -228,11 +225,8 @@ func TestAResumeWhoseAgentCannotStartKeepsItsPaneAndReleasesItsClaim(t *testing.
 	lifeMove(t, cli, "next-tender", delegated.SeedID, "tend", "", "")
 }
 
-func TestSeedEditsAndHarvestSurviveReviewedResume(t *testing.T) {
-	var now atomic.Int64
-	now.Store(time.Now().UnixNano())
-	w := &world{World: prepareWorld(t, fakeagent.Claude), gardenClock: func() time.Time { return time.Unix(0, now.Load()) }}
-	w.start()
+func TestSeedEditsAndHarvestSurviveResume(t *testing.T) {
+	w := newWorld(t)
 	app, cli := w.App(), w.Client()
 	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"resume": true, "state_reporting": true})
 	awaitDriverAvailable(app, "snipe")
@@ -242,17 +236,14 @@ func TestSeedEditsAndHarvestSurviveReviewedResume(t *testing.T) {
 		"resume_session_id": "saved-conversation",
 		"metadata":          map[string]string{"native_id": "saved-conversation"},
 	})
-	seed := gardenReviewPlantTended(t, cli, id, "Resume the tracked task")
+	seed := plantSeedAs(t, cli, "", "Resume the tracked task")
+	lifeMove(t, cli, id, seed, "tend", "", "")
 	closePane(app, sessionPane{session: id})
-	setSetting(t, app, "garden.advisor", `{"agent":"claude"}`)
-	now.Store(time.Unix(0, now.Load()).Add(garden.DefaultStaleWindow).UnixNano())
-	review := gardenReviewStart(t, cli)
 	driver.mu.Lock()
 	driver.holdLaunch = true
 	driver.mu.Unlock()
 	app.Send(protocol.SeedResumeMessage{
 		Cmd: protocol.CmdSeedResume, SeedID: seed, RequestID: protocol.Ptr("resume"),
-		Review: &protocol.SeedReviewActionContext{ReviewID: review.Run.ID, EvidenceVersion: gardenReviewItem(t, &review, seed).EvidenceVersion},
 	})
 	var launch driverLaunch
 	reply := driver.asked("driver.resume", &launch)
@@ -271,37 +262,6 @@ func TestSeedEditsAndHarvestSurviveReviewedResume(t *testing.T) {
 	}
 	if after := lifeShow(t, cli, seed).Seed; after.Rev != changed.Rev {
 		t.Errorf("resume rewrote the seed: revision %d -> %d", changed.Rev, after.Rev)
-	}
-}
-
-func TestAReviewedResumeSettlesItsDecisionWhenLaunchFails(t *testing.T) {
-	var now atomic.Int64
-	now.Store(time.Now().UnixNano())
-	w := &world{World: prepareWorld(t, fakeagent.Plug, fakeagent.Claude), gardenClock: func() time.Time { return time.Unix(0, now.Load()) }}
-	w.start()
-	app, cli := w.App(), w.Client()
-	awaitHarnessOffered(app, "plug")
-	delegated := seedResumeDelegate(t, w, fakeagent.Plug, "api")
-	w.Launched(string(delegated.SessionID))
-	closePane(app, sessionPane{session: string(delegated.SessionID)})
-	now.Store(time.Unix(0, now.Load()).Add(garden.DefaultStaleWindow).UnixNano())
-	setSetting(t, app, "garden.advisor", `{"agent":"claude"}`)
-	t.Setenv("ATTN_HEADLESS_TASKS", "on")
-	review := gardenReviewStart(t, cli)
-	w.HeadlessTask().Answer(`{"recommendation":"resume","explanation":"Continue the saved conversation.","evidence":["The original conversation is available."]}`)
-	testworld.Await(app, protocol.EventGardenReviewUpdated, func(m protocol.GardenReviewUpdatedMessage) bool {
-		return m.Review.Run.ID == review.Run.ID && gardenReviewItem(t, &m.Review, delegated.SeedID).Status == "ready"
-	})
-	defer w.RefusePlugLaunches("the model provider is unreachable")()
-	resumed := testworld.Request(app, protocol.SeedResumeMessage{
-		Cmd: protocol.CmdSeedResume, SeedID: delegated.SeedID, RequestID: protocol.Ptr("resume"),
-		Review: &protocol.SeedReviewActionContext{ReviewID: review.Run.ID, EvidenceVersion: gardenReviewItem(t, &review, delegated.SeedID).EvidenceVersion},
-	}, protocol.EventSeedResumeResult, func(r protocol.SeedResumeResultMessage) bool { return r.RequestID == "resume" })
-	if resumed.Success || !strings.Contains(protocol.Deref(resumed.Error), "provider is unreachable") {
-		t.Fatalf("review resume = %+v, want the launch failure", resumed)
-	}
-	if after := gardenReviewShow(t, cli, review.Run.ID).Review; after.Run.Status != "complete" {
-		t.Errorf("review after launch failure is %s, want complete", after.Run.Status)
 	}
 }
 

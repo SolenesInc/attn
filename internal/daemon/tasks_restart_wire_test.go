@@ -6,22 +6,25 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestATaskThatFailedForGoodIsStillListedWithItsCauseAfterARestart(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		gardenReviewRegisteredAbandonedSeed(t, w, cli, "gardener", "Old checkout work")
-		setSetting(t, w.App(), "garden.advisor", `{"agent":"claude"}`)
-		gardenReviewStart(t, cli)
+	inBubbleAnsweringHeadlessTasks(t, []fakeagent.Harness{fakeagent.Claude}, func(t *testing.T, w *world) {
+		w.AnswerHeadlessTasks(func(task *fakeagent.HeadlessTask) {
+			task.Fail("API Error: 529 overloaded")
+		})
+		w.Spawn(w.App(), fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+			m.InitialPrompt = protocol.Ptr("the login form rejects valid passwords")
+		})
 		w.advance(0)
 		w.advance(time.Minute)
 		w.advance(2 * time.Minute)
 		before := deadTasks(w.App())
 		if len(before) != 1 || protocol.Deref(before[0].LastError) == "" {
-			t.Fatalf("dead tasks = %+v, want the Garden review's with its cause", before)
+			t.Fatalf("dead tasks = %+v, want the failed title task with its cause", before)
 		}
 
 		w.restart()

@@ -193,7 +193,6 @@ func (d *Daemon) outpostsUpdatedMessage() *protocol.OutpostsUpdatedMessage {
 
 func (d *Daemon) projectOutpostReach() {
 	d.projectOutpostsUpdated()
-	d.projectRunningGardenReviews()
 }
 
 func (d *Daemon) projectOutpostsUpdated() {

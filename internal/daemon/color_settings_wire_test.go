@@ -17,7 +17,7 @@ func TestColorSettingsAcceptKnownValuesAndRefuseWithTheVocabulary(t *testing.T) 
 		{"color_overrides", override},
 	}
 	for _, set := range accepted {
-		result := gardenAdvisorSetSetting(app, set.key, set.value)
+		result := trySetSetting(app, set.key, set.value)
 		if !protocol.Deref(result.Success) {
 			t.Fatalf("set %s = %s refused: %s", set.key, set.value, protocol.Deref(result.Error))
 		}
@@ -40,7 +40,7 @@ func TestColorSettingsAcceptKnownValuesAndRefuseWithTheVocabulary(t *testing.T) 
 		{"color_overrides", `{"dark":{"chrome":{}}}`, []string{"color_overrides: dark.chrome is not a group; use ui or terminal"}},
 	}
 	for _, set := range refused {
-		result := gardenAdvisorSetSetting(app, set.key, set.value)
+		result := trySetSetting(app, set.key, set.value)
 		if protocol.Deref(result.Success) {
 			t.Errorf("set %s = %s accepted", set.key, set.value)
 			continue
@@ -54,7 +54,7 @@ func TestColorSettingsAcceptKnownValuesAndRefuseWithTheVocabulary(t *testing.T) 
 	}
 
 	for _, key := range []string{"color_scheme", "color_overrides"} {
-		result := gardenAdvisorSetSetting(app, key, "")
+		result := trySetSetting(app, key, "")
 		if !protocol.Deref(result.Success) {
 			t.Fatalf("clearing %s refused: %s", key, protocol.Deref(result.Error))
 		}

@@ -238,7 +238,6 @@ type Facts struct {
 	SkillDirs   func(lookupEnv func(string) string, homeDir string) ([]string, error)
 	CacheTTL    time.Duration
 	Tiers       map[modeltiers.Tier]ModelChoice
-	Advisor     ModelChoice
 	CrewModel   string
 	Signals     Signals
 	Recovery    Recovery
