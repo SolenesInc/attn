@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "A bed suggestion can include a different bed",
+  "at": "2026-11-24T23:48:17.548Z",
+  "detail": "Selecting the Payments bed suggestion inserts a partial bed query that also matches Cloud Payments, so work from another bed appears in the result. The native wire probe and independent review confirmed this at 5ec9f5d. Evidence: s-kf0c7c/garden-v2-state-review.md.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/garden/search.rs",
+    "line": 221
+  },
+  "culprit": "5ec9f5d43de6c60b63d8df1960ad39f2adb9d386"
+}
