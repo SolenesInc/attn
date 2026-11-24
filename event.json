@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Settled tenders remain Waiting on you",
+  "at": "2026-11-24T23:48:12.447Z",
+  "detail": "In attention queue flow, a settled tender with no open ask can remain under Waiting on you in Garden even after the queue removes the owed turn. The native wire probe and an independent reviewer confirmed the mismatch at 5ec9f5d. Evidence: s-kf0c7c/garden-v2-state-review.md.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/garden/v2.rs",
+    "line": 267
+  },
+  "culprit": "5ec9f5d43de6c60b63d8df1960ad39f2adb9d386"
+}
