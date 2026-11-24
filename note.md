@@ -1,0 +1,1 @@
+⌘P's recent markdown now ranks by decayed use plus a boost that fades within the hour, so a file an agent just edited comes first and last week's burst sinks. Each machine gets its own limit, and each machine checks its own files, so deleted files on outposts stop showing too.
