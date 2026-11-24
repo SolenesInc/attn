@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Sigma fork crash stack test races its crash: succession now commits at /fork, test still prompted the dying daemon",
+  "at": "2026-11-24T07:12:06.470Z",
+  "repairs": "0f30ac9ce379f18cd8eb4d7675a16bef882dd1d8"
+}
