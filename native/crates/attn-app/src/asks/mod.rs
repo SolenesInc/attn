@@ -568,12 +568,14 @@ impl Kind {
 }
 
 /// One row of the sheet's list: the ask, the agent that holds it or the closed agent on
-/// standby that its answer resumes, and how the sheet names that agent.
+/// standby that its answer resumes, how the sheet names that agent, and whether its answer
+/// goes to the Chief because no agent would take it.
 pub(crate) struct Item<'a> {
     pub ask: &'a Ask,
     pub holder: Option<&'a Session>,
     pub standby: Option<Standby<'a>>,
     pub from: String,
+    pub to_chief: bool,
     pub questions: usize,
     pub snoozed_until: Option<&'a str>,
 }
@@ -604,6 +606,7 @@ impl<'a> Lists<'a> {
                     &facts.harnesses,
                 ),
                 standby,
+                to_chief: to_chief(ask, facts),
                 questions: questions(ask).count(),
                 snoozed_until: None,
             }
@@ -699,6 +702,21 @@ pub(crate) fn belongs_to(ask: &Ask, session: &Session, facts: &Facts) -> bool {
     ask.session_id == session.id
 }
 
+pub(crate) const STRANDED: &str = "No agent will get this answer";
+
+pub(crate) fn stranded(ask: &Ask) -> bool {
+    ask.stranded == Some(true)
+}
+
+/// A stranded ask's answer goes to the selected profile's Chief, when it has one.
+fn to_chief(ask: &Ask, facts: &Facts) -> bool {
+    stranded(ask)
+        && facts
+            .crew
+            .iter()
+            .any(|m| m.chief == Some(true) && !m.retired && m.profile_id == facts.profiles.selected)
+}
+
 /// The closed agent on standby that tends the ask's seed, and whether an answer resumes it:
 /// a blocked resume and the `garden.tender_resume` setting can leave the answer waiting.
 fn standby_tender<'a>(ask: &Ask, facts: &'a Facts) -> Option<Standby<'a>> {
@@ -771,9 +789,12 @@ fn next_tender_of(seed: &str, ask: &Ask) -> String {
     format!("the next tender of {}", title.unwrap_or(seed))
 }
 
-/// Says where a follow-up the daemon took went: to the session holding the ask, to the tender
-/// on standby it resumes, or, with neither, who it waits for.
-fn follow_up_notice(ask: &Ask, holder: Option<&str>, facts: &Facts) -> String {
+/// Says where a follow-up the daemon took went: to the Chief, to the session holding the ask, to
+/// the tender on standby it resumes, or, with none of them, who it waits for.
+fn follow_up_notice(ask: &Ask, chief: bool, holder: Option<&str>, facts: &Facts) -> String {
+    if chief {
+        return "Follow-up sent to Chief".into();
+    }
     if let Some(id) = holder {
         return match facts.sessions.iter().find(|s| s.id == id) {
             Some(session) => format!(
@@ -1186,6 +1207,7 @@ fn send_ask(state: &mut State, id: String, tx: &mut Tx) {
     let Some(ask) = state.facts.asks.iter().find(|a| a.id == id).cloned() else {
         return;
     };
+    let chief = to_chief(&ask, &state.facts);
     let draft = state.draft(&id);
     if !draft.sendable(&ask) {
         return;
@@ -1220,6 +1242,7 @@ fn send_ask(state: &mut State, id: String, tx: &mut Tx) {
             answers,
             note: (!note.is_empty()).then_some(note),
             attachments: (!attachments.is_empty()).then_some(attachments),
+            to_chief: chief.then_some(true),
             ..AskAnswerMessage::new()
         },
         move |state, answer, tx| {
@@ -1293,6 +1316,7 @@ fn send_follow_up(state: &mut State, id: String, tx: &mut Tx) {
         return;
     };
     let sent = text.clone();
+    let chief = to_chief(&ask, &state.facts);
     state.window.asks.sending = Some(id.clone());
     state.window.asks.error = None;
     state.ask(
@@ -1302,6 +1326,7 @@ fn send_follow_up(state: &mut State, id: String, tx: &mut Tx) {
                 request_id,
                 ask_id: id,
                 text,
+                to_chief: chief.then_some(true),
                 ..AskFollowUpMessage::new()
             }
         },
@@ -1310,7 +1335,7 @@ fn send_follow_up(state: &mut State, id: String, tx: &mut Tx) {
             match answer.outcome() {
                 Ok(reply) => {
                     let holder = reply.body["holder"].as_str();
-                    let notice = follow_up_notice(&ask, holder, &state.facts);
+                    let notice = follow_up_notice(&ask, chief, holder, &state.facts);
                     let follow_ups = &mut state.window.asks.follow_ups;
                     if follow_ups
                         .get(&id)

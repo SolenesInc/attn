@@ -4,8 +4,8 @@ use std::time::Duration;
 use attn_app::Action;
 use attn_protocol::{
     Ask, AskAnswer, AskAnswerResultMessage, AskChoice, AskDefault, AskFollowUpResultMessage,
-    AskPart, AskQuestion, AskReply, AskThread, AsksUpdatedMessage, InitialStateMessage, Session,
-    SessionStateChangedMessage,
+    AskPart, AskQuestion, AskReply, AskThread, AsksUpdatedMessage, CrewMember, InitialStateMessage,
+    Session, SessionStateChangedMessage,
 };
 use attn_protocol::{
     GardenSeedsUpdatedMessage, PartyView, Seed, SeedDocument, SeedDocumentGetResultMessage,
@@ -3759,4 +3759,131 @@ fn a_follow_up_no_session_holds_says_who_it_waits_for() {
         assert!(!has(&world, "asks.follow-up.field"));
         assert_eq!(name(&world, "notice.text"), says);
     }
+}
+
+fn stranded_cache_store() -> Ask {
+    Ask {
+        seed_id: Some("s-cache".into()),
+        seed_title: Some("Cache migration".into()),
+        stranded: Some(true),
+        ..ask(
+            "a-cache1",
+            "api",
+            "Cache store",
+            30,
+            vec![question(
+                "q1",
+                "one",
+                "Which store?",
+                &["Postgres", "Redis"],
+            )],
+        )
+    }
+}
+
+fn chief_of(profile: &str, retired: bool) -> CrewMember {
+    CrewMember {
+        id: "chief".into(),
+        name: "Chief".into(),
+        profile_id: profile.into(),
+        chief: Some(true),
+        retired,
+        ..CrewMember::default()
+    }
+}
+
+fn start_with_crew(asks: Vec<Ask>, crew: Vec<CrewMember>) -> World {
+    let mut state = one_desktop(vec![]);
+    state.crew = Some(crew);
+    start_on(state, asks, &[])
+}
+
+#[test]
+fn a_stranded_ask_says_no_agent_will_get_the_answer_and_sends_it_to_the_chief() {
+    let mut world = start_with_crew(vec![stranded_cache_store()], vec![chief_of("work", false)]);
+    open_sheet(&mut world);
+
+    assert_eq!(name(&world, "asks.from"), "No agent will get this answer");
+    assert!(name(&world, "asks.send").starts_with("Send to Chief"));
+    click(&mut world, "asks.q.q1.choice.1");
+    send_key(&mut world);
+
+    let sent = sent_answers(&world);
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0]["to_chief"], serde_json::json!(true));
+}
+
+#[test]
+fn a_stranded_ask_keeps_send_when_the_profile_has_no_chief() {
+    for crew in [
+        vec![],
+        vec![chief_of("home", false)],
+        vec![chief_of("work", true)],
+    ] {
+        let mut world = start_with_crew(vec![stranded_cache_store()], crew);
+        open_sheet(&mut world);
+
+        assert_eq!(name(&world, "asks.from"), "No agent will get this answer");
+        let send = name(&world, "asks.send");
+        assert!(
+            send.starts_with("Send ") && !send.contains("Chief"),
+            "{send}"
+        );
+        click(&mut world, "asks.q.q1.choice.1");
+        send_key(&mut world);
+
+        let sent = sent_answers(&world);
+        assert_eq!(sent.len(), 1);
+        assert!(sent[0].get("to_chief").is_none_or(|v| v.is_null()));
+    }
+}
+
+#[test]
+fn a_held_ask_sends_to_its_agent_even_with_a_chief() {
+    let held = Ask {
+        stranded: None,
+        ..stranded_cache_store()
+    };
+    let mut state = one_desktop(vec![api_working()]);
+    state.crew = Some(vec![chief_of("work", false)]);
+    let mut world = start_on(state, vec![held], &[]);
+    open_sheet(&mut world);
+
+    assert_ne!(name(&world, "asks.from"), "No agent will get this answer");
+    assert!(!name(&world, "asks.send").contains("Chief"));
+    click(&mut world, "asks.q.q1.choice.1");
+    send_key(&mut world);
+
+    assert!(
+        sent_answers(&world)[0]
+            .get("to_chief")
+            .is_none_or(|v| v.is_null())
+    );
+}
+
+#[test]
+fn a_follow_up_on_a_stranded_replied_ask_goes_to_the_chief() {
+    let answered = replied(stranded_cache_store(), vec![picked("q1", &["Redis"])], None);
+    let mut world = start_with_crew(vec![answered], vec![chief_of("work", false)]);
+    world.daemon.on("ask_follow_up", |r| {
+        message(AskFollowUpResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            ask_id: r["ask_id"].as_str().unwrap().into(),
+            success: true,
+            ..AskFollowUpResultMessage::new()
+        })
+    });
+    open_sheet(&mut world);
+    letter(&mut world, "r");
+
+    assert_eq!(name(&world, "asks.from"), "No agent will get this answer");
+    letter(&mut world, "f");
+    world.gesture(|app| app.type_text("Use Redis."));
+    assert!(name(&world, "asks.follow-up.send").starts_with("Send to Chief"));
+    send_key(&mut world);
+
+    let sent = world.daemon.sent_of("ask_follow_up");
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0]["to_chief"], serde_json::json!(true));
+    assert_eq!(name(&world, "notice.text"), "Follow-up sent to Chief");
 }

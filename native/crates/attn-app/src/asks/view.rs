@@ -520,11 +520,19 @@ fn header(state: &State, item: &Item<'_>, t: &Tokens) -> El {
             )
         }))
         .child(
-            words(item.from.clone(), Type::Small, t.text_secondary)
-                .key("asks.from")
-                .min_w(0.0)
-                .shrink()
-                .truncate(),
+            words(
+                if super::stranded(ask) {
+                    super::STRANDED.to_owned()
+                } else {
+                    item.from.clone()
+                },
+                Type::Small,
+                t.text_secondary,
+            )
+            .key("asks.from")
+            .min_w(0.0)
+            .shrink()
+            .truncate(),
         )
         .children(asker_state(state, item).map(|said| {
             words(said, Type::Small, t.text_tertiary)
@@ -575,7 +583,11 @@ fn article(state: &State, item: &Item<'_>, measure: Option<f32>, t: &Tokens) -> 
     let ask = item.ask;
     let prose = Prose::of(state, ask, measure, t);
     let mut blocks = Vec::new();
-    if let Some(standby) = item.standby.as_ref().filter(|_| ask.reply.is_none()) {
+    if let Some(standby) = item
+        .standby
+        .as_ref()
+        .filter(|_| ask.reply.is_none() && !item.to_chief)
+    {
         blocks.push(Block::custom(
             "asks.resumes.block",
             words(standby.answer.clone(), Type::Small, t.text_secondary).key("asks.resumes"),
@@ -664,6 +676,7 @@ fn article(state: &State, item: &Item<'_>, measure: Option<f32>, t: &Tokens) -> 
         });
     }
     let note_placeholder = match (item.holder, &item.standby, &ask.seed_id) {
+        _ if item.to_chief => "Anything else for the Chief?".to_owned(),
         (None, Some(standby), _) => format!(
             "Anything else for {}?",
             crate::desktop::chain::dormant_name(standby.tender, &state.facts.harnesses)
@@ -694,7 +707,11 @@ fn article(state: &State, item: &Item<'_>, measure: Option<f32>, t: &Tokens) -> 
                         Some(edit),
                         FOLLOW_UP,
                         "Follow up",
-                        &format!("What else should {} know?", item.from),
+                        &if item.to_chief {
+                            "What else should the Chief know?".to_owned()
+                        } else {
+                            format!("What else should {} know?", item.from)
+                        },
                         move |state: &mut State| super::follow_up_edit(state, &id),
                         t,
                     ),
@@ -1508,7 +1525,7 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> Block {
             Inline::loose()
                 .key("asks.replied-actions")
                 .child(when)
-                .child(follow_up_button(state, ask, t))
+                .child(follow_up_button(state, item, t))
         }
         None => {
             let sendable = !sending
@@ -1527,6 +1544,8 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> Block {
             let sendable = sendable && !waiting;
             let said = if sending || waiting {
                 "Sending…"
+            } else if item.to_chief {
+                "Send to Chief"
             } else {
                 "Send"
             };
@@ -1642,7 +1661,8 @@ fn quote_button(text: &str, t: &Tokens) -> Option<El> {
 }
 
 /// A replied ask's Follow up, which opens its field, then sends what the field holds.
-fn follow_up_button(state: &State, ask: &Ask, t: &Tokens) -> El {
+fn follow_up_button(state: &State, item: &Item<'_>, t: &Tokens) -> El {
+    let ask = item.ask;
     let Some(edit) = state.window.asks.follow_ups.get(&ask.id) else {
         return El::from(
             Button::new("Follow up")
@@ -1658,6 +1678,8 @@ fn follow_up_button(state: &State, ask: &Ask, t: &Tokens) -> El {
     let sending = state.window.asks.sending.is_some();
     let said = if sending {
         "Sending…"
+    } else if item.to_chief {
+        "Send to Chief"
     } else {
         "Send follow-up"
     };
