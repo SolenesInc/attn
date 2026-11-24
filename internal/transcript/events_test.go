@@ -103,6 +103,31 @@ func TestReadEventPageCodexPaginatedRolloutShowsUserMessages(t *testing.T) {
 	}
 }
 
+func TestReadEventPageCodexFunctionCallShowsItsArguments(t *testing.T) {
+	path := writeEventTranscript(t,
+		`{"timestamp":"2026-11-17T01:31:50Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"attn seed show s-hmxwsr\",\"token\":\"hidden-value\"}","call_id":"call-1"}}`,
+		`{"timestamp":"2026-11-17T01:31:51Z","type":"response_item","payload":{"type":"custom_tool_call","name":"exec","input":"text(await tools.exec_command({cmd:\"ls\"}))","call_id":"call-2"}}`,
+	)
+
+	page, err := ReadEventPage(path, FormatCodex, "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Events) != 2 {
+		t.Fatalf("events = %#v, want the two tool calls", page.Events)
+	}
+	call := page.Events[0]
+	if call.Kind != EventKindToolCall || call.ToolName != "exec_command" || call.ToolCallID != "call-1" || !strings.Contains(call.Text, "attn seed show s-hmxwsr") {
+		t.Errorf("function call = %#v, want its arguments as its text", call)
+	}
+	if strings.Contains(call.Text, "hidden-value") {
+		t.Errorf("function call shows a secret: %q", call.Text)
+	}
+	if custom := page.Events[1]; custom.ToolName != "exec" || !strings.Contains(custom.Text, "exec_command") {
+		t.Errorf("custom tool call = %#v, want its input as its text", custom)
+	}
+}
+
 func TestReadEventPageCodexResponseItemAssistantOnly(t *testing.T) {
 	path := writeEventTranscript(t,
 		`{"timestamp":"2026-07-19T10:00:00Z","type":"session_meta","payload":{"id":"native-id"}}`,

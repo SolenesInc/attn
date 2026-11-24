@@ -450,6 +450,7 @@ func parseCodexEvent(envelope eventEnvelope) []Event {
 			Name    string          `json:"name"`
 			CallID  string          `json:"call_id"`
 			Input   json.RawMessage `json:"input"`
+			Args    json.RawMessage `json:"arguments"`
 			Output  json.RawMessage `json:"output"`
 			Status  string          `json:"status"`
 			Error   string          `json:"error"`
@@ -468,7 +469,7 @@ func parseCodexEvent(envelope eventEnvelope) []Event {
 				Kind:       EventKindToolCall,
 				ToolName:   payload.Name,
 				ToolCallID: payload.CallID,
-				Text:       renderJSONValue(payload.Input),
+				Text:       firstNonEmpty(renderJSONValue(payload.Input), renderJSONValue(payload.Args)),
 				IsError:    strings.EqualFold(payload.Status, "failed"),
 			}}
 		case "custom_tool_call_output", "function_call_output":
