@@ -141,7 +141,7 @@ func authorsPlugin(t *testing.T, harnessID, tarball string) string {
 		text := string(data)
 		switch file {
 		case "package.json":
-			text = strings.Replace(text, `"0.7.0"`, `"file:`+tarball+`"`, 1)
+			text = strings.Replace(text, `"0.8.0"`, `"file:`+tarball+`"`, 1)
 		case "src/index.ts":
 			text = strings.Replace(text, `const harnessId = "`+exampleHarnessID+`"`, `const harnessId = "`+harnessID+`"`, 1)
 			if !strings.Contains(text, harnessID) {

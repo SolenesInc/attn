@@ -50,6 +50,9 @@ var claudeSuggestionCells = sync.OnceValue(func() *regexp.Regexp {
 type claudeTranscriptWatcherBehavior struct{}
 
 func (b *claudeTranscriptWatcherBehavior) HandleLine(line []byte) harness.WatcherLine {
+	if title, ok := transcript.ClaudeCustomTitle(line); ok {
+		return harness.WatcherLine{Title: title}
+	}
 	if abort, ok := transcript.ClaudeTurnAborted(line); ok {
 		return harness.WatcherLine{
 			Aborted:     true,

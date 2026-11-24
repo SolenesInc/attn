@@ -151,6 +151,7 @@ export interface DriverRun {
   /** `resumeSessionId` is the native conversation ID; attributed input and compaction wait for it. */
   reportMetadata(metadata: unknown, options?: { resumeSessionId?: string }): Promise<void>;
   transcriptPath(path: string): Promise<void>;
+  title(title: string): Promise<void>;
   pullRequest(url: string): Promise<void>;
   compaction(report: {
     inputId: string;

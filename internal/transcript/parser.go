@@ -293,6 +293,21 @@ type TurnAbort struct {
 	At time.Time
 }
 
+func ClaudeCustomTitle(line []byte) (string, bool) {
+	var entry struct {
+		Type        string `json:"type"`
+		CustomTitle string `json:"customTitle"`
+	}
+	if err := json.Unmarshal(line, &entry); err != nil || entry.Type != "custom-title" {
+		return "", false
+	}
+	title := strings.Join(strings.Fields(entry.CustomTitle), " ")
+	if title == "" {
+		return "", false
+	}
+	return title, true
+}
+
 func ClaudeTurnAborted(line []byte) (TurnAbort, bool) {
 	var entry struct {
 		Type                 string          `json:"type"`

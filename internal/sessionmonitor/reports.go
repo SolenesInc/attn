@@ -12,6 +12,10 @@ func (m *Monitor) ReportHarnessTitle(title string) bool {
 		return false
 	}
 	m.mu.Lock()
+	if m.harnessTitle == title {
+		m.mu.Unlock()
+		return true
+	}
 	m.harnessTitle = title
 	view := m.viewLocked()
 	m.mu.Unlock()

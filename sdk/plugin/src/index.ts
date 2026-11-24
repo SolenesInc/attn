@@ -567,6 +567,10 @@ class ClientRun implements DriverRun {
     return this.call("session.report_transcript_path", this.identity({ path })).then(() => undefined);
   }
 
+  title(title: string): Promise<void> {
+    return this.call("session.report_title", this.identity({ title })).then(() => undefined);
+  }
+
   pullRequest(url: string): Promise<void> {
     return this.call("session.report_pull_request", this.identity({ url })).then(() => undefined);
   }

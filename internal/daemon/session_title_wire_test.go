@@ -1,6 +1,8 @@
 package daemon_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -448,4 +450,49 @@ func TestAnAppServerConversationStartedOutsideAttnIsTitledFromItsFirstPromptWhen
 			t.Fatalf("plan.md, written 150 times before the session resumed the conversation, counts %d in recent files, want 0", got)
 		}
 	})
+}
+
+func TestAClaudeCustomTitleRenamesTheSessionUnlessUserPinned(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	run := w.Launched(session)
+	app.TypeLine(session, "inspect the retry queue")
+	run.Prompted()
+	run.Reply("Looking into it. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+
+	transcripts, err := filepath.Glob(filepath.Join(w.Dir, "toolhome", ".claude", "projects", "*", run.ConversationID+".jsonl"))
+	if err != nil || len(transcripts) != 1 {
+		t.Fatalf("claude transcripts = %v (err=%v), want 1", transcripts, err)
+	}
+	appendLine := func(line string) {
+		t.Helper()
+		f, err := os.OpenFile(transcripts[0], os.O_APPEND|os.O_WRONLY, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.WriteString(line + "\n"); err != nil {
+			_ = f.Close()
+			t.Fatal(err)
+		}
+		if err := f.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	appendLine(`{"type":"custom-title","customTitle":"Retry queue audit","sessionId":"` + run.ConversationID + `"}`)
+	w.readTranscripts()
+	awaitLabel(app, session, "Retry queue audit")
+
+	renameFromApp(app, protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: protocol.SessionID(session), Label: "User chosen name"}, session)
+	awaitLabel(app, session, "User chosen name")
+
+	appendLine(`{"type":"custom-title","customTitle":"Later claude rename","sessionId":"` + run.ConversationID + `"}`)
+	w.readTranscripts()
+	run.Reply("Still working. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if label := w.sessionLabel(session); label != "User chosen name" {
+		t.Fatalf("session label = %q after later Claude custom-title, want explicit user rename preserved", label)
+	}
 }

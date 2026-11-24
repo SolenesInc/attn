@@ -32,6 +32,7 @@ type TranscriptWatcher interface {
 // WatcherLine is what one transcript line told the watcher.
 type WatcherLine struct {
 	Log         string
+	Title       string
 	Aborted     bool
 	AbortDetail string
 	AbortAt     time.Time

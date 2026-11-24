@@ -308,6 +308,47 @@ func runTurnAbortCases(t *testing.T, parse func([]byte) (TurnAbort, bool), cases
 	}
 }
 
+func TestClaudeCustomTitle(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		line      string
+		wantTitle string
+		wantOK    bool
+	}{
+		{
+			name:      "captured custom-title entry",
+			line:      `{"type":"custom-title","customTitle":"Engineering principles from pstack","sessionId":"6d45871e-a4d7-4cff-a573-7b266270aa7b"}`,
+			wantTitle: "Engineering principles from pstack",
+			wantOK:    true,
+		},
+		{
+			name:      "collapses surrounding and internal whitespace",
+			line:      `{"type":"custom-title","customTitle":"  Fix\tlogin\nflow  "}`,
+			wantTitle: "Fix login flow",
+			wantOK:    true,
+		},
+		{
+			name: "blank custom-title is ignored",
+			line: `{"type":"custom-title","customTitle":"   "}`,
+		},
+		{
+			name: "ai-title is not a custom-title",
+			line: `{"type":"ai-title","aiTitle":"Auto title"}`,
+		},
+		{
+			name: "assistant line is not a custom-title",
+			line: `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi"}]}}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := ClaudeCustomTitle([]byte(tc.line))
+			if ok != tc.wantOK || got != tc.wantTitle {
+				t.Fatalf("ClaudeCustomTitle() = (%q, %v), want (%q, %v)", got, ok, tc.wantTitle, tc.wantOK)
+			}
+		})
+	}
+}
+
 func TestClaudeTurnAborted(t *testing.T) {
 	runTurnAbortCases(t, ClaudeTurnAborted, []turnAbortCase{
 		{

@@ -579,6 +579,9 @@ func (w *transcriptWatcher) run(predecessorDone <-chan struct{}) {
 				if lineResult.Log != "" {
 					m.logf("%s session=%s", lineResult.Log, label)
 				}
+				if lineResult.Title != "" {
+					m.ReportHarnessTitle(lineResult.Title)
+				}
 				if lineResult.Aborted {
 					if skip, reason := staleTranscriptAbort(lineResult.AbortAt, w.startedAt); skip {
 						m.logf("transcript watcher: ignoring turn abort session=%s reason=%s abort_at=%s", label, reason, lineResult.AbortAt.Format(time.RFC3339Nano))

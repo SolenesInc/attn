@@ -97,6 +97,13 @@ type pluginReportTranscriptPathParams struct {
 	Path       string              `json:"path"`
 }
 
+type pluginReportTitleParams struct {
+	TerminalID protocol.TerminalID `json:"session_id"`
+	SessionID  protocol.SessionID  `json:"-"`
+	RunID      string              `json:"run_id"`
+	Title      string              `json:"title"`
+}
+
 type pluginClassifyStopParams struct {
 	TerminalID    protocol.TerminalID `json:"session_id"`
 	SessionID     protocol.SessionID  `json:"-"`
@@ -122,6 +129,7 @@ type pendingPluginReport struct {
 	Stop       *pluginReportStopParams
 	Metadata   *pluginReportMetadataParams
 	Transcript *pluginReportTranscriptPathParams
+	Title      *pluginReportTitleParams
 }
 
 func (r *pluginRegistry) registerDriver(plugin *pluginConnection, params pluginDriverRegisterParams, bindServer func() error) error {
@@ -410,6 +418,23 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 			d.applyPluginReportedTranscriptPath(params)
 		}
 		return struct{}{}, true, nil
+	case "session.report_title":
+		var params pluginReportTitleParams
+		if err := json.Unmarshal(msg.Params, &params); err != nil {
+			return nil, true, fmt.Errorf("decode session.report_title params: %w", err)
+		}
+		params.SessionID = d.sessionInTerminal(params.TerminalID)
+		params.Title = strings.Join(strings.Fields(params.Title), " ")
+		if params.Title == "" {
+			return nil, true, errors.New("session.report_title title is required")
+		}
+		if !d.queueReportDuringPluginLaunch(plugin, params.SessionID, pendingPluginReport{Title: &params}) {
+			if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
+				return nil, true, err
+			}
+			d.applyPluginReportedTitle(params)
+		}
+		return struct{}{}, true, nil
 	default:
 		return nil, false, nil
 	}
@@ -532,6 +557,11 @@ func (d *Daemon) applyPluginReportedTranscriptPath(params pluginReportTranscript
 	}
 }
 
+func (d *Daemon) applyPluginReportedTitle(params pluginReportTitleParams) {
+	d.notePluginDriverReport(params.SessionID)
+	d.events().Named(params.SessionID, params.Title)
+}
+
 func (d *Daemon) queueReportDuringPluginLaunch(plugin *pluginConnection, sessionID protocol.SessionID, report pendingPluginReport) bool {
 	var watch *launchWatch
 	queued := d.sessionMonitor(sessionID).QueueDuringLaunch(plugin.name, report.runID(), func() { d.replayPluginReport(report) }, func() {
@@ -562,6 +592,8 @@ func (d *Daemon) replayPluginReport(report pendingPluginReport) {
 		}
 	case report.Transcript != nil:
 		d.applyPluginReportedTranscriptPath(*report.Transcript)
+	case report.Title != nil:
+		d.applyPluginReportedTitle(*report.Title)
 	}
 }
 
@@ -589,6 +621,8 @@ func (r pendingPluginReport) runID() string {
 		return r.Metadata.RunID
 	case r.Transcript != nil:
 		return r.Transcript.RunID
+	case r.Title != nil:
+		return r.Title.RunID
 	default:
 		return ""
 	}

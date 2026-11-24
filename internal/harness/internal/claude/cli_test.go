@@ -63,4 +63,7 @@ func TestClaudeWatcherBehaviorDetectsHaltedTurn(t *testing.T) {
 	if got := behavior.HandleLine([]byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"working on it"}]}}`)); got.Aborted {
 		t.Fatalf("an ordinary line was read as a halt: %+v", got)
 	}
+	if got := behavior.HandleLine([]byte(`{"type":"custom-title","customTitle":"Fix checkout flow","sessionId":"s1"}`)); got.Title != "Fix checkout flow" || got.Aborted {
+		t.Fatalf("custom-title line = %+v, want Title %q", got, "Fix checkout flow")
+	}
 }
