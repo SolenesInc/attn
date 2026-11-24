@@ -1185,11 +1185,16 @@ fn card_face(seed: &Arc<Seed>, look: &CardLook, t: &Tokens) -> El {
                     .min_w(0.0),
             )
             .child(words(look.age.clone(), Type::Mono, t.text_muted));
+        let readiness = (look.column == Column::Ready && !seed.ready)
+            .then(|| card_meta(look, seed, t))
+            .filter(|facts| !facts.is_empty())
+            .map(|facts| Byline::new().wrap().push_all(facts).build(t));
         Card::new(card_key(&seed.id))
             .control("button", seed.title.clone())
             .standing(standing)
             .push(head)
             .push_all(pulse)
+            .push_all(readiness)
             .push_all(look.standby.as_ref().map(|s| standby_marker(s, t)))
             .push(foot)
             .build(t)

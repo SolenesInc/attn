@@ -48,7 +48,6 @@ pub(super) fn index(state: &State) -> Index {
 struct Look<'a> {
     index: &'a Index,
     names: &'a SessionNames,
-    beds: &'a [attn_protocol::GardenBed],
 }
 
 impl Lookups for Look<'_> {
@@ -57,13 +56,6 @@ impl Lookups for Look<'_> {
     }
     fn blockers_of(&self, seed: &Seed) -> usize {
         self.index.blockers(&seed.id)
-    }
-    fn bed_slug_of(&self, seed: &Seed) -> Option<&str> {
-        let id = seed.bed_id.as_deref()?;
-        self.beds
-            .iter()
-            .find(|b| b.id == id)
-            .map(|b| b.slug.as_str())
     }
 }
 
@@ -117,15 +109,18 @@ impl Place {
             let look = Look {
                 index: &index,
                 names: &names,
-                beds: v2::beds(state),
             };
+            let bed_filters = if query.beds.is_empty() {
+                vec![v2_snap.bed.clone()]
+            } else {
+                v2::search_beds(v2::beds(state), &query.beds)
+            };
+            let allow_exact_id = query.beds.is_empty() && v2_snap.bed == BedFilter::All;
             let seeds = super::seeds(state);
             let bed_allows = |s: &Arc<Seed>| {
-                if !v2_snap.on || !query.beds.is_empty() {
-                    true
-                } else {
-                    v2::matches_bed_in(s, &v2_snap.bed, &index)
-                }
+                !v2_snap.on
+                    || (allow_exact_id && query.terms.contains(&s.id))
+                    || v2::matches_any_bed(s, &bed_filters, &index)
             };
             let scoped_seeds: Vec<&Arc<Seed>> = seeds.iter().filter(|s| bed_allows(s)).collect();
             let in_subtree = plot.as_ref().map(|p| index.subtree(p));
@@ -240,7 +235,6 @@ impl Place {
         Look {
             index: &self.index,
             names: &self.names,
-            beds: &[],
         }
     }
 
@@ -322,12 +316,13 @@ pub(super) fn walkable_rows(state: &State, focused: Option<&str>) -> Vec<String>
     if place.v2.on {
         let docked = super::mode(state) != Mode::Full;
         if columns(state) {
-            if let Some(focused_id) = focused
-                && let Some(here) = place.here()
+            if let Some(here) = place.here()
                 && model::is_plot(here)
             {
                 let children = place.lens(place.index.children_of(&here.id));
-                if children.iter().any(|c| c.id == focused_id) {
+                if !children.is_empty()
+                    && focused.is_none_or(|id| children.iter().any(|child| child.id == id))
+                {
                     return ids(&children);
                 }
             }
@@ -730,14 +725,20 @@ fn search_line(state: &State, place: &Place, t: &Tokens) -> El {
                     ));
                 } else {
                     for bed in profile_beds.iter().take(5) {
-                        let slug = bed.slug.clone();
+                        let id = bed.id.clone();
                         meta.push(
                             button(format!("garden.search.bed.{}", bed.id), bed.name.clone(), t)
                                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                                    let raw = state.window.garden.query.text.clone();
-                                    let cut =
-                                        raw.rfind("bed:").map_or(raw.as_str(), |at| &raw[..at]);
-                                    super::set_query(state, format!("{cut}bed:{slug} "), tx);
+                                    let raw = &state.window.garden.query.text;
+                                    let before = raw
+                                        .rsplit_once(char::is_whitespace)
+                                        .map_or("", |(before, _)| before);
+                                    let query = if before.is_empty() {
+                                        format!("bed:{id} ")
+                                    } else {
+                                        format!("{before} bed:{id} ")
+                                    };
+                                    super::set_query(state, query, tx);
                                 }),
                         );
                     }
@@ -1636,8 +1637,7 @@ fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Token
         names: &place.names,
         garden: &state.window.garden,
         seeds: super::seeds(state),
-        sessions: &state.facts.sessions,
-        asks: &state.facts.asks,
+        facts: &state.facts,
         v2: place.v2.on,
         chief: model::has_chief(&state.facts.sessions, &state.facts.profiles.selected),
         readings: &state.readings,

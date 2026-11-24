@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use attn_protocol::{Ask, DesktopUpdateTileMessage, Seed, SeedCheckTally, SeedDocument, Session};
+use attn_client::Facts;
+use attn_protocol::{DesktopUpdateTileMessage, Seed, SeedCheckTally, SeedDocument};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Block, Byline, Entry, Head, Inline, Prose, Section, Stack, entries};
 use attn_ui::system::{
@@ -23,8 +24,7 @@ pub(super) struct Sheet<'a> {
     pub(super) names: &'a SessionNames,
     pub(super) garden: &'a super::Garden,
     pub(super) seeds: &'a [Arc<Seed>],
-    pub(super) sessions: &'a [Session],
-    pub(super) asks: &'a [Ask],
+    pub(super) facts: &'a Facts,
     pub(super) v2: bool,
     pub(super) chief: bool,
     pub(super) readings: &'a crate::markdown::Readings,
@@ -186,18 +186,18 @@ impl Sheet<'_> {
         let t = self.t;
         let mut after = Vec::new();
         if self.v2 {
-            let att = attention.unwrap_or_else(|| {
-                v2::AttentionIndex::of(self.sessions, self.asks).attention(here, index)
-            });
-            let live = v2::live_session(here, self.sessions).map(|(session, agent_state)| {
-                let name = self
-                    .names
-                    .get(&session.id)
-                    .cloned()
-                    .filter(|n| !n.is_empty())
-                    .unwrap_or_else(|| session.label.clone());
-                (session.id.clone(), name, agent_state)
-            });
+            let att = attention
+                .unwrap_or_else(|| v2::AttentionIndex::of(self.facts).attention(here, index));
+            let live =
+                v2::live_session(here, &self.facts.sessions).map(|(session, agent_state)| {
+                    let name = self
+                        .names
+                        .get(&session.id)
+                        .cloned()
+                        .filter(|n| !n.is_empty())
+                        .unwrap_or_else(|| session.label.clone());
+                    (session.id.clone(), name, agent_state)
+                });
             if let Some(strip) = v2::pulse_strip(
                 self.key("head.pulse"),
                 here.pulse.as_deref(),

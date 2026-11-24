@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use attn_protocol::{Ask, Seed, Session};
+use attn_client::Facts;
+use attn_protocol::Seed;
 use attn_ui::Tokens;
 use attn_ui::blocks::{Reader, Room};
 use rune::{El, Tx};
@@ -14,8 +15,7 @@ use crate::State;
 pub(crate) struct Reads<'a> {
     pub(crate) garden: &'a Garden,
     pub(crate) seeds: &'a [Arc<Seed>],
-    pub(crate) sessions: &'a [Session],
-    pub(crate) asks: &'a [Ask],
+    pub(crate) facts: &'a Facts,
     pub(crate) v2: bool,
     pub(crate) readings: &'a crate::markdown::Readings,
     pub(crate) pictures: &'a crate::markdown::Pictures,
@@ -41,7 +41,7 @@ pub(crate) fn body(
     let view = format!("{prefix}.viewport");
     let (document, error) = super::reading(reads.garden, id);
     let held = reads.seeds.iter().find(|s| s.id == id);
-    let names = model::session_names(reads.sessions, reads.harnesses);
+    let names = model::session_names(&reads.facts.sessions, reads.harnesses);
     let sheet = Sheet {
         prefix,
         view: view.clone(),
@@ -52,8 +52,7 @@ pub(crate) fn body(
         names: &names,
         garden: reads.garden,
         seeds: reads.seeds,
-        sessions: reads.sessions,
-        asks: reads.asks,
+        facts: reads.facts,
         v2: reads.v2,
         chief: reads.chief,
         readings: reads.readings,

@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use attn_client::Facts;
 use attn_protocol::{
-    Ask, GardenBed, GardenBedDeleteMessage, GardenBedDeleteResultMessage, GardenBedSaveMessage,
+    GardenBed, GardenBedDeleteMessage, GardenBedDeleteResultMessage, GardenBedSaveMessage,
     GardenBedSaveResultMessage, Seed, SeedBedSetMessage, SeedBedSetResultMessage, Session,
 };
 use attn_ui::Tokens;
@@ -11,14 +12,15 @@ use attn_ui::blocks::{
 };
 use attn_ui::system::{
     Button, DotShape, DotSize, FieldState, GroupHead, IconSize, ListRow, Look, Segment, Segmented,
-    Size, Type, dot, icon_button, line_box, over_window, words,
+    Size, Type, area_box, dot, icon_button, line_box, over_window, words,
 };
 use rune::{Color, El, Key, KeyEvent, TextEdit, Tx};
-use rune_kit::TextInput;
+use rune_kit::{TextArea, TextInput};
 
 use super::model::{self, Index};
 use crate::State;
 use crate::sidebar::model::AgentState;
+use crate::sidebar::queue;
 
 pub(crate) const SETTING: &str = "garden_v2_enabled";
 pub(crate) const BED_RAIL_WIDTH: f32 = 180.0;
@@ -154,12 +156,37 @@ pub(crate) fn root_id<'a>(mut seed_id: &'a str, index: &'a Index) -> &'a str {
     seed_id
 }
 
-pub(crate) fn matches_bed_in(seed: &Seed, filter: &BedFilter, index: &Index) -> bool {
+pub(crate) fn matches_any_bed(seed: &Seed, filters: &[BedFilter], index: &Index) -> bool {
     let root = index
         .by_id
         .get(root_id(&seed.id, index))
         .map_or(seed, Arc::as_ref);
-    matches_bed(root, filter)
+    filters.iter().any(|filter| matches_bed(root, filter))
+}
+
+pub(crate) fn search_beds(beds: &[GardenBed], terms: &[String]) -> Vec<BedFilter> {
+    let mut filters = Vec::new();
+    for term in terms {
+        match term.as_str() {
+            "unassigned" | "none" => filters.push(BedFilter::Unassigned),
+            "automations" | "auto" => filters.push(BedFilter::Automations),
+            term => {
+                if let Some(bed) = beds.iter().find(|bed| bed.id == term) {
+                    filters.push(BedFilter::Bed(bed.id.clone()));
+                } else {
+                    filters.extend(
+                        beds.iter()
+                            .filter(|bed| {
+                                bed.name.to_lowercase().contains(term)
+                                    || bed.slug.to_lowercase().contains(term)
+                            })
+                            .map(|bed| BedFilter::Bed(bed.id.clone())),
+                    );
+                }
+            }
+        }
+    }
+    filters
 }
 
 pub(crate) fn live_session<'a>(
@@ -220,17 +247,20 @@ pub(crate) struct AttentionIndex<'a> {
     sessions: HashMap<&'a str, (&'a Session, AgentState)>,
     ask_seeds: HashSet<&'a str>,
     ask_sessions: HashSet<&'a str>,
+    queue_mode: bool,
+    crew_in_queue: bool,
 }
 
 impl<'a> AttentionIndex<'a> {
-    pub(crate) fn of(sessions: &'a [Session], asks: &'a [Ask]) -> Self {
-        let sessions = sessions
+    pub(crate) fn of(facts: &'a Facts) -> Self {
+        let sessions = facts
+            .sessions
             .iter()
             .map(|s| (s.id.as_str(), (s, AgentState::parse(&s.state))))
             .collect();
         let mut ask_seeds = HashSet::new();
         let mut ask_sessions = HashSet::new();
-        for ask in asks.iter().filter(|a| a.reply.is_none()) {
+        for ask in facts.asks.iter().filter(|a| a.reply.is_none()) {
             if let Some(seed_id) = ask.seed_id.as_deref().filter(|id| !id.is_empty()) {
                 ask_seeds.insert(seed_id);
             }
@@ -242,6 +272,8 @@ impl<'a> AttentionIndex<'a> {
             sessions,
             ask_seeds,
             ask_sessions,
+            queue_mode: crate::setting::on(&facts.settings, queue::QUEUE_MODE),
+            crew_in_queue: crate::setting::on(&facts.settings, queue::QUEUE_CREW),
         }
     }
 
@@ -264,10 +296,11 @@ impl<'a> AttentionIndex<'a> {
             if agent_state == AgentState::PendingApproval {
                 return Attention::Approval;
             }
+            let in_queue = self.queue_mode && queue::participates(session, self.crew_in_queue);
             if self.ask_seeds.contains(seed.id.as_str())
                 || self.ask_sessions.contains(session.id.as_str())
-                || agent_state == AgentState::WaitingInput
                 || session.turn_owed == Some(true)
+                || (!in_queue && agent_state == AgentState::WaitingInput)
             {
                 return Attention::Waiting;
             }
@@ -348,25 +381,10 @@ impl<'a> AttentionIndex<'a> {
     }
 
     pub(crate) fn attention(&self, seed: &Seed, index: &Index) -> Attention {
-        let own = self.own_attention(seed);
-        let children = index.children_of(&seed.id);
-        if is_hidden_closed(seed) || children.is_empty() {
-            return own;
+        if index.children_of(&seed.id).is_empty() {
+            return self.own_attention(seed);
         }
-        let mut best = own;
-        let mut stack: Vec<&Arc<Seed>> = children.iter().collect();
-        let mut seen = HashSet::new();
-        while let Some(child) = stack.pop() {
-            if !seen.insert(child.id.as_str()) || is_hidden_closed(child) {
-                continue;
-            }
-            let child_att = self.own_attention(child);
-            if child_att.is_now() && child_att < best {
-                best = child_att;
-            }
-            stack.extend(index.children_of(&child.id));
-        }
-        best
+        self.compute_into(seed, index, &mut HashMap::new())
     }
 }
 
@@ -378,6 +396,7 @@ pub(crate) struct BedCounts {
     pub(crate) unassigned_waiting: bool,
     pub(crate) automations_open: usize,
     pub(crate) automations_waiting: bool,
+    pub(crate) has_automations: bool,
     pub(crate) open_by_bed: HashMap<String, usize>,
     pub(crate) waiting_by_bed: HashSet<String>,
 }
@@ -386,6 +405,8 @@ impl BedCounts {
     pub(crate) fn of(roots: &[Arc<Seed>], attention: &HashMap<String, Attention>) -> BedCounts {
         let mut counts = BedCounts::default();
         for seed in roots {
+            let automation = is_automation(seed);
+            counts.has_automations |= automation;
             if is_hidden_closed(seed) {
                 continue;
             }
@@ -394,7 +415,7 @@ impl BedCounts {
                 .copied()
                 .unwrap_or(Attention::Ready)
                 .is_waiting();
-            if is_automation(seed) {
+            if automation {
                 counts.automations_open += 1;
                 counts.automations_waiting |= waiting;
                 continue;
@@ -455,7 +476,7 @@ impl Snapshot {
             };
         }
         let bed = active_bed(state);
-        let att_idx = AttentionIndex::of(&state.facts.sessions, &state.facts.asks);
+        let att_idx = AttentionIndex::of(&state.facts);
         let attention = att_idx.compute(index);
         let counts = BedCounts::of(&index.roots, &attention);
         Snapshot {
@@ -546,7 +567,7 @@ pub(crate) fn beds_rail(state: &State, counts: &BedCounts, t: &Tokens) -> El {
     }
 
     let mut rail = Stack::loose().w_full().child(head).child(rows);
-    if counts.automations_open > 0 || active == BedFilter::Automations {
+    if counts.has_automations || active == BedFilter::Automations {
         let foot = ListRow::column()
             .key("garden.beds.automations")
             .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
@@ -631,7 +652,7 @@ pub(crate) fn dock_bed_chips(state: &State, counts: &BedCounts, t: &Tokens) -> E
             t,
         ));
     }
-    if counts.automations_open > 0 || active == BedFilter::Automations {
+    if counts.has_automations || active == BedFilter::Automations {
         chips = chips.child(bed_chip(
             "garden.dock.bed.automations",
             "Auto",
@@ -746,7 +767,7 @@ pub(crate) fn open_edit_bed(state: &mut State, bed: GardenBed, tx: &mut Tx) {
         id: Some(bed.id),
         name,
         note: TextEdit::new(bed.note.unwrap_or_default()),
-        repos: TextEdit::new(bed.repos.join(", ")),
+        repos: TextEdit::new(bed.repos.join("\n")),
         return_focus: None,
         error: None,
         saving: false,
@@ -781,14 +802,6 @@ fn restore_focus(state: &State, back: Option<String>, tx: &mut Tx) {
     }
 }
 
-fn parse_repos(raw: &str) -> Vec<String> {
-    raw.split([',', '\n'])
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_owned)
-        .collect()
-}
-
 fn submit_bed_form(state: &mut State, tx: &mut Tx) {
     let Some(form) = state.window.garden.bed_form.as_mut() else {
         return;
@@ -805,7 +818,14 @@ fn submit_bed_form(state: &mut State, tx: &mut Tx) {
     let id = form.id.clone();
     let note_raw = form.note.text.trim().to_owned();
     let note = (!note_raw.is_empty()).then_some(note_raw);
-    let repos = parse_repos(&form.repos.text);
+    let repos = form
+        .repos
+        .text
+        .lines()
+        .map(str::trim)
+        .filter(|repo| !repo.is_empty())
+        .map(str::to_owned)
+        .collect();
     form.saving = true;
     form.error = None;
     state.ask(
@@ -965,12 +985,14 @@ fn bed_form_dialog(form: &BedForm, t: &Tokens, layers: &mut Vec<El>) {
         ))
         .build(t);
     let repos_field = Field::new("garden.bed-form.repos-field", "Repositories (optional)")
-        .hint("Comma-separated paths or repository names for auto-routing.")
-        .control(line_box(
-            TextInput::new(&form.repos)
+        .hint("Enter one repository path or name per line.")
+        .control(area_box(
+            TextArea::new(&form.repos)
                 .key(FORM_REPOS)
+                .rows(2)
+                .resizable()
                 .label("Bed repositories")
-                .placeholder("payments-api, ~/code/billing")
+                .placeholder("payments-api\n~/code/billing")
                 .on_edit(|state: &mut State| {
                     &mut state
                         .window
@@ -979,8 +1001,7 @@ fn bed_form_dialog(form: &BedForm, t: &Tokens, layers: &mut Vec<El>) {
                         .as_mut()
                         .expect("bed form open while editing repos")
                         .repos
-                })
-                .on_key(form_key),
+                }),
             field_state,
             t,
         ))

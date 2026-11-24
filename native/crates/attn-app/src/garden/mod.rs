@@ -592,8 +592,7 @@ pub(crate) fn open_found(state: &mut State, id: &str, tx: &mut Tx) {
             state.window.garden.bed = v2::filter_for_root(root);
         }
         if state.window.garden.lens != v2::Lens::All {
-            let att = v2::AttentionIndex::of(&state.facts.sessions, &state.facts.asks)
-                .attention(root, &index);
+            let att = v2::AttentionIndex::of(&state.facts).attention(root, &index);
             let shown_in_lens = match state.window.garden.lens {
                 v2::Lens::Now => att.is_now(),
                 v2::Lens::Triage => {

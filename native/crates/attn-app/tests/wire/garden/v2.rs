@@ -3,7 +3,8 @@ use std::collections::BTreeMap;
 use attn_protocol::{
     Ask, GardenBed, GardenBedDeleteResultMessage, GardenBedSaveResultMessage,
     GardenBedsUpdatedMessage, InitialStateMessage, PartyView, Profile, Seed,
-    SeedBedSetResultMessage, SeedPlotProgress, Session,
+    SeedBedSetResultMessage, SeedPlotProgress, Session, SessionStateChangedMessage,
+    SettingsUpdatedMessage,
 };
 use attn_testkit::{Daemon, Request, Target, message};
 use rune::{Key, KeyEvent, Mods};
@@ -334,15 +335,22 @@ fn v2_inline_bed_form_creates_edits_and_deletes_beds_over_ws() {
 
     world.gesture(|app| app.type_text("Relay"));
     world.gesture(|app| app.click(Target::key("garden.bed-form.repos")));
-    world.gesture(|app| app.type_text("cloud-relay, ~/code/relay"));
+    world.gesture(|app| {
+        app.type_text("cloud-relay");
+        app.key(plain_key(Key::Enter));
+        app.type_text("/work/payments,eu");
+    });
+    assert!(world.daemon.sent_of("garden_bed_save").is_empty());
     world.gesture(|app| app.click(Target::key("garden.bed-form.save")));
 
     let sent = world.daemon.sent_of("garden_bed_save");
     assert_eq!(sent.len(), 1);
     assert!(sent[0].get("id").is_none() || sent[0]["id"].is_null());
     assert_eq!(sent[0]["name"], "Relay");
-    assert_eq!(sent[0]["repos"][0], "cloud-relay");
-    assert_eq!(sent[0]["repos"][1], "~/code/relay");
+    assert_eq!(
+        sent[0]["repos"],
+        serde_json::json!(["cloud-relay", "/work/payments,eu"])
+    );
     assert!(
         world
             .screen()
@@ -352,7 +360,10 @@ fn v2_inline_bed_form_creates_edits_and_deletes_beds_over_ws() {
 
     world.daemon.emit(GardenBedsUpdatedMessage {
         profile_id: PROFILE.into(),
-        beds: vec![existing.clone(), bed("b-new001", "Relay", &["cloud-relay"])],
+        beds: vec![
+            existing.clone(),
+            bed("b-new001", "Relay", &["cloud-relay", "/work/payments,eu"]),
+        ],
         ..GardenBedsUpdatedMessage::new()
     });
     world.settle();
@@ -383,7 +394,7 @@ fn v2_inline_bed_form_creates_edits_and_deletes_beds_over_ws() {
             .get(Target::key("garden.bed-form.repos"))
             .value
             .as_deref(),
-        Some("cloud-relay")
+        Some("cloud-relay\n/work/payments,eu")
     );
     assert!(
         world
@@ -398,7 +409,7 @@ fn v2_inline_bed_form_creates_edits_and_deletes_beds_over_ws() {
     assert_eq!(saves.len(), 2);
     assert_eq!(saves[1]["id"], "b-new001");
     assert_eq!(saves[1]["name"], "Cloud Relay");
-    assert_eq!(saves[1]["repos"][0], "cloud-relay");
+    assert_eq!(saves[1]["repos"], sent[0]["repos"]);
     assert!(
         world
             .screen()
@@ -657,6 +668,67 @@ fn v2_dock_shows_bed_chips_and_now_all_toggle_and_plot_bubbles_child_waiting() {
 }
 
 #[test]
+fn v2_waiting_group_follows_a_tenders_owed_turn_in_attention_queue_flow() {
+    let tender = Session {
+        id: "queue-tender".into(),
+        label: "Rollout agent".into(),
+        agent: "claude".into(),
+        state: "waiting_input".into(),
+        profile_id: PROFILE.into(),
+        turn_owed: Some(true),
+        ..Session::default()
+    };
+    let growing = with(seed("s-one001", "Check rollout"), |s| {
+        s.status = "growing".into();
+        s.claimed = true;
+        s.tender = Some(PartyView {
+            name: tender.label.clone(),
+            r#ref: format!("session:{}", tender.id),
+            session_id: Some(tender.id.clone()),
+        });
+    });
+    let mut world = open_garden_with(v2_daemon(
+        true,
+        Vec::new(),
+        vec![growing],
+        vec![tender.clone()],
+        Vec::new(),
+    ));
+    let settings = |queue| SettingsUpdatedMessage {
+        settings: Some(BTreeMap::from([
+            ("garden_v2_enabled".into(), "true".into()),
+            ("queue_mode_enabled".into(), queue),
+        ])),
+        ..SettingsUpdatedMessage::new()
+    };
+    let waiting = |world: &World| {
+        world
+            .screen()
+            .find(Target::key("garden.group.waiting"))
+            .is_some()
+    };
+    world.daemon.emit(settings("true".into()));
+    world.settle();
+    assert!(waiting(&world));
+
+    world.daemon.emit(SessionStateChangedMessage {
+        session: Session {
+            turn_owed: None,
+            ..tender
+        },
+        ..SessionStateChangedMessage::new()
+    });
+    world.settle();
+    assert!(has_row(&world, "Check rollout"));
+    assert!(!waiting(&world));
+
+    world.daemon.emit(settings("false".into()));
+    world.settle();
+    assert!(waiting(&world));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn v2_virtualizes_large_gardens_and_rebuilds_only_one_changed_row_and_card() {
     let beds = vec![bed("b-attn01", "attn", &["attn"])];
     let seeds: Vec<Seed> = (0..250)
@@ -822,6 +894,7 @@ fn v2_bed_search_autocomplete_pulse_session_jump_and_flag_off_keeps_bed_literal(
     let beds = vec![
         bed("b-attn01", "attn", &["attn"]),
         bed("b-pay001", "Cloud Payments", &["payments-api"]),
+        bed("b-pay002", "Cloud Payments Express", &["payments-express"]),
     ];
     let s1 = with(seed("s-one001", "Auth work"), |s| {
         s.status = "growing".into();
@@ -840,6 +913,10 @@ fn v2_bed_search_autocomplete_pulse_session_jump_and_flag_off_keeps_bed_literal(
         s.bed_id = Some("b-pay001".into());
         s.bed = Some("Cloud Payments".into());
     });
+    let express = with(seed("s-exp001", "Express checkout"), |s| {
+        s.bed_id = Some("b-pay002".into());
+        s.bed = Some("Cloud Payments Express".into());
+    });
     let sess = Session {
         id: "sess-1".into(),
         label: "auth-agent".into(),
@@ -852,7 +929,7 @@ fn v2_bed_search_autocomplete_pulse_session_jump_and_flag_off_keeps_bed_literal(
         v2_daemon(
             true,
             beds.clone(),
-            vec![s1.clone(), s2.clone()],
+            vec![s1.clone(), s2.clone(), express],
             vec![sess],
             Vec::new(),
         ),
@@ -861,7 +938,13 @@ fn v2_bed_search_autocomplete_pulse_session_jump_and_flag_off_keeps_bed_literal(
     world.gesture(|app| app.key(board()));
     world.gesture(|app| app.click(Target::key("garden.bed.b-attn01")));
     world.gesture(|app| app.click(Target::key("garden.search.field")));
-    world.gesture(|app| app.type_text("bed:"));
+    world.gesture(|app| app.type_text("bed:payments"));
+    assert!(has_row(&world, "Stripe retry"));
+    assert!(has_row(&world, "Express checkout"));
+    world.gesture(|app| {
+        app.press("mod+a");
+        app.type_text("bed:");
+    });
     assert!(
         world
             .screen()
@@ -901,4 +984,170 @@ fn v2_bed_search_autocomplete_pulse_session_jump_and_flag_off_keeps_bed_literal(
             .is_none()
     );
     assert!(off_world.runtime_is_at_rest());
+}
+
+#[test]
+fn v2_bed_search_keeps_a_delegated_seed_in_its_root_automations_bed() {
+    let run = with(plot("s-auto01", "Daily automation", ""), |s| {
+        s.status = "growing".into();
+        s.claimed = true;
+        s.automation_id = Some(1);
+    });
+    let child = part_of(&run.id, "s-kid001", "Delegated work");
+    let ordinary = seed("s-plain1", "Unassigned work");
+    let mut world = open_garden_sized(
+        v2_daemon(
+            true,
+            Vec::new(),
+            vec![run, child, ordinary],
+            Vec::new(),
+            Vec::new(),
+        ),
+        TWO_COLUMNS,
+    );
+    world.gesture(|app| app.key(board()));
+    world.gesture(|app| app.click(Target::key("garden.bed.automations")));
+    open_row(&mut world, "Daily automation");
+    assert!(has_row(&world, "Delegated work"));
+
+    world.gesture(|app| app.click(Target::key("garden.search.field")));
+    world.gesture(|app| app.type_text("bed:automations"));
+    let screen = world.screen();
+    let results = Target::key("garden.results");
+    assert!(screen.find(results.clone()).is_some());
+    assert!(
+        screen
+            .descendants(results)
+            .iter()
+            .any(|row| row.name.as_deref() == Some("Delegated work"))
+    );
+
+    world.gesture(|app| app.click(Target::key("garden.bed.all")));
+    world.gesture(|app| app.click(Target::key("garden.search.field")));
+    world.gesture(|app| {
+        app.press("mod+a");
+        app.type_text("bed:unassigned");
+    });
+    assert_eq!(rows(&world), vec!["Unassigned work"]);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn v2_closed_automation_history_is_reachable_from_its_bed_and_an_exact_id() {
+    let run = with(seed("s-auto01", "Nightly review"), |s| {
+        s.status = "harvested".into();
+        s.automation_id = Some(1);
+    });
+    let mut world = open_garden_sized(
+        v2_daemon(true, Vec::new(), vec![run], Vec::new(), Vec::new()),
+        TWO_COLUMNS,
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("garden.dock.bed.automations"))
+            .is_some()
+    );
+    world.gesture(|app| app.key(board()));
+    assert!(!has_row(&world, "Nightly review"));
+    world.gesture(|app| app.click(Target::key("garden.bed.automations")));
+    world.gesture(|app| app.click(Target::key("garden.closed")));
+    assert_eq!(rows(&world), vec!["Nightly review"]);
+
+    world.gesture(|app| app.click(Target::key("garden.bed.all")));
+    assert!(!has_row(&world, "Nightly review"));
+    world.gesture(|app| app.click(Target::key("garden.search.field")));
+    world.gesture(|app| {
+        app.press("mod+a");
+        app.type_text("s-auto01 is:any");
+    });
+    assert_eq!(rows(&world), vec!["Nightly review"]);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn v2_walks_into_the_children_of_the_plot_opened_in_the_wide_list() {
+    let plot = with(plot("s-plot01", "Checkout plot", ""), |s| {
+        s.status = "growing".into();
+        s.claimed = true;
+        s.plot_progress.as_mut().unwrap().total = 2;
+    });
+    let first = part_of(&plot.id, "s-kid001", "First step");
+    let second = part_of(&plot.id, "s-kid002", "Second step");
+    let mut world = open_garden_sized(
+        v2_daemon(
+            true,
+            Vec::new(),
+            vec![plot, first, second],
+            Vec::new(),
+            Vec::new(),
+        ),
+        TWO_COLUMNS,
+    );
+    world.gesture(|app| app.key(board()));
+    world.gesture(|app| app.key(plain_key(Key::Down)));
+    assert_eq!(focused_row(&world).as_deref(), Some("Checkout plot"));
+    world.gesture(|app| app.key(plain_key(Key::Right)));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("garden.head.title"))
+            .name
+            .as_deref(),
+        Some("Checkout plot")
+    );
+    world.gesture(|app| app.key(plain_key(Key::Down)));
+    assert_eq!(focused_row(&world).as_deref(), Some("First step"));
+    world.gesture(|app| app.key(text_key("j")));
+    assert_eq!(focused_row(&world).as_deref(), Some("Second step"));
+    world.gesture(|app| app.key(text_key("k")));
+    assert_eq!(focused_row(&world).as_deref(), Some("First step"));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn v2_board_says_why_work_is_unready() {
+    let blocker = with(seed("s-one001", "Start here"), |s| {
+        s.ready = true;
+        s.edges.push(edge("blocks", "s-two002"));
+    });
+    let blocked = seed("s-two002", "Waiting for work");
+    let packet = with(seed("s-pack01", "Release packet"), |s| s.template = true);
+    let gate = with(seed("s-gate01", "Release gate"), |s| s.gate = true);
+    let merge = with(seed("s-pr0001", "Merge release"), |s| {
+        s.harvest_when = Some(SeedHarvestCondition {
+            pull_request: "github.com:victorarias/attn#42".into(),
+            url: "https://github.com/victorarias/attn/pull/42".into(),
+            ..SeedHarvestCondition::default()
+        });
+    });
+    let mut world = open_garden_sized(
+        v2_daemon(
+            true,
+            Vec::new(),
+            vec![blocker, blocked, packet, gate, merge],
+            Vec::new(),
+            Vec::new(),
+        ),
+        TWO_COLUMNS,
+    );
+    world.gesture(|app| app.key(board()));
+    click(&mut world, "board");
+    let screen = world.screen();
+    for (id, reason) in [
+        ("s-two002", "blocked by 1"),
+        ("s-pack01", "packet"),
+        ("s-gate01", "gate"),
+        ("s-pr0001", "harvests on #42"),
+    ] {
+        let card = Target::key(format!("garden.board.card.{id}"));
+        assert!(
+            screen
+                .descendants(card)
+                .iter()
+                .any(|row| row.name.as_deref() == Some(reason)),
+            "{id} should show {reason}"
+        );
+    }
+    assert!(world.runtime_is_at_rest());
 }

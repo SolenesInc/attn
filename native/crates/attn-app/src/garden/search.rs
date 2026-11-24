@@ -126,9 +126,6 @@ pub(crate) struct Match {
 pub(crate) trait Lookups {
     fn tender_of(&self, seed: &Seed) -> String;
     fn blockers_of(&self, seed: &Seed) -> usize;
-    fn bed_slug_of(&self, _seed: &Seed) -> Option<&str> {
-        None
-    }
 }
 
 pub(crate) fn satisfies_lens(seed: &Seed, is: &[&str], lookups: &impl Lookups) -> bool {
@@ -218,25 +215,6 @@ pub(crate) fn match_seed(seed: &Arc<Seed>, q: &Query, lookups: &impl Lookups) ->
     {
         return None;
     }
-    if !q.beds.is_empty() {
-        let bed_name = seed.bed.as_deref().unwrap_or("").to_lowercase();
-        let bed_id = seed.bed_id.as_deref().unwrap_or("").to_lowercase();
-        let bed_slug = lookups.bed_slug_of(seed).unwrap_or("").to_lowercase();
-        let is_auto = super::v2::is_automation(seed);
-        let hit_bed = q.beds.iter().any(|want| match want.as_str() {
-            "unassigned" | "none" => !is_auto && bed_id.is_empty() && bed_name.is_empty(),
-            "automations" | "auto" => is_auto,
-            _ => {
-                !is_auto
-                    && ((!bed_name.is_empty() && bed_name.contains(want.as_str()))
-                        || (!bed_slug.is_empty() && bed_slug.contains(want.as_str()))
-                        || (!bed_id.is_empty() && bed_id == *want))
-            }
-        });
-        if !hit_bed {
-            return None;
-        }
-    }
     let found = |seed: Arc<Seed>, rank| Match {
         seed,
         rank,
@@ -318,7 +296,6 @@ mod tests {
     #[derive(Default)]
     struct Fixed {
         blockers: HashMap<String, usize>,
-        bed_slugs: HashMap<String, String>,
     }
 
     impl Lookups for Fixed {
@@ -330,11 +307,6 @@ mod tests {
         }
         fn blockers_of(&self, seed: &Seed) -> usize {
             self.blockers.get(&seed.id).copied().unwrap_or(0)
-        }
-        fn bed_slug_of(&self, seed: &Seed) -> Option<&str> {
-            seed.bed_id
-                .as_deref()
-                .and_then(|id| self.bed_slugs.get(id).map(String::as_str))
         }
     }
 
@@ -470,7 +442,6 @@ mod tests {
         all.push(Arc::new(seed("s-blok01", "blocked work")));
         let blocked = Fixed {
             blockers: HashMap::from([("s-blok01".to_owned(), 1)]),
-            ..Fixed::default()
         };
         assert_eq!(titles(&all, "work is:blocked", &blocked), ["blocked work"]);
     }
@@ -599,36 +570,21 @@ mod tests {
     }
 
     #[test]
-    fn filters_by_bed_operator_and_matches_pulse_text() {
-        let pool = vec![
-            with(seed("s-pay001", "Checkout"), |s| {
-                s.bed_id = Some("b-pay001".into());
-                s.bed = Some("Cloud Payments".into());
-                s.pulse = Some("Waiting on Stripe webhook".into());
-            }),
-            with(seed("s-un0001", "Misc"), |_| {}),
-            with(seed("s-aut001", "Nightly sweep"), |s| {
-                s.automation_id = Some(9);
-            }),
-        ];
-        let lookups = Fixed {
-            bed_slugs: HashMap::from([("b-pay001".to_owned(), "cloud-payments".to_owned())]),
-            ..Fixed::default()
-        };
-        assert_eq!(titles(&pool, "bed:payments", &lookups), ["Checkout"]);
-        assert_eq!(titles(&pool, "bed:cloud-payments", &lookups), ["Checkout"]);
-        assert_eq!(titles(&pool, "bed:unassigned", &lookups), ["Misc"]);
-        assert_eq!(
-            titles(&pool, "bed:automations", &lookups),
-            ["Nightly sweep"]
-        );
-        assert_eq!(titles(&pool, "webhook", &lookups), ["Checkout"]);
-        let hit = match_seed(&pool[0], &parse("webhook", true), &lookups).unwrap();
+    fn matches_pulse_text() {
+        let seed = with(seed("s-pay001", "Checkout"), |seed| {
+            seed.pulse = Some("Waiting on Stripe webhook".into());
+        });
+        let hit = match_seed(&seed, &parse("webhook", true), &Fixed::default()).unwrap();
         assert_eq!(
             hit.snippet.as_ref().map(|s| s.text.as_str()),
             Some("Waiting on Stripe webhook")
         );
+    }
+
+    #[test]
+    fn recognizes_bed_operators_with_the_feature_enabled() {
         assert_eq!(parse("bed:", true).partial, Some(Partial::Bed));
+        assert_eq!(parse("bed:payments", true).beds, ["payments"]);
         let off = parse("bed:payments", false);
         assert!(off.beds.is_empty());
         assert_eq!(off.terms, ["bed:payments"]);
