@@ -1,0 +1,1 @@
+Installing or linking a plugin whose name is already installed now answers `plugin "<name>" is already installed` before any dependencies are installed. Before this, a duplicate whose `bun install` failed showed Bun's error instead, and every duplicate ran Bun for nothing. The installed plugin keeps running. Replace and update still stage over an installed name.
