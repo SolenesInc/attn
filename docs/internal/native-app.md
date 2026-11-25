@@ -37,8 +37,6 @@ The desktop app lives in `native/` (its own Cargo workspace on attn's
   OS bindings (windows, WebKit, Quick Capture), and add such files as `'!'`
   entries in `.github/ci-inputs.yml` (`native_macos`), enforced by
   `scripts/native-host-reads` in `make check-native`.
-- `native/clippy.toml` bans `std::thread::sleep`, `Instant::now` and
-  `SystemTime::now` across `native/`. Read time through an injected clock.
 
 ## UI rules, colors and the door
 

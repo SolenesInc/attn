@@ -33,9 +33,9 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
 
 `[0.167.0]`
 
-- `/side` forks an ephemeral thread in-process: own `session_id`, no rollout,
-  `transcript_path: null` in every hook. `CODEX_THREAD_ID` is set in shell
-  tools, unset in hooks.
+- `/side` forks an ephemeral conversation in-process: own `session_id`, no
+  rollout, `transcript_path: null` in every hook. `CODEX_THREAD_ID` is set in
+  shell tools, unset in hooks.
 - Fires SessionStart `fork`, UserPromptSubmit, PreToolUse/PostToolUse, Stop.
   `ctrl-/` switches without hooks; `ctrl-c` discards without SessionEnd/Stop.
   Parent and side can run turns concurrently; TUI status follows whichever is on

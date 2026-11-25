@@ -2,8 +2,9 @@
 
 Every coding agent harness sits behind the Go contract in `internal/harness/`
 (`Harness`, `Facts`, `Conversation`, `ConversationStore`, `Events`, `Host`,
-`DirectLauncher`, shared optional parts `OneShot`/`Trust`/`Transcript`/`CallerResolver`,
-and `internal/harness/appserver` for `attn-app-server-v2`) and the pushed wire
+`DirectLauncher`, shared optional parts
+`OneShot`/`Trust`/`Transcript`/`FolderTrustReader`/`CallerResolver`, and
+`internal/harness/appserver` for `attn-app-server-v2`) and the pushed wire
 catalog (`harness_catalog` / `harness_logo`). Adapters live under
 `internal/harness/internal/{claude,codex,sigma,plugin}`; only `builtin` and
 `conformance` may import them.
@@ -13,11 +14,18 @@ catalog (`harness_catalog` / `harness_logo`). Adapters live under
 Generic daemon, session monitor, PTY, CLI and app code must not branch on a
 harness id or assume single-harness behavior.
 
+- **Approved leaks:**
+  - **Leak 1:** single-implementer optional Go interfaces asserted via
+    `harness.As[T]`, restricted to the caller files listed in
+    `scripts/harnesslint/allow.txt`.
+  - **Leak 2:** harness-specific surfaces isolated in their own adapter,
+    command, UI, or pricing paths (shared Codex updates/restarts, session
+    instructions, Claude mod outpost reach routing, `codex-auto-review` billing
+    alias).
 - **Mechanical checks (`make lint-harness`):** `scripts/harnesslint` enforces
-  harness literals, adapter imports, `harness.Host` names and single-implementer
-  `harness.As[T]` callers against `scripts/harnesslint/allow.txt` (approved
-  Leak 1/Leak 2 entries) and `scripts/harnesslint/violations.txt` (shrinking
-  debt only, never add).
+  harness literals, adapter imports, `harness.Host` names and Leak 1
+  `harness.As[T]` callers against `scripts/harnesslint/allow.txt` and
+  `scripts/harnesslint/violations.txt` (shrinking debt only, never add).
 - **User approval required:** never add a new entry to `allow.txt`, a new
   single-implementer optional interface, or a new single-implementer field on
   shared contract structs without explicit user approval.

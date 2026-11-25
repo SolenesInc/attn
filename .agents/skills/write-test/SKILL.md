@@ -15,8 +15,9 @@ lists the habits that most often break the strategy.
 - Name the promise and who relies on it: the user, the agents attn runs, a
   client, or a later version reading today's data. When you cannot name the
   promise, check your change by running it and commit no test.
-- Pick the kind: the first in "Choosing a kind" that can observe the
-  behavior. For a bug, pick the first kind that reproduces what the user saw.
+- Pick the kind: the first in "Kinds of test" (`docs/internal/testing.md`) that
+  can observe the behavior. For a bug, pick the first kind that reproduces what
+  the user saw.
 - Search the suite for a test of the same promise through the same entry:
   the same command, event, CLI verb or world helper. Extend that test
   instead of adding another.

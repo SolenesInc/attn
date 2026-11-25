@@ -32,7 +32,9 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
   `parentUuid` branches to `<id>.jsonl` with the same conversation id
   `[2.1.309]`.
 - **Sticky launch instructions:** `--append-system-prompt` stays active after
-  `/clear` `[2.1.314]`.
+  `/clear` `[2.1.314]`. Subagents do not receive it (they use their agent
+  definition); forks inherit their parent's system prompt including the
+  appended text `[2.1.332]`.
 - **Interactive paste wrapping:** with `tengu_virtual_pancake` enabled, pasted
   input may be wrapped in `\n\n<pasted_content id="hhhh">\n...\n</pasted_content id="hhhh">\n`;
   parsers must handle both wrapped and plain text `[2.1.310]`.
@@ -151,6 +153,12 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
 - Under `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1`, auto mode checks each REPL
   script once before execution and does not apply `mcp__attn__*` allow rules to
   calls inside the script.
+- Auto mode sends permission rules to its classifier `[2.1.332]`: passing
+  `--disallowed-tools ListAgents` causes shell `attn agent list` calls to be
+  refused as `[Undermining Oversight]`, so attn disallows no tool and relies on
+  launch instructions instead. Auto mode also refuses shell `attn ask close` +
+  `attn seed harvest` for asks not created in the session's transcript (the
+  `ask_close` MCP tool succeeds).
 - `autoMode.allow` merges policy + `--settings` + user settings (not project
   settings); omitting `"$defaults"` when setting `allow` drops Claude's 16
   built-in defaults (`claude [--settings <json>] auto-mode config` prints the
@@ -218,8 +226,8 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
 
 `[2.1.328–330]`
 
-- **Warm spare (`internal/agent/claude_spare.go`):** `--print --input-format
-  stream-json --output-format stream-json --verbose` with no prompt argument
+- **Warm spare (`internal/harness/internal/claude/spare.go`):** `--print
+  --input-format stream-json --output-format stream-json --verbose` with no prompt argument
   waits on stdin (~200–300 MB RSS). Unstopped, it burns idle CPU (~1.6–1.9 s /
   10 min even with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`).
 - **Ready probe + SIGSTOP:** send `control_request` `subtype: mcp_status`

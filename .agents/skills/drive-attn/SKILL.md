@@ -169,9 +169,10 @@ for a slice of the store or the window, such as `sessions`, `desktops`,
 `type '{"text":"...","target":{...}}'`, `press`, `hover`, `drag` and `scroll`
 on a target. Capture: `shot '{"path":"<file>"}'`. `run '{"name":"<action id>"}'`
 dispatches an action without its key: use it to set up, never as proof of a
-person's way in. [Native app](../../../docs/internal/native-app.md#automation)
-lists every action and its payload. `bridge --capture` drives the Quick Capture
-panel, which serves its own actions.
+person's way in. Read `native/crates/attn-automation/src/` for every action and
+payload, and [Native app](../../../docs/internal/native-app.md#automation) for
+targeting and wait rules. `bridge --capture` drives the Quick Capture panel,
+which serves its own actions.
 
 **Scenarios.** Read the scenario and the harness guide before running one.
 On a shared Mac, use a focus-free scenario directly, such as

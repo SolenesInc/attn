@@ -71,9 +71,10 @@ repository root.
   driver fails the step when the press landed elsewhere; pass
   `{ allowMiss: true }` when that is the point. Every reply comes after the app
   handled the input, so the next read sees its effect.
-  [Native app](../../../docs/internal/native-app.md#automation) lists the
-  actions behind the driver: `waitFor`, `state`, `tree`, `atRest`, `pressKey`,
-  `run` and the rest.
+  Read `native/crates/attn-automation/src/` for the full action and `state`
+  slice schema behind `waitFor`, `state`, `tree`, `atRest`, `pressKey`, `run`
+  and the rest, and [Native app](../../../docs/internal/native-app.md#automation)
+  for targeting and wait rules.
 - `scenario-native-sidebar-session.mjs` is the smallest example.
 - A scenario that needs real focus or system input, such as Quick Capture's
   global shortcut, takes the platform driver from `appPlatform.createWindowDriver`

@@ -33,7 +33,7 @@ replace superseded findings rather than appending probe logs.
 - **Agent credential never appears in argv:** any local user can read `ps`.
   Pass the credential only via env (`ATTN_AGENT_CREDENTIAL` expanded by Claude
   `${ATTN_AGENT_CREDENTIAL}` and plain Codex `bearer_token_env_var`) or over
-  the server channel (shared Codex per-thread `config`, Sigma in-memory
+  the server channel (shared Codex per-conversation `config`, Sigma in-memory
   `mcp/register`). Guarded by
   `TestNoProcessALaunchStartsHoldsTheAgentCredentialInItsArguments` (`cmd/attnd`).
 - **Running version in transcripts** (stays accurate after on-disk updates):

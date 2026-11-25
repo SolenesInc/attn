@@ -35,15 +35,15 @@ Shared app-server and `--remote` TUI behavior. For plain Codex, see
   With a read-only `sessions/`, `thread/inject_items` fails (`Permission
   denied`) while `turn/start` still runs without saving a rollout, so attn must
   refuse a new conversation whose inject fails `[0.166.0]`.
-- **Single writer:** while an app-server holds a thread loaded, another
+- **Single writer:** while an app-server holds a conversation loaded, another
   app-server or plain `codex resume` gets `already has an active writer` until
   it unloads (~60 s after going idle with no subscribers) `[0.160.0]`.
 - **`thread/resume` settings traps:**
-  - Always ignores `developerInstructions` (a thread keeps its initial
+  - Always ignores `developerInstructions` (a conversation keeps its initial
     instructions) `[0.160.0]`.
   - Applies `approvalPolicy`, `approvalsReviewer`, `sandbox`, and `config`
-    **only** when loading an unloaded or unsubscribed idle thread; ignored if
-    any connection is subscribed or a turn is running `[0.162.1]`.
+    **only** when loading an unloaded or unsubscribed idle conversation;
+    ignored if any connection is subscribed or a turn is running `[0.162.1]`.
   - Without those fields, restores approval policy and reviewer, but restores
     sandbox only from a permission profile (otherwise falls back to the
     server's configured sandbox, e.g. `read-only`) `[0.162.1]`.
@@ -55,19 +55,19 @@ Shared app-server and `--remote` TUI behavior. For plain Codex, see
     resuming a remote task."` if launched with
     `--dangerously-bypass-approvals-and-sandbox`, `-c` approval/sandbox flags,
     or after `/permissions`.
-- **Archive & rename:** `thread/archive` shuts down a loaded thread (aborting
-  running turns/compacts) and moves the rollout to flat `archived_sessions/`;
-  `thread/unarchive` restores it `[0.164.0]`. `thread/name/set` appends to
-  `$CODEX_HOME/session_index.jsonl` (visible to all servers on that
-  `CODEX_HOME`) `[0.162.1]`.
+- **Archive & rename:** `thread/archive` shuts down a loaded conversation
+  (aborting running turns/compacts) and moves the rollout to flat
+  `archived_sessions/`; `thread/unarchive` restores it `[0.164.0]`.
+  `thread/name/set` appends to `$CODEX_HOME/session_index.jsonl` (visible to
+  all servers on that `CODEX_HOME`) `[0.162.1]`.
 - **Subagents & `/agents`:**
   - Server-side `spawn_agent` emits `thread/status/changed` (no
     `thread/started`) plus child turn/item/hook notifications; `thread/read`
     returns `parentThreadId` and survives daemon restarts (`thread/loaded/list`
     still lists the child without `thread/started` replay) `[0.165.0]`.
-  - `/agents` resumes the picked root thread, except an unprompted thread the
-    TUI itself started, where the TUI stays subscribed and switches silently
-    until the first `turn/start` `[0.162.1]`.
+  - `/agents` resumes the picked root conversation, except an unprompted
+    conversation the TUI itself started, where the TUI stays subscribed and
+    switches silently until the first `turn/start` `[0.162.1]`.
   - `/new` and `/clear` call `thread/start` before the first prompt, queuing
     SessionStart until the first turn `[0.162.1]`.
 
@@ -102,25 +102,28 @@ Shared app-server and `--remote` TUI behavior. For plain Codex, see
 - **Stuck MCP startup round `[0.164.0–0.167.0]`:** TUI reports `working` until
   every MCP server from its launch config leaves `starting`
   (`mcpServer/startupStatus/updated`, not replayed, 30 s default
-  `startup_timeout_sec`). Joining a thread mid-round or removing an MCP server
-  from `config.toml` after TUI launch can leave the TUI permanently reporting
-  `working` across later turns while prompts still run.
+  `startup_timeout_sec`). Joining a conversation mid-round or removing an MCP
+  server from `config.toml` after TUI launch can leave the TUI permanently
+  reporting `working` across later turns while prompts still run.
 
 ## Folder trust
 
-`[0.164.0–0.166.0]`
+`[0.164.0–0.167.0]`
 
 - App-server and plain TUI resolve trust from the exact folder or its git repo
   root (main repo for worktrees), never other ancestors.
 - Both `--remote` and plain TUIs ask the server via `config/read`, so `-c
-  projects."<folder>".trust_level` on the TUI does not bypass the prompt.
+  projects."<folder>".trust_level` on the TUI does not bypass the prompt. Plain
+  TUI prompts only inside a project (git repo or `project_root_markers`);
+  `--remote` prompts inside and outside projects `[0.167.0]`.
 - On a non-default daemon socket, `--remote` checks only the exact folder
   (prompting in every new worktree unless a `.codex/` directory exists under
   the trusted repo root). Explicitly untrusted folders cause `--remote` to exit
   at launch.
-- While `"Trust this folder?"` is open, no OSC 7501 is emitted, and losing the
-  server leaves the TUI unable to reconnect (`remote app-server worker channel
-  is closed` on accept).
+- While `"Trust this folder?"` (`"1. Trust and continue"`) is open, the TUI
+  sets no terminal title (OSC 0/2) and sends no OSC 7501 `[0.167.0]`; losing
+  the server leaves the TUI unable to reconnect (`remote app-server worker
+  channel is closed` on accept).
 
 ## Drain, shutdown and TUI reconnect
 
@@ -133,8 +136,8 @@ Shared app-server and `--remote` TUI behavior. For plain Codex, see
   approvals still work. Pending approvals, questions, and title generation keep
   the drain open. Second SIGTERM/SIGINT forces exit.
 - **Shutdown:** closes socket and drops clients with raw EOF (no WS close
-  frame), then shuts down threads (up to 10 s each; slow when MCP servers are
-  running, 9–16.5 s observed) while ignoring signals.
+  frame), then shuts down conversations (up to 10 s each; slow when MCP servers
+  are running, 9–16.5 s observed) while ignoring signals.
 - **Process-group / npm / PTY host traps:**
   - npm's `bin/codex.js` forwards SIGTERM to the native binary, so one SIGTERM
     to the process group hits the server twice and forces exit; a second
@@ -153,21 +156,25 @@ Shared app-server and `--remote` TUI behavior. For plain Codex, see
 
 `[0.171.0]`
 
-- **Per-thread MCP config:** pass `mcp_servers.<name>.{url,
+- **Per-conversation MCP config:** pass `mcp_servers.<name>.{url,
   http_headers.Authorization, default_tools_approval_mode="approve",
   omit_tools_from=["deferred"]}` on `thread/start` (inherited by subagents;
-  pass on `thread/fork` for `/side`). Kept for the thread's loaded lifetime
-  (later subscribed `thread/resume` ignores `config`).
-- **`tools/call` caller identity:** `_meta.threadId` is the calling thread
-  (subagent's own id, or ephemeral `/side` id), matching `CODEX_THREAD_ID`;
-  `_meta.sessionId` is the root thread. Server `name` hyphens become
-  underscores in code-mode tool names (`attn-core` → `mcp__attn_core__*`).
-  Deferred namespace listings truncate `initialize` `instructions` to the first
-  line (max 250 chars). MCP calls run in the app-server, outside the sandbox.
-- **Ephemeral model calls (`internal/daemon/codex_oneshot.go`):** run as an
-  ephemeral `thread/start` on the shared app-server with `features.hooks=false`,
-  `mcp_servers.<name>.enabled=false` for user MCP servers, and the `codex exec`
-  tool-stripping flags. Keeps user `config.toml` settings (unlike `codex exec
-  --ignore-user-config`), never writes to disk, and unloads after closing the
-  connection. First turn still pays ~0.5 s for an unskippable git-attribution
-  HTTP fetch (~2.95 s median vs ~4.48 s via `codex exec`).
+  pass on `thread/fork` for `/side`). Kept for the conversation's loaded
+  lifetime (later subscribed `thread/resume` ignores `config`).
+- **`tools/call` caller identity:** `_meta.threadId` is the calling
+  conversation (subagent's own id, or ephemeral `/side` id), matching
+  `CODEX_THREAD_ID`; `_meta.sessionId` is the root conversation. Server `name`
+  hyphens become underscores in code-mode tool names (`attn-core` →
+  `mcp__attn_core__*`). Deferred namespace listings truncate `initialize`
+  `instructions` to the first line (max 250 chars). In code mode, `outputSchema`
+  TypeScript generation expands at most 32 `$ref`s per schema (property-name
+  order) and emits `unknown` for later ones `[0.167.0]`. MCP calls run in the
+  app-server, outside the sandbox.
+- **Ephemeral model calls (`internal/harness/internal/codex/oneshot.go`):** run
+  as an ephemeral `thread/start` on the shared app-server with
+  `features.hooks=false`, `mcp_servers.<name>.enabled=false` for user MCP
+  servers, and the `codex exec` tool-stripping flags. Keeps user `config.toml`
+  settings (unlike `codex exec --ignore-user-config`), never writes to disk,
+  and unloads after closing the connection. First turn still pays ~0.5 s for an
+  unskippable git-attribution HTTP fetch (~2.95 s median vs ~4.48 s via
+  `codex exec`).

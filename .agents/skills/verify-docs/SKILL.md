@@ -50,31 +50,19 @@ This skill covers:
 - Does the change use glossary terms, and no legacy names?
 - Does the change follow
   `internal/prompts/content/skills/attn-workflow/references/technical-writing.md`?
-- Does the change follow `AGENTS.md`: no implementation notes, and product
-  prompts address the user?
+- Does the change follow `AGENTS.md` ("Documentation" and "Working rules")?
+  Reject implementation notes, product prompts that address "Victor", and
+  internal-doc (`docs/internal/**`, scoped `AGENTS.md`) changes that include:
+  - human onboarding tutorials, UI click-ops manuals, or illustrative textbook
+    scenarios;
+  - prose restating Go, Rust, JS, shell scripts, workflow YAML, or lint
+    allowlists (`scripts/harnesslint/`, `native/clippy.toml`);
+  - probe diaries or unversioned claims in `docs/internal/harnesses/*.md` (raw
+    probe output belongs on the seed; see `docs/internal/harnesses.md`);
+  - a new `docs/internal/` file for traps or recipes local to one directory.
 - Text that agents load in every session, like `AGENTS.md`, the glossary and
   priming prompts, costs context everywhere. Does each added line earn that
   cost?
-
-### Internal docs (`docs/internal/**` and scoped `AGENTS.md`)
-
-Internal docs exist for agents, not humans. User documentation belongs in
-`docs/guide/`. Reject any internal-doc change that breaks these rules:
-
-- **Audience is agents.** Reject human onboarding tutorials, UI click-ops
-  manuals and illustrative textbook scenarios.
-- **No code mirrors.** Reject prose that restates what attn's Go, Rust, JS,
-  shell scripts, workflow YAML or lint allowlists (`scripts/harnesslint/`,
-  `native/clippy.toml`) already say. Put measurement receipts as short comments
-  on constants, test-helper APIs in Go or Rust doc comments, and script flags
-  and subcommands in `--help`.
-- **External facts by topic, not probe diaries.** In
-  `docs/internal/harnesses/*.md`, group facts by topic with version tags,
-  replace superseded findings, and cut trial-by-trial logs (the seed holds raw
-  probe output).
-- **Keep subsystem-local rules beside their code.** Short traps or recipes that
-  concern one directory belong in a scoped `AGENTS.md` next to that code, not
-  as a new file in `docs/internal/`.
 
 ## Report
 
