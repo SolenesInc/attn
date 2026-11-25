@@ -1,0 +1,1 @@
+The Codex harness doc now records a real Codex 0.167.0 at its folder-trust question: no title and no OSC 7501, so attn shows waiting_input / folder_trust_question from 10 s, plain and shared. The agent bench refuses a Codex msg-delegate cell without --tool-home, so it never writes to your own ~/.codex.
