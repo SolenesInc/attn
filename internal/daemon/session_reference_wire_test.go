@@ -215,6 +215,15 @@ func TestALiveSessionIsAddressedByItsNameAndACallerIsNot(t *testing.T) {
 				t.Errorf("%s %v = %v, want session_not_found", name, args, err)
 			}
 		}
+		if _, err := agent.CrewCreate("Keel", "claude"); err != nil {
+			t.Fatalf("create a member: %v", err)
+		}
+		if err := w.InjectSession("6b3f0d85-91e7-4c2a-b4d8-5e07a9c1f362", "keel", w.Path("keel"), "claude"); err != nil {
+			t.Fatalf("register a session named like the member: %v", err)
+		}
+		if err := agent.RunCommand("terminal read", "", map[string]any{"terminal": "keel"}, &done); err == nil || !strings.Contains(err.Error(), "terminal \"keel\" not found") {
+			t.Errorf("terminal read of a member between sessions = %v, want no terminal found", err)
+		}
 		if _, err := cli.AgentMsg("caller", "api-review", "who am I"); client.ErrorCode(err) != "session_not_found" {
 			t.Errorf("a name as the sender = %v, want session_not_found", err)
 		}

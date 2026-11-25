@@ -98,12 +98,11 @@ func (d *Daemon) terminalTarget(caller *protocol.Session, ref string) (*selected
 			if session := d.store.Get(member.BindingSession); session != nil && session.ProfileID == caller.ProfileID {
 				match = session
 			}
-		}
-	}
-	if match == nil {
-		match, err = d.liveSessionNamed(ref, caller.ProfileID)
-		if errors.Is(err, errAmbiguousSession) {
-			return nil, protocol.Refuse(protocol.RefusalInvalidInput, "target rule: %s", err)
+		} else {
+			match, err = d.liveSessionNamed(ref, caller.ProfileID)
+			if errors.Is(err, errAmbiguousSession) {
+				return nil, protocol.Refuse(protocol.RefusalInvalidInput, "target rule: %s", err)
+			}
 		}
 	}
 	if match == nil {
