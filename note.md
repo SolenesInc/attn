@@ -1,0 +1,1 @@
+The agent bench counts attn calls at the home by what ran, on both surfaces: one execution per daemon log line for tools, one per run of the session's attn for the CLI. Codex cells no longer run the installed attn or load the user's skills.
