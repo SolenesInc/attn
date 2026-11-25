@@ -34,22 +34,24 @@ the range into units, and give each unit a reviewer of its own.
    which are the files `scripts/land-resolve.sh` regenerates, and
    [the reviewer's job](#the-reviewers-job). End your turn. attn tells you
    when a reviewer messages.
-4. Route each reviewer's confirmed findings, with one decision per commit:
+4. Record and route each reviewer's confirmed findings, with one decision per
+   commit:
+   - Best effort, before routing: record each confirmed defect with
+     `land bug <sha> --title "<title>" --severity p0|p1 --source review [--location path:line] --detail-file <file>`
+     to capture its short bug id (`land: id <id>`), and post each finding with
+     `land event <sha> --kind finding --state fail --title "P0|P1: <title>" --detail-file <file>`.
+     If posting fails, note it in your seed note and continue.
    - If the commit's `Attn-Session:` is live, or an agent tends its seed or
-     plot, send that agent the sha, each finding, what a fix needs and the
-     instruction to land the fix with `land` (`land guide` and the
-     `land-on-main` skill), using `attn agent msg`. Tell the reviewer it is
-     done.
+     plot, send that agent the sha, each finding (with its bug id when
+     registered), what a fix needs, and the instruction to add
+     `Fixes-Bug: <id>` to the fix commit's trailers and land the fix with `land`
+     (`land guide` and the `land-on-main` skill), using `attn agent msg`. Tell
+     the reviewer it is done.
    - Otherwise, reply to the reviewer with `attn agent msg`, telling it to make
-     the fix and land it with `land` (`land guide` and `land-on-main`).
+     the fix, include `Fixes-Bug: <id>` in the fix commit's trailers, and land
+     it with `land` (`land guide` and `land-on-main`).
 
    A reviewer with no confirmed findings is done. Tell it so.
-
-   Best effort: post each routed finding to the feed with
-   `land event <sha> --kind finding --state fail --title "P0|P1: <title>" --detail-file <file>`,
-   and record each confirmed defect with
-   `land bug <sha> --title "<title>" --severity p0|p1 --source review [--location path:line] --detail-file <file>`.
-   If posting fails, note it in your seed note and continue.
 5. When every reviewer has reported and every finding has been routed, write
    one note on your own seed: the range, the units, where each reviewer ran,
    and where each finding went. Give each routed finding a line of its own,

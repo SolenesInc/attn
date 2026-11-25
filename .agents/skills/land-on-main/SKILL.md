@@ -14,7 +14,9 @@ explains the system around landing.
 
 Inside attn, `.githooks/prepare-commit-msg` adds the `Attn-Session:` and
 `Attn-Seed:` trailers, as `AGENTS.md` describes. Check that every commit
-carries them. Outside attn, leave them out.
+carries them. Outside attn, leave them out. When a commit fixes a registered
+bug, add a `Fixes-Bug: <id>` trailer (repeatable) as `land guide` describes so
+landing closes it on the feed.
 
 When a slice adds code that nothing uses yet, state in one line of the commit
 message what will use the code and which seed or plan section says so.
