@@ -670,13 +670,13 @@ impl Terminals {
                 Policy::SameAppRemount
             };
             let requested = policy.resizes_first().then_some(tile.size);
+            self.inbox.claim(id);
             if requested.is_some() {
                 term.sent_size = None;
                 let at = term.sent_at;
                 send_resize(id, term, at, Pixels::Sent, daemon);
             }
             term.stream = Stream::Attaching(Default::default());
-            self.inbox.claim(id);
             let attaching = Attaching {
                 policy,
                 requested,
