@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "land": "0.12.0",
+  "base": "3b147ade0af0e68243723a62d427069d50102e3c",
+  "head": "c47fb9f30521c9428d35eba05abdcbed1ed07184",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 261.491,
+    "ranOn": "306e6eb1a566a5fe16b5544cbb89eeabd74111d5"
+  },
+  "acknowledgedFlake": {
+    "test": "go ./internal/daemon TestAnAppServerFeedRecordsEachEntryOnceAcrossDaemonAndServerRestarts",
+    "owner": "s-fhf8km"
+  },
+  "recordings": []
+}

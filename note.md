@@ -1,0 +1,1 @@
+The words on id labels (hold Cmd+L) are now plain text, so only the key, icon, border and glow take the state color. Name in place dims the terminal less than the Lantern. Both match the approved pictures.
