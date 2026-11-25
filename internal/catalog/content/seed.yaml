@@ -835,7 +835,7 @@ commands:
     summary: set or clear a seed's one-line status pulse
     runs: home
     grant: own
-    effect: act
+    effect: record
     doc: |
       Sets or clears a seed's current one-line status pulse (single line, at most 160 characters) shown in the Garden without writing a log note. Update it when starting a phase, hitting a milestone, or blocking on something. Who may change it follows seed moves: the tender, sessions above it in the delegation chain, the profile's chief, or anyone while unclaimed. Refused on closed seeds. Requires `garden_v2_enabled`.
     args:
