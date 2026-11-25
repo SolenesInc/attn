@@ -6,6 +6,7 @@ use rune::{El, Key, KeyEvent, Tx};
 
 use crate::State;
 use crate::action::Action;
+use crate::terminal::{Mark, Subject};
 
 /// What a header popover shows about its tile's agent.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -19,6 +20,8 @@ pub(crate) enum What {
     Ask,
     /// The seeds the agent tends and the one it reports to.
     Seed,
+    /// The seed whose id a terminal shows.
+    SeedCard,
 }
 
 impl What {
@@ -29,6 +32,7 @@ impl What {
             What::Chain => "role",
             What::Ask => "ask",
             What::Seed => "seed",
+            What::SeedCard => "seed-card",
         }
     }
 
@@ -39,6 +43,7 @@ impl What {
             What::Chain => super::chain::shown(session, facts),
             What::Ask => !crate::asks::of_session(facts, session).is_empty(),
             What::Seed => super::seed_chip::shown(session, facts),
+            What::SeedCard => false,
         }
     }
 
@@ -47,7 +52,7 @@ impl What {
         match self {
             What::Chain => super::chain::current_row(session, facts),
             What::Seed => super::seed_chip::first_pick(session, facts),
-            What::Usage | What::Details | What::Ask => 0,
+            What::Usage | What::Details | What::Ask | What::SeedCard => 0,
         }
     }
 
@@ -55,15 +60,6 @@ impl What {
     fn reveal(self, pop: &Pop, picked: usize, tx: &mut Tx) {
         if self == What::Chain {
             super::chain::reveal(pop, picked, tx);
-        }
-    }
-
-    /// How long the pointer rests before the popover opens, and how long it may be away
-    /// before the popover closes, in seconds.
-    fn delays(self) -> (f64, f64) {
-        match self {
-            What::Usage | What::Ask | What::Seed => (0.16, 0.24),
-            What::Details | What::Chain => (0.0, 0.12),
         }
     }
 }
@@ -76,16 +72,26 @@ fn has(what: What, session: &str, facts: &Facts) -> bool {
         .is_some_and(|s| what.shown_for(s, facts))
 }
 
-/// Where a popover hangs: a piece of a tile's header, or a sidebar row's delegation chain.
+/// Where a popover hangs: a piece of a tile's header, a sidebar row's delegation chain, or an id
+/// in a terminal.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Host {
     Tile(String),
     Row(String),
+    Mark(Marking),
 }
 
-/// A tile header's popover, or a sidebar row's chain: the piece it hangs from, and whether a
-/// click, the keyboard or the Action menu pinned it, which keeps it until Escape or a press
-/// outside it and gives it the keyboard.
+/// An id in terminal `runtime`, which shows `reader`'s agent.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct Marking {
+    runtime: String,
+    reader: String,
+    mark: Mark,
+}
+
+/// A tile header's popover, a sidebar row's chain or an id's card: the piece it hangs from, and
+/// whether a click, the keyboard or the Action menu pinned it, which keeps it until Escape or a
+/// press outside it and gives it the keyboard.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Pop {
     pub(crate) host: Host,
@@ -95,10 +101,50 @@ pub(crate) struct Pop {
 }
 
 impl Pop {
+    /// The card of the id `marking` holds: a seed's, or an agent's as its delegation chain.
+    fn of_mark(marking: Marking, pinned: bool) -> Pop {
+        let (what, session) = match &marking.mark.target {
+            Subject::Seed(_) => (What::SeedCard, marking.reader.clone()),
+            Subject::Session(id) => (What::Chain, id.clone()),
+        };
+        Pop {
+            host: Host::Mark(marking),
+            session,
+            what,
+            pinned,
+        }
+    }
+
     pub(crate) fn anchor(&self) -> String {
         match &self.host {
             Host::Tile(leaf) => anchor(leaf, self.what),
             Host::Row(row) => row_anchor(row),
+            Host::Mark(on) => mark_anchor(&on.runtime),
+        }
+    }
+
+    /// The agent whose tile a seed opened from the popover goes beside.
+    pub(crate) fn beside(&self) -> &str {
+        match &self.host {
+            Host::Tile(_) | Host::Row(_) => &self.session,
+            Host::Mark(on) => &on.reader,
+        }
+    }
+
+    pub(crate) fn marking(&self) -> Option<&Marking> {
+        match &self.host {
+            Host::Mark(on) => Some(on),
+            Host::Tile(_) | Host::Row(_) => None,
+        }
+    }
+
+    /// How long the pointer rests before the popover opens, and how long it may be away
+    /// before the popover closes, in seconds.
+    fn delays(&self) -> (f64, f64) {
+        match (&self.host, self.what) {
+            (Host::Mark(_), _) => (0.16, 0.24),
+            (_, What::Details | What::Chain) => (0.0, 0.12),
+            (_, What::Usage | What::Ask | What::Seed | What::SeedCard) => (0.16, 0.24),
         }
     }
 
@@ -108,7 +154,11 @@ impl Pop {
 
     /// The popover's own key.
     pub(crate) fn surface(&self) -> String {
-        format!("{}.popover", self.anchor())
+        match (&self.host, self.what) {
+            (Host::Mark(on), What::SeedCard) => format!("terminal.{}.seed-card", on.runtime),
+            (Host::Mark(on), _) => format!("terminal.{}.agent-card", on.runtime),
+            _ => format!("{}.popover", self.anchor()),
+        }
     }
 
     /// Of a tile's delegation chain and its pull requests, the one the popover is not, while the
@@ -125,6 +175,11 @@ impl Pop {
 
 pub(crate) fn anchor(leaf: &str, what: What) -> String {
     format!("tile.{leaf}.{}", what.part())
+}
+
+/// The key of the place over terminal `runtime` an id's card hangs from.
+pub(crate) fn mark_anchor(runtime: &str) -> String {
+    format!("terminal.{runtime}.mark")
 }
 
 /// The key of the delegation chain's trigger on the sidebar row keyed `row`.
@@ -180,30 +235,32 @@ fn leave(pop: &mut HeaderPop, host: &Host, what: What, tx: &mut Tx) {
 }
 
 fn rest(state: &mut State, host: &Host, session: &str, what: What, tx: &mut Tx) {
-    let first = what.first_pick(session, &state.facts);
-    let pop = &mut state.window.desk.header_pop;
-    let here = |p: &Pop| p.on(host, what);
-    if pop.open.as_ref().is_some_and(here) {
-        if matches!(pop.timer, Some(Timer::Close(_))) {
-            pop.timer = None;
-        } else {
-            tx.live_only();
-        }
-        return;
-    }
-    if pop.open.as_ref().is_some_and(|p| p.pinned)
-        || matches!(&pop.timer, Some(Timer::Open(p, ..)) if here(p))
-    {
-        tx.live_only();
-        return;
-    }
     let opening = Pop {
         host: host.clone(),
         session: session.to_owned(),
         what,
         pinned: false,
     };
-    match what.delays().0 {
+    if !rests(state, opening, tx) {
+        tx.live_only();
+    }
+}
+
+/// The pointer rests on what opens `opening`. Returns whether that changed anything.
+fn rests(state: &mut State, opening: Pop, tx: &mut Tx) -> bool {
+    let what = opening.what;
+    let first = what.first_pick(&opening.session, &state.facts);
+    let pop = &mut state.window.desk.header_pop;
+    let here = |p: &Pop| p.on(&opening.host, what);
+    if pop.open.as_ref().is_some_and(here) {
+        return pop.timer.take().is_some();
+    }
+    if pop.open.as_ref().is_some_and(|p| p.pinned)
+        || matches!(&pop.timer, Some(Timer::Open(p, ..)) if here(p))
+    {
+        return false;
+    }
+    match opening.delays().0 {
         0.0 => {
             pop.timer = None;
             pop.picked = first;
@@ -216,6 +273,52 @@ fn rest(state: &mut State, host: &Host, session: &str, what: What, tx: &mut Tx) 
             tx.wake_at(at);
         }
     }
+    true
+}
+
+/// The pointer moved over terminal `runtime`, which shows `reader`'s agent, or left it: resting
+/// on an id opens its card after a moment, and moving off the id and the card closes it after
+/// another.
+pub(super) fn pointer(state: &mut State, runtime: &str, reader: &str, inside: bool, tx: &mut Tx) {
+    let mark = inside
+        .then(|| state.terminals.mark_under_pointer(runtime))
+        .flatten();
+    if let Some(mark) = mark {
+        let marking = Marking {
+            runtime: runtime.to_owned(),
+            reader: reader.to_owned(),
+            mark,
+        };
+        rests(state, Pop::of_mark(marking, false), tx);
+        return;
+    }
+    let pop = &mut state.window.desk.header_pop;
+    let here = |p: &Pop| p.marking().is_some_and(|on| on.runtime == runtime);
+    match &pop.timer {
+        Some(Timer::Close(_)) => {}
+        _ if pop.open.as_ref().is_some_and(here) => close_soon(pop, tx),
+        Some(Timer::Open(opening, ..)) if here(opening) => pop.timer = None,
+        _ => {}
+    }
+}
+
+/// A click with ⌘ or Ctrl on the id `mark` in terminal `runtime`, which shows `reader`'s agent:
+/// it opens the agent, the card of one that closed, or the seed as a tile.
+pub(super) fn open_mark(state: &mut State, runtime: &str, reader: &str, mark: Mark, tx: &mut Tx) {
+    let id = match &mark.target {
+        Subject::Seed(id) => return super::agent_card::open_seed(state, id, reader, tx),
+        Subject::Session(id) => id,
+    };
+    if state.terminals.closed_session(id).is_none() {
+        super::agent_card::select(state, &id.clone(), tx);
+        return;
+    }
+    let marking = Marking {
+        runtime: runtime.to_owned(),
+        reader: reader.to_owned(),
+        mark,
+    };
+    hold(state, Pop::of_mark(marking, true), 0, tx);
 }
 
 /// The pointer moved onto the open popover, or off it.
@@ -233,7 +336,7 @@ fn close_soon(pop: &mut HeaderPop, tx: &mut Tx) {
     let Some(open) = pop.open.as_ref().filter(|p| !p.pinned) else {
         return;
     };
-    let at = tx.clock() + open.what.delays().1;
+    let at = tx.clock() + open.delays().1;
     pop.timer = Some(Timer::Close(at));
     tx.wake_at(at);
 }
@@ -284,14 +387,14 @@ fn hold(state: &mut State, open: Pop, picked: usize, tx: &mut Tx) {
     crate::garden::follow(state, tx);
 }
 
-/// Gives the open chain or pull requests the keyboard, or closes them if pinned. Otherwise pins
+/// Gives the open chain, pull requests or seed card the keyboard, or closes them if pinned. Otherwise pins
 /// the chain of the agent on screen, or its pull requests when it sits in no chain.
 pub(crate) fn take_keyboard(state: &mut State, tx: &mut Tx) {
     let pop = &state.window.desk.header_pop;
     let open = pop
         .open
         .as_ref()
-        .filter(|open| matches!(open.what, What::Chain | What::Details))
+        .filter(|open| matches!(open.what, What::Chain | What::Details | What::SeedCard))
         .cloned();
     match open {
         Some(open) if open.pinned => close(state),
@@ -432,7 +535,38 @@ pub(crate) fn close(state: &mut State) {
     pop.open = None;
 }
 
+/// Whether the open popover is `session`'s.
+pub(crate) fn is_on(state: &State, session: &str) -> bool {
+    let open = &state.window.desk.header_pop.open;
+    open.as_ref().is_some_and(|p| p.session == session)
+}
+
+pub(crate) fn close_of(state: &mut State, session: &str) {
+    if is_on(state, session) {
+        close(state);
+    }
+}
+
+impl Marking {
+    pub(crate) fn target(&self) -> &Subject {
+        &self.mark.target
+    }
+}
+
+/// The terminal the open card hangs over, and where in its slot, as the bits of its x, y, width
+/// and height in points.
+pub(crate) type Anchor = (String, [u32; 4]);
+
 impl HeaderPop {
+    pub(crate) fn marking(&self) -> Option<&Marking> {
+        self.open.as_ref()?.marking()
+    }
+
+    /// The open card's anchor, as the tiles' view reads it.
+    pub(crate) fn mark_anchor(&self) -> Option<Anchor> {
+        self.marking().map(|on| (on.runtime.clone(), on.mark.at))
+    }
+
     /// Lets the popover go, and any it was about to open, once its tile leaves the current
     /// desktop or its agent stops having what it shows.
     pub(crate) fn follow(&mut self, facts: &attn_client::Facts) {
@@ -442,6 +576,7 @@ impl HeaderPop {
                     .current_desktop()
                     .is_some_and(|d| d.panes.iter().any(|p| &p.pane_id == leaf)),
                 Host::Row(_) => true,
+                Host::Mark(_) => return true,
             };
             hosted
                 && facts
@@ -460,10 +595,14 @@ impl HeaderPop {
 }
 
 /// Lets a sidebar row's popover go, and any it was about to open, once the sidebar stops
-/// drawing its row. Returns whether it did.
-pub(crate) fn follow_rows(state: &mut State) -> bool {
+/// drawing its row, and an id's card once its terminal leaves the screen or attn stops knowing
+/// what the id names. Returns whether it did.
+pub(crate) fn follow_hosts(state: &mut State) -> bool {
     let gone = |state: &State, pop: &Pop| match &pop.host {
         Host::Row(row) => !crate::sidebar::draws_row(state, row),
+        Host::Mark(on) => {
+            !state.terminals.draws(&on.runtime) || !state.terminals.knows(&on.mark.target)
+        }
         Host::Tile(_) => false,
     };
     let pop = &state.window.desk.header_pop;
@@ -478,6 +617,13 @@ pub(crate) fn follow_rows(state: &mut State) -> bool {
         pop.timer = None;
     }
     open_gone || timer_gone
+}
+
+/// Brightens the ids in a terminal that name what the open card shows.
+pub(crate) fn preview_marks(state: &mut State) {
+    let card = state.window.desk.header_pop.marking();
+    let card = card.map(|on| (on.runtime.as_str(), &on.mark.target));
+    state.terminals.preview(card);
 }
 
 /// Opens or closes the popover whose moment came. Returns whether it did.

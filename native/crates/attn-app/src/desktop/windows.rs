@@ -454,6 +454,9 @@ pub(crate) fn view(state: &State, cx: &mut rune::Cx<State>) -> El {
         .children(shown);
     let mut layers = Vec::new();
     crate::garden::overlay(state, &t, &mut layers);
+    if super::shows_mark_card(state) {
+        layers.extend(super::header_popover(state, &t));
+    }
     crate::markdown::with_image_preview(root, layers, state, cx.is_reduced_motion(), &t)
         .children(crate::markdown::annotating::layers(state, cx, &t))
         .children(crate::markdown::sending::layers(state, cx, &t))

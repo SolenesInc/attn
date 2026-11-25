@@ -465,6 +465,18 @@ fn name_ids(state: &State, words: &str) -> String {
     query::name_ids(words, |id| label_of(state, id))
 }
 
+/// Why a refused reopen of `entry` left it closed.
+pub(crate) fn refused(state: &State, entry: &SessionLedgerEntry) -> Option<String> {
+    let ledger = &state.window.ledger;
+    let Some(Note::Refused(said)) = ledger.note(entry) else {
+        return None;
+    };
+    Some(match ledger.verdict(entry) {
+        Some(verdict) => name_ids(state, &query::compact_paths(&verdict.summary)),
+        None => said.clone(),
+    })
+}
+
 fn profile_text(entry: &SessionLedgerEntry) -> String {
     if entry.profile_name.is_empty() {
         String::new()

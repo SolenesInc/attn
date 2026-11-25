@@ -9,6 +9,7 @@ mod view;
 
 use std::collections::HashMap;
 
+use attn_protocol::session_id::short;
 use attn_protocol::{
     KeptConversationKeepMessage, SessionLedgerEntry, SessionLedgerFacets, SessionListResultMessage,
     SetSettingMessage,
@@ -21,7 +22,7 @@ use crate::shell::Layer;
 use query::{Filters, ProfileChoice, Scope, Verdict, Window};
 use reopen::Reopened;
 
-pub(crate) use view::{row_menu, view};
+pub(crate) use view::{refused, row_menu, view};
 
 mod conversations;
 
@@ -68,6 +69,9 @@ pub struct Ledger {
     /// A profile the query chose, kept among the choices when a later page leaves it out.
     chosen_profile: Option<ProfileChoice>,
     read: Read,
+    /// The closed session the ledger was opened on, which the page holds even when it is older
+    /// than the daemon's page.
+    sought: Option<SessionLedgerEntry>,
     /// The window the page was read over, which its older pages and the closes it takes in
     /// keep, or none when the filters name no window.
     window: Option<Window>,
@@ -184,6 +188,28 @@ pub(crate) fn open(state: &mut State, tab: Tab, tx: &mut Tx) {
             .get(query::FILTERS_SETTING)
             .map(String::as_str),
     );
+    open_on(state, tab, filters, None, tx);
+}
+
+/// Opens the Sessions list on the closed session `entry`, its query narrowed to it, leaving the
+/// filters the list was last left with as they are for the next time it opens.
+pub(crate) fn open_session(state: &mut State, entry: SessionLedgerEntry, tx: &mut Tx) {
+    if state.window.tile.is_some() {
+        let update = move |state: &mut State, tx: &mut Tx| open_session(state, entry, tx);
+        crate::desktop::to_main(state, Box::new(update));
+        crate::frame::raise_main();
+        return;
+    }
+    open_on(state, Tab::Sessions, Filters::default(), Some(entry), tx);
+}
+
+fn open_on(
+    state: &mut State,
+    tab: Tab,
+    filters: Filters,
+    sought: Option<SessionLedgerEntry>,
+    tx: &mut Tx,
+) {
     let named_with = profile_names(state);
     let chosen_profile = (!filters.profile_id.is_empty()).then(|| ProfileChoice {
         profile_id: filters.profile_id.clone(),
@@ -198,12 +224,18 @@ pub(crate) fn open(state: &mut State, tab: Tab, tx: &mut Tx) {
     let mut conversations = conversations::Kept::default();
     conversations.epoch = state.window.ledger.conversations.epoch;
     let worktrees = state.window.ledger.worktrees.reset(None);
+    let query = match &sought {
+        Some(entry) => short(&entry.id).into_owned(),
+        None => query::format(&filters, &named_with),
+    };
     state.window.ledger = Ledger {
         tab,
         conversations,
         worktrees,
         seen_kept: state.facts.kept_conversations,
-        query: TextEdit::new(query::format(&filters, &named_with)),
+        query: TextEdit::new(query),
+        selected: sought.as_ref().map(|entry| entry.id.clone()),
+        sought,
         filters,
         named_with,
         chosen_profile,
@@ -418,6 +450,7 @@ fn read(state: &mut State, tx: &mut Tx) {
                     };
                     ledger.omitted = result.omitted;
                     ledger.next_before = result.next_before;
+                    ledger.hold_sought();
                     query_edited(state, tx);
                 }
                 None => {
@@ -555,6 +588,16 @@ impl Ledger {
         }
     }
 
+    fn hold_sought(&mut self) {
+        let (Some(entry), Some(window)) = (&self.sought, &self.window) else {
+            return;
+        };
+        let held = self.read.entries.iter().any(|e| e.id == entry.id);
+        if !held && self.filters.holds_close(entry, window) {
+            self.read.entries.push(entry.clone());
+        }
+    }
+
     fn read_facets(&self) -> Option<&SessionLedgerFacets> {
         match &self.read.filters {
             Some(f) if *f == self.filters => self.read.facets.as_ref(),
@@ -672,8 +715,7 @@ pub(crate) fn rows(state: &State) -> Vec<Row<'_>> {
 
 fn row<'a>(state: &State, entry: &'a SessionLedgerEntry) -> Row<'a> {
     let closed = query::is_closed(entry);
-    let live_session = state.facts.sessions.iter().find(|s| s.id == entry.id);
-    let live = !closed && live_session.is_some();
+    let live = !closed && state.facts.sessions.iter().any(|s| s.id == entry.id);
     let ledger = &state.window.ledger;
     let mut verbs = Vec::new();
     if live {
@@ -704,12 +746,23 @@ fn row<'a>(state: &State, entry: &'a SessionLedgerEntry) -> Row<'a> {
     if keeps_conversation(&state.facts.harnesses, entry) {
         verbs.push(Verb::Keep(entry.conversation_pinned_at.is_none()));
     }
-    let shell_name = live_session
-        .filter(|_| entry.agent == "shell")
+    Row {
+        entry,
+        title: title(&state.facts, entry),
+        live,
+        verbs,
+    }
+}
+
+/// How the ledger names a session: its crew member, or its own label.
+pub(crate) fn title(facts: &attn_client::Facts, entry: &SessionLedgerEntry) -> String {
+    let shell_name = facts
+        .sessions
+        .iter()
+        .find(|s| s.id == entry.id && entry.agent == "shell")
         .map(|s| s.label.clone());
     let member = entry.member_key.as_ref().map(|key| {
-        state
-            .facts
+        facts
             .crew
             .iter()
             .find(|m| &m.id == key)
@@ -721,15 +774,10 @@ fn row<'a>(state: &State, entry: &'a SessionLedgerEntry) -> Row<'a> {
         .filter(|n| !n.is_empty())
         .or(shell_name)
         .unwrap_or_else(|| entry.label.clone());
-    Row {
-        entry,
-        title: if title.is_empty() {
-            "untitled session".into()
-        } else {
-            title
-        },
-        live,
-        verbs,
+    if title.is_empty() {
+        "untitled session".into()
+    } else {
+        title
     }
 }
 
@@ -868,6 +916,17 @@ pub(crate) fn run_nth(state: &mut State, id: &str, index: usize, tx: &mut Tx) {
     }
 }
 
+pub(crate) fn resuming(state: &State, entry: &SessionLedgerEntry) -> bool {
+    matches!(state.window.ledger.note(entry), Some(Note::Busy(_)))
+}
+
+/// Resumes the closed session `entry` from its card, unless a reopen of it is under way.
+pub(crate) fn resume(state: &mut State, entry: SessionLedgerEntry, action: String, tx: &mut Tx) {
+    if !resuming(state, &entry) {
+        reopen(state, entry, action, tx);
+    }
+}
+
 fn reopen(state: &mut State, entry: SessionLedgerEntry, action: String, tx: &mut Tx) {
     state
         .window
@@ -884,12 +943,17 @@ fn reopen(state: &mut State, entry: SessionLedgerEntry, action: String, tx: &mut
                 if is_open(state) {
                     close(state, tx);
                 }
+                crate::desktop::header_pop::close_of(state, &session);
                 crate::sidebar::open_agent(state, &session, tx);
             }
             Reopened::Refused { why, verdict } => {
-                let note = Note::Refused(why);
+                let note = Note::Refused(why.clone());
                 state.window.ledger.record(&entry, Some(note), verdict);
-                read(state, tx);
+                if is_open(state) {
+                    read(state, tx);
+                } else if !crate::desktop::header_pop::is_on(state, &entry.id) {
+                    state.window.notify(why, tx);
+                }
             }
         },
         tx,

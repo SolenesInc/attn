@@ -329,6 +329,7 @@ fn previews_a_marked_seed_on_hover_and_opens_it_for_the_session() {
     assert_eq!(sent[0]["seed_id"], KNOWN);
     assert_eq!(sent[0]["session_id"], "s1");
     assert!(card(&world).is_none());
+    world.advance(Duration::from_millis(250));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -507,6 +508,7 @@ fn goes_to_reviewer(mut world: World) {
     assert_eq!(shows.len(), 1);
     assert_eq!(shows[0]["session_id"], "s2");
     assert!(card(&world).is_none());
+    world.advance(Duration::from_millis(250));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -600,6 +602,7 @@ fn the_card_closes_when_its_seed_leaves_the_garden_and_opens_again_once_it_retur
     );
     rest_on(&mut world, 8, 0);
     assert_eq!(card_heading(&world), "Make seed IDs navigable");
+    world.advance(Duration::from_millis(250));
     assert!(world.runtime_is_at_rest());
 }
 

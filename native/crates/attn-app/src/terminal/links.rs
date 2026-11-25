@@ -38,8 +38,8 @@ struct Found {
 
 impl Terminals {
     /// The pointer moved to `at` over terminal `id`, or left it: the link under it is
-    /// underlined, and with ⌘ or Ctrl held the slot shows the pointing hand over it. True when
-    /// the cursor changed, which the view draws.
+    /// underlined, and with ⌘ or Ctrl held the slot shows the pointing hand over it or over a
+    /// session id. True when the cursor changed, which the view draws.
     pub(super) fn hover(&mut self, id: &str, at: Option<(f32, f32)>, accelerator: bool) -> bool {
         let metrics = self.metrics();
         let home = home();
@@ -68,18 +68,24 @@ impl Terminals {
             }
             _ => false,
         };
-        let pointing = (over_link && accelerator).then(|| id.to_owned());
+        let points = accelerator && (over_link || self.points_at_mark(id));
+        let pointing = points.then(|| id.to_owned());
         self.pointing_link_in(pointing)
     }
 
-    /// ⌘ or Ctrl went down or up: the pointing hand follows it over a hovered link.
+    /// ⌘ or Ctrl went down or up: the pointing hand follows it over a hovered link or id.
     pub(crate) fn accelerator(&mut self, held: bool) -> bool {
-        let hovered = self
+        let hovered: Vec<(String, bool)> = self
             .panes
             .iter()
-            .find(|(_, t)| t.view.hover.as_ref().is_some_and(|h| h.link.is_some()))
-            .map(|(id, _)| id.clone());
-        self.pointing_link_in(hovered.filter(|_| held))
+            .filter(|_| held)
+            .filter_map(|(id, t)| Some((id.clone(), t.view.hover.as_ref()?.link.is_some())))
+            .collect();
+        let pointing = hovered
+            .into_iter()
+            .find(|(id, link)| *link || self.points_at_mark(id))
+            .map(|(id, _)| id);
+        self.pointing_link_in(pointing)
     }
 
     fn pointing_link_in(&mut self, id: Option<String>) -> bool {
@@ -90,7 +96,7 @@ impl Terminals {
         true
     }
 
-    /// The terminal whose slot shows the pointing hand over a link.
+    /// The terminal whose slot shows the pointing hand over a link or a session id.
     pub(crate) fn pointing_link(&self) -> Option<&str> {
         self.pointing.as_deref()
     }
@@ -120,9 +126,7 @@ impl Terminals {
         }
     }
 
-    /// A press at `at` in terminal `id` with ⌘ or Ctrl held lands on a link, which it opens
-    /// instead of telling the program.
-    pub(crate) fn presses_link(&mut self, id: &str, at: (f32, f32)) -> bool {
+    pub(super) fn presses_link(&mut self, id: &str, at: (f32, f32)) -> bool {
         self.link_at(id, at).is_some()
     }
 
@@ -136,12 +140,12 @@ impl Terminals {
     }
 
     /// Output, a scroll or a resize moved the text: the hover reads the link under the pointer
-    /// again, and the seed ids on screen are found again.
+    /// again, and the ids on screen are found again.
     pub(super) fn hover_moved(term: &mut Term) {
         if let Some(hover) = &mut term.view.hover {
             hover.stale = true;
         }
-        term.view.seeds = None;
+        term.view.ids = None;
     }
 
     /// Reads each stale hover's link again where its pointer rests, before the terminal draws.
@@ -196,7 +200,11 @@ fn home() -> Option<String> {
     std::env::var("HOME").ok().filter(|h| !h.is_empty())
 }
 
-fn screen_cell(term: &mut Term, metrics: &Metrics, at: (f32, f32)) -> Option<(u32, u16)> {
+pub(super) fn screen_cell(
+    term: &mut Term,
+    metrics: &Metrics,
+    at: (f32, f32),
+) -> Option<(u32, u16)> {
     let (slot, scale) = term.slot?;
     let size = term.vt.size();
     let (col, row) = metrics.cell_in(size, slot, scale, at)?;

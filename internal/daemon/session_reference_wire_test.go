@@ -1,11 +1,13 @@
 package daemon_test
 
 import (
+	"maps"
 	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestASessionIsNamedByItsShortIDOrAUniquePrefixOfItsIDLiveOrClosed(t *testing.T) {
@@ -25,6 +27,7 @@ func TestASessionIsNamedByItsShortIDOrAUniquePrefixOfItsIDLiveOrClosed(t *testin
 	)
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
+		app := w.App()
 		registerSessions(t, w, cli, live, closed, closedTwin, closedSingle, liveTwin, liveTwin2, shadowed, shadowing, sevenHex, sevenHexLive)
 		side := createProfile(w.App(), "Side")
 		for _, id := range []string{stranger, strangerClose} {
@@ -91,6 +94,18 @@ func TestASessionIsNamedByItsShortIDOrAUniquePrefixOfItsIDLiveOrClosed(t *testin
 				"session transcript": {"id": foreign},
 				"session reopen":     {"id": foreign},
 			})
+		}
+
+		resolved := testworld.Request(app, protocol.ResolveSessionsMessage{
+			Cmd: protocol.CmdResolveSessions, RequestID: protocol.Ptr("resolve"),
+			Refs: []string{"ag-rqm1y1", closed, "c5e81f07", "ag-7yd2rk", live, "ag-e70dka", "71c0d9ab", strangerClose, "ag-b3rtfg", "ag-zzzzzz", "00000000-0000-4000-8000-000000000000"},
+		}, protocol.EventResolveSessionsResult, func(r protocol.ResolveSessionsResultMessage) bool { return r.RequestID == "resolve" })
+		found := map[string]string{}
+		for _, r := range resolved.Found {
+			found[r.Ref] = string(r.Closed.ID)
+		}
+		if want := map[string]string{"ag-rqm1y1": closedSingle, closed: closed, "c5e81f07": closedSingle}; !resolved.Success || !maps.Equal(found, want) {
+			t.Errorf("resolve_sessions = %v (success %v), want only the closed sessions of the app's profile that one reference names, %v", found, resolved.Success, want)
 		}
 
 		var renamed string

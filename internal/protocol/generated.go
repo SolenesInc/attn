@@ -9438,6 +9438,42 @@ type ReposUpdatedMessage struct {
 	Repos []RepoState `json:"repos,omitempty,omitzero"`
 }
 
+type ResolveSessionsMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Refs corresponds to the JSON schema field "refs".
+	Refs []string `json:"refs"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type ResolveSessionsResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Found corresponds to the JSON schema field "found".
+	Found []ResolvedSession `json:"found"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type ResolvedSession struct {
+	// Closed corresponds to the JSON schema field "closed".
+	Closed SessionLedgerEntry `json:"closed"`
+
+	// Ref corresponds to the JSON schema field "ref".
+	Ref string `json:"ref"`
+}
+
 type Response struct {
 	// AskAmendResult corresponds to the JSON schema field "ask_amend_result".
 	AskAmendResult *Ask `json:"ask_amend_result,omitempty,omitzero"`

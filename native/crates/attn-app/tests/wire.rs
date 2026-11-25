@@ -214,6 +214,7 @@ mod wire {
     mod terminal_blocks;
     mod terminal_filter;
     mod terminal_find;
+    mod terminal_ids;
     mod terminal_input_latency;
     mod terminal_kitty;
     mod terminal_links;

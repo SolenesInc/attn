@@ -164,7 +164,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
             (
                 state.drafts.revision,
                 state.readings.revision,
-                state.terminals.seed_card_key(),
+                desk.header_pop.mark_anchor(),
             ),
             (state.notebook.revision, state.browser.revision()),
         ),
@@ -418,12 +418,13 @@ fn sublines(
                     .filter(|pop| {
                         pop.host == crate::desktop::header_pop::Host::Tile(p.pane_id.clone())
                     })
-                    .map(|pop| match pop.what {
-                        What::Usage => Piece::Usage,
-                        What::Details => Piece::Provenance,
-                        What::Chain => Piece::Role,
-                        What::Ask => Piece::Ask,
-                        What::Seed => Piece::Seed,
+                    .and_then(|pop| match pop.what {
+                        What::Usage => Some(Piece::Usage),
+                        What::Details => Some(Piece::Provenance),
+                        What::Chain => Some(Piece::Role),
+                        What::Ask => Some(Piece::Ask),
+                        What::Seed => Some(Piece::Seed),
+                        What::SeedCard => None,
                     })
                     .into_iter()
                     .chain(crate::outpost::offline(s, &facts.outposts).then_some(Piece::Host))
@@ -538,6 +539,7 @@ pub(super) fn lone(
         dragging: None,
         rings: &[],
         refusals: &state.window.desk.refusals,
+        mark_anchor: state.window.desk.header_pop.mark_anchor(),
         screen: super::tile_look::Screen {
             marking: None,
             zoomed: false,
@@ -628,6 +630,7 @@ fn screen(
                     dragging,
                     rings: &desk.rings,
                     refusals: &desk.refusals,
+                    mark_anchor: desk.header_pop.mark_anchor(),
                     screen: super::tile_look::Screen {
                         marking: (rendered.leaves().len() > 1).then_some(focus_style),
                         zoomed: view == super::layout::View::Zoomed,
@@ -730,6 +733,8 @@ struct TileCx<'a> {
     rings: &'a [super::arrival::Ring],
     /// Input the daemon refused, by terminal.
     refusals: &'a super::refusal::Refusals,
+    /// Where the open card of an id in a terminal hangs.
+    mark_anchor: Option<super::header_pop::Anchor>,
     screen: super::tile_look::Screen,
     holder: Option<&'a Holder>,
     terminals: &'a Terminals,
@@ -1004,14 +1009,10 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 )),
                 None => slot,
             };
-            let slot = slot.children(cx.terminals.seed_card(&pane.runtime_id).and_then(|card| {
-                super::seed_card::card(
-                    card,
-                    cx.facts,
-                    cx.terminals.slot_size(&pane.runtime_id).unwrap_or_default(),
-                    cx.now_ms,
-                    t,
-                )
+            let slot = slot.children(cx.mark_anchor.as_ref().and_then(|(runtime, at)| {
+                let [x, y, w, h] = at.map(f32::from_bits);
+                let anchor = || el().key(super::header_pop::mark_anchor(runtime));
+                (*runtime == pane.runtime_id).then(|| anchor().absolute(x, y).w(w).h(h))
             }));
             let slot = slot.children(cx.refusals.flash(&pane.runtime_id, t));
             let unsent = cx
@@ -1796,7 +1797,7 @@ fn terminal_slot(
 ) -> El {
     let id = runtime_id.to_owned();
     let (pointing, pressing, wheeling, leaving) = (id.clone(), id.clone(), id.clone(), id.clone());
-    let (moved_over, left) = (session.to_owned(), session.to_owned());
+    let (moved_over, left, reader) = (session.to_owned(), session.to_owned(), session.to_owned());
     let reading = id.clone();
     let slot = el()
         .key(crate::terminal::slot_key(runtime_id))
@@ -1829,14 +1830,14 @@ fn terminal_slot(
             );
             let over_mark = (tx.mods().alt && !held).then_some((p.x, p.y));
             let mark_changed = state.terminals.hover_mark(&pointing, over_mark);
-            super::seed_card::pointer(state, &pointing, &moved_over, !held, tx);
+            super::header_pop::pointer(state, &pointing, &moved_over, !held, tx);
             if !pointing_changed && !mark_changed {
                 tx.live_only();
             }
         })
         .on_hover_change(move |state: &mut State, inside, tx: &mut Tx| {
             if !inside {
-                super::seed_card::pointer(state, &leaving, &left, false, tx);
+                super::header_pop::pointer(state, &leaving, &left, false, tx);
             }
             let mark_changed = !inside && state.terminals.hover_mark(&leaving, None);
             if (inside || !state.terminals.pointer_left(&leaving)) && !mark_changed {
@@ -1861,7 +1862,7 @@ fn terminal_slot(
                     };
                     let opens = button == mouse::PRIMARY
                         && accelerator(tx.mods())
-                        && state.terminals.presses_link(&pressing, (d.x, d.y));
+                        && state.terminals.presses_mark(&pressing, (d.x, d.y));
                     let reported = !opens
                         && state.terminals.pointer_pressed(
                             &pressing,
@@ -1910,6 +1911,10 @@ fn terminal_slot(
                             }
                         }
                         Release::Click if !d.cancelled() && accelerator(tx.mods()) => {
+                            if let Some(mark) = state.terminals.mark_at(&pressing, at) {
+                                super::header_pop::open_mark(state, &pressing, &reader, mark, tx);
+                                return;
+                            }
                             match state.terminals.open_link_at(&pressing, (d.x, d.y), tx) {
                                 Ok(Some(markdown)) => {
                                     let session = state

@@ -296,7 +296,7 @@ func (s *Store) ClosedSessionsNamed(ref, profileID string, limit int) ([]protoco
 	}
 
 	rows, err := s.db.Query(ledgerSelect+" FROM sessions_with_runtime AS sessions WHERE "+ledgerVisible+
-		" AND closed_at <> '' AND substr(id, 1, length(?1)) = ?1 AND (?2 = '' OR profile_id = ?2)", sessionref.IDPrefix(ref), profileID)
+		" AND closed_at <> '' AND id >= ?1 AND id < ?1 || char(0x10FFFF) AND (?2 = '' OR profile_id = ?2)", sessionref.IDPrefix(ref), profileID)
 	if err != nil {
 		return nil, fmt.Errorf("read closed sessions matching %s: %w", ref, err)
 	}

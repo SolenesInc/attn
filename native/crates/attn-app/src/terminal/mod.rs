@@ -20,11 +20,11 @@ mod annotating;
 mod blocks;
 mod filter;
 mod find;
+mod ids;
 mod input_trace;
 mod kitty;
 mod latency;
 mod links;
-mod seeds;
 mod selection;
 mod spoken;
 
@@ -34,10 +34,10 @@ pub(crate) use annotating::{
 pub(crate) use blocks::Part;
 pub(crate) use filter::{Filtered, Filtering, filter_field_key};
 pub(crate) use find::{Finding, Toward, find_field_key};
+pub(crate) use ids::{Mark, Subject, ask_about_unresolved};
 pub(crate) use input_trace::{Decision, Heard, InputTrace, Target, TraceId, Write};
 pub(crate) use latency::type_into;
 pub(crate) use links::accelerator;
-pub(crate) use seeds::SeedCard;
 pub(crate) use selection::Release;
 
 /// How often a terminal tells the daemon its new size while its tile is being resized.
@@ -231,13 +231,7 @@ pub struct Terminals {
     unshown_comment: rune::TextEdit,
     /// What the terminals have to tell the person, until the window shows it.
     said: Option<String>,
-    /// The seed ids the garden knows, which the terminals mark.
-    seeds: Arc<std::collections::HashSet<String>>,
-    /// The card of the seed id the pointer rests on, and when it opens or closes.
-    card: Option<seeds::SeedCard>,
-    card_timer: Option<seeds::CardTimer>,
-    /// The pointer is over the seed card, which keeps it open.
-    over_card: bool,
+    ids: ids::Ids,
     pub(crate) latency: latency::InputLatency,
     /// The app's input trace, which the main window hands its tile windows.
     pub(crate) trace: Arc<Mutex<InputTrace>>,
@@ -444,7 +438,6 @@ impl Terminals {
             self.images.forget(&id);
             self.latency.forget(&id);
             self.trace.lock().unwrap().forget(&id);
-            self.seed_card_left(&id);
             save_leaving_note(term.marking.as_ref(), daemon);
             release(&id, &mut term, None, 0, daemon);
             let mut screen = std::mem::take(&mut term.grid);
@@ -1367,9 +1360,9 @@ impl Terminals {
         let metrics = self.metrics();
         let finds = &self.finds;
         let images = &mut self.images;
-        let seeds = (&*self.seeds, self.card.as_ref());
+        let ids = &mut self.ids;
         self.panes.iter_mut().map(move |(id, term)| {
-            Terminals::bring_up_to_date(images, finds, seeds, &theme, metrics, id, term);
+            Terminals::bring_up_to_date(images, finds, ids, &theme, metrics, id, term);
             (mark(id), &term.grid)
         })
     }
@@ -1379,14 +1372,14 @@ impl Terminals {
     fn bring_up_to_date(
         images: &mut kitty::Images,
         finds: &HashMap<String, find::Finding>,
-        (seeds, card): (&std::collections::HashSet<String>, Option<&seeds::SeedCard>),
+        ids: &mut ids::Ids,
         theme: &TerminalColors,
         metrics: Metrics,
         id: &str,
         term: &mut Term,
     ) {
         if Terminals::grid_follows_screen(term) && term.vt.sync(&mut term.grid) {
-            term.view.seeds = None;
+            term.view.ids = None;
         }
         let top = term.vt.view_top();
         let cell = term
@@ -1395,8 +1388,7 @@ impl Terminals {
         let placed = Terminals::kitty_images(images, id, term, top, cell);
         term.grid.set_images(placed, top);
         let mut overlays = Terminals::overlays(term, theme, finds.get(id));
-        let previewing = card.filter(|c| c.runtime == id).map(|c| c.seed.as_str());
-        overlays.extend(Terminals::seed_overlays(term, seeds, previewing, theme));
+        overlays.extend(Terminals::id_overlays(id, term, ids, theme));
         term.grid.set_overlays(overlays);
         term.scrolled_back = term.vt.scrolled_back();
     }
@@ -1421,12 +1413,11 @@ impl Terminals {
     fn current(&mut self, id: &str) -> Option<&Term> {
         let metrics = self.metrics();
         let term = self.panes.get_mut(id)?;
-        let seeds = (&*self.seeds, self.card.as_ref());
         let theme = &self.theme;
         Terminals::bring_up_to_date(
             &mut self.images,
             &self.finds,
-            seeds,
+            &mut self.ids,
             theme,
             metrics,
             id,

@@ -1,5 +1,6 @@
 use attn_client::Facts;
-use attn_protocol::{ActorView, Seed, Session, StandbyTender};
+use attn_protocol::session_id::short;
+use attn_protocol::{ActorView, Seed, Session, SessionLedgerEntry, StandbyTender};
 use attn_ui::blocks::{Inline, Stack};
 use attn_ui::system::{
     Button, DotShape, DotSize, IconSize, Size, Type, dot, glyph, icon, keycaps, tinted_pill, words,
@@ -12,12 +13,13 @@ use super::role_icon::Mark;
 use crate::State;
 use crate::sidebar::model::{AgentState, display_name, harness_label};
 
-/// An agent a card shows: a live session, or a closed one that tends a seed on standby and
-/// resumes when mail reaches it.
+/// An agent a card shows: a live session, a closed one that tends a seed on standby and
+/// resumes when mail reaches it, or a closed one as the ledger holds it.
 #[derive(Clone, Copy)]
 pub(crate) enum Link<'a> {
     Live(&'a Session),
     Dormant(&'a Seed, &'a StandbyTender),
+    Closed(&'a SessionLedgerEntry),
 }
 
 impl<'a> Link<'a> {
@@ -25,6 +27,7 @@ impl<'a> Link<'a> {
         match self {
             Link::Live(session) => &session.id,
             Link::Dormant(_, tender) => &tender.session_id,
+            Link::Closed(entry) => &entry.id,
         }
     }
 
@@ -32,6 +35,7 @@ impl<'a> Link<'a> {
         match self {
             Link::Live(session) => session.dispatcher_session_id.as_deref(),
             Link::Dormant(_, tender) => tender.dispatcher_session_id.as_deref(),
+            Link::Closed(_) => None,
         }
     }
 
@@ -39,6 +43,7 @@ impl<'a> Link<'a> {
         match self {
             Link::Live(session) => session.dispatcher.as_ref(),
             Link::Dormant(_, tender) => tender.dispatcher.as_ref(),
+            Link::Closed(_) => None,
         }
     }
 }
@@ -54,10 +59,10 @@ impl<'a> Card<'a> {
     pub(super) fn of(link: Link<'a>, facts: &Facts, now_ms: i64) -> Card<'a> {
         Card {
             link,
-            name: name_of(link, &facts.harnesses),
+            name: name_of(link, facts),
             needs: match link {
                 Link::Live(session) => Needs::of(session, facts, now_ms),
-                Link::Dormant(..) => None,
+                Link::Dormant(..) | Link::Closed(_) => None,
             },
         }
     }
@@ -105,10 +110,11 @@ impl Needs {
     }
 }
 
-fn name_of(link: Link<'_>, harnesses: &[attn_protocol::Harness]) -> String {
+fn name_of(link: Link<'_>, facts: &Facts) -> String {
     match link {
-        Link::Live(session) => display_name(session, harnesses),
-        Link::Dormant(_, tender) => dormant_name(tender, harnesses),
+        Link::Live(session) => display_name(session, &facts.harnesses),
+        Link::Dormant(_, tender) => dormant_name(tender, &facts.harnesses),
+        Link::Closed(entry) => crate::ledger::title(facts, entry),
     }
 }
 
@@ -134,6 +140,8 @@ fn held(iso: &str, now_ms: i64) -> Option<String> {
 /// What the picked agent's details lead to, each by its letter.
 #[derive(Clone)]
 pub(super) enum Go {
+    Resume { session: String, action: String },
+    Ledger(String),
     Seed(String),
     PullRequest(String),
     Ask(String),
@@ -142,6 +150,8 @@ pub(super) enum Go {
 impl Go {
     pub(super) fn letter(&self) -> &'static str {
         match self {
+            Go::Resume { .. } => "r",
+            Go::Ledger(_) => "l",
             Go::Seed(_) => "s",
             Go::PullRequest(_) => "p",
             Go::Ask(_) => "a",
@@ -150,8 +160,9 @@ impl Go {
 }
 
 /// Where the letters and the details of the agent `link` lead: its seed, its pull request and its
-/// oldest open ask.
-pub(super) fn goes(link: Link<'_>, facts: &Facts) -> Vec<Go> {
+/// oldest open ask, or how a closed one resumes, its ledger row and its seed.
+pub(super) fn goes(link: Link<'_>, state: &State) -> Vec<Go> {
+    let facts = &state.facts;
     match link {
         Link::Live(session) => session
             .seed_id
@@ -169,7 +180,40 @@ pub(super) fn goes(link: Link<'_>, facts: &Facts) -> Vec<Go> {
             )
             .collect(),
         Link::Dormant(seed, _) => vec![Go::Seed(seed.id.clone())],
+        Link::Closed(entry) => {
+            let action = match state.window.ledger.verdict(entry) {
+                Some(verdict) => verdict.actions.first().cloned(),
+                None => Some("reopen".to_owned()),
+            };
+            let session = entry.id.clone();
+            let resume = action.map(|action| Go::Resume { session, action });
+            let seed = seed_of_closed(facts, &entry.id).map(|seed| Go::Seed(seed.id.clone()));
+            resume
+                .into_iter()
+                .chain([Go::Ledger(entry.id.clone())])
+                .chain(seed)
+                .collect()
+        }
     }
+}
+
+/// The seed a closed session tends, or waits for on standby, or last tended.
+fn seed_of_closed<'a>(facts: &'a Facts, session: &str) -> Option<&'a Seed> {
+    let tends = |seed: &Seed| {
+        let tender = seed.tender.as_ref().and_then(|t| t.session_id.as_deref());
+        let standby = seed.standby.as_ref().and_then(|s| s.tender.as_ref());
+        tender == Some(session) || standby.is_some_and(|t| t.session_id == session)
+    };
+    let seeds = facts.garden.of(&facts.profiles.selected);
+    seeds
+        .iter()
+        .find(|seed| tends(seed))
+        .or_else(|| {
+            let last =
+                |seed: &&std::sync::Arc<Seed>| seed.last_execution_id.as_deref() == Some(session);
+            seeds.iter().find(last)
+        })
+        .map(|seed| seed.as_ref())
 }
 
 fn find_seed<'a>(facts: &'a Facts, id: &str) -> Option<&'a Seed> {
@@ -193,6 +237,22 @@ pub(super) fn go_button(
     t: &Tokens,
 ) -> El {
     let (label, said, mark): (String, String, El) = match go {
+        Go::Resume { action, .. } => {
+            let said = match action.as_str() {
+                "reopen" => "Resume",
+                other => crate::ledger::query::action_label(other),
+            };
+            (
+                format!("{said}: {}", name_of(link, facts)),
+                said.to_owned(),
+                glyph(glyph::REFRESH, IconSize::Small, t.accent),
+            )
+        }
+        Go::Ledger(_) => (
+            format!("Show {} in the ledger", name_of(link, facts)),
+            "Ledger".to_owned(),
+            glyph(glyph::CLOCK, IconSize::Small, t.text_tertiary),
+        ),
         Go::Seed(id) => {
             let seed = find_seed(facts, id);
             let named = match seed {
@@ -210,7 +270,7 @@ pub(super) fn go_button(
         Go::PullRequest(url) => {
             let pr = match link {
                 Link::Live(agent) => super::provenance::pull_request(agent),
-                Link::Dormant(..) => None,
+                Link::Dormant(..) | Link::Closed(_) => None,
             };
             match pr {
                 Some(pr) => (
@@ -249,7 +309,7 @@ pub(super) fn go_button(
         .child(mark.a11y_hidden());
     let button = Button::new(said).size(Size::Compact).leading(leading);
     let button = match go {
-        Go::PullRequest(_) => button.whole(),
+        Go::Resume { .. } | Go::Ledger(_) | Go::PullRequest(_) => button.whole(),
         Go::Seed(_) | Go::Ask(_) => button,
     };
     let (go, session) = (go.clone(), session.to_owned());
@@ -284,7 +344,7 @@ pub(super) fn who(key: Option<&str>, card: &Card<'_>, state: &State, t: &Tokens)
             let about = [
                 role.map(|r| r.name.clone()),
                 Some(harness_label(&facts.harnesses, &session.agent)),
-                session.host.clone().filter(|h| !h.is_empty()),
+                super::host::name(session, &facts.outposts),
             ]
             .into_iter()
             .flatten()
@@ -323,6 +383,31 @@ pub(super) fn who(key: Option<&str>, card: &Card<'_>, state: &State, t: &Tokens)
                 t.text_tertiary,
             )
         }
+        Link::Closed(entry) => {
+            let about = [
+                Some(harness_label(&facts.harnesses, &entry.agent)),
+                Some(short(&entry.id).into_owned()),
+                entry
+                    .host
+                    .as_deref()
+                    .filter(|h| !h.is_empty())
+                    .map(|h| super::host::outpost_name(h, &facts.outposts)),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" · ");
+            let said = match held(entry.closed_at.as_deref().unwrap_or_default(), now_ms) {
+                Some(held) => format!("closed {held}"),
+                None => "closed".to_owned(),
+            };
+            (
+                dot(t.text_muted, DotShape::Hollow, DotSize::Regular),
+                vec![about_line(about, t)],
+                said,
+                t.text_tertiary,
+            )
+        }
     };
     let keyed = |part: El, name: &str| match key {
         Some(key) => part.key(format!("{key}.{name}")),
@@ -351,8 +436,9 @@ fn about_line(said: String, t: &Tokens) -> El {
         .shrink()
 }
 
-/// What an agent is doing now, or why a closed one cannot resume.
-pub(super) fn doing(card: &Card<'_>, now_ms: i64, t: &Tokens) -> Option<El> {
+/// What an agent is doing now, or where a closed one worked and why it cannot resume.
+pub(super) fn doing(card: &Card<'_>, state: &State, t: &Tokens) -> Option<El> {
+    let now_ms = state.window.now_ms;
     let (said, ink) = match card.link {
         Link::Live(session) => (
             session.activity.clone().filter(|a| !a.trim().is_empty())?,
@@ -362,14 +448,36 @@ pub(super) fn doing(card: &Card<'_>, now_ms: i64, t: &Tokens) -> Option<El> {
             crate::garden::model::standby_of(seed, now_ms)?.blocked_words()?,
             t.warning,
         ),
+        Link::Closed(entry) if crate::ledger::resuming(state, entry) => {
+            ("Resuming…".to_owned(), t.text_secondary)
+        }
+        Link::Closed(entry) => match crate::ledger::refused(state, entry) {
+            Some(why) => (why, t.warning),
+            None => (
+                entry.branch.clone().filter(|b| !b.is_empty())?,
+                t.text_secondary,
+            ),
+        },
     };
     Some(words(said, Type::Body, ink).wrap().max_lines(2))
 }
 
 /// Opens what `go` leads to and closes the chain: a seed in a tile beside `session`, a pull
-/// request on GitHub, an ask in the asks sheet.
+/// request on GitHub, an ask in the asks sheet, a closed agent in the ledger. A closed agent that
+/// resumes keeps its card until it opens, so a refusal shows there.
 pub(super) fn follow(state: &mut State, go: &Go, session: &str, tx: &mut Tx) {
     match go {
+        Go::Resume { session, action } => {
+            if let Some(entry) = state.terminals.closed_session(session).cloned() {
+                crate::ledger::resume(state, entry, action.clone(), tx);
+            }
+        }
+        Go::Ledger(session) => {
+            if let Some(entry) = state.terminals.closed_session(session).cloned() {
+                header_pop::close(state);
+                crate::ledger::open_session(state, entry, tx);
+            }
+        }
         Go::Seed(id) => open_seed(state, id, session, tx),
         Go::PullRequest(url) => {
             header_pop::close(state);

@@ -62,6 +62,10 @@ one forever from there.
   clipboard sequence and puts the text on your clipboard, even from a remote machine.
 - Cmd-click (Ctrl-click on Linux) a path or URL to open it. A `.md` file opens
   in a markdown tile next to the agent.
+- Attn underlines the id of an agent or a seed it knows. Point at one to see its
+  card. Cmd-click (Ctrl-click on Linux) it to open a live agent, or a seed in a
+  tile. For a closed agent, Cmd-click moves the keyboard into its card, where you
+  can resume the agent or find it in the ledger.
 - If your shell marks commands (fish does by default), click a command's output
   to select the whole block. Cmd+C (Ctrl+Shift+C on Linux) copies the command
   and its output. Cmd+Shift+C (Ctrl+Alt+C on Linux) copies only the command.

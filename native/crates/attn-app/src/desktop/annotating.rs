@@ -186,10 +186,6 @@ fn popup_at(popup: &Popup, size: (f32, f32), slot: (f32, f32), room: Room) -> (f
 
 /// Where a box of `size` opens for a point `at` in a slot of `slot`: centred above it, or else
 /// below it, or else beside it, kept inside the slot.
-pub(crate) fn place(at: (f32, f32), size: (f32, f32), slot: (f32, f32)) -> (f32, f32) {
-    place_in(at, size, slot, Room::Anywhere)
-}
-
 fn place_in(at: (f32, f32), size: (f32, f32), slot: (f32, f32), room: Room) -> (f32, f32) {
     let clamp = |v: f32, low: f32, high: f32| v.min(high.max(low)).max(low);
     let left = clamp(at.0 - size.0 / 2.0, MARGIN, slot.0 - size.0 - MARGIN);

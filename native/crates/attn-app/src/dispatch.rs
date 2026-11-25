@@ -46,6 +46,10 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
                 Outcome::Unavailable
             };
         }
+        if action == Action::SessionDetails && crate::desktop::shows_mark_card(state) {
+            crate::desktop::header_pop::take_keyboard(state, tx);
+            return Outcome::Ran;
+        }
         if matches!(
             action,
             Action::TerminalSendAnnotations | Action::MarkdownSendAnnotations

@@ -54,6 +54,12 @@ fn sync_terminals(rt: &mut Runtime<State>) -> TerminalColors {
 
 fn screens_drawn(rt: &mut Runtime<State>, redrawn: bool) {
     rt.state().terminals.echoes_drawn();
+    if rt.state().terminals.has_unresolved_ids() {
+        rt.update_if(|state, tx| {
+            crate::terminal::ask_about_unresolved(state, tx);
+            false
+        });
+    }
     if redrawn {
         rt.a11y_text_changed();
     }

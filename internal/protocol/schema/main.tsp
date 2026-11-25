@@ -899,6 +899,15 @@ model SessionShowMessage {
   session_id: SessionID;
 }
 
+// Reads the closed sessions of the app's profile that session references on its screens name:
+// short ids, whole ids or prefixes of one.
+@extension("x-on", #{ home: true })
+model ResolveSessionsMessage {
+  cmd: "resolve_sessions";
+  request_id?: string;
+  refs: string[];
+}
+
 // Brings a closed or stopped session back under its own id. Without an action it performs
 // the plain reopen, and refuses naming what is offered instead.
 @extension("x-on", #{ home: true })
@@ -8361,6 +8370,21 @@ model SessionShowResultMessage {
   entry?: SessionLedgerEntry;
 }
 
+model ResolvedSession {
+  ref: string;
+  closed: SessionLedgerEntry;
+}
+
+// A reference absent from `found` names no closed session of the profile: it names a live one,
+// several, or none.
+model ResolveSessionsResultMessage {
+  event: "resolve_sessions_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  found: ResolvedSession[];
+}
+
 model TerminalReadTextResultMessage {
   event: "terminal_read_text_result";
   request_id: string;
@@ -9047,6 +9071,7 @@ alias DaemonEvent =
   | TasksChangedMessage
   | SessionListResultMessage
   | SessionShowResultMessage
+  | ResolveSessionsResultMessage
   | TerminalReadTextResultMessage
   | SessionReopenResultMessage
   | SessionClosedMessage

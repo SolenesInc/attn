@@ -308,6 +308,7 @@ pub fn bind(
             quick_capture::shortcut::follow(state);
             sidebar::advance(state, tx);
             garden::follow(state, tx);
+            state.terminals.know_sessions(&state.facts);
             crew::follow(state);
             automations::follow(state, tx);
             follow_terminals(state, tx);
@@ -413,10 +414,11 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         | shell::follow_details(state)
         | home::pull_requests::poll(state, now);
     let automated = automations::poll(state, now, tx);
-    let pointed = callouts::poll(state, tx) | desktop::header_pop::follow_rows(state);
+    let pointed = callouts::poll(state, tx) | desktop::header_pop::follow_hosts(state);
     let reported = diagnostic_report::poll(state, now, tx);
     presence::follow(state);
     let expired = shell::expire(state, now, tx) || expired;
+    desktop::header_pop::preview_marks(state);
     let browsed_pages = browser::follow(state, tx);
     expired
         || automated

@@ -224,7 +224,13 @@ pub(crate) fn header_popover(state: &State, t: &attn_ui::Tokens) -> Option<rune:
         header_pop::What::Chain => chain::popover(state, pop, t),
         header_pop::What::Ask => crate::asks::preview(state, pop, t),
         header_pop::What::Seed => seed_chip::popover(state, pop, t),
+        header_pop::What::SeedCard => seed_card::popover(state, pop, t),
     }
+}
+
+/// Whether the card of an id in a terminal is open.
+pub(crate) fn shows_mark_card(state: &State) -> bool {
+    state.window.desk.header_pop.marking().is_some()
 }
 
 /// Lets the moments the desktops keep lapse when their time is up: entries' flashes, tiles' rings
@@ -233,7 +239,7 @@ pub(crate) fn header_popover(state: &State, t: &attn_ui::Tokens) -> Option<rune:
 /// and the header popover, and the peek's reads. Returns whether anything changed.
 pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
     let now = tx.clock();
-    let popped = header_pop::expire(state, now) | state.terminals.expire_seed_card(now);
+    let popped = header_pop::expire(state, now);
     if popped {
         crate::garden::follow(state, tx);
     }

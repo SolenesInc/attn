@@ -219,6 +219,28 @@ func (d *Daemon) sendSessionShowWSResult(client *wsClient, msg *protocol.Session
 	d.sendToClient(client, reply)
 }
 
+func (d *Daemon) sendResolveSessionsWSResult(client *wsClient, msg *protocol.ResolveSessionsMessage) {
+	reply := protocol.ResolveSessionsResultMessage{
+		Event:     protocol.EventResolveSessionsResult,
+		RequestID: protocol.Deref(msg.RequestID),
+		Success:   true,
+		Found:     []protocol.ResolvedSession{},
+	}
+	for _, ref := range msg.Refs {
+		match, err := d.resolveSession(ref, client.selectedProfile())
+		switch {
+		case errors.Is(err, errSessionNotFound), errors.Is(err, errAmbiguousSession):
+		case err != nil:
+			reply.Success, reply.Error = false, protocol.Ptr(err.Error())
+		case match.Closed != nil:
+			d.decorateLedgerEntryWithUsage(match.Closed)
+			d.decorateLedgerEntryWithTitle(match.Closed)
+			reply.Found = append(reply.Found, protocol.ResolvedSession{Ref: ref, Closed: *match.Closed})
+		}
+	}
+	d.sendToClient(client, reply)
+}
+
 func projectSessionClosed(d *Daemon, event bus.Event) {
 	entry, ok := decodeFact[protocol.SessionLedgerEntry](d, event)
 	if !ok {

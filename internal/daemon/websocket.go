@@ -865,6 +865,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.life.Go("sendSessionListWSResult", func() { d.sendSessionListWSResult(client, msg.(*protocol.SessionListMessage)) })
 	case protocol.CmdSessionShow:
 		d.life.Go("sendSessionShowWSResult", func() { d.sendSessionShowWSResult(client, msg.(*protocol.SessionShowMessage)) })
+	case protocol.CmdResolveSessions:
+		d.life.Go("sendResolveSessionsWSResult", func() { d.sendResolveSessionsWSResult(client, msg.(*protocol.ResolveSessionsMessage)) })
 	case protocol.CmdTerminalReadText:
 		d.life.Go("sendTerminalReadTextWSResult", func() { d.sendTerminalReadTextWSResult(client, msg.(*protocol.TerminalReadTextMessage)) })
 	case protocol.CmdSessionReopen:

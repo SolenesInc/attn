@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "bdf6806897aa";
+pub const PROTOCOL_VERSION: &str = "b27ad8e53a47";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -8649,6 +8649,49 @@ impl ReposUpdatedMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ResolveSessionsMessage {
+    pub cmd: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub refs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+}
+
+impl ResolveSessionsMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "resolve_sessions".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ResolveSessionsResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub found: Vec<ResolvedSession>,
+    pub request_id: String,
+    pub success: bool,
+}
+
+impl ResolveSessionsResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "resolve_sessions_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ResolvedSession {
+    pub closed: SessionLedgerEntry,
+    pub r#ref: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Response {

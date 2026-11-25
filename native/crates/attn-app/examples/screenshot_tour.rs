@@ -28,14 +28,15 @@ use attn_protocol::{
     OutpostInfo, OutpostUpdate, PR, PartyView, PathInspection, PhoneLink, PhonesUpdatedMessage,
     Profile, RateLimitedMessage, RecentFilesResultMessage, RecentLocation,
     RecentLocationsResultMessage, RecordCommandUsageResultMessage, RefreshPRsResultMessage,
-    RepoInfo, ReviewBundle, ReviewFile, ReviewFlow, ReviewFlowGroup, ReviewFlowMessage,
-    ReviewFlowParticipant, ReviewNotShown, ReviewNote, ReviewRow, ReviewStop, Seed, SeedCheck,
-    SeedContinuation, SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedNote,
-    SeedPlotProgress, Session, SessionAnnotationsGetResultMessage,
-    SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
-    SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, SessionPullRequest,
-    SessionUsage, SessionUsageModel, SharedCodexBlocker, SharedCodexState, UpdateChangedMessage,
-    UpdateOutpostProgress, UpdateRun, Worktree, WorktreeListResult, WorktreeListResultEvent,
+    RepoInfo, ResolveSessionsResultMessage, ResolvedSession, ReviewBundle, ReviewFile, ReviewFlow,
+    ReviewFlowGroup, ReviewFlowMessage, ReviewFlowParticipant, ReviewNotShown, ReviewNote,
+    ReviewRow, ReviewStop, Seed, SeedCheck, SeedContinuation, SeedDocument,
+    SeedDocumentGetResultMessage, SeedEdge, SeedNote, SeedPlotProgress, Session,
+    SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionLedgerEntry,
+    SessionListResult, SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage,
+    SessionPullRequest, SessionReopen, SessionReopenResultMessage, SessionUsage, SessionUsageModel,
+    SharedCodexBlocker, SharedCodexState, UpdateChangedMessage, UpdateOutpostProgress, UpdateRun,
+    Worktree, WorktreeListResult, WorktreeListResultEvent,
 };
 use attn_term::{FONT_SIZE, Metrics};
 use attn_testkit::tree::{below, pane, row};
@@ -7714,6 +7715,94 @@ fn terminal_seed_card(dark: bool) {
     snap(&mut world, "terminal-seed-card", dark);
 }
 
+const LIVE_AGENT: &str = "3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f";
+const CLOSED_AGENT: &str = "c5e81f07-4a36-4f8f-b2d9-7701aa5c9e3d";
+
+/// Agent a's terminal naming agent `s1` by a real id and a closed agent by its short one.
+fn naming_agents(dark: bool) -> World {
+    let mapped = Seed {
+        last_execution_id: Some(CLOSED_AGENT.into()),
+        ..seed("s-7k3f9m", "Map where uploads retry", "harvested", None)
+    };
+    let mut world = popover_world(
+        dark,
+        |state| {
+            let sessions = state.sessions.as_mut().expect("the tour's sessions");
+            sessions[1].id = LIVE_AGENT.into();
+            sessions[1].delegation_role = Some(attn_protocol::SessionDelegationRole {
+                name: "Builder".into(),
+                builtin: Some("builder".into()),
+                ..Default::default()
+            });
+            state.seeds_total = Some(1);
+            state.seeds = Some(vec![mapped]);
+        },
+        |daemon| {
+            daemon.on("resolve_sessions", |r: &Request| {
+                message(ResolveSessionsResultMessage {
+                    request_id: request_id(r),
+                    success: true,
+                    found: vec![ResolvedSession {
+                        r#ref: attn_protocol::session_id::short(CLOSED_AGENT).into_owned(),
+                        closed: SessionLedgerEntry {
+                            id: CLOSED_AGENT.into(),
+                            label: "Map where uploads retry".into(),
+                            agent: "claude".into(),
+                            branch: Some("upload-retry-map".into()),
+                            profile_id: PROFILE.into(),
+                            last_seen: "2026-11-12T06:00:00Z".into(),
+                            closed_at: Some("2026-11-12T06:00:00Z".into()),
+                            ..SessionLedgerEntry::default()
+                        },
+                    }],
+                    ..ResolveSessionsResultMessage::new()
+                })
+            });
+        },
+    );
+    let live = attn_protocol::session_id::short(LIVE_AGENT);
+    let closed = attn_protocol::session_id::short(CLOSED_AGENT);
+    write(
+        &mut world,
+        &format!("{live} builds the fix\r\n{closed} mapped it; its id is {CLOSED_AGENT}\r\n"),
+    );
+    world
+}
+
+/// A live agent's id in agent a's terminal with the pointer resting on it, so its card opens
+/// there.
+fn terminal_agent_card(dark: bool) {
+    let mut world = naming_agents(dark);
+    let at = cell(&world, 4, 0);
+    world.gesture(|app| app.runtime.pointer_move(at.0, at.1));
+    world.advance(std::time::Duration::from_millis(400));
+    snap(&mut world, "terminal-agent-card", dark);
+}
+
+/// A closed agent's id with its card pinned, then the same card after its resume was refused.
+fn terminal_closed_card(dark: bool) {
+    let mut world = naming_agents(dark);
+    world.daemon.on("session_reopen", |r: &Request| {
+        message(SessionReopenResultMessage {
+            request_id: request_id(r),
+            error: Some("the worktree is gone".into()),
+            reopen: Some(SessionReopen {
+                reason: Some("the worktree ~/projects/api--upload-retry-map is gone".into()),
+                actions: vec!["recreate_worktree_and_reopen".into()],
+                ..SessionReopen::default()
+            }),
+            ..SessionReopenResultMessage::new()
+        })
+    });
+    let at = cell(&world, 4, 1);
+    world.gesture(|app| app.runtime.pointer_move(at.0, at.1));
+    world.advance(std::time::Duration::from_millis(400));
+    snap(&mut world, "terminal-closed-card", dark);
+    world.gesture(|app| app.press("mod+i"));
+    world.gesture(|app| app.press("r"));
+    snap(&mut world, "terminal-closed-card-refused", dark);
+}
+
 /// A critical failure with its evidence and actions, a warning and a read notice; then the
 /// failure opened.
 fn notifications_listed(dark: bool) {
@@ -8861,6 +8950,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("session_usage", || session_usage(dark));
         scene("session_seed_context", || session_seed_context(dark));
         scene("terminal_seed_card", || terminal_seed_card(dark));
+        scene("terminal_agent_card", || terminal_agent_card(dark));
+        scene("terminal_closed_card", || terminal_closed_card(dark));
         scene("notifications_empty", || notifications_empty(dark));
         scene("notifications_listed", || notifications_listed(dark));
         scene("notifications_failed", || notifications_failed(dark));

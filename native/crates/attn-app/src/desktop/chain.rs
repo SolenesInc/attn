@@ -152,6 +152,16 @@ pub(crate) fn tree<'a>(id: &str, facts: &'a Facts) -> (Vec<(Link<'a>, usize)>, O
     (rows, earlier)
 }
 
+/// What the card of `session` shows: the chain it sits in while it is live, and the agent alone
+/// once it closed.
+fn shown_rows<'a>(session: &str, state: &'a State) -> (Vec<(Link<'a>, usize)>, Option<String>) {
+    let live = state.facts.sessions.iter().any(|s| s.id == session);
+    match state.terminals.closed_session(session).filter(|_| !live) {
+        Some(entry) => (vec![(Link::Closed(entry), 0)], None),
+        None => tree(session, &state.facts),
+    }
+}
+
 /// Where the chain of `session` starts its pick: on `session` itself.
 pub(crate) fn current_row(session: &str, facts: &Facts) -> usize {
     tree(session, facts)
@@ -166,7 +176,7 @@ pub(crate) fn agent_at(session: &str, i: usize, facts: &Facts) -> Option<String>
     let (rows, _) = tree(session, facts);
     match rows.get(i.min(rows.len().checked_sub(1)?))?.0 {
         Link::Live(session) => Some(session.id.clone()),
-        Link::Dormant(..) => None,
+        Link::Dormant(..) | Link::Closed(_) => None,
     }
 }
 
@@ -333,8 +343,7 @@ fn first_delegate_row(depths: &[usize], i: usize) -> Option<usize> {
 /// picked agent is, what it does and where that leads, over the chain's agents as a tree, each with
 /// its state, what it needs from the user and its role.
 pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
-    state.facts.sessions.iter().find(|s| s.id == pop.session)?;
-    let (rows, earlier) = tree(&pop.session, &state.facts);
+    let (rows, earlier) = shown_rows(&pop.session, state);
     let now_ms = state.window.now_ms;
     let agents = agents(&rows, &state.facts, now_ms);
     let picked = state
@@ -371,10 +380,15 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
             .single_line()
             .key(format!("{surface_key}.needs"))
     });
+    let enter = match opens(agents[picked].card.link, state) {
+        Some(Pick::Go(_)) => Some("resume"),
+        Some(Pick::Agent(_) | Pick::Seed(_)) => Some("open"),
+        None => None,
+    };
     let moves = (!lone)
         .then(|| keys_hint(["↑", "↓", "←", "→"], "move", t))
         .into_iter()
-        .chain([keys_hint(["↵"], "open", t)]);
+        .chain(enter.map(|said| keys_hint(["↵"], said, t)));
     let surface = Popover::new(surface_key.clone(), "Delegation chain")
         .sectioned()
         .holding(pop.pinned)
@@ -408,6 +422,7 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     let (anchor, placement) = match &pop.host {
         header_pop::Host::Tile(_) => (pop.anchor(), Placement::BottomStart),
         header_pop::Host::Row(row) => (row.clone(), Placement::RightStart),
+        header_pop::Host::Mark(_) => (pop.anchor(), Placement::BottomStart),
     };
     Some(rune_kit::popover::anchored(
         attn_ui::kit(t),
@@ -457,7 +472,7 @@ fn row_name(key: &str, agent: &Agent<'_>, picked: bool, t: &Tokens) -> El {
     let (kind, ink) = match (picked, agent.card.link) {
         (true, _) => (Type::Name, t.text_primary),
         (false, Link::Live(_)) => (Type::Body, t.text_primary),
-        (false, Link::Dormant(..)) => (Type::Body, t.text_secondary),
+        (false, Link::Dormant(..) | Link::Closed(_)) => (Type::Body, t.text_secondary),
     };
     words(agent.shown_name(), kind, ink)
         .key(format!("{key}.title"))
@@ -522,7 +537,7 @@ fn agent_row(
             } else {
                 words("standby", Type::Small, t.text_tertiary)
             };
-            let opens = (seed.id.clone(), pop.session.clone());
+            let opens = (seed.id.clone(), pop.beside().to_owned());
             ListRow::new(key.clone(), format!("{} · {kind}", agent.card.name))
                 .lead(dot(t.text_muted, DotShape::Hollow, DotSize::Regular))
                 .title_el(row_name(&key, agent, picked, t))
@@ -532,6 +547,9 @@ fn agent_row(
                     open_seed(state, &opens.0, &opens.1, tx)
                 })
         }
+        Link::Closed(_) => ListRow::new(key.clone(), agent.card.name.clone())
+            .lead(dot(t.text_muted, DotShape::Hollow, DotSize::Regular))
+            .title_el(row_name(&key, agent, picked, t)),
     };
     row.role("treeitem")
         .unfocusable()
@@ -559,10 +577,9 @@ fn agent_row(
 fn details(pop: &Pop, agents: &[Agent<'_>], picked: usize, state: &State, t: &Tokens) -> El {
     let key = details_key(pop);
     let facts = &state.facts;
-    let now_ms = state.window.now_ms;
     let agent = &agents[picked];
     let others = || agents.iter().enumerate().filter(move |(i, _)| *i != picked);
-    let goes_of = |agent: &Agent<'_>| goes(agent.card.link, facts);
+    let goes_of = |agent: &Agent<'_>| goes(agent.card.link, state);
     let buttons = goes_of(agent)
         .into_iter()
         .map(|go| {
@@ -572,14 +589,14 @@ fn details(pop: &Pop, agents: &[Agent<'_>], picked: usize, state: &State, t: &To
                 agent.card.link,
                 pop.pinned,
                 facts,
-                &pop.session,
+                pop.beside(),
                 t,
             )
         })
         .collect::<Vec<_>>();
-    let shown_doing = doing(&agent.card, now_ms, t);
+    let shown_doing = doing(&agent.card, state, t);
     let room_doing: Vec<El> = others()
-        .filter_map(|(_, a)| doing(&a.card, now_ms, t))
+        .filter_map(|(_, a)| doing(&a.card, state, t))
         .collect();
     let acts = shown_doing.is_some() || !room_doing.is_empty();
     let leads = agents.iter().any(|a| !goes_of(a).is_empty());
@@ -606,34 +623,38 @@ fn details(pop: &Pop, agents: &[Agent<'_>], picked: usize, state: &State, t: &To
 /// What a key reaches from one row of the chain.
 struct Target {
     depth: usize,
-    opens: Pick,
+    opens: Option<Pick>,
     goes: Vec<Go>,
+}
+
+/// What Enter does on an agent's row: opens the agent, opens the seed of one on standby, or
+/// resumes a closed one.
+fn opens(link: Link<'_>, state: &State) -> Option<Pick> {
+    match link {
+        Link::Live(session) => Some(Pick::Agent(session.id.clone())),
+        Link::Dormant(seed, _) => Some(Pick::Seed(seed.id.clone())),
+        Link::Closed(_) => goes(link, state)
+            .into_iter()
+            .find(|go| matches!(go, Go::Resume { .. }))
+            .map(Pick::Go),
+    }
 }
 
 fn pinned_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if header_pop::switch_key(state, ev, tx) {
         return true;
     }
-    let Some(session) = state
-        .window
-        .desk
-        .header_pop
-        .open
-        .as_ref()
-        .map(|p| p.session.clone())
-    else {
+    let Some(open) = state.window.desk.header_pop.open.as_ref() else {
         return false;
     };
-    let targets: Vec<Target> = tree(&session, &state.facts)
+    let beside = open.beside().to_owned();
+    let targets: Vec<Target> = shown_rows(&open.session, state)
         .0
         .iter()
         .map(|(link, depth)| Target {
             depth: *depth,
-            opens: match link {
-                Link::Live(s) => Pick::Agent(s.id.clone()),
-                Link::Dormant(seed, _) => Pick::Seed(seed.id.clone()),
-            },
-            goes: goes(*link, &state.facts),
+            opens: opens(*link, state),
+            goes: goes(*link, state),
         })
         .collect();
     let depths: Vec<usize> = targets.iter().map(|t| t.depth).collect();
@@ -649,9 +670,10 @@ fn pinned_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Key::Left => pop.picked = dispatcher_row(&depths, at).unwrap_or(at),
         Key::Right => pop.picked = first_delegate_row(&depths, at).unwrap_or(at),
         Key::Enter => {
-            match targets.get(at).map(|t| t.opens.clone()) {
+            match targets.get(at).and_then(|t| t.opens.clone()) {
                 Some(Pick::Agent(id)) => select(state, &id, tx),
-                Some(Pick::Seed(id)) => open_seed(state, &id, &session, tx),
+                Some(Pick::Seed(id)) => open_seed(state, &id, &beside, tx),
+                Some(Pick::Go(go)) => follow(state, &go, &beside, tx),
                 None => {}
             }
             return true;
@@ -664,7 +686,7 @@ fn pinned_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             else {
                 return false;
             };
-            follow(state, &go, &session, tx);
+            follow(state, &go, &beside, tx);
             return true;
         }
         _ => return false,
@@ -679,4 +701,5 @@ fn pinned_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 enum Pick {
     Agent(String),
     Seed(String),
+    Go(Go),
 }
