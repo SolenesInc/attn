@@ -10,3 +10,5 @@ A target machine takes `"host": "ai-sandbox", "cwd": "~/project"`:
 ```text
 delegate {"seed": "s-1", "role": "builder", "cwd": "/repo"}
 ```
+
+Settle it with `seed_check_uncheck` or `seed_check_reject` with {"seed": "<id>", "id": "<C#>", …}.

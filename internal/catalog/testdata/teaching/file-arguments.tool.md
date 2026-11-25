@@ -1,0 +1,1 @@
+Hand over the file with `delegate` with {"brief": "<the contents of question.md>", "cwd": "/notes", "role": "pathfinder"}, or write it down with `journal_append` with {"text": "<the contents of notes.md>"}.

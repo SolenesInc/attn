@@ -89,7 +89,7 @@ Steps:
 
 - Wire: `internal/daemon/agent_tools_wire_test.go`, `internal/daemon/agent_tools_*_wire_test.go`, `internal/daemon/codex_agent_tools_wire_test.go`, `internal/daemon/plugin_agent_tools_wire_test.go`, `internal/daemon/sigma_wire_test.go` (`TestASigmaSessionStartsWithAttnsToolsWhileAgentToolsAreOn`), `internal/daemon/garden_move_reason_wire_test.go`, `internal/daemon/session_reads_profile_wire_test.go`.
 - Stack: `cmd/attnd/agent_credential_arguments_stack_test.go`, `cmd/attnd/agent_tools_outpost_stack_test.go`, `cmd/attnd/agent_tools_delegate_outpost_stack_test.go`, `cmd/attnd/agent_tools_terminal_stack_test.go`, `cmd/attnd/plugin_agent_tools_stack_test.go`.
-- Kernel: `internal/mcpserver/schema_test.go`, `internal/catalog/mention_test.go`.
+- Kernel: `internal/mcpserver/schema_test.go`, `internal/catalog/mention_test.go`, `internal/catalog/teaching_test.go` (how references render for tools; its inputs and renderings are in `internal/catalog/testdata/teaching/`).
 
 ## Gotchas
 

@@ -12,15 +12,18 @@ func TestAReferenceRendersForAToolAsTheCorpusSays(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rendered, err := filepath.Glob(filepath.Join("testdata", "teaching", "*.tool.md"))
+	corpus, err := filepath.Glob(filepath.Join("testdata", "teaching", "*.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rendered) == 0 {
-		t.Fatal("the corpus holds no rendering")
+	if len(corpus) == 0 {
+		t.Fatal("the corpus is empty")
 	}
-	for _, path := range rendered {
-		name := strings.TrimSuffix(filepath.Base(path), ".tool.md")
+	for _, path := range corpus {
+		if strings.HasSuffix(path, ".tool.md") {
+			continue
+		}
+		name := strings.TrimSuffix(filepath.Base(path), ".md")
 		t.Run(name, func(t *testing.T) {
 			written := readCorpus(t, name+".md")
 			want := readCorpus(t, name+".tool.md")

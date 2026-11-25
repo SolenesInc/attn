@@ -10,3 +10,5 @@ A target machine takes `--host ai-sandbox --cwd ~/project`:
 ```sh
 attn delegate --seed s-1 --role builder --cwd /repo
 ```
+
+Settle it with `attn seed check uncheck|reject <id> <C#>`.

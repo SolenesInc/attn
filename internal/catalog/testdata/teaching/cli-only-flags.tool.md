@@ -3,3 +3,5 @@ Read the seeds you tend (`presence` (without the CLI-only `--seed-ids`) lists th
 ```text
 terminal_run {"terminal": "<terminal>", "command": "make lint"} (without the CLI-only --wait)
 ```
+
+`run --wait` (CLI only) reads the next block, and `--timeout <seconds>` (CLI only) bounds it.
