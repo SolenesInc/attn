@@ -508,7 +508,9 @@ fn modal(state: &State) -> bool {
 /// Whether the open layer holds the action's key, which then acts on nothing, not even the
 /// menu bar.
 fn held(state: &State, action: &Action) -> bool {
-    state.window.layer.is_some_and(|layer| layer.holds(action))
+    let acts_in_layer =
+        *action == Action::SessionDetails && crate::desktop::header_pop::is_in_sheet(state);
+    !acts_in_layer && (state.window.layer).is_some_and(|layer| layer.holds(action))
 }
 
 fn bound(state: &State, ev: &KeyEvent, tx: &Tx) -> bool {

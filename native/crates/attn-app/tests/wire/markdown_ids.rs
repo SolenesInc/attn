@@ -134,6 +134,10 @@ fn said(world: &World, part: &str) -> Option<String> {
     world.screen().find(Target::key(key))?.name
 }
 
+fn has_keyboard(world: &World, key: &str) -> bool {
+    world.screen().focused().and_then(|n| n.key).as_deref() == Some(key)
+}
+
 fn opened_seeds(world: &World) -> Vec<String> {
     let sent = world.daemon.sent_of("open_seed");
     sent.iter()
@@ -636,4 +640,86 @@ fn the_chord_labels_an_asks_sessions_and_seeds_and_a_label_opens_the_card() {
     key(&mut world, Key::Enter);
     assert_eq!(opened_seeds(&world), [SEED]);
     assert!(!has(&world, "asks.ask"), "the sheet gives way to the seed");
+}
+
+#[test]
+fn the_card_key_gives_a_hovered_card_in_an_ask_the_keyboard_and_gives_it_back() {
+    let mut world = asking();
+    let choice = "asks.q.q1.choice.0";
+    assert!(has_keyboard(&world, choice));
+    rest_on(&mut world, TO_BUILDER);
+    assert!(shown(&world, AGENT_CARD));
+    assert!(has_keyboard(&world, choice), "pointing leaves the keyboard");
+    takes_keyboard(&mut world);
+    assert!(has_keyboard(&world, AGENT_CARD));
+    takes_keyboard(&mut world);
+    assert!(
+        !shown(&world, AGENT_CARD),
+        "the key closes the card it gave"
+    );
+
+    rest_on(&mut world, TO_MAPPER);
+    takes_keyboard(&mut world);
+    key(&mut world, Key::Escape);
+    assert!(!shown(&world, AGENT_CARD));
+    assert!(
+        has(&world, "asks.ask"),
+        "Escape on the card leaves the sheet"
+    );
+    assert!(has_keyboard(&world, choice));
+
+    rest_on(&mut world, TO_BUILDER);
+    takes_keyboard(&mut world);
+    key(&mut world, Key::Enter);
+    assert_eq!(sessions_shown(&world), [BUILDER]);
+    assert!(!has(&world, "asks.ask"), "the sheet gives way to the agent");
+    assert_eq!(inputs(&world), [], "the terminal hears none of it");
+}
+
+#[test]
+fn with_no_card_the_card_key_in_an_ask_leaves_the_tile_behind_it() {
+    let delegate = Session {
+        dispatcher_session_id: Some("s1".into()),
+        ..builder()
+    };
+    let asks = vec![ask("a-1", "s1", "Is it done?", 30, vec![prose("Yes.")])];
+    let mut world = start_with((vec![delegate], vec![], vec![]), asks, "");
+    let chain = |world: &World| {
+        let dialog = Target::role("dialog").name("Delegation chain");
+        world.screen().find(dialog).is_some()
+    };
+    takes_keyboard(&mut world);
+    assert!(chain(&world), "the tile shows its chain");
+    key(&mut world, Key::Escape);
+    open_sheet(&mut world);
+    takes_keyboard(&mut world);
+    assert!(!chain(&world));
+    assert!(has(&world, "asks.ask"));
+    key(&mut world, Key::Escape);
+    takes_keyboard(&mut world);
+    assert!(chain(&world));
+}
+
+#[test]
+fn the_card_key_gives_a_hovered_card_in_the_garden_over_the_window_the_keyboard() {
+    let plan = Seed {
+        id: "s-plan11".into(),
+        status: "growing".into(),
+        body: format!("{BUILDER_SHORT} follows {SEED}"),
+        ..mapped()
+    };
+    let known = (vec![builder()], vec![mapped(), plan], vec![]);
+    let mut world = start_tile(known, vec![], document());
+    let board = super::sidebar::chord(attn_app::Action::BoardOpen);
+    for _ in 0..2 {
+        let board = board.clone();
+        world.gesture(|app| app.key(board));
+    }
+    click(&mut world, "garden.row.s-plan11");
+    rest_on(&mut world, TO_BUILDER);
+    assert!(shown(&world, AGENT_CARD));
+    takes_keyboard(&mut world);
+    assert!(has_keyboard(&world, AGENT_CARD));
+    key(&mut world, Key::Enter);
+    assert_eq!(sessions_shown(&world), [BUILDER]);
 }

@@ -2810,7 +2810,7 @@ fn letter_opens_its_seed_link(fern: CrewMember) -> Value {
 
 #[test]
 fn an_agent_a_letter_names_shows_its_card_over_the_page_and_opens_in_place_of_it() {
-    use super::terminal_ids::{BUILDER, BUILDER_SHORT, sessions_shown};
+    use super::terminal_ids::{BUILDER, BUILDER_SHORT, into_card, sessions_shown};
     let d = daemon(
         vec![member("fern", 1)],
         vec![session(BUILDER, "claude")],
@@ -2837,6 +2837,13 @@ fn an_agent_a_letter_names_shows_its_card_over_the_page_and_opens_in_place_of_it
     let card = Target::key("words.agent-card");
     assert!(world.screen().find(card.clone()).is_some());
     assert!(world.runtime_is_at_rest());
+
+    world.gesture(|app| app.press(into_card()));
+    let focused = world.screen().focused().and_then(|n| n.key);
+    assert_eq!(focused.as_deref(), Some("words.agent-card"));
+    press(&mut world, Key::Escape);
+    assert!(world.screen().find(card.clone()).is_none());
+    assert!(is_open(&world), "Escape on the card leaves the page");
 
     world.gesture(|app| app.click(link));
     assert_eq!(sessions_shown(&world), [BUILDER]);
