@@ -19,10 +19,17 @@ struct Arrangement {
     rows: Rows,
     /// The row's room.
     area: [f32; 4],
-    above: f32,
-    lines: f32,
-    below: f32,
+    above: List,
+    below: List,
     legend: f32,
+}
+
+/// Where a list beside the row stands, `shown` points of its `height` tall.
+#[derive(Clone, Copy)]
+struct List {
+    y: f32,
+    shown: f32,
+    height: f32,
 }
 
 struct Needing {
@@ -35,6 +42,13 @@ fn strips(state: &State, shown: &str) -> (usize, usize) {
     let desktops = overview::ordered(state);
     let at = desktops.iter().position(|d| d.id == shown).unwrap_or(0);
     (at, desktops.len().saturating_sub(at + 1))
+}
+
+/// How much of two lists of these heights shows in `room`: each its half, and what the other
+/// leaves of its own.
+fn shares(above: f32, below: f32, room: f32) -> (f32, f32) {
+    let above = above.min((room / 2.0).max(room - below));
+    (above, below.min(room - above))
 }
 
 /// The gap a block of `height` takes with the room before the next one; none when empty.
@@ -51,15 +65,17 @@ fn arrange(state: &State, desktop: &Desktop, lines: usize) -> Arrangement {
     let (w, h) = state.window.main_size;
     let (before, after) = strips(state, &desktop.id);
     let pad = Block::PADDING;
-    let above = with_gap(before as f32 * Block::STRIP_STEP);
-    let lines = with_gap(lines as f32 * Block::LINE);
-    let below = with_gap((after + 1) as f32 * Block::STRIP_STEP);
+    let above = before as f32 * Block::STRIP_STEP;
+    let below = with_gap(lines as f32 * Block::LINE) + (after + 1) as f32 * Block::STRIP_STEP;
     let legend = h - pad - Block::LINE;
+    let gaps = with_gap(above) - above + 2.0 * Block::GAP;
+    let room = (legend - pad - gaps).max(0.0);
+    let (above_shown, below_shown) = shares(above, below, room / 2.0);
     let area = [
         pad,
-        pad + above,
+        pad + with_gap(above_shown),
         (w - crate::shell::dock_width(state) - 2.0 * pad).max(0.0),
-        (legend - below - lines - Block::GAP - pad - above).max(0.0),
+        room - above_shown - below_shown,
     ];
     let slot = (w / on_screen.len().max(1) as f32, h);
     let rows = if columns.is_empty() || w <= 0.0 || h <= 0.0 {
@@ -67,16 +83,22 @@ fn arrange(state: &State, desktop: &Desktop, lines: usize) -> Arrangement {
     } else {
         layout::rows(columns.len(), slot, (area[2], area[3]))
     };
-    let after_row = area[1] + area[3] + Block::GAP;
     Arrangement {
         columns,
         on_screen,
         slot,
         rows,
         area,
-        above: pad,
-        lines: after_row,
-        below: after_row + lines,
+        above: List {
+            y: pad,
+            shown: above_shown,
+            height: above,
+        },
+        below: List {
+            y: area[1] + area[3] + Block::GAP,
+            shown: below_shown,
+            height: below,
+        },
         legend,
     }
 }
@@ -143,48 +165,56 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
     let desktops = overview::ordered(state);
     let (before, _) = strips(state, &desktop.id);
     let row_w = placed.area[2];
-    let at = |y: f32, e: El| el().absolute(Block::PADDING, y).w(row_w).child(e.w(row_w));
-    let strips_above = desktops[..before].iter().enumerate().map(|(i, d)| {
-        at(
-            placed.above + i as f32 * Block::STRIP_STEP,
-            strip(state, d, t),
-        )
-    });
-    let strips_below = desktops[before + 1..].iter().enumerate().map(|(i, d)| {
-        at(
-            placed.below + i as f32 * Block::STRIP_STEP,
-            strip(state, d, t),
-        )
-    });
-    let new_at = placed.below + (desktops.len() - before - 1) as f32 * Block::STRIP_STEP;
+    let at = |y: f32, e: El| el().absolute(0.0, y).w_full().child(e);
+    let step = |i: usize| i as f32 * Block::STRIP_STEP;
+    let below_lines = with_gap(needing.len() as f32 * Block::LINE);
+    let strips_above = desktops[..before]
+        .iter()
+        .enumerate()
+        .map(|(i, d)| at(step(i), strip(state, d, t)));
+    let after = &desktops[before + 1..];
+    let strips_below = after
+        .iter()
+        .enumerate()
+        .map(|(i, d)| at(below_lines + step(i), strip(state, d, t)));
+    let new = at(
+        below_lines + step(after.len()),
+        Block::new_desktop("overview.new", t).on_press_tx(overview::create),
+    );
     let lines = needing.iter().enumerate().map(|(i, n)| {
         let spot = spot(desktop, &n.leaf);
         let line = Block::line(format!("overview.line.{}", n.leaf), &n.member, &n.asks, t)
             .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                 overview::land(state, spot.clone(), tx)
             });
-        at(placed.lines + i as f32 * Block::LINE, line)
+        at(i as f32 * Block::LINE, line)
     });
     let empty = placed
         .columns
         .is_empty()
         .then(|| Block::empty(placed.area, t));
+    let List { y, shown, height } = placed.above;
+    let above = (before > 0).then(|| {
+        let rect = [Block::PADDING, y, row_w, shown];
+        Block::above("overview.above".to_owned(), rect, height, strips_above, t)
+    });
+    let List { y, shown, height } = placed.below;
+    let rect = [Block::PADDING, y, row_w, shown];
+    let listed = lines.chain(strips_below).chain([new]);
+    let below = Block::below("overview.below".to_owned(), rect, height, listed, t);
+    let legend = Block::legend(legend(state, overview, desktop), row_w, t);
     Some(
         layer
-            .children(strips_above)
+            .children(above)
             .children(row)
             .children(bars)
             .children(empty)
-            .children(lines)
-            .children(strips_below)
-            .child(at(
-                new_at,
-                Block::new_desktop("overview.new", t).on_press_tx(overview::create),
-            ))
-            .child(at(
-                placed.legend,
-                Block::legend(legend(state, overview, desktop), t),
-            )),
+            .child(below)
+            .child(
+                el().absolute(Block::PADDING, placed.legend)
+                    .w(row_w)
+                    .child(legend.w(row_w)),
+            ),
     )
 }
 

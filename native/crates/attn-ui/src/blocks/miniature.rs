@@ -1,8 +1,11 @@
 use rune::{El, Spring, SpringPair, Transition, col, el, row};
 
+use super::block::{Opens, scrolling};
 use super::shelf::{Ground, MemberState, ShelfMember, legible, mark};
 use crate::colors::{MARK_READS, READS};
-use crate::system::{IconSize, Space, Type, door, icon, keycaps, keys_hint, words};
+use crate::system::{
+    IconSize, Space, Type, door, icon, keycaps, keys_hint, keys_hint_width, width_of, words,
+};
 use crate::{Glyph, Tokens};
 
 /// A row drawn small over the tile area, and what stands around it: a strip per other desktop
@@ -142,6 +145,29 @@ impl Overview {
             )
     }
 
+    /// The list above the row at `rect`, `height` points tall whole: it scrolls, from its end
+    /// nearest the row, when `rect` is shorter.
+    pub fn above(
+        key: String,
+        rect: [f32; 4],
+        height: f32,
+        listed: impl IntoIterator<Item = El>,
+        t: &Tokens,
+    ) -> El {
+        list(key, rect, height, Opens::AtEnd, listed, t)
+    }
+
+    /// The list below the row, as the one [above](Self::above) it.
+    pub fn below(
+        key: String,
+        rect: [f32; 4],
+        height: f32,
+        listed: impl IntoIterator<Item = El>,
+        t: &Tokens,
+    ) -> El {
+        list(key, rect, height, Opens::AtStart, listed, t)
+    }
+
     /// The strip that makes a desktop.
     pub fn new_desktop(key: &str, t: &Tokens) -> El {
         let said = (Type::Body, t.text_tertiary);
@@ -174,30 +200,36 @@ impl Overview {
         ground.pressable(door::sides(line, Space::S12, Space::S8), 0.0)
     }
 
-    /// The keys the overview has and what each does, after what the bar means.
-    pub fn legend(hints: impl IntoIterator<Item = (Vec<String>, String)>, t: &Tokens) -> El {
+    /// The keys the overview has and what each does, after what the bar means, in `room` points:
+    /// a hint wider than its share of them gives way first.
+    pub fn legend(hints: Vec<(Vec<String>, String)>, room: f32, t: &Tokens) -> El {
+        const BAR_MEANS: &str = "on screen";
+        let gap = Space::S16;
+        let swatch_w = SWATCH_W + Space::S6.pt() + width_of(BAR_MEANS, Type::Small);
+        let n = hints.len() as f32;
+        let share = ((room - swatch_w) / n - gap.pt()).max(0.0);
         let t = &Tokens {
             text_tertiary: legible(t.text_tertiary, t.bg_app, READS, t),
             ..*t
         };
         let swatch = door::gap(row().items_center(), Space::S6)
             .child(bar(SWATCH_W, t))
-            .child(words("on screen", Type::Small, t.text_tertiary));
+            .child(words(BAR_MEANS, Type::Small, t.text_tertiary));
         door::gap(
             row()
                 .key("overview.legend")
                 .w_full()
                 .items_center()
                 .justify_center(),
-            Space::S16,
+            gap,
         )
         .h(LINE)
         .child(swatch)
-        .children(
-            hints
-                .into_iter()
-                .map(|(keys, what)| keys_hint(keys, what, t)),
-        )
+        .children(hints.into_iter().map(|(keys, what)| {
+            let whole = keys_hint_width(keys.iter().map(String::as_str), &what);
+            let least = whole.min(share);
+            keys_hint(keys, what, t).shrink().min_w(least)
+        }))
     }
 }
 
@@ -279,6 +311,20 @@ impl Miniature {
             .child(body);
         door::clip(el()).fill(t.bg_app).child(body)
     }
+}
+
+fn list(
+    key: String,
+    [x, y, w, h]: [f32; 4],
+    height: f32,
+    opens: Opens,
+    listed: impl IntoIterator<Item = El>,
+    t: &Tokens,
+) -> El {
+    let content = el().w_full().h(height).children(listed);
+    let body = col().key(key).w_full().grow(1.0).child(content);
+    let body = scrolling(body, opens, t);
+    col().absolute(x, y).w(w).h(h).child(body)
 }
 
 fn outline(key: String, [x, y, w, h]: [f32; 4], width: f32, ink: rune::Color) -> El {

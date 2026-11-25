@@ -328,10 +328,11 @@ fn overview(s: &Desk, cx: &mut Cx<Desk>) -> El {
         .child(Overview::new_desktop("strip.new", &t).on_press_tx(press))
         .child(Overview::line("line".into(), &approval, "approve?", &t).on_press_tx(press))
         .child(Overview::legend(
-            [
+            vec![
                 (vec!["←".into(), "→".into()], "row".into()),
                 (vec!["esc".into()], "close".into()),
             ],
+            2.0 * w + 10.0,
             &t,
         ));
     stage(s, cx, &t, vec![row_small, below]).fill(t.bg_app)

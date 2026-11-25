@@ -849,6 +849,81 @@ fn the_row_stands_clear_of_an_open_drawer() {
     }
 }
 
+/// The smallest size the window takes.
+const SMALLEST: (f32, f32) = (800.0, 600.0);
+
+/// A wheel turn over `key` past the end of what it scrolls.
+fn wheel_to_the_end(world: &mut World, key: &str) {
+    let [x, y, w, h] = world.runtime().presented(key).unwrap().0;
+    let at = (x + w / 2.0, y + h / 2.0);
+    world.gesture(|app| {
+        app.runtime
+            .wheel_event(rune::WheelEvent::new(0.0, -10_000.0).at(at.0, at.1))
+    });
+    rest(world);
+}
+
+#[test]
+fn in_the_smallest_window_the_row_keeps_its_room_and_the_lists_around_it_scroll() {
+    let ids: Vec<String> = (0..10).map(|i| format!("p{i}")).collect();
+    let shown = desktop(5, "p0", Some(row(ids.iter().map(|id| pane(id)))));
+    let mut desktops: Vec<_> = (1..=9).map(|slot| desktop(slot, "", None)).collect();
+    desktops[4] = shown.clone();
+    let mut state = initial(desktops);
+    state.profiles = Some(vec![profile(&shown.id)]);
+    for session in state.sessions.iter_mut().flatten() {
+        session.state = "waiting_input".into();
+    }
+    let mut world = World::start_sized(Daemon::scripted().state(state), SMALLEST);
+    world.open_desktop();
+    press(&mut world, Action::DesktopOverview);
+    rest(&mut world);
+
+    let rect = |world: &World, key: &str| world.runtime().presented(key).unwrap().0;
+    let [_, top, _, height] = rect(&world, "overview");
+    let [edge, legend, room, _] = rect(&world, "overview.legend");
+    for said in ["on screen", "row", "close"] {
+        let elements = world.runtime().elements();
+        let shown = elements.iter().find(|e| {
+            let inside = e.rect[1] >= legend && e.rect[0] >= edge - 1.0;
+            inside && e.text.as_deref() == Some(said)
+        });
+        let [x, _, w, _] = shown.unwrap_or_else(|| panic!("no {said}")).rect;
+        let end = x + w;
+        assert!(
+            end <= edge + room,
+            "{said} ends at {end} of {}",
+            edge + room
+        );
+        let needs = attn_ui::system::width_of(said.to_owned(), attn_ui::system::Type::Small);
+        assert!(w >= needs - 1.0, "{said} has {w} points of {needs}");
+    }
+    assert_eq!(row_shown(&world), ids);
+    let first = rect(&world, &miniature("p0"));
+    let last = rect(&world, &miniature("p9"));
+    let row_height = last[1] + last[3] - first[1];
+    assert!(
+        row_height >= height / 3.0,
+        "the row is {row_height} points of {height}"
+    );
+    assert!(first[1] >= top && last[1] + last[3] <= legend);
+
+    wheel_to_the_end(&mut world, "overview.below");
+    let new = rect(&world, "overview.new");
+    assert!(last[1] + last[3] <= new[1] && new[1] + new[3] <= legend);
+    wheel_to_the_end(&mut world, "overview.above");
+    let above = rect(&world, &format!("overview.strip.{}", "work/desktop_4"));
+    assert!(above[1] >= top && above[1] + above[3] <= first[1]);
+    assert!(open(&world));
+
+    click(&mut world, &miniature("p9"));
+    assert!(!open(&world));
+    assert_eq!(
+        sent(&world, "desktop_show_leaf").last().unwrap()["leaf_id"],
+        json!("p9")
+    );
+}
+
 #[test]
 fn an_entry_dropped_on_the_overview_lands_on_no_tile_behind_it() {
     let mut world = start(vec![stacked("a")]);

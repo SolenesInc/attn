@@ -394,7 +394,7 @@ fn overview_board(t: &Tokens) -> El {
         Overview::line(format!("line.{state:?}"), &member, "Which branch?", t)
             .on_press(|_: &mut Tokens| {})
     });
-    let hints = [(vec!["esc".to_owned()], "close".to_owned())];
+    let hints = vec![(vec!["esc".to_owned()], "close".to_owned())];
     rune::col()
         .w_full()
         .grow(1.0)
@@ -413,7 +413,7 @@ fn overview_board(t: &Tokens) -> El {
         )
         .child(Overview::new_desktop("strip.new", t).on_press(|_: &mut Tokens| {}))
         .children(lines)
-        .child(Overview::legend(hints, t))
+        .child(Overview::legend(hints, 400.0, t))
         .child(
             el().w_full()
                 .h(40.0)

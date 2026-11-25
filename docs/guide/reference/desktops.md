@@ -126,7 +126,7 @@ A terminal shows its text. A terminal that has not been on screen shows the text
 | 1–9 | Go to that desktop |
 | Esc, or the key that opened it | Go back to where you were, as a click on the shelf's current entry or on the background does |
 
-The keys that move between tiles also move the highlight. A click on a tile, or on its line below the row, goes to the tile. A click on a desktop's strip shows that desktop, and the **New desktop** strip makes one. The shelf's current entry follows the highlight.
+The keys that move between tiles also move the highlight. A click on a tile, or on its line below the row, goes to the tile. A click on a desktop's strip shows that desktop, and the **New desktop** strip makes one. In a small window the strips and lines scroll, and the row keeps its room. The shelf's current entry follows the highlight.
 
 ### How tiles move
 
