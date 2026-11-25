@@ -20,6 +20,7 @@ commands:
     summary: ask for the user; the turn opens when you stop
     runs: home
     grant: own
+    effect: record
     doc: |
       Asks for the user. When a notification from attn started your run, your stop may not put you in the user's queue, so open your turn before you stop to bring them something you need or finished. Run while you work, it opens your turn when you stop, so the user is not sent to you while you are still busy. A later notification does not settle a turn you opened; the user does, or `turn_settle`. For a decision only the user can make, use `ask` instead, whether or not you can keep working meanwhile.
     result: AgentTurnResult
@@ -28,6 +29,7 @@ commands:
     summary: settle a turn you opened, or cancel one that was going to open
     runs: home
     grant: own
+    effect: act
     doc: |
       Settles a turn you opened, or cancels one that was going to open when you stop. A turn that opened when you stopped on your own is the user's to settle.
     result: AgentTurnResult

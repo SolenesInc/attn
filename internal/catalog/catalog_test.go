@@ -34,6 +34,7 @@ commands:
     summary: one seed
     runs: home
     grant: own
+    effect: read
     doc: Reads one seed.
     args:
       - {name: seed, type: seed, required: true, cli: pos}
@@ -66,7 +67,7 @@ func TestLoadAcceptsAFamilyAndACommandNotOffered(t *testing.T) {
 }
 
 func TestABareCommandCarriesItsFamilysMap(t *testing.T) {
-	c, err := Load(catalogFS(map[string]string{"list.yaml": "commands:\n  - {name: list, summary: list sessions, runs: home, grant: full, doc: Lists sessions., map: {rows: [{need: See every session, tools: [list]}]}}\n"}))
+	c, err := Load(catalogFS(map[string]string{"list.yaml": "commands:\n  - {name: list, summary: list sessions, runs: home, grant: full, effect: read, doc: Lists sessions., map: {rows: [{need: See every session, tools: [list]}]}}\n"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,12 +121,12 @@ func TestLoadRefusesWhatWouldBreakAHarnessOrAnUnmarkedCommand(t *testing.T) {
 		},
 		{
 			name:  "a bare command that offers a tool without a map",
-			files: map[string]string{"list.yaml": "commands:\n  - {name: list, summary: list sessions, runs: home, grant: full, doc: Lists sessions.}\n"},
+			files: map[string]string{"list.yaml": "commands:\n  - {name: list, summary: list sessions, runs: home, grant: full, effect: read, doc: Lists sessions.}\n"},
 			want:  []string{"list.yaml: family \"list\"", "offers tools but has no map"},
 		},
 		{
 			name:  "a core tool the map does not name",
-			files: map[string]string{"seed.yaml": goodFamily + "  - {name: seed notes, summary: the log, core: true, runs: home, grant: own, doc: Reads the log.}\n"},
+			files: map[string]string{"seed.yaml": goodFamily + "  - {name: seed notes, summary: the log, core: true, runs: home, grant: own, effect: read, doc: Reads the log.}\n"},
 			want:  []string{"seed.yaml: family \"seed\"", `core tool "seed_notes" is in no map row`},
 		},
 		{
@@ -147,6 +148,16 @@ func TestLoadRefusesWhatWouldBreakAHarnessOrAnUnmarkedCommand(t *testing.T) {
 			name:  "a grant that is no gate and no grant name",
 			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "grant: own", "grant: seed", 1)},
 			want:  []string{"seed.yaml: seed show", `grant is "seed"`, "push_default_branch"},
+		},
+		{
+			name:  "an offered command without an effect",
+			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "    effect: read\n", "", 1)},
+			want:  []string{"seed.yaml: seed show: effect is missing", "read, record or act"},
+		},
+		{
+			name:  "an effect attn does not know",
+			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "effect: read", "effect: write", 1)},
+			want:  []string{"seed.yaml: seed show", `effect is "write"`, "read, record and act"},
 		},
 		{
 			name:  "a requirement waived by an arg the command lacks",
@@ -195,7 +206,7 @@ func TestLoadRefusesWhatWouldBreakAHarnessOrAnUnmarkedCommand(t *testing.T) {
 		},
 		{
 			name:  "a receipt on a command that only reads",
-			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "grant: own", "grant: own\n    read_only: true\n    result: SeedShowResult\n    receipt: [seed.id]", 1)},
+			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "grant: own", "grant: own\n    result: SeedShowResult\n    receipt: [seed.id]", 1)},
 			want:  []string{"seed.yaml: seed show", "a read answers whole"},
 		},
 		{

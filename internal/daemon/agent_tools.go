@@ -29,7 +29,7 @@ type agentToolDefinition struct {
 	Title        string          `json:"title"`
 	Description  string          `json:"description"`
 	Core         bool            `json:"core"`
-	ReadOnly     bool            `json:"read_only"`
+	Effect       catalog.Effect  `json:"effect"`
 	InputSchema  json.RawMessage `json:"inputSchema"`
 	OutputSchema json.RawMessage `json:"outputSchema"`
 	Receipt      []string        `json:"receipt"`
@@ -212,7 +212,7 @@ func (def agentToolDefinition) offered() mcpserver.Tool {
 		Description:  def.Description,
 		InputSchema:  def.InputSchema,
 		OutputSchema: def.OutputSchema,
-		Annotations:  &mcpserver.Annotations{Title: def.Title, ReadOnlyHint: def.ReadOnly},
+		Annotations:  &mcpserver.Annotations{Title: def.Title, ReadOnlyHint: def.Effect == catalog.EffectRead},
 	}
 	if def.Core {
 		tool.Meta = map[string]any{"anthropic/alwaysLoad": true}

@@ -60,7 +60,7 @@ func Typed[A any](run func(ctx context.Context, c Caller, args A) (any, error)) 
 }
 
 type spec struct {
-	readOnly          bool
+	needsSession      bool
 	anyone            bool
 	sessionFlag       bool
 	runsWithoutDaemon bool
@@ -121,7 +121,7 @@ func (l *Layer) Run(ctx context.Context, c Caller, name string, args json.RawMes
 	if !ok {
 		return nil, Usage("%q is not a command", name)
 	}
-	if c.Terminal != "" && !specs()[name].anyone && (!specs()[name].readOnly || c.Profile == "") {
+	if c.Terminal != "" && !specs()[name].anyone && (specs()[name].needsSession || c.Profile == "") {
 		if !specs()[name].sessionFlag {
 			return nil, Refuse("no_session", "terminal %s is not showing a session", c.Terminal)
 		}

@@ -34,6 +34,14 @@ const (
 	RunsHere Runs = "here"
 )
 
+type Effect string
+
+const (
+	EffectRead   Effect = "read"
+	EffectRecord Effect = "record"
+	EffectAct    Effect = "act"
+)
+
 var gates = []string{"any", "own", "full"}
 
 var errorCodePattern = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`^[a-z][a-z0-9_]*$`) })
@@ -121,7 +129,8 @@ type Command struct {
 	MayNeed           []string         `yaml:"may_need"`
 	Doc               string           `yaml:"doc"`
 	Args              []Arg            `yaml:"args"`
-	ReadOnly          bool             `yaml:"read_only"`
+	Effect            Effect           `yaml:"effect"`
+	NeedsSession      bool             `yaml:"needs_session"`
 	Anyone            bool             `yaml:"anyone"`
 	Caller            string           `yaml:"caller"`
 	RunsWithoutDaemon bool             `yaml:"runs_without_daemon"`
@@ -397,6 +406,15 @@ func (c *Catalog) check() []string {
 		default:
 			add("%s: runs is %q; accepted values are home and here", where, cmd.Runs)
 		}
+		switch cmd.Effect {
+		case EffectRead, EffectRecord, EffectAct:
+		case "":
+			if cmd.IsOffered() {
+				add("%s: effect is missing; name what the command changes: read, record or act", where)
+			}
+		default:
+			add("%s: effect is %q; accepted values are read, record and act", where, cmd.Effect)
+		}
 		if cmd.Usage != "" && cmd.ThroughLayer() {
 			add("%s: usage is generated from the args of a command the command layer runs; remove it", where)
 		}
@@ -435,7 +453,7 @@ func (c *Catalog) check() []string {
 		if strings.TrimSpace(cmd.Doc) == "" && cmd.ThroughLayer() {
 			add("%s: doc is missing", where)
 		}
-		if len(cmd.Receipt) > 0 && (cmd.Result == "" || cmd.ReadOnly) {
+		if len(cmd.Receipt) > 0 && (cmd.Result == "" || cmd.Effect == EffectRead) {
 			add("%s: receipt cuts the result of a command that changes something; a read answers whole", where)
 		}
 		codes := map[string]bool{}

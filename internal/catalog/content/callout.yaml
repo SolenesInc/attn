@@ -40,6 +40,7 @@ commands:
     summary: list the anchors and which are on screen
     runs: home
     grant: full
+    effect: read
     doc: |
       Lists every anchor with its description, and for each fixed anchor whether it is on screen now. Run it before `callout_show` to pick an anchor the user can see. When the app is not showing your profile, the list still comes back with `app_showing_profile` false and no anchor marked on screen.
     result: CalloutAnchorsResult
@@ -51,6 +52,7 @@ commands:
     summary: show a callout the user steps through
     runs: home
     grant: full
+    effect: record
     doc: |
       Shows a callout: each step's text beside its anchor, in order. Put the agent or desktop the user should go to on the last step, because Enter and → go there only from the last step. If a fixed anchor is missing, the whole callout is refused and the message names the anchors on screen. A new callout replaces the one showing. The call returns when the app accepts the callout.
     args:

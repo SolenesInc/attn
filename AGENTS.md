@@ -339,10 +339,20 @@ help and parse table (`cli/attn/src/commands/<family>/help_generated.rs` and
 (`internal/command/args_generated.go`), the machine each command runs on
 (`internal/protocol/commands_generated.go`) and the garden reference
 (`internal/prompts/content/skills/attn/references/garden.md`), and refuses an
-entry the command layer runs without `runs` or `grant`. A command that
-changes something may list in `receipt` the paths of its result that its tool
-answers with, such as `seed.id`; the CLI, `--json` and the tools that only read
-answer whole. A command that is not
+entry the command layer runs without `runs` or `grant`, and an offered entry
+without `effect`.
+
+A command's `effect` is the strongest effect any of its calls can have. `read`
+changes nothing but the caller's own read position. `record` adds to the work
+record, or speaks to the user or to an agent the caller works with; it deletes
+nothing, closes nothing, starts no process and changes no setting. `act` is
+everything else, and the choice when in doubt. A `read` also answers a terminal
+that shows no session, in that terminal's profile, unless it sets
+`needs_session`.
+
+A `record` or `act` command may list in `receipt` the paths of its result that
+its tool answers with, such as `seed.id`; the CLI, `--json` and the tools that
+only read answer whole. A command that is not
 offered as a tool says `offered: false` and its `reason`; `not-offered.yaml`
 holds the ones the CLI runs outside the command layer. Edit the catalog, not
 those files, then run `make generate-types`. The CLI sends a catalog command as

@@ -12,7 +12,7 @@ commands:
     summary: whether you run inside attn, your session and the seeds you work on
     runs: here
     grant: full
-    read_only: true
+    effect: read
     doc: |
       Says whether you run inside attn, and as which session, with the seeds the session works on: the seed its delegation assigned it, then each growing seed it tends.
     args:

@@ -122,7 +122,7 @@ func writeCommandTables(c *catalog.Catalog, cliRoot, goRoot string) error {
 		if g.sessionFlagNamesTarget(cmd) {
 			caller += ", sessionTarget: true"
 		}
-		fmt.Fprintf(&args, "\t\t%q: {readOnly: %v, anyone: %v, sessionFlag: %v, runsWithoutDaemon: %v%s%s},\n", cmd.Name, cmd.ReadOnly, cmd.Anyone, g.takesSessionFlag(cmd), cmd.RunsWithoutDaemon, caller, fixes)
+		fmt.Fprintf(&args, "\t\t%q: {needsSession: %v, anyone: %v, sessionFlag: %v, runsWithoutDaemon: %v%s%s},\n", cmd.Name, cmd.Effect != catalog.EffectRead || cmd.NeedsSession, cmd.Anyone, g.takesSessionFlag(cmd), cmd.RunsWithoutDaemon, caller, fixes)
 	}
 	args.WriteString("\t}\n})\n")
 	for _, cmd := range c.Commands {

@@ -28,6 +28,7 @@ commands:
     summary: record what got in your way; nobody replies
     runs: home
     grant: any
+    effect: record
     doc: |
       Records a vent about attn's usability: an attn command that failed or behaved differently from its help or docs, attn instructions that contradict each other or attn's behavior, an attn capability you needed and had to work around, or attn not working inside your harness. With `about` tools, when the user turned tool vents on, it is about your other tooling instead: a skill, another CLI or MCP server, or your harness's permissions; the task and the repository are never tools. Don't vent because the work was hard, to report progress, or to ask for help. Say what happened, what you expected and what you did instead, in a paragraph at most. Nobody replies, so keep working. One vent per turn: to add to one, withdraw it with `vent_withdraw` and send one that covers both; withdraw a wrong vent instead of sending a correction.
     args:
@@ -43,6 +44,7 @@ commands:
     summary: take back a vent you sent
     runs: home
     grant: any
+    effect: act
     doc: |
       Takes back a vent this session sent.
     args:

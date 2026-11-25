@@ -48,6 +48,7 @@ commands:
     summary: open or navigate the browser tile
     runs: home
     grant: full
+    effect: act
     doc: |
       Opens the browser tile on your session's desktop at `url`, or navigates the tile that is open there. Only http and https URLs open.
     args:
@@ -60,6 +61,8 @@ commands:
     summary: print a semantic page snapshot
     runs: home
     grant: full
+    effect: read
+    needs_session: true
     doc: |
       Returns a semantic snapshot of the page: its state, and the locators and element references the other commands take.
     result: BrowserResult
@@ -68,6 +71,8 @@ commands:
     summary: find an element and return its reference
     runs: home
     grant: full
+    effect: read
+    needs_session: true
     doc: |
       Finds the element that `using` and `value` locate, such as using role and value textbox, and returns its reference for `browser_click` and `browser_type`. `name` narrows by accessible name; `all` returns every match.
     args:
@@ -99,6 +104,7 @@ commands:
     summary: click an element
     runs: home
     grant: full
+    effect: act
     doc: |
       Clicks the element that `selector` (CSS) or `element` (a reference from `browser_find` or a snapshot) names.
     args:
@@ -110,6 +116,7 @@ commands:
     summary: replace an input's value
     runs: home
     grant: full
+    effect: act
     doc: |
       Replaces the value of the input that `selector` or `element` names with `text`.
     args:
@@ -124,6 +131,7 @@ commands:
     summary: send a keyboard key
     runs: home
     grant: full
+    effect: act
     doc: |
       Presses and releases the key `text`, such as Enter or a letter.
     args:
@@ -134,6 +142,7 @@ commands:
     summary: scroll the page
     runs: home
     grant: full
+    effect: act
     doc: |
       Scrolls the page by `x` and `y` pixels; a negative value scrolls up or left.
     args:
@@ -145,6 +154,7 @@ commands:
     summary: go back in the browser's history
     runs: home
     grant: full
+    effect: act
     doc: |
       Goes back one page in the tile's history.
     result: BrowserResult
@@ -153,6 +163,7 @@ commands:
     summary: go forward in the browser's history
     runs: home
     grant: full
+    effect: act
     doc: |
       Goes forward one page in the tile's history.
     result: BrowserResult
@@ -161,6 +172,7 @@ commands:
     summary: reload the page
     runs: home
     grant: full
+    effect: act
     doc: |
       Reloads the page in the tile.
     result: BrowserResult
@@ -169,6 +181,8 @@ commands:
     summary: list cookies for the current page
     runs: home
     grant: full
+    effect: read
+    needs_session: true
     doc: |
       Lists the cookies of the current page.
     result: BrowserResult
@@ -177,6 +191,7 @@ commands:
     summary: call the WebDriver-shaped API directly
     runs: home
     grant: full
+    effect: act
     doc: |
       Calls the WebDriver-shaped action `action` with `params`, a JSON object. Called as a tool, a `timeout` in `params` is at most 15000 ms, so the call answers within 20 s; on the CLI it is at most 120000.
     args:
@@ -191,6 +206,7 @@ commands:
     summary: save a PNG of the page
     runs: home
     grant: full
+    effect: act
     doc: |
       Saves a PNG of the page at `path`, attn-browser.png by default, readable only by you, and returns the absolute path.
     args:
@@ -204,6 +220,7 @@ commands:
     summary: save a PDF of the page
     runs: home
     grant: full
+    effect: act
     doc: |
       Saves a PDF of the page at `path`, attn-browser.pdf by default, readable only by you, and returns the absolute path. `params` takes the print options as a JSON object; called as a tool, its `timeout` is at most 15000 ms.
     args:

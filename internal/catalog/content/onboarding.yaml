@@ -19,7 +19,7 @@ commands:
     summary: whether the Chief's onboarding is pending, and which path it takes
     runs: home
     grant: full
-    read_only: true
+    effect: read
     doc: |
       Shows whether the Chief's onboarding is pending, and which path it takes: the full path for a new user, or the tour for a user who used attn before the Chief.
     result: OnboardingResult
@@ -28,6 +28,7 @@ commands:
     summary: mark onboarding finished
     runs: home
     grant: full
+    effect: act
     doc: |
       Marks the Chief's onboarding finished. `onboarding_again` runs the full path again.
     result: OnboardingResult
@@ -36,6 +37,7 @@ commands:
     summary: start the full path again in the Chief's next session
     runs: home
     grant: full
+    effect: act
     doc: |
       Starts the full path again in the Chief's next session. It doesn't wake the Chief. An awake Chief can run it, then start the full path in its current conversation.
     result: OnboardingResult

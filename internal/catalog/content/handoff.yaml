@@ -14,6 +14,7 @@ commands:
     summary: file the letter closing this crew member's session
     runs: home
     grant: full
+    effect: act
     doc: |
       Files the letter closing this crew member's session. You write it; attn files it into handoffs/ in the member's home, with a UTC-stamped name, and never edits the prose. A correction is a new letter.
 

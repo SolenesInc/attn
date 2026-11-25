@@ -133,7 +133,7 @@ commands:
     summary: find seeds by words, closed ones included
     runs: home
     grant: own
-    read_only: true
+    effect: read
     doc: |
       Finds seeds by words across your profile's garden, harvested and withered included: titles, bodies and log entries. Words match as stemmed prefixes; identifier parts match too. Seeds carrying some words also appear. Ranks by title coverage, word coverage, relevance and recency, with a boost for open seeds. Prints status, last active and an original matching line. Search before you plant, so a duplicate is found instead of created.
     args:
@@ -147,6 +147,7 @@ commands:
     summary: plant a seed and print its id, slug and title
     runs: home
     grant: own
+    effect: record
     doc: |
       Plants a seed and prints its id, slug and title. `body` takes markdown; if the seed gains children, that body is the plot's plan. `part_of` plants it under a plot. `bed` assigns a root seed to an existing curated bed when `garden_v2_enabled` is on (otherwise a root seed auto-routes by repository if a bed matches). `checks` defines what the seed must prove; attn numbers each check unless C#= names the id, and prints each id. Lists up to 3 similar open seeds in your profile, leaving out that plot. Planting always proceeds. If one is the same work, wither the new seed.
     args:
@@ -165,6 +166,7 @@ commands:
     summary: plant a whole plot in one move from a JSON payload
     runs: home
     grant: full
+    effect: record
     doc: |
       Plants a whole plot in one move from a JSON payload, read from the `plot` file, or from stdin when the file is - or omitted: {"title": …, "body": …, "bed": "<bed>", "checks": [{"id": "C5", "text": …, "shared": true}], "part_of": "<plot>", "discovered_from": "<seed>", "children": [{"title": …, "body": …, "checks": […], "after": ["<sibling step slug>"]}]}.
 
@@ -180,6 +182,7 @@ commands:
     summary: relate two seeds
     runs: home
     grant: full
+    effect: act
     doc: |
       Relates two seeds. "a blocks b" keeps b out of ready until a closes. "a part-of b" puts a under b; b is then a plot. "a discovered-from b" records where work came from without ordering it. A structural cycle is refused, naming both seeds and the edge to remove.
     args:
@@ -195,6 +198,7 @@ commands:
     summary: remove an edge between two seeds
     runs: home
     grant: full
+    effect: act
     doc: |
       Removes the edge "a relation b". Every link has an unlink.
     args:
@@ -208,7 +212,7 @@ commands:
     summary: what you can tend right now
     runs: home
     grant: own
-    read_only: true
+    effect: read
     doc: |
       Lists what you can tend right now, oldest first: nothing open blocks it, nobody is holding it, and it is not a plot, because a plot's work is its children. With neither `plot` nor `all` the scope is your profile's garden, unless this session was dispatched at a plot, and then that plot; `all` steps back out to the garden.
     args:
@@ -220,7 +224,7 @@ commands:
     summary: the garden, newest first, with children nested under their plot
     runs: home
     grant: own
-    read_only: true
+    effect: read
     doc: |
       Lists the garden, newest first, with children nested under their plot, without bodies or checks; `seed_show` reads one seed whole. `plot` lists every child of one plot, oldest first, harvested and withered included. `stale` narrows to open seeds whose log has not moved for `window` (default {stale_window}): a query for your judgment, never a reaper. `standby` narrows to seeds on standby, each with the pull requests it watches and their readiness, its reminder, and why a resume is blocked when one is. `bed` narrows to seeds whose effective bed matches that curated bed (or `unassigned`) when `garden_v2_enabled` is on.
     args:
@@ -243,7 +247,7 @@ commands:
     core: true
     runs: home
     grant: own
-    read_only: true
+    effect: read
     doc: |
       Reads one seed, news first: its state, who tends it and a bookmark; the newest entries on its log, and where the freshest handoff is when it is older than those; every edge that touches it, with seeds discovered from it folded to a count and the open ones; the outline of the plot it is part of; a plot's open children as a board, each with what it waits for, its checks and its newest entry, closed children folded into one line; checks and artifacts; the body last.
 
@@ -263,7 +267,7 @@ commands:
     summary: the whole log, newest first
     runs: home
     grant: own
-    read_only: true
+    effect: read
     doc: |
       Lists the whole log, newest first; `seed_show` renders the newest few and says how many more are here. The last line is a bookmark. `since` lists every entry saved after a bookmark, on this seed and every seed below it, labeled by seed. `kind` keeps one kind of entry, such as handoff or answer.
     args:
@@ -281,7 +285,7 @@ commands:
     summary: the standing garden contract and this session's garden position
     runs: home
     grant: own
-    read_only: true
+    effect: read
     doc: |
       Prints the standing garden contract and this session's live garden position.
 
@@ -289,6 +293,7 @@ commands:
     summary: the craft of writing seeds
     runs: here
     grant: any
+    effect: read
     doc: |
       Prints the craft: writing a body, deliverable types and what "done" is for each, a complete plot example, artifacts, and handoffs and steering.
 
@@ -296,6 +301,7 @@ commands:
     summary: claim the seed and start growing it
     runs: home
     grant: own
+    effect: act
     doc: |
       Claims the seed and starts growing it. The freshest handoff prints on the claim, so picking a seed up primes you. Tending your own claim again changes nothing and rings nobody. `for` assigns the seed to a crew member instead; the user never claims a seed, so a tend from outside an attn session needs it.
     args:
@@ -311,6 +317,7 @@ commands:
     core: true
     runs: home
     grant: own
+    effect: record
     doc: |
       Appends to the seed's log: what happened and what you learned, for whoever tends it next. `handoff` addresses it to your successor on this seed: `seed_tend` prints the freshest one on the claim, so it is read before any work, and `seed_show` points at it once newer entries bury it. `ring` tells current and covering plot tenders and watchers to look; ordinary notes stay quiet.
     args:
@@ -327,6 +334,7 @@ commands:
     summary: pause the seed and let go of it
     runs: home
     grant: own
+    effect: act
     doc: |
       Pauses the seed deliberately: it is parked and lets go of its tender. An optional `reason` lands on the log in the same move. Tending it again picks it back up. Parking it again keeps the state and adds only the reason. The tender's park refuses while the seed has an ask the user has not answered, and names the ask: read it with `attn ask show`, then either end your turn and park after you act on the answer, or withdraw an ask that no longer matters with `attn ask close`. Moves print who they rang.
     args:
@@ -340,6 +348,7 @@ commands:
     summary: put the seed back in the pool
     runs: home
     grant: full
+    effect: act
     doc: |
       Puts the seed back in the pool: planted, unclaimed, ready for whoever is free. Reopens a closed seed, takes a parked one off hold, and hands back one being grown. Replanting an already planted seed changes nothing and rings nobody. The tender's replant refuses while the seed has an ask the user has not answered, as park does. Moves print who they rang.
     args:
@@ -353,6 +362,7 @@ commands:
     summary: close the seed as abandoned
     runs: home
     grant: full
+    effect: act
     doc: |
       Closes the seed as abandoned: nobody is picking this up. Repeating it keeps the earlier reason and adds a different reason to the log. A harvested seed must be replanted first. A plot refuses while any direct child is open. Closing a plot's last child leaves a ringing note on the plot and names the plot in the output. Withering withdraws the seed's open asks from the user, names them in the output, and tells each asking session that is still open. Moves print who they rang.
     args:
@@ -366,6 +376,7 @@ commands:
     summary: give the seed to the Chief to decide its next working context
     runs: home
     grant: full
+    effect: act
     doc: |
       Gives this seed to the Chief to decide its next working context. The saved folder, branch and placement problem are recorded automatically; `guidance` adds an exception such as a special branch or directory.
     args:
@@ -378,6 +389,7 @@ commands:
     summary: close the seed as done
     runs: home
     grant: own
+    effect: act
     doc: |
       Closes the seed as done, with a required `reason` unless `when_merged` is set. Repeating a harvest succeeds with the earlier reason; a different reason goes on its log. A withered seed must be replanted first. A plot refuses while any direct child is open. A seed with an ask the user has not answered refuses and names the ask: read it with `attn ask show`, then either end your turn and harvest after you act on the answer, or withdraw an ask that no longer matters with `attn ask close`. Closing a plot's last child leaves a ringing note on the plot and names the plot in the output. Moves print who they rang.
 
@@ -405,6 +417,7 @@ commands:
     summary: define a statement the seed must prove
     runs: home
     grant: full
+    effect: record
     doc: |
       Defines a statement the seed must prove and prints its id, which the body cites. attn picks the next free id in the plot tree; `id` names one instead. On a plot, `shared` puts the check on each seed below the plot that has no children, and each of those seeds proves it with its own report. Removed ids are never reused.
     args:
@@ -423,6 +436,7 @@ commands:
     summary: replace the check's statement
     runs: home
     grant: full
+    effect: act
     doc: |
       Replaces the check's statement.
     args:
@@ -440,6 +454,7 @@ commands:
     summary: remove a check
     runs: home
     grant: full
+    effect: act
     doc: |
       Removes a check. Its id stays reserved.
     args:
@@ -454,6 +469,7 @@ commands:
     summary: bring a removed check back
     runs: home
     grant: full
+    effect: act
     doc: |
       Brings a removed check back with its result.
     args:
@@ -469,6 +485,7 @@ commands:
     core: true
     runs: home
     grant: own
+    effect: act
     doc: |
       Records the proof for a check in one call: `summary`, one line of at most {max_check_summary_chars} characters that `seed_show` prints, and `detail`, kept in the report's check note. Together they fit in {max_note_kib} KiB. `evidence` is a local file, an artifact on the seed, or an http(s) URL, and can repeat. A local file is copied onto the seed, replacing its file of the same name, unless it already sits in the seed's artifact folder. A refused report lists every problem it found; nothing is recorded. A new report clears the verdict. `seed_show` marks cited evidence replaced after the report. If a check doesn't apply, report that too: say why and cite what shows it. The verdict decides.
     args:
@@ -488,6 +505,7 @@ commands:
     summary: confirm the check
     runs: home
     grant: full
+    effect: act
     doc: |
       Confirms the check, with or without a report.
     args:
@@ -502,6 +520,7 @@ commands:
     summary: reject the check
     runs: home
     grant: full
+    effect: act
     doc: |
       Rejects the check. `proof` names what would prove it.
     args:
@@ -516,6 +535,7 @@ commands:
     summary: clear the verdict and keep the report
     runs: home
     grant: full
+    effect: act
     doc: |
       Clears the verdict and keeps the report.
     args:
@@ -530,6 +550,7 @@ commands:
     summary: clear the report and verdict
     runs: home
     grant: full
+    effect: act
     doc: |
       Clears the report and verdict.
     args:
@@ -544,6 +565,7 @@ commands:
     summary: watch this seed and its descendants
     runs: home
     grant: full
+    effect: act
     doc: |
       Subscribes this session to the seed and its descendants, including children planted later. Delegation starts the same watch on the seed it binds. Tending a plot already covers its descendants until the claim ends. A crew member's watch belongs to the member and lasts across the member's sessions. `seed_show` names the subscriptions that still cover a seed. Restarting or resuming the same delegation does not restore a removed watch.
     args:
@@ -554,6 +576,7 @@ commands:
     summary: remove this seed's subscription
     runs: home
     grant: full
+    effect: act
     doc: |
       Removes this seed's subscription. It also drops a queued update only when the session is not a current tender, not a covering tender, and not covered by another watch. Separate child watches remain, and an ancestor watch can still cover the seed. `seed_show` and this command name those subscriptions and the commands that remove them.
     args:
@@ -564,6 +587,7 @@ commands:
     summary: set a reminder that posts a message to the seed's mailbox
     runs: home
     grant: full
+    effect: act
     doc: |
       Sets a reminder: at that time attn posts `message` to the seed's mailbox, which delivers it to whoever tends the seed then. When nobody tends it, the message waits for the next tender, who reads it with `attn agent inbox`. `in` counts from now; `at` takes an RFC3339 time; one of them is required unless `clear`. attn checks once a minute, so a message can arrive up to a minute late. A seed holds one reminder, and a new one replaces it. The reminder ends when attn posts the message, when `clear` removes it, and when the seed is harvested or withered. `seed_show` and `seed_ls` print it until then. While someone tends the seed, only the tender, sessions above it in the delegation chain, the profile's chief and the user can set or clear its reminder; anyone can while nobody holds the claim, and nobody can force it.
     args:
@@ -587,6 +611,7 @@ commands:
     summary: wait for seed mail with this session closed
     runs: home
     grant: full
+    effect: act
     doc: |
       Puts a seed you tend on standby with `next`, a note saying what to do next, and closes this session. When mail reaches the seed, attn resumes the session and delivers the note; for a crew member it starts a session. `in` and `at` also set the seed's reminder to that time, with the note as its message, as `seed_remind` does. When the session can compact, attn compacts it before closing; end your turn right after the command. `stay` keeps this session open.
 
@@ -616,7 +641,7 @@ commands:
     summary: write the raw body to a file for editing
     runs: home
     grant: full
-    read_only: true
+    effect: read
     doc: |
       Exports the raw body with a first-line stamp naming this seed and its body hash. Edit it with any tool, keep its first line, then pass the whole text to `seed_edit`.
     args:
@@ -628,6 +653,7 @@ commands:
     summary: save an edited body
     runs: home
     grant: full
+    effect: act
     doc: |
       Saves an exported body after editing the file with any tool. Keep the first stamp line: it names the body the edit started from. If the body changed since export, export again and reapply. Empty bodies are refused. Each edit saves a numbered version and a log entry; `note` adds what changed to that entry.
     args:
@@ -646,6 +672,7 @@ commands:
     summary: restore an earlier body
     runs: home
     grant: full
+    effect: act
     doc: |
       Restores the body before the newest version, or the numbered `version`. The restored body becomes a new version, so rollback can itself be rolled back. Edit entries in `seed_notes` show the versions and size changes.
     args:
@@ -658,6 +685,7 @@ commands:
     summary: set, clear or print the task's authorization
     runs: home
     grant: own
+    effect: act
     doc: |
       Sets, clears or prints the task's authorization: the steps agents take beyond the project's guidance and the steps they stop before, written as instructions. Set only what the user allowed. Delegation openings deliver the words. When someone other than the seed's tender changes the words, attn types the change into the tender's conversation as the user's message, waiting while the tender needs approval. With neither `words` nor `clear`, prints them and the state of the last typed update. Who may change them follows seed moves: the tender, sessions above it in the delegation chain, and the profile's chief; anyone in the profile while nobody holds the seed.
     args:
@@ -674,6 +702,7 @@ commands:
     summary: give the seed a file or a document to keep
     runs: home
     grant: full
+    effect: act
     doc: |
       Puts a local regular file in durable seed-owned storage, or records a document that stays where it lives. For a local file, `mode` is required: move transfers the file and leaves one editable canonical file, which is the recommended choice; copy keeps an independent source snapshot. Git-tracked files must use copy. A file the seed already has by that name is replaced, and `seed_show` marks check evidence replaced after its report; re-attaching an unchanged file changes nothing. A `path` in a `repo`, a `notebook` document and a `url` remain associations, and `note` goes on the log with them.
     args:
@@ -702,6 +731,7 @@ commands:
     summary: move a managed artifact back out, or drop an association
     runs: home
     grant: full
+    effect: act
     doc: |
       Moves a managed artifact back out of the seed to `to`, and never overwrites. `reference` removes an old linked path association instead. `repo`, `notebook` and `url` drop the association they name, and `note` goes on the log with it.
     args:
@@ -730,7 +760,7 @@ commands:
     summary: list the profile's curated beds, their repos and open seed counts
     runs: home
     grant: own
-    read_only: true
+    effect: read
     doc: |
       Lists every curated bed in this profile, alphabetically by name, with its slug, optional note, bound auto-routing repositories, and count of open seeds. Requires `garden_v2_enabled`.
     result: SeedBedListResult
@@ -739,6 +769,7 @@ commands:
     summary: create a curated bed
     runs: home
     grant: full
+    effect: act
     doc: |
       Creates a curated bed in this profile. Only create a bed when the user asks for one. `repos` binds repository paths or bare repository names so new root seeds planted from those repositories land in this bed automatically. A path belongs to the caller's machine. Use an address such as `build:/work/payments` for a different machine. A bare repository name matches on any machine. A matching path takes precedence over a bare name. Two beds cannot claim the same path on the same machine or the same bare name. Requires `garden_v2_enabled`.
     args:
@@ -753,6 +784,7 @@ commands:
     summary: update a bed's name, note or repos
     runs: home
     grant: full
+    effect: act
     doc: |
       Updates an existing bed in this profile by id, name or slug. Only edit a bed when the user asks. Passing `repos` replaces the bed's repository list. Paths use the caller's machine unless qualified as `machine:/path`. Bare names match on any machine. `clear_repos` clears the list. Requires `garden_v2_enabled`.
     args:
@@ -772,6 +804,7 @@ commands:
     summary: remove a curated bed and leave its seeds unassigned
     runs: home
     grant: full
+    effect: act
     doc: |
       Removes a curated bed by id, name or slug. Seeds assigned to that bed keep their state and become unassigned. Only remove a bed when the user asks. Requires `garden_v2_enabled`.
     args:
@@ -782,6 +815,7 @@ commands:
     summary: assign a root seed or plot to an existing bed, or clear its bed
     runs: home
     grant: own
+    effect: act
     doc: |
       Assigns a root seed or plot to an existing curated bed in this profile, or clears its bed with `clear`. Child seeds inherit their root plot's bed and cannot be assigned separately. Refuses unknown beds and lists the profile's beds. Requires `garden_v2_enabled`.
     args:
@@ -801,6 +835,7 @@ commands:
     summary: set or clear a seed's one-line status pulse
     runs: home
     grant: own
+    effect: act
     doc: |
       Sets or clears a seed's current one-line status pulse (single line, at most 160 characters) shown in the Garden without writing a log note. Update it when starting a phase, hitting a milestone, or blocking on something. Who may change it follows seed moves: the tender, sessions above it in the delegation chain, the profile's chief, or anyone while unclaimed. Refused on closed seeds. Requires `garden_v2_enabled`.
     args:

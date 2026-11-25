@@ -22,7 +22,7 @@ type toolDefinition struct {
 	Title        string         `json:"title"`
 	Description  string         `json:"description"`
 	Core         bool           `json:"core,omitempty"`
-	ReadOnly     bool           `json:"read_only,omitempty"`
+	Effect       catalog.Effect `json:"effect"`
 	InputSchema  map[string]any `json:"inputSchema"`
 	OutputSchema map[string]any `json:"outputSchema,omitempty"`
 	Receipt      []string       `json:"receipt,omitempty"`
@@ -43,7 +43,7 @@ func writeTools(c *catalog.Catalog, goRoot string) error {
 			Title:       g.expand(where, cmd.Summary, toolSurface),
 			Description: strings.TrimSpace(g.expand(where, cmd.Doc, toolSurface)),
 			Core:        cmd.Core,
-			ReadOnly:    cmd.ReadOnly,
+			Effect:      cmd.Effect,
 			InputSchema: g.inputSchema(cmd),
 		}
 		if n := utf8.RuneCountInString(tool.Description); n > maxDescriptionChars {

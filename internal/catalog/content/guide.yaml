@@ -8,7 +8,7 @@ commands:
         - {need: "Answer the user's questions about attn", tools: [guide]}
     runs: here
     grant: any
-    read_only: true
+    effect: read
     anyone: true
     runs_without_daemon: true
     doc: |

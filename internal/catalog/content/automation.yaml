@@ -20,6 +20,7 @@ commands:
     summary: create or update an automation from its definition
     runs: home
     grant: full
+    effect: act
     doc: |
       Saves `definition`, creating the automation, or updating the one whose id the definition names. `launch_desktop` chooses where its sessions open; `desktop_name` names the new desktop of own or an empty slot, and defaults to the automation's name. Prints the saved automation.
     args:
@@ -39,7 +40,7 @@ commands:
     summary: check a definition without saving it
     runs: home
     grant: full
-    read_only: true
+    effect: read
     doc: |
       Checks `definition` as apply would, without saving it.
     args:
@@ -50,7 +51,7 @@ commands:
     summary: list your profile's automations
     runs: home
     grant: full
-    read_only: true
+    effect: read
     doc: |
       Lists your profile's automations with their trigger, next run, last run and guard check.
     result: AutomationListResult
@@ -59,7 +60,7 @@ commands:
     summary: print an automation's definition
     runs: home
     grant: full
-    read_only: true
+    effect: read
     doc: |
       Prints the automation's saved definition as YAML, under comment lines for its profile, launch desktop, last run and guard check.
     args:
@@ -70,6 +71,7 @@ commands:
     summary: choose where an automation's sessions open
     runs: home
     grant: full
+    effect: act
     doc: |
       Saves the desktop the automation's sessions open on. `desktop_name` names the new desktop of own or an empty slot, and defaults to the automation's name.
     args:
@@ -82,6 +84,7 @@ commands:
     summary: let an automation's trigger start runs
     runs: home
     grant: full
+    effect: act
     doc: |
       Turns the automation on, so its trigger starts runs. Prints the automation.
     args:
@@ -93,6 +96,7 @@ commands:
     summary: stop an automation's trigger from starting runs
     runs: home
     grant: full
+    effect: act
     doc: |
       Turns the automation off, so its trigger starts no runs; a run already started goes on. Prints the automation.
     args:
@@ -104,6 +108,7 @@ commands:
     summary: start a run now
     runs: home
     grant: full
+    effect: act
     doc: |
       Starts a run of the automation now and prints it. The CLI prints the run once its session is launched. A tool call answers once the run is recorded, pending, while preparing its location, which for a repository_worktree automation can mean a first clone, and launching its session go on; `automation runs` shows how it went. A run whose preparation fails in a way that can be retried, such as a failed clone or a GitHub host that is not signed in, stays pending: the same `request_id` delivers it again, and the CLI prints the reason. Until the run is delivered, `automation runs` shows the latest such reason as its `last_error` and how many attempts failed as its `failed_attempts`. `input` is the occurrence's structured input; `pr_url` resolves one GitHub pull request into it instead, for a repository_worktree automation. A retry with the same `request_id` returns the run the first request started.
     args:
@@ -119,7 +124,7 @@ commands:
     summary: list an automation's runs
     runs: home
     grant: full
-    read_only: true
+    effect: read
     doc: |
       Lists the automation's runs, newest first; `truncated` says older runs were left out.
     args:
@@ -130,6 +135,7 @@ commands:
     summary: remove the worktrees of an automation's finished runs
     runs: home
     grant: full
+    effect: act
     doc: |
       Removes the worktrees of the automation's finished runs. A worktree with uncommitted changes is kept, and so is one whose thread is still in use; the result lists each run under cleaned, kept_dirty or kept_active.
     args:
@@ -140,6 +146,7 @@ commands:
     summary: delete an automation
     runs: home
     grant: full
+    effect: act
     doc: |
       Deletes the automation. Its runs' sessions stay.
     args:

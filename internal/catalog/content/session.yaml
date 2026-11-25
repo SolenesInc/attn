@@ -16,7 +16,7 @@ commands:
     summary: answer a question from a Codex session's conversation, with exact excerpts
     runs: home
     grant: full
-    read_only: true
+    effect: act
     anyone: true
     doc: |
       Answers a free-form question from the target session's bounded Codex conversation, returning validated exact excerpts. Unclear is a successful answer.
@@ -37,7 +37,7 @@ commands:
     summary: read a session's conversation and tool events
     runs: home
     grant: full
-    read_only: true
+    effect: read
     anyone: true
     doc: |
       Reads provider-neutral, timestamped, redacted conversation and tool events of one session. `after` resumes strictly after the cursor an earlier read ended on. `follow` keeps reading until interrupted; `--json` prints one event per line.
@@ -58,7 +58,7 @@ commands:
     summary: the session ledger, newest first, or every live session as a tree
     runs: home
     grant: full
-    read_only: true
+    effect: read
     anyone: true
     doc: |
       Reads the session ledger, newest first: live sessions by default, `closed` for the ones that ended, `all` for both. When rows are omitted the notice names the id to pass to `before` for the next page. Filters combine and are applied before paging. `last` takes today, yesterday, 7d or 30d; `since` and `until` take a date or an RFC3339 instant and are half-open, so `until` excludes its own instant. `reopen` adds what would bring each closed row back, judging the whole page in one call; session_show explains any one of those verdicts.
@@ -85,7 +85,7 @@ commands:
     summary: one ledger row, live or closed, with who closed it and why
     runs: home
     grant: full
-    read_only: true
+    effect: read
     anyone: true
     doc: |
       Reads one ledger row, live or closed, including who closed it and why. A closed row also carries the reopen verdict: whether it comes back, why not when it does not, and the actions offered instead.
@@ -100,6 +100,7 @@ commands:
     summary: mark a session so its owed turns go first, or clear the mark
     runs: home
     grant: full
+    effect: act
     anyone: true
     doc: |
       Marks a session so its owed turns go first, or clears that mark. `target` defaults to the session running this command. Any agent may mark any session.
@@ -114,6 +115,7 @@ commands:
     summary: defer sessions' owed turns until a time
     runs: home
     grant: full
+    effect: act
     anyone: true
     doc: |
       Defers sessions until an RFC3339 instant, a positive duration (30m, 1h, 2h, 4h, 8h), or tomorrow, saturday or monday. Day choices use local 09:00; quote a custom time, e.g. "tomorrow 09:00". A session may snooze itself and agents below it in its delegation chain, including delegates of delegates; the chief any session of its profile. Each id reports success or why it failed. session_unsnooze ends a snooze early.
@@ -128,6 +130,7 @@ commands:
     summary: end sessions' snoozes early
     runs: home
     grant: full
+    effect: act
     anyone: true
     doc: |
       Ends snoozes early, with the same permissions as session_snooze. Already unsnoozed is a successful no-op. session_list and session_show include the snoozed-until instant.
@@ -139,6 +142,7 @@ commands:
     summary: give a session the name a person reads in the sidebar
     runs: home
     grant: own
+    effect: act
     anyone: true
     doc: |
       Gives a session the name a person reads in the sidebar and the ledger: a few plain words about the work, up to 48 characters. `target` defaults to the session running this command. Rename when the main work drifts from the name it started with.
@@ -153,6 +157,7 @@ commands:
     summary: bring a closed or stopped session back under its own id
     runs: home
     grant: full
+    effect: act
     anyone: true
     doc: |
       Brings a closed or stopped session back under its own id, on its last or current desktop in its profile. Without `action` it performs the plain reopen and refuses, naming what is offered, when the verdict does not allow one. Actions that recreate a worktree or fetch a branch write to the repository and only ever run when named here. Sessions whose profile was deleted cannot reopen. To close a session, use agent_close.

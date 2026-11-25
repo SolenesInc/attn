@@ -30,6 +30,7 @@ commands:
     core: true
     runs: here
     grant: own
+    effect: record
     doc: |
       Opens an ask in the user's queue and returns its id at once. {ask_rules}
 
@@ -59,7 +60,7 @@ commands:
     summary: your open asks and those about seeds you tend, then the open asks of the agents you oversee
     runs: home
     grant: own
-    read_only: true
+    effect: read
     doc: |
       Lists your open asks and those about seeds you tend, then, apart from yours, the open asks of the agents you oversee.
     result: AskListResult
@@ -68,7 +69,7 @@ commands:
     summary: one ask, with who asked, its seed, its age and text
     runs: home
     grant: own
-    read_only: true
+    effect: read
     doc: |
       Prints one open ask you hold or oversee: who asked, its seed, its age and its text.
     args:
@@ -79,6 +80,7 @@ commands:
     summary: add to an open ask when the facts change; the user keeps its place and their answer so far
     runs: here
     grant: own
+    effect: record
     doc: |
       Adds markdown to the end of an open ask you hold or oversee, when something it says has changed. The user sees the addition as an update with its time, and keeps the ask's place in their queue and the answer they have started. Closing the ask and asking again would throw both away.
 
@@ -94,6 +96,7 @@ commands:
     summary: withdraw an ask you no longer need answered
     runs: home
     grant: own
+    effect: act
     doc: |
       Withdraws an ask you no longer need answered. To withdraw an ask of an agent you oversee, say why in `reason`: attn notes the reason on the ask's seed and tells the agent that asked, so it does not wait for an answer.
     args:

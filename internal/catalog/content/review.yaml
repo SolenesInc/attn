@@ -177,6 +177,7 @@ commands:
     summary: snapshot the working tree as head and write the review's frontmatter
     runs: here
     grant: full
+    effect: act
     doc: |
       Snapshots the working tree of `repository` as head, and writes frame (brief unless the document already picks one), repository, base and head into the frontmatter of `document`. Creates the document when it is missing, and leaves the text below the frontmatter as written. Run it again before presenting a revision: it takes a fresh head and keeps the base. `base` defaults to the head of the last review the user sent on this document, else the document's base; without one the review is a tour of unchanged code.
     args:
@@ -193,6 +194,7 @@ commands:
     summary: list the document's problems, each with its line and the fix
     runs: here
     grant: full
+    effect: read
     doc: |
       Lists the problems of `document`, each with its line and the fix. An empty list means the document is ready to open. On the CLI it exits 1 when there are problems, and `attn open` prints the same problems as warnings.
     args:
@@ -205,6 +207,7 @@ commands:
     summary: answer a question the user asked on the review
     runs: home
     grant: full
+    effect: record
     doc: |
       Answers a question the user asked on the review. The question arrives as the user's message with this command and the question's id; the answer shows under the line in the user's review.
     args:

@@ -28,6 +28,7 @@ commands:
     core: true
     runs: home
     grant: own
+    effect: act
     doc: |
       Starts another agent in its own session, which the user can open and steer. Every delegation has a seed, which the delegated agent reads when it starts: `brief` plants a new one, and `seed` uses an existing seed's current assignment. `handover` transfers that seed to the new agent, with `note` as the next step; the previous agent keeps running. `authorization` says how far the user lets the task go, written as instructions to the agent; it is saved on the seed, and the opening delivers it. Without it, a delegation keeps the seed's current words.
 
@@ -73,7 +74,7 @@ commands:
     summary: a delegation's operation, by request or operation id
     runs: home
     grant: own
-    read_only: true
+    effect: read
     doc: |
       Reads a delegation's operation by its request id or operation id: its state, its progress, the session it started, and its result once it has one. Use it when the answer to `delegate` was lost, not to wait for a start.
     args:
@@ -86,7 +87,7 @@ commands:
     runs: home
     anyone: true
     grant: own
-    read_only: true
+    effect: read
     doc: |
       Prints the roles agents choose from when delegating: each role that is turned on and has a complete default model, its alternatives with when to pick them, and the fallback for work no role fits.
     args:
@@ -98,7 +99,7 @@ commands:
     runs: home
     anyone: true
     grant: full
-    read_only: true
+    effect: read
     doc: |
       Answers the whole saved table: roles turned off, roles that still need a model, alternatives and the fallback. With `role`, also answers that role with its full guidance and alternatives, a maintained role's included. The table in the result is what `delegate_roles_apply` takes.
     args:
@@ -113,7 +114,7 @@ commands:
     runs: home
     anyone: true
     grant: full
-    read_only: true
+    effect: read
     doc: |
       Lists revisions of the table newest first, with who changed what and why.
     args:
@@ -126,6 +127,7 @@ commands:
     runs: home
     anyone: true
     grant: full
+    effect: act
     doc: |
       Adds Attn's maintained roles the table lacks, turns the table and its roles on, and installs the attn-workflow skill they follow for every available harness. Your roles stay. When one of yours already uses an Attn role's id, the Attn role gets a numeric suffix, such as builder-2.
     args:
@@ -141,6 +143,7 @@ commands:
     runs: home
     anyone: true
     grant: full
+    effect: act
     doc: |
       Adds a role, or an alternative model for a role when `target` is role/alternative. A custom role needs `name`, and its default model comes from the model args. With `builtin`, the role is one of Attn's maintained roles: pathfinder, builder, reviewer, orchestrator or prototyper (`delegate_roles_install` must run once first). An alternative starts from the role's default model; `when` says when an agent should pick it instead of the default, and without a condition it is saved but never picked.
     args:
@@ -167,6 +170,7 @@ commands:
     runs: home
     anyone: true
     grant: full
+    effect: act
     doc: |
       Changes a role, or one of its alternatives when `target` is role/alternative. `default` makes the alternative the role's default. With `fallback`, changes the model agents use when no role fits, and its `instructions`.
     args:
@@ -196,6 +200,7 @@ commands:
     runs: home
     anyone: true
     grant: full
+    effect: act
     doc: |
       Makes an editable custom copy of a role, maintained ones included, placed after it in the table.
     args:
@@ -215,6 +220,7 @@ commands:
     runs: home
     anyone: true
     grant: full
+    effect: act
     doc: |
       Removes a role, or one of its alternatives when `target` is role/alternative.
     args:
@@ -233,6 +239,7 @@ commands:
     runs: home
     anyone: true
     grant: full
+    effect: act
     doc: |
       Turns `role` on. Without a role, turns the whole table on.
     args:
@@ -250,6 +257,7 @@ commands:
     runs: home
     anyone: true
     grant: full
+    effect: act
     doc: |
       Turns `role` off. Without a role, turns the whole table off, and agents choose harness and model themselves.
     args:
@@ -267,6 +275,7 @@ commands:
     runs: home
     anyone: true
     grant: full
+    effect: act
     doc: |
       Replaces the whole table with `table`, the table `delegate_roles_show` returned. Refused when the table changed since that export.
     args:
@@ -284,6 +293,7 @@ commands:
     runs: home
     anyone: true
     grant: full
+    effect: act
     doc: |
       With no `revision`, restores the table that was live before the current one; repeat to keep walking back. With `revision`, restores that one, older or newer: rolling forward is restoring a later revision.
     args:

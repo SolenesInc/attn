@@ -20,6 +20,7 @@ commands:
     summary: append an entry to the Notebook's daily journal
     runs: home
     grant: full
+    effect: record
     doc: |
       Appends `text` to the day's journal file, journal/<date>.md, through the daemon. It is the contention-safe way an agent writes the journal, instead of editing the file with its own file tools, which races other agents writing the same file. `date` defaults to today. The result names the file and its hash after the append.
     args:

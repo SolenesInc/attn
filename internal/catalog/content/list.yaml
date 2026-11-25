@@ -3,7 +3,7 @@ commands:
     summary: "list sessions and profiles"
     runs: home
     grant: full
-    read_only: true
+    effect: read
     anyone: true
     doc: |
       Lists every session on this daemon and every profile, as JSON.

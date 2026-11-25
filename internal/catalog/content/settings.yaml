@@ -20,7 +20,7 @@ commands:
     summary: show every setting's key, scope, value and description
     runs: here
     grant: full
-    read_only: true
+    effect: read
     anyone: true
     doc: |
       Shows each setting's key, scope, value and description. `all` adds the read-only values attn computes. `features` shows each experimental feature instead, whether it is on, and when a change applies.
@@ -33,7 +33,7 @@ commands:
     summary: show the value of one setting
     runs: here
     grant: full
-    read_only: true
+    effect: read
     anyone: true
     doc: |
       Shows the value in effect. It is empty when the setting is unset, unless the setting is on by default.
@@ -45,6 +45,7 @@ commands:
     summary: change a setting
     runs: here
     grant: full
+    effect: act
     anyone: true
     doc: |
       Changes a setting. An empty `value` restores the default of a setting that has one, or clears it where its description allows. On an outpost, a home setting is saved at the home.

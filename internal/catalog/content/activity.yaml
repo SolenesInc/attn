@@ -15,7 +15,7 @@ commands:
     summary: what each agent is doing, and why nothing is generated
     runs: home
     grant: full
-    read_only: true
+    effect: read
     anyone: true
     doc: |
       Shows whether activity lines are generated and why not when they are not: the presence tier (nothing is generated while nobody can see it), the setting, and whether an agent is chosen to write them. Then each session that generates a line, with its line, its age and why its last run failed.
@@ -25,6 +25,7 @@ commands:
     summary: forget one session's line and its read position
     runs: home
     grant: full
+    effect: act
     anyone: true
     doc: |
       Forgets one session's activity line and its read position, so the next line is written from what happens next.

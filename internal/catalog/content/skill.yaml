@@ -9,7 +9,7 @@ commands:
         - {need: "Write more than a few sentences for a reader", tools: [skill], references: [showing]}
     runs: here
     grant: any
-    read_only: true
+    effect: read
     anyone: true
     runs_without_daemon: true
     doc: |

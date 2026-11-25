@@ -22,7 +22,7 @@ commands:
     summary: show your profile's members and their active sessions
     runs: home
     grant: full
-    read_only: true
+    effect: read
     doc: |
       Shows your profile's members and their active sessions, if any. `all` includes retired members.
     args:
@@ -33,6 +33,7 @@ commands:
     summary: add a member to your profile
     runs: home
     grant: full
+    effect: act
     doc: |
       Adds a member to your profile. Its home is crew/<name>/ in the profile's Notebook (crew/<name>-2/ when that folder is taken) and starts with an empty CHARTER.md, which the member writes with you in its first session.
     args:
@@ -47,6 +48,7 @@ commands:
     summary: start a session for a member with its saved launch settings
     runs: home
     grant: full
+    effect: act
     doc: |
       Starts a session using the member's saved launch settings, on its chosen desktop in the member's profile, without moving your focus. Asked from an agent of another profile, it refuses. The session's opening includes its charter location, latest handoff, home instructions, held seeds with handoff notes, and ready counts for their plots. `agent` overrides the harness for this session. If the member is in session, it returns that session.
     args:
@@ -58,6 +60,7 @@ commands:
     summary: ask a member to write a handoff and close
     runs: home
     grant: full
+    effect: act
     doc: |
       Asks the member to write a handoff and close with `attn handoff`. The member closes its own session. Does nothing if it is between sessions.
     args:
@@ -68,7 +71,7 @@ commands:
     summary: print the orientation your crew session started with
     runs: home
     grant: full
-    read_only: true
+    effect: read
     doc: |
       Prints the orientation your crew session started with, read fresh: identity, charter, latest letter and held seeds. Run it when your conversation starts empty, as after /clear or /new. A session that is not a crew member's gets no member and no guidance.
     result: CrewPrimeResult
@@ -77,6 +80,7 @@ commands:
     summary: apply a member's saved settings and charter to its running session
     runs: home
     grant: full
+    effect: act
     doc: |
       Applies the member's saved launch settings and charter to its running session. On the same harness the session reloads in place and keeps its conversation. On a different harness the member is asked to file its letter with `attn handoff`, which ends the session and starts the next one on the saved harness. The member itself, an agent above it in the delegation chain, and the profile's chief may apply. Does nothing if the member is between sessions; its next session uses the saved settings.
     args:
@@ -87,6 +91,7 @@ commands:
     summary: save a member's launch settings
     runs: home
     grant: full
+    effect: act
     doc: |
       Saves launch settings without changing the member's markdown files. Pass at least one setting.
 
@@ -115,6 +120,7 @@ commands:
     summary: give a member a new name
     runs: home
     grant: full
+    effect: act
     doc: |
       Gives the member a new name, unique in its profile. Its key, letters, mail and seeds stay. A home in the Notebook moves to a folder named after the new name: at once when the member is between sessions, otherwise when its next session starts.
     args:
@@ -126,6 +132,7 @@ commands:
     summary: move a member's home into its profile's current Notebook
     runs: home
     grant: full
+    effect: act
     doc: |
       Moves the member's home into its profile's current Notebook, at crew/<name>/ (crew/<name>-2/ when that folder is taken), from wherever it is: attn's data folder, an earlier Notebook or any other folder. Its charter, letters and other files move; a working or awareness directory inside the home follows. The member must be between sessions. Changing the Notebook folder moves no home by itself; run this for each member.
     args:
@@ -137,6 +144,7 @@ commands:
     summary: stop a member's work
     runs: home
     grant: full
+    effect: act
     doc: |
       Stops the member's work: its claimed seeds are replanted with a note, its seed and pull request watches and open asks are removed, and new mail is refused. Unread mail, its home and its name stay. A member in session is asked to close.
     args:
@@ -148,6 +156,7 @@ commands:
     summary: bring a retired member back
     runs: home
     grant: full
+    effect: act
     doc: |
       Brings a retired member back. Mail kept while retired is delivered, which can start a session for it.
     args:
