@@ -1,0 +1,1 @@
+**Each column of the overview has an edge again.** Its outline stood outside a box that clipped it, so a white column on the light background had no border. The edge is now inside the box, over the tiles and under the outlines of the highlight and of a tile that needs you. The line of keys at the bottom is centered, and New desktop is quieter than a desktop's strip.
