@@ -1103,7 +1103,7 @@ func (r *codexShared) retireConnections(t harness.TerminalID) {
 	}
 }
 
-func (r *codexShared) terminalExited(t harness.TerminalID) {
+func (r *codexShared) terminalExited(t harness.TerminalID, e harness.Exited) {
 	if !r.runsLink(t) {
 		r.terminalDropped(t)
 		return
@@ -1129,7 +1129,7 @@ func (r *codexShared) terminalExited(t harness.TerminalID) {
 		r.forget(exited)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	err := r.terminals.Remove(ctx, t)
+	err := r.terminals.RemoveExited(ctx, t, e)
 	cancel()
 	if err != nil {
 		r.host.Logf("pty backend remove on exit failed for %s: %v", t, err)

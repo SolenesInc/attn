@@ -376,6 +376,10 @@ func (h hostTerminals) Remove(ctx context.Context, t harness.TerminalID) error {
 	return nil
 }
 
+func (h hostTerminals) RemoveExited(ctx context.Context, t harness.TerminalID, exited harness.Exited) error {
+	return h.d.removeExitedRuntime(ctx, t, exited.Lifecycle)
+}
+
 func (h adapterHost) RunInShellTile(ctx context.Context, profile, desktop, label, command string) (bool, error) {
 	shell := pty.GetUserLoginShell()
 	if !pty.ShellIntegrationExpected(shell, pty.MergeEnvironment(os.Environ(), h.d.latestLoginEnv())) {

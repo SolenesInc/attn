@@ -977,11 +977,25 @@ func (b *WorkerBackend) Kill(ctx context.Context, id harness.TerminalID, sig sys
 const removedRuntimeExitCode = 128 + int(syscall.SIGTERM)
 
 func (b *WorkerBackend) Remove(ctx context.Context, id harness.TerminalID) error {
-	sessionID := string(id)
-	session, err := b.getSession(sessionID)
+	session, err := b.getSession(string(id))
 	if err != nil {
 		return err
 	}
+	return b.removeSession(ctx, session)
+}
+
+func (b *WorkerBackend) RemoveRuntime(ctx context.Context, id harness.TerminalID, lifecycleID string) error {
+	b.mu.RLock()
+	session := b.sessions[string(id)]
+	b.mu.RUnlock()
+	if session == nil || session.LifecycleID != lifecycleID {
+		return fmt.Errorf("%w: %s", pty.ErrSessionNotFound, id)
+	}
+	return b.removeSession(ctx, session)
+}
+
+func (b *WorkerBackend) removeSession(ctx context.Context, session *workerSession) error {
+	sessionID := session.SessionID
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, killRPCTimeout)

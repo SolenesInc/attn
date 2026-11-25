@@ -132,6 +132,10 @@ func (b *fakeSpawnBackend) Remove(_ context.Context, id harness.TerminalID) erro
 	return nil
 }
 
+func (b *fakeSpawnBackend) RemoveRuntime(ctx context.Context, id harness.TerminalID, _ string) error {
+	return b.Remove(ctx, id)
+}
+
 func (b *fakeSpawnBackend) TerminalIDs(context.Context) []harness.TerminalID {
 	b.mu.Lock()
 	defer b.mu.Unlock()

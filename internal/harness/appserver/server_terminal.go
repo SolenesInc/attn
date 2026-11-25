@@ -10,13 +10,13 @@ func (c *Client) terminal(t harness.TerminalID, e harness.TerminalEvent) {
 		}
 	case harness.Exited:
 		if c.host.Terminals().Owned(t) {
-			if err := c.host.Terminals().Remove(c.host.Life().Context(), t); err != nil {
+			if err := c.host.Terminals().RemoveExited(c.host.Life().Context(), t, e); err != nil {
 				c.host.Logf("remove app-server terminal %s: %v", t, err)
 			}
 			return
 		}
 		for _, l := range c.Links() {
-			l.terminalExited(t)
+			l.terminalExited(t, e)
 		}
 	case harness.Dropped:
 		for _, l := range c.Links() {

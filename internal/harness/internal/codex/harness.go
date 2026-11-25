@@ -95,7 +95,7 @@ func Facts() harness.Facts {
 func (h codexHarness) Terminal(t harness.TerminalID, e harness.TerminalEvent) {
 	switch e := e.(type) {
 	case harness.Exited:
-		h.shared.terminalExited(t)
+		h.shared.terminalExited(t, e)
 	case harness.Dropped:
 		h.shared.terminalDropped(t)
 	case harness.Handed:

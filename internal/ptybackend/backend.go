@@ -213,6 +213,7 @@ type Backend interface {
 	SetTheme(ctx context.Context, id harness.TerminalID, theme pty.TerminalTheme) error
 	Kill(ctx context.Context, id harness.TerminalID, sig syscall.Signal) error
 	Remove(ctx context.Context, id harness.TerminalID) error
+	RemoveRuntime(ctx context.Context, id harness.TerminalID, lifecycleID string) error
 	TerminalIDs(ctx context.Context) []harness.TerminalID
 	Recover(ctx context.Context) (RecoveryReport, error)
 	Shutdown(ctx context.Context) error

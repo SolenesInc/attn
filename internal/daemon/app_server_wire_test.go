@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyworker"
 	"github.com/victorarias/attn/internal/testworld"
@@ -585,6 +586,35 @@ func TestAnAppServerFeedRecordsEachEntryOnceAcrossDaemonAndServerRestarts(t *tes
 		awaitServerFeed(app, session, conversation, server, 300)
 		if got := recentCount(app, plan); got != 3 {
 			t.Fatalf("plan.md after a server restart and a third edit counts %d, want 3", got)
+		}
+	})
+}
+
+func TestAReplacementAppServerOutlivesTheLateExitOfTheServerItReplaced(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app := w.App()
+		session, view, server := appServerSession(t, w, app, h)
+		conversation := view.ConversationID
+		promptUntilWorking(app, session, view, server, "write the plan")
+		awaitServerFeed(app, session, conversation, server, 100)
+
+		launched := w.AppServers(h)
+		replacing := w.PauseAt(pausepoint.AdapterTerminalStarting)
+		exiting := w.PauseAt(pausepoint.PtyExitAccepted)
+		exited := w.PauseAt(pausepoint.PtyExitHandled)
+		server.Crash()
+		replacing.Await()
+		exiting.Await()
+		replacing.Release()
+		replacement := w.AppServerAfter(h, launched)
+		exiting.Release()
+		exited.Await()
+		exited.Release()
+
+		awaitServerFeed(app, session, conversation, replacement, 200)
+		if n := w.AppServers(h); n != launched+1 {
+			t.Errorf("%d servers started after the crash, want only the replacement", n-launched)
 		}
 	})
 }

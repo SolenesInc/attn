@@ -167,6 +167,10 @@ func (b *InProcessPTY) Remove(_ context.Context, id harness.TerminalID) error {
 	return nil
 }
 
+func (b *InProcessPTY) RemoveRuntime(_ context.Context, id harness.TerminalID, lifecycleID string) error {
+	return b.manager.RemoveRuntime(string(id), lifecycleID)
+}
+
 func (b *InProcessPTY) RuntimeLifecycle(id harness.TerminalID) (string, bool) {
 	return b.manager.LifecycleID(string(id))
 }

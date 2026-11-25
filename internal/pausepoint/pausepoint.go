@@ -98,6 +98,8 @@ const (
 	ConversationReportReady        = "conversation-report-ready"
 	ConversationApplyAwaited       = "conversation-apply-awaited"
 	OutpostConversationApplied     = "outpost-conversation-applied"
+	PtyExitAccepted                = "pty-exit-accepted"
+	AdapterTerminalStarting        = "adapter-terminal-starting"
 	PtyExitOwnerResolved           = "pty-exit-owner-resolved"
 	PtyExitRuntimeRemoved          = "pty-exit-runtime-removed"
 	PtyExitHandled                 = "pty-exit-handled"

@@ -517,6 +517,19 @@ func (m *Manager) Remove(sessionID string) {
 	}
 }
 
+func (m *Manager) RemoveRuntime(sessionID, lifecycleID string) error {
+	m.mu.Lock()
+	session, ok := m.sessions[sessionID]
+	if !ok || session.lifecycleID != lifecycleID {
+		m.mu.Unlock()
+		return fmt.Errorf("%w: %s", ErrSessionNotFound, sessionID)
+	}
+	delete(m.sessions, sessionID)
+	m.mu.Unlock()
+	session.closePTY()
+	return nil
+}
+
 func (m *Manager) Shutdown() {
 	m.mu.RLock()
 	sessions := make([]*Session, 0, len(m.sessions))

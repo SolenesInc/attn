@@ -121,6 +121,10 @@ func (b *migrationTestBackend) Kill(context.Context, harness.TerminalID, syscall
 	return nil
 }
 
+func (b *migrationTestBackend) RemoveRuntime(ctx context.Context, id harness.TerminalID, _ string) error {
+	return b.Remove(ctx, id)
+}
+
 func (b *migrationTestBackend) Remove(_ context.Context, id harness.TerminalID) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()

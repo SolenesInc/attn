@@ -587,13 +587,13 @@ func (l *Link) releaseUnlessUsed() {
 	}
 }
 
-func (l *Link) terminalExited(t harness.TerminalID) {
+func (l *Link) terminalExited(t harness.TerminalID, e harness.Exited) {
 	if t != l.b.terminal {
 		l.terminalDropped(t)
 		return
 	}
 	l.logf("the %s server exited", l.b.name)
-	if err := l.c.host.Terminals().Remove(l.c.host.Life().Context(), t); err != nil {
+	if err := l.c.host.Terminals().RemoveExited(l.c.host.Life().Context(), t, e); err != nil {
 		l.c.host.Logf("pty backend remove on exit failed for %s: %v", t, err)
 	}
 }

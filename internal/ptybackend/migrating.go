@@ -182,12 +182,32 @@ func (b *MigratingBackend) Remove(ctx context.Context, id harness.TerminalID) er
 		return err
 	}
 	err = backend.Remove(ctx, id)
-	if err == nil || errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
-		b.mu.Lock()
-		delete(b.owners, id)
-		b.mu.Unlock()
-	}
+	b.forgetRemoved(backend, id, err)
 	return err
+}
+
+func (b *MigratingBackend) RemoveRuntime(ctx context.Context, id harness.TerminalID, lifecycleID string) error {
+	backend, err := b.backendFor(id)
+	if err != nil {
+		return err
+	}
+	err = backend.RemoveRuntime(ctx, id, lifecycleID)
+	b.forgetRemoved(backend, id, err)
+	return err
+}
+
+func (b *MigratingBackend) forgetRemoved(backend Backend, id harness.TerminalID, removeErr error) {
+	if removeErr != nil && !errors.Is(removeErr, pty.ErrSessionNotFound) && !errors.Is(removeErr, os.ErrNotExist) {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if provider, ok := backend.(RuntimeLifecycleProvider); ok {
+		if _, replaced := provider.RuntimeLifecycle(id); replaced {
+			return
+		}
+	}
+	delete(b.owners, id)
 }
 
 func (b *MigratingBackend) TerminalIDs(_ context.Context) []harness.TerminalID {

@@ -227,7 +227,19 @@ func (b *Terminals) Kill(_ context.Context, id harness.TerminalID, sig syscall.S
 
 func (b *Terminals) Remove(_ context.Context, id harness.TerminalID) error {
 	b.mu.Lock()
+	return b.removeLocked(id, b.terminals[id])
+}
+
+func (b *Terminals) RemoveRuntime(_ context.Context, id harness.TerminalID, lifecycleID string) error {
+	b.mu.Lock()
 	term := b.terminals[id]
+	if term != nil && term.Options.LifecycleID != lifecycleID {
+		term = nil
+	}
+	return b.removeLocked(id, term)
+}
+
+func (b *Terminals) removeLocked(id harness.TerminalID, term *Terminal) error {
 	if term == nil {
 		b.mu.Unlock()
 		return nil

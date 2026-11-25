@@ -1754,6 +1754,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.logf("ignoring exit of a replaced runtime in terminal %s", info.ID)
 		return false
 	}
+	pausepoint.At(pausepoint.PtyExitAccepted)
 	adapterOwned := d.adapterTerminal(info.ID)
 	d.terminalEvent(info.ID, harness.Exited{Code: info.ExitCode, Signal: info.Signal, Lifecycle: info.LifecycleID})
 	if adapterOwned {
@@ -1770,7 +1771,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	if !shown {
 		d.clearTerminalExitIntent(info.ID, terminalExitStop)
 		d.logf("pty exit of terminal %s, which no session shows; removing its runtime", info.ID)
-		if err := d.removePTYSession(info.ID); err != nil {
+		if err := d.removeExitedPTYSession(info); err != nil {
 			d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
 		}
 		return false
@@ -1825,7 +1826,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	}
 	d.endRun(sessionID, reason, &info.ExitCode, info.Signal)
 	d.noteLaunchExited(sessionID, exit)
-	if err := d.removePTYSession(info.ID); err != nil {
+	if err := d.removeExitedPTYSession(info); err != nil {
 		d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
 	}
 	unlockEnds()
@@ -1859,7 +1860,7 @@ func (d *Daemon) bringBackLostRuntime(sessionID protocol.SessionID, info ptyback
 	monitor.ResetInput()
 	monitor.StopTranscriptWatchers()
 	d.endRun(sessionID, harness.RunExited, &info.ExitCode, info.Signal)
-	if err := d.removePTYSession(info.ID); err != nil {
+	if err := d.removeExitedPTYSession(info); err != nil {
 		d.logf("pty backend remove on lost runtime failed for %s: %v", info.ID, err)
 	}
 	if !d.serverOwns(sessionID) {
@@ -1880,7 +1881,7 @@ func (d *Daemon) bringBackLostRuntime(sessionID protocol.SessionID, info ptyback
 func (d *Daemon) endClosedSessionsRun(sessionID protocol.SessionID, owner endingTerminal, info ptybackend.ExitInfo) {
 	exit := d.exitOf(sessionID, info)
 	exit.Stopped = d.consumeTerminalExitIntent(info.ID, terminalExitStop)
-	if err := d.removePTYSession(info.ID); err != nil {
+	if err := d.removeExitedPTYSession(info); err != nil {
 		d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
 	}
 	reopened := d.store.Get(sessionID) != nil
@@ -1955,13 +1956,21 @@ func (d *Daemon) projectSessionPTYExited(ev bus.Event) {
 }
 
 func (d *Daemon) removePTYSession(terminal harness.TerminalID) error {
+	d.forgetAdapterTerminal(terminal)
+	return d.removeRetrying(terminal, func(ctx context.Context) error { return d.removeTerminalRuntime(ctx, terminal) })
+}
+
+func (d *Daemon) removeExitedPTYSession(info ptybackend.ExitInfo) error {
+	return d.removeRetrying(info.ID, func(ctx context.Context) error { return d.removeExitedRuntime(ctx, info.ID, info.LifecycleID) })
+}
+
+func (d *Daemon) removeRetrying(terminal harness.TerminalID, remove func(context.Context) error) error {
 	if d.ptyBackend == nil {
 		return nil
 	}
-	d.forgetAdapterTerminal(terminal)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	err := d.removeTerminalRuntime(ctx, terminal)
+	err := remove(ctx)
 	if err == nil || errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -1974,7 +1983,7 @@ func (d *Daemon) removePTYSession(terminal harness.TerminalID) error {
 				return
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			retryErr := d.removeTerminalRuntime(ctx, terminal)
+			retryErr := remove(ctx)
 			cancel()
 			if retryErr == nil || errors.Is(retryErr, pty.ErrSessionNotFound) || errors.Is(retryErr, os.ErrNotExist) {
 				return

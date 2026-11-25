@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
@@ -28,6 +29,7 @@ func (d *Daemon) adapterTerminalOwner(t harness.TerminalID) (string, bool) {
 }
 
 func (d *Daemon) startAdapterTerminal(ctx context.Context, owner string, opts ptybackend.SpawnOptions) error {
+	pausepoint.At(pausepoint.AdapterTerminalStarting)
 	if err := d.store.SaveAdapterTerminal(string(opts.ID), owner); err != nil {
 		return err
 	}

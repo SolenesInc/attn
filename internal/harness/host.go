@@ -160,6 +160,8 @@ type HostTerminals interface {
 	Kill(ctx context.Context, t TerminalID, sig syscall.Signal) error
 	// Remove ends the terminal and forgets it before returning.
 	Remove(ctx context.Context, t TerminalID) error
+	// RemoveExited clears the runtime an Exited event reported and leaves one that has taken its place.
+	RemoveExited(ctx context.Context, t TerminalID, exited Exited) error
 }
 
 type TerminalInfo struct {

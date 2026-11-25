@@ -404,6 +404,17 @@ func (d *Daemon) removeTerminal(ctx context.Context, msg protocol.TerminalRemove
 	return struct{}{}, err
 }
 
+func (d *Daemon) removeExitedRuntime(ctx context.Context, terminal harness.TerminalID, lifecycleID string) error {
+	err := d.ptyBackend.RemoveRuntime(ctx, terminal, lifecycleID)
+	if _, running := d.runtimeLifecycle(terminal); !running {
+		d.monitors().registry.DropPendingConversations(terminal)
+	}
+	if errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
+		err = nil
+	}
+	return err
+}
+
 func (d *Daemon) themeTerminals(ctx context.Context, msg protocol.TerminalThemeMessage) (struct{}, error) {
 	theme := pty.TerminalTheme{Foreground: msg.Foreground, Background: msg.Background, Cursor: msg.Cursor}
 	copy(theme.ANSIPalette[:], msg.AnsiPalette)
