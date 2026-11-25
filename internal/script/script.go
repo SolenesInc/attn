@@ -125,7 +125,8 @@ func converse(job Job, host func(name string, args json.RawMessage) Answer, stdi
 		return Output{}, errRunnerGone
 	}
 	lines := bufio.NewScanner(stdout)
-	lines.Buffer(nil, job.Limits.Memory)
+	longest := 2 * job.Limits.Memory // a done message carries the logs and the returned text, and the memory limit bounds each
+	lines.Buffer(nil, longest)
 	for lines.Scan() {
 		var m message
 		if err := json.Unmarshal(lines.Bytes(), &m); err != nil {
@@ -144,7 +145,7 @@ func converse(job Job, host func(name string, args json.RawMessage) Answer, stdi
 		}
 	}
 	if errors.Is(lines.Err(), bufio.ErrTooLong) {
-		return Output{}, fmt.Errorf("the script sent more than its memory limit of %s in one message", size(job.Limits.Memory))
+		return Output{}, fmt.Errorf("the script sent more than %s in one message", size(longest))
 	}
 	return Output{}, errRunnerGone
 }

@@ -107,11 +107,12 @@ func (e *engine) call(c *quickjs.Context, _ *quickjs.Value, args []*quickjs.Valu
 }
 
 func (e *engine) log(c *quickjs.Context, _ *quickjs.Value, args []*quickjs.Value) *quickjs.Value {
+	encoded := args[0].ToString()
 	var line string
-	if err := json.Unmarshal([]byte(args[0].ToString()), &line); err != nil || c.HasException() {
+	if err := json.Unmarshal([]byte(encoded), &line); err != nil || c.HasException() {
 		return c.ThrowInternalError(outOfMemory)
 	}
-	if e.logged += len(line); e.logged > e.job.Limits.Memory {
+	if e.logged += len(encoded) + len(","); e.logged > e.job.Limits.Memory {
 		e.stopped = e.memoryLimit()
 		return c.ThrowInternalError(outOfMemory)
 	}

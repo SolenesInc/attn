@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -319,8 +320,18 @@ func TestACrashInTheInterpreterFailsItsRunAndNamesTheSignal(t *testing.T) {
 	job := script.Job{Source: "const f = () => f() + 1;\nf()", Functions: []string{"seed_show"}, Limits: script.DefaultLimits}
 	job.Limits.Stack = 1 << 40
 	out := script.Run(context.Background(), job, nil)
-	if !strings.HasPrefix(out.Failed, "the script's runner died before the script ended: ") || !strings.Contains(out.Failed, "SIGSEGV") {
+	if !regexp.MustCompile(`^the script's runner died before the script ended: exit status 2: SIG[A-Z]+: `).MatchString(out.Failed) {
 		t.Errorf("the run of a crashed child ended with %+v", out)
+	}
+}
+
+func TestAScriptThatFloodsItsLogStopsAtItsMemoryAndKeepsWhatItLogged(t *testing.T) {
+	t.Parallel()
+	job := script.Job{Source: "for (;;) console.log('x'.repeat(1000))", Functions: []string{"seed_show"}, Limits: script.DefaultLimits}
+	job.Limits.Memory = 4 << 20
+	out := script.Run(context.Background(), job, nil)
+	if want := "the script stopped: it reached its memory limit of 4 MB"; out.Failed != want || len(out.Logs) == 0 {
+		t.Errorf("the run ended with %q and %d logs, want %q and the logs", out.Failed, len(out.Logs), want)
 	}
 }
 
