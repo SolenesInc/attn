@@ -1,0 +1,3 @@
+A live session can be addressed by its name. `attn agent msg api-review "…"`, `peek`, `close`, `reload`, `session show`/`rename`/`snooze`, `state explain`, terminal and callout targets and `pr --session`, on the CLI and the agent tools, take the whole name in any case. Agents told a name used to be refused and went to `agent list`.
+
+Ids still go first, so nothing that addressed a session before changes. A name shared by several live sessions is refused with each candidate's id. Names never say who the caller is, and who may close whom is unchanged. `session reopen`, `--before`, `conversation` and `attn send` take ids only.
