@@ -206,11 +206,10 @@ func TestAScriptRunsCommandsAndEndsAsTheAgentIsTold(t *testing.T) {
 		},
 		{
 			name: "a script that looks for another world",
-			source: `const found = ['require', 'fetch', 'std', 'os', 'setTimeout', 'setInterval', 'process', 'WebAssembly', 'Worker'].filter((name) => name in globalThis);
+			source: `const found = ['require', 'fetch', 'SharedArrayBuffer', 'std', 'os', 'setTimeout', 'setInterval', 'process', 'WebAssembly', 'Worker'].filter((name) => name in globalThis);
 for (const name of ['std', 'os', 'qjs:std', 'qjs:os', 'fs', './x.js']) {
   try { await import(name); found.push(name) } catch {}
 }
-try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0); found.push('Atomics.wait') } catch {}
 return [found, typeof Date.now(), typeof Math.random()]`,
 			want: script.Output{Returned: `[[],"number","number"]`, Has: true},
 		},

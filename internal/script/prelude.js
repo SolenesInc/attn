@@ -1,6 +1,7 @@
 (call, log, names) => {
   const { parse, stringify } = JSON;
   const compile = eval;
+  delete globalThis.SharedArrayBuffer;
 
   const text = (value) =>
     typeof value === "string" ? value

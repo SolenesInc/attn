@@ -21,6 +21,8 @@
   waiting for an answer costs a script nothing. QuickJS asks the interrupt
   handler once in 10,000 branches and calls and never inside a built-in, so a
   command and `console.log` ask it too.
+- `SharedArrayBuffer` memory is outside the heap's count, so the prelude
+  removes it: 40 of 16 MB took the child to 667 MB under the 64 MB limit.
 - A script can take the prelude's host functions out of a stack trace
   (`Error.prepareStackTrace`, `CallSite.getFunction`) and call them with
   anything. The daemon's side of the pipe checks each call.
