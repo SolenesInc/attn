@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Newly visible IDs can have no keyboard label during a hold",
+  "at": "2026-11-25T04:41:05.581Z",
+  "detail": "Newly visible IDs can have no keyboard label during a hold.\n\nStart with 16 visible known IDs, hold the hint chord, and let output reveal a 17th. At 816f0be9a the label count stays at 16 until release and rehold. The reviewer reproduced this with both wire key modes. An independent reviewer reproduced the missing allocator key. The first count fixes key width, while scrolling or output adds targets. The renderer omits targets beyond the initial key space and keyboard picking can see only surviving labels.\n\nGive each current visible target a selectable prefix-free key as the viewport changes. Clear partial input if an assignment changes. Evidence and rerun script are on s-8crgwb.\n"
+}
