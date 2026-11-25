@@ -1,0 +1,8 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "fix: two Linux tests expected the old tool mention in a refusal",
+  "at": "2026-11-25T20:54:25.264Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45693336909",
+  "repairs": "8bf2930b0"
+}
