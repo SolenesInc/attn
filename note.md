@@ -1,0 +1,1 @@
+The Daemon CI job now checks out full history, and `scripts/source-at-commit.sh` no longer fetches. Two test processes fetching old commits at depth 1 raced on the one `.git/shallow` and failed Daemon (3) with "shallow file has changed since we read it". The cost is about 4 s to 7 s more checkout per Daemon job.
