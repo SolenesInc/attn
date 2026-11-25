@@ -1,250 +1,109 @@
 # Sigma harness behavior
 
-How Sigma behaves where attn meets it. The rules for adding a claim are in
-[Harness behavior](../harnesses.md).
+Sigma (named Nisse until 2026-11-14; repo `SolenesInc/sigma`). Rules for
+adding claims: [Harness behavior](../harnesses.md).
 
-Sigma was named Nisse until 2026-11-14. Entries were read in the source at
-SolenesInc/sigma 6fb87ec, except the entries on authors, instructions and
-skills (72006f8); on steering, compaction, watching, entries, tools, forks and
-tasks (a903aa0, where a probe on 2026-11-20 checked forks, tasks and an idle
-watch); and on MCP servers (69daaf7). An entry that names its own commit or
-measurement uses that one.
+## Server, protocol and authors
 
-- One server per Sigma home holds every conversation. Clients reach the server
-  over `SIGMA_HOME/sigma.sock`, and the home defaults to `~/.sigma`.
-  `sigma serve` refuses a home another server already serves
-  (`packages/sigma/src/main.ts`).
-- `initialize` answers `{version, protocol, readOnly}` with protocol 2 to a
-  client that asks for 1 or 2, and no server name (43ebbba,
-  `packages/protocol/src/index.ts`). A server started from an older build
-  answers protocol 1.
-- The TUI and `sigma exec` start a detached server when none answers. A server
-  exits 30 seconds after its last client leaves and its last run settles.
-- `sigma --conversation <id>` opens that conversation, and starts a
-  conversation with that id when none exists. A prompt after the flags is sent
-  once the conversation opens.
-- Every call that changes a conversation, `conversation/submit` and
-  `conversation/interrupt` among them, requires `author: {id, name}`. Sigma
-  stores both on the change's entry and shows the name. A
-  string author, or none, fails to decode; the protocol version stayed 1 when
-  this changed (dff03a5). The TUI and `sigma exec` act as `SIGMA_AUTHOR_ID` and
-  `SIGMA_AUTHOR_NAME`, each defaulting to the system's user name
-  (`packages/sigma/src/author.ts`).
-- The server never compares author ids, and the TUI draws history by name. The
-  TUI compares ids only on live queue state: it lets you edit the queued
-  prompts whose author id is its own, and an interrupt puts back in its
-  composer the withdrawn prompts that are its own (43ebbba,
-  `packages/sigma/src/tui/main.tsx`). attn launches each tile's TUI as
-  `attn-terminal:<terminal>` so a fork names its tile, and sends input in the
-  user's voice with the id of the session's terminal so the tile counts it as
-  its own. A prompt queued from a tile that is then reloaded or resumed in a
-  new terminal can't be edited from the new tile while that run works.
-- `conversation/submit` is idempotent by its `requestId`: a retried submit is
-  one input. With `steer: true` the input reaches the run in flight at its next
-  step instead of waiting for the run to end; with no run working it starts one.
-  Input waits in the conversation's `pi.inbox` until the run takes it, and only
-  `approval/resolve` answers an approval; what a steer does while a call waits
-  on an approval is not probed (`packages/protocol/src/index.ts`,
-  `packages/sigma/src/server.ts`).
-- `conversation/interrupt` stops only the named conversation's run (when busy)
-  or its own hosted background jobs (when idle), and never crosses worker
-  boundaries (`packages/sigma/src/agents.ts`, read at e69ff71). It withdraws
-  the people's inputs waiting in the conversation's inbox in the same commit
-  that writes its `sigma.interrupted` entry, and answers with them; inputs that
-  arrive while the run stops are not withdrawn (`packages/sigma/src/server.ts`,
-  read at 9fbd582). A `conversation/submit` without `steer` right after it
-  starts the next run with that input. Probed through a non-production attn
-  instance on 9fbd582 with `claude-haiku-5-5` (seed `s-77s6d3`, 2026-11-23):
-  the run's foreground tool call ended "interrupted; it may or may not have
-  taken effect", and the submitted message started the next run 7 ms later. A
-  steer sent during a tool call reached the run right after that call's result.
-  For another agent's interrupt, attn submits the withdrawn inputs again after
-  its message, each with its author and without `steer`. The answer carries
-  only their text, so their images and the skills they named are lost.
-- `ephemeral/run {prompt, system?, schema?, provider?, model?, effort?, maxTurns?}`
-  answers one prompt with no tools and commits nothing: no conversation in
-  `conversation/list`, no entry, no usage (measured on 43ebbba: after a title,
-  a stop verdict and a dictation on `claude/haiku`, `conversation/list` held
-  only the session's conversation and `usage/get` only its spend). It answers
-  `{text, output?, provider, model, turns, usage}`, where `usage` holds
-  `input`, `output` and `cost.total`, and `output` is the value that matches
-  `schema`. A failure is a `Cause` whose `message` is the reason, tagged
-  `EphemeralFailed` (the provider failed, or the answer is not JSON or does not
-  match the schema), `UnknownProvider`, `UnknownEffort` or `ReadOnlyServer`.
-  These shapes were probed on 43ebbba with the `script` provider. Without
-  `provider`, the home's default provider answers
-  (`packages/sigma/src/ephemeral.ts`), and the answer's `provider` and `model`
-  name the model that answered. Runs at once each answer their own prompt
-  (`ephemeral-concurrent` in `packages/sigma/test`).
-- `conversation/compact {conversation, author, instructions?}` answers once the
-  compaction has ended, with `outcome` `compacted`, `nothing_to_compact`,
-  `failed` (with a `message`) or `stopped`. Behind a run in flight it waits for
-  the run's next step or its end.
-- Every `bash` call, and Claude Code's and `agy`'s processes, run with
-  `SIGMA_ROOT_CONVERSATION` set to the root of the conversation's tree: the id
-  of the conversation people started for a root conversation and its hosted
-  subagents, or the worker's own id for a worker and its hosted subagents
-  (`packages/sigma/src/conversations.ts`, read at e69ff71). Every MCP request
-  carries the registered headers and `Sigma-Root-Conversation` with the same
-  tree root (and MCP clients are keyed by tree root): the id the client chose,
-  or Sigma's internal number for a conversation started without one, such as by
-  `sigma exec`, `/fork` or `start_worker` (measured on 69daaf7: a bare
-  `sigma exec` sent `149`, a fork `173`; worker boundary verified by wire and
-  Claude tests on e69ff71).
-- `conversation/start` takes `instructions`, kept with the conversation and not
-  given to its subagents: OpenAI is told them after the `AGENTS.md` files, and
-  Claude Code appends them to its own system prompt. They are fixed once the
-  conversation starts, and `conversation/start` with an existing id changes
-  nothing (413f38d). A worker on its parent's provider keeps the instructions
-  its parent inherited, and a worker on another provider gets none
-  (`packages/sigma/src/agents.ts`, a9b3461).
-- A server's `instructions` reach the model by provider. On the Claude path
-  Sigma hands Claude Code each server as an in-process MCP server with the
-  instructions the server gave in `initialize` (`packages/claude/src/process.ts`),
-  and Claude Code puts them under `# MCP Server Instructions` in the messages.
-  On Sigma's own loop, the one OpenAI models take, they are only in
-  `describeNamespace()` (`packages/sigma/src/tools/mcp.ts`). attn appends its
-  intent map to the conversation's `instructions` (D22 of `s-ct56cj`), so on
-  the Claude path the model reads it twice: measured 2026-11-21 on 69daaf7
-  with claude-haiku-5-5, 1,337 bytes in the system prompt and again in the
-  messages.
-- Skills: an OpenAI model finds them in `.agents/skills` and `.claude/skills`
-  of the project folders and in `skills` of the Sigma home
-  (`packages/sigma/src/workspace.ts`). Claude Code finds its own in its
-  `CLAUDE_CONFIG_DIR`, by default `~/.claude`. `config.toml` in the Sigma home
-  may name more Claude providers, each with a `config_dir` (which may start with
-  `~/`) or an `env.CLAUDE_CONFIG_DIR` that becomes that Claude Code's config
-  folder (`packages/sigma/src/config.ts`, `providers.ts`).
-- `models/list` answers each provider's models, with the efforts each takes.
-  It lists a provider you are not signed in to as well.
-- `providers/list` answers each provider's `health.status`, `ready`,
-  `signed_out` or `unavailable`, and from 30eaeca `ephemeral`, whether its
-  driver answers `ephemeral/run`: every driver but `agy` does
-  (`ephemeral-listed` in `packages/sigma/test/providers.test.ts`). Measured
-  2026-11-22 on 30eaeca with a scratch home: the bundled `openai` with no
-  sign-in was `signed_out`, an `openai-work` signed in to a fake ChatGPT was
-  `ready`, and `claude` and `agy` with missing executables were `unavailable`.
-- `providers/list` and `models/list` take `refresh`. A Claude provider's
-  health and models come from one Claude Code start, kept until a call with
-  `refresh: true` or a sign-in through Sigma, so a sign-in through Claude Code
-  stays `signed_out` until then. ChatGPT reads its stored sign-in on every
-  call, and `models/list` with `refresh` fetches its catalog again
-  (`packages/claude/src/account.ts`, `packages/models/src/chatgpt/index.ts`,
-  read at 9fbd582). Measured 2026-11-22 on 9fbd582 with a scratch home, a
-  signed-out bundled Claude Code and a signed-out `openai`: the first
-  `providers/list` took 1.1 s, a repeat 1 ms, and each `refresh: true` call to
-  either method 0.8 to 1.0 s.
-- `status/watch` opens with the busy conversation trees and then sends one
-  status per change of a tree (working, waiting on an approval, idle), with
-  how its root's run ended. Each conversation people started and each worker
-  starts a tree of its own; hosted subagents roll up into their nearest worker
-  or person-started root (`packages/sigma/src/status.ts`, read at e69ff71).
-- A client says which conversation it shows with `client/shows
-  {conversation, author}`, a stream that lasts while the client keeps it
-  open. `status/watch` sends `{_tag: "shown", author, conversation}` when one
-  starts, and its opening snapshot lists every current one in `shown`, oldest
-  first. Nothing is sent when one ends, and a server restart forgets them.
-  The TUI holds one for the conversation on its screen, opened once the screen
-  is up and again after each reconnect, so a fork it never opened is never
-  shown (`packages/sigma/src/status.ts`, `packages/sigma/src/tui/main.tsx`,
-  read at 40fb517).
-  attn moves the tile whose author is `attn-terminal:<terminal>` to the
-  newest conversation shown under that author.
-- `conversation/list` carries `ended` on each conversation that has run: how
-  its last run ended, the same as `status/watch` says.
-- Sigma's tools refuse no path outside the conversation's folder. A path
-  resolves from `~`, a `file://` URL or an absolute path with no containment
-  check (`packages/env/src/local.ts`, read at eb70be3). Approvals are per tool,
-  not per path (`asks` in `packages/harness/src/types.ts`). Claude Code's own
-  permission asks go to Sigma's approvals through `canUseTool`
-  (`packages/claude/src/process.ts`): a read outside the folder waits for an
-  approval in `ask` mode and runs in `auto` mode, and is never refused.
-- Prompt cache lifetime, measured 2026-11-20 on Sigma eb70be3 with real
-  accounts: each probe sent a first prompt carrying a random nonce, waited, then
-  sent a second prompt in the same conversation. Under the `claude` provider,
-  Claude Code writes only one-hour cache (`ephemeral_1h_input_tokens`, never
-  `5m`, in its own transcripts); the second prompt read the nonce turn back
-  after 55 minutes and read only the shared prefix after 65. Under the `openai`
-  provider, the second prompt read the nonce turn back after every gap tried,
-  up to 75 minutes. So a Sigma crew member's cache lasts at least an hour on
-  either provider, and the crew's default of 3600 s fits it.
-- `conversation/watch` streams a view of the newest entries and the
-  conversation's docs, then each change as ops on that view. Past `max`
-  entries, twice `min` and 100 by default, the window drops its oldest down to
-  `min` and sets `before`. A slow reader gets the ops folded, or the whole
-  view again. With `window.from`, the view starts at that entry when at most
-  `max` entries follow it. A watch sends nothing while the conversation is
-  idle (probe).
-- Entry ids ascend across the server, not within one conversation.
-  `conversation/entries` pages a conversation's entries in either order.
-- A prompt is a `sigma.user` entry, whose data names its author. A message
-  between agents is a `sigma.mail` entry (`data: {kind, task, sender}`, where
-  `task` is the recipient's task path, `sender` is the sender's, and `kind` is
-  `new_task` for a task assigned to a worker, `message` for peer or wake mail,
-  or `final_answer` for a worker's reply to its parent, read in
-  `packages/sigma/src/agents.ts` at e69ff71). A reply or a tool call is a
-  `pi.assistant` entry, and a tool's output a `pi.tool-result` entry.
-  `pi.usage` holds each model's token and cost totals, and `pi.live` the
-  compactions running.
-- A child conversation has its own entries and its own `pi.usage`, which
-  counts only that conversation's spend. `conversation/list` gives each child's
-  `lineage` (`parent`, `root`, `title`, and `task` on a worker)
-  (`packages/kernel/docs/spec.md`, `packages/protocol/src/index.ts`). Read at
-  e69ff71, a child is one of two kinds:
-  - A worker comes from the `start_worker` tool. Its lineage's `task` is its
-    worker path, such as `/root/explore`, and its `lineage.root` is its own id.
-    It starts a tree of its own, takes direct input, and outlives its parent's
-    turns. With `fork_turns: "all"` it is a fork of its parent
-    (`packages/sigma/src/agents.ts`, `packages/sigma/src/conversations.ts`,
-    `packages/sigma/src/server.ts`). It is a Sigma worker in the glossary's
-    sense.
-  - A subagent is one of Claude Code's own subagents, which Sigma hosts. Its
-    lineage has no `task`, and its `lineage.root` is its nearest worker or
-    person-started root. It stays in that root's tree, takes input only through
-    its parent (refusing its own with `TakesNoInput`), and stops when its
-    parent's run does (`packages/hosted/src/transcript.ts`,
-    `packages/protocol/src/index.ts`). Its parent gets a `sigma.subagent` entry
-    that points at it.
-- A conversation's `title` in `conversation/list` is a child's lineage title, or
-  else the first line of the conversation's first prompt.
-- Sigma's own tools are `read`, `write` and `edit`, which take a `path`,
-  `apply_patch`, which takes a `patch` in Codex's format, `bash`, `grep`,
-  `glob` and tool search (`packages/tools/src`). Sigma has no tool that sends
-  the user a file.
-- `/fork` in the TUI starts a new conversation that inherits the entries up to
-  a point, then opens it, which `status/watch` reports as `shown` (above).
-  The original conversation's watch gets nothing, and the fork's tree status
-  says nothing until it works or waits: the tracker reports a tree only when a
-  commit changes either (source, `packages/sigma/src/status.ts`). Two
-  `/fork` typed at once make two forks, and the TUI opens the one answered
-  last. The fork's first entry is `sigma.forked`, naming the client's
-  `SIGMA_AUTHOR_ID`. `conversation/list` gives the fork's `fork.of` (probe)
-  and `fork.at`, the last entry it inherits (source,
-  `packages/protocol/src/index.ts`). `conversation/list` takes a null payload
-  and refuses an object with `Expected null` (probe on 43ebbba, 2026-11-22).
-- `tasks/watch` shows only `claude.run` tasks, from pending to running to gone
-  at the run's end. Sigma sleeps only for a retry's backoff or a deferred poll
-  inside a run, so no task outlives a run (probe, `packages/harness/src/live.ts`).
-- MCP servers (D19 of `s-ct56cj`): a connected client registers a server with
-  `mcp/register {name, url, headers}`, a stream the server holds in memory for
-  as long as the client stays connected. `sigma --mcp-server <name>=<description>`
-  and `conversation/start`'s `mcpServers` name the servers a new conversation
-  uses (`packages/sigma/src/main.ts`). Sigma lists each server's tools when the
-  conversation starts and stores the listing in the conversation's `pi.agent`
-  document; subagents and forks inherit it and never list again. A server that
-  does not list then gives that conversation no tools for its whole life, with
-  a `sigma.mcp_unlisted` entry naming the reason (`packages/sigma/src/mcp.ts`).
-  The registered header values stay in memory: after attn's registration and
-  tool calls, no file in the Sigma home held attn's credential or `Bearer`
-  (measured on 69daaf7).
-- An HTTP 401 from an MCP server, or a session the server no longer knows,
-  reaches the conversation as pi-mcp's text, such as
-  `MCP server requires authentication`, followed since f6be0c3 by the first 500
-  characters of what the server answered, in the `sigma.mcp_unlisted` reason or
-  the call's error. For attn's refusal it reads `…: invalid token: no session
-  of sigma holds conversation <id>` (measured on f6be0c3; 69daaf7 dropped the
-  answer).
-- `SIGMA_MODEL_SCRIPT` names a JSON list of steps for the `script` provider,
-  read when the server starts; the model `script/script-code-mode` takes only
-  code mode, as ChatGPT's code-mode models do (`packages/models/src/script.ts`).
-  It drives Sigma's own loop, the path OpenAI models take, without an account.
+- **Server & socket:** one server per `SIGMA_HOME` (default `~/.sigma`) on
+  `SIGMA_HOME/sigma.sock`; `sigma serve` refuses an already-served home
+  `[6fb87ec]`. TUI and `sigma exec` auto-start a detached server that exits
+  30 s after its last client leaves and last run settles.
+- **Handshake & queries:** `initialize` returns `{version, protocol, readOnly}`
+  with protocol 2 (older builds return 1) `[43ebbba]`. `conversation/list`
+  requires a `null` payload and rejects `{}` (`Expected null`) `[43ebbba]`.
+- **Authors:** every mutating RPC (`conversation/submit`,
+  `conversation/interrupt`, `conversation/compact`, …) requires
+  `author: {id, name}` (string or omitted fails decode) `[dff03a5]`. TUI and
+  `sigma exec` read `SIGMA_AUTHOR_ID`/`SIGMA_AUTHOR_NAME`. The server ignores
+  author ids, and the TUI uses them only to decide which queued prompts are
+  editable/restored on interrupt `[43ebbba]`—so attn sets
+  `attn-terminal:<terminal>` on tiles and matches that id for user-voice
+  inputs (prompts queued before a tile reload cannot be edited from the new
+  tile).
+- **Instructions & skills:** `conversation/start` `instructions` are fixed for
+  the conversation's life (not passed to subagents; workers on the same
+  provider inherit them, cross-provider workers get none) `[413f38d, a9b3461]`.
+  OpenAI models read skills from `.agents/skills`, `.claude/skills`, and
+  `SIGMA_HOME/skills`; Claude providers read `CLAUDE_CONFIG_DIR` (or per-provider
+  `config_dir` / `env.CLAUDE_CONFIG_DIR` in `SIGMA_HOME/config.toml`)
+  `[72006f8]`.
+
+## Input, steering, interrupt and compaction
+
+- **`conversation/submit`:** idempotent by `requestId`. `steer: true` injects
+  at the next step of a running turn (or starts one if idle); approvals are
+  answered only by `approval/resolve` `[a903aa0]`.
+- **`conversation/interrupt`:** stops only the named conversation's run (when
+  busy) or its own hosted background jobs (when idle), never crossing worker
+  boundaries `[e69ff71]`. Atomically withdraws queued human inputs and returns
+  their text only (images and named skills are lost when re-submitted); inputs
+  arriving mid-stop are not withdrawn `[9fbd582]`.
+- **`conversation/compact`:** waits for the next step or end of a running turn
+  and returns `outcome: compacted | nothing_to_compact | failed | stopped`
+  `[a903aa0]`.
+
+## Status, display, entries and lineage
+
+- **`status/watch`:** streams initial busy trees + current `shown` pairs, then
+  changes per tree (`working`, approval wait, `idle` with `ended`) and
+  `{_tag: "shown", author, conversation}` when a client opens `client/shows`
+  (no end event; forgotten on server restart; TUI opens it once on screen)
+  `[e69ff71, 40fb517]`. `conversation/list` also carries `ended`.
+- **`conversation/watch` & entries:** entry ids ascend server-wide, not per
+  conversation; idle watches send nothing `[a903aa0]`. Entry types:
+  `sigma.user`, `sigma.mail` (`kind: new_task|message|final_answer`),
+  `sigma.forked`, `sigma.subagent`, `sigma.mcp_unlisted`, `pi.assistant`,
+  `pi.tool-result`, `pi.usage` (per-conversation only), `pi.live` `[e69ff71]`.
+- **Lineage (`conversation/list` `lineage.{parent,root,title,task}`):**
+  - **Worker** (`start_worker`): has `lineage.task`, `lineage.root == id`, own
+    status tree, takes direct input, outlives parent turns (`fork_turns: "all"`
+    forks parent) `[e69ff71]`.
+  - **Hosted subagent** (Claude Code subagent): no `task`, `lineage.root` is
+    nearest worker or person-started root, rolls up into root's tree, refuses
+    direct input (`TakesNoInput`), stops with parent `[e69ff71]`.
+- **Forks (`/fork`):** emits `shown`, writes `sigma.forked` (`fork.of`,
+  `fork.at` in `conversation/list`), emits no tree status until it works or
+  waits `[a903aa0]`.
+- **Tasks & tools:** `tasks/watch` shows only `claude.run` tasks (no task
+  outlives a run). Built-in tools (`read`, `write`, `edit`, `apply_patch`,
+  `bash`, `grep`, `glob`, tool search) enforce no path containment; approvals
+  are per-tool (Claude Code reads outside cwd ask in `ask` mode, run in `auto`)
+  `[eb70be3]`.
+
+## Providers, models, ephemeral calls and cache
+
+- **`providers/list` & `models/list`:** `models/list` includes signed-out
+  providers. `providers/list` reports `health.status` (`ready`, `signed_out`,
+  `unavailable`) and `ephemeral` (every driver except `agy`) `[30eaeca]`.
+  Claude provider health/models are cached from one Claude start until
+  `refresh: true` (~0.8–1.1 s) or Sigma sign-in `[9fbd582]`.
+- **`ephemeral/run`:** runs one tool-free prompt committing nothing to
+  `conversation/list` or `usage/get`; supports concurrent calls; errors tag
+  `EphemeralFailed`, `UnknownProvider`, `UnknownEffort`, `ReadOnlyServer`
+  `[43ebbba]`.
+- **Prompt cache lifetime:** ≥1 hour on both `claude` (1h cache only) and
+  `openai` (tested to 75 min), matching crew's 3600 s default `[eb70be3]`.
+- **Testing without an account:** set `SIGMA_MODEL_SCRIPT` (JSON step list) and
+  model `script/script-code-mode` to drive Sigma's own loop `[a903aa0]`.
+
+## attn tools over MCP
+
+`[69daaf7, e69ff71, f6be0c3]`
+
+- `mcp/register {name, url, headers}` holds the registration and headers in
+  memory for the stream's life (never written to disk). New conversations name
+  servers via `--mcp-server <name>=<desc>` or `conversation/start`
+  `mcpServers`.
+- Sigma lists tools once at conversation start and stores them in `pi.agent`
+  (inherited by subagents and forks; failures record `sigma.mcp_unlisted` and
+  give no tools for the conversation's life).
+- Every bash call, Claude/`agy` process, and MCP request carries the tree root
+  in `SIGMA_ROOT_CONVERSATION` / `Sigma-Root-Conversation` (MCP clients are
+  keyed by tree root).
+- On the Claude path, Sigma passes MCP `initialize` `instructions` into
+  `# MCP Server Instructions` (on Sigma's own OpenAI loop, only in
+  `describeNamespace()`), so appending attn's map to conversation
+  `instructions` delivers it twice on the Claude path.
+- HTTP 401/errors surface up to 500 chars of the server body in
+  `sigma.mcp_unlisted` / tool error `[f6be0c3]`.

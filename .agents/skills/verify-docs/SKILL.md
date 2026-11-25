@@ -35,8 +35,9 @@ This skill covers:
 
 ## Judge each change
 
-- Does the change repeat what this text or another place already says? Name
-  the place that should own the statement.
+- Does the change repeat what this text or another place already says? One home
+  per rule: reject repeating rules across `AGENTS.md`, `docs/internal/` and
+  `.agents/skills/`. Name the place that should own the statement.
 - Does the change contradict the rest of the text, another doc, the glossary
   or the code?
 - Does the change belong where it was added? A new paragraph at the end, or a
@@ -54,6 +55,26 @@ This skill covers:
 - Text that agents load in every session, like `AGENTS.md`, the glossary and
   priming prompts, costs context everywhere. Does each added line earn that
   cost?
+
+### Internal docs (`docs/internal/**` and scoped `AGENTS.md`)
+
+Internal docs exist for agents, not humans. User documentation belongs in
+`docs/guide/`. Reject any internal-doc change that breaks these rules:
+
+- **Audience is agents.** Reject human onboarding tutorials, UI click-ops
+  manuals and illustrative textbook scenarios.
+- **No code mirrors.** Reject prose that restates what attn's Go, Rust, JS,
+  shell scripts, workflow YAML or lint allowlists (`scripts/harnesslint/`,
+  `native/clippy.toml`) already say. Put measurement receipts as short comments
+  on constants, test-helper APIs in Go or Rust doc comments, and script flags
+  and subcommands in `--help`.
+- **External facts by topic, not probe diaries.** In
+  `docs/internal/harnesses/*.md`, group facts by topic with version tags,
+  replace superseded findings, and cut trial-by-trial logs (the seed holds raw
+  probe output).
+- **Keep subsystem-local rules beside their code.** Short traps or recipes that
+  concern one directory belong in a scoped `AGENTS.md` next to that code, not
+  as a new file in `docs/internal/`.
 
 ## Report
 

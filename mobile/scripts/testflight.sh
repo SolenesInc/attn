@@ -38,7 +38,7 @@ read_secret() {
   fi
   require_command secret "install the secret CLI from shell-config, or set ${env_name}"
   if ! error="$(secret get "${name}" 2>&1 >"${destination}")" || [[ ! -s "${destination}" ]]; then
-    fail "secret ${name} is missing or unreadable${error:+ (${error})}. Create the App Store Connect API key as docs/internal/phone-app-releases.md says, then store it with: secret put ${name}"
+    fail "secret ${name} is missing or unreadable${error:+ (${error})}. Create the App Store Connect API key (see mobile/AGENTS.md), then store it with: secret put ${name}"
   fi
 }
 
@@ -68,7 +68,7 @@ run_logged() {
     printf '\n%s failed. Its errors:\n' "${name}" >&2
     grep -E '(^|: )error:|^error|\*\* .* FAILED \*\*' "${log}" | sort -u >&2 || tail -n 30 "${log}" >&2
     if grep -q 'Error Downloading App Information' "${log}"; then
-      fail "App Store Connect has no app record for codes.attn.mobile, or the API key cannot see it. Create it once as docs/internal/phone-app-releases.md says (One-time setup), then run this script again. The full log is ${log}"
+      fail "App Store Connect has no app record for codes.attn.mobile, or the API key cannot see it. Create it once in App Store Connect (see mobile/AGENTS.md), then run this script again. The full log is ${log}"
     fi
     if refusal="$(grep -E -m1 -A1 'Validation failed.*409|Upload limit' "${log}" | tr '\n' ' ')" && [[ -n "${refusal}" ]]; then
       fail "App Store Connect refused the upload with a 409. If its answer names the upload limit, wait a day, then upload again. Otherwise, fix what it names. The full log is ${log}. Its answer: ${refusal}"

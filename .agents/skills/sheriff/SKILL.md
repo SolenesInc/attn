@@ -84,8 +84,9 @@ git rev-parse origin/main
   still in CI. Continue to Step 2 for recovered runs, even when `main` is
   green. Wrap up in [Step 6](#6-wrap-up-when-the-pass-is-settled) when there
   are no current or recovered failures to triage.
-- For pass records, carried groups, nightly runs, and release commits, see
-  [Verifying before landing](../../../docs/internal/trunk-based-development.md#verifying-before-landing).
+- Pass records and carried groups live in `.github/ci-inputs.yml` and
+  `.github/workflows/ci*.yml` (nightly, dispatch, and release commits run every
+  job).
 
 ### 2. Decide which failures need action
 

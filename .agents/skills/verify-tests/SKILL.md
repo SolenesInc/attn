@@ -8,11 +8,8 @@ description: Use before landing or opening a pull request whose changes add, cha
 Judge whether each test that this change adds, changes or deletes earns its
 place in the whole suite. Report findings. Do not edit.
 
-`docs/internal/testing.md` and the "Writing tests" section of `AGENTS.md` are
-attn's testing strategy. The Gotchas in the `write-test` skill name the habits
-that most often break the strategy. Read all three first, and read the page
-that `write-test` names for each kind of test the change touches. This skill
-does not repeat them.
+`docs/internal/testing.md` and the `write-test` skill's Gotchas are attn's
+testing strategy. Read both first. This skill does not repeat them.
 
 ## Read
 
@@ -37,9 +34,9 @@ timing outside `synctest`, or when you reproduce a flake.
 
 Run each new or changed native wire test from `native/` with
 `cargo test -p <crate> --test wire <test name>`, and compare its time with the
-same budgets. When a pattern matches more than one test, use the
-`--report-time` command in `docs/internal/native-wire-tests.md` to print each
-test's time.
+same budgets. When a pattern matches more than one test, print each test's time
+by running the binary from `cargo test -p <crate> --test wire --no-run` with
+`RUSTC_BOOTSTRAP=1 <binary> -Z unstable-options --report-time`.
 
 When a test's assertions look weak or indirect, break the behavior that the
 test guards and run the test to confirm that the test fails. Do that in a

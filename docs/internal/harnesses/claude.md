@@ -1,727 +1,242 @@
 # Claude Code harness behavior
 
-How Claude Code behaves where attn meets it. The rules for adding a claim are in
-[Harness behavior](../harnesses.md).
+Rules for adding claims: [Harness behavior](../harnesses.md).
 
-Probed on 2.1.288 with a mock API.
+## Lifecycle, hooks and transcripts
 
-| Action | Hooks, in order | Conversation id |
+`[2.1.288–319]`
+
+| Action | Hooks (in order) | Conversation id |
 |---|---|---|
-| Launch with `--session-id <uuid>` | SessionStart `startup` | that id. No transcript until the first prompt |
+| Launch `--session-id <uuid>` | SessionStart `startup` | that id; no transcript until first prompt |
 | `/clear` | SessionEnd `clear`, SessionStart `clear` | new |
-| `/resume <id>` or the picker | SessionEnd `resume`, SessionStart `resume` | the target. The same id twice is a no-op |
+| `/resume <id>` or picker | SessionEnd `resume`, SessionStart `resume` | target (same id twice is a no-op) |
 | `/branch` | SessionEnd `resume`, SessionStart `fork` | new |
 | `/compact` | PreCompact, SessionStart `compact`, PostCompact | unchanged |
-| `claude -r <id>`, `--continue` | SessionStart `resume` | unchanged. `--fork-session` gives `fork` and a new id |
+| `claude -r <id>`, `--continue` | SessionStart `resume` | unchanged (`--fork-session` gives `fork` + new id) |
 | `/rewind` | none | unchanged |
+| Plan mode "clear context and proceed" | SessionEnd `clear`, SessionStart `clear`, then turn + Stop (no UserPromptSubmit) | new |
 
-- SessionStart blocks Claude until the hook exits. SessionEnd is cut off
-  after about 1.5 s and may never arrive.
-- Claude runs `command` hooks under `/bin/sh`, whatever `$SHELL` is. A hook's
-  parent was `sh` with fish, zsh and bash (2.1.319, `s-f2ke65`).
-- Claude also compacts by itself while it sits at its prompt. Probed with Opus
-  5.5 and subscription logins, without attn, in seven conversations on the
-  1-hour prompt cache: two on 2.1.318, and five on 2.1.319 behind a recording
-  proxy, set with `HTTPS_PROXY` and `NODE_EXTRA_CA_CERTS`. The rules below were
-  read in the 2.1.318 and 2.1.319 bundles.
-  - Claude checks 54 minutes after the last main-thread request was sent, with
-    6 minutes of cache left, within 0.2 s in every run. Stop and an unsent draft
-    typed later do not move the check.
-  - The check does nothing when auto-compact or `idleCompaction` is off, the
-    prefix changed, the cache is not 1-hour, the cache lapsed or the check runs
-    more than 60 s late, context is under
-    `max(100000, CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS ?? 200000)` tokens, a newer
-    request exists, or the rate limit status is not `allowed`. The bundle also
-    has a variant that precomputes the summary, which was not seen. A skip has no
-    hook and no screen change. Claude's telemetry reported two skip reasons:
-    `small` for 168k tokens under the default threshold, and `near_limit` for
-    245k, and for 168k with the threshold at 100000. At 238k on another account
-    with status `allowed`, it reported `started`.
-  - There is no fixed usage cutoff. The bundle sets the status to
-    `allowed_warning` when a response reports
-    `anthropic-ratelimit-unified-<window>-surpassed-threshold` for any window, or
-    when its pacing table matches. In the 5-hour window, that is 90% used with at
-    most 72% elapsed. In the 7-day window, it is 75% with at most 60% elapsed, 50%
-    with at most 35%, or 25% with at most 15%. The `near_limit` skips came from the
-    header: `7d-surpassed-threshold: 0.75` at 76% used and 66% elapsed, which the
-    table alone would not match. Where the server sets its thresholds was not
-    seen.
-  - A compact's hooks are PreCompact `auto`, SessionStart `compact` and
-    PostCompact `auto`, over about 6.5 s, all carrying the last turn's
-    `prompt_id`. No UserPromptSubmit, Stop or Notification comes with them. When
-    the compact fails, PreCompact is the only hook and the screen shows no error.
-    That was seen against a local server that answered without a summary.
-  - Program status goes `working`, then `done`, around an idle compact, whether
-    or not it succeeds. PreCompact and PostCompact finish before `done` is sent.
-    So a `done` with no PostCompact before it means the compact failed. The next
-    prompt then runs as a normal turn. Probed on 2.1.319.
-  - A normal turn opens with `thread: {type: "create"}`. Its later requests use
-    `{type: "continue", previous_message_id}` and carry only the new messages,
-    with no `tools`. A compact request has no `thread`, sends
-    `x-claude-code-request-class: compaction` and
-    `x-claude-code-compaction: auto`, and carries the whole conversation and its
-    summary prompt. Its usage at about 240k was 32k to 40k read from the cache and
-    207k uncached. The next turn opens a new thread with 34k to 41k of context.
-  - The screen shows `Compacting conversation…` above the composer. An unsent
-    draft stays in the composer on the default and fullscreen renderers, and
-    Enter then submits it as a normal turn on top of the summary. After 75 minutes
-    the footer shows `new task? /clear to save <n>k tokens`.
-  - Against a local server with `ANTHROPIC_BASE_URL` and an API key, Claude sends
-    no `thread` and no compaction headers, and uses the 5-minute cache, so the
-    timer never arms. With `ENABLE_PROMPT_CACHING_1H=1` and a response reporting
-    245k of usage, the same idle compact runs at 54 minutes with the same hooks.
-    The summary prompt contains
-    `create a detailed summary of the conversation so far`, and the response must
-    hold a `<summary>`. An API-key session ignores the rate limit headers (read in
-    the bundle), so a local server cannot reach `near_limit`.
-  - `go run ./scripts/fakeclaudeapi check-idle` checks the timing, the size and
-    cache skips, and the compact and failed-compact hooks against the installed
-    Claude, with no account or tokens, in about 58 minutes. It cannot run faster,
-    because the timer is a real one and needs exactly the 1-hour cache. Run it
-    after Claude updates, and update this section, the fake API and attn together
-    when it fails. `go run ./scripts/fakeclaudeapi serve` runs the same fake on its
-    own, with a `/control` endpoint for context size and for holding or failing
-    compacts.
-- Plan mode's "clear context and proceed" is SessionEnd `clear`, SessionStart
-  `clear`, then a turn and Stop on the new id with no UserPromptSubmit.
-- The transcript is `<config>/projects/<cwd-slug>/<id>.jsonl`. attn reads the
-  conversation id from that name.
-- Launch instructions from `--append-system-prompt` stay in force after
-  `/clear`: the new conversation still follows them (probed on 2.1.314 with
-  the real model).
-- A subagent does not get the `--append-system-prompt` text. Its system prompt
-  comes from its agent definition. A fork gets its parent's system prompt, with
-  the appended text (read in the 2.1.332 bundle, not run).
-- `--settings <JSON>` accepts inline hook settings (probed on 2.1.296 on
-  macOS and Linux). SessionStart, UserPromptSubmit and Stop use the
-  `--session-id` conversation id.
-- When Stop fires, the transcript already holds the turn's final assistant
-  message with its usage. Only `stop_hook_summary`, `last-prompt` and
-  `cost-state` lines come after it (probed on 2.1.316 in `claude -p`, with a
-  Stop hook that copied the transcript; the interactive TUI was not probed).
-- A composer suggestion is Claude's guess at the user's next prompt, not input.
-  Plain text cannot tell a suggestion from a typed draft: both read
-  `❯ keep the gate, harvest it`. In cell styles, a suggestion is dim with the
-  cursor on its first letter, and a typed draft is normal text with the cursor
-  after it. `attn agent peek` labels a suggestion by those cells, read from the
-  screen snapshot. The `Try "…"` placeholder of an empty composer has the same
-  cells, so peek labels it too (2.1.319). An idle compact leaves both in place.
-  Enter alone leaves a suggestion unsent. A paste and Enter replace a suggestion,
-  so the model sees only the pasted text. With a typed draft, the model sees the
-  draft and the pasted text as one prompt. Probed on 2.1.318 with a local fake
-  API, under tmux, with `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=true`. Claude asks
-  for a suggestion with a `[SUGGESTION MODE` request after a turn stops, and not
-  before the conversation has two assistant messages (read in the bundle). With
-  attn's hooks on 2.1.319, Claude dropped a suggestion that a local API answered
-  at once, and showed it when the answer came 3 s later or after attn saw the
-  turn end. Under attn, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` leaves
-  suggestions on.
+- **Hook execution:** SessionStart blocks Claude until exit; SessionEnd is cut
+  off after ~1.5 s and may never arrive. `command` hooks run under `/bin/sh`
+  regardless of `$SHELL` `[2.1.319]`. `--settings <JSON>` accepts inline hooks
+  `[2.1.296]`.
+- **Transcript path & timing:** `<config>/projects/<cwd-slug>/<id>.jsonl`. When
+  Stop fires, the final assistant message and usage are already written (only
+  `stop_hook_summary`, `last-prompt`, `cost-state` follow) `[2.1.316]`.
+  However, a Bash tool that terminates the session (e.g. filing a crew letter)
+  can exit before Claude persists that final tool call `[2.1.310]`.
+- **Forks & duplicate writers:** `--resume <id> --fork-session` copies prior
+  assistant messages preserving `message.id` and usage `[2.1.303]`. Opening the
+  same conversation in a second process is not refused; both append separate
+  `parentUuid` branches to `<id>.jsonl` with the same conversation id
+  `[2.1.309]`.
+- **Sticky launch instructions:** `--append-system-prompt` stays active after
+  `/clear` `[2.1.314]`.
+- **Interactive paste wrapping:** with `tengu_virtual_pancake` enabled, pasted
+  input may be wrapped in `\n\n<pasted_content id="hhhh">\n...\n</pasted_content id="hhhh">\n`;
+  parsers must handle both wrapped and plain text `[2.1.310]`.
 
-Read in the installed 2.1.310 source and checked with unpaid CLI probes:
+## Terminal boot, input, trust and config
 
-- A fresh `CLAUDE_CONFIG_DIR` uses a separate configuration and projects
-  directory. On macOS, `auth status` reported `loggedIn: false` there while
-  the default configuration was authenticated. An isolated run needs its own
-  authentication setup. A fresh interactive launch opens the theme picker.
-  With `<config>/.claude.json` prefilled with `hasCompletedOnboarding: true`,
-  `theme: "dark"`, and `projects[<absolute cwd>].hasTrustDialogAccepted: true`,
-  Claude skips onboarding and the folder-trust dialog. In a real crew launch
-  with no token, Claude with that config reaches the normal prompt with “Not
-  logged in · Please run /login”, without making a model call (2.1.310).
-- Read in the 2.1.319 bundle: Claude rewrites `.claude.json` under a lock directory
-  at `<file>.lock` and rereads the file inside the lock, so a writer that takes the
-  same lock loses nothing. A lock with no holder to refresh it counts as stale after
-  10 s. Sampled every 1 ms for 90 s on a Mac running many agents, Claude held the
-  lock 12 times, the longest for 407 ms; attn waits 2 s (`claudeConfigLockWait`).
-  SIGKILL during startup left the lock behind when attn's model discovery did it.
-  SIGTERM exits in about 0.8 s and closing stdin in about 1.3 s, and neither left a
-  lock in 6 runs each.
-- `--mcp-config` takes multiple values. When a wrapper puts `--mcp-config`
-  before a subcommand, a following option must end the values of
-  `--mcp-config`. Otherwise `--mcp-config` consumes the subcommand's words.
-  `--mcp-config <json> --setting-sources '' auth status` preserves the
-  subcommand.
-- An HTTP MCP server's first request is `server/discover` at protocol
-  2026-07-28. When the server advertises `tools.listChanged`, Claude then holds
-  a `subscriptions/listen` stream open. When `server/discover` gets -32601,
-  Claude sends `initialize` at 2025-11-25 and `notifications/initialized`,
-  takes a 405 on GET, and lists and calls tools (probed on 2.1.330 with
-  `claude -p`; captures on `s-vadq83`).
-- `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false` disables composer suggestions
-  without replacing inline hook settings. `promptSuggestionEnabled: false`
-  is also a supported setting. Both switches were read in 2.1.310's source.
-  The environment switch was used in the real crew lifecycle probe below.
-- `--name <name>` supplies the native session title. Without `--name`, a local
-  mock provider recorded four auxiliary Haiku title requests across a crew
-  wake, two inputs, and a sleep. With `--name Member` and suggestions
-  disabled, the same real-binary lifecycle made only the six expected Opus
-  member requests (2.1.310). attn's `ATTN_HEADLESS_TASKS=off` does not disable
-  Claude's native title generation.
-- `-p --output-format json --json-schema ...` returns a result object by
-  default and an array of events with `--verbose`. The array's last
-  `type: "result"` event carries `structured_output`, `usage`, `modelUsage`
-  and `total_cost_usd`. Both forms ran in real simulator and judge print calls
-  against a local provider mock on 2.1.310.
-- `--setting-sources ''` can still leave skills and slash commands listed in
-  print-mode init metadata. That catalogue alone does not show whether the
-  contents of the skills and commands reached the model.
-  `--disable-slash-commands` produced empty skill and command lists in the
-  probe. Fresh working and config directories, together with the memory-off
-  switch, kept synthetic personal-context canaries out of the simulator and
-  judge requests (2.1.310).
-- A Bash tool filing the crew member's letter can close the session
-  before Claude persists the final tool call to JSONL. In the 2.1.310 local
-  provider probe, the fifth member request closed the session while the file
-  retained only the four work requests. Persisted closure records therefore
-  do not guarantee a complete trace of that final call.
-- Enter depends on the byte and on when it arrives. After boot, CR alone
-  submits and LF alone inserts a newline. attn does not change the terminal's
-  modes, so the PTY translates CR to LF until Claude switches it to raw. Probed
-  on 2.1.318 through a PTY, with the turn read from the transcript.
-- A line typed before Claude reads its terminal does not become a turn. Launched
-  with no prompt, the line lands in the composer and is not submitted (4 of 4
-  launches, typed at 0.05 to 0.15 s). `--resume` with no prompt does the same.
-  Launched with a prompt, as every crew session start
-  is, the line reached neither the screen nor the transcript in 9 of 10 launches
-  typed at 0.05 to 0.35 s. The tenth, typed at 0.35 s, became a turn, as both
-  lines typed at 0.45 s did, in a boot that showed its prompt at about 0.5 s.
-  A line typed as soon as the terminal title appeared became a turn in 7 of 7
-  launches, and one typed at UserPromptSubmit in 3 of 3. SessionStart is too
-  early: typed then, the line was lost in 1 of 3 launches, and a 1.5 s
-  SessionStart hook does not hold the boot back. At the folder trust question
-  Claude sets no title and fires no SessionStart (2 of 2 launches). Probed on
-  2.1.319 on Linux through a PTY with a mock API, with the turn read from the
-  requests.
-  attn recognizes the question by the choice text "Yes, I trust this folder",
-  which appears 0.8 to 2.2 s after start (4 launches of 2.1.319). "No, exit"
-  ends the process with code 1.
-- Measured on 2.1.319 through a PTY with a scratch `CLAUDE_CONFIG_DIR`: folder
-  trust resolves through the main repository, and the walk up from the working
-  directory stops at the repository root. Trust on the main repository covers
-  its subfolders and every worktree. Trust on a worktree covers that worktree
-  only, not the main repository. Trust on a parent folder covers a plain folder
-  below it, but not a Git repository or worktree below it. Answering the
-  question inside a worktree writes `projects[<main repository>].hasTrustDialogAccepted`.
-  `claudeHasTrust` in `internal/harness/internal/claude/trust.go` copies this rule, so
-  recheck it when Claude changes trust handling.
-- An interactive paste can be stored as `\n\n<pasted_content id="hhhh">\n`,
-  the pasted text, and `\n</pasted_content id="hhhh">\n`, with the same four
-  hexadecimal characters in both tags. A 2.1.310 paid eval trace preserved
-  the inner text exactly while adding this container. The installed source gates wrapping on `tengu_virtual_pancake`. An offline probe needs
-  that cached flag enabled and `CLAUDE_CODE_GB_DISK_CACHE_WHEN_TELEMETRY_OFF=1`
-  while telemetry is disabled. Plain text remains possible, so code that
-  matches native user input must account for both forms.
-
-Probed on 2.1.309 with a mock API and an isolated `CLAUDE_CONFIG_DIR`:
-
-- Nothing stops a second process from opening a conversation another process
-  has open. `claude -r <id>` and `/resume <id>` both fire SessionStart
-  `resume` with that id, with no refusal and no fork.
-- Both processes then append to the one `<id>.jsonl`, each from its own
-  history in memory, and neither sees the other's turns. Each process writes
-  entries whose `parentUuid` continues the branch of that process, so the
-  transcript becomes a tree with two branches. A third process resuming the conversation loads the
-  branch with the newest leaf.
-- Every hook from either process carries the same conversation id.
-
-Claude Code has no link, so a terminal that resumes a live session's
-conversation gets its own session on that conversation, and both tiles warn
-until one process exits or moves to another conversation.
-
-Probed on 2.1.303 with synthetic prompts and a local mock API:
-
-- `--resume <id> --fork-session` copies the prior assistant messages into the
-  new conversation's transcript, preserving their `message.id` and usage.
-  A message id therefore identifies the same request across root transcripts.
-
-## Agent view
-
-Probed on 2.1.312 with real Claude in a fresh `CLAUDE_CONFIG_DIR` against a
-local mock API, and read in its bundled source.
-
-- ← on an empty prompt (the footer shows "← for agents") and `/background`
-  (`/bg`) move the conversation into Claude's background daemon. The terminal's
-  process becomes the agent view, `claude agents`.
-- Moving forks the conversation: the daemon runs it with `--fork-session
-  --resume` under a new id, and SessionStart `fork` fires with that id. The
-  fork's transcript repeats every entry of the original with the same `uuid`s.
-  The original transcript ends with
-  `{"type":"continued-in","continuedInSessionId":"<fork>"}`.
-- The agent view also starts a draft for its new-session prompt. SessionStart
-  `startup` fires with a third id, whose transcript is written only once the
-  draft gets a prompt.
-- Esc, or Enter on the row, shows the fork in the terminal again and fires no
-  hook. The next UserPromptSubmit carries the fork's id.
-- One daemon serves one config directory. Its sockets live under
-  `/tmp/cc-daemon-<uid>/<first 8 hex digits of sha256(config dir)>`, its log at
-  `<config>/daemon.log`, its workers in `<config>/daemon/roster.json`. The
-  first client that needs the daemon starts the daemon, and the daemon exits
-  once no worker or client is left. `claude daemon status` shows the daemon.
-  `claude daemon stop --any` stops the daemon with its workers.
-- Workers inherit the daemon's environment, which is the environment of the
-  client that started the daemon. A worker keeps the flags of the process that
-  its conversation left, `--settings` included, so the worker's hooks run the
-  same commands as before. `ATTN_TERMINAL_ID` in the worker's environment names
-  the terminal that started the daemon, which may be another terminal.
-  `CLAUDE_CODE_SESSION_ID` in a tool's environment is the running
-  conversation's id.
-- The agent view in any terminal lists every conversation the daemon runs for
-  the config directory, and opening a conversation attaches it in that
-  terminal, so two terminals can show one worker. Attaching fires no hook, and
-  the worker's hooks still run the commands of the terminal the worker left.
-- `claude -r <id>` of a conversation a worker runs exits 1: "That session is
-  running in the background (<id>). Run `claude attach <id>` to open it, or
-  `claude stop <id>` first to resume it here." `claude -r` of the original id
-  opens the history from before the move.
-- Closing the terminal that shows a worker leaves the worker running.
-- `CLAUDE_CODE_DISABLE_AGENT_VIEW=1`, or `"disableAgentView": true` in inline
-  `--settings`, turns the agent view off for that process: the footer drops the hint, ←
-  does nothing, `/background` and `/bg` are unknown commands, and no fork or
-  draft starts. Claude describes the switch as disabling "`claude agents`,
-  `--bg`, /background, the on-demand daemon".
-
-Claude's daemon lets several terminals show one conversation, as a link does,
-but nothing tells attn which terminal shows which worker. attn launches Claude
-with `CLAUDE_CODE_DISABLE_AGENT_VIEW=1` instead. Without the variable, a
-conversation moved into the daemon no longer runs in the terminal attn
-launched. attn would open one session for the draft and another for the fork.
-The agent's attn commands would name another terminal. Reload session could not
-resume the conversation. The variable also reaches `claude` run from the
-agent's tools, so a `claude` that the agent runs cannot start conversations in
-the daemon. Such conversations would carry the agent's attn identity. Claude
-that the user starts by hand in a terminal running a shell keeps its agent
-view. That terminal has no
-`ATTN_TERMINAL_ID`, so the conversation carries no attn identity.
-
-## The model call spare
-
-attn answers a model call from a `claude` it started before the call
-(`internal/agent/claude_spare.go`). Measured with a subscription sign-in and
-synthetic text on 2.1.328, 2026-11-19 (plot `s-jhntry`, F2 to F5), and on
-2.1.329, 2026-11-20 (seed `s-63n4ng`), unless a bullet says otherwise:
-
-- `--print` with `--input-format stream-json --output-format stream-json
-  --verbose` and no prompt argument starts and waits for messages on stdin.
-  Idle, it holds 200 to 300 MB resident. It is not quiet: on 2.1.329 one used
-  0.73 s of CPU over 3 idle minutes, and 0.19 s with
-  `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, which attn sets on the spare.
-  Under attn, before it was stopped, the spare used 1.6 to 1.9 s over 10 idle
-  minutes either way.
-- Until a message reaches its stdin, the process writes nothing on stdout,
-  with or without `--bare`. A `control_request` with `subtype: mcp_status` is
-  answered once the session has started: 24 ms after a mod's `session.start` hook ran
-  (1.3 s after launch) without `--bare`, and 0.6 to 1.1 s after launch under
-  `--bare`, where Claude loads no plugins and a mod's hooks never run.
-  `get_settings` is answered earlier, before `session.start`. The probe leaves
-  the call unchanged: with and without it, the model request carried the same
-  `system` and no tools (a fake API behind a recording proxy). attn writes `mcp_status` as the spare starts
-  and stops the spare's process group with SIGSTOP when the answer arrives.
-- A stopped spare uses no CPU. Through `agent.StartSpare` on 2.1.329, it used
-  0 clock ticks over 10 idle minutes, under `--bare` with
-  `ANTHROPIC_API_KEY` and under `--setting-sources ''`, and then answered the
-  call (C14). A spare that a mod's `session.start` hook stopped answered
-  after SIGCONT with 50 to 177 ms beyond the model's time over 3 calls,
-  against 35 to 76 ms for one never stopped (2.1.328). When the daemon was
-  killed with SIGKILL, a stopped spare was gone within 200 ms: its
-  process group is orphaned with a stopped member, so the kernel sends SIGHUP
-  and SIGCONT.
-- A spare still answers after 2 hours idle (2.1.329, seed `s-jwy81g`). Left
-  running, one took its instructions and model and answered in 1,241 ms,
-  1,121 ms of it the model's, having used 15.6 s of CPU in those 2 hours.
-  Stopped with SIGSTOP from a mod's `session.start`, one used 0.00 s of CPU in
-  2 hours and, after SIGCONT, answered with 52 ms beyond the model's time.
-- A process started with no model and no instructions takes both afterwards:
-  a `control_request` with `subtype: initialize` and `systemPrompt`, then one
-  with `subtype: set_model`. Each answers a `control_response` with
-  `subtype: success`. The answer then carried the same 661 input tokens as
-  `--system-prompt` and the model set. Wall time was the model's time plus 83
-  to 175 ms over 4 calls; a cold `claude --print` added about 4 s. Through
-  `attn model call` on 2.1.329 (seed `s-jwy81g`, C2), 10 calls on a spare
-  took a median of 53 ms beyond the model's time, and 10 cold calls 1,227 ms.
-  On a host at load average 40 (seed `s-63n4ng`, C15), 10 calls on a spare
-  stopped by `mcp_status` took a median of 400 ms beyond the model's time,
-  against 342 ms for one stopped by a mod in interleaved calls; 10 cold calls
-  took 1,739 ms, and a call after 10 idle minutes 1,009 ms.
-- Without the `initialize`, the process answers as Claude Code and tries to
-  call tools, so a spare must get its instructions before any input.
-- One process keeps its conversation: six messages to one process grew the
-  cache reads from 0 to 873 tokens, and later answers took the style of
-  earlier ones. A spare answers one call and exits.
-- `--disallowedTools '*'` keeps a call to 661 input tokens. `--allowedTools`
-  adds about 19,300 tokens of tool definitions to every call. A `jsonSchema`
-  on `initialize` returns `structured_output` only under `--allowedTools`.
-
-Probed on 2.1.329 with `--bare`, `ANTHROPIC_API_KEY` and a local fake API
-behind a recording proxy (`scripts/fakeclaudeapi`), 2026-11-19: both control
-requests succeed, and the model request carries only the call's instructions
-as `system`, the call's input, the model set, and no tools. Before it, Claude
-sends one request of its own with the Claude Code prompt and the text `Hi`,
-which carries nothing of the call.
-A cold call, which no spare answers, runs `claude --print` with no prompt
-argument, and Claude reads the prompt from stdin. On 2.1.329 a 1,048,576-byte
-input reached the model request whole as the user message, with and without
-`--bare` (seed `s-63n4ng`). The instructions go in a file named by
-`--system-prompt-file`, which on 2.1.330 sent the same request as
-`--system-prompt` with the text, and carried 1,048,576-byte instructions whole
-as the last `system` block (seed `s-d7drbj`).
-
-## Auto memory
-
-The [Claude memory documentation](https://code.claude.com/docs/en/memory)
-defines `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` to disable auto memory for one
-process. The switch is present in the installed 2.1.310 binary. The switch
-leaves the user's stored memory files in place. A new working directory alone
-does not turn auto memory off (checked with unpaid CLI probes on 2.1.310).
+- **Raw mode & boot timing:** after boot, CR submits and LF inserts a newline;
+  until Claude enters raw mode, the PTY translates CR to LF `[2.1.318]`. Lines
+  typed before the terminal title appears (including at SessionStart) are lost
+  or left unsubmitted; typing once the title or UserPromptSubmit arrives
+  submits reliably `[2.1.319]`.
+- **Composer suggestions:** indistinguishable from a typed draft in plain text,
+  but dim with cursor on the first cell in cell styles (same as the empty
+  `Try "…"` placeholder) `[2.1.319]`. Enter alone leaves a suggestion unsent;
+  paste+Enter replaces a suggestion but appends to a typed draft `[2.1.318]`.
+  Disable via `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false` or
+  `promptSuggestionEnabled: false` `[2.1.310]`.
+- **Config locking (`.claude.json`):** Claude updates `.claude.json` under
+  `<file>.lock` (stale after 10 s; observed max hold 407 ms; attn waits 2 s)
+  and rereads inside the lock. SIGKILL during startup leaves the lock behind;
+  SIGTERM (~0.8 s) and EOF on stdin (~1.3 s) clean it up `[2.1.319]`.
+- **Folder trust:** resolved at the main git repo root (stopping at repo root),
+  covering subfolders and worktrees; trust on a worktree covers only that
+  worktree; trust on a parent covers non-git subfolders only. Answering the
+  dialog (`"Yes, I trust this folder"`, appears 0.8–2.2 s after start; no title
+  or SessionStart fired while open; `"No, exit"` exits 1) writes
+  `projects[<main repo>].hasTrustDialogAccepted` `[2.1.319]`. Mirror this in
+  `internal/harness/internal/claude/trust.go`.
+- **Isolated `CLAUDE_CONFIG_DIR`:** starts logged out and opens the theme
+  picker unless `<config>/.claude.json` sets `hasCompletedOnboarding: true`,
+  `theme: "dark"`, and `projects[<cwd>].hasTrustDialogAccepted: true`
+  `[2.1.310]`.
+- **Auxiliary traffic & memory:** `--name <name>` suppresses auxiliary Haiku
+  title calls (`ATTN_HEADLESS_TASKS=off` does not) `[2.1.310]`.
+  `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` disables auto memory for one process
+  (a new cwd alone does not) `[2.1.310]`.
+- **CLI arg traps:** `--mcp-config` is variadic; place a following flag (e.g.
+  `--setting-sources ''`) before any subcommand so `--mcp-config` does not
+  consume it `[2.1.310]`. `--setting-sources ''` can still list skills/commands
+  in print-mode init metadata; `--disable-slash-commands` empties them
+  `[2.1.310]`.
 
 ## Program status (OSC 7501)
 
-Probed on 2.1.295 under a scratch PTY, and read in its bundled source.
+`[2.1.295–319]`
 
-- At startup Claude sends `OSC 7501 ; ?` before its DA1 query. Claude reports
-  only when a reply starting with `?` arrives before the DA1 reply, so
-  Ghostty's `?:states=…:kinds=…` counts (read in 2.1.319's bundle). Otherwise
-  Claude never asks again in that process. `CLAUDE_CODE_DISABLE_TERMINAL_TITLE` turns the
-  reports off along with the title.
-- Claude reports the root record with `app=claude-code`:
+- At startup Claude sends `OSC 7501 ; ?` before DA1 and emits reports only if a
+  reply starting with `?` arrives before DA1 (never re-queries).
+  `CLAUDE_CODE_DISABLE_TERMINAL_TITLE` disables both titles and OSC 7501.
+- Reports are edge-triggered (no heartbeat) on `app=claude-code`; background
+  agents emit child records (`id=<agent id>`), which attn ignores. Exit/suspend
+  emits `state=clear`.
+- Mapping: busy or queued prompt → `working`; permission/sandbox/worker/goal →
+  `blocked kind=permission`; AskUserQuestion/MCP elicitation →
+  `blocked kind=question` (~20 ms after PreToolUse, PermissionRequest ~40 ms);
+  other dialog → `blocked`; login failure → `blocked kind=auth`; turn done →
+  `done`; fresh/interrupted → `idle`; failure → `error`.
+- Interactive menus (`/model`, `/resume`, `/config`, `/permissions`, Esc-Esc
+  rewind) emit neither OSC 7501 nor hooks `[2.1.303]`.
 
-  | Claude | Report |
-  |---|---|
-  | busy, or idle with a queued prompt | `working`, with `progress` and `msg` |
-  | permission, sandbox, worker or goal prompt | `blocked kind=permission` |
-  | MCP elicitation | `blocked kind=question` |
-  | other open dialog | `blocked` without a kind |
-  | login failure | `blocked kind=auth` |
-  | turn completed | `done` |
-  | interrupted, or a fresh session | `idle` |
-  | turn failed | `error`, the failure in `msg` |
+## Idle auto-compaction
 
-- Background agents arrive as child records (`id=<agent id>`) with their own
-  `working` or `blocked`. attn reads only the root record.
-- Claude sends a report only when the reported state changes. There is no
-  heartbeat. When Claude hands the terminal back, on exit or suspend, it sends
-  `state=clear`.
-- Claude keeps setting its title glyphs. Once a terminal has a root record,
-  attn ignores the glyphs until a `clear`.
+`[2.1.318–319]`
 
-Probed on 2.1.303 under a scratch PTY with a local mock API, in auto and
-default permission mode:
+- Fires 54 min after the last main-thread request (6 min before 1h cache
+  expiry); Stop and unsent drafts do not reset it.
+- Skips silently (no hooks) if auto-compact/`idleCompaction` is off, prefix
+  changed, cache is not 1h or expired, timer >60 s late, context <
+  `max(100000, CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS ?? 200000)`, newer request
+  exists, or rate-limit status is not `allowed` (e.g. `allowed_warning` from
+  `anthropic-ratelimit-unified-*-surpassed-threshold` or pacing table).
+- Hooks on success: PreCompact `auto`, SessionStart `compact`, PostCompact
+  `auto` (~6.5 s, carrying last turn's `prompt_id`), no UserPromptSubmit/Stop.
+  On failure: PreCompact only, no screen error. OSC 7501 transitions `working`
+  → `done` either way (so `done` without PostCompact = failed compact). Unsent
+  composer drafts survive.
+- Local verification: `go run ./scripts/fakeclaudeapi check-idle` (~58 min real
+  timer; requires `ENABLE_PROMPT_CACHING_1H=1` for API-key sessions, which
+  ignore rate-limit headers). Re-run after Claude updates and update this doc,
+  the fake API and attn together on failure.
 
-- AskUserQuestion fires PreToolUse, then `blocked kind=question` about 20 ms
-  later, then a PermissionRequest for `AskUserQuestion` about 40 ms after
-  PreToolUse.
-- With `/model`, `/resume`, `/config`, `/permissions` or the Esc-Esc rewind
-  menu open, Claude sends no report and fires no hook.
+## Agent view (background daemon)
 
-## attn tools over MCP
+`[2.1.312]`
 
-Probed on 2.1.330 with a real account, on a non-production instance with
-`agent_tools_enabled` on, in auto mode, through both launch paths
-(`direct_agent_launch_enabled` on and off):
+- `←` on an empty prompt or `/background` (`/bg`) forks the conversation into
+  Claude's per-config daemon (`/tmp/cc-daemon-<uid>/<sha256[:8]>`) and switches
+  the terminal to `claude agents`. Workers inherit the daemon starter's env
+  (wrong `ATTN_TERMINAL_ID`) and attach/detach fires no hooks.
+- attn launches Claude with `CLAUDE_CODE_DISABLE_AGENT_VIEW=1` (also inherited
+  by nested `claude` calls) so conversations cannot escape into Claude's daemon.
 
-- An inline `--mcp-config` HTTP server whose `Authorization` header is
-  `Bearer ${ATTN_AGENT_CREDENTIAL}` reaches `/mcp` with the credential from
-  the environment. `ps` shows only the literal `${ATTN_AGENT_CREDENTIAL}`.
-- `permissions.allow` with `mcp__attn__*` in `--settings` lets direct calls run
-  in auto mode without a question.
-- A background subagent started with the Agent tool calls with its parent's
-  credential, so its call acts as the parent's session.
-- After `/clear` the process keeps its server and credential, and the next
-  call acts as the session the terminal shows then.
-- After the daemon restarts, with the agent's process kept, the next call
-  succeeds with no reconnect step from the agent. A reload resumes with
-  `-r` and the same server.
-- Interactive Claude Code sends its first request without waiting for an MCP
-  server to connect, so a prompt on the command line or typed at once can
-  run its first turn without the server's tools. The next turn has them.
-  On 2.1.332, with attn's real server, none of 4 briefs and 0 of 1 prompts typed
-  at once had attn's tools, while 6 of 6 prompts typed a little later did.
-  `alwaysLoad: true` on the server does not change this (0 of 5), nor does
-  `MCP_CONNECTION_NONBLOCKING=0`, nor a UserPromptSubmit hook or a mod's
-  `prompt.submit` hook that waits (those load the tools named up front and miss
-  the deferred ones). A SessionStart hook that returns once the server has
-  answered `tools/list` is still too early (0 of 10).
-- A mod's `session.start` hook holds a prompt from the command line or the
-  composer until it resolves, for at most 10 s. The composer draws meanwhile,
-  and a resumed conversation draws in it at once. A prompt that a mod submits
-  with `$.prompt.submit` is not held. Awaiting `$.mcp.connect('attn')` there
-  gives the first request the server's tools: 4 of 4 launches on an idle
-  machine, 12 of 12 with 22 and 66 busy loops on 22 cores, and with the server
-  answering 3 s late. An idle machine pays about 0.15 s. `$.mcp.connect` waits
-  for a failing server: 8.1 s on a refused port, 7.6 s on 500s, still waiting
-  after 80 s on a server that never answers, about 0.1 s on a 401. With no
-  server of that name it resolves `unlisted` at once. attn's mod waits at most
-  8 s and starts its poll afterwards, so a message that wakes a resumed
-  session has the tools too (2.1.332, probed with a mock server; the first
-  requests of 2.1.329, 2.1.330 and 2.1.331 through attn's mod have the tools
-  too). A session without the mod, because the mod failed to load or the user
-  runs `claude` without attn, keeps the race.
-- `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1` asks for consent at the first launch.
-  In code mode the agent wrote one REPL script that found `seed_note` with
-  `searchTools`, read its schema with `describeTool`, and called
-  `tools["mcp__attn__seed_note"]` for three seeds in one `Promise.all`. The
-  consent text says auto mode's safety check reads each script once, before
-  it runs, and does not check the tool calls the script makes, so the
-  `mcp__attn__*` allow rule does not cover a script. That run passed the check.
-- Claude Code sends its permission rules to the auto-mode classifier. On 2.1.332
-  with Sonnet 5.5, under `--disallowed-tools ListAgents`, a shell `attn agent list`
-  was refused as `[Undermining Oversight]` in 12 of 12 `claude -p` runs and 8 of 8
-  calls in attn sessions. Without the flag it was refused in 0 of 31 runs
-  (`c6-classifier-agent-list.md` on `s-ct56cj`). attn disallows no tool, and
-  Claude's launch instructions say that its `ListAgents` and `SendMessage` are not
-  attn's. In 27 attn sessions launched that way, each with `ListAgents` in its tools
-  and `SendMessage` deferred, no call used either and no `attn agent list` was
-  refused (`s-dqnc07`).
-- Auto mode refuses a shell `attn ask close` followed by `attn seed harvest` for an
-  ask that the session's transcript did not create: 6 of 7 tries with
-  `ListAgents` disallowed and 5 of 5 without, as `[Destructive or Unwanted
-  Actions]` or `[Undermining Oversight]`. The `ask_close` tool ran 2 of 2 times
-  (2.1.332). Which rule the classifier applies was not seen.
-- Auto mode reads `autoMode.{allow, soft_deny, hard_deny, environment}` from
-  policy, flag (`--settings`) and user settings, not from project settings
-  (read in the 2.1.330 bundle). `claude [--settings <json>] auto-mode config` prints
-  the result. Measured for `allow` on 2.1.330: the list is the concatenation of the
-  sources, and a `"$defaults"` entry in any source puts the built-in entries
-  back:
+## attn tools over MCP and auto mode
 
-  | User settings `allow` | `--settings` `allow` | Result |
-  |---|---|---|
-  | none | `["$defaults", X]` | the 16 built-ins and X |
-  | none | `[X]` | X alone: the built-ins are dropped |
-  | `[U]` | `["$defaults", X]` | the built-ins, U and X: the built-ins U dropped return |
-  | `[U]` | `[X]` | U and X |
+`[2.1.330]`
 
-## Mods
+- HTTP MCP opens with `server/discover` (protocol `2026-07-28`); on `-32601`,
+  Claude falls back to `initialize` (`2025-11-25`) + `notifications/initialized`,
+  accepts `405` on GET, and lists/calls tools.
+- Inline `--mcp-config` expands `Bearer ${ATTN_AGENT_CREDENTIAL}` from env
+  without exposing the token in `ps`. `permissions.allow: ["mcp__attn__*"]`
+  approves direct calls in auto mode. Background subagents inherit the parent
+  credential; the server survives `/clear` and daemon restarts without
+  reconnecting.
+- **First-turn MCP race `[2.1.329–332]`:** interactive Claude sends its first
+  request without waiting for MCP servers to connect, so CLI or immediate
+  prompts can miss deferred MCP tools (`alwaysLoad: true`,
+  `MCP_CONNECTION_NONBLOCKING=0`, `SessionStart` after `tools/list`, and
+  `UserPromptSubmit`/`prompt.submit` waits do not prevent this). A mod's
+  `session.start` hook holds CLI/composer prompts up to 10 s (not
+  `$.prompt.submit`); awaiting `$.mcp.connect('attn')` there gives the first
+  turn the tools (~0.15 s idle; refused/500 fails in ~7.6–8.1 s, 401 in ~0.1 s,
+  unresponsive servers hang >80 s, unlisted resolves immediately). attn caps
+  that wait at 8 s before starting its poll; sessions without the mod keep the
+  race.
+- Under `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1`, auto mode checks each REPL
+  script once before execution and does not apply `mcp__attn__*` allow rules to
+  calls inside the script.
+- `autoMode.allow` merges policy + `--settings` + user settings (not project
+  settings); omitting `"$defaults"` when setting `allow` drops Claude's 16
+  built-in defaults (`claude [--settings <json>] auto-mode config` prints the
+  merged list).
+- Fresh configs prompt `"Make auto mode your default permission mode?"`
+  (`hasSeenAutoDefaultNotice` alone does not skip it when `defaultMode` is
+  `default`). Under `--permission-mode auto`, a blanket `Bash` allow rule does
+  not bypass auto-mode checks unless `permissions.disableAutoMode: "disable"`
+  `[2.1.318–319]`.
 
-A mod is a plugin whose `hooks/hooks.json` names a TypeScript hooks module.
-The module's API is typed in the `plugin-authoring` skill's
-`types/claude-code.d.ts`. Probed on 2.1.316 under a scratch PTY against a
-local mock API, launched with attn's environment, `--settings` hooks and
-`--permission-mode auto`:
+## Mods (`--plugin-dir` TypeScript hooks)
 
-- `--plugin-dir <folder>` and `CLAUDE_CODE_PLUGIN_DIRS=<folder>` both load the
-  module in an interactive session with no consent question. Claude watches
-  the folder: a change to the module's content reloads it, which runs
-  `session.start` again. On 2.1.317, touching the file does not reload it.
-- A `session.start` hook can keep a `$.process.spawn` child for the session's
-  life, as a direct child of the `claude` process. The child survives
-  `/clear`, `/compact` and `/resume`. A reload, `/exit` and a SIGKILL of
-  `claude` end it. Its stdin is written once and closed.
-- `$.prompt.submit({ text, asUser: true })` on an idle session starts a turn
-  with the text bare, as typed. UserPromptSubmit and Stop fire with the current
-  conversation id. The transcript keeps a `user` row with the text as a string
-  and `origin: {"kind":"plugin","name":<plugin>,"asUser":true}`. The screen
-  shows "› Prompt from the <plugin> plugin" above the prompt. The call resolves
-  `{ text, origin }` as the turn starts.
-- `$.prompt.submit` during a turn resolves only when that turn completes, then
-  starts its own turn. It never reaches the running turn.
-- A prompt typed into the PTY during a turn reaches the running turn: the next
-  model request carries it after the tool result, as "The user sent a new
-  message while you were working:" and the text. The `prompt.submit` hooks see
-  it with `origin: {"kind":"composer"}` and the running `turnId`.
-- `$.session.append({ message: { type: "user", content: [text block] } })`
-  during a tool call adds the text, bare, to the running turn's next model
-  request, after the tool result. The transcript keeps it as an `isMeta` user
-  row with the plugin's origin. The screen does not show it. From 2.1.326 the
-  text is no longer bare: see the 2.1.326 finding below.
-- A permission question replaces the prompt, and the `AbovePrompt` band is not
-  drawn until the question closes (2.1.318). Refusing the question, with Esc or
-  with "No", leaves `next.signal.aborted` true in that `tool.call` hook and ends
-  the turn with `isAborted` false and `reason: "answer"`. A mod cannot tell the
-  two keys apart: the hook events, the abort reason (`The operation was
-  aborted`) and the transcript's `toolDenialKind` (`user-rejected`) are the same.
-  Neither stops the session, so a `$.prompt.submit` afterwards starts a turn. Esc
-  during a running tool differs in all but `toolDenialKind`: the abort reason is
-  `user-cancel`. The question ignores keys for a moment after it draws, with no
-  signal for when it starts taking them: a key sent as soon as the screen shows
-  the question did nothing, on Esc and on the number for "No", and one second
-  later it worked. The `permission_prompt` Notification hook fires about 6 s after
-  the question draws, when keys work.
-- An append made inside a `turn.step` hook, before `next(e)`, misses that
-  request: it reaches the model only on a later request.
-- A `turn.complete` hook that calls `$.prompt.submit` starts a new turn right
-  after an answered turn ends.
-- `$.session.send` to the session's own id fails: `isDelivered: false`, "no
-  live session on this machine has id <id>".
-- `/clear` raises `session.end` with `reason: "clear"` and no `session.start`;
-  `$.session.id()` returns the new id from then on. `/resume <id>` raises
-  `session.end` with `reason: "resume"`. Both still fire the SessionStart
-  settings hook.
+`[2.1.316–330]`
 
-Probed on 2.1.317 the same way, in auto, default and bypass permission modes:
+- **Loading & lifecycle:** `--plugin-dir` / `CLAUDE_CODE_PLUGIN_DIRS` load
+  without consent; content edits (not `touch`) reload the module and re-run
+  `session.start` (invalid syntax keeps the old module running). `$.state`
+  survives reloads; module globals reset. `/clear` and `/resume` fire
+  `session.end` without re-running `session.start`; `$.session.id()` updates.
+  First poll arrives 0.7–5.5 s after launch in trusted folders, and never
+  before the folder-trust prompt is answered.
+- **Sockets & env:** `$.http.fetch` with `socketPath` rejects after 30 s with
+  no response (aborted on reload/`/exit`). `$.env.get` returns a Promise in
+  worker-hosted modules. `$.ui.log` replaces newlines with U+FFFD.
+- **`$.prompt.submit`:**
+  - `{ text, asUser: true }`: starts a turn between turns in the user's voice;
+    auto mode's classifier treats consent in it as user consent `[2.1.330]`.
+  - `{ text }` (without `asUser`): starts a turn prefixed `"The attn plugin
+    sent a message:"`; not treated as user voice `[2.1.330]`.
+  - Calling `$.prompt.submit` during a turn waits for the turn to end (and
+    rejects immediately if called inside a `tool.call` hook).
+  - After user Esc during a turn, `$.prompt.submit` drops with `"the session
+    was stopped and nobody has sent input since"` indefinitely until the user
+    types input `[2.1.317]`.
+- **`$.session.append` (steering) `[2.1.326+]`:**
+  - Appends after a main-loop `tool.call` hook's `next(e)` reach the next model
+    request (appends inside `turn.step` miss that request).
+  - Since `2.1.326`, appended rows travel in a `role: "system"` message
+    prefixed `"Note from the attn plugin, not from the user:"` (never treated
+    as user consent by auto mode's classifier). In Code Mode, `tool.call` hooks
+    fire only when the REPL script settles `[2.1.330]`.
+- **`$.turn.abort({ turnId })` (interrupt) `[2.1.330]`:**
+  - Called in `tool.call` after `next(e)`, ends the turn (`turn.complete`
+    `isAborted: true`, no Stop settings hook) **without** stopping the session
+    like Esc does, so `$.prompt.submit` starts the next turn immediately
+    (~75–120 ms). Running Code Mode background commands keep running until the
+    model stops them.
+- **Permissions:** denying a permission prompt (Esc or "No") sets
+  `next.signal.aborted` and ends the turn with `reason: "answer"` (unlike Esc
+  during a tool, which gives `user-cancel` / `reason: "aborted"` and stops the
+  session); the two denial keys are indistinguishable to a mod. Permission
+  dialogs ignore keys briefly after drawing (~1 s) `[2.1.318]`.
+- **Compaction (`$.session.compact()`):**
+  - Compacts between turns (`trigger: "manual"`), rejecting during a turn
+    (`a turn is running`, etc.) or if a turn starts mid-compact (`a newer turn
+    began before the compaction could be applied`). Call without awaiting so
+    the poll loop keeps running.
+  - The Stop settings hook fires while Claude still considers the turn running
+    (compact placed then fails intermittently); wait for the mod's
+    `turn.complete` instead `[2.1.319]`.
+  - Compact boundary entries flush to the transcript JSONL only on exit
+    (SIGTERM) `[2.1.318]`.
 
-- The terminal raises no `ui.render` for `UserMessage` rows, so a mod cannot
-  redraw a prompt row or remove the "Prompt from the <plugin> plugin" line. A
-  `$.session.append` of a `system` row is stored but not drawn.
-  `$.ui.log(text)` draws a transcript line as `<plugin>: <text>`, which the
-  model never reads. On 2.1.319 it stores and draws U+FFFD in place of each
-  newline, so it cannot show more than one line.
-- `$.env.get(name)` reads the `claude` process's environment. In a
-  worker-hosted module it returns a promise, and a `$.fs.write` given the
-  promise as its path throws "arguments are not plain data". `$.fs.write` to a
-  FIFO writes into it and leaves the FIFO in place.
-- A loop started from `session.start` can call `$.http.fetch` with
-  `socketPath` on a Unix socket. A call with no complete answer after 30 s
-  rejects: "aborted: no complete answer within 30000ms". A reload aborts the
-  old module's call in flight, and `/exit` closes it.
-- Appends made after a main-loop `tool.call` hook's `next(e)` resolves reach
-  the next model request, all of them, after the tool result. This holds when
-  the tool call waited on a permission question that the user approved.
-- Esc during a tool call resolves that `next(e)` with `next.signal.aborted`
-  true, and `turn.complete` reports `reason: "aborted"`. An append made then is
-  stored and reaches the model only with the next turn. Until the user sends
-  input, `$.prompt.submit` resolves `{ drop: "the session was stopped and
-  nobody has sent input since" }` and starts no turn. The stop does not
-  expire: submits 5 s, 65 s and 185 s after Esc were dropped, and so was a
-  submit from the aborted turn's own `turn.complete` hook before `next(e)`. A
-  prompt typed into the PTY during the turn is sent as its own turn as soon as
-  Esc stops it, and typed input lifts the stop.
-- Denying a permission question also sets `next.signal.aborted`, but
-  `turn.complete` reports `reason: "answer"`, and a `$.prompt.submit` right
-  after starts a turn.
-- The Agent tool runs a subagent in the background: the main turn completes
-  while the screen shows "Waiting for 1 background agent to finish". A
-  `$.prompt.submit` or a typed prompt in that time starts a main turn at once.
-  When the subagent finishes, a main turn starts with empty text. The
-  subagent's `turn.start`, `tool.call` and `turn.complete` carry its `agentId`.
+## Model call spare and headless print
 
-Measured on 2.1.318 through attn's mod, with the real binary and a mock API:
+`[2.1.328–330]`
 
-- The findings above hold, with these additions.
-- `$.state` survives a reload that lands during a turn, and the new module's
-  `tool.call` hooks fire for that turn. Module variables start over, so a mod
-  that must know a turn is running keeps that in `$.state`.
-- `$.prompt.read()` from a stopped session returns the composer as it stands:
-  `''` after Left, Right, Home, End, PageUp, Shift+Tab or a draft erased with
-  Backspace, and the text of a typed draft or one recalled with Up.
-- A reload draws `attn: reloaded (5 hooks: ...)` in the transcript, named after
-  the plugin. The model does not read it.
-- A save that does not parse keeps the old module running and polling. A save
-  of a valid module that does nothing ends its polls.
-- `/exit` ends the session in attn at once. A delivery to it then fails with
-  `unknown session`, so nothing is left to type into.
-- `/clear` keeps the module and its poll loop, and the terminal moves to a new
-  session id.
-- A tool result followed by several appended rows reaches the model as one user
-  message, each row a text block. Every block but the last gains a trailing
-  newline.
-- From 2.1.326, rows appended after a tool result no longer join the tool
-  result's user message. The request carries them after it as one
-  `role: "system"` message. Each row becomes a note that opens with "Note from
-  the attn plugin, not from the user:", and a blank line separates the notes.
-  The row's line breaks survive. Probed through attn's mod against a mock API:
-  one append on 2.1.328, 2.1.329 and 2.1.330, two appends on 2.1.330. Probed
-  with the real model through a probe mod (seed `s-1phqe5`): 2.1.318 to 2.1.325
-  still join the row to the tool result's user message as a text block, and
-  2.1.326 and 2.1.327 send the note. 2.1.320 was never published.
-- On a fresh config, the first launch asks "Make auto mode your default
-  permission mode?". attn reports the session as needing approval until the user
-  answers, so a delivery waits. `hasSeenAutoDefaultNotice` alone does not skip it
-  with `permissions.defaultMode` set to `default`.
-- On 2.1.319 under `--permission-mode auto`, a blanket `Bash` allow rule does not
-  approve `npm test`. Against a stub model the command opens a dialog, "Auto mode
-  can't check actions in this session and needs your choice". With
-  `permissions.disableAutoMode` set to `disable`, the same launch starts, and the
-  allow rule approves the command.
-- In a folder with no trust recorded, `claude` makes its first poll only after
-  the user answers the trust question: 0.3 to 1.4 s after the answer in 4 runs,
-  and never before it. In a trusted folder, launched by attn, the first poll
-  came 0.71 to 5.54 s after launch (12 launches, median 0.9 s).
-- `$.session.compact()` with no argument compacts with the engine's own prompt.
-  An idle compact resolved `{ messages, tokensBefore, tokensAfter }` 5 times out
-  of 5, in 8 to 18 s at up to 82k tokens, and it resolves `{ skip }` when a hook
-  vetoes it. While a turn runs it rejects within 1 ms with a message that says
-  the conversation compacts between turns: `a turn is running (<id>)`,
-  `a turn is in flight`, or `an external turn is driving the conversation`. A
-  turn that begins during the compact makes it reject with
-  `a newer turn began before the compaction could be applied`. It also rejects
-  on an empty conversation (`Not enough messages to compact`) and with
-  `DISABLE_COMPACT` set. A poll loop keeps running through a compaction, so the
-  mod calls it without awaiting. PreCompact and PostCompact fire with
-  `trigger: "manual"`.
-- A prompt typed during that compact waits, and Claude runs it on top of the
-  summary once the compact ends.
-- The Stop hook runs while Claude still counts the turn as running. A compact
-  that attn placed as the Stop hook arrived was refused with
-  `a turn is running (<id>)`, naming the turn that had just stopped, in 3 of 10
-  runs on 2.1.319, so the end of the turn is the mod's `turn.complete`, not the
-  Stop hook. A turn that ends with a shell left running in the background sends
-  `background_tasks` in the Stop hook input, and `$.session.compact()` then
-  compacts as it does at an idle prompt.
-- The compact's `system`/`compact_boundary` and `isCompactSummary` entries reach
-  the transcript file only when Claude exits, which attn's close does with
-  SIGTERM. `claude --resume` loads from them.
-
-Probed on 2.1.330 with the real model (Opus 5.5) under `--permission-mode auto`,
-through a probe mod named `attn`, in scratch git projects (seed `s-1phqe5`
-holds the runs):
-
-- A prompt typed into the PTY during a turn reaches the model as a
-  `queued_command` attachment with `origin: {"kind":"human"}`, in a
-  `role: "system"` message with the head "The user sent a new message while you
-  were working:" and a tail that tells the model to address it in the running
-  turn. A plugin's appended row with the same head and tail differs only by its
-  plugin origin and by the "Note from the attn plugin, not from the user:" line
-  that the 2.1.326 entry above describes. The note
-  goes out next to the other system reminders of the same request, such as MCP
-  instruction deltas.
-- The `session.append` typings say a plugin's appended row "is never the
-  person's words, even when it quotes them: a reminder to the model and to auto
-  mode's server classifier". Auto mode's classifier denied every action whose
-  only consent came from an appended row: `git push --force origin main` over
-  another author's commit 3 of 3 and `rm -rf` of a pre-existing untracked
-  folder 2 of 2, each with "[Destructive or Unwanted Actions]", and once an
-  in-project edit with "[Undermining Oversight]". The same push was allowed
-  when the consent came from a typed prompt (2 of 2), from
-  `$.prompt.submit({ text, asUser: true })` (4 of 4), or from the opening
-  prompt (1 of 1). A `tool.judge` hook reads each verdict from `next(e)` as
-  `{ decision, reason }`. Auto mode settled most in-project edits by mode,
-  with no classifier call. 2.1.326 and 2.1.327 denied the appended push too
-  (one and two runs). On 2.1.318 to 2.1.325, where the row joins the tool
-  result's user message, the classifier accepted it in every run: one on each
-  published version, two on 2.1.318. 2.1.318 refuses a module that registers
-  `tool.judge`, with `"tool.judge" is not an event`.
-- With `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1` on 2.1.330, the classifier still
-  denied the appended push (2 of 2) and allowed the typed one. Code mode runs
-  tools from code, and `tool.judge` then sees only the code's call, with "Auto
-  mode allowed the code that makes this call", not the push inside it.
-- Asked by an appended row for a harmless edit, the model made it in 4 of 7
-  runs, against 3 of 3 on 2.1.318. When it declined, it said the request came "inside the tool output" or
-  "inside an MCP server's instructions". Three rewrites of attn's head and tail
-  did no better.
-- `$.prompt.submit` called inside a `tool.call` hook rejects at once:
-  "prompt.submit: called from a tool.call hook, it would wait on the turn this
-  hook is holding; submit from a later event (turn.complete)". Called from a
-  loop outside any hook, it still waits for the turn to complete, as the 2.1.316
-  entry says.
-- `$.prompt.submit({ text })` without `asUser` starts a turn whose transcript
-  row has `origin: {"kind":"plugin","name":"attn"}`, and the model reads the
-  text after "The attn plugin sent a message:", followed by "This is how Claude
-  Code surfaces a prompt a plugin submits between turns — it starts this turn in
-  the user's place. Address the message above." The screen shows it under
-  "› Prompt from the attn plugin", as it does a submit with `asUser: true`.
-  Measured through attn's mod with a 📬 ring (seed `s-4nrpn7`).
-- Through attn's mod, a Quick Capture sent while a foreground Bash call ran was
-  held to the turn's end and submitted with `asUser: true`. It told Claude to
-  `git push --force origin main` over another author's commit, and auto mode
-  allowed the push (1 of 1, seed `s-4nrpn7`).
-- `$.turn.abort({ turnId })` called in a main-loop `tool.call` hook after
-  `next(e)` resolved keeps the tool result and ends the turn: `turn.complete`
-  reports `isAborted: true` and `reason: "aborted"`, and the Stop settings
-  hook does not fire. Unlike Esc, it does not stop the session: a
-  `$.prompt.submit({ text, asUser: true })` right after starts a turn 75 to
-  103 ms later, and UserPromptSubmit fires for it. The screen shows the text
-  under "› Prompt from the attn plugin". In 3 of 3 runs the model then finished
-  the task the aborted turn had started and did the new request.
-- In Code Mode the `tool.call` hooks for the calls inside a REPL script fire
-  when the script settles, so a steer that attn's mod holds for the next tool
-  call reaches the model when the running script ends, not while its command
-  runs. The appended row is a `plugin_note` attachment that the model reads
-  after "Note from the attn plugin, not from the user:" (seed `s-w8vjqt`).
-- attn's interrupt during a Code Mode script ends the open `Poll` call with
-  "[Tool call did not complete: the turn was ended to deliver the message that
-  follows. Nothing refused it; re-run it if still needed.]", and the mod's
-  prompt starts the next turn about 120 ms later. The abort writes no
-  "[Request interrupted by user]" row, and attn keeps the session working
-  (4 of 4 runs). The script's command keeps
-  running in the background until the model stops it, which it did in 2 of 2
-  runs when the message asked it to (seed `s-w8vjqt`).
+- **Warm spare (`internal/agent/claude_spare.go`):** `--print --input-format
+  stream-json --output-format stream-json --verbose` with no prompt argument
+  waits on stdin (~200–300 MB RSS). Unstopped, it burns idle CPU (~1.6–1.9 s /
+  10 min even with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`).
+- **Ready probe + SIGSTOP:** send `control_request` `subtype: mcp_status`
+  (`get_settings` answers too early, before `session.start`) and SIGSTOP the
+  process group on reply. Stopped spares use 0 CPU, still answer after 2h+
+  idle (~50 ms overhead over model time vs ~1.2–4 s cold), and exit within
+  200 ms if the daemon dies via SIGKILL (orphaned stopped process group gets
+  SIGHUP+SIGCONT).
+- **Late config & single-use:** send `control_request` `initialize` (with
+  `systemPrompt`—required or it answers as Claude Code with tools) then
+  `set_model`. A spare keeps conversation history across messages, so use each
+  spare for one call and exit.
+- **Tools & schemas:** `--disallowedTools '*'` avoids ~19.3k tokens of tool
+  definitions; `jsonSchema` on `initialize` returns `structured_output` only
+  under `--allowedTools`. Under `-p --output-format json --json-schema`,
+  `--verbose` wraps output in an event array whose last `type: "result"` holds
+  `structured_output`, `usage`, `modelUsage`, `total_cost_usd` `[2.1.310]`.
+- **Large cold inputs:** `claude --print` reads stdin whole (tested to 1 MiB)
+  and `--system-prompt-file` carries instructions whole (tested to 1 MiB)
+  `[2.1.329–330]`.

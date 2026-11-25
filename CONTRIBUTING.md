@@ -21,9 +21,10 @@ Not all contributions will be accepted. Opening an issue first sets expectations
 
 ## Development Workflow
 
-Follow [Pull requests](docs/internal/pull-requests.md) for branches and pull
-requests from your fork, and [Instances](docs/internal/instances.md) for development setup and verification.
-Reference the issue in your PR.
+Branch from and target `main` (never `next`, which is a read-only mirror of
+`main`). Open your pull request ready for review with a scoped
+conventional-commit title and a description of what users observe, and reference
+the issue. See [Instances](docs/internal/instances.md) for development setup.
 
 ## Questions?
 

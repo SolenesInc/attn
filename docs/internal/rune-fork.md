@@ -1,184 +1,67 @@
 # The Rune fork
 
-The native app in `native/` builds on Rune, through attn's fork of it:
-[SolenesInc/rune](https://github.com/SolenesInc/rune). The fork is attn's own
-library. We change it whenever that makes attn simpler or better, and we delete
-from it what attn does not use. Upstream,
-[anomalyco/rune](https://github.com/anomalyco/rune), is a source of changes we
-cherry-pick. We do not merge upstream into the fork.
+`native/` builds on attn's own fork, `SolenesInc/rune`. Change it whenever that
+makes attn simpler or better, and delete whole unused areas rather than pieces
+(deleted areas can no longer take upstream picks). Cherry-pick from upstream
+`anomalyco/rune`; never merge upstream into the fork.
 
-Do not open issues, pull requests or discussions on `anomalyco/rune`.
+**Never open issues, pull requests or discussions on `anomalyco/rune`.**
 
-## Branches
+## Branches and `FORK.md`
 
-- `main` is the trunk and the fork's default branch. `native/` pins one
-  revision of it. Nobody rebases or force-pushes `main`, because every revision
-  an app has pinned must stay reachable.
-- `dev` mirrors upstream's `dev`. It only fast-forwards and takes no commits of
-  ours. Picks come from it.
-- Work branches start from `main`. Other apps' branches, such as `lens-fixes`
-  for Attn Lens, belong to their own work. Leave them alone.
+- `main`: fork trunk; `native/Cargo.toml` pins a commit here. Never rebase or
+  force-push `main`.
+- `dev`: fast-forward mirror of upstream `dev` (picks come from here).
+- Other apps' branches (such as `lens-fixes`): leave alone.
+- `FORK.md` at the fork root is the ledger ("Our changes", "Picked from
+  upstream", "Last upstream commit reviewed"). Every commit on `main` not in
+  upstream `dev` must record itself by updating `FORK.md` (with its test names
+  in backticks, suffixed `(macOS)` or `(Linux)` if OS-only).
+- **Union-merge trap:** `.gitattributes` merges `FORK.md` by union, which keeps
+  both versions of an edited line. `scripts/rune-bump` rejects duplicate lines;
+  collapse any pair into one line on your branch before bumping.
 
-`FORK.md` at the root of `main` is the ledger. It has three parts: our changes,
-each with its tests; the upstream commits we picked; and the last upstream
-commit someone reviewed for picks. `scripts/rune-bump` runs every test it
-names, and fails when `FORK.md` does not record a commit on `main` that
-upstream's `dev` lacks. A commit records itself by changing `FORK.md`. Changes
-made before that rule list their commits by hash.
+## Changing Rune and moving the pin
 
-The fork's `.gitattributes` merges `FORK.md` by union, so branches that each
-append a row merge without a conflict. Union also keeps two versions of a line
-when a merge's sides disagree on it: a row two branches extend, or a row one
-side extends while the other adds a row beside it, which keeps the old version
-too. `scripts/rune-bump` refuses a `main` whose `FORK.md` still holds two
-versions of one line, and names them; rows that differ, kept once each, pass.
-Make each pair into one line on the branch, in any later commit.
+Run `scripts/rune-bump --help` for full behavior (`RUNE_CLONE` defaults to
+`~/projects/rune`).
 
-## Change the library
+1. **Own change or conflicting pick:** branch from `solenes/main`, add a test
+   that fails without the change (overlay tests go in
+   `crates/rune/src/overlay/fork_tests.rs`), run
+   `scripts/test.sh -p rune -p rune-kit -p rune-mermaid -p rune-perf --features rune-kit/markdown,rune-kit/mermaid`,
+   add the `FORK.md` row in the same commit, push the branch, then from your
+   attn checkout run:
 
-Put a change in the fork when it makes attn simpler or better there than in
-`native/`: a bug fix, an API the app needs, or code that removes plumbing from
-the app. Deleting code attn does not use counts too; delete whole areas rather
-than pieces, since a deleted area can no longer take picks.
+   ```sh
+   scripts/rune-bump --branch <fork-branch>
+   ```
 
-1. Clone the fork, or add it as a remote to a clone of upstream:
-   `git remote add solenes git@github.com:SolenesInc/rune.git`.
-2. Branch from `solenes/main`.
-3. Write the change with a test that fails without it. Put tests in the sibling
-   test file the fork's `AGENTS.md` names; overlay tests go in
-   `crates/rune/src/overlay/fork_tests.rs`.
-4. Run `scripts/test.sh -p rune -p rune-kit -p rune-mermaid -p rune-perf --features rune-kit/markdown,rune-kit/mermaid`
-   for the areas you touched. `scripts/test.sh` passes its arguments to
-   `cargo test`; several agents can run it at once on one machine, as
-   [Test builds and memory](#test-builds-and-memory) explains. The fork's
-   `fork tests` workflow (`.github/workflows/fork-tests.yml`) runs the whole
-   suite on Linux and macOS for each push to `main` and on request, so a test
-   that runs only on macOS is checked there.
-5. Add a row under "Our changes" in `FORK.md`: what the change does, why it
-   lives in Rune, and its tests in backticks, followed by `(macOS)` or `(Linux)`
-   when a test runs only there; `scripts/rune-bump` skips it elsewhere. Name a unit test by its path in its crate, such as
-   `overlay::tests::a_press_before_the_first_frame_after_show_reaches_the_view`, and an integration test by its
-   file, such as `crates/rune/tests/press_keeps_focus.rs`, which runs the whole
-   file, or with `::<test>` after the file to run one of its tests. Commit the
-   row with the change; a later commit to the same change extends its row.
-6. Push the branch and bring it into `main` with
-   `scripts/rune-bump --branch <branch>`, from the attn checkout that holds the
-   attn side of your change, as [Move the pin](#move-the-pin) says.
+2. **Clean upstream pick (Orchestrator):** from a clean attn checkout on `main`:
 
-## Take a change from upstream
+   ```sh
+   scripts/rune-bump --pick <upstream-commit>...
+   ```
 
-Take upstream changes one named commit at a time, by cherry-pick, never by
-merging `dev`. Watch the areas where upstream's work helps attn most: text and
-IME, Linux and Wayland, and frame pacing.
+   If a pick conflicts, port it as an own change on a branch instead.
+3. **Existing `main` revision:** `scripts/rune-bump --rev <rev>`.
+4. Commit the uncommitted pin move together with the attn-side change and land
+   both with `land`. Land promptly after `rune-bump` pushes `main` so other
+   agents merging onto `main` do not build against a breaking Rune change
+   without your attn-side update.
 
-A weekly automation, "Rune upstream review", reads upstream's new commits for
-picks, following the `rune-upstream-review` skill
-(`.agents/skills/rune-upstream-review`). `scripts/rune-upstream list` shows the
-commits after the "Last upstream commit reviewed" line in `FORK.md`, and the
-automation asks the user which to pick. It picks nothing itself. Once the user
-answers, it plants a seed for the Orchestrator when the user picked commits,
-and moves the line with `scripts/rune-upstream reviewed <commit>`, which
-commits the move to the fork's `main` and pushes it without moving the pin.
-Anyone else who reads upstream's commits for picks moves the line the same
-way.
+## Traps
 
-A Builder asked for an upstream change picks it on a branch from `main`:
-`git cherry-pick -x <commit>`, then adds a row under "Picked from upstream" in
-`FORK.md` in the same commit, pushes the branch and names it on the seed, as for
-a change of our own. When the commit no longer applies, write it as our own
-change instead, with a test and a row under "Our changes" that names the upstream
-commit it follows.
-
-The Orchestrator takes picks straight onto `main`, from an attn checkout on a
-clean `main`:
-
-```sh
-scripts/rune-bump --pick <upstream commit>...
-```
-
-It works in a clone of Rune at `~/projects/rune` (set `RUNE_CLONE` for another)
-and fetches upstream and the fork by URL, so the clone's remotes do not matter.
-In order, it:
-
-1. refuses a commit that is not on upstream's `dev`, then fast-forwards the
-   fork's `dev` to upstream's;
-2. cherry-picks each commit, in the order given, onto `main` in a temporary
-   worktree with `git cherry-pick -x`, and records it under "Picked from
-   upstream" in `FORK.md` in the same commit;
-3. checks that `FORK.md` records every commit on `main`;
-4. runs every test `FORK.md` names, through the new `main`'s
-   `scripts/test.sh` on this machine's OS, and fails when one fails or does not
-   run, so a stale row is caught;
-5. moves the pin and runs attn's native suite against the new `main`, then
-   pushes `main`, as below.
-
-A pick that conflicts stops the script, and nothing is pushed. Port it on a
-branch as a Builder would, then run `scripts/rune-bump --branch <branch>`.
-
-## Move the pin
-
-The Builder whose change needs Rune moves the pin, and lands it in one landing
-with the attn side of the change. A move whose native suite fails does not land.
-
-- `scripts/rune-bump --pick <commit>...` picks from upstream, then moves the pin.
-- `scripts/rune-bump --branch <fork-branch>` merges a fork branch into `main`,
-  checks the ledger, runs its tests and moves the pin. It refuses a branch that carries commits of upstream's `dev`
-  that `main` lacks, and one whose `FORK.md` keeps two versions of a line.
-  When the merge conflicts, bring the branch up to `main`, resolve, and push it
-  again.
-- `scripts/rune-bump --rev <rev>` moves the pin to a revision already on
-  `main`. It refuses a revision that is not on `main` or whose ledger lacks a
-  row.
-
-Before moving the pin, the script fails when the crates Rune's
-`[patch.crates-io]` names at the new revision differ from those
-`native/Cargo.toml` repeats. An app that depends on Rune repeats those entries
-in its own workspace, because cargo ignores a dependency's `[patch]` section.
-Copy Rune's entries into `native/Cargo.toml`, pointed at the fork at the
-revision `native/` pins now, commit, and run the same `scripts/rune-bump` again.
-
-The script then replaces the rev in `native/Cargo.toml`, runs
-`cargo update -p rune` and the native suite (`make test-native`) in your attn
-checkout, and leaves the pin move uncommitted. For `--pick` and `--branch`, the
-new `main` reaches the fork only once that suite passes. Until then cargo
-fetches it from a candidate branch, `rune-bump/<rev>`, which the script deletes
-when it exits. So a Rune change that breaks attn never reaches `main` ahead of
-its attn side, and another agent's `scripts/rune-bump` never builds attn against
-it. When the suite fails, fix attn against the pinned revision, drop the pin
-move with `git checkout -- native/Cargo.toml native/Cargo.lock`, and run the
-script again. When someone pushed `main` while the suite ran, the push is
-refused; drop the pin move and run the script again.
-
-Commit the pin move with the attn change and land both with `land`,
-which runs the native suite again before pushing. Between the push and that
-landing, `main` is ahead of attn's: another agent's run that merges onto it
-builds attn without your attn side, and fails if the Rune change breaks attn.
-Land soon after the push, and ask that agent to wait for your landing. The
-script stops at the first step that fails, names it and prints its output.
-
-## Test builds and memory
-
-Compiling `rune`'s lib tests is one `rustc` that peaks at 3.6 GB of resident
-memory and takes 55 s on ai-sandbox (22 cores, 64 GB). It instantiates 188,000
-items. Two full ledger runs started together from two checkouts both finish,
-with a combined peak of 21.7 GB. Most of it, 19 GB, was cargo building the
-colder checkout's integration-test crates in parallel, one `rustc` per core; the
-lib tests are a small part. So a run from a cold checkout peaks near 19 GB, and
-three cold runs at once can exhaust a 64 GB machine; pass `-j` to `scripts/test.sh`
-to build fewer crates at a time. Measured 2026-11-14 on
-the fork's `main` at `e659f048` and on `test-lock-removal` at `5383df81`.
-
-Before that, the build peaked at 24.8 GB and took 425 s (2.53 million items,
-at `e92ffed3`), so `scripts/test.sh` let one run at a time per machine, under a
-lock in `~/.cargo`. The cost came from monomorphization: the runtime was generic
-over the app state, `Runtime<S>`, and the lib tests use 271 state types, so the
-whole runtime was built 271 times. Build settings barely moved it.
-
-The runtime now does its work in `RuntimeCore`, which has no type parameter,
-and reaches the app's state, view and hooks through one trait object; the
-typed `Runtime<S>` is a thin wrapper that derefs to it. The fork's
-`scripts/state-free.sh`, run by its `scripts/file-size.sh`, fails on an `impl`
-over `Runtime<S>` outside `runtime/app_side.rs`, since such a method is built
-again for every state type. Write runtime methods in `impl RuntimeCore`, and
-take `impl RuntimeCore` for an upstream pick that adds an `impl<S> Runtime<S>`
-block.
+- **`[patch.crates-io]` sync:** Cargo ignores a dependency's `[patch]` section,
+  so `native/Cargo.toml` repeats Rune's `[patch.crates-io]` entries. If
+  `scripts/rune-bump` fails on a mismatch, copy the new entries into
+  `native/Cargo.toml` at the currently pinned rev, commit, and rerun.
+- **No `impl<S> Runtime<S>`:** write runtime methods on `impl RuntimeCore`
+  (non-generic) instead of `Runtime<S>` outside `runtime/app_side.rs`
+  (enforced by `scripts/state-free.sh`). Generic `Runtime<S>` monomorphized
+  across 271 test state types and spiked builds to 24.8 GB.
+- **Cold test memory:** a cold checkout peaks near ~19 GB RAM building
+  integration tests in parallel; pass `-j` to `scripts/test.sh` if multiple
+  cold runs share a 64 GB host.
+- **Weekly upstream review:** `.agents/skills/rune-upstream-review` uses
+  `scripts/rune-upstream list` and `scripts/rune-upstream reviewed <commit>`.

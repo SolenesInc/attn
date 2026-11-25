@@ -67,7 +67,7 @@ withdraw them. Asks are on by default, and an agent keeps the setting it launche
 ### Triggers
 
 - A default falling due: the one-minute `ask_default_due` tick (`internal/daemon/ask_defaults.go`) queues the notice in the addressee's inbox, classed as a reminder for `garden.tender_resume`.
-- The user's answer is user input in the addressee's inbox. A ring types the answer into the conversation without waiting for the agent's turn to end (`internal/daemon/asks.go`). The rules are in `docs/internal/inbox.md`.
+- The user's answer is user input in the addressee's inbox. A ring types the answer into the conversation without waiting for the agent's turn to end (`internal/daemon/asks.go`, `internal/daemon/inbox_delivery.go`).
 
 ## Driving it
 

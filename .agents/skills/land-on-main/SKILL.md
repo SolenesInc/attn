@@ -7,8 +7,7 @@ description: attn-specific additions to `land guide` when landing a change on at
 
 attn lands straight on `main` with `land`, with no pull request. Run
 `land guide` first for the universal landing steps. This skill holds what attn
-adds to them. [Trunk-based development](../../../docs/internal/trunk-based-development.md)
-explains the system around landing.
+adds to them.
 
 ## Commit
 

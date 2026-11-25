@@ -1,96 +1,43 @@
 # Harness behavior
 
-How each harness behaves where attn meets it: which hooks fire and when, which
-conversation id the hooks carry, what the harness's app-server and TUI do, and
-how the harness updates itself. Designs that react to a harness depend on these facts.
+External behavior of each harness where attn meets it. Every claim must be
+checked in the harness's source or with a binary probe and tagged with its
+version; never add or rely on a claim from memory. Group facts by topic and
+replace superseded findings rather than appending probe logs.
 
-Every entry was checked against the harness's source or a probe, and names
-the version it was checked on. Do not add or rely on a claim from memory:
-read the source or probe the binary first, then record it in the file for its
-harness.
+## Per-harness references
 
-## Where each harness is described
+- [Claude Code](harnesses/claude.md): hooks, idle compaction, trust, OSC 7501,
+  MCP, mods, agent view, model call spare.
+- [Codex](harnesses/codex.md): plain TUI, hooks, `/side`, rollouts, local
+  memories, updates, `codex exec`.
+- [Codex app-server](harnesses/codex-app-server.md): shared app-server,
+  `--remote` TUI, drain/restarts, trust, MCP, ephemeral model calls.
+- [Sigma](harnesses/sigma.md): Sigma server (formerly Nisse), authors,
+  steering/interrupt, lineage, MCP, ephemeral runs.
 
-- [Claude Code](harnesses/claude.md): hooks, conversation ids, idle compaction,
-  composer suggestions, the agent view, auto memory, OSC 7501, attn tools
-  over MCP, mods and the model call spare.
-- [Codex](harnesses/codex.md): plain Codex, local memories, updates and
-  headless runs.
-- [Codex app-server and `--remote`](harnesses/codex-app-server.md): the shared
-  app-server that shared Codex runs on, attn tools over MCP there, and model
-  calls on it.
-- [Sigma](harnesses/sigma.md): the Sigma server, named Nisse until 2026-11-14,
-  and attn tools over MCP there.
+## Cross-harness invariants
 
-This file keeps the facts that hold across harnesses.
-
-## attn identities at the harness boundary
-
-`ATTN_TERMINAL_ID` identifies the launched terminal. Older launches carry the
-same identity under `ATTN_SESSION_ID`. A terminal can change conversations with
-`/clear` or `/resume`. CLI commands address the conversation shown when the
-command starts. Hooks apply to the conversation shown when the report arrives.
-Under shared Codex, hooks and commands run in the app-server and name their
-conversation instead: a hook by the `session_id` on its stdin, a command by
-`CODEX_THREAD_ID`, and an attn tool call by the `threadId` in its `_meta`. A
-`/side` conversation has no session of its own: attn sets `ATTN_TERMINAL_ID` on
-its shell tools and gives it its terminal's credential for the tools, so its
-commands and tool calls act as the session of the terminal that shows it, and
-its hooks resolve to no session. Sigma runs commands in its server, and names
-the root of the caller's tree (the user-started conversation for a root session
-and its hosted subagents, or the worker itself for a worker and its hosted
-subagents) by `SIGMA_ROOT_CONVERSATION`, and an attn tool call by the
-`Sigma-Root-Conversation` header. Native harness
-conversation ids remain separate text values.
-
-A session is attn's record of one conversation in one profile. A terminal
-shows one session at a time, and a session can show in any number of
-terminals. Removing a placement keeps the terminal addressable, including
-after daemon restart. Closing a session ends its terminal associations. When a
-terminal resumes the conversation of a session whose agent no longer runs, the
-session moves into that terminal and the session's old tile goes away.
-
-Showing one session in many terminals needs the session to run over a link
-whose server every terminal of the conversation joins, like shared Codex's
-app-server. A terminal on a link that resumes the conversation of a live
-session shows that session.
-
-An integration without a link starts one process per terminal. Claude Code
-lets a second process open a conversation that another process still runs.
-The second terminal keeps its own session on the conversation, so two open
-sessions hold one conversation. The tiles of every live session on that
-conversation warn until one session remains. Plain Codex refuses the second
-process.
-
-Plugin driver payloads retain the `session_id` wire spelling for the terminal.
-Close notifications, including those completed after restart, use the original
-terminal identity.
-
-## The agent credential stays out of arguments
-
-Any local user can read a process's arguments, so no process attn starts holds
-the credential for the attn tools in its arguments: not the PTY worker or host,
-the login shell, the launcher (`attn -s`), nor the harness. A terminal's harness
-receives the credential in its environment, as `ATTN_AGENT_CREDENTIAL` or a
-variable its plugin names, and its configuration names the variable: Claude
-Code expands `${ATTN_AGENT_CREDENTIAL}` in its `--mcp-config` header, and plain
-Codex names it with `bearer_token_env_var`. Shared Codex receives its server's
-credential in each conversation's `config` over the app-server connection.
-Every variable a launch adds to an agent's environment travels this way, so a
-new one needs no care of its own.
-`TestNoProcessALaunchStartsHoldsTheAgentCredentialInItsArguments` (`cmd/attnd`)
-records every process that Claude Code and shared Codex launches start, on both
-PTY runtimes and both launch paths, and fails on any credential the daemon
-signed that appears in their arguments.
-
-## The running version in the transcript
-
-Each harness writes the version of the running process into its transcript, so
-the version stays right after the binary on disk updates. Probed on the user's
-own transcripts on 2026-10-24:
-
-- Claude Code (2.1.302, 2.1.310): every line has a top-level `version`. The
-  newest `version` is at most 38.8 KB from the end of the file, across 300
-  transcripts with lines up to 1.8 MB.
-- Codex (0.162.1): the first line is `session_meta`, with
-  `payload.cli_version`. That line is about 23 KB.
+- **Caller identity at the boundary:**
+  - Terminal-bound harnesses: `ATTN_TERMINAL_ID` (legacy `ATTN_SESSION_ID`);
+    CLI commands resolve to the terminal's current conversation when the
+    command starts, hooks when the report arrives.
+  - Shared Codex (server-bound): hooks carry `session_id` on stdin, shell tools
+    get `CODEX_THREAD_ID`, MCP `tools/call` gets `_meta.threadId`. Ephemeral
+    `/side` shell tools get the terminal's `ATTN_TERMINAL_ID` and credential;
+    its hooks resolve to no session.
+  - Sigma (server-bound): shell tools get `SIGMA_ROOT_CONVERSATION`, MCP
+    requests carry header `Sigma-Root-Conversation` (root of the conversation
+    or worker tree).
+  - Plugin drivers retain `session_id` as the wire spelling for the terminal.
+- **Agent credential never appears in argv:** any local user can read `ps`.
+  Pass the credential only via env (`ATTN_AGENT_CREDENTIAL` expanded by Claude
+  `${ATTN_AGENT_CREDENTIAL}` and plain Codex `bearer_token_env_var`) or over
+  the server channel (shared Codex per-thread `config`, Sigma in-memory
+  `mcp/register`). Guarded by
+  `TestNoProcessALaunchStartsHoldsTheAgentCredentialInItsArguments` (`cmd/attnd`).
+- **Running version in transcripts** (stays accurate after on-disk updates):
+  - Claude Code `[2.1.302–310]`: top-level `version` on every JSONL line
+    (newest `version` within 38.8 KB of EOF across 300 transcripts).
+  - Codex `[0.162.1]`: first line is `session_meta` with `payload.cli_version`
+    (~23 KB).

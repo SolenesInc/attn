@@ -205,6 +205,7 @@ func (e *quietError) Error() string {
 
 func (e *quietError) Unwrap() error { return ErrUserTyping }
 
+// Over 14x the 4,390 user records in the busiest sampled transcript across 23 days (2026-10-29).
 const MaxPlacedDeliveries = 65_536
 
 func RetryDelay(err error) (time.Duration, bool) {

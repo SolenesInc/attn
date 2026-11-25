@@ -527,6 +527,7 @@ func sessionPullRequestRecordsForWatches(selected, all []store.SessionPullReques
 	return selected
 }
 
+// Intentionally in-memory (s-zabqmw): a daemon restart resets the 10-minute delay window.
 func (d *Daemon) failingForAColdInterval(prID string, now time.Time) bool {
 	since, seen := d.sessionPRFailingSince[prID]
 	if !seen {

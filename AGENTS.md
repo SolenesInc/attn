@@ -141,10 +141,9 @@ count.
 This repository lands on `main` with `land`, with no pull request.
 Before you land a change, run `land guide` and follow it.
 
-[Trunk-based development](docs/internal/trunk-based-development.md) explains the
-system, and the `land-on-main` skill (`.agents/skills/land-on-main`) holds
-attn's additions to `land guide` (seed direction, reviewer model table,
-`drive-attn` cleanup, Linux scenarios, and seed check reports).
+The `land-on-main` skill (`.agents/skills/land-on-main`) holds attn's
+additions to `land guide` (seed direction, reviewer model table, `drive-attn`
+cleanup, Linux scenarios, and seed check reports).
 
 - Your work ends when `land` pushes.
 - An Orchestrator reviews its Builders after landing. Corrections are new
@@ -233,8 +232,6 @@ is inconclusive, not a pass. When the work is not trivial, write the script
 that does it or proves it, so a reviewer reruns it instead of trusting a
 summary.
 
-Choose checks for affected CLI, daemon, app, protocol, and Linux paths using
-[verification requirements](docs/internal/instances.md#verification-requirements).
 When you change rendering, make sure nothing repaints continuously.
 
 ## Writing tests
@@ -388,14 +385,16 @@ garden reference changes, copy it into `attn_skill/references/garden.md` in
 
 ## Documentation
 
-Docs define product vocabulary, explain intended behavior and tell people how to
-use, run and test attn. Keep the glossary to short definitions. Docs for people
-using attn live in `docs/guide/`; docs for people changing attn live in
-`docs/internal/`.
+Docs for users live in `docs/guide/`. Internal docs (`docs/internal/` and
+scoped `AGENTS.md` files) exist for agents, not humans: they hold external
+facts, domain vocabulary, silent traps, and non-obvious entry points. Keep the
+glossary to short definitions.
 
-Do not write implementation notes anywhere. The code must explain how it works.
-If it needs a prose explanation of its wiring or control flow, make the code
-clearer.
+Do not write implementation notes or code mirrors anywhere. The code must
+explain how it works; put measurement receipts as short comments on constants,
+test-helper APIs in Go or Rust doc comments, and script flags in `--help`. Put
+subsystem-local rules in a short `AGENTS.md` beside the code rather than adding
+to `docs/internal/`.
 
 Edit text as a whole. Before you change a doc, skill, prompt or CLI help, read
 all of it and the other places that cover the same subject. Decide what to
@@ -409,7 +408,7 @@ entry names:
 
 - Database schema or migrations => docs/internal/db-migrations.md
 - Tests, before writing, changing, or deleting them => the write-test skill
-  (.agents/skills/write-test)
+  (.agents/skills/write-test) and docs/internal/testing.md
 - Test runners, their receipts, or `scripts/test-history` =>
   docs/internal/test-history.md
 - Harness contract, adapters, optional parts, approved leaks, or adding a
@@ -417,30 +416,23 @@ entry names:
 - How a harness behaves, before relying on it => docs/internal/harnesses.md and
   the file it names for that harness; check new claims in the harness's source
   or with a probe and record them in that file
-- The inbox: addresses, rings, wakes, seed updates or notices =>
-  docs/internal/inbox.md
 - Agent-facing content in `internal/prompts/content/**`, its Go definitions, or
   CLI help => docs/internal/prompt-authoring.md
 - Landing a change => run `land guide`, plus the land-on-main skill
   (.agents/skills/land-on-main) for attn's additions
-- Review on main, a red main, or why attn lands this way =>
-  docs/internal/trunk-based-development.md
-- Pull requests, or waiting on their reviews => docs/internal/pull-requests.md
+- Review on main or a red main => `.agents/skills/review-main` or
+  `.agents/skills/sheriff`
 - Release notes, releases, or hotfixes => docs/internal/making-a-release.md
-- Phone app TestFlight builds or testers => docs/internal/phone-app-releases.md
-- Installing, launching, or verifying instances => docs/internal/instances.md
+- Phone app TestFlight builds => mobile/AGENTS.md
+- Installing, launching, or cleaning instances => docs/internal/instances.md
 - Checking a change live through every way into a feature => the drive-attn
   skill (.agents/skills/drive-attn) and its feature map
-- The app in `native/`: its code, shortcuts, tests or build output =>
+- The app in `native/`: workspace, UI rules, screenshot tour or automation =>
   docs/internal/native-app.md
 - Packaged-app scenarios or recording/publishing evidence =>
   app/scripts/real-app-harness/AGENTS.md
 - CPU, memory, or benchmarks => docs/internal/perf-testing.md
-- Terminal input that stops working =>
-  docs/internal/diagnosing-terminal-input.md
-- Shared Rust PTY host => docs/internal/pty-host-verification.md
-- Native views' spacing, type, corners or controls => "Layout, type and
-  corners" in docs/internal/native-app.md
+- Shared Rust PTY host => pty-host/AGENTS.md
 - The Rune fork, its patches or the app's pin => docs/internal/rune-fork.md
 - The Cloud Relay's wire contract or its conformance suite =>
   docs/internal/cloud-relay-contract.md

@@ -47,7 +47,7 @@ macOS only. A paired program sends with `attn send` without the panel.
 
 ### Triggers
 
-- A sent capture is user input in the chosen mailbox's inbox. A ring types the capture at once, without the 📬 line. If the member is between sessions, attn starts a session for it first, and that start does not count against the mail-start limit (`internal/daemon/quick_captures.go`). The rules are in `docs/internal/inbox.md`.
+- A sent capture is user input in the chosen mailbox's inbox. A ring types the capture at once, without the 📬 line. If the member is between sessions, attn starts a session for it first, and that start does not count against the mail-start limit (`internal/daemon/quick_captures.go`, `internal/daemon/inbox_delivery.go`).
 
 ## Driving it
 

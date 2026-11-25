@@ -20,16 +20,17 @@ import (
 )
 
 var (
+	// Peak minute 882 events; peak day 87,414 events / 10.9 MB uncompressed (redacted).
 	eventsPerInstallPerMinute = window{limit: "events_per_install_per_minute", value: 10_000, span: time.Minute, bucket: time.Second}
 	eventsPerInstallPerDay    = window{limit: "events_per_install_per_day", value: 1_000_000, span: 24 * time.Hour, bucket: time.Minute}
-	installsPerIPPerHour      = window{limit: "installs_per_ip_per_hour", value: 20, span: time.Hour, bucket: time.Minute}
+	installsPerIPPerHour      = window{limit: "installs_per_ip_per_hour", value: 20, span: time.Hour, bucket: time.Minute} // Guessed; remeasure from real traffic.
 	bytesPerInstallPerDay     = window{limit: "bytes_per_install_per_day", value: 128 << 20, span: 24 * time.Hour, bucket: time.Minute}
 )
 
 const (
-	DefaultBytesPerDay = 2 << 30
+	DefaultBytesPerDay = 2 << 30 // Guessed (~16 installs at peak); remeasure from real traffic.
 	minIPSecretBytes   = 32
-	batchesInFlight    = 2
+	batchesInFlight    = 2 // One 16 MiB batch peaked at 130 MiB RSS (2026-10-24).
 )
 
 type Config struct {

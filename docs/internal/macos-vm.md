@@ -1,38 +1,26 @@
 # macOS VM
 
-Agents open, drive, screenshot and record Mac app windows in a macOS VM on the
-user's Mac. The VM runs headless, so nothing appears on the user's screen and no
-input reaches their keyboard or pointer. Nothing of the host goes inside: no
-shared folders, Keychain, tokens or signing identity.
+`scripts/vm` (built on `macvm` from shell-config) runs this checkout's Mac app
+in a headless macOS VM with no host folders, Keychain, tokens, or signing
+identity.
 
-`scripts/vm` runs this checkout's attn in such a VM. It sits on `macvm`, from
-shell-config, which starts, shares and stops the VMs for any repository.
+## When to use the VM vs the host
 
-## When to use it
+- **Use the VM** for every Mac app window you open, drive through automation,
+  screenshot, or record (PR clips, guide footage, Attn Lens checks).
+- **Stay on the host** for:
+  - CLI, daemon and wire checks (no window opened);
+  - speed, memory, CPU and frame-presentation budgets (VM numbers are not
+    representative and Metal writes `present_ms: null` on every frame);
+  - feel checks and anything needing the signed bundle or real attn;
+  - smooth high-fps recordings (VM recordings cap around ~22 fps light / ~11
+    fps heavy output);
+  - `drive-attn` recipes and `createScenarioRunner` scenarios (parked,
+    focus-free host launch until seed `s-6ktd3v` lands).
 
-Use the VM for every Mac app window you open, drive, screenshot or record:
+## Commands and hygiene
 
-- driving an app through its automation bridge
-- PR evidence clips and screenshots
-- guide and landing-page footage
-- Attn Lens checks
-
-CLI, daemon and wire checks open no window and need no VM. drive-attn recipes
-and `createScenarioRunner` scenarios do not run in the VM yet (seed `s-6ktd3v`);
-until they do, keep their parked, focus-free launch on the host.
-
-Stay on the host for:
-
-- speed, memory and CPU budgets, which VM numbers do not represent
-- how something feels to use
-- anything that needs the signed bundle or the user's real attn
-- recordings that need a smooth, high frame rate. Window recordings in the VM
-  reach about 22 fps with light terminal output and about 11 fps with heavy
-  output (seed `s-cj6223`). If a recording needs more, record on the host.
-
-## Run attn in the VM
-
-```bash
+```sh
 scripts/vm up
 scripts/vm drive wait '{"target":{"key":"sidebar"}}'
 scripts/vm record 20 /tmp/clip.mp4
@@ -40,79 +28,28 @@ scripts/vm shot /tmp/still.png
 scripts/vm down
 ```
 
-`up` installs `app/node_modules` if it is missing, builds the app unless the
-staged bundle already matches the source, gets a VM, installs the app, opens it
-without taking focus and waits until it is ready. Run it again after changing
-code: it rebuilds and reinstalls only when the source changed.
+- Run `scripts/vm down` when done (including after abandoned runs). Never run
+  `macvm stop` on a shared VM unless you own all holders (`macvm ls` shows
+  holders; up to 4 agents share each of macOS's 2 allowed VMs).
+- Each agent gets its own instance (`vm-<worktree>-<hash>`); pass
+  `--instance NAME` to pick another, or `scripts/vm adopt --instance NAME` to
+  claim an unowned legacy instance.
+- For exclusive guest access (real focus, system input, or Keychain isolation),
+  use `macvm up --alone`.
+- Publish clips from the host with `./scripts/pr-evidence.sh publish`. Do not
+  run `pr-evidence.sh record` inside the VM (`screencapture -v` writes an empty
+  video there).
+- See [Native app automation](native-app.md#automation) for `drive` actions.
 
-`drive` sends one automation action to the app.
-[Native app](native-app.md#automation) lists the actions. `record` adds a frame
-only when the window repaints, so a clip of a still window has few frames.
-Publish clips from the host with `./scripts/pr-evidence.sh publish`. Its
-`record` command does not work in the VM, where `screencapture -v` writes an
-empty video.
+## Guest quirks
 
-Each agent gets its own instance by default, `vm-<worktree name>-<hash>`, even
-when agents share a checkout. `--instance NAME`, before or right after the
-command, selects another. `down` quits and cleans the instance and releases the
-VM, so if one agent runs two instances, bring both down together.
-
-## Sharing
-
-macOS allows two running macOS VMs per Mac, so agents share them, up to four
-agents per VM. `scripts/vm up` joins the fullest running VM with room and starts
-one only when none has room. Each instance keeps its data apart, and clips show
-only their own window. One recording runs at a time per VM; a second one waits
-for the first.
-
-An instance belongs to the agent that brought it up in that VM. Another agent's
-`up`, `drive`, `record` or `shot` on that name is refused and names the owner, so
-pick a different `--instance`. Its `down` releases only its own hold on the VM
-and leaves the owner's app and data alone.
-
-An instance started by a `scripts/vm` from before owners has no owner, and its
-agent may still be using it. `up` on that name is refused, and `down` leaves it
-in place. If the instance is yours, `scripts/vm adopt --instance NAME` makes you
-its owner, and `drive`, `record`, `shot` and `down` then work as usual.
-
-When both VMs are full, `up` prints who holds them and waits up to 30 minutes.
-
-For a guest with one app in front, as scenarios that need real focus or system
-input do, or a guest nobody else can read, as Lens's Keychain token needs, use
-`macvm up --alone` directly.
-
-`macvm ls` shows every VM, who holds it, whether each holder is working, and
-when the VM will stop. `macvm stop NAME` stops one now, whoever holds it, and
-names the holders it removes.
-
-## How a VM stops
-
-`scripts/vm down` means "I am done". Run it when you are done, including after
-an abandoned run, and do not stop the VM yourself: another agent may be using it.
-
-A reaper, run by launchd each minute, stops VMs nobody needs. A VM stays up
-while any attn session holding it is working, or while the guest has work in
-progress. Once that ends, it stops 60 minutes later if a holder is still around
-and 15 minutes later if nobody holds it, which leaves it warm for the next job. A
-killed agent's VM stops the same way. A later `scripts/vm` or `macvm` call from
-an agent whose VM stopped fails and says when and why;
-`~/.local/state/macvm/stops.log` keeps the record. Run `scripts/vm up` again to
-get a new one.
-
-## Limits
-
-- The guest display is 1920x1200 points at 2x, so a full-screen still is
-  3840x2400 pixels.
-- A VM boots in seconds when the Mac is quiet and in up to 15 minutes when other
-  agents load it.
-- Right after a boot the guest is busy for several minutes. A capture can time
-  out then with `could not create image from display`; run it again.
-- The guest's display can stop showing the app window's new frames while the
-  app keeps drawing them. `shot`, `record` and the screen then keep an old
-  picture until the window is activated or resized. Real Macs don't do this
-  (seed `s-bk8n80`), and current builds rarely trigger it (seed `s-bjt0b1`).
-  The bridge's `find` and `wait` read the app's state, not the screen, so trust
-  them over a still. When a still disagrees with them, run
+- Display is 1920×1200 @ 2× (3840×2400 px). Boot takes seconds on a quiet Mac
+  and up to 15 minutes under load.
+- Right after boot, captures can fail with `could not create image from display`;
+  retry.
+- **Frozen guest display:** the guest window server can stop presenting new
+  frames while the app keeps drawing. Trust `drive find`/`wait` over a still;
+  if a still looks stale, run
   `macvm exec open -a Applications/attn-<instance>.app` and capture again.
-- Metal in the guest reports every drawable as skipped, so the app's `--trace`
-  writes `present_ms: null` on every frame. Measure presentation on the host.
+- `scripts/vm` fails if the launchd reaper stopped an idle VM
+  (`~/.local/state/macvm/stops.log`); rerun `scripts/vm up`.

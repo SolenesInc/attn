@@ -1,532 +1,173 @@
 # Codex app-server and `--remote` behavior
 
-How the Codex app-server and `--remote` behave where attn meets them. [Codex
-harness behavior](codex.md) covers plain Codex. The rules for adding a claim are
-in [Harness behavior](../harnesses.md).
+Shared app-server and `--remote` TUI behavior. For plain Codex, see
+[Codex](codex.md). Rules for adding claims: [Harness behavior](../harnesses.md).
 
-Probed on 0.165.0 with a local mock model, an isolated `CODEX_HOME` and a
-non-production attn daemon:
+## Socket, startup and hooks
 
-- A server-side `spawn_agent` sends `thread/status/changed` for the child to
-  an initialized control connection, but no `thread/started` for that child.
-  The connection also receives the child's turn, item and hook notifications.
-  `thread/read` returns the child's `parentThreadId` while the child's turn
-  runs.
-- Restarting attn's daemon leaves the same app-server and child turn running.
-  On the new control connection, `thread/loaded/list` includes the child and
-  `thread/read` still returns its parent. Reconnecting sends no
-  `thread/started` replay.
-- With `workspace-write`, `on-request` approvals and code mode enabled,
-  `tools.exec_command({cmd: "attn seed show ..."})` fails to connect to attn's
-  Unix socket with `operation not permitted`. Adding
-  `prefix_rule(pattern = ["attn", "seed", "show"], decision = "allow")` to
-  `<CODEX_HOME>/rules/default.rules` lets the same command connect and read
-  the seed. The tool call uses default sandbox permissions in both runs.
+- **Socket path:** `codex app-server --listen unix://PATH` serves WebSocket
+  (`GET /rpc`); `PATH` is a symlink into `/tmp/codex-daemon-<uid>/` named by
+  SHA-256 of canonicalized `PATH` `[0.158.0–0.167.0-alpha.4]`. Resolve the
+  symlink before dialing long paths. On Linux, `systemd-tmpfiles` can delete
+  the aged symlink while the listening socket stays reachable `[0.164.0]`.
+- **Hooks:** server `-c` hooks are session-flag hooks trusted via
+  `hooks.state."/<session-flags>/config.toml:<event>:0:0".trusted_hash`. They
+  run in the server's env with `cwd` = conversation cwd and stdin carrying
+  `session_id`, `transcript_path`, `cwd` `[0.160.0]`. Shell tools inherit
+  `CODEX_THREAD_ID` and server `-c shell_environment_policy.set.*` across all
+  conversations `[0.160.0]`.
+- **Open-file limit:** Codex never raises `RLIMIT_NOFILE`; processes launched
+  from a macOS app inherit 256 and fail under concurrent `command/exec` with
+  `os error 24` (`openai/codex#44682`) `[0.162.1]`.
+- **Sandbox + attn socket:** under `workspace-write`, `on-request` and code
+  mode, `exec_command` fails to dial attn's Unix socket (`operation not
+  permitted`) unless allowed via `prefix_rule` in
+  `<CODEX_HOME>/rules/default.rules` `[0.165.0]`.
+- **Server version:** `initialize` returns `userAgent` as
+  `<originator>/<version> (...)`, where `originator` is fixed to the first
+  client's `clientInfo.name` `[0.162.1]`.
 
-Probed on 0.160.0 with a mock model. Shared Codex relies on these.
+## Conversations, resume, permissions and subagents
 
-- `codex app-server --listen unix://PATH` speaks WebSocket (`GET /rpc`) on a
-  socket. `PATH` is a symlink to that socket, under `/tmp/codex-daemon-<uid>/`.
-  When `PATH` is long, a client must resolve the symlink before connecting.
-- From 0.158.0 through at least 0.167.0-alpha.4, the socket's name is the
-  SHA-256 of `PATH` with its parent folder canonicalized. On Linux,
-  `systemd-tmpfiles` removes an aged symlink but keeps a listening socket, so
-  the server stays reachable at that name after `PATH` is gone. Probed with the
-  link and its folder removed on 0.164.0 (Linux) and 0.166.0 (macOS).
-- Hooks given to the server with `-c` are session-flag hooks. A
-  `hooks.state."/<session-flags>/config.toml:<event>:0:0".trusted_hash` given
-  the same way trusts them. They run in the server's environment, with the
-  working directory set to the conversation's. Stdin carries `session_id` (the
-  conversation), `transcript_path` and `cwd`.
-- `thread/start` writes nothing to disk. `thread/inject_items` with a
-  developer message writes the conversation at once. The first turn of that
-  conversation still fires SessionStart `startup`, then UserPromptSubmit.
-- `thread/resume` of a conversation not on disk fails with `no rollout found`,
-  even while the server holds the conversation in memory. A `--remote` TUI that
-  loses its socket reconnects and resumes the conversation it shows, so a
-  conversation never written to disk cannot come back.
-- On 0.166.0 with a read-only `sessions/`, `thread/inject_items` fails with
-  `Permission denied`, but a `turn/start` after it still runs and completes. It
-  writes no rollout and only warns at turn completion. `thread/resume` then
-  fails, even on a fresh server after permissions are repaired. attn therefore
-  refuses a new conversation whose write fails.
-- A `--remote` TUI on 0.166.0 waited the full 60s attn holds the `thread/start`
-  reply, without a limit of its own firing.
-- `thread/resume` ignores `developerInstructions`: a conversation keeps the
-  instructions it started with. The `config` that `thread/resume` takes (such
-  as `model_auto_compact_token_limit`) applies when the resume loads the
-  conversation.
-- Every connection receives `thread/status/changed` (`idle`, `notLoaded`, or
-  `active` with `waitingOnApproval`), `thread/name/updated` and `thread/closed`
-  for every conversation. Only subscribers receive turns, items and approvals.
-  A conversation with no subscriber unloads about 60 s after it goes idle.
-- `turn/start` runs a turn with no terminal attached. `turn/steer` adds input
-  to the running turn and needs the turn's id as `expectedTurnId`.
-- A connection that resumes a conversation gets the conversation's pending
-  approval again, with the same request id. Any subscriber's answer settles the
-  approval for all subscribers.
-- After the first prompt the TUI names the conversation with an ephemeral
-  `thread_title` conversation, then `thread/name/set` on the real conversation.
-  `thread/name/set` from any connection renames the conversation in every TUI.
-- A conversation's shell tools get `CODEX_THREAD_ID` (the conversation id) and
-  the server's `-c shell_environment_policy.set.*` values, in every
-  conversation, including ones another client resumed.
-- One process writes a conversation at a time: while an app-server holds the
-  conversation loaded, another app-server or a plain `codex resume` fails with
-  `already has an active writer`. Either can take the conversation once the
-  holder unloads it. On 0.162.1, while a `--remote` TUI holds the conversation,
-  a plain TUI shows the lock screen that
-  [Codex harness behavior](codex.md) describes, both as
-  `codex resume <id>` and with `/resume <id>`, and writes nothing.
-- `thread/archive` moves the rollout to `archived_sessions/` (flat, no dated
-  directories) and refuses later resumes. `thread/unarchive` moves the rollout
-  back.
+- **Disk persistence trap:** `thread/start` writes nothing to disk until
+  `thread/inject_items` (developer message) writes it; `thread/resume` fails
+  with `no rollout found` if never written, breaking TUI reconnects `[0.160.0]`.
+  With a read-only `sessions/`, `thread/inject_items` fails (`Permission
+  denied`) while `turn/start` still runs without saving a rollout, so attn must
+  refuse a new conversation whose inject fails `[0.166.0]`.
+- **Single writer:** while an app-server holds a thread loaded, another
+  app-server or plain `codex resume` gets `already has an active writer` until
+  it unloads (~60 s after going idle with no subscribers) `[0.160.0]`.
+- **`thread/resume` settings traps:**
+  - Always ignores `developerInstructions` (a thread keeps its initial
+    instructions) `[0.160.0]`.
+  - Applies `approvalPolicy`, `approvalsReviewer`, `sandbox`, and `config`
+    **only** when loading an unloaded or unsubscribed idle thread; ignored if
+    any connection is subscribed or a turn is running `[0.162.1]`.
+  - Without those fields, restores approval policy and reviewer, but restores
+    sandbox only from a permission profile (otherwise falls back to the
+    server's configured sandbox, e.g. `read-only`) `[0.162.1]`.
+  - Rewrites any non-running in-progress turn as interrupted `[1ffa95e]`.
+- **`--remote` TUI permission traps `[0.160.0–0.163.0]`:**
+  - Refuses `--add-dir` (use experimental `runtimeWorkspaceRoots` on
+    `thread/start`, which replaces `[cwd]`; `/tmp` stays writable).
+  - Refuses to resume with `"Permission overrides are not supported when
+    resuming a remote task."` if launched with
+    `--dangerously-bypass-approvals-and-sandbox`, `-c` approval/sandbox flags,
+    or after `/permissions`.
+- **Archive & rename:** `thread/archive` shuts down a loaded thread (aborting
+  running turns/compacts) and moves the rollout to flat `archived_sessions/`;
+  `thread/unarchive` restores it `[0.164.0]`. `thread/name/set` appends to
+  `$CODEX_HOME/session_index.jsonl` (visible to all servers on that
+  `CODEX_HOME`) `[0.162.1]`.
+- **Subagents & `/agents`:**
+  - Server-side `spawn_agent` emits `thread/status/changed` (no
+    `thread/started`) plus child turn/item/hook notifications; `thread/read`
+    returns `parentThreadId` and survives daemon restarts (`thread/loaded/list`
+    still lists the child without `thread/started` replay) `[0.165.0]`.
+  - `/agents` resumes the picked root thread, except an unprompted thread the
+    TUI itself started, where the TUI stays subscribed and switches silently
+    until the first `turn/start` `[0.162.1]`.
+  - `/new` and `/clear` call `thread/start` before the first prompt, queuing
+    SessionStart until the first turn `[0.162.1]`.
 
-Read in the source at openai/codex rust-v0.164.0:
+## Turns, steering, interrupt and status
 
-- `thread/archive` first shuts down a loaded thread, which aborts its running
-  turn, a compact included, and then moves the rollout
-  (`app-server/src/request_processors/thread_processor.rs`,
-  `core/src/session/handlers.rs`).
+- **Turn control `[0.167.0]`:**
+  - `turn/steer` requires `expectedTurnId`; refuses compact turns with
+    `activeTurnNotSteerable` (`thread/compact/start` runs as a turn; TUI queues
+    user prompts until it ends).
+  - `turn/interrupt {threadId, turnId}` replies `{}` before the turn finishes;
+    `thread/status/changed` `idle` and `turn/completed` `interrupted` follow
+    within milliseconds. Interrupted commands stay alive as background
+    terminals.
+  - `turn/start` while active returns the running turn's id without starting a
+    new turn; call after `idle`.
+- **Notifications & approvals:** every connection gets `thread/status/changed`
+  (`idle`, `notLoaded`, `active` with `waitingOnApproval` /
+  `waitingOnUserInput`), `thread/name/updated`, `thread/closed`. Only
+  subscribers get turns, items, and approvals (resuming replays pending
+  approvals with the same id; any subscriber settles them) `[0.160.0]`.
+- **Stop hook ordering:** Stop runs inside the turn before `idle`, so `idle`
+  without Stop means interrupted or cut off `[1ffa95e]`.
+- **OSC 7501 & guardian:** TUI emits `app=codex` `idle|working|blocked`
+  (`kind=permission|question` in builds after `#54114`), ignoring
+  `thread/status/changed`. Under the guardian reviewer, `PermissionRequest`
+  fires before review with no answer hook, and the TUI stays `working`
+  (guardian-approved background terminals may emit no `PostToolUse`)
+  `[0.163.0–0.164.0]`.
+- **Background terminals:** conversation is `idle` while post-turn background
+  terminals run (`thread/backgroundTerminals/list`), while the TUI reports
+  `working` until they exit `[0.164.0]`.
+- **Stuck MCP startup round `[0.164.0–0.167.0]`:** TUI reports `working` until
+  every MCP server from its launch config leaves `starting`
+  (`mcpServer/startupStatus/updated`, not replayed, 30 s default
+  `startup_timeout_sec`). Joining a thread mid-round or removing an MCP server
+  from `config.toml` after TUI launch can leave the TUI permanently reporting
+  `working` across later turns while prompts still run.
 
-Read in the source at openai/codex rust-v0.162.1:
+## Folder trust
 
-- Codex appends to the existing rollout when it resumes a conversation. For a
-  fork, Codex creates a new thread id and writes the fork's own `session_meta`
-  before inherited history (`core/src/session/session.rs`,
-  `thread-store/src/local/create_thread.rs`, `rollout/src/recorder.rs`).
-  `thread/revert` can create a new rollout file while retaining the thread id
-  (`rollout/src/recorder.rs`).
-- In a `--remote` TUI, `/new` and `/clear` send `thread/start` before the
-  first prompt (`tui/src/app/event_dispatch.rs`,
-  `tui/src/app/session_lifecycle.rs`). SessionStart remains queued until the
-  first turn, before UserPromptSubmit (`core/src/session/session.rs`,
-  `core/src/session/turn.rs`). attn admits the successor when those hooks
-  report the successor's conversation. That first prompt makes the successor
-  working. The previous conversation's program status does not carry over.
-- `thread/name/set` appends the name to `$CODEX_HOME/session_index.jsonl`,
-  and the latest entry for a thread id is the thread's name
-  (`rollout/src/session_index.rs`,
-  `thread-store/src/local/update_thread_metadata.rs`). Every app-server on one
-  `CODEX_HOME` sees a rename made through any of them.
+`[0.164.0–0.166.0]`
 
-Read in the source at openai/codex rust-v0.167.0:
+- App-server and plain TUI resolve trust from the exact folder or its git repo
+  root (main repo for worktrees), never other ancestors.
+- Both `--remote` and plain TUIs ask the server via `config/read`, so `-c
+  projects."<folder>".trust_level` on the TUI does not bypass the prompt.
+- On a non-default daemon socket, `--remote` checks only the exact folder
+  (prompting in every new worktree unless a `.codex/` directory exists under
+  the trusted repo root). Explicitly untrusted folders cause `--remote` to exit
+  at launch.
+- While `"Trust this folder?"` is open, no OSC 7501 is emitted, and losing the
+  server leaves the TUI unable to reconnect (`remote app-server worker channel
+  is closed` on accept).
 
-- `thread/compact/start` runs the compact as a turn. `turn/steer` refuses it
-  with `cannot steer a compact turn` and the `activeTurnNotSteerable` error
-  (`core/src/session/turn_input.rs`,
-  `app-server/src/request_processors/turn_processor.rs`). A TUI whose user
-  submits a prompt during that turn keeps the prompt in its queue
-  (`tui/src/chatwidget/input_restore.rs`, `turn_runtime.rs`), so the
-  conversation takes it after the compact, as a new turn.
+## Drain, shutdown and TUI reconnect
 
-Probed on 0.163.0 with a real model:
+`[0.162.1–0.167.0]`
 
-- A `--remote` TUI refuses `--add-dir` and exits at once. Extra writable
-  directories come from `runtimeWorkspaceRoots` (experimental) on
-  `thread/start`, which replaces the default `[cwd]`. With `workspace-write`, a
-  conversation started with `[cwd, dir]` writes in `dir`. A conversation
-  started without `dir` cannot. `/tmp` stays writable either way. A
-  `thread/resume` without `runtimeWorkspaceRoots` restores the roots the
-  conversation saved. This behavior is read in the source at 6ae8b8aa7c and not
-  probed (`app-server/src/request_processors/thread_processor.rs`).
+- **Drain:** first SIGTERM/SIGINT (or SIGHUP, which can never force exit)
+  starts an unbounded drain—rejecting `turn/start`, `turn/steer`,
+  `thread/{start,resume,fork,archive}` with `-32600` (`data.reason:
+  "serverShuttingDown"` in `0.163.0+`), while reads, `turn/interrupt` and
+  approvals still work. Pending approvals, questions, and title generation keep
+  the drain open. Second SIGTERM/SIGINT forces exit.
+- **Shutdown:** closes socket and drops clients with raw EOF (no WS close
+  frame), then shuts down threads (up to 10 s each; slow when MCP servers are
+  running, 9–16.5 s observed) while ignoring signals.
+- **Process-group / npm / PTY host traps:**
+  - npm's `bin/codex.js` forwards SIGTERM to the native binary, so one SIGTERM
+    to the process group hits the server twice and forces exit; a second
+    SIGTERM to node alone is not forwarded.
+  - If a PTY host dies, SIGHUP leaves an active app-server draining forever
+    reparented to launchd—attn must kill the terminal's process group when its
+    host/worker dies.
+- **TUI reconnect `[0.163.0]`:** retries at 0, 1, 2, 4 s then every 8 s up to
+  120 s (keeping typed drafts; reporting `working` during reconnect), then
+  stays permanently offline. Pending approvals do not survive server restart.
+  Against a draining server, `turn/steer` exits 1, `turn/start` drops the
+  prompt, and a new `--remote` TUI exits 1. A TUI waiting on `thread/start`
+  tolerates a 60 s server hold `[0.166.0]`.
 
-Probed on 0.162.1 against the app-server alone:
+## attn tools over MCP and ephemeral model calls
 
-- `thread/start` and `thread/resume` take `approvalPolicy`,
-  `approvalsReviewer` and `sandbox`. `thread/resume` also takes `config`.
-  `thread/resume` applies these values and the `config` only when it loads the
-  conversation. It loads a conversation that is not loaded, and it loads again a
-  conversation that is loaded and has no subscriber. While any connection is
-  subscribed, the resuming connection included, `thread/resume` ignores these
-  values and the conversation keeps its own. `thread/resume` also ignores them
-  while a turn runs. The case of a running turn is read in the source at
-  rust-v0.160.0 and not probed
-  (`app-server/src/request_processors/thread_processor.rs`).
-- When `thread/resume` loads a conversation and receives none of these values,
-  it restores the approval policy and reviewer that the conversation last ran
-  with, but restores a sandbox only from a permission profile (the reviewer is
-  read in the source at rust-v0.160.0,
-  `app-server/src/request_processors/persisted_resume_settings.rs`). A
-  conversation that ran under a `sandbox` mode loads under the server's
-  configured sandbox. For example, a conversation started with `never` and
-  `danger-full-access` comes back `never` and `read-only` in an untrusted
-  folder.
-- Codex never raises its open-file limit (openai/codex#44682): the app-server
-  and the commands the app-server runs keep the soft limit that the app-server
-  was launched with, which is 256 for anything a macOS app starts. At 256, 65
-  of 200 concurrent `command/exec` calls failed with
-  `Too many open files (os error 24)`.
+`[0.171.0]`
 
-Probed on 0.167.0 with a real model over stdio, and through a non-production
-attn instance's shared app-server (seed `s-77s6d3`, 2026-11-23). attn's
-steer and interrupt rely on these:
-
-- `turn/steer` with `expectedTurnId` adds a user message to the running turn
-  while a command runs. The turn goes on and its reply can follow the steer.
-- `turn/interrupt {threadId, turnId}` answers `{}` before the turn has ended:
-  `thread/status/changed` `idle` and `turn/completed` with status
-  `interrupted` follow within milliseconds. The rollout records
-  `turn_aborted` with the turn's `turn_id` and reason `interrupted`.
-- `turn/start` while a turn is active starts no turn: it answers with the
-  running turn's id. A `turn/start` after the `idle` starts a new turn with
-  the input, 9 ms after the abort in the attn run.
-- A command the interrupted turn ran keeps running as a background terminal;
-  the next turn's agent saw its `sleep` still running.
-
-Probed on 0.162.1 and 0.163.0 with a mock model, and read in the source at
-rust-v0.163.0. Stopping and restarting the shared Codex app-server relies on
-these.
-
-- `initialize` answers `userAgent` as `<originator>/<version> (<os>; <arch>)
-  ...`. The version is the first token after the first `/`, the number
-  `codex --version` prints after `codex-cli `. The originator is the first
-  client's `clientInfo.name` for the life of the process. The rest of the
-  string changes with each client that initializes. A `--remote` TUI sends its
-  own version as `clientInfo.version`, probed on 0.162.1 (`tui/src/lib.rs`).
-- The first SIGTERM or SIGINT starts a drain. SIGHUP starts a drain too but can
-  never force it. During the drain connections stay up and new connections are
-  accepted, but `turn/start`, `turn/steer`, `thread/start`, `thread/resume`,
-  `thread/fork` and `thread/archive`, among others, fail with -32600 `Server is
-  draining; retry after reconnecting`. 0.163.0 adds `data.reason:
-  "serverShuttingDown"`. 0.162.1 sends no data. `thread/read`, `thread/list`,
-  `turn/interrupt` and approval answers still work. Nothing announces the
-  drain to clients.
-- The drain ends when no turn is running and no request admitted before the
-  drain is still preparing or submitting work. The drain has no timeout of its
-  own. A turn waiting on an approval or a question is still running, and so is
-  a turn's title generation. A second SIGTERM or SIGINT forces the exit. When no
-  turn is running and no admitted request is pending at the first signal, the
-  drain ends at once (`ShutdownState::update` in `app-server/src/lib.rs`).
-- At the end the server stops listening, removes its socket and drops every
-  connection without a WebSocket close frame, so clients see EOF before the
-  process exits. The server then drains its background tasks and shuts all its
-  conversations down at once, giving each up to 10 s. The server reads no
-  signals during that shutdown (`app-server/src/lib.rs`, `shutdown_all_threads_bounded` in
-  `core/src/thread_manager.rs`, called from
-  `request_processors/thread_processor.rs`).
-- While a server answers on `PATH`, a second server there exits 1 with
-  `app-server control socket is already in use`. Once the process is gone, a
-  new server can listen on the same `PATH` at once, even after SIGKILL.
-- A conversation cut off by a forced exit or SIGKILL can still be resumed on
-  the next server.
-- Installed with npm, `codex` is node running `bin/codex.js`, which forwards
-  SIGTERM to the native binary. One SIGTERM to the process group therefore
-  reaches the server twice and forces its exit. A second SIGTERM sent to the
-  node process alone is not forwarded.
-
-Probed on 0.167.0 on macOS, with the server as a shared PTY host's terminal
-and a model that never answers:
-
-- When the host dies, the server, the session leader of its PTY, gets the
-  hangup's SIGHUP and starts a drain. With no turn running it exits at once.
-  With a turn running it drains with no end, reparented to launchd: servers
-  a demo run left behind still answered `Server is draining` hours later.
-  attn therefore kills a terminal's process group when its PTY host or worker
-  dies.
-
-Probed on 0.162.1 and 0.164.0 on a copy of a real `CODEX_HOME`, with its
-plugins and MCP servers, and with a 0.162.1 `--remote` TUI:
-
-- A second app-server on another socket with the same `CODEX_HOME` starts and
-  answers `initialize` in 125–325 ms while the first runs. Stopping the second
-  server leaves the first serving.
-- Shutting conversations down is what makes a stop slow. With one
-  conversation a TUI started, the drain ended at once (socket gone after
-  0.16 s) and the process exited 9–16.5 s after SIGTERM, while its MCP servers
-  stopped. With conversations only resumed and no MCP server running, the
-  process exited 22–533 ms after SIGTERM.
-- A new `--remote` TUI starts its conversation by itself a few seconds after
-  launch, before any prompt. A TUI that asks whether to trust its folder starts
-  the conversation once the user answers. Before the conversation starts,
-  losing the connection makes the TUI exit 1, except at the trust question,
-  where the TUI stays open and never reconnects, as described below.
-- After a `--remote` TUI reconnects, the TUI shows busy in its title for a few
-  seconds: about 2 s when its server restarted, 7 s and more after attn's
-  daemon restarted.
-
-Probed on 0.163.0 with a `--remote` TUI, and read in the source at
-rust-v0.163.0:
-
-- When its server stops, the TUI shows `Reconnecting to server…` and retries
-  after 0, 1, 2 and 4 s, then every 8 s, until 120 s after the disconnect. Then
-  the TUI stays open offline and never retries (`tui/src/app/reconnect.rs`).
-- What the user typed survives the reconnect. Offline, typing works and Enter
-  does nothing.
-- Against a draining server, a prompt sent into a running turn (`turn/steer`)
-  makes the TUI exit 1. A prompt sent to an idle conversation shows `Failed to
-  start turn` and is dropped. A TUI started during a drain exits 1. When the
-  `thread/resume` of a reconnect is refused, the TUI shows the conversation as
-  unavailable, with input paused, and does not retry.
-- A pending approval does not survive a server restart.
-- The TUI never refuses a server version. When the TUI is a stable release
-  newer than its server, the TUI adds a warning to its footer and its F2
-  viewer, and nowhere else. `tui.show_server_version_notice` turns the warning
-  off. A TUI older than its server drops notifications of types it does not recognize and
-  answers unknown server requests with -32601, which the server takes as a
-  denied approval. The turn carries on.
-- A TUI still at the folder trust prompt when its server goes away never
-  reconnects, and choosing to trust then fails with `config/batchWrite ...
-  remote app-server worker channel is closed`, probed on 0.162.1.
-
-Read in the source at openai/codex rust-v0.160.0:
-
-- A `--remote` TUI sends its `--model`, `model_reasoning_effort`,
-  `approval_policy`, `approvals_reviewer` and a `sandbox` mode, never a
-  permission profile, on `thread/start`, and no approval or sandbox settings
-  on `thread/resume` (`tui/src/app_server_session.rs`). The TUI takes the
-  approval policy and reviewer that the server answers with and sends them with
-  each turn. The TUI sends a sandbox with a turn only after the user picks a
-  sandbox in the TUI (`tui/src/chatwidget/session_flow.rs`,
-  `tui/src/app/thread_routing.rs`).
-- A `--remote` TUI refuses to resume a conversation with `Permission
-  overrides are not supported when resuming a remote task.` when it was given
-  `--dangerously-bypass-approvals-and-sandbox` or `-c` for an approval or
-  sandbox setting such as `approval_policy` or `approvals_reviewer`, or once
-  the user picked permissions in the TUI with `/permissions`. As
-  `codex resume <id>`, the TUI exits. On `/resume`, or `/agents` to a
-  conversation that is not loaded, the TUI shows the error and stays on its
-  conversation (`tui/src/app/startup.rs`, `tui/src/app/config_persistence.rs`,
-  `tui/src/resume_permissions.rs`).
-
-Read in the source at openai/codex rust-v0.164.0:
-
-- The app-server and a plain TUI take a folder's trust from that folder, else
-  from the root of its repository (the main repository for a worktree), and
-  from no other parent folder (`config/src/config_toml.rs`,
-  `git-utils/src/trust.rs`).
-- Before its first `thread/start` or `thread/resume`, a `--remote` TUI given
-  `-C` asks the server whether that folder is trusted with `config/read`, so
-  `-c projects."<folder>".trust_level` given to the TUI does not count. On any
-  socket but Codex's own daemon socket the TUI looks only at the exact folder
-  in the reply, so the TUI asks in every new worktree of a trusted repository.
-  The TUI doesn't ask for a folder saved untrusted, or when the reply has an
-  enabled project layer: a `.codex/` folder, even one without `config.toml`,
-  that the server trusts through the repository. Inside a folder saved
-  untrusted with neither, the TUI exits at launch with `remote project
-  directory is inside an explicitly untrusted project`. Answering the question
-  makes the TUI write `projects."<folder>".trust_level = "trusted"` with
-  `config/batchWrite` (`tui/src/config_update.rs`,
-  `tui/src/onboarding/directory_trust.rs`, `tui/src/lib.rs`,
-  `config/src/loader/mod.rs`).
-- Declining the question saves nothing, so the next launch there asks again
-  (`tui/src/onboarding/trust_directory.rs`).
-- `thread/start` in a folder with no saved trust level saves trust when the
-  conversation's sandbox can write there: on the root of its repository (the
-  main repository for a worktree), or on the folder outside git
-  (`app-server/src/request_processors/thread_processor.rs`).
-
-Probed on 0.166.0 with a plain TUI in a PTY and its own `CODEX_HOME`, and on
-0.167.0 through attn on Linux, as a shared `--remote` TUI and as a plain TUI from
-an attn built to launch Codex outside its app-server, with every byte the TUI
-wrote recorded. Read in the source at rust-v0.166.0 and rust-v0.167.0:
-
-- The folder trust question reads "Trust this folder?", with "1. Trust and
-  continue" selected. attn recognizes the question by the text "Trust and
-  continue" (`ShowsFolderTrustQuestion`).
-- A plain TUI asks its app-server about trust too, with or without
-  `--no-daemon`, so `-c projects."<folder>".trust_level="trusted"` does not
-  stop the question (`tui/src/onboarding/directory_trust.rs`). It asks only
-  inside a project, meaning a git repository or a folder under a
-  `project_root_markers` entry. In any other folder with no saved trust the chat
-  starts (probed on 0.167.0). A `--remote` TUI asks in a project and outside one
-  (`tui/src/config_update.rs`, `read_remote_project_trust`).
-- Trust saved on a repository's root covers its worktrees and subfolders: the
-  TUI does not ask there.
-- In a folder saved untrusted, the TUI asks a different question, "Open
-  restricted" or "Quit".
-- While the question is open, the TUI sets no terminal title (no OSC 0 or 2) and
-  sends no OSC 7501, plain or shared, for the 40 s of the 0.167.0 probe. It
-  reports `state=idle` once its chat starts, 3.6 s after Enter in one probe on
-  0.166.0, because only the chat widget reports status
-  (`tui/src/chatwidget.rs`).
-- On 0.167.0 attn had the session `launching` until its first screen read 10.0 s
-  after launch, and `waiting_input` with `folder_trust_question` from then on, at
-  30 s too. A shared launch with a first prompt did the same.
-
-Read in the source at openai/codex 1ffa95e:
-
-- `active` carries `waitingOnUserInput` while a turn waits on the user's
-  answer (`app-server-protocol/src/protocol/v2/thread.rs`).
-- Stop hooks run inside the turn, and the turn waits for them, so a
-  conversation goes `idle` only after its Stop hook has exited
-  (`core/src/session/turn.rs`). A conversation that goes idle with no Stop
-  ended its turn another way: interrupted, or cut off.
-- `thread/resume` of a conversation that is not running rewrites its
-  in-progress turns as interrupted
-  (`app-server/src/request_processors/thread_lifecycle.rs`).
-- The TUI reports its state with OSC 7501 `state=idle|working|blocked` and
-  `app=codex` (`tui/src/terminal_program_status.rs`), and ignores
-  `thread/status/changed` for its own state. While the TUI reconnects to a lost
-  app-server it keeps reporting `working`. Once the TUI resumes the
-  conversation, it replays the conversation's turns, so a turn the lost server
-  was running ends as interrupted (`tui/src/app/reconnect.rs`,
-  `tui/src/chatwidget/replay.rs`).
-
-Read in the source at openai/codex rust-v0.164.0 and probed on 0.164.0 with a
-frame tap on attn's view proxy. These decide when a shared Codex tile leaves
-`working`:
-
-- The TUI counts an MCP startup round as a running task, so it reports
-  `working`, with no status row while no turn runs. A round ends only when every
-  server enabled in the TUI's config has reported a state other than `starting`
-  (`tui/src/chatwidget/mcp_startup.rs`,
-  `tui/src/chatwidget/status_surfaces.rs`).
-- `mcpServer/startupStatus/updated` goes only to the connections subscribed to
-  the conversation, with no replay. A TUI that joins a conversation another
-  connection loaded misses what the servers already reported. If a later server
-  still reports, that round starts in the TUI and has no way to end, so the TUI
-  keeps reporting `working` after its turn completes.
-- `thread/resume` can start a round, even for a conversation already loaded.
-  `turn/start` can start a round that reports only `ready`.
-- The TUI reads the servers it waits for from its config at launch, and `/new`
-  reads them again. A server removed from `config.toml` after launch leaves any
-  later round without an end. Restarting the app-server under that TUI starts
-  such a round, and the TUI reports `working` from then on, through later turns
-  too, probed with a real model. Typed prompts still run.
-- `thread/backgroundTerminals/list` names the running background terminals of a
-  loaded conversation. The conversation is `idle` while one runs after its turn
-  ends, and the TUI correctly reports `working` until the terminal exits, then
-  `done`.
-- A healthy TUI and the server agree within 103 ms when a turn starts and 30 ms
-  when it ends.
-
-Probed on 0.167.0 with a stdio MCP server that answers after 12 s and a frame
-tap on attn's view proxy, restarting the app-server under a live TUI:
-
-- `starting` for every server reaches the TUI within 100 ms of `thread/resume`,
-  and the TUI reports `working` within 100 ms of those frames. The conversation
-  stays `idle` throughout. The TUI reports `idle` within 3 ms of the last
-  `ready`.
-- With a server removed from `config.toml` after launch, the same frames arrive
-  and every server reaches `ready`, but the TUI stays on `working`. A frame tap
-  therefore tells a server that is starting from a round with no end.
-- A server's startup is bound by `startup_timeout_sec`, 30 s by default
-  (`codex-mcp/src/rmcp_client.rs`).
-- A new conversation of a fresh TUI has no attn conversation while its first
-  round runs, so `thread/read` on the session cannot run yet.
-
-Read in the source at openai/codex rust-v0.163.0 and c3bb20602d:
-
-- The TUI reports `blocked` only while a question, an approval overlay or an
-  MCP elicitation waits on the user. A guardian review shows as a footer
-  status, so the TUI reports `working` while the guardian reviews
-  (`tui/src/chatwidget/status_surfaces.rs`, `tui/src/bottom_pane/mod.rs`).
-- rust-v0.163.0 sends `blocked` without a kind. Later builds (#54114) add
-  `kind=permission` for approvals and `kind=question` for questions and
-  elicitations.
-
-Seen in attn's production log on 0.164.0, a shared Codex tile with the guardian
-reviewer:
-
-- PermissionRequest fires before the guardian reviews, and no hook reports the
-  guardian's answer. A command that the guardian let through and that kept
-  running as a background terminal sent no PostToolUse. The next hook came with
-  the agent's next tool call, 214 s later, while the TUI kept reporting
-  `working`.
-
-Read in the source at openai/codex rust-v0.162.1, with the switches probed on
-it using a model on a closed port. These behaviors decide which conversation a
-shared Codex tile follows:
-
-- A `--remote` TUI starts, forks or resumes a conversation on its own
-  connection only to show the conversation, or starts an `ephemeral`
-  conversation for a helper such as automatic titles and recaps. The TUI's task
-  tools that reach other conversations, `create_thread`, `fork_thread` and
-  `send_message_to_thread`, need an MCP server that the TUI starts only for a
-  local daemon or an embedded app-server, so the TUI refuses them
-  (`tui/src/app/startup.rs`, `tui/src/app/app_server_events.rs`,
-  `tui/src/dynamic_tools.rs`, `tui/src/app/thread_title.rs`).
-- `/agents` reads the root conversation picked with `thread/read` and resumes
-  the conversation with `thread/resume`, even a conversation the TUI showed
-  before. The exception is a conversation the TUI started itself and has not
-  prompted yet. When the TUI leaves that conversation, the TUI stays subscribed to the
-  conversation and goes back to it without a request. attn therefore first sees
-  the `turn/start` of the next prompt on that conversation (`tui/src/app/agents_overview.rs`,
-  `tui/src/app/thread_routing.rs`).
-- Picking a subagent that is not attached resumes the subagent
-  (`tui/src/app/session_lifecycle.rs`). On reconnect, the TUI resumes the
-  conversation it displays, a subagent's conversation when it shows one, never
-  a conversation another client loaded (`tui/src/app/reconnect.rs`).
-- The `thread` of a `thread/start`, `thread/fork` or `thread/resume` reply
-  carries `path` even before the conversation is on disk, and
-  `parentThreadId` only for a subagent
-  (`app-server-protocol/src/protocol/v2/thread_data.rs`,
-  `app-server/src/request_processors/thread_processor.rs`).
-
-## attn tools over MCP
-
-Probed on 0.171.0 with a real model, on a non-production attn instance with
-`agent_tools_enabled` on, two `--remote` TUIs on one app-server, and an
-isolated `CODEX_HOME` (seed `s-z7cfmc`):
-
-- A per-thread `config` of `mcp_servers.<name>.url`,
-  `mcp_servers.<name>.http_headers.Authorization`,
-  `mcp_servers.<name>.default_tools_approval_mode = "approve"` and
-  `mcp_servers.<name>.omit_tools_from = ["deferred"]` on `thread/start` gives
-  that conversation the server. Its tools run without a question under
-  `on-request` approvals. A subagent the server spawns calls with its parent's
-  entry. An ephemeral `/side` fork takes the entry its `thread/fork` `config`
-  gives it.
-- A conversation keeps the server entry it loaded with. When a second TUI
-  resumes a conversation that the first still shows, the resume's `config` is
-  ignored (as for every resume of a subscribed conversation, above), so the
-  entry, its bearer token included, stays the first TUI's.
-- Every `tools/call` names its conversation in `params._meta`: `threadId` is
-  the calling thread, a subagent's own thread for a subagent, and `sessionId`
-  is the root thread. `_meta["x-codex-turn-metadata"]` repeats both as
-  `thread_id` and `session_id`, with `parent_thread_id` for a subagent. A side
-  conversation's `threadId` is its ephemeral thread. attn resolves the caller
-  from `threadId`, because it is what `CODEX_THREAD_ID` holds for the CLI, so a
-  tool call and a CLI command from one thread resolve through the same path
-  (`codexShared.resolveCaller`), a subagent through its parent.
-- A server's `instructions` from `initialize` become its namespace's
-  description (`codex-mcp/src/rmcp_client.rs`, read on 0.171.0). Codex sends
-  the whole description with the namespace of tools it loads, but lists a
-  deferred namespace by its description's first line, cut at 250 characters
-  (`core/src/context/world_state/tools.rs`).
-- With `features.code_mode = true` and `workspace-write` without network, one
-  `exec` script called `tools.mcp__attn_core__seed_show({seed})`, read
-  `structuredContent.seed.title` from the `CallToolResult`, and passed it to
-  `tools.mcp__attn_core__seed_note`. The server's name `attn-core` becomes
-  `attn_core` in the tool name. MCP calls are made by the app-server, outside
-  the sandbox.
-- Code mode prints a tool's `outputSchema` as a TypeScript type in the `exec`
-  tool's description, or in `ALL_TOOLS` for a deferred tool. It expands at most
-  32 `$ref`s for each schema, in property-name order, and prints `unknown` for
-  every later one (`code-mode-protocol/src/json_schema_types.rs`, read at
-  rust-v0.167.0). A 0.167.0 rollout printed `seed_show`'s `seed`, `notes` and
-  `since` as `unknown`, because `board` had used the 32 (seed `s-fkmy5z`).
-
-## Model calls on the shared app-server
-
-A Codex model call runs as one ephemeral conversation on the profile's shared
-app-server while it runs (`internal/daemon/codex_oneshot.go`), on its own
-connection. Probed on 0.171.0 with attn's shared-server settings, a stand-in
-Responses API set as `openai_base_url`, and a user config with an MCP server,
-and read in the source at rust-v0.171.0, 2026-11-21 (seed `s-2apqpm`):
-
-- `thread/start` builds the conversation's settings from the server's `-c`
-  settings with the request's `config` laid over them
-  (`load_with_overrides` in `request_processors/thread_processor.rs`). With
-  `features.hooks=false` there, the conversation fired none of the hooks the
-  server was started with, while a conversation started without it on the
-  same server fired SessionStart, UserPromptSubmit and Stop. With the settings
-  `codex exec` gets for a tool-free run and
-  `mcp_servers.<name>.enabled=false` for each of the user's MCP servers, the
-  request declared only `exec` and `wait`, as `codex exec` does.
-- The server reads the user's `config.toml`, so the conversation keeps the
-  user's own settings, such as `developer_instructions`, where
-  `codex exec --ignore-user-config` drops them.
-- A conversation with no subscribed connection and no running turn unloads
-  after a delay (`thread_lifecycle.rs`), so closing the call's connection
-  ends it. An ephemeral conversation is never written to disk.
-- Measured with gpt-6.1-terra on a non-production instance, 10 calls 10 s
-  apart: 2.95 s median wall time on the shared app-server against 4.48 s
-  through `codex exec`. A conversation started ahead of the call answered in
-  2.14 s median in a direct probe. The rest of the difference is the
-  conversation's start: a WebSocket connection and a prewarm request, about
-  0.9 s together. The first turn of every conversation also fetches the
-  account's git attribution policy over HTTP before it calls the model, about
-  0.5 s (`ext/git-attribution/src/lib.rs`), and no setting skips it.
-
+- **Per-thread MCP config:** pass `mcp_servers.<name>.{url,
+  http_headers.Authorization, default_tools_approval_mode="approve",
+  omit_tools_from=["deferred"]}` on `thread/start` (inherited by subagents;
+  pass on `thread/fork` for `/side`). Kept for the thread's loaded lifetime
+  (later subscribed `thread/resume` ignores `config`).
+- **`tools/call` caller identity:** `_meta.threadId` is the calling thread
+  (subagent's own id, or ephemeral `/side` id), matching `CODEX_THREAD_ID`;
+  `_meta.sessionId` is the root thread. Server `name` hyphens become
+  underscores in code-mode tool names (`attn-core` → `mcp__attn_core__*`).
+  Deferred namespace listings truncate `initialize` `instructions` to the first
+  line (max 250 chars). MCP calls run in the app-server, outside the sandbox.
+- **Ephemeral model calls (`internal/daemon/codex_oneshot.go`):** run as an
+  ephemeral `thread/start` on the shared app-server with `features.hooks=false`,
+  `mcp_servers.<name>.enabled=false` for user MCP servers, and the `codex exec`
+  tool-stripping flags. Keeps user `config.toml` settings (unlike `codex exec
+  --ignore-user-config`), never writes to disk, and unloads after closing the
+  connection. First turn still pays ~0.5 s for an unskippable git-attribution
+  HTTP fetch (~2.95 s median vs ~4.48 s via `codex exec`).

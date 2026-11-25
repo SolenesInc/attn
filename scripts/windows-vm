@@ -21,6 +21,16 @@ scripts/windows-vm: try attn's native app on Windows 11 through WSL2, in a local
 
 The VM lives in $ATTN_WINDOWS_VM_DIR (default ~/.local/share/attn-windows-vm). It needs
 KVM with nested virtualization, qemu-system-x86_64, qemu-img, xorriso and OVMF.
+Defaults: 12 CPUs (ATTN_WINDOWS_VM_CPUS), 24 GiB RAM (ATTN_WINDOWS_VM_MEMORY_GIB),
+SSH on 127.0.0.1:2522 (ATTN_WINDOWS_VM_SSH_PORT). Evaluation expires after 90 days.
+
+Traps:
+  - Always start WSL via `scripts/windows-vm start`, not `wsl.exe` over SSH: SSH has no
+    desktop session, so WSLg's compositor crashes. Fix with `ssh win wsl --shutdown` then `start`.
+  - Run the app over X11 (`WAYLAND_DISPLAY=`, as `launch` does); WSLg Wayland segfaults.
+  - No GPU and three hypervisors deep on ai-sandbox (1.5-5 s key echo); never judge speed here.
+  - If host disk fills, QEMU pauses (`query-status` -> `io-error` on `qmp.sock`); free space
+    and send `{"execute":"cont"}`.
 EOF
     exit 2
 }

@@ -7,7 +7,7 @@ runner, and restores the database from a rotating backup. A user who hits a
 stuck terminal saves a diagnostic report from the palette and hands it to
 whoever maintains attn. `attn state explain` shows why one session has its
 state ([agent-state.md](agent-state.md)).
-`docs/internal/diagnosing-terminal-input.md` explains how to diagnose typing that stops working, using `attn debug input`.
+Use `attn debug input --tail 0` or **Create diagnostic report** when typing stops working.
 
 ## Sub-features
 

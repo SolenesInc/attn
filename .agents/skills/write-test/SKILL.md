@@ -27,18 +27,44 @@ lists the habits that most often break the strategy.
 
 ## Read
 
-Read `docs/internal/testing.md`, then the page for your kind:
+Read `docs/internal/testing.md`, and inspect the harness package for your kind
+(doc comments and neighboring tests are the API reference):
 
-| Kind | Read |
+| Kind | Harness |
 |---|---|
-| Daemon wire | `docs/internal/daemon-wire-tests.md` |
-| App wire | `docs/internal/native-wire-tests.md` |
-| CLI stack | `docs/internal/cli-stack-tests.md` |
+| Daemon wire | `internal/daemon/world_test.go`, `internal/testworld/`, `internal/fakeagent/`, `internal/daemon/AGENTS.md` |
+| App wire | `native/crates/attn-testkit/` |
+| CLI stack | `internal/testworld/` (`Stack`), `cmd/attnd/` |
 | Scenario | `app/scripts/real-app-harness/AGENTS.md` |
 
 ## Gotchas
 
 Each is a habit that works elsewhere and breaks a promise-only test here.
+
+### Harness traps
+
+- **Typing or delivering to a new agent too early.** Call `w.Launched` before
+  typing at a new fake agent (a line typed before the terminal is raw does not
+  submit to Claude). Before delivering to a new agent, await its session's
+  `idle` state, not text on its screen, or delivery can return
+  `skipped_pending_approval`.
+- **`inBubble` cannot run real agents or watch folders.** Use a stepped-clock
+  world outside a bubble (`w.advance`, `w.awaitTimer(name)`), or
+  `inBubbleWithAgents` for fake terminals.
+- **Stack tests need `scripts/test-go.sh`.** It supplies `ATTN_TEST_PTY_HOST`
+  and `ATTN_NATIVE_APP_BIN` from the build store. A test calling
+  `Stack.StartNativeApp` must be named `TestTheNativeApp*`.
+- **Native wire tests (`attn-testkit`).** Build protocol messages with
+  `InitialStateMessage::new()` (not `Default::default()`, which leaves `event`
+  empty). `Target::role("status")` without a name always matches Rune's hidden
+  announcement element. Omit empty optional fields in command assertions
+  (`request.get("field").is_none()`). End each test with
+  `assert!(world.runtime_is_at_rest())`. Measure per-frame work with
+  `attn_testkit::allocations::made_here()`, never wall time.
+- **Stepping a connected home/outpost pair in a stack.** Advance in steps
+  shorter than `bridge.StallAfter` and `AwaitTimer(bridge.StallTimer)` after
+  each, or use `s.FireTimers(bridge.RetryTimer)` when a redial retry may or may
+  not be armed.
 
 ### Time
 

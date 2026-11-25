@@ -15,10 +15,10 @@ import (
 )
 
 const (
-	maxBodyGzipBytes = 4 << 20
-	maxBodyBytes     = 16 << 20
-	maxLineBytes     = analytics.RecordLineLimit
-	maxBuildBytes    = 2 << 10
+	maxBodyGzipBytes = 4 << 20                   // Peak day is 613 KB gzipped.
+	maxBodyBytes     = 16 << 20                  // 10k redacted records are ~1.25 MB uncompressed.
+	maxLineBytes     = analytics.RecordLineLimit // 64 KiB, 4x the 16 KB vent cap.
+	maxBuildBytes    = 2 << 10                   // Release build line is 313 B.
 	maxStreamBytes   = 32
 	maxNameBytes     = 256
 	maxSubjectBytes  = 256
