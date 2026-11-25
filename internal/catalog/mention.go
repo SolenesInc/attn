@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -72,10 +73,11 @@ func (c *Catalog) ToolMention(line string) (string, error) {
 		}
 		return "", fmt.Errorf("%q names no catalog command", line)
 	}
-	args, shell, err := mentionArgs(c, cmds[0], rest)
+	args, err := mentionArgs(c, cmds[0], rest)
 	if err != nil {
 		return "", fmt.Errorf("%q: %w", line, err)
 	}
+	shell := slices.ContainsFunc(args, func(arg mentionArg) bool { return arg.cliOnly })
 	var names []string
 	for _, cmd := range cmds {
 		if !cmd.IsTool() {
@@ -90,10 +92,10 @@ func (c *Catalog) ToolMention(line string) (string, error) {
 	if len(names) > 1 {
 		tools = strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
 	}
-	if args == "" {
+	if len(args) == 0 {
 		return tools, nil
 	}
-	return tools + " with " + args, nil
+	return tools + " with " + jsonArgs(args), nil
 }
 
 func shellCommand(line string) string {
@@ -121,11 +123,13 @@ func (c *Catalog) mentionedCommands(words []string) ([]*Command, []string) {
 }
 
 type mentionArg struct {
-	name  string
-	value any
+	name    string
+	value   any
+	choice  string
+	cliOnly bool
 }
 
-func mentionArgs(c *Catalog, cmd *Command, words []string) (string, bool, error) {
+func mentionArgs(c *Catalog, cmd *Command, words []string) ([]mentionArg, error) {
 	var positional []*Arg
 	for i := range cmd.Args {
 		switch cmd.Args[i].CLI {
@@ -134,7 +138,7 @@ func mentionArgs(c *Catalog, cmd *Command, words []string) (string, bool, error)
 		}
 	}
 	var out []mentionArg
-	shell := false
+	words, stdin := withoutRedirect(words)
 	for i := 0; i < len(words); i++ {
 		word := words[i]
 		if word == "--json" && cmd.Result != "" {
@@ -143,37 +147,42 @@ func mentionArgs(c *Catalog, cmd *Command, words []string) (string, bool, error)
 		if isFlag(word) {
 			arg, choice := flagArg(cmd, word)
 			if arg == nil {
-				return "", false, fmt.Errorf("%s takes no %s", cmd.Name, word)
+				return nil, fmt.Errorf("%s takes no %s", cmd.Name, word)
 			}
-			shell = shell || arg.CLIOnly
 			var value any = "…"
 			switch {
 			case choice != "":
 				value = choice
 			case c.ArgType(*arg).Schema["type"] == "boolean":
 				value = true
+			case arg.FlagWords() != "":
+				var list []string
+				for i+1 < len(words) && !isFlag(words[i+1]) {
+					i++
+					list = append(list, words[i])
+				}
+				value = list
 			case i+1 < len(words) && !isFlag(words[i+1]):
 				i++
 				value = mentionValue(c, *arg, words[i])
 				if words[i] == "-" && arg.Stdin {
 					value = "<text>"
-					if i+2 < len(words) && words[i+1] == "<" {
-						value = "<the contents of " + words[i+2] + ">"
-						i += 2
+					if stdin != "" {
+						value = contentsOf(stdin)
 					}
 				}
 			}
-			out = append(out, mentionArg{arg.Name, value})
+			out = append(out, mentionArg{name: arg.Name, value: value, choice: choice, cliOnly: arg.CLIOnly})
 			continue
 		}
 		if len(positional) == 0 {
-			return "", false, fmt.Errorf("%s takes no more positional words, got %q", cmd.Name, word)
+			return nil, fmt.Errorf("%s takes no more positional words, got %q", cmd.Name, word)
 		}
+		positional = skipUnfilled(c, cmd, positional, word, positionalWords(words[i:]))
 		arg := positional[0]
-		shell = shell || arg.CLIOnly
 		if arg.CLI == "pos" {
 			positional = positional[1:]
-			out = append(out, mentionArg{arg.Name, mentionValue(c, *arg, word)})
+			out = append(out, mentionArg{name: arg.Name, value: mentionValue(c, *arg, word), cliOnly: arg.CLIOnly})
 			continue
 		}
 		positional = positional[1:]
@@ -183,32 +192,90 @@ func mentionArgs(c *Catalog, cmd *Command, words []string) (string, bool, error)
 		}
 		i--
 		if arg.List || c.ArgType(*arg).Schema["type"] == "array" {
-			out = append(out, mentionArg{arg.Name, list})
+			out = append(out, mentionArg{name: arg.Name, value: list, cliOnly: arg.CLIOnly})
 		} else {
-			out = append(out, mentionArg{arg.Name, strings.Join(list, " ")})
+			out = append(out, mentionArg{name: arg.Name, value: strings.Join(list, " "), cliOnly: arg.CLIOnly})
 		}
 	}
-	if len(out) == 0 {
-		return "", shell, nil
+	return out, nil
+}
+
+func jsonArgs(args []mentionArg) string {
+	if len(args) == 0 {
+		return ""
 	}
 	var b bytes.Buffer
 	b.WriteString("{")
-	for i, arg := range out {
+	for i, arg := range args {
 		if i > 0 {
 			b.WriteString(", ")
 		}
 		b.WriteString(jsonText(arg.name) + ": " + jsonText(arg.value))
 	}
 	b.WriteString("}")
-	return b.String(), shell, nil
+	return b.String()
 }
+
+func withoutRedirect(words []string) ([]string, string) {
+	if n := len(words); n > 1 && words[n-2] == "<" {
+		return words[:n-2], words[n-1]
+	}
+	return words, ""
+}
+
+func positionalWords(words []string) int {
+	count := 0
+	for _, word := range words {
+		if isFlag(word) {
+			break
+		}
+		count++
+	}
+	return count
+}
+
+func skipUnfilled(c *Catalog, cmd *Command, positional []*Arg, word string, words int) []*Arg {
+	first := positional[0]
+	if partner, prefix, shared := c.SharedPositional(cmd, *first); shared && !namesSeed(word, prefix) {
+		return positionalNamed(positional, partner)
+	} else if len(positional) > 1 && !shared {
+		if _, prefix, seedSide := c.SharedPositional(cmd, *positional[1]); seedSide && namesSeed(word, prefix) {
+			return positional[1:]
+		}
+	}
+	required := 0
+	for _, arg := range positional {
+		if arg.Required {
+			required++
+		}
+	}
+	if !first.Required && required > 0 && words <= required {
+		return positional[1:]
+	}
+	return positional
+}
+
+func positionalNamed(positional []*Arg, name string) []*Arg {
+	for i, arg := range positional {
+		if arg.Name == name {
+			return positional[i:]
+		}
+	}
+	return positional
+}
+
+func namesSeed(word, prefix string) bool {
+	return strings.HasPrefix(word, prefix) || word == "<plot>" || word == "<seed>" || word == "<seed-id>"
+}
+
+func contentsOf(file any) string { return fmt.Sprintf("<the contents of %v>", file) }
 
 func isFlag(word string) bool { return strings.HasPrefix(word, "-") && word != "-" }
 
 func flagArg(cmd *Command, flag string) (*Arg, string) {
 	for i := range cmd.Args {
 		arg := &cmd.Args[i]
-		cli := arg.CLI
+		cli := strings.TrimSuffix(arg.CLI, "...")
 		if cli == "-m+" {
 			cli = "-m"
 		}
@@ -229,6 +296,12 @@ func flagArg(cmd *Command, flag string) (*Arg, string) {
 }
 
 func mentionValue(c *Catalog, arg Arg, word string) any {
+	if output := shellOutput().FindStringSubmatch(word); output != nil {
+		return "<the output of " + output[1] + ">"
+	}
+	if arg.File && word != "-" {
+		return contentsOf(word)
+	}
 	if c.ArgType(arg).Schema["type"] == "integer" {
 		if n, err := strconv.Atoi(word); err == nil {
 			return n
@@ -254,20 +327,27 @@ func mentionWords(line string) ([]string, error) {
 		switch {
 		case line[i] == ' ':
 			i++
-		case line[i] == '"':
-			end := strings.IndexByte(line[i+1:], '"')
+		case line[i] == '"' || line[i] == '\'':
+			end := strings.IndexByte(line[i+1:], line[i])
 			if end < 0 {
 				return nil, fmt.Errorf("%q has an unclosed quote", line)
 			}
 			words = append(words, line[i+1:i+1+end])
 			i += end + 2
 		case line[i] == '<' && i+1 < len(line) && line[i+1] != ' ':
-			end := strings.IndexByte(line[i:], '>')
-			if end < 0 {
-				return nil, fmt.Errorf("%q has an unclosed <placeholder>", line)
+			start := i
+			for i < len(line) && line[i] != ' ' {
+				if line[i] != '<' {
+					i++
+					continue
+				}
+				end := strings.IndexByte(line[i:], '>')
+				if end < 0 {
+					return nil, fmt.Errorf("%q has an unclosed <placeholder>", line)
+				}
+				i += end + 1
 			}
-			words = append(words, line[i:i+end+1])
-			i += end + 1
+			words = append(words, line[start:i])
 		default:
 			end := strings.IndexByte(line[i:], ' ')
 			if end < 0 {

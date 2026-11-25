@@ -138,6 +138,8 @@ func (l *Layer) Run(ctx context.Context, c Caller, name string, args json.RawMes
 	return result, nil
 }
 
+type Teaching string
+
 func AsRefusal(err error) *Refusal {
 	var refusal *Refusal
 	if errors.As(err, &refusal) {

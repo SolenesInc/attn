@@ -357,7 +357,7 @@ func (d *Daemon) runSeedGuide(context.Context, command.Caller, command.SeedGuide
 	if err != nil {
 		return nil, err
 	}
-	return guide.Text, nil
+	return command.Teaching(guide.Text), nil
 }
 
 func (d *Daemon) runSeedMove(c command.Caller, verb, seed, reason, assignee string, force bool) (any, error) {

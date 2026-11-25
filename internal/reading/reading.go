@@ -31,7 +31,7 @@ func runSkill(_ context.Context, _ command.Caller, args command.SkillArgs) (any,
 	if err != nil {
 		return nil, command.Refuse(command.CodeNoSuchReference, "no bundled reference %q; bundled references: %s", reference, strings.Join(attnskill.SkillReferenceNames(), ", "))
 	}
-	return string(content), nil
+	return command.Teaching(content), nil
 }
 
 func runGuide(_ context.Context, _ command.Caller, args command.GuideArgs) (any, error) {

@@ -234,7 +234,10 @@ func (d *Daemon) callAgentTool(ctx context.Context, call *agentCall, tool agentT
 		return mcpserver.Result{IsError: true, Content: []mcpserver.Content{mcpserver.Text(def.refusalText(refusal))}}
 	}
 	d.logf("agent tools: %s by %s (session %s): ok", def.Name, call.who, call.caller.Session)
-	if text, ok := result.(string); ok {
+	switch text := result.(type) {
+	case command.Teaching:
+		return mcpserver.Result{Content: []mcpserver.Content{mcpserver.Text(toolCatalog().TeachingToolText(string(text)))}}
+	case string:
 		return mcpserver.Result{Content: []mcpserver.Content{mcpserver.Text(text)}}
 	}
 	return mcpserver.Result{Content: []mcpserver.Content{}, StructuredContent: result}
