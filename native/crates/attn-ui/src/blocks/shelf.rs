@@ -1,4 +1,4 @@
-use rune::{Color, Curve, Easing, El, Spring, col, el, row};
+use rune::{Color, Curve, Easing, El, Spring, Transition, col, el, row};
 
 use crate::colors::{MARK_READS, READS, mix_srgb, moved_until_it_reads, reads_furthest};
 use crate::system::{Radius, Space, Type, door, focus, layers, words};
@@ -512,6 +512,7 @@ fn asks(key: &str, count: usize, ground: &Ground, t: &Tokens) -> Vec<El> {
         .map(|i| {
             recolored_at_once(ground.words(ASK.to_owned(), Type::Label, t.accent, t))
                 .key(format!("{key}.ask.{i}"))
+                .transition(Transition::none())
                 .role("img")
                 .label("Open ask")
         })

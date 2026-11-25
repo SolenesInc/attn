@@ -306,6 +306,9 @@ fn a_new_column_in_use_changes_the_entries_colours_at_once_while_the_frame_and_t
     )
     .waiting(&["c"]);
     let mut world = of.start("a", TWO_FIT);
+    let ask = super::asks::ask("a-1", "s-d", "Which branch?", 5, vec![]);
+    super::asks::update_asks(&mut world, vec![ask]);
+    world.advance(Duration::from_secs(1));
 
     let walked = world.record(60.0, 0.5, |daemon, _| daemon.emit(of.arrangement("c")));
     assert_eq!(recolored_at_once(&walked), ["a", "b"]);
@@ -315,6 +318,14 @@ fn a_new_column_in_use_changes_the_entries_colours_at_once_while_the_frame_and_t
     let scrolled = world.record(60.0, 0.5, |daemon, _| daemon.emit(of.arrangement("e")));
     assert_eq!(recolored_at_once(&scrolled), ["a", "b", "d", "e"]);
     assert!(places(&scrolled, "/shelf.frame") > 4);
+    let ask = "/shelf.entry.d.ask.0";
+    let ask = scrolled.tracks.iter().find(|t| t.path.ends_with(ask));
+    let shown = ask.unwrap().frames.iter().filter(|(_, s)| s.op > 0.0);
+    let last = shown.map(|(at, _)| *at).max();
+    assert!(
+        last.is_some_and(|at| at < scrolled.inputs[0].0),
+        "the mark is drawn until frame {last:?}"
+    );
     assert!(places(&scrolled, "/shelf.frame.edge") > 4);
 
     let [x, y, w, h] = entry(&world, "a");
