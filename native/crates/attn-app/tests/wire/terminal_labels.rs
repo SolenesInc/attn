@@ -12,7 +12,7 @@ use super::terminal_ids::{
 };
 use crate::wire::mac;
 
-fn chord_mods() -> Mods {
+pub(super) fn chord_mods() -> Mods {
     Mods {
         cmd: true,
         logo: mac(),
@@ -33,7 +33,7 @@ fn physical(letter: char) -> PhysicalKeyCode {
     }
 }
 
-fn press(world: &mut World, letter: char, repeat: bool) {
+pub(super) fn press(world: &mut World, letter: char, repeat: bool) {
     let chord = if mac() {
         format!("mod+{letter}")
     } else {
@@ -58,16 +58,16 @@ fn modifiers(world: &mut World, mods: Mods) {
     world.gesture(|app| app.hold(mods));
 }
 
-fn hold(world: &mut World) {
+pub(super) fn hold(world: &mut World) {
     modifiers(world, chord_mods());
     press(world, 'l', false);
 }
 
-fn lets_go(world: &mut World) {
+pub(super) fn lets_go(world: &mut World) {
     modifiers(world, Mods::default());
 }
 
-fn labels_in(nodes: Vec<Node>) -> Vec<String> {
+pub(super) fn labels_in(nodes: Vec<Node>) -> Vec<String> {
     nodes
         .into_iter()
         .filter(|n| n.role == "note")

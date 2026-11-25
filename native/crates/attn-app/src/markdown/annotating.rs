@@ -68,13 +68,14 @@ pub(crate) struct Reading {
 }
 
 /// What people did to a document: the `<details>` blocks they opened or closed, by the source
-/// byte each block's tag starts at, and the code block that says it was just copied. And the
-/// whole points its view last laid out across, once it has.
+/// byte each block's tag starts at, and the code block that says it was just copied. The whole points
+/// its view last laid out across, once it has, and the ids attn knows.
 #[derive(Clone, Default, PartialEq, Hash)]
 pub(crate) struct Kept {
     pub(crate) folds: BTreeMap<usize, bool>,
     pub(crate) copied: Option<usize>,
     pub(crate) width: Option<u32>,
+    pub(crate) ids: crate::terminal::Known,
 }
 
 /// How long a copied code block says "Copied!".
@@ -97,6 +98,8 @@ pub struct Readings {
     /// Each review tile's reading.
     pub(crate) reviews: crate::review::Reviews,
     widths: HashMap<String, u32>,
+    /// The ids every reading links.
+    pub(crate) ids: crate::terminal::Known,
     /// Moves with every change, so views that show them build again.
     pub(crate) revision: u64,
 }
@@ -112,6 +115,7 @@ impl Readings {
                 .filter(|(at, _, _)| at == view)
                 .map(|(_, index, _)| *index),
             width: self.widths.get(view).copied(),
+            ids: self.ids.clone(),
         }
     }
 

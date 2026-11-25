@@ -1,4 +1,8 @@
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
+use std::ops::Range;
+use std::rc::Rc;
 
 use attn_client::{Connection, Facts};
 use attn_protocol::session_id;
@@ -108,6 +112,7 @@ impl Placed {
     }
 }
 
+#[derive(Clone)]
 struct Keyed {
     id: String,
     live: bool,
@@ -118,24 +123,44 @@ fn role_sprite(session: &attn_protocol::Session) -> Option<Sprite> {
     Some(role_icon::Mark::of(Some(role)).sprite())
 }
 
-/// The seeds and sessions of the selected profile that terminals mark, and what they ask the
-/// daemon about the rest.
-#[derive(Default)]
-pub(super) struct Ids {
-    profile: String,
+/// The seeds and sessions of the selected profile attn knows by their ids.
+#[derive(Clone, Default)]
+struct Index {
     seeds: HashSet<String>,
     /// Each live session's role icon.
     live: HashMap<String, Option<Sprite>>,
-    closed: HashMap<String, SessionLedgerEntry>,
     by_key: HashMap<u32, Vec<Keyed>>,
-    seen_closes: u64,
-    unresolved: HashSet<String>,
-    asked: HashSet<String>,
-    asking: bool,
-    previewing: Option<(String, Subject)>,
 }
 
-impl Ids {
+/// The session ids on screen that name no session the app holds: the ones to ask the daemon
+/// about, and the ones it was asked.
+#[derive(Default)]
+struct Wondered {
+    unresolved: HashSet<String>,
+    asked: HashSet<String>,
+}
+
+/// What attn knew of ids at `revision`, as whatever marks them in text reads it.
+#[derive(Clone, Default)]
+pub(crate) struct Known {
+    revision: u64,
+    index: Rc<Index>,
+    wondered: Rc<RefCell<Wondered>>,
+}
+
+impl PartialEq for Known {
+    fn eq(&self, other: &Known) -> bool {
+        self.revision == other.revision
+    }
+}
+
+impl Hash for Known {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.revision.hash(state);
+    }
+}
+
+impl Index {
     fn named(&self, word: &Word<'_>) -> Option<Subject> {
         match word {
             Word::Seed(id) => self
@@ -170,10 +195,10 @@ impl Ids {
         }
     }
 
-    fn index(&mut self) {
+    fn key_sessions(&mut self, closed: &HashMap<String, SessionLedgerEntry>) {
         self.by_key.clear();
         let live = self.live.keys().map(|id| (id, true));
-        let closed = self.closed.keys().filter(|id| !self.live.contains_key(*id));
+        let closed = closed.keys().filter(|id| !self.live.contains_key(*id));
         for (id, live) in live.chain(closed.map(|id| (id, false))) {
             let Some(key) = session_id::key_of(id) else {
                 continue;
@@ -182,21 +207,81 @@ impl Ids {
             self.by_key.entry(key).or_default().push(Keyed { id, live });
         }
     }
+}
+
+impl Known {
+    /// What `word` names. A session id that names none the app holds is one to ask about.
+    fn named(&self, word: &Word<'_>) -> Option<Subject> {
+        let named = self.index.named(word);
+        if let (None, Word::Short(id) | Word::Uuid(id)) = (&named, word) {
+            let mut wondered = self.wondered.borrow_mut();
+            if !wondered.asked.contains(*id) {
+                wondered.unresolved.insert((*id).to_owned());
+            }
+        }
+        named
+    }
+
+    /// The ids in `text` that attn knows, in its order.
+    pub(crate) fn in_text(&self, text: &str) -> Vec<(Range<usize>, Subject)> {
+        let (starts, cells): (Vec<usize>, Vec<u8>) = text
+            .char_indices()
+            .map(|(at, c)| (at, scanned(Some((c, c)))))
+            .unzip();
+        let byte = |cell: usize| starts.get(cell).copied().unwrap_or(text.len());
+        let mut found = Vec::new();
+        words(&cells, |span, word| {
+            if let Some(target) = self.named(&word) {
+                found.push((byte(span.start)..byte(span.end), target));
+            }
+        });
+        found
+    }
+
+    fn change(&mut self) -> &mut Index {
+        self.revision += 1;
+        Rc::make_mut(&mut self.index)
+    }
+}
+
+/// What attn knows of the ids it marks, and what it asks the daemon about the rest.
+#[derive(Default)]
+pub(super) struct Ids {
+    profile: String,
+    known: Known,
+    closed: HashMap<String, SessionLedgerEntry>,
+    seen_closes: u64,
+    asking: bool,
+    previewing: Option<(String, Subject)>,
+}
+
+impl Ids {
+    fn index(&mut self) {
+        self.known.change().key_sessions(&self.closed);
+    }
 
     /// Takes in the live sessions of the selected profile and the ones that closed. Returns
-    /// whether that changed what a terminal marks.
+    /// whether that changed what is marked.
     fn follow(&mut self, facts: &Facts) -> bool {
         let switched = self.profile != facts.profiles.selected;
         if switched {
+            let seeds = self.known.index.seeds.clone();
             *self = Ids {
                 profile: facts.profiles.selected.clone(),
-                seeds: std::mem::take(&mut self.seeds),
+                known: Known {
+                    revision: self.known.revision,
+                    index: Rc::new(Index {
+                        seeds,
+                        ..Index::default()
+                    }),
+                    ..Known::default()
+                },
                 asking: self.asking,
                 ..Ids::default()
             };
         }
         if facts.connection != Connection::Connected {
-            self.asked.clear();
+            self.known.wondered.borrow_mut().asked.clear();
         }
         let closes = &facts.closes;
         let mut changed = switched;
@@ -206,11 +291,13 @@ impl Ids {
         self.seen_closes = closes.seq;
         let of_profile = |s: &&attn_protocol::Session| s.profile_id == facts.profiles.selected;
         let live = || facts.sessions.iter().filter(of_profile);
-        let known = |s: &attn_protocol::Session| self.live.get(&*s.id) == Some(&role_sprite(s));
-        if live().count() != self.live.len() || !live().all(known) {
+        let held = &self.known.index.live;
+        let known = |s: &attn_protocol::Session| held.get(&*s.id) == Some(&role_sprite(s));
+        if live().count() != held.len() || !live().all(known) {
             let live = live().map(|s| (s.id.clone(), role_sprite(s))).collect();
-            let before = std::mem::replace(&mut self.live, live);
-            let live = &self.live;
+            let index = self.known.change();
+            let before = std::mem::replace(&mut index.live, live);
+            let live = &index.live;
             self.closed
                 .retain(|id, _| before.contains_key(id) || !live.contains_key(id));
             changed = true;
@@ -230,12 +317,17 @@ impl Ids {
     }
 
     fn learn(&mut self, refs: Vec<String>, found: Vec<ResolvedSession>) {
-        if self.asked.len() + refs.len() > ASKED_KEPT {
-            self.asked.clear();
+        let mut wondered = self.known.wondered.borrow_mut();
+        if wondered.asked.len() + refs.len() > ASKED_KEPT {
+            wondered.asked.clear();
         }
         for reference in refs {
-            self.unresolved.remove(&reference);
-            self.asked.insert(reference);
+            wondered.unresolved.remove(&reference);
+            wondered.asked.insert(reference);
+        }
+        drop(wondered);
+        if found.is_empty() {
+            return;
         }
         for session in found {
             self.take_closed(session.closed);
@@ -247,10 +339,10 @@ impl Ids {
 impl Terminals {
     /// The garden's seed ids changed: each terminal marks the ones it shows again.
     pub(crate) fn know_seeds(&mut self, known: HashSet<String>) {
-        if self.ids.seeds == known {
+        if self.ids.known.index.seeds == known {
             return;
         }
-        self.ids.seeds = known;
+        self.ids.known.change().seeds = known;
         self.mark_again();
     }
 
@@ -270,16 +362,20 @@ impl Terminals {
 
     pub(crate) fn knows(&self, target: &Subject) -> bool {
         match target {
-            Subject::Seed(id) => self.ids.seeds.contains(id),
+            Subject::Seed(id) => self.ids.known.index.seeds.contains(id),
             Subject::Session(id) => {
-                self.ids.live.contains_key(id) || self.ids.closed.contains_key(id)
+                self.ids.known.index.live.contains_key(id) || self.ids.closed.contains_key(id)
             }
         }
     }
 
+    pub(crate) fn known_ids(&self) -> &Known {
+        &self.ids.known
+    }
+
     /// The closed session `id`, as the ledger holds it.
     pub(crate) fn closed_session(&self, id: &str) -> Option<&SessionLedgerEntry> {
-        let live = self.ids.live.contains_key(id);
+        let live = self.ids.known.index.live.contains_key(id);
         self.ids.closed.get(id).filter(|_| !live)
     }
 
@@ -329,7 +425,7 @@ impl Terminals {
         let metrics = self.metrics();
         let term = self.panes.get_mut(runtime)?;
         let placed = Placed::of(term, &metrics)?;
-        let (found, row) = marks(term, &mut self.ids)
+        let (found, row) = marks(term, &self.ids.known)
             .iter()
             .find_map(|found| Some((found, found.row_at(cell)?)))?;
         placed.mark(found, row)
@@ -344,14 +440,14 @@ impl Terminals {
         let Some(placed) = Placed::of(term, &metrics) else {
             return Vec::new();
         };
-        marks(term, &mut self.ids)
+        marks(term, &self.ids.known)
             .iter()
             .filter_map(|found| found.rows.iter().find_map(|row| placed.mark(found, *row)))
             .collect()
     }
 
     pub(crate) fn has_unresolved_ids(&self) -> bool {
-        !self.ids.unresolved.is_empty() && !self.ids.asking
+        !self.ids.asking && !self.ids.known.wondered.borrow().unresolved.is_empty()
     }
 
     /// Washes and underlines the ids on terminal `term`'s view that attn knows, brighter on the
@@ -366,7 +462,7 @@ impl Terminals {
         let rows = u32::from(term.vt.size().1);
         let top = term.vt.view_top();
         let mut overlays = Vec::new();
-        marks(term, ids);
+        marks(term, &ids.known);
         let previewing = ids.previewing.as_ref().filter(|(r, _)| r == id);
         for found in term.view.ids.iter().flatten() {
             let bright = previewing.is_some_and(|(_, target)| *target == found.target);
@@ -422,7 +518,8 @@ pub(crate) fn ask_about_unresolved(state: &mut State, tx: &mut Tx) {
     }
     let ids = &mut state.terminals.ids;
     ids.asking = true;
-    let mut refs: Vec<String> = std::mem::take(&mut ids.unresolved).into_iter().collect();
+    let unresolved = std::mem::take(&mut ids.known.wondered.borrow_mut().unresolved);
+    let mut refs: Vec<String> = unresolved.into_iter().collect();
     refs.sort();
     let profile = ids.profile.clone();
     let asked = refs.clone();
@@ -443,6 +540,7 @@ pub(crate) fn ask_about_unresolved(state: &mut State, tx: &mut Tx) {
                 terminals.ids.learn(asked, reply.found);
                 if learns {
                     terminals.mark_again();
+                    crate::markdown::ids::follow(state);
                 }
             }
             ask_about_unresolved(state, tx);
@@ -452,9 +550,9 @@ pub(crate) fn ask_about_unresolved(state: &mut State, tx: &mut Tx) {
 }
 
 /// The known ids on the rows terminal `term` shows, found once per screen of text.
-fn marks<'a>(term: &'a mut Term, ids: &mut Ids) -> &'a [Found] {
+fn marks<'a>(term: &'a mut Term, known: &Known) -> &'a [Found] {
     if term.view.ids.is_none() {
-        term.view.ids = Some(find(term, ids));
+        term.view.ids = Some(find(term, known));
     }
     term.view.ids.as_deref().unwrap_or_default()
 }
@@ -489,7 +587,7 @@ fn in_word(cell: u8, cluster: u8) -> bool {
 
 /// Reads the rows the view draws from the grid the renderer took, and the row past either
 /// edge of the view from the screen only when a line wraps across that edge.
-fn find(term: &mut Term, ids: &mut Ids) -> Vec<Found> {
+fn find(term: &mut Term, known: &Known) -> Vec<Found> {
     let grid = &term.grid;
     let vt = &mut term.vt;
     let (cols, rows) = (grid.cols, u32::from(grid.rows));
@@ -540,18 +638,13 @@ fn find(term: &mut Term, ids: &mut Ids) -> Vec<Found> {
             cols,
             ..Line::default()
         };
-        words(&cells, |span, word| match ids.named(&word) {
-            Some(target) => found.push(Found {
-                icon: ids.icon(&word, &target),
-                target,
-                rows: line.rows(span),
-            }),
-            None => {
-                if let Word::Short(id) | Word::Uuid(id) = word
-                    && !ids.asked.contains(id)
-                {
-                    ids.unresolved.insert(id.to_owned());
-                }
+        words(&cells, |span, word| {
+            if let Some(target) = known.named(&word) {
+                found.push(Found {
+                    icon: known.index.icon(&word, &target),
+                    target,
+                    rows: line.rows(span),
+                });
             }
         });
         start = end + 1;

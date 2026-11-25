@@ -14,7 +14,7 @@ const EXCERPT_CHARS: usize = 260;
 
 /// The agent the card goes to: the seed's tender, or else the last session that tended it,
 /// while that session is open and is not the one whose terminal shows the card.
-fn agent<'a>(seed: &Seed, sessions: &'a [Session], host: &str) -> Option<&'a Session> {
+fn agent<'a>(seed: &Seed, sessions: &'a [Session], host: Option<&str>) -> Option<&'a Session> {
     [
         seed.tender.as_ref().and_then(|t| t.session_id.as_deref()),
         seed.last_execution_id.as_deref(),
@@ -22,10 +22,10 @@ fn agent<'a>(seed: &Seed, sessions: &'a [Session], host: &str) -> Option<&'a Ses
     .into_iter()
     .flatten()
     .find_map(|id| sessions.iter().find(|s| s.id == id))
-    .filter(|s| s.id != host)
+    .filter(|s| Some(s.id.as_str()) != host)
 }
 
-/// The card of the seed whose id a terminal shows.
+/// The card of the seed whose id a terminal or words show.
 pub(super) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     let Subject::Seed(id) = pop.marking()?.target() else {
         return None;
@@ -55,12 +55,12 @@ pub(super) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
                 .key(format!("{surface}.agent")),
         )
     });
-    let (seed_id, session) = (seed.id.clone(), pop.beside().to_owned());
+    let (seed_id, beside) = (seed.id.clone(), pop.beside().map(str::to_owned));
     let open: El = Button::new("Open as tile")
         .look(Look::Plain)
         .size(Size::Compact)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            super::agent_card::open_seed(state, &seed_id, &session, tx)
+            super::agent_card::open_seed(state, &seed_id, beside.as_deref(), tx)
         })
         .build(t)
         .key(format!("{surface}.open"))
@@ -137,11 +137,11 @@ fn pinned_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     }
     let open = &state.window.desk.header_pop.open;
     let Some((seed, beside)) = open.as_ref().and_then(|pop| match pop.marking()?.target() {
-        Subject::Seed(seed) => Some((seed.clone(), pop.beside().to_owned())),
+        Subject::Seed(seed) => Some((seed.clone(), pop.beside().map(str::to_owned))),
         Subject::Session(_) => None,
     }) else {
         return false;
     };
-    super::agent_card::open_seed(state, &seed, &beside, tx);
+    super::agent_card::open_seed(state, &seed, beside.as_deref(), tx);
     true
 }

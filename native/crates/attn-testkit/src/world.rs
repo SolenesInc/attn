@@ -622,7 +622,14 @@ impl World {
             }
             self.still_frame(&mut sampler);
             self.land_motion(&sampler);
-            while self.runtime.has_pending_input() {
+            loop {
+                while self.runtime.has_pending_input() {
+                    self.still_frame(&mut sampler);
+                    self.land_motion(&sampler);
+                }
+                if self.covered || !attn_app::screen::ids_drawn(&mut self.runtime) {
+                    break;
+                }
                 self.still_frame(&mut sampler);
                 self.land_motion(&sampler);
             }

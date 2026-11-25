@@ -202,7 +202,14 @@ impl TileRuntime {
         }
         crate::frames::draw(&mut self.runtime, 0.0);
         self.land_motion();
-        while self.runtime.has_pending_input() {
+        loop {
+            while self.runtime.has_pending_input() {
+                crate::frames::draw(&mut self.runtime, 0.0);
+                self.land_motion();
+            }
+            if !self.shown || !attn_app::screen::ids_drawn(&mut self.runtime) {
+                break;
+            }
             crate::frames::draw(&mut self.runtime, 0.0);
             self.land_motion();
         }

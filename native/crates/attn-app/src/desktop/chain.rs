@@ -539,14 +539,14 @@ fn agent_row(
             } else {
                 words("standby", Type::Small, t.text_tertiary)
             };
-            let opens = (seed.id.clone(), pop.beside().to_owned());
+            let opens = (seed.id.clone(), pop.beside().map(str::to_owned));
             ListRow::new(key.clone(), format!("{} · {kind}", agent.card.name))
                 .lead(dot(t.text_muted, DotShape::Hollow, DotSize::Regular))
                 .title_el(row_name(&key, agent, picked, t))
                 .aside(said.single_line())
                 .aside(role_slot(None, t))
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    open_seed(state, &opens.0, &opens.1, tx)
+                    open_seed(state, &opens.0, opens.1.as_deref(), tx)
                 })
         }
         Link::Closed(_) => ListRow::new(key.clone(), agent.card.name.clone())
@@ -649,7 +649,7 @@ fn pinned_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let Some(open) = state.window.desk.header_pop.open.as_ref() else {
         return false;
     };
-    let beside = open.beside().to_owned();
+    let beside = open.beside().map(str::to_owned);
     let targets: Vec<Target> = shown_rows(&open.session, state)
         .0
         .iter()
@@ -674,8 +674,8 @@ fn pinned_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Key::Enter => {
             match targets.get(at).and_then(|t| t.opens.clone()) {
                 Some(Pick::Agent(id)) => select(state, &id, tx),
-                Some(Pick::Seed(id)) => open_seed(state, &id, &beside, tx),
-                Some(Pick::Go(go)) => follow(state, &go, &beside, tx),
+                Some(Pick::Seed(id)) => open_seed(state, &id, beside.as_deref(), tx),
+                Some(Pick::Go(go)) => follow(state, &go, beside.as_deref(), tx),
                 None => {}
             }
             return true;
@@ -688,7 +688,7 @@ fn pinned_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             else {
                 return false;
             };
-            follow(state, &go, &beside, tx);
+            follow(state, &go, beside.as_deref(), tx);
             return true;
         }
         _ => return false,

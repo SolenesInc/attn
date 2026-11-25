@@ -42,7 +42,7 @@ fn recommending(mut part: AskPart, recommended: &str) -> AskPart {
     part
 }
 
-fn prose(markdown: &str) -> AskPart {
+pub(super) fn prose(markdown: &str) -> AskPart {
     AskPart {
         markdown: Some(markdown.into()),
         ..AskPart::default()
@@ -251,7 +251,7 @@ pub(super) fn add_note(world: &mut World) {
     click(world, "asks.note.add");
 }
 
-fn type_into(world: &mut World, key: &str, text: &str) {
+pub(super) fn type_into(world: &mut World, key: &str, text: &str) {
     scroll_to(world, key);
     click(world, key);
     let text = text.to_owned();
@@ -293,7 +293,7 @@ fn disabled(world: &World, key: &str) -> bool {
         .any(|s| s == "disabled")
 }
 
-fn has(world: &World, key: &str) -> bool {
+pub(super) fn has(world: &World, key: &str) -> bool {
     world.screen().find(Target::key(key)).is_some()
 }
 
@@ -1728,7 +1728,7 @@ fn tab_reaches_every_button_of_the_asks_sheet() {
     );
 }
 
-fn mentions_answered(world: &World, mentions: &[(&str, &str)]) {
+pub(super) fn mentions_answered(world: &World, mentions: &[(&str, &str)]) {
     let mentions: Vec<serde_json::Value> = mentions
         .iter()
         .map(|(text, seed)| serde_json::json!({"text": text, "seed_id": seed}))

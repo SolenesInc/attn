@@ -4,11 +4,13 @@ use attn_protocol::session_id;
 use attn_ui::blocks::{IdLabel, IdMark, IdPlace, id_list, id_scrim, lantern, name_in_place};
 use attn_ui::colors::TerminalColors;
 use attn_ui::{Glyph, Tokens};
-use rune::{ChordKey, El, Key, KeyEvent, Mods, Platform, Tx, el};
+use rune::{ChordKey, El, Key, KeyEvent, Mods, Platform, ShownLink, Tx, el};
 
 use crate::State;
+use crate::desktop::header_pop::{Front, Place};
 use crate::desktop::role_icon;
 use crate::keys::covers;
+use crate::markdown::ids::{self, Reading};
 use crate::sidebar::model::AgentState;
 use crate::terminal::{Mark, Subject};
 
@@ -29,13 +31,14 @@ pub(crate) fn drawing(settings: &BTreeMap<String, String>) -> &'static str {
 pub(crate) enum Hints {
     #[default]
     Off,
-    On(Held),
+    On(Box<Held>),
     Ended,
 }
 
 pub(crate) struct Held {
     mods: Mods,
-    place: Option<String>,
+    front: Front,
+    readings: Vec<Reading>,
     targets: Vec<Subject>,
     keys: usize,
     typed: String,
@@ -47,14 +50,14 @@ pub(crate) struct Shown {
     panes: Vec<Pane>,
     labels: Vec<Label>,
     typed: String,
-    list_in: Option<String>,
     named: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct Pane {
-    runtime: String,
-    reader: String,
+    place: Place,
+    /// The box of the window words show in; a terminal's slot holds its own.
+    clip: Option<[u32; 4]>,
     marks: Vec<Mark>,
 }
 
@@ -134,41 +137,58 @@ impl Hints {
 
 pub(crate) fn start(state: &mut State, tx: &mut Tx) -> bool {
     let mods = tx.mods();
-    let panes = panes(state);
-    if mods == Mods::default() || panes.is_empty() {
+    if mods == Mods::default() {
         return false;
     }
     crate::desktop::header_pop::close(state);
-    let found = find(state, panes);
-    let mut held = Held {
-        mods,
-        place: place(state),
-        targets: Vec::new(),
-        keys: 0,
-        typed: String::new(),
-        shown: Shown::default(),
-    };
-    held.take_in(&found);
-    held.shown = draw(state, &held, found);
-    state.window.hints = Hints::On(held);
+    tx.find_links(ids::HREF, move |state: &mut State, links, _| {
+        let mut held = Held {
+            mods,
+            front: Front::of(state),
+            readings: ids::readings(state, &links),
+            targets: Vec::new(),
+            keys: 0,
+            typed: String::new(),
+            shown: Shown::default(),
+        };
+        let panes = panes(state, &held.readings);
+        if panes.is_empty() {
+            return;
+        }
+        held.take_in(&panes);
+        held.shown = draw(state, &held, panes);
+        state.window.hints = Hints::On(Box::new(held));
+    });
     true
 }
 
 pub(crate) fn follow(state: &mut State) -> bool {
+    match &state.window.hints {
+        Hints::On(held) => label_again(state, held.readings.clone()),
+        Hints::Off | Hints::Ended => false,
+    }
+}
+
+/// Labels the ids the window's words show now. Returns whether that changed what it draws.
+pub(crate) fn words_drawn(state: &mut State, links: &[ShownLink]) -> bool {
     let Hints::On(held) = &state.window.hints else {
         return false;
     };
-    let panes = panes(state);
-    if held.place != place(state) || panes.is_empty() {
-        state.window.hints = Hints::Ended;
-        return true;
-    }
-    let found = find(state, panes);
-    let Hints::On(mut held) = std::mem::take(&mut state.window.hints) else {
+    let readings = ids::readings(state, links);
+    held.readings != readings && label_again(state, readings)
+}
+
+fn label_again(state: &mut State, readings: Vec<Reading>) -> bool {
+    let Hints::On(mut held) = std::mem::replace(&mut state.window.hints, Hints::Ended) else {
         return false;
     };
-    held.take_in(&found);
-    let shown = draw(state, &held, found);
+    let panes = panes(state, &readings);
+    if held.front != Front::of(state) || panes.is_empty() {
+        return true;
+    }
+    held.readings = readings;
+    held.take_in(&panes);
+    let shown = draw(state, &held, panes);
     let changed = shown != held.shown;
     held.shown = shown;
     state.window.hints = Hints::On(held);
@@ -234,10 +254,10 @@ fn open(state: &mut State, target: &Subject, tx: &mut Tx) {
     };
     let at = held.shown.panes.into_iter().find_map(|pane| {
         let mark = pane.marks.into_iter().find(|m| m.target == *target)?;
-        Some((pane.runtime, pane.reader, mark))
+        Some((pane.place, mark))
     });
-    if let Some((runtime, reader, mark)) = at {
-        crate::desktop::header_pop::pin_mark(state, &runtime, &reader, mark, tx);
+    if let Some((place, mark)) = at {
+        crate::desktop::header_pop::pin_mark(state, place, mark, tx);
     }
 }
 
@@ -284,36 +304,41 @@ fn keys_of(target: usize, keys: usize) -> String {
     (0..keys).rev().map(|p| char::from(letter(p))).collect()
 }
 
-fn place(state: &State) -> Option<String> {
-    state
-        .window
-        .acting(&state.facts)
-        .map(|(desktop, _)| desktop.id.clone())
+/// The terminals on screen, and the boxes of words that hold ids: the terminal that has the
+/// keyboard first, or the words when none has it.
+fn panes(state: &mut State, readings: &[Reading]) -> Vec<Pane> {
+    let words = readings.iter().map(|reading| Pane {
+        place: Place::words(state),
+        clip: Some(reading.clip),
+        marks: reading.marks.clone(),
+    });
+    let mut panes: Vec<Pane> = words.collect();
+    panes.extend(terminals(state));
+    let keyboard = state.window.typing_terminal(&state.facts);
+    let has_keyboard = |pane: &Pane| {
+        let runtime = pane.place.runtime();
+        runtime.is_some() && runtime == keyboard.as_deref()
+    };
+    panes.sort_by_key(|pane| !has_keyboard(pane));
+    panes
 }
 
-fn panes(state: &State) -> Vec<(String, String)> {
-    if !state.window.tiles_in_front() {
+fn terminals(state: &mut State) -> Vec<Pane> {
+    let covered = crate::garden::mode(state) == crate::garden::Mode::Full;
+    if covered || !state.window.tiles_in_front() {
         return Vec::new();
     }
-    let keyboard = state.window.typing_terminal(&state.facts);
-    let mut panes: Vec<(String, String)> = crate::desktop::shown_panes(state)
+    let shown: Vec<(String, String)> = crate::desktop::shown_panes(state)
         .into_iter()
         .filter(|pane| state.terminals.draws(&pane.runtime_id))
         .map(|pane| (pane.runtime_id.clone(), pane.session_id.clone()))
         .collect();
-    panes.sort_by_key(|(runtime, _)| Some(runtime) != keyboard.as_ref());
-    panes
-}
-
-fn find(state: &mut State, panes: Vec<(String, String)>) -> Vec<Pane> {
-    panes
-        .into_iter()
-        .map(|(runtime, reader)| Pane {
-            marks: state.terminals.marks_on_screen(&runtime),
-            runtime,
-            reader,
-        })
-        .collect()
+    let pane = |(runtime, reader): (String, String)| Pane {
+        marks: state.terminals.marks_on_screen(&runtime),
+        place: Place::Terminal { runtime, reader },
+        clip: None,
+    };
+    shown.into_iter().map(pane).collect()
 }
 
 fn draw(state: &State, held: &Held, panes: Vec<Pane>) -> Shown {
@@ -331,7 +356,6 @@ fn draw(state: &State, held: &Held, panes: Vec<Pane>) -> Shown {
         .collect();
     let named = drawing(&state.facts.settings) == NAME_IN_PLACE;
     Shown {
-        list_in: panes.first().map(|pane| pane.runtime.clone()),
         panes,
         labels,
         typed: held.typed.clone(),
@@ -401,51 +425,85 @@ pub(crate) fn layer(
     terminal: &TerminalColors,
     t: &Tokens,
 ) -> Option<El> {
-    let pane = shown.panes.iter().find(|pane| pane.runtime == runtime)?;
-    let typed = shown.typed.len();
-    let drawing = if shown.named { name_in_place } else { lantern };
-    let labels = pane.marks.iter().enumerate().filter_map(|(i, mark)| {
-        let label = shown.labels.iter().find(|l| l.target == mark.target)?;
-        label.keys.starts_with(&shown.typed).then(|| {
-            let key = format!("terminal.{runtime}.label.{i}");
-            drawing(
-                key,
-                &label.drawn(typed, t),
-                spot(mark, &pane.marks, size),
-                t,
-            )
-        })
-    });
-    let listed =
-        shown.list_in.as_deref() == Some(runtime) && (!shown.named || shown.labels.is_empty());
-    let list = listed.then(|| {
-        let labels: Vec<IdLabel> = shown
-            .labels
-            .iter()
-            .filter(|label| label.keys.starts_with(&shown.typed))
-            .map(|label| label.drawn(typed, t))
-            .collect();
-        id_list(format!("terminal.{runtime}.labels"), &labels, size, t)
-    });
-    Some(
-        el().key(format!("terminal.{runtime}.hints"))
-            .absolute(0.0, 0.0)
-            .w_full()
-            .h_full()
-            .inert()
-            .child(id_scrim(attn_ui::colors::rgb(terminal.bg), shown.named))
-            .children(labels)
-            .children(list),
-    )
+    let on = |pane: &Pane| pane.place.runtime() == Some(runtime);
+    let at = shown.panes.iter().position(on)?;
+    let ground = attn_ui::colors::rgb(terminal.bg);
+    let labelled = shown.labelled(
+        at,
+        &format!("terminal.{runtime}"),
+        [0.0, 0.0],
+        size,
+        ground,
+        t,
+    );
+    Some(labelled.absolute(0.0, 0.0).w_full().h_full())
 }
 
-fn spot(mark: &Mark, marks: &[Mark], pane: (f32, f32)) -> IdPlace {
-    let at = mark.at.map(f32::from_bits);
+/// The labels over each box of the window that words show in.
+pub(crate) fn words_layers(state: &State, t: &Tokens) -> Vec<El> {
+    let Some(shown) = state.window.hints.shown() else {
+        return Vec::new();
+    };
+    let panes = shown.panes.iter().enumerate();
+    panes
+        .filter_map(|(at, pane)| {
+            let [x, y, w, h] = pane.clip?.map(f32::from_bits);
+            let labelled = shown.labelled(at, &format!("words.{at}"), [x, y], (w, h), t.bg_app, t);
+            Some(labelled.absolute(x, y).w(w).h(h))
+        })
+        .collect()
+}
+
+impl Shown {
+    /// The labels of pane `at`, whose marks are placed from `origin`, over it at `size`.
+    fn labelled(
+        &self,
+        at: usize,
+        key: &str,
+        [ox, oy]: [f32; 2],
+        size: (f32, f32),
+        ground: rune::Color,
+        t: &Tokens,
+    ) -> El {
+        let typed = self.typed.len();
+        let drawing = if self.named { name_in_place } else { lantern };
+        let marks: Vec<(&Subject, [f32; 4])> = (self.panes[at].marks.iter())
+            .map(|mark| {
+                let [x, y, w, h] = mark.at.map(f32::from_bits);
+                (&mark.target, [x - ox, y - oy, w, h])
+            })
+            .collect();
+        let labels = marks
+            .iter()
+            .enumerate()
+            .filter_map(|(i, (target, spot_at))| {
+                let label = self.labels.iter().find(|l| l.target == **target)?;
+                let spot = spot(*spot_at, &marks, size);
+                (label.keys.starts_with(&self.typed))
+                    .then(|| drawing(format!("{key}.label.{i}"), &label.drawn(typed, t), spot, t))
+            });
+        let listed = at == 0 && (!self.named || self.labels.is_empty());
+        let list = listed.then(|| {
+            let labels: Vec<IdLabel> = (self.labels.iter())
+                .filter(|label| label.keys.starts_with(&self.typed))
+                .map(|label| label.drawn(typed, t))
+                .collect();
+            id_list(format!("{key}.labels"), &labels, size, t)
+        });
+        el().key(format!("{key}.hints"))
+            .inert()
+            .child(id_scrim(ground, self.named))
+            .children(labels)
+            .children(list)
+    }
+}
+
+fn spot(at: [f32; 4], marks: &[(&Subject, [f32; 4])], pane: (f32, f32)) -> IdPlace {
     let next = marks
         .iter()
-        .map(|other| other.at.map(f32::from_bits))
+        .map(|(_, other)| other)
         .filter(|[x, y, ..]| *y == at[1] && *x > at[0])
-        .map(|[x, ..]| x)
+        .map(|[x, ..]| *x)
         .fold(pane.0, f32::min);
     IdPlace {
         at,

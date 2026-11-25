@@ -944,6 +944,9 @@ fn reopen(state: &mut State, entry: SessionLedgerEntry, action: String, tx: &mut
                 if is_open(state) {
                     close(state, tx);
                 }
+                if crate::desktop::header_pop::is_on(state, &session) {
+                    crate::shell::uncover_tiles(state, tx);
+                }
                 crate::desktop::header_pop::close_of(state, &session);
                 crate::dispatch(state, Action::OpenAgent { session }, tx);
             }

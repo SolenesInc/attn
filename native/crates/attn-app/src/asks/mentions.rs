@@ -8,10 +8,9 @@ use attn_protocol::{AskSeedMention, AskSeedMentionsMessage, AskSeedMentionsResul
 use rune::Tx;
 
 use crate::State;
+use crate::markdown::ids;
 use crate::requests::Answer;
-
-/// The href a seed's link carries in an ask's markdown.
-const SEED_HREF: &str = "attn-seed:";
+use crate::terminal::{Known, Subject};
 
 /// What the daemon says the shown ask names, as of the garden it was asked under; none when
 /// the question never reached the daemon, so the next follow asks again.
@@ -93,28 +92,30 @@ pub(crate) fn of<'a>(state: &'a State, ask: &str) -> &'a [AskSeedMention] {
         .map_or(&[], |m| m.names.as_slice())
 }
 
-/// The seed links in a run of an ask's prose, as `Markdown::text_links` takes them: the run's
-/// text outside code and links, so a seed named inside a URL leaves the URL one link.
-pub(crate) fn seed_links(
+/// The links in a run of an ask's prose, as `Markdown::text_links` takes them, to the seeds of
+/// `names` and the sessions of `ids`: the run's text outside code and links, so a seed named
+/// inside a URL leaves the URL one link.
+pub(crate) fn links(
+    run: &str,
     names: &[AskSeedMention],
-) -> impl Fn(&str) -> Vec<(Range<usize>, String)> + 'static {
-    let names = names.to_vec();
-    move |run| {
-        found(run, &names)
-            .into_iter()
-            .map(|(at, seed)| (at, href(seed)))
-            .collect()
+    ids: &Known,
+) -> Vec<(Range<usize>, String)> {
+    let seeds = found(run, names).into_iter();
+    let seeds = seeds.map(|(at, seed)| (at, Subject::Seed(seed.to_owned())));
+    let mut links: Vec<_> = seeds.collect();
+    for (at, target) in ids.in_text(run) {
+        let free = links
+            .iter()
+            .all(|(taken, _)| taken.end <= at.start || at.end <= taken.start);
+        if free && matches!(target, Subject::Session(_)) {
+            links.push((at, target));
+        }
     }
-}
-
-/// The href of a link that opens `seed`.
-pub(crate) fn href(seed: &str) -> String {
-    format!("{SEED_HREF}{seed}")
-}
-
-/// The seed a link in an ask's markdown opens.
-pub(crate) fn seed_of(href: &str) -> Option<&str> {
-    href.strip_prefix(SEED_HREF)
+    links.sort_by_key(|(at, _)| at.start);
+    let hrefs = links
+        .into_iter()
+        .map(|(at, target)| (at, ids::href(&target)));
+    hrefs.collect()
 }
 
 /// Where `text` names a seed: a name the daemon resolved, standing on its own, the longest

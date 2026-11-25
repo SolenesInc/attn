@@ -2809,6 +2809,42 @@ fn letter_opens_its_seed_link(fern: CrewMember) -> Value {
 }
 
 #[test]
+fn an_agent_a_letter_names_shows_its_card_over_the_page_and_opens_in_place_of_it() {
+    use super::terminal_ids::{BUILDER, BUILDER_SHORT, sessions_shown};
+    let d = daemon(
+        vec![member("fern", 1)],
+        vec![session(BUILDER, "claude")],
+        Vec::new(),
+    );
+    d.on("crew_handoffs_get", |_| {
+        message(CrewHandoffsGetResultMessage {
+            success: true,
+            member: Some("fern".into()),
+            handoffs: vec![letter("a.md", "2026-11-16T10:00:00Z")],
+            ..CrewHandoffsGetResultMessage::new()
+        })
+    });
+    d.on("crew_handoff_get", |_| {
+        letter_read("a.md", &format!("Ask {BUILDER_SHORT} first."))
+    });
+    let mut world = World::start(d);
+    open(&mut world);
+    click(&mut world, "crew.tab.handoffs");
+    let link = Target::role("link").name(BUILDER_SHORT);
+    let [x, y, w, h] = world.screen().bounds(link.clone()).unwrap();
+    world.gesture(|app| app.runtime.pointer_move(x + w / 2.0, y + h / 2.0));
+    world.advance(std::time::Duration::from_millis(200));
+    let card = Target::key("words.agent-card");
+    assert!(world.screen().find(card.clone()).is_some());
+    assert!(world.runtime_is_at_rest());
+
+    world.gesture(|app| app.click(link));
+    assert_eq!(sessions_shown(&world), [BUILDER]);
+    assert!(!is_open(&world));
+    assert!(world.screen().find(card).is_none());
+}
+
+#[test]
 fn a_seed_link_in_a_letter_opens_the_seed_as_a_standalone_reader_for_a_member_between_sessions() {
     let opened = letter_opens_its_seed_link(member("fern", 1));
     assert_eq!(opened["standalone"], true);

@@ -48,6 +48,7 @@ pub struct Window {
     pub keyboard: Option<Holder>,
     pub(crate) desk: crate::desktop::Desk,
     pub(crate) hints: crate::hints::Hints,
+    pub(crate) words: crate::markdown::ids::Pointed,
     pub(crate) search: crate::palette::Search,
     pub agent_list_open: bool,
     /// The automations whose runs the queue sidebar lists under their group, by definition id.
@@ -277,6 +278,7 @@ impl Layer {
             ) | (Layer::Overview, Action::DesktopOverview)
                 | (Layer::ProfileSwitcher, Action::ProfileSwitch)
                 | (Layer::Asks, Action::DockAsks)
+                | (Layer::Asks | Layer::Crew, Action::TerminalLabelIds)
         );
         let tiles = self == Layer::Overview
             && action.category() == crate::action::Category::Panes
@@ -600,8 +602,10 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
                 .into_iter()
                 .flatten(),
         )
-        .child(body.min_h(WORK_AREA_FLOOR));
+        .child(body.min_h(WORK_AREA_FLOOR))
+        .children(crate::desktop::header_pop::words_anchor(state));
     crate::markdown::with_image_preview(root, layers(state, &t), state, cx.is_reduced_motion(), &t)
+        .children(crate::hints::words_layers(state, &t))
         .children(crate::markdown::annotating::layers(state, cx, &t))
         .children(crate::markdown::sending::layers(state, cx, &t))
         .children(crate::callouts::layers(state, cx, &t))
@@ -921,7 +925,9 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
     crate::automations::form::overlay(state, t, &mut layers);
     layers.extend(crate::desktop::width_control_layer(state, t));
     layers.extend(crate::desktop::peek(state, t));
-    layers.extend(crate::desktop::header_popover(state, t));
+    if !crate::desktop::header_pop::is_in_sheet(state) {
+        layers.extend(crate::desktop::header_popover(state, t));
+    }
     layers.extend(crate::sidebar::bar_peek::view(state, t));
     layers.extend(crate::sidebar::snooze::view(state, t));
     layers.extend(crate::harness_menu::view(state, t));
@@ -935,6 +941,19 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
     layers.extend(crate::picker::worktree_setup(state, t));
     crate::sender_pairing::view(state, t, &mut layers);
     layers
+}
+
+/// Closes what reads words over the tiles, so what an id in them opens shows.
+pub(crate) fn uncover_tiles(state: &mut State, tx: &mut Tx) {
+    if crate::asks::is_open(state) {
+        crate::asks::close(state, tx);
+    }
+    if crate::crew::is_open(state) {
+        crate::crew::close(state, tx);
+    }
+    if crate::garden::mode(state) == crate::garden::Mode::Full {
+        crate::garden::close(state);
+    }
 }
 
 fn close_layer(state: &mut State, tx: &mut Tx) {

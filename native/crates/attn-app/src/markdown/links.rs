@@ -12,6 +12,7 @@ use rune::Tx;
 
 use crate::State;
 use crate::requests::Answer;
+use crate::terminal::Subject;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Target {
@@ -112,6 +113,8 @@ pub(crate) struct Document {
     pub(crate) seed: Option<String>,
     /// The byte of the source a reading of one part of the document starts at.
     pub(crate) part: Option<usize>,
+    /// The ids its words link.
+    pub(crate) ids: crate::terminal::Known,
 }
 
 #[derive(Clone)]
@@ -123,6 +126,12 @@ pub(crate) struct Outpost {
 impl Document {
     /// How the reader treats the link `href` in this document.
     pub(crate) fn verdict(&self, href: &str) -> Verdict {
+        if super::ids::subject(href).is_some() {
+            return Verdict {
+                help: None,
+                follows: true,
+            };
+        }
         if let Some(seed) = self.seed(href) {
             return Verdict {
                 help: Some(format!("Open {seed}")),
@@ -197,6 +206,13 @@ fn is_seed_id(text: &str) -> bool {
 
 /// Follows the link `href` pressed in `document`.
 pub(crate) fn follow(state: &mut State, document: &Document, href: &str, tx: &mut Tx) {
+    if let Some(target) = super::ids::subject(href) {
+        match (target, document.opens_seed) {
+            (Subject::Seed(seed), Some(open)) => open(state, &seed, tx),
+            (target, _) => super::ids::open(state, target, tx),
+        }
+        return;
+    }
     if let Some(seed) = document.seed(href)
         && let Some(open) = document.opens_seed
     {

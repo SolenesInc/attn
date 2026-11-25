@@ -62,18 +62,21 @@ one forever from there.
   clipboard sequence and puts the text on your clipboard, even from a remote machine.
 - Cmd-click (Ctrl-click on Linux) a path or URL to open it. A `.md` file opens
   in a markdown tile next to the agent.
-- Attn underlines the id of an agent or a seed it knows. In a live agent's
-  short id, its role's icon stands in place of `ag-`, and copying the id still
-  gives its text, `ag-` included. Point at an id to see its card. Cmd-click (Ctrl-click on
-  Linux) it to open a live agent, or a seed in a tile. For a closed agent,
-  Cmd-click moves the keyboard into its card, where you can resume the agent or
-  find it in the ledger.
-- Hold Cmd+L (Ctrl+Shift+L on Linux) to put a letter on each of those ids. Keep
-  holding and press the letter to open its card with the keyboard in it: Enter
-  opens the agent or the seed, or resumes a closed agent, and Escape returns to
-  the terminal. Let go to hide the letters. Settings → Appearance → Id Labels
-  picks how they look: each id lit up with a list of what the ids name, or each
-  name in place of its id.
+- Attn knows the ids of your agents and seeds. In a terminal it underlines them,
+  and in a live agent's short id, its role's icon stands in place of `ag-`. Copying
+  the id still gives its text, `ag-` included. Markdown tiles, seeds, crew letters
+  and asks link the same ids, except in code.
+- Point at an id to see its card. Cmd-click (Ctrl-click on Linux) an id in a
+  terminal, or click one in markdown, to open a live agent, or a seed in a tile.
+  For a closed agent, the click moves the keyboard into its card, where you can
+  resume the agent or find it in the ledger. In an ask, a seed's link opens the
+  seed in the Garden and shows no card.
+- Hold Cmd+L (Ctrl+Shift+L on Linux) to put a letter on each of those ids, in
+  terminals and in markdown. Keep holding and press the letter to open its card
+  with the keyboard in it: Enter opens the agent or the seed, or resumes a closed
+  agent, and Escape returns to where you were. Let go to hide the letters.
+  Settings → Appearance → Id Labels picks how they look: each id lit up with a
+  list of what the ids name, or each name in place of its id.
 - If your shell marks commands (fish does by default), click a command's output
   to select the whole block. Cmd+C (Ctrl+Shift+C on Linux) copies the command
   and its output. Cmd+Shift+C (Ctrl+Alt+C on Linux) copies only the command.

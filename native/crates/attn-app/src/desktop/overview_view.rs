@@ -347,7 +347,13 @@ fn document(state: &State, desktop: &Desktop, leaf: &str, width: f32, t: &Tokens
     };
     let view = format!("{}.document", miniature_key(leaf));
     let content = state.facts.tile_contents.get(&key)?;
-    crate::markdown::still(view, width, content, &state.pictures, t)
+    crate::markdown::still(
+        view,
+        width,
+        content,
+        (&state.pictures, &state.readings.ids),
+        t,
+    )
 }
 
 fn seed(state: &State, desktop: &Desktop, leaf: &str, params: Option<&str>, t: &Tokens) -> El {

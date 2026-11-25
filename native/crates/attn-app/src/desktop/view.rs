@@ -1007,10 +1007,11 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 )),
                 None => slot,
             };
-            let slot = slot.children(cx.mark_anchor.as_ref().and_then(|(runtime, at)| {
+            let slot = slot.children(cx.mark_anchor.as_ref().and_then(|(place, at)| {
                 let [x, y, w, h] = at.map(f32::from_bits);
-                let anchor = || el().key(super::header_pop::mark_anchor(runtime));
-                (*runtime == pane.runtime_id).then(|| anchor().absolute(x, y).w(w).h(h))
+                let anchor = || el().key(super::header_pop::mark_anchor(place));
+                let here = place.runtime() == Some(&pane.runtime_id);
+                here.then(|| anchor().absolute(x, y).w(w).h(h))
             }));
             let slot = slot.children(cx.refusals.flash(&pane.runtime_id, t));
             let slot = slot.children(cx.hints.and_then(|shown| {
@@ -1914,7 +1915,11 @@ fn terminal_slot(
                         }
                         Release::Click if !d.cancelled() && accelerator(tx.mods()) => {
                             if let Some(mark) = state.terminals.mark_at(&pressing, at) {
-                                super::header_pop::open_mark(state, &pressing, &reader, mark, tx);
+                                let place = super::header_pop::Place::Terminal {
+                                    runtime: pressing.clone(),
+                                    reader: reader.clone(),
+                                };
+                                super::header_pop::open_mark(state, place, mark, tx);
                                 return;
                             }
                             match state.terminals.open_link_at(&pressing, (d.x, d.y), tx) {

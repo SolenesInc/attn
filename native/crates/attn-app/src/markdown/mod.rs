@@ -6,6 +6,7 @@ pub(crate) mod annotating;
 pub(crate) mod drafts;
 mod front_matter;
 pub(crate) use front_matter::{Value as FrontMatterValue, entries as front_matter_entries};
+pub(crate) mod ids;
 pub(crate) mod images;
 pub(crate) mod links;
 mod marks;
@@ -141,6 +142,7 @@ pub(crate) fn body(
         opens_seed: None,
         seed: None,
         part: None,
+        ids: kept.ids.clone(),
     };
     let read_source = |source: &str, part: Option<usize>, marking: Marking| {
         let pictures = pictures.of(outpost.as_ref().map(|o| o.host.as_str()));
@@ -216,7 +218,7 @@ pub(crate) fn still(
     view: String,
     width: f32,
     content: &attn_client::TileContent,
-    pictures: &Pictures,
+    (pictures, ids): (&Pictures, &crate::terminal::Known),
     t: &Tokens,
 ) -> Option<El> {
     let attn_client::TileContent { revision, message } = content;
@@ -230,7 +232,13 @@ pub(crate) fn still(
         f32::INFINITY
     };
     let (padding, text_width) = card_fit(Some(width as u32), widest);
-    let version = (*revision, width.to_bits(), pictures.revision, *t);
+    let version = (
+        *revision,
+        width.to_bits(),
+        pictures.revision,
+        ids.clone(),
+        *t,
+    );
     let reading = memo(format!("{view}.reading"), version, || {
         let style = look(t).prose_measure(PROSE_MEASURE);
         let host = message.host.as_deref().filter(|h| !h.is_empty());
@@ -244,6 +252,7 @@ pub(crate) fn still(
                 opens_seed: None,
                 seed: None,
                 part: None,
+                ids: ids.clone(),
             },
             pictures.of(host),
             annotating::Kept::default(),
@@ -380,7 +389,7 @@ pub(crate) fn reader(
         Some(root),
     ) = (marking, root)
     else {
-        return markdown.build(attn_ui::kit(t));
+        return ids::pointed(markdown.build(attn_ui::kit(t)), ids::Cards::All);
     };
     let pressed = tile.clone();
     let in_part = part.is_some();
@@ -398,11 +407,14 @@ pub(crate) fn reader(
                 .map(|(start, source)| (*start, source.as_str()));
             annotating::selection_changed(state, &tile, &uri, part, change, tx)
         });
-    if in_part {
-        col().w_full().child(reading)
-    } else {
-        reading
-    }
+    ids::pointed(
+        if in_part {
+            col().w_full().child(reading)
+        } else {
+            reading
+        },
+        ids::Cards::All,
+    )
 }
 
 /// `markdown` read as a document at `document.path`: its links go where the reader sends them
@@ -417,7 +429,9 @@ pub(crate) fn linked(
     let help = document.clone();
     let plain = document.clone();
     let text_color = t.text_primary;
+    let ids = document.ids.clone();
     pictured(markdown, &document, pictures, t)
+        .text_links(move |run| ids::links(&ids, run))
         .on_link_tx(move |state: &mut State, href: &str, tx: &mut Tx| {
             links::follow(state, &document, href, tx)
         })

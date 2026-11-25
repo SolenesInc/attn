@@ -310,6 +310,7 @@ pub fn bind(
             sidebar::advance(state, tx);
             garden::follow(state, tx);
             state.terminals.know_sessions(&state.facts);
+            markdown::ids::follow(state);
             crew::follow(state);
             automations::follow(state, tx);
             follow_terminals(state, tx);

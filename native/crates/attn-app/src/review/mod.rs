@@ -740,6 +740,7 @@ pub(crate) fn body(
                         colors.is_some(),
                         rows.len(),
                         marked,
+                        document.ids.clone(),
                         asking.clone(),
                         pictured,
                         *t,

@@ -90,6 +90,7 @@ pub(crate) fn page(state: &State, t: &Tokens) -> El {
         .grow(1.0)
         .min_w(0.0)
         .fill(t.bg_panel)
+        .children(crate::desktop::header_pop::in_sheet(state, t))
 }
 
 /// The pickers Manage crew opens over itself.
@@ -903,6 +904,7 @@ fn handoffs_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<Block> {
                     opens_seed: Some(super::open_seed),
                     seed: None,
                     part: None,
+                    ids: state.readings.ids.clone(),
                 },
                 std::rc::Rc::default(),
                 state.readings.kept(&view),

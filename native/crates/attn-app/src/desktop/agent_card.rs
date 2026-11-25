@@ -243,7 +243,7 @@ pub(super) fn go_button(
     link: Link<'_>,
     pinned: bool,
     facts: &Facts,
-    session: &str,
+    beside: Option<&str>,
     t: &Tokens,
 ) -> El {
     let (label, said, mark): (String, String, El) = match go {
@@ -319,10 +319,12 @@ pub(super) fn go_button(
         Go::Resume { .. } | Go::Ledger(_) | Go::PullRequest(_) => button.whole(),
         Go::Seed(_) | Go::Ask(_) => button,
     };
-    let (go, session) = (go.clone(), session.to_owned());
+    let (go, beside) = (go.clone(), beside.map(str::to_owned));
     El::from(
         button
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| follow(state, &go, &session, tx))
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                follow(state, &go, beside.as_deref(), tx)
+            })
             .build(t),
     )
     .key(key)
@@ -469,10 +471,10 @@ pub(super) fn doing(card: &Card<'_>, state: &State, t: &Tokens) -> Option<El> {
     Some(words(said, Type::Body, ink).wrap().max_lines(2))
 }
 
-/// Opens what `go` leads to and closes the chain: a seed in a tile beside `session`, a pull
+/// Opens what `go` leads to and closes the chain: a seed in a tile beside `beside`'s, a pull
 /// request on GitHub, an ask in the asks sheet, a closed agent in the ledger. A closed agent that
 /// resumes keeps its card until it opens, so a refusal shows there.
-pub(super) fn follow(state: &mut State, go: &Go, session: &str, tx: &mut Tx) {
+pub(super) fn follow(state: &mut State, go: &Go, beside: Option<&str>, tx: &mut Tx) {
     match go {
         Go::Resume { session, action } => {
             if let Some(entry) = state.terminals.closed_session(session).cloned() {
@@ -482,10 +484,11 @@ pub(super) fn follow(state: &mut State, go: &Go, session: &str, tx: &mut Tx) {
         Go::Ledger(session) => {
             if let Some(entry) = state.terminals.closed_session(session).cloned() {
                 header_pop::close(state);
+                crate::shell::uncover_tiles(state, tx);
                 crate::ledger::open_session(state, entry, tx);
             }
         }
-        Go::Seed(id) => open_seed(state, id, session, tx),
+        Go::Seed(id) => open_seed(state, id, beside, tx),
         Go::PullRequest(url) => {
             header_pop::close(state);
             super::provenance::open(state, url, tx);
@@ -498,13 +501,18 @@ pub(super) fn follow(state: &mut State, go: &Go, session: &str, tx: &mut Tx) {
     }
 }
 
-pub(super) fn open_seed(state: &mut State, seed: &str, session: &str, tx: &mut Tx) {
+pub(super) fn open_seed(state: &mut State, seed: &str, beside: Option<&str>, tx: &mut Tx) {
     header_pop::close(state);
-    crate::garden::open_tile_beside(state, seed, Some(session.to_owned()), tx);
+    crate::shell::uncover_tiles(state, tx);
+    match beside {
+        Some(session) => crate::garden::open_tile_beside(state, seed, Some(session.to_owned()), tx),
+        None => crate::garden::open_tile(state, seed, tx),
+    }
 }
 
 pub(super) fn select(state: &mut State, session: &str, tx: &mut Tx) {
     header_pop::close(state);
+    crate::shell::uncover_tiles(state, tx);
     let session = session.to_owned();
     crate::dispatch(state, Action::OpenAgent { session }, tx);
 }

@@ -3,11 +3,11 @@
 
 use std::ops::Range;
 
-use attn_protocol::AskSeedMention;
 use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 use rune::{Color, El, Link, Span};
 
-use super::mentions;
+use crate::markdown::ids;
+use crate::terminal::Subject;
 
 #[derive(Clone, Debug, PartialEq)]
 enum Mark {
@@ -27,19 +27,16 @@ pub(crate) struct Line {
 }
 
 impl Line {
-    /// `source` with its links, bare URLs and the seeds of `names` it names marked as links.
-    pub(crate) fn of(source: &str, names: &[AskSeedMention]) -> Line {
+    /// `source` with its links, bare URLs and what `found` finds in its words marked as links.
+    pub(crate) fn of(source: &str, found: impl Fn(&str) -> Vec<(Range<usize>, String)>) -> Line {
         let mut line = parsed(source).unwrap_or_else(|| Line {
             text: source.to_owned(),
             marks: Vec::new(),
         });
         let urls = bare_urls(&line.text);
         line.link_where_free(urls);
-        let seeds = mentions::found(&line.text, names)
-            .into_iter()
-            .map(|(at, seed)| (at, mentions::href(seed)))
-            .collect();
-        line.link_where_free(seeds);
+        let named = found(&line.text);
+        line.link_where_free(named);
         line
     }
 
@@ -82,13 +79,12 @@ impl Line {
             })
             .collect();
         self.links().fold(el.spans(spans), |el, (at, href)| {
-            let shown = match mentions::seed_of(href) {
-                Some(seed) => {
-                    Link::new(at.clone(), href).help(format!("Open {seed} in the Garden"))
-                }
-                None => Link::new(at.clone(), href).help(href.to_owned()),
-            };
-            el.link(shown)
+            let link = Link::new(at.clone(), href);
+            el.link(match ids::subject(href) {
+                Some(Subject::Seed(seed)) => link.help(format!("Open {seed} in the Garden")),
+                Some(Subject::Session(_)) => link,
+                None => link.help(href.to_owned()),
+            })
         })
     }
 
@@ -196,7 +192,7 @@ mod tests {
     );
 
     fn read(source: &str) -> (String, Vec<(String, &'static str)>) {
-        let line = Line::of(source, &[]);
+        let line = Line::of(source, |_| Vec::new());
         let marks = line
             .marks
             .iter()

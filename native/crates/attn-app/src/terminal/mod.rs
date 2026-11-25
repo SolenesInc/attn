@@ -35,7 +35,7 @@ pub(crate) use annotating::{
 pub(crate) use blocks::Part;
 pub(crate) use filter::{Filtered, Filtering, filter_field_key};
 pub(crate) use find::{Finding, Toward, find_field_key};
-pub(crate) use ids::{Mark, Subject, ask_about_unresolved};
+pub(crate) use ids::{Known, Mark, Subject, ask_about_unresolved};
 pub(crate) use input_trace::{Decision, Heard, InputTrace, Target, TraceId, Write};
 pub(crate) use latency::type_into;
 pub(crate) use links::accelerator;

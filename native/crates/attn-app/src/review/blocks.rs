@@ -12,7 +12,7 @@ use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd, TextMerg
 use rune::{El, Image, Link, Span, col, text};
 use rune_kit::markdown::Markdown;
 
-use crate::markdown::{Document, linked};
+use crate::markdown::{Document, ids, linked};
 
 /// Whether a stop on `path` reads as a document rather than as code.
 pub(crate) fn is_document(path: &str) -> bool {
@@ -394,11 +394,12 @@ pub(crate) fn rewording(block: &Block) -> Option<Vec<(Op, Word)>> {
 }
 
 /// A block's words as one text: removed words struck, added words tinted, code in mono,
-/// strong and emphasis as they read, and the links `document` follows underlined and followed.
+/// strong and emphasis as they read, and the links `document` follows and the ids it links
+/// underlined and followed.
 fn worded(ops: &[(Op, Word)], key: String, document: &Document, t: &Tokens) -> El {
     let mut said = String::new();
     let (mut spans, mut strikes) = (Vec::new(), Vec::new());
-    let mut linked: Vec<(std::ops::Range<usize>, &str)> = Vec::new();
+    let mut linked: Vec<(std::ops::Range<usize>, String)> = Vec::new();
     let (mut added, mut removed) = (Vec::new(), Vec::new());
     for (op, word) in ops {
         if !said.is_empty() {
@@ -419,7 +420,7 @@ fn worded(ops: &[(Op, Word)], key: String, document: &Document, t: &Tokens) -> E
                         Some((range, last)) if *last == href && range.end + 1 == start => {
                             range.end = end
                         }
-                        _ => linked.push((start..end, href)),
+                        _ => linked.push((start..end, href.to_owned())),
                     }
                     span.underline(t.accent)
                 }
@@ -428,6 +429,16 @@ fn worded(ops: &[(Op, Word)], key: String, document: &Document, t: &Tokens) -> E
                     span
                 }
             };
+        }
+        if !word
+            .marks
+            .iter()
+            .any(|m| matches!(m, Mark::Code | Mark::Link))
+        {
+            for (at, href) in ids::links(&document.ids, &word.text) {
+                linked.push((start + at.start..start + at.end, href));
+                span = span.underline(t.accent);
+            }
         }
         match op {
             Op::Added => {
@@ -463,7 +474,7 @@ fn worded(ops: &[(Op, Word)], key: String, document: &Document, t: &Tokens) -> E
         .spans(spans)
         .strikes(strikes)
         .wrap();
-    read_as(worded, Reading::Text)
+    ids::pointed(read_as(worded, Reading::Text), ids::Cards::All)
 }
 
 /// The file a stop is on, which its blocks' links and images resolve from, and the pictures
@@ -472,14 +483,14 @@ type File<'a> = (&'a Document, &'a Rc<HashMap<String, Option<Image>>>);
 
 /// `source` drawn as the file at `file` draws it.
 fn drawn(source: &str, (document, pictures): File, t: &Tokens) -> El {
-    linked(
+    let read = linked(
         Markdown::new(source.to_owned()).smart_punctuation(true),
         document.clone(),
         pictures.clone(),
         t,
     )
-    .style(crate::markdown::look(t))
-    .build(attn_ui::kit(t))
+    .style(crate::markdown::look(t));
+    ids::pointed(read.build(attn_ui::kit(t)), ids::Cards::All)
 }
 
 /// Markdown a block was, drawn as the document drew it, dimmed in a removed frame.

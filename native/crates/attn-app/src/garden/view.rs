@@ -399,7 +399,7 @@ pub(crate) fn frame_layer(state: &State, t: &Tokens) -> Option<El> {
     ))
 }
 
-pub(super) fn full_frame(_state: &State, t: &Tokens, content: El) -> El {
+pub(super) fn full_frame(state: &State, t: &Tokens, content: El) -> El {
     let dialog = col()
         .key("garden.frame")
         .role("dialog")
@@ -407,7 +407,8 @@ pub(super) fn full_frame(_state: &State, t: &Tokens, content: El) -> El {
         .modal_tx(true, |state: &mut State, _: &mut Tx| super::close(state))
         .w_full()
         .h_full()
-        .child(content);
+        .child(content)
+        .children(crate::desktop::header_pop::in_sheet(state, t));
     crate::shell::under_title_bar("garden.full", Surface::panel(dialog, t), t)
 }
 

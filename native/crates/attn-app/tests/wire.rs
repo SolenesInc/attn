@@ -182,6 +182,7 @@ mod wire {
     mod ledger;
     mod markdown;
     mod markdown_annotations;
+    mod markdown_ids;
     mod migration_failure;
     mod notebook;
     mod notifications;

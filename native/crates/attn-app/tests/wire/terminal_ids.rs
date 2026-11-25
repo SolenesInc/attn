@@ -21,7 +21,7 @@ pub(super) const BUILDER: &str = "3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f";
 pub(super) const BUILDER_SHORT: &str = "ag-7yd2rk";
 pub(super) const MAPPER: &str = "c5e81f07-4a36-4f8f-b2d9-7701aa5c9e3d";
 pub(super) const MAPPER_SHORT: &str = "ag-rqm1y1";
-const STRANGER: &str = "9d2e4f61-5b08-4c3a-87e9-f1a60d7c2b54";
+pub(super) const STRANGER: &str = "9d2e4f61-5b08-4c3a-87e9-f1a60d7c2b54";
 pub(super) const SEED: &str = "s-7k3f9m";
 
 pub(super) const AGENT_CARD: &str = "terminal.r1.agent-card";
@@ -83,6 +83,13 @@ pub(super) fn start(
     state.seeds_total = Some(seeds.len() as i64);
     state.seeds = Some(seeds);
     let mut world = World::start_sized(ledger_daemon(state, ledger.clone()), (1400.0, 900.0));
+    resolves(&world, ledger);
+    world.open_desktop();
+    world
+}
+
+/// Answers the sessions the app asks about with those of `ledger` it names.
+pub(super) fn resolves(world: &World, ledger: Vec<SessionLedgerEntry>) {
     world.daemon.on("resolve_sessions", move |r| {
         let found = ledger
             .iter()
@@ -91,8 +98,6 @@ pub(super) fn start(
             .collect();
         answer(r, found)
     });
-    world.open_desktop();
-    world
 }
 
 fn short(id: &str) -> String {
@@ -125,7 +130,7 @@ fn answer(request: &Request, found: Vec<ResolvedSession>) -> Value {
     })
 }
 
-fn asked(world: &World) -> Vec<Vec<String>> {
+pub(super) fn asked(world: &World) -> Vec<Vec<String>> {
     let sent = world.daemon.sent_of("resolve_sessions");
     sent.iter().map(names).collect()
 }
@@ -204,7 +209,7 @@ pub(super) fn rest_on(world: &mut World, col: u16, row: u16) {
     world.advance(Duration::from_millis(200));
 }
 
-fn held_accelerator() -> Mods {
+pub(super) fn held_accelerator() -> Mods {
     Mods {
         logo: mac(),
         cmd: true,
@@ -246,11 +251,11 @@ pub(super) fn letter(world: &mut World, c: &str) {
     key(world, Key::Text(c.into()));
 }
 
-fn into_card() -> &'static str {
+pub(super) fn into_card() -> &'static str {
     if mac() { "mod+i" } else { "mod+shift+i" }
 }
 
-fn takes_keyboard(world: &mut World) {
+pub(super) fn takes_keyboard(world: &mut World) {
     world.gesture(|app| app.press(into_card()));
 }
 
@@ -908,7 +913,7 @@ fn resting_on_a_closed_sessions_id_shows_who_it_was_and_offers_resume_its_ledger
     rests(&mut world);
 }
 
-fn resumed(session: &str) -> SessionReopenResultMessage {
+pub(super) fn resumed(session: &str) -> SessionReopenResultMessage {
     SessionReopenResultMessage {
         success: true,
         result: Some(SessionReopenResult {
@@ -920,7 +925,7 @@ fn resumed(session: &str) -> SessionReopenResultMessage {
     }
 }
 
-fn reopens(world: &World) -> Vec<(String, String)> {
+pub(super) fn reopens(world: &World) -> Vec<(String, String)> {
     let word = |r: &Request, field: &str| r[field].as_str().unwrap_or_default().to_owned();
     let sent = world.daemon.sent_of("session_reopen");
     sent.iter()
@@ -1131,7 +1136,7 @@ fn a_seed_card_takes_the_keyboard_opens_its_seed_with_return_and_closes_with_esc
 
 /// The main window on Home, `s1`'s terminal popped out into its own window, and the builder in
 /// a tile docked on the same desktop. The daemon makes the tile it is asked to show active.
-fn popped_out(
+pub(super) fn popped_out(
     seeds: Vec<Seed>,
     ledger: Vec<SessionLedgerEntry>,
     asks: Vec<Ask>,
@@ -1289,7 +1294,7 @@ fn main_has(world: &mut World, pane: &str, runtime: Option<&str>) {
     }
 }
 
-fn is_at_rest(world: &mut World) -> bool {
+pub(super) fn is_at_rest(world: &mut World) -> bool {
     world.advance(Duration::from_secs(1));
     world.runtime_is_at_rest() && world.tile_windows_are_at_rest()
 }

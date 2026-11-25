@@ -17,8 +17,9 @@ use super::inline::Line;
 use super::{Chip, Item, Kind, Lists, Stop, attach, mentions, questions};
 use crate::State;
 use crate::desktop::header_pop::{self, Pop, What};
-use crate::markdown::{self, images, links};
+use crate::markdown::{self, ids, images, links};
 use crate::sidebar::queue;
+use crate::terminal::{Known, Subject};
 
 pub(super) const SNOOZE: &str = "asks.snooze";
 const OPEN_SEED: &str = "asks.open-seed";
@@ -130,7 +131,7 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
     let beside = window_w - 2.0 * side >= BESIDE_LEAST;
     let panel = col()
         .key(super::SHEET)
-        .role("dialog")
+        .role("group")
         .label("Asks")
         .focusable(true)
         .tab_index(-1)
@@ -149,20 +150,27 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
                 super::drop_on_sheet(state, paths, tx);
             },
         )
-        .on_paste_content(super::paste_on_sheet)
         .on_drop_hover(|state: &mut State, over: bool, _: &mut Tx| {
             state.window.asks.dropping = over && matches!(state.shown_ask(), Some((_, false)));
         })
+        .w_full();
+    let frame = col()
+        .key("asks.frame")
+        .role("dialog")
+        .label("Asks")
         .modal_tx(true, super::close)
+        .on_paste_content(super::paste_on_sheet)
         .w_full()
         .max_w(SHEET_W);
     let now_ms = state.window.now_ms;
-    let panel = match shown.and_then(|id| items.iter().position(|i| i.ask.id == id)) {
-        None => panel.child(
-            rail.push(empty(replied, t))
+    let (frame, panel) = match shown.and_then(|id| items.iter().position(|i| i.ask.id == id)) {
+        None => {
+            let empty = rail
+                .push(empty(replied, t))
                 .fits(under_title_bar - 2.0 * above)
-                .build(t),
-        ),
+                .build(t);
+            (frame, panel.child(empty))
+        }
         Some(at) if beside => {
             let item = &items[at];
             let rail = rail
@@ -180,9 +188,8 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
                 .footer(footer(state, item, items.len() > 1, t))
                 .build(t)
                 .grow_from(1.0, 0.0);
-            panel
-                .h_full()
-                .child(row().w_full().h_full().child(rail).child(reading))
+            let panes = row().w_full().h_full().child(rail).child(reading);
+            (frame.h_full(), panel.h_full().child(panes))
         }
         Some(at) => {
             let item = &items[at];
@@ -199,13 +206,19 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
                 .push_all(article(state, item, None, t))
                 .footer(footer(state, item, items.len() > 1, t))
                 .build(t);
-            panel.h_full().child(stacked)
+            (frame.h_full(), panel.h_full().child(stacked))
         }
     };
     let panel = match asks.quotable.as_deref().filter(|_| quoting) {
         Some(text) => panel.children(quote_button(text, t)),
         None => panel,
     };
+    let panel = Frame::dialog(t).draw_clipped(
+        panel.children(
+            asks.dropping
+                .then(|| drop_overlay("asks.drop", drop_said(state), t)),
+        ),
+    );
     let placed = col()
         .pin(
             Some(side),
@@ -215,12 +228,9 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
         )
         .center()
         .child(
-            Frame::dialog(t).draw_clipped(
-                panel.children(
-                    asks.dropping
-                        .then(|| drop_overlay("asks.drop", drop_said(state), t)),
-                ),
-            ),
+            frame
+                .child(ids::pointed(panel, ids::Cards::Sessions))
+                .children(header_pop::in_sheet(state, t)),
         );
     rune::el()
         .key("asks.layer")
@@ -364,10 +374,11 @@ fn list_row(item: &Item<'_>, selected: bool, now_ms: i64, t: &Tokens) -> El {
         })
 }
 
-/// How an ask's words show: the seeds they name as links that open them, and its pictures,
+/// How an ask's words show: the seeds and sessions they name as links that open them, and its pictures,
 /// read from the copy of them the home keeps.
 struct Prose<'a> {
     names: &'a [AskSeedMention],
+    ids: &'a Known,
     measure: Option<f32>,
     pictures: Rc<HashMap<String, Option<Image>>>,
     widths: &'a HashMap<String, u32>,
@@ -379,6 +390,7 @@ impl<'a> Prose<'a> {
     fn of(state: &'a State, ask: &Ask, measure: Option<f32>, t: &'a Tokens) -> Prose<'a> {
         Prose {
             names: mentions::of(state, &ask.id),
+            ids: &state.readings.ids,
             measure,
             pictures: state.pictures.of_ask(&ask.id),
             widths: &state.window.asks.widths,
@@ -396,13 +408,14 @@ impl<'a> Prose<'a> {
             opens_seed: None,
             seed: None,
             part: None,
+            ids: self.ids.clone(),
         }
     }
 
     /// The words of `source`, a line of inline markdown, and what draws its marks on the words
     /// that show them, its links opening as the ask's prose opens them.
     fn line(&self, source: &str) -> (String, bool, impl FnOnce(El) -> El + 'static) {
-        let line = Line::of(source, self.names);
+        let line = Line::of(source, |text| mentions::links(text, self.names, self.ids));
         let (link, code) = (self.t.accent, self.t.bg_elevated);
         let document = self.document();
         let (words, linked) = (line.text.clone(), line.has_links());
@@ -434,7 +447,10 @@ impl<'a> Prose<'a> {
         };
         let place = place.to_owned();
         let read = markdown::pictured(read, &document, self.pictures.clone(), self.t)
-            .text_links(mentions::seed_links(self.names))
+            .text_links({
+                let (names, ids) = (self.names.to_vec(), self.ids.clone());
+                move |run| mentions::links(run, &names, &ids)
+            })
             .style(style)
             .on_link_tx(move |state: &mut State, href: &str, tx: &mut Tx| {
                 follow_link(state, &document, href, tx)
@@ -456,9 +472,9 @@ impl<'a> Prose<'a> {
 }
 
 fn follow_link(state: &mut State, document: &links::Document, href: &str, tx: &mut Tx) {
-    match mentions::seed_of(href) {
-        Some(seed) => super::open_seed(state, seed, tx),
-        None => links::follow(state, document, href, tx),
+    match ids::subject(href) {
+        Some(Subject::Seed(seed)) => super::open_seed(state, &seed, tx),
+        _ => links::follow(state, document, href, tx),
     }
 }
 

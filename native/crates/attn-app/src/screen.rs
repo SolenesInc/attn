@@ -3,6 +3,7 @@ use attn_ui::colors::TerminalColors;
 use rune::{Compositor, Frame, Runtime, RuntimeCore};
 
 use crate::State;
+use crate::markdown::ids;
 
 /// Draws the window, with each terminal's cells in its tile's slot and, while the overview shows,
 /// in its miniature's.
@@ -71,15 +72,27 @@ fn sync_terminals(rt: &mut Runtime<State>) -> TerminalColors {
 
 fn screens_drawn(rt: &mut Runtime<State>, redrawn: bool) {
     rt.state().terminals.echoes_drawn();
+    ids_drawn(rt);
+    if redrawn {
+        rt.a11y_text_changed();
+    }
+}
+
+/// Follows what a frame the window drew shows of the ids attn knows: asks the daemon about those
+/// nothing it holds names, and takes in where the ones in words are. Returns whether that changed
+/// what the window draws.
+pub fn ids_drawn(rt: &mut Runtime<State>) -> bool {
     if rt.state().terminals.has_unresolved_ids() {
         rt.update_if(|state, tx| {
             crate::terminal::ask_about_unresolved(state, tx);
             false
         });
     }
-    if redrawn {
-        rt.a11y_text_changed();
+    if !ids::followed(rt.state()) {
+        return false;
     }
+    let links = rt.links(ids::HREF);
+    rt.update_if(|state, _| ids::drawn(state, links))
 }
 
 impl Screens {

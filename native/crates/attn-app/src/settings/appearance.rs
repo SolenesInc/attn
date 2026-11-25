@@ -301,8 +301,8 @@ fn id_labels(state: &State, t: &Tokens) -> Section {
         .binding(&Action::TerminalLabelIds)
         .map(|b| state.keymap.label(b));
     let copy = match keys {
-        Some(keys) => format!("How the ids in your terminals look while you hold {keys}."),
-        None => "How the ids in your terminals look while you hold their keys.".to_owned(),
+        Some(keys) => format!("How the ids on screen look while you hold {keys}."),
+        None => "How the ids on screen look while you hold their keys.".to_owned(),
     };
     Section::new("settings.block.id-labels", "Id Labels")
         .description(copy)
