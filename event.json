@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "The Shelf stops following the overview highlight across desktops",
+  "at": "2026-11-25T05:10:18.684Z",
+  "detail": "The Shelf stops following the row-overview highlight across desktops.\n\nOpen the row overview on desktop A and click desktop B's strip. At 52ff8b53c a Linux app wire probe sees B's active tile highlighted in the overview while the Shelf still marks A's active tile current. At shelf.rs:335,373 the Shelf builds from the actual profile desktop and falls back to its active tile when the preview is on another desktop. The plan's D2 requires the current entry and stack slice to follow the highlight. A fresh verifier independently confirmed the path.\n\nUse the previewed row and highlight during overview, and preserve the actual desktop until landing. The scratch probes and output are attached to s-vqawr3.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/desktop/shelf.rs",
+    "line": 335
+  },
+  "culprit": "3b147ade0af0e68243723a62d427069d50102e3c"
+}
