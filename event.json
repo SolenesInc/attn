@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Relative repository bindings do not route seeds",
+  "at": "2026-11-25T00:47:51.693Z",
+  "fixesBug": "4472f5d"
+}
