@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Settled tenders remain Waiting on you",
+  "at": "2026-11-25T00:48:03.624Z",
+  "fixesBug": "5e22642"
+}
