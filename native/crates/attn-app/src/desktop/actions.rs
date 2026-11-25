@@ -570,9 +570,8 @@ fn hold_keyboard(state: &mut State, desktop: &str, leaf: &str) {
     state.terminals.focus(keyboard, &state.daemon);
 }
 
-/// Moves the active tile to where `layout::step` sends it along the row, and returns that tile.
-/// Past the edge it leaves the pane, as `leave_pane` says, and returns None. Over an open overview
-/// it moves the highlight instead.
+/// Moves the active tile to `tile_toward`, and returns that tile. Past the edge it leaves the pane,
+/// as `leave_pane` says, and returns None. Over an open overview it moves the highlight instead.
 pub(crate) fn focus_toward(state: &mut State, toward: Toward, tx: &mut Tx) -> Option<String> {
     if super::overview::open(state).is_some() {
         return super::overview::step(state, toward, tx);
@@ -581,12 +580,20 @@ pub(crate) fn focus_toward(state: &mut State, toward: Toward, tx: &mut Tx) -> Op
         Toward::Left | Toward::Up => -1,
         Toward::Right | Toward::Down => 1,
     };
+    let desktop = state.facts.current_desktop()?.id.clone();
+    let next = tile_toward(state, toward);
+    match &next {
+        Some(leaf) => show_leaf(state, &desktop, leaf, tx),
+        None => leave_pane(state, toward, edge, tx),
+    }
+    next
+}
+
+/// The tile `layout::step` sends the active tile to along the current desktop's row.
+pub(super) fn tile_toward(state: &State, toward: Toward) -> Option<String> {
     let desktop = state.facts.current_desktop()?;
     let desk = &state.window.desk;
-    let Some((_, plan)) = desk.plan(&state.facts, desktop) else {
-        leave_pane(state, toward, edge, tx);
-        return None;
-    };
+    let (_, plan) = desk.plan(&state.facts, desktop)?;
     let active = desk.acting_leaf(desktop);
     let row_state = desk.row(&desktop.id);
     let vertical = matches!(toward, Toward::Up | Toward::Down);
@@ -613,13 +620,7 @@ pub(crate) fn focus_toward(state: &mut State, toward: Toward, tx: &mut Tx) -> Op
             })
             .collect(),
     };
-    let next = layout::step(&row, &active, toward, &row_state.focus_order);
-    let desktop = desktop.id.clone();
-    match &next {
-        Some(leaf) => show_leaf(state, &desktop, leaf, tx),
-        None => leave_pane(state, toward, edge, tx),
-    }
-    next
+    layout::step(&row, &active, toward, &row_state.focus_order)
 }
 
 /// Past the last tile, left and right step desktops. In queue flow up and down step the queue,

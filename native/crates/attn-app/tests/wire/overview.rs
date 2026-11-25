@@ -12,6 +12,8 @@ use serde_json::{Value, json};
 
 /// Wide enough for two tiles at the narrowest width, and too narrow for three.
 const TWO_FIT: (f32, f32) = (1600.0, 900.0);
+/// Wide enough for the four columns of `stacked`.
+const FOUR_FIT: (f32, f32) = (3200.0, 900.0);
 const ONE: &str = "work/desktop_1";
 const TWO: &str = "work/desktop_2";
 const THREE: &str = "work/desktop_3";
@@ -76,8 +78,12 @@ fn stacked(active: &str) -> Desktop {
 
 /// Desktop 1 with a stack off screen, desktop 2 with two agents and an empty desktop 3.
 fn three_desktops() -> Vec<Desktop> {
+    three_desktops_at("a")
+}
+
+fn three_desktops_at(active: &str) -> Vec<Desktop> {
     vec![
-        stacked("a"),
+        stacked(active),
         desktop(2, "y", Some(row([pane("x"), pane("y")]))),
         desktop(3, "", None),
     ]
@@ -795,7 +801,7 @@ fn the_shelf_s_colours_change_at_once_as_the_highlight_moves_kept_held_and_on_a_
 {
     let asking = |desktops| {
         let mut state = initial(desktops);
-        state.asks = Some(vec![question("s-c"), question("s-p")]);
+        state.asks = Some(vec![question("s-c"), question("s-e"), question("s-p")]);
         start_on(Daemon::scripted().state(state))
     };
     let mut kept = asking(two_rows());
@@ -806,11 +812,12 @@ fn the_shelf_s_colours_change_at_once_as_the_highlight_moves_kept_held_and_on_a_
     assert_eq!(recolored, ["a", "b"]);
     assert_eq!(step_to_the_ask_of(&mut kept, "c"), ["b", "c"]);
 
-    let mut held = asking(three_desktops());
-    walk_to_b(&mut held);
+    let mut held = asking(three_desktops_at("b"));
+    hold(&mut held);
+    walk(&mut held, Action::TerminalFocusRight, "c");
     advance_ms(&mut held, 1000);
     assert!(open(&held));
-    assert_eq!(step_to_the_ask_of(&mut held, "c"), ["b", "c"]);
+    assert_eq!(step_to_the_ask_of(&mut held, "e"), ["c", "e"]);
 
     let mut previewed = asking(two_rows());
     press(&mut previewed, Action::DesktopOverview);
@@ -1333,19 +1340,39 @@ fn let_go(world: &mut World) {
     down(world, Mods::default());
 }
 
-/// Holds the walk chord's modifiers and steps right once, to `b`, as the daemon then shows.
-fn walk_to_b(world: &mut World) {
+/// Holds the walk chord's modifiers.
+fn hold(world: &mut World) {
     down(world, chord(&Action::TerminalFocusRight).mods);
-    press(world, Action::TerminalFocusRight);
-    arrange(world, ONE, {
-        let mut desktops = three_desktops();
-        desktops[0] = stacked("b");
-        desktops
-    });
+}
+
+/// Steps to `leaf`, as the daemon then shows.
+fn walk(world: &mut World, step: Action, leaf: &str) {
+    press(world, step);
+    arrange(world, ONE, three_desktops_at(leaf));
+}
+
+/// Holds the walk chord's modifiers and steps right once, from `a` to `b`, which is on screen.
+fn walk_to_b(world: &mut World) {
+    hold(world);
+    walk(world, Action::TerminalFocusRight, "b");
+}
+
+/// On `b`, the last tile on screen, holds the walk chord's modifiers and steps right once, to `c`.
+fn walk_off_screen_to_c() -> World {
+    let mut world = start(three_desktops_at("b"));
+    hold(&mut world);
+    walk(&mut world, Action::TerminalFocusRight, "c");
+    world
 }
 
 fn advance_ms(world: &mut World, ms: u64) {
     world.advance(Duration::from_millis(ms));
+}
+
+fn stays_shut(world: &mut World) {
+    assert!(!open(world));
+    rest(world);
+    assert!(!open(world));
 }
 
 /// Every way to let go of the chord: one of its modifiers at a time, and all of them.
@@ -1369,10 +1396,43 @@ fn ways_to_let_go() -> Vec<Mods> {
 }
 
 #[test]
+fn steps_between_tiles_on_screen_never_open_the_overview_however_long_the_chord_is_held() {
+    use Action::{TerminalFocusLeft, TerminalFocusRight};
+    let mut world = start(three_desktops());
+    walk_to_b(&mut world);
+    stays_shut(&mut world);
+    walk(&mut world, TerminalFocusLeft, "a");
+    let ev = chord(&TerminalFocusRight);
+    world.gesture(|app| app.runtime.repeat_key(ev));
+    stays_shut(&mut world);
+
+    let daemon = Daemon::scripted().state(initial(three_desktops()));
+    let mut wide = World::start_sized(daemon, FOUR_FIT);
+    wide.open_desktop();
+    hold(&mut wide);
+    for leaf in ["b", "c", "e"] {
+        walk(&mut wide, TerminalFocusRight, leaf);
+        stays_shut(&mut wide);
+        assert_eq!(keyboard(&mut wide), leaf);
+    }
+}
+
+#[test]
+fn a_step_in_a_stack_and_one_back_on_screen_never_open_the_overview() {
+    let mut stack = start(three_desktops_at("c"));
+    hold(&mut stack);
+    walk(&mut stack, Action::TerminalFocusDown, "d");
+    stays_shut(&mut stack);
+
+    let mut back = walk_off_screen_to_c();
+    walk(&mut back, Action::TerminalFocusLeft, "b");
+    stays_shut(&mut back);
+}
+
+#[test]
 fn a_single_quick_step_never_opens_the_overview_whichever_modifier_goes_first() {
     for left in ways_to_let_go() {
-        let mut world = start(three_desktops());
-        walk_to_b(&mut world);
+        let mut world = walk_off_screen_to_c();
         advance_ms(&mut world, 199);
         assert!(!open(&world), "a step is the walk's step");
         let acted = acts(&world);
@@ -1385,30 +1445,44 @@ fn a_single_quick_step_never_opens_the_overview_whichever_modifier_goes_first() 
         assert_eq!(acts(&world), acted);
         assert_eq!(
             sent(&world, "desktop_show_leaf"),
-            [json!({"desktop_id": ONE, "leaf_id": "b"})]
+            [json!({"desktop_id": ONE, "leaf_id": "c"})]
         );
-        assert_eq!(keyboard(&mut world), "b");
+        assert_eq!(keyboard(&mut world), "c");
     }
 }
 
 #[test]
-fn a_hold_and_a_second_step_open_the_overview_over_a_row_that_stays_and_letting_go_lands() {
-    type WayIn = (&'static str, &'static str, fn(&mut World));
-    let ways: [WayIn; 3] = [
-        ("200 ms", "b", |w| advance_ms(w, 200)),
-        ("a second step", "c", |w| {
-            press(w, Action::TerminalFocusRight)
+fn a_hold_past_the_screen_opens_the_overview_over_a_row_that_stays_and_letting_go_lands() {
+    type WayIn = (&'static str, fn() -> World, &'static str, fn(&mut World));
+    let to_b = || {
+        let mut world = start(three_desktops());
+        walk_to_b(&mut world);
+        world
+    };
+    let ways: [WayIn; 4] = [
+        ("200 ms", walk_off_screen_to_c, "c", |w| {
+            advance_ms(w, 200);
         }),
-        ("a repeat of the held chord", "c", |w| {
+        ("a second step off screen", walk_off_screen_to_c, "e", |w| {
+            press(w, Action::TerminalFocusRight);
+        }),
+        ("a step off screen after one on it", to_b, "c", |w| {
+            press(w, Action::TerminalFocusRight);
+        }),
+        ("a repeat of the held chord", to_b, "c", |w| {
             let ev = chord(&Action::TerminalFocusRight);
             w.gesture(|app| app.runtime.repeat_key(ev));
         }),
     ];
-    for (name, at, enter) in ways {
-        for left in ways_to_let_go() {
-            let mut world = start(three_desktops());
-            walk_to_b(&mut world);
+    for (i, (name, walked, at, enter)) in ways.into_iter().enumerate() {
+        let lets_go = match i {
+            0 => ways_to_let_go(),
+            _ => vec![Mods::default()],
+        };
+        for left in lets_go {
+            let mut world = walked();
             let acted = acts(&world);
+            let on = keyboard(&mut world);
 
             enter(&mut world);
             assert!(open(&world), "{name} opens it");
@@ -1417,7 +1491,7 @@ fn a_hold_and_a_second_step_open_the_overview_over_a_row_that_stays_and_letting_
             assert!(!has(&world, &format!("overview.strip.{TWO}")), "{name}");
             assert!(!has(&world, "overview.new"), "{name}");
             assert_eq!(acts(&world), acted, "{name} moves nothing");
-            assert_eq!(keyboard(&mut world), "b", "{name}");
+            assert_eq!(keyboard(&mut world), on, "{name}");
             rest(&mut world);
             assert!(open(&world), "{name}: it stays while the chord is down");
 
@@ -1476,8 +1550,7 @@ fn the_window_losing_focus_lands_a_held_overview_and_ends_a_hold_before_it_opens
         Some(&json!({"desktop_id": ONE, "leaf_id": "c"}))
     );
 
-    let mut world = start(three_desktops());
-    walk_to_b(&mut world);
+    let mut world = walk_off_screen_to_c();
     let acted = acts(&world);
     world.gesture(|app| app.runtime.window_focus(false));
     rest(&mut world);
@@ -1486,7 +1559,7 @@ fn the_window_losing_focus_lands_a_held_overview_and_ends_a_hold_before_it_opens
 }
 
 #[test]
-fn cancelling_a_held_overview_goes_back_to_the_tile_the_user_came_from() {
+fn cancelling_a_held_overview_goes_back_to_the_tile_the_user_left_the_screen_from() {
     type WayOut = (&'static str, fn(&mut World));
     let mut ways: Vec<WayOut> = vec![("a press beside the row", |w| {
         let [x, y, _, _] = w.runtime().presented("overview").unwrap().0;
@@ -1499,20 +1572,34 @@ fn cancelling_a_held_overview_goes_back_to_the_tile_the_user_came_from() {
             w.gesture(|app| app.key(KeyEvent { key, mods }));
         }));
     }
-    for (name, leave) in ways {
+    let off_screen_at_once = || {
+        let mut world = walk_off_screen_to_c();
+        advance_ms(&mut world, 200);
+        world
+    };
+    let after_a_step_on_screen = || {
         let mut world = start(three_desktops());
         walk_to_b(&mut world);
         press(&mut world, Action::TerminalFocusRight);
+        world
+    };
+    let walks = [off_screen_at_once, after_a_step_on_screen as fn() -> World];
+    for ((name, leave), walk) in ways
+        .into_iter()
+        .flat_map(|way| walks.map(|walk| (way, walk)))
+    {
+        let mut world = walk();
+        assert!(open(&world));
 
         leave(&mut world);
         assert!(!open(&world), "{name} closes it");
         let shown = sent(&world, "desktop_show_leaf");
         assert_eq!(
             shown.last(),
-            Some(&json!({"desktop_id": ONE, "leaf_id": "a"})),
+            Some(&json!({"desktop_id": ONE, "leaf_id": "b"})),
             "{name}"
         );
-        assert_eq!(keyboard(&mut world), "a", "{name}");
+        assert_eq!(keyboard(&mut world), "b", "{name}");
 
         let_go(&mut world);
         rest(&mut world);
@@ -1527,8 +1614,7 @@ fn cancelling_a_held_overview_goes_back_to_the_tile_the_user_came_from() {
 
 #[test]
 fn a_press_on_a_miniature_of_a_held_overview_lands_there_and_letting_go_lands_nothing_more() {
-    let mut world = start(three_desktops());
-    walk_to_b(&mut world);
+    let mut world = walk_off_screen_to_c();
     advance_ms(&mut world, 200);
 
     click(&mut world, &miniature("e"));
@@ -1558,14 +1644,14 @@ fn a_step_that_leaves_the_row_and_the_repeats_after_it_never_open_the_overview()
     );
     advance_ms(&mut world, 200);
     assert!(!open(&world), "before the daemon switched desktops");
-    desktops[1] = desktop(2, "x", Some(row([pane("x"), pane("y")])));
+    desktops[1] = desktop(2, "y", Some(row([pane("x"), pane("y"), pane("z")])));
     arrange(&mut world, TWO, desktops);
 
     let ev = chord(&Action::TerminalFocusRight);
     world.gesture(|app| app.runtime.repeat_key(ev));
     assert_eq!(
         sent(&world, "desktop_show_leaf"),
-        [json!({"desktop_id": TWO, "leaf_id": "y"})],
+        [json!({"desktop_id": TWO, "leaf_id": "z"})],
         "the repeat walks on as it does today"
     );
     rest(&mut world);
@@ -1606,7 +1692,7 @@ fn a_key_without_modifiers_a_sequence_and_the_palette_walk_without_a_hold() {
         }),
     ];
     for (name, keys, walk) in walks {
-        let mut state = initial(three_desktops());
+        let mut state = initial(three_desktops_at("b"));
         state.settings = keys.map(|keys| {
             [("keybindings_config".to_owned(), keys.to_owned())]
                 .into_iter()
@@ -1617,7 +1703,7 @@ fn a_key_without_modifiers_a_sequence_and_the_palette_walk_without_a_hold() {
         walk(&mut world);
         assert_eq!(
             sent(&world, "desktop_show_leaf"),
-            [json!({"desktop_id": ONE, "leaf_id": "b"})],
+            [json!({"desktop_id": ONE, "leaf_id": "c"})],
             "{name} walks"
         );
         rest(&mut world);
@@ -1627,8 +1713,7 @@ fn a_key_without_modifiers_a_sequence_and_the_palette_walk_without_a_hold() {
 
 #[test]
 fn a_layer_that_opens_before_the_hold_s_time_keeps_the_overview_shut() {
-    let mut world = start(three_desktops());
-    walk_to_b(&mut world);
+    let mut world = walk_off_screen_to_c();
     press(&mut world, Action::UiCommandPalette);
     rest(&mut world);
     assert!(!open(&world));
@@ -1636,8 +1721,7 @@ fn a_layer_that_opens_before_the_hold_s_time_keeps_the_overview_shut() {
 
 #[test]
 fn a_tile_shown_another_way_before_the_hold_s_time_keeps_the_overview_shut() {
-    let mut world = start(three_desktops());
-    walk_to_b(&mut world);
+    let mut world = walk_off_screen_to_c();
     click(&mut world, "sidebar.session.s-a");
     arrange(&mut world, ONE, three_desktops());
     rest(&mut world);

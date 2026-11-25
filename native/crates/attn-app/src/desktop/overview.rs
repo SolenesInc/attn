@@ -40,9 +40,9 @@ enum Mode {
 #[derive(Clone, Debug)]
 pub(crate) struct Hold {
     chord: Mods,
-    from: Spot,
+    back_to: Spot,
     at: Spot,
-    opens_at: f64,
+    opens_at: Option<f64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -155,38 +155,52 @@ fn open_at(state: &mut State, from: Spot, at: Spot, mode: Mode) {
 }
 
 pub(crate) fn chord(state: &mut State, toward: Toward, tx: &mut Tx) {
-    if let Some(hold) = state.window.desk.hold.take()
+    let leaves_screen = step_leaves_screen(state, toward);
+    let hold = state.window.desk.hold.take();
+    let held = hold.is_some();
+    if let Some(hold) = hold.filter(|_| leaves_screen)
         && open_held_if_in_front(state, hold)
     {
         step(state, toward, tx);
         return;
     }
     let chord = tx.mods();
-    let arms = chord != Mods::default() && !tx.key_repeat() && open(state).is_none();
+    let holds = chord != Mods::default() && (held || !tx.key_repeat()) && open(state).is_none();
     let from = state.facts.current_desktop().map(|desktop| Spot {
         desktop: desktop.id.clone(),
         leaf: Some(state.window.desk.acting_leaf(desktop)),
     });
     let stepped = super::actions::focus_toward(state, toward, tx);
-    if let (true, Some(from), Some(leaf)) = (arms, from, stepped) {
+    if let (true, Some(from), Some(leaf)) = (holds, from, stepped) {
         let at = Spot {
             desktop: from.desktop.clone(),
             leaf: Some(leaf),
         };
-        let opens_at = tx.clock() + HOLD_OPENS_AFTER;
+        let opens_at = leaves_screen.then(|| tx.clock() + HOLD_OPENS_AFTER);
         state.window.desk.hold = Some(Hold {
             chord,
-            from,
+            back_to: if leaves_screen { from } else { at.clone() },
             at,
             opens_at,
         });
-        tx.wake_at(opens_at);
+        if let Some(opens_at) = opens_at {
+            tx.wake_at(opens_at);
+        }
     }
+}
+
+fn step_leaves_screen(state: &State, toward: Toward) -> bool {
+    let Some(desktop) = state.facts.current_desktop() else {
+        return false;
+    };
+    let (columns, on_screen) = row_of(state, desktop);
+    super::actions::tile_toward(state, toward)
+        .is_some_and(|leaf| !columns[on_screen].iter().any(|c| c.holds(&leaf)))
 }
 
 pub(super) fn expire(state: &mut State, now: f64) -> bool {
     let hold = &mut state.window.desk.hold;
-    match hold.take_if(|hold| now >= hold.opens_at) {
+    match hold.take_if(|hold| hold.opens_at.is_some_and(|at| now >= at)) {
         Some(hold) => open_held_if_in_front(state, hold),
         None => false,
     }
@@ -200,7 +214,7 @@ fn open_held_if_in_front(state: &mut State, hold: Hold) -> bool {
     }
     let leaf = hold.at.leaf.clone();
     let mode = Mode::Held { chord: hold.chord };
-    open_at(state, hold.from, hold.at, mode);
+    open_at(state, hold.back_to, hold.at, mode);
     if let Some(leaf) = leaf {
         highlight(state, &leaf);
     }
