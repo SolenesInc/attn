@@ -1,0 +1,1 @@
+`review-main` now registers confirmed defects with `land bug` before routing so fixers get the short bug id and include `Fixes-Bug: <id>` in their fix commit; `land-on-main` notes the `Fixes-Bug:` trailer alongside attn's trailers.
