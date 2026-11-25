@@ -260,7 +260,7 @@ export function attnCalls(events: any[], outcomes: ToolOutcome[] = []): Call[] {
 
 export const isHelp = (call: Call) => call.via === "cli" && HELP.test(call.text)
 export const isCommand = (call: Call, commands: string | string[]) => [commands].flat().includes(call.command)
-export const isUsageRefusal = (call: Call) => call.refused !== undefined && /(^|\n|\\n)usage:/.test(call.refused)
+export const isUsageRefusal = (call: { refused?: string }) => call.refused !== undefined && /(^|\n|\\n)usage:/.test(call.refused)
 
 export const reached = (calls: Call[], commands: string | string[], mentions?: RegExp) =>
   calls.some((c) => isCommand(c, commands) && !isHelp(c) && c.refused === undefined && (mentions === undefined || mentions.test(c.text)))
@@ -277,6 +277,7 @@ export type Metrics = {
   toolRefusals: number
   cliCalls: number
   cliFailures: number
+  usageRefusals: number
   searches: number
   cliHelpReads: number
   referenceReads: number
@@ -300,6 +301,7 @@ export function metrics(events: any[], calls: Call[], outcomes?: ToolOutcome[]):
     toolRefusals: tool.filter((c) => c.refused !== undefined).length,
     cliCalls: cli.length,
     cliFailures: cli.filter((c) => c.refused !== undefined).length,
+    usageRefusals: [...tool, ...cli].filter(isUsageRefusal).length,
     searches,
     cliHelpReads: calls.filter(isHelp).length,
     referenceReads: calls.filter((c) => !isHelp(c) && isCommand(c, ["skill", "guide"])).length,

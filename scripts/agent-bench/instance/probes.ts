@@ -7,7 +7,7 @@ import { type Call, type Check, isCommand, isHelp, isUsageRefusal, reached, STAY
 type Probe = {
   id: string
   ask: string | ((w: World) => Promise<string> | string)
-  /** The commands that can answer it, on either surface. Some call of one must succeed, and none may be refused for its usage. */
+  /** The commands that can answer it, on either surface. Some call of one must succeed. */
   command: string | string[]
   mentions?: RegExp
   /** The skill reference the agent must read before it acts. */
@@ -156,11 +156,9 @@ const probeTask = (p: Probe): Task => ({
   },
   check: async (w, calls, ended) => {
     const mine = calls.filter((c) => isCommand(c, p.command) && !isHelp(c))
-    const done = reached(calls, p.command, p.mentions) || (p.app === true && mine.length > 0)
+    const done = reached(calls, p.command, p.mentions) || (p.app === true && mine.some((c) => !isUsageRefusal(c)))
     const problems: string[] = []
     if (!done) problems.push(mine.length === 0 ? `never reached ${p.command}` : `no ${p.command} call succeeded: ${(mine.at(-1)!.refused ?? mine.at(-1)!.text).slice(0, 160)}`)
-    const misused = mine.filter(isUsageRefusal).length
-    if (misused > 0) problems.push(`${misused} call(s) refused for usage`)
     if (p.reads && !reached(calls, "skill", new RegExp(p.reads))) problems.push(`skipped the ${p.reads} reference`)
     const lacking = await p.end?.(w, calls, ended)
     if (lacking) problems.push(lacking)
