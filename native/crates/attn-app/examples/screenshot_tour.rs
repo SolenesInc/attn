@@ -38,7 +38,7 @@ use attn_protocol::{
     UpdateOutpostProgress, UpdateRun, Worktree, WorktreeListResult, WorktreeListResultEvent,
 };
 use attn_term::{FONT_SIZE, Metrics};
-use attn_testkit::tree::{pane, row};
+use attn_testkit::tree::{below, pane, row};
 use attn_testkit::{Daemon, Request, Target, World, key_event, message};
 use rune::render::{Gpu, OFFSCREEN_FORMAT, Offscreen, Renderer, write_png};
 use rune::text::pixel_compare::Image;
@@ -1214,15 +1214,14 @@ fn tended_agent(dark: bool) -> InitialStateMessage {
 }
 
 /// The title bar's shelf on a desktop wider than the window, as the audit's desktop: the
-/// waiting reviewer active beside a shell and a document, each marked by its state or kind, and
-/// two agents off screen as chips; `hovered`, with the pointer on its dots, which show the
-/// width control.
+/// waiting reviewer active beside a shell and a document, and two agents off screen; `hovered`,
+/// with the pointer on its frame, which shows the width control.
 fn shelf(dark: bool, hovered: bool) {
     let mut world = shelf_world(dark);
     if hovered {
         world.gesture(|app| {
-            if let Some(dots) = app.runtime.find("shelf.live") {
-                app.move_to(dots);
+            if let Some(frame) = app.runtime.find("shelf.frame") {
+                app.move_to(frame);
             }
         });
     }
@@ -1238,7 +1237,7 @@ fn shelf(dark: bool, hovered: bool) {
 }
 
 /// The audit's desktop: the waiting reviewer active beside a shell and a document, and two
-/// agents off screen as chips.
+/// agents off screen.
 fn shelf_world(dark: bool) -> World {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
     let named = |id: &str, label: &str, agent: &str, status: &str| Session {
@@ -1277,26 +1276,26 @@ fn shelf_world(dark: bool) -> World {
     world
 }
 
-/// The shelf of [`shelf`] with the pointer resting on a chip, whose peek opens: the builder's,
-/// or in a window too narrow for the chips, the first chip of the cap's menu; with no shelf,
+/// The shelf of [`shelf`] with the pointer resting on an entry, whose peek opens: the builder's,
+/// or in a window too narrow for the entries, the first one of the count's menu; with no shelf,
 /// the title bar that left it no room.
 fn shelf_peek(dark: bool) {
     let mut world = shelf_world(dark);
     world.resize((window().0.min(900.0), 600.0));
-    let cap = ["shelf.cap.after", "shelf.cap.before"]
+    let count = ["shelf.count.after", "shelf.count.before"]
         .into_iter()
         .find(|key| world.screen().find(Target::key(*key)).is_some());
-    if let Some(cap) = cap {
-        world.gesture(|app| app.click(Target::key(cap)));
+    if let Some(count) = count {
+        world.gesture(|app| app.click(Target::key(count)));
         world.settle();
     }
-    let chip = ["w", "i", "sh", "r", "m"]
+    let entry = ["w", "i", "sh", "r", "m"]
         .iter()
-        .map(|leaf| format!("shelf.chip.{leaf}"))
+        .map(|leaf| format!("shelf.entry.{leaf}"))
         .find(|key| world.runtime().presented(key).is_some());
-    if let Some(chip) = chip {
+    if let Some(entry) = entry {
         world.gesture(|app| {
-            let at = app.runtime.find(&chip).expect("the chip is laid out");
+            let at = app.runtime.find(&entry).expect("the entry is laid out");
             app.move_to(at);
         });
     }
@@ -1304,18 +1303,82 @@ fn shelf_peek(dark: bool) {
     snap(&mut world, "shelf-peek", dark);
 }
 
-/// The shelf of [`shelf`] in a window too narrow for its chips, its cap's menu open, and the
+/// The shelf of a row with two stacks, the second member of the second one in use between a
+/// terminal, an approval and a document, beside a document and before an agent off screen; and
+/// in a window too narrow for it, where the ends fold into counts.
+fn shelf_stack(dark: bool) {
+    let role = |builtin: &str| {
+        Some(attn_protocol::SessionDelegationRole {
+            name: builtin.into(),
+            builtin: Some(builtin.into()),
+            ..Default::default()
+        })
+    };
+    let agents = [
+        ("ch", "chief", "idle", role("orchestrator")),
+        ("rv", "reviewer", "working", role("reviewer")),
+        ("sc", "scout", "waiting_input", role("pathfinder")),
+        ("bd", "builder", "working", role("builder")),
+        ("ld", "land-on-main: verify perf", "pending_approval", None),
+    ];
+    let shells = [("ts", "tests"), ("sh", "shell"), ("bl", "builder logs")];
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    let sessions = state.sessions.get_or_insert_default();
+    sessions.extend(agents.iter().map(|(id, label, status, role)| Session {
+        label: (*label).into(),
+        agent: "claude".into(),
+        delegation_role: role.clone(),
+        ..session(&format!("x-{id}"), status)
+    }));
+    sessions.extend(shells.map(|(id, label)| Session {
+        label: label.into(),
+        agent: "shell".into(),
+        ..session(&format!("x-{id}"), "idle")
+    }));
+    if let Some(desktop) = state.desktops.iter_mut().flatten().next() {
+        desktop.panes = agents
+            .iter()
+            .map(|(id, ..)| *id)
+            .chain(shells.iter().map(|(id, _)| *id))
+            .map(|id| agent_pane(DESKTOP, id, &format!("x-{id}")))
+            .collect();
+        desktop.active_pane_id = "bl".into();
+        desktop.tree_json = row(vec![
+            pane("ch"),
+            below(pane("rv"), pane("ts")),
+            pane("sh"),
+            document_tile("m", "/repo/plan.md"),
+            below(
+                pane("bd"),
+                below(
+                    pane("bl"),
+                    below(pane("ld"), document_tile("n", "/repo/notes.md")),
+                ),
+            ),
+            pane("sc"),
+        ])
+        .to_string();
+    }
+    let mut world = start(scripted().state(state));
+    deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
+    deliver_to(&mut world, "n", "/repo/notes.md", DOCUMENT, None);
+    snap(&mut world, "shelf-stack", dark);
+    world.resize((900.0, 600.0));
+    snap(&mut world, "shelf-folded", dark);
+}
+
+/// The shelf of [`shelf`] in a window too narrow for its entries, its count's menu open, and the
 /// label fewer tiles shows.
-fn shelf_caps(dark: bool) {
+fn shelf_counts(dark: bool) {
     let mut world = shelf_world(dark);
     world.resize((900.0, 600.0));
-    let cap = ["shelf.cap.after", "shelf.cap.before"]
+    let count = ["shelf.count.after", "shelf.count.before"]
         .into_iter()
         .find(|key| world.screen().find(Target::key(*key)).is_some());
-    if let Some(cap) = cap {
-        world.gesture(|app| app.click(Target::key(cap)));
+    if let Some(count) = count {
+        world.gesture(|app| app.click(Target::key(count)));
     }
-    snap(&mut world, "shelf-cap-menu", dark);
+    snap(&mut world, "shelf-count-menu", dark);
     let mut world = shelf_world(dark);
     run(&mut world, Action::ShelfFewerTiles);
     snap(&mut world, "shelf-width-label", dark);
@@ -8612,7 +8675,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("shelf", || shelf(dark, false));
         scene("shelf", || shelf(dark, true));
         scene("shelf_peek", || shelf_peek(dark));
-        scene("shelf_caps", || shelf_caps(dark));
+        scene("shelf_counts", || shelf_counts(dark));
+        scene("shelf_stack", || shelf_stack(dark));
         scene("review_stop", || review_stop(dark));
         scene("garden", || garden(dark));
         scene("garden_dock", || garden_dock(dark));

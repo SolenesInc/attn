@@ -97,7 +97,7 @@ const SINGLE_TAB_JS: &str = r#"(() => {
     return originalOpen(url, target, features);
   };
 })()"#;
-const OFF_SCREEN: &str = "browser screenshot is unavailable while the browser tile is off screen; ask the user to bring it on screen with its chip on the shelf or by selecting its desktop, then retry";
+const OFF_SCREEN: &str = "browser screenshot is unavailable while the browser tile is off screen; ask the user to bring it on screen with its entry on the shelf or by selecting its desktop, then retry";
 
 thread_local! {
     static WAKE: RefCell<Option<Box<dyn Fn()>>> = const { RefCell::new(None) };

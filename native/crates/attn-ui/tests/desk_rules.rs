@@ -1,9 +1,10 @@
 //! The rules the desktop chrome's blocks hold, read from the gallery's desk stories: a tile
 //! header's piece never stands wider than it measures, so the header fits its pieces by what
-//! they draw, and nothing it draws reaches past it; the shelf counts its chips' widths as they
-//! draw; the overview's cards share one width and hold what they show.
+//! they draw, and nothing it draws reaches past it; the shelf counts its entries' widths as they
+//! draw, and what it draws reads on what is behind it in every scheme; the overview's cards share one width and hold what they show.
 
 use attn_ui::Tokens;
+use attn_ui::blocks::{CountSide, MemberState, Place, Shelf, ShelfCount, ShelfEntry, ShelfMember};
 use attn_ui::colors::scheme_for;
 use attn_ui::desk_gallery::header_pieces_of;
 use rune::{App, AppSpec, Cx, El, ElementInfo, Env, Runtime, el};
@@ -102,29 +103,137 @@ fn a_piece_cut_short_keeps_its_words_within_their_room() {
 }
 
 #[test]
-fn a_shelf_chip_of_marks_stands_as_wide_as_the_shelf_counts_it() {
-    use attn_ui::blocks::Shelf;
-    use attn_ui::system::DotSize;
+fn a_shelf_entry_stands_as_wide_as_the_shelf_counts_it_and_draws_nothing_past_its_box() {
     for variant in ["Rest", "Long"] {
         let rt = story_of(true, "Desk/Shelf", variant);
-        for (key, marks) in [("shelf.dot", 1), ("shelf.dot.current", 3)] {
+        let counts = [
+            ("shelf.count", CountSide::Before, 2, vec![]),
+            (
+                "shelf.count.needs",
+                CountSide::After,
+                3,
+                vec![shelf_member(Some(MemberState::Approval))],
+            ),
+        ];
+        for (key, side, columns, marks) in counts {
             let drawn = element(&rt, key).rect[2];
-            let counted = Shelf::marks_chip_width(marks, DotSize::Small).max(20.0);
+            let counted = shelf_count(side, columns, marks).width();
             assert!(
                 (drawn - counted).abs() < 0.5,
                 "{variant} {key}: drawn {drawn}, counted {counted}"
             );
         }
-        let chip = element(&rt, "shelf.chip");
-        for part in within(&rt, &chip) {
-            let [x, _, w, _] = part.rect;
-            assert!(
-                x >= chip.rect[0] - 0.5 && x + w <= chip.rect[0] + chip.rect[2] + 0.5,
-                "{variant}: {:?} runs past its chip",
-                part.key
-            );
+        for key in [
+            "shelf.entry",
+            "shelf.entry.stack",
+            "shelf.entry.on_screen",
+            "shelf.entry.current",
+            "shelf.entry.asks",
+            "shelf.count",
+            "shelf.count.needs",
+        ] {
+            let entry = element(&rt, key);
+            for part in within(&rt, &entry) {
+                let [x, y, w, h] = part.visible;
+                if w <= 0.0 || h <= 0.0 {
+                    continue;
+                }
+                assert!(
+                    x >= entry.rect[0] - 0.5
+                        && x + w <= entry.rect[0] + entry.rect[2] + 0.5
+                        && y >= entry.rect[1] - 0.5
+                        && y + h <= entry.rect[1] + entry.rect[3] + 0.5,
+                    "{variant}: {:?} at {:?} runs past {key} at {:?}",
+                    part.path,
+                    part.visible,
+                    entry.rect
+                );
+            }
         }
     }
+}
+
+const SHELF_WINDOW: (f32, f32) = (1400.0, 700.0);
+const STATES: [Option<MemberState>; 7] = [
+    None,
+    Some(MemberState::Idle),
+    Some(MemberState::Working),
+    Some(MemberState::Waiting),
+    Some(MemberState::Approval),
+    Some(MemberState::Scheduled),
+    Some(MemberState::Unknown),
+];
+const PLACES: [Place; 3] = [Place::OffScreen, Place::OnScreen, Place::Current];
+
+thread_local! {
+    static SHELF_TOKENS: std::cell::Cell<Option<Tokens>> = const { std::cell::Cell::new(None) };
+}
+
+fn shelf_tokens() -> Tokens {
+    SHELF_TOKENS
+        .with(|cell| cell.get())
+        .expect("the shelf's tokens")
+}
+
+fn shelf_member(state: Option<MemberState>) -> ShelfMember {
+    ShelfMember {
+        name: "plan".into(),
+        icon: (&attn_ui::icon::AGENT).into(),
+        state,
+    }
+}
+
+fn shelf_count(side: CountSide, columns: usize, marks: Vec<ShelfMember>) -> ShelfCount {
+    ShelfCount {
+        side,
+        columns,
+        needs_user: !marks.is_empty(),
+        marks,
+    }
+}
+
+/// Every entry the shelf draws, a row per place: one tile in each state, a stack that shows each
+/// state between one more of every state on both edges, and the counts with and without marks.
+fn shelf_board(t: &Tokens, _: &mut Cx<Tokens>) -> El {
+    let rows = PLACES.iter().enumerate().map(|(p, &place)| {
+        let flat = STATES.iter().map(|&state| vec![shelf_member(state)]);
+        let stacks = STATES.iter().map(|&shown| {
+            let all = || STATES.iter().map(|&state| shelf_member(state));
+            all().chain([shelf_member(shown)]).chain(all()).collect()
+        });
+        let entries = flat
+            .map(|members| (members, 0))
+            .chain(stacks.map(|members| (members, STATES.len())))
+            .enumerate()
+            .map(|(i, (members, shown))| {
+                let entry = ShelfEntry::new(members, shown, place, 1);
+                entry.build(&format!("entry.{p}.{i}"), "plan", entry.name_width(), t)
+            });
+        let framed = (place != Place::OffScreen).then(|| {
+            [
+                Shelf::frame(0.0, 1390.0, t),
+                Shelf::frame_edge(0.0, 1390.0, t),
+            ]
+        });
+        Shelf::row(format!("row.{p}"))
+            .children(framed.into_iter().flatten())
+            .children(entries)
+    });
+    let needing = STATES.map(shelf_member);
+    let counts = [false, true].into_iter().flat_map(|open| {
+        [&needing[..], &[]]
+            .into_iter()
+            .map(move |needing| (open, needing.to_vec()))
+    });
+    let counts = counts.enumerate().map(|(i, (open, needing))| {
+        shelf_count(CountSide::After, 3, needing).build(format!("count.{i}"), "3 more", open, t)
+    });
+    rune::col()
+        .w_full()
+        .h_full()
+        .fill(t.bg_panel)
+        .children(rows)
+        .child(Shelf::row("counts").children(counts))
 }
 
 #[test]
@@ -178,6 +287,107 @@ fn a_link_on_a_header_line_reaches_over_none_of_the_words_beside_it() {
                 part.key,
                 part.rect,
                 link.rect
+            );
+        }
+    }
+}
+
+fn luminance(c: rune::Color) -> f32 {
+    0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+}
+
+fn contrast(a: rune::Color, b: rune::Color) -> f32 {
+    let (a, b) = (luminance(a), luminance(b));
+    (a.max(b) + 0.05) / (a.min(b) + 0.05)
+}
+
+/// What the board shows that reads too little against what is directly behind it: the last
+/// opaque surface drawn before it under its middle.
+fn faults(t: Tokens, dark: bool) -> (usize, Vec<String>) {
+    SHELF_TOKENS.with(|cell| cell.set(Some(t)));
+    let mut rt = App::new(AppSpec {
+        fonts: attn_ui::FONTS,
+        families: attn_ui::FAMILIES,
+        ..AppSpec::new("shelf", SHELF_WINDOW, shelf_tokens, shelf_board)
+    })
+    .headless_runtime(SHELF_WINDOW, Env::new(dark, SCALE));
+    rt.frame(0.0);
+    let all = rt.elements();
+    let behind = |at: usize| {
+        let [x, y, w, h] = all[at].visible;
+        let (x, y) = (x + w / 2.0, y + h / 2.0);
+        all[..at]
+            .iter()
+            .rev()
+            .find(|e| {
+                let [ex, ey, ew, eh] = e.visible;
+                e.fill.a > 0.999 && x >= ex && x <= ex + ew && y >= ey && y <= ey + eh
+            })
+            .expect("the board's own ground")
+            .fill
+    };
+    let mut found = vec![];
+    let mut seen = 0;
+    let mut check = |what: &str, ink: rune::Color, ground: rune::Color, floor: f32| {
+        seen += 1;
+        let reads = contrast(ink, ground);
+        if reads < floor - 0.01 {
+            found.push(format!("{what} reads {reads:.2}:1, under {floor}:1"));
+        }
+    };
+    for (i, e) in all.iter().enumerate().skip(1) {
+        let [_, _, w, h] = e.visible;
+        if w <= 0.0 || h <= 0.0 {
+            continue;
+        }
+        let ground = behind(i);
+        match (e.role, e.text_color) {
+            ("icon", Some(ink)) => check(&e.path, ink, ground, 3.0),
+            (_, Some(ink)) if e.text.is_some() => check(&e.path, ink, ground, 4.5),
+            _ => {}
+        }
+        let dot = h == 4.0 && e.fill.a > 0.0;
+        let cut_out = all
+            .iter()
+            .filter(|part| part.parent == Some(i) && part.role == "icon")
+            .any(|icon| contrast(icon.text_color.expect("an icon's ink"), ground) < 1.01);
+        if dot || (e.fill.a > 0.0 && cut_out) {
+            check(&e.path, e.fill, ground, 3.0);
+        }
+        if e.key.as_deref() == Some("shelf.frame.edge") {
+            let frame = e.rect.map(|v| v * SCALE);
+            let edge = rt
+                .instances
+                .iter()
+                .find(|drawn| {
+                    drawn.border[3] > 0.0
+                        && drawn
+                            .rect
+                            .iter()
+                            .zip(frame)
+                            .all(|(a, b)| (a - b).abs() <= 1.0)
+                })
+                .expect("the frame's edge");
+            let [r, g, b] = [0, 1, 2].map(|c| rune::theme::srgb_decode(edge.border[c]));
+            check(&e.path, rune::Color { r, g, b, a: 1.0 }, ground, 3.0);
+        }
+    }
+    (seen, found)
+}
+
+#[test]
+fn the_shelfs_marks_and_names_read_on_what_is_behind_them_in_every_scheme() {
+    for scheme in attn_ui::colors::SCHEMES.iter() {
+        for dark in [true, false] {
+            let t = scheme.colors(dark).ui;
+            let (seen, found) = faults(t, dark);
+            println!("{}, dark={dark}: {seen} marks and words read", scheme.id);
+            assert!(seen > 400, "only {seen} marks and words were found");
+            assert!(
+                found.is_empty(),
+                "{}, dark={dark}:\n{}",
+                scheme.id,
+                found.join("\n")
             );
         }
     }

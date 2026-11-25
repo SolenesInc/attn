@@ -51,7 +51,7 @@ pub(crate) use host::outpost_name;
 pub(crate) use overview::{create as create_desktop, view as overview};
 pub(crate) use peek::view as peek;
 pub(crate) use shelf::{
-    cap_menu, columns as shelf_columns, settle, slot as shelf_slot, title as leaf_title,
+    columns as shelf_columns, count_menu, settle, slot as shelf_slot, title as leaf_title,
     width_control_layer, width_label,
 };
 pub use tile_look::FocusStyle;
@@ -86,8 +86,8 @@ pub struct Desk {
     pub(crate) shelf_px: Option<f32>,
     pub(crate) window_w: Option<f32>,
     pub(crate) width_control: shelf::WidthControlHover,
-    /// The shelf cap whose menu is open.
-    pub(crate) cap_open: Option<layout::Edge>,
+    /// The shelf count whose menu is open.
+    pub(crate) count_open: Option<attn_ui::blocks::CountSide>,
     pub(crate) width_label: Option<shelf::WidthLabel>,
     /// The row the tile area last laid out, which its next layout slides from.
     pub(crate) shown_row: Option<row_slide::ShownRow>,
@@ -99,7 +99,7 @@ pub struct Desk {
     pub(crate) dividers: HashMap<String, ([f32; 4], layout::Direction)>,
     /// Split ratios this window shows ahead of the daemon, by split id.
     pub(crate) ratios: HashMap<String, divider::RatioOverride>,
-    /// Chips that flash for a moment: a tile that arrived or went off screen.
+    /// Entries that flash for a moment: a tile that arrived or went off screen.
     pub(crate) flashes: Vec<shelf::Flash>,
     /// A show this window asked for that has not landed on screen yet.
     pub(crate) awaited: Option<arrival::Awaited>,
@@ -108,7 +108,7 @@ pub struct Desk {
     pub(crate) refusals: refusal::Refusals,
     /// A tile or shelf column being dragged.
     pub(crate) drag: Option<drag::LeafDrag>,
-    /// Where shelf chips, caps and the shelf are in the window, by element key, for drops.
+    /// Where shelf entries, counts and the shelf are in the window, by element key, for drops.
     pub(crate) rects: HashMap<String, [f32; 4]>,
     pub(crate) peeks: peek::Peeks,
     pub(crate) header_pop: header_pop::HeaderPop,
@@ -156,7 +156,7 @@ pub(crate) struct RowState {
     /// A column brought beside the active tile that the daemon has not yet moved.
     pub drop: Option<shelf::PendingDrop>,
     pub settled: Option<shelf::Settled>,
-    /// A tile a chip took the place of, held off screen until the moves land.
+    /// A tile an entry took the place of, held off screen until the moves land.
     pub swap: Option<drag::Swap>,
     /// Documents that arrived off screen, not yet seen.
     pub unseen: Vec<String>,
@@ -227,7 +227,7 @@ pub(crate) fn header_popover(state: &State, t: &attn_ui::Tokens) -> Option<rune:
     }
 }
 
-/// Lets the moments the desktops keep lapse when their time is up: chips' flashes, tiles' rings
+/// Lets the moments the desktops keep lapse when their time is up: entries' flashes, tiles' rings
 /// and refusal flashes, the rest a
 /// drag takes on a sidebar desktop before the window switches to it, the delays of the peek
 /// and the header popover, and the peek's reads. Returns whether anything changed.
@@ -371,7 +371,7 @@ impl Desk {
             current.as_ref() == Some(previous) || !facts.desktops.iter().any(|d| d.id == *previous)
         });
         if shown.is_some() && shown != self.shown {
-            self.cap_open = None;
+            self.count_open = None;
         }
         if shown.is_some() {
             self.shown = shown;

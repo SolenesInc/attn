@@ -319,7 +319,7 @@ fn drag(world: &mut World, from: &str, to: (f32, f32)) {
     world.gesture(|app| app.drag(Target::key(from), to));
 }
 
-/// Drags `tile`'s header and drops it at `share` of the width of the chip or cap `key`.
+/// Drags `tile`'s header and drops it at `share` of the width of the entry or count `key`.
 fn drop_on(world: &mut World, tile: &str, key: &str, share: f32) {
     let to = at(world, key, share, 0.5);
     drag(world, &format!("tile.{tile}.header"), to);
@@ -385,16 +385,17 @@ fn typed(world: &World) -> Vec<(String, String)> {
 }
 
 #[test]
-fn a_refused_bring_says_the_keys_typed_for_it_were_not_delivered_and_sends_none() {
+fn a_refused_drop_says_the_keys_typed_for_it_were_not_delivered_and_sends_none() {
     let mut world = start(TWO_FIT, None, vec![four("a")]);
     world
         .daemon
         .answer_in_turn("desktop_move_leaf", [Answer::Hold]);
 
-    world.gesture(|app| app.click(Target::key("shelf.chip.d")));
+    let to = in_tile(&world, "b", 0.97, 0.5);
+    drag(&mut world, "shelf.entry.d", to);
     world.gesture(|app| app.type_text("y"));
-    let bring = world.daemon.sent_of("desktop_move_leaf")[0].clone();
-    world.daemon.reply_to(&bring, refused(&bring, "refused"));
+    let drop = world.daemon.sent_of("desktop_move_leaf")[0].clone();
+    world.daemon.reply_to(&drop, refused(&drop, "refused"));
     world.settle();
 
     let said = notice(&world).unwrap_or_default();
@@ -423,11 +424,11 @@ fn a_stacks_divider_whose_tile_closes_mid_drag_lets_go_so_the_next_header_drag_m
 }
 
 #[test]
-fn a_chip_dropped_on_a_tiles_bottom_edge_stacks_its_column_there() {
+fn an_entry_dropped_on_a_tiles_bottom_edge_stacks_its_column_there() {
     let mut world = start(TWO_FIT, None, vec![four("a")]);
 
     let to = in_tile(&world, "b", 0.5, 0.97);
-    drag(&mut world, "shelf.chip.d", to);
+    drag(&mut world, "shelf.entry.d", to);
 
     assert_eq!(moves(&world), [moved("d", "b", "bottom", true)]);
     assert_eq!(notice(&world), None);
@@ -435,7 +436,7 @@ fn a_chip_dropped_on_a_tiles_bottom_edge_stacks_its_column_there() {
 }
 
 #[test]
-fn a_stack_chip_dropped_on_a_tiles_top_edge_takes_the_share_that_keeps_every_tile_at_the_minimum_height()
+fn a_stack_entry_dropped_on_a_tiles_top_edge_takes_the_share_that_keeps_every_tile_at_the_minimum_height()
  {
     for (name, lower_share, tiles_high, y, share) in [
         ("an even stack", 0.5, 1200.0, 0.02, 640.0 / 1200.0),
@@ -458,7 +459,7 @@ fn a_stack_chip_dropped_on_a_tiles_top_edge_takes_the_share_that_keeps_every_til
         );
 
         let to = in_tile(&world, "b", 0.5, y);
-        drag(&mut world, "shelf.chip.d", to);
+        drag(&mut world, "shelf.entry.d", to);
 
         assert_eq!(moves(&world), [moved("d", "b", "top", true)], "{name}");
         let sent_share = sent(&world, "desktop_move_leaf")[0]["leaf_share"]
@@ -473,10 +474,10 @@ fn a_stack_chip_dropped_on_a_tiles_top_edge_takes_the_share_that_keeps_every_til
 }
 
 #[test]
-fn a_chip_dropped_on_itself_moves_nothing_and_brings_nothing() {
+fn an_entry_dropped_on_itself_moves_nothing_and_brings_nothing() {
     let mut world = start(TWO_FIT, None, vec![four("a")]);
 
-    let (x, y) = at(&world, "shelf.chip.d", 0.5, 0.5);
+    let (x, y) = at(&world, "shelf.entry.d", 0.5, 0.5);
     world.gesture(|app| {
         app.drag_from((x, y), (x + 10.0, y));
         app.release((x + 10.0, y));
@@ -489,8 +490,9 @@ fn a_chip_dropped_on_itself_moves_nothing_and_brings_nothing() {
 }
 
 #[test]
-fn a_tile_dropped_on_either_half_of_a_chip_shows_beside_that_chip_whether_it_was_active_or_not() {
-    for (tile, chip, share) in [
+fn a_tile_dropped_on_either_half_of_an_entry_shows_beside_that_entry_whether_it_was_active_or_not()
+{
+    for (tile, entry, share) in [
         ("a", "c", LEFT_HALF),
         ("a", "c", RIGHT_HALF),
         ("a", "d", LEFT_HALF),
@@ -500,24 +502,24 @@ fn a_tile_dropped_on_either_half_of_a_chip_shows_beside_that_chip_whether_it_was
         ("b", "d", LEFT_HALF),
         ("b", "d", RIGHT_HALF),
     ] {
-        let case = format!("{tile} on {chip} at {share}");
+        let case = format!("{tile} on {entry} at {share}");
         let mut world = start(THREE_FIT, Some("86"), vec![four("a")]);
         assert_eq!(screen(&world), ["a", "b"]);
 
-        drop_on(&mut world, tile, &format!("shelf.chip.{chip}"), share);
+        drop_on(&mut world, tile, &format!("shelf.entry.{entry}"), share);
         let edge = if share == LEFT_HALF { "left" } else { "right" };
-        assert_eq!(moves(&world), [moved(tile, chip, edge, false)], "{case}");
+        assert_eq!(moves(&world), [moved(tile, entry, edge, false)], "{case}");
         let mut order: Vec<&str> = ["a", "b", "c", "d"]
             .into_iter()
             .filter(|l| *l != tile)
             .collect();
-        let at = order.iter().position(|l| *l == chip).unwrap() + usize::from(share == RIGHT_HALF);
+        let at = order.iter().position(|l| *l == entry).unwrap() + usize::from(share == RIGHT_HALF);
         order.insert(at, tile);
         becomes(&mut world, tiles(tile, panes(order.iter().copied())));
 
         let pair: Vec<&str> = order
             .into_iter()
-            .filter(|l| *l == tile || *l == chip)
+            .filter(|l| *l == tile || *l == entry)
             .collect();
         assert_eq!(screen(&world), pair, "{case}");
         assert_eq!(keyboard(&mut world), tile, "{case}");
@@ -526,10 +528,10 @@ fn a_tile_dropped_on_either_half_of_a_chip_shows_beside_that_chip_whether_it_was
 }
 
 #[test]
-fn a_tile_dropped_beside_the_chip_already_next_to_it_shows_the_pair() {
+fn a_tile_dropped_beside_the_entry_already_next_to_it_shows_the_pair() {
     let mut world = start(THREE_FIT, Some("86"), vec![four("a")]);
 
-    drop_on(&mut world, "b", "shelf.chip.c", LEFT_HALF);
+    drop_on(&mut world, "b", "shelf.entry.c", LEFT_HALF);
     becomes(&mut world, four("b"));
 
     assert_eq!(screen(&world), ["b", "c"]);
@@ -538,15 +540,15 @@ fn a_tile_dropped_beside_the_chip_already_next_to_it_shows_the_pair() {
 }
 
 #[test]
-fn a_tile_dropped_beside_a_chip_whose_dragged_width_keeps_them_apart_clears_it_and_shows_the_pair()
-{
+fn a_tile_dropped_beside_an_entry_whose_dragged_width_keeps_them_apart_clears_it_and_shows_the_pair()
+ {
     let row = || [wanted("a", 200, None), pane("b"), pane("c"), pane("d")];
     let mut world = start(THREE_FIT, None, vec![tiles("a", row())]);
     press(&mut world, Action::TerminalFocusRight);
     becomes(&mut world, tiles("b", row()));
     assert_eq!(screen(&world), ["b", "c", "d"]);
 
-    drop_on(&mut world, "b", "shelf.chip.a", RIGHT_HALF);
+    drop_on(&mut world, "b", "shelf.entry.a", RIGHT_HALF);
     assert_eq!(moves(&world), [moved("b", "a", "right", false)]);
     becomes(&mut world, tiles("b", row()));
 
@@ -557,11 +559,11 @@ fn a_tile_dropped_beside_a_chip_whose_dragged_width_keeps_them_apart_clears_it_a
 }
 
 #[test]
-fn a_tile_dropped_beside_a_chip_when_two_tiles_cannot_fit_shows_alone_and_says_the_numbers() {
+fn a_tile_dropped_beside_an_entry_when_two_tiles_cannot_fit_shows_alone_and_says_the_numbers() {
     let mut world = start(TWO_FIT, Some("150"), vec![four("a")]);
     assert_eq!(screen(&world), ["a"]);
 
-    drop_on(&mut world, "a", "shelf.chip.c", RIGHT_HALF);
+    drop_on(&mut world, "a", "shelf.entry.c", RIGHT_HALF);
     assert_eq!(moves(&world), [moved("a", "c", "right", false)]);
     let said = notice(&world).unwrap_or_default();
     assert!(
@@ -575,7 +577,7 @@ fn a_tile_dropped_beside_a_chip_when_two_tiles_cannot_fit_shows_alone_and_says_t
     rest(&mut world);
 }
 
-/// Desktop 1 with 24 agents in a row, `p00` to `p23`, more than the title bar has chips for.
+/// Desktop 1 with 24 agents in a row, `p00` to `p23`, more than the title bar has entries for.
 fn many(active: &str, order: &[String]) -> Desktop {
     tiles(active, order.iter().map(|id| pane(id)))
 }
@@ -585,21 +587,24 @@ fn many_ids() -> Vec<String> {
 }
 
 #[test]
-fn a_press_on_a_cap_opens_the_menu_of_the_chips_it_holds_and_a_second_press_closes_it() {
+fn a_press_on_a_count_opens_the_menu_of_the_entries_it_holds_and_a_second_press_closes_it() {
     let ids = many_ids();
     let mut world = start(TWO_FIT, None, vec![many("p00", &ids)]);
-    world.gesture(|app| app.click(Target::key("shelf.cap.after")));
+    world.gesture(|app| app.click(Target::key("shelf.count.after")));
     world.settle();
     let menu = world
         .screen()
         .find(Target::key("shelf.menu.after"))
-        .expect("the cap opens its menu");
+        .expect("the count opens its menu");
     assert_eq!(menu.role, "menu");
     assert!(
-        world.screen().find(Target::key("shelf.chip.p23")).is_some(),
-        "the menu holds the cap's chips"
+        world
+            .screen()
+            .find(Target::key("shelf.entry.p23"))
+            .is_some(),
+        "the menu holds the count's entries"
     );
-    world.gesture(|app| app.click(Target::key("shelf.cap.after")));
+    world.gesture(|app| app.click(Target::key("shelf.count.after")));
     world.settle();
     assert!(
         world
@@ -611,40 +616,42 @@ fn a_press_on_a_cap_opens_the_menu_of_the_chips_it_holds_and_a_second_press_clos
 }
 
 #[test]
-fn a_press_on_a_chip_in_an_open_caps_menu_brings_its_tile_beside_the_active_one() {
+fn a_press_on_an_entry_in_an_open_counts_menu_shows_its_tile_where_it_is() {
     let ids = many_ids();
     let mut world = start(TWO_FIT, None, vec![many("p00", &ids)]);
-    world.gesture(|app| app.click(Target::key("shelf.cap.after")));
+    world.gesture(|app| app.click(Target::key("shelf.count.after")));
     world.settle();
-    world.gesture(|app| app.click(Target::key("shelf.chip.p23")));
-    assert_eq!(moves(&world), [moved("p23", "p00", "right", true)]);
+    world.gesture(|app| app.click(Target::key("shelf.entry.p23")));
+    let shown = world.daemon.sent_of("desktop_show_leaf");
+    assert_eq!(shown.last().expect("the tile is shown")["leaf_id"], "p23");
+    assert!(moves(&world).is_empty(), "{:?}", moves(&world));
     rest(&mut world);
 }
 
 #[test]
-fn a_chip_dragged_out_of_an_open_caps_menu_onto_a_tiles_bottom_edge_stacks_there() {
+fn an_entry_dragged_out_of_an_open_counts_menu_onto_a_tiles_bottom_edge_stacks_there() {
     let ids = many_ids();
     let mut world = start(TWO_FIT, None, vec![many("p00", &ids)]);
-    world.gesture(|app| app.click(Target::key("shelf.cap.after")));
+    world.gesture(|app| app.click(Target::key("shelf.count.after")));
     world.settle();
     let to = in_tile(&world, "p00", 0.5, 0.97);
-    drag(&mut world, "shelf.chip.p22", to);
+    drag(&mut world, "shelf.entry.p22", to);
     assert_eq!(moves(&world), [moved("p22", "p00", "bottom", true)]);
     rest(&mut world);
 }
 
 #[test]
-fn a_tile_dropped_on_the_trailing_cap_moves_past_the_rows_last_column_and_shows_beside_it() {
+fn a_tile_dropped_on_the_trailing_count_moves_past_the_rows_last_column_and_shows_beside_it() {
     let ids = many_ids();
     let mut world = start(TWO_FIT, None, vec![many("p00", &ids)]);
     assert!(
         world
             .screen()
-            .find(Target::key("shelf.cap.after"))
+            .find(Target::key("shelf.count.after"))
             .is_some()
     );
 
-    drop_on(&mut world, "p01", "shelf.cap.after", 0.5);
+    drop_on(&mut world, "p01", "shelf.count.after", 0.5);
     assert_eq!(moves(&world), [moved("p01", "p23", "right", false)]);
     let mut order: Vec<String> = ids.into_iter().filter(|id| id != "p01").collect();
     order.push("p01".into());
@@ -655,7 +662,7 @@ fn a_tile_dropped_on_the_trailing_cap_moves_past_the_rows_last_column_and_shows_
 }
 
 #[test]
-fn a_tile_dropped_on_the_leading_cap_moves_before_the_rows_first_column_and_shows_beside_it() {
+fn a_tile_dropped_on_the_leading_count_moves_before_the_rows_first_column_and_shows_beside_it() {
     let ids = many_ids();
     let mut world = start(TWO_FIT, None, vec![many("p00", &ids)]);
     becomes(&mut world, many("p23", &ids));
@@ -663,11 +670,11 @@ fn a_tile_dropped_on_the_leading_cap_moves_before_the_rows_first_column_and_show
     assert!(
         world
             .screen()
-            .find(Target::key("shelf.cap.before"))
+            .find(Target::key("shelf.count.before"))
             .is_some()
     );
 
-    drop_on(&mut world, "p22", "shelf.cap.before", 0.5);
+    drop_on(&mut world, "p22", "shelf.count.before", 0.5);
     assert_eq!(moves(&world), [moved("p22", "p00", "left", false)]);
     let mut order: Vec<String> = ids.into_iter().filter(|id| id != "p22").collect();
     order.insert(0, "p22".into());
@@ -682,11 +689,11 @@ fn with_stack(active: &str) -> Desktop {
 }
 
 #[test]
-fn a_stacked_tile_dropped_beside_a_chip_leaves_its_stack_alone_and_shows_beside_the_chip() {
+fn a_stacked_tile_dropped_beside_an_entry_leaves_its_stack_alone_and_shows_beside_the_entry() {
     let mut world = start(THREE_FIT, Some("86"), vec![with_stack("a")]);
     assert_eq!(screen(&world), ["a", "b", "c"]);
 
-    drop_on(&mut world, "c", "shelf.chip.d", RIGHT_HALF);
+    drop_on(&mut world, "c", "shelf.entry.d", RIGHT_HALF);
     assert_eq!(moves(&world), [moved("c", "d", "right", false)]);
     assert_eq!(shown_leaf(&world), ["c"]);
     becomes(&mut world, tiles("c", panes(["a", "b", "d", "c"])));
@@ -696,7 +703,7 @@ fn a_stacked_tile_dropped_beside_a_chip_leaves_its_stack_alone_and_shows_beside_
 }
 
 #[test]
-fn the_active_stacked_tile_dropped_beside_its_neighbouring_chip_stays_active_beside_it() {
+fn the_active_stacked_tile_dropped_beside_its_neighbouring_entry_stays_active_beside_it() {
     let mut world = start(THREE_FIT, Some("86"), vec![with_stack("a")]);
     press(&mut world, Action::TerminalFocusRight);
     becomes(&mut world, with_stack("b"));
@@ -705,7 +712,7 @@ fn the_active_stacked_tile_dropped_beside_its_neighbouring_chip_stays_active_bes
     assert_eq!(screen(&world), ["a", "b", "c"]);
     assert_eq!(shown_leaf(&world), ["b", "c"]);
 
-    drop_on(&mut world, "c", "shelf.chip.d", LEFT_HALF);
+    drop_on(&mut world, "c", "shelf.entry.d", LEFT_HALF);
     assert_eq!(moves(&world), [moved("c", "d", "left", false)]);
     assert_eq!(shown_leaf(&world), ["b", "c"]);
     becomes(&mut world, four("c"));
@@ -723,7 +730,7 @@ fn a_refused_shelf_drop_gives_the_tile_back_and_names_the_failure() {
         .on("desktop_move_leaf", |r| refused(r, "refused"));
     assert_eq!(screen(&world), ["a", "b", "c"]);
 
-    drop_on(&mut world, "c", "shelf.chip.d", 0.25);
+    drop_on(&mut world, "c", "shelf.entry.d", 0.25);
     world.settle();
 
     assert_eq!(
@@ -747,7 +754,7 @@ fn a_refused_swap_keeps_the_slots_tile_and_sends_no_second_move() {
         .on("desktop_move_leaf", |r| refused(r, "refused"));
 
     let to = at(&world, "tile.a", 0.5, 0.5);
-    drag(&mut world, "shelf.chip.d", to);
+    drag(&mut world, "shelf.entry.d", to);
     world.settle();
 
     assert_eq!(sent(&world, "desktop_move_leaf").len(), 1);
@@ -774,7 +781,7 @@ fn in_sidebar(world: &World, slot: u32) -> (f32, f32) {
 }
 
 #[test]
-fn a_stacks_chip_dropped_on_a_sidebar_desktop_moves_its_whole_column_there() {
+fn a_stacks_entry_dropped_on_a_sidebar_desktop_moves_its_whole_column_there() {
     let first = tiles(
         "a",
         [pane("a"), pane("b"), pane("c"), below(pane("d"), pane("e"))],
@@ -785,7 +792,7 @@ fn a_stacks_chip_dropped_on_a_sidebar_desktop_moves_its_whole_column_there() {
         .answer_in_turn("desktop_move_leaf", [Answer::Hold]);
 
     let to = in_sidebar(&world, 2);
-    drag(&mut world, "shelf.chip.d", to);
+    drag(&mut world, "shelf.entry.d", to);
 
     assert_eq!(
         sent(&world, "desktop_move_leaf"),
@@ -813,18 +820,18 @@ fn a_stacks_chip_dropped_on_a_sidebar_desktop_moves_its_whole_column_there() {
 }
 
 #[test]
-fn escape_cancels_a_chip_drag_and_a_header_drag_onto_a_chip_with_no_move_and_no_message() {
+fn escape_cancels_an_entry_drag_and_a_header_drag_onto_an_entry_with_no_move_and_no_message() {
     let mut world = start(TWO_FIT, None, vec![four("a")]);
 
     let to = in_tile(&world, "b", 0.5, 0.5);
-    world.gesture(|app| app.drag_over(Target::key("shelf.chip.d"), to));
+    world.gesture(|app| app.drag_over(Target::key("shelf.entry.d"), to));
     assert!(world.screen().find(Target::key("drag.target")).is_some());
     escape(&mut world);
     world.gesture(|app| app.release(to));
     assert!(world.screen().find(Target::key("drag.target")).is_none());
     assert!(world.screen().find(Target::key("drag.ghost")).is_none());
 
-    let to = at(&world, "shelf.chip.d", 0.5, 0.5);
+    let to = at(&world, "shelf.entry.d", 0.5, 0.5);
     world.gesture(|app| app.drag_over(Target::key("tile.b.header"), to));
     assert!(world.screen().find(Target::key("drag.ghost")).is_some());
     escape(&mut world);
@@ -1056,7 +1063,7 @@ fn the_palette_clears_the_desktops_dragged_widths_and_says_when_there_are_none()
 }
 
 #[test]
-fn a_stack_chip_carried_to_another_desktop_too_short_for_it_lands_beside_and_says_why() {
+fn a_stack_entry_carried_to_another_desktop_too_short_for_it_lands_beside_and_says_why() {
     let source = tiles(
         "a",
         [pane("a"), pane("b"), pane("c"), below(pane("d"), pane("e"))],
@@ -1065,7 +1072,7 @@ fn a_stack_chip_carried_to_another_desktop_too_short_for_it_lands_beside_and_say
     let mut world = start_sized(size, None, vec![source.clone(), other()]);
 
     let over = in_sidebar(&world, 2);
-    world.gesture(|app| app.drag_over(Target::key("shelf.chip.d"), over));
+    world.gesture(|app| app.drag_over(Target::key("shelf.entry.d"), over));
     world.advance(Duration::from_millis(400));
     arrange(&mut world, "work/desktop_2", vec![source, other()]);
     let to = in_tile(&world, "x", 0.5, 0.02);
@@ -1083,14 +1090,14 @@ fn a_stack_chip_carried_to_another_desktop_too_short_for_it_lands_beside_and_say
 }
 
 #[test]
-fn a_chip_carried_to_another_desktop_by_resting_on_it_lands_beside_a_tile_without_replacing_it() {
+fn an_entry_carried_to_another_desktop_by_resting_on_it_lands_beside_a_tile_without_replacing_it() {
     let mut world = start(TWO_FIT, None, vec![four("a"), other()]);
     world
         .daemon
         .answer_in_turn("desktop_move_leaf", [Answer::Hold]);
 
     let over = in_sidebar(&world, 2);
-    world.gesture(|app| app.drag_over(Target::key("shelf.chip.d"), over));
+    world.gesture(|app| app.drag_over(Target::key("shelf.entry.d"), over));
     world.advance(Duration::from_millis(400));
     assert_eq!(
         sent(&world, "desktop_set_current"),

@@ -192,7 +192,7 @@ try {
     await walkTheRow('sidebar-open');
     await stepTheWidth('sidebar-open keys', () => driver.pressKey(keys.fewer), () => driver.pressKey(keys.more));
     const pressWidthButton = async (button) => {
-      await driver.hover({ key: 'shelf.live' });
+      await driver.hover({ key: 'shelf.frame' });
       await driver.waitFor({ key: 'shelf.width' });
       await driver.click({ key: `shelf.width.${button}` });
     };

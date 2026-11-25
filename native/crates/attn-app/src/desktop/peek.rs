@@ -1,4 +1,4 @@
-//! The peek: a look at a tile off screen, from its shelf chip, and a reply to its terminal that
+//! The peek: a look at a tile off screen, from its shelf entry, and a reply to its terminal that
 //! leaves the layout as it is.
 
 use std::collections::HashMap;
@@ -34,7 +34,7 @@ const STOPPED: &str = "Agent stopped. Open its tile to resume it; your reply sta
 pub(crate) struct Peeks {
     pub(crate) open: Option<Open>,
     timer: Option<Timer>,
-    /// The tile the pointer last came to on the chip it is over.
+    /// The tile the pointer last came to on the entry it is over.
     arrived: Option<Arrival>,
     /// Replies not yet delivered, by the terminal they go to.
     pub(crate) replies: HashMap<String, Reply>,
@@ -45,8 +45,8 @@ pub(crate) struct Peeks {
 pub(crate) struct Open {
     pub(crate) desktop: String,
     pub(crate) leaf: String,
-    /// The point in the window the panel hangs from: its chip's bottom-left corner on the
-    /// shelf, or beside the cap's menu that holds its chip, so it covers neither.
+    /// The point in the window the panel hangs from: its entry's bottom-left corner on the
+    /// shelf, or beside the count's menu that holds its entry, so it covers neither.
     anchor: [f32; 2],
     /// The tile's terminal, when it has one.
     runtime: Option<String>,
@@ -65,7 +65,7 @@ enum Timer {
     Open {
         desktop: String,
         leaf: String,
-        chip: String,
+        entry: String,
         at: f64,
     },
     Close {
@@ -96,49 +96,49 @@ impl Reply {
     }
 }
 
-/// Where on the shelf the pointer came to: a chip, by its key, and the tile on it.
+/// Where on the shelf the pointer came to: an entry, by its key, and the tile on it.
 #[derive(Clone, Debug, PartialEq)]
 struct Arrival {
-    chip: String,
+    entry: String,
     leaf: String,
 }
 
-/// The pointer moved over a chip: it comes to the tile the chip brings, unless it already came
-/// to a tile on the chip.
-pub(crate) fn hover_chip(state: &mut State, desktop: &str, leaf: &str, chip: &str, tx: &mut Tx) {
+/// The pointer moved over an entry: it comes to the tile the entry goes to, unless it already came
+/// to a tile on the entry.
+pub(crate) fn hover_entry(state: &mut State, desktop: &str, leaf: &str, entry: &str, tx: &mut Tx) {
     if state
         .window
         .desk
         .peeks
         .arrived
         .as_ref()
-        .is_some_and(|a| a.chip == chip)
+        .is_some_and(|a| a.entry == entry)
     {
         tx.live_only();
         return;
     }
-    arrive(state, desktop, leaf, chip, tx);
+    arrive(state, desktop, leaf, entry, tx);
 }
 
-/// The pointer came onto the mark of `leaf` on the chip keyed `chip`.
-pub(crate) fn hover_member(state: &mut State, desktop: &str, leaf: &str, chip: &str, tx: &mut Tx) {
+/// The pointer came onto the mark of `leaf` on the entry keyed `entry`.
+pub(crate) fn hover_member(state: &mut State, desktop: &str, leaf: &str, entry: &str, tx: &mut Tx) {
     let arrival = Arrival {
-        chip: chip.to_owned(),
+        entry: entry.to_owned(),
         leaf: leaf.to_owned(),
     };
     if state.window.desk.peeks.arrived.as_ref() != Some(&arrival) {
-        arrive(state, desktop, leaf, chip, tx);
+        arrive(state, desktop, leaf, entry, tx);
     }
 }
 
-/// The pointer came to `leaf` on the chip keyed `chip`: its peek opens after a moment, sooner
+/// The pointer came to `leaf` on the entry keyed `entry`: its peek opens after a moment, sooner
 /// when another peek shows.
-fn arrive(state: &mut State, desktop: &str, leaf: &str, chip: &str, tx: &mut Tx) {
+fn arrive(state: &mut State, desktop: &str, leaf: &str, entry: &str, tx: &mut Tx) {
     let desk = &mut state.window.desk;
     let peeks = &mut desk.peeks;
     peeks.timer = None;
     peeks.arrived = Some(Arrival {
-        chip: chip.to_owned(),
+        entry: entry.to_owned(),
         leaf: leaf.to_owned(),
     });
     if desk.drag.as_ref().is_some_and(|d| d.dragging().is_some()) {
@@ -156,7 +156,7 @@ fn arrive(state: &mut State, desktop: &str, leaf: &str, chip: &str, tx: &mut Tx)
     peeks.timer = Some(Timer::Open {
         desktop: desktop.to_owned(),
         leaf: leaf.to_owned(),
-        chip: chip.to_owned(),
+        entry: entry.to_owned(),
         at,
     });
     tx.wake_at(at);
@@ -167,18 +167,18 @@ fn enter_peek(state: &mut State) {
     state.window.desk.peeks.timer = None;
 }
 
-/// The pointer left the chip keyed `chip`. Hover changes come after the move that caused
-/// them, so the pointer may already have come to another chip, which then keeps the peek.
-pub(crate) fn leave_chip(state: &mut State, chip: &str, tx: &mut Tx) {
+/// The pointer left the entry keyed `entry`. Hover changes come after the move that caused
+/// them, so the pointer may already have come to another entry, which then keeps the peek.
+pub(crate) fn leave_entry(state: &mut State, entry: &str, tx: &mut Tx) {
     let peeks = &mut state.window.desk.peeks;
-    if peeks.arrived.as_ref().is_some_and(|a| a.chip != chip) {
+    if peeks.arrived.as_ref().is_some_and(|a| a.entry != entry) {
         return;
     }
     peeks.arrived = None;
     close_soon(state, tx);
 }
 
-/// The pointer left the peek, unless it came to a chip first.
+/// The pointer left the peek, unless it came to an entry first.
 fn leave_peek(state: &mut State, tx: &mut Tx) {
     if state.window.desk.peeks.arrived.is_none() {
         close_soon(state, tx);
@@ -240,7 +240,7 @@ pub(crate) fn close(state: &mut State) -> bool {
     dismiss(state)
 }
 
-/// The leaf of the open peek on `desktop`, for the chip that marks it.
+/// The leaf of the open peek on `desktop`, for the entry that marks it.
 pub(crate) fn peeked(state: &State, desktop: &str) -> Option<String> {
     let open = state.window.desk.peeks.open.as_ref()?;
     (open.desktop == desktop).then(|| open.leaf.clone())
@@ -262,9 +262,9 @@ pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
             Some(Timer::Open {
                 desktop,
                 leaf,
-                chip,
+                entry,
                 ..
-            }) => show(state, desktop, leaf, &chip),
+            }) => show(state, desktop, leaf, &entry),
             _ => {
                 peeks.open = None;
             }
@@ -284,12 +284,12 @@ pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
     changed
 }
 
-fn show(state: &mut State, desktop: String, leaf: String, chip: &str) {
+fn show(state: &mut State, desktop: String, leaf: String, entry: &str) {
     let Some(rect) = state
         .window
         .desk
         .rects
-        .get(&format!("shelf.chip.{chip}"))
+        .get(&format!("shelf.entry.{entry}"))
         .copied()
     else {
         return;
@@ -302,7 +302,7 @@ fn show(state: &mut State, desktop: String, leaf: String, chip: &str) {
         .and_then(|d| super::view::pane_of(d, &leaf))
         .map(|p| p.runtime_id.clone())
         .filter(|r| !r.is_empty());
-    let anchor = if state.window.desk.cap_open.is_some() {
+    let anchor = if state.window.desk.count_open.is_some() {
         [rect[0] + rect[2] + ANCHOR_GAP_PX, rect[1] - ANCHOR_GAP_PX]
     } else {
         [rect[0], rect[1] + rect[3]]
@@ -367,8 +367,8 @@ fn start_read(state: &mut State, runtime: String, tx: &mut Tx) {
     );
 }
 
-/// Keeps the peek, open or about to open, to a tile still off screen on the current desktop,
-/// and moves a reply typed to an agent that stopped back to unsent, for its tile to keep.
+/// Keeps the peek, open or about to open, and where the pointer came to, to a tile still off
+/// screen on the current desktop, and moves a reply typed to an agent that stopped back to unsent, for its tile to keep.
 pub(crate) fn settle(state: &mut State) {
     let peeks = &state.window.desk.peeks;
     let peeked = match (&peeks.open, &peeks.timer) {
@@ -376,15 +376,20 @@ pub(crate) fn settle(state: &mut State) {
         (None, Some(Timer::Open { desktop, leaf, .. })) => Some((desktop, leaf)),
         (None, _) => None,
     };
+    let off_screen = |leaf: &str| Shelf::of(state).is_some_and(|s| s.holds(leaf));
     let gone = peeked.is_some_and(|(desktop, leaf)| {
         !(state
             .facts
             .current_desktop()
             .is_some_and(|d| &d.id == desktop)
-            && Shelf::of(state).is_some_and(|s| s.holds(leaf)))
+            && off_screen(leaf))
     });
+    let left = peeks.arrived.as_ref().is_some_and(|a| !off_screen(&a.leaf));
     if gone {
         dismiss(state);
+    }
+    if left {
+        state.window.desk.peeks.arrived = None;
     }
     let stopped: Vec<String> = state
         .facts
@@ -568,7 +573,7 @@ fn press_return(state: &mut State, runtime: String, title: String, text: String,
                     );
                     follow_reply(state, &runtime);
                     state.window.notify(
-                    format!("Your reply to {title} was typed but not submitted: {reason}. Hover its chip to finish it."),
+                    format!("Your reply to {title} was typed but not submitted: {reason}. Hover its entry to finish it."),
                     tx,
                 );
                 }
@@ -742,7 +747,7 @@ fn notice(reply: Option<&Reply>, blocked: Option<&str>) -> Option<String> {
     }
 }
 
-/// The open peek, hanging below its chip within the tile area.
+/// The open peek, hanging below its entry within the tile area.
 pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
     let peeks = &state.window.desk.peeks;
     let open = peeks.open.as_ref()?;

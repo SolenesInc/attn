@@ -12,7 +12,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 const options = parseCommonArgs(process.argv.slice(2));
 const runner = createScenarioRunner(options, {
   scenarioId: 'NATIVE-SHELF-DROP-BESIDE', tier: 'tier1-local-shell', prefix: 'native-shelf-drop-beside',
-  metadata: { focus: 'In the native app, a tile dropped beside a chip comes on screen next to it, active, for every drop place on a four-tile row that shows two and when a saved width keeps the pair apart, with pointer input through the app' },
+  metadata: { focus: 'In the native app, a tile dropped beside an entry comes on screen next to it, active, for every drop place on a four-tile row that shows two and when a saved width keeps the pair apart, with pointer input through the app' },
 });
 const client = new UiAutomationClient({ appPath: options.appPath });
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -41,7 +41,7 @@ const row = () => leavesOf(treeOf(current()));
 const wantedIn = (entry, leaf) => firstLeafOf(columnsOf(treeOf(entry)).find((column) => leavesOf(column).includes(leaf))).wanted_cols ?? 0;
 const sameList = (left, right) => left.join() === right.join();
 const tile = (leaf) => ({ key: `tile.${leaf}` });
-const chip = (leaf) => ({ key: `shelf.chip.${leaf}` });
+const entry = (leaf) => ({ key: `shelf.entry.${leaf}` });
 const header = (leaf) => ({ key: `tile.${leaf}.header` });
 const shot = (name) => driver.screenshot(path.join(runner.runDir, `${name}.png`));
 
@@ -99,18 +99,18 @@ async function dropBeside(moving, anchor, share) {
   const rowBefore = row();
   const shownBefore = await shown();
   const side = share === LEFT_HALF ? 'before' : 'after';
-  await driver.drag(header(moving), { target: chip(anchor), at: [share, 0.5] });
-  const entry = await observer.waitFor(() => {
+  await driver.drag(header(moving), { target: entry(anchor), at: [share, 0.5] });
+  const landed = await observer.waitFor(() => {
     const now = current();
     const order = leavesOf(treeOf(now));
     return order.indexOf(moving) - order.indexOf(anchor) === (side === 'before' ? -1 : 1) && now.active_pane_id === moving && now;
   }, `${moving} ${side} ${anchor}, active`, 20_000);
-  const order = leavesOf(treeOf(entry));
+  const order = leavesOf(treeOf(landed));
   const expected = order.filter((leaf) => leaf === moving || leaf === anchor);
   for (const leaf of expected) await driver.waitFor(tile(leaf));
   for (const leaf of order.filter((id) => !expected.includes(id))) await driver.waitFor(tile(leaf), { gone: true });
   const after = await shown();
-  runner.assert(sameList(after, expected), 'the screen shows the dropped tile beside the chip’s tile', { after, expected });
+  runner.assert(sameList(after, expected), 'the screen shows the dropped tile beside the entry’s tile', { after, expected });
   await keyboardOn(moving);
   runner.assert(!sameList(after, shownBefore) || !sameList(order, rowBefore), 'the drop changes what the user sees', { shownBefore, after, rowBefore, order });
   runner.log('dropped', { moving, anchor, side, rowBefore, shownBefore, order, after });
@@ -151,7 +151,7 @@ try {
     await shot('four-tiles-two-on-screen');
   });
 
-  await runner.step('d_dropped_beside_a_chip_shows_a_and_d', async () => {
+  await runner.step('d_dropped_beside_an_entry_shows_a_and_d', async () => {
     const [a, , , d] = row();
     await dropBeside(d, a, RIGHT_HALF);
     runner.assert(sameList(await shown(), [a, d]), 'a and d on screen', { a, d });
@@ -160,13 +160,13 @@ try {
 
   await runner.step('every_drop_place_changes_the_screen', async () => {
     for (const tileIs of ['active', 'inactive']) {
-      for (const chipAt of [0, 1]) {
+      for (const entryAt of [0, 1]) {
         for (const share of [LEFT_HALF, RIGHT_HALF]) {
           const on = await shown();
           const active = current().active_pane_id;
           const moving = tileIs === 'active' ? active : on.find((leaf) => leaf !== active);
           const offscreen = row().filter((leaf) => !on.includes(leaf));
-          await dropBeside(moving, offscreen[chipAt], share);
+          await dropBeside(moving, offscreen[entryAt], share);
         }
       }
     }
@@ -177,7 +177,7 @@ try {
     const order = row();
     const on = await shown();
     const at = order.findIndex((leaf, index) => on.includes(leaf) && order[index + 1] && !on.includes(order[index + 1]));
-    runner.assert(at >= 0, 'a tile on screen sits just before a chip', { order, on });
+    runner.assert(at >= 0, 'a tile on screen sits just before one off screen', { order, on });
     await dropBeside(order[at], order[at + 1], LEFT_HALF);
     runner.assert(sameList(row(), order), 'the row order is unchanged', { order });
     await shot('unchanged-order-drop');
@@ -189,7 +189,6 @@ try {
     await driver.drag({ key: `divider.row:${wide}` }, { by: [500, 0] });
     await observer.waitFor(() => wantedIn(current(), wide) > 0, `${wide} saved wide`, 20_000);
     await driver.waitFor(tile(neighbour), { gone: true });
-    await driver.waitFor(chip(neighbour));
     await shot('saved-width-alone');
     const order = row();
     await dropBeside(wide, neighbour, LEFT_HALF);
@@ -198,16 +197,16 @@ try {
     await shot('saved-width-cleared-pair-shown');
   });
 
-  await runner.step('a_selected_stacked_tile_dropped_on_the_next_chip_shows_beside_it', async () => {
+  await runner.step('a_selected_stacked_tile_dropped_on_the_next_entry_shows_beside_it', async () => {
     const [first, second, third, last] = row();
     await dropBeside(last, first, LEFT_HALF);
     await driver.pressKey(keys.focusRight);
     await keyboardOn(first);
     const stacked = await split(keys.below);
-    runner.assert(sameList(await shown(), [last, first, stacked]), 'the stack sits just before the chip', { last, first, stacked });
+    runner.assert(sameList(await shown(), [last, first, stacked]), 'the stack sits just before the column off screen', { last, first, stacked });
     await dropBeside(stacked, second, LEFT_HALF);
-    runner.assert(sameList(row(), [last, first, stacked, second, third]), 'the stacked tile has its own column before the chip', { stacked, second });
-    await shot('stacked-tile-beside-chip');
+    runner.assert(sameList(row(), [last, first, stacked, second, third]), 'the stacked tile has its own column before the entry’s', { stacked, second });
+    await shot('stacked-tile-beside-entry');
   });
 
   await runner.finishSuccess({ desktopId: desktop.id, row: row() });

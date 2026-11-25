@@ -637,10 +637,6 @@ pub fn with_widths(mut row: Vec<Column>, pending: &[(String, u32)]) -> Vec<Colum
     row
 }
 
-pub fn columns_fit_together(a: &Column, b: &Column, m: &Measures) -> bool {
-    m.fits(m.need_px(a) + m.need_px(b))
-}
-
 /// What the screen shows of the row: the run of columns that fits around the active tile,
 /// their widths in points, and the columns left on the shelf on either side.
 #[derive(Clone, Debug, PartialEq)]

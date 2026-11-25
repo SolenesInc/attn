@@ -15,7 +15,7 @@ const STOPPED = 'Agent stopped. Open its tile to resume it; your reply stays the
 const options = parseCommonArgs(process.argv.slice(2));
 const runner = createScenarioRunner(options, {
   scenarioId: 'NATIVE-SHELF-PEEK', tier: 'tier1-local-shell', prefix: 'native-shelf-peek',
-  metadata: { focus: 'In the native app hovering a chip shows a live terminal in a panel, a reply reaches it at its size without moving the layout, Enter with no reply opens the tile, a chip that reflows under a still pointer opens nothing, each tile of a stacked chip peeks from its own mark, and a stopped terminal keeps the reply, without the app taking focus' },
+  metadata: { focus: 'In the native app hovering an entry shows a live terminal in a panel, a reply reaches it at its size without moving the layout, Enter with no reply opens the tile, an entry that leaves the screen under a still pointer opens nothing, each tile of a stack peeks from its pill and its dots, and a stopped terminal keeps the reply, without the app taking focus' },
 });
 const client = new UiAutomationClient({ appPath: options.appPath });
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -29,7 +29,7 @@ const keys = process.platform === 'darwin'
   ? { left: 'mod+alt+left', right: 'mod+alt+right' }
   : { left: 'mod+shift+left', right: 'mod+shift+right' };
 const PEEK = { key: 'shelf.peek' };
-const chip = (leaf) => ({ key: `shelf.chip.${leaf}` });
+const entry = (leaf) => ({ key: `shelf.entry.${leaf}` });
 const field = (leaf) => ({ key: `shelf.peek.${leaf}.field` });
 const shot = (name) => driver.screenshot(path.join(runner.runDir, `${name}.png`));
 
@@ -46,12 +46,6 @@ function nodeIn(node, key) {
     if (found) return found;
   }
   return null;
-}
-
-function nodesIn(node, match, found = []) {
-  if (match(node)) found.push(node);
-  for (const child of node?.children ?? []) nodesIn(child, match, found);
-  return found;
 }
 
 try {
@@ -150,13 +144,13 @@ try {
     runner.log('the target terminal before it leaves the screen', { target: target.pane, size });
     await focusLeaf(row[0]);
     await driver.waitFor({ key: `tile.${target.pane}` }, { gone: true });
-    await driver.waitFor(chip(target.pane));
+    await driver.waitFor(entry(target.pane));
   });
 
   await runner.step('hover_shows_the_terminal_without_moving_anything', async () => {
     const shown = await shownLeaves();
-    await driver.hover(chip(target.pane));
-    runner.assert(await peekName() === target.label, 'the panel names the tile its chip brings', { target });
+    await driver.hover(entry(target.pane));
+    runner.assert(await peekName() === target.label, 'the panel names the tile its entry goes to', { target });
     await waitScreen(`size ${size}`);
     await shot('peek-open');
     await assertNothingMoved('peek open', shown, row[0]);
@@ -169,18 +163,18 @@ try {
 
   await runner.step('a_reply_reaches_the_terminal_at_its_size', async () => {
     const shown = await shownLeaves();
-    await driver.hover(chip(target.pane));
+    await driver.hover(entry(target.pane));
     await driver.waitFor(PEEK);
     await driver.typeInto(field(target.pane), 'hello');
     await shot('peek-reply-typed');
-    await driver.hover({ key: 'shelf.live' });
+    await driver.hover({ key: 'shelf.frame' });
     await driver.find(PEEK).then((open) => runner.assert(open, 'the panel stays while its field holds the keyboard'));
     await driver.pressKey('Enter');
     await driver.waitFor(PEEK, { gone: true });
     const keyboard = await driver.state('window');
     runner.assert(keyboard.keyboard?.pane === row[0], 'the keyboard goes back to the active tile', keyboard);
     await assertNothingMoved('after a reply', shown, row[0]);
-    await driver.hover(chip(target.pane));
+    await driver.hover(entry(target.pane));
     await waitScreen(`peek-reply hello ${size}`);
     await shot('peek-reply-arrived');
     await driver.pressKey('Escape');
@@ -189,7 +183,7 @@ try {
   });
 
   await runner.step('enter_with_no_reply_opens_the_tile', async () => {
-    await driver.hover(chip(target.pane));
+    await driver.hover(entry(target.pane));
     await driver.waitFor(PEEK);
     await driver.click(field(target.pane));
     await driver.pressKey('Enter');
@@ -203,53 +197,55 @@ try {
     await driver.waitFor({ key: `tile.${target.pane}` }, { gone: true });
   });
 
-  await runner.step('a_chip_that_reflows_under_a_still_pointer_opens_nothing', async () => {
-    await focusLeaf(row[2]);
+  await runner.step('an_entry_that_leaves_the_screen_under_a_still_pointer_opens_nothing', async () => {
     const pressed = row.at(-1);
-    const { receipt, target: at } = await driver.click(chip(pressed)).then((receipt) => ({ receipt, target: receipt.target }));
-    runner.assert(receipt.matched, 'the press lands on the chip', receipt);
+    const receipt = await driver.click(entry(pressed));
+    runner.assert(receipt.matched, 'the press lands on the entry', receipt);
     await waitActive(pressed);
     await driver.waitFor({ key: `tile.${pressed}` });
-    const [x, y, w, h] = at.rect;
+    runner.assert(readRow().join() === row.join(), 'going to the tile leaves the row alone', { row, now: readRow() });
+    const [x, y, w, h] = receipt.target.rect;
     const point = [x + w / 2, y + h / 2];
-    const under = nodesIn(await driver.tree(), (node) => /^shelf\.chip\.[^.]+$/.test(node?.key ?? '') && node.bounds
-      && point[0] >= node.bounds[0] && point[0] < node.bounds[0] + node.bounds[2] && point[1] >= node.bounds[1] && point[1] < node.bounds[1] + node.bounds[3]);
-    runner.assert(under.length === 1 && under[0].key !== `shelf.chip.${pressed}`, 'another chip came under the still pointer', { point, under });
-    const arrived = under[0].key.slice('shelf.chip.'.length);
+    await focusLeaf(row[0]);
+    await driver.waitFor({ key: `tile.${pressed}` }, { gone: true });
+    const { rect: at } = await driver.waitFor(entry(pressed));
+    runner.assert(point[0] >= at[0] && point[0] < at[0] + at[2] && point[1] >= at[1] && point[1] < at[1] + at[3], 'the entry is under the still pointer', { point, at });
     await driver.waitFor(PEEK, { timeoutMs: PEEK_OPEN_DELAY_MS * 5 }).then(
       () => { throw new Error('a peek opened under the still pointer'); },
       (error) => { if (!/to appear/.test(String(error))) throw error; },
     );
-    await shot('still-pointer-after-chip-click');
+    await shot('still-pointer-after-entry-click');
     await hoverAway();
-    await driver.hover(chip(arrived));
-    runner.assert(await peekName() === shells.find((shell) => shell.pane === arrived).label, 'moving onto the chip peeks at its tile', { arrived });
+    await driver.hover(entry(pressed));
+    runner.assert(await peekName() === shells.find((shell) => shell.pane === pressed).label, 'moving onto the entry peeks at its tile', { pressed });
     await driver.pressKey('Escape');
     await driver.waitFor(PEEK, { gone: true });
     await hoverAway();
-    row = readRow();
-    target = shells.find((shell) => shell.pane === row.at(-1));
-    await focusLeaf(row[0]);
-    await driver.waitFor(chip(target.pane));
   });
 
-  await runner.step('each_tile_of_an_off_screen_stack_peeks_from_its_mark', async () => {
+  await runner.step('each_tile_of_an_off_screen_stack_peeks_from_its_dot', async () => {
     const below = await spawn('peek-below', { desktop_id: desktop.id, direction: 'horizontal', anchor_pane_id: target.pane });
     shells.push(below);
     await observer.waitForDesktopOf(below.id, (entry) => entry.panes.length === TILES + 1, 'a shell stacked below the target');
     await focusLeaf(row[0]);
     await driver.waitFor({ key: `tile.${below.pane}` }, { gone: true });
     const shown = await shownLeaves();
-    const member = (i) => ({ key: `shelf.chip.${target.pane}.member.${i}` });
-    await driver.waitFor(member(1));
+    const dots = [
+      { dot: { key: `shelf.entry.${target.pane}.above.0` }, pointed: target.label, inUse: below.label },
+      { dot: { key: `shelf.entry.${target.pane}.below.1` }, pointed: below.label, inUse: target.label },
+    ];
+    const found = [];
+    for (const { dot } of dots) found.push(await driver.find(dot));
+    const stack = dots.find((_, i) => found[i]?.rect[2] > 0);
+    runner.assert(stack, 'the pill draws a dot for the member that is not in use', { found });
 
-    await driver.hover(member(1));
-    runner.assert(await peekName() === below.label, 'the lower mark peeks at the lower tile', { below });
-    await shot('peek-stack-lower');
-    const moved = await driver.hover(member(0));
-    runner.log('moving onto the upper mark with the panel open', { landed: moved.landed, matched: moved.matched });
-    await driver.waitFor({ role: 'dialog', name: target.label });
-    await shot('peek-stack-upper');
+    await driver.hover(entry(target.pane));
+    runner.assert(await peekName() === stack.inUse, 'the pill peeks at the member in use', stack);
+    await shot('peek-stack-in-use');
+    const moved = await driver.hover(stack.dot);
+    runner.log('moving onto the dot with the panel open', { landed: moved.landed, matched: moved.matched });
+    await driver.waitFor({ role: 'dialog', name: stack.pointed });
+    await shot('peek-stack-dot');
     await assertNothingMoved('peeking a stack', shown, row[0]);
     await driver.pressKey('Escape');
     await driver.waitFor(PEEK, { gone: true });
@@ -257,25 +253,25 @@ try {
 
     observer.unregisterSession(below.id);
     await observer.waitForDesktopOf(target.id, (entry) => entry.panes.length === TILES, 'the stacked shell closed');
-    await driver.waitFor(member(1), { gone: true });
+    await driver.waitFor({ key: `shelf.entry.${target.pane}.slice.1` }, { gone: true });
   });
 
   await runner.step('a_stopped_terminal_keeps_the_reply_and_the_tile_offers_it', async () => {
-    await driver.hover(chip(target.pane));
+    await driver.hover(entry(target.pane));
     await driver.waitFor(PEEK);
     await driver.typeInto(field(target.pane), 'exit 1');
-    await driver.hover({ key: 'shelf.live' });
+    await driver.hover({ key: 'shelf.frame' });
     await driver.pressKey('Enter');
     await driver.waitFor(PEEK, { gone: true });
     await hoverAway();
     await observer.waitFor(() => observer.getSession(target.id)?.terminal_exit || null, 'the target terminal stops', 15_000);
     await observer.waitForDesktopOf(target.id, (entry) => entry.panes.some((pane) => pane.pane_id === target.pane), 'the stopped tile stays');
 
-    await driver.hover(chip(target.pane));
+    await driver.hover(entry(target.pane));
     const notice = await driver.waitFor({ key: 'shelf.peek.notice' });
     runner.assert(notice.name === STOPPED, 'the panel says the agent stopped', notice);
     await driver.typeInto(field(target.pane), 'keep this reply');
-    await driver.hover({ key: 'shelf.live' });
+    await driver.hover({ key: 'shelf.frame' });
     await driver.pressKey('Enter');
     await driver.waitFor(PEEK);
     runner.assert(await fieldValue(target.pane) === 'keep this reply', 'Enter keeps the reply when the agent stopped');
@@ -284,7 +280,7 @@ try {
     await driver.waitFor(PEEK, { gone: true });
     await hoverAway();
 
-    await driver.hover(chip(target.pane));
+    await driver.hover(entry(target.pane));
     await driver.waitFor(field(target.pane));
     runner.assert(await fieldValue(target.pane) === 'keep this reply', 'reopening the panel shows the kept reply');
     await driver.click({ key: 'shelf.peek.open' });

@@ -311,10 +311,14 @@ fn screen(world: &World) -> Vec<String> {
     shown.into_iter().map(|(_, leaf)| leaf.to_owned()).collect()
 }
 
-fn chip(world: &World, leaf: &str) -> Option<String> {
+fn off_screen(world: &World, leaf: &str) -> Option<String> {
     world
         .screen()
-        .find(Target::key(format!("shelf.chip.{leaf}")))
+        .find(Target::key(format!("shelf.entry.{leaf}")))
+        .filter(|n| {
+            let said = n.value.as_deref().unwrap_or_default();
+            !said.starts_with("current") && !said.starts_with("on screen")
+        })
         .map(|n| n.value.unwrap_or_default())
 }
 
@@ -608,38 +612,6 @@ fn the_palette_steps_the_width_and_moves_tiles_as_the_keys_do_and_the_shortcut_h
     rest(&mut world);
 }
 
-#[test]
-fn a_chip_whose_dragged_width_cannot_fit_beside_the_active_tile_shows_alone_where_it_is() {
-    let row = || [pane("a"), pane("b"), pane("c"), wanted("d", 149, None)];
-    let mut world = start(TWO_FIT, None, vec![tiles("a", row())]);
-    assert_eq!(screen(&world), ["a", "b"]);
-
-    click(&mut world, "shelf.chip.d");
-    assert_eq!(shown_leaf(&world), ["d"]);
-    assert!(sent(&world, "desktop_move_leaf").is_empty());
-    becomes(&mut world, tiles("d", row()));
-    assert_eq!(screen(&world), ["d"]);
-    assert!(sent(&world, "desktop_set_wanted_cols").is_empty());
-    rest(&mut world);
-}
-
-#[test]
-fn a_chip_with_one_tile_on_screen_shows_its_tile_where_it_is() {
-    let mut world = start(
-        TWO_FIT,
-        Some("150"),
-        vec![tiles("a", panes(["a", "b", "c"]))],
-    );
-    assert_eq!(screen(&world), ["a"]);
-
-    click(&mut world, "shelf.chip.c");
-    assert_eq!(shown_leaf(&world), ["c"]);
-    assert!(sent(&world, "desktop_move_leaf").is_empty());
-    becomes(&mut world, tiles("c", panes(["a", "b", "c"])));
-    assert_eq!(screen(&world), ["c"]);
-    rest(&mut world);
-}
-
 fn typed(world: &World) -> Vec<(String, String)> {
     world
         .daemon
@@ -655,18 +627,18 @@ fn typed(world: &World) -> Vec<(String, String)> {
 }
 
 #[test]
-fn keys_typed_right_after_a_chip_click_reach_the_tile_it_brings_once_it_lands() {
+fn keys_typed_right_after_a_click_on_an_entry_reach_its_tile_once_it_shows() {
     let mut world = start(TWO_FIT, None, vec![tiles("a", panes(["a", "b", "c", "d"]))]);
 
-    click(&mut world, "shelf.chip.d");
+    click(&mut world, "shelf.entry.d");
     world.gesture(|app| app.type_text("x"));
     assert!(typed(&world).is_empty(), "{:?}", typed(&world));
 
-    becomes(&mut world, tiles("d", panes(["a", "d", "b", "c"])));
+    becomes(&mut world, tiles("d", panes(["a", "b", "c", "d"])));
     assert_eq!(
         super::desktops::ringing(&world),
         ["d"],
-        "the brought tile rings"
+        "the shown tile rings"
     );
     assert_eq!(typed(&world), [("r-d".to_owned(), "x".to_owned())]);
     world.gesture(|app| app.type_text("y"));
@@ -749,7 +721,7 @@ fn a_refused_send_to_the_shelf_brings_the_tile_back_and_names_the_failure() {
 }
 
 #[test]
-fn a_held_column_is_skipped_by_arrows_and_its_chip_brings_it_back() {
+fn a_held_column_is_skipped_by_arrows_and_its_entry_shows_it() {
     let abc = |active: &str| tiles(active, panes(["a", "b", "c"]));
     let mut world = start(THREE_FIT, None, vec![abc("a")]);
     becomes(&mut world, abc("b"));
@@ -759,16 +731,16 @@ fn a_held_column_is_skipped_by_arrows_and_its_chip_brings_it_back() {
     assert_eq!(shown_leaf(&world), ["c"]);
     becomes(&mut world, abc("c"));
     assert_eq!(screen(&world), ["a", "c"]);
-    assert!(chip(&world, "b").is_some());
+    assert!(off_screen(&world, "b").is_some());
 
     press(&mut world, Action::TerminalFocusLeft);
     assert_eq!(shown_leaf(&world), ["c", "a"], "the arrow skips b");
     becomes(&mut world, abc("a"));
 
-    click(&mut world, "shelf.chip.b");
+    click(&mut world, "shelf.entry.b");
     becomes(&mut world, abc("b"));
     assert_eq!(screen(&world), ["a", "b", "c"]);
-    assert!(world.screen().find(Target::key("shelf")).is_none());
+    assert!(off_screen(&world, "b").is_none());
     rest(&mut world);
 }
 
@@ -785,7 +757,7 @@ fn sending_to_the_shelf_holds_a_second_column_when_the_first_held_one_left_room(
     assert_eq!(shown_leaf(&world), ["c", "a"]);
     becomes(&mut world, abc("a"));
     assert_eq!(screen(&world), ["a"]);
-    assert!(chip(&world, "b").is_some() && chip(&world, "c").is_some());
+    assert!(off_screen(&world, "b").is_some() && off_screen(&world, "c").is_some());
     rest(&mut world);
 }
 
@@ -812,7 +784,7 @@ fn sending_the_only_tile_on_screen_to_the_shelf_moves_it_to_the_row_end_and_show
 }
 
 #[test]
-fn a_split_beside_a_full_screen_slides_to_keep_the_anchor_and_flashes_the_chip_of_the_column_that_left()
+fn a_split_beside_a_full_screen_slides_to_keep_the_anchor_and_flashes_the_entry_of_the_column_that_left()
  {
     let mut world = start(THREE_FIT, None, vec![tiles("a", panes(["a", "b", "c"]))]);
     becomes(&mut world, tiles("c", panes(["a", "b", "c"])));
@@ -826,7 +798,7 @@ fn a_split_beside_a_full_screen_slides_to_keep_the_anchor_and_flashes_the_chip_o
     placed.panes[3].session_id = spawn["id"].as_str().unwrap().to_owned();
     becomes(&mut world, placed);
     assert_eq!(screen(&world), ["b", "c", "n"]);
-    assert_eq!(chip(&world, "a").as_deref(), Some("arrived"));
+    assert_eq!(off_screen(&world, "a").as_deref(), Some("arrived"));
     assert_eq!(
         super::desktops::ringing(&world),
         Vec::<String>::new(),
@@ -858,7 +830,10 @@ fn an_unseen_document_goes_before_a_waiting_agent_for_the_jump_and_closing_it_re
     };
     becomes(&mut world, with_doc("c"));
     assert_eq!(screen(&world), ["b", "c"]);
-    assert_eq!(chip(&world, "doc").as_deref(), Some("needs you, arrived"));
+    assert_eq!(
+        off_screen(&world, "doc").as_deref(),
+        Some("needs you, arrived")
+    );
 
     press(&mut world, Action::SessionJumpToWaiting);
     assert_eq!(shown_leaf(&world), ["doc"], "the document goes before d");
@@ -979,7 +954,7 @@ fn document_seen_then_left() -> World {
     }
     assert_eq!(screen(&world), ["b", "c"]);
     world.advance(Duration::from_secs(1));
-    assert_eq!(chip(&world, "doc").as_deref(), Some(""));
+    assert_eq!(off_screen(&world, "doc").as_deref(), Some(""));
     world
 }
 
@@ -996,7 +971,10 @@ fn a_document_asked_for_again_after_it_was_seen_waits_unseen_once_for_the_jump()
         );
     }
     assert_eq!(screen(&world), ["b", "c"]);
-    assert_eq!(chip(&world, "doc").as_deref(), Some("needs you, arrived"));
+    assert_eq!(
+        off_screen(&world, "doc").as_deref(),
+        Some("needs you, arrived")
+    );
 
     press(&mut world, Action::SessionJumpToWaiting);
     assert_eq!(shown_leaf(&world)[jumps..], ["doc"]);
@@ -1005,7 +983,7 @@ fn a_document_asked_for_again_after_it_was_seen_waits_unseen_once_for_the_jump()
         "work/desktop_1",
         vec![with_doc_by_a("doc", 2), other()],
     );
-    assert!(chip(&world, "doc").is_none());
+    assert!(off_screen(&world, "doc").is_none());
 
     press(&mut world, Action::SessionJumpToWaiting);
     assert_eq!(
@@ -1045,7 +1023,7 @@ fn a_document_asked_for_again_by_an_agent_on_screen_slides_into_view_and_the_act
 
     becomes(&mut world, with_doc("c", 1));
     assert_eq!(screen(&world), ["c", "d", "doc"]);
-    assert!(chip(&world, "doc").is_none());
+    assert!(off_screen(&world, "doc").is_none());
     rest(&mut world);
 }
 
@@ -1073,7 +1051,7 @@ fn a_document_asked_for_again_while_on_screen_changes_nothing_and_closing_it_res
 
     becomes(&mut world, with_doc(1));
     assert_eq!(screen(&world), ["b", "c", "doc"]);
-    assert!(chip(&world, "doc").is_none());
+    assert!(off_screen(&world, "doc").is_none());
 
     becomes(&mut world, five("b"));
     assert_eq!(screen(&world), ["a", "b", "c"]);
@@ -1102,9 +1080,9 @@ fn a_document_asked_for_again_while_another_desktop_is_current_waits_for_the_jum
     );
     assert_eq!(screen(&world), ["b", "c"]);
     assert!(
-        chip(&world, "doc").is_some_and(|v| v.starts_with("needs you")),
+        off_screen(&world, "doc").is_some_and(|v| v.starts_with("needs you")),
         "{:?}",
-        chip(&world, "doc")
+        off_screen(&world, "doc")
     );
 
     press(&mut world, Action::SessionJumpToWaiting);
@@ -1136,9 +1114,9 @@ fn a_document_opened_while_another_desktop_is_current_waits_for_the_jump() {
     arrange(&mut world, "work/desktop_1", vec![with_doc, other()]);
     assert_eq!(screen(&world), ["a", "b"]);
     assert!(
-        chip(&world, "doc").is_some_and(|v| v.starts_with("needs you")),
+        off_screen(&world, "doc").is_some_and(|v| v.starts_with("needs you")),
         "{:?}",
-        chip(&world, "doc")
+        off_screen(&world, "doc")
     );
 
     press(&mut world, Action::SessionJumpToWaiting);
@@ -1176,7 +1154,7 @@ fn a_document_opened_while_away_beside_an_agent_that_was_on_screen_shows_on_retu
 }
 
 #[test]
-fn a_terminal_an_agent_starts_off_screen_flashes_its_chip_and_moves_nothing() {
+fn a_terminal_an_agent_starts_off_screen_flashes_its_entry_and_moves_nothing() {
     let mut world = start(
         THREE_FIT,
         None,
@@ -1190,23 +1168,29 @@ fn a_terminal_an_agent_starts_off_screen_flashes_its_chip_and_moves_nothing() {
         ))
     });
     assert_eq!(screen(&world), ["a", "b", "c"]);
-    let chip_shown = opacities(&arrived, |path| path.ends_with("/shelf.chip.late"));
-    let flash: Vec<f32> = opacities(&arrived, |path| path.contains("/shelf.chip.late.flash."))
+    let entry_shown = opacities(&arrived, |path| path.ends_with("/shelf.entry.late"));
+    let flash: Vec<f32> = opacities(&arrived, |path| path.contains("/shelf.entry.late.flash."))
         .iter()
-        .zip(&chip_shown)
-        .map(|(flash, chip)| if *chip > 0.0 { flash / chip } else { 1.0 })
+        .zip(&entry_shown)
+        .filter(|(_, entry)| **entry > 0.0)
+        .map(|(flash, entry)| flash / entry)
         .collect();
-    let (held, fading) = flash.split_at(32);
+    let (shown, fading) = flash.split_at(32);
+    let (rising, held) = shown.split_at(6);
+    assert!(
+        rising.windows(2).all(|p| p[1] >= p[0]) && rising[0] < 0.5,
+        "the flash fades in: {flash:?}"
+    );
     assert!(
         held.iter().all(|o| *o == 1.0),
-        "the flash holds for 60%: {flash:?}"
+        "it holds until 60%: {flash:?}"
     );
     assert!(
         fading.windows(2).all(|p| p[1] <= p[0]) && fading.iter().any(|o| *o < 1.0),
         "then fades: {flash:?}"
     );
     assert!(flash.len() <= 60, "over 0.9 s: {flash:?}");
-    assert_eq!(chip(&world, "late").as_deref(), Some(""));
+    assert_eq!(off_screen(&world, "late").as_deref(), Some(""));
     assert!(shown_leaf(&world).is_empty());
     rest(&mut world);
 }
@@ -1231,7 +1215,7 @@ fn the_tile_that_slides_into_a_closed_tiles_slot_takes_the_keyboard() {
 }
 
 /// The tile area at `area` wide shows `before`, then the daemon changes desktop 1 to `after`:
-/// what the window shows over the two seconds that follow, long enough for a chip's flash.
+/// what the window shows over the two seconds that follow, long enough for an entry's flash.
 fn moving(area: f32, before: Desktop, after: Desktop) -> Recording {
     moving_in(&mut start(area, None, vec![before]), after)
 }
@@ -1287,6 +1271,8 @@ const LANDS_AT_ONCE: &[AllowRow] = &[
     AllowRow::new("jump", "tiles.area", ALONE, SIDEBAR_GOES).max(4),
     AllowRow::new("pop-out", "sidebar.frame", ALONE, SIDEBAR_GOES).max(1),
     AllowRow::new("pop-in", "sidebar.frame", ALONE, SIDEBAR_GOES).max(1),
+    AllowRow::new("pop-out", "shelf.slot/shelf", ALONE, SIDEBAR_GOES).max(1),
+    AllowRow::new("pop-in", "shelf.slot/shelf", ALONE, SIDEBAR_GOES).max(1),
     AllowRow::new("jump", "titlebar.left", ALONE, SIDEBAR_GOES).max(2),
     AllowRow::new("jump", "titlebar.middle", ALONE, SIDEBAR_GOES).max(8),
     AllowRow::new(
@@ -1329,7 +1315,7 @@ fn tiles_move_join_and_leave_the_row_without_a_visible_glitch_and_focus_lands_at
             }),
         ),
         (
-            "a chip brings its tile in place of another",
+            "a tile dragged off the shelf takes another's place",
             Box::new(|| {
                 moving(
                     TWO_FIT,

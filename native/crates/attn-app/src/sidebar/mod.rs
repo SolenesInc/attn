@@ -23,7 +23,7 @@ use attn_ui::system::{self, DotShape, DotSize, GroupHead, IconSize, ListRow, Ton
 use rune::{El, GrowthSpec, ScrollSpec, Tx, col, memo, row};
 use rune_kit::ScrollBar;
 
-pub(crate) use model::{AgentRow, Line, display_name, tile_title};
+pub(crate) use model::{AgentRow, Line, display_name, tile_icon, tile_title};
 pub use model::{AgentState, SESSION_EMOJIS};
 use model::{DesktopHeader, TileRow};
 

@@ -35,6 +35,11 @@ pub(crate) fn icon(glyph: impl Into<rune::IconSource>, size: IconSize) -> El {
     rune::icon(glyph, size.pt())
 }
 
+/// `glyph` at a size that has its own receipt, such as one cut out of a mark.
+pub(crate) fn icon_at(glyph: impl Into<rune::IconSource>, points: f32) -> El {
+    rune::icon(glyph, points)
+}
+
 /// A mark of [`crate::glyph`] drawn as text `size` high, one line tall.
 pub(crate) const fn mark(size: IconSize) -> TextStyle {
     TextStyle::new(size.pt(), 400.0).lh(size.pt())
@@ -209,6 +214,16 @@ pub(crate) fn frame(e: El, top: Space, x: Space, bottom: Space) -> El {
 /// `e` starting `points` before its parent's start, where a clipping parent hides it.
 pub(crate) fn behind_start(e: El, points: f32) -> El {
     e.ml(-points)
+}
+
+/// `e` with a corner that has its own receipt, drawing nothing past it.
+pub(crate) fn clip_round(e: El, points: f32) -> El {
+    e.radius(points).clip_rounded(points)
+}
+
+/// `e` with a corner that has its own receipt.
+pub(crate) fn round(e: El, points: f32) -> El {
+    e.radius(points)
 }
 
 /// `e` drawing nothing past its box.

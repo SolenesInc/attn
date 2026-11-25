@@ -154,7 +154,7 @@ const SECTIONS: &[Section] = &[
                 &[Of(Action::ShelfSendToShelf)],
                 |keymap| {
                     format!(
-                        "A held tile returns with a chip, {} or a restart.",
+                        "A held tile returns with its entry, {} or a restart.",
                         label(keymap, &Action::SessionJumpToWaiting)
                     )
                 },

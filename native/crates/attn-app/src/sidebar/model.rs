@@ -226,12 +226,17 @@ impl TileRow {
 
     /// The icon the row leads with.
     pub fn icon(&self) -> &'static rune::Icon {
-        match self.kind.as_str() {
-            "seed" => &attn_ui::icon::GARDEN,
-            "markdown" => &attn_ui::icon::MARKDOWN,
-            "browser" => &attn_ui::icon::BROWSER,
-            _ => &attn_ui::icon::NOTEBOOK,
-        }
+        tile_icon(&self.kind)
+    }
+}
+
+/// The icon of a tile of `kind`, such as a document.
+pub fn tile_icon(kind: &str) -> &'static rune::Icon {
+    match kind {
+        "seed" => &attn_ui::icon::GARDEN,
+        "markdown" => &attn_ui::icon::MARKDOWN,
+        "browser" => &attn_ui::icon::BROWSER,
+        _ => &attn_ui::icon::NOTEBOOK,
     }
 }
 

@@ -12,7 +12,7 @@ Use attn's persistent, user-visible browser tile when the user asks for the attn
 
 Use `attn browser snapshot` for state and locators. Use screenshots when visual layout matters. Do not request both by default.
 
-When the window has no room, the tile opens off screen, as a chip on the shelf in the title bar. The commands keep working there and the user's screen stays as it is. If a screenshot reports that the tile is off screen, use `attn browser snapshot`, or ask the user to bring the tile on screen.
+When the window has no room, the tile opens off screen and the user's screen stays as it is. The commands keep working there. If a screenshot reports that the tile is off screen, use `attn browser snapshot`, or ask the user to click the tile's entry on the shelf in the title bar.
 
 - `attn browser open <url> [--json]`: open or navigate the browser tile
 - `attn browser snapshot [--json]`: print a semantic page snapshot

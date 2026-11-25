@@ -143,6 +143,18 @@ outline!(
     r#"<path d="M4 2.5h7.5a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4Z"/><path d="M4 2.5a1.5 1.5 0 0 0-1.5 1.5v8A1.5 1.5 0 0 0 4 13.5"/><path d="M6 5.5h4M6 8h4" stroke-width="1.3"/>"#
 );
 outline!(
+    AGENT,
+    24.0,
+    "1.9",
+    r#"<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 10v2m8-2v2m-7 4h6"/>"#
+);
+outline!(
+    TERMINAL,
+    16.0,
+    "1.5",
+    r#"<path d="m2.5 4 4.5 4-4.5 4M9 12.5h4.5"/>"#
+);
+outline!(
     MARKDOWN,
     16.0,
     "1.3",

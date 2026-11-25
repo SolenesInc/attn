@@ -10,7 +10,7 @@ top. Commands the user picks often rise in the list.
 
 ## Sub-features
 
-- `agent-palette`: ⌘K lists the chief and crew, then turns in queue order, the other agents, snoozed agents and tiles. A delegate's name follows its role's icon. Typing four or more characters of an agent's id finds that agent. Enter opens one, or starts a session for a crew member between sessions. An off-screen tile on the current desktop comes beside the active tile ([desktops.md](desktops.md)).
+- `agent-palette`: ⌘K lists the chief and crew, then turns in queue order, the other agents, snoozed agents and tiles. A delegate's name follows its role's icon. Typing four or more characters of an agent's id finds that agent. Enter opens one, or starts a session for a crew member between sessions. For an off-screen tile on the current desktop, the row slides to show it and its order stays ([desktops.md](desktops.md)).
 - `command-palette`: ⌘⇧K, or `>` in the agent palette, lists every command attn offers, with its shortcut.
 - `palette-switch`: ⌘K and ⌘⇧K switch between the two and keep the typed text. The same key again closes the palette.
 - `palette-actions`: in the agent palette, ⌘⇧E settles, ⌘⇧I marks priority and ⌘⇧S snoozes the highlighted agent, without closing.

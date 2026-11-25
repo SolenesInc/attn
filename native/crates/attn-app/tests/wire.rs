@@ -203,6 +203,7 @@ mod wire {
     mod settings;
     mod shared_codex;
     mod shelf_drags;
+    mod shelf_entries;
     mod shelf_layout;
     mod shelf_peek;
     mod shortcut_editor;

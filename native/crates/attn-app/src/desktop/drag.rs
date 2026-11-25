@@ -1,4 +1,4 @@
-//! Dragging a tile by its header, or a shelf column by its chip, onto a tile's edge, into a
+//! Dragging a tile by its header, or a shelf column by its entry, onto a tile's edge, into a
 //! tile's place, beside a column on the shelf, or onto a desktop in the sidebar.
 
 use attn_protocol::DesktopMoveLeafMessage;
@@ -16,7 +16,7 @@ const BAND_MIN: f32 = 0.15;
 const BAND_MAX: f32 = 0.5;
 const SNAPS: [f32; 3] = [0.25, 1.0 / 3.0, 0.5];
 const SNAP_TOLERANCE: f32 = 0.045;
-/// How far from every edge a chip has to be over a tile to take its place.
+/// How far from every edge an entry has to be over a tile to take its place.
 const CENTRE: f32 = 0.25;
 /// How long a drag rests on a sidebar desktop before the window switches to it.
 const HOVER_SWITCH: f64 = 0.32;
@@ -33,8 +33,8 @@ pub(crate) enum Source {
         label: String,
         movable: bool,
     },
-    /// A shelf column, by its chip: `leaf` is the tile it brings.
-    Chip {
+    /// A shelf column, by its entry: `leaf` is the tile it goes to.
+    Entry {
         desktop: String,
         column: String,
         leaf: String,
@@ -52,14 +52,14 @@ impl Source {
     fn desktop(&self) -> &str {
         match self {
             Source::Header { desktop, .. }
-            | Source::Chip { desktop, .. }
+            | Source::Entry { desktop, .. }
             | Source::Row { desktop, .. } => desktop,
         }
     }
 
     fn leaf(&self) -> &str {
         match self {
-            Source::Header { leaf, .. } | Source::Chip { leaf, .. } | Source::Row { leaf, .. } => {
+            Source::Header { leaf, .. } | Source::Entry { leaf, .. } | Source::Row { leaf, .. } => {
                 leaf
             }
         }
@@ -68,7 +68,7 @@ impl Source {
     fn label(&self) -> &str {
         match self {
             Source::Header { label, .. }
-            | Source::Chip { label, .. }
+            | Source::Entry { label, .. }
             | Source::Row { label, .. } => label,
         }
     }
@@ -76,13 +76,13 @@ impl Source {
     fn movable(&self) -> bool {
         match self {
             Source::Header { movable, .. } => *movable,
-            Source::Chip { .. } | Source::Row { .. } => true,
+            Source::Entry { .. } | Source::Row { .. } => true,
         }
     }
 
-    fn chip(&self) -> Option<&str> {
+    fn entry(&self) -> Option<&str> {
         match self {
-            Source::Chip { column, .. } => Some(column),
+            Source::Entry { column, .. } => Some(column),
             Source::Header { .. } | Source::Row { .. } => None,
         }
     }
@@ -94,9 +94,9 @@ impl Source {
 pub(crate) enum Owner {
     /// The tile area: headers.
     Tiles,
-    /// The shelf in the title bar: its chips.
+    /// The shelf in the title bar: its entries.
     Shelf,
-    /// An open cap's menu: the chips it holds.
+    /// An open count's menu: the entries it holds.
     Menu,
     /// The sidebar: its agent and tile rows.
     Sidebar,
@@ -123,8 +123,8 @@ impl Owner {
                 .and_then(|s| s.strip_suffix(".header"))
                 .and_then(|leaf| super::view::header_source(state, leaf)),
             Owner::Shelf | Owner::Menu => segment
-                .strip_prefix("shelf.chip.")
-                .and_then(|column| Shelf::of(state)?.chip_source(column)),
+                .strip_prefix("shelf.entry.")
+                .and_then(|column| Shelf::of(state)?.entry_source(column)),
             Owner::Sidebar => unreachable!(),
         })
     }
@@ -194,9 +194,9 @@ struct Dock {
     ratio: f32,
     /// Where the dragged tile would go, in window points.
     rect: [f32; 4],
-    /// A chip over a tile's middle takes its place in the row.
+    /// An entry over a tile's middle takes its place in the row.
     replaces: bool,
-    /// Why a chip dropped on a tile's top or bottom lands beside it instead.
+    /// Why an entry dropped on a tile's top or bottom lands beside it instead.
     limit: Option<String>,
 }
 
@@ -253,7 +253,7 @@ fn distance(a: [f32; 2], b: [f32; 2]) -> f32 {
     (a[0] - b[0]).hypot(a[1] - b[1])
 }
 
-/// Runs a press on `owner`: on a header or chip, a press that travels becomes a drag and
+/// Runs a press on `owner`: on a header or entry, a press that travels becomes a drag and
 /// drops where it is let go, and one that does not is a click.
 pub(crate) fn gesture(state: &mut State, d: &mut Drag, tx: &mut Tx, owner: Owner) {
     let at = d.window_point();
@@ -389,9 +389,9 @@ pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
 fn click(state: &mut State, source: &Source, tx: &mut Tx) {
     match source {
         Source::Header { desktop, leaf, .. } => super::actions::activate(state, desktop, leaf, tx),
-        Source::Chip { desktop, leaf, .. } => {
-            state.window.desk.cap_open = None;
-            super::shelf::bring(state, desktop, leaf, tx);
+        Source::Entry { desktop, leaf, .. } => {
+            state.window.desk.count_open = None;
+            super::actions::show_leaf(state, desktop, leaf, tx);
         }
         Source::Row { .. } => {}
     }
@@ -411,7 +411,7 @@ fn target(state: &State, drag: &LeafDrag) -> Option<Target> {
     }
 }
 
-/// Over the source desktop's shelf: Some(None) when over the dragged chip itself, which
+/// Over the source desktop's shelf: Some(None) when over the dragged entry itself, which
 /// takes the drop nowhere, and None when the pointer is not over the shelf.
 fn shelf_target(state: &State, drag: &LeafDrag) -> Option<Option<Target>> {
     let shelf = Shelf::of(state).filter(|s| s.desktop == drag.source.desktop())?;
@@ -425,7 +425,7 @@ fn shelf_target(state: &State, drag: &LeafDrag) -> Option<Option<Target>> {
         .into_iter()
         .filter_map(|a| rects.get(&a.element).map(|r| (a, *r)))
         .collect();
-    let own = drag.source.chip();
+    let own = drag.source.entry();
     if anchors
         .iter()
         .any(|(a, r)| Some(a.column.as_str()) == own && x >= r[0] && x <= r[0] + r[2])
@@ -474,7 +474,7 @@ fn band(rect: [f32; 4], side: Side, ratio: f32) -> [f32; 4] {
     }
 }
 
-/// Over a tile of the current desktop: the side nearest the pointer, or for a chip over the
+/// Over a tile of the current desktop: the side nearest the pointer, or for an entry over the
 /// tile's middle, the tile's place.
 fn dock_target(state: &State, drag: &LeafDrag) -> Option<Dock> {
     let facts = &state.facts;
@@ -516,9 +516,9 @@ fn dock_target(state: &State, drag: &LeafDrag) -> Option<Dock> {
     .fold((Side::Left, f32::INFINITY), |best, (s, d)| {
         if d < best.1 { (s, d) } else { best }
     });
-    let chip = drag.source.chip();
+    let entry = drag.source.entry();
     let source_shows = drag.source.desktop() == desktop.id;
-    if chip.is_some() && source_shows && dist >= CENTRE {
+    if entry.is_some() && source_shows && dist >= CENTRE {
         return Some(Dock {
             anchor: anchor.to_owned(),
             side: Side::Left,
@@ -537,7 +537,7 @@ fn dock_target(state: &State, drag: &LeafDrag) -> Option<Dock> {
         replaces: false,
         limit: None,
     };
-    match chip {
+    match entry {
         Some(_) if matches!(side, Side::Top | Side::Bottom) => {
             let source = facts
                 .desktops
@@ -550,8 +550,8 @@ fn dock_target(state: &State, drag: &LeafDrag) -> Option<Dock> {
     }
 }
 
-/// A chip's column stacked on a tile keeps every tile at the minimum height, or lands beside
-/// the tile instead, saying why. `source` is the tree of the desktop the chip comes from.
+/// An entry's column stacked on a tile keeps every tile at the minimum height, or lands beside
+/// the tile instead, saying why. `source` is the tree of the desktop the entry comes from.
 fn fit_column(dock: Dock, anchor_rect: [f32; 4], source: &Node, leaf: &str) -> Dock {
     let row = layout::read_row(source);
     let need = layout::column_index(&row, leaf)
@@ -589,22 +589,22 @@ fn fit_column(dock: Dock, anchor_rect: [f32; 4], source: &Node, leaf: &str) -> D
     }
 }
 
-/// Where the column a chip leaves goes when the chip takes another tile's place in the row,
-/// so the tile takes the chip's old place.
-fn slot_return(tree: &Node, chip: &str, slot: &str) -> (Edge, Option<(String, Edge)>) {
+/// Where the column an entry leaves goes when the entry takes another tile's place in the row,
+/// so the tile takes the entry's old place.
+fn slot_return(tree: &Node, entry: &str, slot: &str) -> (Edge, Option<(String, Edge)>) {
     let row = layout::read_row(tree);
-    let (Some(chip_at), Some(slot_at)) = (
-        layout::column_index(&row, chip),
+    let (Some(entry_at), Some(slot_at)) = (
+        layout::column_index(&row, entry),
         layout::column_index(&row, slot),
     ) else {
         return (Edge::Right, None);
     };
-    let from_left = chip_at < slot_at;
-    let chip_edge = if from_left { Edge::Right } else { Edge::Left };
+    let from_left = entry_at < slot_at;
+    let entry_edge = if from_left { Edge::Right } else { Edge::Left };
     let neighbour = if from_left {
-        chip_at + 1
+        entry_at + 1
     } else {
-        chip_at.wrapping_sub(1)
+        entry_at.wrapping_sub(1)
     };
     let back = (neighbour != slot_at).then(|| {
         (
@@ -612,7 +612,7 @@ fn slot_return(tree: &Node, chip: &str, slot: &str) -> (Edge, Option<(String, Ed
             if from_left { Edge::Left } else { Edge::Right },
         )
     });
-    (chip_edge, back)
+    (entry_edge, back)
 }
 
 /// The note when two tiles at the narrowest width cannot show side by side, or None.
@@ -653,8 +653,8 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
     };
     let source = drag.source.desktop().to_owned();
     let leaf = drag.source.leaf().to_owned();
-    match (target, drag.source.chip()) {
-        (Target::Desktop(desktop), chip) => {
+    match (target, drag.source.entry()) {
+        (Target::Desktop(desktop), entry) => {
             crate::sidebar::open_desktop(state, desktop, tx);
             let to = Some(desktop.clone());
             to_desktop(
@@ -662,18 +662,18 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
                 &source,
                 to,
                 &leaf,
-                chip.is_some(),
+                entry.is_some(),
                 with_delegates,
                 tx,
             );
         }
-        (Target::NewDesktop, chip) => {
+        (Target::NewDesktop, entry) => {
             to_desktop(
                 state,
                 &source,
                 None,
                 &leaf,
-                chip.is_some(),
+                entry.is_some(),
                 with_delegates,
                 tx,
             );
@@ -749,7 +749,7 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
             let Some(tree) = desktop.tree() else {
                 return;
             };
-            let (chip_edge, back) = slot_return(tree, &leaf, &dock.anchor);
+            let (entry_edge, back) = slot_return(tree, &leaf, &dock.anchor);
             let moves = if back.is_some() { 2 } else { 1 };
             let sent_on = desktop.tree_json.clone();
             let row = state.window.desk.row_mut(&source);
@@ -767,12 +767,12 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
                 None => ShelfDrop {
                     leaf: leaf.clone(),
                     anchor: dock.anchor.clone(),
-                    edge: chip_edge,
+                    edge: entry_edge,
                     whole_column: true,
                 },
             };
             row.swap = Some(Swap {
-                chip: leaf.clone(),
+                entry: leaf.clone(),
                 slot: dock.anchor.clone(),
                 until,
                 tree: sent_on,
@@ -782,7 +782,7 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
             let (from, slot) = (source.clone(), dock.anchor.clone());
             super::shelf::send_move_then(
                 state,
-                (&source, &source, &leaf, &dock.anchor, chip_edge.as_str()),
+                (&source, &source, &leaf, &dock.anchor, entry_edge.as_str()),
                 None,
                 true,
                 true,
@@ -807,7 +807,7 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
                 tx,
             );
         }
-        (Target::Tile(dock), chip) => {
+        (Target::Tile(dock), entry) => {
             if let Some(limit) = &dock.limit {
                 state.window.notify(limit.clone(), tx);
             }
@@ -823,7 +823,7 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
                 state,
                 (&source, &current, &leaf, &dock.anchor, dock.side.as_str()),
                 Some(dock.ratio),
-                chip.is_some(),
+                entry.is_some(),
                 true,
                 "move that tile",
                 move |state: &mut State, moved, tx: &mut Tx| {
@@ -903,11 +903,11 @@ pub(crate) fn overlay(state: &State, t: &Tokens) -> Vec<El> {
     mark.into_iter().chain([ghost]).collect()
 }
 
-/// A chip taking a tile's place: the tile stays held off screen until the last move lands.
+/// An entry taking a tile's place: the tile stays held off screen until the last move lands.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Swap {
-    /// The chip's tile, which goes into the slot.
-    pub chip: String,
+    /// The entry's tile, which goes into the slot.
+    pub entry: String,
     pub slot: String,
     pub until: ShelfDrop,
     /// The row's tree when the moves were sent, and how many changes to it the moves make.

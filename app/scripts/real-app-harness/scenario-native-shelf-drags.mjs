@@ -12,7 +12,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 const options = parseCommonArgs(process.argv.slice(2));
 const runner = createScenarioRunner(options, {
   scenarioId: 'NATIVE-SHELF-DRAGS', tier: 'tier1-local-shell', prefix: 'native-shelf-drags',
-  metadata: { focus: 'In the native app: chips onto tiles, between chips and onto sidebar desktops, tiles beside a chip, column dividers past the narrowest and after a window resize, and stack chips onto a tile edge, with real shells and pointer input through the app' },
+  metadata: { focus: 'In the native app: entries onto tiles, between entries and onto sidebar desktops, tiles beside an entry, column dividers past the narrowest and after a window resize, and stack entries onto a tile edge, with real shells and pointer input through the app' },
 });
 const client = new UiAutomationClient({ appPath: options.appPath });
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -39,7 +39,7 @@ const wantedIn = (entry, leaf) => firstLeafOf(columnOf(entry, leaf)).wanted_cols
 const sameList = (left, right) => left.join() === right.join();
 const sessionOf = (leaf) => current().panes.find((pane) => pane.pane_id === leaf)?.session_id;
 const tile = (leaf) => ({ key: `tile.${leaf}` });
-const chip = (leaf) => ({ key: `shelf.chip.${leaf}` });
+const entry = (leaf) => ({ key: `shelf.entry.${leaf}` });
 const header = (leaf) => ({ key: `tile.${leaf}.header` });
 const divider = (leaf) => ({ key: `divider.row:${leaf}` });
 const shot = (name) => driver.screenshot(path.join(runner.runDir, `${name}.png`));
@@ -55,7 +55,7 @@ async function shown() {
   return found.sort((a, b) => a[1] - b[1] || a[2] - b[2]).map(([leaf]) => leaf);
 }
 
-async function chips() {
+async function offScreen() {
   const on = await shown();
   return columnsOf(treeOf(current())).map(leavesOf).filter((column) => !column.some((leaf) => on.includes(leaf))).map((column) => column[0]);
 }
@@ -106,8 +106,8 @@ async function focusShown(leaf) {
 }
 
 const keys = process.platform === 'darwin'
-  ? { right: 'mod+d', below: 'mod+shift+d', palette: 'mod+shift+k' }
-  : { right: 'mod+shift+d', below: 'mod+alt+d', palette: 'mod+alt+k' };
+  ? { right: 'mod+d', below: 'mod+shift+d', palette: 'mod+shift+k', carryRight: 'mod+alt+shift+right' }
+  : { right: 'mod+shift+d', below: 'mod+alt+d', palette: 'mod+alt+k', carryRight: 'mod+alt+shift+right' };
 const sessions = new Set();
 runner.registerCleanup('unregister_shells', () => { for (const id of sessions) observer.unregisterSession(id); });
 
@@ -143,18 +143,15 @@ async function stackOnTheShelf() {
   const stacked = await split(keys.below);
   const column = leavesOf(columnOf(current(), stacked));
   runner.assert(column.length === 2, 'the new shell sits in a stack', { column });
-  for (let brought = 0; brought < 8; brought += 1) {
-    const on = await shown();
-    if (!column.some((leaf) => on.includes(leaf))) break;
-    const other = on.find((leaf) => !column.includes(leaf));
-    runner.assert(other !== undefined, 'the screen shows a tile outside the stack', { on, column });
-    await focusShown(other);
-    const next = (await chips()).find((leaf) => !column.includes(leaf));
-    await driver.click(chip(next));
-    await driver.waitFor(tile(next));
-    await keyboardOn(next);
+  const columnAt = () => columnsOf(treeOf(current())).findIndex((each) => leavesOf(each).includes(stacked));
+  for (let at = columnAt(); at < columnsOf(treeOf(current())).length - 1; at = columnAt()) {
+    await driver.pressKey(keys.carryRight);
+    await waitForRow(() => columnAt() === at + 1, 'the stack one place right');
   }
-  await driver.waitFor(chip(column[0]));
+  const first = columnsOf(treeOf(current())).map(leavesOf)[0];
+  await driver.click(entry(first[0]));
+  await observer.waitFor(() => first.includes(current().active_pane_id), 'the first column active');
+  for (const leaf of column) await driver.waitFor(tile(leaf), { gone: true });
   return column;
 }
 
@@ -189,47 +186,47 @@ try {
     runner.log('row', { row: row(), shown: await shown() });
   });
 
-  await runner.step('chip_onto_a_tile_centre_takes_its_slot', async () => {
+  await runner.step('entry_onto_a_tile_centre_takes_its_slot', async () => {
     const before = await shown();
-    const moving = (await chips()).at(-1);
+    const moving = (await offScreen()).at(-1);
     const slot = before[0];
-    await driver.drag(chip(moving), tile(slot));
+    await driver.drag(entry(moving), tile(slot));
     await driver.waitFor(tile(moving));
-    await driver.waitFor(chip(slot));
+    await driver.waitFor(tile(slot), { gone: true });
     const after = await shown();
-    runner.assert(after[0] === moving, 'the chip takes the slot', { after, moving });
+    runner.assert(after[0] === moving, 'the dragged column takes the slot', { after, moving });
     runner.assert(sameList(after.slice(1), before.slice(1)), 'the other tiles stay where they were', { after, before });
-    await observer.waitFor(() => current().active_pane_id === moving, 'the chip tile is the active pane');
+    await observer.waitFor(() => current().active_pane_id === moving, 'the dragged tile is the active pane');
     await driver.waitFor({ key: `tile.${moving}.spotlight.top` });
-    await shot('chip-took-the-slot');
+    await shot('entry-took-the-slot');
   });
 
-  await runner.step('chip_between_chips_reorders_without_taking_focus', async () => {
+  await runner.step('entry_between_entries_reorders_without_taking_focus', async () => {
     await focusShown(current().active_pane_id);
     const active = current().active_pane_id;
     const before = await shown();
-    const offscreen = await chips();
-    runner.assert(offscreen.length >= 2, 'there are chips to reorder', { offscreen });
+    const offscreen = await offScreen();
+    runner.assert(offscreen.length >= 2, 'there are entries to reorder', { offscreen });
     const moving = offscreen.at(-1);
-    await driver.drag(chip(moving), { target: chip(offscreen[0]), at: [0.1, 0.5] });
-    await waitForRow((now) => now.indexOf(moving) === now.indexOf(offscreen[0]) - 1, 'the chip before the first chip');
+    await driver.drag(entry(moving), { target: entry(offscreen[0]), at: [0.1, 0.5] });
+    await waitForRow((now) => now.indexOf(moving) === now.indexOf(offscreen[0]) - 1, 'the dragged column before the first one off screen');
     runner.assert(current().active_pane_id === active, 'the active tile stays active', { active });
     runner.assert(sameList(await shown(), before), 'the screen stays as it was', { before });
     await keyboardOn(active);
-    await shot('chips-reordered');
+    await shot('entries-reordered');
   });
 
-  await runner.step('tile_beside_a_chip_comes_on_screen_with_it', async () => {
+  await runner.step('tile_beside_an_entry_comes_on_screen_with_it', async () => {
     const active = current().active_pane_id;
     const moving = (await shown()).find((leaf) => leaf !== active);
-    const anchor = (await chips())[0];
-    await driver.drag(header(moving), { target: chip(anchor), at: [0.1, 0.5] });
-    await waitForRow((now) => now.indexOf(moving) === now.indexOf(anchor) - 1, 'the tile just before the chip');
+    const anchor = (await offScreen())[0];
+    await driver.drag(header(moving), { target: entry(anchor), at: [0.1, 0.5] });
+    await waitForRow((now) => now.indexOf(moving) === now.indexOf(anchor) - 1, 'the tile just before the entry’s');
     await driver.waitFor(tile(anchor));
     await keyboardOn(moving);
     const after = await shown();
-    runner.assert(after.includes(moving) && after.includes(anchor), 'the tile and the chip’s tile are on screen', { after, moving, anchor });
-    await shot('tile-beside-the-chip');
+    runner.assert(after.includes(moving) && after.includes(anchor), 'the tile and the entry’s tile are on screen', { after, moving, anchor });
+    await shot('tile-beside-the-entry');
   });
 
   await runner.step('column_divider_resizes_and_a_double_click_clears', async () => {
@@ -253,7 +250,6 @@ try {
     await focusShown(first);
     await driver.drag(divider(first), { by: [500, 0] });
     await driver.waitFor(tile(far), { gone: true });
-    await driver.waitFor(chip(far));
     await waitForWanted(first, (cols) => cols > 0);
     await shot('far-column-left');
     await clearDraggedWidthsFromThePalette();
@@ -315,7 +311,7 @@ try {
     await waitForWanted(on[0], (cols) => !cols);
   });
 
-  await runner.step('stack_chip_to_a_sidebar_desktop_moves_its_whole_column', async () => {
+  await runner.step('stack_entry_to_a_sidebar_desktop_moves_its_whole_column', async () => {
     const created = await observer.profileCommand('desktop_create', { profile_id: observer.profileId, name: 'Drop here' });
     const target = created.desktops[0].id;
     runner.registerCleanup('close_drop_desktop', () => {
@@ -328,7 +324,7 @@ try {
     await driver.waitFor(tile(current().active_pane_id));
     const column = await stackOnTheShelf();
     const sessions = column.map(sessionOf);
-    await driver.drag(chip(column[0]), { key: `sidebar.desktop.${target}` });
+    await driver.drag(entry(column[0]), { key: `sidebar.desktop.${target}` });
     for (const sessionId of sessions) {
       await observer.waitForDesktopOf(sessionId, (entry) => entry.id === target, `session ${sessionId} on the dropped desktop`);
     }
@@ -341,14 +337,14 @@ try {
     }
   });
 
-  await runner.step('stack_chip_on_a_tile_top_edge_keeps_every_tile_usable', async () => {
+  await runner.step('stack_entry_on_a_tile_top_edge_keeps_every_tile_usable', async () => {
     const dropOnTopEdge = async () => {
       await focusShown((await shown()).find((leaf) => leavesOf(columnOf(current(), leaf)).length === 1));
       const column = await stackOnTheShelf();
       const anchor = (await shown()).find((leaf) => leavesOf(columnOf(current(), leaf)).length === 1);
       runner.assert(anchor !== undefined, 'a tile alone in its column is on screen', { column });
       const anchorHeight = await heightOf(anchor);
-      await driver.drag(chip(column[0]), { target: tile(anchor), at: [0.5, 0.02] });
+      await driver.drag(entry(column[0]), { target: tile(anchor), at: [0.5, 0.02] });
       return { column, anchor, anchorHeight };
     };
 

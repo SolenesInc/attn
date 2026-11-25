@@ -1,16 +1,19 @@
 //! The gallery's stories for the blocks the desktop's chrome is built from: the pieces of a tile
-//! header's second line, the shelf's chips, the overview's grid of desktops in miniature, and a
+//! header's second line, the shelf's entries, the overview's grid of desktops in miniature, and a
 //! terminal's screen read as text. One story per block, a variant per state.
 
 use rune::{Cx, El, Playground, Story, Tx, col, el, row};
 
 use crate::Tokens;
-use crate::blocks::{Card, Grid, HeaderPiece, Inline, Miniature, Screen, Shelf, Standing};
+use crate::blocks::{
+    Card, CountSide, Grid, HeaderPiece, Inline, MemberState, Miniature, Place, Screen, Shelf,
+    ShelfCount, ShelfEntry, ShelfMember, Standing,
+};
 use crate::chrome_gallery::ChromeSheet;
 use crate::colors::scheme_for;
 use crate::icon;
-use crate::system::{DotShape, DotSize, Type, dot, words};
 use crate::system::{Space, door};
+use crate::system::{Type, words};
 
 /// What a desk story shows: the state its variant sets.
 #[derive(Default)]
@@ -50,11 +53,14 @@ pub const DESK_SHEETS: &[ChromeSheet] = &[
         name: "desk-shelf",
         story: "Desk/Shelf",
         keys: &[
-            "shelf.chip",
-            "shelf.dot",
-            "shelf.dot.current",
-            "shelf.cap",
+            "shelf.entry",
+            "shelf.entry.stack",
+            "shelf.entry.on_screen",
+            "shelf.entry.current",
+            "shelf.entry.asks",
             "shelf.arrived",
+            "shelf.count",
+            "shelf.count.needs",
         ],
         columns: PRESSABLE,
     },
@@ -94,57 +100,142 @@ fn states(story: Story<Desk>) -> Story<Desk> {
 /// folder, and a desktop named by a person.
 const LONG_AGENT: &str = "attn--ds-page-blocks-delegation-appearance-landing-two";
 const LONG_DESKTOP: &str = "Design system review with the Orchestrator and five Builders";
-/// The shelf's chip at its slot's width, as the title bar fits it.
-pub const SHELF_CHIP: f32 = 112.0;
-
-/// The shelf's chips: a column off screen with an agent and a tile, columns on screen as their
-/// marks, the one on screen filled, a cap of three more, and a chip whose tile just arrived.
+/// The shelf of a row that has gone off screen at both ends: a count, a column of one, a stack
+/// whose second tile waits, the two columns on screen with a stack in use, a document no one has
+/// read and an agent that asks, and a count with an approval in it.
 fn shelf(s: &Desk, cx: &mut Cx<Desk>) -> El {
     let t = tokens(cx);
     let name = if s.long { LONG_AGENT } else { "reviewer" };
-    let marks = |n: usize| {
-        Shelf::marks((0..n).map(|i| {
-            dot(
-                if i == 0 {
-                    t.state_waiting
-                } else {
-                    t.text_secondary
-                },
-                if i == 0 {
-                    DotShape::Filled
-                } else {
-                    DotShape::Square
-                },
-                DotSize::Small,
-            )
-        }))
-    };
-    let face = |label: &str| {
-        Inline::joined().w_full().child(marks(2)).child(
-            words(label.to_owned(), Type::Small, t.text_secondary)
-                .single_line()
-                .truncate()
-                .grow(1.0),
-        )
-    };
-    let items = vec![
-        Shelf::chip("shelf.chip", name, face(name), false, &t).w(SHELF_CHIP - Shelf::gap()),
-        Shelf::chip("shelf.dot", "builder", marks(1), false, &t),
-        Shelf::chip("shelf.dot.current", "scout", marks(3), true, &t),
-        Shelf::chip(
-            "shelf.cap",
-            "3 more this way",
-            words("3 ›", Type::Label, t.warning),
-            false,
-            &t,
+    let approval = member("docs", &icon::AGENT, Some(MemberState::Approval));
+    let arrived = entry(
+        &[(name, &icon::MARKDOWN, Some(MemberState::Waiting))],
+        0,
+        Place::OffScreen,
+        0,
+    );
+    let arrived_name = arrived.name_width();
+    let entries = [
+        (
+            "shelf.entry",
+            entry(
+                &[(name, &icon::AGENT, Some(MemberState::Idle))],
+                0,
+                Place::OffScreen,
+                0,
+            ),
         ),
-        Shelf::chip("shelf.arrived", name, face(name), false, &t)
-            .w(SHELF_CHIP - Shelf::gap())
-            .child(Shelf::flash("shelf.arrived.flash", &t)),
-    ]
-    .into_iter()
-    .map(|chip| chip.on_press_tx(press));
-    stage(s, cx, &t, vec![Shelf::row("shelf.row").children(items)])
+        (
+            "shelf.entry.stack",
+            entry(
+                &[
+                    ("builder", &icon::AGENT, Some(MemberState::Working)),
+                    (name, &icon::AGENT, Some(MemberState::Waiting)),
+                    ("shell", &icon::TERMINAL, None),
+                ],
+                0,
+                Place::OffScreen,
+                0,
+            ),
+        ),
+        (
+            "shelf.entry.on_screen",
+            entry(&[("plan.md", &icon::MARKDOWN, None)], 0, Place::OnScreen, 0),
+        ),
+        (
+            "shelf.entry.current",
+            entry(
+                &[
+                    ("builder", &icon::AGENT, Some(MemberState::Idle)),
+                    (name, &icon::AGENT, Some(MemberState::Working)),
+                    ("docs", &icon::AGENT, Some(MemberState::Approval)),
+                    ("shell", &icon::TERMINAL, None),
+                ],
+                1,
+                Place::Current,
+                0,
+            ),
+        ),
+        (
+            "shelf.entry.asks",
+            entry(
+                &[("scout", &icon::AGENT, Some(MemberState::Waiting))],
+                0,
+                Place::OffScreen,
+                1,
+            ),
+        ),
+    ];
+    let before = count(CountSide::Before, 2, vec![]);
+    let after = count(CountSide::After, 3, vec![approval]);
+    let mut x = Shelf::START + before.width() + Shelf::gap();
+    let mut framed = (x, 0.0);
+    for (key, entry) in &entries {
+        if *key == "shelf.entry.on_screen" {
+            framed.0 = x;
+        }
+        x += entry.width(entry.name_width());
+        if *key == "shelf.entry.current" {
+            framed.1 = x;
+        }
+        x += Shelf::gap();
+    }
+    let reach = Shelf::FRAME_REACH;
+    let (frame_x, frame_width) = (framed.0 - reach, framed.1 - framed.0 + 2.0 * reach);
+    let row = Shelf::row("shelf.row")
+        .child(Shelf::frame(frame_x, frame_width, &t))
+        .child(Shelf::frame_edge(frame_x, frame_width, &t))
+        .child(
+            before
+                .build("shelf.count", "2 more this way", false, &t)
+                .on_press_tx(press),
+        )
+        .children(entries.iter().map(|(key, entry)| {
+            entry
+                .build(key, &entry.members()[0].name, entry.name_width(), &t)
+                .on_press_tx(press)
+        }))
+        .child(
+            arrived
+                .build("shelf.arrived", name, arrived_name, &t)
+                .child(Shelf::flash("shelf.arrived.flash", &t))
+                .on_press_tx(press),
+        )
+        .child(
+            after
+                .build("shelf.count.needs", "3 more this way", false, &t)
+                .on_press_tx(press),
+        );
+    stage(s, cx, &t, vec![row])
+}
+
+fn member(name: &str, icon: &'static rune::Icon, state: Option<MemberState>) -> ShelfMember {
+    ShelfMember {
+        name: name.to_owned(),
+        icon: icon.into(),
+        state,
+    }
+}
+
+fn count(side: CountSide, columns: usize, marks: Vec<ShelfMember>) -> ShelfCount {
+    ShelfCount {
+        side,
+        columns,
+        needs_user: !marks.is_empty(),
+        marks,
+    }
+}
+
+fn entry(
+    members: &[(&str, &'static rune::Icon, Option<MemberState>)],
+    shown: usize,
+    place: Place,
+    asking: usize,
+) -> ShelfEntry {
+    let members = members
+        .iter()
+        .map(|(name, icon, state)| member(name, icon, *state))
+        .collect();
+    ShelfEntry::new(members, shown, place, asking)
 }
 
 /// Three desktops in miniature on the overview's grid: the current one picked, an empty one, and

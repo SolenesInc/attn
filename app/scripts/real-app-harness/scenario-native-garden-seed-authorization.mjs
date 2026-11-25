@@ -96,7 +96,8 @@ try {
     const shown = await observer.waitForDesktopOf(agent, (d) => seedTiles(d).some((t) => t.tile_params === seedId) && d, 'the seed opens as a tile beside the agent');
     [tile] = seedTiles(shown).filter((t) => t.tile_params === seedId);
     runner.registerCleanup('remove_tile', () => observer.profileCommand('desktop_remove_leaf', { desktop_id: shown.id, leaf_id: tile.tile_id }).catch(() => {}));
-    if (await driver.find({ key: `shelf.chip.${tile.tile_id}` })) await driver.click({ key: `shelf.chip.${tile.tile_id}` });
+    const entry = { key: `shelf.entry.${tile.tile_id}` };
+    if (await driver.find(entry) && !(await driver.find({ key: `tile.${tile.tile_id}` }))) await driver.click(entry);
     await driver.waitFor({ key: `seed-tile.${tile.tile_id}.authorization.empty`, name: EMPTY });
   });
 

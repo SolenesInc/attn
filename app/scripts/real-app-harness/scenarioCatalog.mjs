@@ -153,13 +153,13 @@ export const scenarioCatalog = [
   {
     id: 'native-shelf-peek',
     runnerId: 'NATIVE-SHELF-PEEK',
-    label: 'Native app shelf peek: a chip shows a live terminal, a reply reaches it at its size, Enter opens the tile, a chip reflowing under a still pointer opens nothing, a stack peeks from its marks, and a stopped terminal keeps the reply',
+    label: 'Native app shelf peek: an entry shows a live terminal, a reply reaches it at its size, Enter opens the tile, an entry leaving the screen under a still pointer opens nothing, a stack peeks from its pill and its dots, and a stopped terminal keeps the reply',
     command: ['node', 'scripts/real-app-harness/scenario-native-shelf-peek.mjs'],
   },
   {
     id: 'native-title-bar',
     runnerId: 'NATIVE-TITLE-BAR',
-    label: 'Native app title bar: clicks reach every control, a chip opens its peek, a tile drops beside a chip, and tiles start below the band',
+    label: 'Native app title bar: clicks reach every control, an entry opens its peek, a tile drops beside an entry, and tiles start below the band',
     command: ['node', 'scripts/real-app-harness/scenario-native-title-bar.mjs'],
   },
   {
@@ -177,7 +177,7 @@ export const scenarioCatalog = [
   {
     id: 'native-shelf-drags',
     runnerId: 'NATIVE-SHELF-DRAGS',
-    label: 'Native app shelf drags: chips onto tiles, between chips and onto a sidebar desktop, a tile beside a chip, column dividers past the narrowest and after a window resize, and stack chips onto a tile edge',
+    label: 'Native app shelf drags: entries onto tiles, between entries and onto a sidebar desktop, a tile beside an entry, column dividers past the narrowest and after a window resize, and stack entries onto a tile edge',
     command: ['node', 'scripts/real-app-harness/scenario-native-shelf-drags.mjs'],
   },
   {
@@ -195,13 +195,13 @@ export const scenarioCatalog = [
   {
     id: 'native-shelf-moves',
     runnerId: 'NATIVE-SHELF-MOVES',
-    label: 'Native app: a split at capacity keeps its anchor, close keeps focus in the slot, carry and send to the shelf, documents agents open wait on the shelf for the jump key, and chips and the sidebar go to a tile without reordering the row',
+    label: 'Native app: a split at capacity keeps its anchor, close keeps focus in the slot, carry and send to the shelf, documents agents open wait off screen for the jump key, and entries and the sidebar go to a tile without reordering the row',
     command: ['node', 'scripts/real-app-harness/scenario-native-shelf-moves.mjs'],
   },
   {
     id: 'native-shelf-drop-beside',
     runnerId: 'NATIVE-SHELF-DROP-BESIDE',
-    label: 'Native app: a tile dropped beside a chip comes on screen next to it, active, for every drop place on a four-tile row that shows two and when a saved width keeps the pair apart',
+    label: 'Native app: a tile dropped beside an entry comes on screen next to it, active, for every drop place on a four-tile row that shows two and when a saved width keeps the pair apart',
     command: ['node', 'scripts/real-app-harness/scenario-native-shelf-drop-beside.mjs'],
   },
   {

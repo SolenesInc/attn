@@ -5,6 +5,7 @@ use crate::system::{IconSize, Space, door};
 
 /// What a [`GlyphButton`] draws: an icon of [`crate::icon`], or text such as a mark of
 /// [`crate::glyph`] or `Aa`.
+#[derive(Clone)]
 pub enum Glyph {
     Icon(&'static Icon),
     Text(String),

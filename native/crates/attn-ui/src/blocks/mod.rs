@@ -108,7 +108,7 @@ pub use screen::Screen;
 pub use section::Section;
 pub use setting_row::SettingRow;
 pub use sheet::Sheet;
-pub use shelf::Shelf;
+pub use shelf::{CountSide, MemberState, Place, Shelf, ShelfCount, ShelfEntry, ShelfMember};
 
 /// `blocks` one under another, spaced by what they are, for a surface that is not a page.
 pub(crate) fn stacked(blocks: Vec<Block>) -> rune::El {

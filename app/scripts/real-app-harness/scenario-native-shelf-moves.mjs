@@ -19,7 +19,7 @@ const execFileAsync = promisify(execFile);
 const options = parseCommonArgs(process.argv.slice(2));
 const runner = createScenarioRunner(options, {
   scenarioId: 'NATIVE-SHELF-MOVES', tier: 'tier2-local-mock-agent', prefix: 'native-shelf-moves',
-  metadata: { focus: 'On a native row of shells past the screen: a split at capacity keeps its anchor, close keeps focus in the slot, carry and send to the shelf keep the keyboard, documents agents open wait on the shelf or show beside an agent on screen and the jump key brings them without reordering the row, chips and the sidebar go to a tile, and chips say what needs the person' },
+  metadata: { focus: 'On a native row of shells past the screen: a split at capacity keeps its anchor, close keeps focus in the slot, carry and send to the shelf keep the keyboard, documents agents open wait on the shelf or show beside an agent on screen and the jump key shows them without reordering the row, entries and the sidebar go to a tile, and entries say what needs the person' },
 });
 const client = new UiAutomationClient({ appPath: options.appPath });
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -48,9 +48,9 @@ async function screen() {
   return nodes.filter((node) => /^tile\.[^.]+$/.test(node.key)).sort((a, b) => a.bounds[0] - b.bounds[0]).map((node) => node.key.slice('tile.'.length));
 }
 
-async function chip(leaf) {
-  await driver.waitFor({ key: `shelf.chip.${leaf}` });
-  const found = keyedNodes(await driver.tree()).find((node) => node.key === `shelf.chip.${leaf}`);
+async function saidOf(leaf) {
+  await driver.waitFor({ key: `shelf.entry.${leaf}` });
+  const found = keyedNodes(await driver.tree()).find((node) => node.key === `shelf.entry.${leaf}`);
   return found?.value ?? '';
 }
 
@@ -137,7 +137,7 @@ try {
     runner.assert(row().join() === rowBefore.join(), 'going to the tile leaves the row order alone', { row: row(), rowBefore });
   };
   const closeDocument = async (leaf) => {
-    if (!(await screen()).includes(leaf)) await driver.click({ key: `shelf.chip.${leaf}` });
+    if (!(await screen()).includes(leaf)) await driver.click({ key: `shelf.entry.${leaf}` });
     await driver.click({ key: `tile.${leaf}.header` }, { at: [0.05, 0.5] });
     await observer.waitFor(() => active() === leaf, 'the document is active');
     await driver.pressKey(keys.close);
@@ -187,7 +187,7 @@ try {
     runner.assert(shown.includes(anchor) && shown.includes(opened), 'the anchor stays on screen beside the new tile', { shown, anchor, opened });
     runner.assert(shown.length === shownBefore.length, 'the screen keeps its tile count', { shown, shownBefore });
     const left = shownBefore.find((id) => !shown.includes(id));
-    runner.log('the column that left', { left, value: await chip(left) });
+    runner.log('the column that left', { left, value: await saidOf(left) });
     await shot('split-at-capacity');
   });
 
@@ -214,16 +214,16 @@ try {
 
     await driver.pressKey(keys.send);
     await driver.waitFor({ key: `tile.${moving}` }, { gone: true });
-    await chip(moving);
+    await saidOf(moving);
     await observer.waitFor(() => active() !== moving, 'the next tile takes over');
     const next = active();
     await landOn(next, 'the next tile takes the keyboard');
     await shot('sent-to-shelf');
+    const sentRow = row();
 
-    await driver.click({ key: `shelf.chip.${moving}` });
-    await landOn(moving, 'the chip brings the tile back');
-    const brought = await screen();
-    runner.assert(brought.includes(next) && brought.includes(moving), 'a chip brings the tile beside the active one, which stays on screen', { brought, next, moving });
+    await driver.click({ key: `shelf.entry.${moving}` });
+    await landOn(moving, 'the entry shows the tile');
+    await assertJumpedTo(moving, sentRow);
   });
 
   await runner.step('an_agent_opening_a_document_while_the_user_types_keeps_the_keys_in_the_terminal', async () => {
@@ -253,14 +253,14 @@ try {
     runner.assert(shownAfter.join() === shownBefore.join(), 'closing the document restores the screen', { shownBefore, shownAfter });
   });
 
-  await runner.step('the_jump_key_brings_an_unseen_document_and_closing_restores_the_screen', async () => {
+  await runner.step('the_jump_key_shows_an_unseen_document_and_closing_restores_the_screen', async () => {
     await walkTo((await screen()).at(-1));
     const before = row();
     const shownBefore = await screen();
     const owner = await offScreen();
     const was = active();
     const documentLeaf = await agentOpensDocument(owner, 'waiting.md');
-    runner.assert((await chip(documentLeaf)).includes('needs you'), 'the document waits on the shelf as needing the person');
+    runner.assert((await saidOf(documentLeaf)).includes('needs you'), 'the document waits on the shelf as needing the person');
     runner.assert((await screen()).join() === shownBefore.join(), 'the screen stays as it was', { shownBefore });
     runner.assert(active() === was, 'focus stays as it was', { was });
     await shot('document-waiting-on-the-shelf');
@@ -269,8 +269,8 @@ try {
     await driver.pressKey(keys.jump);
     await landOn(documentLeaf, 'the jump key shows the document');
     await assertJumpedTo(documentLeaf, rowBeforeJump);
-    await driver.waitFor({ key: `shelf.chip.${documentLeaf}` }, { gone: true });
-    await shot('document-brought');
+    runner.assert(!(await saidOf(documentLeaf)).includes('needs you'), 'a document on screen no longer needs the person');
+    await shot('document-shown');
 
     await driver.pressKey(keys.close);
     await waitForRow((current) => current.length === before.length, 'the document leaves the row');
@@ -283,12 +283,12 @@ try {
   await runner.step('a_document_sent_to_the_shelf_waits_when_its_agent_opens_it_again', async () => {
     const owner = await offScreen();
     const documentLeaf = await agentOpensDocument(owner, 'again.md');
-    runner.assert((await chip(documentLeaf)).includes('needs you'), 'the document waits on the shelf');
+    runner.assert((await saidOf(documentLeaf)).includes('needs you'), 'the document waits on the shelf');
     await driver.pressKey(keys.jump);
     await landOn(documentLeaf, 'the jump key shows the document');
     await driver.pressKey(keys.send);
     await driver.waitFor({ key: `tile.${documentLeaf}` }, { gone: true });
-    runner.assert(!(await chip(documentLeaf)).includes('needs you'), 'a document the person saw and sent away waits as seen');
+    runner.assert(!(await saidOf(documentLeaf)).includes('needs you'), 'a document the person saw and sent away waits as seen');
     await walkTo((await screen()).at(-1));
     const was = active();
     const shownBefore = await screen();
@@ -296,7 +296,7 @@ try {
     const askedBefore = asked(documentLeaf);
     await agentRunsOpen(owner, 'again.md');
     await observer.waitFor(() => asked(documentLeaf) > askedBefore, 'the agent asks to show the document again');
-    runner.assert((await chip(documentLeaf)).includes('needs you'), 'asking again makes it wait as unseen');
+    runner.assert((await saidOf(documentLeaf)).includes('needs you'), 'asking again makes it wait as unseen');
     runner.assert((await screen()).join() === shownBefore.join(), 'the screen stays as it was', { shownBefore });
     runner.assert(active() === was, 'focus stays as it was', { was });
     await shot('document-waiting-again');
@@ -349,7 +349,7 @@ try {
     await driver.click({ key: `sidebar.desktop.${desktop.id}` });
     await observer.waitFor(() => observer.currentDesktopId() === desktop.id, 'the row is current again');
     await driver.waitFor({ key: `tile.${was}` });
-    runner.assert((await chip(documentLeaf)).includes('needs you'), 'the document waits on the shelf');
+    runner.assert((await saidOf(documentLeaf)).includes('needs you'), 'the document waits on the shelf');
     await shot('document-waiting-after-away');
     const rowBeforeJump = row();
     await driver.pressKey(keys.jump);
@@ -359,26 +359,7 @@ try {
     await waitForRow((current) => !current.includes(documentLeaf), 'the document leaves the row');
   });
 
-  await runner.step('a_brought_tile_replaces_a_neighbour_and_the_selected_tile_stays', async () => {
-    const [first] = row();
-    await walkTo(first);
-    await shot('bring-selected-on-the-left-before');
-    const fromLeft = await offScreen();
-    await driver.click({ key: `shelf.chip.${fromLeft}` });
-    await landOn(fromLeft, 'the chip brings its tile');
-    const afterLeft = await screen();
-    runner.assert(afterLeft[0] === first && afterLeft[1] === fromLeft, 'the selected tile on the left stays and the right neighbour is replaced', { afterLeft, first, fromLeft });
-    await shot('bring-selected-on-the-left-after');
-
-    const fromRight = await offScreen();
-    await driver.click({ key: `shelf.chip.${fromRight}` });
-    await landOn(fromRight, 'the chip brings its tile');
-    const afterRight = await screen();
-    runner.assert(afterRight[0] === fromRight && afterRight[1] === fromLeft, 'the selected tile on the right stays and the left neighbour is replaced', { afterRight, fromLeft, fromRight });
-    await shot('bring-selected-on-the-right-after');
-  });
-
-  await runner.step('chips_say_what_needs_the_person', async () => {
+  await runner.step('entries_say_what_needs_the_person', async () => {
     const id = crypto.randomUUID();
     const cwd = path.join(runner.sessionDir, 'waiting-agent');
     fs.mkdirSync(cwd, { recursive: true });
@@ -401,14 +382,14 @@ try {
     runner.assert(!shown.includes(agent), 'the agent sits on the shelf', { shown, agent });
     const plain = row().find((leaf) => leaf !== agent && sessionOf(leaf) && !shown.includes(leaf));
     const documentLeaf = await agentOpensDocument(plain, 'unseen.md');
-    runner.assert((await chip(agent)).includes('needs you'), 'a waiting agent\'s chip needs the person', { value: await chip(agent) });
-    runner.assert((await chip(documentLeaf)).includes('needs you'), 'an unseen document\'s chip needs the person');
-    runner.assert(!(await chip(plain)).includes('needs you'), 'a plain chip does not');
+    runner.assert((await saidOf(agent)).includes('needs you'), 'a waiting agent\'s entry needs the person', { value: await saidOf(agent) });
+    runner.assert((await saidOf(documentLeaf)).includes('needs you'), 'an unseen document\'s entry needs the person');
+    runner.assert(!(await saidOf(plain)).includes('needs you'), 'a plain entry does not');
     await shot('attention-on-the-shelf');
     await closeDocument(documentLeaf);
   });
 
-  await runner.step('going_to_a_tile_from_the_sidebar_or_a_chip_leaves_the_row_alone', async () => {
+  await runner.step('going_to_a_tile_from_the_sidebar_or_an_entry_leaves_the_row_alone', async () => {
     const rowBeforeSidebar = row();
     const fromSidebar = await offScreen();
     await driver.click({ key: `sidebar.session.${sessionOf(fromSidebar)}` });
@@ -416,18 +397,25 @@ try {
     await assertJumpedTo(fromSidebar, rowBeforeSidebar);
     await shot('jump-from-sidebar');
 
+    const rowBeforeEntry = row();
+    const fromEntry = await offScreen();
+    await driver.click({ key: `shelf.entry.${fromEntry}` });
+    await landOn(fromEntry, 'the entry shows its tile');
+    await assertJumpedTo(fromEntry, rowBeforeEntry);
+    await shot('jump-from-entry');
+
     for (let count = (await screen()).length; count > 1; count -= 1) {
       await driver.pressKey(keys.fewer);
       await driver.waitFor(tileCount(count - 1));
     }
-    const rowBeforeChip = row();
+    const rowBeforeAlone = row();
     const [only] = await screen();
-    const fromChip = rowBeforeChip[rowBeforeChip.indexOf(only) + 1] ?? rowBeforeChip[rowBeforeChip.indexOf(only) - 1];
-    await driver.click({ key: `shelf.chip.${fromChip}` });
-    await landOn(fromChip, 'the chip shows its tile');
-    await assertJumpedTo(fromChip, rowBeforeChip);
-    runner.assert((await screen()).join() === fromChip, 'a chip with one tile on screen shows only that tile', { fromChip });
-    await shot('jump-from-chip-with-one-tile');
+    const alone = rowBeforeAlone[rowBeforeAlone.indexOf(only) + 1] ?? rowBeforeAlone[rowBeforeAlone.indexOf(only) - 1];
+    await driver.click({ key: `shelf.entry.${alone}` });
+    await landOn(alone, 'the entry shows its tile alone');
+    await assertJumpedTo(alone, rowBeforeAlone);
+    runner.assert((await screen()).join() === alone, 'an entry with one tile on screen shows only that tile', { alone });
+    await shot('jump-from-entry-with-one-tile');
   });
 
   const frontmostAfter = checksFocus ? await driver.frontmostBundleId() : null;

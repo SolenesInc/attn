@@ -14,7 +14,7 @@ const BAND_PX = 32;
 const options = parseCommonArgs(process.argv.slice(2));
 const runner = createScenarioRunner(options, {
   scenarioId: 'NATIVE-TITLE-BAR', tier: 'tier1-local-shell', prefix: 'native-title-bar',
-  metadata: { focus: 'In the native app clicks reach every control of the title bar, a chip in it opens its peek, a tile dropped on a chip lands beside it, and tiles start below the band with the sidebar open or hidden, without the app taking focus' },
+  metadata: { focus: 'In the native app clicks reach every control of the title bar, an entry in it opens its peek, a tile dropped on an entry lands beside it, and tiles start below the band with the sidebar open or hidden, without the app taking focus' },
 });
 const client = new UiAutomationClient({ appPath: options.appPath });
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -24,7 +24,7 @@ runner.registerCleanup('quit_app', () => client.quitApp());
 
 const BAND = { key: 'titlebar' };
 const PEEK = { key: 'shelf.peek' };
-const chip = (leaf) => ({ key: `shelf.chip.${leaf}` });
+const entry = (leaf) => ({ key: `shelf.entry.${leaf}` });
 const header = (leaf) => ({ key: `tile.${leaf}.header` });
 const shot = (name) => driver.screenshot(path.join(runner.runDir, `${name}.png`));
 
@@ -135,33 +135,33 @@ try {
     await assertTilesStartBelowTheBand('sidebar back');
   });
 
-  await runner.step('a_chip_opens_its_peek', async () => {
+  await runner.step('an_entry_opens_its_peek', async () => {
     const shown = await shownLeaves();
     const target = shells.find((shell) => !shown.includes(shell.pane));
     const { rect: band } = await driver.waitFor(BAND);
-    const { rect: at } = await driver.waitFor(chip(target.pane));
-    runner.assert(at[1] >= band[1] && at[1] + at[3] <= band[1] + band[3], 'the chip sits in the band', { band, at });
-    await driver.hover(chip(target.pane));
+    const { rect: at } = await driver.waitFor(entry(target.pane));
+    runner.assert(at[1] >= band[1] && at[1] + at[3] <= band[1] + band[3], 'the entry sits in the band', { band, at });
+    await driver.hover(entry(target.pane));
     const peek = await driver.waitFor(PEEK);
-    runner.assert(peek.name === target.label, 'the chip peeks at its tile', { peek, target });
-    await shot('peek-from-band-chip');
+    runner.assert(peek.name === target.label, 'the entry peeks at its tile', { peek, target });
+    await shot('peek-from-band-entry');
     await driver.pressKey('Escape');
     await driver.waitFor(PEEK, { gone: true });
     await driver.hover({ key: `tile.${shown.at(-1)}` });
   });
 
-  await runner.step('a_tile_drops_beside_a_chip', async () => {
+  await runner.step('a_tile_drops_beside_an_entry', async () => {
     const shown = await shownLeaves();
     const tile = shown.find((leaf) => leaf !== active());
     const anchor = readRow().find((leaf) => !shown.includes(leaf));
-    await driver.drag(header(tile), { target: chip(anchor), at: [0.1, 0.5] });
+    await driver.drag(header(tile), { target: entry(anchor), at: [0.1, 0.5] });
     await observer.waitFor(() => {
       const after = readRow();
       return (active() === tile && after.indexOf(tile) === after.indexOf(anchor) - 1) || null;
     }, `${tile} lands just before ${anchor} and is active`);
     await driver.waitFor({ key: `tile.${tile}` });
     await driver.waitFor({ key: `tile.${anchor}` });
-    await shot('tile-beside-the-band-chip');
+    await shot('tile-beside-the-band-entry');
   });
 
   const frontmostAfter = checksFocus ? await driver.frontmostBundleId() : null;

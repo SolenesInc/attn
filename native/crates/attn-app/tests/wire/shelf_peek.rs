@@ -208,9 +208,9 @@ fn rest_on(world: &mut World, key: &str) {
     move_to(world, at);
 }
 
-/// Rests on the chip of `leaf` until its peek opens.
+/// Rests on the entry of `leaf` until its peek opens.
 fn peek_at(world: &mut World, leaf: &str) {
-    rest_on(world, &format!("shelf.chip.{leaf}"));
+    rest_on(world, &format!("shelf.entry.{leaf}"));
     world.advance(Duration::from_millis(200));
 }
 
@@ -305,17 +305,17 @@ fn reads(world: &World) -> usize {
 }
 
 #[test]
-fn a_chip_that_arrives_under_a_still_pointer_peeks_only_once_the_pointer_moves() {
+fn an_entry_that_arrives_under_a_still_pointer_peeks_only_once_the_pointer_moves() {
     let mut world = peeking();
-    let at = middle(&world, "shelf.chip.c");
+    let at = middle(&world, "shelf.entry.c");
     arrange(&mut world, desktop(row([pane("a"), pane("b")])), "a");
     move_to(&mut world, at);
 
     arrange(&mut world, four_in_a_row(), "a");
-    let [x, y, w, h] = world.runtime().presented("shelf.chip.c").unwrap().0;
+    let [x, y, w, h] = world.runtime().presented("shelf.entry.c").unwrap().0;
     assert!(
         (x..x + w).contains(&at.0) && (y..y + h).contains(&at.1),
-        "the chip came under the pointer"
+        "the entry came under the pointer"
     );
     world.advance(Duration::from_secs(1));
     assert!(peek(&world).is_none(), "a still pointer peeks at nothing");
@@ -330,9 +330,29 @@ fn a_chip_that_arrives_under_a_still_pointer_peeks_only_once_the_pointer_moves()
 }
 
 #[test]
-fn moving_on_a_chip_keeps_the_delay_from_the_first_move_and_after_escape_only_coming_back_peeks() {
+fn an_entry_peeked_at_then_gone_to_peeks_again_once_it_is_off_screen() {
     let mut world = peeking();
-    let at = middle(&world, "shelf.chip.c");
+    peek_at(&mut world, "c");
+    assert_eq!(peek(&world).unwrap().name.as_deref(), Some("Agent c"));
+
+    click(&mut world, "shelf.entry.c");
+    arrange(&mut world, four_in_a_row(), "c");
+    move_away(&mut world);
+    arrange(&mut world, four_in_a_row(), "a");
+    assert!(peek(&world).is_none());
+
+    peek_at(&mut world, "c");
+    assert_eq!(peek(&world).unwrap().name.as_deref(), Some("Agent c"));
+    key(&mut world, rune::Key::Escape);
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn moving_on_an_entry_keeps_the_delay_from_the_first_move_and_after_escape_only_coming_back_peeks()
+{
+    let mut world = peeking();
+    let at = middle(&world, "shelf.entry.c");
 
     move_to(&mut world, at);
     world.advance(Duration::from_millis(150));
@@ -343,7 +363,7 @@ fn moving_on_a_chip_keeps_the_delay_from_the_first_move_and_after_escape_only_co
     key(&mut world, rune::Key::Escape);
     move_to(&mut world, at);
     world.advance(Duration::from_secs(1));
-    assert!(peek(&world).is_none(), "the peek stays closed on the chip");
+    assert!(peek(&world).is_none(), "the peek stays closed on the entry");
 
     move_away(&mut world);
     peek_at(&mut world, "c");
@@ -622,12 +642,12 @@ fn open_keeps_a_reply_whose_return_failed_on_the_tile_of_an_agent_that_stopped_b
 }
 
 #[test]
-fn the_tile_of_a_stopped_agent_whose_return_failed_offers_the_reply_when_reached_from_its_chip() {
+fn the_tile_of_a_stopped_agent_whose_return_failed_offers_the_reply_when_reached_from_its_entry() {
     let mut world = peeking();
     reply_whose_return_fails(&mut world, "session not running", false);
     session_changes(&mut world, stopped("c"));
 
-    click(&mut world, "shelf.chip.c");
+    click(&mut world, "shelf.entry.c");
     arrange(&mut world, four_in_a_row(), "c");
 
     assert!(peek(&world).is_none());
@@ -793,7 +813,7 @@ fn enter_sends_nothing_more_while_a_reply_is_unanswered_and_a_dropped_daemon_lea
 }
 
 #[test]
-fn the_smallest_window_at_large_text_keeps_the_cap_that_reaches_the_columns_off_screen() {
+fn the_smallest_window_at_large_text_keeps_the_count_that_reaches_the_columns_off_screen() {
     let columns = ["a", "b", "d", "e", "f", "g", "h", "i", "c", "j"];
     for size in [(800.0, 600.0), (900.0, 600.0)] {
         let daemon = daemon_with(desktop(row(columns.into_iter().map(pane))), session("c"))
@@ -806,14 +826,14 @@ fn the_smallest_window_at_large_text_keeps_the_cap_that_reaches_the_columns_off_
         world.resize(size);
         world.open_desktop();
         assert!(
-            world.runtime().presented("shelf.cap.after").is_some(),
-            "at {size:?} the shelf keeps the cap over the columns after the screen"
+            world.runtime().presented("shelf.count.after").is_some(),
+            "at {size:?} the shelf keeps the count over the columns after the screen"
         );
-        click(&mut world, "shelf.cap.after");
+        click(&mut world, "shelf.count.after");
         peek_at(&mut world, "c");
         assert!(
             peek(&world).is_some(),
-            "at {size:?} a column in the cap peeks"
+            "at {size:?} a column in the count peeks"
         );
     }
 }

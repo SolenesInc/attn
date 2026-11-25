@@ -924,7 +924,7 @@ fn the_cheat_sheet_lists_its_rows_with_paired_keys_and_notes() {
     assert_eq!(
         shelf.description,
         Some(format!(
-            "A held tile returns with a chip, {} or a restart.",
+            "A held tile returns with its entry, {} or a restart.",
             keys(Action::SessionJumpToWaiting)
         ))
     );
