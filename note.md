@@ -1,0 +1,1 @@
+The overview's key legend stands where it did before fbeef950b when it fits. Giving every hint a measured minimum width had moved it a point or two. In a narrow window the longest hints still shorten. The screenshot tour's overview is pixel-identical to 52ff8b53c again; its empty desktop differs only by the shelf, which 725b48806 takes away there.
