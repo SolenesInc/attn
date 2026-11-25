@@ -9,6 +9,7 @@ use attn::go::flag::{Flag, FlagDefault, FlagSet, Value};
 use attn::go::quote::quote;
 use attn::go::tabwriter;
 use attn_protocol::go_values::{ATTACHMENT_OWNER_QUICK_CAPTURE, QUICK_CAPTURE_MAILBOX_SESSION};
+use attn_protocol::session_id::short;
 use attn_protocol::{
     AttachmentDiscardMessage, AttachmentOwner, AttachmentPutMessage, AttachmentResult,
     PairedSender, PairedSenderToken, QuickCaptureMailbox, QuickCaptureResult,
@@ -196,7 +197,7 @@ fn send(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     print_stdout(&format!(
         "Sent {} file(s) and the message to session {} as capture {}.\n",
         record.attachments.len(),
-        record.mailbox.session_id.unwrap_or_default(),
+        short(record.mailbox.session_id.as_deref().unwrap_or_default()),
         record.id
     ));
     Ok(())
@@ -240,7 +241,7 @@ impl Capture<'_> {
                 format!("session {session}: {}", daemon_message(&error))
             })?;
         if shown.entry.closed_at.is_some() {
-            return Err(format!("session {} is closed", shown.entry.id));
+            return Err(format!("session {} is closed", short(&shown.entry.id)));
         }
         let profile_id = shown.entry.profile_id.clone();
         let capture_id = new_uuid();
@@ -533,7 +534,7 @@ fn sessions(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
         let _ = writeln!(
             table,
             "{}\t{}\t{}\t{}\t{}\t{}",
-            session.id,
+            short(&session.id),
             session.agent,
             session.state,
             or_dash(

@@ -8,9 +8,11 @@ file gives the rules.
 
 ## Who else is here
 
-`attn agent list` lists the sessions you can address. It prints a short id for
-each session. Any unique prefix works, and `--json` adds the full ids and the
-machine-readable shape. The stable name of a crew member in session also works as the
+`attn agent list` lists the sessions you can address. It prints each session's
+short id, such as `ag-7yd2r4`. Use the short id when you name a session to the
+user or to another agent. Commands take the short id, the full id or a unique
+prefix of the full id. `--json` carries full ids and the machine-readable shape.
+The stable name of a crew member in session also works as the
 address for `peek`, `msg` and `reload`.
 
 `attn session list --tree` shows every live session under its dispatcher, with
@@ -138,9 +140,9 @@ lose non-persistent state. Before you reload, save anything you need. The
 session stays in place and resumes its saved conversation when one is
 available.
 
-Use full session ids, unique prefixes, or the name of a crew member in session. Naming
-a member between sessions starts nothing. A session may reload itself and the agents below
-it in the delegation chain, including delegates of delegates.
+`reload` takes the same references as `peek`, and naming a member between
+sessions starts nothing. A session may reload itself and the agents below it in
+the delegation chain, including delegates of delegates.
 The profile's chief may reload any agent in that profile. These rules apply to
 chief and crew sessions too, even though they are protected from closing.
 The command does not reload shells.

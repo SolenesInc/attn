@@ -96,7 +96,7 @@ try {
   });
 
   await runner.step('ledger_lists_the_cleared_session', async () => {
-    const closed = cli('session', 'list', '--closed');
+    const closed = cli('session', 'list', '--closed', '--json');
     runner.assert(closed.includes(run.first), 'session list --closed lists the cleared session', { closed });
     const shownByCli = cli('session', 'show', run.first);
     runner.assert(/^state\s+closed$/m.test(shownByCli), 'session show reports the cleared session closed', { shown: shownByCli });

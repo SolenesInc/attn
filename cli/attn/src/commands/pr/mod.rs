@@ -5,6 +5,7 @@ use super::{Run, Stop, print_json, print_stdout};
 use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
 use attn::go::tabwriter;
+use attn_protocol::session_id::short;
 use attn_protocol::{PullRequestListResult, PullRequestResult, PullRequestWatchResult};
 use std::ffi::OsString;
 use std::fmt::Write as _;
@@ -105,7 +106,9 @@ fn watched(result: &PullRequestWatchResult) -> String {
         ),
         None => format!(
             "watching {} in {} mode for session {}; updates arrive in the agent inbox\n",
-            result.url, result.mode, result.session_id
+            result.url,
+            result.mode,
+            short(&result.session_id)
         ),
     }
 }
@@ -115,12 +118,18 @@ fn recorded(verb: &str, result: &PullRequestResult) -> String {
         ("unwatch", Some(seed)) => format!("stopped watching {} for seed {seed}\n", result.url),
         ("unwatch", None) => format!(
             "stopped watching {} for session {}\n",
-            result.url, result.session_id
+            result.url,
+            short(&result.session_id)
         ),
-        ("forget", _) => format!("forgot {} for session {}\n", result.url, result.session_id),
+        ("forget", _) => format!(
+            "forgot {} for session {}\n",
+            result.url,
+            short(&result.session_id)
+        ),
         _ => format!(
             "recorded {} for session {}\n",
-            result.url, result.session_id
+            result.url,
+            short(&result.session_id)
         ),
     }
 }
@@ -131,11 +140,11 @@ fn list(verb: &str, result: &PullRequestListResult) -> String {
             (Some(seed), _) => format!("seed {seed} has no watched pull requests\n"),
             (None, "status") => format!(
                 "session {} has no watched pull requests\n",
-                result.session_id
+                short(&result.session_id)
             ),
             (None, _) => format!(
                 "session {} has opened no pull requests\n",
-                result.session_id
+                short(&result.session_id)
             ),
         };
     }

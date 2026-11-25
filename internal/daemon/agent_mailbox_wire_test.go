@@ -9,6 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionref"
 )
 
 const inboxDoorbell = "You have unread items in your attn inbox. Run attn agent inbox to read them."
@@ -131,6 +132,10 @@ func TestAgentMessageIsReadableByIDOnlyByItsRecipientAndSurvivesARestart(t *test
 	if left := readInbox(t, cli, recipient, 0); len(left.Items) != 0 {
 		t.Errorf("the inbox still holds %q after the message was read", inboxContents(left.Items))
 	}
+}
+
+func shortID[ID ~string](session ID) string {
+	return sessionref.Short(protocol.SessionID(session))
 }
 
 func registerSessions(t *testing.T, w *world, cli *client.Client, ids ...string) {

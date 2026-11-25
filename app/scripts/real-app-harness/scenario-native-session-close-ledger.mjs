@@ -100,9 +100,9 @@ try {
     runner.assert(/^state\s+closed$/m.test(shown), 'session show reports the session closed', { shown });
     runner.assert(/^closed\s+.* by user$/m.test(shown), 'session show names the user as the closer', { shown });
     runner.assert(/^worktree\s+yes, of /m.test(shown), 'session show keeps the worktree it ran in', { shown });
-    const closed = cli('session', 'list', '--closed');
+    const closed = cli('session', 'list', '--closed', '--json');
     runner.assert(closed.includes(sessionId), 'session list --closed lists the closed session', { closed });
-    const live = cli('session', 'list');
+    const live = cli('session', 'list', '--json');
     runner.assert(!live.includes(sessionId), 'session list leaves out a closed session', { live });
     runner.writeText('session-show.txt', shown);
     await driver.run('sessions.open');

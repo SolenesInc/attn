@@ -218,7 +218,7 @@ try {
   });
 
   await runner.step('the_cli_and_the_list_agree', async () => {
-    const shown = cli('session', 'list', '--all', '--repository', repo);
+    const shown = cli('session', 'list', '--all', '--repository', repo, '--json');
     runner.assert(shown.includes(sessions.one) && shown.includes(sessions.two), 'the CLI repository filter answers the same rows', { shown });
     runner.assert(!shown.includes(sessions.elsewhere), 'the CLI repository filter leaves out the other repository', { shown });
   });

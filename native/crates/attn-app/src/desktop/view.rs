@@ -1,4 +1,5 @@
 use attn_client::Desktop;
+use attn_protocol::session_id::short;
 use attn_protocol::{DesktopPane, Session};
 use attn_term::mouse;
 use attn_ui::Tokens;
@@ -441,10 +442,6 @@ fn sublines(
         .collect()
 }
 
-fn short_id(session: &str) -> String {
-    session.chars().take(8).collect()
-}
-
 fn id_face(short: String, ink: rune::Color) -> HeaderPiece {
     let width = attn_ui::system::width_of(short.clone(), attn_ui::system::Type::Mono);
     HeaderPiece::new().drawn(
@@ -455,7 +452,7 @@ fn id_face(short: String, ink: rune::Color) -> HeaderPiece {
 
 fn id_width(session: &str) -> Widths {
     Widths {
-        full: id_face(short_id(session), rune::Color::TRANSPARENT).button_width(),
+        full: id_face(short(session).into_owned(), rune::Color::TRANSPARENT).button_width(),
         short: None,
         icon: None,
     }
@@ -1451,7 +1448,7 @@ fn header(leaf: &Leaf, title: &str, look: &super::tile_look::Look, cx: &TileCx) 
 /// The agent header's second line: its seed, its delegation role, the machine it runs on, its usage, where
 /// it came from, and its short id, which copies the whole id.
 fn subline(key: &str, leaf: &str, session: &str, sub: Option<&Subline>, t: &Tokens) -> Vec<El> {
-    let short = short_id(session);
+    let short = short(session).into_owned();
     let id = session.to_owned();
     let at = |piece| sub.and_then(|sub| sub.shows(piece));
     let seed = sub.and_then(|sub| {

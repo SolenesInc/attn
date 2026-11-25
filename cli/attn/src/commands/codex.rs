@@ -13,6 +13,7 @@ use attn::go::time::Time;
 use attn_protocol::go_values::{
     SHARED_CODEX_RESTART_FAILED, SHARED_CODEX_RESTART_PENDING, SHARED_CODEX_RESTART_RESTARTING,
 };
+use attn_protocol::session_id::short;
 use attn_protocol::{
     CodexStatusMessage, CodexStatusResult, QueryMessage, RestartSharedCodexMessage,
 };
@@ -267,7 +268,12 @@ fn round_to_second(nanos: i128) -> i64 {
 }
 
 fn render_status(result: &CodexStatusResult, names: &HashMap<String, String>) -> String {
-    let name = |id: &str| names.get(id).cloned().unwrap_or_else(|| id.to_string());
+    let name = |id: &str| {
+        names
+            .get(id)
+            .cloned()
+            .unwrap_or_else(|| short(id).into_owned())
+    };
     let mut table = format!(
         "profile\t{}\ncodex\t{}\n",
         result.profile_name, result.executable

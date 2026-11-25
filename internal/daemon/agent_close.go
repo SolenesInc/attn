@@ -197,7 +197,7 @@ func (d *Daemon) resolveAgentCloseTarget(msg *agentCloseRequest, caller *protoco
 		return target, nil
 	case errors.Is(err, errAmbiguousSession):
 		return nil, &agentCloseRefusal{err.Error(), fmt.Sprintf(
-			"%q matches more than one session; give more of the id (`attn agent list --json` carries full ids)", reference)}
+			"%q matches more than one session; give more of the full id (`attn agent list --json` carries full ids)", reference)}
 	default:
 		return nil, &agentCloseRefusal{err.Error(), fmt.Sprintf(
 			"no session matches %q; `attn agent list` names the sessions this daemon can reach", reference)}

@@ -132,7 +132,7 @@ func (d *Daemon) awaitLaunch(sessionID protocol.SessionID, watch *launchWatch, g
 
 func launchExitError(agent string, sessionID protocol.SessionID, exit *store.SessionExitScreen) error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s exited with %s before its first turn (session %s)", agent, describeExit(exit), sessionID)
+	fmt.Fprintf(&b, "%s exited with %s before its first turn (session %s)", agent, describeExit(exit), shortSessionID(sessionID))
 	if exit.ExitCode != 0 || exit.ExitSignal != "" {
 		fmt.Fprintf(&b, "; `attn agent peek %s` shows what it left", shortSessionID(sessionID))
 	}

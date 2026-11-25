@@ -19,11 +19,11 @@ func TestOpeningAMembersOldDayWhileItIsInSessionElsewhereIsRefused(t *testing.T)
 	w.Launched(string(current.SessionID))
 
 	revived := attachRevive(app, string(old), 80, 24)
-	if revived.Success || !strings.Contains(protocol.Deref(revived.Error), string(current.SessionID)[:8]) {
+	if revived.Success || !strings.Contains(protocol.Deref(revived.Error), shortID(current.SessionID)) {
 		t.Fatalf("opening alder's old day %s answered %+v, want a refusal naming the live day %s", old, revived, current.SessionID)
 	}
 	_, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: old})
-	crewErrorContains(t, err, "Alder is in session "+string(current.SessionID)[:8])
+	crewErrorContains(t, err, "Alder is in session "+shortID(current.SessionID))
 
 	if got := protocol.Deref(crewRosterMember(t, cli, "alder").BindingSession); got != current.SessionID {
 		t.Fatalf("after the refusals alder is bound to %q, want %s", got, current.SessionID)

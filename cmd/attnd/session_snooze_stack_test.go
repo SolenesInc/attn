@@ -26,7 +26,7 @@ func TestSessionSnoozeCLIShowsBatchDeadlinesAndUnsnoozes(t *testing.T) {
 	}
 	until := time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)
 	snoozed := s.Attn("session", "snooze", first, second, "--until", until)
-	if snoozed.Code != 0 || !strings.Contains(snoozed.Stdout, first+" snoozed until "+until) || !strings.Contains(snoozed.Stdout, second+" snoozed until "+until) {
+	if snoozed.Code != 0 || !strings.Contains(snoozed.Stdout, shortID(first)+" snoozed until "+until) || !strings.Contains(snoozed.Stdout, shortID(second)+" snoozed until "+until) {
 		t.Fatalf("batch snooze: %+v", snoozed)
 	}
 	t.Logf("batch snooze output:\n%s", snoozed.Stdout)
@@ -73,7 +73,7 @@ func TestSessionSnoozeCLIShowsBatchDeadlinesAndUnsnoozes(t *testing.T) {
 	}
 
 	partial := s.Run(testworld.Invocation{Session: first, Args: []string{"session", "snooze", second, first, "missing", "--until", "1h"}})
-	if partial.Code != 1 || !strings.Contains(partial.Stdout, first+" snoozed until") || !strings.Contains(partial.Stderr, "may snooze itself") || !strings.Contains(partial.Stderr, "unknown live session missing") {
+	if partial.Code != 1 || !strings.Contains(partial.Stdout, shortID(first)+" snoozed until") || !strings.Contains(partial.Stderr, "may snooze itself") || !strings.Contains(partial.Stderr, "unknown live session missing") {
 		t.Fatalf("partial batch: %+v", partial)
 	}
 	denied := s.Run(testworld.Invocation{Session: first, Args: []string{"session", "unsnooze", second}})

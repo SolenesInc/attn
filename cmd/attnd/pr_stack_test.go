@@ -306,7 +306,7 @@ func TestPRSessionCommandsRecordForgetAndWatchASessionsPullRequests(t *testing.T
 		{"--session=" + id, url + "3"},
 	} {
 		recorded := s.Attn(append([]string{"pr", "record"}, args...)...)
-		if want := fmt.Sprintf("recorded %s%d for session %s\n", url, i+1, id); recorded.Code != 0 || recorded.Stdout != want {
+		if want := fmt.Sprintf("recorded %s%d for session %s\n", url, i+1, shortID(id)); recorded.Code != 0 || recorded.Stdout != want {
 			t.Errorf("pr record %q exited %d with %q, want %q", args, recorded.Code, recorded.Stdout+recorded.Stderr, want)
 		}
 	}
@@ -338,7 +338,7 @@ func TestPRSessionCommandsRecordForgetAndWatchASessionsPullRequests(t *testing.T
 		t.Errorf("pr ls after forgetting 2 = %q", got)
 	}
 	watched := inSession("watch", url+"1", "--mode", "formal-review", "--reviewer", "victor")
-	if watched.Code != 0 || !strings.Contains(watched.Stdout, "watching "+url+"1 in formal-review mode for session "+id) {
+	if watched.Code != 0 || !strings.Contains(watched.Stdout, "watching "+url+"1 in formal-review mode for session "+shortID(id)) {
 		t.Errorf("pr watch exited %d with %q", watched.Code, watched.Stdout+watched.Stderr)
 	}
 	if got := listed("status"); !slices.Equal(got, []string{"1formal-review"}) {

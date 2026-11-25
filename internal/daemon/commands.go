@@ -132,9 +132,9 @@ func (d *Daemon) resolveFramedSession(cmd string, named protocol.SessionID, scop
 	case err == nil:
 		return match.ID(), match.ProfileID(), nil
 	case errors.Is(err, errAmbiguousSession) && target:
-		return "", "", command.Refuse(command.CodeAmbiguousSession, "session %s matches more than one session; give more of the id", named)
+		return "", "", command.Refuse(command.CodeAmbiguousSession, "session %s matches more than one session; give more of the full id", named)
 	case errors.Is(err, errAmbiguousSession):
-		return "", "", command.Refuse(command.CodeAmbiguousSession, "the %s %q matches more than one session; give more of the id", command.CallerRole(cmd), named)
+		return "", "", command.Refuse(command.CodeAmbiguousSession, "the %s %q matches more than one session; give more of the full id", command.CallerRole(cmd), named)
 	case !errors.Is(err, errSessionNotFound):
 		return "", "", err
 	case target:

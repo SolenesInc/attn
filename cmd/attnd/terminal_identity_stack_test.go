@@ -30,16 +30,16 @@ func TestACommandCarryingItsTerminalsIDSpeaksAsTheSessionTheTerminalShows(t *tes
 	if carried == session {
 		t.Fatalf("terminal %s must differ from session %s", carried, session)
 	}
-	if got := fromTheAgent("presence"); got.Code != 0 || strings.TrimSpace(got.Stdout) != "running inside attn (session "+session+")" {
+	if got := fromTheAgent("presence"); got.Code != 0 || strings.TrimSpace(got.Stdout) != "running inside attn (session "+shortID(session)+")" {
 		t.Fatalf("presence: %+v", got)
 	}
 	if got := fromTheAgent("presence", "--session-id"); got.Code != 0 || got.Stdout != session+"\n" {
 		t.Fatalf("presence --session-id: %+v", got)
 	}
-	if got := s.Run(testworld.Invocation{Args: []string{"presence"}, Env: []string{"ATTN_INSIDE_APP=1", "ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=" + carried}}); got.Code != 0 || strings.TrimSpace(got.Stdout) != "running inside attn (session "+session+")" {
+	if got := s.Run(testworld.Invocation{Args: []string{"presence"}, Env: []string{"ATTN_INSIDE_APP=1", "ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=" + carried}}); got.Code != 0 || strings.TrimSpace(got.Stdout) != "running inside attn (session "+shortID(session)+")" {
 		t.Fatalf("legacy terminal spelling: %+v", got)
 	}
-	if got := fromTheAgent("session", "rename", "checkout"); got.Code != 0 || strings.TrimSpace(got.Stdout) != session+` renamed to "checkout"` {
+	if got := fromTheAgent("session", "rename", "checkout"); got.Code != 0 || strings.TrimSpace(got.Stdout) != shortID(session)+` renamed to "checkout"` {
 		t.Fatalf("rename exited %d: %s", got.Code, got.Stderr)
 	}
 	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.Label == "checkout" })
@@ -48,7 +48,7 @@ func TestACommandCarryingItsTerminalsIDSpeaksAsTheSessionTheTerminalShows(t *tes
 	if string(moved.SessionID) != session {
 		t.Errorf("terminal move from the agent moved %+v, want its own session %s", moved, session)
 	}
-	if listed := fromTheAgent("pr", "ls"); listed.Code != 0 || listed.Stdout != "session "+session+" has opened no pull requests\n" {
+	if listed := fromTheAgent("pr", "ls"); listed.Code != 0 || listed.Stdout != "session "+shortID(session)+" has opened no pull requests\n" {
 		t.Errorf("pr ls exited %d and printed %q, want the session's own empty list", listed.Code, listed.Stdout)
 	}
 
@@ -96,20 +96,20 @@ func TestCallerReceiptsFollowAClearInTheSameTerminal(t *testing.T) {
 	fromAgent := func(args ...string) testworld.Result {
 		return s.Run(testworld.Invocation{Args: args, Terminal: terminalID})
 	}
-	if got := fromAgent("presence"); got.Code != 0 || strings.TrimSpace(got.Stdout) != "running inside attn (session "+string(next.ID)+")" {
+	if got := fromAgent("presence"); got.Code != 0 || strings.TrimSpace(got.Stdout) != "running inside attn (session "+shortID(next.ID)+")" {
 		t.Fatalf("presence after clear: %+v", got)
 	}
-	if got := fromAgent("session", "rename", "after clear"); got.Code != 0 || strings.TrimSpace(got.Stdout) != string(next.ID)+` renamed to "after clear"` {
+	if got := fromAgent("session", "rename", "after clear"); got.Code != 0 || strings.TrimSpace(got.Stdout) != shortID(next.ID)+` renamed to "after clear"` {
 		t.Fatalf("rename after clear: %+v", got)
 	}
 
 	for _, mode := range []string{"on", "off"} {
-		if got := fromAgent("session", "priority", mode); got.Code != 0 || strings.TrimSpace(got.Stdout) != string(next.ID)+" priority "+mode {
+		if got := fromAgent("session", "priority", mode); got.Code != 0 || strings.TrimSpace(got.Stdout) != shortID(next.ID)+" priority "+mode {
 			t.Fatalf("priority after clear: %+v", got)
 		}
 		testworld.AwaitSession(app, string(next.ID), func(session protocol.Session) bool { return protocol.Deref(session.Priority) == (mode == "on") })
 	}
-	if got := fromAgent("pr", "ls"); got.Code != 0 || got.Stdout != "session "+string(next.ID)+" has opened no pull requests\n" {
+	if got := fromAgent("pr", "ls"); got.Code != 0 || got.Stdout != "session "+shortID(next.ID)+" has opened no pull requests\n" {
 		t.Fatalf("PR receipt after clear: %+v", got)
 	}
 }

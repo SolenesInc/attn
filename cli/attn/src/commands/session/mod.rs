@@ -7,6 +7,7 @@ use crate::command::{self, Answer, Command, Family, Parsed};
 use attn::go::quote::quote;
 use attn::go::tabwriter;
 use attn::go::time::Time;
+use attn_protocol::session_id::short;
 use attn_protocol::{
     SessionInstructionsResult, SessionLedgerEntry, SessionListResult, SessionReopen,
     SessionReopenResult, SessionShowResult, SessionSnoozeResult, SessionTranscriptResult,
@@ -297,14 +298,18 @@ fn snoozed(cmd: &Command, result: &SessionSnoozeResult) -> Result<(), Stop> {
             (Some(error), _) => {
                 print_stdout(&out);
                 out.clear();
-                eprintln!("session {} {}: {error}", cmd.name, outcome.session_id);
+                eprintln!(
+                    "session {} {}: {error}",
+                    cmd.name,
+                    short(&outcome.session_id)
+                );
                 failed = true;
             }
             (None, Some(until)) => {
-                let _ = writeln!(out, "{} snoozed until {until}", outcome.session_id);
+                let _ = writeln!(out, "{} snoozed until {until}", short(&outcome.session_id));
             }
             (None, None) => {
-                let _ = writeln!(out, "{} unsnoozed", outcome.session_id);
+                let _ = writeln!(out, "{} unsnoozed", short(&outcome.session_id));
             }
         }
     }
@@ -380,12 +385,12 @@ fn list(parsed: &Parsed, result: &SessionListResult) -> String {
         let _ = write!(
             table,
             "{}\t{}\t{}\t{}\t{}\t{}\t",
-            entry.id,
+            short(&entry.id),
             entry.agent,
             ledger_state(entry),
             or_dash(entry.turn_snoozed_until.as_deref().unwrap_or("")),
             short_stamp(when),
-            or_dash(entry.closed_by.as_deref().unwrap_or(""))
+            or_dash(&short(entry.closed_by.as_deref().unwrap_or("")))
         );
         if reopen {
             let column = match verdicts.iter().find(|v| v.session_id == entry.id) {
@@ -407,7 +412,7 @@ fn list(parsed: &Parsed, result: &SessionListResult) -> String {
     let mut out = tabwriter::format(&table);
     for entry in &result.entries {
         if let Some(reason) = trimmed(entry.close_reason.as_deref()) {
-            let _ = write!(out, "\n{} closed because: {reason}\n", entry.id);
+            let _ = write!(out, "\n{} closed because: {reason}\n", short(&entry.id));
         }
     }
     if result.omitted > 0 {
@@ -416,7 +421,7 @@ fn list(parsed: &Parsed, result: &SessionListResult) -> String {
             "\nshowing {}, {} omitted, paginate with --before {}\n",
             result.entries.len(),
             result.omitted,
-            result.next_before.as_deref().unwrap_or("")
+            short(result.next_before.as_deref().unwrap_or(""))
         );
     }
     out
@@ -434,11 +439,11 @@ fn tree(parsed: &Parsed, profiles: &[SessionTreeProfile]) -> String {
         let _ = writeln!(out, "{} ({})", profile.profile_name, profile.profile_id);
         let mut table = String::from("SESSION\tAGENT\tSTATE\tTURN\tSEED\n");
         for row in &profile.rows {
-            let short: String = row.session_id.chars().take(8).collect();
             let _ = writeln!(
                 table,
-                "{}{short}  {}\t{}\t{}\t{}\t{}",
+                "{}{}  {}\t{}\t{}\t{}\t{}",
                 row.prefix,
+                short(&row.session_id),
                 row.label,
                 row.agent,
                 row.state,
@@ -486,7 +491,7 @@ fn ledger_profile(entry: &SessionLedgerEntry) -> String {
 fn show(result: &SessionShowResult) -> String {
     let entry = &result.entry;
     let mut out = String::new();
-    let _ = writeln!(out, "{}  {}", entry.id, entry.label);
+    let _ = writeln!(out, "{}  {}", short(&entry.id), entry.label);
     let _ = writeln!(out, "agent      {}", entry.agent);
     let _ = writeln!(out, "state      {}", ledger_state(entry));
     if entry.priority == Some(true) {
@@ -523,14 +528,14 @@ fn show(result: &SessionShowResult) -> String {
             out,
             "closed     {} by {}",
             short_stamp(closed_at),
-            or_dash(entry.closed_by.as_deref().unwrap_or(""))
+            or_dash(&short(entry.closed_by.as_deref().unwrap_or("")))
         );
         if let Some(reason) = trimmed(entry.close_reason.as_deref()) {
             let _ = writeln!(out, "because    {reason}");
         }
     }
     if let Some(reopen) = &result.reopen {
-        verdict(&mut out, &entry.id, reopen);
+        verdict(&mut out, &short(&entry.id), reopen);
     }
     out
 }
@@ -577,7 +582,8 @@ fn reopened(result: &SessionReopenResult) -> String {
     if result.already_running == Some(true) {
         return format!(
             "{} is already running in profile {}\n",
-            result.session_id, result.profile_id
+            short(&result.session_id),
+            result.profile_id
         );
     }
     let mut out = String::new();
@@ -587,7 +593,10 @@ fn reopened(result: &SessionReopenResult) -> String {
     let _ = writeln!(
         out,
         "{} reopened in {} (profile {}, last or current desktop, {})",
-        result.session_id, result.directory, result.profile_id, result.action
+        short(&result.session_id),
+        result.directory,
+        result.profile_id,
+        result.action
     );
     out
 }

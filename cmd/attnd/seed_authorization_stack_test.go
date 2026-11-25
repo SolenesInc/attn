@@ -32,7 +32,7 @@ func TestSeedAuthorizationSaysWhereEachChangeWent(t *testing.T) {
 	if got := seedAs(t, s, tender, "authorization", seed.ID, "You may push this branch."); got != seed.ID+" authorization set. You tend "+seed.ID+", so nothing is typed.\n" {
 		t.Errorf("the tender setting its own seed's authorization printed %q", got)
 	}
-	if got := seedAs(t, s, "", "authorization", seed.ID, "Ask me before landing."); !strings.HasPrefix(got, seed.ID+" authorization set. ") || !strings.Contains(got, tender[:8]) {
+	if got := seedAs(t, s, "", "authorization", seed.ID, "Ask me before landing."); !strings.HasPrefix(got, seed.ID+" authorization set. ") || !strings.Contains(got, shortID(tender)) {
 		t.Errorf("the user changing the words while %s tends the seed printed %q; want where the change went", tender, got)
 	}
 	if got := seedAs(t, s, tender, "authorization", seed.ID, "--clear"); got != seed.ID+" authorization cleared. You tend "+seed.ID+", so nothing is typed.\n" {
@@ -41,10 +41,10 @@ func TestSeedAuthorizationSaysWhereEachChangeWent(t *testing.T) {
 	if got := seedAs(t, s, "", "authorization", seed.ID, "Ask me before landing."); !strings.HasPrefix(got, seed.ID+" authorization set. ") {
 		t.Errorf("setting the words again printed %q", got)
 	}
-	if got := seedAs(t, s, "", "authorization", seed.ID, "--clear"); !strings.HasPrefix(got, seed.ID+" authorization cleared. ") || !strings.Contains(got, tender[:8]) {
+	if got := seedAs(t, s, "", "authorization", seed.ID, "--clear"); !strings.HasPrefix(got, seed.ID+" authorization cleared. ") || !strings.Contains(got, shortID(tender)) {
 		t.Errorf("the user clearing the words while %s tends the seed printed %q; want where the removal went", tender, got)
 	}
-	if got := seedAs(t, s, "", "authorization", seed.ID); !strings.HasPrefix(got, seed.ID+" has no authorization: cleared by the user at ") || !strings.Contains(got, tender[:8]) {
+	if got := seedAs(t, s, "", "authorization", seed.ID); !strings.HasPrefix(got, seed.ID+" has no authorization: cleared by the user at ") || !strings.Contains(got, shortID(tender)) {
 		t.Errorf("reading a cleared authorization printed %q; want who cleared it and where the removal went", got)
 	}
 	both := s.Run(testworld.Invocation{Session: tender, Args: []string{"seed", "authorization", seed.ID, "words", "--clear"}})

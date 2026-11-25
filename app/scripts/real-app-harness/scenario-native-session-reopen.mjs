@@ -61,7 +61,7 @@ async function backInTheSidebar(description) {
   await observer.waitFor(() => observer.getSession(sessionId), description, 60_000);
   await driver.waitFor({ key: 'ledger.panel' }, { gone: true });
   await driver.waitFor({ key: `sidebar.session.${sessionId}` }, { timeoutMs: 60_000 });
-  const live = cli('session', 'list');
+  const live = cli('session', 'list', '--json');
   runner.assert(live.includes(sessionId), `${description}: the session is live under its own id`, { live });
 }
 

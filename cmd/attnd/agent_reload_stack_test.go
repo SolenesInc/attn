@@ -49,7 +49,7 @@ func TestAgentReloadCLIUsesThePaletteLifecycleAndReportsBatchFailures(t *testing
 	}
 	got := run(target[:8], "missing", target)
 	t.Logf("reload <prefix> missing <duplicate>: exit %d\n%s%s", got.Code, got.Stdout, got.Stderr)
-	if got.Code != 1 || strings.Count(got.Stdout, "reloaded session "+target+"\n") != 1 || !strings.Contains(got.Stderr, "missing") {
+	if got.Code != 1 || strings.Count(got.Stdout, "reloaded session "+shortID(target)+"\n") != 1 || !strings.Contains(got.Stderr, "missing") {
 		t.Fatalf("reload batch = %+v", got)
 	}
 	second := s.Launched(target)

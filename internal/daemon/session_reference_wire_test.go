@@ -8,7 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func TestASessionIsNamedByAUniquePrefixOfItsIDLiveOrClosed(t *testing.T) {
+func TestASessionIsNamedByItsShortIDOrAUniquePrefixOfItsIDLiveOrClosed(t *testing.T) {
 	const (
 		live          = "3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f"
 		closed        = "71c0d9ab-0f42-4e0b-8d0e-5a9f1c3b7e22"
@@ -20,17 +20,19 @@ func TestASessionIsNamedByAUniquePrefixOfItsIDLiveOrClosed(t *testing.T) {
 		shadowing     = "e07b3c95-8a13-4b7e-b6d0-17c5f2e94a88"
 		stranger      = "9d2e4f61-5b08-4c3a-87e9-f1a60d7c2b54"
 		strangerClose = "58f1a7c3-6e90-4d2b-9c14-0b7e3f5a8d61"
+		sevenHex      = "c5e81f0b-2d1a-4c7e-9f30-84b6e7a1d5c2"
+		sevenHexLive  = "3f9a2c40-6b7d-4e19-a3c8-1f5d02e9b764"
 	)
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
-		registerSessions(t, w, cli, live, closed, closedTwin, closedSingle, liveTwin, liveTwin2, shadowed, shadowing)
+		registerSessions(t, w, cli, live, closed, closedTwin, closedSingle, liveTwin, liveTwin2, shadowed, shadowing, sevenHex, sevenHexLive)
 		side := createProfile(w.App(), "Side")
 		for _, id := range []string{stranger, strangerClose} {
 			if err := w.InjectSession(id, id, w.Path(id), "claude", side.ID); err != nil {
 				t.Fatalf("register %s: %v", id, err)
 			}
 		}
-		for _, id := range []string{closed, closedTwin, closedSingle, shadowed, strangerClose} {
+		for _, id := range []string{closed, closedTwin, closedSingle, shadowed, sevenHex, strangerClose} {
 			if err := cli.Unregister(protocol.SessionID(id)); err != nil {
 				t.Fatalf("close %s: %v", id, err)
 			}
@@ -45,6 +47,9 @@ func TestASessionIsNamedByAUniquePrefixOfItsIDLiveOrClosed(t *testing.T) {
 			{"3f9a2c4e", live},
 			{"3f9a2c4e-8b1d", live},
 			{live, live},
+			{"ag-7yd2rk", live},
+			{"ag-rqm1y1", closedSingle},
+			{"ag-w1xks5", shadowing},
 			{"c5e81f07", closedSingle},
 			{closedSingle, closedSingle},
 			{"71c0d9ab-0", closed},
@@ -65,10 +70,10 @@ func TestASessionIsNamedByAUniquePrefixOfItsIDLiveOrClosed(t *testing.T) {
 				}
 			}
 		}
-		for _, ref := range []string{"71c0d9ab", "a4b6d210"} {
+		for _, ref := range []string{"71c0d9ab", "a4b6d210", "ag-e70dka", "ag-mjvd44"} {
 			_, err := run("session show", map[string]any{"id": ref})
-			if client.ErrorCode(err) != "ambiguous_session" || !strings.Contains(err.Error(), "give more of the id") {
-				t.Errorf("session show %s = %v, want ambiguous_session asking for more of the id", ref, err)
+			if client.ErrorCode(err) != "ambiguous_session" || !strings.Contains(err.Error(), "give more of the full id") {
+				t.Errorf("session show %s = %v, want ambiguous_session asking for more of the full id", ref, err)
 			}
 		}
 		refuses("ambiguous_session", map[string]map[string]any{
@@ -80,7 +85,7 @@ func TestASessionIsNamedByAUniquePrefixOfItsIDLiveOrClosed(t *testing.T) {
 			"session rename":     {"name": "taken", "target": "a4b6d210"},
 			"session priority":   {"priority": "on", "target": "a4b6d210"},
 		})
-		for _, foreign := range []string{"9d2e4f61", "58f1a7c3"} {
+		for _, foreign := range []string{"9d2e4f61", "58f1a7c3", "ag-kmq4yr", "ag-b3rtfg", "ag-zzzzzz", "ag-7yd2"} {
 			refuses("session_not_found", map[string]map[string]any{
 				"session show":       {"id": foreign},
 				"session transcript": {"id": foreign},

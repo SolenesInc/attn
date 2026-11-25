@@ -5,6 +5,7 @@ use super::{Run, Stop, print_stdout};
 use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
 use attn::go::time::Time;
+use attn_protocol::session_id::short;
 use attn_protocol::{
     AgentCloseResult, AgentInboxBatchResult, AgentListResult, AgentMsgResult, AgentPeekResult,
     AgentPeerMessage, AgentReloadResult,
@@ -12,7 +13,7 @@ use attn_protocol::{
 use serde_json::Value as Json;
 use std::fmt::Write as _;
 
-const SHORT_ID: usize = 8;
+const SHORT_ID: usize = 9;
 
 struct Agent;
 
@@ -107,11 +108,11 @@ impl Family for Agent {
                 let reloaded: AgentReloadResult = command::decode(run, self, cmd, &result)?;
                 for outcome in &reloaded.outcomes {
                     if outcome.success {
-                        print_stdout(&format!("reloaded session {}\n", outcome.target));
+                        print_stdout(&format!("reloaded session {}\n", short(&outcome.target)));
                     } else {
                         eprintln!(
                             "agent reload {}: {}",
-                            outcome.target,
+                            short(&outcome.target),
                             outcome.error.as_deref().unwrap_or("")
                         );
                     }
@@ -164,10 +165,6 @@ fn print_field(run: &mut Run<'_>, cmd: &Command, result: &Reply, field: &str) ->
         .map_err(|error| run.fail_send(&Agent.label(cmd.name), &error))?;
     crate::commands::print_json(raw.as_bytes());
     Ok(())
-}
-
-fn short(id: &str) -> String {
-    id.chars().take(SHORT_ID).collect()
 }
 
 fn cell(value: &str, width: usize) -> String {
@@ -227,7 +224,9 @@ fn trimmed(value: Option<&str>) -> Option<&str> {
 fn peek(result: &AgentPeekResult) -> String {
     let mut out = format!(
         "session {} ({}) — {}\n",
-        result.session_id, result.agent, result.label
+        short(&result.session_id),
+        result.agent,
+        result.label
     );
     if let Some(member) = trimmed(result.crew_member_name.as_deref()) {
         let _ = writeln!(out, "crew member: this session is {member} today");

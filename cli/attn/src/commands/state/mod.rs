@@ -6,6 +6,7 @@ use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
 use attn::go::quote::quote;
 use attn::go::time::Time;
+use attn_protocol::session_id::short;
 use attn_protocol::{StateExplainEntry, StateExplainResult};
 use std::fmt::Write as _;
 
@@ -55,7 +56,12 @@ impl Family for State {
 
 fn explain(result: &StateExplainResult) -> String {
     let mut out = String::new();
-    let _ = writeln!(out, "session {} ({})", result.session_id, result.agent);
+    let _ = writeln!(
+        out,
+        "session {} ({})",
+        short(&result.session_id),
+        result.agent
+    );
     let _ = write!(out, "state:   {}", result.state);
     if let Some(since) = present(result.state_since.as_deref()) {
         let _ = write!(out, " since {}", clock(since));

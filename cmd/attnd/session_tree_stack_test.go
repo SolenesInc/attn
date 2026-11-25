@@ -76,11 +76,11 @@ func TestSessionTreeShowsDelegationChainsAndKeepsChildrenOfClosedDispatchers(t *
 	}
 	shown := tree()
 	for _, prefix := range []string{
-		source[:8] + "  orchestrator",
-		"├─ " + child.SessionID[:8] + "  builder",
-		"│  └─ " + grandchild.SessionID[:8] + "  reviewer",
-		"└─ " + sibling.SessionID[:8] + "  writer",
-		shell[:8] + "  shell (shell split from " + source[:8] + ")",
+		shortID(source) + "  orchestrator",
+		"├─ " + shortID(child.SessionID) + "  builder",
+		"│  └─ " + shortID(grandchild.SessionID) + "  reviewer",
+		"└─ " + shortID(sibling.SessionID) + "  writer",
+		shortID(shell) + "  shell (shell split from " + shortID(source) + ")",
 	} {
 		if !strings.Contains(shown, "\n"+prefix) {
 			t.Errorf("tree is missing row %q:\n%s", prefix, shown)
@@ -95,7 +95,7 @@ func TestSessionTreeShowsDelegationChainsAndKeepsChildrenOfClosedDispatchers(t *
 		{sibling.SessionID, "writer", "owed", "document-discount-field"},
 	} {
 		for _, line := range strings.Split(shown, "\n") {
-			if strings.Contains(line, tc.id[:8]+"  "+tc.label) {
+			if strings.Contains(line, shortID(tc.id)+"  "+tc.label) {
 				if strings.Contains(line, tc.id) || !strings.Contains(line, "claude") || !strings.Contains(line, tc.turn) || !strings.HasSuffix(line, tc.slug) {
 					t.Errorf("row %s is missing its short id, harness, turn or slug: %s", tc.label, line)
 				}
@@ -123,15 +123,15 @@ func TestSessionTreeShowsDelegationChainsAndKeepsChildrenOfClosedDispatchers(t *
 	}
 	shown = tree()
 	for _, row := range []string{
-		child.SessionID[:8] + "  builder (dispatcher closed or absent)",
-		"└─ " + grandchild.SessionID[:8] + "  reviewer",
-		sibling.SessionID[:8] + "  writer (dispatcher closed or absent)",
+		shortID(child.SessionID) + "  builder (dispatcher closed or absent)",
+		"└─ " + shortID(grandchild.SessionID) + "  reviewer",
+		shortID(sibling.SessionID) + "  writer (dispatcher closed or absent)",
 	} {
 		if !strings.Contains(shown, "\n"+row) {
 			t.Errorf("tree after closing dispatcher is missing %q:\n%s", row, shown)
 		}
 	}
-	if strings.Contains(shown, source[:8]+"  orchestrator") {
+	if strings.Contains(shown, shortID(source)+"  orchestrator") {
 		t.Errorf("tree still lists the closed dispatcher:\n%s", shown)
 	}
 	app.TypeLine(shell, "exit")
@@ -280,17 +280,17 @@ func TestSessionTreeShowsAClosedDelegateOnStandbyUnderItsDispatcherWithWhatItWai
 	}
 	var row string
 	for _, line := range strings.Split(got.Stdout, "\n") {
-		if strings.HasPrefix(line, "└─ "+result.SessionID[:8]+"  merger") {
+		if strings.HasPrefix(line, "└─ "+shortID(result.SessionID)+"  merger") {
 			row = line
 		}
 	}
-	if row == "" || !strings.Contains(got.Stdout, "\n"+source[:8]+"  orchestrator") {
+	if row == "" || !strings.Contains(got.Stdout, "\n"+shortID(source)+"  orchestrator") {
 		t.Fatalf("tree is missing the dormant row under the orchestrator:\n%s", got.Stdout)
 	}
 	if fields := strings.Fields(row); !strings.Contains(row, "claude") || !slices.Contains(fields, "standby") || !strings.HasSuffix(row, "· Merge once CI is green") {
 		t.Errorf("the dormant row is missing its harness, standby state or what it waits for: %s", row)
 	}
-	if !strings.Contains(got.Stdout, row+"\n   └─ "+fixer.SessionID[:8]+"  fixer") {
+	if !strings.Contains(got.Stdout, row+"\n   └─ "+shortID(fixer.SessionID)+"  fixer") {
 		t.Errorf("tree is missing the merger's live delegate under its dormant row:\n%s", got.Stdout)
 	}
 }

@@ -142,7 +142,7 @@ func TestASharedCodexSubagentsToolsResolveTheSessionThatStartedIt(t *testing.T) 
 	server := w.CodexServer()
 	subagent := server.SpawnSubagent(codex.ConversationID)
 
-	if got := strings.TrimSpace(server.RunTool(subagent, `"$ATTN_WRAPPER_PATH" presence`)); got != "running inside attn (session "+parent+")" {
+	if got := strings.TrimSpace(server.RunTool(subagent, `"$ATTN_WRAPPER_PATH" presence`)); got != "running inside attn (session "+shortID(parent)+")" {
 		t.Errorf("a tool of subagent %s reports %q, want session %s", subagent, got, parent)
 	}
 }
@@ -203,7 +203,7 @@ func TestASharedCodexTerminalShowingASubagentKeepsTheSessionOfTheConversationTha
 	if shown := queriedSession(t, w.Client(), checkout); protocol.Deref(shown.Hidden) {
 		t.Errorf("session %s, whose subagent the terminal shows, is hidden", checkout)
 	}
-	if got := strings.TrimSpace(w.CodexServer().RunTool(subagent, `"$ATTN_WRAPPER_PATH" presence`)); got != "running inside attn (session "+checkout+")" {
+	if got := strings.TrimSpace(w.CodexServer().RunTool(subagent, `"$ATTN_WRAPPER_PATH" presence`)); got != "running inside attn (session "+shortID(checkout)+")" {
 		t.Errorf("a tool of subagent %s reports %q, want session %s", subagent, got, checkout)
 	}
 
@@ -266,7 +266,7 @@ func TestASharedCodexToolSpeaksAsItsConversationsSessionAfterItsTerminalMovesOn(
 	server.Prompted(hidden)
 	for conversation, want := range map[string]string{hidden: checkout, codex.ConversationID: shown} {
 		got := strings.TrimSpace(server.RunTool(conversation, `"$ATTN_WRAPPER_PATH" presence`))
-		if got != "running inside attn (session "+want+")" {
+		if got != "running inside attn (session "+shortID(want)+")" {
 			t.Errorf("a tool of conversation %s reports %q, want session %s", conversation, got, want)
 		}
 	}

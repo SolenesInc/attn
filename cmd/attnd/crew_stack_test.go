@@ -130,23 +130,23 @@ func TestCrewMembersStartCloseAndKeepTheirLaunchSettings(t *testing.T) {
 	day := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession)
 	trellis := s.Launched(string(day))
 	trellis.Prompted()
-	requireLines(t, "trellis's row", crewRow(t, s.Attn("crew", "list").Stdout, "Trellis"), " in session ", string(" "+day[:8]+" "))
+	requireLines(t, "trellis's row", crewRow(t, s.Attn("crew", "list").Stdout, "Trellis"), " in session ", " "+shortID(day)+" ")
 	agents := s.Attn("agent", "list").Stdout
 	requireLines(t, "agent list", agents, "MEMBER", "An ID, or the MEMBER of a member in session, here works with `attn agent peek <target>`")
-	requireLines(t, "trellis's agent row", crewRow(t, agents, string(day[:8])), " Trellis ")
-	requireStdout(t, s.Attn("agent", "peek", "trellis"), string("session "+day), "crew member: this session is Trellis today")
+	requireLines(t, "trellis's agent row", crewRow(t, agents, shortID(day)), " Trellis ")
+	requireStdout(t, s.Attn("agent", "peek", "trellis"), "session "+shortID(day), "crew member: this session is Trellis today")
 	requireFailure(t, s.Attn("agent", "peek", "keel"), "agent peek: ", "keel is between sessions", "never starts a session", "`attn crew start keel`")
-	requireStdout(t, s.Attn("crew", "start", "trellis"), string("Trellis is already in session "+day[:8]+" — nothing was launched."))
+	requireStdout(t, s.Attn("crew", "start", "trellis"), "Trellis is already in session "+shortID(day)+" — nothing was launched.")
 
 	trellis.Exit(143)
 	testworld.AwaitSession(app, string(day), func(x protocol.Session) bool { return protocol.Deref(x.StateReason) == "process_exited" })
-	requireStdout(t, s.Attn("crew", "start", "trellis"), string("Previous session "+day[:8]+" had exited; its binding was released.\n"), "Trellis is in session ")
+	requireStdout(t, s.Attn("crew", "start", "trellis"), "Previous session "+shortID(day)+" had exited; its binding was released.\n", "Trellis is in session ")
 	next := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession)
 	if next == day || next == "" {
 		t.Fatalf("trellis woke into %q after %q exited", next, day)
 	}
 	s.Launched(string(next)).Prompted()
-	requireStdout(t, s.Attn("crew", "close", "trellis"), string("Close request for Trellis is queued in session "+next[:8]+" — "))
+	requireStdout(t, s.Attn("crew", "close", "trellis"), "Close request for Trellis is queued in session "+shortID(next)+" — ")
 	requireStdout(t, s.Attn("crew", "close", "keel"), "Keel is between sessions", "no close request was sent")
 
 	var woken protocol.CrewStartResult
@@ -340,5 +340,5 @@ func TestAClearedMemberKeepsItsDayAcrossADaemonCrash(t *testing.T) {
 	if !again.AlreadyInSession || again.SessionID != next.ID {
 		t.Fatalf("wake after the clear = %+v, want the successor %s", again, next.ID)
 	}
-	requireStdout(t, s.Attn("crew", "retire", "Keel"), "Keel is retired.", "Asked Keel in session "+string(next.ID)[:8])
+	requireStdout(t, s.Attn("crew", "retire", "Keel"), "Keel is retired.", "Asked Keel in session "+shortID(next.ID))
 }

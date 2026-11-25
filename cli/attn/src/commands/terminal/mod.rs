@@ -5,6 +5,7 @@ use super::{Run, Stop, print_compact_line, print_stdout};
 use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
 use attn::go::tabwriter;
+use attn_protocol::session_id::short;
 use attn_protocol::{
     TerminalEntry, TerminalListResult, TerminalMoveResult, TerminalOpenResult, TerminalReadResult,
     TerminalRunResult, TerminalWaitResult,
@@ -30,7 +31,7 @@ fn table(entries: &[TerminalEntry]) -> String {
             entry.state,
             entry.desktop_label,
             entry.position.as_deref().unwrap_or_default(),
-            entry.opened_by.as_deref().unwrap_or_default(),
+            short(entry.opened_by.as_deref().unwrap_or_default()),
         );
     }
     tabwriter::format(&table)

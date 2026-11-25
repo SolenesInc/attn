@@ -2,10 +2,10 @@ package daemon
 
 import (
 	"errors"
-	"strings"
 
 	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionref"
 )
 
 var (
@@ -52,7 +52,7 @@ func (d *Daemon) resolveSession(ref, profileID string) (sessionMatch, error) {
 	if !errors.Is(err, errSessionNotFound) {
 		return sessionMatch{}, err
 	}
-	closed, err := d.store.ClosedSessionsWithIDPrefix(ref, profileID, 2)
+	closed, err := d.store.ClosedSessionsNamed(ref, profileID, 2)
 	switch {
 	case err != nil:
 		return sessionMatch{}, err
@@ -77,7 +77,7 @@ func (d *Daemon) resolveLiveSession(ref, profileID string) (*protocol.Session, e
 		if profileID != "" && session.ProfileID != profileID {
 			continue
 		}
-		if !strings.HasPrefix(string(session.ID), ref) {
+		if !sessionref.Names(ref, session.ID) {
 			continue
 		}
 		if match != nil {
@@ -96,7 +96,7 @@ func sessionRefusal(ref string, err, notFound error) error {
 	case errors.Is(err, errSessionNotFound):
 		return notFound
 	case errors.Is(err, errAmbiguousSession):
-		return command.Refuse(command.CodeAmbiguousSession, "%q matches more than one session; give more of the id", protocol.TrimID(ref))
+		return command.Refuse(command.CodeAmbiguousSession, "%q matches more than one session; give more of the full id", protocol.TrimID(ref))
 	default:
 		return err
 	}

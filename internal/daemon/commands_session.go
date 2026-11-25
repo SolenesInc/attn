@@ -228,7 +228,7 @@ func (d *Daemon) runSessionPriority(ctx context.Context, c command.Caller, a com
 	if err := d.setSessionPriority(&protocol.SetSessionPriorityMessage{SessionID: id, Priority: a.Priority == "on"}); err != nil {
 		return nil, err
 	}
-	return fmt.Sprintf("%s priority %s", id, a.Priority), nil
+	return fmt.Sprintf("%s priority %s", shortSessionID(id), a.Priority), nil
 }
 
 func (d *Daemon) runSessionRename(ctx context.Context, c command.Caller, a command.SessionRenameArgs) (any, error) {
@@ -243,7 +243,7 @@ func (d *Daemon) runSessionRename(ctx context.Context, c command.Caller, a comma
 	if err := d.renameSession(&protocol.RenameSessionMessage{SessionID: id, Label: name}); err != nil {
 		return nil, err
 	}
-	return fmt.Sprintf("%s renamed to %s", id, strconv.Quote(name)), nil
+	return fmt.Sprintf("%s renamed to %s", shortSessionID(id), strconv.Quote(name)), nil
 }
 
 func (d *Daemon) runSessionSnooze(ctx context.Context, c command.Caller, a command.SessionSnoozeArgs) (any, error) {

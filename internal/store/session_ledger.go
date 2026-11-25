@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionref"
 	"github.com/victorarias/attn/internal/who"
 )
 
@@ -279,7 +280,7 @@ func (s *Store) SessionLedgerEntry(id protocol.SessionID) *protocol.SessionLedge
 	return &entry
 }
 
-func (s *Store) ClosedSessionsWithIDPrefix(prefix, profileID string, limit int) ([]protocol.SessionLedgerEntry, error) {
+func (s *Store) ClosedSessionsNamed(ref, profileID string, limit int) ([]protocol.SessionLedgerEntry, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -287,7 +288,7 @@ func (s *Store) ClosedSessionsWithIDPrefix(prefix, profileID string, limit int) 
 	if s.db == nil {
 		for id := range s.sessionCloses {
 			entry := s.ledgerEntryMemoryLocked(id)
-			if strings.HasPrefix(string(id), prefix) && (profileID == "" || entry.ProfileID == profileID) && len(matches) < limit {
+			if sessionref.Names(ref, id) && (profileID == "" || entry.ProfileID == profileID) && len(matches) < limit {
 				matches = append(matches, *entry)
 			}
 		}
@@ -295,20 +296,22 @@ func (s *Store) ClosedSessionsWithIDPrefix(prefix, profileID string, limit int) 
 	}
 
 	rows, err := s.db.Query(ledgerSelect+" FROM sessions_with_runtime AS sessions WHERE "+ledgerVisible+
-		" AND closed_at <> '' AND substr(id, 1, length(?1)) = ?1 AND (?2 = '' OR profile_id = ?2) LIMIT ?3", prefix, profileID, limit)
+		" AND closed_at <> '' AND substr(id, 1, length(?1)) = ?1 AND (?2 = '' OR profile_id = ?2)", sessionref.IDPrefix(ref), profileID)
 	if err != nil {
-		return nil, fmt.Errorf("read closed sessions matching %s: %w", prefix, err)
+		return nil, fmt.Errorf("read closed sessions matching %s: %w", ref, err)
 	}
 	defer rows.Close()
-	for rows.Next() {
+	for len(matches) < limit && rows.Next() {
 		entry, err := scanLedgerEntry(rows)
 		if err != nil {
-			return nil, fmt.Errorf("read closed sessions matching %s: %w", prefix, err)
+			return nil, fmt.Errorf("read closed sessions matching %s: %w", ref, err)
 		}
-		matches = append(matches, entry)
+		if sessionref.Names(ref, entry.ID) {
+			matches = append(matches, entry)
+		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read closed sessions matching %s: %w", prefix, err)
+		return nil, fmt.Errorf("read closed sessions matching %s: %w", ref, err)
 	}
 	return matches, nil
 }

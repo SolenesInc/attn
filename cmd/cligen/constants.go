@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionref"
 	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/shortid"
 )
@@ -70,6 +71,7 @@ func writeConstants(out *strings.Builder) {
 		{"SHARED_CODEX_RESTART_FAILED", string(protocol.SharedCodexRestartFailed)},
 		{"SERVER_CALLER_PREFIX", harness.ServerCallerPrefix},
 		{"ID_ALPHABET", shortid.Alphabet},
+		{"SESSION_SHORT_ID_PREFIX", sessionref.Prefix},
 		{"CREW_KEY_REF_PREFIX", crew.KeyRefPrefix},
 		{"AGENT_MSG_STATUS_QUEUED", string(protocol.AgentMsgStatusQueued)},
 		{"LAUNCH_DESKTOP_KIND_AUTOMATION", string(protocol.LaunchDesktopKindAutomation)},

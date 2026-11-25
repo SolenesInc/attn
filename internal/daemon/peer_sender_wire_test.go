@@ -54,7 +54,7 @@ func TestRepliesToACrewPartyFollowItsNextSession(t *testing.T) {
 	}
 	plain := protocol.Deref(received.Items[0].Sender)
 	replyTo := protocol.Deref(received.Items[0].ReplyTo)
-	if plain.Ref != protocol.PartyRef("session:"+x) || replyTo == "" || !strings.HasPrefix(x, replyTo) {
+	if plain.Ref != protocol.PartyRef("session:"+x) || replyTo != shortID(x) {
 		t.Fatalf("plain sender: %+v reply to %q", plain, replyTo)
 	}
 }

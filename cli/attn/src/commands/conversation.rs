@@ -4,6 +4,7 @@ use super::{Run, Stop, USAGE_UNKNOWN_COMMAND, print_reply_field, print_stdout};
 use crate::client::SendError;
 use attn::go::flag::{Flag, FlagDefault, FlagSet};
 use attn::go::time::Time;
+use attn_protocol::session_id::short;
 use attn_protocol::{
     KeptConversationForgetMessage, KeptConversationForgetResult, KeptConversationKeepMessage,
     KeptConversationListMessage, KeptConversationListResult, KeptConversationRow,
@@ -212,7 +213,11 @@ fn render(result: &KeptConversationListResult) -> String {
             row.agent.clone(),
             size,
             reasons(row).join("; "),
-            row.session_ids.join(", "),
+            row.session_ids
+                .iter()
+                .map(|id| short(id))
+                .collect::<Vec<_>>()
+                .join(", "),
         ]);
     }
     out.push_str(&format_table(&rows));

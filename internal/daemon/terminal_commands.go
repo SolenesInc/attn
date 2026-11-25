@@ -213,10 +213,16 @@ func (d *Daemon) runTerminalList(_ context.Context, c command.Caller, a command.
 			}
 			decorated := d.sessionForBroadcast(session)
 			name := sessionDisplayName(decorated)
-			entries = append(entries, protocol.TerminalEntry{TerminalID: pane.RuntimeID, SessionID: session.ID, ShortID: shortSessionID(protocol.SessionID(pane.RuntimeID)), Agent: session.Agent, Name: name, State: decorated.State, DesktopID: desktop.ID, DesktopLabel: desktop.Name, Position: protocol.Ptr(positions[pane.PaneID]), OpenedBy: session.ParentSessionID})
+			entries = append(entries, protocol.TerminalEntry{TerminalID: pane.RuntimeID, SessionID: session.ID, ShortID: shortTerminalID(pane.RuntimeID), Agent: session.Agent, Name: name, State: decorated.State, DesktopID: desktop.ID, DesktopLabel: desktop.Name, Position: protocol.Ptr(positions[pane.PaneID]), OpenedBy: session.ParentSessionID})
 		}
 	}
 	return protocol.TerminalListResult{Terminals: entries}, nil
+}
+
+const terminalShortIDLength = 8
+
+func shortTerminalID(id protocol.TerminalID) string {
+	return string(id[:min(len(id), terminalShortIDLength)])
 }
 
 func terminalPositions(node layouttree.Node, path string, out map[string]string) {

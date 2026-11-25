@@ -72,7 +72,7 @@ func TestAgentPeekShowsASessionWithoutInterruptingIt(t *testing.T) {
 
 	peek := s.Attn("agent", "peek", builder[:8])
 	requireLines(t, "peek", peek.Stdout,
-		"session "+builder+" (claude) — builder\n",
+		"session "+shortID(builder)+" (claude) — builder\n",
 		"profile: Default\n",
 		"state: waiting_input (",
 		"turn: owed to this session\n",
@@ -165,7 +165,7 @@ func TestAgentMessagesCarryTheSenderAndTheDaemonsVerdict(t *testing.T) {
 	if read := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", messageID}, Session: recipient}); read.Code != 0 {
 		t.Errorf("the recipient reading its message exited %d: %s", read.Code, read.Stderr)
 	} else {
-		requireLines(t, "the recipient's read", read.Stdout, "rev-1111 (reviewer)", "the discount is applied after tax")
+		requireLines(t, "the recipient's read", read.Stdout, string(reviewer)+" (reviewer)", "the discount is applied after tax")
 	}
 	var reread protocol.AgentPeerMessage
 	s.Run(testworld.Invocation{Args: []string{"agent", "inbox", "--json", messageID}, Session: recipient}).JSON(t, &reread)
@@ -187,7 +187,7 @@ func TestAgentMessagesCarryTheSenderAndTheDaemonsVerdict(t *testing.T) {
 		t.Errorf("a message exactly at the limit exited %d: %s", long.Code, long.Stderr)
 	}
 
-	if status := s.Run(testworld.Invocation{Args: []string{"agent", "msg-status", queued.MessageID}, Session: reviewer}); status.Stdout != "queued: message "+queued.MessageID+" to session desk-333\n" {
+	if status := s.Run(testworld.Invocation{Args: []string{"agent", "msg-status", queued.MessageID}, Session: reviewer}); status.Stdout != "queued: message "+queued.MessageID+" to session "+desk+"\n" {
 		t.Errorf("msg-status exited %d and printed %q", status.Code, status.Stdout)
 	}
 	var status protocol.AgentPeerMessage
@@ -225,9 +225,9 @@ func TestAgentMessagesCarryTheSenderAndTheDaemonsVerdict(t *testing.T) {
 		t.Fatalf("close exited %d: %s", closed.Code, closed.Stderr)
 	}
 	requireLines(t, "close", closed.Stdout,
-		"closed session desk-333 (desk): its report landed\n",
+		"closed session "+desk+" (desk): its report landed\n",
 		"noted on "+seed.ID+", which it was tending\n",
-		"`attn session show desk-333`",
+		"`attn session show "+desk+"`",
 	)
 
 	var selfClosed protocol.AgentCloseResult

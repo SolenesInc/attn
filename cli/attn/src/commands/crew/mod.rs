@@ -5,6 +5,7 @@ use super::{Run, Stop, print_json, print_stdout};
 use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
 use attn_protocol::go_values::{AGENT_MSG_STATUS_QUEUED, CREW_KEY_REF_PREFIX};
+use attn_protocol::session_id::short;
 use attn_protocol::{
     CrewApplyResult, CrewCloseResult, CrewListResult, CrewMember, CrewMoveHomeResult,
     CrewPrimeResult, CrewRenameResult, CrewRestoreResult, CrewRetireResult, CrewStartResult,
@@ -12,8 +13,6 @@ use attn_protocol::{
 };
 use serde::de::DeserializeOwned;
 use std::fmt::Write as _;
-
-const SHORT_ID_LENGTH: usize = 8;
 
 struct Crew;
 
@@ -170,7 +169,7 @@ fn shell_word(arg: &str) -> String {
 }
 
 fn start_lines(result: &CrewStartResult) -> String {
-    let session = short_id(&result.session_id);
+    let session = short(&result.session_id);
     if result.already_in_session {
         return format!(
             "{} is already in session {session} — nothing was launched.\n",
@@ -183,7 +182,7 @@ fn start_lines(result: &CrewStartResult) -> String {
         let _ = writeln!(
             out,
             "Previous session {} had exited; its binding was released.",
-            short_id(released)
+            short(released)
         );
     }
     let _ = writeln!(
@@ -203,7 +202,7 @@ fn close_outcome(result: &CrewCloseResult) -> String {
         }
         return format!("{name} is between sessions — no close request was sent.");
     }
-    let session = short_id(result.session_id.as_deref().unwrap_or(""));
+    let session = short(result.session_id.as_deref().unwrap_or(""));
     if result.delivery_status.as_deref() == Some(AGENT_MSG_STATUS_QUEUED) {
         let detail = if detail.is_empty() {
             "the member is not taking input right now"
@@ -240,11 +239,6 @@ pub fn launch_desktop_text(setting: Option<&LaunchDesktopSetting>) -> &str {
     setting.map_or("-", |setting| setting.label.as_deref().unwrap_or(""))
 }
 
-fn short_id(id: &str) -> String {
-    let bytes = id.as_bytes();
-    String::from_utf8_lossy(&bytes[..bytes.len().min(SHORT_ID_LENGTH)]).into_owned()
-}
-
 fn roster(members: &[CrewMember]) -> String {
     if members.is_empty() {
         return "No crew members in this profile. `attn crew create <name> --agent <harness>` adds one; `attn crew list --all` includes retired members.\n".to_string();
@@ -256,9 +250,9 @@ fn roster(members: &[CrewMember]) -> String {
     for member in members {
         let binding = member.binding_session.as_deref().map_or("", str::trim);
         let (mut state, session) = if binding.is_empty() {
-            ("between sessions", "-".to_string())
+            ("between sessions", "-".into())
         } else {
-            ("in session", short_id(binding))
+            ("in session", short(binding))
         };
         if member.retired {
             state = "retired";

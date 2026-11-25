@@ -157,7 +157,7 @@ func TestAnInstalledServerPluginKeepsConversationOwnershipThroughRegistrationAnd
 			}
 			presence := strings.TrimSpace(server.RunTool(conversation, fmt.Sprintf("%q presence", testworld.AttnBinary(t))))
 			t.Logf("attn presence from external server tool: %s", presence)
-			if presence != "running inside attn (session "+session+")" {
+			if presence != "running inside attn (session "+shortID(session)+")" {
 				t.Fatalf("caller: %q", presence)
 			}
 

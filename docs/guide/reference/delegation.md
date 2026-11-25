@@ -428,9 +428,9 @@ watches, or the first line of its note.
 
 ```
 Default (profile-b156a44b-2749-4a0f-9302-f6874ff272be)
-SESSION               AGENT   STATE    TURN  SEED
-dispatch  dispatcher  claude  idle     owed  -
-└─ 6c808e54  merger   claude  standby  -     merger · until 16:50
+SESSION                AGENT   STATE    TURN  SEED
+ag-3fk8wq  dispatcher  claude  idle     owed  -
+└─ ag-dj08wn  merger   claude  standby  -     merger · until 16:50
 ```
 
 A resumed agent ends its turn by going on standby again, by harvesting the seed,

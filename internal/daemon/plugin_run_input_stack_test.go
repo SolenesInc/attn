@@ -67,7 +67,7 @@ func TestADirectDriverRunSurvivesADaemonRestartWithoutPTYFallback(t *testing.T) 
 				t.Fatal("retry submitted twice")
 			}
 			state := s.Attn("session", "show", session)
-			if state.Code != 0 || !strings.Contains(state.Stdout, session) {
+			if state.Code != 0 || !strings.Contains(state.Stdout, shortID(session)) {
 				t.Fatalf("CLI session show: %+v", state)
 			}
 			t.Logf("CLI session show:\n%s", state.Stdout)

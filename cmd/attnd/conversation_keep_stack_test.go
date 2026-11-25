@@ -286,7 +286,7 @@ func TestConversationCLIListPinUnkeepAndForget(t *testing.T) {
 		testworld.AwaitTaskDone(app, "conversation_keep")
 	}
 	list := s.Attn("conversation", "list")
-	for _, want := range []string{"1 kept · ", "CONVERSATION", first.ConversationID, "claude", "pinned ", "open seed ", delegated.SeedID, string(delegated.SessionID)} {
+	for _, want := range []string{"1 kept · ", "CONVERSATION", first.ConversationID, "claude", "pinned ", "open seed ", delegated.SeedID, shortID(delegated.SessionID)} {
 		if list.Code != 0 || !strings.Contains(list.Stdout, want) {
 			t.Errorf("list missing %q: %+v", want, list)
 		}

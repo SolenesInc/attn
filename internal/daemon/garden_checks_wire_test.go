@@ -695,7 +695,7 @@ func TestARungCheckMoveNamesItsAudienceAndTheMoveInTheInbox(t *testing.T) {
 		if !slices.Equal(rung.RingRecipients, []string{sessions["watcher"]}) {
 			t.Errorf("the rung move's recipients = %v, want the watcher and not the reviewer who made it", rung.RingRecipients)
 		}
-		gardenNudgeOneBell(t, cli, sessions["watcher"], seed, "check C1 rejected by "+sessions["reviewer"][:8])
+		gardenNudgeOneBell(t, cli, sessions["watcher"], seed, "check C1 rejected by "+shortID(sessions["reviewer"]))
 		gardenNudgeInboxIsEmpty(t, cli, sessions["reviewer"], "after its own rung move")
 
 		lonely := plot.Children[1].ID

@@ -65,7 +65,7 @@ const probes: Probe[] = [
       return "What is the agent called fern doing? Read its screen."
     },
     command: ["agent peek", "terminal read"],
-    end: (w, calls) => expect(calls.some((c) => isCommand(c, "terminal read") || (isCommand(c, "agent peek") && (c.text.includes(String(w.state.fern).slice(0, 8)) || /fern|\w\.id\b/.test(c.text)))), "read another screen than fern's"),
+    end: (w, calls) => expect(calls.some((c) => isCommand(c, "terminal read") || (isCommand(c, "agent peek") && ([String(w.state.fern).slice(0, 8), w.attn(["session", "show", String(w.state.fern)]).split(" ")[0]!].some((id) => c.text.includes(id)) || /fern|\w\.id\b/.test(c.text)))), "read another screen than fern's"),
   },
   { id: "close-self", ask: "Close yourself. There is nothing left to do.", command: "agent close", reads: "wrap-up", end: (_w, _calls, ended) => expect(ended === "closed itself", "still open") },
   {

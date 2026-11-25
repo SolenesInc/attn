@@ -85,12 +85,12 @@ func TestAgentListShowsSessionsByProfileThenLabelWithTheOwedTurn(t *testing.T) {
 
 	table := s.Attn("agent", "list").Stdout
 	for _, id := range []string{zeta, alpha, notes} {
-		if !strings.Contains(table, id[:8]) || strings.Contains(table, id) {
+		if !strings.Contains(table, shortID(id)) || strings.Contains(table, id) {
 			t.Fatalf("table should show %s by its short id:\n%s", id, table)
 		}
 	}
 	for _, line := range strings.Split(table, "\n") {
-		if strings.HasPrefix(line, zeta[:8]) != strings.HasSuffix(line, "owed") {
+		if strings.HasPrefix(line, shortID(zeta)) != strings.HasSuffix(line, "owed") {
 			t.Fatalf("table should mark only zeta's turn as owed:\n%s", table)
 		}
 	}

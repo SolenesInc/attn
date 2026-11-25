@@ -13,8 +13,6 @@ import (
 
 const agentPeekMessageMaxChars = annotatableMessageMaxChars
 
-const agentShortIDLength = 8
-
 const agentPeekSnapshotTimeout = 3 * time.Second
 
 var errCrewMemberAsleep = errors.New("crew_member_asleep")
@@ -30,7 +28,7 @@ func (d *Daemon) runAgentPeek(ctx context.Context, c command.Caller, a command.A
 	case errors.Is(err, errSessionNotFound):
 		return nil, command.Refuse(command.CodeSessionNotFound, "no session or crew member matches %q; `{attn agent list}` names sessions and `{attn crew list}` names members", target)
 	case errors.Is(err, errAmbiguousSession):
-		return nil, command.Refuse(command.CodeAmbiguousSession, "%q matches more than one session; give more of the id (`{attn agent list --json}` carries full ids)", target)
+		return nil, command.Refuse(command.CodeAmbiguousSession, "%q matches more than one session; give more of the full id (`{attn agent list --json}` carries full ids)", target)
 	case errors.Is(err, errCrewMemberAsleep):
 		return nil, command.Refuse(err.Error(), "%s is between sessions; `{attn agent peek}` never starts a session for a crew member. `{attn crew start %s}` starts one", target, target)
 	default:

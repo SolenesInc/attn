@@ -90,7 +90,7 @@ func TestAnOutpostSessionKnowsItselfWhileTheHomeIsDown(t *testing.T) {
 	}
 
 	home.Stop()
-	if got := presence(); got.Code != 0 || got.Stdout != "running inside attn (session "+id+")\n" {
+	if got := presence(); got.Code != 0 || got.Stdout != "running inside attn (session "+shortID(id)+")\n" {
 		t.Errorf("presence while the home is down: %+v, want session %s", got, id)
 	}
 	if got := presence("--session-id"); got.Code != 0 || got.Stdout != id+"\n" {

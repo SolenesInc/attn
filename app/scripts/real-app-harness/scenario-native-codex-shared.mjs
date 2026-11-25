@@ -215,7 +215,7 @@ try {
     runner.assert(/^state\s+closed$/m.test(shown), 'the ledger reads the session as closed', { shown });
     runner.assert(/^usage\s+[1-9]/m.test(shown), 'the closed session keeps its usage', { shown });
     runner.assert(session(checkout) && tileOf(checkout), 'the other session and its tile are untouched', session(checkout));
-    runner.assert(attn('session', 'list', '--closed').includes(discount), 'the ledger lists the closed session');
+    runner.assert(attn('session', 'list', '--closed', '--json').includes(discount), 'the ledger lists the closed session');
   });
 
   await runner.finishSuccess({ sessions, checkoutConversation });

@@ -47,6 +47,7 @@ pub const SHARED_CODEX_RESTART_RESTARTING: &str = "restarting";
 pub const SHARED_CODEX_RESTART_FAILED: &str = "failed";
 pub const SERVER_CALLER_PREFIX: &str = "server-env:";
 pub const ID_ALPHABET: &str = "0123456789abcdefghjkmnpqrstvwxyz";
+pub const SESSION_SHORT_ID_PREFIX: &str = "ag-";
 pub const CREW_KEY_REF_PREFIX: &str = "member:";
 pub const AGENT_MSG_STATUS_QUEUED: &str = "queued";
 pub const LAUNCH_DESKTOP_KIND_AUTOMATION: &str = "automation";

@@ -429,11 +429,11 @@ fn launch_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<Block> {
         } else {
             crate::harness::catalog::name(&state.facts.harnesses, &running)
         };
-        let short: String = session.chars().take(8).collect();
+        let short = attn_protocol::session_id::short(session);
         let said = format!("{harness} · Model not reported · Effort not reported · {short}");
         tab.push(
             Section::new("crew.running", "Running now")
-                .control(words(short, Type::Mono, t.text_muted))
+                .control(words(short.into_owned(), Type::Mono, t.text_muted))
                 .push(Block::custom(
                     "crew.running.route.block",
                     words(said.clone(), Type::Body, t.text_primary)

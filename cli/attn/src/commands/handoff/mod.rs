@@ -5,15 +5,12 @@ use super::{Run, Stop, print_stdout};
 use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
 use attn_protocol::CrewHandoffResult;
+use attn_protocol::session_id::short;
 
 struct Handoff;
 
 pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     command::run_group(run, &Handoff, args)
-}
-
-fn short(id: &str) -> &str {
-    id.get(..8).unwrap_or(id)
 }
 
 impl Family for Handoff {

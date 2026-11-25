@@ -6,6 +6,7 @@ use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
 use attn_protocol::PresenceResult;
 use attn_protocol::go_values::SERVER_CALLER_PREFIX;
+use attn_protocol::session_id::short;
 use serde_json::Value as Json;
 
 struct Presence;
@@ -124,7 +125,7 @@ impl Family for Presence {
         } else {
             print_stdout(&format!(
                 "running inside attn (session {})\n",
-                presence.session_id
+                short(&presence.session_id)
             ));
         }
         Ok(())

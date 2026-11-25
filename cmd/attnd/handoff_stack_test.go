@@ -76,7 +76,7 @@ func TestAHandoffFilesTheLetterAndTurnsTheDayOver(t *testing.T) {
 	requireStdout(t, s.Attn("crew", "set", "trellis", "--cwd", workdir), "Trellis launches in "+workdir)
 	trellis := startMember(t, s, "trellis")
 	requireStdout(t, s.Attn("crew", "set", "trellis", "--agent", "codex"))
-	requireStdout(t, s.Attn("crew", "apply", "trellis"), "Trellis's session "+trellis[:8]+" is busy; it will be asked to file its letter when it can take input, and its next session starts on codex from it.")
+	requireStdout(t, s.Attn("crew", "apply", "trellis"), "Trellis's session "+shortID(trellis)+" is busy; it will be asked to file its letter when it can take input, and its next session starts on codex from it.")
 	if err := os.Remove(workdir); err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestAHandoffFilesTheLetterAndTurnsTheDayOver(t *testing.T) {
 	retried := s.Run(testworld.Invocation{Args: []string{"handoff", "--retry"}, Session: trellis})
 	requireStdout(t, retried, "Trellis's letter was already filed at "+path+".\n", "Trellis's next session is ")
 	next := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession)
-	if next == "" || string(next) == trellis || !strings.Contains(retried.Stdout, string(next[:8]+" on its new harness")) {
+	if next == "" || string(next) == trellis || !strings.Contains(retried.Stdout, shortID(next)+" on its new harness") {
 		t.Fatalf("the retry started %q:\n%s", next, retried.Stdout)
 	}
 	if run := s.Launched(string(next)); run.Harness != fakeagent.Codex {
@@ -122,7 +122,7 @@ func TestCrewApplyReloadsAModelChangeInPlace(t *testing.T) {
 	first.Prompted()
 
 	requireStdout(t, s.Attn("crew", "set", "keel", "--model", "claude-sonnet-fake"))
-	requireStdout(t, s.Attn("crew", "apply", "keel"), "Reloaded Keel's session "+keel[:8]+" in place on claude with its saved settings; its conversation continues.")
+	requireStdout(t, s.Attn("crew", "apply", "keel"), "Reloaded Keel's session "+shortID(keel)+" in place on claude with its saved settings; its conversation continues.")
 	again := s.Launched(keel)
 	model := ""
 	if i := slices.Index(again.Argv, "--model"); i >= 0 && i+1 < len(again.Argv) {

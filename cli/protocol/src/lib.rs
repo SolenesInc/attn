@@ -2,6 +2,7 @@
 mod generated;
 #[rustfmt::skip]
 pub mod go_values;
+pub mod session_id;
 
 pub use generated::*;
 

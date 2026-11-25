@@ -89,7 +89,7 @@ func (d *Daemon) resolveAgentReloadTarget(ref, profileID string) (*protocol.Sess
 	case err == nil:
 		return target, nil
 	case errors.Is(err, errAmbiguousSession):
-		return nil, fmt.Errorf("%q matches more than one session; use more of the id", ref)
+		return nil, fmt.Errorf("%q matches more than one session; give more of the full id", ref)
 	default:
 		return nil, fmt.Errorf("no session or crew member in session matches %q in the caller's profile", ref)
 	}

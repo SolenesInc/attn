@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/sessionref"
 	"github.com/victorarias/attn/internal/who"
 )
 
@@ -100,7 +101,7 @@ func (d *Daemon) runAgentMsg(ctx context.Context, c command.Caller, a command.Ag
 				if errors.Is(err, errSessionNotFound) {
 					return nil, notFound()
 				}
-				return nil, command.Refuse(err.Error(), "%q matches more than one session; give more of the id (`{attn agent list --json}` carries full ids)", protocol.TrimID(targetRef))
+				return nil, command.Refuse(err.Error(), "%q matches more than one session; give more of the full id (`{attn agent list --json}` carries full ids)", protocol.TrimID(targetRef))
 			}
 			if target.ProfileID != sender.ProfileID {
 				return nil, notFound()
@@ -262,8 +263,5 @@ func displayName(id protocol.SessionID, label, title string) string {
 }
 
 func shortSessionID(id protocol.SessionID) string {
-	if len(id) <= agentShortIDLength {
-		return string(id)
-	}
-	return string(id[:agentShortIDLength])
+	return sessionref.Short(id)
 }

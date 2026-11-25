@@ -1286,14 +1286,17 @@ fn a_document_tiles_header_focuses_it_and_every_tiles_header_closes_it() {
 
 #[test]
 fn an_agents_header_shows_its_short_session_id_and_copies_the_whole_id() {
-    let mut world = start(vec![desktop(1, "a1b2c3d4e5", Some(pane("a1b2c3d4e5")))]);
-    let id = world.screen().get(Target::key("tile.a1b2c3d4e5.id"));
-    assert_eq!(id.name.as_deref(), Some("Copy session id s-a1b2c3"));
+    let session = "3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f";
+    let mut work = desktop(1, "a", Some(pane("a")));
+    work.panes[0].session_id = session.into();
+    let mut world = start(vec![work]);
+    let id = world.screen().get(Target::key("tile.a.id"));
+    assert_eq!(id.name.as_deref(), Some("Copy session id ag-7yd2rk"));
 
-    world.gesture(|app| app.click(Target::key("tile.a1b2c3d4e5.id")));
+    world.gesture(|app| app.click(Target::key("tile.a.id")));
     assert_eq!(
         world.clipboard.text().map(|t| t.to_string()).as_deref(),
-        Some("s-a1b2c3d4e5")
+        Some(session)
     );
     assert!(world.runtime_is_at_rest());
 }

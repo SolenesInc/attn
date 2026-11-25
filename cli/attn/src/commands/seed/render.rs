@@ -15,6 +15,7 @@ use attn_protocol::go_values::{
     DEFAULT_STALE_WINDOW_SECONDS, EDGE_PART_OF, NOTE_KIND_NOTE, SEARCH_MAX_RESULTS,
     STATUS_HARVESTED, STATUS_WITHERED,
 };
+use attn_protocol::session_id::short;
 use attn_protocol::{
     ActorView, AgentCloseResult, PartyView, Seed, SeedArtifact, SeedArtifactReference,
     SeedAuthorization, SeedAuthorizationResult, SeedAuthorizationUpdate, SeedBedAssignResult,
@@ -30,7 +31,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const NANOS_PER_SECOND: i128 = 1_000_000_000;
 const SECONDS_PER_DAY: i64 = 86_400;
-const AGENT_SHORT_ID_LENGTH: usize = 8;
 const CLIP_WIDTH: usize = 80;
 
 pub fn format_window_seconds(seconds: i64) -> String {
@@ -128,7 +128,7 @@ fn q(text: &str) -> String {
 fn who_label(reference: &str, name: &str) -> String {
     reference
         .strip_prefix("session:")
-        .map_or_else(|| name.to_string(), ToString::to_string)
+        .map_or_else(|| name.to_string(), |id| short(id).into_owned())
 }
 
 pub fn actor_label(actor: &ActorView) -> String {
@@ -691,8 +691,8 @@ fn authorization_update_state(update: &SeedAuthorizationUpdate) -> String {
 
 fn recipient_label(party: &PartyView) -> String {
     let id = party.session_id.as_deref().unwrap_or_default();
-    let id = if id.len() > 8 { &id[..8] } else { id };
-    if id.is_empty() || party.name.starts_with(id) {
+    let id = short(id);
+    if id.is_empty() || party.name == id {
         party.name.clone()
     } else {
         format!("{} ({id})", party.name)
@@ -803,7 +803,7 @@ pub fn reminder_line(reminder: &SeedReminder) -> String {
 fn board_holder(reference: &str, name: &str) -> String {
     reference
         .strip_prefix("session:")
-        .map_or_else(|| name.to_string(), |id| id.chars().take(8).collect())
+        .map_or_else(|| name.to_string(), |id| short(id).into_owned())
 }
 
 fn clip_line(line: &str, limit: usize) -> String {
@@ -1400,23 +1400,15 @@ pub fn live_delegate_nudge(out: &mut String, session: Option<&str>) {
     let Some(id) = session.map(str::trim).filter(|id| !id.is_empty()) else {
         return;
     };
-    let short = short_session(id);
+    let short = short(id);
     let _ = writeln!(
         out,
         "delegate {short} is still live — close it with `attn agent close {short} -m \"<why>\"` if done"
     );
 }
 
-fn short_session(id: &str) -> &str {
-    if id.len() <= AGENT_SHORT_ID_LENGTH {
-        id
-    } else {
-        &id[..AGENT_SHORT_ID_LENGTH]
-    }
-}
-
 pub fn agent_close(out: &mut String, result: &AgentCloseResult) {
-    let id = short_session(&result.target_session_id);
+    let id = short(&result.target_session_id);
     if result.pending_compact == Some(true) {
         let _ = writeln!(
             out,

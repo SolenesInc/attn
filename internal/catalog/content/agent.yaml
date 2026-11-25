@@ -34,13 +34,13 @@ commands:
     read_only: true
     anyone: true
     doc: |
-      Observes a session without interrupting it: state, last assistant message, and the rendered screen. On a Claude session, says when the composer holds Claude's suggestion and not typed text. Passive: the observed agent never notices. `target` is a crew name, a full session id, or a unique session id prefix. A crew member between sessions stays between sessions.
+      Observes a session without interrupting it: state, last assistant message, and the rendered screen. On a Claude session, says when the composer holds Claude's suggestion and not typed text. Passive: the observed agent never notices. `target` is a crew name, a short id, a full session id, or a unique session id prefix. A crew member between sessions stays between sessions.
     args:
-      - {name: target, type: text, required: true, cli: pos, placeholder: "<session-or-member>", doc: "a crew name, full session id, or unique id prefix"}
+      - {name: target, type: text, required: true, cli: pos, placeholder: "<session-or-member>", doc: "a crew name, short id, full session id, or unique id prefix"}
     result: AgentPeekResult
     errors:
       - {code: session_not_found, fix: "Pass a session id agent_list names, or the name of a crew member in session."}
-      - {code: ambiguous_session, fix: "Give more of the id; agent_list carries full ids."}
+      - {code: ambiguous_session, fix: "Give more of the full id; agent_list carries full ids."}
       - {code: crew_member_asleep, fix: "Start the member with crew_start first, or message it with agent_msg, which starts it."}
 
   - name: agent msg
@@ -52,7 +52,7 @@ commands:
     doc: |
       Sends a session, crew member or seed a message. By default the message waits until the recipient's turn ends: the body stays in the inbox and the recipient gets a generic inbox notification at its next safe prompt. `steer` puts the message into a working recipient's running turn at its next step, without stopping the turn. `interrupt` stops a working recipient's turn now and makes the message its next prompt. A recipient that is not working gets the message right away either way. A harness that cannot take a steer or an interrupt keeps the message queued, and the result says why. `as_user` delivers the text as the user's own words, without the sender's name; use it only to pass on words the user gave you to pass on. The result says queued, notified, steered, interrupted, or refused. attn starts a session for a member between sessions before the notification is placed. A seed id reaches its current or next tender, waiting when none is reachable. In the CLI, a message that starts with - goes after --, as: attn agent msg -- <target> "-text".
     args:
-      - {name: target, type: text, required: true, cli: pos, placeholder: "<session-or-member-or-seed>", doc: "a session id or unique prefix, a crew member's name, or a seed id"}
+      - {name: target, type: text, required: true, cli: pos, placeholder: "<session-or-member-or-seed>", doc: "a session's short id, full id or unique prefix, a crew member's name, or a seed id"}
       - {name: text, type: text, required: true, cli: pos, placeholder: '"<text>"', doc: "the message"}
       - {name: steer, type: bool, cli: "--steer", doc: "put the message into the recipient's running turn at its next step, without stopping the turn"}
       - {name: interrupt, type: bool, cli: "--interrupt", doc: "stop the recipient's turn now and make the message its next prompt"}
@@ -63,7 +63,7 @@ commands:
       - {code: steer_and_interrupt, usage: true, fix: "Pass {steer} or {interrupt}, not both."}
       - {code: as_user_with_steer, usage: true, fix: "A steer cannot be the user's words. Drop {steer}, or pass {interrupt}."}
       - {code: session_or_crew_member_not_found, fix: "Pass a session id agent_list names, a crew member's name, or a seed id."}
-      - {code: ambiguous_session, fix: "Give more of the id; agent_list carries full ids."}
+      - {code: ambiguous_session, fix: "Give more of the full id; agent_list carries full ids."}
 
   - name: agent close
     summary: close a session for good, with a reason
@@ -78,7 +78,7 @@ commands:
 
       `compact` goes only with `self`: attn waits for your turn to end, compacts your conversation through the harness, then closes the session. End your turn right after: you get no turn after the compact. When the compact fails, the session still closes, and the reason says the compact did not run. Only a Claude session with the Claude mod and a Codex session on the shared Codex app server compact, on the home machine or an outpost, and a Sigma session on the home machine; attn refuses any other session and says why. Compact only a session that will resume as itself, as a seed's tender does when its standby resumes it. A crew member's next session starts fresh.
     args:
-      - {name: target, type: text, cli: pos, placeholder: "<session-or-seed>", doc: "the session id or unique prefix, or the seed whose tender to close"}
+      - {name: target, type: text, cli: pos, placeholder: "<session-or-seed>", doc: "the session's short id, full id or unique prefix, or the seed whose tender to close"}
       - {name: reason, type: text, required: true, cli: "-m", placeholder: '"<reason>"', doc: "why this session is done"}
       - {name: self, type: bool, cli: "--self", doc: "close the calling session"}
       - {name: compact, type: bool, cli: "--compact", doc: "compact the conversation after this turn, then close (with self)"}
@@ -94,7 +94,7 @@ commands:
     runs: home
     grant: full
     doc: |
-      Interrupts and reloads agents in place, as "Reload this agent" does. Running work is interrupted and non-persistent state may be lost. Full ids, unique prefixes and names of crew members in session work; a member between sessions stays between sessions. A member whose saved harness matches its session reloads with its saved model and effort. A session may reload itself and descendants; the profile's chief may reload any agent in that profile. `all` is chief-only, includes the chief and crew, and excludes shells. Chief and crew close protections do not prevent reload. Each target reports an outcome; failures leave successful reloads in place. Repeated targets reload once. Exited agents use 80x24. The caller reloads last if selected; a self reload may interrupt the command before its result arrives.
+      Interrupts and reloads agents in place, as "Reload this agent" does. Running work is interrupted and non-persistent state may be lost. Short ids, full ids, unique prefixes and names of crew members in session work; a member between sessions stays between sessions. A member whose saved harness matches its session reloads with its saved model and effort. A session may reload itself and descendants; the profile's chief may reload any agent in that profile. `all` is chief-only, includes the chief and crew, and excludes shells. Chief and crew close protections do not prevent reload. Each target reports an outcome; failures leave successful reloads in place. Repeated targets reload once. Exited agents use 80x24. The caller reloads last if selected; a self reload may interrupt the command before its result arrives.
     args:
       - {name: targets, type: text, list: true, cli: rest, placeholder: "<session-or-member>", unless: all, doc: "the sessions or crew members to reload"}
       - {name: all, type: bool, cli: "--all", doc: "every agent in the caller's profile (chief only)"}

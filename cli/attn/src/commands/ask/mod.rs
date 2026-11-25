@@ -6,6 +6,7 @@ use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
 use attn::go::quote::quote;
 use attn::go::time::Time;
+use attn_protocol::session_id::short;
 use attn_protocol::{ActorView, Ask as OpenAsk, AskCloseResult, AskListResult, AskShowResult};
 use serde_json::Value as Json;
 use std::fmt::Write as _;
@@ -62,12 +63,8 @@ fn row(ask: &OpenAsk) -> String {
 
 fn asker(from: &ActorView) -> String {
     match from.r#ref.strip_prefix("session:") {
-        Some(session) if !session.starts_with(&from.name) => {
-            format!(
-                "{} ({})",
-                from.name,
-                session.chars().take(8).collect::<String>()
-            )
+        Some(session) if short(session) != from.name => {
+            format!("{} ({})", from.name, short(session))
         }
         _ => from.name.clone(),
     }

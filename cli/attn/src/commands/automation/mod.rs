@@ -5,6 +5,7 @@ use super::crew::launch_desktop_text;
 use super::{Run, Stop, print_json, print_stdout};
 use crate::client::Reply;
 use crate::command::{self, Arg, Command, Family, Parsed};
+use attn_protocol::session_id::short;
 use attn_protocol::{AutomationDefinitionSummary, AutomationShowResult};
 use serde_json::Value as Json;
 use std::fmt::Write as _;
@@ -113,7 +114,7 @@ fn show_header(definition: &AutomationDefinitionSummary) -> String {
     if let Some(last) = &definition.last_run {
         let session = last.session_id.as_deref().unwrap_or("");
         if !session.is_empty() {
-            let _ = write!(out, "# Last run session: {session}");
+            let _ = write!(out, "# Last run session: {}", short(session));
             let superseded = last
                 .automation
                 .as_ref()

@@ -34,9 +34,9 @@ func listedRows(t *testing.T, s *testworld.Stack, args ...string) []string {
 	return ids
 }
 
-func rowOf(table, id string) string {
+func rowOf(table, session string) string {
 	for _, line := range strings.Split(table, "\n") {
-		if strings.HasPrefix(line, id) {
+		if strings.HasPrefix(line, shortID(session)) {
 			return line
 		}
 	}
@@ -131,12 +131,12 @@ func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 		t.Errorf("session list printed:\n%s\nwant a table of the one live session", live)
 	}
 	closedTable := s.Attn("session", "list", "--closed").Stdout
-	for id, closer := range map[string]string{worker.SessionID: source, scratch: "user"} {
+	for id, closer := range map[string]string{worker.SessionID: shortID(source), scratch: "user"} {
 		if row := strings.Fields(rowOf(closedTable, id)); len(row) < 3 || row[2] != "closed" || !slices.Contains(row[3:], closer) {
 			t.Errorf("session list --closed shows %s as %q, want it closed by %s", id, row, closer)
 		}
 	}
-	requireLines(t, "session list --closed", closedTable, worker.SessionID+" closed because: brief delivered")
+	requireLines(t, "session list --closed", closedTable, shortID(worker.SessionID)+" closed because: brief delivered")
 	if strings.Contains(closedTable, "REOPEN") {
 		t.Errorf("a list nobody asked to judge grew a REOPEN column:\n%s", closedTable)
 	}
@@ -147,7 +147,7 @@ func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 		t.Fatalf("a truncated page printed:\n%s\nwant a notice naming the --before cursor", paged)
 	}
 	next := listedRows(t, s, "--closed", "--limit", "1", "--before", notice[1])
-	if len(next) != 1 || next[0] == notice[1] || !slices.Contains([]string{worker.SessionID, scratch}, next[0]) {
+	if len(next) != 1 || shortID(next[0]) == notice[1] || !slices.Contains([]string{worker.SessionID, scratch}, next[0]) {
 		t.Errorf("the page after %s holds %q, want the other closed session", notice[1], next)
 	}
 	if past := s.Attn("session", "list", "--closed", "--before", next[0]).Stdout; !strings.Contains(past, "no sessions past that page") {
@@ -180,14 +180,16 @@ func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 
 	shown := s.Attn("session", "show", worker.SessionID).Stdout
 	requireLines(t, "session show", shown,
-		"state      closed", "branch     feat/ledger", "worktree   yes, of "+repo, "by "+source, "because    brief delivered",
+		"state      closed", "branch     feat/ledger", "worktree   yes, of "+repo, "by "+shortID(source), "because    brief delivered",
 		"reopen     no: its directory no longer exists; branch feat/ledger is still here, so the worktree can be put back",
 		"place      directory missing, branch local",
-		"attn session reopen "+worker.SessionID+" --action "+string(protocol.SessionReopenActionRecreateWorktreeAndReopen))
+		"attn session reopen "+shortID(worker.SessionID)+" --action "+string(protocol.SessionReopenActionRecreateWorktreeAndReopen))
 
 	for name, id := range map[string]string{"live": source, "closed": worker.SessionID} {
-		if byPrefix := s.Attn("session", "show", id[:8]); byPrefix.Code != 0 || rowOf(byPrefix.Stdout, id) == "" {
-			t.Errorf("session show %s of a %s session exited %d with %q, want %s", id[:8], name, byPrefix.Code, byPrefix.Stdout+byPrefix.Stderr, id)
+		for _, ref := range []string{id[:8], shortID(id)} {
+			if named := s.Attn("session", "show", ref); named.Code != 0 || rowOf(named.Stdout, id) == "" {
+				t.Errorf("session show %s of a %s session exited %d with %q, want %s", ref, name, named.Code, named.Stdout+named.Stderr, id)
+			}
 		}
 	}
 
@@ -195,7 +197,7 @@ func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 	if reopened.Code != 0 {
 		t.Fatalf("session reopen exited %d: %s", reopened.Code, reopened.Stderr)
 	}
-	requireLines(t, "session reopen", reopened.Stdout, "recreated worktree "+worker.Directory, worker.SessionID+" reopened in "+worker.Directory)
+	requireLines(t, "session reopen", reopened.Stdout, "recreated worktree "+worker.Directory, shortID(worker.SessionID)+" reopened in "+worker.Directory)
 	if _, err := os.Stat(worker.Directory); err != nil {
 		t.Errorf("the reopen reported a recreated worktree it did not create: %v", err)
 	}
@@ -208,7 +210,7 @@ func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 	if refused.Code != 1 || !strings.Contains(refused.Stderr, "not a worktree attn can put back") {
 		t.Errorf("missing directory reopen = %+v, want refusal", refused)
 	}
-	if again := s.Attn("session", "reopen", worker.SessionID); again.Code != 0 || !strings.Contains(again.Stdout, worker.SessionID+" is already running") {
+	if again := s.Attn("session", "reopen", worker.SessionID); again.Code != 0 || !strings.Contains(again.Stdout, shortID(worker.SessionID)+" is already running") {
 		t.Errorf("reopening a live session exited %d with %q, want it reported as running", again.Code, again.Stdout+again.Stderr)
 	}
 }

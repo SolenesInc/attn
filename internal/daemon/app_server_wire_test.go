@@ -305,7 +305,7 @@ func TestACommandAnAppServerAgentRunsActsAsItsSession(t *testing.T) {
 				session, view, server := appServerSession(t, w, app, h)
 				got := strings.TrimSpace(server.RunTool(view.ConversationID, `"$ATTN_WRAPPER_PATH" presence`))
 				t.Logf("attn presence from the app-server agent: %s", got)
-				if got != "running inside attn (session "+session+")" {
+				if got != "running inside attn (session "+shortID(session)+")" {
 					t.Errorf("attn presence from the app-server agent = %q, want session %s", got, session)
 				}
 				server.RunTool(view.ConversationID, `"$ATTN_WRAPPER_PATH" _hook-state idle`)

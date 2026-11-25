@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/enrollment"
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionref"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -16,6 +18,10 @@ type enrollmentJSON struct {
 	HomeDaemonID string `json:"home_daemon_id"`
 	IsHome       bool   `json:"is_home"`
 	Message      string `json:"message"`
+}
+
+func shortID[ID ~string](session ID) string {
+	return sessionref.Short(protocol.SessionID(session))
 }
 
 func requireLines(t *testing.T, what, text string, want ...string) {

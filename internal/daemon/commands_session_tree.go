@@ -11,8 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-const sessionShortIDLength = 8
-
 type sessionTreeNode struct {
 	session  protocol.Session
 	seedSlug string
@@ -163,13 +161,6 @@ func shortClock(at, now time.Time) string {
 	return at.Format("Jan 2 15:04")
 }
 
-func sessionShortID(id string) string {
-	if len(id) <= sessionShortIDLength {
-		return id
-	}
-	return id[:sessionShortIDLength]
-}
-
 func appendTreeRows(rows []protocol.SessionTreeRow, node *sessionTreeNode, prefix, branch string) []protocol.SessionTreeRow {
 	session := node.session
 	label := session.Label
@@ -181,7 +172,7 @@ func appendTreeRows(rows []protocol.SessionTreeRow, node *sessionTreeNode, prefi
 		label += " (" + dispatcher + " closed or absent)"
 	}
 	if parent := protocol.Deref(session.ParentSessionID); parent != "" {
-		label += " (shell split from " + sessionShortID(string(parent)) + ")"
+		label += " (shell split from " + shortSessionID(parent) + ")"
 	}
 	turn := "-"
 	if protocol.Deref(session.TurnOwed) {
