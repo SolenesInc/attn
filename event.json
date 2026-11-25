@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Search misclassifies automation descendants",
+  "at": "2026-11-25T00:48:10.396Z",
+  "fixesBug": "2b78db6"
+}
