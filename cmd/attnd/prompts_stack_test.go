@@ -46,7 +46,7 @@ func TestPromptsExplainAndShowTheCatalogAndRefuseAMistypedScenario(t *testing.T)
 		t.Errorf("explain delivers %q with text:\n%s\nwant launch instructions", explanation.Delivery, explanation.Text)
 	}
 	selected := explanation.Trace.selectedBySource()
-	for source, want := range map[string]bool{"content/agent.md": true, "content/session/vent-guidance.md": true, "content/session/vent-attn-only.md": true, "content/session/vent-tools.md": false, "content/garden.md": false} {
+	for source, want := range map[string]bool{"content/agent-cli.md": true, "content/session/vent-guidance.md": true, "content/session/vent-attn-only.md": true, "content/session/vent-tools.md": false, "content/garden.md": false} {
 		if got, traced := selected[source]; !traced || got != want {
 			t.Errorf("explain traced %s selected=%v (traced %v), want selected=%v: %v", source, got, traced, want, selected)
 		}

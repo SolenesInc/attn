@@ -8,7 +8,7 @@ groups:
       What each agent is doing right now: the one-line activity a background model writes for each session, and why nothing is generated when it is not.
     map:
       rows:
-        - {need: "See what each agent is doing right now, or reset one session's line", tools: [activity, activity_clear]}
+        - {need: "See what each agent is doing now", tools: [activity]}
 
 commands:
   - name: activity

@@ -6,7 +6,7 @@ groups:
     summary: "read or add to the Notebook"
     map:
       rows:
-        - {need: "Read the user's Notebook with your file tools, or add to its journal", tools: [journal_append], references: [notebook]}
+        - {need: "Read the Notebook with your file tools, or add to its journal", tools: [journal_append], references: [notebook]}
     doc: |
       The journal is the Notebook's daily log, one file per day at journal/<date>.md, in the Notebook of the calling session's profile. `attn skill --reference notebook` says how to read and add to the Notebook.
     flags:

@@ -20,17 +20,15 @@ groups:
       - {name: session, placeholder: "<id>", doc: "the session asking (defaults to the current session)"}
     map:
       rows:
-        - {need: "Find work you can pick up, read a seed or plan, claim it", tools: [seed_ready, seed_show, seed_tend], references: [garden]}
-        - {need: "Record progress, report on delegated work, prove a check on a seed you tend", tools: [seed_note, seed_check_report], references: [delegated-agent]}
+        - {need: "Find work to pick up; read or claim a seed or plan", tools: [seed_ready, seed_show, seed_tend], references: [garden]}
+        - {need: "Record progress, report delegated work, prove a check", tools: [seed_note, seed_check_report], references: [delegated-agent]}
         - {need: "Finish, pause, abandon or give back a seed", tools: [seed_harvest, seed_park, seed_wither, seed_replant]}
         - {need: "Track new work, find existing work, split a plan", tools: [seed_search, seed_plant, seed_plot, seed_link], references: [garden]}
         - {need: "Change a seed's body, checks, files or reminders", tools: [seed_edit, seed_check_add, seed_attach, seed_remind]}
-        - {need: "Wait for a time, a pull request or another seed, with your session closed", tools: [seed_standby], references: [garden]}
-        - {need: "Update a seed's one-line pulse or assign its bed", tools: [seed_pulse, seed_bed_ls, seed_bed_assign]}
+        - {need: "Wait, session closed, for a time, pull request or seed", tools: [seed_standby], references: [garden]}
+        - {need: "Update a seed's pulse or bed", tools: [seed_pulse, seed_bed_assign]}
       notes: |
-        Tools take a seed's id or its slug. Besides its body, a seed has checks (C1, C2) and a log.
-
-        An update about a seed asks you to read what changed, not to act. Act only when the update needs you or the user.
+        An update about a seed asks you to read what changed. Act only when it needs you or the user.
     reference:
       name: garden
       title: "The garden: seeds, plots, and reporting"

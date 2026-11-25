@@ -15,7 +15,6 @@ var gardenRulesNoToolTeaches = []string{
 	"When the user uses one of those Jira words",
 	"not in markdown TODO lists or your harness's todo tool",
 	"Never plant an unverified suspicion:",
-	"`--discovered-from <seed>`",
 }
 
 func TestALaunchThatCarriesTheToolsLeavesTheirFamiliesCLITeachingToTheServer(t *testing.T) {
@@ -60,6 +59,9 @@ func TestALaunchThatCarriesTheToolsLeavesTheirFamiliesCLITeachingToTheServer(t *
 		}
 		if viaTool := strings.Contains(text, "call `skill` with `reference` delegation"); viaTool != taught || strings.Contains(text, "attn skill --reference delegation") == taught {
 			t.Errorf("%s points at the delegation reference through the tool: %t, want %t, and through the CLI only without the tools:\n%s", launch, viaTool, taught, text)
+		}
+		if viaTool := strings.Contains(text, "call `seed_search`"); viaTool != taught || strings.Contains(text, "run `attn seed search <words>`") == taught {
+			t.Errorf("%s says to search the garden through the tool: %t, want %t, and through the CLI only without the tools:\n%s", launch, viaTool, taught, text)
 		}
 		if dropped := !strings.Contains(text, "Use `attn agent msg` to reach sessions attn runs."); dropped != taught {
 			t.Errorf("%s left out the agent and session families' CLI teaching: %t, want %t:\n%s", launch, dropped, taught, text)

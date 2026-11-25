@@ -5,7 +5,7 @@ commands:
     summary: read the user guide
     map:
       rows:
-        - {need: "Answer the user's questions about attn from the user guide", tools: [guide]}
+        - {need: "Answer the user's questions about attn", tools: [guide]}
     runs: here
     grant: any
     read_only: true

@@ -9,9 +9,12 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/victorarias/attn/internal/catalog"
 )
+
+const maxDescriptionChars = 4096
 
 type toolDefinition struct {
 	Command      string         `json:"command"`
@@ -41,6 +44,9 @@ func writeTools(c *catalog.Catalog, goRoot string) error {
 			Core:        cmd.Core,
 			ReadOnly:    cmd.ReadOnly,
 			InputSchema: g.inputSchema(cmd),
+		}
+		if n := utf8.RuneCountInString(tool.Description); n > maxDescriptionChars {
+			g.problems = append(g.problems, fmt.Sprintf("%s: doc is %d characters as a tool description, over the limit of %d that Claude Code keeps", where, n, maxDescriptionChars))
 		}
 		if cmd.Result != "" {
 			schema, err := bundledSchema(cmd.Result)

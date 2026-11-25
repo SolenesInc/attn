@@ -6,7 +6,7 @@ groups:
     summary: "work with permanent agents that keep a charter and letters"
     map:
       rows:
-        - {need: "Work with permanent agents that keep a charter and letters", tools: [crew_list, crew_start], references: [charter], guides: [crew]}
+        - {need: "Work with permanent agents (crew) and their charters", tools: [crew_list, crew_start], references: [charter], guides: [crew]}
     doc: |
       Manage the Crew. Each member has a home folder with its charter and letters, which persist across sessions: in attn's data folder, or in its profile's Notebook at crew/<name>/. Every member belongs to a profile and has sessions only there.
 

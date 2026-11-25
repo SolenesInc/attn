@@ -560,7 +560,11 @@ func (c *Catalog) Instructions() string {
 			continue
 		}
 		for _, row := range m.Rows {
-			rows = append(rows, strings.ReplaceAll(fmt.Sprintf("| %s | %s | %s |", strings.TrimSpace(row.Need), strings.Join(row.Tools, ", "), row.reading()), "|  |", "| |"))
+			line := "- " + strings.TrimSpace(row.Need) + ": " + strings.Join(row.Tools, ", ")
+			if reading := row.reading(); reading != "" {
+				line += " (" + reading + ")"
+			}
+			rows = append(rows, line)
 		}
 		if text := strings.TrimSpace(m.Notes); text != "" {
 			notes = append(notes, text)
@@ -568,7 +572,7 @@ func (c *Catalog) Instructions() string {
 	}
 	parts := []string{strings.TrimSpace(c.Server.Intro)}
 	if len(rows) > 0 {
-		parts = append(parts, "| When you need to | Tools | Reference |\n|---|---|---|\n"+strings.Join(rows, "\n"))
+		parts = append(parts, strings.Join(rows, "\n"))
 	}
 	return strings.Join(append(parts, notes...), "\n\n")
 }

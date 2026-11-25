@@ -92,7 +92,7 @@ func attnMapNode(launch bool) Node {
 	head := Exact(Use("session.attn-map", "content/session/attn-map.md"))
 	bullets := []Node{attnMapPart("cli"), attnMapPart("skill"), attnMapPart("guide")}
 	if launch {
-		bullets = []Node{When(Enabled(agentToolsCarried), attnMapPart("tools")), bullets[0], cliTeaching(bullets[1], "skill"), cliTeaching(bullets[2], "guide")}
+		bullets = []Node{Choose(Enabled(agentToolsCarried), attnMapPart("tools"), bullets[0]), cliTeaching(bullets[1], "skill"), cliTeaching(bullets[2], "guide")}
 	}
 	parts := append([]Node{head}, bullets...)
 	if !launch {
@@ -105,24 +105,37 @@ func attnMapNode(launch bool) Node {
 	return Trim(Join("", parts...))
 }
 
+func forSurface(id, path string) Node {
+	return Choose(Enabled(agentToolsCarried), Use(id+"-tools", path+"-tools.md"), Use(id+"-cli", path+"-cli.md"))
+}
+
+func gardenRulesWith(words func(id, path string) Node) Node {
+	bind := func(name string) Binding {
+		return Bind(name, words("session.garden."+name, "content/garden/"+name))
+	}
+	return Use("session.garden", "content/garden.md", bind("ids"), bind("guide"), bind("search"), bind("planting"))
+}
+
+func cliWords(id, path string) Node { return Use(id+"-cli", path+"-cli.md") }
+
 var (
 	delegationBoundary = Use("delegation.boundary", "content/delegation-boundary.md", Bind("read_reference", Choose(Enabled(agentToolsCarried),
 		Use("delegation.boundary-tools", "content/delegation-boundary/tools.md"),
 		Use("delegation.boundary-cli", "content/delegation-boundary/cli.md"))))
 	agentGuidance = Compose(
-		Use("session.agent", "content/agent.md"),
+		forSurface("session.agent", "content/agent"),
 		cliTeaching(Use("session.agent-reach", "content/agent-reach.md"), "agent", "session"),
 		When(Enabled(claudeCodePeerTools), Use("session.claude-code-peer-tools", "content/claude-code-peer-tools.md")),
 		Use("session.agent-trust", "content/agent-trust.md"),
 		delegationBoundary)
 	quickCaptureGuidance = Use("session.quick-capture-guidance", "content/session/quick-capture.md")
 	crewCleared          = Use("crew.cleared", "content/crew/cleared.md")
-	gardenRules          = Use("session.garden", "content/garden.md")
+	gardenRules          = gardenRulesWith(forSurface)
 	gardenCLI            = Use("session.garden-cli", "content/garden-cli.md")
 	gardenV2Rules        = Use("session.garden-v2", "content/garden-v2.md")
 	gardenV2Beds         = Use("session.garden-v2-beds", "content/garden-v2-beds.md", Bind("beds", Input(gardenBeds)))
 	gardenV2CLI          = Use("session.garden-v2-cli", "content/garden-v2-cli.md")
-	gardenGuidance       = Compose(gardenRules, gardenCLI)
+	gardenGuidance       = Compose(gardenRulesWith(cliWords), gardenCLI)
 	queueGuidance        = Use("session.queue", "content/session/queue.md")
 	attnMap              = attnMapNode(false)
 	launchAttnMap        = attnMapNode(true)

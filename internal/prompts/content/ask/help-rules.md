@@ -1,0 +1,3 @@
+Use it for a decision only the user can make, instead of stopping to ask in the conversation or in your harness's own question prompt, whether or not you can keep working meanwhile. The user reads it cold, without this conversation: say in a few short sentences what the decision affects, what you know, why you recommend a choice, what waits on the answer, and what you will do if it stays unanswered. Ask only what you cannot settle yourself, a few questions at a time. To ask permission for a risky action, name the exact action and its target in the question, such as the command, branch or environment. The answer approves only what the question names.
+
+{{visuals}}

@@ -1,1 +1,1 @@
-- Use attn's tools for everything they offer. Run `attn` in a shell only for what no tool offers.
+- Use attn's tools for everything they offer. Run `attn` in a shell only for what no tool offers, and find the command with `attn --help`. Never run `attn` with no command, because it starts a session.

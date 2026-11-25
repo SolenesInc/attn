@@ -7,7 +7,7 @@ groups:
     summary: "ask the user something they answer from attn"
     map:
       rows:
-        - {need: "Ask the user a decision only they can make, instead of asking in the conversation", tools: [ask, ask_list, ask_amend, ask_close]}
+        - {need: "Ask the user a decision only they can make", tools: [ask, ask_amend, ask_close]}
     flags:
       - {name: session, placeholder: "<id>", doc: "session id (defaults to the current session)"}
     doc: |
@@ -27,9 +27,7 @@ commands:
     runs: here
     grant: own
     doc: |
-      Opens an ask in the user's queue and returns its id at once. Use it for a decision only the user can make, instead of stopping to ask in the conversation or in your harness's own question prompt, whether or not you can keep working meanwhile. The user reads it cold, without this conversation: say in a few short sentences what the decision affects, what you know, why you recommend a choice, what waits on the answer, and what you will do if it stays unanswered. Ask only what you cannot settle yourself, a few questions at a time. To ask permission for a risky action, name the exact action and its target in the question, such as the command, branch or environment. The answer approves only what the question names.
-
-      {ask_visuals}
+      Opens an ask in the user's queue and returns its id at once. {ask_rules}
 
       The ask is markdown. Question blocks in it ask the user something; an ask without one just tells them something: `:::question` (pick one choice), `:::question-multi` (pick any number of choices), `:::question-text` (write an answer) and `:::question-file` (attach a screenshot or a file), each closed by `:::`. A block's first line is the question; the rest is context. Choices are "- [ ] label" or "- [ ] label — why"; "Recommended: <label>" marks yours. In one `:::question` of an ask, "Default: <label> after <duration>", such as "Default: Job queue after 2h", names the choice you go with when no answer has come by then: attn tells you once, the ask stays open, and a later answer reaches you as usual. A question that asks permission takes no default.
 
@@ -43,7 +41,7 @@ commands:
 
       Images (![alt](path)) {ask_image_base}. Name an image elsewhere by its absolute path. attn copies them when the ask opens, at most 5 MiB in all, so the user sees them as they were. An image that cannot be read refuses the ask, and so does one the app or the phone cannot show: an SVG, a remote or data: URL, a file of another type, or an HTML <img> tag. Draw a diagram in a mermaid code block instead.
 
-      Carry on with work that does not depend on the answer; when none is left, end your turn, and do not wait or poll. While any of your asks is open, attn refuses a standby that would close your session, and a close of your own session that would leave the answer with no agent. Withdraw an ask that no longer matters with `ask_close`. When the user answers, attn types the answer into the conversation as their message, approvals included. By then they have likely moved on and will not read what you write back there. If their answer asks you something, reply with a new ask that names theirs in `re`, so the user sees the question and the answer it follows. If you still need them, ask again.
+      {ask_waiting}Withdraw an ask that no longer matters with `ask_close`. When the user answers, attn types the answer into the conversation as their message, approvals included. By then they have likely moved on and will not read what you write back there. If their answer asks you something, reply with a new ask that names theirs in `re`, so the user sees the question and the answer it follows. If you still need them, ask again.
     args:
       - {name: markdown, type: markdown, required: true, piped: true, cli: "--file", placeholder: "<path>", doc: "the ask's markdown, required"}
       - {name: subject, type: text, cli: "--subject", doc: "the ask's subject (defaults to its first question)"}
