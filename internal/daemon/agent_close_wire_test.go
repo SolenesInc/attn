@@ -190,8 +190,8 @@ func TestGardenV2GuardsSelfCloseOnGrowingSeedsAndAutoParksOnDispatcherClose(t *t
 		t.Fatal("MCP agent_close --self succeeded while tending growing seeds")
 	}
 	mcpText := resultText(mcpRefusal)
-	if !strings.HasPrefix(mcpText, "growing_seeds_held: ") || !strings.Contains(mcpText, seedA) || !strings.Contains(mcpText, "`seed_park`") || !strings.Contains(mcpText, `"stay": true`) || !strings.Contains(mcpText, "Fix: Harvest, park, wither, or put each growing seed on standby, then close again.") {
-		t.Fatalf("MCP self-close refusal = %q, want growing_seeds_held with MCP tool mentions, stay: true hint, and catalog fix", mcpText)
+	if !strings.HasPrefix(mcpText, "growing_seeds_held: ") || !strings.Contains(mcpText, seedA) || !strings.Contains(mcpText, "`seed_park({seed: ") || !strings.Contains(mcpText, "`seed_standby({seed: \"<id>\", stay: true, ") || !strings.Contains(mcpText, "Fix: Harvest, park, wither, or put each growing seed on standby, then close again.") {
+		t.Fatalf("MCP self-close refusal = %q, want growing_seeds_held with park and stay: true calls, and catalog fix", mcpText)
 	}
 
 	_, standbyErr := cli.WithGardenProfile("", protocol.SessionID(worker)).SeedStandby(seedA, client.SeedStandbyOptions{Note: "wait for CI"})
