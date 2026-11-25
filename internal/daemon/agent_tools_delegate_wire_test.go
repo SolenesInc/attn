@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -72,6 +73,9 @@ func TestEveryDelegateToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing
 
 	relative := call("delegate", map[string]any{"brief": "Work in the session's folder", "cwd": ".", "model": "default", "request_id": "relative-1", "name": "relative"})
 	retried := call("delegate", map[string]any{"brief": "Work in the session's folder", "cwd": ".", "model": "default", "request_id": "relative-1", "name": "relative"})
+	if relative["state"] != "completed" || relative["result"] == nil {
+		t.Errorf("delegate answered %v, want the delegation completed with its result: its agent took its first turn", relative)
+	}
 	if retried["operation_id"] != relative["operation_id"] || retried["session_id"] != relative["session_id"] {
 		t.Errorf("a retry with the same request_id answered %v, want the first call's operation %v", retried, relative)
 	}
@@ -127,7 +131,34 @@ func TestADelegateCallerReadsAndDelegatesNothingOfAnotherProfile(t *testing.T) {
 	}
 }
 
-func TestADelegationThatFailsAfterItsToolCallReturnedReachesTheCallersInbox(t *testing.T) {
+func TestADelegateToolCallStopsWaitingForASilentAgentAndTheStartGoesOn(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		caller := w.bubbleClaude(t, w.App(), "shop")
+		args := map[string]any{"brief": "Say hello", "cwd": w.Path("shop"), "model": "default", "request_id": "silent-agent"}
+
+		asked := time.Now()
+		var operation protocol.DelegationOperation
+		if err := caller.cli.RunCommand("delegate", protocol.SessionID(caller.id), args, &operation); err != nil {
+			t.Fatal(err)
+		}
+		if waited := time.Since(asked); waited < 15*time.Second || waited > 30*time.Second {
+			t.Errorf("delegate answered after %s, want a wait under the 30s a harness gives a tool call", waited)
+		}
+		if operation.State != protocol.DelegationOperationStatePreparing || operation.Result != nil {
+			t.Errorf("delegate answered %+v, want the operation still preparing", operation)
+		}
+
+		w.bootBubbleClaude(t, string(operation.SessionID))
+		if err := caller.cli.RunCommand("delegate status", protocol.SessionID(caller.id), map[string]any{"id": "silent-agent"}, &operation); err != nil {
+			t.Fatal(err)
+		}
+		if operation.State != protocol.DelegationOperationStateCompleted || operation.Result == nil || operation.Result.FirstTurnAt == nil {
+			t.Errorf("once the agent took its first turn the operation is %+v, want it completed", operation)
+		}
+	})
+}
+
+func TestADelegationThatFailsAfterItWasAcceptedAnswersFailedAndReachesTheCallersInbox(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	setSetting(t, app, "agent_tools_enabled", "true")
@@ -136,22 +167,17 @@ func TestADelegationThatFailsAfterItsToolCallReturnedReachesTheCallersInbox(t *t
 	repo := w.Path("repo")
 	gitRepo(t, repo)
 
-	accepted := agent.mustCall(t, "delegate", map[string]any{"brief": "Work in a repository without a checkout", "cwd": repo, "model": "default", "request_id": "fails-after-acceptance"})
-	if accepted.IsError {
-		t.Fatalf("delegate refused before acceptance: %s", resultText(accepted))
+	answered := agent.mustCall(t, "delegate", map[string]any{"brief": "Work in a repository without a checkout", "cwd": repo, "model": "default", "request_id": "fails-after-acceptance"})
+	if answered.IsError {
+		t.Fatalf("delegate refused before acceptance: %s", resultText(answered))
 	}
 	var operation protocol.DelegationOperation
-	data, _ := json.Marshal(accepted.StructuredContent)
+	data, _ := json.Marshal(answered.StructuredContent)
 	if err := json.Unmarshal(data, &operation); err != nil {
 		t.Fatal(err)
 	}
-	for operation.State == protocol.DelegationOperationStateAccepted || operation.State == protocol.DelegationOperationStatePreparing {
-		if err := w.Client().RunCommand("delegate status", protocol.SessionID(session), map[string]any{"id": operation.OperationID, "wait_past": operation.UpdatedAt}, &operation); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if operation.State != protocol.DelegationOperationStateFailed {
-		t.Fatalf("the delegation settled %s, want failed: it needs a checkout in a repository", operation.State)
+	if operation.State != protocol.DelegationOperationStateFailed || operation.Failure == nil {
+		t.Fatalf("delegate answered %+v, want the failed delegation: it needs a checkout in a repository", operation)
 	}
 	items := readInbox(t, w.Client(), session, 10).Items
 	if len(items) != 1 || items[0].Kind != "maintenance_prompt" || !strings.Contains(items[0].Content, "fails-after-acceptance") || !strings.Contains(items[0].Content, "git checkout requires") {

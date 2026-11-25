@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/protocol"
@@ -32,7 +33,32 @@ func (d *Daemon) runDelegate(ctx context.Context, c command.Caller, a command.De
 			request.CwdBase = protocol.Ptr(row.Directory)
 		}
 	}
-	return d.startDelegation(ctx, request, d.sessionOrOwner(c.Session))
+	operation, err := d.startDelegation(ctx, request, d.sessionOrOwner(c.Session))
+	if err != nil || a.Follow {
+		return operation, err
+	}
+	return d.delegationWithinToolBound(ctx, operation.OperationID)
+}
+
+// delegateToolBound is how long a delegate tool call waits for the delegate's
+// first turn. On ai-sandbox, 4 starts of claude took 0.9 to 1.4 s and 3 of codex
+// 1.0 to 1.8 s (2026-11-25), so a wait that reaches it is a stopped start, such as
+// one at a folder-trust question, or a slow machine. It sits 10 s under the
+// shortest tool-call limit of the harnesses that call attn's tools, pi-mcp 1.3.0's
+// 30 s request default, below Claude Code's 60 s and Codex's 300 s.
+const delegateToolBound = 20 * time.Second
+
+func (d *Daemon) delegationWithinToolBound(ctx context.Context, operationID string) (*protocol.DelegationOperation, error) {
+	bounded, cancel := context.WithTimeout(ctx, delegateToolBound)
+	defer cancel()
+	operation, err := d.awaitDelegationSettled(operationID, bounded.Done())
+	if !errors.Is(err, errCallerGone) {
+		return operation, err
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	return d.delegationOperation(operationID)
 }
 
 func delegateRequest(a command.DelegateArgs) (*protocol.DelegateMessage, error) {

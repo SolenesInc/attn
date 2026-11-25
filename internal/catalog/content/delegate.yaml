@@ -11,7 +11,7 @@ groups:
     summary: "start another agent on work you may hand off; roles picks its models"
     map:
       rows:
-        - {need: "Start another agent on work you may hand off, and follow its start", tools: [delegate, delegate_status], references: [delegation]}
+        - {need: "Start another agent on work you may hand off, and look up one you started", tools: [delegate, delegate_status], references: [delegation]}
         - {need: "Read or change the models and harnesses each delegation role uses", tools: [delegate_roles, delegate_roles_set, delegate_roles_history, delegate_roles_rollback], references: [delegation-roles]}
     flags:
       - {name: profile, placeholder: "<name|id>", doc: "the garden of this profile; required outside attn when several profiles exist"}
@@ -33,9 +33,10 @@ commands:
 
       `model` is required unless `role` or `fallback` picks the model from the user's delegation roles (`delegate_roles` lists them). `cwd` is the folder or repository on the target machine, `host` or the caller's own. Inside Git, choose one complete checkout: `reuse_checkout` with `branch`, `new_worktree` with `branch` and `from`, or `new_worktree` with `existing_branch`. Outside Git, `cwd` is enough. On the caller's own machine, a relative `cwd` resolves against the CLI's working directory, or the folder a tool caller's session started in. Only a handover's predecessor is exempt from checkout occupancy; any other active session there needs `allow_worktree_reuse`.
 
-      A tool call answers with the operation once attn accepts the request, and `delegate_status` reads it later; the CLI waits until the agent has started and prints its result. Pass the same `request_id` to retry safely: a retry returns the accepted operation instead of starting another.
+      The command waits for the agent's first turn. Called as a tool, it waits at most 20 s and answers with the operation: `completed` with the session it started, or `failed` with the reason. `accepted` or `preparing` means that the agent is still starting, and attn goes on without you: go on with your work, or end your turn. Do not call `delegate_status` to wait for it. A start that fails or stalls, and what the agent reports later, reaches your inbox. Pass the same `request_id` to retry safely: a retry returns the accepted operation instead of starting another.
     args:
       - {name: cwd_base, type: path, cli: internal, doc: "the folder a relative cwd resolves against"}
+      - {name: follow, type: bool, cli: internal, doc: "answer once attn accepts the request; the CLI always follows the operation itself"}
       - {name: brief, type: markdown, cli: "--brief", doc: "the task: plants a seed for new work"}
       - {name: brief_file, type: path, cli: "--brief-file", cli_only: true, doc: "a file holding the brief"}
       - {name: seed, type: seed, cli: "--seed", doc: "an existing seed whose assignment the agent takes"}
@@ -73,7 +74,7 @@ commands:
     grant: own
     read_only: true
     doc: |
-      Reads a delegation's operation by its request id or operation id: its state, its progress, the session it started, and its result once it has one.
+      Reads a delegation's operation by its request id or operation id: its state, its progress, the session it started, and its result once it has one. Use it when the answer to `delegate` was lost, not to wait for a start.
     args:
       - {name: id, type: name, required: true, cli: pos, placeholder: "<request-or-operation-id>", doc: "the request id or operation id"}
       - {name: wait_past, type: text, cli: internal, doc: "answer once the operation changes after this updated_at"}

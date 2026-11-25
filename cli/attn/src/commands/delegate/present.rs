@@ -147,6 +147,7 @@ fn prepare_delegation(parsed: &mut Parsed) -> Result<(), Stop> {
         )
     })?;
     parsed.args.insert("cwd_base".to_string(), Json::from(base));
+    parsed.args.insert("follow".to_string(), Json::from(true));
     if parsed.text("request_id").trim().is_empty() {
         parsed
             .args

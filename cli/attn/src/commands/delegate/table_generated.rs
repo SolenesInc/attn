@@ -15,6 +15,7 @@ pub const COMMANDS: &[Command] = &[
         usage: &[],
         args: &[
             Arg { name: "cwd_base", cli: Cli::Internal, value: Value::Text, source: Source::Given, required: false, list: false },
+            Arg { name: "follow", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },
             Arg { name: "brief", cli: Cli::Flag("brief"), value: Value::Text, source: Source::Given, required: false, list: false },
             Arg { name: "brief_file", cli: Cli::Flag("brief-file"), value: Value::Text, source: Source::Given, required: false, list: false },
             Arg { name: "seed", cli: Cli::Flag("seed"), value: Value::Text, source: Source::Given, required: false, list: false },

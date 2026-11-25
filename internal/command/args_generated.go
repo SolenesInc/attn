@@ -534,6 +534,7 @@ type CrewRestoreArgs struct {
 
 type DelegateArgs struct {
 	CwdBase            string  `json:"cwd_base,omitempty"`
+	Follow             bool    `json:"follow,omitempty"`
 	Brief              string  `json:"brief,omitempty"`
 	BriefFile          string  `json:"brief_file,omitempty"`
 	Seed               string  `json:"seed,omitempty"`
