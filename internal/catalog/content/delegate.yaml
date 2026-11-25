@@ -65,7 +65,7 @@ commands:
       - {name: source_session, type: name, cli: "--source-session", cli_only: true, placeholder: "<id>", doc: "the session delegating (default: the current session)"}
       - {name: yolo, type: bool, cli: "--yolo", doc: "launch the agent with its approval prompts bypassed"}
     result: DelegationOperation
-    receipt: [operation_id, request_id, state, progress, session_id, seed_id, failure, error]
+    receipt: [operation_id, request_id, state, progress, session_id, seed_id, result.directory, result.branch, result.agent, result.model, result.effort, result.first_turn_at, result.first_turn_unconfirmed, failure, error]
     examples:
       - {brief: "Fix the flaky checkout test", cwd: /src/shop, new_worktree: true, branch: fix/checkout, from: main, model: default}
 
