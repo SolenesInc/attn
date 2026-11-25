@@ -1,0 +1,1 @@
+Fixes 955b355: the "?" of an open ask on the shelf changes colour with its entry's fill when the overview makes an off-screen entry current, instead of fading at 1.31:1, and still slides with the row. It also goes at once when its column comes on screen, where it used to fade out over the new fill.
