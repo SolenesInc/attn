@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "info",
+  "title": "Review disposition: old search argument refusal below P1",
+  "at": "2026-11-25T10:07:54.938Z",
+  "detail": "The original isolated MCP reproduction still holds: the pre-rename words argument is refused and the query argument works. The review did not show a live session failing to recover from the schema refusal. The affected sessions span an update with an experimental feature enabled. The implementation plot tender and review coordinator agreed this does not meet P1 and no code change is assigned. This supersedes the P1 disposition for edbacf0 without claiming a fix landed.\n"
+}
