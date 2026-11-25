@@ -1,0 +1,8 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "fix: Daemon (3) shallow fetch race",
+  "at": "2026-11-25T10:25:11.669Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45588950910",
+  "repairs": "2bf7d3ca6"
+}
