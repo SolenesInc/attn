@@ -59,23 +59,33 @@ func TestEachHarnessReadsAttnsGuidanceAndLeavesItsPullRequestsToItsHooks(t *test
 	}
 }
 
-func TestClaudeRunsWithItsPeerMessagingToolsDeniedUnlessTheUserRestoresThem(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app := w.App()
-	denied := w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("denied"), func(m *protocol.SpawnSessionMessage) {
-		m.InitialPrompt = protocol.Ptr("--help is text, not a flag")
-	}))
-	i, end := slices.Index(denied.Argv, "--disallowed-tools"), slices.Index(denied.Argv, "--")
-	if i < 0 || end < i || !slices.Equal(denied.Argv[i+1:i+2], []string{"ListAgents"}) || slices.Contains(denied.Argv, "SendMessage") {
-		t.Errorf("claude launched as %q, want only ListAgents denied, before the prompt", denied.Argv)
-	}
-	if got := denied.Prompted(); got != "--help is text, not a flag" {
-		t.Errorf("claude was prompted %q", got)
-	}
-	t.Setenv("ATTN_CLAUDE_PEER_MESSAGING", "1")
-	restored := w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("restored")))
-	if slices.Contains(restored.Argv, "--disallowed-tools") {
-		t.Errorf("with peer messaging restored claude launched as %q", restored.Argv)
+func TestAClaudeCodeSessionKeepsItsPeerToolsAndIsToldToReachOtherAgentsThroughAttn(t *testing.T) {
+	const notAttns = "Claude Code's own `ListAgents` and `SendMessage` tools are not attn's"
+	for _, direct := range []bool{false, true} {
+		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
+			w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
+			app := w.App()
+			setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
+			for _, tools := range []bool{false, true} {
+				setSetting(t, app, "agent_tools_enabled", strconv.FormatBool(tools))
+				claude := w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("claude"), func(m *protocol.SpawnSessionMessage) {
+					m.InitialPrompt = protocol.Ptr("--help is text, not a flag")
+				}))
+				if slices.Contains(claude.Argv, "--disallowed-tools") {
+					t.Errorf("with agent_tools_enabled %t, claude launched with tools disallowed: %q", tools, claude.Argv)
+				}
+				if got := claude.Prompted(); got != "--help is text, not a flag" {
+					t.Errorf("claude was prompted %q", got)
+				}
+				if guidance := launchGuidance(t, w, claude); !strings.Contains(guidance, notAttns) {
+					t.Errorf("with agent_tools_enabled %t, claude launched without being told its peer tools are not attn's:\n%s", tools, guidance)
+				}
+				codex := w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("codex")))
+				if guidance := launchGuidance(t, w, codex); strings.Contains(guidance, notAttns) {
+					t.Errorf("with agent_tools_enabled %t, codex was told about Claude Code's peer tools:\n%s", tools, guidance)
+				}
+			}
+		})
 	}
 }
 

@@ -603,6 +603,24 @@
                     ]
                   },
                   {
+                    "kind": "when",
+                    "condition": {
+                      "field": {
+                        "name": "claude_code_peer_tools",
+                        "kind": "flag",
+                        "description": "The session's harness is Claude Code, whose own tools list and message Claude Code sessions."
+                      },
+                      "test": "enabled"
+                    },
+                    "children": [
+                      {
+                        "kind": "text",
+                        "id": "session.claude-code-peer-tools",
+                        "source": "content/claude-code-peer-tools.md"
+                      }
+                    ]
+                  },
+                  {
                     "kind": "text",
                     "id": "session.agent-trust",
                     "source": "content/agent-trust.md"
@@ -8310,5 +8328,5 @@
       ]
     }
   ],
-  "definitions_hash": "8020f5f8d52bdd614cf899274bdb1553536f355c89b54fe4d2448be753757d6d"
+  "definitions_hash": "aa8ee4fd2b2e72433a3620002cf565a177f9fc786103bc6879ec4fa8f9caf42a"
 }

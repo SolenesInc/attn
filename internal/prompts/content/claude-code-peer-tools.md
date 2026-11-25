@@ -1,0 +1,1 @@
+Claude Code's own `ListAgents` and `SendMessage` tools are not attn's: they see only Claude Code sessions and name them by folder. To find, read or message another agent, use attn, through its CLI or its tools. Use `SendMessage` only to continue a subagent you started.

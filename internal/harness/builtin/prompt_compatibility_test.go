@@ -16,7 +16,6 @@ import (
 
 func TestLegacyPromptCompatibility(t *testing.T) {
 	out := map[string]string{}
-	t.Setenv("ATTN_CLAUDE_PEER_MESSAGING", "false")
 	for mask := 0; mask < 16; mask += 2 {
 		for _, resume := range []bool{false, true} {
 			opts := harness.DirectLaunchOpts{TerminalID: "session-id", CWD: "/tmp/work", InitialPrompt: "Task λ {{literal}}\nsecond line", WrapperPath: "/tmp/attn", SocketPath: "/tmp/attn.sock", Guidance: prompts.Launch{Garden: mask&4 != 0}}

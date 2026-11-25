@@ -45,8 +45,6 @@ const (
 	claudeTranscriptFreshnessSkew = 5 * time.Second
 )
 
-var claudePeerTools = []string{"ListAgents"}
-
 func resolveExecutable(configured string) string {
 	return harness.ResolveExecutable(claudeExecutableEnvVar, configured, claudeDefaultExecutable)
 }
@@ -59,19 +57,6 @@ func showsFolderTrustQuestion(screen string) bool {
 
 func withoutWhitespace(text string) string {
 	return strings.Join(strings.Fields(text), "")
-}
-
-func claudePeerMessagingEnabled() bool {
-	raw, ok := os.LookupEnv("ATTN_CLAUDE_PEER_MESSAGING")
-	if !ok {
-		return false
-	}
-	switch strings.TrimSpace(strings.ToLower(raw)) {
-	case "1", "true", "yes", "on":
-		return true
-	}
-	parsed, err := strconv.ParseBool(strings.TrimSpace(strings.ToLower(raw)))
-	return err == nil && parsed
 }
 
 func addDirArgs(dirs []string) []string {
@@ -104,13 +89,10 @@ func buildCommand(opts harness.DirectLaunchOpts, hookSettings string, mod claude
 	if opts.AgentTools != nil {
 		args = append(args, "--mcp-config", claudeAgentToolsConfig(opts.AgentTools.URL))
 	}
-	if instructions := opts.EffectiveGuidance().Instructions(); instructions != "" {
+	guidance := opts.EffectiveGuidance()
+	guidance.ClaudeCodePeerTools = true
+	if instructions := guidance.Instructions(); instructions != "" {
 		args = append(args, "--append-system-prompt", instructions)
-	}
-
-	if !claudePeerMessagingEnabled() {
-		args = append(args, "--disallowed-tools")
-		args = append(args, claudePeerTools...)
 	}
 
 	args = append(args, addDirArgs(opts.AwarenessDirs)...)

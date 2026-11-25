@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "claude-code-session",
+  "description": "Claude Code session: its launch says Claude Code's own tools for sessions are not attn's.",
+  "recipient": "session",
+  "event": "launch",
+  "values": {
+    "garden_available": "true",
+    "asks_enabled": "true",
+    "vent_enabled": "true",
+    "crew_priming": "",
+    "self_report_pull_requests": "false",
+    "tool_vents_enabled": "false",
+    "claude_code_peer_tools": "true"
+  }
+}

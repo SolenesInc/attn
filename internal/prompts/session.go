@@ -23,6 +23,8 @@ var (
 	crewPriming            = ProducedBy(Trimmed(TextField("crew_priming", "Rendered crew identity and predecessor letter, supplied by internal/crew.")), "crew/priming")
 )
 
+var claudeCodePeerTools = FlagField("claude_code_peer_tools", "The session's harness is Claude Code, whose own tools list and message Claude Code sessions.")
+
 var agentToolsCarried = FlagField("agent_tools", "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer.")
 
 func cliTeaching(node Node, families ...string) Node {
@@ -110,6 +112,7 @@ var (
 	agentGuidance = Compose(
 		Use("session.agent", "content/agent.md"),
 		cliTeaching(Use("session.agent-reach", "content/agent-reach.md"), "agent", "session"),
+		When(Enabled(claudeCodePeerTools), Use("session.claude-code-peer-tools", "content/claude-code-peer-tools.md")),
 		Use("session.agent-trust", "content/agent-trust.md"),
 		delegationBoundary)
 	quickCaptureGuidance = Use("session.quick-capture-guidance", "content/session/quick-capture.md")
@@ -191,6 +194,7 @@ type Launch struct {
 	CodeReview             bool
 	Crew                   string
 	AgentTools             bool
+	ClaudeCodePeerTools    bool
 }
 
 func (l Launch) Values() Values {
@@ -205,6 +209,7 @@ func (l Launch) Values() Values {
 		codeReviewEnabled.Name:      strconv.FormatBool(l.CodeReview),
 		crewPriming.Name:            l.Crew,
 		agentToolsCarried.Name:      strconv.FormatBool(l.AgentTools),
+		claudeCodePeerTools.Name:    strconv.FormatBool(l.ClaudeCodePeerTools),
 	}
 }
 
