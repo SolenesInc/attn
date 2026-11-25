@@ -1,0 +1,3 @@
+The daemon's side of the script runner (`internal/script`, not reached from `/mcp` until s-4k286c) no longer trusts its child. `Run` refuses a call outside `Job.Functions` or whose arguments are not one object, reads at most 10 MB, and the child keeps 100,000 characters of logs and returned text and counts the rest in `Output.Dropped`. A log flood went from 1 to 2 s of daemon CPU to 1 ms.
+
+A script that reaches its memory limit now ends with the limit named whatever it catches. QuickJS throws a catchable `null` there and keeps no record, so `heap.go` puts the limit in the runtime's allocator. That reads private layout of the pinned binding: a moved layout refuses to start and fails a landing test.
