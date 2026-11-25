@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -183,14 +182,13 @@ func (e *engine) failure(thrown error) Output {
 	return Output{Line: line, Failed: failed}
 }
 
-var scriptFrame = regexp.MustCompile(`<input>:(\d+)`)
-
 func (e *engine) line(stack string) int {
-	frame := scriptFrame.FindStringSubmatch(stack)
-	if frame == nil {
+	_, frame, found := strings.Cut(stack, "<input>:")
+	if !found {
 		return 0
 	}
-	line, _ := strconv.Atoi(frame[1])
+	digits := strings.IndexFunc(frame+"\n", func(r rune) bool { return r < '0' || r > '9' })
+	line, _ := strconv.Atoi(frame[:digits])
 	return min(line, 1+strings.Count(e.job.Source, "\n"))
 }
 
