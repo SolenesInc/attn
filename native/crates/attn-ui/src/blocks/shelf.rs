@@ -48,6 +48,10 @@ impl ShelfMember {
         )
     }
 
+    fn dot_width(&self) -> f32 {
+        if self.needs_user() { DASH } else { DOT }
+    }
+
     fn ink(&self, ground: Color, t: &Tokens) -> Color {
         let ink = self.state.map_or(t.text_tertiary, |state| state.ink(t));
         legible(ink, ground, MARK_READS, t)
@@ -238,20 +242,47 @@ impl ShelfEntry {
             .fold(0.0, f32::max)
     }
 
-    /// How wide a column of `members` tiles stands with no name and no ask.
-    pub fn icon_width(members: usize) -> f32 {
-        let shape = if members > 1 { &PILL } else { &FLAT };
-        shape.start + MARK + shape.end
+    fn unnamed_width(&self) -> f32 {
+        let shape = self.shape();
+        shape.start + MARK + shape.end + self.asks_width()
+    }
+
+    /// The room a pill's dots take on the edge that holds most of them, whichever member it shows.
+    fn dots_width(&self) -> f32 {
+        if !self.stacked() {
+            return 0.0;
+        }
+        let edge = |members: &[ShelfMember]| {
+            let dots: f32 = members.iter().map(ShelfMember::dot_width).sum();
+            2.0 * DOTS_START + dots + DOT_GAP * (members.len() - 1) as f32
+        };
+        let last = self.members.len() - 1;
+        edge(&self.members[1..]).max(edge(&self.members[..last]))
+    }
+
+    /// Whether `name` points draw the member's name, whole or cut short.
+    fn names(&self, member: &ShelfMember, name: f32) -> bool {
+        let whole = door::width(&self.name_of(member), Type::Control);
+        name > 0.0 && name >= whole.min(door::width("…", Type::Control))
+    }
+
+    fn name_room(&self, name: f32) -> f32 {
+        if self.members.iter().any(|m| self.names(m, name)) {
+            NAME_GAP.pt() + name
+        } else {
+            0.0
+        }
     }
 
     /// How wide the entry stands with `name` points for its name.
     pub fn width(&self, name: f32) -> f32 {
-        Self::icon_width(self.members.len()) + self.asks_width() + name_room(name)
+        (self.unnamed_width() + self.name_room(name)).max(self.dots_width())
     }
 
-    /// The widest name that takes no more than `room` with the gap before it.
+    /// The widest name that widens the entry by no more than `room`.
     pub fn name_within(&self, room: f32) -> f32 {
-        (room - NAME_GAP.pt()).floor().max(0.0)
+        let spare = self.width(0.0) - self.unnamed_width();
+        (spare + room - NAME_GAP.pt()).floor().max(0.0)
     }
 
     fn ground(&self, t: &Tokens) -> Color {
@@ -281,7 +312,7 @@ impl ShelfEntry {
             Place::Current => Type::Control,
             _ => Type::Small,
         };
-        let named = (name_room(name) > 0.0).then(|| {
+        let named = self.names(member, name).then(|| {
             words(self.name_of(member), kind, self.name_ink(ground, t))
                 .single_line()
                 .truncate()
@@ -319,7 +350,7 @@ impl ShelfEntry {
                 .iter()
                 .enumerate()
                 .map(|(member, m)| {
-                    let width = if m.needs_user() { DASH } else { DOT };
+                    let width = m.dot_width();
                     let shows = if above {
                         member < self.shown
                     } else {
@@ -347,7 +378,7 @@ impl ShelfEntry {
         let shape = self.shape();
         let ground = self.ground(t);
         let asks = Shelf::asks(key, self.asking, ground, t);
-        let slices = MARK + name_room(name);
+        let slices = MARK + self.name_room(name);
         let slices = if self.stacked() {
             let reel = col()
                 .absolute(0.0, 0.0)
@@ -408,14 +439,6 @@ impl ShelfEntry {
         } else {
             entry
         }
-    }
-}
-
-fn name_room(name: f32) -> f32 {
-    if name < door::width("…", Type::Control) {
-        0.0
-    } else {
-        NAME_GAP.pt() + name
     }
 }
 

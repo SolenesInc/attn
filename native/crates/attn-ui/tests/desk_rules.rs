@@ -7,6 +7,7 @@ use attn_ui::Tokens;
 use attn_ui::blocks::{CountSide, MemberState, Place, Shelf, ShelfCount, ShelfEntry, ShelfMember};
 use attn_ui::colors::scheme_for;
 use attn_ui::desk_gallery::header_pieces_of;
+use attn_ui::system::{Type, width_of};
 use rune::{App, AppSpec, Cx, El, ElementInfo, Env, Runtime, el};
 
 const WINDOW: (f32, f32) = (900.0, 500.0);
@@ -148,6 +149,133 @@ fn a_shelf_entry_stands_as_wide_as_the_shelf_counts_it_and_draws_nothing_past_it
                     part.visible,
                     entry.rect
                 );
+            }
+        }
+    }
+}
+
+const SHORT_NAMES: [&str; 3] = ["A", "I", "7"];
+const STACKED: usize = 4;
+
+fn named(name: &str, state: MemberState) -> ShelfMember {
+    ShelfMember {
+        name: name.into(),
+        ..shelf_member(Some(state))
+    }
+}
+
+/// One tile by a one-character name.
+fn short_entry(place: Place, name: &str) -> ShelfEntry {
+    ShelfEntry::new(vec![named(name, MemberState::Idle)], 0, place, 0)
+}
+
+/// A stack where every member but `idle` waits.
+fn waiting_stack(place: Place, idle: usize, shown: usize) -> ShelfEntry {
+    let state = |i| {
+        if i == idle {
+            MemberState::Idle
+        } else {
+            MemberState::Waiting
+        }
+    };
+    let members = (0..STACKED).map(|i| named("builder", state(i))).collect();
+    ShelfEntry::new(members, shown, place, 0)
+}
+
+fn waiting_stacks(place: Place) -> impl Iterator<Item = (usize, usize, ShelfEntry)> {
+    (0..STACKED).flat_map(move |idle| {
+        (0..STACKED).map(move |shown| (idle, shown, waiting_stack(place, idle, shown)))
+    })
+}
+
+/// A row per place of one-character names, and one of stacks at their narrowest.
+fn narrow_board(_: &(), _: &mut Cx<()>) -> El {
+    let t = tokens(true);
+    let rows = PLACES.iter().enumerate().flat_map(|(p, &place)| {
+        let names = SHORT_NAMES.map(|name| {
+            let entry = short_entry(place, name);
+            entry.build(&format!("{p}.{name}"), name, entry.name_width(), &t)
+        });
+        let stacks = waiting_stacks(place).map(|(idle, shown, entry)| {
+            let key = format!("{p}.{idle}.{shown}");
+            entry.build(&key, "builder", entry.name_within(0.0), &t)
+        });
+        [
+            Shelf::row(format!("names.{p}")).children(names),
+            Shelf::row(format!("stacks.{p}")).children(stacks),
+        ]
+    });
+    rune::col().children(rows)
+}
+
+fn narrow_shelf() -> Runtime<()> {
+    let mut rt = App::new(AppSpec {
+        fonts: attn_ui::FONTS,
+        families: attn_ui::FAMILIES,
+        ..AppSpec::new("narrow shelf", SHELF_WINDOW, || (), narrow_board)
+    })
+    .headless_runtime(SHELF_WINDOW, Env::new(true, SCALE));
+    rt.frame(0.0);
+    rt
+}
+
+fn keyed(rt: &Runtime<()>, key: &str) -> ElementInfo {
+    rt.elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some(key))
+        .unwrap_or_else(|| panic!("{key} is drawn"))
+}
+
+#[test]
+fn a_name_whose_own_width_fits_is_drawn_whole_however_short_it_is() {
+    let rt = narrow_shelf();
+    for (p, &place) in PLACES.iter().enumerate() {
+        for name in SHORT_NAMES {
+            let entry = keyed(&rt, &format!("{p}.{name}"));
+            let said = within(&rt, &entry)
+                .into_iter()
+                .find(|e| e.text.as_deref() == Some(name))
+                .unwrap_or_else(|| panic!("{place:?} {name:?} is drawn"));
+            assert_eq!(said.visible, said.rect, "{place:?} {name:?} is not cut");
+            assert!(
+                said.rect[2] >= width_of(name, Type::Control) - 0.5,
+                "{place:?} {name:?} has {} of {} points",
+                said.rect[2],
+                width_of(name, Type::Control)
+            );
+        }
+    }
+}
+
+#[test]
+fn a_stack_at_its_narrowest_draws_every_dot_whole_whichever_member_it_shows() {
+    let rt = narrow_shelf();
+    for (p, &place) in PLACES.iter().enumerate() {
+        for (idle, shown, entry) in waiting_stacks(place) {
+            let key = format!("{p}.{idle}.{shown}");
+            let pill = keyed(&rt, &key);
+            let [x, y, width, height] = pill.rect;
+            let first = waiting_stack(place, idle, 0).width(0.0);
+            assert_eq!(entry.width(0.0), first, "{key}: the pill keeps its width");
+            assert!(
+                (width - first).abs() < 0.5,
+                "{key}: drawn {width}, counted {first}"
+            );
+            for member in (0..STACKED).filter(|&m| m != shown) {
+                let side = if member < shown { "above" } else { "below" };
+                let dot = keyed(&rt, &format!("{key}.{side}.{member}"));
+                let [dx, dy, dw, dh] = dot.visible;
+                let whole = if member == idle { 4.0 } else { 10.0 };
+                assert!(
+                    (dw - whole).abs() < 0.5
+                        && dx >= x + pill.radius
+                        && dx + dw <= x + width - pill.radius,
+                    "{key}: {side}.{member} draws {dw} of {whole} points at {} in {width}",
+                    dx - x
+                );
+                assert!(dy >= y && dy + dh <= y + height, "{key}: {side}.{member}");
+                let found = entry.dot_at(dx + dw / 2.0 - x, dy + dh / 2.0 - y);
+                assert_eq!(found, Some(member), "{key}: the pointer on {side}.{member}");
             }
         }
     }
