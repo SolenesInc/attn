@@ -1,0 +1,1 @@
+The agent bench counts calls refused for their usage in a column of their own, and no longer fails a probe for one when the agent then gets the end state right. Claude Code calls a deferred tool before its schema loads, which cost probes whose outcome was right.
