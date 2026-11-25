@@ -1,0 +1,1 @@
+Holding the keys that move between tiles no longer opens the overview unless you turn it on. The new setting, `hold_opens_overview_enabled`, is off by default and has a switch in Settings → Appearance → Overview. Cmd+G and the other ways in are unchanged.
