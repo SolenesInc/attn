@@ -1,0 +1,1 @@
+Two automation tool wire tests now wait for their Claude to launch before running an automation, so a slow SessionStart report no longer makes Codex folder trust refuse the run (the Daemon (4) red in run 45584805143). Test-only.
