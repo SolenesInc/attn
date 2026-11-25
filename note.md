@@ -1,0 +1,1 @@
+`TestEachToolServerTeachesInTheTextItsHarnessShows` was red on `main` since `bf8fba16e` made the intent map a list: it pinned the old table's layout. It now checks that the served instructions name every core tool and stay within 4,096 characters. `scripts/landing-tests` gets an `agent-tools` group, so a change to the generated tools file runs this test before it lands.
