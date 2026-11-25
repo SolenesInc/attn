@@ -292,6 +292,8 @@ jobs:
             jobs: daemon-3 daemon-4 attn-6
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Report runner class
         run: ./scripts/ci-runner-class.sh
