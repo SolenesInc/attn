@@ -24,6 +24,7 @@ func TestEveryAutomationToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testi
 	app := w.App()
 	setSetting(t, app, "agent_tools_enabled", "true")
 	session := w.Spawn(app, fakeagent.Claude, w.Path("check"))
+	w.Launched(session)
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
 	tools := &schemaCheckedTools{t: t, agent: agent, tools: listOfferedTools(t, agent), called: map[string]bool{}}
 
@@ -80,6 +81,7 @@ func TestAnAutomationRunToolGivesTheAgentItsInputsIntegersExactly(t *testing.T) 
 	app := w.App()
 	setSetting(t, app, "agent_tools_enabled", "true")
 	session := w.Spawn(app, fakeagent.Claude, w.Path("check"))
+	w.Launched(session)
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
 	var applied protocol.AutomationDefinitionSummary
 	structuredAs(t, agent.mustCall(t, "automation_apply", map[string]any{"definition": manualAutomation(w, "Check the record.")}), &applied)
