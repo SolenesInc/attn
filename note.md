@@ -1,0 +1,3 @@
+A terminal's grid can now be drawn by more than one renderer, at any size. Each row, the overlays and the images carry a stamp that changes when they do, and a renderer remembers the stamps it drew, so nothing one renderer reads is cleared by another. `Cells::prepare` takes `shrink`: with it, a grid fills a smaller slot at its own proportions, with glyphs rastered near that size.
+
+Nothing uses the small renderer yet: the row overview (s-qnky2t) will. At full size nothing changes: 746 of 750 tour screens are byte-identical, the other 4 show a random worktree name, and paired streaming runs found no cost beyond the spread of the base runs.
