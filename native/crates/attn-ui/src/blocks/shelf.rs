@@ -510,8 +510,7 @@ impl ShelfEntry {
 fn asks(key: &str, count: usize, ground: &Ground, t: &Tokens) -> Vec<El> {
     (0..count)
         .map(|i| {
-            ground
-                .words(ASK.to_owned(), Type::Label, t.accent, t)
+            recolored_at_once(ground.words(ASK.to_owned(), Type::Label, t.accent, t))
                 .key(format!("{key}.ask.{i}"))
                 .role("img")
                 .label("Open ask")

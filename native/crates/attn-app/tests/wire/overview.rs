@@ -781,12 +781,23 @@ fn the_shelf_shows_the_row_of_a_previewed_desktop_until_the_overview_closes() {
 #[test]
 fn the_shelf_s_colours_change_at_once_as_the_highlight_moves_and_on_a_previewed_desktop() {
     let right = || chord(&Action::TerminalFocusRight);
-    let mut own = start(two_rows());
+    let mut state = initial(two_rows());
+    state.asks = Some(vec![question("s-c")]);
+    let mut own = start_on(Daemon::scripted().state(state));
     press(&mut own, Action::DesktopOverview);
     let stepped = own.record(60.0, 0.5, |_, app| app.key(right()));
     assert_eq!(
         super::shelf_entries::recolored_at_once(&stepped),
         ["a", "b"]
+    );
+    let off_screen = own.record(60.0, 0.5, |_, app| app.key(right()));
+    let ask = "/shelf.entry.c.ask.0";
+    let ask = off_screen.tracks.iter().find(|t| t.path.ends_with(ask));
+    let ink = |at| ask.unwrap().paint_at(at).unwrap().colors;
+    assert_ne!(ink(0), ink(off_screen.frames - 1));
+    assert_eq!(
+        super::shelf_entries::recolored_at_once(&off_screen),
+        ["b", "c"]
     );
     let mut previewed = previewing();
     let stepped = previewed.record(60.0, 0.5, |_, app| app.key(right()));
