@@ -594,6 +594,13 @@ func validateTheme(value string) error {
 	return nil
 }
 
+func validateIDLabels(value string) error {
+	if value != "lantern" && value != "name" {
+		return fmt.Errorf("invalid id labels: %s (must be lantern or name)", value)
+	}
+	return nil
+}
+
 func extractCommandBinary(command string) string {
 	if command == "" {
 		return ""

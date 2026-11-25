@@ -46,6 +46,9 @@ fn heard_key(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> 
     if matches!(ev.key, Key::Modifier { .. }) {
         return false;
     }
+    if crate::hints::on_key(state, ev, tx) {
+        return true;
+    }
     let escape = ev.key == Key::Escape;
     let disarmed = escape && crate::sidebar::crew::disarm(state);
     if modal(state) {
@@ -306,12 +309,12 @@ fn type_into(
     true
 }
 
-/// ⌘ or Ctrl went down or up: over a link in a terminal, the cursor shows it opens.
 pub(crate) fn on_modifiers(state: &mut State, mods: Mods, tx: &mut Tx) {
-    if !state
+    let unlabelled = crate::hints::on_modifiers(state, mods);
+    let pointed = state
         .terminals
-        .accelerator(crate::terminal::accelerator(mods))
-    {
+        .accelerator(crate::terminal::accelerator(mods));
+    if !unlabelled && !pointed {
         tx.live_only();
     }
 }
@@ -337,6 +340,9 @@ fn composed(state: &mut State, ime: &Ime, tx: &mut Tx) -> bool {
     };
     if composing.is_none() {
         state.terminals.end_composition();
+    }
+    if state.window.hints.on() {
+        return true;
     }
     if crate::notebook::ime(state, ime, tx) {
         return true;
@@ -382,6 +388,9 @@ fn composed(state: &mut State, ime: &Ime, tx: &mut Tx) -> bool {
 /// for an image the Ctrl-V byte, which tells an agent to read the image off the clipboard
 /// itself.
 pub(crate) fn on_paste(state: &mut State, content: &ClipboardContent, tx: &mut Tx) {
+    if state.window.hints.on() {
+        return;
+    }
     if !content.text().is_empty() && crate::notebook::paste(state, content.text(), tx) {
         return;
     }
@@ -436,6 +445,9 @@ pub(crate) fn on_field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> boo
         .lock()
         .unwrap()
         .field_heard(Heard::Key(ev, tx.key_repeat()), target, now);
+    if crate::hints::on_key(state, ev, tx) {
+        return true;
+    }
     if modal(state) {
         return false;
     }

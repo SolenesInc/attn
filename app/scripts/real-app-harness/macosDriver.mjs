@@ -112,6 +112,10 @@ export class MacOSDriver {
     await this.runInputDriver(['key', '--key', key, '--modifiers', modifierNames(modifiers).join(','), '--prompt-accessibility']);
   }
 
+  async menuKeys() {
+    return JSON.parse(await this.runInputDriverCapture(['menu_keys', '--prompt-accessibility']));
+  }
+
   async parkWindow(visiblePx) {
     const stdout = await this.runInputDriverCapture([
       'window_park',

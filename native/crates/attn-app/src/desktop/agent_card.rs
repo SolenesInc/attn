@@ -69,14 +69,15 @@ impl<'a> Card<'a> {
 }
 
 /// Why an agent waits on the user, most pressing first.
-pub(super) enum Needs {
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum Needs {
     Approval,
     Turn,
     Asks(usize),
 }
 
 impl Needs {
-    pub(super) fn of(session: &Session, facts: &Facts, now_ms: i64) -> Option<Needs> {
+    pub(crate) fn of(session: &Session, facts: &Facts, now_ms: i64) -> Option<Needs> {
         let snoozed =
             crate::sidebar::queue::is_snoozed(session.turn_snoozed_until.as_deref(), now_ms);
         if AgentState::parse(&session.state) == AgentState::PendingApproval {
@@ -89,7 +90,7 @@ impl Needs {
         }
     }
 
-    pub(super) fn said(&self) -> String {
+    pub(crate) fn said(&self) -> String {
         match self {
             Needs::Approval => "wants approval".to_owned(),
             Needs::Turn => "waiting for you".to_owned(),
@@ -98,7 +99,7 @@ impl Needs {
         }
     }
 
-    fn ink(&self, t: &Tokens) -> Color {
+    pub(crate) fn ink(&self, t: &Tokens) -> Color {
         match self {
             Needs::Approval => t.state_approval,
             Needs::Turn | Needs::Asks(_) => t.state_waiting,

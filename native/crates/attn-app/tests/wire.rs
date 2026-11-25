@@ -217,6 +217,7 @@ mod wire {
     mod terminal_ids;
     mod terminal_input_latency;
     mod terminal_kitty;
+    mod terminal_labels;
     mod terminal_links;
     mod terminal_stale_build;
     mod terminal_view;

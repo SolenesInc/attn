@@ -43,6 +43,7 @@ pub struct Window {
     /// taking this window's keyboard.
     pub keyboard: Option<Holder>,
     pub(crate) desk: crate::desktop::Desk,
+    pub(crate) hints: crate::hints::Hints,
     pub(crate) search: crate::palette::Search,
     pub agent_list_open: bool,
     /// The automations whose runs the queue sidebar lists under their group, by definition id.

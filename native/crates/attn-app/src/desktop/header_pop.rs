@@ -250,6 +250,9 @@ fn rest(state: &mut State, host: &Host, session: &str, what: What, tx: &mut Tx) 
 
 /// The pointer rests on what opens `opening`. Returns whether that changed anything.
 fn rests(state: &mut State, opening: Pop, tx: &mut Tx) -> bool {
+    if state.window.hints.on() {
+        return false;
+    }
     let what = opening.what;
     let first = what.first_pick(&opening.session, &state.facts);
     let pop = &mut state.window.desk.header_pop;
@@ -324,6 +327,17 @@ pub(super) fn open_mark(state: &mut State, runtime: &str, reader: &str, mark: Ma
         mark,
     };
     hold(state, Pop::of_mark(marking, true), 0, tx);
+}
+
+pub(crate) fn pin_mark(state: &mut State, runtime: &str, reader: &str, mark: Mark, tx: &mut Tx) {
+    let marking = Marking {
+        runtime: runtime.to_owned(),
+        reader: reader.to_owned(),
+        mark,
+    };
+    let pop = Pop::of_mark(marking, true);
+    let first = pop.what.first_pick(&pop.session, &state.facts);
+    hold(state, pop, first, tx);
 }
 
 /// The pointer moved onto the open popover, or off it.

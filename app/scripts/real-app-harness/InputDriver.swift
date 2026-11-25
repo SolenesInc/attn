@@ -55,7 +55,7 @@ func parseOptions() throws -> Options {
     while index < args.count {
         let arg = args[index]
         switch arg {
-        case "activate", "activate_background", "quit_wait", "frontmost", "display_state", "windowid", "windowlist", "windowstack", "text", "key", "keycode", "move", "click", "right_click", "drag", "menu", "window_park", "global_key", "global_text", "global_capture", "pointer_top_edge", "wait_window_centre", "drag_between", "permissions", "wait_frontmost", "wait_hidden", "hidden":
+        case "activate", "activate_background", "quit_wait", "frontmost", "display_state", "windowid", "windowlist", "windowstack", "text", "key", "keycode", "move", "click", "right_click", "drag", "menu", "menu_keys", "window_park", "global_key", "global_text", "global_capture", "pointer_top_edge", "wait_window_centre", "drag_between", "permissions", "wait_frontmost", "wait_hidden", "hidden":
             options.command = arg
         case "--centre":
             index += 1
@@ -166,6 +166,7 @@ func parseOptions() throws -> Options {
               InputDriver.swift move --relative-x 0.75 --relative-y 0.5 [--window-title <substring>]
               InputDriver.swift click --relative-x 0.75 --relative-y 0.5 [--modifiers command] [--window-title <substring>]
               InputDriver.swift menu --path "File>New Session" [--bundle-id ...]
+              InputDriver.swift menu_keys [--bundle-id ...]
               InputDriver.swift window_park --visible-px 200 [--bundle-id ...] [--window-title <substring>]
 
             --window-title matches windows owned by --bundle-id whose title CONTAINS the given
@@ -277,6 +278,27 @@ func axPressMenuItem(bundleId: String, path: [String]) throws {
             "AXPressAction on menu item \(path.joined(separator: ">")) failed (status=\(pressStatus.rawValue))"
         )
     }
+}
+
+func axKeyEquivalents(_ element: AXUIElement) -> [[String: Any]] {
+    var found: [[String: Any]] = []
+    for child in axChildren(element) {
+        let key = axCopyAttribute(child, kAXMenuItemCmdCharAttribute as String) as? String
+        if let key, !key.isEmpty {
+            let modifiers = axCopyAttribute(child, kAXMenuItemCmdModifiersAttribute as String) as? Int
+            found.append(["title": axTitle(child) ?? "", "key": key, "modifiers": modifiers ?? 0])
+        }
+        found.append(contentsOf: axKeyEquivalents(child))
+    }
+    return found
+}
+
+func axMenuKeys(bundleId: String) throws -> [[String: Any]] {
+    let (_, appElement) = try axApplication(bundleId: bundleId)
+    guard let rawMenuBar = axCopyAttribute(appElement, kAXMenuBarAttribute as String) else {
+        throw DriverError.eventCreationFailed("App \(bundleId) exposes no AX menu bar")
+    }
+    return axKeyEquivalents(rawMenuBar as! AXUIElement)
 }
 
 func waitForFrontmost(bundleId: String) {
@@ -1084,6 +1106,11 @@ do {
     case "menu":
         try ensureAccessibility(prompt: options.promptAccessibility)
         try axPressMenuItem(bundleId: options.bundleId, path: options.menuPath)
+    case "menu_keys":
+        try ensureAccessibility(prompt: options.promptAccessibility)
+        let keys = try axMenuKeys(bundleId: options.bundleId)
+        let data = try JSONSerialization.data(withJSONObject: keys, options: [.sortedKeys])
+        print(String(data: data, encoding: .utf8) ?? "[]")
     case "text":
         try ensureAccessibility(prompt: options.promptAccessibility)
         guard let text = options.text else {

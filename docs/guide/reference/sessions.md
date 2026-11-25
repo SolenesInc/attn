@@ -68,6 +68,12 @@ one forever from there.
   Linux) it to open a live agent, or a seed in a tile. For a closed agent,
   Cmd-click moves the keyboard into its card, where you can resume the agent or
   find it in the ledger.
+- Hold Cmd+L (Ctrl+Shift+L on Linux) to put a letter on each of those ids. Keep
+  holding and press the letter to open its card with the keyboard in it: Enter
+  opens the agent or the seed, or resumes a closed agent, and Escape returns to
+  the terminal. Let go to hide the letters. Settings → Appearance → Id Labels
+  picks how they look: each id lit up with a list of what the ids name, or each
+  name in place of its id.
 - If your shell marks commands (fish does by default), click a command's output
   to select the whole block. Cmd+C (Ctrl+Shift+C on Linux) copies the command
   and its output. Cmd+Shift+C (Ctrl+Alt+C on Linux) copies only the command.

@@ -70,8 +70,12 @@ pub(crate) fn output(world: &World, seq: u32, data: &[u8]) {
 }
 
 pub(crate) fn output_frame(seq: u32, data: &[u8]) -> Vec<u8> {
-    let mut frame = vec![0x01, 2];
-    frame.extend_from_slice(b"r1");
+    output_frame_to("r1", seq, data)
+}
+
+pub(crate) fn output_frame_to(runtime: &str, seq: u32, data: &[u8]) -> Vec<u8> {
+    let mut frame = vec![0x01, runtime.len() as u8];
+    frame.extend_from_slice(runtime.as_bytes());
     frame.extend_from_slice(&seq.to_be_bytes());
     frame.extend_from_slice(data);
     frame
@@ -1617,7 +1621,7 @@ fn a_process_that_ends_while_its_tile_returns_shows_that_it_ended() {
     );
 }
 
-fn showing_desktop(current: &str) -> ProfileArrangementChangedMessage {
+pub(crate) fn showing_desktop(current: &str) -> ProfileArrangementChangedMessage {
     let other = Desktop {
         id: "d2".into(),
         name: "d2".into(),

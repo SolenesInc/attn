@@ -25,6 +25,7 @@ pub mod garden;
 mod harness;
 mod harness_menu;
 pub mod headless;
+mod hints;
 mod home;
 pub mod instance;
 mod keymap;
@@ -414,7 +415,8 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         | shell::follow_details(state)
         | home::pull_requests::poll(state, now);
     let automated = automations::poll(state, now, tx);
-    let pointed = callouts::poll(state, tx) | desktop::header_pop::follow_hosts(state);
+    let pointed =
+        callouts::poll(state, tx) | desktop::header_pop::follow_hosts(state) | hints::follow(state);
     let reported = diagnostic_report::poll(state, now, tx);
     presence::follow(state);
     let expired = shell::expire(state, now, tx) || expired;

@@ -77,7 +77,7 @@ pub(super) fn chord(action: &Action) -> KeyEvent {
     }
 }
 
-fn press(world: &mut World, action: &Action) {
+pub(super) fn press(world: &mut World, action: &Action) {
     let ev = chord(action);
     world.gesture(|app| app.key(ev));
 }

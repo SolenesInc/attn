@@ -986,6 +986,7 @@ fn a_key_the_page_keeps_runs_nothing_of_attn_when_the_page_passes_it_on() {
 
     for action in [
         Action::TerminalFind,
+        Action::TerminalLabelIds,
         Action::UiActionMenu,
         Action::TerminalSplitVertical,
     ] {

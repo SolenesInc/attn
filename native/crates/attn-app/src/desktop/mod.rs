@@ -553,6 +553,26 @@ pub(crate) fn on_screen_leaves(state: &crate::State) -> Vec<String> {
     }
 }
 
+pub(crate) fn shown_panes(state: &crate::State) -> Vec<&attn_protocol::DesktopPane> {
+    let panes = terminal_panes(&state.facts, &state.window);
+    if state.window.tile.is_some() {
+        return panes;
+    }
+    let Some(desktop) = state.facts.current_desktop() else {
+        return Vec::new();
+    };
+    let Some((tree, plan)) = state.window.desk.plan(&state.facts, desktop) else {
+        return Vec::new();
+    };
+    let view = state.window.desk.row(&desktop.id).view;
+    let rendered = plan.rendered(&tree, &view, &desktop.active_pane_id);
+    rendered
+        .leaves()
+        .into_iter()
+        .filter_map(|leaf| panes.iter().copied().find(|pane| pane.pane_id == leaf.id))
+        .collect()
+}
+
 /// The agents whose tiles this window shows.
 pub(crate) fn on_screen_sessions(state: &crate::State) -> Vec<String> {
     let Some(desktop) = state.facts.current_desktop() else {

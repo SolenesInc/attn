@@ -338,9 +338,10 @@ fn kept(action: &Action, binding: Binding, platform: Platform) -> Kept {
         | Action::MarkdownSendAnnotations
         | Action::TerminalSendAnnotations => Kept::ByFieldsAndPages,
         Action::SessionToggleSidebar if platform == Platform::Mac => Kept::ByFieldsAndPages,
-        Action::SessionToggleSidebar | Action::UiActionMenu | Action::TerminalSplitVertical => {
-            Kept::ByPages
-        }
+        Action::SessionToggleSidebar
+        | Action::UiActionMenu
+        | Action::TerminalSplitVertical
+        | Action::TerminalLabelIds => Kept::ByPages,
         _ => Kept::Not,
     }
 }
@@ -550,6 +551,7 @@ const MAC: &[(Action, &str)] = &[
     (Action::SidebarWider, "mod+alt+]"),
     (Action::SidebarNarrower, "mod+alt+["),
     (Action::TerminalFind, "mod+f"),
+    (Action::TerminalLabelIds, "mod+l"),
     (Action::SessionNew, "mod+n"),
     (Action::SessionNewTerminal, "mod+t"),
     (Action::SessionNewHorizontal, "mod+shift+n"),
@@ -639,6 +641,7 @@ const LINUX: &[(Action, &str)] = &[
     (Action::SidebarWider, "mod+alt+]"),
     (Action::SidebarNarrower, "mod+alt+["),
     (Action::TerminalFind, "mod+shift+f"),
+    (Action::TerminalLabelIds, "mod+shift+l"),
     (Action::SessionNew, "mod+shift+n"),
     (Action::SessionNewTerminal, "mod+shift+t"),
     (Action::SessionNewHorizontal, "mod+alt+n"),

@@ -7719,7 +7719,7 @@ const LIVE_AGENT: &str = "3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f";
 const CLOSED_AGENT: &str = "c5e81f07-4a36-4f8f-b2d9-7701aa5c9e3d";
 
 /// Agent a's terminal naming agent `s1` by a real id and a closed agent by its short one.
-fn naming_agents(dark: bool) -> World {
+fn naming_agents(dark: bool, more: &str) -> World {
     let mapped = Seed {
         last_execution_id: Some(CLOSED_AGENT.into()),
         ..seed("s-7k3f9m", "Map where uploads retry", "harvested", None)
@@ -7764,7 +7764,7 @@ fn naming_agents(dark: bool) -> World {
     let closed = attn_protocol::session_id::short(CLOSED_AGENT);
     write(
         &mut world,
-        &format!("{live} builds the fix\r\n{closed} mapped it; its id is {CLOSED_AGENT}\r\n"),
+        &format!("{live} builds the fix\r\n{closed} mapped it; its id is {CLOSED_AGENT}\r\n{more}"),
     );
     world
 }
@@ -7772,7 +7772,7 @@ fn naming_agents(dark: bool) -> World {
 /// A live agent's id in agent a's terminal with the pointer resting on it, so its card opens
 /// there.
 fn terminal_agent_card(dark: bool) {
-    let mut world = naming_agents(dark);
+    let mut world = naming_agents(dark, "");
     let at = cell(&world, 4, 0);
     world.gesture(|app| app.runtime.pointer_move(at.0, at.1));
     world.advance(std::time::Duration::from_millis(400));
@@ -7821,9 +7821,38 @@ fn terminal_role_icons(dark: bool) {
     snap(&mut world, "terminal-role-icons", dark);
 }
 
+fn terminal_labels(dark: bool) {
+    let live = attn_protocol::session_id::short(LIVE_AGENT);
+    let more = format!("{live} read s-7k3f9m, then asked {live} again\r\n");
+    let mut world = naming_agents(dark, &more);
+    let mac = attn_testkit::mac();
+    world.gesture(|app| {
+        app.hold(rune::Mods {
+            cmd: true,
+            logo: mac,
+            ctrl: !mac,
+            shift: !mac,
+            ..rune::Mods::default()
+        })
+    });
+    press(&mut world, Action::TerminalLabelIds);
+    snap(&mut world, "terminal-labels-lantern", dark);
+    let theme = if dark { "dark" } else { "light" };
+    world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+        settings: Some(
+            [("id_labels", "name"), ("theme", theme)]
+                .map(|(key, value)| (key.to_owned(), value.into()))
+                .into(),
+        ),
+        ..attn_protocol::SettingsUpdatedMessage::new()
+    });
+    world.settle();
+    snap(&mut world, "terminal-labels-name", dark);
+}
+
 /// A closed agent's id with its card pinned, then the same card after its resume was refused.
 fn terminal_closed_card(dark: bool) {
-    let mut world = naming_agents(dark);
+    let mut world = naming_agents(dark, "");
     world.daemon.on("session_reopen", |r: &Request| {
         message(SessionReopenResultMessage {
             request_id: request_id(r),
@@ -8995,6 +9024,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("terminal_agent_card", || terminal_agent_card(dark));
         scene("terminal_role_icons", || terminal_role_icons(dark));
         scene("terminal_closed_card", || terminal_closed_card(dark));
+        scene("terminal_labels", || terminal_labels(dark));
         scene("notifications_empty", || notifications_empty(dark));
         scene("notifications_listed", || notifications_listed(dark));
         scene("notifications_failed", || notifications_failed(dark));

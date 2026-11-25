@@ -17,17 +17,17 @@ use super::terminal::{cell, desktop, inputs, output, pane, profile, showing};
 use super::terminal_view::copied;
 use crate::wire::mac;
 
-const BUILDER: &str = "3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f";
-const BUILDER_SHORT: &str = "ag-7yd2rk";
-const MAPPER: &str = "c5e81f07-4a36-4f8f-b2d9-7701aa5c9e3d";
-const MAPPER_SHORT: &str = "ag-rqm1y1";
+pub(super) const BUILDER: &str = "3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f";
+pub(super) const BUILDER_SHORT: &str = "ag-7yd2rk";
+pub(super) const MAPPER: &str = "c5e81f07-4a36-4f8f-b2d9-7701aa5c9e3d";
+pub(super) const MAPPER_SHORT: &str = "ag-rqm1y1";
 const STRANGER: &str = "9d2e4f61-5b08-4c3a-87e9-f1a60d7c2b54";
-const SEED: &str = "s-7k3f9m";
+pub(super) const SEED: &str = "s-7k3f9m";
 
-const AGENT_CARD: &str = "terminal.r1.agent-card";
-const SEED_CARD: &str = "terminal.r1.seed-card";
+pub(super) const AGENT_CARD: &str = "terminal.r1.agent-card";
+pub(super) const SEED_CARD: &str = "terminal.r1.seed-card";
 
-fn agent(id: &str, label: &str) -> Session {
+pub(super) fn agent(id: &str, label: &str) -> Session {
     Session {
         id: id.into(),
         label: label.into(),
@@ -38,7 +38,7 @@ fn agent(id: &str, label: &str) -> Session {
     }
 }
 
-fn builder() -> Session {
+pub(super) fn builder() -> Session {
     Session {
         delegation_role: Some(SessionDelegationRole {
             name: "Builder".into(),
@@ -48,14 +48,14 @@ fn builder() -> Session {
     }
 }
 
-fn mapper() -> SessionLedgerEntry {
+pub(super) fn mapper() -> SessionLedgerEntry {
     SessionLedgerEntry {
         branch: Some("upload-retry-map".into()),
         ..closed(entry(MAPPER, "Map where uploads retry", 180), "user")
     }
 }
 
-fn mapped() -> Seed {
+pub(super) fn mapped() -> Seed {
     Seed {
         profile_id: "work".into(),
         id: SEED.into(),
@@ -67,7 +67,11 @@ fn mapped() -> Seed {
 }
 
 /// A window whose one terminal shows agent `s1`, which reads about the others.
-fn start(others: Vec<Session>, seeds: Vec<Seed>, ledger: Vec<SessionLedgerEntry>) -> World {
+pub(super) fn start(
+    others: Vec<Session>,
+    seeds: Vec<Seed>,
+    ledger: Vec<SessionLedgerEntry>,
+) -> World {
     let mut sessions = vec![agent("s1", "Reader")];
     sessions.extend(others);
     let reader = DesktopPane {
@@ -126,7 +130,7 @@ fn asked(world: &World) -> Vec<Vec<String>> {
     sent.iter().map(names).collect()
 }
 
-fn write(world: &mut World, seq: u32, text: &str) {
+pub(super) fn write(world: &mut World, seq: u32, text: &str) {
     output(world, seq, text.as_bytes());
     world.settle();
 }
@@ -194,7 +198,7 @@ fn marked(world: &mut World) -> Vec<String> {
         .collect()
 }
 
-fn rest_on(world: &mut World, col: u16, row: u16) {
+pub(super) fn rest_on(world: &mut World, col: u16, row: u16) {
     let at = cell(world, col, row);
     world.gesture(|app| app.runtime.pointer_move(at.0, at.1));
     world.advance(Duration::from_millis(200));
@@ -221,7 +225,7 @@ fn opens(world: &mut World, col: u16, row: u16) {
     accelerator(world, false);
 }
 
-fn key(world: &mut World, key: Key) {
+pub(super) fn key(world: &mut World, key: Key) {
     world.gesture(|app| {
         app.key(KeyEvent {
             key,
@@ -230,7 +234,7 @@ fn key(world: &mut World, key: Key) {
     });
 }
 
-fn letter(world: &mut World, c: &str) {
+pub(super) fn letter(world: &mut World, c: &str) {
     key(world, Key::Text(c.into()));
 }
 
@@ -238,11 +242,11 @@ fn takes_keyboard(world: &mut World) {
     world.gesture(|app| app.press("mod+i"));
 }
 
-fn shown(world: &World, card: &str) -> bool {
+pub(super) fn shown(world: &World, card: &str) -> bool {
     world.screen().find(Target::key(card)).is_some()
 }
 
-fn said(world: &World, part: &str) -> Option<String> {
+pub(super) fn said(world: &World, part: &str) -> Option<String> {
     let key = format!("{AGENT_CARD}.picked.{part}");
     world.screen().find(Target::key(key))?.name
 }
@@ -256,11 +260,11 @@ fn buttons(world: &World, card: &str) -> Vec<String> {
         .collect()
 }
 
-fn sessions_shown(world: &World) -> Vec<String> {
+pub(super) fn sessions_shown(world: &World) -> Vec<String> {
     super::ledger::shown_session(world)
 }
 
-fn rests(world: &mut World) {
+pub(super) fn rests(world: &mut World) {
     world.advance(Duration::from_millis(250));
     assert!(world.runtime_is_at_rest());
 }

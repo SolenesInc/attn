@@ -293,6 +293,7 @@ actions! {
     ShelfSendToShelf = "shelf.sendToShelf", Panes, "Send tile to the shelf";
     TilePopOut = "tile.popOut", Panes, "Pop out or bring back tile";
     TerminalFind = "terminal.find", Panes, "Find in terminal";
+    TerminalLabelIds = "terminal.labelIds", Panes, "Label the ids on screen";
 
     MarkdownSendAnnotations = "markdown.sendAnnotations", Markdown, "Send annotations to session";
     TerminalSendAnnotations = "terminal.sendAnnotations", Markdown, "Send terminal annotations to session";
@@ -358,6 +359,7 @@ impl Action {
                 | Action::TerminalFocusUp
                 | Action::TerminalFocusDown
                 | Action::TerminalFind
+                | Action::TerminalLabelIds
                 | Action::TerminalSendAnnotations
         )
     }

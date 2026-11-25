@@ -6,7 +6,7 @@ use attn_protocol::{
     ResolveSessionsMessage, ResolveSessionsResultMessage, ResolvedSession, SessionLedgerEntry,
 };
 use attn_term::links::{Line, Span};
-use attn_term::{Overlay, OverlayKind, Sprite};
+use attn_term::{Metrics, Overlay, OverlayKind, Sprite};
 use attn_ui::colors::TerminalColors;
 use rune::Tx;
 
@@ -69,6 +69,42 @@ impl Found {
         let after = start + SESSION.len() as u16;
         let sprite = self.icon.filter(|_| after < end)?;
         Some((sprite, row, (start, after)))
+    }
+}
+
+struct Placed {
+    metrics: Metrics,
+    size: (u16, u16),
+    slot: (f32, f32),
+    scale: f32,
+    top: u32,
+}
+
+impl Placed {
+    fn of(term: &mut Term, metrics: &Metrics) -> Option<Placed> {
+        let (slot, scale) = term.slot?;
+        Some(Placed {
+            metrics: *metrics,
+            size: term.vt.size(),
+            slot,
+            scale,
+            top: term.vt.view_top(),
+        })
+    }
+
+    fn mark(&self, found: &Found, (row, start, end): (u32, u16, u16)) -> Option<Mark> {
+        let row = row.checked_sub(self.top)? as u16;
+        if row >= self.size.1 {
+            return None;
+        }
+        let [x, y, w, h] = self
+            .metrics
+            .cell_rect(self.size, self.slot, self.scale, (start, row));
+        let wide = w * f32::from(end - start);
+        Some(Mark {
+            target: found.target.clone(),
+            at: [x, y, wide, h].map(f32::to_bits),
+        })
     }
 }
 
@@ -292,18 +328,26 @@ impl Terminals {
     fn mark_in_cell(&mut self, runtime: &str, cell: (u32, u16)) -> Option<Mark> {
         let metrics = self.metrics();
         let term = self.panes.get_mut(runtime)?;
-        let (slot, scale) = term.slot?;
-        let (top, size) = (term.vt.view_top(), term.vt.size());
-        let (found, (row, start, end)) = marks(term, &mut self.ids)
+        let placed = Placed::of(term, &metrics)?;
+        let (found, row) = marks(term, &mut self.ids)
             .iter()
             .find_map(|found| Some((found, found.row_at(cell)?)))?;
-        let row = row.checked_sub(top)? as u16;
-        let [x, y, w, h] = metrics.cell_rect(size, slot, scale, (start, row));
-        let wide = w * f32::from(end - start);
-        Some(Mark {
-            target: found.target.clone(),
-            at: [x, y, wide, h].map(f32::to_bits),
-        })
+        placed.mark(found, row)
+    }
+
+    pub(crate) fn marks_on_screen(&mut self, runtime: &str) -> Vec<Mark> {
+        self.current(runtime);
+        let metrics = self.metrics();
+        let Some(term) = self.panes.get_mut(runtime) else {
+            return Vec::new();
+        };
+        let Some(placed) = Placed::of(term, &metrics) else {
+            return Vec::new();
+        };
+        marks(term, &mut self.ids)
+            .iter()
+            .filter_map(|found| found.rows.iter().find_map(|row| placed.mark(found, *row)))
+            .collect()
     }
 
     pub(crate) fn has_unresolved_ids(&self) -> bool {

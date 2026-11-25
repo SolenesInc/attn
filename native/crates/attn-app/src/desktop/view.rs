@@ -165,6 +165,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                 state.drafts.revision,
                 state.readings.revision,
                 desk.header_pop.mark_anchor(),
+                state.window.hints.shown().cloned(),
             ),
             (state.notebook.revision, state.browser.revision()),
         ),
@@ -187,6 +188,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                     &seed_reads(state),
                     (&state.drafts, &state.readings),
                     &state.browser,
+                    state.window.hints.shown(),
                 ),
                 (t, scale, state.window.now_ms, focus_style),
             ))
@@ -540,6 +542,7 @@ pub(super) fn lone(
         rings: &[],
         refusals: &state.window.desk.refusals,
         mark_anchor: state.window.desk.header_pop.mark_anchor(),
+        hints: state.window.hints.shown(),
         screen: super::tile_look::Screen {
             marking: None,
             zoomed: false,
@@ -585,13 +588,14 @@ fn screen(
     facts: &attn_client::Facts,
     (settles, keys, sublines): HeaderReads,
     holder: Option<&Holder>,
-    (terminals, pictures, notebook, seeds, marks, browsers): (
+    (terminals, pictures, notebook, seeds, marks, browsers, hints): (
         &Terminals,
         &crate::markdown::Pictures,
         &crate::notebook::Notebook,
         &crate::garden::TileReads,
         (&crate::markdown::Drafts, &crate::markdown::Readings),
         &crate::browser::Browsers,
+        Option<&crate::hints::Shown>,
     ),
     (t, scale, now_ms, focus_style): (&Tokens, f32, i64, super::FocusStyle),
 ) -> El {
@@ -631,6 +635,7 @@ fn screen(
                     rings: &desk.rings,
                     refusals: &desk.refusals,
                     mark_anchor: desk.header_pop.mark_anchor(),
+                    hints,
                     screen: super::tile_look::Screen {
                         marking: (rendered.leaves().len() > 1).then_some(focus_style),
                         zoomed: view == super::layout::View::Zoomed,
@@ -735,6 +740,7 @@ struct TileCx<'a> {
     refusals: &'a super::refusal::Refusals,
     /// Where the open card of an id in a terminal hangs.
     mark_anchor: Option<super::header_pop::Anchor>,
+    hints: Option<&'a crate::hints::Shown>,
     screen: super::tile_look::Screen,
     holder: Option<&'a Holder>,
     terminals: &'a Terminals,
@@ -1015,6 +1021,10 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 (*runtime == pane.runtime_id).then(|| anchor().absolute(x, y).w(w).h(h))
             }));
             let slot = slot.children(cx.refusals.flash(&pane.runtime_id, t));
+            let slot = slot.children(cx.hints.and_then(|shown| {
+                let size = cx.terminals.slot_size(&pane.runtime_id)?;
+                crate::hints::layer(shown, &pane.runtime_id, size, cx.terminal_colors, t)
+            }));
             let unsent = cx
                 .unsent
                 .iter()

@@ -23,6 +23,7 @@ mod floating_panel;
 mod grid;
 mod group;
 mod header_piece;
+mod id_labels;
 pub mod inspector;
 mod key_line;
 mod lane;
@@ -83,6 +84,7 @@ pub use floating_panel::FloatingPanel;
 pub use grid::Grid;
 pub use group::Group;
 pub use header_piece::HeaderPiece;
+pub use id_labels::{IdLabel, IdMark, IdPlace, id_list, id_scrim, lantern, name_in_place};
 pub use inspector::Inspector;
 pub use key_line::{
     HintFit, Hints, KeyFit, KeyLine, key_choice, key_choice_width, key_hint, key_tab,

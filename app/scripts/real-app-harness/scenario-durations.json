@@ -113,6 +113,7 @@
     "native-terminal-annotations": 5.6,
     "native-terminal-core": 3.1,
     "native-terminal-features": 3.8,
+    "native-terminal-labels": 6,
     "native-terminal-md-link": 4.1,
     "native-tile-windows": 4.4,
     "native-title-bar": 8.5

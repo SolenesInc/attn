@@ -62,6 +62,9 @@ var settingValidators = map[*setting.Setting]func(*Daemon, string, string) error
 	setting.Theme: func(d *Daemon, key, value string) error {
 		return validateTheme(value)
 	},
+	setting.IDLabels: func(d *Daemon, key, value string) error {
+		return validateIDLabels(value)
+	},
 	setting.ColorScheme: func(d *Daemon, key, value string) error {
 		return keyedError(key, colors.CheckScheme(value))
 	},

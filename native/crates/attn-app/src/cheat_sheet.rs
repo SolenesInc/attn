@@ -138,6 +138,11 @@ const SECTIONS: &[Section] = &[
         title: "Panes & Terminals",
         lines: &[
             line("Find in terminal", &[Of(Action::TerminalFind)]),
+            noted(
+                "Label the ids on screen",
+                &[Of(Action::TerminalLabelIds)],
+                |_| "Hold it, then press a label's key to open its card.".into(),
+            ),
             line("New shell beside", &[Of(Action::TerminalSplitVertical)]),
             line("New shell below", &[Of(Action::TerminalSplitHorizontal)]),
             noted(

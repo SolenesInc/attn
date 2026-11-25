@@ -10,10 +10,15 @@ use rune::{El, Tx};
 use super::controls::{number_field, segmented};
 use crate::State;
 use crate::action::Action;
+use crate::hints;
 use crate::sidebar::width;
 
 pub(super) const NARROWEST_TILE_COLS: &str = "narrowest_tile_cols";
 const THEME: &str = "theme";
+const ID_LABELS: &[(&str, &str)] = &[
+    (hints::LANTERN, "Lantern"),
+    (hints::NAME_IN_PLACE, "Name in place"),
+];
 const COLOR_SCHEME: &str = "color_scheme";
 const COLOR_OVERRIDES: &str = "color_overrides";
 const UI_SCALE: &str = "uiScale";
@@ -286,6 +291,39 @@ fn font_size(state: &State, t: &Tokens) -> Section {
         )
 }
 
+fn choose_id_labels(state: &mut State, drawing: &'static str, _: &mut Tx) {
+    store(state, hints::DRAWING, drawing.into());
+}
+
+fn id_labels(state: &State, t: &Tokens) -> Section {
+    let keys = state
+        .keymap
+        .binding(&Action::TerminalLabelIds)
+        .map(|b| state.keymap.label(b));
+    let copy = match keys {
+        Some(keys) => format!("How the ids in your terminals look while you hold {keys}."),
+        None => "How the ids in your terminals look while you hold their keys.".to_owned(),
+    };
+    Section::new("settings.block.id-labels", "Id Labels")
+        .description(copy)
+        .push(
+            SettingRow::new(
+                "settings.row.id-labels",
+                "Label style",
+                "Lantern lights up each id and lists them all in a corner. Name in place writes each name over its id.",
+                segmented(
+                    hints::DRAWING,
+                    "Label style",
+                    ID_LABELS,
+                    hints::drawing(&state.facts.settings),
+                    t,
+                    choose_id_labels,
+                ),
+            )
+            .build(t),
+        )
+}
+
 fn layout(state: &State, t: &Tokens) -> Section {
     let draft = state.window.settings.autosave.draft(width::SETTING);
     let default_width = (width::DEFAULT as i64).to_string();
@@ -348,6 +386,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     vec![
         theme(state, t).build(t),
         font_size(state, t).build(t),
+        id_labels(state, t).build(t),
         layout(state, t).build(t),
     ]
 }

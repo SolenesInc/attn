@@ -229,6 +229,12 @@ export const scenarioCatalog = [
     command: ['node', 'scripts/real-app-harness/scenario-native-terminal-md-link.mjs'],
   },
   {
+    id: 'native-terminal-labels',
+    runnerId: 'NATIVE-TERMINAL-LABELS',
+    label: 'Holding Cmd+L (Ctrl+Shift+L on Linux) labels the ids in a native terminal, a label opens its card with the keyboard, letting go hides them, and no key reaches the shell',
+    command: ['node', 'scripts/real-app-harness/scenario-native-terminal-labels.mjs'],
+  },
+  {
     id: 'native-markdown-opener',
     runnerId: 'NATIVE-MARKDOWN-OPENER',
     label: 'The native markdown opener docks tracked and untracked files by a fuzzy query, and a recent reuses its tile',

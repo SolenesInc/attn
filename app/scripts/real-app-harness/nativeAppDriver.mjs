@@ -83,6 +83,10 @@ export class NativeAppDriver {
     return this.window.waitForMainWindow(...args);
   }
 
+  menuKeys() {
+    return this.window.menuKeys();
+  }
+
   parkWindow(...args) {
     return this.window.parkWindow(...args);
   }

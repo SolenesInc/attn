@@ -5,15 +5,16 @@
 use rune::{Cx, El, Playground, Story, TextEdit, Tx, col, el};
 use rune_kit::TextInput;
 
-use crate::Tokens;
 use crate::blocks::{
-    Block, Card, FloatingPanel, Inline, Notice, Settling, SettlingChip, Stack, Status, Tabs,
-    TerminalBar, TileHeader, drag_ghost, drop_target, terminal_notices, terminal_status, tip,
+    Block, Card, FloatingPanel, IdLabel, IdMark, IdPlace, Inline, Notice, Settling, SettlingChip,
+    Stack, Status, Tabs, TerminalBar, TileHeader, drag_ghost, drop_target, id_list, id_scrim,
+    lantern, name_in_place, terminal_notices, terminal_status, tip,
 };
 use crate::colors::scheme_for;
 use crate::system::{
     Button, DotShape, DotSize, IconSize, Look, Size, Space, Type, door, dot, icon_button, words,
 };
+use crate::{Glyph, Tokens};
 
 /// What a tile story shows: the state its variant sets.
 #[derive(Default)]
@@ -98,6 +99,20 @@ pub const TILE_SUBJECTS: &[TileSubject] = &[
         Some(".panel.send"),
     ),
     (
+        "tile-id-labels",
+        "Tiles/Id labels",
+        &["story.tile"],
+        &[
+            "Rest",
+            "Name in place",
+            "Two letters",
+            "Empty",
+            "Long",
+            "Smallest long",
+        ],
+        None,
+    ),
+    (
         "tile-drag",
         "Tiles/Drag",
         &["story.tile"],
@@ -154,6 +169,13 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
         .story(common(
             Story::new("Tiles/Annotations", Tiles::default, annotations_story)
                 .variant("Rest", |_| {}),
+        ))
+        .story(common(
+            Story::new("Tiles/Id labels", Tiles::default, id_labels_story)
+                .variant("Rest", |_| {})
+                .variant("Name in place", |s| s.on = true)
+                .variant("Two letters", |s| s.mark_only = true)
+                .variant("Empty", |s| s.empty = true),
         ))
         .story(
             Story::new("Tiles/Drag", Tiles::default, drag_story)
@@ -402,6 +424,70 @@ fn tabs_story(s: &Tiles, cx: &mut Cx<Tiles>) -> El {
         .build(&t);
     let width = if s.smallest { SMALLEST } else { WIDE };
     stage(&t, col().w(width).child(tabs))
+}
+
+fn id_labels_story(s: &Tiles, cx: &mut Cx<Tiles>) -> El {
+    let t = tokens(cx);
+    let named = if s.long {
+        "attn--ds-page-blocks-delegation-appearance-landing-two"
+    } else {
+        "Fix the retry uploader"
+    };
+    let keys = if s.mark_only {
+        ["ss", "sd", "sf"]
+    } else {
+        ["s", "d", "f"]
+    };
+    let typed = usize::from(s.mark_only);
+    let label = |i: usize, mark, id, name, state, ink| IdLabel {
+        keys: keys[i],
+        typed,
+        mark,
+        id,
+        name,
+        state,
+        ink,
+    };
+    let growing = IdMark::Glyph(Glyph::Icon(crate::icon::seed("growing")));
+    let person = IdMark::Glyph(Glyph::from(crate::glyph::PERSON));
+    let labels = if s.empty {
+        Vec::new()
+    } else {
+        vec![
+            label(0, person, "7yd2rk", named, "working", t.state_working),
+            label(
+                1,
+                IdMark::Hollow,
+                "rqm1y1",
+                "Map uploads",
+                "closed",
+                t.text_muted,
+            ),
+            label(2, growing, "7k3f9m", named, "growing", t.success),
+        ]
+    };
+    let pane = (if s.smallest { SMALLEST } else { WIDE }, TERMINAL_H);
+    let places = [(0.0, 4.0), (110.0, 4.0), (pane.0 - 72.0, 44.0)];
+    let drawing = if s.on { name_in_place } else { lantern };
+    let over = labels
+        .iter()
+        .zip(places)
+        .enumerate()
+        .map(|(i, (label, (x, y)))| {
+            let place = IdPlace {
+                at: [x, y, 72.0, 20.0],
+                room: if i == 0 { 110.0 } else { pane.0 - x },
+                pane,
+            };
+            drawing(format!("story.tile.label.{i}"), label, place, &t)
+        });
+    let list = (!s.on).then(|| id_list("story.tile.labels", &labels, pane, &t));
+    let layers = [id_scrim(t.bg_tile)]
+        .into_iter()
+        .chain(over)
+        .chain(list)
+        .collect();
+    terminal(s, &t, layers)
 }
 
 fn drag_story(s: &Tiles, cx: &mut Cx<Tiles>) -> El {
