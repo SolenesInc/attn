@@ -6716,6 +6716,9 @@ model SeedArtifactTransferHereMessage {
   host: string;
   transfer: SeedArtifactTransferMessage;
   "notebook_folder"?: string;
+  // Present when the transfer must not replace a file on the seed: the hash of
+  // the home's file by this name, or empty when the home has none.
+  "held_hash"?: string;
 }
 
 model SeedArtifactTransferResult {

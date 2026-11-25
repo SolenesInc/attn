@@ -35,6 +35,7 @@ const (
 	CodeDesktopNameNeedsDesktop     = "desktop_name_needs_desktop"
 	CodeDetachNeedsTo               = "detach_needs_to"
 	CodeEmptyWords                  = "empty_words"
+	CodeEvidenceNameTaken           = "evidence_name_taken"
 	CodeFallbackWithTarget          = "fallback_with_target"
 	CodeGrowingSeedsHeld            = "growing_seeds_held"
 	CodeIDMismatch                  = "id_mismatch"
@@ -224,7 +225,7 @@ var specs = sync.OnceValue(func() map[string]spec {
 		"seed check edit":         {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_a_check_id": "Pass a check id like C3, and the statement in {statement}.", "needs_statement": "Pass the statement the seed must prove in {statement}."}},
 		"seed check remove":       {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"seed check restore":      {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
-		"seed check report":       {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+		"seed check report":       {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"evidence_name_taken": "Give the evidence file another name, or pass the path of the file on the seed in {evidence}."}},
 		"seed check confirm":      {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"seed check reject":       {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"seed check uncheck":      {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},

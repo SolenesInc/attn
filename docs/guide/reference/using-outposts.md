@@ -322,8 +322,9 @@ name, if the seed has one.
 to the destination on that outpost. Each command waits for the matching change
 at the home before returning, so a following check report can name the artifact
 as evidence. `attn seed check report <seed> <C#> --evidence <file>` from an
-outpost shell copies that outpost's file the same way before it records the
-report. If the sync fails, the error names what is left to sync. After you fix the failure, retry the
+outpost shell copies that outpost's file onto the seed before it records the
+report, and is refused when the copy would change a file on the seed that no
+earlier report on that check cited. If the sync fails, the error names what is left to sync. After you fix the failure, retry the
 same command. `attn seed show <seed>` prints the artifact folder for the machine
 you called from.
 

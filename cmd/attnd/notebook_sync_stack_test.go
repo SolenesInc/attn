@@ -231,6 +231,14 @@ func TestOutpostSeedTransfersUseItsNotebookAndWaitForTheHome(t *testing.T) {
 		t.Fatalf("the outpost's report returned before its file reached home: %q, %v", data, err)
 	}
 	requireStdout(t, home.Attn("seed", "show", seed.ID), "report  Received from the outpost\n", "proof.log, copy.md · ")
+	requireStdout(t, outpost.Attn("seed", "check", "add", seed.ID, "C2", "-m", "Nothing else is replaced"))
+	requireStdout(t, outpost.Attn("seed", "check", "report", seed.ID, "C2", "-m", "The same bytes", "--evidence", proof), "C2 reported on "+seed.ID)
+	stranger := filepath.Join(outpost.Dir, "stranger", "copy.md")
+	writeFileAt(t, stranger, "another file from outpost")
+	requireFailure(t, outpost.Attn("seed", "check", "report", seed.ID, "C2", "-m", "Another file", "--evidence", stranger), "seed check report: ", "copy.md", filepath.Join(seedDir, "copy.md"))
+	if data, err := os.ReadFile(notebookPath(home, "seeds", seed.ID, "copy.md")); err != nil || string(data) != "copy from outpost, changed" {
+		t.Fatalf("after the outpost's refused report the home's copy.md holds %q, %v; want it unchanged", data, err)
+	}
 	destination := filepath.Join(outpost.Dir, "detached.md")
 	outpost.Attn("seed", "detach", seed.ID, "--path", "move.md", "--to", destination, "--json").JSON(t, &attached)
 	if data, err := os.ReadFile(destination); err != nil || !strings.Contains(string(data), "move from outpost") {

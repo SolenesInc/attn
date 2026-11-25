@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
@@ -154,14 +156,62 @@ func (d *Daemon) attachReportEvidence(ctx context.Context, msg *protocol.SeedChe
 	if _, _, err := garden.ApplyCheckMove(read.plots, seedID, *move, landed, d.gardenTime()); err != nil {
 		return nil, nil, err
 	}
-	attached := make([]protocol.SeedCheckAttachment, 0, len(copies))
-	for _, path := range copies {
-		copied, err := d.submitSeedArtifactTransfer(ctx, &protocol.SeedArtifactTransferMessage{
+	_, homeDir, err := d.seedArtifactDir(seedID, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	citedBefore := read.plots.ReportedArtifacts(seedID, move.CheckID)
+	carry := func(path string, heldHash *string) (*seedArtifactMachineTransfer, protocol.SeedArtifactTransferMessage, error) {
+		transfer := protocol.SeedArtifactTransferMessage{
 			Cmd: protocol.CmdSeedArtifactTransfer, ProfileID: msg.ProfileID, SeedID: seedID, Operation: "copy",
 			SourcePath: protocol.Ptr(path), SourceSessionID: msg.SourceSessionID,
-		}, move.Actor)
+		}
+		carried, err := d.carrySeedArtifact(ctx, &transfer, heldHash)
+		return carried, transfer, copyEvidenceError(path, seedID, err)
+	}
+	type evidenceCopy struct {
+		path     string
+		heldHash *string
+	}
+	var landing []evidenceCopy
+	var taken []string
+	for _, path := range copies {
+		name := filepath.Base(path)
+		if slices.Contains(citedBefore, name) {
+			landing = append(landing, evidenceCopy{path, nil})
+			continue
+		}
+		hash, err := hashRegularFile(filepath.Join(homeDir, name))
+		if os.IsNotExist(err) {
+			landing = append(landing, evidenceCopy{path, protocol.Ptr("")})
+			continue
+		}
 		if err != nil {
-			return nil, nil, fmt.Errorf("copy %s onto %s: %w; nothing was reported, and the same command run again copies what is left and records the report", path, seedID, err)
+			return nil, nil, copyEvidenceError(path, seedID, err)
+		}
+		carried, _, err := carry(path, &hash)
+		if err != nil {
+			return nil, nil, err
+		}
+		if carried.WouldReplace {
+			taken = append(taken, filepath.Join(dir, name))
+		}
+	}
+	if len(taken) > 0 {
+		return nil, nil, evidenceNameTaken(seedID, move.CheckID, taken)
+	}
+	attached := make([]protocol.SeedCheckAttachment, 0, len(landing))
+	for _, evidence := range landing {
+		carried, transfer, err := carry(evidence.path, evidence.heldHash)
+		if err != nil {
+			return nil, nil, err
+		}
+		if carried.WouldReplace {
+			return nil, nil, evidenceNameTaken(seedID, move.CheckID, []string{filepath.Join(dir, filepath.Base(evidence.path))})
+		}
+		copied, err := d.observeSeedArtifactTransfer(&transfer, carried, move.Actor)
+		if err != nil {
+			return nil, nil, copyEvidenceError(evidence.path, seedID, err)
 		}
 		attached = append(attached, protocol.SeedCheckAttachment{Filename: filepath.Base(copied.DestinationPath), Replaced: protocol.Deref(copied.Replaced)})
 	}
@@ -169,6 +219,23 @@ func (d *Daemon) attachReportEvidence(ctx context.Context, msg *protocol.SeedChe
 		return nil, nil, err
 	}
 	return citable, attached, nil
+}
+
+func copyEvidenceError(path, seedID string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("copy %s onto %s: %w; nothing was reported, and the same command run again copies what is left and records the report", path, seedID, err)
+}
+
+func evidenceNameTaken(seedID, checkID string, seedFiles []string) error {
+	names := make([]string, len(seedFiles))
+	for i, path := range seedFiles {
+		names[i] = filepath.Base(path)
+	}
+	return command.Refuse(command.CodeEvidenceNameTaken,
+		"%s already holds another %s, which no earlier report on %s cited, so evidence may not replace it; nothing was reported. Give your evidence another name, or cite the seed's own file by its path: %s",
+		seedID, joinAnd(names), checkID, strings.Join(seedFiles, ", "))
 }
 
 func (g gardenRead) withSeed(next garden.Seed, doc docstore.Document) gardenRead {

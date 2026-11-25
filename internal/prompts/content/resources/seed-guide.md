@@ -151,7 +151,8 @@ report's check note. `--evidence` takes a local file, which attn copies onto the
 seed, an artifact already on the seed, or an http(s) URL. Reporting again
 creates a new report. The new report replaces the last report and clears the
 verdict. Citing a changed file under the same name
-replaces the old file. `attn seed show` marks a report whose cited file changed
+replaces the file an earlier report on that check cited. attn refuses evidence
+that would change any other file on the seed. `attn seed show` marks a report whose cited file changed
 after the report, until the next report. For a check that does not apply, report
 why and cite what shows it.
 

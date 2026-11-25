@@ -10655,6 +10655,9 @@ type SeedArtifactTransferHereMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// HeldHash corresponds to the JSON schema field "held_hash".
+	HeldHash *string `json:"held_hash,omitempty,omitzero"`
+
 	// Host corresponds to the JSON schema field "host".
 	Host string `json:"host"`
 

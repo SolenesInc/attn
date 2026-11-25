@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -651,6 +652,84 @@ func TestAReportCopiesLocalFilesOntoTheSeedAndCitesThem(t *testing.T) {
 			t.Errorf("the same report run again recorded %+v, want it with out.txt, late.txt and the URL", got)
 		}
 	})
+}
+
+func TestAReportReplacesNoFileButItsOwnChecksEvidence(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "agent_tools_enabled", "true")
+	root := seedArtifactsNotebook(t, w)
+	planner := w.Spawn(app, fakeagent.Claude, w.Path("planner"))
+	stranger := w.Spawn(app, fakeagent.Claude, w.Path("stranger"))
+	tools := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(stranger))}
+	seed := checksPlot(t, cli, planner).Children[0].ID
+	onSeed := func(name string) string { return filepath.Join(root, "seeds", seed, name) }
+	holds := func(when, name, want string) {
+		t.Helper()
+		if data, err := os.ReadFile(onSeed(name)); err != nil || string(data) != want {
+			t.Errorf("%s the seed's %s holds %q (%v), want %q", when, name, data, err, want)
+		}
+	}
+	report := func(check string, evidence ...string) (*protocol.SeedCheckResult, error) {
+		var result protocol.SeedCheckResult
+		err := cli.RunCommand("seed check report", protocol.SessionID(stranger), command.SeedCheckReportArgs{Seed: seed, ID: check, Summary: "it ran", Evidence: evidence}, &result)
+		return &result, err
+	}
+	attached := func(when string, want []protocol.SeedCheckAttachment, check string, evidence ...string) {
+		t.Helper()
+		result, err := report(check, evidence...)
+		if err != nil {
+			t.Fatalf("%s: %v", when, err)
+		}
+		if !slices.Equal(result.Attached, want) {
+			t.Errorf("%s attached %+v, want %+v", when, result.Attached, want)
+		}
+	}
+
+	plan := seedArtifactsWrite(t, t.TempDir(), "plan.md", []byte("the planner's only copy"))
+	seedArtifactsTransfer(t, cli, seed, "move", plan, "", "")
+	runs := t.TempDir()
+	other := seedArtifactsWrite(t, runs, "plan.md", []byte("the stranger's log"))
+	fresh := seedArtifactsWrite(t, runs, "fresh.log", []byte("new evidence"))
+
+	_, err := report("C1", fresh, other)
+	lifeRefusal(t, "evidence named like the planner's file", err, "plan.md", "another name", onSeed("plan.md"))
+	refused := tools.mustCall(t, "seed_check_report", map[string]any{"seed": seed, "id": "C1", "summary": "it ran", "evidence": []any{fresh, other}})
+	if text := resultText(refused); !refused.IsError || !strings.HasPrefix(text, "evidence_name_taken: ") || !strings.Contains(text, "plan.md") || !strings.Contains(text, "\nFix: Give the evidence file another name") {
+		t.Errorf("the tool answered %q, want an evidence_name_taken refusal that names plan.md and the fix", text)
+	}
+	holds("after two refused reports", "plan.md", "the planner's only copy")
+	if check := checkByID(checksShow(t, cli, seed).Checks, "C1"); check.Report != nil {
+		t.Errorf("a refused report recorded %+v, want nothing", check.Report)
+	}
+	seedArtifactsListed(t, cli, seed, "after two refused reports", "plan.md")
+
+	same := seedArtifactsWrite(t, t.TempDir(), "plan.md", []byte("the planner's only copy"))
+	before, err := os.Stat(onSeed("plan.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	attached("evidence identical to the seed's file", []protocol.SeedCheckAttachment{}, "C1", same)
+	attached("the seed's own file by its path", nil, "C5", onSeed("plan.md"))
+	attached("the seed's own file by its name", nil, "C5", "plan.md")
+	if after, err := os.Stat(onSeed("plan.md")); err != nil || !os.SameFile(before, after) || !after.ModTime().Equal(before.ModTime()) {
+		t.Errorf("citing the seed's own plan.md rewrote it: %v, %v", after, err)
+	}
+
+	run := seedArtifactsWrite(t, t.TempDir(), "run.log", []byte("first run"))
+	attached("the first run", []protocol.SeedCheckAttachment{{Filename: "run.log"}}, "C1", run)
+	seedArtifactsWrite(t, filepath.Dir(run), "run.log", []byte("second run"))
+	_, err = report("C5", run)
+	lifeRefusal(t, "C5 evidence that would replace C1's", err, "run.log", "C5")
+	holds("after C5's refused report", "run.log", "first run")
+	attached("C1's second run", []protocol.SeedCheckAttachment{{Filename: "run.log", Replaced: true}}, "C1", run)
+	holds("after C1's second run", "run.log", "second run")
+
+	attached("a report that cites only a URL", nil, "C1", "https://example.test/run/3")
+	checkMoveOK(t, cli, checkMove(seed, "C1", "reopen", ""))
+	seedArtifactsWrite(t, filepath.Dir(run), "run.log", []byte("third run"))
+	attached("C1's third run, cited two reports ago", []protocol.SeedCheckAttachment{{Filename: "run.log", Replaced: true}}, "C1", run)
+	holds("after C1's third run", "run.log", "third run")
 }
 
 func TestAReportWithSeveralProblemsIsRefusedOnceNamingEach(t *testing.T) {

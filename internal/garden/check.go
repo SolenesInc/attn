@@ -21,8 +21,30 @@ type Check struct {
 }
 
 type CheckResult struct {
-	Report  *CheckReport  `json:"report,omitempty"`
-	Verdict *CheckVerdict `json:"verdict,omitempty"`
+	Report       *CheckReport  `json:"report,omitempty"`
+	Verdict      *CheckVerdict `json:"verdict,omitempty"`
+	CitedEarlier []string      `json:"cited_earlier,omitempty"`
+}
+
+func (r CheckResult) CitedArtifacts() []string {
+	cited := slices.Clone(r.CitedEarlier)
+	if r.Report != nil {
+		for _, evidence := range r.Report.Evidence {
+			if evidence.Artifact != "" && !slices.Contains(cited, evidence.Artifact) {
+				cited = append(cited, evidence.Artifact)
+			}
+		}
+	}
+	return cited
+}
+
+func (t PlotTree) ReportedArtifacts(seedID, checkID string) []string {
+	for _, check := range t.EffectiveChecks(seedID) {
+		if check.ID == checkID {
+			return check.Result.CitedArtifacts()
+		}
+	}
+	return nil
 }
 
 type CheckReport struct {
@@ -472,7 +494,7 @@ func ApplyCheckMove(tree PlotTree, id string, move CheckMove, artifacts []CheckE
 		if err != nil {
 			return Seed{}, Note{}, err
 		}
-		if result.Report == nil && result.Verdict == nil {
+		if result.Report == nil && result.Verdict == nil && len(result.CitedEarlier) == 0 {
 			delete(next.CheckResults, key)
 		} else {
 			next.CheckResults[key] = result
@@ -568,7 +590,7 @@ func applyResultMove(seedID, checkID string, result CheckResult, move CheckMove,
 		if err := JoinProblems(problems); err != nil {
 			return "", "", result, err
 		}
-		return checkID + " reported", detail, CheckResult{Report: report}, nil
+		return checkID + " reported", detail, CheckResult{Report: report, CitedEarlier: result.CitedArtifacts()}, nil
 	case CheckVerbConfirm, CheckVerbReject:
 		confirmed := move.Verb == CheckVerbConfirm
 		if !confirmed && summary == "" {
@@ -593,7 +615,7 @@ func applyResultMove(seedID, checkID string, result CheckResult, move CheckMove,
 		if state == CheckOpen {
 			return "", "", result, protocol.Refuse(protocol.RefusalWrongState, "%s on %s is already open: it has no report and no verdict", checkID, seedID)
 		}
-		return checkID + " reopened", summary, CheckResult{}, nil
+		return checkID + " reopened", summary, CheckResult{CitedEarlier: result.CitedArtifacts()}, nil
 	}
 	return "", "", result, protocol.Refuse(protocol.RefusalInvalidInput, "%q is not a result move", move.Verb)
 }
