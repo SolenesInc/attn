@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "land": "0.10.0",
+  "base": "84a7881ce5ea1d5e4d4c93c1e730442df3b285c3",
+  "head": "230cd2a8e633d71e9a3867d23911c0e67f535157",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 102.49,
+    "ranOn": "230cd2a8e633d71e9a3867d23911c0e67f535157"
+  },
+  "recordings": []
+}
