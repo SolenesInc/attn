@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: QuickJS can report success after heap exhaustion",
+  "at": "2026-11-25T19:02:33.493Z",
+  "detail": "At 584ae896d, QuickJS can return a successful script result after reaching the configured heap limit. The heap cap itself remains enforced. D28 requires a named limit error so callers can distinguish a partial batch from completion. internal/script/engine.go:49-59, :68-88, and :154-163 cover the limit and outcome paths. Have the runner preserve the heap-exhaustion outcome independently of script-level error handling, and preserve the agreed stack-error behavior. See review s-whb4j6 for ordinary functional checks and its source trace.\n"
+}
