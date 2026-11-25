@@ -21,7 +21,9 @@ pick applies to every profile.
 You can have as many desktops as you want. The first 9 are one keypress away:
 Cmd+1–9 (Ctrl+Shift+1–9 on Linux). Pressing a digit with no desktop behind it
 creates one, and pressing the digit of the desktop you're on takes you back to
-the previous one. Cmd+G (Ctrl+Shift+G on Linux) shows all your desktops at once.
+the previous one. Cmd+G (Ctrl+Shift+G on Linux) shows the current desktop's tiles
+small, all at once, with your other desktops above and below.
+[The overview](#the-overview) says how it works.
 
 You can also have as many non-numbered desktops as you want. Cmd+K (Ctrl+Shift+K
 on Linux) finds any agent or tile on any desktop and takes you to it.
@@ -89,9 +91,9 @@ The shelf, in the window's title bar, names every column in row order. It shows 
 - **Entry.** One column. The frame runs around the entries of the columns on screen, and the column you are in is filled.
 - **Needs you.** An agent that waits for you or needs approval, or a document that arrived off screen, has a filled mark behind its icon. A working agent's mark is fainter.
 - **Stack.** A stack's entry is a pill that shows the tile you used last. The dots on its top edge are the tiles above that one, and the dots on its bottom edge are the tiles below it. A dot becomes a dash when its tile needs you.
-- **Count.** When the title bar has no room for every entry, the ones farthest from the screen fold into `‹ 3` or `3 ›` at the row's ends. An entry that needs you folds last. When one does fold, its count shows its mark. Click a count for a menu of the entries folded into it. Entries on screen never fold. Their names get shorter instead.
+- **Count.** When the title bar has no room for every entry, the ones farthest from the screen fold into `‹ 3` or `3 ›` at the row's ends. An entry that needs you folds last. When one does fold, its count shows its mark. Click a count to open the overview, which shows every column. Entries on screen never fold. Their names get shorter instead.
 
-A click on an entry goes to the tile you used last in its column, as **Going to a tile** describes.
+A click on an entry goes to the tile you used last in its column, as **Going to a tile** describes. A click on the entry of the column you are in opens the overview.
 
 The window's title bar is one toolbar, so tiles and the sidebar list get the height the title bar and the sidebar's header took. From left to right, beside the window buttons, it holds New, Commands, the flow switch, the sidebar toggle and notifications. The shelf comes next, starting where the tiles start. On the right are the garden, the Notebook, the Ledger, automations, asks and the profile selector. Drag the empty parts of the toolbar to move the window, and double-click them to zoom it. While the Notebook, the Ledger, the full Garden or a dialog is open, the toolbar's controls are dimmed until you close it, and you can still drag the toolbar. With the queue sidebar collapsed, the queue bar's waiting pill, automation runs and desktop chips sit in the toolbar too. When they don't all fit, the desktop chips shrink to the current desktop and a +N chip that opens the desktop overview, and automation runs leave the bar until there is room again. While a tile is focused with its agent, the toolbar stays empty, so the window can still be moved. On Linux, the toolbar sits under the native title bar.
 
@@ -108,6 +110,23 @@ The window's title bar is one toolbar, so tiles and the sidebar list get the hei
 The command palette offers these actions too.
 
 On Ubuntu 24.04, GNOME's default keys move a window between workspaces with Ctrl+Alt+Shift+arrows, so carry and send never reach Attn there. To use them, run the commands from the palette, rebind them in Attn (Cmd+/ on macOS, Ctrl+Shift+/ on Linux, then **Edit shortcuts**), or change GNOME's keys.
+
+### The overview
+
+Cmd+G (Ctrl+Shift+G on Linux) shows the whole row small, on one line or several, with your other desktops as strips above and below it. The sidebar's "Desktop overview" row, the queue bar's desktop overview chip, the palette, a count on the shelf, and the entry of the column you are in open it too. Nothing moves while you look: no tile slides and no terminal changes size.
+
+A terminal shows its text. A terminal that has not been on screen shows the text it had when the overview opened, or its icon and title when there is none to show. A document or a seed on this desktop shows its body. Browser tiles and other kinds show their icon and title. The bar under a column says the column is on screen. A tile that needs you has an outline and a word in its state's color, and a line below the row says what it asks. The tile with the heavy outline has the highlight. The highlight starts on the tile you are in, and moving it does not move the row.
+
+| Key | What it does |
+|---|---|
+| Left, Right | Move the highlight along the row |
+| Up, Down | Move the highlight in a stack, and past its end show the desktop above or below |
+| Enter | Go to the highlighted tile |
+| Shift+Enter | Send the tile you came from to the desktop shown |
+| 1–9 | Go to that desktop |
+| Esc, or the key that opened it | Go back to where you were, as a click on the shelf's current entry or on the background does |
+
+The keys that move between tiles also move the highlight. A click on a tile, or on its line below the row, goes to the tile. A click on a desktop's strip shows that desktop, and the **New desktop** strip makes one. The shelf's current entry follows the highlight.
 
 ### How tiles move
 
@@ -204,7 +223,7 @@ Pressing the digit of the desktop you're on takes you back only while you're loo
 <details>
 <summary>Where does a tile land when I move it to another desktop?</summary>
 
-Cmd+Option+digit (Ctrl+Alt+digit on Linux), with or without Shift, puts the tile to the right of the active tile on that desktop and makes the tile active there. The shortcut creates the desktop when the digit has none. "Move to desktop…" places the tile the same way. Dropping a tile on a desktop in the sidebar puts its column at the start of that desktop's row. Dropping the tile on the "New desktop" spot that appears below your desktops while you drag makes a new desktop for the tile. In the desktop overview (Cmd+G, Ctrl+Shift+G on Linux), Shift+Enter sends the active tile to the highlighted desktop and keeps you where you are. Delegates come along only with an Option drop (Alt on Linux) or the "Move with delegates to" commands.
+Cmd+Option+digit (Ctrl+Alt+digit on Linux), with or without Shift, puts the tile to the right of the active tile on that desktop and makes the tile active there. The shortcut creates the desktop when the digit has none. "Move to desktop…" places the tile the same way. Dropping a tile on a desktop in the sidebar puts its column at the start of that desktop's row. Dropping the tile on the "New desktop" spot that appears below your desktops while you drag makes a new desktop for the tile. In the desktop overview (Cmd+G, Ctrl+Shift+G on Linux), Shift+Enter sends the tile you came from to the desktop shown and keeps you where you are. Delegates come along only with an Option drop (Alt on Linux) or the "Move with delegates to" commands.
 </details>
 
 <details>

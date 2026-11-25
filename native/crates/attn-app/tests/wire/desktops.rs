@@ -1728,38 +1728,6 @@ fn the_screen_keeps_where_it_starts_while_the_active_tile_stays_on_it() {
 }
 
 #[test]
-fn a_count_opens_a_menu_of_the_entries_it_holds_that_escape_closes() {
-    let ids: Vec<String> = (0..24).map(|i| format!("p{i:02}")).collect();
-    let tree = row(ids.iter().map(|id| pane(id)));
-    let mut world = start(vec![desktop(1, "p00", Some(tree))]);
-
-    let count = world.screen().get(Target::key("shelf.count.after"));
-    assert!(off_screen(&world, "p23").is_none());
-
-    click(&mut world, "shelf.count.after");
-    let menu = world.screen().get(Target::key("shelf.menu.after"));
-    assert_eq!(menu.name, count.name);
-    assert!(
-        off_screen(&world, "p23").is_some(),
-        "the menu holds the far entries"
-    );
-
-    world.gesture(|app| {
-        app.key(rune::KeyEvent {
-            key: rune::Key::Escape,
-            mods: rune::Mods::default(),
-        })
-    });
-    assert!(
-        world
-            .screen()
-            .find(Target::key("shelf.menu.after"))
-            .is_none()
-    );
-    assert!(world.runtime_is_at_rest());
-}
-
-#[test]
 fn carrying_moves_the_active_column_one_place_and_says_when_it_is_at_the_end() {
     let mut world = start(vec![four_in_a_row("a")]);
 
@@ -1961,42 +1929,6 @@ fn the_screen_returns_to_where_it_started_after_a_width_change() {
     narrowest(&mut world, "66");
     assert_eq!(shown(&world), ["a", "b"]);
     world.advance(Duration::from_secs(1));
-    assert!(world.runtime_is_at_rest());
-}
-
-#[test]
-fn a_counts_menu_closes_on_a_press_outside_it_and_on_another_desktop() {
-    let ids: Vec<String> = (0..24).map(|i| format!("p{i:02}")).collect();
-    let tree = row(ids.iter().map(|id| pane(id)));
-    let other = {
-        let mut d = desktop(2, "p00", Some(row(ids.iter().map(|id| pane(id)))));
-        d.panes.iter_mut().for_each(|p| p.desktop_id = d.id.clone());
-        d
-    };
-    let mut world = start(vec![desktop(1, "p00", Some(tree.clone())), other.clone()]);
-
-    click(&mut world, "shelf.count.after");
-    click(&mut world, "shelf.menu.layer");
-    assert!(
-        world
-            .screen()
-            .find(Target::key("shelf.menu.after"))
-            .is_none()
-    );
-
-    click(&mut world, "shelf.count.after");
-    arrange(
-        &mut world,
-        "work/desktop_2",
-        vec![desktop(1, "p00", Some(tree)), other],
-    );
-    assert!(
-        world
-            .screen()
-            .find(Target::key("shelf.menu.after"))
-            .is_none(),
-        "the menu does not follow the window to another desktop"
-    );
     assert!(world.runtime_is_at_rest());
 }
 
@@ -3051,215 +2983,6 @@ fn key(world: &mut World, key: rune::Key, shift: bool) {
     });
 }
 
-fn overview_card(world: &World, slot: u32) -> attn_testkit::Node {
-    world
-        .screen()
-        .get(Target::key(format!("overview.card.work/desktop_{slot}")))
-}
-
-fn heard_card(world: &World) -> Option<String> {
-    world.screen().active_option().and_then(|n| n.key)
-}
-
-#[test]
-fn the_overview_moves_between_desktops_by_arrow_and_switches_or_sends_the_active_tile() {
-    let mut world = start(two_desktops());
-
-    press(&mut world, Action::DesktopOverview);
-    let dialog = world.screen().get(Target::key("overview.dialog"));
-    assert_eq!(dialog.name.as_deref(), Some("Desktop overview"));
-    assert_eq!(
-        overview_card(&world, 1).value.as_deref(),
-        Some("current, focused")
-    );
-    assert_eq!(
-        heard_card(&world).as_deref(),
-        Some("overview.card.work/desktop_1"),
-        "a screen reader hears the focused card"
-    );
-
-    key(&mut world, rune::Key::Right, false);
-    assert_eq!(overview_card(&world, 2).value.as_deref(), Some("focused"));
-    assert_eq!(
-        heard_card(&world).as_deref(),
-        Some("overview.card.work/desktop_2")
-    );
-    key(&mut world, rune::Key::Enter, true);
-    let moved = sent(&world, "desktop_move_leaf");
-    assert_eq!(moved.len(), 1, "Shift-Return sends the active tile");
-    assert_eq!(moved[0]["leaf_id"], "a");
-    assert_eq!(moved[0]["target_desktop_id"], "work/desktop_2");
-    assert!(
-        world
-            .screen()
-            .find(Target::key("overview.dialog"))
-            .is_none()
-    );
-
-    press(&mut world, Action::DesktopOverview);
-    key(&mut world, rune::Key::Text("2".into()), false);
-    let current = sent(&world, "desktop_set_current");
-    assert_eq!(
-        current.last().unwrap()["desktop_id"],
-        "work/desktop_2",
-        "a digit switches"
-    );
-    assert!(
-        world
-            .screen()
-            .find(Target::key("overview.dialog"))
-            .is_none()
-    );
-
-    press(&mut world, Action::DesktopOverview);
-    key(&mut world, rune::Key::Escape, false);
-    assert!(
-        world
-            .screen()
-            .find(Target::key("overview.dialog"))
-            .is_none()
-    );
-
-    press(&mut world, Action::DesktopOverview);
-    click(&mut world, "overview.card.work/desktop_1");
-    let current = sent(&world, "desktop_set_current");
-    assert_eq!(
-        current.last().unwrap()["desktop_id"],
-        "work/desktop_1",
-        "a card switches"
-    );
-    assert!(
-        world
-            .screen()
-            .find(Target::key("overview.dialog"))
-            .is_none()
-    );
-    world.advance(Duration::from_secs(1));
-    assert!(world.runtime_is_at_rest());
-}
-
-#[test]
-fn the_overview_keeps_the_keys_scripts_find_it_by_while_open_and_drops_them_when_closed() {
-    let mut world = start(two_desktops());
-    let keys = ["overview", "overview.dialog", "overview.scrim"];
-
-    press(&mut world, Action::DesktopOverview);
-    for k in keys {
-        assert!(
-            world.runtime().presented(k).is_some(),
-            "the open overview draws {k}"
-        );
-    }
-    key(&mut world, rune::Key::Escape, false);
-    for k in keys {
-        assert!(
-            world.runtime().presented(k).is_none(),
-            "the closed overview draws no {k}"
-        );
-    }
-}
-
-#[test]
-fn the_overviews_cards_share_one_grid_whatever_each_card_holds() {
-    let mut world = start(two_desktops());
-
-    press(&mut world, Action::DesktopOverview);
-    let screen = world.screen();
-    assert!(
-        screen
-            .find(Target::key("overview.send.work/desktop_1"))
-            .is_none()
-    );
-    assert!(
-        screen
-            .find(Target::key("overview.send.work/desktop_2"))
-            .is_some()
-    );
-    let [current, other, new] = [
-        "overview.desktop.work/desktop_1",
-        "overview.desktop.work/desktop_2",
-        "overview.new",
-    ]
-    .map(|key| screen.bounds(Target::key(key)).unwrap());
-    for card in [other, new] {
-        assert_eq!(
-            (card[1], card[2], card[3]),
-            (current[1], current[2], current[3]),
-            "one row of equal cells: {current:?} {other:?} {new:?}"
-        );
-    }
-}
-
-#[test]
-fn the_overviews_cards_keep_the_width_that_shows_each_desktops_tiles_by_name() {
-    let mut world = start(two_desktops());
-    press(&mut world, Action::DesktopOverview);
-    let [_, _, w, _] = world
-        .screen()
-        .bounds(Target::key("overview.desktop.work/desktop_1"))
-        .unwrap();
-    assert!(
-        w >= 260.0,
-        "a card stands as wide as the overview drew it before the design system (276), not {w}"
-    );
-}
-
-#[test]
-fn at_the_smallest_window_with_large_text_each_send_button_stays_inside_its_own_card() {
-    let desktops = vec![
-        four_in_a_row("a"),
-        desktop(2, "x", Some(row([pane("x"), pane("y")]))),
-        desktop(3, "z", Some(row([pane("z")]))),
-    ];
-    let state = InitialStateMessage {
-        settings: Some([("uiScale".to_owned(), "1.5".to_owned())].into()),
-        ..initial(desktops)
-    };
-    let mut world = World::start_sized(Daemon::scripted().state(state), (800.0, 600.0));
-    world.open_desktop();
-    press(&mut world, Action::DesktopOverview);
-    let screen = world.screen();
-    for desktop in ["work/desktop_2", "work/desktop_3"] {
-        let [cx, _, cw, _] = screen
-            .bounds(Target::key(format!("overview.desktop.{desktop}")))
-            .unwrap();
-        let [x, _, w, _] = screen
-            .bounds(Target::key(format!("overview.send.{desktop}")))
-            .unwrap();
-        assert!(
-            x >= cx - 0.5 && x + w <= cx + cw + 0.5,
-            "{desktop}: Send at {x}+{w} runs out of its card at {cx}+{cw}"
-        );
-    }
-}
-
-#[test]
-fn the_overviews_new_desktop_card_makes_a_desktop_and_switches_to_it() {
-    let daemon = daemon(two_desktops());
-    daemon.on("desktop_create", |_| {
-        attn_testkit::message(attn_protocol::ProfileActionResultMessage {
-            success: true,
-            desktops: Some(vec![desktop(3, "", None)]),
-            ..attn_protocol::ProfileActionResultMessage::new()
-        })
-    });
-    let mut world = World::start_sized(daemon, TWO_FIT);
-    world.open_desktop();
-
-    press(&mut world, Action::DesktopOverview);
-    click(&mut world, "overview.new");
-
-    assert_eq!(sent(&world, "desktop_create").len(), 1);
-    let current = sent(&world, "desktop_set_current");
-    assert_eq!(current.last().unwrap()["desktop_id"], "work/desktop_3");
-    assert!(
-        world
-            .screen()
-            .find(Target::key("overview.dialog"))
-            .is_none()
-    );
-}
-
 #[test]
 fn a_desktop_the_daemon_could_not_make_says_why() {
     let daemon = daemon(two_desktops());
@@ -3284,12 +3007,7 @@ fn a_desktop_the_daemon_could_not_make_says_why() {
             .as_deref(),
         Some("Could not create a desktop: too many desktops")
     );
-    assert!(
-        world
-            .screen()
-            .find(Target::key("overview.dialog"))
-            .is_none()
-    );
+    assert!(world.screen().find(Target::key("overview")).is_none());
 }
 
 fn popped(mut leaf: Value, frame: (f64, f64, f64, f64)) -> Value {
@@ -4222,7 +3940,7 @@ fn the_palette_reloads_the_agent_shown_alone_while_another_window_selects_anothe
 fn the_overview_sends_the_tile_shown_alone_while_another_window_selects_another() {
     let mut world = alone_here_selected_elsewhere("root", "lone");
     press(&mut world, Action::DesktopOverview);
-    key(&mut world, rune::Key::Right, false);
+    key(&mut world, rune::Key::Down, false);
     key(&mut world, rune::Key::Enter, true);
     let moved = sent(&world, "desktop_move_leaf");
     assert_eq!(moved.len(), 1);

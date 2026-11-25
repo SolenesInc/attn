@@ -290,6 +290,53 @@ pub fn step(row: &[&Column], from: &str, toward: Toward, focus_order: &[String])
     })
 }
 
+/// The gap between a row's columns drawn small, and between its lines, in points.
+const ROWS_COLUMN_GAP: f32 = 10.0;
+const ROWS_LINE_GAP: f32 = 18.0;
+const ROWS_MAX_SCALE: f32 = 0.8;
+
+/// A row drawn small, whole: each column's slot in row order, as x, y, width and height from
+/// the top left corner of the area it fills.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Rows {
+    pub scale: f32,
+    pub lines: usize,
+    pub slots: Vec<[f32; 4]>,
+}
+
+/// Places `columns` slots, each `slot` points large at full size, on as many lines of `area`
+/// as draws them largest.
+pub fn rows(columns: usize, slot: (f32, f32), area: (f32, f32)) -> Rows {
+    let scaled = |lines: usize| {
+        let across = columns.div_ceil(lines);
+        let w = (area.0 - ROWS_COLUMN_GAP * (across - 1) as f32) / across as f32 / slot.0;
+        let h = (area.1 - ROWS_LINE_GAP * (lines - 1) as f32) / lines as f32 / slot.1;
+        w.min(h).clamp(0.0, ROWS_MAX_SCALE)
+    };
+    let Some((lines, scale)) = (1..=columns)
+        .map(|lines| (lines, scaled(lines)))
+        .reduce(|best, next| if next.1 > best.1 { next } else { best })
+    else {
+        return Rows::default();
+    };
+    let across = columns.div_ceil(lines);
+    let (w, h) = (slot.0 * scale, slot.1 * scale);
+    let (step_x, step_y) = (w + ROWS_COLUMN_GAP, h + ROWS_LINE_GAP);
+    let left = (area.0 - (step_x * across as f32 - ROWS_COLUMN_GAP)) / 2.0;
+    let top = (area.1 - (step_y * lines as f32 - ROWS_LINE_GAP)) / 2.0;
+    let slots = (0..columns)
+        .map(|i| {
+            let (line, at) = (i / across, i % across);
+            [left + step_x * at as f32, top + step_y * line as f32, w, h]
+        })
+        .collect();
+    Rows {
+        scale,
+        lines,
+        slots,
+    }
+}
+
 fn overlap(a0: f32, a1: f32, b0: f32, b1: f32) -> f32 {
     (a1.min(b1) - a0.max(b0)).max(0.0)
 }
@@ -1295,6 +1342,63 @@ mod tests {
         };
         let plan = resolve(&["a", "b", "c", "d", "e"], "c", Some(&first));
         assert_eq!(firsts(&plan.screen), ["b", "c", "d"]);
+    }
+
+    /// The largest scale at which `columns` slots stand on `lines` lines of `area`.
+    fn scale_on(lines: usize, columns: usize, slot: (f32, f32), area: (f32, f32)) -> f32 {
+        let across = columns.div_ceil(lines) as f32;
+        let w = (area.0 - 10.0 * (across - 1.0)) / (across * slot.0);
+        let h = (area.1 - 18.0 * (lines as f32 - 1.0)) / (lines as f32 * slot.1);
+        w.min(h).min(0.8)
+    }
+
+    #[test]
+    fn a_row_drawn_small_is_whole_in_row_order_and_as_large_as_any_number_of_lines_draws_it() {
+        const HAIR: f32 = 0.01;
+        let mut drawn = 0;
+        for columns in 1..=48 {
+            for on_screen in 1..=6 {
+                for window in [
+                    (640.0, 400.0),
+                    (1024.0, 700.0),
+                    (1728.0, 1080.0),
+                    (900.0, 1400.0),
+                    (3440.0, 1400.0),
+                ] {
+                    for taken in [0.0, 60.0, 182.0] {
+                        let slot = (window.0 / on_screen as f32, window.1);
+                        let area = (window.0 - 48.0, window.1 - 48.0 - taken);
+                        let case = format!("{columns} columns of {slot:?} in {area:?}");
+                        let rows = rows(columns, slot, area);
+                        drawn += 1;
+
+                        assert_eq!(rows.slots.len(), columns, "{case}");
+                        assert!(rows.scale > 0.0, "{case}");
+                        for [x, y, w, h] in &rows.slots {
+                            assert!(*x >= -HAIR && *y >= -HAIR, "{case}");
+                            assert!(x + w <= area.0 + HAIR && y + h <= area.1 + HAIR, "{case}");
+                            assert!((w - slot.0 * rows.scale).abs() < HAIR, "{case}");
+                            assert!((h - slot.1 * rows.scale).abs() < HAIR, "{case}");
+                        }
+                        for pair in rows.slots.windows(2) {
+                            let ([x, y, w, h], [next_x, next_y, ..]) = (pair[0], pair[1]);
+                            let same_line = next_y == y && next_x >= x + w;
+                            let next_line = next_y >= y + h;
+                            assert!(same_line || next_line, "{case}");
+                        }
+                        let tops: std::collections::BTreeSet<u32> =
+                            rows.slots.iter().map(|s| s[1].to_bits()).collect();
+                        assert_eq!(tops.len(), rows.lines, "{case}");
+                        for lines in 1..=columns {
+                            let other = scale_on(lines, columns, slot, area);
+                            assert!(other <= rows.scale + 1e-5, "{case} on {lines} lines");
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(drawn, 48 * 6 * 5 * 3);
+        assert_eq!(rows(0, (500.0, 900.0), (1000.0, 800.0)), Rows::default());
     }
 
     #[test]

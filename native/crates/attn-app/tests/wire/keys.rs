@@ -937,12 +937,13 @@ fn the_cheat_sheet_lists_its_rows_with_paired_keys_and_notes() {
     );
 }
 
-/// The dialogs and menus in front, by name.
+/// The dialogs, the menus and the overview in front, by name.
 fn fronts(world: &World) -> Vec<String> {
     let screen = world.screen();
     ["dialog", "menu"]
         .into_iter()
         .flat_map(|role| screen.all(Target::role(role)))
+        .chain(screen.find(Target::key("overview")))
         .map(|n| n.name.unwrap_or_default())
         .collect()
 }

@@ -1,7 +1,7 @@
 use rune::{Color, Curve, Easing, El, Spring, col, el, row};
 
 use crate::colors::{MARK_READS, READS, mix_srgb, moved_until_it_reads, reads_furthest};
-use crate::system::{Radius, Size, Space, Type, chip_button, door, focus, layers, words};
+use crate::system::{Radius, Space, Type, door, focus, layers, words};
 use crate::{Glyph, Tokens};
 
 /// The title bar's shelf: an entry per column of the row, by name, with a frame behind the ones
@@ -52,7 +52,7 @@ impl ShelfMember {
         if self.needs_user() { DASH } else { DOT }
     }
 
-    fn ink(&self, ground: &Ground, t: &Tokens) -> Ink {
+    pub(super) fn ink(&self, ground: &Ground, t: &Tokens) -> Ink {
         let ink = self.state.map_or(t.text_tertiary, |state| state.ink(t));
         ground.ink(ink, MARK_READS, t)
     }
@@ -129,7 +129,6 @@ const DOT_GAP: f32 = 2.0;
 const DOTS_START: f32 = 8.0;
 const ENTRY_GAP: Space = Space::S2;
 const NAME_GAP: Space = Space::S6;
-const MARK_GAP: Space = Space::S2;
 const COUNT_GAP: Space = Space::S4;
 const COUNT_INSET: Space = Space::S8;
 const ASK: &str = "?";
@@ -141,7 +140,7 @@ const SCROLL: Curve = Curve::Tween {
 
 /// `ink` moved toward whichever of the text and the panel reads further on `ground`, only as far
 /// as `floor` asks.
-fn legible(ink: Color, ground: Color, floor: f32, t: &Tokens) -> Color {
+pub(super) fn legible(ink: Color, ground: Color, floor: f32, t: &Tokens) -> Color {
     let toward = reads_furthest(ground, [t.text_primary, t.bg_panel]);
     moved_until_it_reads(ink, toward, ground, floor)
 }
@@ -160,7 +159,7 @@ fn laid_over(below: Color, layer: Color) -> Color {
 
 /// What is behind a control's inks, at rest and under the pointer.
 #[derive(Clone, Copy)]
-struct Ground {
+pub(super) struct Ground {
     rest: Color,
     hovered: Color,
     pressed: Color,
@@ -168,7 +167,7 @@ struct Ground {
 
 impl Ground {
     /// `rest` with the steps every control takes, each only as far as words on it still read.
-    fn of(rest: Color, t: &Tokens) -> Ground {
+    pub(super) fn of(rest: Color, t: &Tokens) -> Ground {
         let furthest = reads_furthest(rest, [t.text_primary, t.bg_panel]);
         let step = |below: Color, layer: Color| {
             moved_until_it_reads(laid_over(below, layer), below, furthest, READS)
@@ -182,7 +181,7 @@ impl Ground {
         }
     }
 
-    fn ink(&self, ink: Color, floor: f32, t: &Tokens) -> Ink {
+    pub(super) fn ink(&self, ink: Color, floor: f32, t: &Tokens) -> Ink {
         let rest = legible(ink, self.rest, floor, t);
         let hovered = legible(rest, self.hovered, floor, t);
         Ink {
@@ -191,12 +190,12 @@ impl Ground {
         }
     }
 
-    fn words(&self, said: String, kind: Type, ink: Color, t: &Tokens) -> El {
+    pub(super) fn words(&self, said: String, kind: Type, ink: Color, t: &Tokens) -> El {
         let ink = self.ink(ink, READS, t);
         words(said, kind, ink.rest).group_color(ink.lit)
     }
 
-    fn pressable(&self, e: El, corner: f32) -> El {
+    pub(super) fn pressable(&self, e: El, corner: f32) -> El {
         door::round(e, corner)
             .hover(self.hovered)
             .press(self.pressed)
@@ -205,9 +204,9 @@ impl Ground {
 
 /// A colour at rest, and while the pointer is over the control it is on.
 #[derive(Clone, Copy)]
-struct Ink {
-    rest: Color,
-    lit: Color,
+pub(super) struct Ink {
+    pub(super) rest: Color,
+    pub(super) lit: Color,
 }
 
 impl Ink {
@@ -234,7 +233,7 @@ fn drawn(icon: &Glyph, points: f32, ink: Ink) -> El {
     })
 }
 
-fn mark(member: &ShelfMember, ground: &Ground, t: &Tokens) -> El {
+pub(super) fn mark(member: &ShelfMember, ground: &Ground, t: &Tokens) -> El {
     let ink = member.ink(ground, t);
     let square = || row().size(MARK, MARK).center().a11y_hidden();
     let cut_out = |corner: f32| {
@@ -563,15 +562,9 @@ impl ShelfCount {
             + self.marks.len() as f32 * (COUNT_GAP.pt() + MARK)
     }
 
-    /// The count keyed `key` and read as `label`, `open` while its menu is.
-    pub fn build(
-        &self,
-        key: impl Into<String>,
-        label: impl Into<String>,
-        open: bool,
-        t: &Tokens,
-    ) -> El {
-        let ground = Ground::of(if open { t.bg_elevated } else { t.bg_panel }, t);
+    /// The count keyed `key` and read as `label`.
+    pub fn build(&self, key: impl Into<String>, label: impl Into<String>, t: &Tokens) -> El {
+        let ground = Ground::of(t.bg_panel, t);
         let ink = if self.needs_user {
             t.text_primary
         } else {
@@ -642,42 +635,6 @@ impl Shelf {
             .border(1.0, edge)
             .paint_order(1)
             .inert()
-    }
-
-    /// A "?" on `ground` for each of `count` open asks of the entry keyed `key`.
-    pub fn asks(key: &str, count: usize, ground: Color, t: &Tokens) -> Vec<El> {
-        asks(key, count, &Ground::of(ground, t), t)
-    }
-
-    /// A tile's mark on `ground`.
-    pub fn mark(member: &ShelfMember, ground: Color, t: &Tokens) -> El {
-        mark(member, &Ground::of(ground, t), t)
-    }
-
-    /// A folded column in a count's menu, keyed `key` and read as `label`: `marks`, the words
-    /// `label` and `after`. The pointer moves the shelf's entries, so it takes no stop on Tab.
-    pub fn folded(
-        key: impl Into<String>,
-        label: impl Into<String>,
-        marks: impl IntoIterator<Item = El>,
-        after: impl IntoIterator<Item = El>,
-        t: &Tokens,
-    ) -> El {
-        let label = label.into();
-        let face = door::gap(row().w_full().items_center(), NAME_GAP)
-            .child(door::gap(row().items_center(), MARK_GAP).children(marks))
-            .child(
-                Ground::of(t.bg_panel, t)
-                    .words(label.clone(), Type::Small, t.text_secondary, t)
-                    .single_line()
-                    .truncate()
-                    .grow(1.0),
-            )
-            .children(after);
-        chip_button(key, label, face, false, Size::Small, t)
-            .focusable(false)
-            .min_w(0.0)
-            .w_full()
     }
 
     /// The accent ring over an entry while what it brings arrives, keyed `key`.

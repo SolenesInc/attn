@@ -16,6 +16,7 @@ pub(crate) mod header_pop;
 pub(crate) mod host;
 pub use attn_client::layout;
 mod overview;
+mod overview_view;
 mod peek;
 pub(crate) mod provenance;
 pub(crate) mod refusal;
@@ -48,11 +49,15 @@ pub(crate) use close::{Closing, view as close_confirmation};
 pub(crate) use drag::{DesktopMark, overlay as drag_overlay};
 pub(crate) use fit::Widths;
 pub(crate) use host::outpost_name;
-pub(crate) use overview::{create as create_desktop, view as overview};
+pub use overview::Overview;
+pub(crate) use overview::{
+    create as create_desktop, follow as follow_overview, key as overview_key,
+};
+pub(crate) use overview_view::{miniatures, view as overview};
 pub(crate) use peek::view as peek;
 pub(crate) use shelf::{
-    columns as shelf_columns, count_menu, settle, slot as shelf_slot, title as leaf_title,
-    width_control_layer, width_label,
+    columns as shelf_columns, settle, slot as shelf_slot, title as leaf_title, width_control_layer,
+    width_label,
 };
 pub use tile_look::FocusStyle;
 pub(crate) use view::{Room, area, session_of_leaf};
@@ -86,8 +91,6 @@ pub struct Desk {
     pub(crate) shelf_px: Option<f32>,
     pub(crate) window_w: Option<f32>,
     pub(crate) width_control: shelf::WidthControlHover,
-    /// The shelf count whose menu is open.
-    pub(crate) count_open: Option<attn_ui::blocks::CountSide>,
     pub(crate) width_label: Option<shelf::WidthLabel>,
     /// The row the tile area last laid out, which its next layout slides from.
     pub(crate) shown_row: Option<row_slide::ShownRow>,
@@ -112,8 +115,6 @@ pub struct Desk {
     pub(crate) rects: HashMap<String, [f32; 4]>,
     pub(crate) peeks: peek::Peeks,
     pub(crate) header_pop: header_pop::HeaderPop,
-    /// The desktop the overview's keys act on.
-    pub(crate) overview_focus: Option<String>,
     /// The drain under each tile header whose agent's turn counts down to settling, by session.
     pub(crate) settling: HashMap<String, crate::sidebar::Countdown>,
     pub(crate) windows: windows::Pool,
@@ -376,9 +377,6 @@ impl Desk {
         self.previous_desktop.take_if(|previous| {
             current.as_ref() == Some(previous) || !facts.desktops.iter().any(|d| d.id == *previous)
         });
-        if shown.is_some() && shown != self.shown {
-            self.count_open = None;
-        }
         if shown.is_some() {
             self.shown = shown;
         }

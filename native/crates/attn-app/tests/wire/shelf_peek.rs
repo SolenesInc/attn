@@ -830,10 +830,12 @@ fn the_smallest_window_at_large_text_keeps_the_count_that_reaches_the_columns_of
             "at {size:?} the shelf keeps the count over the columns after the screen"
         );
         click(&mut world, "shelf.count.after");
-        peek_at(&mut world, "c");
         assert!(
-            peek(&world).is_some(),
-            "at {size:?} a column in the count peeks"
+            world
+                .screen()
+                .find(Target::key("overview.miniature.c"))
+                .is_some(),
+            "at {size:?} the count reaches a column it holds"
         );
     }
 }

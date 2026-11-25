@@ -33,6 +33,10 @@ pub struct Window {
     /// window's edge, and Escape closes the newest.
     pub drawers: Vec<Drawer>,
     pub layer: Option<Layer>,
+    /// The open overview, which counts only while `Layer::Overview` is the layer.
+    pub overview: Option<crate::desktop::Overview>,
+    /// How large the area beside the sidebar last laid out, in points.
+    pub(crate) main_size: (f32, f32),
     pub(crate) callout: Option<crate::callouts::Callout>,
     pub(crate) whats_new: crate::whats_new::Tour,
     pub(crate) diagnostic_report: Option<crate::diagnostic_report::Draft>,
@@ -244,7 +248,8 @@ impl Layer {
     /// Whether the layer keeps `action`'s keys from acting while it is open. A layer keeps its own
     /// keys: the agents key toggles the palette and its turn keys act on its highlighted agent; the
     /// keys that open the markdown opener, the overview and the profile switcher close them; the
-    /// notebook's file key finds a note.
+    /// notebook's file key finds a note. The overview also keeps every tile's keys but the walk's,
+    /// which move its highlight.
     pub(crate) fn holds(self, action: &Action) -> bool {
         let captures_navigation = matches!(
             self,
@@ -273,7 +278,10 @@ impl Layer {
                 | (Layer::ProfileSwitcher, Action::ProfileSwitch)
                 | (Layer::Asks, Action::DockAsks)
         );
-        captures_navigation && action.yields_to_overlays() && !own
+        let tiles = self == Layer::Overview
+            && action.category() == crate::action::Category::Panes
+            && !action.walks();
+        tiles || (captures_navigation && action.yields_to_overlays() && !own)
     }
 }
 
@@ -333,6 +341,7 @@ pub(crate) fn escape_drawers(state: &mut State, tx: &mut Tx) -> bool {
 
 impl Window {
     pub(crate) fn go_home(&mut self) {
+        self.close_overview();
         self.view = View::Home;
         self.desk.header_pop = Default::default();
         self.follow_next_turn = false;
@@ -347,8 +356,22 @@ impl Window {
         self.desk.awaited = None;
     }
 
-    /// Shows the current desktop. Coming from another view lands at once.
+    /// Closes the open overview; whether there was one.
+    pub(crate) fn close_overview(&mut self) -> bool {
+        let open = self.layer == Some(Layer::Overview);
+        if open {
+            self.layer = None;
+            self.overview = None;
+        }
+        open
+    }
+
+    /// Shows the current desktop, which closes the overview. Coming from another view lands at
+    /// once.
     pub(crate) fn show_desktop(&mut self, tx: &mut Tx) {
+        if self.close_overview() {
+            tx.blur();
+        }
         if self.view != View::Desktop {
             tx.instant();
         }
@@ -664,10 +687,12 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
 }
 
 /// Whether something holds the window so that the title bar's controls fade: every layer but the
-/// notifications panel, and the garden over the whole window.
+/// notifications panel and the overview, and the garden over the whole window.
 fn title_bar_covered(state: &State) -> bool {
-    !matches!(state.window.layer, None | Some(Layer::Notifications))
-        || crate::garden::mode(state) == crate::garden::Mode::Full
+    !matches!(
+        state.window.layer,
+        None | Some(Layer::Notifications | Layer::Overview)
+    ) || crate::garden::mode(state) == crate::garden::Mode::Full
 }
 
 const COVERED_OPACITY: f32 = 0.45;
@@ -747,12 +772,25 @@ fn main_area(state: &State, t: &Tokens, scale: f32) -> Vec<El> {
     if crate::crew::is_open(state) {
         return vec![crate::crew::page(state, t)];
     }
-    std::iter::once(match state.window.view {
-        View::Home => crate::home::view(state, t),
+    let shown = match state.window.view {
+        View::Home => row()
+            .key("home.area")
+            .grow(1.0)
+            .min_w(0.0)
+            .h_full()
+            .child(crate::home::view(state, t)),
         View::Desktop => crate::desktop::area(state, t, scale),
-    })
-    .chain(dock(state, t))
-    .collect()
+    };
+    let main = shown
+        .on_layout_tx(|state: &mut State, [_, _, w, h], tx: &mut Tx| {
+            if state.window.main_size == (w, h) {
+                tx.live_only();
+                return;
+            }
+            state.window.main_size = (w, h);
+        })
+        .children(crate::desktop::overview(state, t));
+    std::iter::once(main).chain(dock(state, t)).collect()
 }
 
 /// The open drawers over the content, below the title bar, nothing behind them moving: the
@@ -845,6 +883,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
 /// hint sit at the window's foot and leave the page showing.
 pub(crate) fn covers_tiles(state: &State) -> bool {
     state.window.callout.is_some()
+        || state.window.layer == Some(Layer::Overview)
         || !over_tiles(state, &crate::color_scheme(&state.facts.settings).dark.ui).is_empty()
 }
 
@@ -856,7 +895,6 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::Palette(Palette::Search)) => layers.push(crate::palette::view(state, t)),
         Some(Layer::Palette(Palette::Files)) => layers.push(crate::opener::view(state, t)),
         Some(Layer::NewSession) => layers.extend(crate::picker::dialog(state, t)),
-        Some(Layer::Overview) => layers.extend(crate::desktop::overview(state, t)),
         Some(Layer::Ledger) => {
             layers.push(crate::ledger::view(state, t));
             layers.extend(crate::ledger::row_menu(state, t));
@@ -876,12 +914,11 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::BannerDetails(band, shown)) => {
             banner_details(state, band, shown, t, &mut layers)
         }
-        None => {}
+        Some(Layer::Overview) | None => {}
     }
     layers.extend(crate::home::pull_requests::merge_confirmation(state, t));
     crate::notebook::root_picker_overlay(state, t, &mut layers);
     crate::automations::form::overlay(state, t, &mut layers);
-    layers.extend(crate::desktop::count_menu(state, t));
     layers.extend(crate::desktop::width_control_layer(state, t));
     layers.extend(crate::desktop::peek(state, t));
     layers.extend(crate::desktop::header_popover(state, t));

@@ -1278,11 +1278,15 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::header_piece::HeaderPiece::link(label)", false),
     ("blocks::header_piece::HeaderPiece::link(said)", false),
     ("blocks::header_piece::HeaderPiece::button(label)", false),
-    ("blocks::miniature::Miniature::tile(name)", true),
+    ("blocks::miniature::Overview::strip(number)", false),
+    ("blocks::miniature::Overview::strip(name)", false),
+    ("blocks::miniature::Overview::strip(counts)", false),
+    ("blocks::miniature::Overview::line(asks)", false),
+    ("blocks::miniature::Overview::legend(hints)", false),
+    ("blocks::miniature::Miniature::card(title)", false),
     ("blocks::screen::Screen::showing(shown)", false),
     ("blocks::shelf::ShelfEntry::build(label)", false),
     ("blocks::shelf::ShelfCount::build(label)", false),
-    ("blocks::shelf::Shelf::folded(label)", false),
 ];
 
 #[test]

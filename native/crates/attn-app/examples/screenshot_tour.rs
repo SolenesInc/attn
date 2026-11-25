@@ -1277,19 +1277,11 @@ fn shelf_world(dark: bool) -> World {
     world
 }
 
-/// The shelf of [`shelf`] with the pointer resting on an entry, whose peek opens: the builder's,
-/// or in a window too narrow for the entries, the first one of the count's menu; with no shelf,
+/// The shelf of [`shelf`] with the pointer resting on an entry, whose peek opens; with no shelf,
 /// the title bar that left it no room.
 fn shelf_peek(dark: bool) {
     let mut world = shelf_world(dark);
     world.resize((window().0.min(900.0), 600.0));
-    let count = ["shelf.count.after", "shelf.count.before"]
-        .into_iter()
-        .find(|key| world.screen().find(Target::key(*key)).is_some());
-    if let Some(count) = count {
-        world.gesture(|app| app.click(Target::key(count)));
-        world.settle();
-    }
     let entry = ["w", "i", "sh", "r", "m"]
         .iter()
         .map(|leaf| format!("shelf.entry.{leaf}"))
@@ -1368,18 +1360,8 @@ fn shelf_stack(dark: bool) {
     snap(&mut world, "shelf-folded", dark);
 }
 
-/// The shelf of [`shelf`] in a window too narrow for its entries, its count's menu open, and the
-/// label fewer tiles shows.
-fn shelf_counts(dark: bool) {
-    let mut world = shelf_world(dark);
-    world.resize((900.0, 600.0));
-    let count = ["shelf.count.after", "shelf.count.before"]
-        .into_iter()
-        .find(|key| world.screen().find(Target::key(*key)).is_some());
-    if let Some(count) = count {
-        world.gesture(|app| app.click(Target::key(count)));
-    }
-    snap(&mut world, "shelf-count-menu", dark);
+/// The shelf of [`shelf`] and the label fewer tiles shows.
+fn shelf_width_label(dark: bool) {
     let mut world = shelf_world(dark);
     run(&mut world, Action::ShelfFewerTiles);
     snap(&mut world, "shelf-width-label", dark);
@@ -8782,28 +8764,67 @@ fn session_not_created(dark: bool) {
     snap(&mut world, "session-not-created", dark);
 }
 
-/// The overview over three desktops: terminal `a` beside the document, one agent, and an empty
-/// one.
-fn desktop_overview(dark: bool) {
-    let mut world = popover_world(
-        dark,
-        |state| {
-            let desktops = state.desktops.as_mut().expect("the tour's desktops");
-            desktops.truncate(2);
-            desktops.push(Desktop {
-                tree_json: String::new(),
-                ..desktop("d-empty", "3", Value::Null, vec![])
-            });
-            state
-                .sessions
-                .as_mut()
-                .expect("the tour's sessions")
-                .truncate(2);
-        },
-        |_| {},
-    );
+/// The overview over a row of terminal `a`, the document, a stack of an agent over a seed, a
+/// browser and an agent that waits, between a desktop above and an empty one below; then with the
+/// empty desktop previewed.
+fn overview(dark: bool) {
+    let tile = |kind: &str, id: &str, params: &str| json!({"type": "tile", "tile_id": id, "tile_kind": kind, "tile_params": params});
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), seeds());
+    {
+        let desktops = state.desktops.as_mut().expect("the tour's desktops");
+        let mut panes = vec![agent_pane(DESKTOP, "a", "s0")];
+        panes.extend((1..4).map(|n| agent_pane(DESKTOP, &format!("p{n}"), &format!("s{n}"))));
+        let stack = below(pane("p1"), tile("seed", "g", "s-one"));
+        desktops[0] = desktop(
+            DESKTOP,
+            "2",
+            row(vec![
+                pane("a"),
+                document_tile("m", "/repo/plan.md"),
+                stack,
+                tile("browser", "w", "https://docs.example.com/attn"),
+                pane("p2"),
+                pane("p3"),
+            ]),
+            panes,
+        );
+        desktops.truncate(1);
+        let others = (4..STATES.len())
+            .map(|n| agent_pane("d-above", &format!("p{n}"), &format!("s{n}")))
+            .collect::<Vec<_>>();
+        let row_above = row((4..STATES.len()).map(|n| pane(&format!("p{n}"))));
+        desktops.push(Desktop {
+            shortcut_slot: Some(1),
+            ..desktop("d-above", "1", row_above, others)
+        });
+        desktops.push(Desktop {
+            tree_json: String::new(),
+            shortcut_slot: Some(3),
+            ..desktop("d-empty", "3", Value::Null, vec![])
+        });
+    }
+    let daemon = scripted().state(state);
+    daemon.on("seed_document_get", |r: &Request| {
+        message(SeedDocumentGetResultMessage {
+            request_id: request_id(r),
+            success: true,
+            document: seeds()
+                .into_iter()
+                .find(|s| s.id == r["seed_id"])
+                .map(|seed| SeedDocument {
+                    seed,
+                    ..SeedDocument::default()
+                }),
+            ..SeedDocumentGetResultMessage::new()
+        })
+    });
+    let mut world = start(daemon);
+    deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
+    write(&mut world, BOXES);
     press(&mut world, Action::DesktopOverview);
-    snap(&mut world, "desktop-overview", dark);
+    snap(&mut world, "overview", dark);
+    tap(&mut world, Key::Down);
+    snap(&mut world, "overview-empty", dark);
 }
 
 fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
@@ -8835,7 +8856,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("shelf", || shelf(dark, false));
         scene("shelf", || shelf(dark, true));
         scene("shelf_peek", || shelf_peek(dark));
-        scene("shelf_counts", || shelf_counts(dark));
+        scene("shelf_width_label", || shelf_width_label(dark));
         scene("shelf_stack", || shelf_stack(dark));
         scene("review_stop", || review_stop(dark));
         scene("garden", || garden(dark));
@@ -9028,7 +9049,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("notifications_empty", || notifications_empty(dark));
         scene("notifications_listed", || notifications_listed(dark));
         scene("notifications_failed", || notifications_failed(dark));
-        scene("desktop_overview", || desktop_overview(dark));
+        scene("overview", || overview(dark));
         scene("settings_delegation", || settings_delegation(dark));
         scene("settings_delegation_table", || {
             settings_delegation_table(dark)

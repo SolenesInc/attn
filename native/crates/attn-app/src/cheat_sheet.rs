@@ -93,7 +93,9 @@ const SECTIONS: &[Section] = &[
                 &[ModifiersOf(Action::DesktopSendStay1, "1–9")],
                 |_| "A digit with no desktop yet gets a new one.".into(),
             ),
-            line("Desktop overview", &[Of(Action::DesktopOverview)]),
+            noted("Desktop overview", &[Of(Action::DesktopOverview)], |_| {
+                "Arrows step through tiles and desktops, Return goes there.".into()
+            }),
             line("Switch profile", &[Of(Action::ProfileSwitch)]),
             line(
                 "Go to dashboard (home)",

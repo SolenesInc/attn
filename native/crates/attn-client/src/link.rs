@@ -7,17 +7,17 @@ use attn_protocol::{
     AppPerformanceResultMessage, AsksUpdatedMessage, AttachResultMessage, AuthorsUpdatedMessage,
     ClientHelloMessage, CommandErrorMessage, CrewUpdatedMessage, FsChangedMessage,
     GardenBedsUpdatedMessage, GardenSeedsChangedMessage, GardenSeedsUpdatedMessage,
-    GitHubHostsUpdatedMessage, GitOperationStartedMessage, HarnessCatalogMessage,
-    InitialStateMessage, InstallCodexUpdateResultMessage, KittyImageResultMessage,
-    KittyPlacementsMessage, NotificationListResultMessage, NotificationsUpdatedMessage,
-    OutpostsUpdatedMessage, PROTOCOL_VERSION, PRsUpdatedMessage, PluginsUpdatedMessage,
-    ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage,
-    QuickCaptureReadMessage, QuickCaptureUnreadMessage, RateLimitedMessage, ReposUpdatedMessage,
-    RuntimeRespawnedMessage, SessionClosedMessage, SessionExitedMessage,
-    SessionMessagesChangedMessage, SessionRegisteredMessage, SessionUnregisteredMessage,
-    SessionsUpdatedMessage, SettingsUpdatedMessage, SharedCodexChangedMessage,
-    UpdateChangedMessage, VentsUpdatedMessage, WorktreeStateChangedEvent, WorktreeSweptEvent,
-    go_values,
+    GetScreenSnapshotResultMessage, GitHubHostsUpdatedMessage, GitOperationStartedMessage,
+    HarnessCatalogMessage, InitialStateMessage, InstallCodexUpdateResultMessage,
+    KittyImageResultMessage, KittyPlacementsMessage, NotificationListResultMessage,
+    NotificationsUpdatedMessage, OutpostsUpdatedMessage, PROTOCOL_VERSION, PRsUpdatedMessage,
+    PluginsUpdatedMessage, ProfileArrangementChangedMessage, ProfilesChangedMessage,
+    PtyDesyncMessage, PtyResizedMessage, QuickCaptureReadMessage, QuickCaptureUnreadMessage,
+    RateLimitedMessage, ReposUpdatedMessage, RuntimeRespawnedMessage, SessionClosedMessage,
+    SessionExitedMessage, SessionMessagesChangedMessage, SessionRegisteredMessage,
+    SessionUnregisteredMessage, SessionsUpdatedMessage, SettingsUpdatedMessage,
+    SharedCodexChangedMessage, UpdateChangedMessage, VentsUpdatedMessage,
+    WorktreeStateChangedEvent, WorktreeSweptEvent, go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -109,6 +109,7 @@ pub enum TerminalEvent {
     Resized(PtyResizedMessage),
     Placements(KittyPlacementsMessage),
     ImageResult(KittyImageResultMessage),
+    Snapshot(GetScreenSnapshotResultMessage),
     Desync(PtyDesyncMessage),
     Respawned(RuntimeRespawnedMessage),
     Exited(SessionExitedMessage),
@@ -888,6 +889,10 @@ impl Task {
             }
             "kitty_image_result" => {
                 (self.config.terminals)(TerminalEvent::ImageResult(parse(&header.event, text)?));
+                None
+            }
+            "get_screen_snapshot_result" => {
+                (self.config.terminals)(TerminalEvent::Snapshot(parse(&header.event, text)?));
                 None
             }
             "pty_desync" => {

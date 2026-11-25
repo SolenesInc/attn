@@ -344,6 +344,17 @@ impl Action {
         }
     }
 
+    /// Whether the action walks from tile to tile along the row.
+    pub(crate) fn walks(&self) -> bool {
+        matches!(
+            self,
+            Action::TerminalFocusLeft
+                | Action::TerminalFocusRight
+                | Action::TerminalFocusUp
+                | Action::TerminalFocusDown
+        )
+    }
+
     /// Whether the action only acts on a terminal, so its keys do nothing without one open.
     pub fn requires_terminal(&self) -> bool {
         matches!(

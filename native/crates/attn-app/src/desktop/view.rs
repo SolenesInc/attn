@@ -849,14 +849,6 @@ fn divider(split: String, direction: Direction, live: bool) -> El {
         })
 }
 
-pub(super) fn share(child: El, ratio: f32) -> El {
-    col()
-        .grow(ratio.max(0.001))
-        .min_w(0.0)
-        .min_h(0.0)
-        .child(child)
-}
-
 /// The name a leaf goes by in its header, on the shelf and to assistive tech: an agent by its
 /// session's name, a tile by what it holds.
 pub(crate) fn leaf_title(
@@ -1131,7 +1123,7 @@ fn browser_page(desktop: &Desktop, leaf: &Leaf) -> attn_client::TileKey {
     }
 }
 
-fn seed_reads(state: &State) -> crate::garden::TileReads<'_> {
+pub(super) fn seed_reads(state: &State) -> crate::garden::TileReads<'_> {
     crate::garden::TileReads {
         garden: &state.window.garden,
         seeds: crate::garden::seeds(state),

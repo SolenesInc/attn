@@ -209,6 +209,56 @@ pub(crate) fn body(
     scroll(card(reading).children(marking))
 }
 
+/// The document `content` holds, read `width` points across as its tile reads it, with no marks and
+/// none of its tile's tools. `view` names it apart from its tile. None when there is nothing to
+/// read.
+pub(crate) fn still(
+    view: String,
+    width: f32,
+    content: &attn_client::TileContent,
+    pictures: &Pictures,
+    t: &Tokens,
+) -> Option<El> {
+    let attn_client::TileContent { revision, message } = content;
+    let failed = message.error.as_deref().is_some_and(|e| !e.is_empty());
+    if failed || message.content.trim().is_empty() {
+        return None;
+    }
+    let widest = if message.review.is_some() {
+        crate::review::CARD_MAX_WIDTH
+    } else {
+        f32::INFINITY
+    };
+    let (padding, text_width) = card_fit(Some(width as u32), widest);
+    let version = (*revision, width.to_bits(), pictures.revision, *t);
+    let reading = memo(format!("{view}.reading"), version, || {
+        let style = look(t).prose_measure(PROSE_MEASURE);
+        let host = message.host.as_deref().filter(|h| !h.is_empty());
+        reader(
+            &message.content,
+            links::Document {
+                path: message.path.clone(),
+                session: None,
+                outpost: None,
+                view: view.clone(),
+                opens_seed: None,
+                seed: None,
+                part: None,
+            },
+            pictures.of(host),
+            annotating::Kept::default(),
+            None,
+            match text_width {
+                Some(width) => style.text_width(width),
+                None => style,
+            },
+            t,
+        )
+    });
+    let page = col().key(view).w_full().items_center();
+    Some(Surface::gutter(page).child(card(padding, reading, t)))
+}
+
 /// The marks a reader in tile `tile` paints over document `uri`, and where its selections go.
 /// Reading a part of the document ([`links::Document::part`]), the reader paints marks by
 /// where they sit in it.

@@ -26,6 +26,7 @@ mod kitty;
 mod latency;
 mod links;
 mod selection;
+mod snapshots;
 mod spoken;
 
 pub(crate) use annotating::{
@@ -39,6 +40,7 @@ pub(crate) use input_trace::{Decision, Heard, InputTrace, Target, TraceId, Write
 pub(crate) use latency::type_into;
 pub(crate) use links::accelerator;
 pub(crate) use selection::Release;
+pub(crate) use snapshots::miniature_mark;
 
 /// How often a terminal tells the daemon its new size while its tile is being resized.
 const RESIZE_INTERVAL: f64 = 0.25;
@@ -187,6 +189,7 @@ fn terminal_of(event: &TerminalEvent) -> Option<&str> {
         TerminalEvent::Resized(resized) => Some(&resized.id),
         TerminalEvent::Placements(described) => Some(&described.id),
         TerminalEvent::ImageResult(result) => Some(&result.id),
+        TerminalEvent::Snapshot(result) => Some(&result.id),
         TerminalEvent::Desync(desync) => Some(&desync.id),
         TerminalEvent::Respawned(respawned) => Some(&respawned.id),
         TerminalEvent::Exited(exited) => Some(&exited.id),
@@ -212,6 +215,7 @@ pub struct Terminals {
     /// The screen each hidden terminal last showed, without its images, by runtime id: a tile
     /// shown again draws it until its attach brings the current one.
     hidden_screens: HashMap<String, Grid>,
+    snapshots: HashMap<String, snapshots::Snapshot>,
     connected: bool,
     daemon_instance: String,
     focused: Option<String>,
@@ -508,6 +512,7 @@ impl Terminals {
             return;
         }
         self.connected = connected;
+        self.snapshots.clear();
         if !connected {
             for term in self.panes.values_mut() {
                 term.phase = Phase::Waiting;
@@ -731,11 +736,13 @@ impl Terminals {
 
     /// Takes what the link heard since the last frame, `typing` being the terminal keys type
     /// into. Output changes nothing in the view beyond an open find bar's count: true when that
-    /// count changed.
+    /// count changed, or a snapshot arrived.
     pub(crate) fn drain(&mut self, typing: Option<&str>, tx: &mut Tx, daemon: &Commands) -> bool {
         let events = self.inbox.take();
         let heard = !events.is_empty();
+        let mut pictured = false;
         for (received, event) in events {
+            pictured |= matches!(event, TerminalEvent::Snapshot(_));
             self.apply(event, received, tx, daemon);
             self.undrawn = true;
         }
@@ -766,7 +773,7 @@ impl Terminals {
             }
         }
         self.speak_quiet_output(typing, tx);
-        recounted
+        recounted | pictured
     }
 
     fn apply(&mut self, event: TerminalEvent, received: Instant, tx: &mut Tx, daemon: &Commands) {
@@ -818,6 +825,7 @@ impl Terminals {
                 daemon,
             ),
             TerminalEvent::ImageResult(result) => self.image_refused(&result),
+            TerminalEvent::Snapshot(result) => self.snapshot_arrived(&result),
             TerminalEvent::Attached(result) => {
                 let id = result.id.clone();
                 let resumes = result.snapshot.is_some()

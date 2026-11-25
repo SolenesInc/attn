@@ -155,7 +155,7 @@ states, the dialog for a worktree that could not be made, the command palette of
 the Chief's setup, the notifications panel, also with no notifications, an
 agent's actions menu, and the other floating surfaces: a session's snooze and
 rename popovers, a tile header's usage popover and its seeds popover for one
-seed, and the desktop overview. The `screenshot_tour` example of `attn-app`
+seed, and the desktop overview over a full row and an empty desktop. The `screenshot_tour` example of `attn-app`
 sets each one up on the wire-test world and draws it on Rune's offscreen GPU
 renderer, so it needs no window and no VM, and two runs of the same source match
 pixel for pixel. Each shot uploads every glyph it draws, so a second shot of one

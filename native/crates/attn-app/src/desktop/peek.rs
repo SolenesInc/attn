@@ -45,8 +45,7 @@ pub(crate) struct Peeks {
 pub(crate) struct Open {
     pub(crate) desktop: String,
     pub(crate) leaf: String,
-    /// The point in the window the panel hangs from: its entry's bottom-left corner on the
-    /// shelf, or beside the count's menu that holds its entry, so it covers neither.
+    /// The point in the window the panel hangs from: its entry's bottom-left corner.
     anchor: [f32; 2],
     /// The tile's terminal, when it has one.
     runtime: Option<String>,
@@ -240,12 +239,6 @@ pub(crate) fn close(state: &mut State) -> bool {
     dismiss(state)
 }
 
-/// The leaf of the open peek on `desktop`, for the entry that marks it.
-pub(crate) fn peeked(state: &State, desktop: &str) -> Option<String> {
-    let open = state.window.desk.peeks.open.as_ref()?;
-    (open.desktop == desktop).then(|| open.leaf.clone())
-}
-
 /// Opens or closes the peek whose moment came, and reads the open terminal's text when due.
 /// Returns whether anything changed.
 pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
@@ -302,11 +295,7 @@ fn show(state: &mut State, desktop: String, leaf: String, entry: &str) {
         .and_then(|d| super::view::pane_of(d, &leaf))
         .map(|p| p.runtime_id.clone())
         .filter(|r| !r.is_empty());
-    let anchor = if state.window.desk.count_open.is_some() {
-        [rect[0] + rect[2] + ANCHOR_GAP_PX, rect[1] - ANCHOR_GAP_PX]
-    } else {
-        [rect[0], rect[1] + rect[3]]
-    };
+    let anchor = [rect[0], rect[1] + rect[3]];
     let peeks = &mut state.window.desk.peeks;
     let draft = runtime
         .as_ref()

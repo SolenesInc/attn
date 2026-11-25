@@ -145,6 +145,12 @@ export const scenarioCatalog = [
     command: ['node', 'scripts/real-app-harness/scenario-native-desktop-switching.mjs'],
   },
   {
+    id: 'native-row-overview',
+    runnerId: 'NATIVE-ROW-OVERVIEW',
+    label: "The native overview draws a row's terminals small, walks them, previews another desktop and comes back, draws a terminal never shown from its snapshot and one with none as a card, and lands, with no terminal resized",
+    command: ['node', 'scripts/real-app-harness/scenario-native-row-overview.mjs'],
+  },
+  {
     id: 'native-close-desktop',
     runnerId: 'NATIVE-CLOSE-DESKTOP',
     label: 'The native close key closes an empty desktop with its launcher focused and shows the desktop above, and a desktop holding a shell closes from its sidebar row only through a confirmation',

@@ -326,6 +326,7 @@ pub(crate) fn follow_terminals(state: &mut State, tx: &mut Tx) {
     state
         .terminals
         .follow(&state.facts, &panes, keyboard, tx.clock(), &state.daemon);
+    desktop::follow_overview(state);
 }
 
 /// Connects a window to the daemon: the link starts from what `config` makes of the terminal

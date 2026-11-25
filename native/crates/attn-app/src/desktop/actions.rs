@@ -571,8 +571,12 @@ fn hold_keyboard(state: &mut State, desktop: &str, leaf: &str) {
 }
 
 /// Moves the active tile to where `layout::step` sends it along the row, and returns that tile.
-/// Past the edge it leaves the pane, as `leave_pane` says, and returns None.
-fn focus_toward(state: &mut State, toward: Toward, tx: &mut Tx) -> Option<String> {
+/// Past the edge it leaves the pane, as `leave_pane` says, and returns None. Over an open overview
+/// it moves the highlight instead.
+pub(crate) fn focus_toward(state: &mut State, toward: Toward, tx: &mut Tx) -> Option<String> {
+    if super::overview::open(state).is_some() {
+        return super::overview::step(state, toward, tx);
+    }
     let edge = match toward {
         Toward::Left | Toward::Up => -1,
         Toward::Right | Toward::Down => 1,
@@ -756,8 +760,7 @@ fn toggle_view(state: &mut State, focus: bool, tx: &mut Tx) {
     }
 }
 
-/// Escape ends a drag, closes a shelf count's menu, or takes the current desktop out of focus
-/// mode, before anything else hears it; false when there is none of those to end.
+/// Escape ends a drag, or takes the current desktop out of focus mode, before anything else hears it; false when there is none of those to end.
 pub(crate) fn escape(state: &mut State, tx: &mut Tx) -> bool {
     if super::peek::close(state) {
         return true;
@@ -765,7 +768,7 @@ pub(crate) fn escape(state: &mut State, tx: &mut Tx) -> bool {
     let Some(desktop) = state.facts.current_desktop() else {
         return false;
     };
-    if state.window.desk.drag.take().is_some() || state.window.desk.count_open.take().is_some() {
+    if state.window.desk.drag.take().is_some() {
         return true;
     }
     let row = state.window.desk.row_mut(&desktop.id);

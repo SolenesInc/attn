@@ -188,6 +188,7 @@ mod wire {
     mod opener;
     mod outpost_paths;
     mod outpost_updates;
+    mod overview;
     mod palette;
     mod performance;
     mod picker;

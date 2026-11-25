@@ -4,11 +4,11 @@
 use attn_client::Desktop;
 use attn_protocol::{DesktopMoveLeafMessage, DesktopSetWantedColsMessage, SetSettingMessage};
 use attn_ui::blocks::{
-    self, Card, CountSide, Inline, MemberState, Menu, Place, ShelfCount, ShelfEntry, ShelfMember,
+    self, Card, CountSide, Inline, MemberState, Place, ShelfCount, ShelfEntry, ShelfMember,
 };
 use attn_ui::system::{IconSize, Size, Type, icon_button, words};
 use attn_ui::{Glyph, Tokens};
-use rune::{Drag, El, Phase, PointerEvent, Tx, row};
+use rune::{Drag, El, PointerEvent, Tx, row};
 
 use super::drag::{Owner, Source};
 
@@ -85,6 +85,11 @@ impl Entry {
         self.drawn.members().iter().any(ShelfMember::needs_user)
     }
 
+    /// The columns on screen, and the current one wherever it stands.
+    fn never_folds(&self) -> bool {
+        self.drawn.place() != Place::OffScreen
+    }
+
     fn width(&self) -> f32 {
         self.drawn.width(self.name_px)
     }
@@ -119,7 +124,7 @@ fn icon_of(session: &attn_protocol::Session) -> Glyph {
     }
 }
 
-fn member(
+pub(super) fn member(
     desktop: &Desktop,
     facts: &attn_client::Facts,
     tree: &Node,
@@ -189,7 +194,7 @@ fn entry(
     row: &super::RowState,
     flashing: &[(&str, u64)],
     column: &Column,
-    on_screen: bool,
+    (active, on_screen): (&str, bool),
 ) -> Entry {
     let members: Vec<ShelfMember> = column
         .leaf_ids
@@ -197,14 +202,13 @@ fn entry(
         .map(|leaf| member(desktop, facts, tree, &row.unseen, leaf))
         .collect();
     let titles: Vec<String> = members.iter().map(|m| m.name.clone()).collect();
-    let active = &desktop.active_pane_id;
     let place = match on_screen {
-        true if column.holds(active) => Place::Current,
+        _ if column.holds(active) => Place::Current,
         true => Place::OnScreen,
         false => Place::OffScreen,
     };
     let go = match place {
-        Place::Current => active.clone(),
+        Place::Current => active.to_owned(),
         _ => column.last_used(&row.focus_order).to_owned(),
     };
     let shown = column.leaf_ids.iter().position(|l| *l == go).unwrap_or(0);
@@ -267,14 +271,18 @@ fn shelf_width(items: impl Iterator<Item = f32>) -> f32 {
 
 /// The width each name is cut to so that all of them and the current one fit `room`: the others
 /// evenly, the current one only once they have none.
-fn cut_names(screen: &mut [Entry], room: f32) {
-    let least: f32 = screen.iter().map(Entry::least_width).sum();
-    let gaps = blocks::Shelf::gap() * screen.len().saturating_sub(1) as f32;
+fn cut_names(shown: &mut [&mut Entry], room: f32) {
+    let least: f32 = shown.iter().map(|e| e.least_width()).sum();
+    let gaps = blocks::Shelf::gap() * shown.len().saturating_sub(1) as f32;
     let spare = room - least - gaps;
     let wanted = |e: &Entry| e.width() - e.least_width();
     let current = |e: &Entry| e.drawn.place() == Place::Current;
-    let kept: f32 = screen.iter().filter(|e| current(e)).map(wanted).sum();
-    let mut others: Vec<f32> = screen.iter().filter(|e| !current(e)).map(wanted).collect();
+    let kept: f32 = shown.iter().filter(|e| current(e)).map(|e| wanted(e)).sum();
+    let mut others: Vec<f32> = shown
+        .iter()
+        .filter(|e| !current(e))
+        .map(|e| wanted(e))
+        .collect();
     others.sort_by(f32::total_cmp);
     let mut left = spare - kept;
     let mut share = f32::INFINITY;
@@ -286,13 +294,17 @@ fn cut_names(screen: &mut [Entry], room: f32) {
         }
         left -= want;
     }
-    for e in screen.iter_mut().filter(|e| !current(e)) {
+    for e in shown.iter_mut().filter(|e| !current(e)) {
         if wanted(e) > share {
             e.name_px = e.drawn.name_within(share);
         }
     }
-    let taken: f32 = screen.iter().filter(|e| !current(e)).map(wanted).sum();
-    for e in screen.iter_mut().filter(|e| current(e)) {
+    let taken: f32 = shown
+        .iter()
+        .filter(|e| !current(e))
+        .map(|e| wanted(e))
+        .sum();
+    for e in shown.iter_mut().filter(|e| current(e)) {
         if wanted(e) > spare - taken {
             e.name_px = e.drawn.name_within((spare - taken).max(0.0));
         }
@@ -358,10 +370,13 @@ impl Shelf {
             .filter(|f| f.desktop == desktop.id)
             .map(|f| (f.leaf.as_str(), f.until.to_bits()))
             .collect();
+        let active =
+            super::overview::highlight_on(state, &desktop.id).unwrap_or(&desktop.active_pane_id);
         let entries = |columns: &[Column], on_screen: bool| -> Vec<Entry> {
+            let stands = (active, on_screen);
             columns
                 .iter()
-                .map(|c| entry(desktop, facts, &tree, &row_state, &flashing, c, on_screen))
+                .map(|c| entry(desktop, facts, &tree, &row_state, &flashing, c, stands))
                 .collect()
         };
         let (before, screen, after) = (
@@ -380,7 +395,7 @@ impl Shelf {
         Some(shelf)
     }
 
-    /// The width of the entries on screen without their names and of both counts without marks,
+    /// The width of the entries that never fold without their names and of both counts without marks,
     /// under which the shelf overflows its slot.
     fn least_px(&self) -> f32 {
         let bare = |side: CountSide, columns: usize| {
@@ -391,8 +406,14 @@ impl Shelf {
                 marks: vec![],
             })
         };
-        let least = shelf_width(self.screen.iter().map(Entry::least_width))
-            + count_width(bare(CountSide::Before, self.before.len()).as_ref())
+        let least = shelf_width(
+            self.before
+                .iter()
+                .chain(&self.screen)
+                .chain(&self.after)
+                .filter(|e| e.never_folds())
+                .map(Entry::least_width),
+        ) + count_width(bare(CountSide::Before, self.before.len()).as_ref())
             + count_width(bare(CountSide::After, self.after.len()).as_ref());
         least.ceil()
     }
@@ -418,9 +439,16 @@ impl Shelf {
         }
         let over = self.width() - room;
         if over > 0.0 {
-            let shown = shelf_width(self.screen.iter().map(Entry::width));
+            let mut kept: Vec<&mut Entry> = self
+                .before
+                .iter_mut()
+                .chain(&mut self.screen)
+                .chain(&mut self.after)
+                .filter(|e| e.never_folds())
+                .collect();
+            let shown = shelf_width(kept.iter().map(|e| e.width()));
             let ends = blocks::Shelf::START + blocks::Shelf::END;
-            cut_names(&mut self.screen, shown - ends - over);
+            cut_names(&mut kept, shown - ends - over);
         }
     }
 
@@ -438,7 +466,7 @@ impl Shelf {
         let after = self.after.iter_mut().enumerate().map(|(i, e)| (i + 1, e));
         before
             .chain(after)
-            .filter(|(_, e)| !e.folded)
+            .filter(|(_, e)| !e.folded && !e.never_folds())
             .max_by(|(a, x), (b, y)| {
                 (!x.needs_user())
                     .cmp(&!y.needs_user())
@@ -578,13 +606,12 @@ fn view(state: &State, shelf: Option<Shelf>, t: &Tokens) -> Option<El> {
     let marked = |key: &str| drop.filter(|(marked, _)| *marked == key).map(|(_, e)| e);
     let count = |side: CountSide| {
         let marked = marked(count_key(side));
-        shelf
-            .count(side)
-            .map(|c| count(&c, desk.count_open == Some(side), marked, t))
+        shelf.count(side).map(|c| count(&c, marked, t))
     };
     let entries = shelf.shown().map(|e| match e.drawn.place() {
         Place::OffScreen => off_screen(e, id, marked(&entry_key(&e.key)), t),
-        Place::OnScreen | Place::Current => on_screen(e, id, t),
+        Place::OnScreen => on_screen(e, id, t),
+        Place::Current => current(e, t),
     });
     Some(
         owner()
@@ -676,8 +703,13 @@ fn drawn(entry: &Entry, t: &Tokens) -> El {
 fn on_screen(entry: &Entry, desktop: &str, t: &Tokens) -> El {
     let (desktop, leaf) = (desktop.to_owned(), entry.go.clone());
     drawn(entry, t).on_press_tx(move |state: &mut State, tx: &mut Tx| {
-        actions::show_leaf(state, &desktop, &leaf, tx)
+        crate::sidebar::open_tile(state, &desktop, &leaf, tx)
     })
+}
+
+/// The current entry, which opens the overview and closes an open one.
+fn current(entry: &Entry, t: &Tokens) -> El {
+    drawn(entry, t).on_press_tx(super::overview::toggle)
 }
 
 /// The entry of a column off screen. The pointer resting on it peeks at the tile it goes to, or
@@ -717,45 +749,6 @@ fn peeks(
         })
 }
 
-/// A folded column in its count's menu, with a mark per tile; `peeked` is the tile the open peek
-/// shows.
-fn folded_row(entry: &Entry, desktop: &str, peeked: Option<&str>, t: &Tokens) -> El {
-    let key = entry_key(&entry.key);
-    let stacked = entry.leaves.len() > 1;
-    let marks = entry
-        .drawn
-        .members()
-        .iter()
-        .zip(&entry.leaves)
-        .enumerate()
-        .map(|(i, (member, leaf))| {
-            let peeked = stacked && peeked == Some(leaf.as_str());
-            let (desktop, leaf, column) = (desktop.to_owned(), leaf.clone(), entry.key.clone());
-            row()
-                .key(format!("{key}.member.{i}"))
-                .border_sides(
-                    [0.0, 0.0, 2.0, 0.0],
-                    if peeked {
-                        t.text_secondary
-                    } else {
-                        rune::Color::TRANSPARENT
-                    },
-                )
-                .on_hover_change(move |state: &mut State, inside, tx: &mut Tx| {
-                    if inside {
-                        super::peek::hover_member(state, &desktop, &leaf, &column, tx);
-                    }
-                })
-                .child(blocks::Shelf::mark(member, t.bg_panel, t))
-        });
-    let asks = blocks::Shelf::asks(&key, entry.drawn.asking(), t.bg_panel, t);
-    let flash = entry.arrival.map(|until| flash_ring(&key, until, t));
-    let row = blocks::Shelf::folded(key.clone(), entry.label.clone(), marks, asks, t)
-        .a11y_value(said(entry))
-        .children(flash);
-    peeks(row, entry, desktop, |_| None)
-}
-
 /// The accent ring an entry shows while its tile's arrival flashes, held and then fading; keyed
 /// by when the flash ends, so a new flash plays from the start.
 fn flash_ring(entry_key: &str, until: u64, t: &Tokens) -> El {
@@ -773,69 +766,18 @@ fn drop_bar(el: El, drop: Option<Edge>, t: &Tokens) -> El {
     }
 }
 
-fn count(count: &ShelfCount, open: bool, drop: Option<Edge>, t: &Tokens) -> El {
+/// A count, which opens the overview.
+fn count(count: &ShelfCount, drop: Option<Edge>, t: &Tokens) -> El {
     let side = count.side;
     let key = count_key(side);
-    let state = [(open, "open"), (count.needs_user, "needs you")]
-        .into_iter()
-        .filter_map(|(on, words)| on.then_some(words))
-        .collect::<Vec<_>>()
-        .join(", ");
+    let state = if count.needs_user { "needs you" } else { "" };
     let label = format!("{} more this way", count.columns);
     let count = count
-        .build(key, label, open, t)
-        .on_press(move |state: &mut State| {
-            let desk = &mut state.window.desk;
-            desk.count_open = (desk.count_open != Some(side)).then_some(side);
-        })
+        .build(key, label, t)
+        .on_press_tx(super::overview::show)
         .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| record(state, key, rect, tx))
         .a11y_value(state);
     drop_bar(count, drop, t)
-}
-
-/// The open count's menu of the columns it holds, under the title bar on its side.
-pub(crate) fn count_menu(state: &State, t: &Tokens) -> Option<El> {
-    let layer = rune::el()
-        .key("shelf.menu.layer")
-        .absolute(0.0, 0.0)
-        .w_full()
-        .h_full()
-        .on_drag(menu_gesture);
-    let open = state.window.desk.count_open.zip(Shelf::of(state));
-    let Some((side, shelf)) = open else {
-        return holding(state, Owner::Menu).then_some(layer);
-    };
-    let held = shelf.folded(side);
-    if held.is_empty() {
-        return holding(state, Owner::Menu).then_some(layer);
-    }
-    let (name, align) = match side {
-        CountSide::Before => ("before", rune::Align::Start),
-        CountSide::After => ("after", rune::Align::End),
-    };
-    let peeked = super::peek::peeked(state, &shelf.desktop);
-    let menu = Menu::new(
-        format!("shelf.menu.{name}"),
-        format!("{} more this way", held.len()),
-    )
-    .takes_no_focus()
-    .rows(
-        held.iter()
-            .map(|e| folded_row(e, &shelf.desktop, peeked.as_deref(), t)),
-    )
-    .build(t)
-    .anchored(count_key(side), rune::Side::Bottom, align, ANCHOR_GAP_PX);
-    Some(layer.child(menu))
-}
-
-/// A press on an open count's menu drags the entry under it; one beside the menu closes it.
-fn menu_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx) {
-    let ours = holding(state, Owner::Menu);
-    if d.phase == Phase::Up && !ours {
-        state.window.desk.count_open = None;
-        return;
-    }
-    super::drag::gesture(state, d, tx, Owner::Menu);
 }
 
 /// Where the pointer moved to, with no button held, that shows the width control: over the

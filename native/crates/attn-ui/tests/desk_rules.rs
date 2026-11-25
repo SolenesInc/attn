@@ -1,10 +1,13 @@
 //! The rules the desktop chrome's blocks hold, read from the gallery's desk stories: a tile
 //! header's piece never stands wider than it measures, so the header fits its pieces by what
 //! they draw, and nothing it draws reaches past it; the shelf counts its entries' widths as they
-//! draw, and what it draws reads on what is behind it in every scheme; the overview's cards share one width and hold what they show.
+//! draw; and what the shelf and the overview draw reads on what is behind it in every scheme, and
+//! stays inside its box.
 
 use attn_ui::Tokens;
-use attn_ui::blocks::{CountSide, MemberState, Place, Shelf, ShelfCount, ShelfEntry, ShelfMember};
+use attn_ui::blocks::{
+    CountSide, MemberState, Miniature, Overview, Place, Shelf, ShelfCount, ShelfEntry, ShelfMember,
+};
 use attn_ui::colors::scheme_for;
 use attn_ui::desk_gallery::header_pieces_of;
 use attn_ui::system::{Type, width_of};
@@ -321,8 +324,7 @@ fn shelf_count(side: CountSide, columns: usize, marks: Vec<ShelfMember>) -> Shel
 }
 
 /// Every entry the shelf draws, a row per place: one tile in each state, a stack that shows each
-/// state between a dot of it on both edges, the counts with and without marks, and a row of a
-/// count's menu.
+/// state between a dot of it on both edges, and the counts with and without marks.
 fn shelf_board(t: &Tokens, _: &mut Cx<Tokens>) -> El {
     let rows = PLACES.iter().enumerate().map(|(p, &place)| {
         let flat = STATES.iter().map(|&state| vec![shelf_member(state)]);
@@ -350,51 +352,100 @@ fn shelf_board(t: &Tokens, _: &mut Cx<Tokens>) -> El {
             .children(entries)
     });
     let needing = STATES.map(shelf_member);
-    let counts = [false, true].into_iter().flat_map(|open| {
-        [&needing[..], &[]]
-            .into_iter()
-            .map(move |needing| (open, needing.to_vec()))
-    });
-    let counts = counts.enumerate().map(|(i, (open, needing))| {
+    let counts = [needing.to_vec(), vec![]];
+    let counts = counts.into_iter().enumerate().map(|(i, needing)| {
         shelf_count(CountSide::After, 3, needing)
-            .build(format!("count.{i}"), "3 more", open, t)
+            .build(format!("count.{i}"), "3 more", t)
             .on_press(|_: &mut Tokens| {})
     });
-    let marks = STATES.map(|state| Shelf::mark(&shelf_member(state), t.bg_panel, t));
-    let asks = Shelf::asks("folded", 1, t.bg_panel, t);
-    let folded = Shelf::folded("folded", "plan", marks, asks, t).on_press(|_: &mut Tokens| {});
     rune::col()
         .w_full()
         .h_full()
         .fill(t.bg_panel)
         .children(rows)
         .child(Shelf::row("counts").children(counts))
-        .child(folded)
+        .child(overview_board(t))
+}
+
+/// What the overview draws: a miniature in each state, highlighted and not, a strip with a mark in
+/// each state, a line per state that needs the user, and the legend.
+fn overview_board(t: &Tokens) -> El {
+    const TILE: [f32; 2] = [170.0, 80.0];
+    let tiles = [false, true].into_iter().enumerate().flat_map(|(r, on)| {
+        STATES.iter().enumerate().map(move |(i, &state)| {
+            let member = shelf_member(state);
+            let rect = [
+                i as f32 * (TILE[0] + 10.0),
+                r as f32 * (TILE[1] + 10.0),
+                TILE[0],
+                TILE[1],
+            ];
+            let picture = Miniature::card(member.icon.clone(), &member.name, t);
+            let tile = [0.0, 0.0, TILE[0], TILE[1]];
+            let key = format!("miniature.{r}.{i}");
+            Overview::column(format!("column.{r}.{i}"), rect, t)
+                .child(Miniature::tile(key, &member, on, tile, 0.3, picture, t))
+        })
+    });
+    let columns = STATES.map(|state| vec![shelf_member(state)]);
+    let lines = [MemberState::Waiting, MemberState::Approval].map(|state| {
+        let member = shelf_member(Some(state));
+        Overview::line(format!("line.{state:?}"), &member, "Which branch?", t)
+            .on_press(|_: &mut Tokens| {})
+    });
+    let hints = [(vec!["esc".to_owned()], "close".to_owned())];
+    rune::col()
+        .w_full()
+        .grow(1.0)
+        .fill(t.bg_app)
+        .child(el().w_full().h(2.0 * (TILE[1] + 10.0)).children(tiles))
+        .child(
+            Overview::strip(
+                "strip".into(),
+                Some("2".into()),
+                "work",
+                &columns,
+                "7 columns, 2 wait",
+                t,
+            )
+            .on_press(|_: &mut Tokens| {}),
+        )
+        .child(Overview::new_desktop("strip.new", t).on_press(|_: &mut Tokens| {}))
+        .children(lines)
+        .child(Overview::legend(hints, t))
+        .child(
+            el().w_full()
+                .h(40.0)
+                .child(Overview::empty([0.0, 0.0, 400.0, 40.0], t)),
+        )
 }
 
 #[test]
-fn the_overviews_cards_share_one_width_and_a_tiles_name_stays_inside_it() {
+fn what_a_miniature_draws_stays_inside_it() {
     for variant in ["Rest", "Long"] {
         let rt = story_of(true, "Desk/Overview", variant);
-        let widths: Vec<f32> = ["card.current", "card.empty", "card.one"]
-            .iter()
-            .map(|k| element(&rt, k).rect[2])
-            .collect();
-        assert!(
-            widths.iter().all(|w| (w - widths[0]).abs() < 0.5),
-            "{variant}: cards {widths:?}"
-        );
-        let current = element(&rt, "card.current");
-        for part in within(&rt, &current) {
-            let [x, y, w, h] = part.rect;
-            let [cx, cy, cw, ch] = current.rect;
-            assert!(
-                x >= cx - 0.5 && x + w <= cx + cw + 0.5 && y >= cy - 0.5 && y + h <= cy + ch + 0.5,
-                "{variant}: {:?} at {:?} runs past its card at {:?}",
-                part.key,
-                part.rect,
-                current.rect
-            );
+        for key in [
+            "miniature.highlight",
+            "miniature.needs",
+            "miniature.card",
+            "strip",
+            "line",
+        ] {
+            let outer = element(&rt, key);
+            let [cx, cy, cw, ch] = outer.rect;
+            for part in within(&rt, &outer) {
+                let [x, y, w, h] = part.rect;
+                assert!(
+                    x >= cx - 0.5
+                        && x + w <= cx + cw + 0.5
+                        && y >= cy - 0.5
+                        && y + h <= cy + ch + 0.5,
+                    "{variant}: {:?} at {:?} runs past {key} at {:?}",
+                    part.key,
+                    part.rect,
+                    outer.rect
+                );
+            }
         }
     }
 }
@@ -610,7 +661,7 @@ impl Board {
 }
 
 #[test]
-fn the_shelfs_marks_and_names_read_at_rest_hovered_and_pressed_in_every_scheme() {
+fn the_shelfs_and_the_overviews_marks_and_names_read_at_rest_hovered_and_pressed_in_every_scheme() {
     for scheme in attn_ui::colors::SCHEMES.iter() {
         for dark in [true, false] {
             let mut board = Board::new(scheme.colors(dark).ui, dark);

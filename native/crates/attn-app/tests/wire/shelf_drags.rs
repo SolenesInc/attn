@@ -616,60 +616,6 @@ fn many_ids() -> Vec<String> {
     (0..24).map(|i| format!("p{i:02}")).collect()
 }
 
-#[test]
-fn a_press_on_a_count_opens_the_menu_of_the_entries_it_holds_and_a_second_press_closes_it() {
-    let ids = many_ids();
-    let mut world = start(TWO_FIT, None, vec![many("p00", &ids)]);
-    world.gesture(|app| app.click(Target::key("shelf.count.after")));
-    world.settle();
-    let menu = world
-        .screen()
-        .find(Target::key("shelf.menu.after"))
-        .expect("the count opens its menu");
-    assert_eq!(menu.role, "menu");
-    assert!(
-        world
-            .screen()
-            .find(Target::key("shelf.entry.p23"))
-            .is_some(),
-        "the menu holds the count's entries"
-    );
-    world.gesture(|app| app.click(Target::key("shelf.count.after")));
-    world.settle();
-    assert!(
-        world
-            .screen()
-            .find(Target::key("shelf.menu.after"))
-            .is_none()
-    );
-    rest(&mut world);
-}
-
-#[test]
-fn a_press_on_an_entry_in_an_open_counts_menu_shows_its_tile_where_it_is() {
-    let ids = many_ids();
-    let mut world = start(TWO_FIT, None, vec![many("p00", &ids)]);
-    world.gesture(|app| app.click(Target::key("shelf.count.after")));
-    world.settle();
-    world.gesture(|app| app.click(Target::key("shelf.entry.p23")));
-    let shown = world.daemon.sent_of("desktop_show_leaf");
-    assert_eq!(shown.last().expect("the tile is shown")["leaf_id"], "p23");
-    assert!(moves(&world).is_empty(), "{:?}", moves(&world));
-    rest(&mut world);
-}
-
-#[test]
-fn an_entry_dragged_out_of_an_open_counts_menu_onto_a_tiles_bottom_edge_stacks_there() {
-    let ids = many_ids();
-    let mut world = start(TWO_FIT, None, vec![many("p00", &ids)]);
-    world.gesture(|app| app.click(Target::key("shelf.count.after")));
-    world.settle();
-    let to = in_tile(&world, "p00", 0.5, 0.97);
-    drag(&mut world, "shelf.entry.p22", to);
-    assert_eq!(moves(&world), [moved("p22", "p00", "bottom", true)]);
-    rest(&mut world);
-}
-
 /// The daemon says the agent `id` waits on the user.
 fn waits(world: &mut World, id: &str) {
     world.daemon.emit(SessionStateChangedMessage {

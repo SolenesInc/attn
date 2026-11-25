@@ -35,10 +35,6 @@ pub enum DialogSize {
     /// beside the widest page, filling the window down to 880 tall, its lead quiet on the
     /// title's line so the page keeps the height.
     Workspace,
-    /// A board of cards, such as the desktop overview's desktops in miniature: three cards of
-    /// about 276 side by side, as tall as they hold up to 800, the overview's size before the
-    /// design system.
-    Board,
 }
 
 /// A tour's drawing: the width its scenes are painted at.
@@ -52,7 +48,6 @@ impl DialogSize {
             DialogSize::Sheet => 760.0,
             DialogSize::Tour => TOUR_DRAWING + 2.0 * Space::S24.pt(),
             DialogSize::Workspace => Dialog::NAVIGATION + super::page::Page::WIDEST,
-            DialogSize::Board => 880.0,
         }
     }
 
@@ -60,7 +55,6 @@ impl DialogSize {
         match self {
             DialogSize::Prompt | DialogSize::Tour => Height::Fit(None),
             DialogSize::Form => Height::Fit(Some(760.0)),
-            DialogSize::Board => Height::Fit(Some(800.0)),
             DialogSize::Sheet => Height::Window(0.84),
             DialogSize::Workspace => Height::Fill(880.0),
         }

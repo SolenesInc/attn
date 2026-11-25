@@ -96,8 +96,6 @@ pub(crate) enum Owner {
     Tiles,
     /// The shelf in the title bar: its entries.
     Shelf,
-    /// An open count's menu: the entries it holds.
-    Menu,
     /// The sidebar: its agent and tile rows.
     Sidebar,
 }
@@ -107,7 +105,6 @@ impl Owner {
         match self {
             Owner::Tiles => "tiles",
             Owner::Shelf => "shelf",
-            Owner::Menu => "shelf.menu.layer",
             Owner::Sidebar => "sidebar",
         }
     }
@@ -122,7 +119,7 @@ impl Owner {
                 .strip_prefix("tile.")
                 .and_then(|s| s.strip_suffix(".header"))
                 .and_then(|leaf| super::view::header_source(state, leaf)),
-            Owner::Shelf | Owner::Menu => segment
+            Owner::Shelf => segment
                 .strip_prefix("shelf.entry.")
                 .and_then(|column| Shelf::of(state)?.entry_source(column)),
             Owner::Sidebar => unreachable!(),
@@ -391,10 +388,7 @@ pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
 fn click(state: &mut State, source: &Source, tx: &mut Tx) {
     match source {
         Source::Header { desktop, leaf, .. } => super::actions::activate(state, desktop, leaf, tx),
-        Source::Entry { desktop, leaf, .. } => {
-            state.window.desk.count_open = None;
-            super::actions::show_leaf(state, desktop, leaf, tx);
-        }
+        Source::Entry { desktop, leaf, .. } => crate::sidebar::open_tile(state, desktop, leaf, tx),
         Source::Row { .. } => {}
     }
 }
@@ -409,6 +403,7 @@ fn target(state: &State, drag: &LeafDrag) -> Option<Target> {
     }
     match shelf_target(state, drag) {
         Some(shelf) => shelf,
+        None if super::overview::open(state).is_some() => None,
         None => dock_target(state, drag).map(Target::Tile),
     }
 }

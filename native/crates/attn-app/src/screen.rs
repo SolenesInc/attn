@@ -4,10 +4,27 @@ use rune::{Compositor, Frame, Runtime, RuntimeCore};
 
 use crate::State;
 
-/// Draws the window, with each terminal's cells in its tile's slot.
+/// Draws the window, with each terminal's cells in its tile's slot and, while the overview shows,
+/// in its miniature's.
 #[derive(Default)]
 pub struct Screens {
     cells: Cells,
+    small: Cells,
+    miniatures: Option<Miniatures>,
+}
+
+/// The terminals the overview draws small, kept until the closed overview has left the screen.
+struct Miniatures {
+    terminals: Vec<String>,
+    scale: f32,
+}
+
+impl Miniatures {
+    fn marks(&self) -> impl Iterator<Item = u32> {
+        self.terminals
+            .iter()
+            .map(|id| crate::terminal::miniature_mark(id))
+    }
 }
 
 /// The terminals whose slots the last layout holds, fitted for a display scale other than the
@@ -103,13 +120,41 @@ impl Compositor<State> for Screens {
             theme,
             terminals.grids(),
         );
+        let open = crate::desktop::miniatures(f.rt.state());
+        let closing = open.is_none();
+        if let Some((terminals, scale)) = open {
+            self.miniatures = Some(Miniatures { terminals, scale });
+        }
+        if let Some(miniatures) = &self.miniatures {
+            let terminals = &f.rt.state().terminals;
+            self.small.prepare(
+                device,
+                queue,
+                key,
+                scale,
+                Some(miniatures.scale),
+                metrics,
+                theme,
+                terminals.miniatures(&miniatures.terminals),
+            );
+        }
         let clear = f.rt.clear_color();
         let core: &mut RuntimeCore = f.rt;
         f.ui.prepare(device, queue, &mut core.text.atlas, &core.instances, f.size);
-        let cells = &mut self.cells;
+        let (cells, small) = (&mut self.cells, &mut self.small);
+        let marks: Vec<u32> = self.miniatures.iter().flat_map(Miniatures::marks).collect();
+        let mut drew_small = false;
         f.ui.draw_with(f.encoder, f.target, clear, &mut |pass, site| {
-            cells.draw(device, pass, site);
+            if marks.contains(&site.mark) {
+                drew_small = true;
+                small.draw(device, pass, site);
+            } else {
+                cells.draw(device, pass, site);
+            }
         });
+        if closing && !drew_small && self.miniatures.take().is_some() {
+            self.small = Cells::default();
+        }
         screens_drawn(f.rt, redrawn);
     }
 }

@@ -1,13 +1,13 @@
 //! The gallery's stories for the blocks the desktop's chrome is built from: the pieces of a tile
-//! header's second line, the shelf's entries, the overview's grid of desktops in miniature, and a
-//! terminal's screen read as text. One story per block, a variant per state.
+//! header's second line, the shelf's entries, the overview's row drawn small, and a terminal's screen read as
+//! text. One story per block, a variant per state.
 
-use rune::{Cx, El, Playground, Story, Tx, col, el, row};
+use rune::{Cx, El, Playground, Story, Tx, col, el};
 
 use crate::Tokens;
 use crate::blocks::{
-    Card, CountSide, Grid, HeaderPiece, Inline, MemberState, Miniature, Place, Screen, Shelf,
-    ShelfCount, ShelfEntry, ShelfMember, Standing,
+    CountSide, HeaderPiece, MemberState, Miniature, Overview, Place, Screen, Shelf, ShelfCount,
+    ShelfEntry, ShelfMember,
 };
 use crate::chrome_gallery::ChromeSheet;
 use crate::colors::scheme_for;
@@ -67,7 +67,15 @@ pub const DESK_SHEETS: &[ChromeSheet] = &[
     ChromeSheet {
         name: "desk-overview",
         story: "Desk/Overview",
-        keys: &["card.current", "card.empty", "card.one"],
+        keys: &[
+            "miniature.highlight",
+            "miniature.needs",
+            "miniature.card",
+            "bar",
+            "strip",
+            "strip.new",
+            "line",
+        ],
         columns: PRESSABLE,
     },
     ChromeSheet {
@@ -186,7 +194,7 @@ fn shelf(s: &Desk, cx: &mut Cx<Desk>) -> El {
         .child(Shelf::frame_edge(frame_x, frame_width, &t))
         .child(
             before
-                .build("shelf.count", "2 more this way", false, &t)
+                .build("shelf.count", "2 more this way", &t)
                 .on_press_tx(press),
         )
         .children(entries.iter().map(|(key, entry)| {
@@ -202,7 +210,7 @@ fn shelf(s: &Desk, cx: &mut Cx<Desk>) -> El {
         )
         .child(
             after
-                .build("shelf.count.needs", "3 more this way", false, &t)
+                .build("shelf.count.needs", "3 more this way", &t)
                 .on_press_tx(press),
         );
     stage(s, cx, &t, vec![row])
@@ -238,69 +246,85 @@ fn entry(
     ShelfEntry::new(members, shown, place, asking)
 }
 
-/// Three desktops in miniature on the overview's grid: the current one picked, an empty one, and
-/// a desktop of four tiles.
+/// A row drawn small: a column of two tiles, the highlighted one over one that needs the user, a
+/// tile that shows a card, the bar under the column on screen, a desktop's strip, the strip for a
+/// new one, a line and the legend.
 fn overview(s: &Desk, cx: &mut Cx<Desk>) -> El {
     let t = tokens(cx);
-    let name = if s.long { LONG_DESKTOP } else { "work" };
-    let tile = |label: &str, on: bool| Miniature::tile(label.to_owned(), on, &t);
-    let split = |a: El, b: El, across: bool| {
-        if across { row() } else { col() }
-            .w_full()
-            .h_full()
-            .min_w(0.0)
-            .min_h(0.0)
-            .child(a.grow(1.0).w(0.0).min_w(0.0))
-            .child(b.grow(1.0).w(0.0).min_w(0.0))
+    let name = if s.long { LONG_AGENT } else { "reviewer" };
+    let desktop = if s.long { LONG_DESKTOP } else { "work" };
+    let document = member("plan.md", &icon::MARKDOWN, None);
+    let waiting = member(name, &icon::AGENT, Some(MemberState::Waiting));
+    let approval = member(name, &icon::AGENT, Some(MemberState::Approval));
+    let working = member("builder", &icon::AGENT, Some(MemberState::Working));
+    let ground = |words_of: &str| {
+        el().fill(t.bg_app)
+            .child(words(words_of.to_owned(), Type::Mono, t.text_secondary))
     };
-    let four = split(
-        tile(if s.long { LONG_AGENT } else { "reviewer" }, true),
-        split(
-            tile("shell", false),
-            split(tile("plan.md", false), tile("scout", false), false),
+    let tile = |key: &str, m: &ShelfMember, on: bool, rect: [f32; 4], picture: El| {
+        Miniature::tile(key.to_owned(), m, on, rect, MINI_SCALE, picture, &t).on_press_tx(press)
+    };
+    let [w, h] = MINI;
+    let stack = Overview::column("column.stack".into(), [0.0, 0.0, w, h], &t)
+        .child(tile(
+            "miniature.highlight",
+            &working,
+            true,
+            [0.0, 0.0, w, h / 2.0],
+            ground("$ cargo test"),
+        ))
+        .child(tile(
+            "miniature.needs",
+            &waiting,
             false,
-        ),
-        true,
-    );
-    let card = |key: &str, title: &str, layout: Option<El>, standing: Standing| {
-        Card::new(key)
-            .control("button", title)
-            .standing(standing)
-            .push(
-                Inline::joined()
-                    .w_full()
-                    .child(words("⌘1", Type::Mono, t.text_secondary))
-                    .child(
-                        words(title.to_owned(), Type::Body, t.text_primary)
-                            .single_line()
-                            .truncate()
-                            .shrink(),
-                    ),
+            [0.0, h / 2.0, w, h / 2.0],
+            ground("Which branch?"),
+        ));
+    let card = Overview::column("column.card".into(), [w + 10.0, 0.0, w, h], &t).child(tile(
+        "miniature.card",
+        &document,
+        false,
+        [0.0, 0.0, w, h],
+        Miniature::card((&icon::MARKDOWN).into(), "plan.md", &t),
+    ));
+    let row_small = el()
+        .w(2.0 * w + 10.0)
+        .h(h + Overview::GAP)
+        .child(stack)
+        .child(card)
+        .child(Overview::on_screen("bar".into(), [0.0, 0.0, w, h], &t));
+    let columns = [
+        vec![document.clone()],
+        vec![working.clone(), waiting.clone()],
+    ];
+    let below = col()
+        .w(2.0 * w + 10.0)
+        .child(
+            Overview::strip(
+                "strip".into(),
+                Some("2".into()),
+                desktop,
+                &columns,
+                "2 columns, 1 waits",
+                &t,
             )
-            .push(Miniature::ground(layout, 16.0 / 9.0, &t))
-            .build(&t)
-            .on_press_tx(press)
-            .min_w(0.0)
-    };
-    let grid = Grid::cards(
-        "grid",
-        3,
-        [
-            card("card.current", name, Some(four), Standing::Picked),
-            card("card.empty", "notes", None, Standing::Resting),
-            card(
-                "card.one",
-                "review",
-                Some(tile("reviewer", false)),
-                Standing::Resting,
-            ),
-        ],
-    );
-    stage(s, cx, &t, vec![grid.w(OVERVIEW_W)])
+            .on_press_tx(press),
+        )
+        .child(Overview::new_desktop("strip.new", &t).on_press_tx(press))
+        .child(Overview::line("line".into(), &approval, "approve?", &t).on_press_tx(press))
+        .child(Overview::legend(
+            [
+                (vec!["←".into(), "→".into()], "row".into()),
+                (vec!["esc".into()], "close".into()),
+            ],
+            &t,
+        ));
+    stage(s, cx, &t, vec![row_small, below]).fill(t.bg_app)
 }
 
-/// The overview's grid at the width the overview's dialog gives it.
-const OVERVIEW_W: f32 = 572.0;
+/// A column drawn small at the scale twelve columns take on a 1440-point window.
+const MINI: [f32; 2] = [220.0, 260.0];
+const MINI_SCALE: f32 = 0.3;
 
 /// A terminal's screen: a prompt and its output, and with Long a line wider than the screen.
 fn screen(s: &Desk, cx: &mut Cx<Desk>) -> El {

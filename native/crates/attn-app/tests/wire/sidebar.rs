@@ -643,12 +643,7 @@ fn the_sidebar_goes_to_the_desktop_overview_and_docks_the_chosen_shortcuts() {
             serde_json::json!({"target": {"key": "sidebar.overview"}}),
         )
         .unwrap();
-    assert!(
-        world
-            .screen()
-            .find(Target::key("overview.dialog"))
-            .is_some()
-    );
+    assert!(world.screen().find(Target::key("overview")).is_some());
 }
 
 #[test]

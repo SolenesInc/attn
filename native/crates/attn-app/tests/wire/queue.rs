@@ -901,12 +901,7 @@ fn the_desktop_strip_names_the_window_s_desktop_at_home_too_and_its_last_chip_op
     );
 
     world.gesture(|app| app.click(Target::key("queue.desktop-overview")));
-    assert!(
-        world
-            .screen()
-            .find(Target::key("overview.dialog"))
-            .is_some()
-    );
+    assert!(world.screen().find(Target::key("overview")).is_some());
 }
 
 #[test]
@@ -2590,7 +2585,7 @@ fn a_crowded_queue_bar_keeps_the_window_s_desktop_and_gathers_the_rest_into_the_
     );
 
     world.gesture(|app| app.click(Target::key("queue-bar.desktop-extras")));
-    assert!(has(&world, "overview.dialog"));
+    assert!(has(&world, "overview"));
     world.gesture(|app| app.key(chord(Action::DesktopOverview)));
 
     world.resize(ROOMY);
