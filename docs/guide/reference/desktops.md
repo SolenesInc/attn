@@ -128,6 +128,8 @@ A terminal shows its text. A terminal that has not been on screen shows the text
 
 The keys that move between tiles also move the highlight. A click on a tile, or on its line below the row, goes to the tile. A click on a desktop's strip shows that desktop, and the **New desktop** strip makes one. In a small window the strips and lines scroll, and the row keeps its room. The shelf's current entry follows the highlight.
 
+You can also open it by holding the keys that move between tiles. Press Cmd+Option (Ctrl+Shift on Linux) with an arrow and keep the modifiers down: after a fifth of a second, or at the next step, the overview opens on the tile you stepped to. The arrows then move the highlight along the row and in a stack, and letting go of a modifier goes to the highlighted tile. A click on the background, or Esc on Linux, goes back to the tile you came from. A step you let go of sooner only moves you, and a step that takes you to another desktop opens nothing. Opened this way, the overview shows only this desktop.
+
 ### How tiles move
 
 - **Opening a tile.** Cmd+D, Cmd+N and Cmd+T (Ctrl+Shift+D, N and T on Linux) open beside the active column and take focus, even when the row is full. A tile on the far side leaves the screen. Cmd+Shift+D (Ctrl+Alt+D on Linux) opens a shell below the active tile, in the same column, and Cmd+Shift+N (Ctrl+Alt+N on Linux) does the same for a new session. When a stack has no room for another tile at 320px, the new tile opens beside instead, and a message gives the numbers.

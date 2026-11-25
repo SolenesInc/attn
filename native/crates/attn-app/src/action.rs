@@ -1,3 +1,5 @@
+use crate::desktop::layout::Toward;
+
 /// What the cheat sheet groups an action under.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Category {
@@ -344,15 +346,14 @@ impl Action {
         }
     }
 
-    /// Whether the action walks from tile to tile along the row.
-    pub(crate) fn walks(&self) -> bool {
-        matches!(
-            self,
-            Action::TerminalFocusLeft
-                | Action::TerminalFocusRight
-                | Action::TerminalFocusUp
-                | Action::TerminalFocusDown
-        )
+    pub(crate) fn walks_toward(&self) -> Option<Toward> {
+        match self {
+            Action::TerminalFocusLeft => Some(Toward::Left),
+            Action::TerminalFocusRight => Some(Toward::Right),
+            Action::TerminalFocusUp => Some(Toward::Up),
+            Action::TerminalFocusDown => Some(Toward::Down),
+            _ => None,
+        }
     }
 
     /// Whether the action only acts on a terminal, so its keys do nothing without one open.

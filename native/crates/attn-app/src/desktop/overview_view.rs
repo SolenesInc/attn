@@ -4,7 +4,7 @@
 use attn_client::Desktop;
 use attn_ui::Tokens;
 use attn_ui::blocks::{MemberState, Miniature, Overview as Block, ShelfMember};
-use rune::{El, Tx, el, memo};
+use rune::{El, Platform, Tx, el, memo};
 
 use super::layout::{self, Column, Leaf, LeafKind, Node, Rows};
 use super::overview::{self, Overview, Spot};
@@ -38,10 +38,19 @@ struct Needing {
     asks: String,
 }
 
-fn strips(state: &State, shown: &str) -> (usize, usize) {
-    let desktops = overview::ordered(state);
-    let at = desktops.iter().position(|d| d.id == shown).unwrap_or(0);
-    (at, desktops.len().saturating_sub(at + 1))
+fn strips<'s>(
+    state: &'s State,
+    overview: &Overview,
+    shown: &str,
+) -> (Vec<&'s Desktop>, Vec<&'s Desktop>) {
+    if overview.held_by().is_some() {
+        return (Vec::new(), Vec::new());
+    }
+    let mut above = overview::ordered(state);
+    let at = above.iter().position(|d| d.id == shown).unwrap_or(0);
+    let below = above.split_off(above.len().min(at + 1));
+    above.truncate(at);
+    (above, below)
 }
 
 /// How much of two lists of these heights shows in `room`: each its half, and what the other
@@ -60,13 +69,15 @@ fn with_gap(height: f32) -> f32 {
     }
 }
 
-fn arrange(state: &State, desktop: &Desktop, lines: usize) -> Arrangement {
+fn arrange(state: &State, overview: &Overview, desktop: &Desktop, lines: usize) -> Arrangement {
     let (columns, on_screen) = overview::row_of(state, desktop);
     let (w, h) = state.window.main_size;
-    let (before, after) = strips(state, &desktop.id);
+    let (strips_above, strips_below) = strips(state, overview, &desktop.id);
+    let before = strips_above.len();
+    let after = strips_below.len() + usize::from(overview.held_by().is_none());
     let pad = Block::PADDING;
     let above = before as f32 * Block::STRIP_STEP;
-    let below = with_gap(lines as f32 * Block::LINE) + (after + 1) as f32 * Block::STRIP_STEP;
+    let below = with_gap(lines as f32 * Block::LINE) + after as f32 * Block::STRIP_STEP;
     let legend = h - pad - Block::LINE;
     let gaps = with_gap(above) - above + 2.0 * Block::GAP;
     let room = (legend - pad - gaps).max(0.0);
@@ -137,7 +148,7 @@ fn needing(state: &State, desktop: &Desktop) -> Vec<Needing> {
 pub(crate) fn miniatures(state: &State) -> Option<(Vec<String>, f32)> {
     let overview = overview::open(state)?;
     let desktop = overview::desktop_of(state, &overview.at().desktop)?;
-    let scale = arrange(state, desktop, needing(state, desktop).len())
+    let scale = arrange(state, overview, desktop, needing(state, desktop).len())
         .rows
         .scale;
     let terminals = desktop.panes.iter().map(|p| p.runtime_id.clone()).collect();
@@ -151,36 +162,36 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
         .label("Desktop overview")
         .focusable(true)
         .no_focus_ring()
-        .on_press_tx(overview::close);
+        .on_press_tx(overview::dismiss);
     let Some(desktop) = overview::desktop_of(state, &overview.at().desktop) else {
         return Some(layer);
     };
     let needing = needing(state, desktop);
-    let placed = arrange(state, desktop, needing.len());
+    let placed = arrange(state, overview, desktop, needing.len());
     let layer = match &overview.at().leaf {
         Some(leaf) => layer.active_descendant(miniature_key(leaf)),
         None => layer,
     };
     let (row, bars) = row(state, overview, desktop, &placed, t);
-    let desktops = overview::ordered(state);
-    let (before, _) = strips(state, &desktop.id);
+    let (desktops_above, desktops_below) = strips(state, overview, &desktop.id);
     let row_w = placed.area[2];
     let at = |y: f32, e: El| el().absolute(0.0, y).w_full().child(e);
     let step = |i: usize| i as f32 * Block::STRIP_STEP;
     let below_lines = with_gap(needing.len() as f32 * Block::LINE);
-    let strips_above = desktops[..before]
+    let strips_above = desktops_above
         .iter()
         .enumerate()
         .map(|(i, d)| at(step(i), strip(state, d, t)));
-    let after = &desktops[before + 1..];
-    let strips_below = after
+    let strips_below = desktops_below
         .iter()
         .enumerate()
         .map(|(i, d)| at(below_lines + step(i), strip(state, d, t)));
-    let new = at(
-        below_lines + step(after.len()),
-        Block::new_desktop("overview.new", t).on_press_tx(overview::create),
-    );
+    let new = overview.held_by().is_none().then(|| {
+        at(
+            below_lines + step(desktops_below.len()),
+            Block::new_desktop("overview.new", t).on_press_tx(overview::create),
+        )
+    });
     let lines = needing.iter().enumerate().map(|(i, n)| {
         let spot = spot(desktop, &n.leaf);
         let line = Block::line(format!("overview.line.{}", n.leaf), &n.member, &n.asks, t)
@@ -194,14 +205,16 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
         .is_empty()
         .then(|| Block::empty(placed.area, t));
     let List { y, shown, height } = placed.above;
-    let above = (before > 0).then(|| {
+    let above = (height > 0.0).then(|| {
         let rect = [Block::PADDING, y, row_w, shown];
         Block::above("overview.above".to_owned(), rect, height, strips_above, t)
     });
     let List { y, shown, height } = placed.below;
-    let rect = [Block::PADDING, y, row_w, shown];
-    let listed = lines.chain(strips_below).chain([new]);
-    let below = Block::below("overview.below".to_owned(), rect, height, listed, t);
+    let below = (height > 0.0).then(|| {
+        let rect = [Block::PADDING, y, row_w, shown];
+        let listed = lines.chain(strips_below).chain(new);
+        Block::below("overview.below".to_owned(), rect, height, listed, t)
+    });
     let legend = Block::legend(legend(state, overview, desktop), row_w, t);
     Some(
         layer
@@ -209,7 +222,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
             .children(row)
             .children(bars)
             .children(empty)
-            .child(below)
+            .children(below)
             .child(
                 el().absolute(Block::PADDING, placed.legend)
                     .w(row_w)
@@ -403,23 +416,33 @@ fn legend(state: &State, overview: &Overview, desktop: &Desktop) -> Vec<(Vec<Str
         Some(name) => format!("land on {name}"),
         None => format!("go to {shown}"),
     };
+    let hint = |keys: &[&str], what: &str| {
+        let keys = keys.iter().map(|key| (*key).to_owned()).collect();
+        (keys, what.to_owned())
+    };
+    let row = hint(&["←", "→"], "row");
+    if let Some(chord) = overview.held_by() {
+        let release = format!("release {}", crate::keys::modifiers_label(chord));
+        let back = match named(overview.from()) {
+            Some(name) if overview.at() != overview.from() => format!("back to {name}"),
+            _ => "close".to_owned(),
+        };
+        let escape = (Platform::current() != Platform::Mac).then(|| hint(&["esc"], &back));
+        return [row, hint(&["↑", "↓"], "stack"), hint(&[&release], &lands)]
+            .into_iter()
+            .chain(escape)
+            .collect();
+    }
     let sends = overview::sendable(overview)
         .and_then(|_| named(overview.from()))
-        .map(|name| (vec!["⇧", "↵"], format!("send {name} to {shown}")));
+        .map(|name| hint(&["⇧", "↵"], &format!("send {name} to {shown}")));
     [
-        (vec!["←", "→"], "row".to_owned()),
-        (
-            vec!["↑", "↓"],
-            "stack, then the desktop above or below".to_owned(),
-        ),
-        (vec!["↵"], lands),
+        row,
+        hint(&["↑", "↓"], "stack, then the desktop above or below"),
+        hint(&["↵"], &lands),
     ]
     .into_iter()
     .chain(sends)
-    .chain([
-        (vec!["1–9"], "desktop".to_owned()),
-        (vec!["esc"], "close".to_owned()),
-    ])
-    .map(|(keys, what)| (keys.into_iter().map(str::to_owned).collect(), what))
+    .chain([hint(&["1–9"], "desktop"), hint(&["esc"], "close")])
     .collect()
 }

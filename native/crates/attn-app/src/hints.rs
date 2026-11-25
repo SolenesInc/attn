@@ -4,10 +4,11 @@ use attn_protocol::session_id;
 use attn_ui::blocks::{IdLabel, IdMark, IdPlace, id_list, id_scrim, lantern, name_in_place};
 use attn_ui::colors::TerminalColors;
 use attn_ui::{Glyph, Tokens};
-use rune::{Chord, ChordKey, ChordMod, El, Key, KeyEvent, Mods, Platform, Tx, el};
+use rune::{ChordKey, El, Key, KeyEvent, Mods, Platform, Tx, el};
 
 use crate::State;
 use crate::desktop::role_icon;
+use crate::keys::covers;
 use crate::sidebar::model::AgentState;
 use crate::terminal::{Mark, Subject};
 
@@ -255,33 +256,16 @@ impl Held {
     }
 }
 
-fn covers(now: Mods, held: Mods) -> bool {
-    let kept = |held: bool, now: bool| !held || now;
-    kept(held.shift, now.shift)
-        && kept(held.cmd, now.cmd)
-        && kept(held.alt, now.alt)
-        && kept(held.ctrl, now.ctrl)
-        && kept(held.logo, now.logo)
-}
-
 fn letter(ev: &KeyEvent, tx: &Tx) -> Option<char> {
-    let mods = [
-        (ev.mods.cmd, ChordMod::Primary),
-        (ev.mods.ctrl, ChordMod::Ctrl),
-        (ev.mods.alt, ChordMod::Alt),
-        (ev.mods.shift, ChordMod::Shift),
-        (ev.mods.logo, ChordMod::Super),
-    ];
     LETTERS_NO_MENU_OR_HOLD_TAKES
         .iter()
         .map(|l| char::from(*l))
         .find(|l| {
-            mods.iter()
-                .filter(|(down, _)| *down)
-                .fold(Chord::new(ChordKey::Char(*l)), |chord, (_, m)| {
-                    chord.with(*m)
-                })
-                .matches_tx_on(ev, tx, Platform::current())
+            crate::keys::chord_of(ev.mods, ChordKey::Char(*l)).matches_tx_on(
+                ev,
+                tx,
+                Platform::current(),
+            )
         })
 }
 

@@ -51,7 +51,8 @@ pub(crate) use fit::Widths;
 pub(crate) use host::outpost_name;
 pub use overview::Overview;
 pub(crate) use overview::{
-    create as create_desktop, follow as follow_overview, key as overview_key,
+    chord as overview_chord, create as create_desktop, follow as follow_overview,
+    held_key as overview_held_key, key as overview_key, on_modifiers as overview_modifiers,
 };
 pub(crate) use overview_view::{miniatures, view as overview};
 pub(crate) use peek::view as peek;
@@ -114,6 +115,7 @@ pub struct Desk {
     /// Where shelf entries, counts and the shelf are in the window, by element key, for drops.
     pub(crate) rects: HashMap<String, [f32; 4]>,
     pub(crate) peeks: peek::Peeks,
+    pub(crate) hold: Option<overview::Hold>,
     pub(crate) header_pop: header_pop::HeaderPop,
     /// The drain under each tile header whose agent's turn counts down to settling, by session.
     pub(crate) settling: HashMap<String, crate::sidebar::Countdown>,
@@ -236,15 +238,16 @@ pub(crate) fn shows_mark_card(state: &State) -> bool {
 
 /// Lets the moments the desktops keep lapse when their time is up: entries' flashes, tiles' rings
 /// and refusal flashes, the rest a
-/// drag takes on a sidebar desktop before the window switches to it, the delays of the peek
-/// and the header popover, and the peek's reads. Returns whether anything changed.
+/// drag takes on a sidebar desktop before the window switches to it, the delays of the peek,
+/// the held walk chord and the header popover, and the peek's reads. Returns whether anything changed.
 pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
     let now = tx.clock();
     let popped = header_pop::expire(state, now);
     if popped {
         crate::garden::follow(state, tx);
     }
-    let switched = drag::expire(state, tx) | peek::expire(state, tx) | popped;
+    let switched =
+        drag::expire(state, tx) | peek::expire(state, tx) | overview::expire(state, now) | popped;
     let flashes = &mut state.window.desk.flashes;
     let before = flashes.len();
     flashes.retain(|f| f.until > now);

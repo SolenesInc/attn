@@ -380,6 +380,7 @@ impl BrowserHost for WebKitHost {
             return;
         };
         let Some((content, at)) = at.and_then(|at| Some((self.content_of(&at)?, at))) else {
+            self.focus_window_from(&shown.web);
             shown.clip.setHidden(true);
             return;
         };
@@ -958,6 +959,14 @@ define_class!(
                 tell(Heard::Focused { page: self.ivars().clone() });
             }
             became
+        }
+
+        #[unsafe(method(flagsChanged:))]
+        fn flags_changed(&self, event: &NSEvent) {
+            let _: () = unsafe { msg_send![super(self), flagsChanged: event] };
+            if let Some(content) = self.window().and_then(|window| window.contentView()) {
+                content.flagsChanged(event);
+            }
         }
 
         #[unsafe(method(performKeyEquivalent:))]

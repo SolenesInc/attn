@@ -5,7 +5,7 @@ use std::collections::HashSet;
 
 use attn_client::Desktop;
 use attn_protocol::{DesktopCreateMessage, DesktopMoveLeafMessage, ProfileActionResultMessage};
-use rune::{Key, KeyEvent, Tx};
+use rune::{Key, KeyEvent, Mods, Platform, Tx};
 
 use super::layout::{self, Column, Toward};
 use crate::State;
@@ -14,6 +14,7 @@ use crate::requests::Refused;
 use crate::shell::Layer;
 
 pub(crate) const LAYER: &str = "overview";
+const HOLD_OPENS_AFTER: f64 = 0.2;
 
 /// The open overview. It counts only while `Layer::Overview` is the window's layer, and the next
 /// opening replaces it.
@@ -27,6 +28,21 @@ pub struct Overview {
     order: Vec<String>,
     /// The shown row's leaves by column as they last stood, to find a closed tile's neighbour.
     seen: Vec<Vec<String>>,
+    mode: Mode,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Mode {
+    Held { chord: Mods },
+    Kept,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct Hold {
+    chord: Mods,
+    from: Spot,
+    at: Spot,
+    opens_at: f64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -43,6 +59,13 @@ impl Overview {
 
     pub(crate) fn at(&self) -> &Spot {
         &self.at
+    }
+
+    pub(super) fn held_by(&self) -> Option<Mods> {
+        match self.mode {
+            Mode::Held { chord } => Some(chord),
+            Mode::Kept => None,
+        }
     }
 }
 
@@ -109,7 +132,7 @@ fn spot_on(state: &State, desktop: &str) -> Spot {
 /// Opens the overview on the current desktop, or closes it.
 pub(crate) fn toggle(state: &mut State, tx: &mut Tx) {
     if open(state).is_some() {
-        close(state, tx);
+        dismiss(state, tx);
     } else {
         show(state, tx);
     }
@@ -125,20 +148,102 @@ pub(crate) fn show(state: &mut State, tx: &mut Tx) {
         return;
     };
     let from = spot_on(state, &desktop);
+    open_at(state, from.clone(), from, Mode::Kept);
+    tx.focus(LAYER, false);
+}
+
+fn open_at(state: &mut State, from: Spot, at: Spot, mode: Mode) {
+    let desktop = at.desktop.clone();
     state.window.overview = Some(Overview {
-        at: from.clone(),
+        from,
+        at,
         order: state.window.desk.row(&desktop).focus_order,
         seen: leaves_of(state, &desktop),
-        from,
+        mode,
     });
     state.window.layer = Some(Layer::Overview);
     state.terminals.forget_snapshots();
     ask_snapshots(state, &desktop);
-    tx.focus(LAYER, false);
+}
+
+pub(crate) fn chord(state: &mut State, toward: Toward, tx: &mut Tx) {
+    if let Some(hold) = state.window.desk.hold.take()
+        && open_held_if_in_front(state, hold)
+    {
+        step(state, toward, tx);
+        return;
+    }
+    let chord = tx.mods();
+    let arms = chord != Mods::default() && !tx.key_repeat() && open(state).is_none();
+    let from = state.facts.current_desktop().map(|desktop| Spot {
+        desktop: desktop.id.clone(),
+        leaf: Some(state.window.desk.acting_leaf(desktop)),
+    });
+    let stepped = super::actions::focus_toward(state, toward, tx);
+    if let (true, Some(from), Some(leaf)) = (arms, from, stepped) {
+        let at = Spot {
+            desktop: from.desktop.clone(),
+            leaf: Some(leaf),
+        };
+        let opens_at = tx.clock() + HOLD_OPENS_AFTER;
+        state.window.desk.hold = Some(Hold {
+            chord,
+            from,
+            at,
+            opens_at,
+        });
+        tx.wake_at(opens_at);
+    }
+}
+
+pub(super) fn expire(state: &mut State, now: f64) -> bool {
+    let hold = &mut state.window.desk.hold;
+    match hold.take_if(|hold| now >= hold.opens_at) {
+        Some(hold) => open_held_if_in_front(state, hold),
+        None => false,
+    }
+}
+
+fn open_held_if_in_front(state: &mut State, hold: Hold) -> bool {
+    let desktop = state.facts.current_desktop().map(|d| d.id.clone());
+    let there = desktop.map(|desktop| spot_on(state, &desktop));
+    if there.as_ref() != Some(&hold.at) || !state.window.tiles_in_front() {
+        return false;
+    }
+    let leaf = hold.at.leaf.clone();
+    let mode = Mode::Held { chord: hold.chord };
+    open_at(state, hold.from, hold.at, mode);
+    if let Some(leaf) = leaf {
+        highlight(state, &leaf);
+    }
+    true
+}
+
+pub(crate) fn on_modifiers(state: &mut State, mods: Mods, tx: &mut Tx) -> bool {
+    let let_go = |chord: Mods| !crate::keys::covers(mods, chord);
+    state.window.desk.hold.take_if(|hold| let_go(hold.chord));
+    let lands = open(state)
+        .filter(|overview| overview.held_by().is_some_and(let_go))
+        .map(|overview| overview.at.clone());
+    let landed = lands.is_some();
+    if let Some(at) = lands {
+        land(state, at, tx);
+    }
+    landed
+}
+
+pub(super) fn dismiss(state: &mut State, tx: &mut Tx) {
+    let back = open(state)
+        .filter(|overview| overview.held_by().is_some())
+        .map(|overview| overview.from.clone());
+    match back {
+        Some(from) => land(state, from, tx),
+        None => close(state, tx),
+    }
 }
 
 /// Closes the overview and leaves the window as it was.
-pub(super) fn close(state: &mut State, tx: &mut Tx) {
+fn close(state: &mut State, tx: &mut Tx) {
     if state.window.close_overview() {
         tx.blur();
     }
@@ -155,7 +260,8 @@ fn ask_snapshots(state: &mut State, desktop: &str) {
 }
 
 /// Moves the highlight as `layout::step` moves the active tile, over the plain columns. Past the
-/// end of a column it previews the desktop above or below; past an end of the row it stays.
+/// end of a column a kept overview previews the desktop above or below and a held one stays; past
+/// an end of the row both stay.
 pub(super) fn step(state: &mut State, toward: Toward, tx: &mut Tx) -> Option<String> {
     let overview = open(state)?;
     let desktop = desktop_of(state, &overview.at.desktop)?;
@@ -167,6 +273,7 @@ pub(super) fn step(state: &mut State, toward: Toward, tx: &mut Tx) -> Option<Str
         .as_deref()
         .and_then(|leaf| layout::step(&row, leaf, toward, &overview.order));
     let beyond = match toward {
+        _ if overview.held_by().is_some() => 0,
         Toward::Up => -1,
         Toward::Down => 1,
         Toward::Left | Toward::Right => 0,
@@ -288,9 +395,23 @@ pub(crate) fn create(state: &mut State, tx: &mut Tx) {
     );
 }
 
+pub(crate) fn held_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    let cancels = ev.key == Key::Escape
+        && Platform::current() != Platform::Mac
+        && open(state).is_some_and(|overview| overview.held_by().is_some());
+    if cancels {
+        dismiss(state, tx);
+    }
+    cancels
+}
+
 /// A key the open overview takes: the arrows walk, Return lands, Shift-Return sends the tile the
-/// user came from to the shown desktop, a digit goes to its desktop and Escape closes.
+/// user came from to the shown desktop, a digit goes to its desktop and Escape closes. Escape on
+/// Linux reaches a held overview too, with its chord down.
 pub(crate) fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    if held_key(state, ev, tx) {
+        return true;
+    }
     let Some(overview) = open(state) else {
         return false;
     };
@@ -309,7 +430,7 @@ pub(crate) fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         return true;
     }
     match &ev.key {
-        Key::Escape => close(state, tx),
+        Key::Escape => dismiss(state, tx),
         Key::Enter if ev.mods.shift => send(state, tx),
         Key::Enter => {
             let at = overview.at.clone();

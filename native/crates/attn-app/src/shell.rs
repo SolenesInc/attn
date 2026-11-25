@@ -280,7 +280,7 @@ impl Layer {
         );
         let tiles = self == Layer::Overview
             && action.category() == crate::action::Category::Panes
-            && !action.walks();
+            && action.walks_toward().is_none();
         tiles || (captures_navigation && action.yields_to_overlays() && !own)
     }
 }

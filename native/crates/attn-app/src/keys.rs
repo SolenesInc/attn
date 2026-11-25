@@ -1,5 +1,5 @@
 use attn_term::keys;
-use rune::{Chord, ClipboardContent, Ime, Key, KeyEvent, Mods, Platform, Tx};
+use rune::{Chord, ChordKey, ChordMod, ClipboardContent, Ime, Key, KeyEvent, Mods, Platform, Tx};
 
 use crate::State;
 use crate::action::Action;
@@ -135,7 +135,7 @@ fn route(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> bool
         Press::Action(action) => {
             held(state, &action)
                 || crate::browser::press_page_key(state, &action, tx)
-                || run_shortcut(state, action, tx)
+                || run_chord(state, action, tx)
                 || send_to_terminal(state, terminal, ev, trace, tx)
         }
         Press::Unbound => send_to_terminal(state, terminal, ev, trace, tx),
@@ -312,12 +312,42 @@ fn type_into(
     true
 }
 
+pub(crate) fn covers(now: Mods, held: Mods) -> bool {
+    let kept = |held: bool, now: bool| !held || now;
+    kept(held.shift, now.shift)
+        && kept(held.cmd, now.cmd)
+        && kept(held.alt, now.alt)
+        && kept(held.ctrl, now.ctrl)
+        && kept(held.logo, now.logo)
+}
+
+pub(crate) fn chord_of(mods: Mods, key: ChordKey) -> Chord {
+    [
+        (mods.cmd, ChordMod::Primary),
+        (mods.ctrl, ChordMod::Ctrl),
+        (mods.alt, ChordMod::Alt),
+        (mods.shift, ChordMod::Shift),
+        (mods.logo, ChordMod::Super),
+    ]
+    .into_iter()
+    .filter(|(down, _)| *down)
+    .fold(Chord::new(key), |chord, (_, m)| chord.with(m))
+}
+
+pub(crate) fn modifiers_label(mods: Mods) -> String {
+    let platform = Platform::current();
+    let mut caps = chord_of(mods, ChordKey::Left).keycaps_on(platform);
+    caps.pop();
+    caps.join(if platform == Platform::Mac { "" } else { "+" })
+}
+
 pub(crate) fn on_modifiers(state: &mut State, mods: Mods, tx: &mut Tx) {
     let unlabelled = crate::hints::on_modifiers(state, mods);
+    let landed = crate::desktop::overview_modifiers(state, mods, tx);
     let pointed = state
         .terminals
         .accelerator(crate::terminal::accelerator(mods));
-    if !unlabelled && !pointed {
+    if !unlabelled && !landed && !pointed {
         tx.live_only();
     }
 }
@@ -448,7 +478,7 @@ pub(crate) fn on_field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> boo
         .lock()
         .unwrap()
         .field_heard(Heard::Key(ev, tx.key_repeat()), target, now);
-    if crate::hints::on_key(state, ev, tx) {
+    if crate::hints::on_key(state, ev, tx) || crate::desktop::overview_held_key(state, ev, tx) {
         return true;
     }
     if modal(state) {
@@ -459,7 +489,7 @@ pub(crate) fn on_field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> boo
         ..Focus::default()
     };
     match state.keymap.press(ev, tx, focus) {
-        Press::Action(action) => held(state, &action) || run_shortcut(state, action, tx),
+        Press::Action(action) => held(state, &action) || run_chord(state, action, tx),
         Press::Leader { .. } | Press::Unbound => false,
     }
 }
@@ -487,6 +517,18 @@ fn bound(state: &State, ev: &KeyEvent, tx: &Tx) -> bool {
         ..Focus::default()
     };
     state.keymap.press(ev, tx, focus) != Press::Unbound
+}
+
+fn run_chord(state: &mut State, action: Action, tx: &mut Tx) -> bool {
+    let Some(toward) = action
+        .walks_toward()
+        .filter(|_| state.window.tile.is_none())
+    else {
+        return run_shortcut(state, action, tx);
+    };
+    crate::desktop::overview_chord(state, toward, tx);
+    record_shortcut(state, &action);
+    true
 }
 
 /// Whether the shortcut's action ran.

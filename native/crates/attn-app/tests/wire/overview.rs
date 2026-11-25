@@ -181,6 +181,14 @@ fn miniature(leaf: &str) -> String {
 
 /// The leaf the highlight stands on, as the miniature says and as assistive tech hears it.
 fn highlight(world: &World) -> Option<String> {
+    let shown = highlighted(world);
+    let heard = world.screen().active_option().and_then(|n| n.key);
+    assert_eq!(heard, shown.as_deref().map(miniature));
+    shown
+}
+
+/// The leaf the highlight stands on, as the miniature says.
+fn highlighted(world: &World) -> Option<String> {
     let screen = world.screen();
     let shown: Vec<String> = screen
         .all(Target::role("list-box-option"))
@@ -194,8 +202,6 @@ fn highlight(world: &World) -> Option<String> {
         .filter_map(|n| Some(n.key?.strip_prefix("overview.miniature.")?.to_owned()))
         .collect();
     assert!(shown.len() <= 1, "{shown:?} are highlighted");
-    let heard = screen.active_option().and_then(|n| n.key);
-    assert_eq!(heard, shown.first().map(|leaf| miniature(leaf)));
     shown.into_iter().next()
 }
 
@@ -937,4 +943,346 @@ fn an_entry_dropped_on_the_overview_lands_on_no_tile_behind_it() {
 
     assert!(sent(&world, "desktop_move_leaf").is_empty());
     assert!(open(&world));
+}
+
+fn down(world: &mut World, mods: Mods) {
+    world.gesture(|app| app.hold(mods));
+}
+
+fn let_go(world: &mut World) {
+    down(world, Mods::default());
+}
+
+/// Holds the walk chord's modifiers and steps right once, to `b`, as the daemon then shows.
+fn walk_to_b(world: &mut World) {
+    down(world, chord(&Action::TerminalFocusRight).mods);
+    press(world, Action::TerminalFocusRight);
+    arrange(world, ONE, {
+        let mut desktops = three_desktops();
+        desktops[0] = stacked("b");
+        desktops
+    });
+}
+
+fn advance_ms(world: &mut World, ms: u64) {
+    world.advance(Duration::from_millis(ms));
+}
+
+/// Every way to let go of the chord: one of its modifiers at a time, and all of them.
+fn ways_to_let_go() -> Vec<Mods> {
+    let all = chord(&Action::TerminalFocusRight).mods;
+    let primary = Mods {
+        cmd: false,
+        ctrl: false,
+        logo: false,
+        ..all
+    };
+    let alt = Mods { alt: false, ..all };
+    let shift = Mods {
+        shift: false,
+        ..all
+    };
+    [primary, alt, shift, Mods::default()]
+        .into_iter()
+        .filter(|left| *left != all)
+        .collect()
+}
+
+#[test]
+fn a_single_quick_step_never_opens_the_overview_whichever_modifier_goes_first() {
+    for left in ways_to_let_go() {
+        let mut world = start(three_desktops());
+        walk_to_b(&mut world);
+        advance_ms(&mut world, 199);
+        assert!(!open(&world), "a step is the walk's step");
+        let acted = acts(&world);
+
+        down(&mut world, left);
+        advance_ms(&mut world, 1);
+        assert!(!open(&world), "{left:?} still down");
+        rest(&mut world);
+        assert!(!open(&world));
+        assert_eq!(acts(&world), acted);
+        assert_eq!(
+            sent(&world, "desktop_show_leaf"),
+            [json!({"desktop_id": ONE, "leaf_id": "b"})]
+        );
+        assert_eq!(keyboard(&mut world), "b");
+    }
+}
+
+#[test]
+fn a_hold_and_a_second_step_open_the_overview_over_a_row_that_stays_and_letting_go_lands() {
+    type WayIn = (&'static str, &'static str, fn(&mut World));
+    let ways: [WayIn; 3] = [
+        ("200 ms", "b", |w| advance_ms(w, 200)),
+        ("a second step", "c", |w| {
+            press(w, Action::TerminalFocusRight)
+        }),
+        ("a repeat of the held chord", "c", |w| {
+            let ev = chord(&Action::TerminalFocusRight);
+            w.gesture(|app| app.runtime.repeat_key(ev));
+        }),
+    ];
+    for (name, at, enter) in ways {
+        for left in ways_to_let_go() {
+            let mut world = start(three_desktops());
+            walk_to_b(&mut world);
+            let acted = acts(&world);
+
+            enter(&mut world);
+            assert!(open(&world), "{name} opens it");
+            assert_eq!(highlighted(&world).as_deref(), Some(at), "{name}");
+            assert_eq!(row_shown(&world), ["a", "b", "c", "e", "d"], "{name}");
+            assert!(!has(&world, &format!("overview.strip.{TWO}")), "{name}");
+            assert!(!has(&world, "overview.new"), "{name}");
+            assert_eq!(acts(&world), acted, "{name} moves nothing");
+            assert_eq!(keyboard(&mut world), "b", "{name}");
+            rest(&mut world);
+            assert!(open(&world), "{name}: it stays while the chord is down");
+
+            down(&mut world, left);
+            assert!(!open(&world), "{name}: {left:?} still down");
+            let shown = sent(&world, "desktop_show_leaf");
+            assert_eq!(
+                shown.last(),
+                Some(&json!({"desktop_id": ONE, "leaf_id": at})),
+                "{name}"
+            );
+            assert_eq!(keyboard(&mut world), at, "{name}");
+            rest(&mut world);
+        }
+    }
+}
+
+#[test]
+fn a_held_overview_steps_along_the_row_and_within_a_stack_and_stays_on_its_desktop() {
+    use Action::{TerminalFocusDown, TerminalFocusLeft, TerminalFocusRight, TerminalFocusUp};
+    let mut world = start(three_desktops());
+    walk_to_b(&mut world);
+    let acted = acts(&world);
+    let steps = [
+        (TerminalFocusRight, "c"),
+        (TerminalFocusUp, "c"),
+        (TerminalFocusDown, "d"),
+        (TerminalFocusDown, "d"),
+        (TerminalFocusRight, "e"),
+        (TerminalFocusRight, "e"),
+        (TerminalFocusLeft, "d"),
+        (TerminalFocusLeft, "b"),
+        (TerminalFocusLeft, "a"),
+        (TerminalFocusLeft, "a"),
+    ];
+    for (i, (step, at)) in steps.into_iter().enumerate() {
+        press(&mut world, step);
+        assert_eq!(highlighted(&world).as_deref(), Some(at), "step {i}");
+    }
+    assert_eq!(acts(&world), acted);
+
+    let_go(&mut world);
+    assert_eq!(keyboard(&mut world), "a", "walking back undoes the walk");
+    rest(&mut world);
+}
+
+#[test]
+fn the_window_losing_focus_lands_a_held_overview_and_ends_a_hold_before_it_opens() {
+    let mut world = start(three_desktops());
+    walk_to_b(&mut world);
+    press(&mut world, Action::TerminalFocusRight);
+    world.gesture(|app| app.runtime.window_focus(false));
+    assert!(!open(&world));
+    assert_eq!(
+        sent(&world, "desktop_show_leaf").last(),
+        Some(&json!({"desktop_id": ONE, "leaf_id": "c"}))
+    );
+
+    let mut world = start(three_desktops());
+    walk_to_b(&mut world);
+    let acted = acts(&world);
+    world.gesture(|app| app.runtime.window_focus(false));
+    rest(&mut world);
+    assert!(!open(&world));
+    assert_eq!(acts(&world), acted);
+}
+
+#[test]
+fn cancelling_a_held_overview_goes_back_to_the_tile_the_user_came_from() {
+    type WayOut = (&'static str, fn(&mut World));
+    let mut ways: Vec<WayOut> = vec![("a press beside the row", |w| {
+        let [x, y, _, _] = w.runtime().presented("overview").unwrap().0;
+        w.gesture(|app| app.click_at((x + 4.0, y + 4.0)));
+    })];
+    if attn_testkit::platform() != rune::Platform::Mac {
+        ways.push(("Escape", |w| {
+            let mods = chord(&Action::TerminalFocusRight).mods;
+            let key = Key::Escape;
+            w.gesture(|app| app.key(KeyEvent { key, mods }));
+        }));
+    }
+    for (name, leave) in ways {
+        let mut world = start(three_desktops());
+        walk_to_b(&mut world);
+        press(&mut world, Action::TerminalFocusRight);
+
+        leave(&mut world);
+        assert!(!open(&world), "{name} closes it");
+        let shown = sent(&world, "desktop_show_leaf");
+        assert_eq!(
+            shown.last(),
+            Some(&json!({"desktop_id": ONE, "leaf_id": "a"})),
+            "{name}"
+        );
+        assert_eq!(keyboard(&mut world), "a", "{name}");
+
+        let_go(&mut world);
+        rest(&mut world);
+        assert!(!open(&world), "{name}");
+        assert_eq!(
+            sent(&world, "desktop_show_leaf"),
+            shown,
+            "{name}: letting go of the chord then lands nothing"
+        );
+    }
+}
+
+#[test]
+fn a_press_on_a_miniature_of_a_held_overview_lands_there_and_letting_go_lands_nothing_more() {
+    let mut world = start(three_desktops());
+    walk_to_b(&mut world);
+    advance_ms(&mut world, 200);
+
+    click(&mut world, &miniature("e"));
+    assert!(!open(&world));
+    let shown = sent(&world, "desktop_show_leaf");
+    assert_eq!(
+        shown.last(),
+        Some(&json!({"desktop_id": ONE, "leaf_id": "e"}))
+    );
+    let_go(&mut world);
+    rest(&mut world);
+    assert_eq!(sent(&world, "desktop_show_leaf"), shown);
+}
+
+#[test]
+fn a_step_that_leaves_the_row_and_the_repeats_after_it_never_open_the_overview() {
+    let mut desktops = three_desktops();
+    desktops[0] = stacked("e");
+    let mut world = start(desktops.clone());
+    down(&mut world, chord(&Action::TerminalFocusRight).mods);
+    press(&mut world, Action::TerminalFocusRight);
+    let current = sent(&world, "desktop_set_current");
+    assert_eq!(
+        current.last().unwrap()["desktop_id"],
+        TWO,
+        "it left the row"
+    );
+    advance_ms(&mut world, 200);
+    assert!(!open(&world), "before the daemon switched desktops");
+    desktops[1] = desktop(2, "x", Some(row([pane("x"), pane("y")])));
+    arrange(&mut world, TWO, desktops);
+
+    let ev = chord(&Action::TerminalFocusRight);
+    world.gesture(|app| app.runtime.repeat_key(ev));
+    assert_eq!(
+        sent(&world, "desktop_show_leaf"),
+        [json!({"desktop_id": TWO, "leaf_id": "y"})],
+        "the repeat walks on as it does today"
+    );
+    rest(&mut world);
+    assert!(!open(&world));
+}
+
+#[test]
+fn a_step_with_nowhere_to_go_never_opens_the_overview() {
+    let mut world = start(vec![stacked("e")]);
+    down(&mut world, chord(&Action::TerminalFocusRight).mods);
+    press(&mut world, Action::TerminalFocusRight);
+    press(&mut world, Action::TerminalFocusRight);
+    rest(&mut world);
+    assert!(!open(&world));
+    assert!(sent(&world, "desktop_show_leaf").is_empty());
+}
+
+#[test]
+fn a_key_without_modifiers_a_sequence_and_the_palette_walk_without_a_hold() {
+    let bare = r#"{"version":1,"overrides":{"terminal.focusRight":{"key":"F8"}}}"#;
+    let sequence = r#"{"version":1,"overrides":{"terminal.focusRight":{"leader":{"key":"y","meta":true,"shift":true},"then":{"key":"j"}}}}"#;
+    type Walk = (&'static str, Option<&'static str>, fn(&mut World));
+    let walks: [Walk; 3] = [
+        ("a bare key", Some(bare), |w| key(w, Key::Function(8))),
+        ("a sequence", Some(sequence), |w| {
+            let leader = key_event(&rune::Chord::parse("mod+shift+y").unwrap());
+            down(w, leader.mods);
+            w.gesture(|app| app.key(leader));
+            w.gesture(|app| app.type_text("j"));
+        }),
+        ("the palette", None, |w| {
+            down(w, chord(&Action::TerminalFocusRight).mods);
+            w.gesture(|app| {
+                app.update(|state, tx| {
+                    attn_app::dispatch(state, Action::TerminalFocusRight, tx);
+                })
+            });
+        }),
+    ];
+    for (name, keys, walk) in walks {
+        let mut state = initial(three_desktops());
+        state.settings = keys.map(|keys| {
+            [("keybindings_config".to_owned(), keys.to_owned())]
+                .into_iter()
+                .collect()
+        });
+        let mut world = start_on(Daemon::scripted().state(state));
+
+        walk(&mut world);
+        assert_eq!(
+            sent(&world, "desktop_show_leaf"),
+            [json!({"desktop_id": ONE, "leaf_id": "b"})],
+            "{name} walks"
+        );
+        rest(&mut world);
+        assert!(!open(&world), "{name} opens nothing");
+    }
+}
+
+#[test]
+fn a_layer_that_opens_before_the_hold_s_time_keeps_the_overview_shut() {
+    let mut world = start(three_desktops());
+    walk_to_b(&mut world);
+    press(&mut world, Action::UiCommandPalette);
+    rest(&mut world);
+    assert!(!open(&world));
+}
+
+#[test]
+fn a_tile_shown_another_way_before_the_hold_s_time_keeps_the_overview_shut() {
+    let mut world = start(three_desktops());
+    walk_to_b(&mut world);
+    click(&mut world, "sidebar.session.s-a");
+    arrange(&mut world, ONE, three_desktops());
+    rest(&mut world);
+    assert!(!open(&world));
+    assert_eq!(keyboard(&mut world), "a");
+}
+
+#[test]
+fn a_held_overview_s_legend_names_letting_go_and_names_escape_only_where_it_cancels() {
+    let mut world = start(three_desktops());
+    walk_to_b(&mut world);
+    press(&mut world, Action::TerminalFocusRight);
+    let screen = world.screen().to_string();
+    let mac = attn_testkit::platform() == rune::Platform::Mac;
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
+    let walk = keymap.label(keymap.binding(&Action::TerminalFocusRight).unwrap());
+    let released = screen
+        .split_once("release ")
+        .and_then(|(_, rest)| rest.split(|c: char| c.is_whitespace() || c == '"').next())
+        .expect("the legend names letting go");
+    assert!(!released.is_empty(), "{screen}");
+    assert!(
+        walk.starts_with(released),
+        "{released} is not what {walk} holds down"
+    );
+    assert!(screen.contains("land on Agent c"), "{screen}");
+    assert_eq!(screen.contains("back to Agent a"), !mac, "{screen}");
 }
