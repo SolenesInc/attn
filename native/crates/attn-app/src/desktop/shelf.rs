@@ -395,8 +395,8 @@ impl Shelf {
         Some(shelf)
     }
 
-    /// The width of the entries that never fold without their names and of both counts without marks,
-    /// under which the shelf overflows its slot.
+    /// The width of the entries that never fold without their names and of both counts without
+    /// marks, under which the shelf overflows its slot.
     fn least_px(&self) -> f32 {
         let bare = |side: CountSide, columns: usize| {
             (columns > 0).then(|| ShelfCount {

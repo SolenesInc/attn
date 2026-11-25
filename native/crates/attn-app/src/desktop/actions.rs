@@ -760,7 +760,8 @@ fn toggle_view(state: &mut State, focus: bool, tx: &mut Tx) {
     }
 }
 
-/// Escape ends a drag, or takes the current desktop out of focus mode, before anything else hears it; false when there is none of those to end.
+/// Escape ends a drag, or takes the current desktop out of focus mode, before anything else hears
+/// it; false when there is none of those to end.
 pub(crate) fn escape(state: &mut State, tx: &mut Tx) -> bool {
     if super::peek::close(state) {
         return true;

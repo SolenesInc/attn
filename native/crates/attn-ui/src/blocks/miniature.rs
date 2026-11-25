@@ -15,6 +15,7 @@ pub struct Miniature;
 const LABEL_LEAST: f32 = 22.0;
 const LABEL_FULL: f32 = 46.0;
 const LABEL_EDGE: f32 = 1.0;
+const COLUMN_EDGE: f32 = 1.0;
 const NEEDS_EDGE: f32 = 2.0;
 const HIGHLIGHT_EDGE: f32 = 3.0;
 const COLUMN_CORNER: f32 = 6.0;
@@ -67,15 +68,25 @@ impl Overview {
             .transition(motion)
     }
 
-    /// The ground of a column's miniatures at `rect`.
-    pub fn column(key: String, [x, y, w, h]: [f32; 4], t: &Tokens) -> El {
+    /// A column of miniatures at `rect`: its `tiles`, its edge over them, and over that the
+    /// `outlines` of those that have one.
+    pub fn column(
+        key: String,
+        [x, y, w, h]: [f32; 4],
+        tiles: impl IntoIterator<Item = El>,
+        outlines: impl IntoIterator<Item = El>,
+        t: &Tokens,
+    ) -> El {
         let edge = legible(t.text_tertiary, t.bg_app, MARK_READS, t);
+        let edge = outline(format!("{key}.edge"), [0.0, 0.0, w, h], COLUMN_EDGE, edge);
         door::clip_round(el().key(key), COLUMN_CORNER)
             .absolute(x, y)
             .w(w)
             .h(h)
             .fill(t.bg_panel)
-            .outline(LABEL_EDGE, 0.0, edge)
+            .children(tiles)
+            .child(edge)
+            .children(outlines)
     }
 
     /// The bar under the column at `rect`, which is on screen.
@@ -119,7 +130,8 @@ impl Overview {
                 .a11y_hidden()
                 .children(marks),
         );
-        strip(key, number.unwrap_or_default(), name, t)
+        let said = (Type::Name, t.text_primary);
+        strip(key, number.unwrap_or_default(), name, said, t)
             .a11y_value(counts.to_owned())
             .child(marks)
             .child(
@@ -132,7 +144,8 @@ impl Overview {
 
     /// The strip that makes a desktop.
     pub fn new_desktop(key: &str, t: &Tokens) -> El {
-        strip(key.to_owned(), "+".to_owned(), "New desktop", t)
+        let said = (Type::Body, t.text_tertiary);
+        strip(key.to_owned(), "+".to_owned(), "New desktop", said, t)
     }
 
     /// The line of a tile that needs the user and what it `asks`.
@@ -171,7 +184,11 @@ impl Overview {
             .child(bar(SWATCH_W, t))
             .child(words("on screen", Type::Small, t.text_tertiary));
         door::gap(
-            row().key("overview.legend").w_full().items_center(),
+            row()
+                .key("overview.legend")
+                .w_full()
+                .items_center()
+                .justify_center(),
             Space::S16,
         )
         .h(LINE)
@@ -204,21 +221,6 @@ impl Miniature {
         t: &Tokens,
     ) -> El {
         let label = label(member, highlighted, Self::label_height(scale), t);
-        let edge = if highlighted {
-            Some((HIGHLIGHT_EDGE, t.text_primary))
-        } else {
-            member
-                .needs_user()
-                .then(|| (NEEDS_EDGE, needing(member, t)))
-        };
-        let outline = edge.map(|(width, ink)| {
-            door::clip_round(el(), COLUMN_CORNER)
-                .absolute(0.0, 0.0)
-                .w_full()
-                .h_full()
-                .border(width, ink)
-                .inert()
-        });
         door::clip(col().key(key))
             .role("option")
             .label(member.name.clone())
@@ -227,7 +229,23 @@ impl Miniature {
             .h(h)
             .child(label)
             .child(picture.w_full().grow(1.0).min_h(0.0))
-            .children(outline)
+    }
+
+    /// The outline of the tile at `rect` of its column, when it has the highlight or needs the
+    /// user.
+    pub fn outline(
+        key: String,
+        member: &ShelfMember,
+        highlighted: bool,
+        rect: [f32; 4],
+        t: &Tokens,
+    ) -> Option<El> {
+        if highlighted {
+            return Some(outline(key, rect, HIGHLIGHT_EDGE, t.text_primary));
+        }
+        member
+            .needs_user()
+            .then(|| outline(key, rect, NEEDS_EDGE, needing(member, t)))
     }
 
     /// What a tile with no picture shows: its icon and `title`.
@@ -263,6 +281,15 @@ impl Miniature {
     }
 }
 
+fn outline(key: String, [x, y, w, h]: [f32; 4], width: f32, ink: rune::Color) -> El {
+    door::round(el().key(key), COLUMN_CORNER)
+        .absolute(x, y)
+        .w(w)
+        .h(h)
+        .border(width, ink)
+        .inert()
+}
+
 fn bar(width: f32, t: &Tokens) -> El {
     door::round(el().w(width).min_w(width).h(BAR), BAR_CORNER).fill(legible(
         t.text_secondary,
@@ -276,7 +303,7 @@ fn needing(member: &ShelfMember, t: &Tokens) -> rune::Color {
     member.ink(&Ground::of(t.bg_panel, t), t).rest
 }
 
-fn strip(key: String, cap: String, name: &str, t: &Tokens) -> El {
+fn strip(key: String, cap: String, name: &str, (kind, ink): (Type, rune::Color), t: &Tokens) -> El {
     let ground = Ground::of(t.bg_app, t);
     let strip = door::gap(row().key(key).w_full().items_center(), Space::S8)
         .role("button")
@@ -291,7 +318,7 @@ fn strip(key: String, cap: String, name: &str, t: &Tokens) -> El {
         )
         .child(
             ground
-                .words(name.to_owned(), Type::Name, t.text_primary, t)
+                .words(name.to_owned(), kind, ink, t)
                 .single_line()
                 .truncate()
                 .shrink()

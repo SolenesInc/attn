@@ -383,8 +383,9 @@ fn overview_board(t: &Tokens) -> El {
             let picture = Miniature::card(member.icon.clone(), &member.name, t);
             let tile = [0.0, 0.0, TILE[0], TILE[1]];
             let key = format!("miniature.{r}.{i}");
-            Overview::column(format!("column.{r}.{i}"), rect, t)
-                .child(Miniature::tile(key, &member, on, tile, 0.3, picture, t))
+            let outline = Miniature::outline(format!("{key}.outline"), &member, on, tile, t);
+            let tiles = [Miniature::tile(key, &member, on, tile, 0.3, picture, t)];
+            Overview::column(format!("column.{r}.{i}"), rect, tiles, outline, t)
         })
     });
     let columns = STATES.map(|state| vec![shelf_member(state)]);
@@ -698,6 +699,48 @@ fn the_shelfs_and_the_overviews_marks_and_names_read_at_rest_hovered_and_pressed
                 scheme.id,
                 board.found.join("\n")
             );
+        }
+    }
+}
+
+#[test]
+fn a_column_of_the_overview_has_an_edge_all_round_that_reads_on_the_layer_in_every_scheme() {
+    for scheme in attn_ui::colors::SCHEMES.iter() {
+        for dark in [true, false] {
+            let t = scheme.colors(dark).ui;
+            let board = Board::new(t, dark);
+            let all = board.rt.elements();
+            let columns: Vec<_> = all
+                .iter()
+                .filter(|e| {
+                    let key = e.key.as_deref().unwrap_or_default();
+                    key.starts_with("column.") && !key.ends_with(".edge")
+                })
+                .collect();
+            assert_eq!(columns.len(), 2 * STATES.len());
+            for column in columns {
+                let [x, y, w, h] = column.rect.map(|v| v * SCALE);
+                let edge = board.rt.instances.iter().find(|i| {
+                    let [ix, iy, iw, ih] = i.rect;
+                    let [x0, y0, x1, y1] = i.clip;
+                    let unclipped = x0 <= ix && y0 <= iy && x1 >= ix + iw && y1 >= iy + ih;
+                    let all_round = [ix - x, iy - y, iw - w, ih - h]
+                        .iter()
+                        .all(|d| d.abs() < 0.5);
+                    all_round && unclipped && i.border[3] > 0.0 && i.params[0] == SCALE
+                });
+                let edge = edge.unwrap_or_else(|| {
+                    panic!("{}, dark={dark}: {:?} has no edge", scheme.id, column.key)
+                });
+                let [r, g, b] = [0, 1, 2].map(|c| rune::theme::srgb_decode(edge.border[c]));
+                let reads = contrast(rune::Color { r, g, b, a: 1.0 }, t.bg_app);
+                assert!(
+                    reads >= 3.0 - 0.01,
+                    "{}, dark={dark}: {:?} has an edge at {reads:.2}:1",
+                    scheme.id,
+                    column.key
+                );
+            }
         }
     }
 }

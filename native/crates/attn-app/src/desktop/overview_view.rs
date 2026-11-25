@@ -236,24 +236,20 @@ fn row(
                 (member.needs_user(), "needs you"),
             ];
             let said: Vec<&str> = said.iter().filter(|(is, _)| *is).map(|(_, w)| *w).collect();
-            Some(
-                Miniature::tile(
-                    miniature_key(id),
-                    &member,
-                    highlighted,
-                    at.map(|points| points * scale),
-                    scale,
-                    picture,
-                    t,
-                )
+            let key = miniature_key(id);
+            let at = at.map(|points| points * scale);
+            let outline = Miniature::outline(format!("{key}.outline"), &member, highlighted, at, t);
+            let tile = Miniature::tile(key, &member, highlighted, at, scale, picture, t)
                 .a11y_value(said.join(", "))
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     overview::land(state, here.clone(), tx)
-                }),
-            )
+                });
+            Some((tile, outline))
         });
+        let (tiles, outlines): (Vec<_>, Vec<_>) = tiles.unzip();
+        let outlines = outlines.into_iter().flatten();
         let key = format!("overview.column.{}", column.first());
-        columns.push(Block::column(key.clone(), rect, t).children(tiles));
+        columns.push(Block::column(key.clone(), rect, tiles, outlines, t));
         if on_screen {
             bars.push(Block::on_screen(format!("{key}.on_screen"), rect, t));
         }

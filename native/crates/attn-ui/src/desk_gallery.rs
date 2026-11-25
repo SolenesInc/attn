@@ -262,31 +262,46 @@ fn overview(s: &Desk, cx: &mut Cx<Desk>) -> El {
             .child(words(words_of.to_owned(), Type::Mono, t.text_secondary))
     };
     let tile = |key: &str, m: &ShelfMember, on: bool, rect: [f32; 4], picture: El| {
-        Miniature::tile(key.to_owned(), m, on, rect, MINI_SCALE, picture, &t).on_press_tx(press)
+        let outline = Miniature::outline(format!("{key}.outline"), m, on, rect, &t);
+        let tile = Miniature::tile(key.to_owned(), m, on, rect, MINI_SCALE, picture, &t);
+        (tile.on_press_tx(press), outline)
+    };
+    let column = |key: &str, rect: [f32; 4], tiles: Vec<(El, Option<El>)>| {
+        let (tiles, outlines): (Vec<_>, Vec<_>) = tiles.into_iter().unzip();
+        Overview::column(key.into(), rect, tiles, outlines.into_iter().flatten(), &t)
     };
     let [w, h] = MINI;
-    let stack = Overview::column("column.stack".into(), [0.0, 0.0, w, h], &t)
-        .child(tile(
-            "miniature.highlight",
-            &working,
-            true,
-            [0.0, 0.0, w, h / 2.0],
-            ground("$ cargo test"),
-        ))
-        .child(tile(
-            "miniature.needs",
-            &waiting,
-            false,
-            [0.0, h / 2.0, w, h / 2.0],
-            ground("Which branch?"),
-        ));
-    let card = Overview::column("column.card".into(), [w + 10.0, 0.0, w, h], &t).child(tile(
-        "miniature.card",
-        &document,
-        false,
+    let stack = column(
+        "column.stack",
         [0.0, 0.0, w, h],
-        Miniature::card((&icon::MARKDOWN).into(), "plan.md", &t),
-    ));
+        vec![
+            tile(
+                "miniature.highlight",
+                &working,
+                true,
+                [0.0, 0.0, w, h / 2.0],
+                ground("$ cargo test"),
+            ),
+            tile(
+                "miniature.needs",
+                &waiting,
+                false,
+                [0.0, h / 2.0, w, h / 2.0],
+                ground("Which branch?"),
+            ),
+        ],
+    );
+    let card = column(
+        "column.card",
+        [w + 10.0, 0.0, w, h],
+        vec![tile(
+            "miniature.card",
+            &document,
+            false,
+            [0.0, 0.0, w, h],
+            Miniature::card((&icon::MARKDOWN).into(), "plan.md", &t),
+        )],
+    );
     let row_small = el()
         .w(2.0 * w + 10.0)
         .h(h + Overview::GAP)
