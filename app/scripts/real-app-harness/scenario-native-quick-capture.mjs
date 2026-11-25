@@ -127,16 +127,31 @@ async function captureStack() {
 }
 const openingReceipts = [];
 const nativeFindings = [];
-const HIDE_DOES_NOT_HOLD = '⌘H must keep attn hidden';
+const hideFailures = [];
+async function recordHideFailure(finding, press) {
+  hideFailures.push({
+    finding, press,
+    lsappinfo: execFileSync('lsappinfo', ['info', driver.bundleId], { encoding: 'utf8' }),
+    frontmost: await driver.frontmostBundleId(),
+    windows: await driver.windowList(),
+    stack: JSON.parse(await driver.runInputDriverCapture(['windowstack'])),
+  });
+  runner.writeJson('hide-failure.json', hideFailures);
+  nativeFindings.push(new Error(finding));
+}
 async function hideAttn() {
   await driver.activateApp();
   await driver.runInputDriver(['wait_frontmost']);
-  await key('h', ['command']);
-  const hid = await driver.runInputDriver(['wait_hidden']).then(() => true, () => false);
+  const press = JSON.parse(await driver.runInputDriverCapture(['hide']));
+  if (!press.hidden) {
+    const seen = press.events.map(({ ms, event, bundleId, frontmost }) => `${ms} ms ${event} ${bundleId} (frontmost ${frontmost})`).join(', ');
+    await recordHideFailure(`${press.sawHide ? 'attn was visible again after ⌘H hid it' : '⌘H did not hide attn'}: ${seen}`, press);
+  }
   await fixture.activateApp();
   await fixture.runInputDriver(['wait_frontmost']);
-  if (hid && !(await appVisible())) return true;
-  if (!nativeFindings.some(error => error.message === HIDE_DOES_NOT_HOLD)) nativeFindings.push(new Error(HIDE_DOES_NOT_HOLD));
+  if (!press.hidden) return false;
+  if (!(await appVisible())) return true;
+  await recordHideFailure('attn was visible again after the fixture took focus', press);
   return false;
 }
 async function expectAttnHidden(finding) {

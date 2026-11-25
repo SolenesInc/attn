@@ -55,7 +55,7 @@ func parseOptions() throws -> Options {
     while index < args.count {
         let arg = args[index]
         switch arg {
-        case "activate", "activate_background", "quit_wait", "frontmost", "display_state", "windowid", "windowlist", "windowstack", "text", "key", "keycode", "move", "click", "right_click", "drag", "menu", "menu_keys", "window_park", "global_key", "global_text", "global_capture", "pointer_top_edge", "wait_window_centre", "drag_between", "permissions", "wait_frontmost", "wait_hidden", "hidden":
+        case "activate", "activate_background", "quit_wait", "frontmost", "display_state", "windowid", "windowlist", "windowstack", "text", "key", "keycode", "move", "click", "right_click", "drag", "menu", "menu_keys", "window_park", "global_key", "global_text", "global_capture", "pointer_top_edge", "wait_window_centre", "drag_between", "permissions", "wait_frontmost", "hide", "hidden":
             options.command = arg
         case "--centre":
             index += 1
@@ -311,18 +311,52 @@ func waitForFrontmost(bundleId: String) {
     if frontmostBundleIdentifier() != bundleId { CFRunLoopRun() }
 }
 
-func waitForHidden(bundleId: String) throws {
+// The whole hidden_origin_escape step took 0.9-1.5 s when hides were not watched for a second (88 macOS CI runs, 2026-11).
+let hideTripwire: TimeInterval = 12
+
+func pressHideAndWatch(bundleId: String) throws -> [String: Any] {
     guard let app = findRunningApp(bundleId: bundleId) else {
         throw DriverError.appNotRunning(bundleId)
     }
     let loop = CFRunLoopGetCurrent()
     let center = NSWorkspace.shared.notificationCenter
-    let observer = center.addObserver(forName: NSWorkspace.didHideApplicationNotification, object: nil, queue: .main) { notification in
-        if let hidden = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-           hidden.bundleIdentifier == bundleId { CFRunLoopStop(loop) }
+    var events = [[String: Any]]()
+    var sawHide = false
+    var samplesTaken = false
+    let pressedAt = ProcessInfo.processInfo.systemUptime
+    func record(_ event: String, _ bundle: String) {
+        let ms = Int((ProcessInfo.processInfo.systemUptime - pressedAt) * 1000)
+        events.append(["ms": ms, "event": event, "bundleId": bundle, "frontmost": frontmostBundleIdentifier(), "hidden": app.isHidden])
     }
-    defer { center.removeObserver(observer) }
-    if !app.isHidden { CFRunLoopRun() }
+    let watched: [(NSNotification.Name, String)] = [
+        (NSWorkspace.didHideApplicationNotification, "didHide"),
+        (NSWorkspace.didUnhideApplicationNotification, "didUnhide"),
+        (NSWorkspace.didActivateApplicationNotification, "didActivate"),
+    ]
+    let observers = watched.map { name, label in
+        center.addObserver(forName: name, object: nil, queue: .main) { notification in
+            let changed = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            record(label, changed?.bundleIdentifier ?? "")
+            if label == "didHide" && changed?.processIdentifier == app.processIdentifier { sawHide = true }
+            if sawHide && samplesTaken { CFRunLoopStop(loop) }
+        }
+    }
+    defer { observers.forEach(center.removeObserver) }
+    let sampleSeconds = [0.05, 0.25, 1.0]
+    for seconds in sampleSeconds {
+        RunLoop.current.add(Timer(timeInterval: seconds, repeats: false) { _ in
+            record("sample", "")
+            samplesTaken = seconds == sampleSeconds.last
+            if samplesTaken && (sawHide || app.isHidden) { CFRunLoopStop(loop) }
+        }, forMode: .default)
+    }
+    record("press", bundleId)
+    try postKeyCode(try virtualKeyCode(for: "h"), modifiers: ["command"])
+    try awaitHIDDelivery()
+    let remaining = hideTripwire - (ProcessInfo.processInfo.systemUptime - pressedAt)
+    if !(samplesTaken && (sawHide || app.isHidden)) { _ = CFRunLoopRunInMode(.defaultMode, remaining, false) }
+    record("end", "")
+    return ["sawHide": sawHide, "hidden": app.isHidden, "events": events]
 }
 
 func frontmostBundleIdentifier() -> String {
@@ -483,7 +517,7 @@ func windowStack() throws -> [[String: Any]] {
         let bundle = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""
         let systemOwner = entry[kCGWindowOwnerName as String] as? String == "WindowServer" ||
             ["com.apple.dock", "com.apple.systemuiserver", "com.apple.controlcenter", "com.apple.notificationcenterui"].contains(bundle)
-        return ["id": number, "pid": entry[kCGWindowOwnerPID as String] ?? -1,
+        return ["id": number, "pid": entry[kCGWindowOwnerPID as String] ?? -1, "owner": entry[kCGWindowOwnerName as String] ?? "",
                 "layer": entry[kCGWindowLayer as String] ?? 0, "alpha": entry[kCGWindowAlpha as String] ?? 1,
                 "systemUI": systemOwner && ((entry[kCGWindowLayer as String] as? Int) ?? 0) >= CGWindowLevelForKey(.dockWindow),
                 "x": rect.minX, "y": rect.minY, "width": rect.width, "height": rect.height]
@@ -1052,7 +1086,7 @@ do {
     // and observation-only commands work fine against a sleeping display and
     // are deliberately left alone.
     switch options.command {
-    case "activate", "text", "key", "keycode", "global_key", "global_text", "global_capture", "pointer_top_edge", "drag_between", "move", "click", "right_click", "drag":
+    case "activate", "text", "key", "keycode", "global_key", "global_text", "global_capture", "hide", "pointer_top_edge", "drag_between", "move", "click", "right_click", "drag":
         try requireLiveDisplay()
     default:
         break
@@ -1081,8 +1115,10 @@ do {
     case "wait_frontmost":
         waitForFrontmost(bundleId: options.bundleId)
         print(frontmostBundleIdentifier())
-    case "wait_hidden":
-        try waitForHidden(bundleId: options.bundleId)
+    case "hide":
+        try ensureAccessibility(prompt: options.promptAccessibility)
+        let data = try JSONSerialization.data(withJSONObject: pressHideAndWatch(bundleId: options.bundleId), options: [.sortedKeys])
+        print(String(data: data, encoding: .utf8) ?? "{}")
     case "hidden":
         guard let app = findRunningApp(bundleId: options.bundleId) else {
             throw DriverError.appNotRunning(options.bundleId)
