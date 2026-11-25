@@ -48,9 +48,13 @@ func (d *Daemon) traceStateEvidence(sessionID protocol.SessionID, origin session
 }
 
 func (d *Daemon) runStateExplain(ctx context.Context, c command.Caller, a command.StateExplainArgs) (any, error) {
-	session := d.store.Get(protocol.SessionID(strings.TrimSpace(a.ID)))
-	if session == nil || !c.Sees(session.ProfileID) {
-		return nil, command.Refuse(command.CodeSessionNotFound, "no session %q; pass a full session id", a.ID)
+	notFound := command.Refuse(command.CodeSessionNotFound, "no session %q; pass a session id or unique prefix", a.ID)
+	session, err := d.resolveLiveSession(a.ID, c.Profile)
+	if err != nil {
+		return nil, sessionRefusal(a.ID, err, notFound)
+	}
+	if !c.Sees(session.ProfileID) {
+		return nil, notFound
 	}
 	return d.stateExplainResult(ctx, session)
 }

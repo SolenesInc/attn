@@ -383,12 +383,14 @@ func (d *Daemon) runActivity(ctx context.Context, c command.Caller, a command.Ac
 }
 
 func (d *Daemon) runActivityClear(ctx context.Context, c command.Caller, a command.ActivityClearArgs) (any, error) {
-	sessionID := protocol.SessionID(strings.TrimSpace(a.ID))
-	session := d.store.Get(sessionID)
-	visible := session != nil && c.Sees(session.ProfileID)
-	if !visible || !d.store.UpdateSessionActivity(sessionID, "", time.Time{}, "") {
-		return nil, command.Refuse(command.CodeSessionNotFound, "no session %q; pass a full session id", a.ID)
+	notFound := command.Refuse(command.CodeSessionNotFound, "no session %q; pass a session id or unique prefix", a.ID)
+	session, err := d.resolveLiveSession(a.ID, c.Profile)
+	if err != nil {
+		return nil, sessionRefusal(a.ID, err, notFound)
 	}
-	d.publishFact(FactSessionActivityChanged, string(sessionID), nil)
-	return fmt.Sprintf("cleared the activity line for %s", sessionID), nil
+	if !c.Sees(session.ProfileID) || !d.store.UpdateSessionActivity(session.ID, "", time.Time{}, "") {
+		return nil, notFound
+	}
+	d.publishFact(FactSessionActivityChanged, string(session.ID), nil)
+	return fmt.Sprintf("cleared the activity line for %s", session.ID), nil
 }

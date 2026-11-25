@@ -279,6 +279,40 @@ func (s *Store) SessionLedgerEntry(id protocol.SessionID) *protocol.SessionLedge
 	return &entry
 }
 
+func (s *Store) ClosedSessionsWithIDPrefix(prefix, profileID string, limit int) ([]protocol.SessionLedgerEntry, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var matches []protocol.SessionLedgerEntry
+	if s.db == nil {
+		for id := range s.sessionCloses {
+			entry := s.ledgerEntryMemoryLocked(id)
+			if strings.HasPrefix(string(id), prefix) && (profileID == "" || entry.ProfileID == profileID) && len(matches) < limit {
+				matches = append(matches, *entry)
+			}
+		}
+		return matches, nil
+	}
+
+	rows, err := s.db.Query(ledgerSelect+" FROM sessions_with_runtime AS sessions WHERE "+ledgerVisible+
+		" AND closed_at <> '' AND substr(id, 1, length(?1)) = ?1 AND (?2 = '' OR profile_id = ?2) LIMIT ?3", prefix, profileID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("read closed sessions matching %s: %w", prefix, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		entry, err := scanLedgerEntry(rows)
+		if err != nil {
+			return nil, fmt.Errorf("read closed sessions matching %s: %w", prefix, err)
+		}
+		matches = append(matches, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read closed sessions matching %s: %w", prefix, err)
+	}
+	return matches, nil
+}
+
 func (s *Store) SessionLedger(query SessionLedgerQuery) (SessionLedgerPage, error) {
 	limit := query.Limit
 	if limit <= 0 {

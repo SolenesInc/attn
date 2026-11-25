@@ -197,11 +197,12 @@ func (h hostSessions) StoredConversation(id harness.SessionID) (string, string) 
 func (h hostSessions) ConversationOwner(session harness.SessionID, conversation string) harness.SessionID {
 	return h.d.store.ConversationOwner(session, conversation)
 }
-func (h hostSessions) LedgerProfile(id harness.SessionID) (string, bool) {
-	if entry := h.d.store.SessionLedgerEntry(id); entry != nil {
-		return entry.ProfileID, true
+func (h hostSessions) Resolve(ref, profile string) (harness.SessionID, error) {
+	match, err := h.d.resolveSession(ref, profile)
+	if err != nil {
+		return "", sessionRefusal(ref, err, command.Refuse(command.CodeSessionNotFound, "The target session was not found"))
 	}
-	return "", false
+	return match.ID(), nil
 }
 func (h hostSessions) LaunchedAt(id harness.SessionID) time.Time {
 	return h.d.store.SessionLaunchedAt(id)

@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"maps"
 	"net"
 	"strings"
@@ -125,18 +126,17 @@ func (d *Daemon) sessionCallerFor(session protocol.SessionID, profile, requested
 }
 
 func (d *Daemon) resolveFramedSession(cmd string, named protocol.SessionID, scope string) (protocol.SessionID, string, error) {
-	if profile, known := d.knownSessionProfile(named); known && (scope == "" || profile == scope) {
-		return named, profile, nil
-	}
-	session, code := d.resolveSessionReference(string(named), scope)
+	match, err := d.resolveSession(string(named), scope)
 	target := command.SessionFlagNamesTarget(cmd)
 	switch {
-	case session != nil:
-		return session.ID, session.ProfileID, nil
-	case code == "ambiguous_session" && target:
-		return "", "", command.Refuse("ambiguous_session", "session %s matches more than one session; give more of the id", named)
-	case code == "ambiguous_session":
-		return "", "", command.Refuse("ambiguous_session", "the %s %q matches more than one session; give more of the id", command.CallerRole(cmd), named)
+	case err == nil:
+		return match.ID(), match.ProfileID(), nil
+	case errors.Is(err, errAmbiguousSession) && target:
+		return "", "", command.Refuse(command.CodeAmbiguousSession, "session %s matches more than one session; give more of the id", named)
+	case errors.Is(err, errAmbiguousSession):
+		return "", "", command.Refuse(command.CodeAmbiguousSession, "the %s %q matches more than one session; give more of the id", command.CallerRole(cmd), named)
+	case !errors.Is(err, errSessionNotFound):
+		return "", "", err
 	case target:
 		return "", "", command.Refuse(command.CodeSessionNotFound, "unknown session %s", named)
 	default:

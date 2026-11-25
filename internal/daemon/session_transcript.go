@@ -19,9 +19,13 @@ import (
 const sessionTranscriptPageSize = 200
 
 func (d *Daemon) runSessionTranscript(ctx context.Context, c command.Caller, a command.SessionTranscriptArgs) (any, error) {
-	session := d.store.SessionLedgerEntry(protocol.SessionID(strings.TrimSpace(a.ID)))
+	match, err := d.resolveSession(a.ID, c.Profile)
+	if err != nil {
+		return nil, sessionRefusal(a.ID, err, sessionTranscriptRefusal(command.CodeSessionNotFound))
+	}
+	session := d.store.SessionLedgerEntry(match.ID())
 	if session == nil || !c.Sees(session.ProfileID) {
-		return nil, sessionTranscriptRefusal("session_not_found")
+		return nil, sessionTranscriptRefusal(command.CodeSessionNotFound)
 	}
 
 	answer, err := Call[protocol.MonitorTranscriptPageResult](ctx, d.router(), protocol.MonitorTranscriptPageMessage{Cmd: protocol.CmdMonitorTranscriptPage, SessionID: session.ID, Cursor: protocol.Ptr(strings.TrimSpace(a.After))})

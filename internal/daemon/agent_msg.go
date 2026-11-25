@@ -92,15 +92,15 @@ func (d *Daemon) runAgentMsg(ctx context.Context, c command.Caller, a command.Ag
 		if found {
 			address = who.Member(member.Key).Address()
 		} else {
-			target, code := d.resolveSessionByIDOrPrefix(string(targetRef))
-			if target == nil {
+			target, err := d.resolveLiveSession(string(targetRef), "")
+			if err != nil {
 				if memberErr != nil {
 					return nil, memberErr
 				}
-				if code == "session_not_found" {
+				if errors.Is(err, errSessionNotFound) {
 					return nil, notFound()
 				}
-				return nil, command.Refuse(code, "%q matches more than one session; give more of the id (`{attn agent list --json}` carries full ids)", protocol.TrimID(targetRef))
+				return nil, command.Refuse(err.Error(), "%q matches more than one session; give more of the id (`{attn agent list --json}` carries full ids)", protocol.TrimID(targetRef))
 			}
 			if target.ProfileID != sender.ProfileID {
 				return nil, notFound()

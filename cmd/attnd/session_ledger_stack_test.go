@@ -185,6 +185,12 @@ func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 		"place      directory missing, branch local",
 		"attn session reopen "+worker.SessionID+" --action "+string(protocol.SessionReopenActionRecreateWorktreeAndReopen))
 
+	for name, id := range map[string]string{"live": source, "closed": worker.SessionID} {
+		if byPrefix := s.Attn("session", "show", id[:8]); byPrefix.Code != 0 || rowOf(byPrefix.Stdout, id) == "" {
+			t.Errorf("session show %s of a %s session exited %d with %q, want %s", id[:8], name, byPrefix.Code, byPrefix.Stdout+byPrefix.Stderr, id)
+		}
+	}
+
 	reopened := s.Attn("session", "reopen", worker.SessionID, "--action", string(protocol.SessionReopenActionRecreateWorktreeAndReopen))
 	if reopened.Code != 0 {
 		t.Fatalf("session reopen exited %d: %s", reopened.Code, reopened.Stderr)

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -83,11 +84,11 @@ func (d *Daemon) resolveAgentReloadTarget(ref, profileID string) (*protocol.Sess
 		}
 		return nil, fmt.Errorf("crew member %s is between sessions; reload does not start sessions for members", member.Name)
 	}
-	target, code := d.resolveSessionReference(ref, profileID)
+	target, err := d.resolveLiveSession(ref, profileID)
 	switch {
-	case target != nil:
+	case err == nil:
 		return target, nil
-	case code == "ambiguous_session":
+	case errors.Is(err, errAmbiguousSession):
 		return nil, fmt.Errorf("%q matches more than one session; use more of the id", ref)
 	default:
 		return nil, fmt.Errorf("no session or crew member in session matches %q in the caller's profile", ref)

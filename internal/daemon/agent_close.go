@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -190,41 +191,17 @@ func (d *Daemon) resolveAgentCloseTarget(msg *agentCloseRequest, caller *protoco
 		}
 		reference = protocol.SessionID(tender)
 	}
-	target, errCode := d.resolveAgentCloseSession(reference)
+	target, err := d.resolveLiveSession(string(reference), "")
 	switch {
-	case target != nil:
+	case err == nil:
 		return target, nil
-	case errCode == "ambiguous_session":
-		return nil, &agentCloseRefusal{errCode, fmt.Sprintf(
+	case errors.Is(err, errAmbiguousSession):
+		return nil, &agentCloseRefusal{err.Error(), fmt.Sprintf(
 			"%q matches more than one session; give more of the id (`attn agent list --json` carries full ids)", reference)}
 	default:
-		return nil, &agentCloseRefusal{errCode, fmt.Sprintf(
+		return nil, &agentCloseRefusal{err.Error(), fmt.Sprintf(
 			"no session matches %q; `attn agent list` names the sessions this daemon can reach", reference)}
 	}
-}
-
-func (d *Daemon) resolveAgentCloseSession(reference protocol.SessionID) (*protocol.Session, string) {
-	reference = protocol.TrimID(reference)
-	if reference == "" {
-		return nil, "session_not_found"
-	}
-	if session := d.store.Get(reference); session != nil {
-		return session, ""
-	}
-	var match *protocol.Session
-	for _, session := range d.store.List("") {
-		if !strings.HasPrefix(string(session.ID), string(reference)) {
-			continue
-		}
-		if match != nil && match.ID != session.ID {
-			return nil, "ambiguous_session"
-		}
-		match = session
-	}
-	if match == nil {
-		return nil, "session_not_found"
-	}
-	return match, ""
 }
 
 func (d *Daemon) refuseGrowingSeedsSelfClose(session *protocol.Session, goingOnStandby string) error {

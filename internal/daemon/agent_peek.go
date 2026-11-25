@@ -17,24 +17,24 @@ const agentShortIDLength = 8
 
 const agentPeekSnapshotTimeout = 3 * time.Second
 
+var errCrewMemberAsleep = errors.New("crew_member_asleep")
+
 func (d *Daemon) runAgentPeek(ctx context.Context, c command.Caller, a command.AgentPeekArgs) (any, error) {
-	session, errCode := d.resolveAgentPeekTarget(crewAsker{session: c.Session, profileID: c.Profile}, a.Target)
-	if session != nil {
-		if !c.Sees(session.ProfileID) {
-			session, errCode = nil, "session_not_found"
-		}
+	session, err := d.resolveAgentPeekTarget(crewAsker{session: c.Session, profileID: c.Profile}, a.Target)
+	if err == nil && !c.Sees(session.ProfileID) {
+		err = errSessionNotFound
 	}
 	target := strings.TrimSpace(a.Target)
 	switch {
-	case session != nil:
-	case errCode == "session_not_found":
-		return nil, command.Refuse(errCode, "no session or crew member matches %q; `{attn agent list}` names sessions and `{attn crew list}` names members", target)
-	case errCode == "ambiguous_session":
-		return nil, command.Refuse(errCode, "%q matches more than one session; give more of the id (`{attn agent list --json}` carries full ids)", target)
-	case errCode == "crew_member_asleep":
-		return nil, command.Refuse(errCode, "%s is between sessions; `{attn agent peek}` never starts a session for a crew member. `{attn crew start %s}` starts one", target, target)
+	case err == nil:
+	case errors.Is(err, errSessionNotFound):
+		return nil, command.Refuse(command.CodeSessionNotFound, "no session or crew member matches %q; `{attn agent list}` names sessions and `{attn crew list}` names members", target)
+	case errors.Is(err, errAmbiguousSession):
+		return nil, command.Refuse(command.CodeAmbiguousSession, "%q matches more than one session; give more of the id (`{attn agent list --json}` carries full ids)", target)
+	case errors.Is(err, errCrewMemberAsleep):
+		return nil, command.Refuse(err.Error(), "%s is between sessions; `{attn agent peek}` never starts a session for a crew member. `{attn crew start %s}` starts one", target, target)
 	default:
-		return nil, errors.New(errCode)
+		return nil, err
 	}
 	if err := d.requireSessionHost(session.ID); err != nil {
 		return nil, err
@@ -42,67 +42,36 @@ func (d *Daemon) runAgentPeek(ctx context.Context, c command.Caller, a command.A
 	return d.agentPeekResult(session), nil
 }
 
-func (d *Daemon) resolveAgentPeekTarget(asker crewAsker, target string) (*protocol.Session, string) {
+func (d *Daemon) resolveAgentPeekTarget(asker crewAsker, target string) (*protocol.Session, error) {
 	target = protocol.TrimID(target)
 	if target == "" {
-		return nil, "session_not_found"
+		return nil, errSessionNotFound
 	}
 	if session := d.store.Get(protocol.SessionID(target)); session != nil {
-		return session, ""
+		return session, nil
 	}
 	profileID, err := d.crewAskerProfile(asker)
 	if err != nil {
-		if session, code := d.resolveSessionByIDOrPrefix(target); session != nil || code != "session_not_found" {
-			return session, code
+		if session, resolveErr := d.resolveLiveSession(target, ""); !errors.Is(resolveErr, errSessionNotFound) {
+			return session, resolveErr
 		}
-		return nil, "crew names resolve in a profile: " + err.Error()
+		return nil, errors.New("crew names resolve in a profile: " + err.Error())
 	}
 	member, found, err := d.crewMemberIn(profileID, target)
 	if err != nil {
 		d.logf("agent peek crew resolution: target=%q err=%v", target, err)
-		return nil, "internal_error"
+		return nil, errors.New("internal_error")
 	}
 	if found {
 		if !d.crewBindingLive(member) {
-			return nil, "crew_member_asleep"
+			return nil, errCrewMemberAsleep
 		}
 		if session := d.store.Get(member.BindingSession); session != nil {
-			return session, ""
+			return session, nil
 		}
-		return nil, "crew_member_asleep"
+		return nil, errCrewMemberAsleep
 	}
-	return d.resolveSessionByIDOrPrefix(target)
-}
-
-func (d *Daemon) resolveSessionByIDOrPrefix(target string) (*protocol.Session, string) {
-	return d.resolveSessionReference(target, "")
-}
-
-func (d *Daemon) resolveSessionReference(target, profileID string) (*protocol.Session, string) {
-	target = protocol.TrimID(target)
-	if target == "" {
-		return nil, "session_not_found"
-	}
-	if session := d.store.Get(protocol.SessionID(target)); session != nil && (profileID == "" || session.ProfileID == profileID) {
-		return session, ""
-	}
-	var match *protocol.Session
-	for _, session := range d.store.List("") {
-		if profileID != "" && session.ProfileID != profileID {
-			continue
-		}
-		if !strings.HasPrefix(string(session.ID), target) {
-			continue
-		}
-		if match != nil {
-			return nil, "ambiguous_session"
-		}
-		match = session
-	}
-	if match == nil {
-		return nil, "session_not_found"
-	}
-	return match, ""
+	return d.resolveLiveSession(target, "")
 }
 
 func (d *Daemon) agentPeekResult(session *protocol.Session) *protocol.AgentPeekResult {

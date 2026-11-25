@@ -22,9 +22,9 @@ func (h codexHarness) runSessionInstructions(ctx context.Context, c command.Call
 	if question == "" {
 		return nil, command.Usage("{question} is required")
 	}
-	target := protocol.SessionID(strings.TrimSpace(a.ID))
-	if profile, ok := h.host.Sessions().LedgerProfile(target); ok && !c.Sees(profile) {
-		return nil, command.Refuse("session_not_found", "%s", sessionInstructionsErrorMessage("session_not_found"))
+	target, err := h.host.Sessions().Resolve(a.ID, c.Profile)
+	if err != nil {
+		return nil, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, sessionInstructionsTimeout)
 	defer cancel()

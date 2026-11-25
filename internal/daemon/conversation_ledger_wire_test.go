@@ -113,7 +113,7 @@ func TestConversationPinCopiesUnreferencedClosedSessionAndUnkeepExpires(t *testi
 	if pinned.Count != 1 || pinned.StoredBytes != pinned.Rows[0].Kept.Bytes || pinned.NextDeleteAfter != nil {
 		t.Fatalf("pinned totals: %+v", pinned)
 	}
-	if err := cli.KeptConversationKeep(string(delegated.SessionID), false); err != nil {
+	if err := cli.KeptConversationKeep(string(delegated.SessionID)[:8], false); err != nil {
 		t.Fatal(err)
 	}
 	testworld.AwaitTaskDone(app, "conversation_keep")

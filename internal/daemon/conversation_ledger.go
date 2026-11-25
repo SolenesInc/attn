@@ -69,6 +69,15 @@ func (d *Daemon) resolveKeptConversation(id string) (conversationKey, string, er
 			}
 		}
 	}
+	if len(matches) == 0 && scope != "conversation" {
+		match, err := d.resolveSession(id, "")
+		if err == nil && string(match.ID()) != id {
+			return d.resolveKeptConversation("session:" + string(match.ID()))
+		}
+		if errors.Is(err, errAmbiguousSession) {
+			return conversationKey{}, "", sessionRefusal(id, err, nil)
+		}
+	}
 	if len(matches) == 0 {
 		return conversationKey{}, "", fmt.Errorf("no session or conversation %q", id)
 	}

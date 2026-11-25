@@ -103,7 +103,7 @@ func TestSessionInstructionsAnswerOnlyFromQuotesTheTranscriptHolds(t *testing.T)
 			}
 			done := make(chan asked, 1)
 			go func() {
-				result, err := cli.SessionInstructions(session, tc.question)
+				result, err := cli.SessionInstructions(session[:8], tc.question)
 				done <- asked{result, err}
 			}()
 			for i, answer := range tc.answers {

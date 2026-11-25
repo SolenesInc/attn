@@ -85,21 +85,9 @@ func (d *Daemon) terminalTarget(caller *protocol.Session, ref string) (*selected
 	if terminalMatch != nil {
 		return terminalMatch, nil
 	}
-	var match *protocol.Session
-	for _, session := range d.store.List("") {
-		if session.ProfileID != caller.ProfileID {
-			continue
-		}
-		if string(session.ID) == ref {
-			match = session
-			break
-		}
-		if ref != "" && strings.HasPrefix(string(session.ID), ref) {
-			if match != nil {
-				return nil, protocol.Refuse(protocol.RefusalInvalidInput, "target rule: %q matches multiple sessions; use a terminal id from `{attn terminal ls --all}`", ref)
-			}
-			match = session
-		}
+	match, err := d.resolveLiveSession(ref, caller.ProfileID)
+	if errors.Is(err, errAmbiguousSession) {
+		return nil, protocol.Refuse(protocol.RefusalInvalidInput, "target rule: %q matches multiple sessions; use a terminal id from `{attn terminal ls --all}`", ref)
 	}
 	if match == nil {
 		member, found, err := d.crewMemberIn(caller.ProfileID, ref)

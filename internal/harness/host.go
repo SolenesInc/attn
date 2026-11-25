@@ -85,7 +85,7 @@ type HostSessions interface {
 	Holder(profile, conversation string) SessionID
 	StoredConversation(id SessionID) (conversation, path string)
 	ConversationOwner(session SessionID, conversation string) SessionID
-	LedgerProfile(id SessionID) (string, bool)
+	Resolve(ref, profile string) (SessionID, error)
 	LaunchedAt(id SessionID) time.Time
 	Lifetime(id SessionID) (ID, Lifetime)
 	Conversation(id SessionID) string

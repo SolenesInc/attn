@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -141,9 +142,14 @@ func (d *Daemon) reopenVerdictsForPage(entries []protocol.SessionLedgerEntry) []
 }
 
 func (d *Daemon) handleSessionShow(conn net.Conn, msg *protocol.SessionShowMessage) {
-	entry := d.store.SessionLedgerEntry(protocol.TrimID(msg.SessionID))
+	match, err := d.resolveSession(string(msg.SessionID), "")
+	if err != nil {
+		d.sendError(conn, sessionRefusal(string(msg.SessionID), err, errSessionNotFound).Error())
+		return
+	}
+	entry := d.store.SessionLedgerEntry(match.ID())
 	if entry == nil {
-		d.sendError(conn, "session_not_found")
+		d.sendError(conn, command.CodeSessionNotFound)
 		return
 	}
 	result := &protocol.SessionShowResult{Entry: *entry}
