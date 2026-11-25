@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Row overview can hide every miniature at the supported minimum window size",
+  "at": "2026-11-25T05:06:00.603Z",
+  "detail": "Row overview can hide every miniature at the supported minimum window size.\n\nAt the reviewed pin 52ff8b53c, open row overview in an 800x600 window with nine numbered desktops and ten waiting agents on the shown desktop. At overview_view.rs:49-69 the strips, waiting lines, legend and spacing reserve 582 points of an at-most 568-point main area. The row gets zero height. layout.rs:309-330 then returns scale zero and empty tile slots, and overview_view.rs:122 skips the miniature raster. The highlight and pointer targets disappear.\n\nA fresh verifier traced the production path and exercised the rows function in isolation. The focused app wire probe was still building at report time. Preserve a usable row when the surrounding lists overflow and add a regression at the supported minimum size. The reviewer is s-cy1wf7.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/desktop/overview_view.rs",
+    "line": 49
+  },
+  "culprit": "3b147ade0af0e68243723a62d427069d50102e3c"
+}
