@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Opening a live agent ID from a popped-out terminal leaves focus on the source",
+  "at": "2026-11-25T02:56:28.998Z",
+  "detail": "Opening a live agent ID from a popped-out terminal leaves focus on the source\n\nStart with the main window on Home and the target docked. From a popped-out terminal, Cmd-click or Enter on the pinned live agent card sends desktop_show_session, but navigation runs in the popped-out window state. Main remains on Home and the target gets no main-window keyboard focus. Route live selection through the window-aware OpenAgent action and verify that the owning window shows and focuses the destination. The confirmed trace and probe are on s-edmq0z.\n"
+}
