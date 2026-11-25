@@ -142,7 +142,7 @@ commands:
     args:
       - {name: member, type: member, required: true, cli: pos}
     result: CrewRetireResult
-    receipt: [already_retired, member.id, member.name, close.session_id, close.already_closed, released_seeds, closed_asks, removed_watches, unread]
+    receipt: [already_retired, member.id, member.name, close.session_id, close.already_closed, close.delivery_status, close.detail, released_seeds, closed_asks, removed_watches, unread]
 
   - name: crew restore
     summary: bring a retired member back

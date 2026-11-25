@@ -9,9 +9,6 @@
 # command as {attn seed tend <id> --for <name>}: the CLI prints the flag and the
 # command line, and a tool caller reads the argument name and the tool with its
 # arguments. The generator and a test refuse a command named in plain words.
-# `receipt` lists the fields of `result` that the tool of a command that changes
-# something answers with: what a next call needs, and what the caller cannot
-# know. The CLI and a tool that only reads answer with the whole result.
 groups:
   - name: seed
     summary: track work in the garden; plant, tend, note and harvest seeds
@@ -159,7 +156,7 @@ commands:
       - {name: bed, type: text, cli: "--bed", placeholder: "<bed>", doc: "assign a root seed to this existing curated bed (requires garden_v2_enabled)"}
       - {name: checks, type: check_definition, list: true, cli: "--check", doc: "a check the seed must prove; attn picks the id unless C#= names it; repeats"}
     result: SeedPlantResult
-    receipt: [id, step_slug, status, ready, bed, checks.id, checks.from, similar.like, similar.last_active, similar.seed.id, similar.seed.step_slug, similar.seed.title, similar.seed.status]
+    receipt: [id, step_slug, title, status, ready, bed, checks.id, checks.from, similar.like, similar.last_active, similar.seed.id, similar.seed.step_slug, similar.seed.title, similar.seed.status]
     examples:
       - {title: "Retry the uploader on 503", part_of: s-p4k2m1, checks: ["A 503 is retried three times"]}
 
@@ -306,7 +303,7 @@ commands:
       - {name: for, type: name, cli: "--for", doc: "the crew member to assign the seed to"}
       - {name: force, type: bool, cli: "--force", doc: "act even though somebody else holds the seed; the log records it"}
     result: SeedTransitionResult
-    receipt: [moved, seed.id, seed.step_slug, seed.status, audit.body, noted.id, ring_recipients, handoff.author.name, handoff.created_at, handoff.body]
+    receipt: [moved, seed.id, seed.step_slug, seed.status, seed.claimed, seed.tender, audit.body, noted.id, ring_recipients, handoff.author.name, handoff.created_at, handoff.body]
 
   - name: seed note
     summary: append to the seed's log
@@ -416,7 +413,7 @@ commands:
       - {name: shared, type: bool, cli: "--shared", doc: "each seed below this plot that has no children proves the check with its own report"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
-    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, attached, ring_recipients, live_delegate]
+    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, seed.checks.report.at, seed.checks.report.evidence.artifact, seed.checks.report.evidence.url, attached, ring_recipients, live_delegate]
     errors:
       - {code: not_a_check_id, usage: true, fix: 'Pass a check id like C3, and the statement in {statement}.'}
       - {code: needs_statement, usage: true, fix: 'Pass the statement the seed must prove in {statement}.'}
@@ -433,7 +430,7 @@ commands:
       - {name: statement, type: text, required: true, cli: "-m", stdin: true, placeholder: '"<statement>"', doc: "what the seed must prove"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
-    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, attached, ring_recipients, live_delegate]
+    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, seed.checks.report.at, seed.checks.report.evidence.artifact, seed.checks.report.evidence.url, attached, ring_recipients, live_delegate]
     errors:
       - {code: not_a_check_id, usage: true, fix: 'Pass a check id like C3, and the statement in {statement}.'}
       - {code: needs_statement, usage: true, fix: 'Pass the statement the seed must prove in {statement}.'}
@@ -450,7 +447,7 @@ commands:
       - {name: reason, type: text, cli: "-m", stdin: true, placeholder: '"<why>"', doc: "why, saved on the check move"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
-    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, attached, ring_recipients, live_delegate]
+    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, seed.checks.report.at, seed.checks.report.evidence.artifact, seed.checks.report.evidence.url, attached, ring_recipients, live_delegate]
 
   - name: seed check restore
     summary: bring a removed check back
@@ -464,7 +461,7 @@ commands:
       - {name: reason, type: text, cli: "-m", stdin: true, placeholder: '"<why>"', doc: "why, saved on the check move"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
-    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, attached, ring_recipients, live_delegate]
+    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, seed.checks.report.at, seed.checks.report.evidence.artifact, seed.checks.report.evidence.url, attached, ring_recipients, live_delegate]
 
   - name: seed check report
     summary: record the proof for a check in one call
@@ -482,7 +479,7 @@ commands:
       - {name: commit, type: revision, cli: "--commit", doc: "the commit the evidence came from, resolved with git rev-parse in the current directory, or for a tool the folder the session started in"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
-    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, attached, ring_recipients, live_delegate]
+    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, seed.checks.report.at, seed.checks.report.evidence.artifact, seed.checks.report.evidence.url, attached, ring_recipients, live_delegate]
     examples:
       - {seed: s-7k3f9m, id: C1, summary: "Retries pass", evidence: [retry.log]}
 
@@ -498,7 +495,7 @@ commands:
       - {name: how, type: text, cli: "-m", stdin: true, placeholder: '"<how you verified it>"', doc: "how you verified it"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
-    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, attached, ring_recipients, live_delegate]
+    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, seed.checks.report.at, seed.checks.report.evidence.artifact, seed.checks.report.evidence.url, attached, ring_recipients, live_delegate]
 
   - name: seed check reject
     summary: reject the check
@@ -512,7 +509,7 @@ commands:
       - {name: proof, type: text, required: true, cli: "-m", stdin: true, placeholder: '"<what would prove it>"', doc: "what would prove it"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
-    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, attached, ring_recipients, live_delegate]
+    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, seed.checks.report.at, seed.checks.report.evidence.artifact, seed.checks.report.evidence.url, attached, ring_recipients, live_delegate]
 
   - name: seed check uncheck
     summary: clear the verdict and keep the report
@@ -526,7 +523,7 @@ commands:
       - {name: reason, type: text, cli: "-m", stdin: true, placeholder: '"<why>"', doc: "why, saved on the check move"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
-    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, attached, ring_recipients, live_delegate]
+    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, seed.checks.report.at, seed.checks.report.evidence.artifact, seed.checks.report.evidence.url, attached, ring_recipients, live_delegate]
 
   - name: seed check reopen
     summary: clear the report and verdict
@@ -540,7 +537,7 @@ commands:
       - {name: reason, type: text, cli: "-m", stdin: true, placeholder: '"<why>"', doc: "why, saved on the check move"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
-    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, attached, ring_recipients, live_delegate]
+    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, seed.checks.report.at, seed.checks.report.evidence.artifact, seed.checks.report.evidence.url, attached, ring_recipients, live_delegate]
 
   - name: seed watch
     summary: watch this seed and its descendants
