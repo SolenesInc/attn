@@ -3,10 +3,10 @@ use std::time::Duration;
 
 use attn_protocol::{
     Ask, Desktop, DesktopPane, OpenSeedResultMessage, OutpostInfo, OutpostsUpdatedMessage, Profile,
-    ProfileArrangementChangedMessage, ProfilesChangedMessage, ResolveSessionsResultMessage,
-    ResolvedSession, Seed, Session, SessionClosedMessage, SessionDelegationRole,
-    SessionLedgerEntry, SessionReopen, SessionReopenResult, SessionReopenResultMessage,
-    SessionStateChangedMessage, SessionUnregisteredMessage,
+    ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyResizedMessage,
+    ResolveSessionsResultMessage, ResolvedSession, Seed, Session, SessionClosedMessage,
+    SessionDelegationRole, SessionLedgerEntry, SessionReopen, SessionReopenResult,
+    SessionReopenResultMessage, SessionStateChangedMessage, SessionUnregisteredMessage,
 };
 use attn_testkit::{Driver, Node, Request, Target, World, message, tree};
 use rune::{Cursor, Key, KeyEvent, Mods, PhysicalInput};
@@ -757,6 +757,60 @@ fn a_click_with_the_accelerator_opens_a_live_agent_and_a_plain_one_does_not() {
     assert_eq!(sessions_shown(&world).len(), 1);
     assert!(!inputs(&world).is_empty());
     rests(&mut world);
+}
+
+#[test]
+fn the_padding_around_the_cells_shows_and_opens_no_id_or_link_on_the_nearest_cell() {
+    for shape @ (cols, rows) in [(50, 30), (100, 10)] {
+        for text in [BUILDER_SHORT, "https://example.test"] {
+            let mut world = start(vec![builder()], vec![], vec![]);
+            world.daemon.emit(PtyResizedMessage {
+                id: "r1".into(),
+                cols,
+                rows,
+                ..PtyResizedMessage::new()
+            });
+            world.settle();
+            write(&mut world, 1, text);
+            let ([left, top, width, height], _) = world
+                .runtime()
+                .presented("terminal.r1")
+                .expect("r1 is drawn");
+            let shape = (shape.0 as u16, shape.1 as u16);
+            let [x, y, cell_w, cell_h] = attn_term::Metrics::of(attn_term::FONT_SIZE).cell_rect(
+                shape,
+                (width, height),
+                world.runtime().env.scale,
+                (0, 0),
+            );
+            let on_cell = (left + x + cell_w / 2.0, top + y + cell_h / 2.0);
+            let in_padding = if x > y {
+                (left + x / 2.0, on_cell.1)
+            } else {
+                (on_cell.0, top + y / 2.0)
+            };
+            assert!(x.max(y) > cell_h, "the grid leaves padding around it");
+
+            click_holding_accelerator(&mut world, in_padding);
+            assert_ne!(world.runtime().cursor(), Cursor::Pointer);
+            assert!(!shown(&world, AGENT_CARD));
+            assert!(sessions_shown(&world).is_empty());
+            assert!(world.opened_links().is_empty());
+
+            click_holding_accelerator(&mut world, on_cell);
+            assert_eq!(sessions_shown(&world).len() + world.opened_links().len(), 1);
+        }
+    }
+}
+
+fn click_holding_accelerator(world: &mut World, (x, y): (f32, f32)) {
+    world.gesture(|app| app.runtime.pointer_move(x, y));
+    world.advance(Duration::from_millis(200));
+    accelerator(world, true);
+    world.gesture(|app| {
+        app.runtime.pointer_down(x, y);
+        app.runtime.pointer_up(x, y);
+    });
 }
 
 #[test]

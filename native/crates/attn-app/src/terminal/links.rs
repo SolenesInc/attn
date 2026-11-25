@@ -205,10 +205,8 @@ pub(super) fn screen_cell(
     metrics: &Metrics,
     at: (f32, f32),
 ) -> Option<(u32, u16)> {
-    let (slot, scale) = term.slot?;
-    let size = term.vt.size();
-    let (col, row) = metrics.cell_in(size, slot, scale, at)?;
-    (col < size.0).then(|| (term.vt.view_top() + u32::from(row), col))
+    let (col, row) = super::cell_at(term, metrics, at)?;
+    Some((term.vt.view_top() + u32::from(row), col))
 }
 
 /// The link over screen cell `cell`: an OSC 8 hyperlink first, since its label may hold spaces,
