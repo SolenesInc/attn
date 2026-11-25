@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Plugins without launch instructions lose ask guidance",
+  "at": "2026-11-25T09:07:11.601Z",
+  "detail": "At bf8fba16e, the ask tool description refers to launch instructions that supported plugins may not receive. Plugin manifests may opt into agent_tools without launch_instructions (internal/harness/internal/plugin/plugin.go:181–198), and the checked-in sample does. In an isolated wire probe the plugin opened an ask while receiving no launch instructions and no visual-selection guidance. cmd/cligen/catalog.go:42 removes the description's previous authoring and follow-through guidance. The ask intent row names no reference. Give plugin callers the guidance in the compact description or through a named MCP-readable reference. Independent wire reproduction and the probe are on s-zrhk1g.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "cmd/cligen/catalog.go",
+    "line": 42
+  },
+  "culprit": "dfd7471c8a60f5584a09f0f0066d6ec0dbff22bc"
+}
