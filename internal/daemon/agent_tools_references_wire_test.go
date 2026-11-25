@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -17,141 +16,76 @@ import (
 
 var (
 	shownCommand = regexp.MustCompile("`(attn\\s[^`]+)`|(?m)^\\s*(attn [^\\n]+)$")
-	shownCall    = regexp.MustCompile("`?([a-z_]+)`? (?:with )?\\{")
-	objectSlot   = regexp.MustCompile(`": <[^"]*, a JSON object>`)
-	integerSlot  = regexp.MustCompile(`": <[^">]*>`)
+	shownCall    = regexp.MustCompile(`\b([a-z]+(?:_[a-z]+)*)\(`)
+	typeName     = regexp.MustCompile(`^(?:[a-z]+(?:\|[a-z]+)*|true|\[\.\.\.\]|\{\.\.\.\})$`)
 	shownFlag    = regexp.MustCompile("(?:CLI-only )?`--?[a-z][^`]*`(?: \\(CLI only\\))?")
 )
 
-type toolArguments struct {
-	Properties map[string]any
-	Required   []string
+type shownArg struct {
+	name, value      string
+	valued, optional bool
 }
 
-func offeredArguments(t *testing.T, agent agentToolsCaller) map[string]toolArguments {
-	t.Helper()
-	session, err := agent.connect(t, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	listed, err := session.ListTools(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	offered := map[string]toolArguments{}
-	for _, tool := range listed.Tools {
-		data, err := json.Marshal(tool.InputSchema)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var args toolArguments
-		if err := json.Unmarshal(data, &args); err != nil {
-			t.Fatal(err)
-		}
-		offered[tool.Name] = args
-	}
-	return offered
-}
-
-var signatureWord = regexp.MustCompile(`^[a-z_]+\??(: [^,]*)?$`)
-
-func shownSignature(text string) map[string]bool {
-	inner, _, found := strings.Cut(strings.TrimPrefix(text, "{"), "}`")
-	if !found {
-		return nil
-	}
-	args := map[string]bool{}
-	for _, word := range strings.Split(inner, ", ") {
-		if !signatureWord.MatchString(word) {
-			return nil
-		}
-		name, _, _ := strings.Cut(word, ":")
-		args[strings.TrimSuffix(name, "?")] = !strings.HasSuffix(name, "?")
-	}
-	return args
-}
-
-func checkShownCalls(t *testing.T, offered map[string]toolArguments, read, text string) int {
-	t.Helper()
-	checked := 0
-	for _, at := range shownCall.FindAllStringSubmatchIndex(text, -1) {
-		name := text[at[2]:at[3]]
-		tool, known := offered[name]
-		if !known {
-			continue
-		}
-		written, _, _ := strings.Cut(text[at[1]-1:], "\n")
-		if strings.HasPrefix(written, "{\"") {
-			args, partial := shownArguments(written)
-			var call map[string]any
-			if err := json.Unmarshal([]byte(args), &call); err != nil {
-				t.Errorf("%s shows %s with arguments that are not JSON: %s", read, name, written)
-				continue
-			}
-			checked++
-			if again := repeatedArgument(args); again != "" {
-				t.Errorf("%s shows %s with the argument %s twice: %s", read, name, again, written)
-			}
-			for arg, value := range call {
-				property, takes := tool.Properties[arg].(map[string]any)
-				if !takes {
-					t.Errorf("%s shows %s with the argument %s, which the tool does not take", read, name, arg)
-				}
-				if shown := typeOf(value); shown != property["type"] {
-					t.Errorf("%s shows %s with %s as %s, but its schema says %v", read, name, arg, shown, property["type"])
-				}
-			}
-			missing := slices.ContainsFunc(tool.Required, func(arg string) bool { _, shown := call[arg]; return !shown })
-			if missing != partial {
-				t.Errorf("%s shows %s leaving out a required argument %t, but marks the call as partial %t: %s", read, name, missing, partial, written)
-			}
-			continue
-		}
-		signature := shownSignature(written)
-		if signature == nil {
-			continue
-		}
-		checked++
-		for arg, required := range signature {
-			if _, takes := tool.Properties[arg]; !takes || required != slices.Contains(tool.Required, arg) {
-				t.Errorf("%s shows %s {%s}, required %t, which its schema does not say", read, name, arg, required)
-			}
-		}
-		for _, arg := range tool.Required {
-			if _, shown := signature[arg]; !shown {
-				t.Errorf("%s shows %s without its required argument %s", read, name, arg)
-			}
-		}
-	}
-	return checked
-}
-
-func shownArguments(written string) (args string, partial bool) {
-	args = integerSlot.ReplaceAllString(objectSlot.ReplaceAllString(written, `": {}`), `": 0`)
+func shownArgs(text string) (args []shownArg, partial, closed bool) {
+	var entry strings.Builder
+	var entries []string
 	quoted, depth := false, 0
-	for i, r := range args {
+	for i, r := range text {
 		switch {
-		case r == '"' && args[i-1] != '\\':
+		case r == '"' && (i == 0 || text[i-1] != '\\'):
 			quoted = !quoted
 		case quoted:
-		case r == '{':
+		case strings.ContainsRune("([{<", r):
 			depth++
-		case r == '}':
+		case strings.ContainsRune(")]}>", r):
 			depth--
 		}
-		if depth == 0 {
-			args = args[:i+1]
+		switch {
+		case depth < 0:
+			closed = true
+		case depth == 1 && r == ',' && !quoted && strings.HasPrefix(text, "{"):
+			entries = append(entries, entry.String())
+			entry.Reset()
+			continue
+		}
+		if closed {
 			break
 		}
+		entry.WriteRune(r)
 	}
-	whole, partial := strings.CutSuffix(args, ", …}")
-	if partial {
-		args = whole + "}"
+	if entry.Len() > 0 {
+		entries = append(entries, entry.String())
 	}
-	return args, partial
+	for i, written := range entries {
+		written = strings.TrimSpace(written)
+		if i == 0 {
+			written = strings.TrimPrefix(written, "{")
+		}
+		if i == len(entries)-1 {
+			written = strings.TrimSuffix(written, "}")
+		}
+		if written == "…" {
+			partial = true
+			continue
+		}
+		name, value, valued := strings.Cut(written, ": ")
+		bare, optional := strings.CutSuffix(name, "?")
+		args = append(args, shownArg{name: bare, value: value, valued: valued, optional: optional})
+	}
+	return args, partial, closed
 }
 
-func typeOf(value any) string {
+func typeOf(written string) string {
+	var value any
+	if json.Unmarshal([]byte(written), &value) != nil {
+		switch {
+		case strings.HasSuffix(written, ", a JSON object>"):
+			return "object"
+		case written == "…" || strings.HasPrefix(written, "<"):
+			return "integer"
+		}
+		return "nothing JSON holds"
+	}
 	switch value.(type) {
 	case map[string]any:
 		return "object"
@@ -165,27 +99,81 @@ func typeOf(value any) string {
 	return "string"
 }
 
-func repeatedArgument(call string) string {
-	decoder := json.NewDecoder(strings.NewReader(call))
-	names := map[string]bool{}
-	if _, err := decoder.Token(); err != nil {
-		return ""
+type toolArguments struct {
+	Properties map[string]struct{ Type string }
+	Required   []string
+}
+
+func commandArguments(t *testing.T, offered offeredTools) map[string]toolArguments {
+	t.Helper()
+	data, err := os.ReadFile("agent_tools_generated.json")
+	if err != nil {
+		t.Fatal(err)
 	}
-	for decoder.More() {
-		name, err := decoder.Token()
-		if err != nil {
-			return ""
-		}
-		if names[name.(string)] {
-			return name.(string)
-		}
-		names[name.(string)] = true
-		var value json.RawMessage
-		if err := decoder.Decode(&value); err != nil {
-			return ""
+	var generated struct {
+		Tools []struct {
+			Name        string
+			InputSchema toolArguments
 		}
 	}
-	return ""
+	if err := json.Unmarshal(data, &generated); err != nil {
+		t.Fatal(err)
+	}
+	arguments := map[string]toolArguments{}
+	for _, tool := range generated.Tools {
+		if offered[tool.Name] {
+			arguments[tool.Name] = tool.InputSchema
+		}
+	}
+	return arguments
+}
+
+func checkShownCalls(t *testing.T, schemas map[string]toolArguments, read, text string) int {
+	t.Helper()
+	checked := 0
+	for _, at := range shownCall.FindAllStringSubmatchIndex(text, -1) {
+		name := text[at[2]:at[3]]
+		written, _, _ := strings.Cut(text[at[0]:], "\n")
+		if _, offered := schemas[name]; !offered {
+			if strings.Contains(name, "_") {
+				t.Errorf("%s shows %s, which is no function of a script's world: %s", read, name, written)
+			}
+			continue
+		}
+		args, partial, closed := shownArgs(strings.TrimPrefix(written, name+"("))
+		if !closed {
+			t.Errorf("%s shows a call that does not close on its line: %s", read, written)
+			continue
+		}
+		checked++
+		tool := schemas[name]
+		signature := slices.ContainsFunc(args, func(arg shownArg) bool {
+			return arg.optional || !arg.valued || arg.value == "[...]" || arg.value == "{...}"
+		})
+		shown := map[string]bool{}
+		for _, arg := range args {
+			schema, known := tool.Properties[arg.name]
+			required := slices.Contains(tool.Required, arg.name)
+			switch {
+			case !known:
+				t.Errorf("%s shows %s with the argument %s, which it does not take: %s", read, name, arg.name, written)
+			case shown[arg.name]:
+				t.Errorf("%s shows %s with the argument %s twice: %s", read, name, arg.name, written)
+			case signature && (arg.optional == required || arg.valued && !typeName.MatchString(arg.value)):
+				t.Errorf("%s shows %s in a signature its arguments do not say: %s", read, arg.name, written)
+			case !signature:
+				if given := typeOf(arg.value); given != schema.Type {
+					t.Errorf("%s shows %s with %s as %s, want %s: %s", read, name, arg.name, given, schema.Type, written)
+				}
+			}
+			shown[arg.name] = true
+		}
+		missing := slices.ContainsFunc(tool.Required, func(arg string) bool { return !shown[arg] })
+		if missing != partial {
+			t.Errorf("%s shows %s leaving out a required argument: %t, and marks the call partial: %t: %s", read, name, missing, partial, written)
+		}
+	}
+	return checked
 }
 
 func offeredToolSpelledAsCommand(tools offeredTools, command string) string {
@@ -196,7 +184,7 @@ func offeredToolSpelledAsCommand(tools offeredTools, command string) string {
 			break
 		}
 		name += strings.ReplaceAll(word, "-", "_")
-		if _, offered := tools[name]; offered && (i == len(words)-1 || !offeredDeeper(tools, name, words[i+1])) {
+		if tools[name] && (i == len(words)-1 || !offeredDeeper(tools, name, words[i+1])) {
 			return name
 		}
 		name += "_"
@@ -205,8 +193,7 @@ func offeredToolSpelledAsCommand(tools offeredTools, command string) string {
 }
 
 func offeredDeeper(tools offeredTools, name, word string) bool {
-	_, deeper := tools[name+"_"+strings.ReplaceAll(word, "-", "_")]
-	return deeper
+	return tools[name+"_"+strings.ReplaceAll(word, "-", "_")]
 }
 
 func TestAReferenceReadThroughAToolTeachesTheToolsAndReadFromTheCLIKeepsItsText(t *testing.T) {
@@ -216,7 +203,7 @@ func TestAReferenceReadThroughAToolTeachesTheToolsAndReadFromTheCLIKeepsItsText(
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
 	tools := listOfferedTools(t, agent)
-	arguments := offeredArguments(t, agent)
+	arguments := commandArguments(t, tools)
 	calls := 0
 
 	read := func(tool, command string, args map[string]any, want string) string {
@@ -273,16 +260,12 @@ func TestAReferenceReadThroughAToolTeachesTheToolsAndReadFromTheCLIKeepsItsText(
 	}
 	guide := read("seed_guide", "seed guide", map[string]any{}, source("resources/seed-guide.md"))
 
-	example := regexp.MustCompile("(?s)seed_plot (\\{[^\n]*\\})\n.*?```json\n(.*?)```").FindStringSubmatch(guide)
+	example := regexp.MustCompile("(?s)seed_plot\\(\\{plot: <[^\n]*, a JSON object>\\}\\)\n.*?```json\n(.*?)```").FindStringSubmatch(guide)
 	if example == nil {
 		t.Fatalf("the seed guide shows no seed_plot call with a payload:\n%s", guide)
 	}
-	var plot map[string]any
-	if err := json.Unmarshal([]byte(objectSlot.ReplaceAllLiteralString(example[1], `": `+example[2])), &plot); err != nil {
-		t.Fatalf("the seed guide's seed_plot call is not one with its payload in place: %v:\n%s", err, example[1])
-	}
-	if planted, err := agent.call(t, "seed_plot", plot); err != nil || planted.IsError {
-		t.Errorf("seed_plot called as the seed guide shows it: %v %q", err, resultText(planted))
+	if planted, failed := agent.script(t, "attn_do", "seed_plot({plot: "+example[1]+"})"); failed {
+		t.Errorf("seed_plot called as the seed guide shows it: %s", planted)
 	}
 
 	if calls == 0 {
@@ -293,7 +276,39 @@ func TestAReferenceReadThroughAToolTeachesTheToolsAndReadFromTheCLIKeepsItsText(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "seed_attach {seed, path?, notebook?, url?, mode?: move|copy"; !strings.Contains(resultText(lines), want) {
+	if want := "seed_attach({seed, path?, notebook?, url?, mode?: move|copy"; !strings.Contains(resultText(lines), want) {
 		t.Errorf("the garden reference does not show the arguments of seed_attach as %q", want)
+	}
+}
+
+func TestALaunchWithToolsWritesEachCommandAsACallAScriptCanMake(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app := w.App()
+	for _, key := range []string{"agent_tools_enabled", "asks_enabled"} {
+		setSetting(t, app, key, "true")
+	}
+	plain := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(plain))}
+	tools := listOfferedTools(t, agent)
+	arguments := commandArguments(t, tools)
+	delegated := agent.mustCall(t, "delegate", map[string]any{"brief": "Fix the parser.", "cwd": w.Path("shop"), "model": "default"})
+	var started protocol.DelegationOperation
+	structuredAs(t, delegated, &started)
+	calls := 0
+	for name, session := range map[string]string{
+		"an agent":            plain,
+		"a delegated agent":   string(started.SessionID),
+		"a crew member's day": string(startCrew(t, w.Client(), "keel", "").SessionID),
+	} {
+		text := launchGuidance(t, w, w.Launched(session))
+		for _, match := range shownCommand.FindAllStringSubmatch(text, -1) {
+			if offered := offeredToolSpelledAsCommand(tools, match[1]+match[2]); offered != "" && name != "a crew member's day" {
+				t.Errorf("%s's launch teaches %q, which a script does with %s", name, match[1]+match[2], offered)
+			}
+		}
+		calls += checkShownCalls(t, arguments, name+"'s launch", text)
+	}
+	if calls == 0 {
+		t.Error("no launch shows a call")
 	}
 }

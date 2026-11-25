@@ -74,8 +74,8 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
   gives the model `structuredContent` as JSON when there is one, else the content.
   A code-mode script gets the result without `_meta`, both `content` and
   `structuredContent`, and the model reads what the script prints:
-  `text(r.content)` prints `[]` when attn sends no content, and `text(r)` prints
-  both fields, so it shows a result twice.
+  `text(r.content)` prints `[]` when the server sends no content, and `text(r)`
+  prints both fields, so it shows a result twice.
 
 ## Updates and versions
 

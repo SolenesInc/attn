@@ -16,6 +16,8 @@ const goodServer = `server:
   name: attn
   description: attn's tools.
   intro: Reach for attn to track work.
+  do: {title: Run commands, script: the script, text: Runs a script.}
+  read: {title: Read, script: the script, text: Runs a script that reads.}
 `
 
 const goodNotOffered = `commands:
@@ -101,8 +103,26 @@ func TestLoadRefusesWhatWouldBreakAHarnessOrAnUnmarkedCommand(t *testing.T) {
 		},
 		{
 			name:  "an intent map over Claude Code's cut",
-			files: map[string]string{ServerFile: "server:\n  name: attn\n  description: attn's tools.\n  intro: " + strings.Repeat("x", 4097) + "\n"},
+			files: map[string]string{ServerFile: strings.Replace(goodServer, "Reach for attn to track work.", strings.Repeat("x", 4097), 1)},
 			want:  []string{"server.yaml", "characters, over the limit of 4096", "server.yaml 4097, seed.yaml 20"},
+		},
+		{
+			name: "an attn_do description over Claude Code's cut once its signatures are in it",
+			files: map[string]string{
+				ServerFile:  strings.Replace(goodServer, "text: Runs a script.}", "text: "+strings.Repeat("x", 4080)+"}", 1),
+				"seed.yaml": strings.Replace(goodFamily, "effect: read", "effect: read\n    upfront: true", 1),
+			},
+			want: []string{"server.yaml", "the description of attn_do is 4098 characters, over the limit of 4096"},
+		},
+		{
+			name:  "an attn_read description over Claude Code's cut",
+			files: map[string]string{ServerFile: strings.Replace(goodServer, "text: Runs a script that reads.}", "text: "+strings.Repeat("x", 4097)+"}", 1)},
+			want:  []string{"server.yaml", "the description of attn_read is 4097 characters, over the limit of 4096"},
+		},
+		{
+			name:  "an arg only a script can pass that the CLI would need",
+			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "cli: pos}", "cli: none}", 1)},
+			want:  []string{"seed.yaml: seed show", `arg "seed"`, "cli none on an arg that is required"},
 		},
 		{
 			name:  "a family that offers tools without a map",

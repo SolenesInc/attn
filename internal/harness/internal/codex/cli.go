@@ -90,7 +90,7 @@ func codexPermissionArgs(opts harness.DirectLaunchOpts) []string {
 	return nil
 }
 
-func buildEnv(opts harness.DirectLaunchOpts, remote string) []string {
+func buildEnv(opts harness.DirectLaunchOpts) []string {
 	env := []string{
 		"ATTN_TERMINAL_ID=" + string(opts.TerminalID),
 		"ATTN_AGENT=" + codexID,
@@ -100,9 +100,6 @@ func buildEnv(opts harness.DirectLaunchOpts, remote string) []string {
 	}
 	if opts.SocketPath != "" {
 		env = append(env, "ATTN_SOCKET_PATH="+opts.SocketPath)
-	}
-	if opts.AgentTools != nil && remote == "" {
-		env = append(env, harness.AgentCredentialEnv+"="+opts.AgentTools.Credential)
 	}
 	if opts.Executable != "" && opts.Executable != codexDefaultExecutable {
 		env = append(env, codexExecutableEnvVar+"="+opts.Executable)
@@ -136,7 +133,7 @@ func (directLauncher) Build(opts harness.DirectLaunchOpts) (*exec.Cmd, []string)
 	if Facts().Signals.ReportsTools {
 		overrides = generateConfigOverrides(opts, remote)
 	}
-	return buildCommand(opts, remote, overrides), buildEnv(opts, remote)
+	return buildCommand(opts, remote, overrides), buildEnv(opts)
 }
 
 func (directLauncher) FindTranscript(resumeID string) string {
@@ -370,11 +367,6 @@ func generateConfigOverrides(opts harness.DirectLaunchOpts, remote string) []str
 	}
 	if remote == "" {
 		overrides = append(overrides, GenerateCodexConfigOverrides(string(opts.TerminalID), opts.SocketPath, opts.WrapperPath, opts.EffectiveGuidance())...)
-		if tools := opts.AgentTools; tools != nil {
-			for _, setting := range CodexAgentToolServers(tools.URL, CodexSetting{Key: "bearer_token_env_var", Value: harness.AgentCredentialEnv}) {
-				overrides = append(overrides, setting.Override())
-			}
-		}
 	}
 	return overrides
 }

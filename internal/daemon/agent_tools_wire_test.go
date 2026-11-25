@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -60,27 +61,18 @@ func (c agentToolsCaller) RoundTrip(r *http.Request) (*http.Response, error) {
 	return http.DefaultTransport.RoundTrip(r)
 }
 
-func (c agentToolsCaller) connect(t *testing.T, query string) (*mcp.ClientSession, error) {
+func (c agentToolsCaller) connect(t *testing.T) (*mcp.ClientSession, error) {
 	t.Helper()
 	client := mcp.NewClient(&mcp.Implementation{Name: "wire-test", Version: "1"}, nil)
-	endpoint := "http://" + c.w.WSAddr + "/mcp" + query
+	endpoint := "http://" + c.w.WSAddr + "/mcp"
 	if c.endpoint != "" {
-		endpoint = c.endpoint + query
+		endpoint = c.endpoint
 	}
 	session, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: endpoint, HTTPClient: &http.Client{Transport: c}}, nil)
 	if err == nil {
 		t.Cleanup(func() { _ = session.Close() })
 	}
 	return session, err
-}
-
-func (c agentToolsCaller) call(t *testing.T, tool string, args map[string]any) (*mcp.CallToolResult, error) {
-	t.Helper()
-	session, err := c.connect(t, "")
-	if err != nil {
-		return nil, err
-	}
-	return session.CallTool(context.Background(), &mcp.CallToolParams{Name: tool, Arguments: args})
 }
 
 func (c agentToolsCaller) mustCall(t *testing.T, tool string, args map[string]any) *mcp.CallToolResult {
@@ -138,12 +130,12 @@ func TestAgentToolsRefuseACallWithoutThisDaemonsCredential(t *testing.T) {
 		"another daemon's credential":   "t." + terminal + "." + hex.EncodeToString(hmac.New(sha256.New, []byte("another key")).Sum(nil)),
 		"a credential for a made-up id": "t.terminal-nobody-made." + strings.Repeat("ab", 32),
 	} {
-		_, err := agentToolsCaller{w: w, bearer: bearer}.connect(t, "")
+		_, err := agentToolsCaller{w: w, bearer: bearer}.connect(t)
 		if err == nil || !strings.Contains(err.Error(), "Unauthorized") {
 			t.Errorf("%s: connecting gave %v, want 401 Unauthorized", name, err)
 		}
 	}
-	if _, err := (agentToolsCaller{w: w, bearer: genuine}).connect(t, ""); err != nil {
+	if _, err := (agentToolsCaller{w: w, bearer: genuine}).connect(t); err != nil {
 		t.Fatalf("the terminal's own credential was refused: %v", err)
 	}
 }
@@ -202,7 +194,7 @@ func TestATerminalsCredentialEndsWithItsTerminalAndOutlivesADaemonRestart(t *tes
 
 	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(ended)})
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == ended })
-	if _, err := endedCaller.connect(t, ""); err == nil || !strings.Contains(err.Error(), "Unauthorized") {
+	if _, err := endedCaller.connect(t); err == nil || !strings.Contains(err.Error(), "Unauthorized") {
 		t.Errorf("the ended terminal's credential connected with %v, want 401 Unauthorized", err)
 	}
 
@@ -224,17 +216,18 @@ func TestEveryAgentToolCallIsRefusedWithTheSettingOff(t *testing.T) {
 	seed := plantForTools(t, w)
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
-	for _, call := range []struct {
-		tool string
-		args map[string]any
-	}{
-		{"seed_show", map[string]any{"seed": seed}},
-		{"seed_note", map[string]any{"seed": seed, "text": "with the setting off"}},
-		{"seed_ready", map[string]any{}},
+	for tool, args := range map[string]map[string]any{
+		"attn_read": {"script": "return seed_show({seed: '" + seed + "'})"},
+		"attn_do":   {"script": "seed_note({seed: '" + seed + "', text: 'with the setting off'})"},
+		"ask":       {"markdown": "Ship it?"},
+		"skill":     {},
 	} {
-		refused := agent.mustCall(t, call.tool, call.args)
+		refused, err := agent.tool(t, tool, args, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", tool, err)
+		}
 		if text := resultText(refused); !refused.IsError || !strings.HasPrefix(text, "setting_off: ") || !strings.Contains(text, "agent_tools_enabled") {
-			t.Errorf("%s with the setting off answered %q, want the setting's refusal", call.tool, text)
+			t.Errorf("%s with the setting off answered %q, want the setting's refusal", tool, text)
 		}
 	}
 	if notes, err := w.Client().SeedNotes("", seed, client.SeedNotesQuery{Kind: "note"}); err != nil || len(notes.Notes) != 0 {
@@ -261,7 +254,7 @@ func TestASharedServersCredentialActsAsTheSessionHoldingTheConversationItsHeader
 		"a conversation no session holds": {"Sigma-Root-Conversation": "conversation-nobody-holds"},
 		"no conversation header":          {},
 	} {
-		_, err := agentToolsCaller{w: w, bearer: credential, headers: headers}.connect(t, "")
+		_, err := agentToolsCaller{w: w, bearer: credential, headers: headers}.connect(t)
 		if err == nil || !strings.Contains(err.Error(), "Unauthorized") {
 			t.Errorf("%s: connecting gave %v, want 401 Unauthorized", name, err)
 		}
@@ -296,7 +289,7 @@ func TestAgentToolsAnswerEachPostAloneWithOneJSONBodyAndRefuseAStream(t *testing
 		return resp, string(data)
 	}
 
-	resp, body := send(http.MethodPost, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"seed_note","arguments":{"seed":"`+seed+`","text":"Without a handshake."}}}`)
+	resp, body := send(http.MethodPost, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"attn_do","arguments":{"script":"seed_note({seed: '`+seed+`', text: 'Without a handshake.'})"}}}`)
 	var reply struct {
 		ID     int `json:"id"`
 		Result struct {
@@ -375,6 +368,7 @@ func launchedToolsCaller(t *testing.T, w *world, claude *fakeagent.Run) agentToo
 			Type    string            `json:"type"`
 			URL     string            `json:"url"`
 			Headers map[string]string `json:"headers"`
+			Timeout int64             `json:"timeout"`
 		} `json:"mcpServers"`
 	}
 	if err := json.Unmarshal([]byte(raw), &config); err != nil {
@@ -383,6 +377,9 @@ func launchedToolsCaller(t *testing.T, w *world, claude *fakeagent.Run) agentToo
 	server, ok := config.MCPServers["attn"]
 	if !ok || server.Type != "http" {
 		t.Fatalf("--mcp-config %s, want an http server named attn", raw)
+	}
+	if server.Timeout != 60_000 {
+		t.Errorf("--mcp-config %s, want Claude Code to wait 60 s for a call, which ends after 50", raw)
 	}
 	authorization := os.Expand(server.Headers["Authorization"], func(name string) string {
 		for _, entry := range claude.Env {
@@ -400,14 +397,12 @@ func launchedToolsCaller(t *testing.T, w *world, claude *fakeagent.Run) agentToo
 	return agentToolsCaller{w: w, bearer: bearer, endpoint: server.URL}
 }
 
-var coreTools = []string{"seed_show", "seed_note", "seed_check_report", "ask", "agent_msg", "delegate"}
-
 func TestTheIntentMapNamesEveryReferenceTheCLIMapNames(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	setSetting(t, app, "agent_tools_enabled", "true")
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(w.Spawn(app, fakeagent.Claude, w.Path("shop"))))}
-	session, err := agent.connect(t, "")
+	session, err := agent.connect(t)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -463,58 +458,41 @@ func TestTheIntentMapNamesEveryReferenceTheCLIMapNames(t *testing.T) {
 	}
 }
 
-func TestEachToolServerTeachesInTheTextItsHarnessShows(t *testing.T) {
+func TestTheServerOffersExactlyFourToolsEachWholeInTheFirstRequest(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	setSetting(t, app, "agent_tools_enabled", "true")
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(w.Spawn(app, fakeagent.Claude, w.Path("shop"))))}
-	served := map[string]*mcp.InitializeResult{}
-	for _, query := range []string{"", "?tools=core", "?tools=rest"} {
-		session, err := agent.connect(t, query)
-		if err != nil {
-			t.Fatalf("%q: %v", query, err)
+	session, err := agent.connect(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const claudeCodeKeeps = 4096
+	if kept := len([]rune(session.InitializeResult().Instructions)); kept == 0 || kept > claudeCodeKeeps {
+		t.Errorf("the server's instructions are %d characters; Claude Code keeps %d", kept, claudeCodeKeeps)
+	}
+	onlyReads := map[string]bool{"attn_do": false, "attn_read": true, "ask": false, "skill": true}
+	var names []string
+	for _, tool := range listed.Tools {
+		names = append(names, tool.Name)
+		if tool.Meta["anthropic/alwaysLoad"] != true {
+			t.Errorf("%s is not marked to be in every request", tool.Name)
 		}
-		served[query] = session.InitializeResult()
-		listed, err := session.ListTools(context.Background(), nil)
-		if err != nil {
-			t.Fatal(err)
+		if length := len([]rune(tool.Description)); length == 0 || length > claudeCodeKeeps {
+			t.Errorf("the description of %s is %d characters; Claude Code keeps %d", tool.Name, length, claudeCodeKeeps)
 		}
-		for _, tool := range listed.Tools {
-			if loaded := tool.Meta["anthropic/alwaysLoad"] == true; loaded != slices.Contains(coreTools, tool.Name) {
-				t.Errorf("%q lists %s with alwaysLoad %t; exactly the core tools %v are always loaded", query, tool.Name, loaded, coreTools)
-			}
+		if tool.OutputSchema != nil {
+			t.Errorf("%s promises structured content, and its answer is text", tool.Name)
+		}
+		if tool.Annotations == nil || tool.Annotations.ReadOnlyHint != onlyReads[tool.Name] {
+			t.Errorf("%s is annotated %+v, want it to only read: %t", tool.Name, tool.Annotations, onlyReads[tool.Name])
 		}
 	}
-
-	intentMap := served[""].Instructions
-	for _, tool := range coreTools {
-		if !strings.Contains(intentMap, tool) {
-			t.Errorf("the server's instructions do not name the core tool %q:\n%s", tool, intentMap)
-		}
-	}
-	if len([]rune(intentMap)) > 4096 {
-		t.Errorf("the intent map is %d characters; Claude Code keeps 4,096", len([]rune(intentMap)))
-	}
-	coreMap := served["?tools=core"].Instructions
-	for _, paragraph := range strings.Split(intentMap, "\n\n") {
-		if !strings.Contains(coreMap, paragraph) {
-			t.Errorf("Codex's always-loaded attn-core server leaves out %q of the intent map", paragraph)
-		}
-	}
-	for _, paragraph := range strings.Split(coreMap, "\n\n") {
-		if strings.Contains(intentMap, paragraph) {
-			continue
-		}
-		for _, name := range append([]string{"attn-core"}, coreTools...) {
-			if !strings.Contains(paragraph, name) {
-				t.Errorf("Codex's always-loaded attn-core server says which tools it holds as %q, without %s", paragraph, name)
-			}
-		}
-	}
-	if coreMap == intentMap {
-		t.Error("Codex's always-loaded attn-core server does not say which tools it holds")
-	}
-	if rest := served["?tools=rest"].Instructions; rest == "" || strings.Contains(rest, "\n") || len([]rune(rest)) > 250 {
-		t.Errorf("Codex's deferred attn server teaches %q; Codex shows a deferred server's first line cut at 250 characters, so it must be the one-line description", rest)
+	if slices.Sort(names); !slices.Equal(names, slices.Sorted(maps.Keys(onlyReads))) {
+		t.Errorf("the server offers %v, want exactly %v", names, slices.Sorted(maps.Keys(onlyReads)))
 	}
 }

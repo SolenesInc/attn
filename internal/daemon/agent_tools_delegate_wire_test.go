@@ -3,7 +3,6 @@ package daemon_test
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -13,39 +12,14 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestEveryDelegateToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) {
+func TestEveryDelegateCommandReturnsToAScriptWhatItsCLIPrints(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	setSetting(t, app, "agent_tools_enabled", "true")
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
-	tools := listOfferedTools(t, agent)
-
-	called := map[string]bool{}
-	call := func(tool string, args map[string]any) map[string]any {
-		t.Helper()
-		called[tool] = true
-		result := agent.mustCall(t, tool, args)
-		if result.IsError {
-			t.Fatalf("%s %v refused: %s", tool, args, resultText(result))
-		}
-		var instance map[string]any
-		data, err := json.Marshal(result.StructuredContent)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := json.Unmarshal(data, &instance); err != nil {
-			t.Fatal(err)
-		}
-		schema, ok := tools[tool]
-		if !ok || schema == nil {
-			t.Fatalf("%s is not offered with an outputSchema", tool)
-		}
-		if err := schema.Validate(instance); err != nil {
-			t.Errorf("%s answered outside its outputSchema: %v", tool, err)
-		}
-		return instance
-	}
+	shapes := newToolShapes(t, agent, listOfferedTools(t, agent))
+	call := shapes.object
 
 	call("delegate_roles_install", map[string]any{"message": "Set up the roles"})
 	call("delegate_roles_add", map[string]any{"target": "custom", "name": "Custom", "agent": "claude", "model": "opus", "message": "a custom role"})
@@ -87,16 +61,7 @@ func TestEveryDelegateToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing
 		t.Errorf("delegate_status answered %v, want the relative delegation's session %v", status, relative["session_id"])
 	}
 
-	var uncalled []string
-	for tool := range tools {
-		if strings.HasPrefix(tool, "delegate_") && !called[tool] {
-			uncalled = append(uncalled, tool)
-		}
-	}
-	sort.Strings(uncalled)
-	if len(uncalled) > 0 {
-		t.Errorf("offered delegate tools this test never called: %v", uncalled)
-	}
+	shapes.finish("delegate")
 }
 
 func TestADelegateCallerReadsAndDelegatesNothingOfAnotherProfile(t *testing.T) {

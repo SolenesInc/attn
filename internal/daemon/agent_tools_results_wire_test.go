@@ -1,121 +1,19 @@
 package daemon_test
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
-	"slices"
-	"sort"
 	"strings"
 	"testing"
 
-	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-type offeredTools map[string]*jsonschema.Resolved
-
-func listOfferedTools(t *testing.T, agent agentToolsCaller) offeredTools {
-	t.Helper()
-	session, err := agent.connect(t, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	listed, err := session.ListTools(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tools := offeredTools{}
-	for _, tool := range listed.Tools {
-		if tool.OutputSchema == nil {
-			tools[tool.Name] = nil
-			continue
-		}
-		data, err := json.Marshal(tool.OutputSchema)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var schema jsonschema.Schema
-		if err := json.Unmarshal(data, &schema); err != nil {
-			t.Fatalf("%s: outputSchema: %v", tool.Name, err)
-		}
-		resolved, err := schema.Resolve(nil)
-		if err != nil {
-			t.Fatalf("%s: outputSchema does not resolve: %v", tool.Name, err)
-		}
-		tools[tool.Name] = resolved
-	}
-	return tools
-}
-
-type toolShapes struct {
-	t          *testing.T
-	agent      agentToolsCaller
-	tools      offeredTools
-	called     map[string]bool
-	mismatches []string
-}
-
-func newToolShapes(t *testing.T, agent agentToolsCaller, tools offeredTools) *toolShapes {
-	return &toolShapes{t: t, agent: agent, tools: tools, called: map[string]bool{}}
-}
-
-func (s *toolShapes) call(tool string, args map[string]any) *mcp.CallToolResult {
-	s.t.Helper()
-	s.called[tool] = true
-	result := s.agent.mustCall(s.t, tool, args)
-	if result.IsError {
-		s.mismatches = append(s.mismatches, tool+": refused: "+resultText(result))
-		return result
-	}
-	schema, ok := s.tools[tool]
-	if !ok {
-		s.t.Fatalf("%s is not offered", tool)
-	}
-	if schema == nil {
-		return result
-	}
-	data, err := json.Marshal(result.StructuredContent)
-	if err != nil {
-		s.t.Fatal(err)
-	}
-	var instance any
-	if err := json.Unmarshal(data, &instance); err != nil {
-		s.t.Fatal(err)
-	}
-	if err := schema.Validate(instance); err != nil {
-		s.mismatches = append(s.mismatches, tool+": "+err.Error())
-	}
-	var inText any
-	if err := json.Unmarshal([]byte(resultText(result)), &inText); err != nil || !reflect.DeepEqual(inText, instance) {
-		s.mismatches = append(s.mismatches, tool+": its text is "+resultText(result)+", want the JSON "+string(data)+" of its structured content")
-	}
-	return result
-}
-
-func (s *toolShapes) finish(prefixes ...string) {
-	s.t.Helper()
-	var uncalled []string
-	for tool := range s.tools {
-		if slices.ContainsFunc(prefixes, func(prefix string) bool { return strings.HasPrefix(tool, prefix) }) && !s.called[tool] {
-			uncalled = append(uncalled, tool)
-		}
-	}
-	sort.Strings(uncalled)
-	if len(uncalled) > 0 {
-		s.t.Errorf("offered tools this test never called: %v", uncalled)
-	}
-	for _, mismatch := range s.mismatches {
-		s.t.Error(mismatch)
-	}
-}
-
-func TestEverySeedToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) {
+func TestEverySeedCommandReturnsToAScriptWhatItsCLIPrints(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	setSetting(t, app, "agent_tools_enabled", "true")
@@ -206,86 +104,26 @@ func TestEverySeedToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) 
 	shapes.finish("seed_")
 }
 
-func TestAChangingToolAnswersWithAReceiptTheNextCallChainsOnAndReadsStayWhole(t *testing.T) {
-	s := newSessionTools(t, "asks_enabled")
-	sent := "Retry the payment call twice, then give up and tell the shopper."
-	receipt := func(tool string, args map[string]any, into any) {
-		t.Helper()
-		result := s.shapes.call(tool, args)
-		answer, err := json.Marshal(result.StructuredContent)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if result.IsError || strings.Contains(string(answer), sent) {
-			t.Errorf("%s answered %s %s, want a receipt that leaves out the text the call sent", tool, answer, resultText(result))
-		}
-		structuredAs(t, result, into)
-	}
-
-	var plot protocol.SeedPlotResult
-	receipt("seed_plot", map[string]any{"plot": map[string]any{"title": "Checkout plot", "body": sent, "children": []any{map[string]any{"title": "Retry the call", "body": sent}}}}, &plot)
-	if len(plot.Children) != 1 || plot.Crown.ID == "" || !plot.Children[0].Ready || plot.Children[0].StepSlug != "retry-call" {
-		t.Fatalf("seed_plot answered %+v, want the plot's id and its ready child", plot)
-	}
-	child := plot.Children[0].ID
-	var tended protocol.SeedTransitionResult
-	receipt("seed_tend", map[string]any{"seed": child}, &tended)
-	if tended.Seed.ID != child || tended.Seed.Status != "growing" || !protocol.Deref(tended.Moved) {
-		t.Errorf("seed_tend answered %+v, want %s growing", tended, child)
-	}
-	var added, reported protocol.SeedCheckResult
-	receipt("seed_check_add", map[string]any{"seed": child, "statement": sent}, &added)
-	receipt("seed_check_report", map[string]any{"seed": child, "id": added.CheckID, "summary": sent}, &reported)
-	if checks := reported.Seed.Checks; reported.CheckID != added.CheckID || len(checks) != 1 || checks[0].State != "reported" {
-		t.Errorf("seed_check_report answered %+v, want %s reported", reported, added.CheckID)
-	}
-	var noted protocol.SeedNoteResult
-	receipt("seed_note", map[string]any{"seed": child, "text": sent, "handoff": true}, &noted)
-	if noted.SeedID != child || noted.ID == "" {
-		t.Errorf("seed_note answered %+v, want the note's id on %s", noted, child)
-	}
-	var asked protocol.Ask
-	receipt("ask", map[string]any{"subject": "Retries", "seed": child, "markdown": sent + askQuestion}, &asked)
-	if asked.ID == "" || protocol.Deref(asked.SeedID) != child {
-		t.Errorf("ask answered %+v, want an ask about %s", asked, child)
-	}
-	s.shapes.call("ask_close", map[string]any{"ask": asked.ID})
-	var parked, retended protocol.SeedTransitionResult
-	receipt("seed_park", map[string]any{"seed": child}, &parked)
-	structuredAs(t, s.shapes.call("seed_tend", map[string]any{"seed": child}), &retended)
-	if retended.Handoff == nil || retended.Handoff.Body != sent {
-		t.Errorf("seed_tend answered %+v, want the handoff left for the tender", retended)
-	}
-	var harvested protocol.SeedTransitionResult
-	receipt("seed_harvest", map[string]any{"seed": child, "reason": "Shipped"}, &harvested)
-	if harvested.Seed.Status != "harvested" || harvested.PlotEmptied == nil || harvested.PlotEmptied.ID != plot.Crown.ID {
-		t.Errorf("seed_harvest answered %+v, want %s harvested and its plot %s emptied", harvested, child, plot.Crown.ID)
-	}
-
-	var shown protocol.SeedShowResult
-	structuredAs(t, s.shapes.call("seed_show", map[string]any{"seed": child}), &shown)
-	if shown.Seed.Body != sent || len(shown.Seed.Checks) != 1 || shown.Seed.Checks[0].Report == nil || shown.Seed.Checks[0].Report.Summary != sent {
-		t.Errorf("seed_show answered %+v, want the whole seed", shown.Seed)
-	}
-	var replanted protocol.SeedTransitionResult
-	if err := s.w.Client().RunCommand("seed replant", protocol.SessionID(s.session), map[string]any{"seed": child}, &replanted); err != nil || replanted.Seed.Body != sent {
-		t.Errorf("seed replant through run_command answered %+v, %v; want the whole seed the CLI prints", replanted.Seed, err)
-	}
-	s.shapes.finish()
-}
-
-func TestEverySeedToolRefusesWithACodeAndAFix(t *testing.T) {
+func TestEveryCommandRefusesAnArgumentItDoesNotTakeSayingWhichItDoes(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	setSetting(t, app, "agent_tools_enabled", "true")
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
-	for tool := range listOfferedTools(t, agent) {
-		refused := agent.mustCall(t, tool, map[string]any{"session": "someone-else"})
-		text := resultText(refused)
-		code, rest, _ := strings.Cut(text, ": ")
-		if !refused.IsError || code != "usage" || !strings.Contains(rest, `"session"`) || !strings.Contains(rest, "\nFix: Call "+tool+" with only the arguments") {
-			t.Errorf("%s with an argument it does not take answered %q, want a usage refusal naming the argument, with a fix", tool, text)
+	offered := listOfferedTools(t, agent)
+	text, failed := agent.script(t, "attn_do", `const refused = {};
+for (const name of Object.keys(globalThis)) {
+	if (typeof globalThis[name] !== "function" || name === "Refusal") continue;
+	try { globalThis[name]({session: "someone-else"}) } catch (e) { refused[name] = {code: e.code, message: e.message, fix: e.fix} }
+}
+return refused`)
+	var refused map[string]struct{ Code, Message, Fix string }
+	if err := json.Unmarshal([]byte(text), &refused); failed || err != nil {
+		t.Fatalf("a script calling every command with an argument none takes answered %q: %v", text, err)
+	}
+	for tool := range offered {
+		if got := refused[tool]; got.Code != "usage" || !strings.Contains(got.Message, `"session"`) || !strings.HasPrefix(got.Fix, "Call "+tool+" with only the arguments it takes") || !strings.Contains(got.Fix, "\n"+tool+"(") {
+			t.Errorf("%s with an argument it does not take was refused with %+v, want a usage refusal naming the argument, with a fix", tool, got)
 		}
 	}
 	seed := plantForTools(t, w)
@@ -411,7 +249,7 @@ func TestARefusalNamesTheToolToAToolCallerAndTheCommandToTheCLI(t *testing.T) {
 	seed := plantForTools(t, w)
 
 	refused := agent.mustCall(t, "seed_standby", map[string]any{"seed": seed, "next": "Resume the rollout.", "stay": true})
-	want := "not_tender: seed standby: only " + seed + "'s tender can put it on standby, from its own session; tend it first: `seed_tend` with {\"seed\": \"" + seed + "\"}"
+	want := "not_tender: seed standby: only " + seed + "'s tender can put it on standby, from its own session; tend it first: `seed_tend({seed: \"" + seed + "\"})`"
 	if text := resultText(refused); !refused.IsError || text != want {
 		t.Errorf("seed_standby on a seed nobody tends answered\n%q\nwant\n%q", text, want)
 	}

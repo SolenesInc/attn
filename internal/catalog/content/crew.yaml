@@ -23,6 +23,7 @@ commands:
     runs: home
     grant: full
     effect: read
+    upfront: true
     doc: |
       Shows your profile's members and their active sessions, if any. `all` includes retired members.
     args:
@@ -34,6 +35,7 @@ commands:
     runs: home
     grant: full
     effect: act
+    upfront: true
     doc: |
       Adds a member to your profile. Its home is crew/<name>/ in the profile's Notebook (crew/<name>-2/ when that folder is taken) and starts with an empty CHARTER.md, which the member writes with you in its first session.
     args:

@@ -45,7 +45,7 @@ func TestALaunchThatCarriesTheToolsLeavesTheirFamiliesCLITeachingToTheServer(t *
 
 	setSetting(t, app, "agent_tools_enabled", "true")
 	for launch, text := range guidance() {
-		taught := launch != "a plugin that takes no tool"
+		taught := launch != "a plugin that takes no tool" && launch != "shared codex"
 		if dropped := !strings.Contains(text, hooks.GardenGuidance()) && !strings.Contains(text, seedCLITeaching); dropped != taught {
 			t.Errorf("%s left out the seed family's CLI teaching: %t, want %t, because its launch carries the tools: %t:\n%s", launch, dropped, taught, taught, text)
 		}
@@ -57,10 +57,10 @@ func TestALaunchThatCarriesTheToolsLeavesTheirFamiliesCLITeachingToTheServer(t *
 		if header := strings.Contains(text, "| When you need to | Run | Reference |"); header == taught {
 			t.Errorf("%s launched with the attn map's table header %t, want it only while a row of the table is left:\n%s", launch, header, text)
 		}
-		if viaTool := strings.Contains(text, "call `skill` with `reference` delegation"); viaTool != taught || strings.Contains(text, "attn skill --reference delegation") == taught {
+		if viaTool := strings.Contains(text, "`skill({reference: \"delegation\"})`"); viaTool != taught || strings.Contains(text, "attn skill --reference delegation") == taught {
 			t.Errorf("%s points at the delegation reference through the tool: %t, want %t, and through the CLI only without the tools:\n%s", launch, viaTool, taught, text)
 		}
-		if viaTool := strings.Contains(text, "call `seed_search` with `query`"); viaTool != taught || strings.Contains(text, "run `attn seed search <words>`") == taught {
+		if viaTool := strings.Contains(text, "call `seed_search({query: \"…\"})`"); viaTool != taught || strings.Contains(text, "run `attn seed search <words>`") == taught {
 			t.Errorf("%s says to search the garden through the tool: %t, want %t, and through the CLI only without the tools:\n%s", launch, viaTool, taught, text)
 		}
 		if dropped := !strings.Contains(text, "Use `attn agent msg` to reach sessions attn runs."); dropped != taught {
@@ -143,7 +143,7 @@ func TestEveryLaunchWithAsksTeachesTheirRulesAndVisualsAndLeavesTheCLIToLaunches
 					t.Errorf("with agent_tools_enabled %t, %s launched without the ask rule %q:\n%s", toolsOn, launch, rule, section)
 				}
 			}
-			carried := toolsOn && launch != "a plugin that takes no tool"
+			carried := toolsOn && launch != "a plugin that takes no tool" && launch != "shared codex"
 			if taught := strings.Contains(section, askCLITeaching); taught == carried {
 				t.Errorf("with agent_tools_enabled %t, %s launched with the ask CLI teaching %t, want it only without attn's tools:\n%s", toolsOn, launch, taught, section)
 			}

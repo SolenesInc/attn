@@ -10,24 +10,24 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func TestEverySettingsToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) {
+func TestEverySettingsCommandReturnsToAScriptWhatItsCLIPrints(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	setSetting(t, app, "agent_tools_enabled", "true")
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(w.Spawn(app, fakeagent.Claude, w.Path("shop"))))}
-	tools := &schemaCheckedTools{t: t, agent: agent, tools: listOfferedTools(t, agent), called: map[string]bool{}}
+	tools := newToolShapes(t, agent, listOfferedTools(t, agent))
 
-	if set := tools.call("settings_set", map[string]any{"key": "theme", "value": "dark"}); set["key"] != "theme" || set["value"] != "dark" {
+	if set := tools.object("settings_set", map[string]any{"key": "theme", "value": "dark"}); set["key"] != "theme" || set["value"] != "dark" {
 		t.Errorf("settings_set answered %v, want theme set to dark", set)
 	}
-	if got := tools.call("settings_get", map[string]any{"key": "theme"}); got["value"] != "dark" {
+	if got := tools.object("settings_get", map[string]any{"key": "theme"}); got["value"] != "dark" {
 		t.Errorf("settings_get answered %v, want dark", got)
 	}
-	listed := tools.call("settings_list", map[string]any{"all": true})
+	listed := tools.object("settings_list", map[string]any{"all": true})
 	if !strings.Contains(fmt.Sprint(listed["entries"]), "pty_backend_mode") {
 		t.Errorf("settings_list with all answered %v, want the read-only values too", listed)
 	}
-	tools.report("settings")
+	tools.finish("settings_")
 }
 
 func TestASettingsCallerReadsAndChangesNothingOfAnotherProfile(t *testing.T) {

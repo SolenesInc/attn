@@ -141,11 +141,13 @@ mark. A daemon released before logos ignores the field.
 
 ### Give the harness attn's tools
 
-attn serves its tools as an MCP server. With `agentTools: true`, from SDK
-0.6.0, `spawn` and `resume` receive `agent_tools` while the user has attn's
-tools on (the experimental setting Agent tools, `agent_tools_enabled`). Without
-the declaration, or with the setting off, the field is absent and the agent
-uses the attn CLI.
+attn serves four tools as an MCP server: `attn_do` and `attn_read` run a
+JavaScript script in which each attn command is a function, and `ask` and
+`skill` are commands themselves. With `agentTools: true`, from SDK 0.6.0,
+`spawn` and `resume` receive `agent_tools` while the user has attn's tools on
+(the experimental setting Agent tools, `agent_tools_enabled`). Without the
+declaration, or with the setting off, the field is absent and the agent uses
+the attn CLI.
 
 A harness that runs in the terminal gets
 `{url, credential, description}`. Give it to the harness however the harness
@@ -154,18 +156,18 @@ takes an MCP server: a Streamable HTTP server at `url`, with the header
 to the terminal, not to one conversation: each call acts as the session the
 terminal shows at that moment, so after the agent clears or resumes into
 another conversation, its calls act as that conversation's session. The
-credential lasts while the terminal does. `description` is one line saying
-what the tools are for, for a harness that lists its servers before it reads
-them. The server's `instructions` hold attn's intent map, the text that says
-when to reach for each tool. Pass the credential in `env`, never in `argv`:
+credential lasts while the terminal does. Pass it in `env`, never in `argv`:
 any local user can read a process's arguments, while its environment is the
 user's own. `examples/plugins/sample-harness` passes the endpoint to its
 harness in the environment, and the harness's `/tool <name> <json>` line calls
-a tool.
+a tool. `description` is one line saying what the tools are for, for a harness
+that lists its servers before it reads them. The server's `instructions` hold
+attn's intent map, the text that says which command serves each need. attn ends
+a script at 50 seconds, so give a call a longer timeout than that.
 
 When your driver also declares `launchInstructions`, a launch that carries
 `agent_tools` gets launch `instructions` without the CLI teaching of the
-command families the tools offer, because the intent map teaches them. Show
+command families the tools teach, because the intent map teaches them. Show
 your agent the server's `instructions`, or it learns those families from
 neither.
 

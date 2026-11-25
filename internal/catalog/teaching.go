@@ -13,7 +13,6 @@ var (
 	fenceLine     = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile("^\\s*(`{3,}|~{3,})") })
 	signatureLine = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile("^(\\s*- )`(attn [^`]+)`(: .*)$") })
 	blockCommand  = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`^(\s*)(attn .*?)(\s{2,}\S.*)?$`) })
-	runWord       = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`([Rr])un(\s)$`) })
 	shellOutput   = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`^\$\((.+)\)$`) })
 	plainAttn     = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile("attn( [a-z_][a-z0-9_-]*)+") })
 	plainFlag     = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`(^|[\s(])--[a-z][a-z-]*`) })
@@ -27,15 +26,7 @@ func (c *Catalog) TeachingToolText(text string) string {
 	t.family = t.mostTaughtFamily()
 	var out strings.Builder
 	for i := range t.parts {
-		rendered := t.render(i)
-		if strings.HasSuffix(t.parts[i].text, "--help`") && t.parts[i].kind == teachSpan {
-			before := runWord().ReplaceAllStringFunc(out.String(), func(run string) string {
-				return map[byte]string{'R': "Read", 'r': "read"}[run[0]] + run[3:]
-			})
-			out.Reset()
-			out.WriteString(before)
-		}
-		out.WriteString(rendered)
+		out.WriteString(t.render(i))
 	}
 	return out.String()
 }
@@ -254,7 +245,7 @@ func (t *teaching) render(i int) string {
 		if !part.command.IsTool() {
 			return part.text
 		}
-		return match[1] + "`" + t.c.toolSignature(part.command) + "`" + match[3] + "\n"
+		return match[1] + "`" + t.c.Signature(part.command) + "`" + match[3] + "\n"
 	case teachBlockCommand:
 		return t.renderBlock(i)
 	case teachBlockSummary:
@@ -275,7 +266,7 @@ func (t *teaching) plainText(i int, text string) string {
 		words := strings.Fields(match)[1:]
 		for n := len(words); n > 0; n-- {
 			if cmd, ok := t.c.Command(strings.Join(words[:n], " ")); ok && cmd.IsTool() {
-				return strings.Join(append([]string{"`" + cmd.ToolName() + "`"}, words[n:]...), " ")
+				return strings.Join(append([]string{"`" + cmd.callText(nil) + "`"}, words[n:]...), " ")
 			}
 		}
 		return match
@@ -340,7 +331,7 @@ func (t *teaching) renderCommand(literal, span string) string {
 		return call.mention()
 	}
 	if group, ok := t.c.Group(strings.TrimPrefix(span, "attn ")); ok && len(t.c.Tools(group.Name)) > 0 {
-		return "the `" + strings.ReplaceAll(group.Name, " ", "_") + "_*` tools"
+		return "the `" + strings.ReplaceAll(group.Name, " ", "_") + "_*` commands"
 	}
 	return literal
 }
@@ -349,22 +340,25 @@ func (t *teaching) renderHelp(literal, line string) string {
 	words := strings.Fields(strings.TrimPrefix(line, "attn "))
 	last := len(words) - 1
 	anyCommand := last >= 0 && strings.HasPrefix(words[last], "<")
+	var placeholder string
 	if anyCommand {
-		words = words[:last]
+		words, placeholder = words[:last], words[last]
 	}
 	name := strings.Join(words, " ")
 	if cmd, ok := t.c.Command(name); ok && cmd.IsTool() && !anyCommand {
-		return "`" + cmd.ToolName() + "`'s description"
+		return helpCall(cmd.ToolName())
 	}
 	if group, ok := t.c.Group(name); ok && len(t.c.Tools(group.Name)) > 0 {
-		tools := "`" + strings.ReplaceAll(group.Name, " ", "_") + "_*`"
+		family := strings.ReplaceAll(group.Name, " ", "_")
 		if anyCommand {
-			return "the description of one of the " + tools + " tools"
+			return helpCall(family + "_" + placeholder)
 		}
-		return "the descriptions of the " + tools + " tools"
+		return helpCall(family)
 	}
 	return literal
 }
+
+func helpCall(command string) string { return "`skill({command: " + jsonText(command) + "})`" }
 
 func (t *teaching) renderFlags(cmds []*Command, literal, span string) string {
 	words, err := mentionWords(span)
@@ -394,7 +388,7 @@ func flagMention(cmd *Command, args []mentionArg, words []string) string {
 		}
 		return "`" + args[0].name + "`"
 	}
-	return "`" + strings.Join(jsonFields(args), ", ") + "`"
+	return "`" + strings.Join(argFields(args), ", ") + "`"
 }
 
 func splitRest(cmd *Command, name string) string {
@@ -457,16 +451,12 @@ func (t *teaching) nearestCommands(i int) []*Command {
 }
 
 type teachingCall struct {
-	tools     []string
-	args      string
+	calls     []string
 	leavesOut []string
 }
 
 func (call teachingCall) inline() string {
-	inline := call.tools[0]
-	if call.args != "" {
-		inline += " " + call.args
-	}
+	inline := call.calls[0]
 	if len(call.leavesOut) > 0 {
 		inline += " (without the CLI-only " + strings.Join(call.leavesOut, " ") + ")"
 	}
@@ -474,14 +464,7 @@ func (call teachingCall) inline() string {
 }
 
 func (call teachingCall) mention() string {
-	var names []string
-	for _, tool := range call.tools {
-		names = append(names, "`"+tool+"`")
-	}
-	mention := strings.Join(names, " or ")
-	if call.args != "" {
-		mention += " with " + call.args
-	}
+	mention := "`" + strings.Join(call.calls, "` or `") + "`"
 	if len(call.leavesOut) > 0 {
 		mention += " (without the CLI-only `" + strings.Join(call.leavesOut, " ") + "`)"
 	}
@@ -502,7 +485,6 @@ func (t *teaching) toolCall(line string) (teachingCall, bool) {
 		if !cmd.IsTool() {
 			return teachingCall{}, false
 		}
-		call.tools = append(call.tools, cmd.ToolName())
 	}
 	args, err := mentionArgs(t.c, cmds[0], rest)
 	if err != nil {
@@ -522,12 +504,8 @@ func (t *teaching) toolCall(line string) (teachingCall, bool) {
 		}
 		call.leavesOut = append(call.leavesOut, arg.written)
 	}
-	if len(given) > 0 {
-		fields := jsonFields(given)
-		if slices.ContainsFunc(cmds, func(cmd *Command) bool { return leavesOutRequired(cmd, given) }) {
-			fields = append(fields, "…")
-		}
-		call.args = jsonObject(fields)
+	for _, cmd := range cmds {
+		call.calls = append(call.calls, cmd.callText(given))
 	}
 	return call, true
 }
@@ -538,10 +516,10 @@ func leavesOutRequired(cmd *Command, given []mentionArg) bool {
 	})
 }
 
-func (c *Catalog) toolSignature(cmd *Command) string {
+func (c *Catalog) Signature(cmd *Command) string {
 	var args []string
 	for _, a := range cmd.Args {
-		if a.CLIOnly || a.Internal() {
+		if !a.takenByTool() {
 			continue
 		}
 		text := a.Name
@@ -562,7 +540,7 @@ func (c *Catalog) toolSignature(cmd *Command) string {
 		args = append(args, text)
 	}
 	if len(args) == 0 {
-		return cmd.ToolName()
+		return cmd.ToolName() + "()"
 	}
-	return cmd.ToolName() + " {" + strings.Join(args, ", ") + "}"
+	return cmd.ToolName() + "({" + strings.Join(args, ", ") + "})"
 }

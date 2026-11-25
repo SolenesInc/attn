@@ -107,7 +107,6 @@ adding claims: [Harness behavior](../harnesses.md).
   `instructions` delivers it twice on the Claude path.
 - **Tool results `[2ebc9c6]`:** the model reads the text blocks, and the JSON of
   `structuredContent` only when there is no content. Code-mode programs read
-  `structuredContent` when the tool has an `outputSchema`. attn's JSON text
-  beside it is one copy either way.
+  `structuredContent` when the tool has an `outputSchema`.
 - HTTP 401/errors surface up to 500 chars of the server body in
   `sigma.mcp_unlisted` / tool error `[f6be0c3]`.

@@ -10,15 +10,18 @@ commands:
     runs: here
     grant: any
     effect: read
+    tool: true
     anyone: true
     runs_without_daemon: true
     doc: |
-      Prints the map of what attn can do. `reference` prints one capability's rules instead, such as garden or delegation; read a capability's rules before you first use it. `list` prints the names of the bundled references, one per line. The text matches the running release.
+      Prints the map of what attn can do. `reference` prints one capability's rules instead, such as garden or delegation; read a capability's rules before you first use it. `list` prints the names of the bundled references, one per line.{skill_command} The text matches the running release.
     args:
       - {name: reference, type: name, cli: "--reference", one_of: part, doc: "print this capability's rules, e.g. garden"}
       - {name: list, type: bool, cli: "--list", one_of: part, doc: "list the bundled reference names"}
+      - {name: command, type: name, cli: none, doc: "print one command's rules, e.g. seed_harvest, or a family's signatures, e.g. crew"}
     errors:
       - {code: no_such_reference, fix: "Use one of the names `skill` with `list` prints."}
       - {code: list_and_reference, usage: true, fix: "Pass {reference} or {list}, not both."}
+      - {code: no_such_command, fix: "Use a command's name, such as seed_harvest, or a family's, such as crew."}
     examples:
       - {reference: garden}

@@ -11,7 +11,9 @@ incomplete while the file lists other ways in.
 
 - **People**: the user, through the app and their own shell.
 - **Agents**: the agents attn runs. They use the `attn` CLI and read the
-  prompts attn sends them.
+  prompts attn sends them. With `agent_tools_enabled` on, they call the
+  commands from scripts over `/mcp`, so a tool `<family>_<verb>` in a feature
+  file is a function of such a script ([agent-tools.md](agent-tools.md)).
 - **Maintainers**: the agents and people changing attn itself. This map is
   written for them.
 

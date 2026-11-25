@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"os"
@@ -24,7 +23,8 @@ func TestAnAgentDrivesTheBrowserTileWithTheBrowserTools(t *testing.T) {
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
 	tools := listOfferedTools(t, agent)
 	shapes := newToolShapes(t, agent, tools)
-	if _, offered := tools["browser_wait"]; offered {
+	shapes.once = true
+	if tools["browser_wait"] {
 		t.Error("browser_wait is offered as a tool, but it holds the call past a harness's limit")
 	}
 	host := browserHostPeer(w, "", browserHostToken)
@@ -81,31 +81,6 @@ func TestAnAgentDrivesTheBrowserTileWithTheBrowserTools(t *testing.T) {
 		t.Errorf("browser_pdf with no path = %+v, want attn-browser.pdf in the session's folder", saved)
 	}
 	shapes.finish("browser_")
-}
-
-func TestAHarnessIsNotToldThatTheCookiesToolOnlyReads(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app := w.App()
-	setSetting(t, app, "agent_tools_enabled", "true")
-	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(w.Spawn(app, fakeagent.Claude, w.Path("shop"))))}
-	session, err := agent.connect(t, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	listed, err := session.ListTools(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	onlyReads := map[string]bool{}
-	for _, tool := range listed.Tools {
-		onlyReads[tool.Name] = tool.Annotations != nil && tool.Annotations.ReadOnlyHint
-	}
-	if !onlyReads["browser_snapshot"] {
-		t.Error("browser_snapshot is not offered as a tool that only reads")
-	}
-	if cookies, offered := onlyReads["browser_cookies"]; !offered || cookies {
-		t.Errorf("browser_cookies is offered: %t, as a tool that only reads: %t; its answer holds the page's session cookies, and a harness runs a tool that only reads with no permission check", offered, cookies)
-	}
 }
 
 func TestBrowserCommandsActOnlyForTheCallerTheyCanName(t *testing.T) {

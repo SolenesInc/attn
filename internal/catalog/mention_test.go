@@ -42,13 +42,13 @@ func TestAMentionOfARestArgumentRendersTheShapeTheToolSchemaTakes(t *testing.T) 
 				t.Errorf("%s: %v", cmd.Name, err)
 				continue
 			}
-			var args map[string]any
-			if err := json.Unmarshal([]byte(rendered[strings.Index(rendered, "{"):]), &args); err != nil {
-				t.Errorf("%s: %q does not end in a JSON object: %v", cmd.Name, rendered, err)
+			_, value, given := strings.Cut(rendered, arg.Name+": ")
+			if !given {
+				t.Errorf("%s: %q does not give %s", cmd.Name, rendered, arg.Name)
 				continue
 			}
 			want := schemas[cmd.Name][arg.Name].Type
-			got := map[bool]string{true: "array", false: "string"}[isList(args[arg.Name])]
+			got := map[bool]string{true: "array", false: "string"}[strings.HasPrefix(value, "[")]
 			if got != want {
 				t.Errorf("%s: a mention renders %s as a %s, but the tool's schema takes a %s: %s", cmd.Name, arg.Name, got, want, rendered)
 			}
@@ -72,5 +72,3 @@ func (p *propertyType) UnmarshalJSON(raw []byte) error {
 	p.Type, _ = shape.Type.(string)
 	return nil
 }
-
-func isList(v any) bool { _, ok := v.([]any); return ok }

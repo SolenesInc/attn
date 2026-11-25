@@ -27,7 +27,7 @@ commands:
     grant: full
     effect: record
     doc: |
-      Records a pull request this session opened, right after `gh pr create` prints its URL. attn attaches it to the session, shows it on the session header and keeps its status fresh. Recording one already recorded changes nothing. `skill` with `reference` delivery says how this repository delivers a change.
+      Records a pull request this session opened, right after `gh pr create` prints its URL. attn attaches it to the session, shows it on the session header and keeps its status fresh. Recording one already recorded changes nothing. `attn skill --reference delivery` says how this repository delivers a change.
     args:
       - {name: url, type: pr_url, required: true, cli: pos}
     result: PullRequestResult

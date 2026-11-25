@@ -1,1 +1,1 @@
-call `seed_search` with `query`
+call `seed_search({query: "…"})`

@@ -349,7 +349,9 @@ export function attnCalls(events: any[], records?: Records): Call[] {
   if (!records) return seen
   const used = new Map<string, number>()
   const tools = records.tools.map((t) => {
-    const texts = seen.filter((c) => c.via === "tool" && c.command === t.command)
+    const own = seen.filter((c) => c.via === "tool" && c.command === t.command)
+    const scripts = seen.filter((c) => c.via === "tool" && (c.command === "attn do" || c.command === "attn read"))
+    const texts = own.length > 0 || scripts.length === 0 ? own : [{ ...scripts[0]!, text: scripts.map((c) => c.text).join("\n") }]
     const n = used.get(t.command) ?? 0
     used.set(t.command, n + 1)
     return { at: t.at, call: { via: "tool" as const, command: t.command, text: texts[Math.min(n, texts.length - 1)]?.text ?? "", ...(t.refused ? { refused: t.refused } : {}) } }

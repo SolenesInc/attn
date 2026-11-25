@@ -103,7 +103,7 @@ func TestAppServerWorkerAdoptsOnceAcrossAllTriggersAndFollowsItsOwnTree(t *testi
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				mcpRes = server.CallTool("worker-one", "seed_note", map[string]any{"seed": seed, "text": "From worker MCP."})
+				mcpRes = server.CallTool("worker-one", "attn_do", noteScript(seed, "From worker MCP."))
 			}()
 		}
 		wg.Wait()
@@ -181,7 +181,7 @@ func TestAppServerWorkerCallerAuthAdoptsBeforeAnyStatusEventAndExternalWorkersSt
 
 		if h == fakeagent.Sigma {
 			server.Worker(parentConv, "mcp-worker", "early mcp")
-			res := server.CallTool("mcp-worker", "seed_note", map[string]any{"seed": seed, "text": "Before any status item."})
+			res := server.CallTool("mcp-worker", "attn_do", noteScript(seed, "Before any status item."))
 			if res.Refused != "" || res.IsError {
 				t.Fatalf("early MCP call from worker failed: refused %q, %s", res.Refused, res.Text())
 			}
@@ -190,7 +190,7 @@ func TestAppServerWorkerCallerAuthAdoptsBeforeAnyStatusEventAndExternalWorkersSt
 				t.Errorf("MCP note author = %q, want adopted session %q", author, mcpAdopted.ID)
 			}
 
-			refused := server.CallTool("outside-worker", "seed_note", map[string]any{"seed": seed, "text": "Should be refused."})
+			refused := server.CallTool("outside-worker", "attn_do", noteScript(seed, "Should be refused."))
 			if refused.Refused == "" {
 				t.Errorf("external worker MCP call succeeded, want refusal")
 			}
@@ -390,7 +390,7 @@ func TestServerBackedPluginAdoptsWorkersOverMCPAndWithoutWatchOrResume(t *testin
 		server.Worker("ext-root", "ext-worker", "external task")
 		server.Worker(parent.conversation, "plugin-mcp-worker", "plugin mcp")
 
-		called := server.CallTool("plugin-mcp-worker", "seed_note", map[string]any{"seed": seed, "text": "From plugin worker MCP."})
+		called := server.CallTool("plugin-mcp-worker", "attn_do", noteScript(seed, "From plugin worker MCP."))
 		if called.Refused != "" || called.IsError {
 			t.Fatalf("plugin worker MCP seed_note: refused %q, %s", called.Refused, called.Text())
 		}
@@ -407,7 +407,7 @@ func TestServerBackedPluginAdoptsWorkersOverMCPAndWithoutWatchOrResume(t *testin
 			t.Errorf("plugin worker MCP note author = %q, want adopted session %q", author, adopted.ID)
 		}
 
-		refused := server.CallTool("ext-worker", "seed_note", map[string]any{"seed": seed, "text": "Should be refused."})
+		refused := server.CallTool("ext-worker", "attn_do", noteScript(seed, "Should be refused."))
 		if refused.Refused == "" {
 			t.Errorf("external plugin worker MCP call succeeded, want refusal")
 		}

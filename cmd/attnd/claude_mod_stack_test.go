@@ -105,7 +105,7 @@ func TestRealClaudesFirstTurnOnItsBriefHasAttnsTools(t *testing.T) {
 		}
 	})
 
-	if offered := model.AwaitToolsOffered(t, brief); !slices.Contains(offered, "mcp__attn__seed_show") {
+	if offered := model.AwaitToolsOffered(t, brief); !slices.Contains(offered, "mcp__attn__attn_do") {
 		t.Fatalf("the first request offered %q, want attn's tools among them", offered)
 	}
 }

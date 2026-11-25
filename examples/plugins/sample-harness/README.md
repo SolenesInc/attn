@@ -27,9 +27,9 @@ plugin and `attn guide writing-harness-plugins` explain the rest.
   state.
 - `agentTools` asks for attn's tools. With the experimental setting Agent tools
   on, the plugin passes the endpoint to the harness in its environment, and a
-  line `/tool seed_note {"seed":"<id>","text":"…"}` calls a tool as the
-  session. A typo in the arguments prints the error and the harness keeps
-  taking input.
+  line `/tool attn_do {"script":"seed_note({seed: '<id>', text: '…'})"}` calls
+  a tool as the session. A typo in the arguments prints the error and the
+  harness keeps taking input.
 - It leaves out `compact` and `models`, so attn offers neither for this harness.
 
 `src/harness.ts` is the stand-in for a native agent. A real plugin launches the

@@ -1,1 +1,1 @@
-To plant under a plot, set `part_of`. When a seed comes from work on another seed, set `discovered_from`.
+To plant under a plot, pass `part_of` to `seed_plant`. When a seed comes from work on another seed, pass `discovered_from`.

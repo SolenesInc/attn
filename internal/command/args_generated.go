@@ -62,6 +62,7 @@ const (
 	CodeNoRole                      = "no_role"
 	CodeNoSender                    = "no_sender"
 	CodeNoSession                   = "no_session"
+	CodeNoSuchCommand               = "no_such_command"
 	CodeNoSuchReference             = "no_such_reference"
 	CodeNoSuchTopic                 = "no_such_topic"
 	CodeNoTarget                    = "no_target"
@@ -258,7 +259,7 @@ var specs = sync.OnceValue(func() map[string]spec {
 		"settings list":           {needsSession: false, anyone: true, sessionFlag: false, runsWithoutDaemon: false},
 		"settings get":            {needsSession: false, anyone: true, sessionFlag: false, runsWithoutDaemon: false},
 		"settings set":            {needsSession: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false},
-		"skill":                   {needsSession: false, anyone: true, sessionFlag: false, runsWithoutDaemon: true, fixes: map[string]string{"no_such_reference": "Use one of the names `skill` with `list` prints.", "list_and_reference": "Pass {reference} or {list}, not both."}},
+		"skill":                   {needsSession: false, anyone: true, sessionFlag: false, runsWithoutDaemon: true, fixes: map[string]string{"no_such_reference": "Use one of the names `skill` with `list` prints.", "list_and_reference": "Pass {reference} or {list}, not both.", "no_such_command": "Use a command's name, such as seed_harvest, or a family's, such as crew."}},
 		"state explain":           {needsSession: false, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"session_not_found": "Pass the name, short id, full id or unique prefix of a live session.", "ambiguous_session": "Pass the id of the session you mean, or more of the full id; agent_list and session_list carry full ids."}},
 		"terminal ls":             {needsSession: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"terminal open":           {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
@@ -1119,6 +1120,7 @@ type SettingsSetArgs struct {
 type SkillArgs struct {
 	Reference string `json:"reference,omitempty"`
 	List      bool   `json:"list,omitempty"`
+	Command   string `json:"command,omitempty"`
 }
 
 type StateExplainArgs struct {

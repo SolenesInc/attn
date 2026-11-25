@@ -154,25 +154,43 @@ func (e toolEndpoint) post(t *testing.T, tool string, args map[string]any) (int,
 	return resp.StatusCode, reply
 }
 
-func (e toolEndpoint) call(t *testing.T, tool string, args map[string]any) toolAnswer {
+func (e toolEndpoint) call(t *testing.T, command string, args map[string]any) toolAnswer {
 	t.Helper()
-	status, reply := e.post(t, tool, args)
+	encoded, err := json.Marshal(args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, reply := e.post(t, "attn_do", map[string]any{"script": fmt.Sprintf(`try { return JSON.stringify({returned: %s(%s)}) } catch (e) {
+	if (!(e instanceof Refusal)) throw e;
+	return JSON.stringify({refused: e.code + ": " + e.message + (e.fix ? "\nFix: " + e.fix : "")});
+}`, command, encoded)})
 	var answer struct {
 		Result struct {
 			IsError bool `json:"isError"`
 			Content []struct {
 				Text string `json:"text"`
 			} `json:"content"`
-			Structured json.RawMessage `json:"structuredContent"`
 		} `json:"result"`
 	}
-	if err := json.Unmarshal(reply, &answer); status != http.StatusOK || err != nil {
-		t.Fatalf("%s at %s answered %d %q (%v)", tool, e.url, status, reply, err)
+	if err := json.Unmarshal(reply, &answer); status != http.StatusOK || err != nil || len(answer.Result.Content) != 1 {
+		t.Fatalf("%s at %s answered %d %q (%v)", command, e.url, status, reply, err)
 	}
-	result := toolAnswer{IsError: answer.Result.IsError, Structured: answer.Result.Structured}
-	for _, content := range answer.Result.Content {
-		result.Text += content.Text
+	text := answer.Result.Content[0].Text
+	if answer.Result.IsError {
+		return toolAnswer{IsError: true, Text: text}
 	}
+	var ran struct {
+		Returned json.RawMessage
+		Refused  string
+	}
+	if err := json.NewDecoder(strings.NewReader(text)).Decode(&ran); err != nil {
+		t.Fatalf("a script calling %s at %s answered %q: %v", command, e.url, text, err)
+	}
+	if ran.Refused != "" {
+		return toolAnswer{IsError: true, Text: ran.Refused}
+	}
+	result := toolAnswer{Text: string(ran.Returned), Structured: ran.Returned}
+	_ = json.Unmarshal(ran.Returned, &result.Text)
 	return result
 }
 
@@ -312,6 +330,8 @@ func TestAClaudeOnAnOutpostRunsHomeToolsAtTheHomeAsItsSessionAndHereToolsWithout
 	o.requireNoteBy(session, "After the outpost restarted")
 }
 
+const largestIntegersAScriptHolds = `{"record":{"id":9007199254740991,"parent":{"id":-9007199254740991}}}`
+
 func TestAnAutomationRunToolOnAnOutpostGivesTheHomesAgentItsInputsIntegersExactly(t *testing.T) {
 	home, outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude)), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
@@ -331,8 +351,8 @@ func TestAnAutomationRunToolOnAnOutpostGivesTheHomesAgentItsInputsIntegersExactl
 	var applied protocol.AutomationDefinitionSummary
 	tools.structured(t, "automation_apply", map[string]any{"definition": spec}, &applied)
 	var run protocol.AutomationRunSummary
-	tools.structured(t, "automation_run", map[string]any{"id": applied.ID, "input": json.RawMessage(integersPastFloatPrecision)}, &run)
-	requireSameJSONNumbers(t, home.Launched(string(protocol.Deref(run.SessionID))), filepath.Join(home.Dir, "automation", "occurrences", run.ID+".json"), integersPastFloatPrecision)
+	tools.structured(t, "automation_run", map[string]any{"id": applied.ID, "input": json.RawMessage(largestIntegersAScriptHolds)}, &run)
+	requireSameJSONNumbers(t, home.Launched(string(protocol.Deref(run.SessionID))), filepath.Join(home.Dir, "automation", "occurrences", run.ID+".json"), largestIntegersAScriptHolds)
 }
 
 func TestAnOutpostAgentsCredentialIsRefusedByTheHomeAndByAnotherOutpost(t *testing.T) {
@@ -347,7 +367,7 @@ func TestAnOutpostAgentsCredentialIsRefusedByTheHomeAndByAnotherOutpost(t *testi
 		t.Fatalf("the outpost refused its own agent's credential: %s", answer.Text)
 	}
 	for name, elsewhere := range map[string]*testworld.Stack{"the home": o.home, "another outpost": other} {
-		status, reply := tools.at(elsewhere).post(t, "seed_show", map[string]any{"seed": o.seed})
+		status, reply := tools.at(elsewhere).post(t, "attn_read", map[string]any{"script": "return seed_show({seed: '" + o.seed + "'})"})
 		if status != http.StatusUnauthorized || !strings.Contains(string(reply), "not signed by this daemon's agent key") {
 			t.Errorf("%s answered the outpost agent's credential with %d %q, want 401 naming its agent key", name, status, reply)
 		}
@@ -371,23 +391,6 @@ func TestTurningTheToolsOffAtTheHomeRefusesTheNextCallOfAnAgentRunningOnAnOutpos
 	o.setTools("true")
 	tools.structured(t, "seed_note", map[string]any{"seed": o.seed, "text": "On again"}, &noted)
 	o.requireNoteBy(session, "On again")
-}
-
-func TestASharedCodexOnAnOutpostRunsHomeToolsAsTheSessionShowingItsConversation(t *testing.T) {
-	o := newOutpostTools(t, fakeagent.Codex)
-	shop := o.outpost.Path("shop")
-	o.outpost.SetCodexFolderTrust(shop, "trusted")
-	session, codex := o.spawn(fakeagent.Codex, shop)
-	o.pair.App.TypeLine(session, "find the flaky checkout test")
-	codex.Prompted()
-	codex.Reply("It races the tax lookup. <!-- attn:state=waiting_input -->")
-	testworld.AwaitSession(o.pair.App, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
-
-	result := o.outpost.CodexServer().CallTool(codex.ConversationID, "attn-core", "seed_note", map[string]any{"seed": o.seed, "text": "Noted by the outpost's Codex"})
-	if result.IsError {
-		t.Fatalf("seed_note from the outpost's Codex conversation %s was refused: %s", codex.ConversationID, result.Text)
-	}
-	o.requireNoteBy(session, "Noted by the outpost's Codex")
 }
 
 func TestACLICommandFromASharedCodexThreadNoSessionHoldsOnAnOutpostRunsInTheThreadsProfile(t *testing.T) {

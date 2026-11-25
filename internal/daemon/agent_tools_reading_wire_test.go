@@ -19,7 +19,7 @@ func TestTheSkillAndGuideToolsPrintTheMapReferencesAndPages(t *testing.T) {
 		args map[string]any
 		want []string
 	}{
-		{"skill", map[string]any{}, []string{"## What attn can do", "attn skill --reference <name>"}},
+		{"skill", map[string]any{}, []string{"## What attn can do", "skill({reference: \"<name>\"})"}},
 		{"skill", map[string]any{"list": true}, []string{"garden\n", "delegation\n"}},
 		{"skill", map[string]any{"reference": "garden"}, []string{"# The garden"}},
 		{"skill", map[string]any{"reference": "garden.md"}, []string{"# The garden"}},

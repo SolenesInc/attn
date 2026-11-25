@@ -78,24 +78,35 @@ func (c *Catalog) ToolMention(line string) (string, error) {
 		return "", fmt.Errorf("%q: %w", line, err)
 	}
 	shell := slices.ContainsFunc(args, func(arg mentionArg) bool { return arg.cliOnly })
-	var names []string
+	var calls []string
 	for _, cmd := range cmds {
 		if !cmd.IsTool() {
 			shell = true
 		}
-		names = append(names, "`"+cmd.ToolName()+"`")
+		calls = append(calls, "`"+cmd.callText(args)+"`")
 	}
 	if shell {
 		return shellCommand(line), nil
 	}
-	tools := names[0]
-	if len(names) > 1 {
-		tools = strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
+	if len(calls) == 1 {
+		return calls[0], nil
 	}
-	if len(args) == 0 {
-		return tools, nil
+	return strings.Join(calls[:len(calls)-1], ", ") + " or " + calls[len(calls)-1], nil
+}
+
+func (c *Command) callText(args []mentionArg) string {
+	partial := leavesOutRequired(c, args)
+	if len(args) == 0 && partial {
+		return c.ToolName()
 	}
-	return tools + " with " + jsonObject(jsonFields(args)), nil
+	fields := argFields(args)
+	if partial {
+		fields = append(fields, "…")
+	}
+	if len(fields) == 0 {
+		return c.ToolName() + "()"
+	}
+	return c.ToolName() + "({" + strings.Join(fields, ", ") + "})"
 }
 
 func shellCommand(line string) string {
@@ -234,12 +245,10 @@ func (arg *mentionArg) addRepeat(cmd *Command, again mentionArg) error {
 	return nil
 }
 
-func jsonObject(fields []string) string { return "{" + strings.Join(fields, ", ") + "}" }
-
-func jsonFields(args []mentionArg) []string {
+func argFields(args []mentionArg) []string {
 	var fields []string
 	for _, arg := range args {
-		fields = append(fields, jsonText(arg.name)+": "+jsonText(arg.value))
+		fields = append(fields, arg.name+": "+jsonText(arg.value))
 	}
 	return fields
 }

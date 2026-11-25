@@ -14,18 +14,24 @@ import (
 	"github.com/victorarias/attn/internal/catalog"
 )
 
-const maxDescriptionChars = 4096
-
 type toolDefinition struct {
 	Command      string         `json:"command"`
 	Name         string         `json:"name"`
 	Title        string         `json:"title"`
 	Description  string         `json:"description"`
 	Core         bool           `json:"core,omitempty"`
+	Tool         bool           `json:"tool,omitempty"`
+	Signature    string         `json:"signature"`
 	Effect       catalog.Effect `json:"effect"`
 	InputSchema  map[string]any `json:"inputSchema"`
 	OutputSchema map[string]any `json:"outputSchema,omitempty"`
 	Receipt      []string       `json:"receipt,omitempty"`
+}
+
+type scriptTool struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Script      string `json:"script"`
 }
 
 func writeTools(c *catalog.Catalog, goRoot string) error {
@@ -43,11 +49,13 @@ func writeTools(c *catalog.Catalog, goRoot string) error {
 			Title:       g.expand(where, cmd.Summary, toolSurface),
 			Description: strings.TrimSpace(g.expand(where, cmd.Doc, toolSurface)),
 			Core:        cmd.Core,
+			Tool:        cmd.Tool,
+			Signature:   c.Signature(cmd),
 			Effect:      cmd.Effect,
 			InputSchema: g.inputSchema(cmd),
 		}
-		if n := utf8.RuneCountInString(tool.Description); n > maxDescriptionChars {
-			g.problems = append(g.problems, fmt.Sprintf("%s: doc is %d characters as a tool description, over the limit of %d that Claude Code keeps", where, n, maxDescriptionChars))
+		if n := utf8.RuneCountInString(tool.Description); cmd.Tool && n > catalog.MaxUpfrontChars {
+			g.problems = append(g.problems, fmt.Sprintf("%s: the description of %s is %d characters, over the limit of %d that Claude Code keeps", where, tool.Name, n, catalog.MaxUpfrontChars))
 		}
 		if cmd.Result != "" {
 			schema, err := bundledSchema(cmd.Result)
@@ -70,7 +78,12 @@ func writeTools(c *catalog.Catalog, goRoot string) error {
 	if err := g.fail(); err != nil {
 		return err
 	}
-	server, err := json.Marshal(map[string]string{"name": c.Server.Name, "description": c.Server.Description, "instructions": c.Instructions(), "core_instructions": c.CoreInstructions()})
+	do, read := c.Server.Do, c.Server.Read
+	server, err := json.Marshal(map[string]any{
+		"name": c.Server.Name, "description": c.Server.Description, "instructions": c.Instructions(), "core_instructions": c.CoreInstructions(),
+		"do":   scriptTool{Title: do.Title, Description: c.DoDescription(), Script: do.Script},
+		"read": scriptTool{Title: read.Title, Description: strings.TrimSpace(read.Text), Script: read.Script},
+	})
 	if err != nil {
 		return err
 	}

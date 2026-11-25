@@ -1,1 +1,1 @@
-- Use attn's tools for everything they offer. Run `attn` in a shell only for what no tool offers, and find the command with `attn --help`. Never run `attn` with no command, because it starts a session.
+- Run attn's commands as functions in a script: `attn_read` runs those that only read, and `attn_do` runs any. `ask` and `skill` are tools of their own. Run `attn` in a shell only for what no function does, and find the command with `attn --help`. Never run `attn` with no command, because it starts a session.

@@ -15,7 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestEveryAgentSessionAndStateToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) {
+func TestEveryAgentSessionAndStateCommandReturnsToAScriptWhatItsCLIPrints(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	setSetting(t, app, "agent_tools_enabled", "true")
@@ -44,7 +44,7 @@ func TestEveryAgentSessionAndStateToolAnswersWithTheShapeItsOutputSchemaDescribe
 	}
 }
 
-func TestTheSessionTranscriptAndInstructionsToolsAnswerWithTheShapeTheirOutputSchemasDescribe(t *testing.T) {
+func TestTheSessionTranscriptAndInstructionsCommandsReturnToAScriptWhatTheirCLIPrints(t *testing.T) {
 	w := newTitlingWorld(t, fakeagent.Codex)
 	w.AnswerHeadlessTasks(func(task *fakeagent.HeadlessTask) {
 		switch {
@@ -139,7 +139,7 @@ func TestAnotherProfilesSessionDoesNotExistForTheSessionCommands(t *testing.T) {
 	}
 }
 
-func TestEveryAgentToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) {
+func TestEveryAgentCommandReturnsToAScriptWhatItsCLIPrints(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	setSetting(t, app, "agent_tools_enabled", "true")

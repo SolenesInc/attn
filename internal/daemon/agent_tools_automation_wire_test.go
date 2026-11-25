@@ -16,7 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestEveryAutomationToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) {
+func TestEveryAutomationCommandReturnsToAScriptWhatItsCLIPrints(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 	if err := os.MkdirAll(w.Path("check"), 0o755); err != nil {
 		t.Fatal(err)
@@ -26,30 +26,30 @@ func TestEveryAutomationToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testi
 	session := w.Spawn(app, fakeagent.Claude, w.Path("check"))
 	w.Launched(session)
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
-	tools := &schemaCheckedTools{t: t, agent: agent, tools: listOfferedTools(t, agent), called: map[string]bool{}}
+	tools := newToolShapes(t, agent, listOfferedTools(t, agent))
 
 	definition := manualAutomation(w, "Check the shop.")
-	if valid := tools.call("automation_validate", map[string]any{"definition": definition}); valid["valid"] != true {
+	if valid := tools.object("automation_validate", map[string]any{"definition": definition}); valid["valid"] != true {
 		t.Errorf("automation_validate answered %v, want valid", valid)
 	}
-	applied := tools.call("automation_apply", map[string]any{"definition": definition, "launch_desktop": "own", "desktop_name": "Checks"})
+	applied := tools.object("automation_apply", map[string]any{"definition": definition, "launch_desktop": "own", "desktop_name": "Checks"})
 	id, _ := applied["id"].(float64)
 	if id < 1 || applied["name"] != "Manual check" {
 		t.Fatalf("automation_apply answered %v, want the saved automation", applied)
 	}
-	tools.call("automation_list", map[string]any{})
-	if shown := tools.call("automation_show", map[string]any{"id": id}); !strings.Contains(fmt.Sprint(shown["spec_yaml"]), "Check the shop.") {
+	tools.object("automation_list", map[string]any{})
+	if shown := tools.object("automation_show", map[string]any{"id": id}); !strings.Contains(fmt.Sprint(shown["spec_yaml"]), "Check the shop.") {
 		t.Errorf("automation_show answered %v, want the definition's YAML", shown)
 	}
-	tools.call("automation_set", map[string]any{"id": id, "launch_desktop": "own"})
-	if disabled := tools.call("automation_disable", map[string]any{"id": id}); disabled["enabled"] != false {
+	tools.object("automation_set", map[string]any{"id": id, "launch_desktop": "own"})
+	if disabled := tools.object("automation_disable", map[string]any{"id": id}); disabled["enabled"] != false {
 		t.Errorf("automation_disable answered %v, want it off", disabled)
 	}
-	if enabled := tools.call("automation_enable", map[string]any{"id": id}); enabled["enabled"] != true {
+	if enabled := tools.object("automation_enable", map[string]any{"id": id}); enabled["enabled"] != true {
 		t.Errorf("automation_enable answered %v, want it on", enabled)
 	}
-	first := tools.call("automation_run", map[string]any{"id": id, "input": map[string]any{}, "request_id": "tool-run"})
-	retried := tools.call("automation_run", map[string]any{"id": id, "input": map[string]any{}, "request_id": "tool-run"})
+	first := tools.object("automation_run", map[string]any{"id": id, "input": map[string]any{}, "request_id": "tool-run"})
+	retried := tools.object("automation_run", map[string]any{"id": id, "input": map[string]any{}, "request_id": "tool-run"})
 	if first["id"] == nil || retried["id"] != first["id"] {
 		t.Errorf("a retried automation_run answered run %v, want the first call's run %v", retried["id"], first["id"])
 	}
@@ -58,22 +58,26 @@ func TestEveryAutomationToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testi
 		t.Fatal(err)
 	}
 	w.Launched(string(protocol.Deref(delivered.SessionID)))
-	if runs := tools.call("automation_runs", map[string]any{"id": id}); len(runs["runs"].([]any)) != 1 {
+	testworld.Await(app, protocol.EventAutomationsChanged, func(protocol.AutomationsChangedMessage) bool {
+		run, err := w.Client().AutomationRun(int(id), "tool-run", "{}")
+		return err == nil && run.State == "delivered"
+	})
+	if runs := tools.object("automation_runs", map[string]any{"id": id}); len(runs["runs"].([]any)) != 1 {
 		t.Errorf("automation_runs answered %v, want the one run", runs)
 	}
-	tools.call("automation_cleanup", map[string]any{"id": id})
-	if deleted := tools.call("automation_delete", map[string]any{"id": id}); deleted["deleted"] != id {
+	tools.object("automation_cleanup", map[string]any{"id": id})
+	if deleted := tools.object("automation_delete", map[string]any{"id": id}); deleted["deleted"] != id {
 		t.Errorf("automation_delete answered %v, want %v", deleted, id)
 	}
 	managed := agent.mustCall(t, "automation_apply", map[string]any{"definition": definition + "enabled: true\n"})
-	if text := resultText(managed); !managed.IsError || !strings.Contains(text, "`automation_enable`") || strings.Contains(text, "attn automation") {
+	if text := resultText(managed); !managed.IsError || !strings.Contains(text, "`automation_enable({id: ") || strings.Contains(text, "attn automation") {
 		t.Errorf("automation_apply with enabled in the spec answered %q, want a refusal that names the automation_enable tool", text)
 	}
-	tools.report("automation")
+	tools.finish("automation_")
 }
 
 func TestAnAutomationRunToolGivesTheAgentItsInputsIntegersExactly(t *testing.T) {
-	const input = `{"record":{"id":9007199254740993,"parent":{"id":-9007199254740993}}}`
+	const input = `{"record":{"id":9007199254740991,"parent":{"id":-9007199254740991}}}`
 	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 	if err := os.MkdirAll(w.Path("check"), 0o755); err != nil {
 		t.Fatal(err)
@@ -85,7 +89,7 @@ func TestAnAutomationRunToolGivesTheAgentItsInputsIntegersExactly(t *testing.T) 
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
 	var applied protocol.AutomationDefinitionSummary
 	structuredAs(t, agent.mustCall(t, "automation_apply", map[string]any{"definition": manualAutomation(w, "Check the record.")}), &applied)
-	ran := agent.mustCall(t, "automation_run", map[string]any{"id": json.RawMessage(fmt.Sprintf("%de0", applied.ID)), "input": json.RawMessage(input)})
+	ran := agent.mustCall(t, "automation_run", map[string]any{"id": applied.ID, "input": json.RawMessage(input)})
 	if ran.IsError {
 		t.Fatalf("automation_run refused: %s", resultText(ran))
 	}
@@ -104,7 +108,7 @@ func TestAnAutomationRunToolGivesTheAgentItsInputsIntegersExactly(t *testing.T) 
 	}
 }
 
-func TestAToolTakesAWholeNumberInAnyJSONSpellingForAnIntegerArgument(t *testing.T) {
+func TestAScriptPassesWholeNumbersAndNothingElseForAnIntegerArgument(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 	if err := os.MkdirAll(w.Path("check"), 0o755); err != nil {
 		t.Fatal(err)
@@ -116,11 +120,10 @@ func TestAToolTakesAWholeNumberInAnyJSONSpellingForAnIntegerArgument(t *testing.
 	var applied protocol.AutomationDefinitionSummary
 	structuredAs(t, agent.mustCall(t, "automation_apply", map[string]any{"definition": manualAutomation(w, "Check the shop.")}), &applied)
 
-	for _, spelling := range []string{"%d", "%d.0", "%de0", "%d.00E+0"} {
-		id := fmt.Sprintf(spelling, applied.ID)
-		shown := agent.mustCall(t, "automation_show", map[string]any{"id": json.RawMessage(id)})
-		if text := resultText(shown); shown.IsError || !strings.Contains(fmt.Sprint(shown.StructuredContent), "Check the shop.") {
-			t.Errorf("automation_show with id %s answered %s, want the automation", id, text)
+	for _, spelling := range []string{"%d", "%d.0", "%de0", "%d * 2 / 2"} {
+		written := fmt.Sprintf("return automation_show({id: "+spelling+"}).spec_yaml", applied.ID)
+		if shown, failed := agent.script(t, "attn_read", written); failed || !strings.Contains(shown, "Check the shop.") {
+			t.Errorf("%s answered %s, want the automation", written, shown)
 		}
 	}
 	if refused := agent.mustCall(t, "automation_show", map[string]any{"id": json.RawMessage(fmt.Sprintf("%d.5", applied.ID))}); !refused.IsError {
@@ -130,11 +133,8 @@ func TestAToolTakesAWholeNumberInAnyJSONSpellingForAnIntegerArgument(t *testing.
 	if installed := agent.mustCall(t, "delegate_roles_install", map[string]any{"message": "Set up the roles"}); installed.IsError {
 		t.Fatalf("delegate_roles_install refused: %s", resultText(installed))
 	}
-	var table map[string]any
-	structuredAs(t, agent.mustCall(t, "delegate_roles_show", map[string]any{}), &table)
-	table["revision"] = json.RawMessage(fmt.Sprintf("%v.0", table["revision"]))
-	if applied := agent.mustCall(t, "delegate_roles_apply", map[string]any{"table": table, "message": "revision written as a decimal"}); applied.IsError {
-		t.Errorf("delegate_roles_apply with the table's revision %s refused: %s", table["revision"], resultText(applied))
+	if applied, failed := agent.script(t, "attn_do", "delegate_roles_apply({table: delegate_roles_show(), message: 'round trip'})"); failed {
+		t.Errorf("delegate_roles_apply with the table delegate_roles_show returned: %s", applied)
 	}
 }
 

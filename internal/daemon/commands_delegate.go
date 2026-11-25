@@ -55,7 +55,7 @@ func (d *Daemon) delegationWithinToolBound(ctx context.Context, operationID stri
 	if !errors.Is(err, errCallerGone) {
 		return operation, err
 	}
-	if ctx.Err() != nil {
+	if ctx.Err() != nil && !errors.Is(context.Cause(ctx), errScriptCallLimit) {
 		return nil, ctx.Err()
 	}
 	operation, err = d.delegationOperation(operationID)

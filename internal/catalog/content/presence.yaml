@@ -13,6 +13,7 @@ commands:
     runs: here
     grant: full
     effect: read
+    upfront: true
     doc: |
       Says whether you run inside attn, and as which session, with the seeds the session works on: the seed its delegation assigned it, then each growing seed it tends.
     args:

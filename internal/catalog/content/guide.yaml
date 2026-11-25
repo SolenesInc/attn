@@ -9,6 +9,7 @@ commands:
     runs: here
     grant: any
     effect: read
+    upfront: true
     anyone: true
     runs_without_daemon: true
     doc: |

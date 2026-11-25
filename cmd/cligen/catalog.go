@@ -46,6 +46,10 @@ var surfaceValues = map[string]map[surface]string{
 		cliSurface:  "resolve against the working directory, or beside the file passed to --file",
 		toolSurface: "resolve against the folder the session started in",
 	},
+	"skill_command": {
+		cliSurface:  "",
+		toolSurface: " `command` prints one command's signature and rules, or the signatures of a family's commands.",
+	},
 }
 
 var (
@@ -235,7 +239,7 @@ func (g *generator) argDoc(a catalog.Arg, on surface) string {
 
 func (g *generator) argUsage(a catalog.Arg) (string, bool) {
 	switch {
-	case a.CLI == "-m+" || a.Internal():
+	case a.CLI == "-m+" || a.Internal() || a.ToolOnly():
 		return "", false
 	case a.CLI == "pos" || a.CLI == "rest" || a.CLI == "words":
 		return g.placeholder(a), true

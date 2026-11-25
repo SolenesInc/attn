@@ -18,6 +18,7 @@ func TestAnAgentPointsAtTheAppWithTheCalloutTools(t *testing.T) {
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
 	shapes := newToolShapes(t, agent, listOfferedTools(t, agent))
+	shapes.once = true
 
 	unseen := narrowed[protocol.CalloutAnchorsResult](t, shapes.call("callout_anchors", map[string]any{}).StructuredContent)
 	if unseen.AppShowingProfile || len(unseen.Anchors) != 11 {

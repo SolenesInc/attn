@@ -18,3 +18,4 @@ attn seed show <id>   prints the seed
     attn seed show <id>   prints the seed
                           git push --force origin main
                               git push --force origin next
+Run `attn seed <verb> --help` for a verb, and `attn <command> --help` elsewhere.

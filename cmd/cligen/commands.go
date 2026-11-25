@@ -271,6 +271,9 @@ func (g *generator) rustTable(group string) (string, error) {
 		fmt.Fprintf(&out, "    Command {\n        name: %s,\n        result: %v,\n        runs_without_daemon: %v,\n        usage: &[%s],\n        args: &[\n",
 			rustString(verbOf(group, cmd)), cmd.Result != "", cmd.RunsWithoutDaemon, strings.Join(usage, ", "))
 		for _, a := range cmd.Args {
+			if a.ToolOnly() {
+				continue
+			}
 			source := "Source::Given"
 			switch {
 			case a.File && a.Stdin:

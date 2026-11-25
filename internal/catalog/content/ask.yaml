@@ -27,10 +27,10 @@ groups:
 commands:
   - name: ask
     summary: open an ask in the user's queue; it returns at once
-    core: true
     runs: here
     grant: own
     effect: record
+    tool: true
     doc: |
       Opens an ask in the user's queue and returns its id at once. {ask_rules}
 
@@ -70,6 +70,7 @@ commands:
     runs: home
     grant: own
     effect: read
+    upfront: true
     doc: |
       Prints one open ask you hold or oversee: who asked, its seed, its age and its text.
     args:
@@ -97,6 +98,7 @@ commands:
     runs: home
     grant: own
     effect: act
+    upfront: true
     doc: |
       Withdraws an ask you no longer need answered. To withdraw an ask of an agent you oversee, say why in `reason`: attn notes the reason on the ask's seed and tells the agent that asked, so it does not wait for an answer.
     args:

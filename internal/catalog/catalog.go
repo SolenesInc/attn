@@ -24,7 +24,7 @@ const (
 	TypesFile  = "types.yaml"
 	ServerFile = "server.yaml"
 
-	MaxInstructionsChars = 4096
+	MaxUpfrontChars = 4096
 )
 
 type Runs string
@@ -56,10 +56,18 @@ type Catalog struct {
 }
 
 type Server struct {
-	Name        string `yaml:"name"`
-	Description string `yaml:"description"`
-	Intro       string `yaml:"intro"`
-	Split       string `yaml:"split"`
+	Name        string     `yaml:"name"`
+	Description string     `yaml:"description"`
+	Intro       string     `yaml:"intro"`
+	Split       string     `yaml:"split"`
+	Do          ScriptTool `yaml:"do"`
+	Read        ScriptTool `yaml:"read"`
+}
+
+type ScriptTool struct {
+	Title  string `yaml:"title"`
+	Text   string `yaml:"text"`
+	Script string `yaml:"script"`
 }
 
 type Type struct {
@@ -124,6 +132,8 @@ type Command struct {
 	Name              string           `yaml:"name"`
 	Summary           string           `yaml:"summary"`
 	Core              bool             `yaml:"core"`
+	Tool              bool             `yaml:"tool"`
+	Upfront           bool             `yaml:"upfront"`
 	Runs              Runs             `yaml:"runs"`
 	Grant             string           `yaml:"grant"`
 	MayNeed           []string         `yaml:"may_need"`
@@ -174,6 +184,12 @@ type Arg struct {
 const CLIInternal = "internal"
 
 func (a Arg) Internal() bool { return a.CLI == CLIInternal }
+
+const cliNone = "none"
+
+func (a Arg) ToolOnly() bool { return a.CLI == cliNone }
+
+func (a Arg) takenByTool() bool { return !a.CLIOnly && !a.Internal() }
 
 func (a Arg) requiredByTool() bool { return a.Required && a.Unless == "" }
 
@@ -350,8 +366,24 @@ func (c *Catalog) check() []string {
 	var problems []string
 	add := func(format string, args ...any) { problems = append(problems, fmt.Sprintf(format, args...)) }
 
-	if n := utf8.RuneCountInString(c.Instructions()); n > MaxInstructionsChars {
-		add("%s: server instructions are %d characters, over the limit of %d that Claude Code keeps; cut the intent map (%s)", ServerFile, n, MaxInstructionsChars, c.mapShares())
+	if n := utf8.RuneCountInString(c.Instructions()); n > MaxUpfrontChars {
+		add("%s: server instructions are %d characters, over the limit of %d that Claude Code keeps; cut the intent map (%s)", ServerFile, n, MaxUpfrontChars, c.mapShares())
+	}
+	for _, upfront := range []struct{ name, text, cut string }{
+		{"attn_do", c.DoDescription(), "cut do.text or a command's upfront: true"},
+		{"attn_read", c.Server.Read.Text, "cut read.text"},
+	} {
+		if n := utf8.RuneCountInString(upfront.text); n > MaxUpfrontChars {
+			add("%s: the description of %s is %d characters, over the limit of %d that Claude Code keeps; %s", ServerFile, upfront.name, n, MaxUpfrontChars, upfront.cut)
+		}
+	}
+	for _, tool := range []struct {
+		name string
+		ScriptTool
+	}{{"do", c.Server.Do}, {"read", c.Server.Read}} {
+		if tool.Title == "" || strings.TrimSpace(tool.Text) == "" || tool.Script == "" {
+			add("%s: server %s needs a title, a text and a script", ServerFile, tool.name)
+		}
 	}
 	if strings.TrimSpace(c.Server.Intro) == "" {
 		add("%s: server intro is empty", ServerFile)
@@ -421,6 +453,12 @@ func (c *Catalog) check() []string {
 		if _, grouped := c.Group(cmd.Name); cmd.Map != nil && (!top || grouped) {
 			add("%s: map belongs to the family: put it on the group, or on the command only when the command is the whole family", where)
 		}
+		if (cmd.Tool || cmd.Upfront) && !cmd.IsTool() {
+			add("%s: tool and upfront are for an offered command", where)
+		}
+		if cmd.Tool && cmd.Upfront {
+			add("%s: upfront lists a command in attn_do's description, and a command served as a tool has a description of its own", where)
+		}
 		if cmd.Hidden && cmd.IsOffered() {
 			add("%s: hidden is for a command that is not offered", where)
 		}
@@ -482,7 +520,7 @@ func (c *Catalog) check() []string {
 				add("%s: type %q is not in %s", argWhere, a.Type, TypesFile)
 			}
 			if a.CLI == "" {
-				add("%s: cli is missing; name the mapping: pos, rest, words, a flag, --a|--b, -m+ or internal", argWhere)
+				add("%s: cli is missing; name the mapping: pos, rest, words, a flag, --a|--b, -m+, internal or none", argWhere)
 			}
 			if items, _ := c.Types[a.Type].Schema["items"].(map[string]any); a.CLI == "words" && (c.Types[a.Type].Schema["type"] != "array" || items["required"] == nil) {
 				add("%s: cli words takes an array of objects whose required fields are the words of each item", argWhere)
@@ -503,6 +541,9 @@ func (c *Catalog) check() []string {
 			}
 			if a.Internal() && (a.Required || a.CLIOnly) {
 				add("%s: cli internal on an arg that is required or cli_only; the CLI fills it alone, and a tool call leaves it out", argWhere)
+			}
+			if a.ToolOnly() && (a.Required || a.CLIOnly) {
+				add("%s: cli none on an arg that is required or cli_only; the CLI must be able to make the call without it", argWhere)
 			}
 			if a.CLIOnly && a.Required {
 				add("%s: cli_only on an arg that is required; a tool must be able to make the call without it", argWhere)
@@ -579,6 +620,16 @@ func (t TopLevel) File() string {
 }
 
 func (c *Catalog) Instructions() string { return c.instructions(c.Server.Intro) }
+
+func (c *Catalog) DoDescription() string {
+	parts := []string{strings.TrimSpace(c.Server.Do.Text)}
+	for i := range c.Commands {
+		if c.Commands[i].Upfront {
+			parts = append(parts, c.Signature(&c.Commands[i]))
+		}
+	}
+	return strings.Join(parts, "\n")
+}
 
 func (c *Catalog) CoreInstructions() string {
 	var core []string

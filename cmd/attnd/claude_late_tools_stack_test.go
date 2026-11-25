@@ -157,7 +157,7 @@ func TestRealClaudesDebugLogSaysWhyASessionStartedWithoutAttnsTools(t *testing.T
 			const brief = "write the migration guide"
 			c.stack.Spawn(app, fakeagent.Claude, c.work, func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr(brief) })
 			t.Log(c.debugLog.await(t, tc.want))
-			if offered := c.model.AwaitToolsOffered(t, brief); slices.Contains(offered, "mcp__attn__seed_show") {
+			if offered := c.model.AwaitToolsOffered(t, brief); slices.Contains(offered, "mcp__attn__attn_do") {
 				t.Errorf("the first request offered %q, want it without attn's tools", offered)
 			}
 		})
@@ -209,7 +209,7 @@ func TestMailThatResumesARealClaudeWaitsForAttnsToolsWhenTheirServerComesUpLate(
 	if sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", seed.ID, "the pull request is approved"}, Session: reviewer}); sent.Code != 0 {
 		t.Fatalf("attn agent msg %s exited %d: %s%s", seed.ID, sent.Code, sent.Stdout, sent.Stderr)
 	}
-	if offered := model.AwaitToolsOfferedSince(t, mark, note); !slices.Contains(offered, "mcp__attn__seed_show") {
+	if offered := model.AwaitToolsOfferedSince(t, mark, note); !slices.Contains(offered, "mcp__attn__attn_do") {
 		t.Errorf("the request of the turn the mail woke offered %q, want attn's tools among them", offered)
 	}
 }

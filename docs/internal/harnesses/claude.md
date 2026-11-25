@@ -157,8 +157,31 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
 - **Tool results `[2.1.332, read from the binary]`:** a result with
   `structuredContent` reaches the model as its compact JSON, without its text
   blocks and with its other blocks. Behind gates (`mcp_content_over_structured`)
-  the content reaches it instead. Neither path gives both, so attn's JSON text
-  beside `structuredContent` is one copy.
+  the content reaches it instead. A result over 25,000 tokens
+  (`MAX_MCP_OUTPUT_TOKENS`) or 100,000 characters is saved to a file and the
+  model gets a pointer.
+- **Upfront texts `[2.1.332]`:** a tool in the first request
+  (`_meta["anthropic/alwaysLoad"]`) has its description cut at 4,096 characters,
+  and the server's `instructions` are cut at 4,096 too. Only a tool loaded
+  through tool search gets 16,384 (read from the binary). attn's four
+  descriptions (3,606 at most) and its 3,375 characters of instructions arrive
+  whole (measured). `OTEL_LOG_RAW_API_BODIES=file:<dir>` with
+  `CLAUDE_CODE_ENABLE_TELEMETRY=1` and `OTEL_LOGS_EXPORTER=otlp` writes each
+  request's body to `<dir>`.
+- **Call timeout `[2.1.332, measured]`:** a server entry's `timeout` ends a
+  call: at 60,000 ms the model read `MCP server "slow" tool "slow" timed out
+  after 60s`, and the server got `notifications/cancelled`. Without one, an
+  HTTP call also failed at 60 s, with `The operation timed out.` and no
+  cancellation.
+- **Permission paths `[2.1.332, read from the binary]`:** auto mode's classifier
+  reads a call as the tool's name and its input flattened to `key=value` text,
+  with the user's messages, earlier tool calls, CLAUDE.md and the `autoMode`
+  sentences. It reads no tool description, annotation, server `instructions` or
+  tool result. `readOnlyHint` only lets calls overlap. A `permissions.allow`
+  rule allows the call before the classifier runs (a session that called
+  `attn_do` under attn's rule sent the classifier nothing, measured). In the
+  default mode an MCP tool without a rule always asks. `autoMode` is read from
+  user, flag and policy settings only.
 - Under `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1`, auto mode checks each REPL
   script once before execution and does not apply `mcp__attn__*` allow rules to
   calls inside the script.
@@ -166,8 +189,8 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
   `--disallowed-tools ListAgents` causes shell `attn agent list` calls to be
   refused as `[Undermining Oversight]`, so attn disallows no tool and relies on
   launch instructions instead. Auto mode also refuses shell `attn ask close` +
-  `attn seed harvest` for asks not created in the session's transcript (the
-  `ask_close` MCP tool succeeds).
+  `attn seed harvest` for asks not created in the session's transcript (a
+  script that calls `ask_close` under the allow rule does not reach it).
 - `autoMode.allow` merges policy + `--settings` + user settings (not project
   settings); omitting `"$defaults"` when setting `allow` drops Claude's 16
   built-in defaults (`claude [--settings <json>] auto-mode config` prints the

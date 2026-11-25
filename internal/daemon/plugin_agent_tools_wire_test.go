@@ -157,7 +157,7 @@ func TestASharedServerPluginGetsTheToolsAndEachConversationActsAsItsOwnSession(t
 	}
 
 	for _, view := range []toolsServerView{first, second} {
-		called := server.CallTool(view.conversation, "seed_note", map[string]any{"seed": seed, "text": "From conversation " + view.conversation})
+		called := server.CallTool(view.conversation, "attn_do", noteScript(seed, "From conversation "+view.conversation))
 		if called.Refused != "" || called.IsError {
 			t.Fatalf("conversation %s calling seed_note: refused %q, %s", view.conversation, called.Refused, called.Text())
 		}
@@ -168,11 +168,11 @@ func TestASharedServerPluginGetsTheToolsAndEachConversationActsAsItsOwnSession(t
 
 	fork := "fork-of-" + first.conversation
 	server.Fork(first.conversation, fork)
-	if refused := server.CallTool(fork, "seed_note", map[string]any{"seed": seed, "text": "from the fork"}); !strings.Contains(refused.Refused, "401") || !strings.Contains(refused.Refused, "no session of "+serverPluginAgent+" holds conversation "+fork) {
+	if refused := server.CallTool(fork, "attn_do", noteScript(seed, "from the fork")); !strings.Contains(refused.Refused, "401") || !strings.Contains(refused.Refused, "no session of "+serverPluginAgent+" holds conversation "+fork) {
 		t.Fatalf("a conversation no session holds was answered %+v, want 401 naming conversation %s", refused, fork)
 	}
 	forked := spawnToolsServerView(w, app, driver, func(m *protocol.SpawnSessionMessage) { m.ResumeSessionID = protocol.Ptr(fork) })
-	server.CallTool(fork, "seed_note", map[string]any{"seed": seed, "text": "from the fork"})
+	server.CallTool(fork, "attn_do", noteScript(seed, "from the fork"))
 	if author, _ := newestNoteAuthor(t, w, seed); author != forked.session || forked.session == first.session {
 		t.Errorf("the opened fork wrote as %s, want its own session %s, not %s", author, forked.session, first.session)
 	}
@@ -237,7 +237,7 @@ func TestASharedServerKeepsTheToolsForItsOtherAliasesWhenOneIsUninstalled(t *tes
 
 	uninstallServerAlias(t, w, app, "first-plugin", firstView)
 
-	called := server.CallTool(secondView.conversation, "seed_note", map[string]any{"seed": seed, "text": "after the other alias left"})
+	called := server.CallTool(secondView.conversation, "attn_do", noteScript(seed, "after the other alias left"))
 	if called.Refused != "" || called.IsError {
 		t.Fatalf("the remaining alias's conversation calling seed_note: refused %q, %s", called.Refused, called.Text())
 	}
@@ -269,7 +269,7 @@ func TestAnOptedInAliasJoiningAConnectedServerGetsTheToolsUntilItLeaves(t *testi
 	if spawned.tools == nil || spawned.tools.Name != "attn" {
 		t.Fatalf("the joining alias's driver.spawn carried agent_tools %+v, want the server's name and description", spawned.tools)
 	}
-	called := server.CallTool(spawned.conversation, "seed_note", map[string]any{"seed": seed, "text": "from the joining alias"})
+	called := server.CallTool(spawned.conversation, "attn_do", noteScript(seed, "from the joining alias"))
 	if called.Refused != "" || called.IsError {
 		t.Fatalf("the joining alias's conversation calling seed_note: refused %q, %s", called.Refused, called.Text())
 	}

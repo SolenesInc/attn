@@ -27,7 +27,7 @@ func (d *Daemon) commandLayer() *command.Layer {
 			d.openCommands(),
 			d.navCommands(),
 			d.sessionCommands(),
-			reading.Handlers(),
+			reading.Handlers(commandRules),
 			d.agentCommands(),
 			d.turnCommands(),
 			d.ventCommands(),

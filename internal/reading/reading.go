@@ -10,22 +10,32 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 )
 
-func Handlers() map[string]command.Handler {
+func Handlers(commandRules func(name string) (string, bool)) map[string]command.Handler {
 	return map[string]command.Handler{
-		"skill": command.Typed(runSkill),
+		"skill": command.Typed(func(_ context.Context, _ command.Caller, args command.SkillArgs) (any, error) {
+			return runSkill(args, commandRules)
+		}),
 		"guide": command.Typed(runGuide),
 	}
 }
 
-func runSkill(_ context.Context, _ command.Caller, args command.SkillArgs) (any, error) {
-	reference := strings.TrimSpace(args.Reference)
+func runSkill(args command.SkillArgs, commandRules func(name string) (string, bool)) (any, error) {
+	reference, name := strings.TrimSpace(args.Reference), strings.TrimSpace(args.Command)
 	switch {
+	case name != "" && (args.List || reference != ""):
+		return nil, command.Usage("pass one of {reference}, {list} and {command}")
+	case name != "":
+		rules, ok := commandRules(name)
+		if !ok {
+			return nil, command.Refuse(command.CodeNoSuchCommand, "%s is not a command or a family of commands", name)
+		}
+		return rules, nil
 	case args.List && reference != "":
 		return nil, command.Refuse(command.CodeListAndReference, "{list} and {reference} are mutually exclusive; pass one")
 	case args.List:
 		return strings.Join(attnskill.SkillReferenceNames(), "\n") + "\n", nil
 	case reference == "":
-		return prompts.RenderText("session", "attn-map", prompts.Values{}) + "\n", nil
+		return command.Teaching(prompts.RenderText("session", "attn-map", prompts.Values{}) + "\n"), nil
 	}
 	content, err := attnskill.SkillFile("references/" + strings.TrimSuffix(reference, ".md") + ".md")
 	if err != nil {

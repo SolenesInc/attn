@@ -25,10 +25,10 @@ groups:
 commands:
   - name: delegate
     summary: start another agent on work you may hand off
-    core: true
     runs: home
     grant: own
     effect: act
+    upfront: true
     doc: |
       Starts another agent in its own session, which the user can open and steer. Every delegation has a seed, which the delegated agent reads when it starts: `brief` plants a new one, and `seed` uses an existing seed's current assignment. `handover` transfers that seed to the new agent, with `note` as the next step; the previous agent keeps running. `authorization` says how far the user lets the task go, written as instructions to the agent; it is saved on the seed, and the opening delivers it. Without it, a delegation keeps the seed's current words.
 
@@ -75,6 +75,7 @@ commands:
     runs: home
     grant: own
     effect: read
+    upfront: true
     doc: |
       Reads a delegation's operation by its request id or operation id: its state, its progress, the session it started, and its result once it has one. Use it when the answer to `delegate` was lost, not to wait for a start.
     args:
@@ -88,6 +89,7 @@ commands:
     anyone: true
     grant: own
     effect: read
+    upfront: true
     doc: |
       Prints the roles agents choose from when delegating: each role that is turned on and has a complete default model, its alternatives with when to pick them, and the fallback for work no role fits.
     args:

@@ -116,7 +116,7 @@ func TestAnAgentCannotSeeOrCloseAnAskOfAnotherProfile(t *testing.T) {
 
 func TestTheAskToolRequiresItsMarkdownAndSpeaksOnlyInToolWords(t *testing.T) {
 	s := newSessionTools(t, "asks_enabled")
-	session, err := s.agent.connect(t, "")
+	session, err := s.agent.connect(t)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestAPluginWithoutLaunchInstructionsCanReadAskGuidance(t *testing.T) {
 		t.Fatal("want a plugin launch with MCP tools and without instructions")
 	}
 	agent := agentToolsCaller{w: w, bearer: launch.AgentTools.Credential}
-	session, err := agent.connect(t, "")
+	session, err := agent.connect(t)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestAPluginWithoutLaunchInstructionsCanReadAskGuidance(t *testing.T) {
 	if index < 0 {
 		t.Fatal("the plugin's MCP server did not offer ask")
 	}
-	if description := listed.Tools[index].Description; !strings.Contains(description, "`skill` with `reference` set to `ask`") {
+	if description := listed.Tools[index].Description; !strings.Contains(description, "`skill({reference: \"ask\"})`") {
 		t.Errorf("the ask description does not direct the plugin to its MCP reference:\n%s", description)
 	}
 	reference := agent.mustCall(t, "skill", map[string]any{"reference": "ask"})

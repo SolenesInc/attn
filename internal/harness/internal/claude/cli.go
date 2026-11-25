@@ -434,16 +434,21 @@ func generateHooksConfig(opts harness.DirectLaunchOpts) string {
 
 const claudeAgentToolsServer = "attn"
 
+// The daemon ends a script after 50 s, and its answer has to arrive first.
+const claudeAgentToolsTimeout = 60 * time.Second
+
 func claudeAgentToolsConfig(url string) string {
 	type server struct {
 		Type    string            `json:"type"`
 		URL     string            `json:"url"`
 		Headers map[string]string `json:"headers"`
+		Timeout int64             `json:"timeout"`
 	}
 	config := map[string]map[string]server{"mcpServers": {claudeAgentToolsServer: {
 		Type:    "http",
 		URL:     url,
 		Headers: map[string]string{"Authorization": "Bearer ${" + harness.AgentCredentialEnv + "}"},
+		Timeout: claudeAgentToolsTimeout.Milliseconds(),
 	}}}
 	data, _ := json.Marshal(config)
 	return string(data)

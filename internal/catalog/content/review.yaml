@@ -178,6 +178,7 @@ commands:
     runs: here
     grant: full
     effect: act
+    upfront: true
     doc: |
       Snapshots the working tree of `repository` as head, and writes frame (brief unless the document already picks one), repository, base and head into the frontmatter of `document`. Creates the document when it is missing, and leaves the text below the frontmatter as written. Run it again before presenting a revision: it takes a fresh head and keeps the base. `base` defaults to the head of the last review the user sent on this document, else the document's base; without one the review is a tour of unchanged code.
     args:
@@ -195,6 +196,7 @@ commands:
     runs: here
     grant: full
     effect: read
+    upfront: true
     doc: |
       Lists the problems of `document`, each with its line and the fix. An empty list means the document is ready to open. On the CLI it exits 1 when there are problems, and `attn open` prints the same problems as warnings.
     args:

@@ -1,80 +1,17 @@
 package daemon_test
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-type schemaCheckedTools struct {
-	t          *testing.T
-	agent      agentToolsCaller
-	tools      offeredTools
-	called     map[string]bool
-	mismatches []string
-}
-
-func (s *schemaCheckedTools) call(tool string, args map[string]any) map[string]any {
-	s.t.Helper()
-	s.called[tool] = true
-	result := s.agent.mustCall(s.t, tool, args)
-	if result.IsError {
-		s.mismatches = append(s.mismatches, tool+": refused: "+resultText(result))
-		return nil
-	}
-	return s.validate(tool, result)
-}
-
-func (s *schemaCheckedTools) validate(tool string, result *mcp.CallToolResult) map[string]any {
-	schema, ok := s.tools[tool]
-	if !ok {
-		s.t.Fatalf("%s is not offered", tool)
-	}
-	data, err := json.Marshal(result.StructuredContent)
-	if err != nil {
-		s.t.Fatal(err)
-	}
-	var instance any
-	if err := json.Unmarshal(data, &instance); err != nil {
-		s.t.Fatal(err)
-	}
-	if schema != nil {
-		if err := schema.Validate(instance); err != nil {
-			s.mismatches = append(s.mismatches, tool+": "+err.Error())
-		}
-	}
-	object, _ := instance.(map[string]any)
-	return object
-}
-
-func (s *schemaCheckedTools) report(families ...string) {
-	s.t.Helper()
-	var uncalled []string
-	for tool := range s.tools {
-		for _, family := range families {
-			if strings.HasPrefix(tool, family+"_") && !s.called[tool] {
-				uncalled = append(uncalled, tool)
-			}
-		}
-	}
-	sort.Strings(uncalled)
-	if len(uncalled) > 0 {
-		s.t.Errorf("offered tools this test never called: %v", uncalled)
-	}
-	for _, mismatch := range s.mismatches {
-		s.t.Error(mismatch)
-	}
-}
-
-func TestEveryJournalToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) {
+func TestEveryJournalCommandReturnsToAScriptWhatItsCLIPrints(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	if err := os.MkdirAll(w.Path("notebook"), 0o700); err != nil {
 		t.Fatal(err)
@@ -83,51 +20,51 @@ func TestEveryJournalToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.
 	setSetting(t, app, "agent_tools_enabled", "true")
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
-	tools := &schemaCheckedTools{t: t, agent: agent, tools: listOfferedTools(t, agent), called: map[string]bool{}}
+	tools := newToolShapes(t, agent, listOfferedTools(t, agent))
 
-	appended := tools.call("journal_append", map[string]any{"text": "Shipped the parser fix.", "date": "2026-07-05"})
+	appended := tools.object("journal_append", map[string]any{"text": "Shipped the parser fix.", "date": "2026-07-05"})
 	if appended["rel_path"] != "journal/2026-07-05.md" {
 		t.Errorf("journal_append answered %v, want journal/2026-07-05.md", appended)
 	}
-	tools.report("journal")
+	tools.finish("journal_")
 }
 
-func TestEveryCrewToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) {
+func TestEveryCrewCommandReturnsToAScriptWhatItsCLIPrints(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app := w.App()
 	setSetting(t, app, "agent_tools_enabled", "true")
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
-	tools := &schemaCheckedTools{t: t, agent: agent, tools: listOfferedTools(t, agent), called: map[string]bool{}}
+	tools := newToolShapes(t, agent, listOfferedTools(t, agent))
 
-	moved := tools.call("crew_move_home", map[string]any{"member": "keel"})
+	moved := tools.object("crew_move_home", map[string]any{"member": "keel"})
 	if member, _ := moved["member"].(map[string]any); member["name"] != "Keel" {
 		t.Errorf("crew_move_home answered %v, want keel's new home", moved)
 	}
-	created := tools.call("crew_create", map[string]any{"name": "scout", "agent": "claude"})
+	created := tools.object("crew_create", map[string]any{"name": "scout", "agent": "claude"})
 	if created["name"] != "scout" {
 		t.Errorf("crew_create answered %v, want the member scout", created)
 	}
-	tools.call("crew_list", map[string]any{"all": true})
-	set := tools.call("crew_set", map[string]any{"member": "scout", "model": "opus", "effort": "", "awareness_dirs": []any{w.Path("shop")}})
+	tools.object("crew_list", map[string]any{"all": true})
+	set := tools.object("crew_set", map[string]any{"member": "scout", "model": "opus", "effort": "", "awareness_dirs": []any{w.Path("shop")}})
 	if set["name"] != "scout" {
 		t.Errorf("crew_set answered %v, want the member scout", set)
 	}
-	tools.call("crew_rename", map[string]any{"member": "scout", "name": "ranger"})
-	tools.call("crew_apply", map[string]any{"member": "ranger"})
-	started := tools.call("crew_start", map[string]any{"member": "ranger"})
+	tools.object("crew_rename", map[string]any{"member": "scout", "name": "ranger"})
+	tools.object("crew_apply", map[string]any{"member": "ranger"})
+	started := tools.object("crew_start", map[string]any{"member": "ranger"})
 	if started["name"] != "ranger" || started["session_id"] == "" {
 		t.Errorf("crew_start answered %v, want ranger in a session", started)
 	}
-	tools.call("crew_close", map[string]any{"member": "ranger"})
-	tools.call("crew_prime", map[string]any{})
-	tools.call("crew_retire", map[string]any{"member": "alder"})
+	tools.object("crew_close", map[string]any{"member": "ranger"})
+	tools.object("crew_prime", map[string]any{})
+	tools.object("crew_retire", map[string]any{"member": "alder"})
 	retired := agent.mustCall(t, "crew_start", map[string]any{"member": "alder"})
-	if text := resultText(retired); !retired.IsError || !strings.Contains(text, "`crew_restore`") || strings.Contains(text, "attn crew") {
+	if text := resultText(retired); !retired.IsError || !strings.Contains(text, "`crew_restore({member: ") || strings.Contains(text, "attn crew") {
 		t.Errorf("crew_start of a retired member answered %q, want a refusal that names the crew_restore tool", text)
 	}
-	tools.call("crew_restore", map[string]any{"member": "alder"})
-	tools.report("crew")
+	tools.object("crew_restore", map[string]any{"member": "alder"})
+	tools.finish("crew_")
 }
 
 func TestAJournalOrCrewCallerReadsAndChangesNothingOfAnotherProfile(t *testing.T) {

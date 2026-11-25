@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"math/big"
 	"regexp"
 	"slices"
 	"sort"
@@ -164,69 +163,6 @@ func (s *Schema) check(n *schemaNode, value any, at string) error {
 		}
 	}
 	return nil
-}
-
-func (s *Schema) IntegerLiterals(raw json.RawMessage) json.RawMessage {
-	return s.integerLiterals(s.root, raw)
-}
-
-func (s *Schema) integerLiterals(n *schemaNode, raw json.RawMessage) json.RawMessage {
-	if n.Ref != "" {
-		n = s.defs[strings.TrimPrefix(n.Ref, defsRef)]
-	}
-	switch {
-	case n.Type == "integer":
-		return integerLiteral(raw)
-	case len(n.Properties) > 0:
-		var fields map[string]json.RawMessage
-		if json.Unmarshal(raw, &fields) != nil || fields == nil {
-			return raw
-		}
-		changed := false
-		for name, property := range n.Properties {
-			if value, given := fields[name]; given {
-				if written := s.integerLiterals(property, value); !bytes.Equal(written, value) {
-					fields[name] = written
-					changed = true
-				}
-			}
-		}
-		if !changed {
-			return raw
-		}
-		written, _ := json.Marshal(fields)
-		return written
-	case n.Items != nil:
-		var items []json.RawMessage
-		if json.Unmarshal(raw, &items) != nil {
-			return raw
-		}
-		changed := false
-		for i, item := range items {
-			if written := s.integerLiterals(n.Items, item); !bytes.Equal(written, item) {
-				items[i] = written
-				changed = true
-			}
-		}
-		if !changed {
-			return raw
-		}
-		written, _ := json.Marshal(items)
-		return written
-	}
-	return raw
-}
-
-func integerLiteral(raw json.RawMessage) json.RawMessage {
-	spelled := bytes.TrimSpace(raw)
-	if !bytes.ContainsAny(spelled, ".eE") {
-		return raw
-	}
-	whole, ok := new(big.Rat).SetString(string(spelled))
-	if !ok || !whole.IsInt() {
-		return raw
-	}
-	return json.RawMessage(whole.Num().String())
 }
 
 func jsonType(value any, want string) string {

@@ -24,34 +24,41 @@ import (
 var agentToolDefinitions []byte
 
 type agentToolDefinition struct {
-	Command      string          `json:"command"`
-	Name         string          `json:"name"`
-	Title        string          `json:"title"`
-	Description  string          `json:"description"`
-	Core         bool            `json:"core"`
-	Effect       catalog.Effect  `json:"effect"`
-	InputSchema  json.RawMessage `json:"inputSchema"`
-	OutputSchema json.RawMessage `json:"outputSchema"`
-	Receipt      []string        `json:"receipt"`
+	Command     string          `json:"command"`
+	Name        string          `json:"name"`
+	Title       string          `json:"title"`
+	Description string          `json:"description"`
+	Tool        bool            `json:"tool"`
+	Signature   string          `json:"signature"`
+	Effect      catalog.Effect  `json:"effect"`
+	InputSchema json.RawMessage `json:"inputSchema"`
+	Receipt     []string        `json:"receipt"`
+}
+
+type scriptToolDefinition struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Script      string `json:"script"`
 }
 
 const (
-	agentToolsAll  = ""
-	agentToolsCore = "core"
-	agentToolsRest = "rest"
+	doToolName   = "attn_do"
+	readToolName = "attn_read"
 )
 
 type agentCall struct {
 	caller command.Caller
 	who    string
-	after  func()
+	after  []func()
 	named  func(meta json.RawMessage) (command.Caller, string, *command.Refusal)
 }
 
 type agentToolServers struct {
-	once    sync.Once
-	servers map[string]*mcpserver.Server
-	tools   map[string]agentTool
+	once         sync.Once
+	server       *mcpserver.Server
+	tools        map[string]agentTool
+	commandNames []string
+	script       *mcpserver.Schema
 }
 
 type agentTool struct {
@@ -62,12 +69,7 @@ type agentTool struct {
 
 func (d *Daemon) agentToolsHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		set := r.URL.Query().Get("tools")
-		server, ok := d.agentToolServers()[set]
-		if !ok {
-			http.Error(w, fmt.Sprintf("tools=%s names no tool set; use tools=core, tools=rest, or leave it out for every tool", set), http.StatusBadRequest)
-			return
-		}
+		server := d.agentToolServer()
 		call, err := d.agentCallFor(r)
 		if err != nil {
 			d.logf("agent tools: %s %s refused: %v", r.Method, r.URL.Path, err)
@@ -76,14 +78,16 @@ func (d *Daemon) agentToolsHandler() http.Handler {
 		}
 		started := time.Now()
 		method := server.Serve(w, r, func(ctx context.Context, tool string, arguments, meta json.RawMessage) mcpserver.Result {
-			return d.callAgentTool(ctx, call, d.agentToolSet.tools[tool], arguments, meta)
+			return d.callAgentTool(ctx, call, tool, arguments, meta)
 		})
 		if method == "initialize" || method == "tools/list" {
 			d.logf("agent tools: %s for %s (session %s) in %s", method, call.who, call.caller.Session, time.Since(started).Round(time.Microsecond))
 		}
-		if call.after != nil {
+		if len(call.after) > 0 {
 			_ = http.NewResponseController(w).Flush()
-			call.after()
+			for _, after := range call.after {
+				after()
+			}
 		}
 	})
 }
@@ -160,11 +164,12 @@ func (d *Daemon) sessionCaller(session protocol.SessionID) command.Caller {
 }
 
 type agentToolCatalog struct {
-	Name             string                `json:"name"`
-	Description      string                `json:"description"`
-	Instructions     string                `json:"instructions"`
-	CoreInstructions string                `json:"core_instructions"`
-	Tools            []agentToolDefinition `json:"tools"`
+	Name         string                `json:"name"`
+	Description  string                `json:"description"`
+	Instructions string                `json:"instructions"`
+	Do           scriptToolDefinition  `json:"do"`
+	Read         scriptToolDefinition  `json:"read"`
+	Tools        []agentToolDefinition `json:"tools"`
 }
 
 var agentToolsCatalog = sync.OnceValue(func() agentToolCatalog {
@@ -175,81 +180,128 @@ var agentToolsCatalog = sync.OnceValue(func() agentToolCatalog {
 	return catalog
 })
 
-func (d *Daemon) agentToolServers() map[string]*mcpserver.Server {
-	d.agentToolSet.once.Do(func() {
+func (d *Daemon) agentToolServer() *mcpserver.Server {
+	set := &d.agentToolSet
+	set.once.Do(func() {
 		offered := agentToolsCatalog()
-		sets := map[string][]mcpserver.Tool{}
-		d.agentToolSet.tools = map[string]agentTool{}
+		tools := []mcpserver.Tool{offered.Do.offered(doToolName, false), offered.Read.offered(readToolName, true)}
+		set.tools = map[string]agentTool{}
 		for _, def := range offered.Tools {
-			d.agentToolSet.tools[def.Name] = agentTool{def: def, input: def.parsedInput(), receipt: catalog.ReceiptOf(def.Receipt)}
-			sets[agentToolsAll] = append(sets[agentToolsAll], def.offered())
-			if def.Core {
-				sets[agentToolsCore] = append(sets[agentToolsCore], def.offered())
-			} else {
-				sets[agentToolsRest] = append(sets[agentToolsRest], def.offered())
+			set.tools[def.Name] = agentTool{def: def, input: def.parsedInput(), receipt: catalog.ReceiptOf(def.Receipt)}
+			set.commandNames = append(set.commandNames, def.Name)
+			if def.Tool {
+				tools = append(tools, def.offered())
 			}
 		}
-		d.agentToolSet.servers = map[string]*mcpserver.Server{}
-		for set, instructions := range map[string]string{agentToolsAll: offered.Instructions, agentToolsCore: offered.CoreInstructions, agentToolsRest: offered.Description} {
-			d.agentToolSet.servers[set] = mcpserver.New(offered.Name, buildinfo.Version, instructions, sets[set])
-		}
+		set.script = parsedSchema(doToolName, tools[0].InputSchema)
+		set.server = mcpserver.New(offered.Name, buildinfo.Version, offered.Instructions, tools)
 	})
-	return d.agentToolSet.servers
+	return set.server
+}
+
+func parsedSchema(tool string, raw json.RawMessage) *mcpserver.Schema {
+	schema, err := mcpserver.ParseSchema(raw)
+	if err != nil {
+		panic(fmt.Sprintf("%s: input schema: %v", tool, err))
+	}
+	return schema
 }
 
 func (def agentToolDefinition) parsedInput() *mcpserver.Schema {
-	input, err := mcpserver.ParseSchema(def.InputSchema)
+	return parsedSchema(def.Name, def.InputSchema)
+}
+
+var inEveryRequest = map[string]any{"anthropic/alwaysLoad": true}
+
+func (def scriptToolDefinition) offered(name string, readOnly bool) mcpserver.Tool {
+	input, err := json.Marshal(map[string]any{
+		"type":                 "object",
+		"properties":           map[string]any{"script": map[string]any{"type": "string", "description": def.Script}},
+		"required":             []string{"script"},
+		"additionalProperties": false,
+	})
 	if err != nil {
-		panic(fmt.Sprintf("%s: input schema: %v", def.Name, err))
+		panic(fmt.Sprintf("%s: input schema: %v", name, err))
 	}
-	return input
+	return mcpserver.Tool{
+		Name: name, Title: def.Title, Description: def.Description, InputSchema: input, Meta: inEveryRequest,
+		Annotations: &mcpserver.Annotations{Title: def.Title, ReadOnlyHint: readOnly},
+	}
 }
 
 func (def agentToolDefinition) offered() mcpserver.Tool {
-	tool := mcpserver.Tool{
-		Name:         def.Name,
-		Title:        def.Title,
-		Description:  def.Description,
-		InputSchema:  def.InputSchema,
-		OutputSchema: def.OutputSchema,
-		Annotations:  &mcpserver.Annotations{Title: def.Title, ReadOnlyHint: def.Effect == catalog.EffectRead},
+	return mcpserver.Tool{
+		Name: def.Name, Title: def.Title, Description: def.Description, InputSchema: def.InputSchema, Meta: inEveryRequest,
+		Annotations: &mcpserver.Annotations{Title: def.Title, ReadOnlyHint: def.Effect == catalog.EffectRead},
 	}
-	if def.Core {
-		tool.Meta = map[string]any{"anthropic/alwaysLoad": true}
-	}
-	return tool
 }
 
-func (d *Daemon) callAgentTool(ctx context.Context, call *agentCall, tool agentTool, arguments, meta json.RawMessage) mcpserver.Result {
-	def := tool.def
-	var refusal *command.Refusal
-	if call.named != nil {
-		call.caller, call.who, refusal = call.named(meta)
-	}
-	if refusal == nil && !d.on(setting.AgentToolsEnabled) {
-		refusal = &command.Refusal{Code: "setting_off", Message: setting.AgentToolsEnabled.Refusal().Error(), Fix: "Use the attn CLI until the setting is on."}
-	}
-	if refusal == nil {
-		refusal = def.checkArguments(arguments, tool.input)
-		arguments = tool.input.IntegerLiterals(arguments)
-	}
-	var result any
-	if refusal == nil {
-		result, refusal = d.runAgentCommand(ctx, call, def.Command, arguments)
+func (d *Daemon) callAgentTool(ctx context.Context, call *agentCall, name string, arguments, meta json.RawMessage) mcpserver.Result {
+	refusal := d.refusesAgentCall(call, meta)
+	if refusal == nil && (name == doToolName || name == readToolName) {
+		var in struct {
+			Script string `json:"script"`
+		}
+		if refusal = checkArguments(name, arguments, d.agentToolSet.script); refusal == nil {
+			if err := json.Unmarshal(arguments, &in); err == nil {
+				return d.runAgentScript(ctx, call, scriptTool{name: name, readsOnly: name == readToolName}, in.Script)
+			}
+		}
 	}
 	if refusal != nil {
-		d.logf("agent tools: %s by %s (session %s): refused %s: %s", def.Name, call.who, call.caller.Session, refusal.Code, refusal.Message)
-		return mcpserver.Result{IsError: true, Content: []mcpserver.Content{mcpserver.Text(def.refusalText(refusal))}}
+		d.logAgentCommand(call, name, refusal)
+		return refusedResult(refusal)
 	}
-	d.logf("agent tools: %s by %s (session %s): ok", def.Name, call.who, call.caller.Session)
-	switch text := result.(type) {
-	case command.Teaching:
-		return mcpserver.Result{Content: []mcpserver.Content{mcpserver.Text(toolCatalog().TeachingToolText(string(text)))}}
-	case string:
-		return mcpserver.Result{Content: []mcpserver.Content{mcpserver.Text(text)}}
+	return d.callCommandTool(ctx, call, d.agentToolSet.tools[name], arguments)
+}
+
+func (d *Daemon) refusesAgentCall(call *agentCall, meta json.RawMessage) *command.Refusal {
+	if call.named != nil {
+		var refusal *command.Refusal
+		if call.caller, call.who, refusal = call.named(meta); refusal != nil {
+			return refusal
+		}
 	}
-	answer := tool.answer(result)
-	return mcpserver.Result{Content: []mcpserver.Content{mcpserver.Text(tool.json(answer))}, StructuredContent: answer}
+	if !d.on(setting.AgentToolsEnabled) {
+		return &command.Refusal{Code: "setting_off", Message: setting.AgentToolsEnabled.Refusal().Error(), Fix: "Use the attn CLI until the setting is on."}
+	}
+	if call.caller.Session == "" {
+		return &command.Refusal{Code: command.CodeNoSession, Message: call.who + " is not showing a session"}
+	}
+	return nil
+}
+
+func (d *Daemon) callCommandTool(ctx context.Context, call *agentCall, tool agentTool, arguments json.RawMessage) mcpserver.Result {
+	refusal := tool.withRules(checkArguments(tool.def.Name, arguments, tool.input))
+	var result any
+	if refusal == nil {
+		result, refusal = d.runAgentCommand(ctx, call.caller, tool.def.Command, arguments)
+		refusal = tool.withRules(refusal)
+	}
+	if then, ok := result.(command.Then); ok {
+		result, call.after = then.Result, append(call.after, then.After)
+	}
+	d.logAgentCommand(call, tool.def.Name, refusal)
+	if refusal != nil {
+		return refusedResult(refusal)
+	}
+	answer := scriptAnswer(tool, result)
+	if answer.JSON != "" {
+		answer.Text = tool.json(tool.answer(result))
+	}
+	return mcpserver.Result{Content: []mcpserver.Content{mcpserver.Text(answer.Text)}}
+}
+
+func refusedResult(refusal *command.Refusal) mcpserver.Result {
+	return mcpserver.Result{IsError: true, Content: []mcpserver.Content{mcpserver.Text(refusalText(refusal))}}
+}
+
+func (d *Daemon) logAgentCommand(call *agentCall, name string, refusal *command.Refusal) {
+	if refusal != nil {
+		d.logf("agent tools: %s by %s (session %s): refused %s: %s", name, call.who, call.caller.Session, refusal.Code, refusal.Message)
+		return
+	}
+	d.logf("agent tools: %s by %s (session %s): ok", name, call.who, call.caller.Session)
 }
 
 func (tool agentTool) json(answer any) string {
@@ -279,21 +331,21 @@ func (tool agentTool) answer(result any) any {
 	return tool.receipt.Of(whole)
 }
 
-func (def agentToolDefinition) checkArguments(raw json.RawMessage, schema *mcpserver.Schema) *command.Refusal {
+func checkArguments(name string, raw json.RawMessage, schema *mcpserver.Schema) *command.Refusal {
 	args := map[string]any{}
 	if len(bytes.TrimSpace(raw)) > 0 && string(raw) != "null" {
 		if err := json.Unmarshal(raw, &args); err != nil {
-			return def.usage(fmt.Sprintf("arguments must be a JSON object: %v", err))
+			return argumentRefusal(name, fmt.Sprintf("arguments must be a JSON object: %v", err))
 		}
 	}
 	if err := schema.Validate(args); err != nil {
-		return def.usage(err.Error())
+		return argumentRefusal(name, err.Error())
 	}
 	return nil
 }
 
-func (def agentToolDefinition) usage(message string) *command.Refusal {
-	return &command.Refusal{Code: command.CodeUsage, Message: message, Fix: "Call " + def.Name + " with only the arguments its input schema lists, and every one it requires.", Arguments: true}
+func argumentRefusal(name, message string) *command.Refusal {
+	return &command.Refusal{Code: command.CodeUsage, Message: message, Fix: "Call " + name + " with only the arguments it takes, and every one it requires.", Arguments: true}
 }
 
 var toolCatalog = sync.OnceValue(func() *catalog.Catalog {
@@ -304,7 +356,7 @@ var toolCatalog = sync.OnceValue(func() *catalog.Catalog {
 	return c
 })
 
-func (def agentToolDefinition) refusalText(r *command.Refusal) string {
+func refusalText(r *command.Refusal) string {
 	text := r.Code + ": " + toolCatalog().ToolText(r.Message)
 	if r.Fix != "" {
 		text += "\nFix: " + toolCatalog().ToolText(r.Fix)
@@ -312,14 +364,9 @@ func (def agentToolDefinition) refusalText(r *command.Refusal) string {
 	return text
 }
 
-func (d *Daemon) runAgentCommand(ctx context.Context, call *agentCall, name string, args json.RawMessage) (any, *command.Refusal) {
+func (d *Daemon) runAgentCommand(ctx context.Context, caller command.Caller, name string, args json.RawMessage) (any, *command.Refusal) {
 	if protocol.CommandRuns[name] == protocol.LocatorHome && !d.enrollmentStatus().IsHome() {
-		return d.forwardCommand(call.caller, name, args)
+		return d.forwardCommand(caller, name, args)
 	}
-	result, refusal := d.commandLayer().Run(ctx, call.caller, name, args)
-	if then, ok := result.(command.Then); ok {
-		call.after = then.After
-		return then.Result, nil
-	}
-	return result, refusal
+	return d.commandLayer().Run(ctx, caller, name, args)
 }

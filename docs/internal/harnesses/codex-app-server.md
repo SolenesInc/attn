@@ -164,12 +164,11 @@ Shared app-server and `--remote` TUI behavior. For plain Codex, see
 - **`tools/call` caller identity:** `_meta.threadId` is the calling
   conversation (subagent's own id, or ephemeral `/side` id), matching
   `CODEX_THREAD_ID`; `_meta.sessionId` is the root conversation. Server `name`
-  hyphens become underscores in code-mode tool names (`attn-core` →
-  `mcp__attn_core__*`). Deferred namespace listings truncate `initialize`
-  `instructions` to the first line (max 250 chars). In code mode, `outputSchema`
-  TypeScript generation expands at most 32 `$ref`s per schema (property-name
-  order) and emits `unknown` for later ones `[0.167.0]`. MCP calls run in the
-  app-server, outside the sandbox.
+  hyphens become underscores in code-mode tool names. Deferred namespace
+  listings truncate `initialize` `instructions` to the first line (max 250
+  chars). In code mode, `outputSchema` TypeScript generation expands at most 32
+  `$ref`s per schema (property-name order) and emits `unknown` for later ones
+  `[0.167.0]`. MCP calls run in the app-server, outside the sandbox.
 - **Ephemeral model calls (`internal/harness/internal/codex/oneshot.go`):** run
   as an ephemeral `thread/start` on the shared app-server with
   `features.hooks=false`, `mcp_servers.<name>.enabled=false` for user MCP

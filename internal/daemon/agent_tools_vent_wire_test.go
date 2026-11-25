@@ -69,7 +69,7 @@ func TestASecondVentInTheSameTurnNamesTheWithdrawToolToAToolCaller(t *testing.T)
 	var first protocol.Vent
 	structuredAs(t, s.shapes.call("vent", map[string]any{"about": "attn", "text": "attn seed show printed no bookmark."}), &first)
 	refused := s.agent.mustCall(t, "vent", map[string]any{"about": "attn", "text": "attn seed note printed nothing."})
-	want := "Withdraw it (`vent_withdraw` with {\"vent\": \"" + first.ID + "\"}) and send one vent that covers both"
+	want := "Withdraw it (`vent_withdraw({vent: \"" + first.ID + "\"})`) and send one vent that covers both"
 	if text := resultText(refused); !refused.IsError || !strings.Contains(text, want) {
 		t.Errorf("a second vent in the turn answered %q, want a refusal containing %q", text, want)
 	}

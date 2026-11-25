@@ -321,7 +321,7 @@ func TestASigmaSessionStartsWithAttnsToolsWhileAgentToolsAreOn(t *testing.T) {
 				t.Fatalf("Sigma started the conversation with MCP servers %+v, want attn with its description", started.MCPServers)
 			}
 			credential := strings.TrimPrefix(server.MCPHeader("attn", "Authorization"), "Bearer ")
-			initialized, err := agentToolsCaller{w: w, bearer: credential, headers: map[string]string{"Sigma-Root-Conversation": on.ConversationID}}.connect(t, "")
+			initialized, err := agentToolsCaller{w: w, bearer: credential, headers: map[string]string{"Sigma-Root-Conversation": on.ConversationID}}.connect(t)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -338,7 +338,7 @@ func TestASigmaSessionStartsWithAttnsToolsWhileAgentToolsAreOn(t *testing.T) {
 				}
 			}
 
-			called := server.CallTool(on.ConversationID, "seed_note", map[string]any{"seed": seed, "text": "From the Sigma session."})
+			called := server.CallTool(on.ConversationID, "attn_do", noteScript(seed, "From the Sigma session."))
 			if called.Refused != "" || called.IsError {
 				t.Fatalf("the Sigma conversation calling seed_note: refused %q, %s", called.Refused, called.Text())
 			}

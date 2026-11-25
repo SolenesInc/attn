@@ -1,1 +1,1 @@
-call `skill` with `reference` delegation
+call `skill({reference: "delegation"})`

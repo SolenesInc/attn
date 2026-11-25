@@ -9,7 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func TestEveryPullRequestToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) {
+func TestEveryPullRequestCommandReturnsToAScriptWhatItsCLIPrints(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	setSetting(t, app, "agent_tools_enabled", "true")

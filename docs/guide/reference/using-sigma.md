@@ -221,13 +221,13 @@ conversation and runs the `attn` command as that session, as it does for other
 harnesses.
 
 With **Agent tools** on in **Settings → Experimental** (`agent_tools_enabled`),
-a Sigma agent also gets Attn's tools, such as `seed_note`, as the MCP server
+a Sigma agent also gets Attn's tools, such as `attn_do`, as the MCP server
 `attn`. Attn registers the server with the Sigma server each time it connects.
 It starts each new conversation with `--mcp-server attn=<description>` and
-appends the intent map, the text that says when to reach for each tool, to the
-conversation's instructions. Sigma sends the tree root conversation's id with
-every tool call, so a call acts as the session holding that conversation: a
-hosted subagent's call acts as its root session, and a worker's call acts as
+appends the intent map, the text that says which command serves each need, to
+the conversation's instructions. Sigma sends the tree root conversation's id
+with every tool call, so a call acts as the session holding that conversation:
+a hosted subagent's call acts as its root session, and a worker's call acts as
 the worker's own session. Attn gives the credential to the Sigma server alone:
 the `sigma` client, its arguments and Sigma's database never hold it.
 

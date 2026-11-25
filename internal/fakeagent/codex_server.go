@@ -1189,28 +1189,6 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 		s.compactRefusal = p.Text
 		s.mu.Unlock()
 		return struct{}{}, nil
-	case methodCallMCPTool:
-		var call mcpToolCall
-		if err := json.Unmarshal(raw, &call); err != nil {
-			return nil, err
-		}
-		t, err := s.loaded(call.ThreadID)
-		if err != nil {
-			return nil, err
-		}
-		s.mu.Lock()
-		config, root := t.config, call.ThreadID
-		for parent := t.parent; parent != ""; {
-			root = parent
-			if next := s.threads[parent]; next != nil {
-				parent = next.parent
-			} else {
-				parent = ""
-			}
-		}
-		s.mu.Unlock()
-		call.Meta = map[string]any{"threadId": call.ThreadID, "sessionId": root}
-		return callCodexTool(config, call)
 	case methodRunTool:
 		t, err := s.loaded(p.ThreadID)
 		if err != nil {

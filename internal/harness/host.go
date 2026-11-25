@@ -93,7 +93,7 @@ type HostSessions interface {
 	MirrorLabel(id SessionID)
 	StartedDirectories(profile string) []string
 	LaunchInfo(id SessionID, agent ID) SessionLaunchInfo
-	Instructions(id SessionID, agentTools bool) string
+	Instructions(id SessionID) string
 	Reload(id SessionID, cols, rows int) error
 	LaunchUnconfirmed(id SessionID, reason string)
 	EnsureTranscriptWatcher(id SessionID, path string)

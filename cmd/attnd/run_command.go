@@ -12,7 +12,7 @@ import (
 )
 
 func runWithoutDaemon() {
-	layer, err := command.WithoutDaemon(reading.Handlers())
+	layer, err := command.WithoutDaemon(reading.Handlers(func(string) (string, bool) { return "", false }))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		exit(1)

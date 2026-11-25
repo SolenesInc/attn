@@ -35,8 +35,8 @@ func TestTheSampleHarnessCallsAttnsToolsAsItsSession(t *testing.T) {
 	t.Parallel()
 	s, app, session, seed := startSampleHarnessSession(t)
 
-	app.TypeLine(session, `/tool seed_note {"seed":"`+seed.ID+`","text":"Rounded half up."}`)
-	app.AwaitScreen(session, "tool seed_note:")
+	app.TypeLine(session, `/tool attn_do {"script":"seed_note({seed:'`+seed.ID+`',text:'Rounded half up.'})"}`)
+	app.AwaitScreen(session, "tool attn_do:")
 	shown := showSeed(t, s, "", seed.ID)
 	if len(shown.Notes) == 0 || shown.Notes[0].Body != "Rounded half up." || stackAuthorSession(shown.Notes[0]) != protocol.SessionID(session) {
 		t.Fatalf("the sample harness's tool call did not note as its session %s: %+v", session, shown.Notes)
@@ -47,10 +47,10 @@ func TestTheSampleHarnessTakesTheNextToolCallAfterATypoInTheArguments(t *testing
 	t.Parallel()
 	s, app, session, seed := startSampleHarnessSession(t)
 
-	app.TypeLine(session, `/tool seed_note {"seed":`)
+	app.TypeLine(session, `/tool attn_do {"script":`)
 	app.AwaitScreen(session, "tool: ")
-	app.TypeLine(session, `/tool seed_note {"seed":"`+seed.ID+`","text":"Typed again."}`)
-	app.AwaitScreen(session, "tool seed_note:")
+	app.TypeLine(session, `/tool attn_do {"script":"seed_note({seed:'`+seed.ID+`',text:'Typed again.'})"}`)
+	app.AwaitScreen(session, "tool attn_do:")
 	shown := showSeed(t, s, "", seed.ID)
 	if len(shown.Notes) == 0 || shown.Notes[0].Body != "Typed again." {
 		t.Fatalf("the session did not take the tool call typed after the typo: %+v", shown.Notes)
@@ -103,7 +103,7 @@ func TestEachConversationOfTheSampleServerCallsAttnsToolsAsItsOwnSession(t *test
 		if used := server.Started(conversation).MCPServers; len(used) != 1 || used[0].Name != "attn" || used[0].Description == "" {
 			t.Fatalf("conversation %s started with MCP servers %+v, want attn's by name and description", conversation, used)
 		}
-		called := server.CallTool(conversation, "seed_note", map[string]any{"seed": seed.ID, "text": "From " + conversation})
+		called := server.CallTool(conversation, "attn_do", map[string]any{"script": "seed_note({seed: '" + seed.ID + "', text: 'From " + conversation + "'})"})
 		if called.Refused != "" || called.IsError {
 			t.Fatalf("conversation %s calling seed_note: refused %q, %s", conversation, called.Refused, called.Text())
 		}

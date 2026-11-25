@@ -227,13 +227,12 @@ func (h hostSessions) LaunchInfo(id harness.SessionID, agent harness.ID) harness
 		AwarenessDirs: member.AwarenessDirs,
 	}
 }
-func (h hostSessions) Instructions(id harness.SessionID, agentTools bool) string {
+func (h hostSessions) Instructions(id harness.SessionID) string {
 	launch, _, err := h.d.prepareLaunchContext(id, false)
 	if err != nil {
 		h.d.logf("no attn instructions for session %s: %v", id, err)
 		return ""
 	}
-	launch.AgentTools = agentTools
 	return launch.Instructions()
 }
 func (h hostSessions) Reload(id harness.SessionID, cols, rows int) error {
