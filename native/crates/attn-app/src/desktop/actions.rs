@@ -487,6 +487,9 @@ pub(crate) fn reveal_leaf(
         give_keyboard(state, desktop, leaf, tx);
     }
     show_leaf_only(state, desktop, leaf, true, tx);
+    if keyboard {
+        arrival::hand_keyboard(state);
+    }
 }
 
 fn show_leaf_only(state: &mut State, desktop: &str, leaf: &str, announced: bool, tx: &mut Tx) {
