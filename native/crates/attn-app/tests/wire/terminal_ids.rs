@@ -521,6 +521,55 @@ fn the_card_closes_once_the_pointer_leaves_the_id_and_stays_while_it_is_on_the_c
 }
 
 #[test]
+fn the_pointer_on_an_open_card_leaves_the_ids_it_covers_alone() {
+    let mut world = start(vec![builder()], vec![mapped()], vec![mapper()]);
+    write(
+        &mut world,
+        1,
+        &format!("{BUILDER_SHORT}\r\n{MAPPER_SHORT}\r\n{SEED}\r\n{MAPPER_SHORT}"),
+    );
+    rest_on(&mut world, 3, 0);
+    let named = said(&world, "name");
+    assert!(named.is_some());
+    for row in [1, 2, 3] {
+        let at = cell(&world, 3, row);
+        for step in 0..3 {
+            world.gesture(|app| app.runtime.pointer_move(at.0 + step as f32, at.1));
+            world.advance(Duration::from_millis(300));
+            assert_eq!(said(&world, "name"), named);
+            assert!(!shown(&world, SEED_CARD));
+        }
+    }
+
+    key(&mut world, Key::Escape);
+    assert!(!shown(&world, AGENT_CARD));
+    let under = cell(&world, 5, 2);
+    world.gesture(|app| app.runtime.pointer_move(under.0, under.1));
+    world.advance(Duration::from_millis(200));
+    assert!(shown(&world, SEED_CARD), "a closed card covers nothing");
+    rests(&mut world);
+}
+
+#[test]
+fn moving_off_an_open_card_straight_onto_another_id_opens_its_card() {
+    let mut world = start(vec![builder()], vec![mapped()], vec![]);
+    write(
+        &mut world,
+        1,
+        &format!("{BUILDER_SHORT}{}{SEED}", "\r\n".repeat(20)),
+    );
+    rest_on(&mut world, 3, 0);
+    let [x, y, w, h] = world.screen().bounds(Target::key(AGENT_CARD)).unwrap();
+    let inside = (x + w / 2.0, y + h / 2.0);
+    world.gesture(|app| app.runtime.pointer_move(inside.0, inside.1));
+    world.advance(Duration::from_millis(50));
+    rest_on(&mut world, 3, 20);
+    assert!(shown(&world, SEED_CARD));
+    assert!(!shown(&world, AGENT_CARD));
+    rests(&mut world);
+}
+
+#[test]
 fn passing_over_another_id_leaves_the_open_card_where_it_is() {
     let mut world = start(vec![builder()], vec![mapped()], vec![]);
     write(&mut world, 1, &format!("{SEED} {BUILDER_SHORT}"));
@@ -728,6 +777,14 @@ fn a_refused_resume_says_the_ledgers_reason_on_the_card_and_offers_what_the_sess
     assert_eq!(
         buttons(&world, AGENT_CARD)[0],
         "Recreate the worktree: Map where uploads retry"
+    );
+    assert!(
+        world
+            .screen()
+            .descendants(Target::key(AGENT_CARD))
+            .into_iter()
+            .filter_map(|n| n.name)
+            .any(|words| words == "↵ recreate the worktree")
     );
     key(&mut world, Key::Enter);
     assert_eq!(

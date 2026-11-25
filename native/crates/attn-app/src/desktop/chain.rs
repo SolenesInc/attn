@@ -381,8 +381,10 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
             .key(format!("{surface_key}.needs"))
     });
     let enter = match opens(agents[picked].card.link, state) {
-        Some(Pick::Go(_)) => Some("resume"),
-        Some(Pick::Agent(_) | Pick::Seed(_)) => Some("open"),
+        Some(Pick::Go(Go::Resume { action, .. })) => {
+            Some(super::agent_card::resume_said(&action).to_lowercase())
+        }
+        Some(Pick::Go(_) | Pick::Agent(_) | Pick::Seed(_)) => Some("open".to_owned()),
         None => None,
     };
     let moves = (!lone)

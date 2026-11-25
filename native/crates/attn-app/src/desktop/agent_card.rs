@@ -225,6 +225,14 @@ fn find_seed<'a>(facts: &'a Facts, id: &str) -> Option<&'a Seed> {
         .find(|s| s.id == id)
 }
 
+/// How a closed agent's card says the ledger's reopen `action`.
+pub(super) fn resume_said(action: &str) -> &str {
+    match action {
+        "reopen" => "Resume",
+        other => crate::ledger::query::action_label(other),
+    }
+}
+
 /// One way out of the picked agent's details: a button with its mark, and its letter while the
 /// chain has the keyboard.
 pub(super) fn go_button(
@@ -238,10 +246,7 @@ pub(super) fn go_button(
 ) -> El {
     let (label, said, mark): (String, String, El) = match go {
         Go::Resume { action, .. } => {
-            let said = match action.as_str() {
-                "reopen" => "Resume",
-                other => crate::ledger::query::action_label(other),
-            };
+            let said = resume_said(action);
             (
                 format!("{said}: {}", name_of(link, facts)),
                 said.to_owned(),

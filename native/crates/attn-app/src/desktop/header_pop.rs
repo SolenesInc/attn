@@ -200,6 +200,8 @@ pub(crate) struct HeaderPop {
     timer: Option<Timer>,
     /// The row a popover listing several things has picked.
     pub(crate) picked: usize,
+    /// The popover the pointer is on.
+    under_pointer: Option<(Host, What)>,
 }
 
 /// `piece` opens the popover of `what` when the pointer moves onto it, as the shelf's peek does,
@@ -280,6 +282,9 @@ fn rests(state: &mut State, opening: Pop, tx: &mut Tx) -> bool {
 /// on an id opens its card after a moment, and moving off the id and the card closes it after
 /// another.
 pub(super) fn pointer(state: &mut State, runtime: &str, reader: &str, inside: bool, tx: &mut Tx) {
+    if inside && state.window.desk.header_pop.covers_pointer() {
+        return;
+    }
     let mark = inside
         .then(|| state.terminals.mark_under_pointer(runtime))
         .flatten();
@@ -324,8 +329,15 @@ pub(super) fn open_mark(state: &mut State, runtime: &str, reader: &str, mark: Ma
 /// The pointer moved onto the open popover, or off it.
 pub(crate) fn hover_popover(state: &mut State, inside: bool, tx: &mut Tx) {
     let pop = &mut state.window.desk.header_pop;
+    pop.under_pointer = None;
     if inside {
         pop.timer = None;
+        pop.under_pointer = pop.open.as_ref().map(|p| (p.host.clone(), p.what));
+    } else if let Some(Marking {
+        runtime, reader, ..
+    }) = pop.marking().cloned()
+    {
+        pointer(state, &runtime, &reader, true, tx);
     } else {
         close_soon(pop, tx);
     }
@@ -558,6 +570,13 @@ impl Marking {
 pub(crate) type Anchor = (String, [u32; 4]);
 
 impl HeaderPop {
+    fn covers_pointer(&self) -> bool {
+        let under = self.under_pointer.as_ref();
+        let open = self.open.as_ref();
+        open.zip(under)
+            .is_some_and(|(open, (host, what))| open.on(host, *what))
+    }
+
     pub(crate) fn marking(&self) -> Option<&Marking> {
         self.open.as_ref()?.marking()
     }
