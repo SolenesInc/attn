@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "A successful final command can hide the script deadline",
+  "at": "2026-11-25T20:36:18.206Z",
+  "detail": "At 8bf2930b0, an attn_do call can report success after its deadline when a final browser command completes before the hard child stop. The command's confirmed change appears in the ledger without a timeout indication. This contradicts D28. Record the elapsed deadline in the final response even when the last command succeeds, while retaining the completed command in the ledger. Source: internal/daemon/agent_script.go:75-77 and :168-175. Two independent stepped-clock functional wire tests confirmed the discrepancy. Evidence on s-qesymt.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/agent_script.go",
+    "line": 168
+  },
+  "culprit": "8bf2930b03be0483be3a973d6dacf692fc8cb4ec"
+}
