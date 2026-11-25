@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Open-ask shelf marker fades against a snapped fill",
+  "at": "2026-11-25T08:06:23.780Z",
+  "detail": "At 537ce738f, the shelf entry's fill snaps to the current colour, while the keyed open-ask marker inherits the body's colour spring (native/crates/attn-ui/src/blocks/shelf.rs:481 and :510). In the overview, arrow into a column outside the on-screen range with an open ask. The shelf keeps the marker because the column is still outside that range. At the change frame, the default dark palette puts the old marker ink against the new fill at 1.31:1, making the ask marker briefly hard to read and missing the instant recolor behavior in D9/D15. Apply the existing immediate recoloring to the ask ink while preserving layout motion. Reviewer and fresh verifier both confirmed the source path and contrast. See review seed s-s1djk9.\n"
+}
