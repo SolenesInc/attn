@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Outpost calls can lose accepted delegation receipts at the deadline",
+  "at": "2026-11-25T20:37:41.233Z",
+  "detail": "At 8bf2930b0, an outpost command forwarded home drops the script's remaining deadline. When a delegation has been accepted and is waiting on folder trust, the outpost can reach its hard stop and return only an uncertain timeout. The equivalent home call returns the accepted operation with its IDs and any visible trust question. Source: internal/daemon/agent_tools.go:367, route.go:182, forward.go:162, commands_delegate.go:51. Preserve enough of the remaining budget to return the recorded operation before hard stop while the delegate continues starting. This was confirmed by an isolated stepped-clock home/outpost comparison and an independent source review. Evidence on s-j1cnrk.\n"
+}
