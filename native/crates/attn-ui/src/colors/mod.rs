@@ -257,16 +257,16 @@ fn c(value: &str) -> Color {
     rune::color::hex(value).unwrap_or_else(|| panic!("token {value:?} is not a hex color"))
 }
 
-/// `moving`, taken toward `toward` only as far as it needs to read on `against` or against it,
-/// at the 4.5:1 body text needs: a fill deepened under its words, or words deepened on a wash.
-pub fn moved_until_it_reads(moving: Color, toward: Color, against: Color) -> Color {
-    if contrast(moving, against) >= READS {
+/// `moving`, taken toward `toward` only as far as it needs to stand `floor` from `against`: a
+/// fill deepened under its words, or words deepened on a wash.
+pub fn moved_until_it_reads(moving: Color, toward: Color, against: Color, floor: f32) -> Color {
+    if contrast(moving, against) >= floor {
         return moving;
     }
     let (mut low, mut high) = (0.0f32, 1.0f32);
     for _ in 0..24 {
         let mid = (low + high) / 2.0;
-        if contrast(mix_srgb(moving, toward, mid), against) < READS {
+        if contrast(mix_srgb(moving, toward, mid), against) < floor {
             low = mid;
         } else {
             high = mid;
@@ -307,7 +307,10 @@ pub fn reads_on(ink: Color, ground: Color) -> bool {
     contrast(ink, ground) >= READS
 }
 
-const READS: f32 = 4.5;
+/// The contrast body text needs.
+pub const READS: f32 = 4.5;
+/// The contrast a mark needs to be told from its ground.
+pub const MARK_READS: f32 = 3.0;
 
 #[cfg(test)]
 mod tests {

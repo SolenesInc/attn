@@ -35,7 +35,8 @@ pub fn pill(key: impl Into<String>, said: impl Into<Said>, t: &Tokens) -> El {
 /// to read.
 pub fn tinted_pill(key: impl Into<String>, said: impl Into<Said>, ink: Color, t: &Tokens) -> El {
     let ground = crate::colors::mix_srgb(t.bg_panel, ink, PILL_WASH);
-    let ink = crate::colors::moved_until_it_reads(ink, t.text_primary, ground);
+    let ink =
+        crate::colors::moved_until_it_reads(ink, t.text_primary, ground, crate::colors::READS);
     let pill = words(said, Type::Control, ink)
         .key(key.into())
         .single_line()

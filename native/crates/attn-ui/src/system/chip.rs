@@ -63,7 +63,8 @@ pub fn count_badge(count: usize, fill: Color, ink: Color) -> El {
 /// mixed into the panel, round, as the count beside a card's title or a repository's name.
 pub fn count_chip(said: impl Into<Said>, t: &Tokens) -> El {
     let ground = crate::colors::mix_srgb(t.bg_panel, t.brand, super::tag::PILL_WASH);
-    let ink = crate::colors::moved_until_it_reads(t.brand, t.text_primary, ground);
+    let ink =
+        crate::colors::moved_until_it_reads(t.brand, t.text_primary, ground, crate::colors::READS);
     let chip = row()
         .min_w(door::line_height(Type::Small))
         .justify_center()
