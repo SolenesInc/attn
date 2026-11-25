@@ -36,7 +36,6 @@ fn v2_daemon(
         "garden_v2_enabled".into(),
         if enabled { "true" } else { "false" }.into(),
     );
-    let known = seeds.clone();
     let daemon = Daemon::scripted().state(InitialStateMessage {
         selected_profile_id: Some(PROFILE.into()),
         profiles: Some(vec![Profile {
@@ -45,16 +44,14 @@ fn v2_daemon(
             ..Profile::default()
         }]),
         settings: Some(settings),
-        sessions: Some(sessions),
+        sessions: Some(sessions.clone()),
         asks: Some(asks),
         seeds_total: Some(seeds.len() as i64),
-        seeds: Some(seeds),
-        garden_beds: Some(beds),
+        seeds: Some(seeds.clone()),
+        garden_beds: Some(beds.clone()),
         ..InitialStateMessage::new()
     });
-    daemon.on("seed_document_get", move |r: &Request| {
-        document_reply(r, known.iter().find(|s| s.id == r["seed_id"]).cloned())
-    });
+    attach_garden_handlers(&daemon, seeds, sessions, beds);
     daemon
 }
 
@@ -1032,6 +1029,14 @@ fn v2_bed_search_keeps_a_delegated_seed_in_its_root_automations_bed() {
             .iter()
             .any(|row| row.name.as_deref() == Some("Delegated work"))
     );
+    let last = world
+        .daemon
+        .sent_of("garden_search")
+        .into_iter()
+        .last()
+        .expect("garden_search for bed:automations");
+    assert_eq!(last["beds"], serde_json::json!(["automations"]));
+    assert!(last.get("bed_scope").is_none());
 
     world.gesture(|app| app.click(Target::key("garden.bed.all")));
     world.gesture(|app| app.click(Target::key("garden.search.field")));
@@ -1040,6 +1045,14 @@ fn v2_bed_search_keeps_a_delegated_seed_in_its_root_automations_bed() {
         app.type_text("bed:unassigned");
     });
     assert_eq!(rows(&world), vec!["Unassigned work"]);
+    let last = world
+        .daemon
+        .sent_of("garden_search")
+        .into_iter()
+        .last()
+        .expect("garden_search for bed:unassigned");
+    assert_eq!(last["beds"], serde_json::json!(["unassigned"]));
+    assert!(last.get("bed_scope").is_none());
     assert!(world.runtime_is_at_rest());
 }
 
@@ -1073,6 +1086,15 @@ fn v2_closed_automation_history_is_reachable_from_its_bed_and_an_exact_id() {
         app.type_text("s-auto01 is:any");
     });
     assert_eq!(rows(&world), vec!["Nightly review"]);
+    let last = world
+        .daemon
+        .sent_of("garden_search")
+        .into_iter()
+        .last()
+        .expect("garden_search for exact automation ID");
+    assert_eq!(last["bed_scope"], "all");
+    assert_eq!(last["terms"], serde_json::json!(["s-auto01"]));
+    assert_eq!(last["is"], serde_json::json!(["any"]));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -1174,5 +1196,313 @@ fn v2_board_shows_readiness_reasons_and_harvest_conditions() {
             "{id} should show {reason}"
         );
     }
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn v2_uses_bed_scoped_closed_counts_shows_archived_automations_rail_and_pages_by_bed() {
+    let beds = vec![bed("b-pay001", "Payments", &["payments-api"])];
+    let open_pay = with(seed("s-open01", "Active payment"), |s| {
+        s.bed_id = Some("b-pay001".into());
+        s.bed = Some("Payments".into());
+    });
+    let archived_pay = with(
+        closed(seed("s-payold", "Archived payment"), "harvested"),
+        |s| {
+            s.bed_id = Some("b-pay001".into());
+            s.bed = Some("Payments".into());
+        },
+    );
+    let archived_auto = with(
+        closed(seed("s-autold", "Archived cron"), "harvested"),
+        |s| {
+            s.automation_id = Some(9);
+        },
+    );
+    let mut settings = BTreeMap::new();
+    settings.insert("garden_v2_enabled".into(), "true".into());
+    let d = Daemon::scripted().state(InitialStateMessage {
+        selected_profile_id: Some(PROFILE.into()),
+        profiles: Some(vec![Profile {
+            id: PROFILE.into(),
+            name: "Work".into(),
+            ..Profile::default()
+        }]),
+        settings: Some(settings),
+        seeds: Some(vec![open_pay]),
+        seeds_total: Some(13),
+        garden_beds: Some(beds),
+        garden_closed_counts: Some(GardenClosedCounts {
+            all: GardenClosedTally {
+                harvested: 10,
+                withered: 0,
+            },
+            automations: GardenClosedTally {
+                harvested: 2,
+                withered: 0,
+            },
+            unassigned: GardenClosedTally {
+                harvested: 3,
+                withered: 0,
+            },
+            by_bed: vec![GardenBedClosedTally {
+                bed_id: "b-pay001".into(),
+                harvested: 7,
+                withered: 0,
+            }],
+        }),
+        ..InitialStateMessage::new()
+    });
+    let (ap, aa) = (archived_pay.clone(), archived_auto.clone());
+    d.on("garden_seeds_page", move |r: &Request| {
+        let seeds = match r["bed"].as_str() {
+            Some("b-pay001") => vec![ap.clone()],
+            Some("automations") => vec![aa.clone()],
+            _ => Vec::new(),
+        };
+        let total = seeds.len() as i64;
+        message(GardenSeedsPageResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            seeds,
+            total,
+            harvested: total,
+            ..GardenSeedsPageResultMessage::new()
+        })
+    });
+    let mut world = open_garden_sized(d, TWO_COLUMNS);
+    world.gesture(|app| app.key(board()));
+    assert!(!shows(&world, "The garden holds"));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("garden.bed.automations"))
+            .is_some()
+    );
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("garden.closed"))
+            .name
+            .as_deref(),
+        Some("10 closed")
+    );
+
+    world.gesture(|app| app.click(Target::key("garden.bed.b-pay001")));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("garden.closed"))
+            .name
+            .as_deref(),
+        Some("7 closed")
+    );
+    assert!(world.daemon.sent_of("garden_seeds_page").is_empty());
+    world.gesture(|app| app.click(Target::key("garden.closed")));
+    assert!(has_row(&world, "Archived payment"));
+
+    world.gesture(|app| app.click(Target::key("garden.bed.automations")));
+    assert!(has_row(&world, "Archived cron"));
+    let pages = world.daemon.sent_of("garden_seeds_page");
+    assert_eq!(pages.len(), 2);
+    assert_eq!(pages[0]["bed"], "b-pay001");
+    assert_eq!(pages[1]["bed"], "automations");
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn v2_opening_archived_search_hit_aligns_bed_and_lens_from_ancestors_and_cached_readings() {
+    let beds = vec![bed("b-pay001", "Payments", &["payments-api"])];
+    let open_other = with(seed("s-open01", "Other open"), |s| s.ready = true);
+    let archived_auto_root = with(
+        closed(plot("s-aroot1", "Nightly plot", ""), "harvested"),
+        |s| s.automation_id = Some(4),
+    );
+    let archived_auto_child = closed(
+        part_of("s-aroot1", "s-akid01", "Archived automation step"),
+        "harvested",
+    );
+    let archived_pay_root = with(
+        closed(seed("s-apay01", "Archived payment root"), "harvested"),
+        |s| {
+            s.bed_id = Some("b-pay001".into());
+            s.bed = Some("Payments".into());
+        },
+    );
+    let mut settings = BTreeMap::new();
+    settings.insert("garden_v2_enabled".into(), "true".into());
+    let d = Daemon::scripted().state(InitialStateMessage {
+        selected_profile_id: Some(PROFILE.into()),
+        profiles: Some(vec![Profile {
+            id: PROFILE.into(),
+            name: "Work".into(),
+            ..Profile::default()
+        }]),
+        settings: Some(settings),
+        seeds: Some(vec![open_other]),
+        seeds_total: Some(4),
+        garden_beds: Some(beds),
+        garden_closed_counts: Some(GardenClosedCounts {
+            all: GardenClosedTally {
+                harvested: 1,
+                withered: 0,
+            },
+            automations: GardenClosedTally {
+                harvested: 1,
+                withered: 0,
+            },
+            by_bed: vec![GardenBedClosedTally {
+                bed_id: "b-pay001".into(),
+                harvested: 1,
+                withered: 0,
+            }],
+            ..GardenClosedCounts::default()
+        }),
+        ..InitialStateMessage::new()
+    });
+    let (hit_child, hit_pay) = (archived_auto_child.clone(), archived_pay_root.clone());
+    d.on("garden_search", move |r: &Request| {
+        let terms: Vec<&str> = r["terms"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_str())
+            .collect();
+        let hits = if terms.contains(&"s-akid01") {
+            vec![GardenSearchHit {
+                seed: hit_child.clone(),
+                r#where: "id".into(),
+                id_hit: true,
+                title_ranges: None,
+                snippet: None,
+                snippet_ranges: None,
+                plot_title: Some("Nightly plot".into()),
+            }]
+        } else if terms.contains(&"s-apay01") {
+            vec![GardenSearchHit {
+                seed: hit_pay.clone(),
+                r#where: "id".into(),
+                id_hit: true,
+                title_ranges: None,
+                snippet: None,
+                snippet_ranges: None,
+                plot_title: None,
+            }]
+        } else {
+            Vec::new()
+        };
+        message(GardenSearchResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            total: hits.len() as i64,
+            hits,
+            ..GardenSearchResultMessage::new()
+        })
+    });
+    let (doc_root, doc_child, doc_pay) = (
+        archived_auto_root.clone(),
+        archived_auto_child.clone(),
+        archived_pay_root.clone(),
+    );
+    d.on("seed_document_get", move |r: &Request| {
+        match r["seed_id"].as_str() {
+            Some("s-akid01") => message(SeedDocumentGetResultMessage {
+                request_id: r["request_id"].as_str().unwrap().into(),
+                success: true,
+                document: Some(SeedDocument {
+                    seed: doc_child.clone(),
+                    ancestors: Some(vec![doc_root.clone()]),
+                    ..SeedDocument::default()
+                }),
+                ..SeedDocumentGetResultMessage::new()
+            }),
+            Some("s-apay01") => message(SeedDocumentGetResultMessage {
+                request_id: r["request_id"].as_str().unwrap().into(),
+                success: true,
+                document: Some(SeedDocument {
+                    seed: doc_pay.clone(),
+                    ..SeedDocument::default()
+                }),
+                ..SeedDocumentGetResultMessage::new()
+            }),
+            _ => document_reply(r, None),
+        }
+    });
+    let mut world = open_garden_sized(d, TWO_COLUMNS);
+    world.gesture(|app| app.key(board()));
+    assert!(
+        world
+            .screen()
+            .get(Target::key("garden.lens.now"))
+            .is("checked")
+    );
+
+    world.gesture(|app| app.click(Target::key("garden.search.field")));
+    world.gesture(|app| app.type_text("s-akid01 is:any"));
+    open_row(&mut world, "Archived automation step");
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("garden.head.title"))
+            .name
+            .as_deref(),
+        Some("Archived automation step")
+    );
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("garden.bed.automations"))
+            .value
+            .as_deref(),
+        Some("selected")
+    );
+    assert!(
+        world
+            .screen()
+            .get(Target::key("garden.lens.all"))
+            .is("checked")
+    );
+
+    world.gesture(|app| app.click(Target::key("garden.search.field")));
+    world.gesture(|app| app.type_text("s-apay01 is:any"));
+    open_row(&mut world, "Archived payment root");
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("garden.bed.b-pay001"))
+            .value
+            .as_deref(),
+        Some("selected")
+    );
+    let doc_gets_before = world.daemon.sent_of("seed_document_get").len();
+    world.gesture(|app| app.click(Target::key("garden.lens.now")));
+    assert!(
+        world
+            .screen()
+            .get(Target::key("garden.lens.now"))
+            .is("checked")
+    );
+    world.gesture(|app| app.click(Target::key("garden.search.field")));
+    world.gesture(|app| app.type_text("s-apay01 is:any"));
+    open_row(&mut world, "Archived payment root");
+    assert_eq!(
+        world.daemon.sent_of("seed_document_get").len(),
+        doc_gets_before,
+        "reopening an archived root already cached in readings must align without re-reading"
+    );
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("garden.bed.b-pay001"))
+            .value
+            .as_deref(),
+        Some("selected")
+    );
+    assert!(
+        world
+            .screen()
+            .get(Target::key("garden.lens.all"))
+            .is("checked")
+    );
     assert!(world.runtime_is_at_rest());
 }

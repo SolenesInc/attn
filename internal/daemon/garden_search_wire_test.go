@@ -377,6 +377,54 @@ func TestGardenSearchWSFiltersSnippetsAndPaging(t *testing.T) {
 		if titleAndTender.Hits[0].Where == garden.MatchBody || titleAndTender.Hits[0].Snippet != nil {
 			t.Errorf("title+tender hit mislabeled where=%q snippet=%v, want non-body with no snippet", titleAndTender.Hits[0].Where, titleAndTender.Hits[0].Snippet)
 		}
+
+		parkedSeed, err := cli.SeedPlant("", "Parked filter seed", "", "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		lifeMove(t, cli, "", parkedSeed.ID, "park", "later", "")
+		blockedSeed, err := cli.SeedPlant("", "Blocked filter seed", "", "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		edgeLink(t, cli, outsideSeed.ID, "blocks", blockedSeed.ID)
+
+		byTenderFilter := search(protocol.GardenSearchMessage{RequestID: "s-tender-filter", Tenders: []string{"hazel"}})
+		if len(byTenderFilter.Hits) != 1 || byTenderFilter.Hits[0].Seed.ID != outsideSeed.ID {
+			t.Fatalf("tender filter = %+v, want only %s", byTenderFilter, outsideSeed.ID)
+		}
+
+		byIsBlocked := search(protocol.GardenSearchMessage{RequestID: "s-is-blocked", Is: []string{"blocked"}})
+		if len(byIsBlocked.Hits) != 1 || byIsBlocked.Hits[0].Seed.ID != blockedSeed.ID {
+			t.Fatalf("is:blocked filter = %+v, want only %s", byIsBlocked, blockedSeed.ID)
+		}
+
+		byIsUnion := search(protocol.GardenSearchMessage{RequestID: "s-is-union", Is: []string{"ready", "parked"}})
+		unionIDs := map[string]bool{}
+		for _, h := range byIsUnion.Hits {
+			unionIDs[h.Seed.ID] = true
+		}
+		if !unionIDs[parkedSeed.ID] || !unionIDs[openChild.ID] || unionIDs[outsideSeed.ID] || unionIDs[blockedSeed.ID] || unionIDs[closedChild.ID] {
+			t.Fatalf("is:ready+parked union IDs = %v, want parked(%s) and ready(%s), excluding growing/blocked/closed", unionIDs, parkedSeed.ID, openChild.ID)
+		}
+
+		setSetting(t, app, "garden_v2_enabled", "true")
+		bedRes := testworld.Request(app, protocol.GardenBedSaveMessage{
+			Cmd: protocol.CmdGardenBedSave, RequestID: "bed-search-1", Name: "Payments", Repos: []string{},
+		}, protocol.EventGardenBedSaveResult, func(m protocol.GardenBedSaveResultMessage) bool { return m.RequestID == "bed-search-1" })
+		if !bedRes.Success || bedRes.Bed == nil {
+			t.Fatalf("creating bed: %+v", bedRes)
+		}
+		assignRes := testworld.Request(app, protocol.SeedBedSetMessage{
+			Cmd: protocol.CmdSeedBedSet, RequestID: "bed-assign-1", SeedID: outsideSeed.ID, BedID: protocol.Ptr(bedRes.Bed.ID),
+		}, protocol.EventSeedBedSetResult, func(m protocol.SeedBedSetResultMessage) bool { return m.RequestID == "bed-assign-1" })
+		if !assignRes.Success {
+			t.Fatalf("assigning bed: %+v", assignRes)
+		}
+		byNamedBed := search(protocol.GardenSearchMessage{RequestID: "s-bed-payments", Beds: []string{"payments"}})
+		if len(byNamedBed.Hits) != 1 || byNamedBed.Hits[0].Seed.ID != outsideSeed.ID {
+			t.Fatalf("bed:payments filter = %+v, want only %s", byNamedBed, outsideSeed.ID)
+		}
 	})
 }
 
@@ -398,31 +446,44 @@ func TestGardenSearchFindsAnExactAutomationSeedIDFromAll(t *testing.T) {
 		t.Fatalf("automation runs = %+v, want one run with a seed", runs)
 	}
 	id := *runs[0].SeedID
+	delegated, err := cli.SeedPlant("", "Delegated automation step", "", id, "")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, tc := range []struct {
-		name  string
-		term  string
-		beds  []string
-		lens  []string
-		found bool
+		name     string
+		bedScope string
+		term     string
+		beds     []string
+		lens     []string
+		wantID   string
 	}{
-		{name: "full ID from All", term: id, lens: []string{"any"}, found: true},
-		{name: "partial ID from All", term: id[:len(id)-1], lens: []string{"any"}},
-		{name: "explicit automation bed", term: id, beds: []string{"automations"}, lens: []string{"any"}, found: true},
-		{name: "explicit unassigned bed", term: id, beds: []string{"unassigned"}, lens: []string{"any"}},
-		{name: "open lens", term: id, lens: []string{"open"}},
+		{name: "full ID from All", bedScope: "all", term: id, lens: []string{"any"}, wantID: id},
+		{name: "partial ID from All", bedScope: "all", term: id[:len(id)-1], lens: []string{"any"}},
+		{name: "text in Automations scope", bedScope: "automations", term: "Manual", lens: []string{"any"}, wantID: id},
+		{name: "delegated text hidden from All", bedScope: "all", term: "delegated", lens: []string{"open"}},
+		{name: "delegated exact ID from All", bedScope: "all", term: delegated.ID, lens: []string{"open"}, wantID: delegated.ID},
+		{name: "delegated in explicit automations bed", bedScope: "all", term: "delegated", beds: []string{"automations"}, lens: []string{"open"}, wantID: delegated.ID},
+		{name: "delegated excluded from unassigned bed", bedScope: "all", term: "delegated", beds: []string{"unassigned"}, lens: []string{"open"}},
+		{name: "explicit automation bed", bedScope: "all", term: id, beds: []string{"automations"}, lens: []string{"any"}, wantID: id},
+		{name: "explicit unassigned bed", bedScope: "all", term: id, beds: []string{"unassigned"}, lens: []string{"any"}},
+		{name: "open lens", bedScope: "all", term: id, lens: []string{"open"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			result := testworld.Request(app, protocol.GardenSearchMessage{
-				Cmd: protocol.CmdGardenSearch, RequestID: tc.name, BedScope: protocol.Ptr("all"),
+				Cmd: protocol.CmdGardenSearch, RequestID: tc.name, BedScope: protocol.Ptr(tc.bedScope),
 				Terms: []string{tc.term}, Beds: tc.beds, Is: tc.lens,
 			}, protocol.EventGardenSearchResult, func(m protocol.GardenSearchResultMessage) bool { return m.RequestID == tc.name })
 			if !result.Success {
 				t.Fatalf("search failed: %s", protocol.Deref(result.Error))
 			}
-			if tc.found {
-				if len(result.Hits) != 1 || result.Hits[0].Seed.ID != id || !result.Hits[0].IDHit {
-					t.Errorf("search hits = %+v, want exact ID hit for %s", result.Hits, id)
+			if tc.wantID != "" {
+				if len(result.Hits) != 1 || result.Hits[0].Seed.ID != tc.wantID {
+					t.Errorf("search hits = %+v, want hit for %s", result.Hits, tc.wantID)
+				}
+				if tc.term == tc.wantID && !result.Hits[0].IDHit {
+					t.Errorf("search hit for exact ID %s did not set id_hit", tc.wantID)
 				}
 			} else if len(result.Hits) != 0 {
 				t.Errorf("search hits = %+v, want no hits", result.Hits)

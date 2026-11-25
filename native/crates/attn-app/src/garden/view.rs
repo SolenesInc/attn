@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -15,10 +16,10 @@ use rune::{El, GrowthSpec, ScrollSpec, Tx, col, memo, row};
 use rune_kit::{ScrollBar, TextInput};
 
 use super::model::{self, Index, SessionNames};
-use super::search::{self, Lookups, Match, Partial, Query};
+use super::search::{self, Lookups, Partial, Query};
 use super::sheet::{Go, Sheet};
 use super::v2::{self, Attention, BedFilter, Lens};
-use super::{BODY, Mode, SEARCH_FIELD};
+use super::{BODY, Mode, PageBucket, PageKey, SEARCH_FIELD, SearchHit};
 use crate::State;
 
 thread_local! {
@@ -47,13 +48,9 @@ pub(super) fn index(state: &State) -> Index {
 
 struct Look<'a> {
     index: &'a Index,
-    names: &'a SessionNames,
 }
 
 impl Lookups for Look<'_> {
-    fn tender_of(&self, seed: &Seed) -> String {
-        model::tender_of(seed, self.names)
-    }
     fn blockers_of(&self, seed: &Seed) -> usize {
         self.index.blockers(&seed.id)
     }
@@ -73,96 +70,130 @@ pub(super) fn columns(state: &State) -> bool {
     frame_width(state) >= COLUMNS_MIN
 }
 
-/// What the garden shows, worked out once per view and per key.
 struct Place {
-    index: Index,
-    names: SessionNames,
+    index: Rc<Index>,
+    names: Rc<SessionNames>,
     trail: Vec<String>,
+    here_seed: Option<Arc<Seed>>,
     query: Query,
     wide: bool,
-    answers: Vec<Match>,
-    /// Matches in the whole garden that the plot's search leaves out.
+    answers: Rc<[SearchHit]>,
     outside: usize,
-    /// Matches in the plot while the search stands wide.
     in_plot: usize,
     hidden_closed: usize,
+    search_loading: bool,
+    search_loading_more: bool,
+    search_next_offset: Option<i64>,
+    search_error: Option<String>,
+    root_closed_count: usize,
+    root_page_key: PageKey,
     now_ms: i64,
-    v2: v2::Snapshot,
+    v2: Rc<v2::Snapshot>,
     lens: Lens,
     has_beds: bool,
 }
 
+fn merge_paged(
+    mut base: Vec<Arc<Seed>>,
+    index: &Index,
+    bucket: Option<&PageBucket>,
+) -> Vec<Arc<Seed>> {
+    let Some(bucket) = bucket else {
+        return base;
+    };
+    if bucket.seeds.is_empty() {
+        return base;
+    }
+    let extra: Vec<Arc<Seed>> = {
+        let mut seen: HashSet<&str> = base.iter().map(|s| s.id.as_str()).collect();
+        let mut out = Vec::new();
+        for seed in &bucket.seeds {
+            if !index.by_id.contains_key(&seed.id) && seen.insert(seed.id.as_str()) {
+                out.push(seed.clone());
+            }
+        }
+        out
+    };
+    base.extend(extra);
+    base
+}
+
 impl Place {
     fn of(state: &State) -> Place {
-        let index = index(state);
-        let names = model::session_names(&state.facts.sessions, &state.facts.harnesses);
+        let index = Rc::new(index(state));
+        let names = Rc::new(model::session_names(
+            &state.facts.sessions,
+            &state.facts.harnesses,
+        ));
         let trail = super::living_trail(state);
+        let here_seed = trail.last().and_then(|id| super::lookup_seed(state, id));
         let garden = &state.window.garden;
-        let v2_snap = v2::Snapshot::of(state, &index);
+        let v2_snap = Rc::new(v2::Snapshot::of(state, &index));
         let query = search::parse(&garden.query.text, v2_snap.on);
         let lens = garden.lens;
         let has_beds = v2_snap.on && !v2::beds(state).is_empty();
         let plot = trail.last().cloned();
         let wide = query.searches && plot.is_some() && garden.wide_in == plot;
-        let (mut answers, mut outside, mut in_plot, mut hidden_closed) = (Vec::new(), 0, 0, 0);
-        if query.searches {
-            let look = Look {
-                index: &index,
-                names: &names,
-            };
-            let bed_filters = if query.beds.is_empty() {
-                vec![v2_snap.bed.clone()]
-            } else {
-                v2::search_beds(v2::beds(state), &query.beds)
-            };
-            let allow_exact_id = query.beds.is_empty() && v2_snap.bed == BedFilter::All;
-            let seeds = super::seeds(state);
-            let bed_allows = |s: &Arc<Seed>| {
-                !v2_snap.on
-                    || (allow_exact_id && query.terms.contains(&s.id))
-                    || v2::matches_any_bed(s, &bed_filters, &index)
-            };
-            let scoped_seeds: Vec<&Arc<Seed>> = seeds.iter().filter(|s| bed_allows(s)).collect();
-            let in_subtree = plot.as_ref().map(|p| index.subtree(p));
-            let plot_pool = || {
-                scoped_seeds
-                    .iter()
-                    .copied()
-                    .filter(|s| in_subtree.as_ref().is_none_or(|w| w.contains(&s.id)))
-            };
-            answers = if wide {
-                search::search(scoped_seeds.iter().copied(), &query, &look)
-            } else {
-                search::search(plot_pool(), &query, &look)
-            };
-            if plot.is_some() && !wide {
-                outside = search::search(scoped_seeds.iter().copied(), &query, &look)
-                    .len()
-                    .saturating_sub(answers.len());
-            }
-            if wide {
-                in_plot = search::search(plot_pool(), &query, &look).len();
-            }
-            if query.is.is_empty() {
-                let any = search::parse(&format!("{} is:any", garden.query.text), v2_snap.on);
-                let with_closed = if wide {
-                    search::search(scoped_seeds.iter().copied(), &any, &look).len()
-                } else {
-                    search::search(plot_pool(), &any, &look).len()
-                };
-                hidden_closed = with_closed.saturating_sub(answers.len());
-            }
-        }
+        let (
+            answers,
+            outside,
+            in_plot,
+            hidden_closed,
+            search_loading,
+            search_loading_more,
+            search_next_offset,
+            search_error,
+        ) = if query.searches && query.unknown.is_empty() {
+            let s = &garden.search;
+            (
+                s.hits.clone(),
+                s.outside.max(0) as usize,
+                s.in_plot.max(0) as usize,
+                s.hidden_closed.max(0) as usize,
+                s.loading,
+                s.loading_more,
+                s.next_offset,
+                s.error.clone(),
+            )
+        } else {
+            (Rc::default(), 0, 0, 0, false, false, None, None)
+        };
+        let closed_counts = state
+            .facts
+            .garden
+            .closed_counts_of(&state.facts.profiles.selected);
+        let root_closed_count = v2::closed_tally(closed_counts, v2_snap.on.then_some(&v2_snap.bed))
+            .map_or_else(
+                || {
+                    index
+                        .roots
+                        .iter()
+                        .filter(|s| {
+                            (!v2_snap.on || v2::matches_bed(s, &v2_snap.bed))
+                                && v2::is_hidden_closed(s)
+                        })
+                        .count()
+                },
+                |(h, w)| h + w,
+            );
+        let root_page_key = PageKey::root(state);
         Place {
             index,
             names,
             trail,
+            here_seed,
             query,
             wide,
             answers,
             outside,
             in_plot,
             hidden_closed,
+            search_loading,
+            search_loading_more,
+            search_next_offset,
+            search_error,
+            root_closed_count,
+            root_page_key,
             now_ms: state.window.now_ms,
             v2: v2_snap,
             lens,
@@ -170,11 +201,29 @@ impl Place {
         }
     }
 
+    fn shows_closed_page(&self) -> bool {
+        !self.query.searches
+            && (self.query.is.contains(&"closed") || self.query.is.contains(&"any"))
+    }
+
     fn attention_of(&self, seed: &Seed) -> Attention {
         self.v2.attention_of(seed)
     }
 
-    fn v2_roots(&self, docked: bool) -> Vec<Arc<Seed>> {
+    fn v1_roots(&self, state: &State) -> Vec<Arc<Seed>> {
+        let live = self.lens(&self.index.roots);
+        if self.shows_closed_page() {
+            merge_paged(
+                live,
+                &self.index,
+                state.window.garden.pages.get(&self.root_page_key),
+            )
+        } else {
+            live
+        }
+    }
+
+    fn v2_roots(&self, state: &State, docked: bool) -> Vec<Arc<Seed>> {
         let look = self.look();
         let explicit_is = !self.query.is.is_empty();
         let lens = if docked && self.lens == Lens::Triage {
@@ -220,26 +269,69 @@ impl Place {
             };
             (band, att)
         });
-        out
-    }
-
-    fn v2_bed_closed_count(&self) -> usize {
-        self.index
-            .roots
-            .iter()
-            .filter(|s| v2::matches_bed(s, &self.v2.bed) && v2::is_hidden_closed(s))
-            .count()
-    }
-
-    fn look(&self) -> Look<'_> {
-        Look {
-            index: &self.index,
-            names: &self.names,
+        if self.shows_closed_page() {
+            merge_paged(
+                out,
+                &self.index,
+                state.window.garden.pages.get(&self.root_page_key),
+            )
+        } else {
+            out
         }
     }
 
+    fn children_of(&self, state: &State, plot_id: &str) -> Vec<Arc<Seed>> {
+        let live = self.lens(self.index.children_of(plot_id));
+        if self.shows_closed_page() {
+            let key = PageKey::plot(state, plot_id);
+            merge_paged(live, &self.index, state.window.garden.pages.get(&key))
+        } else {
+            live
+        }
+    }
+
+    fn plot_closed_count(&self, state: &State, here: &Seed) -> usize {
+        if let Some(bucket) = state
+            .window
+            .garden
+            .pages
+            .get(&PageKey::plot(state, &here.id))
+            .filter(|b| b.answered)
+        {
+            return (bucket.harvested + bucket.withered).max(0) as usize;
+        }
+        if let (Some(doc), _) = super::reading(&state.window.garden, &here.id)
+            && !doc.children.is_empty()
+        {
+            return doc
+                .children
+                .iter()
+                .filter(|child| {
+                    let current = self.index.by_id.get(&child.id).map_or(*child, Arc::as_ref);
+                    v2::is_hidden_closed(current)
+                })
+                .count();
+        }
+        let live_closed = self
+            .index
+            .children_of(&here.id)
+            .iter()
+            .filter(|child| v2::is_hidden_closed(child))
+            .count();
+        if live_closed > 0 {
+            return live_closed;
+        }
+        here.plot_progress
+            .as_ref()
+            .map_or(0, |p| (p.done + p.withered).max(0) as usize)
+    }
+
+    fn look(&self) -> Look<'_> {
+        Look { index: &self.index }
+    }
+
     fn here(&self) -> Option<&Arc<Seed>> {
-        self.index.by_id.get(self.trail.last()?)
+        self.here_seed.as_ref()
     }
 
     fn lens(&self, seeds: &[Arc<Seed>]) -> Vec<Arc<Seed>> {
@@ -266,19 +358,23 @@ impl Place {
     }
 
     /// The levels a column walk shows: the roots, then each walked plot's children.
-    fn levels(&self) -> Vec<(Vec<Arc<Seed>>, String)> {
+    fn levels(&self, state: &State) -> Vec<(Vec<Arc<Seed>>, String, Option<PageKey>)> {
         let mut levels = vec![(
-            self.lens(&self.index.roots),
+            self.v1_roots(state),
             self.trail.first().cloned().unwrap_or_default(),
+            self.shows_closed_page().then(|| self.root_page_key.clone()),
         )];
         for depth in 0..self.trail.len() {
-            let kids = self.index.children_of(&self.trail[depth]);
-            if kids.is_empty() {
+            let id = &self.trail[depth];
+            let kids = self.children_of(state, id);
+            let is_plot = super::lookup_seed(state, id).is_some_and(|s| model::is_plot(&s));
+            if kids.is_empty() && !is_plot {
                 break;
             }
             levels.push((
-                self.lens(kids),
+                kids,
                 self.trail.get(depth + 1).cloned().unwrap_or_default(),
+                self.shows_closed_page().then(|| PageKey::plot(state, id)),
             ));
         }
         levels
@@ -319,34 +415,77 @@ pub(super) fn walkable_rows(state: &State, focused: Option<&str>) -> Vec<String>
             if let Some(here) = place.here()
                 && model::is_plot(here)
             {
-                let children = place.lens(place.index.children_of(&here.id));
+                let children = place.children_of(state, &here.id);
                 if !children.is_empty()
                     && focused.is_none_or(|id| children.iter().any(|child| child.id == id))
                 {
                     return ids(&children);
                 }
             }
-            return ids(&place.v2_roots(docked));
+            return ids(&place.v2_roots(state, docked));
         }
         return match place.here() {
-            Some(here) => ids(&place.lens(place.index.children_of(&here.id))),
-            None => ids(&place.v2_roots(docked)),
+            Some(here) => ids(&place.children_of(state, &here.id)),
+            None => ids(&place.v2_roots(state, docked)),
         };
     }
     if columns(state) {
-        let levels = place.levels();
+        let levels = place.levels(state);
         let column = focused
             .and_then(|id| {
                 levels
                     .iter()
-                    .find(|(seeds, _)| seeds.iter().any(|s| s.id == id))
+                    .find(|(seeds, _, _)| seeds.iter().any(|s| s.id == id))
             })
             .or(levels.last());
-        return column.map(|(seeds, _)| ids(seeds)).unwrap_or_default();
+        return column.map(|(seeds, _, _)| ids(seeds)).unwrap_or_default();
     }
     match place.here() {
-        Some(here) => ids(&place.lens(place.index.children_of(&here.id))),
-        None => ids(&place.lens(&place.index.roots)),
+        Some(here) => ids(&place.children_of(state, &here.id)),
+        None => ids(&place.v1_roots(state)),
+    }
+}
+
+pub(super) fn active_page_key(state: &State, focused: Option<&str>) -> Option<PageKey> {
+    let place = Place::of(state);
+    if !place.shows_closed_page() {
+        return None;
+    }
+    if place.v2.on {
+        if columns(state) {
+            if let Some(here) = place.here()
+                && model::is_plot(here)
+            {
+                let children = place.children_of(state, &here.id);
+                if !children.is_empty()
+                    && focused.is_none_or(|id| children.iter().any(|child| child.id == id))
+                {
+                    return Some(PageKey::plot(state, &here.id));
+                }
+            }
+            return Some(place.root_page_key);
+        }
+        return match place.here() {
+            Some(here) if model::is_plot(here) => Some(PageKey::plot(state, &here.id)),
+            Some(_) => None,
+            None => Some(place.root_page_key),
+        };
+    }
+    if columns(state) {
+        let levels = place.levels(state);
+        let column = focused
+            .and_then(|id| {
+                levels
+                    .iter()
+                    .find(|(seeds, _, _)| seeds.iter().any(|s| s.id == id))
+            })
+            .or(levels.last());
+        return column.and_then(|(_, _, key)| key.clone());
+    }
+    match place.here() {
+        Some(here) if model::is_plot(here) => Some(PageKey::plot(state, &here.id)),
+        Some(_) => None,
+        None => Some(place.root_page_key),
     }
 }
 
@@ -357,16 +496,17 @@ pub(super) fn press_row(state: &mut State, id: &str, tx: &mut Tx) {
         return super::open_found(state, id, tx);
     }
     if place.v2.on && columns(state) {
-        if place.index.roots.iter().any(|s| s.id == id) {
+        let docked = super::mode(state) != Mode::Full;
+        if place.v2_roots(state, docked).iter().any(|s| s.id == id) {
             return super::select_at(state, 0, id, tx);
         }
         return super::drill(state, id, tx);
     }
     if columns(state) {
-        let levels = place.levels();
+        let levels = place.levels(state);
         if let Some(level) = levels
             .iter()
-            .position(|(seeds, _)| seeds.iter().any(|s| s.id == id))
+            .position(|(seeds, _, _)| seeds.iter().any(|s| s.id == id))
         {
             return super::select_at(state, level, id, tx);
         }
@@ -461,7 +601,7 @@ fn chrome(state: &State, place: &Place, t: &Tokens) -> El {
     } else if place.v2.on {
         bar = bar.push(v2::dock_lens_button(state, t));
     }
-    if let Some((count, on)) = closed_toggle(place, columns(state)) {
+    if let Some((count, on)) = closed_toggle(state, place, columns(state)) {
         let label = match (on, count) {
             (true, 0) => "hide closed".to_owned(),
             (true, n) => format!("hide {n} closed"),
@@ -531,30 +671,19 @@ pub(super) fn view_switch(state: &State, t: &Tokens) -> El {
 }
 
 /// The closed toggle's count and whether it is on, or nothing when it has nothing to say.
-fn closed_toggle(place: &Place, wide: bool) -> Option<(usize, bool)> {
+fn closed_toggle(state: &State, place: &Place, wide: bool) -> Option<(usize, bool)> {
     let on = place.query.is.contains(&"any");
     let other = place.query.is.iter().any(|v| *v != "any");
     let hidden_here = match place.here() {
         Some(here) => {
-            let child_hidden = place
-                .index
-                .children_of(&here.id)
-                .iter()
-                .filter(|s| v2::is_hidden_closed(s))
-                .count();
+            let child_hidden = place.plot_closed_count(state, here);
             if place.v2.on && wide {
-                place.v2_bed_closed_count() + child_hidden
+                place.root_closed_count + child_hidden
             } else {
                 child_hidden
             }
         }
-        None if place.v2.on => place.v2_bed_closed_count(),
-        None => place
-            .index
-            .roots
-            .iter()
-            .filter(|s| v2::is_hidden_closed(s))
-            .count(),
+        None => place.root_closed_count,
     };
     let count = if !place.query.searches {
         hidden_here
@@ -598,13 +727,18 @@ fn trail_nav(state: &State, place: &Place, t: &Tokens) -> El {
         return nav.here("garden.trail.here", "The garden", t).build(t);
     };
     let first_visible = if !place.v2.on && columns(state) && !place.query.searches {
-        let levels = place.levels().len();
-        let shown = levels.min(if frame_width(state) >= THIRD_COLUMN_MIN {
+        let levels = place.levels(state);
+        let shown = levels.len().min(if frame_width(state) >= THIRD_COLUMN_MIN {
             3
         } else {
             2
         });
-        levels - shown
+        let first = levels.len() - shown;
+        if first == 0 && trail.len() > 1 && !levels[0].0.iter().any(|s| s.id == trail[0]) {
+            trail.len() - 1
+        } else {
+            first
+        }
     } else {
         usize::MAX
     };
@@ -642,11 +776,7 @@ fn trail_nav(state: &State, place: &Place, t: &Tokens) -> El {
     }
     for (offset, id) in shown.iter().enumerate() {
         let depth = folded + offset + 1;
-        let title = place
-            .index
-            .by_id
-            .get(id)
-            .map_or_else(|| id.clone(), |s| s.title.clone());
+        let title = super::lookup_seed(state, id).map_or_else(|| id.clone(), |s| s.title.clone());
         nav = nav.step(step(format!("garden.trail.{depth}"), title, depth));
     }
     if place.query.searches || place.v2.on {
@@ -680,6 +810,7 @@ fn search_line(state: &State, place: &Place, t: &Tokens) -> El {
             .placeholder(placeholder)
             .active_descendant(found.map(|m| row_key(&m.seed.id)))
             .on_edit(|state: &mut State| &mut state.window.garden.query)
+            .on_change(super::follow)
             .on_key(super::field_key),
         t,
     )
@@ -806,6 +937,7 @@ struct RowLook {
     pick: Pick,
     title_ranges: Vec<search::Range>,
     snippet: Option<search::Snippet>,
+    where_log: bool,
     id_hit: bool,
     home: Option<String>,
     tender: String,
@@ -816,75 +948,117 @@ struct RowLook {
     short_age: String,
 }
 
-struct RowSpec {
-    seed: Arc<Seed>,
-    look: RowLook,
+struct RowListCtx {
+    index: Rc<Index>,
+    names: Rc<SessionNames>,
+    v2: Rc<v2::Snapshot>,
+    now_ms: i64,
+    pick: Pick,
+    selected: String,
+    active: Option<usize>,
+    trail_last: String,
+    show_bed: bool,
 }
 
-fn row_specs(
-    seeds: &[Arc<Seed>],
+#[derive(Clone)]
+enum RowItems {
+    Seeds(Rc<[Arc<Seed>]>),
+    Hits(Rc<[SearchHit]>),
+}
+
+impl RowItems {
+    fn len(&self) -> usize {
+        match self {
+            RowItems::Seeds(seeds) => seeds.len(),
+            RowItems::Hits(hits) => hits.len(),
+        }
+    }
+
+    fn seed(&self, i: usize) -> &Arc<Seed> {
+        match self {
+            RowItems::Seeds(seeds) => &seeds[i],
+            RowItems::Hits(hits) => &hits[i].seed,
+        }
+    }
+
+    fn hit(&self, i: usize) -> Option<&SearchHit> {
+        match self {
+            RowItems::Seeds(_) => None,
+            RowItems::Hits(hits) => Some(&hits[i]),
+        }
+    }
+}
+
+fn row_look(items: &RowItems, i: usize, ctx: &RowListCtx) -> RowLook {
+    let seed = items.seed(i);
+    let hit = items.hit(i);
+    let parent = model::parent_of(seed);
+    let home = (hit.is_some() && parent != ctx.trail_last)
+        .then(|| {
+            hit.and_then(|h| h.plot_title.clone())
+                .or_else(|| ctx.index.by_id.get(parent).map(|p| p.title.clone()))
+        })
+        .flatten();
+    let v2_row = ctx.v2.on && ctx.pick != Pick::Found;
+    let short_age = if v2_row && seed.plot_progress.is_none() {
+        let age_iso = if seed.updated_at.is_empty() {
+            &seed.created_at
+        } else {
+            &seed.updated_at
+        };
+        model::short_age(age_iso, ctx.now_ms)
+    } else {
+        String::new()
+    };
+    RowLook {
+        seed: Arc::as_ptr(seed) as usize,
+        blockers: if v2_row {
+            0
+        } else {
+            ctx.index.blockers(&seed.id)
+        },
+        selected: seed.id == ctx.selected,
+        active: ctx.active == Some(i),
+        pick: ctx.pick,
+        title_ranges: hit.map(|h| h.title_ranges.clone()).unwrap_or_default(),
+        snippet: hit.and_then(|h| h.snippet.clone()),
+        where_log: hit.is_some_and(|h| h.where_ == "log"),
+        id_hit: hit.is_some_and(|h| h.id_hit),
+        home,
+        tender: if v2_row {
+            String::new()
+        } else {
+            model::tender_of(seed, &ctx.names)
+        },
+        standby: model::standby_of(seed, ctx.now_ms),
+        v2: ctx.v2.on,
+        attention: ctx.v2.attention_of(seed),
+        show_bed: ctx.show_bed,
+        short_age,
+    }
+}
+
+fn list(
+    (key, role, label): (&str, &'static str, &str),
+    items: RowItems,
     place: &Place,
     pick: Pick,
     selected: &str,
-    matches: Option<(&[Match], usize)>,
-) -> Vec<RowSpec> {
-    let show_bed = place.v2.on && place.v2.bed == BedFilter::All;
-    seeds
-        .iter()
-        .enumerate()
-        .map(|(i, seed)| {
-            let hit = matches.and_then(|(m, _)| m.get(i));
-            let parent = model::parent_of(seed);
-            let home = (matches.is_some()
-                && parent != place.trail.last().map_or("", String::as_str))
-            .then(|| place.index.by_id.get(parent).map(|p| p.title.clone()))
-            .flatten();
-            let v2_row = place.v2.on && pick != Pick::Found;
-            let short_age = if v2_row && seed.plot_progress.is_none() {
-                let age_iso = if seed.updated_at.is_empty() {
-                    &seed.created_at
-                } else {
-                    &seed.updated_at
-                };
-                model::short_age(age_iso, place.now_ms)
-            } else {
-                String::new()
-            };
-            RowSpec {
-                seed: seed.clone(),
-                look: RowLook {
-                    seed: Arc::as_ptr(seed) as usize,
-                    blockers: if v2_row {
-                        0
-                    } else {
-                        place.index.blockers(&seed.id)
-                    },
-                    selected: seed.id == selected,
-                    active: matches.is_some_and(|(_, active)| active == i),
-                    pick,
-                    title_ranges: hit.map(|h| h.title_ranges.clone()).unwrap_or_default(),
-                    snippet: hit.and_then(|h| h.snippet.clone()),
-                    id_hit: hit.is_some_and(|h| h.id_hit),
-                    home,
-                    tender: if v2_row {
-                        String::new()
-                    } else {
-                        model::tender_of(seed, &place.names)
-                    },
-                    standby: model::standby_of(seed, place.now_ms),
-                    v2: place.v2.on,
-                    attention: place.attention_of(seed),
-                    show_bed,
-                    short_age,
-                },
-            }
-        })
-        .collect()
-}
-
-fn list(key: &str, role: &'static str, label: &str, specs: Vec<RowSpec>, t: &Tokens) -> El {
-    let specs: Rc<[RowSpec]> = specs.into();
-    let keys = specs.clone();
+    active: Option<usize>,
+    t: &Tokens,
+) -> El {
+    let keys = items.clone();
+    let ctx = Rc::new(RowListCtx {
+        index: place.index.clone(),
+        names: place.names.clone(),
+        v2: place.v2.clone(),
+        now_ms: place.now_ms,
+        pick,
+        selected: selected.to_owned(),
+        active,
+        trail_last: place.trail.last().cloned().unwrap_or_default(),
+        show_bed: place.v2.on && place.v2.bed == BedFilter::All,
+    });
     let t = *t;
     col()
         .key(key.to_owned())
@@ -893,10 +1067,13 @@ fn list(key: &str, role: &'static str, label: &str, specs: Vec<RowSpec>, t: &Tok
         .self_stretch()
         .growth(GrowthSpec::default())
         .virtual_rows(
-            specs.len(),
+            items.len(),
             ListRow::two_line_height(),
-            move |_: &State, i| row_key(&keys[i].seed.id).into(),
-            move |_: &State, i| seed_row(&specs[i], &t),
+            move |_: &State, i| row_key(&keys.seed(i).id).into(),
+            move |_: &State, i| {
+                let look = row_look(&items, i, &ctx);
+                seed_row(items.seed(i), &look, &t)
+            },
         )
 }
 
@@ -904,9 +1081,7 @@ fn list(key: &str, role: &'static str, label: &str, specs: Vec<RowSpec>, t: &Tok
 /// it apart, and the passage of its body that answered stands under them inside the same option.
 /// The passage is not a List row's lower block, which lies outside the row's press target and
 /// selected fill and needs a List, where these rows are built virtually as they scroll in.
-fn seed_row(spec: &RowSpec, t: &Tokens) -> El {
-    let seed = &spec.seed;
-    let look = &spec.look;
+fn seed_row(seed: &Arc<Seed>, look: &RowLook, t: &Tokens) -> El {
     if look.v2 && look.pick != Pick::Found {
         let v2_look = V2RowLook {
             seed: look.seed,
@@ -997,6 +1172,9 @@ fn seed_row(spec: &RowSpec, t: &Tokens) -> El {
         }
         if let Some(home) = &look.home {
             say(format!("in {home}"));
+        }
+        if look.where_log {
+            say("in log".to_owned());
         }
         if let Some(tally) = model::check_tally(seed) {
             say(model::tally_words(&tally));
@@ -1154,17 +1332,88 @@ fn tone_color(tone: &str, t: &Tokens) -> rune::Color {
     }
 }
 
-fn capped(state: &State, place: &Place, t: &Tokens) -> Option<El> {
-    let shown = super::seeds(state).len() as i64;
-    let total = state.facts.garden.total_of(&state.facts.profiles.selected);
-    (total > shown).then(|| {
-        let words = if place.query.active {
-            format!("Search covers {shown} of {total} seeds (every open seed and the newest closed).")
-        } else {
-            format!("The garden holds {total} seeds; this panel has {shown} (every open seed and the newest closed).")
-        };
-        Prose::empty("garden.capped", words).el(t)
-    })
+pub(super) fn page_tail(key: PageKey, bucket: Option<&PageBucket>, t: &Tokens) -> Option<El> {
+    let bucket = bucket?;
+    if bucket.loading_more || (bucket.loading && bucket.seeds.is_empty()) {
+        return Some(Prose::empty("garden.more.loading", "Loading older seeds…").el(t));
+    }
+    if let Some(error) = &bucket.error {
+        let retry_key = key.clone();
+        return Some(
+            Inline::loose()
+                .key("garden.more.error")
+                .child(words(error.clone(), Type::Small, t.error).wrap())
+                .child(
+                    quiet("Retry")
+                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                            super::retry_page(state, retry_key.clone(), tx)
+                        })
+                        .build(t)
+                        .key("garden.more.retry")
+                        .into(),
+                ),
+        );
+    }
+    let next = bucket.next_before.as_deref()?;
+    let press_key = key.clone();
+    let vis_key = key;
+    let load: El = quiet("Load older seeds")
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            super::load_more_page(state, press_key.clone(), tx);
+        })
+        .build(t)
+        .key("garden.more")
+        .into();
+    Some(
+        col()
+            .key(format!("garden.more.sentinel.{next}"))
+            .w_full()
+            .on_visible(move |state: &mut State, shown: bool, tx: &mut Tx| {
+                if !shown || !super::load_more_page(state, vis_key.clone(), tx) {
+                    tx.live_only();
+                }
+            })
+            .child(load),
+    )
+}
+
+fn search_tail(place: &Place, t: &Tokens) -> Option<El> {
+    if place.search_loading_more {
+        return Some(Prose::empty("garden.search.more.loading", "Loading more results…").el(t));
+    }
+    if let Some(error) = &place.search_error {
+        return Some(
+            Inline::loose()
+                .key("garden.search.more.error")
+                .child(words(error.clone(), Type::Small, t.error).wrap())
+                .child(
+                    quiet("Retry")
+                        .on_press_tx(super::retry_search)
+                        .build(t)
+                        .key("garden.search.more.retry")
+                        .into(),
+                ),
+        );
+    }
+    let offset = place.search_next_offset?;
+    let load: El = quiet("Load more results")
+        .on_press_tx(|state: &mut State, tx: &mut Tx| {
+            super::load_more_search(state, tx);
+        })
+        .build(t)
+        .key("garden.search.more")
+        .into();
+    Some(
+        col()
+            .key(format!("garden.search.more.sentinel.{offset}"))
+            .w_full()
+            .on_visible(|state: &mut State, shown: bool, tx: &mut Tx| {
+                if !shown || !super::load_more_search(state, tx) {
+                    tx.live_only();
+                }
+            })
+            .child(load),
+    )
 }
 
 fn nothing_found(state: &State, place: &Place, t: &Tokens) -> El {
@@ -1225,18 +1474,39 @@ fn nothing_found(state: &State, place: &Place, t: &Tokens) -> El {
 
 fn results(state: &State, place: &Place, t: &Tokens) -> El {
     if place.answers.is_empty() {
+        if place.search_loading {
+            return Prose::empty("garden.search.loading", "Searching…").el(t);
+        }
+        if let Some(error) = &place.search_error {
+            return Reader::new()
+                .push(Prose::empty("garden.search.error", error.clone()).build(t))
+                .push(
+                    Actions::new("garden.search.error.moves")
+                        .push(
+                            button("garden.search.retry", "Retry", t)
+                                .on_press_tx(super::retry_search),
+                        )
+                        .build()
+                        .key("garden.search.error.actions"),
+                )
+                .build("garden.search.failed", Room::Narrow, t);
+        }
         return nothing_found(state, place, t);
     }
     let active = place.active(state).min(place.answers.len() - 1);
-    let seeds: Vec<Arc<Seed>> = place.answers.iter().map(|m| m.seed.clone()).collect();
-    let specs = row_specs(
-        &seeds,
+    let list_el = list(
+        (RESULTS, "listbox", "Results"),
+        RowItems::Hits(place.answers.clone()),
         place,
         Pick::Found,
         "",
-        Some((&place.answers, active)),
+        Some(active),
+        t,
     );
-    list(RESULTS, "listbox", "Results", specs, t)
+    match search_tail(place, t) {
+        Some(tail) => col().w_full().child(list_el).child(tail),
+        None => list_el,
+    }
 }
 
 pub(super) fn scroll(key: &str, content: El, t: &Tokens) -> El {
@@ -1256,19 +1526,20 @@ fn root_list(state: &State, place: &Place, pick: Pick, t: &Tokens) -> Vec<Block>
     if place.v2.on {
         return v2_root_list(state, place, pick, t);
     }
-    let roots = place.lens(&place.index.roots);
-    let closed = place
-        .index
-        .roots
-        .iter()
-        .filter(|s| model::is_closed(s))
-        .count();
+    let roots = place.v1_roots(state);
+    let closed = place.root_closed_count;
     let stacked = pick == Pick::Drill;
-    let mut page: Vec<Block> = capped(state, place, t)
-        .map(|capped| Block::custom("garden.capped.block", capped))
-        .into_iter()
-        .collect();
-    if roots.is_empty() && closed > 0 {
+    let bucket = place
+        .shows_closed_page()
+        .then(|| state.window.garden.pages.get(&place.root_page_key))
+        .flatten();
+    let mut page: Vec<Block> = Vec::new();
+    if roots.is_empty() && bucket.is_some_and(|b| b.loading || b.error.is_some()) {
+        if let Some(tail) = page_tail(place.root_page_key.clone(), bucket, t) {
+            page.push(Block::custom("garden.more.block", tail));
+        }
+        return page;
+    } else if roots.is_empty() && closed > 0 && !place.shows_closed_page() {
         page.push(Prose::empty("garden.empty", hidden_closed_words(closed)).build(t));
     } else if roots.is_empty() && stacked {
         page.push(
@@ -1285,13 +1556,18 @@ fn root_list(state: &State, place: &Place, pick: Pick, t: &Tokens) -> Vec<Block>
         page.push(Block::custom(
             "garden.list.block",
             list(
-                "garden.list",
-                "list",
-                "Seeds",
-                row_specs(&roots, place, pick, selected, None),
+                ("garden.list", "list", "Seeds"),
+                RowItems::Seeds(roots.into()),
+                place,
+                pick,
+                selected,
+                None,
                 t,
             ),
         ));
+    }
+    if let Some(tail) = page_tail(place.root_page_key.clone(), bucket, t) {
+        page.push(Block::custom("garden.more.block", tail));
     }
     page
 }
@@ -1369,15 +1645,21 @@ fn build_v2_line(line: &V2Line, ctx: &V2ListCtx, t: &Tokens) -> El {
 
 fn v2_root_list(state: &State, place: &Place, pick: Pick, t: &Tokens) -> Vec<Block> {
     let docked = super::mode(state) != Mode::Full;
-    let roots = place.v2_roots(docked);
+    let roots = place.v2_roots(state, docked);
     let open_in_bed = place.v2.counts.open_for(&place.v2.bed);
-    let closed_in_bed = place.v2_bed_closed_count();
-    let mut page: Vec<Block> = capped(state, place, t)
-        .map(|capped| Block::custom("garden.capped.block", capped))
-        .into_iter()
-        .collect();
+    let closed_in_bed = place.root_closed_count;
+    let bucket = place
+        .shows_closed_page()
+        .then(|| state.window.garden.pages.get(&place.root_page_key))
+        .flatten();
+    let mut page: Vec<Block> = Vec::new();
     if roots.is_empty() {
-        if open_in_bed > 0 && place.lens != Lens::All && place.query.is.is_empty() {
+        if bucket.is_some_and(|b| b.loading || b.error.is_some()) {
+            if let Some(tail) = page_tail(place.root_page_key.clone(), bucket, t) {
+                page.push(Block::custom("garden.more.block", tail));
+            }
+            return page;
+        } else if open_in_bed > 0 && place.lens != Lens::All && place.query.is.is_empty() {
             let bed_name = v2::bed_label(state, &place.v2.bed);
             let msg = if place.v2.bed == BedFilter::All {
                 format!(
@@ -1403,7 +1685,7 @@ fn v2_root_list(state: &State, place: &Place, pick: Pick, t: &Tokens) -> Vec<Blo
                     )
                     .build(),
             );
-        } else if closed_in_bed > 0 {
+        } else if closed_in_bed > 0 && !place.shows_closed_page() {
             page.push(Prose::empty("garden.empty", hidden_closed_words(closed_in_bed)).build(t));
         } else if place.v2.bed == BedFilter::All {
             page.push(
@@ -1415,6 +1697,9 @@ fn v2_root_list(state: &State, place: &Place, pick: Pick, t: &Tokens) -> Vec<Blo
             );
         } else {
             page.push(Prose::empty("garden.empty", "Nothing here yet.").build(t));
+        }
+        if let Some(tail) = page_tail(place.root_page_key.clone(), bucket, t) {
+            page.push(Block::custom("garden.more.block", tail));
         }
         return page;
     }
@@ -1488,23 +1773,29 @@ fn v2_root_list(state: &State, place: &Place, pick: Pick, t: &Tokens) -> Vec<Blo
             move |_: &State, i| build_v2_line(&lines[i], &ctx, &t),
         );
     page.push(Block::custom("garden.list.block", list_el));
+    if let Some(tail) = page_tail(place.root_page_key.clone(), bucket, &t) {
+        page.push(Block::custom("garden.more.block", tail));
+    }
     page
+}
+
+fn loading_page(state: &State, id: &str, t: &Tokens) -> Reader {
+    let (_, error) = super::reading(&state.window.garden, id);
+    let words = error.unwrap_or("Loading seed…").to_owned();
+    Reader::new().push(Prose::empty("garden.loading", words).build(t))
 }
 
 fn stack_view(state: &State, place: &Place, t: &Tokens) -> El {
     let content = if place.query.searches {
-        Reader::new()
-            .push_all(
-                capped(state, place, t).map(|capped| Block::custom("garden.capped.block", capped)),
-            )
-            .push(Block::custom(
-                "garden.results.block",
-                results(state, place, t),
-            ))
+        Reader::new().push(Block::custom(
+            "garden.results.block",
+            results(state, place, t),
+        ))
     } else {
-        match place.here() {
-            None => Reader::new().push_all(root_list(state, place, Pick::Drill, t)),
-            Some(here) => page(state, place, here, true, t),
+        match (place.here(), place.trail.last()) {
+            (Some(here), _) => page(state, place, here, true, t),
+            (None, Some(id)) => loading_page(state, id, t),
+            (None, None) => Reader::new().push_all(root_list(state, place, Pick::Drill, t)),
         }
     };
     scroll(
@@ -1522,10 +1813,7 @@ fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
         if place.query.searches {
             columns = columns.child(column(
                 "garden.column.results".into(),
-                col()
-                    .w_full()
-                    .children(capped(state, place, t))
-                    .child(results(state, place, t)),
+                col().w_full().child(results(state, place, t)),
             ));
         } else {
             columns = columns.child(column(
@@ -1533,11 +1821,14 @@ fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
                 blocks_column(root_list(state, place, Pick::Level(0), t), t),
             ));
         }
-        let reader_inner = match place.here() {
-            Some(here) => page(state, place, here, false, t)
+        let reader_inner = match (place.here(), place.trail.last()) {
+            (Some(here), _) => page(state, place, here, false, t)
                 .build("garden.page", Room::Wide, t)
                 .max_w(READER_MAX_WIDTH),
-            None => Reader::new()
+            (None, Some(id)) => loading_page(state, id, t)
+                .build("garden.page", Room::Wide, t)
+                .max_w(READER_MAX_WIDTH),
+            (None, None) => Reader::new()
                 .push(Prose::empty("garden.reader.empty", "Select a seed to read it.").build(t))
                 .build("garden.page", Room::Wide, t)
                 .max_w(READER_MAX_WIDTH),
@@ -1559,38 +1850,57 @@ fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
     if place.query.searches {
         columns = columns.child(column(
             "garden.column.results".into(),
-            col()
-                .w_full()
-                .children(capped(state, place, t))
-                .child(results(state, place, t)),
+            col().w_full().child(results(state, place, t)),
         ));
-    } else if place.here().is_none() {
+    } else if place.trail.is_empty() {
         let root =
             blocks_column(root_list(state, place, Pick::Level(0), t), t).max_w(ROOT_MAX_WIDTH);
         return columns.child(
             Pane::new("garden.column.0", col().w_full().items_center().child(root)).build(t),
         );
     } else {
-        let levels = place.levels();
+        let levels = place.levels(state);
         let max = if frame_width(state) >= THIRD_COLUMN_MIN {
             3
         } else {
             2
         };
         let first = levels.len().saturating_sub(max);
-        for (level, (seeds, selected)) in levels.iter().enumerate().skip(first) {
+        for (level, (seeds, selected, page_key)) in levels.iter().enumerate().skip(first) {
             let content = if level == 0 {
                 blocks_column(root_list(state, place, Pick::Level(0), t), t)
-            } else if seeds.is_empty() {
-                Prose::empty("garden.column.empty", "Nothing here yet.").el(t)
             } else {
-                list(
-                    &format!("garden.list.{level}"),
-                    "list",
-                    "Seeds",
-                    row_specs(seeds, place, Pick::Level(level), selected, None),
-                    t,
-                )
+                let bucket = page_key
+                    .as_ref()
+                    .and_then(|k| state.window.garden.pages.get(k));
+                let tail = page_key.clone().and_then(|k| page_tail(k, bucket, t));
+                if seeds.is_empty() {
+                    if bucket.is_some_and(|b| b.loading || b.error.is_some())
+                        && let Some(tail) = tail
+                    {
+                        tail
+                    } else {
+                        let empty = Prose::empty("garden.column.empty", "Nothing here yet.").el(t);
+                        match tail {
+                            Some(tail) => col().w_full().child(empty).child(tail),
+                            None => empty,
+                        }
+                    }
+                } else {
+                    let list_el = list(
+                        (&format!("garden.list.{level}"), "list", "Seeds"),
+                        RowItems::Seeds(seeds.clone().into()),
+                        place,
+                        Pick::Level(level),
+                        selected,
+                        None,
+                        t,
+                    );
+                    match tail {
+                        Some(tail) => col().w_full().child(list_el).child(tail),
+                        None => list_el,
+                    }
+                }
             };
             columns = columns.child(column(format!("garden.column.{level}"), content));
         }
@@ -1613,6 +1923,24 @@ fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
                 )
                 .scroll_bar_styled(attn_ui::thin_scroll_bar(t)),
         );
+    } else if let Some(id) = place.trail.last() {
+        columns = columns.child(
+            col()
+                .key("garden.reader")
+                .grow(1.0)
+                .h_full()
+                .min_h(0.0)
+                .items_center()
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
+                .child(
+                    loading_page(state, id, t)
+                        .build("garden.page", Room::Wide, t)
+                        .max_w(READER_MAX_WIDTH),
+                )
+                .scroll_bar_styled(attn_ui::thin_scroll_bar(t)),
+        );
     }
     columns
 }
@@ -1626,6 +1954,12 @@ fn blocks_column(blocks: Vec<Block>, t: &Tokens) -> El {
 /// its checks, its plot's children while the walk stacks, its relations, artifacts and log.
 fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Tokens) -> Reader {
     let (document, error) = super::reading(&state.window.garden, &here.id);
+    let in_live = place.index.by_id.contains_key(&here.id);
+    let shown = if in_live {
+        here.as_ref()
+    } else {
+        document.map(|d| &d.seed).unwrap_or(here.as_ref())
+    };
     let sheet = Sheet {
         prefix: "garden".into(),
         view: if stacked {
@@ -1648,20 +1982,26 @@ fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Token
         harnesses: &state.facts.harnesses,
         t,
     };
-    let mut actions = vec![open_as_tile(&here.id, t)];
-    actions.extend(sheet.continuation(Some(here), document));
+    let mut actions = vec![open_as_tile(&shown.id, t)];
+    actions.extend(sheet.continuation(Some(shown), document));
     let mut page = Reader::new()
-        .head(sheet.head(here, actions, sheet.continuation_notes(here, document)))
-        .push_all(sheet.head_after(here, &place.index, Some(place.attention_of(here))))
+        .head(sheet.head(shown, actions, sheet.continuation_notes(shown, document)))
+        .push_all(sheet.head_after(shown, &place.index, Some(place.attention_of(shown))))
         .push_all(sheet.handover_form(document))
         .push_all(sheet.chief_form(document))
-        .push(sheet.authorization(here))
-        .push(sheet.plan(here))
-        .push_all(sheet.checks(here, document));
-    if (stacked || place.v2.on) && model::is_plot(here) {
-        page = page.push(plot_children(place, here, t));
+        .push(sheet.authorization(shown))
+        .push(sheet.plan(shown))
+        .push_all(sheet.checks(shown, document));
+    if (stacked || place.v2.on) && model::is_plot(shown) {
+        page = page.push(plot_children(state, place, shown, t));
     }
-    page.push_all(sheet.seeds("related", "Related", place.index.relations(&here.id)))
+    let cached = super::reading_seeds(&state.window.garden, &here.id);
+    let related = place.index.relations_with(
+        shown,
+        cached.and_then(|c| c.related),
+        cached.and_then(|c| c.ancestors),
+    );
+    page.push_all(sheet.seeds("related", "Related", related))
         .push_all(sheet.artifacts(document))
         .push(sheet.log(document, error))
 }
@@ -1678,12 +2018,24 @@ fn open_as_tile(id: &str, t: &Tokens) -> El {
         .into()
 }
 
-fn plot_children(place: &Place, here: &Arc<Seed>, t: &Tokens) -> Block {
-    let children = place.index.children_of(&here.id);
-    let open = place.lens(children);
-    let closed = children.iter().filter(|s| model::is_closed(s)).count();
+fn plot_children(state: &State, place: &Place, here: &Seed, t: &Tokens) -> Block {
+    let open = place.children_of(state, &here.id);
+    let closed = place.plot_closed_count(state, here);
+    let plot_key = PageKey::plot(state, &here.id);
+    let bucket = place
+        .shows_closed_page()
+        .then(|| state.window.garden.pages.get(&plot_key))
+        .flatten();
     let plot = Section::new("garden.plot", "Plot").region("Plot");
-    if open.is_empty() && closed > 0 {
+    if open.is_empty()
+        && bucket.is_some_and(|b| b.loading || b.error.is_some())
+        && let Some(tail) = page_tail(plot_key.clone(), bucket, t)
+    {
+        return plot
+            .push(Block::custom("garden.plot.more.block", tail))
+            .build(t);
+    }
+    if open.is_empty() && closed > 0 && !place.shows_closed_page() {
         return plot
             .push(Prose::empty("garden.plot.empty", hidden_closed_words(closed)).build(t))
             .build(t);
@@ -1704,15 +2056,20 @@ fn plot_children(place: &Place, here: &Arc<Seed>, t: &Tokens) -> Block {
             )
             .build(t);
     }
-    plot.push(Block::custom(
+    let mut section = plot.push(Block::custom(
         "garden.plot.list.block",
         list(
-            "garden.plot.list",
-            "list",
-            "Plot",
-            row_specs(&open, place, Pick::Drill, "", None),
+            ("garden.plot.list", "list", "Plot"),
+            RowItems::Seeds(open.into()),
+            place,
+            Pick::Drill,
+            "",
+            None,
             t,
         ),
-    ))
-    .build(t)
+    ));
+    if let Some(tail) = page_tail(plot_key, bucket, t) {
+        section = section.push(Block::custom("garden.plot.more.block", tail));
+    }
+    section.build(t)
 }

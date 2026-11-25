@@ -4,7 +4,8 @@ use std::sync::Arc;
 use attn_client::Facts;
 use attn_protocol::{
     GardenBed, GardenBedDeleteMessage, GardenBedDeleteResultMessage, GardenBedSaveMessage,
-    GardenBedSaveResultMessage, Seed, SeedBedSetMessage, SeedBedSetResultMessage, Session,
+    GardenBedSaveResultMessage, GardenClosedCounts, Seed, SeedBedSetMessage,
+    SeedBedSetResultMessage, Session,
 };
 use attn_ui::Tokens;
 use attn_ui::blocks::{
@@ -108,9 +109,45 @@ pub(crate) fn select_bed(state: &mut State, filter: BedFilter, tx: &mut Tx) {
     super::follow(state, tx);
 }
 
+pub(crate) fn bed_scope(filter: &BedFilter) -> String {
+    match filter {
+        BedFilter::All => "all".to_owned(),
+        BedFilter::Unassigned => "unassigned".to_owned(),
+        BedFilter::Automations => "automations".to_owned(),
+        BedFilter::Bed(id) => id.clone(),
+    }
+}
+
+pub(crate) fn closed_tally(
+    counts: Option<&GardenClosedCounts>,
+    filter: Option<&BedFilter>,
+) -> Option<(usize, usize)> {
+    let counts = counts?;
+    let pair = |h: i64, w: i64| (h.max(0) as usize, w.max(0) as usize);
+    Some(match filter {
+        None => pair(
+            counts.all.harvested + counts.automations.harvested,
+            counts.all.withered + counts.automations.withered,
+        ),
+        Some(BedFilter::All) => pair(counts.all.harvested, counts.all.withered),
+        Some(BedFilter::Unassigned) => {
+            pair(counts.unassigned.harvested, counts.unassigned.withered)
+        }
+        Some(BedFilter::Automations) => {
+            pair(counts.automations.harvested, counts.automations.withered)
+        }
+        Some(BedFilter::Bed(id)) => counts
+            .by_bed
+            .iter()
+            .find(|b| b.bed_id == *id)
+            .map_or((0, 0), |b| pair(b.harvested, b.withered)),
+    })
+}
+
 pub(crate) fn select_lens(state: &mut State, lens: Lens, tx: &mut Tx) {
     state.window.garden.lens = lens;
     super::focus_frame(state, tx);
+    super::follow(state, tx);
 }
 
 pub(crate) fn is_automation(seed: &Seed) -> bool {
@@ -154,39 +191,6 @@ pub(crate) fn root_id<'a>(mut seed_id: &'a str, index: &'a Index) -> &'a str {
         seed_id = parent;
     }
     seed_id
-}
-
-pub(crate) fn matches_any_bed(seed: &Seed, filters: &[BedFilter], index: &Index) -> bool {
-    let root = index
-        .by_id
-        .get(root_id(&seed.id, index))
-        .map_or(seed, Arc::as_ref);
-    filters.iter().any(|filter| matches_bed(root, filter))
-}
-
-pub(crate) fn search_beds(beds: &[GardenBed], terms: &[String]) -> Vec<BedFilter> {
-    let mut filters = Vec::new();
-    for term in terms {
-        match term.as_str() {
-            "unassigned" | "none" => filters.push(BedFilter::Unassigned),
-            "automations" | "auto" => filters.push(BedFilter::Automations),
-            term => {
-                if let Some(bed) = beds.iter().find(|bed| bed.id == term) {
-                    filters.push(BedFilter::Bed(bed.id.clone()));
-                } else {
-                    filters.extend(
-                        beds.iter()
-                            .filter(|bed| {
-                                bed.name.to_lowercase().contains(term)
-                                    || bed.slug.to_lowercase().contains(term)
-                            })
-                            .map(|bed| BedFilter::Bed(bed.id.clone())),
-                    );
-                }
-            }
-        }
-    }
-    filters
 }
 
 pub(crate) fn live_session<'a>(
@@ -402,8 +406,16 @@ pub(crate) struct BedCounts {
 }
 
 impl BedCounts {
-    pub(crate) fn of(roots: &[Arc<Seed>], attention: &HashMap<String, Attention>) -> BedCounts {
+    pub(crate) fn of(
+        roots: &[Arc<Seed>],
+        attention: &HashMap<String, Attention>,
+        closed_counts: Option<&GardenClosedCounts>,
+    ) -> BedCounts {
         let mut counts = BedCounts::default();
+        if let Some(closed) = closed_counts {
+            counts.has_automations |=
+                closed.automations.harvested + closed.automations.withered > 0;
+        }
         for seed in roots {
             let automation = is_automation(seed);
             counts.has_automations |= automation;
@@ -478,7 +490,11 @@ impl Snapshot {
         let bed = active_bed(state);
         let att_idx = AttentionIndex::of(&state.facts);
         let attention = att_idx.compute(index);
-        let counts = BedCounts::of(&index.roots, &attention);
+        let closed_counts = state
+            .facts
+            .garden
+            .closed_counts_of(&state.facts.profiles.selected);
+        let counts = BedCounts::of(&index.roots, &attention, closed_counts);
         Snapshot {
             on: true,
             bed,

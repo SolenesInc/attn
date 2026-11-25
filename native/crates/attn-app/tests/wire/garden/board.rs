@@ -886,3 +886,187 @@ fn a_cards_open_menu_lies_on_its_own_raised_surface_apart_from_its_lane() {
     assert_ne!(&menu[7..], "00", "the menu has no surface of its own");
     assert_ne!(menu, fill_of("garden.board.column.ready"));
 }
+
+#[test]
+fn shows_exact_folded_closed_counts_without_cap_banner_and_pages_expanded_closed_cards() {
+    let open = with(seed("s-open01", "active task"), |s| s.ready = true);
+    let archived_plot = with(
+        closed(plot("s-aplt01", "Archived release", ""), "harvested"),
+        |s| {
+            s.plot_progress = Some(SeedPlotProgress {
+                total: 1,
+                done: 1,
+                withered: 0,
+                growing: 0,
+                parked: 0,
+                ready: 0,
+                blocked: 0,
+                checks: None,
+            });
+        },
+    );
+    let archived_plot_child = closed(
+        part_of("s-aplt01", "s-akid01", "Archived step"),
+        "harvested",
+    );
+    let mut page1: Vec<Seed> = vec![archived_plot.clone()];
+    page1.extend((0..79).map(|i| {
+        closed(
+            seed(&format!("s-ac{i:04}"), &format!("archived card {i:02}")),
+            "harvested",
+        )
+    }));
+    let page2 = vec![closed(seed("s-ac0099", "older archived"), "withered")];
+    let d = Daemon::scripted().state(InitialStateMessage {
+        garden_closed_counts: Some(GardenClosedCounts {
+            all: GardenClosedTally {
+                harvested: 85,
+                withered: 5,
+            },
+            unassigned: GardenClosedTally {
+                harvested: 85,
+                withered: 5,
+            },
+            ..GardenClosedCounts::default()
+        }),
+        seeds_total: Some(91),
+        ..initial(vec![open.clone()], Vec::new())
+    });
+    let (p1, p2, kid) = (page1.clone(), page2.clone(), archived_plot_child.clone());
+    d.on("garden_seeds_page", move |r: &Request| {
+        if r["plot_id"].as_str() == Some("s-aplt01") {
+            return message(GardenSeedsPageResultMessage {
+                request_id: r["request_id"].as_str().unwrap().into(),
+                success: true,
+                seeds: vec![kid.clone()],
+                total: 1,
+                harvested: 1,
+                ..GardenSeedsPageResultMessage::new()
+            });
+        }
+        let (seeds, next) = match r["before"].as_str() {
+            None => (p1.clone(), Some("2026-11-12T00:00:00Z|s-ac0078".into())),
+            Some("2026-11-12T00:00:00Z|s-ac0078") => (p2.clone(), None),
+            _ => (Vec::new(), None),
+        };
+        message(GardenSeedsPageResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            seeds,
+            next_before: next,
+            total: 90,
+            harvested: 85,
+            withered: 5,
+            ..GardenSeedsPageResultMessage::new()
+        })
+    });
+    d.on("seed_transition", transition_reply);
+    let mut world = open_board_with(d);
+
+    assert!(!shows(&world, "The garden holds"));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("garden.board.total"))
+            .name
+            .as_deref(),
+        Some("91")
+    );
+    assert!(shows(&world, "85 harvested · 5 withered"));
+    assert!(column(&world, "Closed").is_empty());
+
+    select_card(&mut world, "active task");
+    world.gesture(|app| app.click(Target::key("garden.board.menu.harvest")));
+    assert!(shows(&world, "85 harvested · 5 withered"));
+    assert!(!shows(&world, "Nothing has finished here yet."));
+    key(&mut world, Key::Escape);
+
+    let before_rows = attn_app::garden::rows_built();
+    click(&mut world, "show");
+    let closed_built = attn_app::garden::rows_built() - before_rows;
+    assert!(
+        closed_built < 50,
+        "Closed column should virtualize rows, built {closed_built}"
+    );
+    let pages = world.daemon.sent_of("garden_seeds_page");
+    assert_eq!(pages.len(), 1);
+    assert!(pages[0].get("before").is_none());
+    assert!(world.screen().find(Target::key("garden.more")).is_some());
+    assert!(world.runtime_is_at_rest());
+
+    let [cx, cy, cw, ch] = world
+        .screen()
+        .bounds(Target::key("garden.board.body.closed"))
+        .expect("closed lane body bounds");
+    let center = (cx + cw / 2.0, cy + ch / 2.0);
+    for _ in 0..40 {
+        if world.daemon.sent_of("garden_seeds_page").len() >= 2 {
+            break;
+        }
+        world.gesture(|app| {
+            app.runtime
+                .wheel_event(rune::WheelEvent::new(0.0, -300.0).at(center.0, center.1))
+        });
+    }
+    let pages = world.daemon.sent_of("garden_seeds_page");
+    assert_eq!(pages.len(), 2);
+    assert_eq!(pages[1]["before"], "2026-11-12T00:00:00Z|s-ac0078");
+    world.gesture(|app| {
+        app.runtime
+            .wheel_event(rune::WheelEvent::new(0.0, 20_000.0).at(center.0, center.1))
+    });
+
+    select_card(&mut world, "archived card 00");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("garden.board.menu.replant"))
+            .is_some()
+    );
+    key(&mut world, Key::Escape);
+
+    world.daemon.emit(GardenSeedsChangedMessage {
+        profile_id: PROFILE.into(),
+        order: vec!["s-open01".into(), "s-ac0000".into()],
+        seeds: vec![with(seed("s-ac0000", "archived card 00"), |s| {
+            s.ready = true
+        })],
+        total: 91,
+        closed_counts: Some(GardenClosedCounts {
+            all: GardenClosedTally {
+                harvested: 84,
+                withered: 5,
+            },
+            unassigned: GardenClosedTally {
+                harvested: 84,
+                withered: 5,
+            },
+            ..GardenClosedCounts::default()
+        }),
+        ..GardenSeedsChangedMessage::new()
+    });
+    world.settle();
+    assert!(column(&world, "Ready").contains(&"archived card 00".to_owned()));
+    assert!(!column(&world, "Closed").contains(&"archived card 00".to_owned()));
+
+    world.gesture(|app| app.click(Target::key("garden.board.card.s-aplt01")));
+    assert_eq!(column(&world, "Closed"), ["Archived step"]);
+    let trail_names: Vec<String> = world
+        .screen()
+        .descendants(Target::key("garden.board.trail"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert!(
+        trail_names.iter().any(|n| n == "Archived release"),
+        "{trail_names:?}"
+    );
+    assert!(
+        world
+            .daemon
+            .sent_of("garden_seeds_page")
+            .iter()
+            .any(|r| r["plot_id"] == "s-aplt01")
+    );
+    assert!(world.runtime_is_at_rest());
+}

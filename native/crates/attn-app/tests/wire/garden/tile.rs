@@ -147,17 +147,62 @@ fn a_seed_tile_shows_the_seed_its_plan_and_log_and_names_itself_after_the_seed()
 
 #[test]
 fn a_seed_the_garden_does_not_hold_shows_once_the_daemon_reads_it_and_a_failed_read_says_why() {
-    let world = start("s-old111", Vec::new(), |r| {
-        document(r, seed("s-old111", "An older seed"), Vec::new(), &[])
+    let archived_parent = closed(plot("s-aplt99", "Archived Parent", ""), "harvested");
+    let archived_blocker = closed(seed("s-ablk99", "Archived Blocker"), "harvested");
+    let archived_seed = with(
+        closed(
+            part_of("s-aplt99", "s-old111", "An older seed"),
+            "harvested",
+        ),
+        |s| s.edges.push(edge("blocks", "s-ablk99")),
+    );
+    let (doc_seed, doc_parent, doc_blocker) = (archived_seed, archived_parent, archived_blocker);
+    let mut world = start("s-old111", Vec::new(), move |r| {
+        message(SeedDocumentGetResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            document: Some(SeedDocument {
+                seed: doc_seed.clone(),
+                ancestors: Some(vec![doc_parent.clone()]),
+                related: Some(vec![doc_blocker.clone()]),
+                ..SeedDocument::default()
+            }),
+            ..SeedDocumentGetResultMessage::new()
+        })
     });
     let seen = shown(&world);
     assert!(seen.contains(&"An older seed".to_owned()), "{seen:?}");
+    assert_eq!(
+        titled(&world, "seed-tile.t.back").as_deref(),
+        Some("Back to Archived Parent")
+    );
+    assert!(
+        world
+            .screen()
+            .descendants(Target::key("seed-tile.t.related"))
+            .iter()
+            .any(|n| n.name.as_deref() == Some("Archived Blocker"))
+    );
+    world.gesture(|app| app.click(Target::key("seed-tile.t.open-garden")));
+    assert_eq!(
+        titled(&world, "garden.head.title").as_deref(),
+        Some("An older seed")
+    );
+    assert!(world.runtime_is_at_rest());
+
+    let other_profile = with(seed("s-other1", "Other profile seed"), |s| {
+        s.profile_id = "personal".into();
+    });
+    let world = start("s-other1", Vec::new(), move |r| {
+        document(r, other_profile.clone(), Vec::new(), &[])
+    });
     assert!(
         world
             .screen()
             .find(Target::key("seed-tile.t.open-garden"))
             .is_none()
     );
+    assert!(world.runtime_is_at_rest());
 
     let world = start("s-gone11", Vec::new(), |r| document_reply(r, None));
     let seen = shown(&world);

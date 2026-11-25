@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 use std::sync::Arc;
 
 use attn_protocol::{Seed, SeedNoteMessage, SeedTransitionMessage, SeedTransitionResultMessage};
@@ -7,11 +9,12 @@ use attn_ui::blocks::{
     lanes,
 };
 use attn_ui::system::{DotSize, FieldState, Link, ListRow, Type, dot, line_box, words};
-use rune::{El, Key, KeyEvent, Phase, TextEdit, Tx, col, el, memo, row};
+use rune::{El, GrowthSpec, Key, KeyEvent, Phase, TextEdit, Tx, col, el, memo, row};
 use rune_kit::TextInput;
 
 use super::model::{self, SessionNames};
 use super::v2::{self, Attention, BedFilter};
+use super::{PageBucket, PageKey};
 use crate::State;
 use crate::sidebar::queue::epoch_ms;
 
@@ -166,7 +169,8 @@ pub(crate) fn verbs_for(status: &str) -> Vec<Verb> {
 #[derive(Default)]
 pub(crate) struct Board {
     trail: Vec<String>,
-    closed_open: bool,
+    trail_seeds: HashMap<String, Arc<Seed>>,
+    pub(super) closed_open: bool,
     selected: Option<String>,
     menu_for: Option<String>,
     compose: Option<Compose>,
@@ -176,9 +180,50 @@ pub(crate) struct Board {
     drag: Option<Drag>,
 }
 
+fn living_trail(state: &State) -> Vec<String> {
+    let walk = &state.window.garden.board_walk;
+    if walk.trail.is_empty() {
+        return Vec::new();
+    }
+    let seeds = super::seeds(state);
+    walk.trail
+        .iter()
+        .take_while(|id| walk.trail_seeds.contains_key(*id) || seeds.iter().any(|s| s.id == **id))
+        .cloned()
+        .collect()
+}
+
+pub(super) fn current_plot(state: &State) -> Option<String> {
+    living_trail(state).pop()
+}
+
+fn page_key_for(state: &State, plot: Option<&str>) -> PageKey {
+    match plot {
+        Some(plot_id) => PageKey::plot(state, plot_id),
+        None => PageKey::root(state),
+    }
+}
+
+fn find_seed(state: &State, id: &str) -> Option<Arc<Seed>> {
+    if let Some(seed) = super::seeds(state).iter().find(|s| s.id == id) {
+        return Some(seed.clone());
+    }
+    if let Some(seed) = state.window.garden.board_walk.trail_seeds.get(id) {
+        return Some(seed.clone());
+    }
+    let key = page_key_for(state, current_plot(state).as_deref());
+    state
+        .window
+        .garden
+        .pages
+        .get(&key)
+        .and_then(|bucket| bucket.seeds.iter().find(|s| s.id == id).cloned())
+}
+
 impl Board {
     pub(crate) fn clear_walk(&mut self) {
         self.trail.clear();
+        self.trail_seeds.clear();
         self.selected = None;
         self.menu_for = None;
         self.compose = None;
@@ -210,29 +255,31 @@ struct Drag {
 /// The seeds of the place the board stands in: the cards each column shows, and the closed seeds
 /// with nothing open below them, which fold away.
 struct Place {
-    index: model::Index,
+    index: Rc<model::Index>,
     trail: Vec<String>,
     scoped: usize,
     columns: [Vec<Arc<Seed>>; 4],
     ready: usize,
-    foldable: Vec<Arc<Seed>>,
+    closed_open_below: usize,
+    foldable_harvested: usize,
+    foldable_withered: usize,
     folded: bool,
-    v2: v2::Snapshot,
+    page_key: PageKey,
+    v2: Rc<v2::Snapshot>,
 }
 
 impl Place {
     fn of(state: &State) -> Place {
-        let index = model::Index::of(super::seeds(state));
-        let v2_snap = v2::Snapshot::of(state, &index);
-        let trail: Vec<String> = state
-            .window
-            .garden
-            .board_walk
+        let index = Rc::new(model::Index::of(super::seeds(state)));
+        let v2_snap = Rc::new(v2::Snapshot::of(state, &index));
+        let walk = &state.window.garden.board_walk;
+        let trail: Vec<String> = walk
             .trail
             .iter()
-            .take_while(|id| index.by_id.contains_key(*id))
+            .take_while(|id| index.by_id.contains_key(*id) || walk.trail_seeds.contains_key(*id))
             .cloned()
             .collect();
+        let page_key = page_key_for(state, trail.last().map(String::as_str));
         let scoped_seeds: Vec<Arc<Seed>> = match trail.last() {
             Some(plot) => index.children_of(plot).to_vec(),
             None if v2_snap.on => index
@@ -265,28 +312,93 @@ impl Place {
             }
         }
         let ready = columns[0].iter().filter(|s| s.ready).count();
-        let scoped = scoped_seeds.len();
-        let walk = &state.window.garden.board_walk;
         let closed = &mut columns[slot(Column::Closed)];
-        let foldable: Vec<Arc<Seed>> = closed
+        let local_foldable: Vec<Arc<Seed>> = closed
             .iter()
             .filter(|s| !model::has_open_work_below(s))
             .cloned()
             .collect();
-        let folded = !walk.closed_open && walk.composing_into(Column::Closed).is_none();
+        let closed_open_below = closed.len() - local_foldable.len();
+        let local_harvested = local_foldable
+            .iter()
+            .filter(|s| s.status == "harvested")
+            .count();
+        let local_withered = local_foldable.len() - local_harvested;
+        let bucket = state.window.garden.pages.get(&page_key);
+        let (foldable_harvested, foldable_withered) = if trail.is_empty() {
+            let counts = state
+                .facts
+                .garden
+                .closed_counts_of(&state.facts.profiles.selected);
+            v2::closed_tally(counts, v2_snap.on.then_some(&v2_snap.bed))
+                .unwrap_or((local_harvested, local_withered))
+        } else if let Some(b) = bucket.filter(|b| b.answered) {
+            (b.harvested.max(0) as usize, b.withered.max(0) as usize)
+        } else if local_foldable.is_empty()
+            && let Some(plot) = trail
+                .last()
+                .and_then(|id| index.by_id.get(id).or_else(|| walk.trail_seeds.get(id)))
+            && let Some(p) = &plot.plot_progress
+        {
+            (p.done.max(0) as usize, p.withered.max(0) as usize)
+        } else {
+            (local_harvested, local_withered)
+        };
+        let folded = !walk.closed_open;
         if folded {
             closed.retain(|s| model::has_open_work_below(s));
+        } else if let Some(b) = bucket
+            && !b.seeds.is_empty()
+        {
+            let mut merged: Vec<Arc<Seed>> = closed
+                .iter()
+                .filter(|s| model::has_open_work_below(s))
+                .cloned()
+                .collect();
+            let extra: Vec<Arc<Seed>> = {
+                let mut seen: HashSet<&str> = merged.iter().map(|s| s.id.as_str()).collect();
+                let mut out = Vec::new();
+                for seed in &b.seeds {
+                    if let Some(live) = index.by_id.get(&seed.id) {
+                        if model::is_closed(live)
+                            && !model::has_open_work_below(live)
+                            && seen.insert(live.id.as_str())
+                        {
+                            out.push(live.clone());
+                        }
+                    } else if seen.insert(seed.id.as_str()) {
+                        out.push(seed.clone());
+                    }
+                }
+                for seed in &local_foldable {
+                    if seen.insert(seed.id.as_str()) {
+                        out.push(seed.clone());
+                    }
+                }
+                out
+            };
+            merged.extend(extra);
+            *closed = merged;
         }
+        let open_scoped = columns[0].len() + columns[1].len() + columns[2].len();
+        let scoped = open_scoped + closed_open_below + foldable_harvested + foldable_withered;
         Place {
             index,
             trail,
             scoped,
             columns,
             ready,
-            foldable,
+            closed_open_below,
+            foldable_harvested,
+            foldable_withered,
             folded,
+            page_key,
             v2: v2_snap,
         }
+    }
+
+    fn foldable_total(&self) -> usize {
+        self.foldable_harvested + self.foldable_withered
     }
 
     fn column(&self, column: Column) -> &[Arc<Seed>] {
@@ -296,9 +408,7 @@ impl Place {
     fn count(&self, column: Column) -> usize {
         match column {
             Column::Ready => self.ready,
-            Column::Closed if self.folded => {
-                self.column(Column::Closed).len() + self.foldable.len()
-            }
+            Column::Closed => self.closed_open_below + self.foldable_total(),
             other => self.column(other).len(),
         }
     }
@@ -409,21 +519,33 @@ fn select(state: &mut State, id: &str, tx: &mut Tx) {
 }
 
 fn drill(state: &mut State, id: &str, tx: &mut Tx) {
+    let mut trail = living_trail(state);
+    let seed = find_seed(state, id);
     let walk = board(state);
     walk.selected = None;
     walk.menu_for = None;
-    walk.trail.push(id.to_owned());
+    trail.push(id.to_owned());
+    walk.trail = trail;
+    if let Some(seed) = seed {
+        walk.trail_seeds.insert(id.to_owned(), seed);
+    }
+    walk.trail_seeds.retain(|k, _| walk.trail.contains(k));
     tx.instant();
     tx.focus(BOARD, false);
+    super::follow(state, tx);
 }
 
 fn climb_to(state: &mut State, depth: usize, tx: &mut Tx) {
+    let mut trail = living_trail(state);
+    trail.truncate(depth);
     let walk = board(state);
     walk.selected = None;
     walk.menu_for = None;
-    walk.trail.truncate(depth);
+    walk.trail = trail;
+    walk.trail_seeds.retain(|k, _| walk.trail.contains(k));
     tx.instant();
     tx.focus(BOARD, false);
+    super::follow(state, tx);
 }
 
 fn toggle_menu(state: &mut State, id: &str, tx: &mut Tx) {
@@ -440,8 +562,8 @@ fn toggle_menu(state: &mut State, id: &str, tx: &mut Tx) {
         .garden
         .board_walk
         .menu_for
-        .as_ref()
-        .and_then(|id| super::seeds(state).iter().find(|s| s.id == *id))
+        .clone()
+        .and_then(|id| find_seed(state, &id))
         .and_then(|seed| verbs_for(&seed.status).first().copied());
     match first {
         Some(verb) => tx.focus(format!("{MENU_PREFIX}{}", verb.name()), true),
@@ -450,10 +572,7 @@ fn toggle_menu(state: &mut State, id: &str, tx: &mut Tx) {
 }
 
 fn press_card(state: &mut State, id: &str, tx: &mut Tx) {
-    let plot = super::seeds(state)
-        .iter()
-        .find(|s| s.id == id)
-        .is_some_and(|s| model::is_plot(s));
+    let plot = find_seed(state, id).is_some_and(|s| model::is_plot(&s));
     board(state).selected = Some(id.to_owned());
     if plot {
         drill(state, id, tx);
@@ -635,15 +754,18 @@ fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         };
         let id = cards[next].id.clone();
         select(state, &id, tx);
+        if down && column == Column::Closed && next + 5 >= cards.len() {
+            super::load_more_page(state, place.page_key.clone(), tx);
+        }
         return true;
     }
     match ev.key {
         Key::Right | Key::Left => {
             let selected = walk.selected.clone();
             let plot = selected
-                .as_ref()
-                .and_then(|id| place.index.by_id.get(id))
-                .is_some_and(|s| model::is_plot(s));
+                .as_deref()
+                .and_then(|id| find_seed(state, id))
+                .is_some_and(|s| model::is_plot(&s));
             if ev.key == Key::Right && plot {
                 drill(state, &selected.unwrap_or_default(), tx);
                 return true;
@@ -693,13 +815,15 @@ fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 
 /// Lets go of a selection or an open menu whose seed a garden push took away.
 fn forget_removed(state: &mut State) {
-    let seeds = super::seeds(state);
-    let gone = |id: &Option<String>| {
-        id.as_ref()
-            .is_some_and(|id| !seeds.iter().any(|s| s.id == *id))
-    };
     let walk = &state.window.garden.board_walk;
-    let (selected, menu) = (gone(&walk.selected), gone(&walk.menu_for));
+    let selected = walk
+        .selected
+        .as_deref()
+        .is_some_and(|id| find_seed(state, id).is_none());
+    let menu = walk
+        .menu_for
+        .as_deref()
+        .is_some_and(|id| find_seed(state, id).is_none());
     let walk = board(state);
     if selected {
         walk.selected = None;
@@ -718,8 +842,8 @@ fn menu_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         .garden
         .board_walk
         .menu_for
-        .as_ref()
-        .and_then(|id| super::seeds(state).iter().find(|s| s.id == *id))
+        .clone()
+        .and_then(|id| find_seed(state, &id))
     else {
         return false;
     };
@@ -753,7 +877,7 @@ fn drag(state: &mut State, id: &str, d: &rune::Drag, tx: &mut Tx) {
     let at = d.window_point();
     match d.phase {
         Phase::Down => {
-            let seed = super::seeds(state).iter().find(|s| s.id == id).cloned();
+            let seed = find_seed(state, id);
             board(state).drag = seed.map(|seed| Drag {
                 seed,
                 start: at,
@@ -825,9 +949,11 @@ fn under(path: Option<&str>) -> (Option<Column>, Option<Verb>) {
 pub(super) fn view(state: &State, t: &Tokens) -> El {
     let place = Place::of(state);
     let walk = &state.window.garden.board_walk;
-    let names = model::session_names(&state.facts.sessions, &state.facts.harnesses);
+    let names = Rc::new(model::session_names(
+        &state.facts.sessions,
+        &state.facts.harnesses,
+    ));
     let seeds = super::seeds(state);
-    let total = state.facts.garden.total_of(&state.facts.profiles.selected);
     let mut page = col()
         .key(BOARD)
         .role("region")
@@ -864,7 +990,7 @@ pub(super) fn view(state: &State, t: &Tokens) -> El {
         );
     }
     let mut parts = Vec::new();
-    if seeds.is_empty() {
+    if seeds.is_empty() && place.scoped == 0 && place.trail.is_empty() {
         parts.push(
             Prose::empty(
                 "garden.board.empty",
@@ -877,13 +1003,6 @@ pub(super) fn view(state: &State, t: &Tokens) -> El {
             "garden.board.columns",
             COLUMNS.map(|column| column_view(state, &place, &names, column, t)),
         ));
-    }
-    if total > seeds.len() as i64 {
-        let said = format!(
-            "The garden holds {total} seeds; this board has {} (every open seed and the newest closed).",
-            seeds.len()
-        );
-        parts.push(Prose::empty("garden.board.capped", said).el(t));
     }
     let body = board_body("garden.board.page", parts);
     if place.v2.on && super::view::columns(state) {
@@ -959,6 +1078,7 @@ fn trail(state: &State, place: &Place, t: &Tokens) -> El {
             .index
             .by_id
             .get(id)
+            .or_else(|| state.window.garden.board_walk.trail_seeds.get(id))
             .map_or_else(|| id.clone(), |s| s.title.clone());
         let key = format!("garden.board.trail.{}", depth + 1);
         nav = nav.step(if depth == last {
@@ -970,10 +1090,19 @@ fn trail(state: &State, place: &Place, t: &Tokens) -> El {
     nav.build(t)
 }
 
+struct ClosedCardCtx {
+    selected: Option<String>,
+    menu_for: Option<String>,
+    now_ms: i64,
+    names: Rc<SessionNames>,
+    index: Rc<model::Index>,
+    v2: Rc<v2::Snapshot>,
+}
+
 fn column_view(
     state: &State,
     place: &Place,
-    names: &SessionNames,
+    names: &Rc<SessionNames>,
     column: Column,
     t: &Tokens,
 ) -> El {
@@ -993,13 +1122,17 @@ fn column_view(
     )
     .lit(hovered)
     .faded(dragging.is_some() && zones.is_empty());
-    if column == Column::Closed && !place.foldable.is_empty() {
+    let bucket: Option<&PageBucket> = (column == Column::Closed && !folded)
+        .then(|| state.window.garden.pages.get(&place.page_key))
+        .flatten();
+    if column == Column::Closed && (place.foldable_total() > 0 || walk.closed_open) {
         lane = lane.aside(
             super::view::quiet(if walk.closed_open { "hide" } else { "show" })
                 .expanded(walk.closed_open)
-                .on_press(|state: &mut State| {
+                .on_press_tx(|state: &mut State, tx: &mut Tx| {
                     let walk = board(state);
                     walk.closed_open = !walk.closed_open;
+                    super::follow(state, tx);
                 })
                 .build(t)
                 .key("garden.board.closed.reveal"),
@@ -1009,11 +1142,66 @@ fn column_view(
         lane = lane.push(composer(compose, &walk.words, names, t));
     }
     if cards.is_empty() && !folded {
-        lane = lane.push(note(
-            &format!("garden.board.empty.{}", column.name()),
-            empty_line(column, place),
-            t,
-        ));
+        if !bucket.is_some_and(|b| b.loading || b.error.is_some()) {
+            lane = lane.push(note(
+                &format!("garden.board.empty.{}", column.name()),
+                empty_line(column, place),
+                t,
+            ));
+        }
+    } else if column == Column::Closed && !folded {
+        let cards_rc: Rc<[Arc<Seed>]> = cards.to_vec().into();
+        let keys = cards_rc.clone();
+        let ctx = Rc::new(ClosedCardCtx {
+            selected: walk.selected.clone(),
+            menu_for: walk.menu_for.clone(),
+            now_ms: state.window.now_ms,
+            names: names.clone(),
+            index: place.index.clone(),
+            v2: place.v2.clone(),
+        });
+        let tokens = *t;
+        let list_el = Lane::cards_column()
+            .key("garden.board.closed.list")
+            .self_stretch()
+            .growth(GrowthSpec::default())
+            .virtual_rows(
+                cards_rc.len(),
+                96.0,
+                move |_: &State, i| format!("garden.board.slot.{}", keys[i].id).into(),
+                move |_: &State, i| {
+                    let seed = &cards_rc[i];
+                    let look = CardLook {
+                        seed: Arc::as_ptr(seed) as usize,
+                        column: Column::Closed,
+                        selected: ctx.selected.as_deref() == Some(seed.id.as_str()),
+                        menu_open: ctx.menu_for.as_deref() == Some(seed.id.as_str()),
+                        blockers: ctx.index.blockers(&seed.id),
+                        tender: model::tender_of(seed, &ctx.names),
+                        age: model::short_age(
+                            if seed.updated_at.is_empty() {
+                                &seed.created_at
+                            } else {
+                                &seed.updated_at
+                            },
+                            ctx.now_ms,
+                        ),
+                        standby: model::standby_of(seed, ctx.now_ms),
+                        v2: ctx.v2.on,
+                        attention: ctx.v2.attention_of(seed),
+                        show_bed: ctx.v2.on && ctx.v2.bed == BedFilter::All,
+                    };
+                    memo(
+                        format!("garden.board.slot.{}", seed.id),
+                        (look.clone(), tokens),
+                        || {
+                            super::view::ROWS_BUILT.with(|n| n.set(n.get() + 1));
+                            card_face(seed, &look, &tokens)
+                        },
+                    )
+                },
+            );
+        lane = lane.push(list_el);
     } else {
         for (row_at, seed) in cards.iter().enumerate() {
             if column == Column::Ready && row_at == place.ready && place.ready < cards.len() {
@@ -1029,14 +1217,16 @@ fn column_view(
             lane = lane.push(card(state, place, names, column, seed, t));
         }
     }
-    if folded && (cards.is_empty() || !place.foldable.is_empty()) {
-        let harvested = place
-            .foldable
-            .iter()
-            .filter(|s| s.status == "harvested")
-            .count();
-        let withered = place.foldable.len() - harvested;
-        let said = if cards.is_empty() && place.foldable.is_empty() {
+    if column == Column::Closed
+        && !folded
+        && let Some(tail) = super::view::page_tail(place.page_key.clone(), bucket, t)
+    {
+        lane = lane.push(tail);
+    }
+    if folded && (cards.is_empty() || place.foldable_total() > 0) {
+        let harvested = place.foldable_harvested;
+        let withered = place.foldable_withered;
+        let said = if cards.is_empty() && place.foldable_total() == 0 {
             "Nothing has finished here yet.".to_owned()
         } else if withered > 0 {
             format!("{harvested} harvested · {withered} withered")
@@ -1073,16 +1263,15 @@ fn note(key: &str, said: impl Into<String>, t: &Tokens) -> El {
         .wrap()
 }
 
-fn card(
+fn card_look(
     state: &State,
     place: &Place,
     names: &SessionNames,
     column: Column,
     seed: &Arc<Seed>,
-    t: &Tokens,
-) -> El {
+) -> CardLook {
     let walk = &state.window.garden.board_walk;
-    let look = CardLook {
+    CardLook {
         seed: Arc::as_ptr(seed) as usize,
         column,
         selected: walk.selected.as_deref() == Some(seed.id.as_str()),
@@ -1101,7 +1290,18 @@ fn card(
         v2: place.v2.on,
         attention: place.v2.attention_of(seed),
         show_bed: place.v2.on && place.v2.bed == BedFilter::All,
-    };
+    }
+}
+
+fn card(
+    state: &State,
+    place: &Place,
+    names: &SessionNames,
+    column: Column,
+    seed: &Arc<Seed>,
+    t: &Tokens,
+) -> El {
+    let look = card_look(state, place, names, column, seed);
     memo(
         format!("garden.board.slot.{}", seed.id),
         (look.clone(), *t),

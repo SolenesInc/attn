@@ -13,11 +13,15 @@ pub(crate) mod v2;
 mod view;
 
 use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
+use std::rc::Rc;
 use std::sync::Arc;
 
 use attn_protocol::{
-    FsExistsMessage, FsExistsResultMessage, OpenSeedMessage, OpenSeedResultMessage, Seed,
-    SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage,
+    FsExistsMessage, FsExistsResultMessage, GardenSearchHit, GardenSearchMessage,
+    GardenSearchRange, GardenSearchResultMessage, GardenSeedsPageMessage,
+    GardenSeedsPageResultMessage, OpenSeedMessage, OpenSeedResultMessage, Seed, SeedDocument,
+    SeedDocumentGetMessage, SeedDocumentGetResultMessage,
 };
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col};
 
@@ -74,6 +78,95 @@ pub(super) struct CheckFocus {
     pub(super) check_box: String,
 }
 
+pub(super) const PAGE_LIMIT: i64 = 50;
+const MAX_PAGE_LIMIT: i64 = 200;
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(super) struct PageKey {
+    pub(super) profile: String,
+    pub(super) bed: String,
+    pub(super) plot_id: String,
+    pub(super) status: String,
+}
+
+impl PageKey {
+    pub(super) fn root(state: &State) -> Self {
+        Self {
+            profile: state.facts.profiles.selected.clone(),
+            bed: if v2::enabled(state) {
+                v2::bed_scope(&v2::active_bed(state))
+            } else {
+                String::new()
+            },
+            plot_id: String::new(),
+            status: "closed".to_owned(),
+        }
+    }
+
+    pub(super) fn plot(state: &State, plot_id: &str) -> Self {
+        Self {
+            profile: state.facts.profiles.selected.clone(),
+            bed: String::new(),
+            plot_id: plot_id.to_owned(),
+            status: "closed".to_owned(),
+        }
+    }
+}
+
+#[derive(Default)]
+pub(super) struct PageBucket {
+    pub(super) asked_sig: u64,
+    pub(super) answered: bool,
+    pub(super) seeds: Vec<Arc<Seed>>,
+    pub(super) next_before: Option<String>,
+    pub(super) harvested: i64,
+    pub(super) withered: i64,
+    pub(super) loading: bool,
+    pub(super) loading_more: bool,
+    pub(super) request_id: Option<String>,
+    pub(super) error: Option<String>,
+    pub(super) retry_before: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct SearchKey {
+    pub(super) profile: String,
+    pub(super) terms: Vec<String>,
+    pub(super) is: Vec<String>,
+    pub(super) tenders: Vec<String>,
+    pub(super) beds: Vec<String>,
+    pub(super) bed_scope: String,
+    pub(super) plot_id: String,
+    pub(super) wide: bool,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct SearchHit {
+    pub(super) seed: Arc<Seed>,
+    pub(super) where_: String,
+    pub(super) id_hit: bool,
+    pub(super) title_ranges: Vec<search::Range>,
+    pub(super) snippet: Option<search::Snippet>,
+    pub(super) plot_title: Option<String>,
+}
+
+#[derive(Default)]
+pub(super) struct SearchState {
+    pub(super) key: Option<SearchKey>,
+    pub(super) asked_ptr: usize,
+    pub(super) asked_sessions: u64,
+    pub(super) hits: Rc<[SearchHit]>,
+    pub(super) next_offset: Option<i64>,
+    pub(super) hidden_closed: i64,
+    pub(super) outside: i64,
+    pub(super) in_plot: i64,
+    pub(super) loading: bool,
+    pub(super) loading_more: bool,
+    pub(super) request_id: Option<String>,
+    pub(super) error: Option<String>,
+    pub(super) retry_offset: i64,
+}
+
 /// The window's garden: its frame and the walk through it. The seeds are the daemon's.
 #[derive(Default)]
 pub(crate) struct Garden {
@@ -113,6 +206,9 @@ pub(crate) struct Garden {
     pub(crate) lens: v2::Lens,
     pub(crate) bed_form: Option<v2::BedForm>,
     pub(crate) bed_picker: Option<v2::BedPicker>,
+    pub(super) pages: HashMap<PageKey, PageBucket>,
+    pub(super) search: SearchState,
+    pending_open: Option<String>,
 }
 
 /// A garden push, by its address, and the count of outpost reach changes, which a seed's
@@ -125,6 +221,10 @@ struct Reading {
     /// The garden push and outpost reach the latest read followed, and its request.
     asked: Option<(Followed, String)>,
     document: Option<Arc<SeedDocument>>,
+    seed: Option<Arc<Seed>>,
+    children: Vec<Arc<Seed>>,
+    ancestors: Option<Vec<Arc<Seed>>>,
+    related: Option<Vec<Arc<Seed>>>,
     /// A read since the latest garden push answered, so the document describes that garden.
     answered: bool,
     error: Option<String>,
@@ -170,6 +270,7 @@ pub(crate) fn choose_board(state: &mut State, board: bool, tx: &mut Tx) {
     state.window.garden.board = Some(board);
     crate::frame::set_pref_string(VIEW_PREF, if board { "board" } else { "list" });
     focus_frame(state, tx);
+    follow(state, tx);
 }
 
 fn focus_frame(state: &State, tx: &mut Tx) {
@@ -226,20 +327,46 @@ pub(crate) fn close(state: &mut State) {
     window.garden.full = false;
     window.garden.bed_form = None;
     window.garden.bed_picker = None;
+    window.garden.pages.clear();
+    window.garden.search = SearchState::default();
     window.close_drawer(Drawer::Garden);
 }
 
-/// The trail without the plots the garden no longer holds, and what follows them.
-pub(crate) fn living_trail(state: &State) -> Vec<String> {
-    let seeds = seeds(state);
-    state
-        .window
-        .garden
-        .trail
+pub(super) fn lookup_seed(state: &State, id: &str) -> Option<Arc<Seed>> {
+    if let Some(seed) = seeds(state).iter().find(|s| s.id == id) {
+        return Some(seed.clone());
+    }
+    let garden = &state.window.garden;
+    if let Some(seed) = garden.readings.get(id).and_then(|r| r.seed.as_ref()) {
+        return Some(seed.clone());
+    }
+    for reading in garden.readings.values() {
+        if let Some(seed) = reading
+            .ancestors
+            .iter()
+            .flatten()
+            .chain(reading.children.iter())
+            .chain(reading.related.iter().flatten())
+            .find(|s| s.id == id)
+        {
+            return Some(seed.clone());
+        }
+    }
+    for bucket in garden.pages.values() {
+        if let Some(seed) = bucket.seeds.iter().find(|s| s.id == id) {
+            return Some(seed.clone());
+        }
+    }
+    garden
+        .search
+        .hits
         .iter()
-        .take_while(|id| seeds.iter().any(|s| s.id == **id))
-        .cloned()
-        .collect()
+        .find(|hit| hit.seed.id == id)
+        .map(|hit| hit.seed.clone())
+}
+
+pub(crate) fn living_trail(state: &State) -> Vec<String> {
+    state.window.garden.trail.clone()
 }
 
 /// The seeds on screen: the one the garden opened and each seed tile's.
@@ -271,6 +398,11 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
             garden.bed = v2::BedFilter::All;
             garden.bed_form = None;
             garden.bed_picker = None;
+            garden.trail.clear();
+            garden.wide_in = None;
+            garden.pending_open = None;
+            garden.pages.clear();
+            garden.search = SearchState::default();
             garden.board_walk.clear_walk();
         }
         state.window.garden.last_profile = selected_profile;
@@ -313,6 +445,8 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
         }
         read(state, id, push, tx);
     }
+    sync_pages(state, tx);
+    sync_search(state, tx);
 }
 
 fn mark_in_terminals(state: &mut State) {
@@ -359,28 +493,597 @@ fn read(state: &mut State, id: String, push: Followed, tx: &mut Tx) {
             }) else {
                 return;
             };
+            let mut shrank_trail = false;
             match answer.parse::<SeedDocumentGetResultMessage>() {
                 Some(reply) if reply.success => {
-                    reading.document = reply.document.map(Arc::new);
+                    let doc = reply.document.map(Arc::new);
+                    let linked = linked_files(doc.as_deref());
+                    let linked_changed = linked != reading.looked_for;
+                    reading.document = doc.clone();
+                    reading.seed = doc.as_deref().map(|d| Arc::new(d.seed.clone()));
+                    reading.children = doc
+                        .as_deref()
+                        .map(|d| d.children.iter().cloned().map(Arc::new).collect())
+                        .unwrap_or_default();
+                    reading.ancestors = doc
+                        .as_deref()
+                        .and_then(|d| d.ancestors.as_ref())
+                        .map(|list| list.iter().cloned().map(Arc::new).collect());
+                    reading.related = doc
+                        .as_deref()
+                        .and_then(|d| d.related.as_ref())
+                        .map(|list| list.iter().cloned().map(Arc::new).collect());
                     reading.answered = true;
                     reading.error = None;
-                    let linked = linked_files(reading.document.as_deref());
-                    if linked != reading.looked_for {
+                    if linked_changed {
                         reading.looked_for = linked.clone();
                         reading.missing.clear();
-                        garden.revision += 1;
+                    }
+                    if let Some(doc) = doc.as_deref() {
+                        if garden.trail.len() == 1
+                            && garden.trail[0] == id
+                            && let Some(ancestors) = &doc.ancestors
+                            && !ancestors.is_empty()
+                        {
+                            garden.trail = ancestors
+                                .iter()
+                                .map(|a| a.id.clone())
+                                .chain(std::iter::once(id.clone()))
+                                .collect();
+                        }
+                        if garden.pending_open.as_deref() == Some(id.as_str()) {
+                            garden.pending_open = None;
+                            let root = doc
+                                .ancestors
+                                .as_deref()
+                                .and_then(|a| a.first())
+                                .unwrap_or(&doc.seed)
+                                .clone();
+                            align_v2_to_root(state, &root);
+                        }
+                    }
+                    state.window.garden.revision += 1;
+                    if linked_changed {
                         look_for(state, &id, linked, tx);
                         return;
                     }
+                    return;
                 }
                 Some(reply) => {
-                    reading.error = Some(
+                    let in_live = seeds(state).iter().any(|s| s.id == id);
+                    let garden = &mut state.window.garden;
+                    if let Some(reading) = garden.readings.get_mut(&id) {
+                        if !in_live {
+                            reading.document = None;
+                            reading.seed = None;
+                            reading.children.clear();
+                            reading.ancestors = None;
+                            reading.related = None;
+                        }
+                        reading.error = Some(
+                            reply
+                                .error
+                                .unwrap_or_else(|| format!("Could not read {id}")),
+                        );
+                    }
+                    if !in_live && garden.trail.last().map(String::as_str) == Some(id.as_str()) {
+                        garden.trail.pop();
+                        shrank_trail = true;
+                    }
+                    if garden.pending_open.as_deref() == Some(id.as_str()) {
+                        garden.pending_open = None;
+                    }
+                }
+                None => {
+                    reading.error = Some(format!("Could not read {id}"));
+                }
+            }
+            state.window.garden.revision += 1;
+            if shrank_trail {
+                follow(state, tx);
+            }
+        },
+        tx,
+    );
+}
+
+fn align_v2_to_root(state: &mut State, root: &Seed) {
+    if !v2::enabled(state) {
+        return;
+    }
+    let current_bed = v2::active_bed(state);
+    if !v2::matches_bed(root, &current_bed) {
+        state.window.garden.bed = v2::filter_for_root(root);
+    }
+    if state.window.garden.lens != v2::Lens::All {
+        let index = view::index(state);
+        let att = v2::AttentionIndex::of(&state.facts).attention(root, &index);
+        let shown_in_lens = match state.window.garden.lens {
+            v2::Lens::Now => att.is_now(),
+            v2::Lens::Triage => {
+                matches!(att, v2::Attention::Quiet | v2::Attention::Parked)
+                    || (!v2::beds(state).is_empty()
+                        && !v2::is_automation(root)
+                        && root.bed_id.as_deref().unwrap_or("").is_empty())
+            }
+            v2::Lens::All => true,
+        };
+        if !shown_in_lens || model::is_closed(root) {
+            state.window.garden.lens = v2::Lens::All;
+        }
+    }
+}
+
+fn wanted_pages(state: &State) -> Vec<PageKey> {
+    if mode(state) == Mode::Closed || state.facts.profiles.selected.is_empty() {
+        return Vec::new();
+    }
+    if shows_board(state) {
+        if !state.window.garden.board_walk.closed_open {
+            return Vec::new();
+        }
+        return match board::current_plot(state) {
+            Some(plot_id) => vec![PageKey::plot(state, &plot_id)],
+            None => vec![PageKey::root(state)],
+        };
+    }
+    let query = search::parse(&state.window.garden.query.text, v2::enabled(state));
+    if query.searches || !(query.is.contains(&"closed") || query.is.contains(&"any")) {
+        return Vec::new();
+    }
+    let mut keys = Vec::new();
+    let trail = living_trail(state);
+    let wide = view::columns(state);
+    if trail.is_empty() || wide {
+        keys.push(PageKey::root(state));
+    }
+    if wide && !v2::enabled(state) {
+        for id in &trail {
+            if lookup_seed(state, id).is_some_and(|s| model::is_plot(&s)) {
+                let key = PageKey::plot(state, id);
+                if !keys.contains(&key) {
+                    keys.push(key);
+                }
+            }
+        }
+    } else if let Some(last) = trail.last()
+        && lookup_seed(state, last).is_some_and(|s| model::is_plot(&s))
+    {
+        keys.push(PageKey::plot(state, last));
+    }
+    keys
+}
+
+fn closed_signature(state: &State) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    let profile = &state.facts.profiles.selected;
+    let garden = &state.facts.garden;
+    profile.hash(&mut hasher);
+    garden.full_push.hash(&mut hasher);
+    garden.total.hash(&mut hasher);
+    if let Some(counts) = garden.closed_counts_of(profile) {
+        true.hash(&mut hasher);
+        counts.all.harvested.hash(&mut hasher);
+        counts.all.withered.hash(&mut hasher);
+        counts.automations.harvested.hash(&mut hasher);
+        counts.automations.withered.hash(&mut hasher);
+        counts.unassigned.harvested.hash(&mut hasher);
+        counts.unassigned.withered.hash(&mut hasher);
+        let mut entries: Vec<(&str, i64, i64)> = counts
+            .by_bed
+            .iter()
+            .map(|b| (b.bed_id.as_str(), b.harvested, b.withered))
+            .collect();
+        entries.sort_by_key(|(k, _, _)| *k);
+        entries.hash(&mut hasher);
+    } else {
+        false.hash(&mut hasher);
+    }
+    for bed in garden.beds_of(profile) {
+        bed.id.hash(&mut hasher);
+        bed.slug.hash(&mut hasher);
+    }
+    for seed in garden.of(profile) {
+        if model::is_closed(seed) {
+            seed.id.hash(&mut hasher);
+            seed.rev.hash(&mut hasher);
+            seed.status.hash(&mut hasher);
+        }
+    }
+    hasher.finish()
+}
+
+fn sync_pages(state: &mut State, tx: &mut Tx) {
+    if mode(state) == Mode::Closed {
+        if !state.window.garden.pages.is_empty() {
+            state.window.garden.pages.clear();
+        }
+        return;
+    }
+    let profile = state.facts.profiles.selected.clone();
+    let wanted = wanted_pages(state);
+    let sig = closed_signature(state);
+    let keep_cached = state.window.garden.pages.len() <= 4;
+    state.window.garden.pages.retain(|k, b| {
+        k.profile == profile && (wanted.contains(k) || (keep_cached && b.asked_sig == sig))
+    });
+    for key in wanted {
+        let refresh = state
+            .window
+            .garden
+            .pages
+            .get(&key)
+            .map_or(Some(PAGE_LIMIT), |bucket| {
+                (bucket.asked_sig != sig)
+                    .then(|| (bucket.seeds.len() as i64).clamp(PAGE_LIMIT, MAX_PAGE_LIMIT))
+            });
+        if let Some(limit) = refresh {
+            fetch_page(state, key, sig, None, limit, tx);
+        }
+    }
+}
+
+pub(super) fn load_more_page(state: &mut State, key: PageKey, tx: &mut Tx) -> bool {
+    let cursor = state.window.garden.pages.get(&key).and_then(|bucket| {
+        if bucket.loading || bucket.loading_more || bucket.error.is_some() {
+            return None;
+        }
+        bucket.next_before.clone()
+    });
+    let Some(cursor) = cursor else {
+        return false;
+    };
+    let sig = closed_signature(state);
+    fetch_page(state, key, sig, Some(cursor), PAGE_LIMIT, tx);
+    true
+}
+
+pub(super) fn retry_page(state: &mut State, key: PageKey, tx: &mut Tx) {
+    let (cursor, limit) = state
+        .window
+        .garden
+        .pages
+        .get(&key)
+        .map(|bucket| {
+            let cursor = bucket.retry_before.clone();
+            let limit = if cursor.is_some() {
+                PAGE_LIMIT
+            } else {
+                (bucket.seeds.len() as i64).clamp(PAGE_LIMIT, MAX_PAGE_LIMIT)
+            };
+            (cursor, limit)
+        })
+        .unwrap_or((None, PAGE_LIMIT));
+    let sig = closed_signature(state);
+    fetch_page(state, key, sig, cursor, limit, tx);
+}
+
+fn fetch_page(
+    state: &mut State,
+    key: PageKey,
+    closed_sig: u64,
+    before: Option<String>,
+    limit: i64,
+    tx: &mut Tx,
+) {
+    let request_id = state.next_request_id();
+    let append = before.is_some();
+    let failed_before = before.clone();
+    let bucket = state.window.garden.pages.entry(key.clone()).or_default();
+    bucket.asked_sig = closed_sig;
+    bucket.request_id = Some(request_id.clone());
+    bucket.error = None;
+    bucket.retry_before = None;
+    if append {
+        bucket.loading_more = true;
+    } else {
+        bucket.loading = true;
+        bucket.loading_more = false;
+    }
+    let command = GardenSeedsPageMessage {
+        request_id: request_id.clone(),
+        bed: (!key.bed.is_empty()).then(|| key.bed.clone()),
+        plot_id: (!key.plot_id.is_empty()).then(|| key.plot_id.clone()),
+        status: Some(key.status.clone()),
+        before,
+        limit: Some(limit),
+        ..GardenSeedsPageMessage::new()
+    };
+    state.ask_as(
+        request_id.clone(),
+        &command,
+        move |state, answer, _| {
+            let garden = &mut state.window.garden;
+            let Some(bucket) = garden.pages.get_mut(&key) else {
+                return;
+            };
+            if bucket.request_id.as_deref() != Some(request_id.as_str()) {
+                return;
+            }
+            bucket.request_id = None;
+            bucket.loading = false;
+            bucket.loading_more = false;
+            match answer.parse::<GardenSeedsPageResultMessage>() {
+                Some(reply) if reply.success => {
+                    bucket.answered = true;
+                    bucket.harvested = reply.harvested;
+                    bucket.withered = reply.withered;
+                    bucket.next_before = reply.next_before;
+                    bucket.error = None;
+                    bucket.retry_before = None;
+                    if append {
+                        let mut seen: HashSet<String> =
+                            bucket.seeds.iter().map(|s| s.id.clone()).collect();
+                        for seed in reply.seeds {
+                            if seen.insert(seed.id.clone()) {
+                                bucket.seeds.push(Arc::new(seed));
+                            }
+                        }
+                    } else {
+                        bucket.seeds = reply.seeds.into_iter().map(Arc::new).collect();
+                    }
+                }
+                Some(reply) => {
+                    bucket.retry_before = failed_before;
+                    bucket.error = Some(
                         reply
                             .error
-                            .unwrap_or_else(|| format!("Could not read {id}")),
+                            .unwrap_or_else(|| "Could not load older seeds".to_owned()),
                     );
                 }
-                None => reading.error = Some(format!("Could not read {id}")),
+                None => {
+                    bucket.retry_before = failed_before;
+                    bucket.error = Some("Could not load older seeds".to_owned());
+                }
+            }
+            garden.revision += 1;
+        },
+        tx,
+    );
+}
+
+fn wanted_search_key(state: &State) -> Option<SearchKey> {
+    if mode(state) == Mode::Closed || shows_board(state) {
+        return None;
+    }
+    let profile = state.facts.profiles.selected.clone();
+    if profile.is_empty() {
+        return None;
+    }
+    let v2_on = v2::enabled(state);
+    let query = search::parse(&state.window.garden.query.text, v2_on);
+    if !query.searches || !query.unknown.is_empty() {
+        return None;
+    }
+    let plot_id = living_trail(state).last().cloned().unwrap_or_default();
+    let wide =
+        !plot_id.is_empty() && state.window.garden.wide_in.as_deref() == Some(plot_id.as_str());
+    let bed_scope = if v2_on && query.beds.is_empty() {
+        v2::bed_scope(&v2::active_bed(state))
+    } else {
+        String::new()
+    };
+    Some(SearchKey {
+        profile,
+        terms: query.terms,
+        is: query.is.into_iter().map(str::to_owned).collect(),
+        tenders: query.tenders,
+        beds: query.beds,
+        bed_scope,
+        plot_id,
+        wide,
+    })
+}
+
+fn sessions_signature(state: &State) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for session in state.facts.sessions.iter() {
+        session.id.hash(&mut hasher);
+        session.label.hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+fn sync_search(state: &mut State, tx: &mut Tx) {
+    let Some(key) = wanted_search_key(state) else {
+        let search = &mut state.window.garden.search;
+        if search.key.is_some()
+            || !search.hits.is_empty()
+            || search.loading
+            || search.loading_more
+            || search.error.is_some()
+        {
+            *search = SearchState::default();
+            state.window.garden.revision += 1;
+        }
+        return;
+    };
+    let garden_ptr = Arc::as_ptr(&state.facts.garden) as usize;
+    let sessions_sig = sessions_signature(state);
+    let search = &state.window.garden.search;
+    if search.key.as_ref() == Some(&key)
+        && search.asked_ptr == garden_ptr
+        && search.asked_sessions == sessions_sig
+    {
+        return;
+    }
+    let limit = if search.key.as_ref() == Some(&key) {
+        (search.hits.len() as i64).clamp(PAGE_LIMIT, MAX_PAGE_LIMIT)
+    } else {
+        PAGE_LIMIT
+    };
+    fetch_search(state, key, garden_ptr, sessions_sig, 0, limit, tx);
+}
+
+pub(super) fn load_more_search(state: &mut State, tx: &mut Tx) -> bool {
+    let next = {
+        let search = &state.window.garden.search;
+        if search.loading || search.loading_more || search.error.is_some() {
+            None
+        } else {
+            search.key.clone().zip(search.next_offset)
+        }
+    };
+    let Some((key, offset)) = next else {
+        return false;
+    };
+    let garden_ptr = Arc::as_ptr(&state.facts.garden) as usize;
+    let sessions_sig = sessions_signature(state);
+    fetch_search(state, key, garden_ptr, sessions_sig, offset, PAGE_LIMIT, tx);
+    true
+}
+
+pub(super) fn retry_search(state: &mut State, tx: &mut Tx) {
+    let Some(key) = wanted_search_key(state) else {
+        return;
+    };
+    let search = &state.window.garden.search;
+    let offset = if search.key.as_ref() == Some(&key) {
+        search.retry_offset
+    } else {
+        0
+    };
+    let limit = if offset > 0 {
+        PAGE_LIMIT
+    } else if search.key.as_ref() == Some(&key) {
+        (search.hits.len() as i64).clamp(PAGE_LIMIT, MAX_PAGE_LIMIT)
+    } else {
+        PAGE_LIMIT
+    };
+    let garden_ptr = Arc::as_ptr(&state.facts.garden) as usize;
+    let sessions_sig = sessions_signature(state);
+    fetch_search(state, key, garden_ptr, sessions_sig, offset, limit, tx);
+}
+
+fn safe_ranges(text: &str, raw: Option<Vec<GardenSearchRange>>) -> Vec<search::Range> {
+    let Some(raw) = raw else {
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(raw.len());
+    for range in raw {
+        if range.start < 0 || range.end <= range.start {
+            continue;
+        }
+        let start = (range.start as usize).min(text.len());
+        let end = (range.end as usize).min(text.len());
+        if start < end && text.is_char_boundary(start) && text.is_char_boundary(end) {
+            out.push((start, end));
+        }
+    }
+    out
+}
+
+fn search_hit_from(raw: GardenSearchHit) -> SearchHit {
+    let title_ranges = safe_ranges(&raw.seed.title, raw.title_ranges);
+    let snippet = raw.snippet.filter(|s| !s.is_empty()).map(|text| {
+        let ranges = safe_ranges(&text, raw.snippet_ranges);
+        search::Snippet { text, ranges }
+    });
+    SearchHit {
+        seed: Arc::new(raw.seed),
+        where_: raw.r#where,
+        id_hit: raw.id_hit,
+        title_ranges,
+        snippet,
+        plot_title: raw.plot_title.filter(|p| !p.is_empty()),
+    }
+}
+
+fn fetch_search(
+    state: &mut State,
+    key: SearchKey,
+    garden_ptr: usize,
+    sessions_sig: u64,
+    offset: i64,
+    limit: i64,
+    tx: &mut Tx,
+) {
+    let request_id = state.next_request_id();
+    let append = offset > 0;
+    let search = &mut state.window.garden.search;
+    if search.key.as_ref() != Some(&key) {
+        search.hits = Rc::default();
+        search.next_offset = None;
+        search.hidden_closed = 0;
+        search.outside = 0;
+        search.in_plot = 0;
+        search.retry_offset = 0;
+    }
+    search.key = Some(key.clone());
+    search.asked_ptr = garden_ptr;
+    search.asked_sessions = sessions_sig;
+    search.request_id = Some(request_id.clone());
+    search.error = None;
+    if append {
+        search.loading_more = true;
+    } else {
+        search.loading = true;
+        search.loading_more = false;
+    }
+    let command = GardenSearchMessage {
+        request_id: request_id.clone(),
+        terms: (!key.terms.is_empty()).then(|| key.terms.clone()),
+        is: (!key.is.is_empty()).then(|| key.is.clone()),
+        tenders: (!key.tenders.is_empty()).then(|| key.tenders.clone()),
+        beds: (!key.beds.is_empty()).then(|| key.beds.clone()),
+        bed_scope: (!key.bed_scope.is_empty()).then(|| key.bed_scope.clone()),
+        plot_id: (!key.plot_id.is_empty()).then(|| key.plot_id.clone()),
+        wide: key.wide.then_some(true),
+        offset: Some(offset),
+        limit: Some(limit),
+        ..GardenSearchMessage::new()
+    };
+    state.ask_as(
+        request_id.clone(),
+        &command,
+        move |state, answer, _| {
+            let garden = &mut state.window.garden;
+            let search = &mut garden.search;
+            if search.request_id.as_deref() != Some(request_id.as_str()) {
+                return;
+            }
+            search.request_id = None;
+            search.loading = false;
+            search.loading_more = false;
+            match answer.parse::<GardenSearchResultMessage>() {
+                Some(reply) if reply.success => {
+                    search.hidden_closed = reply.hidden_closed;
+                    search.outside = reply.outside;
+                    search.in_plot = reply.in_plot;
+                    search.next_offset = reply.next_offset;
+                    search.error = None;
+                    search.retry_offset = 0;
+                    if append {
+                        let mut merged: Vec<SearchHit> = search.hits.to_vec();
+                        let mut seen: HashSet<String> =
+                            merged.iter().map(|h| h.seed.id.clone()).collect();
+                        for hit in reply.hits {
+                            if seen.insert(hit.seed.id.clone()) {
+                                merged.push(search_hit_from(hit));
+                            }
+                        }
+                        search.hits = merged.into();
+                    } else {
+                        search.hits = reply
+                            .hits
+                            .into_iter()
+                            .map(search_hit_from)
+                            .collect::<Vec<_>>()
+                            .into();
+                    }
+                }
+                Some(reply) => {
+                    search.retry_offset = offset;
+                    search.error = Some(
+                        reply
+                            .error
+                            .unwrap_or_else(|| "Could not search the garden".to_owned()),
+                    );
+                }
+                None => {
+                    search.retry_offset = offset;
+                    search.error = Some("Could not search the garden".to_owned());
+                }
             }
             garden.revision += 1;
         },
@@ -469,6 +1172,23 @@ pub(crate) fn reading<'a>(
         reading.document.as_deref().filter(|d| d.seed.id == id),
         reading.error.as_deref(),
     )
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct ReadingSeeds<'a> {
+    pub(super) children: &'a [Arc<Seed>],
+    pub(super) ancestors: Option<&'a [Arc<Seed>]>,
+    pub(super) related: Option<&'a [Arc<Seed>]>,
+}
+
+pub(super) fn reading_seeds<'a>(garden: &'a Garden, id: &str) -> Option<ReadingSeeds<'a>> {
+    let reading = garden.readings.get(id)?;
+    reading.document.as_deref().filter(|d| d.seed.id == id)?;
+    Some(ReadingSeeds {
+        children: &reading.children,
+        ancestors: reading.ancestors.as_deref(),
+        related: reading.related.as_deref(),
+    })
 }
 
 /// A read seed's body, and its files as the daemon last described them: name, size and when
@@ -591,30 +1311,38 @@ pub(crate) fn open_tile_beside(state: &mut State, id: &str, session: Option<Stri
 /// Opens a found seed under the whole path of plots above it, and ends the search.
 pub(crate) fn open_found(state: &mut State, id: &str, tx: &mut Tx) {
     let index = view::index(state);
-    let path = index.path_to(id);
-    if v2::enabled(state)
-        && let Some(root) = path.first().and_then(|root_id| index.by_id.get(root_id))
-    {
-        let current_bed = v2::active_bed(state);
-        if !v2::matches_bed(root, &current_bed) {
-            state.window.garden.bed = v2::filter_for_root(root);
+    let mut path = index.path_to(id);
+    if path.is_empty() {
+        if let Some(doc) = state
+            .window
+            .garden
+            .readings
+            .get(id)
+            .and_then(|r| r.document.as_deref())
+        {
+            path = doc
+                .ancestors
+                .iter()
+                .flatten()
+                .map(|a| a.id.clone())
+                .chain(std::iter::once(id.to_owned()))
+                .collect();
+            let root = doc
+                .ancestors
+                .as_deref()
+                .and_then(|a| a.first())
+                .unwrap_or(&doc.seed)
+                .clone();
+            state.window.garden.pending_open = None;
+            align_v2_to_root(state, &root);
+        } else {
+            path = vec![id.to_owned()];
+            state.window.garden.pending_open = Some(id.to_owned());
         }
-        if state.window.garden.lens != v2::Lens::All {
-            let att = v2::AttentionIndex::of(&state.facts).attention(root, &index);
-            let shown_in_lens = match state.window.garden.lens {
-                v2::Lens::Now => att.is_now(),
-                v2::Lens::Triage => {
-                    matches!(att, v2::Attention::Quiet | v2::Attention::Parked)
-                        || (!v2::beds(state).is_empty()
-                            && !v2::is_automation(root)
-                            && root.bed_id.as_deref().unwrap_or("").is_empty())
-                }
-                v2::Lens::All => true,
-            };
-            if !shown_in_lens || model::is_closed(root) {
-                state.window.garden.lens = v2::Lens::All;
-            }
-        }
+    } else if let Some(root) = path.first().and_then(|root_id| index.by_id.get(root_id)) {
+        let root = (**root).clone();
+        state.window.garden.pending_open = None;
+        align_v2_to_root(state, &root);
     }
     let garden = &mut state.window.garden;
     garden.trail = path;
@@ -639,17 +1367,20 @@ pub(crate) fn toggle_wide(state: &mut State, tx: &mut Tx) {
         Some(_) => None,
     };
     focus_search(state, tx);
+    follow(state, tx);
 }
 
 pub(crate) fn toggle_closed(state: &mut State, tx: &mut Tx) {
     let query = &mut state.window.garden.query;
     *query = TextEdit::new(search::toggle_token(&query.text, "is:any"));
     focus_search(state, tx);
+    follow(state, tx);
 }
 
 pub(crate) fn set_query(state: &mut State, text: String, tx: &mut Tx) {
     state.window.garden.query = TextEdit::new(text);
     focus_search(state, tx);
+    follow(state, tx);
 }
 
 /// The search field's keys: the arrows walk the answers while there are some and show the one
@@ -667,6 +1398,9 @@ pub(crate) fn field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             };
             state.window.garden.walked = (answers.question, next);
             tx.scroll_row_into_view_in(view::RESULTS, view::row_key(&answers.ids[next]));
+            if ev.key == Key::Down && next + 5 >= answers.ids.len() {
+                load_more_search(state, tx);
+            }
             true
         }
         Key::Down | Key::Up => walk_rows(state, ev.key == Key::Down, tx),
@@ -771,7 +1505,9 @@ fn walk_rows(state: &mut State, down: bool, tx: &mut Tx) -> bool {
     if rows.is_empty() {
         return false;
     }
-    let at = focused.and_then(|id| rows.iter().position(|r| *r == id));
+    let at = focused
+        .as_deref()
+        .and_then(|id| rows.iter().position(|r| r == id));
     let next = match (at, down) {
         (None, true) => 0,
         (None, false) => rows.len() - 1,
@@ -779,5 +1515,12 @@ fn walk_rows(state: &mut State, down: bool, tx: &mut Tx) -> bool {
         (Some(at), false) => at.saturating_sub(1),
     };
     tx.focus(view::row_key(&rows[next]), true);
+    if down && next + 5 >= rows.len() {
+        if let Some(key) = view::active_page_key(state, focused.as_deref()) {
+            load_more_page(state, key, tx);
+        } else if state.window.garden.search.next_offset.is_some() {
+            load_more_search(state, tx);
+        }
+    }
     true
 }

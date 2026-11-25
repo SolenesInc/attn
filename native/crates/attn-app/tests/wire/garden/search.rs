@@ -65,7 +65,7 @@ fn finds_a_changed_seed_by_its_new_text_and_a_seed_the_change_did_not_include_ke
     assert!(has_row(&world, "wire the field"));
     assert!(has_row(&world, "unrelated field work"));
 
-    let changed = garden()
+    let changed: Vec<Seed> = garden()
         .into_iter()
         .map(|s| {
             if s.id == "s-wire01" {
@@ -79,6 +79,10 @@ fn finds_a_changed_seed_by_its_new_text_and_a_seed_the_change_did_not_include_ke
             }
         })
         .collect();
+    let search_changed = changed.clone();
+    world.daemon.on("garden_search", move |r: &Request| {
+        search_reply(r, &search_changed, &[], &[])
+    });
     push(&mut world, changed);
 
     assert!(!rows(&world).iter().any(|r| r.contains("wire the")));
@@ -372,4 +376,263 @@ fn shows_the_answer_the_arrows_reach_whole_or_from_its_title_on_the_frame_they_r
         }
         assert!(world.runtime_is_at_rest(), "{frame}");
     }
+}
+
+#[test]
+fn searches_archived_log_entries_pages_results_and_opens_archived_hits_with_ancestor_trail() {
+    let mut world = open_garden(vec![seed("s-open01", "current work")]);
+    let archived_plot = closed(plot("s-aplt01", "Archived Plot", ""), "harvested");
+    let archived_child_row = closed(
+        part_of("s-aplt01", "s-akid01", "Archived log hit"),
+        "harvested",
+    );
+    let archived_child_full = with(archived_child_row.clone(), |s| {
+        s.body = "Full body loaded from daemon document.".into();
+    });
+    let mut page1_hits = vec![GardenSearchHit {
+        seed: archived_child_row.clone(),
+        r#where: "log".into(),
+        id_hit: false,
+        title_ranges: None,
+        snippet: Some("Calibrated the hyperdrive coils.".into()),
+        snippet_ranges: Some(vec![GardenSearchRange { start: 15, end: 25 }]),
+        plot_title: Some("Archived Plot".into()),
+    }];
+    page1_hits.extend((0..29).map(|i| GardenSearchHit {
+        seed: closed(
+            seed(&format!("s-sh{i:04}"), &format!("Hyperdrive hit {i:02}")),
+            "harvested",
+        ),
+        r#where: "title".into(),
+        id_hit: false,
+        title_ranges: None,
+        snippet: None,
+        snippet_ranges: None,
+        plot_title: None,
+    }));
+    let second_hit = closed(seed("s-akid02", "Second archived hit"), "withered");
+    let (h1, h2) = (page1_hits, second_hit.clone());
+    world.daemon.on("garden_search", move |r: &Request| {
+        let offset = r["offset"].as_i64().unwrap_or(0);
+        let (hits, next_offset) = match offset {
+            0 => (h1.clone(), Some(30)),
+            30 => (
+                vec![GardenSearchHit {
+                    seed: h2.clone(),
+                    r#where: "title".into(),
+                    id_hit: false,
+                    title_ranges: None,
+                    snippet: None,
+                    snippet_ranges: None,
+                    plot_title: None,
+                }],
+                None,
+            ),
+            _ => (Vec::new(), None),
+        };
+        message(GardenSearchResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            hits,
+            total: 31,
+            next_offset,
+            ..GardenSearchResultMessage::new()
+        })
+    });
+    let (doc_plot, doc_child) = (archived_plot.clone(), archived_child_full.clone());
+    world.daemon.on("seed_document_get", move |r: &Request| {
+        if r["seed_id"] == "s-akid01" {
+            return message(SeedDocumentGetResultMessage {
+                request_id: r["request_id"].as_str().unwrap().into(),
+                success: true,
+                document: Some(SeedDocument {
+                    seed: doc_child.clone(),
+                    ancestors: Some(vec![doc_plot.clone()]),
+                    ..SeedDocument::default()
+                }),
+                ..SeedDocumentGetResultMessage::new()
+            });
+        }
+        document_reply(r, None)
+    });
+
+    ask(&mut world, "hyperdrive is:any");
+
+    assert!(has_row(&world, "Archived log hit"));
+    assert!(row_says(&world, "s-akid01", "in Archived Plot"));
+    assert!(row_says(&world, "s-akid01", "in log"));
+    assert!(row_says(
+        &world,
+        "s-akid01",
+        "Calibrated the hyperdrive coils."
+    ));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("garden.search.more"))
+            .is_some()
+    );
+    let searches = world.daemon.sent_of("garden_search");
+    let final_first_page = searches.last().expect("garden_search sent");
+    assert_eq!(final_first_page["terms"], serde_json::json!(["hyperdrive"]));
+    assert_eq!(final_first_page["is"], serde_json::json!(["any"]));
+    assert_eq!(final_first_page["offset"], 0);
+    assert_eq!(final_first_page["limit"], 50);
+    assert!(
+        !searches.iter().any(|r| r["offset"] == 30),
+        "page 2 must not eager-fetch before scrolling or clicking load-more"
+    );
+    assert!(world.runtime_is_at_rest());
+
+    bring_into_view(&mut world, &Target::key("garden.search.more"));
+    let searches = world.daemon.sent_of("garden_search");
+    let page2_reqs: Vec<_> = searches.iter().filter(|r| r["offset"] == 30).collect();
+    assert_eq!(page2_reqs.len(), 1);
+    assert_eq!(page2_reqs[0]["terms"], serde_json::json!(["hyperdrive"]));
+    assert_eq!(page2_reqs[0]["is"], serde_json::json!(["any"]));
+    assert_eq!(page2_reqs[0]["limit"], 50);
+    assert!(
+        world
+            .screen()
+            .find(Target::key("garden.search.more"))
+            .is_none()
+    );
+
+    if let Some([x, y, w, h]) = world.screen().bounds(Target::key("garden.viewport")) {
+        world.gesture(|app| {
+            app.runtime
+                .wheel_event(rune::WheelEvent::new(0.0, 20_000.0).at(x + w / 2.0, y + h / 2.0))
+        });
+    }
+    open_row(&mut world, "Archived log hit");
+    assert_eq!(heading(&world).as_deref(), Some("Archived log hit"));
+    assert_eq!(trail(&world), ["Garden", "Archived Plot"]);
+    assert!(
+        world
+            .screen()
+            .descendants(Target::key("garden.related"))
+            .iter()
+            .any(|n| n.name.as_deref() == Some("Archived Plot")),
+        "part-of relation must render from document.ancestors even when document.related is None"
+    );
+    assert!(
+        world
+            .screen()
+            .descendants(Target::role("document").name("Plan"))
+            .iter()
+            .any(|n| n.name.as_deref() == Some("Full body loaded from daemon document."))
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn discards_out_of_order_search_replies_and_retries_failed_page_at_same_offset() {
+    let mut world = open_garden(vec![seed("s-open01", "current work")]);
+    world.daemon.answer_in_turn(
+        "garden_search",
+        [
+            attn_testkit::Answer::Hold,
+            attn_testkit::Answer::Hold,
+            attn_testkit::Answer::Reply(message(GardenSearchResultMessage {
+                success: false,
+                error: Some("search page failed".into()),
+                ..GardenSearchResultMessage::new()
+            })),
+            attn_testkit::Answer::Reply(message(GardenSearchResultMessage {
+                success: true,
+                hits: vec![GardenSearchHit {
+                    seed: seed("s-ab0099", "AB recovered page 2"),
+                    r#where: "title".into(),
+                    id_hit: false,
+                    title_ranges: None,
+                    snippet: None,
+                    snippet_ranges: None,
+                    plot_title: None,
+                }],
+                total: 31,
+                next_offset: None,
+                ..GardenSearchResultMessage::new()
+            })),
+        ],
+    );
+    world.gesture(|app| {
+        app.click(Target::key("garden.search.field"));
+        app.type_text("a");
+    });
+    assert!(shows(&world, "Searching…"));
+    world.gesture(|app| app.type_text("b"));
+
+    let searches = world.daemon.sent_of("garden_search");
+    assert_eq!(searches.len(), 2);
+    assert_eq!(searches[0]["terms"], serde_json::json!(["a"]));
+    assert_eq!(searches[1]["terms"], serde_json::json!(["ab"]));
+
+    let first_page: Vec<GardenSearchHit> = (0..30)
+        .map(|i| GardenSearchHit {
+            seed: seed(&format!("s-ab{i:04}"), &format!("AB hit {i:02}")),
+            r#where: "title".into(),
+            id_hit: false,
+            title_ranges: None,
+            snippet: None,
+            snippet_ranges: None,
+            plot_title: None,
+        })
+        .collect();
+    world.daemon.reply_to(
+        &searches[1],
+        message(GardenSearchResultMessage {
+            request_id: searches[1]["request_id"].as_str().unwrap().into(),
+            success: true,
+            hits: first_page,
+            total: 31,
+            next_offset: Some(30),
+            ..GardenSearchResultMessage::new()
+        }),
+    );
+    world.daemon.reply_to(
+        &searches[0],
+        message(GardenSearchResultMessage {
+            request_id: searches[0]["request_id"].as_str().unwrap().into(),
+            success: true,
+            hits: vec![GardenSearchHit {
+                seed: seed("s-stale1", "Stale A hit"),
+                r#where: "title".into(),
+                id_hit: false,
+                title_ranges: None,
+                snippet: None,
+                snippet_ranges: None,
+                plot_title: None,
+            }],
+            total: 1,
+            ..GardenSearchResultMessage::new()
+        }),
+    );
+    world.settle();
+
+    assert!(has_row(&world, "AB hit 00"));
+    assert!(!has_row(&world, "Stale A hit"));
+    assert!(world.runtime_is_at_rest());
+
+    bring_into_view(&mut world, &Target::key("garden.search.more"));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("garden.search.more.retry"))
+            .is_some()
+    );
+    assert!(world.runtime_is_at_rest());
+
+    bring_into_view(&mut world, &Target::key("garden.search.more.retry"));
+    world.gesture(|app| app.click(Target::key("garden.search.more.retry")));
+    let searches = world.daemon.sent_of("garden_search");
+    assert_eq!(searches.len(), 4);
+    assert_eq!(searches[2]["offset"], 30);
+    assert_eq!(searches[3]["offset"], 30);
+    assert!(
+        world
+            .screen()
+            .find(Target::key("garden.search.more"))
+            .is_none()
+    );
+    assert!(world.runtime_is_at_rest());
 }

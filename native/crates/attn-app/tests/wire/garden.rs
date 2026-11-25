@@ -2,9 +2,11 @@ use std::collections::BTreeMap;
 
 use attn_app::Action;
 use attn_protocol::{
-    ActorView, GardenSeedsChangedMessage, GardenSeedsUpdatedMessage, InitialStateMessage,
-    PartyView, Profile, Seed, SeedDocument, SeedDocumentGetResultMessage, SeedEdge,
-    SeedHarvestCondition, SeedNote, SeedPlotProgress, Session, SessionStateChangedMessage,
+    ActorView, GardenBed, GardenBedClosedTally, GardenClosedCounts, GardenClosedTally,
+    GardenSearchHit, GardenSearchRange, GardenSearchResultMessage, GardenSeedsChangedMessage,
+    GardenSeedsPageResultMessage, GardenSeedsUpdatedMessage, InitialStateMessage, PartyView,
+    Profile, Seed, SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedHarvestCondition,
+    SeedNote, SeedPlotProgress, Session, SessionStateChangedMessage,
 };
 use attn_testkit::{Daemon, Node, Request, Target, World, message};
 use rune::{Key, KeyEvent, Mods};
@@ -124,14 +126,290 @@ fn initial(seeds: Vec<Seed>, sessions: Vec<Session>) -> InitialStateMessage {
     }
 }
 
-/// A daemon that answers every seed read with the seed as the garden holds it and no log.
+/// A daemon that answers every seed read, search, and page from `seeds`.
 fn daemon(seeds: Vec<Seed>, sessions: Vec<Session>) -> Daemon {
-    let known = seeds.clone();
-    let daemon = Daemon::scripted().state(initial(seeds, sessions));
-    daemon.on("seed_document_get", move |r: &Request| {
-        document_reply(r, known.iter().find(|s| s.id == r["seed_id"]).cloned())
-    });
+    let daemon = Daemon::scripted().state(initial(seeds.clone(), sessions.clone()));
+    attach_garden_handlers(&daemon, seeds, sessions, Vec::new());
     daemon
+}
+
+pub(super) fn attach_garden_handlers(
+    daemon: &Daemon,
+    seeds: Vec<Seed>,
+    sessions: Vec<Session>,
+    beds: Vec<GardenBed>,
+) {
+    let doc_seeds = seeds.clone();
+    daemon.on("seed_document_get", move |r: &Request| {
+        document_reply(r, doc_seeds.iter().find(|s| s.id == r["seed_id"]).cloned())
+    });
+    let page_seeds = seeds.clone();
+    daemon.on("garden_seeds_page", move |r: &Request| {
+        page_reply(r, &page_seeds)
+    });
+    daemon.on("garden_search", move |r: &Request| {
+        search_reply(r, &seeds, &sessions, &beds)
+    });
+}
+
+fn test_parent_of(s: &Seed) -> &str {
+    s.edges
+        .iter()
+        .find(|e| e.kind == "part-of")
+        .map_or("", |e| e.to.as_str())
+}
+
+fn test_root_of<'a>(seed: &'a Seed, seeds: &'a [Seed]) -> &'a Seed {
+    let mut cur = seed;
+    for _ in 0..16 {
+        let p = test_parent_of(cur);
+        if let Some(parent) = seeds.iter().find(|s| s.id == p) {
+            cur = parent;
+        } else {
+            break;
+        }
+    }
+    cur
+}
+
+pub(super) fn page_reply(request: &Request, seeds: &[Seed]) -> Value {
+    let status = request["status"].as_str().unwrap_or("closed");
+    let plot_id = request["plot_id"].as_str().unwrap_or("");
+    let bed = request["bed"].as_str().unwrap_or("");
+    let is_closed = |s: &Seed| matches!(s.status.as_str(), "harvested" | "withered");
+    let matching: Vec<Seed> = seeds
+        .iter()
+        .filter(|s| {
+            let parent = test_parent_of(s);
+            let in_scope = if plot_id.is_empty() {
+                parent.is_empty() || !seeds.iter().any(|p| p.id == parent)
+            } else {
+                parent == plot_id
+            };
+            if !in_scope {
+                return false;
+            }
+            if status == "closed" && !is_closed(s) {
+                return false;
+            }
+            match bed {
+                "" => true,
+                "automations" => s.automation_id.is_some(),
+                "all" => s.automation_id.is_none(),
+                "unassigned" => {
+                    s.automation_id.is_none() && s.bed_id.as_deref().unwrap_or("").is_empty()
+                }
+                id => s.automation_id.is_none() && s.bed_id.as_deref() == Some(id),
+            }
+        })
+        .cloned()
+        .collect();
+    let harvested = matching.iter().filter(|s| s.status == "harvested").count() as i64;
+    let withered = matching.iter().filter(|s| s.status == "withered").count() as i64;
+    let total = matching.len() as i64;
+    message(GardenSeedsPageResultMessage {
+        request_id: request["request_id"].as_str().unwrap().into(),
+        success: true,
+        seeds: matching,
+        total,
+        harvested,
+        withered,
+        ..GardenSeedsPageResultMessage::new()
+    })
+}
+
+pub(super) fn search_reply(
+    request: &Request,
+    seeds: &[Seed],
+    sessions: &[Session],
+    beds: &[GardenBed],
+) -> Value {
+    let str_vec = |key: &str| -> Vec<String> {
+        request[key]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_str().map(str::to_lowercase))
+            .collect()
+    };
+    let terms = str_vec("terms");
+    let is_vals = str_vec("is");
+    let tenders = str_vec("tenders");
+    let bed_tokens = str_vec("beds");
+    let bed_scope = request["bed_scope"].as_str().unwrap_or("");
+    let plot_id = request["plot_id"].as_str().unwrap_or("");
+    let wide = request["wide"].as_bool().unwrap_or(false);
+    let in_subtree = |seed: &Seed| -> bool {
+        if plot_id.is_empty() {
+            return true;
+        }
+        let mut cur = seed;
+        for _ in 0..16 {
+            let p = test_parent_of(cur);
+            if p == plot_id {
+                return true;
+            }
+            if let Some(parent) = seeds.iter().find(|s| s.id == p) {
+                cur = parent;
+            } else {
+                break;
+            }
+        }
+        false
+    };
+    let is_closed = |s: &Seed| matches!(s.status.as_str(), "harvested" | "withered");
+    let tender_name = |s: &Seed| -> String {
+        let Some(t) = &s.tender else {
+            return String::new();
+        };
+        if let Some(sid) = t.session_id.as_deref()
+            && let Some(sess) = sessions.iter().find(|x| x.id == sid)
+        {
+            return sess.label.to_lowercase();
+        }
+        t.name.to_lowercase()
+    };
+    let matches_bed = |s: &Seed| -> bool {
+        let root = test_root_of(s, seeds);
+        let auto = root.automation_id.is_some();
+        let bed_id = root.bed_id.as_deref().unwrap_or("");
+        let bed_rec = beds.iter().find(|b| b.id == bed_id);
+        if !bed_tokens.is_empty() {
+            return bed_tokens.iter().any(|want| match want.as_str() {
+                "unassigned" | "none" => !auto && bed_id.is_empty(),
+                "automations" | "auto" => auto,
+                tok => {
+                    !auto
+                        && (bed_id.to_lowercase() == tok
+                            || bed_rec.is_some_and(|b| {
+                                b.name.to_lowercase().contains(tok)
+                                    || b.slug.to_lowercase().contains(tok)
+                            }))
+                }
+            });
+        }
+        match bed_scope {
+            "" => true,
+            "automations" => auto,
+            "all" => !auto || terms.contains(&s.id.to_lowercase()),
+            "unassigned" => !auto && bed_id.is_empty(),
+            id => !auto && bed_id == id,
+        }
+    };
+    let mut hidden_closed = 0i64;
+    let mut outside = 0i64;
+    let mut in_plot = 0i64;
+    let mut ranked: Vec<(usize, GardenSearchHit)> = Vec::new();
+    for s in seeds {
+        if !matches_bed(s) {
+            continue;
+        }
+        let tn = tender_name(s);
+        if !tenders.is_empty() && !tenders.iter().any(|w| tn.contains(w.as_str())) {
+            continue;
+        }
+        let id_l = s.id.to_lowercase();
+        let title_l = s.title.to_lowercase();
+        let body_l = s.body.to_lowercase();
+        let pulse_l = s.pulse.as_deref().unwrap_or("").to_lowercase();
+        if !terms.iter().all(|t| {
+            id_l.contains(t.as_str())
+                || title_l.contains(t.as_str())
+                || tn.contains(t.as_str())
+                || pulse_l.contains(t.as_str())
+                || body_l.contains(t.as_str())
+        }) {
+            continue;
+        }
+        let sub = in_subtree(s);
+        let in_scope = plot_id.is_empty() || wide || sub;
+        if is_vals.is_empty() && is_closed(s) {
+            if in_scope {
+                hidden_closed += 1;
+            }
+            continue;
+        }
+        let lens_ok = if is_vals.is_empty() {
+            !is_closed(s)
+        } else {
+            is_vals.iter().any(|v| match v.as_str() {
+                "any" => true,
+                "open" => !is_closed(s),
+                "closed" => is_closed(s),
+                "ready" => s.ready && !is_closed(s),
+                "parked" => s.status == "parked",
+                "standby" => s.standby.is_some() && !is_closed(s),
+                _ => false,
+            })
+        };
+        if !lens_ok {
+            continue;
+        }
+        if !plot_id.is_empty() && !wide && !sub {
+            outside += 1;
+            continue;
+        }
+        if !plot_id.is_empty() && wide && sub {
+            in_plot += 1;
+        }
+        let all_id = !terms.is_empty() && terms.iter().all(|t| id_l.contains(t.as_str()));
+        let all_title = !terms.is_empty() && terms.iter().all(|t| title_l.contains(t.as_str()));
+        let all_tender = !terms.is_empty() && terms.iter().all(|t| tn.contains(t.as_str()));
+        let tier = if all_id {
+            0
+        } else if all_title {
+            1
+        } else if all_tender {
+            2
+        } else {
+            3
+        };
+        let snippet = (tier == 3 && !terms.is_empty()).then(|| {
+            if !s.body.is_empty() && terms.iter().any(|t| body_l.contains(t.as_str())) {
+                s.body.clone()
+            } else {
+                s.pulse.clone().unwrap_or_default()
+            }
+        });
+        let plot_title = seeds
+            .iter()
+            .find(|p| p.id == test_parent_of(s))
+            .map(|p| p.title.clone());
+        ranked.push((
+            tier,
+            GardenSearchHit {
+                seed: s.clone(),
+                r#where: if all_id {
+                    "id"
+                } else if all_title {
+                    "title"
+                } else if all_tender {
+                    "tender"
+                } else {
+                    "body"
+                }
+                .into(),
+                id_hit: all_id,
+                title_ranges: None,
+                snippet: snippet.filter(|t| !t.is_empty()),
+                snippet_ranges: None,
+                plot_title,
+            },
+        ));
+    }
+    ranked.sort_by_key(|(tier, _)| *tier);
+    let hits: Vec<GardenSearchHit> = ranked.into_iter().map(|(_, h)| h).collect();
+    let total = hits.len() as i64;
+    message(GardenSearchResultMessage {
+        request_id: request["request_id"].as_str().unwrap().into(),
+        success: true,
+        hits,
+        total,
+        hidden_closed,
+        outside,
+        in_plot,
+        ..GardenSearchResultMessage::new()
+    })
 }
 
 pub(super) fn document_reply(request: &Request, seed: Option<Seed>) -> Value {
@@ -566,23 +844,179 @@ fn reads_a_garden_less_daemon_as_an_empty_garden() {
 }
 
 #[test]
-fn carries_how_many_seeds_the_garden_holds_not_just_the_ones_it_sent() {
+fn shows_exact_closed_counts_without_a_cap_banner_and_pages_older_closed_seeds() {
     let mut world = open_garden(Vec::new());
+    let page1: Vec<Seed> = (0..30)
+        .map(|i| {
+            closed(
+                seed(&format!("s-ar{i:04}"), &format!("archived item {i:02}")),
+                "harvested",
+            )
+        })
+        .collect();
+    let page2 = vec![closed(seed("s-ar0099", "archived older"), "withered")];
+    let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let (p1, p2, seen_attempts) = (page1.clone(), page2.clone(), attempts.clone());
+    world.daemon.on("garden_seeds_page", move |r: &Request| {
+        let before = r["before"].as_str();
+        match before {
+            None => message(GardenSeedsPageResultMessage {
+                request_id: r["request_id"].as_str().unwrap().into(),
+                success: true,
+                seeds: p1.clone(),
+                next_before: Some("2026-11-12T00:00:00Z|s-ar0029".into()),
+                total: 1420,
+                harvested: 1400,
+                withered: 20,
+                ..GardenSeedsPageResultMessage::new()
+            }),
+            Some("2026-11-12T00:00:00Z|s-ar0029") => {
+                if seen_attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+                    message(GardenSeedsPageResultMessage {
+                        request_id: r["request_id"].as_str().unwrap().into(),
+                        success: false,
+                        error: Some("temporary page error".into()),
+                        ..GardenSeedsPageResultMessage::new()
+                    })
+                } else {
+                    message(GardenSeedsPageResultMessage {
+                        request_id: r["request_id"].as_str().unwrap().into(),
+                        success: true,
+                        seeds: p2.clone(),
+                        next_before: None,
+                        total: 1420,
+                        harvested: 1400,
+                        withered: 20,
+                        ..GardenSeedsPageResultMessage::new()
+                    })
+                }
+            }
+            _ => message(GardenSeedsPageResultMessage {
+                request_id: r["request_id"].as_str().unwrap().into(),
+                success: true,
+                ..GardenSeedsPageResultMessage::new()
+            }),
+        }
+    });
 
     world.daemon.emit(GardenSeedsUpdatedMessage {
         profile_id: PROFILE.into(),
         seeds: vec![seed("s-bbb222", "the newest one")],
         total: 1421,
+        closed_counts: Some(GardenClosedCounts {
+            all: GardenClosedTally {
+                harvested: 1400,
+                withered: 20,
+            },
+            unassigned: GardenClosedTally {
+                harvested: 1400,
+                withered: 20,
+            },
+            ..GardenClosedCounts::default()
+        }),
         ..GardenSeedsUpdatedMessage::new()
     });
     world.settle();
-    assert!(shows(
-        &world,
-        "The garden holds 1421 seeds; this panel has 1 (every open seed and the newest closed)."
-    ));
-
-    push(&mut world, vec![seed("s-bbb222", "the newest one")]);
     assert!(!shows(&world, "The garden holds"));
+    assert!(
+        world
+            .screen()
+            .find(Target::role("button").name("1420 closed"))
+            .is_some()
+    );
+    assert!(world.daemon.sent_of("garden_seeds_page").is_empty());
+
+    click(&mut world, "1420 closed");
+    assert!(has_row(&world, "the newest one"));
+    assert!(has_row(&world, "archived item 00"));
+    assert!(world.screen().find(Target::key("garden.more")).is_some());
+    let pages = world.daemon.sent_of("garden_seeds_page");
+    assert_eq!(pages.len(), 1);
+    assert!(pages[0].get("before").is_none());
+    assert!(world.runtime_is_at_rest());
+
+    bring_into_view(&mut world, &Target::key("garden.more"));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("garden.more.retry"))
+            .is_some()
+    );
+    assert!(world.runtime_is_at_rest());
+
+    bring_into_view(&mut world, &Target::key("garden.more.retry"));
+    world.gesture(|app| app.click(Target::key("garden.more.retry")));
+    let pages = world.daemon.sent_of("garden_seeds_page");
+    assert_eq!(pages.len(), 3);
+    assert_eq!(pages[1]["before"], "2026-11-12T00:00:00Z|s-ar0029");
+    assert_eq!(pages[2]["before"], "2026-11-12T00:00:00Z|s-ar0029");
+    assert!(world.screen().find(Target::key("garden.more")).is_none());
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn plot_scoped_closed_paging_uses_plot_progress_count_and_recovers_from_error() {
+    let parent = with(plot("s-plt001", "Release train", ""), |s| {
+        s.plot_progress = Some(SeedPlotProgress {
+            total: 5,
+            done: 3,
+            withered: 1,
+            growing: 0,
+            parked: 0,
+            ready: 1,
+            blocked: 0,
+            checks: None,
+        });
+    });
+    let open_child = part_of("s-plt001", "s-okid01", "Final verification");
+    let archived_child = closed(part_of("s-plt001", "s-ckid01", "Shipped step"), "harvested");
+    let mut world = open_garden(vec![parent.clone(), open_child]);
+    let failed_once = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (flag, child) = (failed_once.clone(), archived_child.clone());
+    world.daemon.on("garden_seeds_page", move |r: &Request| {
+        if !flag.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            return message(GardenSeedsPageResultMessage {
+                request_id: r["request_id"].as_str().unwrap().into(),
+                success: false,
+                error: Some("plot page unavailable".into()),
+                ..GardenSeedsPageResultMessage::new()
+            });
+        }
+        message(GardenSeedsPageResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            seeds: vec![child.clone()],
+            total: 4,
+            harvested: 3,
+            withered: 1,
+            ..GardenSeedsPageResultMessage::new()
+        })
+    });
+
+    open_row(&mut world, "Release train");
+    assert!(
+        world
+            .screen()
+            .find(Target::role("button").name("4 closed"))
+            .is_some()
+    );
+    click(&mut world, "4 closed");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("garden.more.retry"))
+            .is_some()
+    );
+    assert!(world.runtime_is_at_rest());
+
+    world.gesture(|app| app.click(Target::key("garden.more.retry")));
+    assert!(has_row(&world, "Final verification"));
+    assert!(has_row(&world, "Shipped step"));
+    let pages = world.daemon.sent_of("garden_seeds_page");
+    assert_eq!(pages.len(), 2);
+    assert_eq!(pages[0]["plot_id"], "s-plt001");
+    assert_eq!(pages[1]["plot_id"], "s-plt001");
+    assert!(pages[1].get("before").is_none());
     assert!(world.runtime_is_at_rest());
 }
 
@@ -769,10 +1203,47 @@ fn climbs_out_on_its_own_when_the_plot_it_is_inside_disappears() {
     let mut world = open_garden(deep());
     open_row(&mut world, "the migration");
 
-    push(&mut world, vec![seed("s-alone1", "unrelated work")]);
+    let remaining = vec![seed("s-alone1", "unrelated work")];
+    let doc_remaining = remaining.clone();
+    world.daemon.on("seed_document_get", move |r: &Request| {
+        document_reply(
+            r,
+            doc_remaining.iter().find(|s| s.id == r["seed_id"]).cloned(),
+        )
+    });
+    push(&mut world, remaining);
 
     assert_eq!(heading(&world), None);
     assert!(has_row(&world, "unrelated work"));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn stays_on_a_seed_page_when_a_harvest_removes_it_from_the_live_push() {
+    let open = seed("s-live01", "shipped work");
+    let done = with(closed(open.clone(), "harvested"), |s| {
+        s.reason = Some("merged on main".into());
+        s.body = "Full archived plan.".into();
+    });
+    let mut world = open_garden(vec![open, seed("s-stay01", "still open")]);
+    open_row(&mut world, "shipped work");
+
+    let doc_done = done.clone();
+    world.daemon.on("seed_document_get", move |r: &Request| {
+        let found = (r["seed_id"] == "s-live01").then(|| doc_done.clone());
+        document_reply(r, found)
+    });
+    push(&mut world, vec![seed("s-stay01", "still open")]);
+
+    assert_eq!(heading(&world).as_deref(), Some("shipped work"));
+    assert!(shows(&world, "merged on main"));
+    assert!(
+        world
+            .screen()
+            .descendants(Target::role("document").name("Plan"))
+            .iter()
+            .any(|n| n.name.as_deref() == Some("Full archived plan."))
+    );
     assert!(world.runtime_is_at_rest());
 }
 
@@ -1232,12 +1703,21 @@ fn follows_a_tender_session_to_its_new_label() {
         s.claimed = true;
         s.status = "growing".into();
     });
-    let mut world = open_garden_with(daemon(vec![tended], vec![session("sess-1", "builder")]));
+    let mut world = open_garden_with(daemon(
+        vec![tended.clone()],
+        vec![session("sess-1", "builder")],
+    ));
     type_query(&mut world, "tender:builder");
     assert_eq!(rows(&world), ["tended work"]);
 
+    let renamed = session("sess-1", "reviewer");
+    let search_seeds = vec![tended];
+    let search_sessions = vec![renamed.clone()];
+    world.daemon.on("garden_search", move |r: &Request| {
+        search_reply(r, &search_seeds, &search_sessions, &[])
+    });
     world.daemon.emit(SessionStateChangedMessage {
-        session: session("sess-1", "reviewer"),
+        session: renamed,
         ..SessionStateChangedMessage::new()
     });
     world.settle();

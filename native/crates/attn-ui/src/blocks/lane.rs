@@ -55,6 +55,10 @@ impl Lane {
         self
     }
 
+    pub fn cards_column() -> El {
+        door::gap(col().w_full(), Space::S6)
+    }
+
     /// Something carried over the lane can land in it.
     pub fn lit(mut self, lit: bool) -> Self {
         self.lit = lit;

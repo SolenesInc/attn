@@ -76,7 +76,9 @@ pub(crate) fn body(
         );
         return super::zoomed(reads.zoom, note);
     };
-    let to_garden = held.map(|_| {
+    let can_reveal = held.is_some()
+        || document.is_some_and(|d| d.seed.profile_id == reads.facts.profiles.selected);
+    let to_garden = can_reveal.then(|| {
         let id = id.to_owned();
         super::view::plain("Reveal in Garden")
             .on_press_tx(move |state: &mut State, tx: &mut Tx| super::open_seed(state, &id, tx))
@@ -84,26 +86,39 @@ pub(crate) fn body(
             .key(sheet.key("open-garden"))
             .into()
     });
-    let children = document
-        .map(|d| {
-            d.children
+    let cached = super::reading_seeds(reads.garden, id);
+    let children = cached
+        .map(|cached| {
+            cached
+                .children
                 .iter()
                 .map(|child| Relation {
                     label: "",
-                    seed: Arc::new(child.clone()),
+                    seed: child.clone(),
                 })
                 .collect()
         })
         .unwrap_or_default();
     let index = Index::of(reads.seeds);
-    let related = index.relations(id);
+    let related = index.relations_with(
+        here,
+        cached.and_then(|c| c.related),
+        cached.and_then(|c| c.ancestors),
+    );
     let parent = model::parent_of(here);
     let back = (!parent.is_empty()).then(|| {
         let title = reads
             .seeds
             .iter()
             .find(|s| s.id == parent)
-            .map_or(parent, |s| s.title.as_str());
+            .map(|s| s.title.as_str())
+            .or_else(|| {
+                document
+                    .and_then(|d| d.ancestors.as_deref())
+                    .and_then(|ancestors| ancestors.iter().find(|s| s.id == parent))
+                    .map(|s| s.title.as_str())
+            })
+            .unwrap_or(parent);
         let (go, parent) = (sheet.go.clone(), parent.to_owned());
         super::view::quiet(format!("‹ Back to {title}"))
             .on_press_tx(move |state: &mut State, tx: &mut Tx| go.to(state, &parent, tx))

@@ -89,49 +89,67 @@ impl Index {
         self.children.get(id).map_or(&[], Vec::as_slice)
     }
 
-    /// The seed's edges out, named from its side, then the edges into it, except its parts.
-    pub(crate) fn relations(&self, id: &str) -> Vec<Relation> {
-        let mut rows = Vec::new();
-        if let Some(seed) = self.by_id.get(id) {
-            for edge in &seed.edges {
-                let Some(other) = self.by_id.get(&edge.to) else {
-                    continue;
-                };
-                let label = match edge.kind.as_str() {
-                    "blocks" => "blocks",
-                    "part-of" => "part of",
-                    "discovered-from" => "discovered from",
-                    _ => continue,
-                };
-                rows.push(Relation {
-                    label,
-                    seed: other.clone(),
-                });
-            }
-        }
-        rows.extend(
-            self.inbound
+    pub(crate) fn relations_with(
+        &self,
+        seed: &Seed,
+        related: Option<&[Arc<Seed>]>,
+        ancestors: Option<&[Arc<Seed>]>,
+    ) -> Vec<Relation> {
+        let resolve = |id: &str| -> Option<Arc<Seed>> {
+            self.by_id
                 .get(id)
-                .into_iter()
-                .flatten()
-                .filter(|r| r.label != "has part")
-                .cloned(),
-        );
-        rows
-    }
-
-    /// Every seed below `root`, at any depth.
-    pub(crate) fn subtree(&self, root: &str) -> HashSet<String> {
-        let mut wanted = HashSet::new();
-        let mut queue = vec![root.to_owned()];
-        while let Some(id) = queue.pop() {
-            for child in self.children_of(&id) {
-                if wanted.insert(child.id.clone()) {
-                    queue.push(child.id.clone());
+                .or_else(|| related.into_iter().flatten().find(|s| s.id == id))
+                .or_else(|| ancestors.into_iter().flatten().find(|s| s.id == id))
+                .cloned()
+        };
+        let mut rows = Vec::new();
+        for edge in &seed.edges {
+            let Some(other) = resolve(&edge.to) else {
+                continue;
+            };
+            let label = match edge.kind.as_str() {
+                "blocks" => "blocks",
+                "part-of" => "part of",
+                "discovered-from" => "discovered from",
+                _ => continue,
+            };
+            rows.push(Relation { label, seed: other });
+        }
+        let mut seen_inbound: HashSet<(&'static str, String)> = HashSet::new();
+        if let Some(related) = related {
+            for other in related {
+                for edge in &other.edges {
+                    if edge.to != seed.id {
+                        continue;
+                    }
+                    let label = match edge.kind.as_str() {
+                        "blocks" => "blocked by",
+                        "discovered-from" => "discovered",
+                        _ => continue,
+                    };
+                    let resolved = self
+                        .by_id
+                        .get(&other.id)
+                        .cloned()
+                        .unwrap_or_else(|| other.clone());
+                    if seen_inbound.insert((label, resolved.id.clone())) {
+                        rows.push(Relation {
+                            label,
+                            seed: resolved,
+                        });
+                    }
                 }
             }
         }
-        wanted
+        if let Some(inbound) = self.inbound.get(&seed.id) {
+            for rel in inbound {
+                if rel.label != "has part" && seen_inbound.insert((rel.label, rel.seed.id.clone()))
+                {
+                    rows.push(rel.clone());
+                }
+            }
+        }
+        rows
     }
 
     /// The trail from the root to `id` through each seed's plot, as far up as the garden
