@@ -157,6 +157,21 @@ fn holding_the_chord_labels_every_id_with_what_it_names_until_a_modifier_comes_u
 }
 
 #[test]
+fn a_chord_held_while_a_frame_shows_what_a_shortcut_changed_labels_the_ids() {
+    let mut world = reading();
+    let sidebar = super::keys::chord(&attn_app::Action::SessionToggleSidebar);
+    world.gesture(|app| {
+        app.key(sidebar);
+        app.hold(chord_mods());
+        strike(app, 'l', false);
+    });
+    assert!(labelled(&world));
+    lets_go(&mut world);
+    assert!(!labelled(&world));
+    rests(&mut world);
+}
+
+#[test]
 fn the_labels_and_the_list_show_and_go_in_one_step() {
     for drawing in ["lantern", "name"] {
         let mut world = reading();

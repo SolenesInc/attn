@@ -141,7 +141,11 @@ pub(crate) fn start(state: &mut State, tx: &mut Tx) -> bool {
         return false;
     }
     crate::desktop::header_pop::close(state);
-    tx.find_links(ids::HREF, move |state: &mut State, links, _| {
+    tx.find_links(ids::HREF, move |state: &mut State, links, tx| {
+        if !covers(tx.mods(), mods) {
+            state.window.hints = Hints::Ended;
+            return;
+        }
         let mut held = Held {
             mods,
             front: Front::of(state),
