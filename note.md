@@ -1,0 +1,1 @@
+When attn's tools do not reach a Claude Code session in time, Claude Code's debug log now says why: the 8 s bound, or the server's refusal. Stack tests on the real binary also hold that mail waking a resumed session waits for the tools.
