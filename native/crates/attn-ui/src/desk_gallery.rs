@@ -257,12 +257,13 @@ fn overview(s: &Desk, cx: &mut Cx<Desk>) -> El {
     let waiting = member(name, &icon::AGENT, Some(MemberState::Waiting));
     let approval = member(name, &icon::AGENT, Some(MemberState::Approval));
     let working = member("builder", &icon::AGENT, Some(MemberState::Working));
+    let [w, h] = MINI;
     let ground = |words_of: &str| {
         el().fill(t.bg_app)
             .child(words(words_of.to_owned(), Type::Mono, t.text_secondary))
     };
     let tile = |key: &str, m: &ShelfMember, on: bool, rect: [f32; 4], picture: El| {
-        let outline = Miniature::outline(format!("{key}.outline"), m, on, rect, &t);
+        let outline = Miniature::outline(format!("{key}.outline"), m, on, rect, (w, h), &t);
         let tile = Miniature::tile(key.to_owned(), m, on, rect, MINI_SCALE, picture, &t);
         (tile.on_press_tx(press), outline)
     };
@@ -270,7 +271,6 @@ fn overview(s: &Desk, cx: &mut Cx<Desk>) -> El {
         let (tiles, outlines): (Vec<_>, Vec<_>) = tiles.into_iter().unzip();
         Overview::column(key.into(), rect, tiles, outlines.into_iter().flatten(), &t)
     };
-    let [w, h] = MINI;
     let stack = column(
         "column.stack",
         [0.0, 0.0, w, h],

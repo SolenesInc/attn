@@ -226,6 +226,12 @@ pub(crate) fn round(e: El, points: f32) -> El {
     e.radius(points)
 }
 
+/// `e` with a corner of its own receipt at each of its top left, top right, bottom right and bottom
+/// left.
+pub(crate) fn round_corners(e: El, points: [f32; 4]) -> El {
+    e.corners(points)
+}
+
 /// `e` drawing nothing past its box.
 pub(crate) fn clip(e: El) -> El {
     e.clip_rounded(0.0)

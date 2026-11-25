@@ -272,7 +272,8 @@ fn row(
             let said: Vec<&str> = said.iter().filter(|(is, _)| *is).map(|(_, w)| *w).collect();
             let key = miniature_key(id);
             let at = at.map(|points| points * scale);
-            let outline = Miniature::outline(format!("{key}.outline"), &member, highlighted, at, t);
+            let outline = format!("{key}.outline");
+            let outline = Miniature::outline(outline, &member, highlighted, at, (w, h), t);
             let tile = Miniature::tile(key, &member, highlighted, at, scale, picture, t)
                 .a11y_value(said.join(", "))
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {

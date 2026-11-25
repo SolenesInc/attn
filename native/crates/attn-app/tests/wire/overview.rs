@@ -1083,6 +1083,72 @@ fn a_terminal_s_screen_stands_clear_of_every_edge_and_outline_over_it() {
     }
 }
 
+/// Whether each corner of the outline of `leaf` is round, top left first and clockwise.
+fn rounded_corners(world: &World, leaf: &str) -> [bool; 4] {
+    let rt = world.runtime();
+    let key = format!("{}.outline", miniature(leaf));
+    let pixels = rt.presented(&key).unwrap().0.map(|v| v * rt.env.scale);
+    let near = |rect: &[f32; 4]| rect.iter().zip(pixels).all(|(a, b)| (a - b).abs() <= 1.0);
+    rt.instances
+        .iter()
+        .find(|i| i.border[3] > 0.0 && i.params[0] >= 2.0 * rt.env.scale && near(&i.rect))
+        .unwrap_or_else(|| panic!("{leaf} has an outline"))
+        .radii
+        .map(|radius| radius > 0.0)
+}
+
+#[test]
+fn an_outline_in_a_stack_is_round_only_at_the_corners_of_its_column() {
+    let stack = |ids: &[&str]| {
+        let (last, over) = ids.split_last().unwrap();
+        over.iter()
+            .rev()
+            .fold(pane(last), |under, id| below(pane(id), under))
+    };
+    let stacks: [&[&str]; 4] = [
+        &["a"],
+        &["b1", "b2"],
+        &["c1", "c2", "c3"],
+        &["d1", "d2", "d3", "d4"],
+    ];
+    let halves = row([pane("left"), pane("right")]);
+    let over_halves = below(pane("over"), halves);
+    let tree = row(stacks.map(stack).into_iter().chain([over_halves]));
+    for waiting in [true, false] {
+        let mut state = initial(vec![desktop(1, "a", Some(tree.clone()))]);
+        for session in state.sessions.iter_mut().flatten().filter(|_| waiting) {
+            session.state = "waiting_input".into();
+        }
+        let mut world = start_on(Daemon::scripted().state(state));
+        press(&mut world, Action::DesktopOverview);
+        rest(&mut world);
+        for tiles in stacks {
+            for (i, leaf) in tiles.iter().enumerate() {
+                if !waiting {
+                    assert_eq!(highlighted(&world).as_deref(), Some(*leaf));
+                }
+                let (top, bottom) = (i == 0, i + 1 == tiles.len());
+                let round = [top, top, bottom, bottom];
+                assert_eq!(rounded_corners(&world, leaf), round, "{leaf} of {tiles:?}");
+                if !waiting && !bottom {
+                    key(&mut world, Key::Down);
+                    rest(&mut world);
+                }
+            }
+            if !waiting {
+                key(&mut world, Key::Right);
+                rest(&mut world);
+            }
+        }
+        if waiting {
+            let corners = |leaf| rounded_corners(&world, leaf);
+            assert_eq!(corners("over"), [true, true, false, false]);
+            assert_eq!(corners("left"), [false, false, false, true]);
+            assert_eq!(corners("right"), [false, false, true, false]);
+        }
+    }
+}
+
 #[test]
 fn the_row_and_the_lists_take_the_whole_window_inside_its_padding() {
     for size in [SMALLEST, LAPTOP] {

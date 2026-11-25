@@ -383,7 +383,9 @@ fn overview_board(t: &Tokens) -> El {
             let picture = Miniature::card(member.icon.clone(), &member.name, t);
             let tile = [0.0, 0.0, TILE[0], TILE[1]];
             let key = format!("miniature.{r}.{i}");
-            let outline = Miniature::outline(format!("{key}.outline"), &member, on, tile, t);
+            let column = (TILE[0], TILE[1]);
+            let outline = format!("{key}.outline");
+            let outline = Miniature::outline(outline, &member, on, tile, column, t);
             let tiles = [Miniature::tile(key, &member, on, tile, 0.3, picture, t)];
             Overview::column(format!("column.{r}.{i}"), rect, tiles, outline, t)
         })

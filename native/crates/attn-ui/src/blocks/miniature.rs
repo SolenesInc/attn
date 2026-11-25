@@ -79,7 +79,8 @@ impl Overview {
         t: &Tokens,
     ) -> El {
         let edge = legible(t.text_tertiary, t.bg_app, MARK_READS, t);
-        let edge = outline(format!("{key}.edge"), [0.0, 0.0, w, h], COLUMN_EDGE, edge);
+        let whole = [0.0, 0.0, w, h];
+        let edge = outline(format!("{key}.edge"), whole, (w, h), COLUMN_EDGE, edge);
         door::clip_round(el().key(key), COLUMN_CORNER)
             .absolute(x, y)
             .w(w)
@@ -229,21 +230,23 @@ impl Miniature {
             .child(picture.w_full().grow(1.0).min_h(0.0))
     }
 
-    /// The outline of the tile at `rect` of its column, when it has the highlight or needs the
-    /// user.
+    /// The outline of the tile at `rect` of its `column` points large, when it has the highlight
+    /// or needs the user.
     pub fn outline(
         key: String,
         member: &ShelfMember,
         highlighted: bool,
         rect: [f32; 4],
+        column: (f32, f32),
         t: &Tokens,
     ) -> Option<El> {
         if highlighted {
-            return Some(outline(key, rect, HIGHLIGHT_EDGE, t.text_primary));
+            let ink = t.text_primary;
+            return Some(outline(key, rect, column, HIGHLIGHT_EDGE, ink));
         }
         member
             .needs_user()
-            .then(|| outline(key, rect, NEEDS_EDGE, needing(member, t)))
+            .then(|| outline(key, rect, column, NEEDS_EDGE, needing(member, t)))
     }
 
     /// A terminal's `screen` on its own `ground`, clear of the edges and outlines drawn over it.
@@ -300,13 +303,26 @@ fn list(
     col().absolute(x, y).w(w).h(h).child(body)
 }
 
-fn outline(key: String, [x, y, w, h]: [f32; 4], width: f32, ink: rune::Color) -> El {
-    door::round(el().key(key), COLUMN_CORNER)
+fn outline(key: String, rect: [f32; 4], column: (f32, f32), width: f32, ink: rune::Color) -> El {
+    let [x, y, w, h] = rect;
+    door::round_corners(el().key(key), corners_in_column(rect, column))
         .absolute(x, y)
         .w(w)
         .h(h)
         .border(width, ink)
         .inert()
+}
+
+/// The corners of a tile at `rect` of its `column`: round where they meet the column's, else
+/// square.
+fn corners_in_column([x, y, w, h]: [f32; 4], column: (f32, f32)) -> [f32; 4] {
+    const MEETS: f32 = 0.5;
+    let left = x < MEETS;
+    let top = y < MEETS;
+    let right = x + w > column.0 - MEETS;
+    let bottom = y + h > column.1 - MEETS;
+    [left && top, right && top, right && bottom, left && bottom]
+        .map(|meets| if meets { COLUMN_CORNER } else { 0.0 })
 }
 
 fn bar(width: f32, t: &Tokens) -> El {
