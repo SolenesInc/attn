@@ -37,3 +37,4 @@ commands:
   - {name: _update-apply, summary: "apply a staged update", hidden: true, offered: false, reason: *plumbing}
   - {name: _probe-tui, summary: "draw a fake agent screen for terminal probes", hidden: true, offered: false, reason: *plumbing}
   - {name: _run-command, summary: "answer a command that runs without a daemon when the CLI cannot reach one", hidden: true, offered: false, reason: *plumbing}
+  - {name: _run-script, summary: "run one script for the daemon that started it", hidden: true, offered: false, reason: *plumbing}

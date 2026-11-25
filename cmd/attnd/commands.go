@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/script"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -60,6 +61,7 @@ func topLevelCommands() []topLevelCommand {
 		{names: []string{"_bridge"}, run: runBridge, unrecorded: true},
 		{names: []string{"_probe-tui"}, run: runProbeTUI},
 		{names: []string{"_run-command"}, run: runWithoutDaemon, checks: checkNothing, unrecorded: true},
+		{names: []string{script.Command}, run: runScript, checks: checkNothing, unrecorded: true},
 	}
 }
 

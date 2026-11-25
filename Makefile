@@ -252,6 +252,10 @@ lint-go: $(NATIVE_VT_DEP)
 	if printf '%s\n' "$$deps" | grep -E '^github.com/(santhosh-tekuri/jsonschema|prometheus|modelcontextprotocol/go-sdk|google/jsonschema-go)/'; then \
 		echo "attn must not link the packages listed above: every CLI command and agent hook pays for their init on every start" >&2; exit 1; \
 	fi
+	@importers=$$(go list -f '{{.ImportPath}} {{join .Imports " "}} {{join .TestImports " "}} {{join .XTestImports " "}}' ./...) || exit 1; \
+	if printf '%s\n' "$$importers" | grep -v '^github.com/victorarias/attn/internal/script ' | grep 'github.com/buke/quickjs-go'; then \
+		echo "only internal/script may import the QuickJS binding, so attn can replace the binding in one package" >&2; exit 1; \
+	fi
 	@deps=$$(go list -deps ./internal/sessionmonitor) || exit 1; \
 	if printf '%s\n' "$$deps" | grep -E '/internal/(daemon|store|garden)(/|$$)'; then \
 		echo "internal/sessionmonitor must not import the home's packages listed above: it reads only its Policy, View and Host" >&2; exit 1; \

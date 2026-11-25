@@ -4,6 +4,7 @@ go 1.27.1
 
 require (
 	github.com/BurntSushi/toml v1.5.0
+	github.com/buke/quickjs-go v0.7.8
 	github.com/creack/pty v1.1.24
 	github.com/flynn/noise v1.1.0
 	github.com/fsnotify/fsevents v0.2.0

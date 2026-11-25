@@ -16,6 +16,7 @@ pub const TOP_LEVEL: &[TopLevel] = &[
     TopLevel { name: "_outpost-switch", usage: "_outpost-switch", summary: "switch an outpost to its installed build", hidden: true },
     TopLevel { name: "_probe-tui", usage: "_probe-tui", summary: "draw a fake agent screen for terminal probes", hidden: true },
     TopLevel { name: "_run-command", usage: "_run-command", summary: "answer a command that runs without a daemon when the CLI cannot reach one", hidden: true },
+    TopLevel { name: "_run-script", usage: "_run-script", summary: "run one script for the daemon that started it", hidden: true },
     TopLevel { name: "_update-apply", usage: "_update-apply", summary: "apply a staged update", hidden: true },
     TopLevel { name: "activity", usage: "activity [--json] | clear <id>", summary: "what each agent is doing right now", hidden: false },
     TopLevel { name: "agent", usage: "agent <command>", summary: "see what other agents are doing, message one, close or reload one", hidden: false },
