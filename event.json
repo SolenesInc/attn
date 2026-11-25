@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Callout hides candidates for ambiguous session names",
+  "at": "2026-11-25T10:06:26.999Z",
+  "detail": "At pinned f02c67f39, two live sessions of the same name in the caller profile cause agent peek to return both candidates, but CLI and MCP callout show discard that ambiguity and report unknown_anchor. The suggested anchors lookup does not identify the candidate sessions. Preserve the candidate-bearing ambiguity in the shared handler, with missing and foreign-agent refusals intact. Independently confirmed through run_command and MCP, with evidence on s-6gx07j.\n"
+}
