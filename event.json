@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: PR conflict hides exact review state",
+  "at": "2026-11-25T00:47:45.468Z",
+  "fixesBug": "c82200a"
+}
