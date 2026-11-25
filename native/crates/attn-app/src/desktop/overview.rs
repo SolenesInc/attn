@@ -8,12 +8,13 @@ use attn_protocol::{DesktopCreateMessage, DesktopMoveLeafMessage, ProfileActionR
 use rune::{Key, KeyEvent, Mods, Platform, Tx};
 
 use super::layout::{self, Column, Toward};
-use crate::State;
 use crate::action::Action;
 use crate::requests::Refused;
 use crate::shell::Layer;
+use crate::{State, setting};
 
 pub(crate) const LAYER: &str = "overview";
+pub(crate) const HOLD_OPENS_OVERVIEW: &str = "hold_opens_overview_enabled";
 const HOLD_OPENS_AFTER: f64 = 0.2;
 
 /// The open overview. It counts only while `Layer::Overview` is the window's layer, and the next
@@ -155,6 +156,10 @@ fn open_at(state: &mut State, from: Spot, at: Spot, mode: Mode) {
 }
 
 pub(crate) fn chord(state: &mut State, toward: Toward, tx: &mut Tx) {
+    if !setting::on(&state.facts.settings, HOLD_OPENS_OVERVIEW) {
+        super::actions::focus_toward(state, toward, tx);
+        return;
+    }
     let leaves_screen = step_leaves_screen(state, toward);
     let hold = state.window.desk.hold.take();
     let held = hold.is_some();

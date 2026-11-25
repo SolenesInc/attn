@@ -51,8 +51,9 @@ pub(crate) use fit::Widths;
 pub(crate) use host::outpost_name;
 pub use overview::Overview;
 pub(crate) use overview::{
-    chord as overview_chord, create as create_desktop, follow as follow_overview,
-    held_key as overview_held_key, key as overview_key, on_modifiers as overview_modifiers,
+    HOLD_OPENS_OVERVIEW, chord as overview_chord, create as create_desktop,
+    follow as follow_overview, held_key as overview_held_key, key as overview_key,
+    on_modifiers as overview_modifiers,
 };
 pub(crate) use overview_view::{miniatures, view as overview};
 pub(crate) use peek::view as peek;

@@ -3,7 +3,7 @@ use std::time::Duration;
 use attn_app::{Action, Binding, Category, Keymap};
 use attn_protocol::{
     Ask, Desktop, DesktopPane, InitialStateMessage, Profile, ProfileActionResultMessage,
-    ProfileArrangementChangedMessage, Session,
+    ProfileArrangementChangedMessage, Session, SettingsUpdatedMessage,
 };
 use attn_testkit::tree::{below, pane, row, tile};
 use attn_testkit::{Daemon, Request, Target, World, key_event, message};
@@ -104,8 +104,10 @@ fn profile(current: &str) -> Profile {
     }
 }
 
+/// With the overview opening while the walk chord is held.
 fn initial(desktops: Vec<Desktop>) -> InitialStateMessage {
     InitialStateMessage {
+        settings: Some([hold_opens("true")].into()),
         selected_profile_id: Some("work".into()),
         profiles: Some(vec![profile(&desktops[0].id)]),
         sessions: Some(
@@ -118,6 +120,10 @@ fn initial(desktops: Vec<Desktop>) -> InitialStateMessage {
         desktops: Some(desktops),
         ..InitialStateMessage::new()
     }
+}
+
+fn hold_opens(value: &str) -> (String, String) {
+    ("hold_opens_overview_enabled".into(), value.into())
 }
 
 fn question(session: &str) -> Ask {
@@ -1430,6 +1436,47 @@ fn a_step_in_a_stack_and_one_back_on_screen_never_open_the_overview() {
 }
 
 #[test]
+fn the_walk_chord_opens_the_overview_only_while_its_setting_is_on_and_it_is_off_by_default() {
+    use Action::{TerminalFocusLeft, TerminalFocusRight};
+    let walk_past_the_screen = |world: &mut World| {
+        hold(world);
+        for (step, leaf) in [(TerminalFocusRight, "c"), (TerminalFocusRight, "e")] {
+            walk(world, step, leaf);
+            stays_shut(world);
+            assert_eq!(keyboard(world), leaf);
+        }
+        let_go(world);
+        stays_shut(world);
+    };
+    let set = |world: &mut World, value: &str| {
+        world.daemon.emit(SettingsUpdatedMessage {
+            settings: Some([hold_opens(value)].into()),
+            ..SettingsUpdatedMessage::new()
+        });
+        world.settle();
+    };
+    let mut state = initial(three_desktops_at("b"));
+    state.settings = None;
+    let mut world = start_on(Daemon::scripted().state(state));
+    walk_past_the_screen(&mut world);
+    press(&mut world, Action::DesktopOverview);
+    assert!(open(&world), "its own key opens it");
+    key(&mut world, Key::Escape);
+
+    set(&mut world, "true");
+    hold(&mut world);
+    walk(&mut world, TerminalFocusLeft, "c");
+    assert!(!open(&world));
+    press(&mut world, TerminalFocusLeft);
+    assert!(open(&world));
+    let_go(&mut world);
+
+    set(&mut world, "false");
+    arrange(&mut world, ONE, three_desktops_at("b"));
+    walk_past_the_screen(&mut world);
+}
+
+#[test]
 fn a_single_quick_step_never_opens_the_overview_whichever_modifier_goes_first() {
     for left in ways_to_let_go() {
         let mut world = walk_off_screen_to_c();
@@ -1693,11 +1740,8 @@ fn a_key_without_modifiers_a_sequence_and_the_palette_walk_without_a_hold() {
     ];
     for (name, keys, walk) in walks {
         let mut state = initial(three_desktops_at("b"));
-        state.settings = keys.map(|keys| {
-            [("keybindings_config".to_owned(), keys.to_owned())]
-                .into_iter()
-                .collect()
-        });
+        let bound = keys.map(|keys| ("keybindings_config".to_owned(), keys.to_owned()));
+        state.settings.as_mut().unwrap().extend(bound);
         let mut world = start_on(Daemon::scripted().state(state));
 
         walk(&mut world);

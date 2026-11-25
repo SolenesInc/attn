@@ -1043,6 +1043,24 @@ fn use_default_clears_the_sidebar_width() {
 }
 
 #[test]
+fn the_switch_that_lets_a_hold_open_the_overview_is_off_until_set_and_saves_both_ways() {
+    let (daemon, _) = accepting(&[]);
+    let mut world = World::start(daemon);
+    open(&mut world);
+    click(&mut world, "settings.nav.general");
+    let setting = "hold_opens_overview_enabled";
+    let switch = format!("settings.switch.{setting}");
+    for (on, saved) in [(false, "true"), (true, "false")] {
+        assert_eq!(world.screen().get(Target::key(&switch)).is("checked"), on);
+        click(&mut world, &switch);
+        let written = writes(&world).last().unwrap().clone();
+        assert_eq!(written, (setting.to_owned(), saved.to_owned()));
+    }
+    assert!(!world.screen().get(Target::key(&switch)).is("checked"));
+    rest(&mut world);
+}
+
+#[test]
 fn experimental_lists_each_feature_by_group_with_how_many_are_on_and_its_switch_saves_both_ways() {
     let (daemon, _) = accepting(&[("outposts_enabled", "true")]);
     let mut world = World::start(daemon);

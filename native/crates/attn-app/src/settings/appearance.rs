@@ -7,9 +7,10 @@ use attn_ui::colors::{SCHEMES, has_overrides};
 use attn_ui::system::{Button, Choice, Look, stepper};
 use rune::{El, Tx};
 
-use super::controls::{number_field, segmented};
+use super::controls::{number_field, segmented, setting_switch};
 use crate::State;
 use crate::action::Action;
+use crate::desktop::HOLD_OPENS_OVERVIEW;
 use crate::hints;
 use crate::sidebar::width;
 
@@ -382,11 +383,27 @@ fn layout(state: &State, t: &Tokens) -> Section {
         )
 }
 
+fn hold_opens_overview(state: &State, t: &Tokens) -> Section {
+    const TITLE: &str = "Open by holding the keys that move between tiles";
+    Section::new("settings.block.overview", "Overview")
+        .description("The desktop's whole row, drawn small.")
+        .push(
+            SettingRow::new(
+                "settings.row.hold-opens-overview",
+                TITLE,
+                "Opens when a step leaves the screen, and letting go goes to the tile you picked.",
+                setting_switch(state, HOLD_OPENS_OVERVIEW, TITLE, t),
+            )
+            .build(t),
+        )
+}
+
 pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     vec![
         theme(state, t).build(t),
         font_size(state, t).build(t),
         id_labels(state, t).build(t),
         layout(state, t).build(t),
+        hold_opens_overview(state, t).build(t),
     ]
 }
