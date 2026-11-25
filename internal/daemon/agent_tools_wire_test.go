@@ -487,9 +487,9 @@ func TestEachToolServerTeachesInTheTextItsHarnessShows(t *testing.T) {
 	}
 
 	intentMap := served[""].Instructions
-	for _, want := range []string{"| When you need to | Tools | Reference |", "| seed_ready, seed_show, seed_tend | garden |", "Tools take a seed's id or its slug"} {
-		if !strings.Contains(intentMap, want) {
-			t.Errorf("the server's instructions lack %q:\n%s", want, intentMap)
+	for _, tool := range coreTools {
+		if !strings.Contains(intentMap, tool) {
+			t.Errorf("the server's instructions do not name the core tool %q:\n%s", tool, intentMap)
 		}
 	}
 	if len([]rune(intentMap)) > 4096 {

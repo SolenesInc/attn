@@ -141,6 +141,9 @@ go ./internal/hooks TestLegacyPromptCompatibility
 go ./cmd/attnd TestAPlotPayloadPlacesItsPlotAndOrdersItsChildren
 go ./cmd/attnd TestHelpListsEveryCommandAndReferenceAndEachCommandExplainsItself
 
+group agent-tools ^internal/daemon/agent_tools
+go ./internal/daemon TestEachToolServerTeachesInTheTextItsHarnessShows
+
 group cli-help ^cli/|^internal/prompttest/
 go ./cmd/attnd TestPRWaitReadyReportsEachActionableUpdateOnceAcrossInvocations
 go ./cmd/attnd TestSettingsCLIDiscoversReadsAndSavesDaemonSettings
