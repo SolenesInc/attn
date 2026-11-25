@@ -368,7 +368,7 @@ fn shelf_board(t: &Tokens, _: &mut Cx<Tokens>) -> El {
 }
 
 /// What the overview draws: a miniature in each state, highlighted and not, a strip with a mark in
-/// each state, a line per state that needs the user, and the legend.
+/// each state and a line per state that needs the user.
 fn overview_board(t: &Tokens) -> El {
     const TILE: [f32; 2] = [170.0, 80.0];
     let tiles = [false, true].into_iter().enumerate().flat_map(|(r, on)| {
@@ -394,7 +394,6 @@ fn overview_board(t: &Tokens) -> El {
         Overview::line(format!("line.{state:?}"), &member, "Which branch?", t)
             .on_press(|_: &mut Tokens| {})
     });
-    let hints = vec![(vec!["esc".to_owned()], "close".to_owned())];
     rune::col()
         .w_full()
         .grow(1.0)
@@ -413,7 +412,6 @@ fn overview_board(t: &Tokens) -> El {
         )
         .child(Overview::new_desktop("strip.new", t).on_press(|_: &mut Tokens| {}))
         .children(lines)
-        .child(Overview::legend(hints, 400.0, t))
         .child(
             el().w_full()
                 .h(40.0)

@@ -1042,6 +1042,7 @@ fn the_row_stands_clear_of_an_open_drawer() {
 
 /// The smallest size the window takes.
 const SMALLEST: (f32, f32) = (800.0, 600.0);
+const LAPTOP: (f32, f32) = (1470.0, 956.0);
 
 /// A wheel turn over `key` past the end of what it scrolls.
 fn wheel_to_the_end(world: &mut World, key: &str) {
@@ -1052,6 +1053,43 @@ fn wheel_to_the_end(world: &mut World, key: &str) {
             .wheel_event(rune::WheelEvent::new(0.0, -10_000.0).at(at.0, at.1))
     });
     rest(world);
+}
+
+#[test]
+fn the_row_and_the_lists_take_the_whole_window_inside_its_padding() {
+    for size in [SMALLEST, LAPTOP] {
+        let mut state = initial(three_desktops());
+        for session in state.sessions.iter_mut().flatten() {
+            session.state = "waiting_input".into();
+        }
+        let mut world = World::start_sized(Daemon::scripted().state(state), size);
+        world.open_desktop();
+        let fills = |world: &World, way: &str| {
+            let rect = |key: &str| world.runtime().presented(key).unwrap().0;
+            let [_, top, _, height] = rect("overview");
+            let end = top + height - attn_ui::blocks::Overview::PADDING;
+            let [_, y, _, h] = rect("overview.below");
+            assert!(
+                (y + h - end).abs() < 0.5,
+                "{way} at {size:?} ends at {}",
+                y + h
+            );
+            for leaf in ["a", "b", "c", "d", "e"] {
+                let [_, at, _, tall] = rect(&miniature(leaf));
+                assert!(tall > 0.0 && at + tall <= y, "{way} at {size:?}: {leaf}");
+            }
+        };
+        press(&mut world, Action::DesktopOverview);
+        rest(&mut world);
+        fills(&world, "kept");
+        key(&mut world, Key::Escape);
+
+        walk_to_b(&mut world);
+        press(&mut world, Action::TerminalFocusRight);
+        fills(&world, "held");
+        let_go(&mut world);
+        assert!(!open(&world));
+    }
 }
 
 #[test]
@@ -1072,23 +1110,7 @@ fn in_the_smallest_window_the_row_keeps_its_room_and_the_lists_around_it_scroll(
 
     let rect = |world: &World, key: &str| world.runtime().presented(key).unwrap().0;
     let [_, top, _, height] = rect(&world, "overview");
-    let [edge, legend, room, _] = rect(&world, "overview.legend");
-    for said in ["on screen", "row", "close"] {
-        let elements = world.runtime().elements();
-        let shown = elements.iter().find(|e| {
-            let inside = e.rect[1] >= legend && e.rect[0] >= edge - 1.0;
-            inside && e.text.as_deref() == Some(said)
-        });
-        let [x, _, w, _] = shown.unwrap_or_else(|| panic!("no {said}")).rect;
-        let end = x + w;
-        assert!(
-            end <= edge + room,
-            "{said} ends at {end} of {}",
-            edge + room
-        );
-        let needs = attn_ui::system::width_of(said.to_owned(), attn_ui::system::Type::Small);
-        assert!(w >= needs - 1.0, "{said} has {w} points of {needs}");
-    }
+    let end = top + height - attn_ui::blocks::Overview::PADDING;
     assert_eq!(row_shown(&world), ids);
     let first = rect(&world, &miniature("p0"));
     let last = rect(&world, &miniature("p9"));
@@ -1097,15 +1119,15 @@ fn in_the_smallest_window_the_row_keeps_its_room_and_the_lists_around_it_scroll(
         row_height >= height / 3.0,
         "the row is {row_height} points of {height}"
     );
-    assert!(first[1] >= top && last[1] + last[3] <= legend);
+    assert!(first[1] >= top && last[1] + last[3] <= end);
 
     let [left, _, width, _] = rect(&world, "overview");
     let [_, over, _, over_height] = rect(&world, "overview.above");
     let [_, under, _, _] = rect(&world, "overview.below");
     let room_top = over + over_height;
     assert!(
-        (under - room_top) * 2.0 >= legend - over,
-        "the row has {room_top} to {under}, over the legend at {legend}"
+        (under - room_top) * 2.0 >= end - over,
+        "the row has {room_top} to {under} of {over} to {end}"
     );
     for id in &ids {
         let [x, y, w, h] = rect(&world, &miniature(id));
@@ -1121,9 +1143,9 @@ fn in_the_smallest_window_the_row_keeps_its_room_and_the_lists_around_it_scroll(
 
     wheel_to_the_end(&mut world, "overview.below");
     let last_strip = rect(&world, &format!("overview.strip.{}", "work/desktop_9"));
-    assert!(last_strip[1] >= under && last_strip[1] + last_strip[3] <= legend);
+    assert!(last_strip[1] >= under && last_strip[1] + last_strip[3] <= end);
     let new = rect(&world, "overview.new");
-    assert!(last[1] + last[3] <= new[1] && new[1] + new[3] <= legend);
+    assert!(last[1] + last[3] <= new[1] && new[1] + new[3] <= end);
     wheel_to_the_end(&mut world, "overview.above");
     let above = rect(&world, &format!("overview.strip.{}", "work/desktop_4"));
     assert!(above[1] >= top && above[1] + above[3] <= first[1]);
@@ -1470,26 +1492,4 @@ fn a_tile_shown_another_way_before_the_hold_s_time_keeps_the_overview_shut() {
     rest(&mut world);
     assert!(!open(&world));
     assert_eq!(keyboard(&mut world), "a");
-}
-
-#[test]
-fn a_held_overview_s_legend_names_letting_go_and_names_escape_only_where_it_cancels() {
-    let mut world = start(three_desktops());
-    walk_to_b(&mut world);
-    press(&mut world, Action::TerminalFocusRight);
-    let screen = world.screen().to_string();
-    let mac = attn_testkit::platform() == rune::Platform::Mac;
-    let keymap = Keymap::from_setting(None, attn_testkit::platform());
-    let walk = keymap.label(keymap.binding(&Action::TerminalFocusRight).unwrap());
-    let released = screen
-        .split_once("release ")
-        .and_then(|(_, rest)| rest.split(|c: char| c.is_whitespace() || c == '"').next())
-        .expect("the legend names letting go");
-    assert!(!released.is_empty(), "{screen}");
-    assert!(
-        walk.starts_with(released),
-        "{released} is not what {walk} holds down"
-    );
-    assert!(screen.contains("land on Agent c"), "{screen}");
-    assert_eq!(screen.contains("back to Agent a"), !mac, "{screen}");
 }

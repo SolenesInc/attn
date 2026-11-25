@@ -1282,7 +1282,6 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::miniature::Overview::strip(name)", false),
     ("blocks::miniature::Overview::strip(counts)", false),
     ("blocks::miniature::Overview::line(asks)", false),
-    ("blocks::miniature::Overview::legend(hints)", false),
     ("blocks::miniature::Miniature::card(title)", false),
     ("blocks::screen::Screen::showing(shown)", false),
     ("blocks::shelf::ShelfEntry::build(label)", false),

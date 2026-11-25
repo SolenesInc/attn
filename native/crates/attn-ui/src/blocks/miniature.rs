@@ -3,9 +3,7 @@ use rune::{El, Spring, SpringPair, Transition, col, el, row};
 use super::block::{Opens, scrolling};
 use super::shelf::{Ground, MemberState, ShelfMember, legible, mark};
 use crate::colors::{MARK_READS, READS};
-use crate::system::{
-    IconSize, Space, Type, door, icon, keycaps, keys_hint, keys_hint_width, width_of, words,
-};
+use crate::system::{IconSize, Space, Type, door, icon, keycaps, words};
 use crate::{Glyph, Tokens};
 
 /// A row drawn small over the tile area, and what stands around it: a strip per other desktop
@@ -25,7 +23,6 @@ const COLUMN_CORNER: f32 = 6.0;
 const BAR: f32 = 3.0;
 const BAR_CORNER: f32 = 2.0;
 const BAR_GAP: f32 = 5.0;
-const SWATCH_W: f32 = 18.0;
 const STRIP: f32 = 22.0;
 const STRIP_CORNER: f32 = 6.0;
 const LINE: f32 = 24.0;
@@ -198,42 +195,6 @@ impl Overview {
                     .a11y_hidden(),
             );
         ground.pressable(door::sides(line, Space::S12, Space::S8), 0.0)
-    }
-
-    /// The keys the overview has and what each does, after what the bar means, in `room` points:
-    /// a hint wider than its share of them gives way first.
-    pub fn legend(hints: Vec<(Vec<String>, String)>, room: f32, t: &Tokens) -> El {
-        const BAR_MEANS: &str = "on screen";
-        let gap = Space::S16;
-        let swatch_w = SWATCH_W + Space::S6.pt() + width_of(BAR_MEANS, Type::Small);
-        let n = hints.len() as f32;
-        let share = ((room - swatch_w) / n - gap.pt()).max(0.0);
-        let t = &Tokens {
-            text_tertiary: legible(t.text_tertiary, t.bg_app, READS, t),
-            ..*t
-        };
-        let swatch = door::gap(row().items_center(), Space::S6)
-            .child(bar(SWATCH_W, t))
-            .child(words(BAR_MEANS, Type::Small, t.text_tertiary));
-        door::gap(
-            row()
-                .key("overview.legend")
-                .w_full()
-                .items_center()
-                .justify_center(),
-            gap,
-        )
-        .h(LINE)
-        .child(swatch)
-        .children(hints.into_iter().map(|(keys, what)| {
-            let whole = keys_hint_width(keys.iter().map(String::as_str), &what);
-            let hint = keys_hint(keys, what, t);
-            if whole > share {
-                hint.shrink().min_w(share)
-            } else {
-                hint
-            }
-        }))
     }
 }
 

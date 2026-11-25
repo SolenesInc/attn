@@ -1,10 +1,10 @@
-//! The overview as it draws: the row in miniature, the strips around it, a line per tile that
-//! needs the user and the legend.
+//! The overview as it draws: the row in miniature, the strips around it and a line per tile that
+//! needs the user.
 
 use attn_client::Desktop;
 use attn_ui::Tokens;
 use attn_ui::blocks::{MemberState, Miniature, Overview as Block, ShelfMember};
-use rune::{El, Platform, Tx, el, memo};
+use rune::{El, Tx, el, memo};
 
 use super::layout::{self, Column, Leaf, LeafKind, Node, Rows};
 use super::overview::{self, Overview, Spot};
@@ -21,7 +21,6 @@ struct Arrangement {
     area: [f32; 4],
     above: List,
     below: List,
-    legend: f32,
 }
 
 /// Where a list beside the row stands, `shown` points of its `height` tall.
@@ -78,9 +77,8 @@ fn arrange(state: &State, overview: &Overview, desktop: &Desktop, lines: usize) 
     let pad = Block::PADDING;
     let above = before as f32 * Block::STRIP_STEP;
     let below = with_gap(lines as f32 * Block::LINE) + after as f32 * Block::STRIP_STEP;
-    let legend = h - pad - Block::LINE;
-    let gaps = with_gap(above) - above + 2.0 * Block::GAP;
-    let room = (legend - pad - gaps).max(0.0);
+    let gaps = with_gap(above) - above + with_gap(below) - below;
+    let room = (h - 2.0 * pad - gaps).max(0.0);
     let (above_shown, below_shown) = shares(above, below, room / 2.0);
     let area = [
         pad,
@@ -110,7 +108,6 @@ fn arrange(state: &State, overview: &Overview, desktop: &Desktop, lines: usize) 
             shown: below_shown,
             height: below,
         },
-        legend,
     }
 }
 
@@ -215,19 +212,13 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
         let listed = lines.chain(strips_below).chain(new);
         Block::below("overview.below".to_owned(), rect, height, listed, t)
     });
-    let legend = Block::legend(legend(state, overview, desktop), row_w, t);
     Some(
         layer
             .children(above)
             .children(row)
             .children(bars)
             .children(empty)
-            .children(below)
-            .child(
-                el().absolute(Block::PADDING, placed.legend)
-                    .w(row_w)
-                    .child(legend.w(row_w)),
-            ),
+            .children(below),
     )
 }
 
@@ -408,47 +399,4 @@ fn counted(columns: usize, waiting: usize) -> String {
         1 => format!("{columns}, 1 waits"),
         n => format!("{columns}, {n} wait"),
     }
-}
-
-fn legend(state: &State, overview: &Overview, desktop: &Desktop) -> Vec<(Vec<String>, String)> {
-    let named = |spot: &Spot| {
-        let on = overview::desktop_of(state, &spot.desktop)?;
-        let leaf = spot.leaf.as_deref()?;
-        Some(super::shelf::title(on, &state.facts, on.tree()?, leaf))
-    };
-    let shown = crate::sidebar::model::desktop_title(desktop, &state.facts.desktops);
-    let lands = match named(overview.at()) {
-        Some(_) if overview.at() == overview.from() => "zoom back in".to_owned(),
-        Some(name) => format!("land on {name}"),
-        None => format!("go to {shown}"),
-    };
-    let hint = |keys: &[&str], what: &str| {
-        let keys = keys.iter().map(|key| (*key).to_owned()).collect();
-        (keys, what.to_owned())
-    };
-    let row = hint(&["←", "→"], "row");
-    if let Some(chord) = overview.held_by() {
-        let release = format!("release {}", crate::keys::modifiers_label(chord));
-        let back = match named(overview.from()) {
-            Some(name) if overview.at() != overview.from() => format!("back to {name}"),
-            _ => "close".to_owned(),
-        };
-        let escape = (Platform::current() != Platform::Mac).then(|| hint(&["esc"], &back));
-        return [row, hint(&["↑", "↓"], "stack"), hint(&[&release], &lands)]
-            .into_iter()
-            .chain(escape)
-            .collect();
-    }
-    let sends = overview::sendable(overview)
-        .and_then(|_| named(overview.from()))
-        .map(|name| hint(&["⇧", "↵"], &format!("send {name} to {shown}")));
-    [
-        row,
-        hint(&["↑", "↓"], "stack, then the desktop above or below"),
-        hint(&["↵"], &lands),
-    ]
-    .into_iter()
-    .chain(sends)
-    .chain([hint(&["1–9"], "desktop"), hint(&["esc"], "close")])
-    .collect()
 }

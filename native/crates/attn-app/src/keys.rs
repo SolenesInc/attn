@@ -334,13 +334,6 @@ pub(crate) fn chord_of(mods: Mods, key: ChordKey) -> Chord {
     .fold(Chord::new(key), |chord, (_, m)| chord.with(m))
 }
 
-pub(crate) fn modifiers_label(mods: Mods) -> String {
-    let platform = Platform::current();
-    let mut caps = chord_of(mods, ChordKey::Left).keycaps_on(platform);
-    caps.pop();
-    caps.join(if platform == Platform::Mac { "" } else { "+" })
-}
-
 pub(crate) fn on_modifiers(state: &mut State, mods: Mods, tx: &mut Tx) {
     let unlabelled = crate::hints::on_modifiers(state, mods);
     let landed = crate::desktop::overview_modifiers(state, mods, tx);

@@ -248,7 +248,7 @@ fn entry(
 
 /// A row drawn small: a column of two tiles, the highlighted one over one that needs the user, a
 /// tile that shows a card, the bar under the column on screen, a desktop's strip, the strip for a
-/// new one, a line and the legend.
+/// new one and a line.
 fn overview(s: &Desk, cx: &mut Cx<Desk>) -> El {
     let t = tokens(cx);
     let name = if s.long { LONG_AGENT } else { "reviewer" };
@@ -326,15 +326,7 @@ fn overview(s: &Desk, cx: &mut Cx<Desk>) -> El {
             .on_press_tx(press),
         )
         .child(Overview::new_desktop("strip.new", &t).on_press_tx(press))
-        .child(Overview::line("line".into(), &approval, "approve?", &t).on_press_tx(press))
-        .child(Overview::legend(
-            vec![
-                (vec!["←".into(), "→".into()], "row".into()),
-                (vec!["esc".into()], "close".into()),
-            ],
-            2.0 * w + 10.0,
-            &t,
-        ));
+        .child(Overview::line("line".into(), &approval, "approve?", &t).on_press_tx(press));
     stage(s, cx, &t, vec![row_small, below]).fill(t.bg_app)
 }
 

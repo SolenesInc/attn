@@ -53,10 +53,6 @@ pub struct Spot {
 }
 
 impl Overview {
-    pub(crate) fn from(&self) -> &Spot {
-        &self.from
-    }
-
     pub(crate) fn at(&self) -> &Spot {
         &self.at
     }
@@ -330,7 +326,7 @@ pub(super) fn land(state: &mut State, spot: Spot, tx: &mut Tx) {
 }
 
 /// The tile the user came from, when the shown desktop can take it.
-pub(super) fn sendable(overview: &Overview) -> Option<&str> {
+fn sendable(overview: &Overview) -> Option<&str> {
     (overview.from.desktop != overview.at.desktop)
         .then_some(overview.from.leaf.as_deref())
         .flatten()
