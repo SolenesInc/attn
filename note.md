@@ -1,0 +1,1 @@
+`callout show` is now an act command in the catalog. It was a record, and a record closes nothing, but a new callout ends the one the user is reading. No tool's read-only hint changes; the effect matters to the planned permission rules for attn's MCP tools.
