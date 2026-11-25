@@ -51,6 +51,7 @@ type Server struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
 	Intro       string `yaml:"intro"`
+	Split       string `yaml:"split"`
 }
 
 type Type struct {
@@ -559,7 +560,21 @@ func (t TopLevel) File() string {
 	return t.Command.File
 }
 
-func (c *Catalog) Instructions() string {
+func (c *Catalog) Instructions() string { return c.instructions(c.Server.Intro) }
+
+func (c *Catalog) CoreInstructions() string {
+	var core []string
+	for i := range c.Commands {
+		if c.Commands[i].Core {
+			core = append(core, c.Commands[i].ToolName())
+		}
+	}
+	slices.Sort(core)
+	split := strings.ReplaceAll(c.Server.Split, "{core}", strings.Join(core, ", "))
+	return c.instructions(strings.TrimSpace(c.Server.Intro) + "\n\n" + split)
+}
+
+func (c *Catalog) instructions(intro string) string {
 	var rows, notes []string
 	for _, top := range c.TopLevel() {
 		m := top.Map()
@@ -577,7 +592,7 @@ func (c *Catalog) Instructions() string {
 			notes = append(notes, text)
 		}
 	}
-	parts := []string{strings.TrimSpace(c.Server.Intro)}
+	parts := []string{strings.TrimSpace(intro)}
 	if len(rows) > 0 {
 		parts = append(parts, strings.Join(rows, "\n"))
 	}

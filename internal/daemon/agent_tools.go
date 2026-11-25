@@ -160,10 +160,11 @@ func (d *Daemon) sessionCaller(session protocol.SessionID) command.Caller {
 }
 
 type agentToolCatalog struct {
-	Name         string                `json:"name"`
-	Description  string                `json:"description"`
-	Instructions string                `json:"instructions"`
-	Tools        []agentToolDefinition `json:"tools"`
+	Name             string                `json:"name"`
+	Description      string                `json:"description"`
+	Instructions     string                `json:"instructions"`
+	CoreInstructions string                `json:"core_instructions"`
+	Tools            []agentToolDefinition `json:"tools"`
 }
 
 var agentToolsCatalog = sync.OnceValue(func() agentToolCatalog {
@@ -189,7 +190,7 @@ func (d *Daemon) agentToolServers() map[string]*mcpserver.Server {
 			}
 		}
 		d.agentToolSet.servers = map[string]*mcpserver.Server{}
-		for set, instructions := range map[string]string{agentToolsAll: offered.Instructions, agentToolsCore: offered.Instructions, agentToolsRest: offered.Description} {
+		for set, instructions := range map[string]string{agentToolsAll: offered.Instructions, agentToolsCore: offered.CoreInstructions, agentToolsRest: offered.Description} {
 			d.agentToolSet.servers[set] = mcpserver.New(offered.Name, buildinfo.Version, instructions, sets[set])
 		}
 	})
@@ -247,7 +248,18 @@ func (d *Daemon) callAgentTool(ctx context.Context, call *agentCall, tool agentT
 	case string:
 		return mcpserver.Result{Content: []mcpserver.Content{mcpserver.Text(text)}}
 	}
-	return mcpserver.Result{Content: []mcpserver.Content{}, StructuredContent: tool.answer(result)}
+	answer := tool.answer(result)
+	return mcpserver.Result{Content: []mcpserver.Content{mcpserver.Text(tool.json(answer))}, StructuredContent: answer}
+}
+
+func (tool agentTool) json(answer any) string {
+	var out strings.Builder
+	encoder := json.NewEncoder(&out)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(answer); err != nil {
+		panic(fmt.Sprintf("%s: result: %v", tool.def.Name, err))
+	}
+	return strings.TrimSuffix(out.String(), "\n")
 }
 
 func (tool agentTool) answer(result any) any {

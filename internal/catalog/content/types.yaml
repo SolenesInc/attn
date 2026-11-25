@@ -117,10 +117,10 @@ types:
         check:
           type: object
           properties:
-            id: {type: string}
+            id: {type: string, pattern: "^C[1-9][0-9]*$", description: "You write it, such as C1, so the bodies can cite it."}
             text: {type: string, minLength: 1}
             shared: {type: boolean}
-          required: [text]
+          required: [id, text]
     doc: "A plot payload."
     placeholder: "<path>"
   callout_steps:

@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path"
 import { ASK_TASKS } from "./asks.ts"
 import { GRID_PROBES, PROBES } from "./probes.ts"
 import { HARDER_TASKS, UNGROUPED_TASKS, TASKS } from "./tasks.ts"
-import { attnCalls, blockedRuns, type Call, type Check, cliRuns, codexRuns, isCommand, metrics, type Metrics, type Records, retryWaitMs, run, shellRuns, takesProfile, type Task, toolOutcomes, unrecorded, type World } from "./world.ts"
+import { attnCalls, blockedRuns, type Call, type Check, claudeRequests, cliRuns, codexRequests, codexRuns, isCommand, metrics, type Metrics, type Records, type Requests, retryWaitMs, run, shellRuns, takesProfile, type Task, toolOutcomes, unrecorded, type World } from "./world.ts"
 
 const repository = resolve(import.meta.dir, "../../..")
 /** Tripwires. The prototype's runs took 13 to 38 s and C16's under a minute; a run that reaches these is stuck. */
@@ -378,24 +378,30 @@ const since = (now: Usage, before: Usage): Usage => ({
 
 const onPlace = (place: Place, command: string) => (place.ssh ? run("ssh", [place.ssh, command], process.env) : run("bash", ["-c", command], daemonEnv)).stdout
 
-/** Whether the session's harness recorded attn's tools when its conversation started: Claude Code, also under Sigma's
- * Claude path, in the conversation's `mcp_instructions_delta` or `deferred_tools_delta`, and Codex in the rollout's `additional_tools`. Sigma's own
- * loop keeps no such file, so it answers `unknown`. */
-function toolsHeld(cell: Cell, directory: string, startedAt: number): "on" | "off" | "unknown" {
+/** What the harness recorded of the conversations in a run's folder: Claude Code, also under Sigma's Claude path, in its
+ * conversation files, and Codex in its rollouts, here their tools and usage only. Sigma's own loop keeps no such file. */
+function harnessRecord(cell: Cell, directory: string, startedAt: number): any[] {
   const newer = `-newermt @${Math.floor(startedAt / 1000) - 1}`
   if (cell.harness.agent === "codex") {
     const home = cell.place.ssh ? `${outpostToolHome ?? "~"}/.codex` : codexHome
-    const lines = onPlace(cell.place, `find ${home}/sessions ${home}/archived_sessions -name 'rollout-*.jsonl' ${newer} -print0 2>/dev/null | xargs -0 -r grep -lF '"cwd":"${directory}"' | xargs -r grep -hE '"type":"(session_meta|additional_tools)"'`).split("\n").filter(Boolean)
-    const offered = lines.filter((line) => line.includes('"additional_tools"'))
-    if (offered.length === 0) return "unknown"
-    return offered.some((line) => line.includes("mcp__attn")) ? "on" : "off"
+    return onPlace(cell.place, `find ${home}/sessions ${home}/archived_sessions -name 'rollout-*.jsonl' ${newer} -print0 2>/dev/null | xargs -0 -r grep -lF '"cwd":"${directory}"' | xargs -r grep -hE '"type":"(session_meta|additional_tools|token_usage_record)"'`).split("\n").filter(Boolean).map((line) => JSON.parse(line))
   }
   const claudeHome = cell.place.ssh ? outpostToolHome : toolHome
   const home = claudeHome ? join(claudeHome, ".claude") : "~/.claude"
   const folder = directory.replace(/[^a-zA-Z0-9]/g, "-")
-  const lines = onPlace(cell.place, `find ${home}/projects/${folder} -maxdepth 1 -name '*.jsonl' ${newer} -print0 2>/dev/null | xargs -0 -r cat`).split("\n").filter((line) => line.startsWith("{"))
-  if (lines.length === 0) return "unknown"
-  const added = lines.map((line) => JSON.parse(line).attachment).filter((a) => a?.type === "mcp_instructions_delta" || a?.type === "deferred_tools_delta")
+  return onPlace(cell.place, `find ${home}/projects/${folder} -maxdepth 1 -name '*.jsonl' ${newer} -print0 2>/dev/null | xargs -0 -r cat`).split("\n").filter((line) => line.startsWith("{")).map((line) => JSON.parse(line))
+}
+
+/** Whether the conversation started with attn's tools, as Claude Code's `mcp_instructions_delta` or `deferred_tools_delta`
+ * or Codex's `additional_tools` shows. */
+function toolsHeld(cell: Cell, record: any[]): "on" | "off" | "unknown" {
+  if (cell.harness.agent === "codex") {
+    const offered = record.filter((l) => l.payload?.type === "additional_tools")
+    if (offered.length === 0) return "unknown"
+    return offered.some((l) => JSON.stringify(l).includes("mcp__attn")) ? "on" : "off"
+  }
+  if (record.length === 0) return "unknown"
+  const added = record.map((l) => l.attachment).filter((a) => a?.type === "mcp_instructions_delta" || a?.type === "deferred_tools_delta")
   return added.some((a) => (a.addedNames ?? []).some((n: string) => n === "attn" || n.startsWith("mcp__attn"))) ? "on" : "off"
 }
 
@@ -467,7 +473,7 @@ let profiles = 0
 /** `fault` says why a run measures something other than its cell, such as another model; such a run fails and stays out
  * of the comparisons. `launchMs` is from the run's start to the prompt being typed; `turnMs` from its Enter to settled, and
  * `retryMs` is how long Codex waited in it for the provider to take a request again. */
-type RunResult = { task: string; cell: string; n: number; pass: boolean; why: string; fault: string; ended: string; tools: string; toolsHeld: string; missed: string[]; metrics: Metrics; usage: Usage; launchMs: number; turnMs: number; retryMs: number }
+type RunResult = { task: string; cell: string; n: number; pass: boolean; why: string; fault: string; ended: string; tools: string; toolsHeld: string; missed: string[]; metrics: Metrics; requests?: Requests; usage: Usage; launchMs: number; turnMs: number; retryMs: number }
 
 async function judged(task: Task, w: World, calls: Call[], ended: string): Promise<Check> {
   try {
@@ -582,7 +588,9 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
     const calls = attnCalls(events, records)
     const verdict: Check = stopped ? { pass: false, why: stopped } : await judged(task, w, calls, ended)
     const used = since(await steadyUsage(session), baseline)
-    const held = toolsHeld(cell, directory, started)
+    const record = harnessRecord(cell, directory, started)
+    const held = toolsHeld(cell, record)
+    const requests = (cell.harness.agent === "codex" ? codexRequests : claudeRequests)(record, before > 0 ? turn.at : 0)
     const codex = cell.harness.agent === "codex" && !remote
     const retryMs = codex ? Math.min(codexRetryWaitMs(conversation, turn.at), turn.turnMs) : 0
     const missed = records ? unrecorded(codex ? codexRuns(codexRollout(conversation), turn.at) : shellRuns(events), records) : []
@@ -595,7 +603,7 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
           : faultOf(cell, held, used, events)
     const result: RunResult = {
       task: task.id, cell: cell.id, n, pass: verdict.pass && !fault, why: fault ? `bench: ${fault}; ${verdict.why}` : verdict.why, fault, ended,
-      tools: cell.tools, toolsHeld: held, missed, metrics: metrics(events, calls, blockedRuns(records)), usage: used, launchMs: turn.launchMs, turnMs: turn.turnMs, retryMs,
+      tools: cell.tools, toolsHeld: held, missed, metrics: metrics(events, calls, blockedRuns(records)), requests, usage: used, launchMs: turn.launchMs, turnMs: turn.turnMs, retryMs,
     }
     writeFileSync(join(evidence, "calls.json"), JSON.stringify(calls, null, 1))
     if (records) writeFileSync(join(evidence, "records.json"), JSON.stringify(records, null, 1))
@@ -622,10 +630,10 @@ const median = (xs: number[]) => {
 
 function table(results: RunResult[]) {
   const lines = [
-    `${[...new Set(tasks.map(runsOf))].join(" or ")} run(s) per cell on instance ${instance}, attn ${attnRaw(["version"]).trim()}, ${new Date().toISOString().slice(0, 10)}. Turns, tokens in thousands (uncached input, cache reads, cache writes), output tokens, calls and seconds are medians per run. Tool and CLI show calls, then failed ones in parentheses. Blocked is commands a Codex sandbox kept from attn, and denied is calls holding an attn command or tool that Claude Code refused to run. Neither counts as CLI calls. Usage is calls refused because their arguments did not fit, on either surface. Help is --help reads, ref is skill and guide reads. Cost is the mean per run at API prices, as attn accounts it; "+ unpriced" marks a model attn has no price for. Runs whose fault says they measured something else fail. A run whose usage attn could not measure whole is marked and left out of tokens and cost, and one that waited for the provider out of the seconds.`,
+    `${[...new Set(tasks.map(runsOf))].join(" or ")} run(s) per cell on instance ${instance}, attn ${attnRaw(["version"]).trim()}, ${new Date().toISOString().slice(0, 10)}. Turns, reqs (API requests), first k (the first request's input tokens), tokens in thousands (uncached input, cache reads, cache writes), output tokens, calls and seconds are medians per run. Tool and CLI show calls, then failed ones in parentheses. Blocked is commands a Codex sandbox kept from attn, and denied is calls holding an attn command or tool that Claude Code refused to run. Neither counts as CLI calls. Usage is calls refused because their arguments did not fit, on either surface. Help is --help reads, ref is skill and guide reads. Cost is the mean per run at API prices, as attn accounts it; "+ unpriced" marks a model attn has no price for. Runs whose fault says they measured something else fail. A run whose usage attn could not measure whole is marked and left out of tokens and cost, and one that waited for the provider out of the seconds.`,
     "",
-    "| task | harness | models | tools | place | pass | turns | in k | read k | write k | out | tool | CLI | blocked | denied | usage | searches | help | ref | turn s | cost/run | failures |",
-    "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+    "| task | harness | models | tools | place | pass | turns | reqs | first k | in k | read k | write k | out | tool | CLI | blocked | denied | usage | searches | help | ref | turn s | cost/run | failures |",
+    "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
   ]
   for (const task of tasks)
     for (const cell of cells) {
@@ -635,6 +643,8 @@ function table(results: RunResult[]) {
       const measured = rs.filter((r) => !r.usage.incomplete && r.usage.models.length > 0)
       const used = (f: (u: Usage) => number) => median(measured.map((r) => f(r.usage)))
       const k = (f: (u: Usage) => number) => (measured.length === 0 ? "-" : (used(f) / 1000).toFixed(1))
+      const requested = rs.flatMap((r) => r.requests ?? [])
+      const req = (f: (q: Requests) => number) => (requested.length === 0 ? "-" : String(+median(requested.map(f)).toFixed(1)))
       const missed = rs.filter((r) => r.missed.length > 0).map((r) => `#${r.n} unrecorded: ${r.missed.join(", ")}`)
       const unmeasured = rs.filter((r) => !measured.includes(r)).map((r) => `#${r.n} usage incomplete`)
       const timed = rs.filter((r) => r.retryMs === 0)
@@ -643,7 +653,7 @@ function table(results: RunResult[]) {
       const denied = rs.filter((r) => r.metrics.harnessDenied > 0).map((r) => `#${r.n} Claude Code denied ${r.metrics.harnessDenied} attn call${r.metrics.harnessDenied === 1 ? "" : "s"}`)
       const cli = rs.filter((r) => cell.tools === "on" && r.metrics.cliCalls > 0).map((r) => `#${r.n} used the CLI`)
       lines.push(
-        `| ${task.id} | ${cell.harness.name} | ${[...new Set(rs.flatMap((r) => r.usage.models))].join(" ") || "-"} | ${cell.tools} | ${cell.place.name} | ${rs.filter((r) => r.pass).length}/${rs.length} | ${m((r) => r.metrics.turns)} | ${k((u) => u.input)} | ${k((u) => u.cacheRead)} | ${k((u) => u.cacheWrite)} | ${measured.length === 0 ? "-" : used((u) => u.output)} | ${m((r) => r.metrics.toolCalls)} (${m((r) => r.metrics.toolRefusals)}) | ${m((r) => r.metrics.cliCalls)} (${m((r) => r.metrics.cliFailures)}) | ${m((r) => r.metrics.sandboxBlocked)} | ${m((r) => r.metrics.harnessDenied)} | ${m((r) => r.metrics.usageRefusals)} | ${m((r) => r.metrics.searches)} | ${m((r) => r.metrics.cliHelpReads)} | ${m((r) => r.metrics.referenceReads)} | ${timed.length === 0 ? "-" : (median(timed.map((r) => r.turnMs)) / 1000).toFixed(1)} | ${measured.length === 0 ? "-" : `$${(measured.reduce((a, r) => a + r.usage.cost, 0) / measured.length).toFixed(3)}`}${rs.some((r) => r.usage.unpriced) ? " + unpriced" : ""} | ${[...fails, ...cli, ...denied, ...unmeasured, ...waited, ...missed].join("<br>") || "-"} |`,
+        `| ${task.id} | ${cell.harness.name} | ${[...new Set(rs.flatMap((r) => r.usage.models))].join(" ") || "-"} | ${cell.tools} | ${cell.place.name} | ${rs.filter((r) => r.pass).length}/${rs.length} | ${m((r) => r.metrics.turns)} | ${req((q) => q.count)} | ${req((q) => q.firstTokens / 1000)} | ${k((u) => u.input)} | ${k((u) => u.cacheRead)} | ${k((u) => u.cacheWrite)} | ${measured.length === 0 ? "-" : used((u) => u.output)} | ${m((r) => r.metrics.toolCalls)} (${m((r) => r.metrics.toolRefusals)}) | ${m((r) => r.metrics.cliCalls)} (${m((r) => r.metrics.cliFailures)}) | ${m((r) => r.metrics.sandboxBlocked)} | ${m((r) => r.metrics.harnessDenied)} | ${m((r) => r.metrics.usageRefusals)} | ${m((r) => r.metrics.searches)} | ${m((r) => r.metrics.cliHelpReads)} | ${m((r) => r.metrics.referenceReads)} | ${timed.length === 0 ? "-" : (median(timed.map((r) => r.turnMs)) / 1000).toFixed(1)} | ${measured.length === 0 ? "-" : `$${(measured.reduce((a, r) => a + r.usage.cost, 0) / measured.length).toFixed(3)}`}${rs.some((r) => r.usage.unpriced) ? " + unpriced" : ""} | ${[...fails, ...cli, ...denied, ...unmeasured, ...waited, ...missed].join("<br>") || "-"} |`,
       )
     }
   return lines.join("\n")

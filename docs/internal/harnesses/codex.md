@@ -70,6 +70,12 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
 - `-c mcp_servers.<name>.bearer_token_env_var="ATTN_AGENT_CREDENTIAL"` sends
   `Authorization: Bearer <env>` without exposing the token in argv.
   `default_tools_approval_mode = "approve"` approves direct and subagent calls.
+- **Tool results `[0.167.0, 0.171.0, read from the source]`:** a direct call
+  gives the model `structuredContent` as JSON when there is one, else the content.
+  A code-mode script gets the result without `_meta`, both `content` and
+  `structuredContent`, and the model reads what the script prints:
+  `text(r.content)` prints `[]` when attn sends no content, and `text(r)` prints
+  both fields, so it shows a result twice.
 
 ## Updates and versions
 

@@ -180,9 +180,14 @@ Adapt the assignment and its completion check to the work:
                disposable unless the user decides to keep it. A prototype is a
                spike whose result is options for the user to choose between.
 
-The garden instructions explain how to repeat a move, why you replant a seed
-before you change how it closed (harvested or withered), and why a plot closes
-only after its direct children. They also explain
+When the outcome and the checks are complete, harvest the seed:
+
+    attn seed harvest <id> -m "<what got done>"
+
+The reason is required and at most 400 characters. Put the long version in a
+note. The garden instructions explain how to repeat a move, why you replant a
+seed before you change how it closed (harvested or withered), and why a plot
+closes only after its direct children. They also explain
 `attn seed harvest <id> --when-merged`, which harvests the seed when its pull
 request merges. Use it only when the merge is the last step.
 

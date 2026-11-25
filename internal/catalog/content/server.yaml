@@ -2,7 +2,9 @@
 # shows before it reads the server's instructions, and the instructions of the
 # deferred server Codex lists (Codex shows a deferred server's first line, cut
 # at 250 characters). The instructions are the intent map: `intro`, then a
-# list of every group's `map.rows`, then each group's `map.notes`. A group that
+# list of every group's `map.rows`, then each group's `map.notes`. Codex reads
+# the core tools from a server of their own, whose instructions add `split`
+# after the intro, with the core tools' names for {core}. A group that
 # offers tools needs a map, and each core tool needs a row. Claude Code keeps
 # the first 4,096 characters, so the generator refuses a longer map and names
 # each file's share.
@@ -11,3 +13,4 @@ server:
   description: attn's tools to track, report or hand off work, and to reach the user and other agents.
   intro: |
     These tools are attn's. Each tool's description holds its rules: read it before the first call. Find a tool by the words below. A row's parentheses name its reference: call `skill` with that `reference` before you first call the row's tools; for `guide X`, call `guide` with `topic` X.
+  split: "This server, attn-core, holds {core}. The server attn holds every other tool."

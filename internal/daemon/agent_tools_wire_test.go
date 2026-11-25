@@ -495,8 +495,24 @@ func TestEachToolServerTeachesInTheTextItsHarnessShows(t *testing.T) {
 	if len([]rune(intentMap)) > 4096 {
 		t.Errorf("the intent map is %d characters; Claude Code keeps 4,096", len([]rune(intentMap)))
 	}
-	if served["?tools=core"].Instructions != intentMap {
-		t.Errorf("Codex's always-loaded attn-core server teaches %q, want the whole intent map", served["?tools=core"].Instructions)
+	coreMap := served["?tools=core"].Instructions
+	for _, paragraph := range strings.Split(intentMap, "\n\n") {
+		if !strings.Contains(coreMap, paragraph) {
+			t.Errorf("Codex's always-loaded attn-core server leaves out %q of the intent map", paragraph)
+		}
+	}
+	for _, paragraph := range strings.Split(coreMap, "\n\n") {
+		if strings.Contains(intentMap, paragraph) {
+			continue
+		}
+		for _, name := range append([]string{"attn-core"}, coreTools...) {
+			if !strings.Contains(paragraph, name) {
+				t.Errorf("Codex's always-loaded attn-core server says which tools it holds as %q, without %s", paragraph, name)
+			}
+		}
+	}
+	if coreMap == intentMap {
+		t.Error("Codex's always-loaded attn-core server does not say which tools it holds")
 	}
 	if rest := served["?tools=rest"].Instructions; rest == "" || strings.Contains(rest, "\n") || len([]rune(rest)) > 250 {
 		t.Errorf("Codex's deferred attn server teaches %q; Codex shows a deferred server's first line cut at 250 characters, so it must be the one-line description", rest)

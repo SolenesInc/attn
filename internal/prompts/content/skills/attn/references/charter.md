@@ -18,3 +18,14 @@ the user asks for them.
 Put decisions and their reasons on their seeds as they happen. Write current
 status and pointers for the next session in your letter. Point at the work
 instead of copying its contents into your charter.
+
+## Add a member to the user's crew
+
+When the user asks for a new permanent agent, choose its name and its harness,
+such as `claude` or `codex`:
+
+```sh
+attn crew create <name> --agent <harness>
+```
+
+The member writes its charter with the user in its first session.

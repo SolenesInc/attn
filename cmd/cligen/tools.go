@@ -70,7 +70,7 @@ func writeTools(c *catalog.Catalog, goRoot string) error {
 	if err := g.fail(); err != nil {
 		return err
 	}
-	server, err := json.Marshal(map[string]string{"name": c.Server.Name, "description": c.Server.Description, "instructions": c.Instructions()})
+	server, err := json.Marshal(map[string]string{"name": c.Server.Name, "description": c.Server.Description, "instructions": c.Instructions(), "core_instructions": c.CoreInstructions()})
 	if err != nil {
 		return err
 	}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -89,6 +90,10 @@ func (s *toolShapes) call(tool string, args map[string]any) *mcp.CallToolResult 
 	}
 	if err := schema.Validate(instance); err != nil {
 		s.mismatches = append(s.mismatches, tool+": "+err.Error())
+	}
+	var inText any
+	if err := json.Unmarshal([]byte(resultText(result)), &inText); err != nil || !reflect.DeepEqual(inText, instance) {
+		s.mismatches = append(s.mismatches, tool+": its text is "+resultText(result)+", want the JSON "+string(data)+" of its structured content")
 	}
 	return result
 }

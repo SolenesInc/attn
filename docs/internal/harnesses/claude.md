@@ -154,6 +154,11 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
   connection on 2.1.329, the oldest probed; on an older one that answers at
   once, the mod logs that answer and starts the turn, so it keeps the race
   (read from the mod, not probed). A session without the mod keeps it too.
+- **Tool results `[2.1.332, read from the binary]`:** a result with
+  `structuredContent` reaches the model as its compact JSON, without its text
+  blocks and with its other blocks. Behind gates (`mcp_content_over_structured`)
+  the content reaches it instead. Neither path gives both, so attn's JSON text
+  beside `structuredContent` is one copy.
 - Under `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1`, auto mode checks each REPL
   script once before execution and does not apply `mcp__attn__*` allow rules to
   calls inside the script.

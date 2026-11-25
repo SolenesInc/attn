@@ -67,7 +67,7 @@ Use `--when-merged` only when the merge is genuinely the last step. Review notes
 
 ## Checks
 
-A check is a numbered statement (C1) that a seed must prove. attn stores the check on the seed as data, with its latest report and verdict. Cite the check by id in the body. Define checks with `checks` in plot JSON, with `--check "<statement>"` on plant, or later with `attn seed check add`. Each gives the check the next free id in the plot tree and prints that id. A plot check marked shared applies to every seed below the plot that has no children, and each of those seeds needs its own report for it. `attn seed show` lists a seed's checks, including inherited ones, as open, reported, confirmed or rejected.
+A check is a numbered statement (C1) that a seed must prove. attn stores the check on the seed as data, with its latest report and verdict. Cite the check by id in the body. Define checks with `checks` in plot JSON, where you write each id, with `--check "<statement>"` on plant, or later with `attn seed check add`. `plant` and `add` give the check the next free id in the plot tree and print that id. A plot check marked shared applies to every seed below the plot that has no children, and each of those seeds needs its own report for it. `attn seed show` lists a seed's checks, including inherited ones, as open, reported, confirmed or rejected.
 
 Whoever does the work reports each check, as Report each check as you prove it (`attn skill --reference delegated-agent`) describes. Whoever judges the work confirms or rejects. Checks never block a move. The harvest command lists the checks that are still open or rejected. Add `--ring` to a check command when the other side must act now.
 

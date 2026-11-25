@@ -434,6 +434,31 @@ export const STAYS = /--stay\b|\bstay\\?["']?\s*:\s*true/
 
 const SEARCH_TOOLS = new Set(["ToolSearch", "tool_search", "search_tool_bm25"])
 
+/** The API requests a conversation made: how many, and the first one's input tokens, cached or not. */
+export type Requests = { count: number; firstTokens: number }
+function requestsOf(made: { id: string; tokens: number }[]): Requests | undefined {
+  const first = made[0]
+  return first && { count: new Set(made.map((r) => r.id)).size, firstTokens: first.tokens }
+}
+
+/** One request's parallel tool calls are separate lines of Claude Code's record with the same message. */
+export const claudeRequests = (record: any[], from: number) =>
+  requestsOf(
+    record
+      .filter((l) => l.type === "assistant" && !l.isSidechain && l.message.model !== "<synthetic>" && Date.parse(l.timestamp) >= from)
+      .map(({ message: { id, usage: u } }) => ({ id, tokens: u.input_tokens + u.cache_creation_input_tokens + u.cache_read_input_tokens })),
+  )
+
+/** Codex's auto-review and subagents run in threads of their own, whose record names a parent. */
+export function codexRequests(record: any[], from: number) {
+  const threads = new Set(record.filter((l) => l.type === "session_meta" && !l.payload.parent_thread_id).map((l) => l.payload.id))
+  return requestsOf(
+    record
+      .filter((l) => l.type === "token_usage_record" && threads.has(l.payload.thread_id) && Date.parse(l.timestamp) >= from)
+      .map(({ payload }) => ({ id: payload.response_id, tokens: payload.usage.input_tokens })),
+  )
+}
+
 /** Tool calls and refusals count the daemon's log, where a script's loop counts each call; on an outpost, whose log is
  * on that machine, they count the transcript. */
 export type Metrics = {
