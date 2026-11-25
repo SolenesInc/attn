@@ -61,6 +61,7 @@ commands:
       - {code: unknown_session, fix: "Pass the id of a live session in {session}."}
       - {code: step_needs_text, fix: "Give every step its text."}
       - {code: unknown_anchor, fix: "Use an anchor that callout_anchors lists."}
+      - {code: ambiguous_session, fix: "Put the id of the session you mean in the anchor; the message lists each one's id."}
       - {code: too_many_steps, fix: "Show at most 20 steps."}
       - {code: step_too_long, fix: "Keep each step's text to 160 characters."}
       - {code: not_on_screen, fix: "Point at an anchor the message lists as on screen."}

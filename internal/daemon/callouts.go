@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -58,6 +59,10 @@ func (d *Daemon) calloutSteps(session *protocol.Session, raw []protocol.CalloutS
 		switch {
 		case strings.HasPrefix(anchor, "agent:"):
 			target, err := d.resolveAgentPeekTarget(crewAsker{profileID: session.ProfileID}, strings.TrimPrefix(anchor, "agent:"))
+			var several *severalSessionsNamed
+			if errors.As(err, &several) {
+				return nil, command.Refuse(command.CodeAmbiguousSession, "%s", several.Error())
+			}
 			if err != nil || target.ProfileID != session.ProfileID {
 				return nil, command.Refuse(command.CodeUnknownAnchor, "%s is not an agent in your profile", anchor)
 			}

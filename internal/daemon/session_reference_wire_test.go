@@ -200,6 +200,7 @@ func TestALiveSessionIsAddressedByItsNameAndACallerIsNot(t *testing.T) {
 			"agent peek":    {"target": "twin"},
 			"agent msg":     {"target": "twin", "text": "hello"},
 			"agent close":   {"target": "twin", "reason": "done"},
+			"callout show":  {"steps": []any{map[string]any{"anchor": "agent:twin", "text": "Over there"}}},
 		} {
 			err := agent.RunCommand(name, "", args, &done)
 			if client.ErrorCode(err) != "ambiguous_session" || !strings.Contains(err.Error(), "ag-mjvd44 \"Twin\"") || !strings.Contains(err.Error(), "\"twin\" (claude") {

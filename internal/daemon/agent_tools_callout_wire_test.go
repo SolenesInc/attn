@@ -58,5 +58,15 @@ func TestAnAgentPointsAtTheAppWithTheCalloutTools(t *testing.T) {
 	if text := resultText(unknown); !unknown.IsError || !strings.HasPrefix(text, `unknown_anchor: unknown anchor "nowhere"`) || !strings.Contains(text, "\nFix: ") {
 		t.Errorf("callout_show of an unknown anchor = %q, want the unknown_anchor refusal with a fix", text)
 	}
+
+	for id, name := range map[string]string{"a4b6d210-1c5e-4d27-8e3f-6b90c2d7f148": "Twin", "b4b6d210-7e29-4a61-9f0c-3d58e1b4a7c6": "twin"} {
+		if err := w.InjectSession(id, name, w.Path(id), "claude"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ambiguous := agent.mustCall(t, "callout_show", map[string]any{"steps": []any{map[string]any{"anchor": "agent:twin", "text": "x"}}})
+	if text := resultText(ambiguous); !ambiguous.IsError || !strings.HasPrefix(text, "ambiguous_session: ") || !strings.Contains(text, "ag-mjvd44 \"Twin\"") || !strings.Contains(text, "\"twin\" (claude") || !strings.Contains(text, "\nFix: ") {
+		t.Errorf("callout_show at a name two agents share = %q, want ambiguous_session listing both with a fix", text)
+	}
 	shapes.finish("callout_")
 }

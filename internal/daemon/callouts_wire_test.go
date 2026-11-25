@@ -185,7 +185,12 @@ func TestCalloutsTreatAnotherProfilesAgentAsNotFound(t *testing.T) {
 	stranger, _, _ := w.RequestSpawn(otherApp, shellHarness, w.Path("stranger"))
 	defer exitShells(app, string(caller.ID))
 	defer exitShells(otherApp, string(stranger.ID))
-	for _, target := range []string{string(stranger.ID), string(stranger.ID)[:8], "zz9"} {
+	for _, id := range []string{"a4b6d210-1c5e-4d27-8e3f-6b90c2d7f148", "a4b6d210-7e29-4a61-9f0c-3d58e1b4a7c6"} {
+		if err := w.InjectSession(id, "their-twin", w.Path(id), "claude", other.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, target := range []string{string(stranger.ID), string(stranger.ID)[:8], "their-twin", "a4b6d210", "zz9"} {
 		_, err := cli.CalloutShow(caller.ID, []protocol.CalloutShowStep{{Anchor: "agent:" + target, Text: "Who?"}})
 		calloutRefused(t, err, "agent:"+target+" is not an agent in your profile")
 	}
