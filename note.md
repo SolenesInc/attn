@@ -1,0 +1,1 @@
+Two daemon stack tests (outpost copy, state explain) still expected full session ids in CLI text, so Daemon (1) and (3) failed on main since short session ids landed (78fa1687c). They now expect the short id. Test-only; no product change.
