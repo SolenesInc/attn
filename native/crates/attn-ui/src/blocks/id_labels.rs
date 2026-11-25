@@ -100,7 +100,14 @@ fn said(label: &IdLabel) -> String {
     )
 }
 
-fn chip(key: String, label: &IdLabel, (x, y): (f32, f32), width: f32, t: &Tokens) -> El {
+fn chip(
+    key: String,
+    label: &IdLabel,
+    (x, y): (f32, f32),
+    width: f32,
+    shadow: Shadow,
+    t: &Tokens,
+) -> El {
     let ground = ground(label.ink, t);
     let chip = row()
         .key(key)
@@ -112,11 +119,7 @@ fn chip(key: String, label: &IdLabel, (x, y): (f32, f32), width: f32, t: &Tokens
         .items_center()
         .fill(ground)
         .border(EDGE, label.ink.alpha(0.7))
-        .box_shadow(Shadow {
-            blur: 12.0,
-            color: label.ink.alpha(0.35),
-            ..Shadow::default()
-        });
+        .box_shadow(shadow);
     door::gap(door::inset_start(chip, Space::S2.pt()), Space::S4)
 }
 
@@ -129,7 +132,12 @@ pub fn lantern(key: impl Into<String>, label: &IdLabel, place: IdPlace, t: &Toke
         + Space::S4.pt()
         + width_of(label.id.to_owned(), Type::Mono)
         + Space::S6.pt();
-    let chip = chip(key.into(), label, place.over(width), width, t)
+    let glow = Shadow {
+        blur: 12.0,
+        color: label.ink.alpha(0.35),
+        ..Shadow::default()
+    };
+    let chip = chip(key.into(), label, place.over(width), width, glow, t)
         .child(cap(label, Radius::Tag, t))
         .child(mark(label, ink))
         .child(words(label.id.to_owned(), Type::Mono, t.text_primary).single_line());
@@ -145,7 +153,8 @@ pub fn name_in_place(key: impl Into<String>, label: &IdLabel, place: IdPlace, t:
         + Space::S4.pt();
     let whole = head + width_of(label.name.to_owned(), Type::Name).ceil() + Space::S8.pt();
     let width = whole.min(NAME_MAX).min(place.room.max(NAME_MIN));
-    let chip = chip(key.into(), label, place.at_start(width), width, t)
+    let lift = crate::frame::shadow(t, 2.0, 8.0, 0.5);
+    let chip = chip(key.into(), label, place.at_start(width), width, lift, t)
         .child(cap(label, Radius::Round, t))
         .child(mark(label, ink))
         .child(
