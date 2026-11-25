@@ -238,8 +238,12 @@ pub(super) fn letter(world: &mut World, c: &str) {
     key(world, Key::Text(c.into()));
 }
 
+fn into_card() -> &'static str {
+    if mac() { "mod+i" } else { "mod+shift+i" }
+}
+
 fn takes_keyboard(world: &mut World) {
-    world.gesture(|app| app.press("mod+i"));
+    world.gesture(|app| app.press(into_card()));
 }
 
 pub(super) fn shown(world: &World, card: &str) -> bool {
@@ -1091,7 +1095,7 @@ fn a_popped_out_terminal_shows_the_card_in_its_own_window() {
     assert!(card(&world));
     assert!(!shown(&world, AGENT_CARD), "the main window shows no card");
 
-    world.tile_gesture(&window, |app| app.press("mod+i"));
+    world.tile_gesture(&window, |app| app.press(into_card()));
     world.tile_gesture(&window, |app| {
         app.key(KeyEvent {
             key: Key::Enter,
