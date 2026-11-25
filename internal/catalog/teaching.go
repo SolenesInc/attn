@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 var (
@@ -46,6 +47,7 @@ const (
 	teachSpan
 	teachSignature
 	teachBlockCommand
+	teachBlockSummary
 	teachBlockText
 )
 
@@ -75,6 +77,7 @@ func (t *teaching) split(text string) {
 		t.add(kind, text, t.mentioned(command))
 	}
 	fence, shellFence := "", false
+	summaryColumn := 0
 	for i := 0; i < len(lines); i++ {
 		line := strings.TrimSuffix(lines[i], "\n")
 		if open := fenceLine().FindStringSubmatch(line); open != nil && (fence == "" || strings.HasPrefix(open[1], fence) && strings.TrimSpace(line) == open[1]) {
@@ -87,6 +90,7 @@ func (t *teaching) split(text string) {
 				fence = ""
 			}
 			add(teachBlockText, lines[i], "")
+			summaryColumn = 0
 			continue
 		}
 		indented := strings.HasPrefix(line, "    ")
@@ -98,8 +102,14 @@ func (t *teaching) split(text string) {
 			}
 			match = blockCommand().FindStringSubmatch(strings.TrimRight(lines[i], "\n"))
 			add(teachBlockCommand, lines[i], match[2])
+			summaryColumn = columnOfSummary(match)
 			continue
 		}
+		if summaryColumn > 0 && leadingSpaces(line) >= summaryColumn {
+			add(teachBlockSummary, lines[i], "")
+			continue
+		}
+		summaryColumn = 0
 		switch match := signatureLine().FindStringSubmatch(line); {
 		case fence != "" || indented && t.inBlock(prose.Len()):
 			add(teachBlockText, lines[i], "")
@@ -116,12 +126,24 @@ func (t *teaching) split(text string) {
 	flush()
 }
 
+func columnOfSummary(blockLine []string) int {
+	indent, command, summary := blockLine[1], blockLine[2], blockLine[3]
+	if summary == "" {
+		return 0
+	}
+	return len(indent) + utf8.RuneCountInString(command) + leadingSpaces(summary)
+}
+
+func leadingSpaces(line string) int {
+	return len(line) - len(strings.TrimLeft(line, " "))
+}
+
 func (t *teaching) inBlock(unflushed int) bool {
 	if unflushed > 0 || len(t.parts) == 0 {
 		return false
 	}
 	last := t.parts[len(t.parts)-1].kind
-	return last == teachBlockCommand || last == teachBlockText
+	return last == teachBlockCommand || last == teachBlockSummary || last == teachBlockText
 }
 
 func (t *teaching) add(kind teachingKind, text string, command *Command) {
@@ -235,7 +257,7 @@ func (t *teaching) render(i int) string {
 		return match[1] + "`" + t.c.toolSignature(part.command) + "`" + match[3] + "\n"
 	case teachBlockCommand:
 		return t.renderBlock(i)
-	case teachBlockText:
+	case teachBlockSummary:
 		return t.plainText(i, part.text)
 	case teachSpan:
 		return t.renderSpan(i, strings.Join(strings.Fields(strings.Trim(part.text, "`")), " "))
@@ -294,7 +316,7 @@ func (t *teaching) renderSpan(i int, span string) string {
 	switch {
 	case !ok:
 		return literal
-	case call.leavesOut:
+	case len(call.leavesOut) > 0:
 		return literal + cliOnlyMark
 	}
 	return call.mention()
@@ -431,14 +453,18 @@ func (t *teaching) nearestCommands(i int) []*Command {
 type teachingCall struct {
 	tools     []string
 	args      []mentionArg
-	leavesOut bool
+	leavesOut []string
 }
 
 func (call teachingCall) inline() string {
-	if len(call.args) == 0 {
-		return call.tools[0]
+	inline := call.tools[0]
+	if len(call.args) > 0 {
+		inline += " " + jsonArgs(call.args)
 	}
-	return call.tools[0] + " " + jsonArgs(call.args)
+	if len(call.leavesOut) > 0 {
+		inline += " without " + strings.Join(call.leavesOut, " ") + cliOnlyMark
+	}
+	return inline
 }
 
 func (call teachingCall) mention() string {
@@ -446,11 +472,14 @@ func (call teachingCall) mention() string {
 	for _, tool := range call.tools {
 		names = append(names, "`"+tool+"`")
 	}
-	tools := strings.Join(names, " or ")
+	mention := strings.Join(names, " or ")
 	if args := jsonArgs(call.args); args != "" {
-		return tools + " with " + args
+		mention += " with " + args
 	}
-	return tools
+	if len(call.leavesOut) > 0 {
+		mention += " without `" + strings.Join(call.leavesOut, " ") + "`" + cliOnlyMark
+	}
+	return mention
 }
 
 func (t *teaching) toolCall(line string) (teachingCall, bool) {
@@ -483,7 +512,7 @@ func (t *teaching) toolCall(line string) (teachingCall, bool) {
 			call.args = append(call.args, mentionArg{name: name, value: contentsOf(arg.value)})
 			continue
 		}
-		call.leavesOut = true
+		call.leavesOut = append(call.leavesOut, arg.written)
 	}
 	return call, true
 }

@@ -126,6 +126,7 @@ type mentionArg struct {
 	name    string
 	value   any
 	choice  string
+	written string
 	cliOnly bool
 }
 
@@ -138,9 +139,19 @@ func mentionArgs(c *Catalog, cmd *Command, words []string) ([]mentionArg, error)
 		}
 	}
 	var out []mentionArg
+	add := func(arg *Arg, value any, choice string, written []string) error {
+		given := mentionArg{name: arg.Name, value: value, choice: choice, written: strings.Join(written, " "), cliOnly: arg.CLIOnly}
+		for i := range out {
+			if out[i].name == arg.Name {
+				return out[i].addRepeat(cmd, given)
+			}
+		}
+		out = append(out, given)
+		return nil
+	}
 	words, stdin := withoutRedirect(words)
 	for i := 0; i < len(words); i++ {
-		word := words[i]
+		start, word := i, words[i]
 		if word == "--json" && cmd.Result != "" {
 			continue
 		}
@@ -172,7 +183,9 @@ func mentionArgs(c *Catalog, cmd *Command, words []string) ([]mentionArg, error)
 					}
 				}
 			}
-			out = append(out, mentionArg{name: arg.Name, value: value, choice: choice, cliOnly: arg.CLIOnly})
+			if err := add(arg, value, choice, words[start:i+1]); err != nil {
+				return nil, err
+			}
 			continue
 		}
 		if len(positional) == 0 {
@@ -182,7 +195,9 @@ func mentionArgs(c *Catalog, cmd *Command, words []string) ([]mentionArg, error)
 		arg := positional[0]
 		if arg.CLI == "pos" {
 			positional = positional[1:]
-			out = append(out, mentionArg{name: arg.Name, value: mentionValue(c, *arg, word), cliOnly: arg.CLIOnly})
+			if err := add(arg, mentionValue(c, *arg, word), "", words[start:i+1]); err != nil {
+				return nil, err
+			}
 			continue
 		}
 		positional = positional[1:]
@@ -191,13 +206,26 @@ func mentionArgs(c *Catalog, cmd *Command, words []string) ([]mentionArg, error)
 			list = append(list, words[i])
 		}
 		i--
-		if arg.List || c.ArgType(*arg).Schema["type"] == "array" {
-			out = append(out, mentionArg{name: arg.Name, value: list, cliOnly: arg.CLIOnly})
-		} else {
-			out = append(out, mentionArg{name: arg.Name, value: strings.Join(list, " "), cliOnly: arg.CLIOnly})
+		var value any = list
+		if !arg.List && c.ArgType(*arg).Schema["type"] != "array" {
+			value = strings.Join(list, " ")
+		}
+		if err := add(arg, value, "", words[start:i+1]); err != nil {
+			return nil, err
 		}
 	}
 	return out, nil
+}
+
+func (arg *mentionArg) addRepeat(cmd *Command, again mentionArg) error {
+	list, isList := arg.value.([]string)
+	more, moreIsList := again.value.([]string)
+	if !isList || !moreIsList {
+		return fmt.Errorf("%s takes %s once", cmd.Name, arg.name)
+	}
+	arg.value = append(list, more...)
+	arg.written += " " + again.written
+	return nil
 }
 
 func jsonArgs(args []mentionArg) string {
