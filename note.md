@@ -1,0 +1,1 @@
+When ⌘H does not hide attn in the macOS Quick Capture scenario, the run now writes `hide-failure.json`: the hides, unhides and activations around the press, the frontmost app, and the window stack. It reports "did not hide" and "was visible again" as separate findings, so the next failure says what happened. Test instrumentation only.
