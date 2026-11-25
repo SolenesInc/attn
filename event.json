@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Bed edits can corrupt comma-bearing repository routes",
+  "at": "2026-11-25T00:48:00.279Z",
+  "fixesBug": "263a491"
+}
