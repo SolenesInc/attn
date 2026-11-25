@@ -1,0 +1,1 @@
+The overview has no line of keys any more; the row, strips and lines take its room (the guide names each key). Terminal text in the overview stands 4 pt clear of its column's edge and outlines, an outline inside a stack is square except at its column's corners, and the shelf's entries change colour at once when the column in use changes while the frame and slice still slide.
