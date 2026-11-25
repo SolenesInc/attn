@@ -778,33 +778,44 @@ fn the_shelf_shows_the_row_of_a_previewed_desktop_until_the_overview_closes() {
     }
 }
 
-#[test]
-fn the_shelf_s_colours_change_at_once_as_the_highlight_moves_and_on_a_previewed_desktop() {
-    let right = || chord(&Action::TerminalFocusRight);
-    let mut state = initial(two_rows());
-    state.asks = Some(vec![question("s-c")]);
-    let mut own = start_on(Daemon::scripted().state(state));
-    press(&mut own, Action::DesktopOverview);
-    let stepped = own.record(60.0, 0.5, |_, app| app.key(right()));
-    assert_eq!(
-        super::shelf_entries::recolored_at_once(&stepped),
-        ["a", "b"]
-    );
-    let off_screen = own.record(60.0, 0.5, |_, app| app.key(right()));
-    let ask = "/shelf.entry.c.ask.0";
-    let ask = off_screen.tracks.iter().find(|t| t.path.ends_with(ask));
+/// Steps the highlight right to an entry off screen with an open ask, and the entries that changed
+/// colour with it.
+fn step_to_the_ask_of(world: &mut World, leaf: &str) -> Vec<String> {
+    let step = chord(&Action::TerminalFocusRight);
+    let rec = world.record(60.0, 0.5, |_, app| app.key(step));
+    let key = format!("/shelf.entry.{leaf}.ask.0");
+    let ask = rec.tracks.iter().find(|t| t.path.ends_with(&key));
     let ink = |at| ask.unwrap().paint_at(at).unwrap().colors;
-    assert_ne!(ink(0), ink(off_screen.frames - 1));
-    assert_eq!(
-        super::shelf_entries::recolored_at_once(&off_screen),
-        ["b", "c"]
-    );
-    let mut previewed = previewing();
-    let stepped = previewed.record(60.0, 0.5, |_, app| app.key(right()));
-    assert_eq!(
-        super::shelf_entries::recolored_at_once(&stepped),
-        ["p", "y"]
-    );
+    assert_ne!(ink(0), ink(rec.frames - 1), "the mark of {leaf}");
+    super::shelf_entries::recolored_at_once(&rec)
+}
+
+#[test]
+fn the_shelf_s_colours_change_at_once_as_the_highlight_moves_kept_held_and_on_a_previewed_desktop()
+{
+    let asking = |desktops| {
+        let mut state = initial(desktops);
+        state.asks = Some(vec![question("s-c"), question("s-p")]);
+        start_on(Daemon::scripted().state(state))
+    };
+    let mut kept = asking(two_rows());
+    press(&mut kept, Action::DesktopOverview);
+    let right = chord(&Action::TerminalFocusRight);
+    let stepped = kept.record(60.0, 0.5, |_, app| app.key(right));
+    let recolored = super::shelf_entries::recolored_at_once(&stepped);
+    assert_eq!(recolored, ["a", "b"]);
+    assert_eq!(step_to_the_ask_of(&mut kept, "c"), ["b", "c"]);
+
+    let mut held = asking(three_desktops());
+    walk_to_b(&mut held);
+    advance_ms(&mut held, 1000);
+    assert!(open(&held));
+    assert_eq!(step_to_the_ask_of(&mut held, "c"), ["b", "c"]);
+
+    let mut previewed = asking(two_rows());
+    press(&mut previewed, Action::DesktopOverview);
+    click(&mut previewed, &format!("overview.strip.{TWO}"));
+    assert_eq!(step_to_the_ask_of(&mut previewed, "p"), ["p", "y"]);
 }
 
 #[test]
