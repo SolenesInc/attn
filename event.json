@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: A bed suggestion can include a different bed",
+  "at": "2026-11-25T00:48:07.231Z",
+  "fixesBug": "e4de81e"
+}
