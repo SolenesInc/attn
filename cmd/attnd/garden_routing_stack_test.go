@@ -58,7 +58,42 @@ func TestGardenV2RoutesOutpostWorkFromTheCallersCheckout(t *testing.T) {
 	run(o.outpost, currentSubdir, "", []string{"seed", "plant", "Plant in an outpost shell", "--json"}, "", &planted)
 	checkBed(planted.ID, "Current")
 
-	claudeToolEndpoint(t, agent).structured(t, "seed_plant", map[string]any{"title": "Plant with no working directory"}, &planted)
+	currentAlias := o.outpost.Path("current-link")
+	if err := os.Symlink(current, currentAlias); err != nil {
+		t.Fatal(err)
+	}
+	run(o.outpost, launch, terminal, []string{"seed", "bed", "set", "Current", "--repo", "../current-link", "--json"}, "", &bed)
+	if want := o.pair.Host + ":" + current; len(bed.Bed.Repos) != 1 || bed.Bed.Repos[0] != want {
+		t.Errorf("relative outpost repo saved as %v, want %q", bed.Bed.Repos, want)
+	}
+	run(o.outpost, currentSubdir, "", []string{"seed", "plant", "Plant with a relative outpost binding", "--json"}, "", &planted)
+	checkBed(planted.ID, "Current")
+
+	run(o.home, current, "", []string{"seed", "bed", "add", "Home current", "--repo", current, "--json"}, "", &bed)
+	if want := "home:" + current; len(bed.Bed.Repos) != 1 || bed.Bed.Repos[0] != want {
+		t.Errorf("home absolute repo saved as %v, want %q", bed.Bed.Repos, want)
+	}
+	run(o.home, currentSubdir, "", []string{"seed", "plant", "Plant from the home at the same path", "--json"}, "", &planted)
+	checkBed(planted.ID, "Home current")
+	run(o.outpost, currentSubdir, "", []string{"seed", "plant", "Plant from the outpost at the same path", "--json"}, "", &planted)
+	checkBed(planted.ID, "Current")
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	aliasFromHome, err := filepath.Rel(homeDir, currentAlias)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run(o.outpost, launch, terminal, []string{"seed", "bed", "set", "Current", "--repo", "~/" + aliasFromHome, "--json"}, "", &bed)
+	if want := o.pair.Host + ":" + current; len(bed.Bed.Repos) != 1 || bed.Bed.Repos[0] != want {
+		t.Errorf("outpost tilde alias saved as %v, want %q", bed.Bed.Repos, want)
+	}
+	run(o.outpost, launch, terminal, []string{"seed", "bed", "set", "Launch", "--repo", ".", "--json"}, "", &bed)
+	run(o.home, launch, "", []string{"seed", "bed", "add", "Home launch", "--repo", launch, "--json"}, "", &bed)
+
+	claudeToolEndpoint(t, agent).structured(t, "seed_plant", map[string]any{"title": "Tool call routes to its outpost checkout"}, &planted)
 	checkBed(planted.ID, "Launch")
 
 	delegated, err := o.home.Client().Delegate(protocol.DelegateMessage{
@@ -71,11 +106,4 @@ func TestGardenV2RoutesOutpostWorkFromTheCallersCheckout(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkBed(delegated.SeedID, "Current")
-
-	run(o.outpost, launch, terminal, []string{"seed", "bed", "set", "Current", "--repo", "../current", "--json"}, "", &bed)
-	if len(bed.Bed.Repos) != 1 || bed.Bed.Repos[0] != current {
-		t.Errorf("relative outpost repo saved as %v, want %q", bed.Bed.Repos, current)
-	}
-	run(o.outpost, currentSubdir, "", []string{"seed", "plant", "Plant with a relative outpost binding", "--json"}, "", &planted)
-	checkBed(planted.ID, "Current")
 }

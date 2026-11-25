@@ -30,12 +30,22 @@ var BedVerbs = []string{"ls", "add", "set", "rm", "assign"}
 var reservedBedNames = []string{"all", "unassigned", "automations"}
 
 type Bed struct {
-	ID        string   `json:"id"`
-	ProfileID string   `json:"profile_id"`
-	Name      string   `json:"name"`
-	Slug      string   `json:"slug"`
-	Note      string   `json:"note,omitempty"`
-	Repos     []string `json:"repos,omitempty"`
+	ID        string `json:"id"`
+	ProfileID string `json:"profile_id"`
+	Name      string `json:"name"`
+	Slug      string `json:"slug"`
+	Note      string `json:"note,omitempty"`
+	BedRepositories
+}
+
+type BedRepositories struct {
+	Names []string   `json:"repos,omitempty"`
+	Paths []RepoPath `json:"repo_paths,omitempty"`
+}
+
+type RepoPath struct {
+	Path    string `json:"path"`
+	Machine string `json:"machine"`
 }
 
 func BedsSchema() docstore.CollectionSchema {
@@ -122,50 +132,15 @@ func ValidateBedNote(raw string) (string, error) {
 	return note, nil
 }
 
-func RepoKey(repo string) string {
-	trimmed := strings.TrimSpace(repo)
-	if strings.Contains(trimmed, "/") {
-		return cleanRepoPath(trimmed)
+func ValidateBedRepo(entry string) (string, error) {
+	trimmed := strings.TrimSpace(entry)
+	if trimmed == "" {
+		return "", protocol.Refuse(protocol.RefusalInvalidInput, "a bed repo cannot be empty")
 	}
-	return strings.ToLower(trimmed)
-}
-
-func cleanRepoPath(raw string) string {
-	if rest, ok := strings.CutPrefix(raw, "~/"); ok {
-		cleaned := filepath.Clean(rest)
-		if cleaned == "." {
-			return "~"
-		}
-		return "~/" + cleaned
+	if strings.ContainsAny(trimmed, "\n\r") {
+		return "", protocol.Refuse(protocol.RefusalInvalidInput, "a bed repo must be one line")
 	}
-	return filepath.Clean(raw)
-}
-
-func NormalizeBedRepos(raw []string) ([]string, error) {
-	out := make([]string, 0, len(raw))
-	seen := make(map[string]bool, len(raw))
-	for _, entry := range raw {
-		trimmed := strings.TrimSpace(entry)
-		if trimmed == "" {
-			return nil, protocol.Refuse(protocol.RefusalInvalidInput, "a bed repo cannot be empty")
-		}
-		if strings.ContainsAny(trimmed, "\n\r") {
-			return nil, protocol.Refuse(protocol.RefusalInvalidInput, "a bed repo must be one line")
-		}
-		if strings.Contains(trimmed, "/") {
-			trimmed = cleanRepoPath(trimmed)
-		}
-		key := RepoKey(trimmed)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		out = append(out, trimmed)
-	}
-	if len(out) > MaxBedRepos {
-		return nil, protocol.Refuse(protocol.RefusalLimit, "a bed holds at most %d repos, asked for %d", MaxBedRepos, len(out))
-	}
-	return out, nil
+	return trimmed, nil
 }
 
 func FindBed(beds []Bed, ref string) (Bed, bool) {
@@ -191,59 +166,30 @@ func FindBed(beds []Bed, ref string) (Bed, bool) {
 	return Bed{}, false
 }
 
-func MatchBedForRepo(beds []Bed, repoPath string, resolveAlias func(string) string) (Bed, bool) {
-	cleaned := strings.TrimSpace(repoPath)
-	if cleaned == "" {
+func MatchBedForRepo(beds []Bed, repoPath string, pathMatches func(RepoPath) bool) (Bed, bool) {
+	repoPath = strings.TrimSpace(repoPath)
+	if repoPath == "" {
 		return Bed{}, false
 	}
-	cleaned = cleanRepoPath(cleaned)
-	if cleaned == "." {
-		return Bed{}, false
-	}
-	var pathMatch Bed
+	base := filepath.Base(repoPath)
+	var pathMatch, nameMatch Bed
 	bestLen := -1
-	bestDirect := false
 	for _, bed := range beds {
-		for _, repo := range bed.Repos {
-			if !strings.Contains(repo, "/") {
-				continue
+		for _, target := range bed.Paths {
+			if pathMatches(target) && (len(target.Path) > bestLen || len(target.Path) == bestLen && bed.ID < pathMatch.ID) {
+				pathMatch, bestLen = bed, len(target.Path)
 			}
-			target := cleanRepoPath(repo)
-			direct := repoPathMatches(cleaned, target)
-			if !direct && resolveAlias != nil && filepath.IsAbs(target) {
-				target = resolveAlias(target)
-			}
-			if !direct && !repoPathMatches(cleaned, target) {
-				continue
-			}
-			if len(target) > bestLen || (len(target) == bestLen && (direct && !bestDirect || direct == bestDirect && bed.ID < pathMatch.ID)) {
-				pathMatch, bestLen, bestDirect = bed, len(target), direct
+		}
+		for _, name := range bed.Names {
+			if base != "." && base != "/" && strings.EqualFold(name, base) && (nameMatch.ID == "" || bed.ID < nameMatch.ID) {
+				nameMatch = bed
 			}
 		}
 	}
 	if bestLen >= 0 {
 		return pathMatch, true
 	}
-	base := filepath.Base(cleaned)
-	if base == "" || base == "." || base == "/" {
-		return Bed{}, false
-	}
-	var nameMatch Bed
-	hasName := false
-	for _, bed := range beds {
-		for _, repo := range bed.Repos {
-			if !strings.Contains(repo, "/") && strings.EqualFold(repo, base) {
-				if !hasName || bed.ID < nameMatch.ID {
-					nameMatch, hasName = bed, true
-				}
-			}
-		}
-	}
-	return nameMatch, hasName
-}
-
-func repoPathMatches(path, target string) bool {
-	return path == target || target != "/" && strings.HasPrefix(path, target+"/")
+	return nameMatch, nameMatch.ID != ""
 }
 
 func EffectiveBedID(seed Seed, plots PlotTree) string {

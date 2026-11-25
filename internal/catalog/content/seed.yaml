@@ -714,11 +714,11 @@ commands:
     runs: home
     grant: full
     doc: |
-      Creates a curated bed in this profile. Only create a bed when the user asks for one. `repos` binds repository paths or bare repository names so new root seeds planted from those repositories land in this bed automatically. Exact path matches take precedence over bare names; no two beds in a profile may claim the same repository entry. Requires `garden_v2_enabled`.
+      Creates a curated bed in this profile. Only create a bed when the user asks for one. `repos` binds repository paths or bare repository names so new root seeds planted from those repositories land in this bed automatically. A path belongs to the caller's machine. Use an address such as `build:/work/payments` for a different machine. A bare repository name matches on any machine. A matching path takes precedence over a bare name. Two beds cannot claim the same path on the same machine or the same bare name. Requires `garden_v2_enabled`.
     args:
       - {name: name, type: name, required: true, cli: pos, placeholder: '"<name>"', doc: "the bed's display name (one line, at most 60 characters)"}
       - {name: note, type: text, cli: "-m", stdin: true, placeholder: '"<one-line note>"', doc: "optional one-line description (at most 200 characters)"}
-      - {name: repos, type: text, list: true, cli: "--repo", placeholder: "<path|name>", doc: "repository path or bare repository name that auto-routes into this bed; repeats"}
+      - {name: repos, type: text, list: true, cli: "--repo", placeholder: "<path|name>", doc: "repository path, machine:/path address, or shared bare repository name; repeats"}
     result: SeedBedResult
     examples:
       - {name: "Payments", note: "Checkout and billing", repos: ["payments-api"]}
@@ -728,13 +728,13 @@ commands:
     runs: home
     grant: full
     doc: |
-      Updates an existing bed in this profile by id, name or slug. Only edit a bed when the user asks. Passing `repos` replaces the bed's repository list; `clear_repos` clears it. Requires `garden_v2_enabled`.
+      Updates an existing bed in this profile by id, name or slug. Only edit a bed when the user asks. Passing `repos` replaces the bed's repository list. Paths use the caller's machine unless qualified as `machine:/path`. Bare names match on any machine. `clear_repos` clears the list. Requires `garden_v2_enabled`.
     args:
       - {name: bed, type: text, required: true, cli: pos, placeholder: "<bed>", doc: "the bed's id, name or slug"}
       - {name: name, type: name, cli: "--name", placeholder: '"<name>"', doc: "new display name"}
       - {name: note, type: text, cli: "-m", stdin: true, one_of: note_change, placeholder: '"<one-line note>"', doc: "new one-line description"}
       - {name: clear_note, type: bool, cli: "--clear-note", one_of: note_change, doc: "remove the bed's note"}
-      - {name: repos, type: text, list: true, cli: "--repo", one_of: repo_change, placeholder: "<path|name>", doc: "replace the bed's auto-routing repositories; repeats"}
+      - {name: repos, type: text, list: true, cli: "--repo", one_of: repo_change, placeholder: "<path|name>", doc: "replace the bed's repository paths, machine:/path addresses, or shared bare names; repeats"}
       - {name: clear_repos, type: bool, cli: "--clear-repos", one_of: repo_change, doc: "remove all auto-routing repositories"}
     result: SeedBedResult
     errors:

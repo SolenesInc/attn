@@ -38,12 +38,13 @@ func TestBedValidationAndLookup(t *testing.T) {
 		t.Fatal("expected overly long note to be refused")
 	}
 
-	repos, err := NormalizeBedRepos([]string{" Payments ", "payments", "/work/app/", "/work/app"})
-	if err != nil {
-		t.Fatalf("NormalizeBedRepos: %v", err)
+	for _, invalid := range []string{"", "two\nlines"} {
+		if _, err := ValidateBedRepo(invalid); err == nil {
+			t.Fatalf("invalid repo %q accepted", invalid)
+		}
 	}
-	if len(repos) != 2 || repos[0] != "Payments" || repos[1] != "/work/app" {
-		t.Fatalf("NormalizeBedRepos = %v, want [Payments /work/app]", repos)
+	if repo, err := ValidateBedRepo(" Payments "); err != nil || repo != "Payments" {
+		t.Fatalf("ValidateBedRepo = (%q, %v), want Payments", repo, err)
 	}
 
 	beds := []Bed{
@@ -84,28 +85,34 @@ func TestMatchBedForRepoExactPathBeatsBasenameProperty(t *testing.T) {
 		full := filepath.Join(dir, repo)
 		other := filepath.Join("/other", repo)
 
-		bedExact := Bed{ID: "b-999999", Name: "Exact", Slug: "exact", Repos: []string{full}}
-		bedBase := Bed{ID: "b-222222", Name: "Base", Slug: "base", Repos: []string{strings.ToUpper(repo)}}
-		bedNoise := Bed{ID: "b-333333", Name: "Noise", Slug: "noise", Repos: []string{"unrelated", "/tmp/unrelated"}}
+		bedExact := Bed{ID: "b-999999", Name: "Exact", Slug: "exact", BedRepositories: BedRepositories{Paths: []RepoPath{{Path: full}}}}
+		bedBase := Bed{ID: "b-222222", Name: "Base", Slug: "base", BedRepositories: BedRepositories{Names: []string{strings.ToUpper(repo)}}}
+		bedNoise := Bed{ID: "b-333333", Name: "Noise", Slug: "noise", BedRepositories: BedRepositories{Names: []string{"unrelated"}, Paths: []RepoPath{{Path: "/tmp/unrelated"}}}}
 
 		orderA := []Bed{bedBase, bedNoise, bedExact}
 		orderB := []Bed{bedExact, bedBase, bedNoise}
 
-		gotA, okA := MatchBedForRepo(orderA, full+"/", nil)
-		gotB, okB := MatchBedForRepo(orderB, full, nil)
+		match := func(beds []Bed, checkout string) (Bed, bool) {
+			path := filepath.Clean(checkout)
+			return MatchBedForRepo(beds, path, func(binding RepoPath) bool {
+				return path == binding.Path || strings.HasPrefix(path, binding.Path+"/")
+			})
+		}
+		gotA, okA := match(orderA, full+"/")
+		gotB, okB := match(orderB, full)
 		if !okA || !okB || gotA.ID != bedExact.ID || gotB.ID != bedExact.ID {
 			t.Fatalf("exact path match failed: A=(%q,%v) B=(%q,%v) want %q", gotA.ID, okA, gotB.ID, okB, bedExact.ID)
 		}
 		// Subdirectory inside a bound repo path matches its parent repo, while a sibling prefix does not.
-		gotSub, okSub := MatchBedForRepo(orderA, filepath.Join(full, "pkg", "sub"), nil)
+		gotSub, okSub := match(orderA, filepath.Join(full, "pkg", "sub"))
 		if !okSub || gotSub.ID != bedExact.ID {
 			t.Fatalf("subdir path match failed: got (%q,%v) want %q", gotSub.ID, okSub, bedExact.ID)
 		}
-		if gotSib, okSib := MatchBedForRepo(orderA, full+"-sibling", nil); okSib {
+		if gotSib, okSib := match(orderA, full+"-sibling"); okSib {
 			t.Fatalf("sibling prefix unexpectedly matched bed %q", gotSib.ID)
 		}
 
-		gotFallback, okFallback := MatchBedForRepo(orderA, other, nil)
+		gotFallback, okFallback := match(orderA, other)
 		if !okFallback || gotFallback.ID != bedBase.ID {
 			t.Fatalf("basename fallback failed: got (%q,%v) want %q", gotFallback.ID, okFallback, bedBase.ID)
 		}

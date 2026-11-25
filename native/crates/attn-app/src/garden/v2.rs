@@ -985,7 +985,7 @@ fn bed_form_dialog(form: &BedForm, t: &Tokens, layers: &mut Vec<El>) {
         ))
         .build(t);
     let repos_field = Field::new("garden.bed-form.repos-field", "Repositories (optional)")
-        .hint("Enter one repository path or name per line.")
+        .hint("One repository per line. Use a name to share across machines, or build:/work/repo for an outpost.")
         .control(area_box(
             TextArea::new(&form.repos)
                 .key(FORM_REPOS)
