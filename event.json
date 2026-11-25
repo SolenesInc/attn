@@ -1,0 +1,8 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "fix: Daemon (4) automation tool test race",
+  "at": "2026-11-25T10:20:53.295Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45584805143",
+  "repairs": "7fe7eb8dc"
+}
