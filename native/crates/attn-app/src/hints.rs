@@ -4,7 +4,7 @@ use attn_protocol::session_id;
 use attn_ui::blocks::{IdLabel, IdMark, IdPlace, id_list, id_scrim, lantern, name_in_place};
 use attn_ui::colors::TerminalColors;
 use attn_ui::{Glyph, Tokens};
-use rune::{ChordKey, El, Key, KeyEvent, Mods, Platform, ShownLink, Tx, el};
+use rune::{ChordKey, El, Key, KeyEvent, Mods, Platform, ShownLink, Transition, Tx, el};
 
 use crate::State;
 use crate::desktop::header_pop::{Front, Place};
@@ -492,6 +492,8 @@ impl Shown {
         });
         el().key(format!("{key}.hints"))
             .inert()
+            .transition(Transition::none())
+            .instant_changes()
             .child(id_scrim(ground, self.named))
             .children(labels)
             .children(list)

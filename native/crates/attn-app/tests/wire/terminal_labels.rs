@@ -1,16 +1,18 @@
 use std::time::Duration;
 
 use attn_protocol::{DesktopPane, InitialStateMessage, Seed, Session, SettingsUpdatedMessage};
-use attn_testkit::{Daemon, Node, Target, World, key_event, message, tree};
+use attn_testkit::{Daemon, Driver, Node, Target, World, key_event, message, tree};
+use rune::motion_gate::Recording;
 use rune::{Chord, Ime, Key, Mods, PhysicalInput, PhysicalKeyCode};
 use serde_json::json;
 
+use super::shelf_layout::opacities;
 use super::terminal::{inputs, output, output_frame_to, pane, profile, showing};
 use super::terminal_ids::{
     AGENT_CARD, BUILDER, BUILDER_SHORT, MAPPER_SHORT, SEED, SEED_CARD, agent, builder, key, letter,
     mapped, mapper, rest_on, rests, said, sessions_shown, shown, start, write,
 };
-use crate::wire::mac;
+use crate::wire::{mac, whole_on_its_first_frame};
 
 pub(super) fn chord_mods() -> Mods {
     Mods {
@@ -34,27 +36,43 @@ fn physical(letter: char) -> PhysicalKeyCode {
 }
 
 pub(super) fn press(world: &mut World, letter: char, repeat: bool) {
+    world.gesture(|app| strike(app, letter, repeat));
+}
+
+fn strike(app: &mut Driver, letter: char, repeat: bool) {
     let chord = if mac() {
         format!("mod+{letter}")
     } else {
         format!("mod+shift+{letter}")
     };
     let ev = key_event(&Chord::parse(&chord).unwrap());
-    world.gesture(|app| {
-        app.runtime.physical_key_input(
-            PhysicalInput::Key {
-                key: physical(letter),
-                mods: chord_mods(),
-                pressed: true,
-                repeat,
-            },
-            ev,
-            Some(letter),
-        )
-    });
+    app.runtime.physical_key_input(
+        PhysicalInput::Key {
+            key: physical(letter),
+            mods: chord_mods(),
+            pressed: true,
+            repeat,
+        },
+        ev,
+        Some(letter),
+    );
 }
 
-fn modifiers(world: &mut World, mods: Mods) {
+pub(super) fn recorded(world: &mut World, letter: char) -> Recording {
+    world.record(60.0, 0.5, |_, app| strike(app, letter, false))
+}
+
+pub(super) fn gone_at_once(rec: &Recording, key: &str) {
+    let path = format!("/{key}");
+    let opacities = opacities(rec, |p| p.ends_with(&path));
+    assert!(
+        rec.tracks.iter().any(|t| t.path.ends_with(&path)),
+        "{key} was never drawn"
+    );
+    assert!(opacities.iter().all(|o| *o == 0.0), "{key}: {opacities:?}");
+}
+
+pub(super) fn modifiers(world: &mut World, mods: Mods) {
     world.gesture(|app| app.hold(mods));
 }
 
@@ -136,6 +154,37 @@ fn holding_the_chord_labels_every_id_with_what_it_names_until_a_modifier_comes_u
     assert!(!labelled(&world));
     assert_eq!(inputs(&world), []);
     rests(&mut world);
+}
+
+#[test]
+fn the_labels_and_the_list_show_and_go_in_one_step() {
+    for drawing in ["lantern", "name"] {
+        let mut world = reading();
+        settings(&mut world, "id_labels", drawing);
+        modifiers(&mut world, chord_mods());
+        let rec = recorded(&mut world, 'l');
+        assert!(labelled(&world));
+        whole_on_its_first_frame(&rec, "terminal.r1.hints");
+        whole_on_its_first_frame(&rec, "terminal.r1.label.0");
+        if drawing == "lantern" {
+            whole_on_its_first_frame(&rec, "terminal.r1.labels");
+        }
+
+        let rec = recorded(&mut world, 's');
+        assert!(shown(&world, AGENT_CARD));
+        gone_at_once(&rec, "terminal.r1.hints");
+    }
+}
+
+#[test]
+fn the_labels_a_first_letter_rules_out_go_in_one_step() {
+    let (seeds, text) = many(18);
+    let mut world = start(vec![], seeds, vec![]);
+    write(&mut world, 1, &text);
+    hold(&mut world);
+    let rec = recorded(&mut world, 'd');
+    assert_eq!(on_ids(&world, "r1").len(), 2);
+    gone_at_once(&rec, "terminal.r1.label.0");
 }
 
 #[test]

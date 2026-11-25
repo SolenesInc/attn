@@ -17,8 +17,10 @@ use super::terminal_ids::{
     is_at_rest, key, letter, mapped, mapper, resolves, rests, resumed, sessions_shown, shown,
     takes_keyboard, write,
 };
-use super::terminal_labels::{chord_mods, hold, labels_in, lets_go, press};
-use crate::wire::mac;
+use super::terminal_labels::{
+    chord_mods, gone_at_once, hold, labels_in, lets_go, modifiers, press, recorded,
+};
+use crate::wire::{mac, whole_on_its_first_frame};
 
 const TO_BUILDER: &str = "attn-session:3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f";
 const TO_MAPPER: &str = "attn-session:c5e81f07-4a36-4f8f-b2d9-7701aa5c9e3d";
@@ -324,6 +326,20 @@ fn the_chord_labels_the_ids_in_a_document_with_the_letters_the_terminal_gives_th
     letter(&mut world, "x");
     assert_eq!(inputs(&world), [("x".to_owned(), "user".to_owned())]);
     rests(&mut world);
+}
+
+#[test]
+fn the_labels_over_an_ask_and_the_list_show_and_go_in_one_step() {
+    let mut world = asking();
+    modifiers(&mut world, chord_mods());
+    let rec = recorded(&mut world, 'l');
+    for part in ["hints", "label.0", "labels"] {
+        whole_on_its_first_frame(&rec, &format!("words.0.{part}"));
+    }
+
+    let rec = recorded(&mut world, 's');
+    assert!(shown(&world, AGENT_CARD));
+    gone_at_once(&rec, "words.0.hints");
 }
 
 #[test]
