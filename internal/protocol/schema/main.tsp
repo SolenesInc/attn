@@ -4295,6 +4295,9 @@ model InitialStateMessage {
   seeds_total?: int32;
   // The selected profile's curated Garden beds, alphabetically by name.
   garden_beds?: GardenBed[];
+  // Exact root-level closed seed counts for the selected profile, excluding
+  // completed plots that still have open children below them.
+  garden_closed_counts?: GardenClosedCounts;
   // The crew roster, so the sidebar draws every member — in session or between sessions — from
   // the first push rather than asking for one.
   crew?: CrewMember[];
@@ -6652,6 +6655,10 @@ model SeedDocumentGetMessage {
 model SeedDocument {
   "seed": Seed;
   "children": Seed[];
+  // Root-to-parent chain of plots above `seed`, without bodies.
+  "ancestors"?: Seed[];
+  // Seeds connected by outbound or inbound non-part-of edges, without bodies.
+  "related"?: Seed[];
   "notes": SeedNote[];
   "notes_total": int32;
   // Direct visible regular files in the seed-owned artifact directory.
@@ -7185,6 +7192,131 @@ model SeedBedSetResultMessage {
   "error"?: string;
 }
 
+model GardenClosedTally {
+  "harvested": int32;
+  "withered": int32;
+}
+
+model GardenBedClosedTally {
+  "bed_id": string;
+  "harvested": int32;
+  "withered": int32;
+}
+
+// Root-level closed seed counts across the selected profile, excluding closed
+// plots that still have open work below them.
+model GardenClosedCounts {
+  "all": GardenClosedTally;
+  "unassigned": GardenClosedTally;
+  "automations": GardenClosedTally;
+  "by_bed": GardenBedClosedTally[];
+}
+
+// Reads one cursor-addressed page of seeds in the client's selected profile.
+// Closed history orders by state_changed_at DESC, id DESC; `status: "all"`
+// keeps newest-created first.
+model GardenSeedsPageMessage {
+  "cmd": "garden_seeds_page";
+  "request_id": string;
+  // Absent lists root seeds; present lists direct children of that plot.
+  "plot_id"?: string;
+  // When plot_id is absent: ""/absent includes all roots (v1), "all" excludes
+  // automations (v2 All), "unassigned", "automations", or a bed id.
+  "bed"?: string;
+  // "closed" (default: harvested/withered excluding plots with open work below) or "all".
+  "status"?: string;
+  // Filter to seeds planted or tended by a party ref (e.g. "member:<id>").
+  "planter"?: string;
+  "tender"?: string;
+  // Optional case-insensitive substring filter on title or id.
+  "query"?: string;
+  // Opaque cursor from the previous page's `next_before`; this page starts after it.
+  "before"?: string;
+  // Rows per page. Absent uses the daemon default; capped by the daemon.
+  "limit"?: int32;
+}
+
+model GardenSeedsPageResultMessage {
+  "event": "garden_seeds_page_result";
+  "request_id": string;
+  "success": boolean;
+  "error"?: string;
+  "seeds": Seed[];
+  "next_before"?: string;
+  "total": int32;
+  "harvested": int32;
+  "withered": int32;
+}
+
+model GardenSearchRange {
+  "start": int32;
+  "end": int32;
+}
+
+// Interactive search across the entire selected profile's garden (open and
+// closed; titles, bodies, pulses, tenders, ids and log entries), with
+// structured filters and offset paging.
+model GardenSearchMessage {
+  "cmd": "garden_search";
+  "request_id": string;
+  // Free-text terms, lowercased; every term must match.
+  "terms"?: string[];
+  // `is:` lens values, unioned. Absent/empty defaults to open seeds only.
+  "is"?: string[];
+  // `tender:` substrings, unioned.
+  "tenders"?: string[];
+  // `bed:` filter tokens (name/slug/id/unassigned/none/automations/auto), unioned.
+  "beds"?: string[];
+  // Active v2 bed filter when `beds` is empty: "all", "unassigned", "automations", or bed id.
+  "bed_scope"?: string;
+  // Current plot id when searching inside a plot.
+  "plot_id"?: string;
+  // True when widened out of `plot_id` to the whole garden (daemon still counts `in_plot`).
+  "wide"?: boolean;
+  "offset"?: int32;
+  "limit"?: int32;
+}
+
+model GardenSearchHit {
+  "seed": Seed;
+  // id | title | tender | pulse | body | log
+  "where": string;
+  "id_hit": boolean;
+  "title_ranges"?: GardenSearchRange[];
+  "snippet"?: string;
+  "snippet_ranges"?: GardenSearchRange[];
+  "plot_title"?: string;
+}
+
+model GardenSearchResultMessage {
+  "event": "garden_search_result";
+  "request_id": string;
+  "success": boolean;
+  "error"?: string;
+  "hits": GardenSearchHit[];
+  "total": int32;
+  "next_offset"?: int32;
+  "hidden_closed": int32;
+  "outside": int32;
+  "in_plot": int32;
+}
+
+// Resolves specific seed IDs in the client's selected profile on demand, e.g.
+// for closed seed IDs printed in a terminal.
+model GardenSeedsLookupMessage {
+  "cmd": "garden_seeds_lookup";
+  "request_id": string;
+  "ids": string[];
+}
+
+model GardenSeedsLookupResultMessage {
+  "event": "garden_seeds_lookup_result";
+  "request_id": string;
+  "success": boolean;
+  "error"?: string;
+  "seeds": Seed[];
+}
+
 // The selected profile's whole push window, sent when a client connects or
 // switches profile; later seed changes arrive as garden_seeds_changed.
 model GardenSeedsUpdatedMessage {
@@ -7195,6 +7327,7 @@ model GardenSeedsUpdatedMessage {
   // garden outgrows one push, and then the receipt that says so.
   total: int32;
   beds: GardenBed[];
+  closed_counts?: GardenClosedCounts;
 }
 
 // The selected profile's curated beds, sent whenever a bed is added, changed or removed.
@@ -7213,6 +7346,7 @@ model GardenSeedsChangedMessage {
   order: string[];
   seeds: Seed[];
   total: int32;
+  closed_counts?: GardenClosedCounts;
 }
 
 // ============================================================================
@@ -8987,6 +9121,9 @@ alias DaemonEvent =
   | GardenBedsUpdatedMessage
   | GardenBedSaveResultMessage
   | GardenBedDeleteResultMessage
+  | GardenSeedsPageResultMessage
+  | GardenSearchResultMessage
+  | GardenSeedsLookupResultMessage
   | SeedBedSetResultMessage
   | SeedResumeResultMessage
   | SeedSendToChiefResultMessage

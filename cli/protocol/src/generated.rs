@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "b27ad8e53a47";
+pub const PROTOCOL_VERSION: &str = "9ef53dd1a220";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -5015,6 +5015,12 @@ pub struct GardenBed {
     pub updated_at: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GardenBedClosedTally {
+    pub bed_id: String,
+    pub harvested: i64,
+    pub withered: i64,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GardenBedDeleteMessage {
     pub cmd: String,
     pub id: String,
@@ -5110,7 +5116,100 @@ impl GardenBedsUpdatedMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GardenClosedCounts {
+    pub all: GardenClosedTally,
+    pub automations: GardenClosedTally,
+    #[serde(deserialize_with = "null_as_default")]
+    pub by_bed: Vec<GardenBedClosedTally>,
+    pub unassigned: GardenClosedTally,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GardenClosedTally {
+    pub harvested: i64,
+    pub withered: i64,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GardenSearchHit {
+    pub id_hit: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plot_title: Option<String>,
+    pub seed: Seed,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snippet_ranges: Option<Vec<GardenSearchRange>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title_ranges: Option<Vec<GardenSearchRange>>,
+    pub r#where: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GardenSearchMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bed_scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beds: Option<Vec<String>>,
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offset: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plot_id: Option<String>,
+    pub request_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tenders: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terms: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wide: Option<bool>,
+}
+
+impl GardenSearchMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "garden_search".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GardenSearchRange {
+    pub end: i64,
+    pub start: i64,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GardenSearchResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    pub hidden_closed: i64,
+    #[serde(deserialize_with = "null_as_default")]
+    pub hits: Vec<GardenSearchHit>,
+    pub in_plot: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_offset: Option<i64>,
+    pub outside: i64,
+    pub request_id: String,
+    pub success: bool,
+    pub total: i64,
+}
+
+impl GardenSearchResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "garden_search_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GardenSeedsChangedMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closed_counts: Option<GardenClosedCounts>,
     pub event: String,
     #[serde(deserialize_with = "null_as_default")]
     pub order: Vec<String>,
@@ -5130,9 +5229,104 @@ impl GardenSeedsChangedMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GardenSeedsLookupMessage {
+    pub cmd: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub ids: Vec<String>,
+    pub request_id: String,
+}
+
+impl GardenSeedsLookupMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "garden_seeds_lookup".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GardenSeedsLookupResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    pub request_id: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub seeds: Vec<Seed>,
+    pub success: bool,
+}
+
+impl GardenSeedsLookupResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "garden_seeds_lookup_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GardenSeedsPageMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bed: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before: Option<String>,
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planter: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plot_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
+    pub request_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tender: Option<String>,
+}
+
+impl GardenSeedsPageMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "garden_seeds_page".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GardenSeedsPageResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    pub harvested: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_before: Option<String>,
+    pub request_id: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub seeds: Vec<Seed>,
+    pub success: bool,
+    pub total: i64,
+    pub withered: i64,
+}
+
+impl GardenSeedsPageResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "garden_seeds_page_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GardenSeedsUpdatedMessage {
     #[serde(deserialize_with = "null_as_default")]
     pub beds: Vec<GardenBed>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closed_counts: Option<GardenClosedCounts>,
     pub event: String,
     pub profile_id: String,
     #[serde(deserialize_with = "null_as_default")]
@@ -5753,6 +5947,8 @@ pub struct InitialStateMessage {
     pub event: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub garden_beds: Option<Vec<GardenBed>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub garden_closed_counts: Option<GardenClosedCounts>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub github_hosts: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -9818,6 +10014,8 @@ pub struct SeedContinuation {
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedDocument {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ancestors: Option<Vec<Seed>>,
     #[serde(deserialize_with = "null_as_default")]
     pub artifacts: Vec<SeedArtifact>,
     #[serde(deserialize_with = "null_as_default")]
@@ -9827,6 +10025,8 @@ pub struct SeedDocument {
     pub notes_total: i64,
     #[serde(deserialize_with = "null_as_default")]
     pub references: Vec<SeedArtifactReference>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub related: Option<Vec<Seed>>,
     pub seed: Seed,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

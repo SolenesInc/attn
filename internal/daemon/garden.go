@@ -401,6 +401,16 @@ func (g gardenRead) effectiveBed(seed garden.Seed) (string, string) {
 	return "", ""
 }
 
+func (g gardenRead) rootBed(root garden.Seed) (string, string) {
+	if len(g.beds) == 0 || root.BedID == "" {
+		return "", ""
+	}
+	if bed, ok := g.beds[root.BedID]; ok {
+		return bed.ID, bed.Name
+	}
+	return "", ""
+}
+
 func (g gardenRead) row(seed garden.Seed, doc docstore.Document) protocol.SeedRow {
 	row := protocol.SeedRow{
 		ProfileID:    seed.ProfileID,
@@ -594,18 +604,18 @@ func (d *Daemon) seedDetailsWire(read gardenRead, seed garden.Seed, doc docstore
 	return wire
 }
 
-func (d *Daemon) seedsForBroadcast(profileID ...string) (seeds []protocol.Seed, total int) {
+func (d *Daemon) seedsForBroadcast(profileID ...string) (seeds []protocol.Seed, total int, closedCounts *protocol.GardenClosedCounts) {
 	if d.store == nil {
-		return nil, 0
+		return nil, 0, nil
 	}
 	read, err := d.readGarden(profileID...)
 	if err != nil {
 		if !docstore.IsUndeclaredCollection(err) {
 			d.logf("garden: reading seeds for broadcast: %v", err)
 		}
-		return nil, 0
+		return nil, 0, nil
 	}
-	return read.wireWithoutBodies(garden.Window(read.seeds, gardenSnapshotLimit)), len(read.seeds)
+	return read.wireWithoutBodies(garden.Window(read.seeds, gardenSnapshotLimit)), len(read.seeds), gardenClosedCounts(read)
 }
 
 func (d *Daemon) projectGardenSeeds() {
@@ -1167,9 +1177,13 @@ func (d *Daemon) handleSeedDocumentGet(client *wsClient, msg *protocol.SeedDocum
 		return
 	}
 	markEvidenceChangedSinceReport(wireSeed.Checks, artifacts)
+	ancestors := gardenAncestorsOf(seed, read.plots)
+	related := gardenRelatedOf(seed, read.seeds, read.plots)
 	result.Document = &protocol.SeedDocument{
 		Seed:       wireSeed,
 		Children:   read.wire(children),
+		Ancestors:  read.wireWithoutBodies(ancestors),
+		Related:    read.wireWithoutBodies(related),
 		Notes:      notes,
 		NotesTotal: notesTotal,
 		Artifacts:  artifacts,

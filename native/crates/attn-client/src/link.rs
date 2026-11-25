@@ -668,6 +668,7 @@ impl Task {
                     message.seeds,
                     message.total,
                     message.beds,
+                    message.closed_counts,
                 );
                 None
             }
@@ -683,6 +684,7 @@ impl Task {
                     message.order,
                     message.seeds,
                     message.total,
+                    message.closed_counts,
                 );
                 None
             }

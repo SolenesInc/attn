@@ -55,6 +55,31 @@ func TestTheSeedDocumentShowsBodyChildrenLogAndWhetherItsTenderHolds(t *testing.
 		t.Errorf("while %s is live the document reads tender %q holding=%t, want it holding", tender.session, tenderSessionOf(doc.Seed), doc.Seed.Claimed)
 	}
 
+	grandchildID := ""
+	childDoc := seedReaderDocument(app, child.ID)
+	if !childDoc.Success || childDoc.Document == nil || len(childDoc.Document.Children) != 1 {
+		t.Fatalf("reading the child = %+v", childDoc)
+	}
+	grandchildID = childDoc.Document.Children[0].ID
+	blocker := plantSeedAs(t, cli, tender.session, "Blocker")
+	edgeLink(t, cli, blocker, "blocks", grandchildID)
+	discovered := plantSeedAs(t, cli, tender.session, "Discovered")
+	edgeLink(t, cli, grandchildID, "discovered-from", discovered)
+	grandDoc := seedReaderDocument(app, grandchildID)
+	if !grandDoc.Success || grandDoc.Document == nil {
+		t.Fatalf("reading grandchild = %+v", grandDoc)
+	}
+	if got := lifeSeedIDs(grandDoc.Document.Ancestors); !slices.Equal(got, []string{crown.ID, child.ID}) {
+		t.Errorf("grandchild ancestors = %v, want [%s %s]", got, crown.ID, child.ID)
+	}
+	if grandDoc.Document.Ancestors[0].Body != "" {
+		t.Errorf("ancestor unexpectedly carried body %q", grandDoc.Document.Ancestors[0].Body)
+	}
+	related := lifeSeedIDs(grandDoc.Document.Related)
+	if !slices.Contains(related, blocker) || !slices.Contains(related, discovered) || len(related) != 2 {
+		t.Errorf("grandchild related = %v, want [%s %s]", related, blocker, discovered)
+	}
+
 	closePane(app, tender)
 	ended := seedReaderDocument(app, crown.ID)
 	if !ended.Success || ended.Document == nil || ended.Document.Seed.Claimed || string(tenderSessionOf(ended.Document.Seed)) != tender.session {

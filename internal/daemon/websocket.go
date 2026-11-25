@@ -1301,6 +1301,18 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleGardenBedSaveWS(client, msg.(*protocol.GardenBedSaveMessage))
 	case protocol.CmdGardenBedDelete:
 		d.handleGardenBedDeleteWS(client, msg.(*protocol.GardenBedDeleteMessage))
+	case protocol.CmdGardenSeedsPage:
+		selected := client.selectedProfile()
+		page := msg.(*protocol.GardenSeedsPageMessage)
+		d.life.Go("handleGardenSeedsPage", func() { d.handleGardenSeedsPage(client, selected, page) })
+	case protocol.CmdGardenSearch:
+		selected := client.selectedProfile()
+		search := msg.(*protocol.GardenSearchMessage)
+		d.life.Go("handleGardenSearch", func() { d.handleGardenSearch(client, selected, search) })
+	case protocol.CmdGardenSeedsLookup:
+		selected := client.selectedProfile()
+		lookup := msg.(*protocol.GardenSeedsLookupMessage)
+		d.life.Go("handleGardenSeedsLookup", func() { d.handleGardenSeedsLookup(client, selected, lookup) })
 	case protocol.CmdSeedBedSet:
 		d.handleSeedBedSetWS(client, msg.(*protocol.SeedBedSetMessage))
 	case protocol.CmdSessionMessagesGet:

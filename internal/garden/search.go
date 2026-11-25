@@ -256,29 +256,115 @@ func mergeCarried(into, from []bool) int {
 }
 
 func Snippet(text string, spans [][2]int) string {
-	line, at := bestLine(text, spans)
-	line, at = trimLine(line, at)
+	snippet, _ := SnippetWithSpans(text, spans)
+	return snippet
+}
+
+func SnippetWithSpans(text string, spans [][2]int) (string, [][2]int) {
+	line, lineStart, at := bestLine(text, spans)
+	line, leftTrim, at := trimLine(line, at)
+	lineStart += leftTrim
 	runes := []rune(line)
 	if len(runes) <= SnippetChars {
-		return line
+		return line, projectSpans(spans, lineStart, lineStart+len(line), 0)
 	}
 	start := max(0, len([]rune(line[:at]))-SnippetChars/3)
 	if start+SnippetChars > len(runes) {
 		start = len(runes) - SnippetChars
 	}
-	out := string(runes[start : start+SnippetChars])
+	sliceStart := runeByteOffset(line, start)
+	sliceEnd := runeByteOffset(line, start+SnippetChars)
+	out := line[sliceStart:sliceEnd]
+	prefixBytes := 0
 	if start > 0 {
 		out = "…" + out
+		prefixBytes = len("…")
 	}
 	if start+SnippetChars < len(runes) {
 		out += "…"
 	}
-	return out
+	return out, projectSpans(spans, lineStart+sliceStart, lineStart+sliceEnd, prefixBytes)
 }
 
-func bestLine(text string, spans [][2]int) (string, int) {
+func runeByteOffset(s string, target int) int {
+	if target <= 0 {
+		return 0
+	}
+	count := 0
+	for i := range s {
+		if count == target {
+			return i
+		}
+		count++
+	}
+	return len(s)
+}
+
+func projectSpans(spans [][2]int, winStart, winEnd, shift int) [][2]int {
+	var projected [][2]int
+	for _, span := range spans {
+		s := max(span[0], winStart)
+		e := min(span[1], winEnd)
+		if e <= s {
+			continue
+		}
+		projected = append(projected, [2]int{s - winStart + shift, e - winStart + shift})
+	}
+	return MergeSpans(projected)
+}
+
+func MergeSpans(spans [][2]int) [][2]int {
+	if len(spans) <= 1 {
+		return spans
+	}
+	sort.Slice(spans, func(i, j int) bool {
+		if spans[i][0] != spans[j][0] {
+			return spans[i][0] < spans[j][0]
+		}
+		return spans[i][1] < spans[j][1]
+	})
+	merged := spans[:0]
+	for _, span := range spans {
+		if len(merged) > 0 && span[0] <= merged[len(merged)-1][1] {
+			if span[1] > merged[len(merged)-1][1] {
+				merged[len(merged)-1][1] = span[1]
+			}
+			continue
+		}
+		merged = append(merged, span)
+	}
+	return merged
+}
+
+func TextRanges(haystack string, terms []string) [][2]int {
+	lower := strings.ToLower(haystack)
+	if len(lower) != len(haystack) {
+		return nil
+	}
+	var found [][2]int
+	for _, term := range terms {
+		term = strings.ToLower(term)
+		if term == "" {
+			continue
+		}
+		from := 0
+		for from < len(lower) {
+			at := strings.Index(lower[from:], term)
+			if at < 0 {
+				break
+			}
+			start := from + at
+			end := start + len(term)
+			found = append(found, [2]int{start, end})
+			from = end
+		}
+	}
+	return MergeSpans(found)
+}
+
+func bestLine(text string, spans [][2]int) (string, int, int) {
 	best, _, _ := strings.Cut(text, "\n")
-	bestCount, bestAt, offset := 0, 0, 0
+	bestStart, bestCount, bestAt, offset := 0, 0, 0, 0
 	for line := range strings.Lines(text) {
 		count, first := 0, -1
 		for _, span := range spans {
@@ -290,16 +376,17 @@ func bestLine(text string, spans [][2]int) (string, int) {
 			}
 		}
 		if count > bestCount {
-			bestCount, best, bestAt = count, strings.TrimRight(line, "\n"), first
+			bestCount, best, bestStart, bestAt = count, strings.TrimRight(line, "\n"), offset, first
 		}
 		offset += len(line)
 	}
-	return best, bestAt
+	return best, bestStart, bestAt
 }
 
-func trimLine(line string, at int) (string, int) {
+func trimLine(line string, at int) (string, int, int) {
 	trimmed := strings.TrimLeft(line, " \t")
-	at -= len(line) - len(trimmed)
+	leftTrim := len(line) - len(trimmed)
+	at -= leftTrim
 	trimmed = strings.TrimRight(trimmed, " \t")
-	return trimmed, min(max(at, 0), len(trimmed))
+	return trimmed, leftTrim, min(max(at, 0), len(trimmed))
 }

@@ -5602,6 +5602,17 @@ type GardenBed struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
+type GardenBedClosedTally struct {
+	// BedID corresponds to the JSON schema field "bed_id".
+	BedID string `json:"bed_id"`
+
+	// Harvested corresponds to the JSON schema field "harvested".
+	Harvested int `json:"harvested"`
+
+	// Withered corresponds to the JSON schema field "withered".
+	Withered int `json:"withered"`
+}
+
 type GardenBedDeleteMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -5678,7 +5689,130 @@ type GardenBedsUpdatedMessage struct {
 	ProfileID string `json:"profile_id"`
 }
 
+type GardenClosedCounts struct {
+	// All corresponds to the JSON schema field "all".
+	All GardenClosedTally `json:"all"`
+
+	// Automations corresponds to the JSON schema field "automations".
+	Automations GardenClosedTally `json:"automations"`
+
+	// ByBed corresponds to the JSON schema field "by_bed".
+	ByBed []GardenBedClosedTally `json:"by_bed"`
+
+	// Unassigned corresponds to the JSON schema field "unassigned".
+	Unassigned GardenClosedTally `json:"unassigned"`
+}
+
+type GardenClosedTally struct {
+	// Harvested corresponds to the JSON schema field "harvested".
+	Harvested int `json:"harvested"`
+
+	// Withered corresponds to the JSON schema field "withered".
+	Withered int `json:"withered"`
+}
+
+type GardenSearchHit struct {
+	// IDHit corresponds to the JSON schema field "id_hit".
+	IDHit bool `json:"id_hit"`
+
+	// PlotTitle corresponds to the JSON schema field "plot_title".
+	PlotTitle *string `json:"plot_title,omitempty,omitzero"`
+
+	// Seed corresponds to the JSON schema field "seed".
+	Seed Seed `json:"seed"`
+
+	// Snippet corresponds to the JSON schema field "snippet".
+	Snippet *string `json:"snippet,omitempty,omitzero"`
+
+	// SnippetRanges corresponds to the JSON schema field "snippet_ranges".
+	SnippetRanges []GardenSearchRange `json:"snippet_ranges,omitempty,omitzero"`
+
+	// TitleRanges corresponds to the JSON schema field "title_ranges".
+	TitleRanges []GardenSearchRange `json:"title_ranges,omitempty,omitzero"`
+
+	// Where corresponds to the JSON schema field "where".
+	Where string `json:"where"`
+}
+
+type GardenSearchMessage struct {
+	// BedScope corresponds to the JSON schema field "bed_scope".
+	BedScope *string `json:"bed_scope,omitempty,omitzero"`
+
+	// Beds corresponds to the JSON schema field "beds".
+	Beds []string `json:"beds,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Is corresponds to the JSON schema field "is".
+	Is []string `json:"is,omitempty,omitzero"`
+
+	// Limit corresponds to the JSON schema field "limit".
+	Limit *int `json:"limit,omitempty,omitzero"`
+
+	// Offset corresponds to the JSON schema field "offset".
+	Offset *int `json:"offset,omitempty,omitzero"`
+
+	// PlotID corresponds to the JSON schema field "plot_id".
+	PlotID *string `json:"plot_id,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Tenders corresponds to the JSON schema field "tenders".
+	Tenders []string `json:"tenders,omitempty,omitzero"`
+
+	// Terms corresponds to the JSON schema field "terms".
+	Terms []string `json:"terms,omitempty,omitzero"`
+
+	// Wide corresponds to the JSON schema field "wide".
+	Wide *bool `json:"wide,omitempty,omitzero"`
+}
+
+type GardenSearchRange struct {
+	// End corresponds to the JSON schema field "end".
+	End int `json:"end"`
+
+	// Start corresponds to the JSON schema field "start".
+	Start int `json:"start"`
+}
+
+type GardenSearchResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// HiddenClosed corresponds to the JSON schema field "hidden_closed".
+	HiddenClosed int `json:"hidden_closed"`
+
+	// Hits corresponds to the JSON schema field "hits".
+	Hits []GardenSearchHit `json:"hits"`
+
+	// InPlot corresponds to the JSON schema field "in_plot".
+	InPlot int `json:"in_plot"`
+
+	// NextOffset corresponds to the JSON schema field "next_offset".
+	NextOffset *int `json:"next_offset,omitempty,omitzero"`
+
+	// Outside corresponds to the JSON schema field "outside".
+	Outside int `json:"outside"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+
+	// Total corresponds to the JSON schema field "total".
+	Total int `json:"total"`
+}
+
 type GardenSeedsChangedMessage struct {
+	// ClosedCounts corresponds to the JSON schema field "closed_counts".
+	ClosedCounts *GardenClosedCounts `json:"closed_counts,omitempty,omitzero"`
+
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
@@ -5695,9 +5829,101 @@ type GardenSeedsChangedMessage struct {
 	Total int `json:"total"`
 }
 
+type GardenSeedsLookupMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Ids corresponds to the JSON schema field "ids".
+	Ids []string `json:"ids"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type GardenSeedsLookupResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Seeds corresponds to the JSON schema field "seeds".
+	Seeds []Seed `json:"seeds"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type GardenSeedsPageMessage struct {
+	// Bed corresponds to the JSON schema field "bed".
+	Bed *string `json:"bed,omitempty,omitzero"`
+
+	// Before corresponds to the JSON schema field "before".
+	Before *string `json:"before,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Limit corresponds to the JSON schema field "limit".
+	Limit *int `json:"limit,omitempty,omitzero"`
+
+	// Planter corresponds to the JSON schema field "planter".
+	Planter *string `json:"planter,omitempty,omitzero"`
+
+	// PlotID corresponds to the JSON schema field "plot_id".
+	PlotID *string `json:"plot_id,omitempty,omitzero"`
+
+	// Query corresponds to the JSON schema field "query".
+	Query *string `json:"query,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Status corresponds to the JSON schema field "status".
+	Status *string `json:"status,omitempty,omitzero"`
+
+	// Tender corresponds to the JSON schema field "tender".
+	Tender *string `json:"tender,omitempty,omitzero"`
+}
+
+type GardenSeedsPageResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Harvested corresponds to the JSON schema field "harvested".
+	Harvested int `json:"harvested"`
+
+	// NextBefore corresponds to the JSON schema field "next_before".
+	NextBefore *string `json:"next_before,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Seeds corresponds to the JSON schema field "seeds".
+	Seeds []Seed `json:"seeds"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+
+	// Total corresponds to the JSON schema field "total".
+	Total int `json:"total"`
+
+	// Withered corresponds to the JSON schema field "withered".
+	Withered int `json:"withered"`
+}
+
 type GardenSeedsUpdatedMessage struct {
 	// Beds corresponds to the JSON schema field "beds".
 	Beds []GardenBed `json:"beds"`
+
+	// ClosedCounts corresponds to the JSON schema field "closed_counts".
+	ClosedCounts *GardenClosedCounts `json:"closed_counts,omitempty,omitzero"`
 
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
@@ -6359,6 +6585,9 @@ type InitialStateMessage struct {
 
 	// GardenBeds corresponds to the JSON schema field "garden_beds".
 	GardenBeds []GardenBed `json:"garden_beds,omitempty,omitzero"`
+
+	// GardenClosedCounts corresponds to the JSON schema field "garden_closed_counts".
+	GardenClosedCounts *GardenClosedCounts `json:"garden_closed_counts,omitempty,omitzero"`
 
 	// GithubHosts corresponds to the JSON schema field "github_hosts".
 	GithubHosts []string `json:"github_hosts,omitempty,omitzero"`
@@ -10998,6 +11227,9 @@ type SeedContinuation struct {
 }
 
 type SeedDocument struct {
+	// Ancestors corresponds to the JSON schema field "ancestors".
+	Ancestors []Seed `json:"ancestors,omitempty,omitzero"`
+
 	// Artifacts corresponds to the JSON schema field "artifacts".
 	Artifacts []SeedArtifact `json:"artifacts"`
 
@@ -11012,6 +11244,9 @@ type SeedDocument struct {
 
 	// References corresponds to the JSON schema field "references".
 	References []SeedArtifactReference `json:"references"`
+
+	// Related corresponds to the JSON schema field "related".
+	Related []Seed `json:"related,omitempty,omitzero"`
 
 	// Seed corresponds to the JSON schema field "seed".
 	Seed Seed `json:"seed"`

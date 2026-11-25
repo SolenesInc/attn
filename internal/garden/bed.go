@@ -193,19 +193,27 @@ func MatchBedForRepo(beds []Bed, repoPath string, pathMatches func(RepoPath) boo
 }
 
 func EffectiveBedID(seed Seed, plots PlotTree) string {
-	cur := seed
-	seen := map[string]bool{cur.ID: true}
+	parentID, ok := ParentOf(seed)
+	if !ok {
+		return seed.BedID
+	}
+	parent, found := plots.Seed(parentID)
+	if !found {
+		return seed.BedID
+	}
+	cur := parent
+	seen := map[string]bool{seed.ID: true, cur.ID: true}
 	for {
-		parentID, ok := ParentOf(cur)
-		if !ok || seen[parentID] {
+		nextID, ok := ParentOf(cur)
+		if !ok || seen[nextID] {
 			return cur.BedID
 		}
-		parent, found := plots.Seed(parentID)
+		next, found := plots.Seed(nextID)
 		if !found {
 			return cur.BedID
 		}
-		seen[parentID] = true
-		cur = parent
+		seen[nextID] = true
+		cur = next
 	}
 }
 

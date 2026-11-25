@@ -11,10 +11,11 @@ import (
 )
 
 type gardenHeld struct {
-	profileID string
-	order     []string
-	prints    map[string][sha256.Size]byte
-	total     int
+	profileID    string
+	order        []string
+	prints       map[string][sha256.Size]byte
+	total        int
+	closedCounts *protocol.GardenClosedCounts
 }
 
 type gardenWindow struct {
@@ -27,7 +28,7 @@ func (d *Daemon) gardenWindow(profileID string) gardenWindow {
 	seeds := []protocol.Seed{}
 	held := gardenHeld{profileID: profileID, prints: map[string][sha256.Size]byte{}}
 	if profileID != "" {
-		seeds, held.total = d.seedsForBroadcast(profileID)
+		seeds, held.total, held.closedCounts = d.seedsForBroadcast(profileID)
 	}
 	for _, seed := range seeds {
 		data, err := json.Marshal(seed)
@@ -48,7 +49,8 @@ func (w gardenWindow) full() *protocol.GardenSeedsUpdatedMessage {
 	return &protocol.GardenSeedsUpdatedMessage{
 		Event: protocol.EventGardenSeedsUpdated, ProfileID: w.held.profileID,
 		Seeds: w.withBodies(), Total: w.held.total,
-		Beds: w.daemon.gardenBedsForBroadcast(w.held.profileID),
+		Beds:         w.daemon.gardenBedsForBroadcast(w.held.profileID),
+		ClosedCounts: w.held.closedCounts,
 	}
 }
 
@@ -68,6 +70,7 @@ func (h *gardenHeld) unchanged() *protocol.GardenSeedsChangedMessage {
 	return &protocol.GardenSeedsChangedMessage{
 		Event: protocol.EventGardenSeedsChanged, ProfileID: h.profileID,
 		Order: h.order, Seeds: []protocol.Seed{}, Total: h.total,
+		ClosedCounts: h.closedCounts,
 	}
 }
 

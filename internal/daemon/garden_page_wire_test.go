@@ -174,3 +174,129 @@ func TestTheGardenIsReadWholePastOnePageOfSeedsAndNotes(t *testing.T) {
 		rippleRung(t, cli, "the old dependent", oldDependent, "tender")
 	})
 }
+
+func TestGardenSeedsPageLookupAndClosedCounts(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app := w.App()
+		cli := w.Client().WithGardenProfile(app.SelectedProfile(), "")
+		setSetting(t, app, "garden_v2_enabled", "true")
+		bedRes := testworld.Request(app, protocol.GardenBedSaveMessage{
+			Cmd: protocol.CmdGardenBedSave, RequestID: "bed-1", Name: "Core", Repos: []string{},
+		}, protocol.EventGardenBedSaveResult, func(m protocol.GardenBedSaveResultMessage) bool { return m.RequestID == "bed-1" })
+		if !bedRes.Success || bedRes.Bed == nil {
+			t.Fatalf("creating bed: %+v", bedRes)
+		}
+		bedID := bedRes.Bed.ID
+
+		first, err := cli.SeedPlant("", "Planted first, closed last", "first body", "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.advance(time.Second)
+		second, err := cli.SeedPlant("", "Planted second, closed first", "second body", "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.advance(time.Second)
+		third, err := cli.SeedPlant("", "Withered in bed", "third body", "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.advance(time.Second)
+		closedPlot, err := cli.SeedPlant("", "Closed plot with open child", "", "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		assignRes := testworld.Request(app, protocol.SeedBedSetMessage{
+			Cmd: protocol.CmdSeedBedSet, RequestID: "assign-1", SeedID: third.ID, BedID: protocol.Ptr(bedID),
+		}, protocol.EventSeedBedSetResult, func(m protocol.SeedBedSetResultMessage) bool { return m.RequestID == "assign-1" })
+		if !assignRes.Success {
+			t.Fatalf("assigning bed: %+v", assignRes)
+		}
+
+		lifeMove(t, cli, "", second.ID, "harvest", "done first", "")
+		w.advance(time.Second)
+		lifeMove(t, cli, "", third.ID, "wither", "dropped", "")
+		w.advance(time.Second)
+		lifeMove(t, cli, "", first.ID, "harvest", "done last", "")
+		w.advance(time.Second)
+		lifeMove(t, cli, "", closedPlot.ID, "harvest", "initial milestone shipped", "")
+		if _, err := cli.SeedPlant("", "Open child", "", closedPlot.ID, ""); err != nil {
+			t.Fatal(err)
+		}
+
+		freshApp := w.App()
+		counts := freshApp.Initial.GardenClosedCounts
+		if counts == nil {
+			t.Fatal("initial state omitted garden_closed_counts")
+		}
+		if counts.All.Harvested != 2 || counts.All.Withered != 1 {
+			t.Errorf("closed_counts.all = %+v, want harvested=2 withered=1 (excluding closed plot with open child)", counts.All)
+		}
+		if counts.Unassigned.Harvested != 2 || counts.Unassigned.Withered != 0 {
+			t.Errorf("closed_counts.unassigned = %+v, want harvested=2 withered=0", counts.Unassigned)
+		}
+		if len(counts.ByBed) != 1 || counts.ByBed[0].BedID != bedID || counts.ByBed[0].Harvested != 0 || counts.ByBed[0].Withered != 1 {
+			t.Errorf("closed_counts.by_bed = %+v, want [{%s 0 1}]", counts.ByBed, bedID)
+		}
+
+		page1 := testworld.Request(freshApp, protocol.GardenSeedsPageMessage{
+			Cmd: protocol.CmdGardenSeedsPage, RequestID: "p1", Limit: protocol.Ptr(2),
+		}, protocol.EventGardenSeedsPageResult, func(m protocol.GardenSeedsPageResultMessage) bool { return m.RequestID == "p1" })
+		if !page1.Success || page1.Total != 3 || page1.Harvested != 2 || page1.Withered != 1 {
+			t.Fatalf("page1 = %+v", page1)
+		}
+		if got := lifeSeedIDs(page1.Seeds); !slices.Equal(got, []string{first.ID, third.ID}) {
+			t.Errorf("page1 order = %v, want state_changed_at DESC [%s %s]", got, first.ID, third.ID)
+		}
+		if page1.Seeds[0].Body != "" {
+			t.Errorf("paged seed unexpectedly carried body %q", page1.Seeds[0].Body)
+		}
+		if page1.NextBefore == nil {
+			t.Fatal("page1 omitted next_before")
+		}
+
+		lifeMove(t, cli, "", third.ID, "replant", "", "")
+		changed := testworld.Await(freshApp, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
+			return m.ClosedCounts != nil && m.ClosedCounts.All.Withered == 0
+		})
+		if changed.ClosedCounts.All.Harvested != 2 || changed.ClosedCounts.Unassigned.Harvested != 2 || changed.ClosedCounts.Unassigned.Withered != 0 || len(changed.ClosedCounts.ByBed) != 0 {
+			t.Errorf("garden_seeds_changed closed_counts after replant = %+v, want all={2,0} unassigned={2,0} by_bed=[]", changed.ClosedCounts)
+		}
+		page2 := testworld.Request(freshApp, protocol.GardenSeedsPageMessage{
+			Cmd: protocol.CmdGardenSeedsPage, RequestID: "p2", Before: page1.NextBefore, Limit: protocol.Ptr(2),
+		}, protocol.EventGardenSeedsPageResult, func(m protocol.GardenSeedsPageResultMessage) bool { return m.RequestID == "p2" })
+		if !page2.Success || page2.NextBefore != nil {
+			t.Fatalf("page2 = %+v", page2)
+		}
+		if got := lifeSeedIDs(page2.Seeds); !slices.Equal(got, []string{second.ID}) {
+			t.Errorf("page2 after cursor seed was replanted = %v, want [%s]", got, second.ID)
+		}
+
+		badCursor := testworld.Request(freshApp, protocol.GardenSeedsPageMessage{
+			Cmd: protocol.CmdGardenSeedsPage, RequestID: "p-bad", Before: protocol.Ptr(first.ID),
+		}, protocol.EventGardenSeedsPageResult, func(m protocol.GardenSeedsPageResultMessage) bool { return m.RequestID == "p-bad" })
+		if badCursor.Success || badCursor.Error == nil {
+			t.Errorf("bare seed id as before cursor = %+v, want refusal", badCursor)
+		}
+
+		bedPage := testworld.Request(freshApp, protocol.GardenSeedsPageMessage{
+			Cmd: protocol.CmdGardenSeedsPage, RequestID: "p-bed", Bed: protocol.Ptr(bedID), Status: protocol.Ptr("all"),
+		}, protocol.EventGardenSeedsPageResult, func(m protocol.GardenSeedsPageResultMessage) bool { return m.RequestID == "p-bed" })
+		if !bedPage.Success || !slices.Equal(lifeSeedIDs(bedPage.Seeds), []string{third.ID}) {
+			t.Errorf("bed page = %+v, want [%s]", bedPage, third.ID)
+		}
+
+		other := createProfile(freshApp, "Other")
+		otherSeed, err := w.Client().WithGardenProfile(other.ID, "").SeedPlant("", "Other profile seed", "secret", "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		lookup := testworld.Request(freshApp, protocol.GardenSeedsLookupMessage{
+			Cmd: protocol.CmdGardenSeedsLookup, RequestID: "l1", Ids: []string{first.ID, "s-000000", otherSeed.ID, first.ID},
+		}, protocol.EventGardenSeedsLookupResult, func(m protocol.GardenSeedsLookupResultMessage) bool { return m.RequestID == "l1" })
+		if !lookup.Success || !slices.Equal(lifeSeedIDs(lookup.Seeds), []string{first.ID}) || lookup.Seeds[0].Body != "first body" {
+			t.Errorf("lookup = %+v, want only %s with its body", lookup, first.ID)
+		}
+	})
+}

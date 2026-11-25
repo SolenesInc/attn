@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex, Weak};
 use crate::layout::{Leaf, Node};
 use attn_protocol::{
     Ask, AuthorState, CrewMember, DaemonWarning, DesktopTileContentMessage, GardenBed,
-    GitOperation, Harness, InitialStateMessage, OutpostInfo, PR, PairedSender,
+    GardenClosedCounts, GitOperation, Harness, InitialStateMessage, OutpostInfo, PR, PairedSender,
     PhonesUpdatedMessage, PluginInfo, PluginIssue, Profile, RepoState, Seed, SenderPairingRequest,
     SendersUpdatedMessage, Session, SessionLedgerEntry, SharedCodexState, UpdateRun, Vent,
     Worktree, WorktreeSweepEntry,
@@ -300,6 +300,7 @@ pub struct Garden {
     pub seeds: Vec<Arc<Seed>>,
     pub total: i64,
     pub beds: Vec<GardenBed>,
+    pub closed_counts: Option<GardenClosedCounts>,
 }
 
 impl Garden {
@@ -327,6 +328,15 @@ impl Garden {
             &self.beds
         } else {
             &[]
+        }
+    }
+
+    /// Exact root-level closed counts of the profile `selected` names, when the daemon sent them.
+    pub fn closed_counts_of(&self, selected: &str) -> Option<&GardenClosedCounts> {
+        if self.profile == selected {
+            self.closed_counts.as_ref()
+        } else {
+            None
         }
     }
 }
@@ -560,6 +570,7 @@ impl Store {
                 total: state.seeds_total.unwrap_or(seeds.len() as i64),
                 seeds,
                 beds: state.garden_beds.unwrap_or_default(),
+                closed_counts: state.garden_closed_counts,
             });
             facts.asks = Arc::new(state.asks.unwrap_or_default());
             facts.warnings = Arc::new(state.warnings.unwrap_or_default());
@@ -660,6 +671,7 @@ impl Store {
         seeds: Vec<Seed>,
         total: i64,
         beds: Vec<GardenBed>,
+        closed_counts: Option<GardenClosedCounts>,
     ) {
         self.change(|facts| {
             if facts.profiles.selected != profile {
@@ -670,6 +682,7 @@ impl Store {
                 seeds: seeds.into_iter().map(Arc::new).collect(),
                 total,
                 beds,
+                closed_counts,
             });
             Slices::GARDEN
         });
@@ -681,16 +694,21 @@ impl Store {
             if facts.profiles.selected != profile {
                 return Slices::NONE;
             }
-            let (seeds, total) = if facts.garden.profile == profile {
-                (facts.garden.seeds.clone(), facts.garden.total)
+            let (seeds, total, closed_counts) = if facts.garden.profile == profile {
+                (
+                    facts.garden.seeds.clone(),
+                    facts.garden.total,
+                    facts.garden.closed_counts.clone(),
+                )
             } else {
-                (Vec::new(), 0)
+                (Vec::new(), 0, None)
             };
             facts.garden = Arc::new(Garden {
                 profile,
                 seeds,
                 total,
                 beds,
+                closed_counts,
             });
             Slices::GARDEN
         });
@@ -705,6 +723,7 @@ impl Store {
         order: Vec<String>,
         changed: Vec<Seed>,
         total: i64,
+        closed_counts: Option<GardenClosedCounts>,
     ) {
         self.change(|facts| {
             if facts.garden.profile != profile || facts.profiles.selected != profile {
@@ -742,6 +761,7 @@ impl Store {
                 seeds,
                 total,
                 beds: facts.garden.beds.clone(),
+                closed_counts: closed_counts.or_else(|| facts.garden.closed_counts.clone()),
             });
             Slices::GARDEN
         });
