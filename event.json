@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Details shortcut pins Ask previews",
+  "at": "2026-11-25T00:47:48.559Z",
+  "fixesBug": "28997c6"
+}
