@@ -6,12 +6,13 @@ use attn_protocol::{
     ResolveSessionsMessage, ResolveSessionsResultMessage, ResolvedSession, SessionLedgerEntry,
 };
 use attn_term::links::{Line, Span};
-use attn_term::{Overlay, OverlayKind};
+use attn_term::{Overlay, OverlayKind, Sprite};
 use attn_ui::colors::TerminalColors;
 use rune::Tx;
 
 use super::{Term, Terminals};
 use crate::State;
+use crate::desktop::role_icon;
 
 /// The app's accent, which an id attn knows is washed and underlined in.
 const WASH: u8 = 26;
@@ -45,11 +46,12 @@ pub(crate) struct Mark {
     pub(crate) at: [u32; 4],
 }
 
-/// An id on screen: what it names, and the screen rows it covers with each row's first column
-/// and the column after its last.
+/// An id on screen: what it names, the role icon drawn over its prefix, and the screen rows it
+/// covers with each row's first column and the column after its last.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Found {
     target: Subject,
+    icon: Option<Sprite>,
     rows: Vec<(u32, u16, u16)>,
 }
 
@@ -60,11 +62,24 @@ impl Found {
             .copied()
             .find(|&(r, start, end)| r == row && (start..end).contains(&col))
     }
+
+    /// Its icon with the row and columns it is drawn over, when its prefix and more fit on the row.
+    fn icon_cells(&self) -> Option<(Sprite, u32, (u16, u16))> {
+        let &(row, start, end) = self.rows.first()?;
+        let after = start + SESSION.len() as u16;
+        let sprite = self.icon.filter(|_| after < end)?;
+        Some((sprite, row, (start, after)))
+    }
 }
 
 struct Keyed {
     id: String,
     live: bool,
+}
+
+fn role_sprite(session: &attn_protocol::Session) -> Option<Sprite> {
+    let role = session.delegation_role.as_ref()?;
+    Some(role_icon::Mark::of(Some(role)).sprite())
 }
 
 /// The seeds and sessions of the selected profile that terminals mark, and what they ask the
@@ -73,7 +88,8 @@ struct Keyed {
 pub(super) struct Ids {
     profile: String,
     seeds: HashSet<String>,
-    live: Vec<String>,
+    /// Each live session's role icon.
+    live: HashMap<String, Option<Sprite>>,
     closed: HashMap<String, SessionLedgerEntry>,
     by_key: HashMap<u32, Vec<Keyed>>,
     seen_closes: u64,
@@ -110,10 +126,18 @@ impl Ids {
         one.map(|k| Subject::Session(k.id.clone()))
     }
 
+    /// The role icon drawn over the prefix of `word`, which names `target`.
+    fn icon(&self, word: &Word<'_>, target: &Subject) -> Option<Sprite> {
+        match (word, target) {
+            (Word::Short(_), Subject::Session(id)) => *self.live.get(id)?,
+            _ => None,
+        }
+    }
+
     fn index(&mut self) {
         self.by_key.clear();
-        let live = self.live.iter().map(|id| (id, true));
-        let closed = self.closed.keys().filter(|id| !self.live.contains(id));
+        let live = self.live.keys().map(|id| (id, true));
+        let closed = self.closed.keys().filter(|id| !self.live.contains_key(*id));
         for (id, live) in live.chain(closed.map(|id| (id, false))) {
             let Some(key) = session_id::key_of(id) else {
                 continue;
@@ -145,12 +169,14 @@ impl Ids {
         }
         self.seen_closes = closes.seq;
         let of_profile = |s: &&attn_protocol::Session| s.profile_id == facts.profiles.selected;
-        let live = || facts.sessions.iter().filter(of_profile).map(|s| &s.id);
-        if !live().eq(self.live.iter()) {
-            let before = std::mem::replace(&mut self.live, live().cloned().collect());
+        let live = || facts.sessions.iter().filter(of_profile);
+        let known = |s: &attn_protocol::Session| self.live.get(&*s.id) == Some(&role_sprite(s));
+        if live().count() != self.live.len() || !live().all(known) {
+            let live = live().map(|s| (s.id.clone(), role_sprite(s))).collect();
+            let before = std::mem::replace(&mut self.live, live);
             let live = &self.live;
             self.closed
-                .retain(|id, _| before.contains(id) || !live.contains(id));
+                .retain(|id, _| before.contains_key(id) || !live.contains_key(id));
             changed = true;
         }
         if changed {
@@ -209,13 +235,15 @@ impl Terminals {
     pub(crate) fn knows(&self, target: &Subject) -> bool {
         match target {
             Subject::Seed(id) => self.ids.seeds.contains(id),
-            Subject::Session(id) => self.ids.live.contains(id) || self.ids.closed.contains_key(id),
+            Subject::Session(id) => {
+                self.ids.live.contains_key(id) || self.ids.closed.contains_key(id)
+            }
         }
     }
 
     /// The closed session `id`, as the ledger holds it.
     pub(crate) fn closed_session(&self, id: &str) -> Option<&SessionLedgerEntry> {
-        let live = self.ids.live.iter().any(|known| known == id);
+        let live = self.ids.live.contains_key(id);
         self.ids.closed.get(id).filter(|_| !live)
     }
 
@@ -283,7 +311,8 @@ impl Terminals {
     }
 
     /// Washes and underlines the ids on terminal `term`'s view that attn knows, brighter on the
-    /// ones that name what the open card shows.
+    /// ones that name what the open card shows. A live agent's role icon stands in place of its
+    /// id's prefix unless the cursor is on it.
     pub(super) fn id_overlays(
         id: &str,
         term: &mut Term,
@@ -297,11 +326,29 @@ impl Terminals {
         let previewing = ids.previewing.as_ref().filter(|(r, _)| r == id);
         for found in term.view.ids.iter().flatten() {
             let bright = previewing.is_some_and(|(_, target)| *target == found.target);
+            let icon = found.icon_cells().filter(|&(_, row, (start, after))| {
+                let under = |c: &attn_term::Cursor| {
+                    top + u32::from(c.row) == row && (start..after).contains(&c.col)
+                };
+                !term.grid.cursor.as_ref().is_some_and(under)
+            });
             for &(row, start, end) in &found.rows {
                 if !(top..top + rows).contains(&row) {
                     continue;
                 }
+                let icon = icon.filter(|&(_, on, _)| on == row);
                 let row = (row - top) as u16;
+                let mut start = start;
+                if let Some((sprite, _, cols)) = icon {
+                    start = cols.1;
+                    overlays.push(Overlay {
+                        row,
+                        cols,
+                        color: theme.accent,
+                        alpha: 255,
+                        kind: OverlayKind::Sprite(sprite),
+                    });
+                }
                 overlays.push(Overlay {
                     row,
                     cols: (start, end),
@@ -451,6 +498,7 @@ fn find(term: &mut Term, ids: &mut Ids) -> Vec<Found> {
         };
         words(&cells, |span, word| match ids.named(&word) {
             Some(target) => found.push(Found {
+                icon: ids.icon(&word, &target),
                 target,
                 rows: line.rows(span),
             }),

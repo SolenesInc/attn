@@ -46,6 +46,8 @@ pub struct TerminalColors {
     pub block: Rgb,
     /// A seed id's mark.
     pub seed: Rgb,
+    /// An agent's role icon: the interface's accent.
+    pub accent: Rgb,
     pub ansi: [Rgb; 16],
 }
 
@@ -147,9 +149,14 @@ impl Colors {
     /// The colors `layer` names, over `under` where it names none. A scheme file has no
     /// `under` and names every color.
     fn layered(layer: &Value, dark: bool, under: Option<&Colors>) -> Colors {
+        let ui = tokens(&layer["ui"], dark, under.map(|u| &u.ui));
         Colors {
-            ui: tokens(&layer["ui"], dark, under.map(|u| &u.ui)),
-            terminal: terminal(&layer["terminal"], under.map(|u| &u.terminal)),
+            terminal: terminal(
+                &layer["terminal"],
+                opaque(ui.accent),
+                under.map(|u| &u.terminal),
+            ),
+            ui,
         }
     }
 }
@@ -211,7 +218,13 @@ fn terminal_color(terminal: &Value, name: &str) -> Option<Rgb> {
     Some([(value >> 16) as u8, (value >> 8) as u8, value as u8])
 }
 
-fn terminal(terminal: &Value, under: Option<&TerminalColors>) -> TerminalColors {
+fn opaque(color: Color) -> Rgb {
+    let byte =
+        |at: usize| u8::from_str_radix(&color.hex()[at..at + 2], 16).expect("two hex digits");
+    [byte(1), byte(3), byte(5)]
+}
+
+fn terminal(terminal: &Value, accent: Rgb, under: Option<&TerminalColors>) -> TerminalColors {
     let pick = |name: &str, under: Option<Rgb>| {
         terminal_color(terminal, name)
             .or(under)
@@ -226,6 +239,7 @@ fn terminal(terminal: &Value, under: Option<&TerminalColors>) -> TerminalColors 
         annotation: pick("annotation", under.map(|u| u.annotation)),
         block: pick("block", under.map(|u| u.block)),
         seed: pick("seed", under.map(|u| u.seed)),
+        accent,
         ansi: std::array::from_fn(|i| pick(ANSI[i], under.map(|u| u.ansi[i]))),
     }
 }

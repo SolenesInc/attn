@@ -16,7 +16,7 @@ mod vt;
 
 pub use font::{FONT_SIZE, Metrics};
 pub use grid::{
-    Cell, Cursor, CursorStyle, Grapheme, Grid, Image, Overlay, OverlayKind, Rgb, Width,
+    Cell, Cursor, CursorStyle, Grapheme, Grid, Image, Overlay, OverlayKind, Rgb, Sprite, Width,
 };
 pub use render::Cells;
 pub use vt::{

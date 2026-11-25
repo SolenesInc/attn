@@ -1,7 +1,7 @@
 use std::sync::{Arc, LazyLock};
 
 use attn_term::kitty::{Picture as KittyPicture, Placed};
-use attn_term::{Cells, FONT_SIZE, Grid, Image, Metrics, Overlay, OverlayKind, Vt};
+use attn_term::{Cells, FONT_SIZE, Grid, Image, Metrics, Overlay, OverlayKind, Sprite, Vt};
 use attn_ui::colors::TerminalColors;
 use rune::compose::DeviceKey;
 use rune::render::{EffectSite, Gpu, Instance, OFFSCREEN_FORMAT, Offscreen, Renderer};
@@ -164,6 +164,22 @@ fn find_mark(row: u16) -> Overlay {
     }
 }
 
+static SQUARE: rune::Icon = rune::Icon {
+    name: "square",
+    view: 16.0,
+    body: r#"<rect x="2" y="2" width="12" height="12" fill="currentColor"/>"#,
+};
+
+fn red_sprite(row: u16, sprite: Sprite) -> Overlay {
+    Overlay {
+        row,
+        cols: (2, 5),
+        color: [255, 0, 0],
+        alpha: 255,
+        kind: OverlayKind::Sprite(sprite),
+    }
+}
+
 fn red_image(row: u32) -> Image {
     let (cw, ch) = metrics().device_cell(FULL);
     Image {
@@ -279,6 +295,53 @@ fn an_image_stands_in_a_small_grid_where_and_as_large_as_in_a_full_size_one() {
             (*edge as f32 - want).abs() <= 1.5,
             "small {small:?} beside full {full:?}"
         );
+    }
+}
+
+#[test]
+fn a_sprite_stands_centered_in_place_of_its_cells_text_which_comes_back_when_it_goes() {
+    let text = b"\r\nx ag-7yd2rk x\r\nx ag-7yd2rk x";
+    let (_, bare) = screen(text);
+    let shows_red = |[r, g, b, _]: [u8; 4]| r > 128 && g < 64 && b < 64;
+    for sprite in [Sprite::Icon(&SQUARE), Sprite::Letter('M')] {
+        let (_, mut grid) = screen(text);
+        let mut both = Both::default();
+        both.draw(&grid);
+        for row in [1, 2] {
+            grid.set_overlays(vec![red_sprite(row, sprite)]);
+            let drawn = draws_like_a_fresh_renderer(&mut both, &grid, "a sprite");
+            let blank: &[u8] = match row {
+                1 => b"\r\nx    7yd2rk x\r\nx ag-7yd2rk x",
+                _ => b"\r\nx ag-7yd2rk x\r\nx    7yd2rk x",
+            };
+            let (_, mut blank) = screen(blank);
+            blank.set_overlays(vec![red_sprite(row, sprite)]);
+            let over_blank = Both::default().draw(&blank);
+            for (i, scale) in [FULL, FULL * SMALL].into_iter().enumerate() {
+                assert!(
+                    drawn[i].differs_by(&over_blank[i]) <= SAME,
+                    "{sprite:?} at {scale} shows none of its cells' text"
+                );
+                let m = metrics();
+                let (cw, ch) = (m.cell_w * scale, m.cell_h * scale);
+                let [l, t, r, b] = drawn[i].bounds(shows_red).expect("the sprite draws");
+                let middle = [(l + r) as f32 / 2.0, (t + b) as f32 / 2.0];
+                let wants = [cw * 3.5, ch * (f32::from(row) + 0.5)];
+                assert!(
+                    (middle[0] - wants[0]).abs() <= cw * 0.2
+                        && (middle[1] - wants[1]).abs() <= ch * 0.2,
+                    "{sprite:?} at {scale} stands around {middle:?}, not {wants:?}"
+                );
+            }
+        }
+        grid.set_overlays(vec![]);
+        let after = both.draw(&grid);
+        for (after, bare) in after.iter().zip(Both::default().draw(&bare)) {
+            assert!(
+                after.differs_by(&bare) <= SAME,
+                "{sprite:?} leaves its text"
+            );
+        }
     }
 }
 

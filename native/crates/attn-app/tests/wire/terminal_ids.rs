@@ -14,6 +14,7 @@ use serde_json::{Value, json};
 
 use super::ledger::{closed, entry, hold, ledger_daemon, query_text, refuse_with, rows};
 use super::terminal::{cell, desktop, inputs, output, pane, profile, showing};
+use super::terminal_view::copied;
 use crate::wire::mac;
 
 const BUILDER: &str = "3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f";
@@ -130,20 +131,49 @@ fn write(world: &mut World, seq: u32, text: &str) {
     world.settle();
 }
 
-/// Each marked id's underline, as its row and columns on screen.
-fn marks_in(world: &mut World, runtime: &str) -> Vec<(u64, [u64; 2])> {
-    world.terminal_view(runtime).expect("it is drawn")["overlays"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|o| o["kind"] == "Underline")
+type Cells = (u64, [u64; 2]);
+
+/// The overlays on screen, each as its kind and the row and columns it covers.
+fn overlays_in(world: &mut World, runtime: &str) -> Vec<(String, Cells)> {
+    let view = world.terminal_view(runtime).expect("it is drawn");
+    let overlays = view["overlays"].as_array().unwrap().iter();
+    overlays
         .map(|o| {
             let cols = o["cols"].as_array().unwrap();
             (
-                o["row"].as_u64().unwrap(),
-                [cols[0].as_u64().unwrap(), cols[1].as_u64().unwrap()],
+                o["kind"].as_str().unwrap().to_owned(),
+                (
+                    o["row"].as_u64().unwrap(),
+                    [cols[0].as_u64().unwrap(), cols[1].as_u64().unwrap()],
+                ),
             )
         })
+        .collect()
+}
+
+/// The role icons on screen, each with the row and columns it stands over.
+fn icons(world: &mut World) -> Vec<(String, Cells)> {
+    let overlays = overlays_in(world, "r1").into_iter();
+    overlays
+        .filter_map(|(kind, at)| {
+            let name = kind.strip_prefix("Sprite(")?.strip_suffix(')')?;
+            Some((name.to_owned(), at))
+        })
+        .collect()
+}
+
+/// Each marked id's underline, and the role icon before it, as its row and columns on screen.
+fn marks_in(world: &mut World, runtime: &str) -> Vec<Cells> {
+    let overlays = overlays_in(world, runtime);
+    let icon_before = |(row, [start, _]): Cells| {
+        let icon = |(kind, (r, cols)): &(String, Cells)| {
+            (kind.starts_with("Sprite") && *r == row && cols[1] == start).then_some(cols[0])
+        };
+        overlays.iter().find_map(icon)
+    };
+    let underlines = overlays.iter().filter(|(kind, _)| kind == "Underline");
+    underlines
+        .map(|&(_, at)| (at.0, [icon_before(at).unwrap_or(at.1[0]), at.1[1]]))
         .collect()
 }
 
@@ -281,6 +311,100 @@ fn marks_every_form_of_a_live_sessions_id_as_a_whole_word_on_every_row_it_wraps_
         ]
     );
     assert_eq!(asked(&world), Vec::<Vec<String>>::new());
+    assert!(world.runtime_is_at_rest());
+}
+
+fn named(role: &str, builtin: Option<&str>) -> Session {
+    let mut session = builder();
+    let given = session.delegation_role.as_mut().unwrap();
+    given.name = role.into();
+    given.builtin = builtin.map(Into::into);
+    session
+}
+
+fn changes(world: &mut World, session: Session) {
+    world.daemon.emit(message(SessionStateChangedMessage {
+        session,
+        ..SessionStateChangedMessage::new()
+    }));
+    world.settle();
+}
+
+#[test]
+fn a_live_agents_role_icon_stands_over_its_short_ids_prefix_and_follows_the_role() {
+    let plain = agent(STRANGER, "No role");
+    let mut world = start(
+        vec![named("Builder", Some("builder")), plain],
+        vec![mapped()],
+        vec![mapper()],
+    );
+    write(
+        &mut world,
+        1,
+        &format!(
+            "by {BUILDER_SHORT}, {MAPPER_SHORT} {SEED}\r\n3f9a2c4e {BUILDER} {}\r\n",
+            short(STRANGER)
+        ),
+    );
+    assert_eq!(
+        icons(&mut world),
+        [("role-code".into(), (0, [3, 6]))],
+        "a closed agent, one with no role, a seed and the longer forms keep the plain mark"
+    );
+    assert_eq!(marked(&mut world).len(), 6);
+
+    changes(&mut world, named("Reviewer", Some("reviewer")));
+    assert_eq!(icons(&mut world), [("role-list".into(), (0, [3, 6]))]);
+    changes(&mut world, named("gardener", None));
+    assert_eq!(icons(&mut world), [("G".into(), (0, [3, 6]))]);
+    closes_builder(&mut world);
+    assert_eq!(icons(&mut world), []);
+    assert_eq!(marked(&mut world).len(), 6);
+    rests(&mut world);
+}
+
+#[test]
+fn a_role_icon_comes_with_the_frame_that_draws_its_id_and_none_follows() {
+    let mut world = start(vec![builder()], vec![], vec![]);
+    write(&mut world, 1, "waiting\r\n");
+    let (frames, paints) = (world.terminal_frames(), world.runtime().stats.paints);
+    write(&mut world, 2, &format!("by {BUILDER_SHORT}\r\n"));
+    assert_eq!(icons(&mut world), [("B".into(), (1, [3, 6]))]);
+    world.advance(Duration::from_secs(5));
+    assert_eq!(world.terminal_frames(), frames + 1);
+    assert_eq!(world.runtime().stats.paints, paints);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn an_id_under_a_role_icon_reads_and_copies_as_its_text() {
+    let mut world = start(vec![builder()], vec![], vec![]);
+    write(&mut world, 1, &format!("by {BUILDER_SHORT} now\r\n"));
+    assert_eq!(icons(&mut world).len(), 1);
+    assert_eq!(
+        world.terminal_text("r1")[0],
+        format!("by {BUILDER_SHORT} now")
+    );
+    let (from, to) = (cell(&world, 3, 0), cell(&world, 11, 0));
+    world.gesture(|app| {
+        app.runtime.pointer_down(from.0, from.1);
+        app.runtime.pointer_move(to.0, to.1);
+        app.runtime.pointer_up(to.0, to.1);
+    });
+    assert_eq!(copied(&mut world).as_deref(), Some(BUILDER_SHORT));
+    assert_eq!(icons(&mut world).len(), 1, "a selected id keeps its icon");
+}
+
+#[test]
+fn the_text_under_a_role_icon_shows_while_the_cursor_is_on_it() {
+    let mut world = start(vec![builder()], vec![], vec![]);
+    write(&mut world, 1, &format!("{BUILDER_SHORT} x\r\x1b[2C"));
+    assert_eq!(icons(&mut world), []);
+    assert_eq!(marked(&mut world), [BUILDER_SHORT]);
+    write(&mut world, 2, "\x1b[C");
+    assert_eq!(icons(&mut world).len(), 1);
+    write(&mut world, 3, "\x1b[D");
+    assert_eq!(icons(&mut world), []);
     assert!(world.runtime_is_at_rest());
 }
 

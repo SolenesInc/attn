@@ -1,5 +1,9 @@
 use std::collections::HashMap;
+use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
+
+use rune::Icon;
 
 pub type Rgb = [u8; 3];
 
@@ -59,7 +63,8 @@ pub struct Cursor {
 }
 
 /// A color laid over part of one row of the view: a wash over the cells' backgrounds and under
-/// their text, a line at the underline's place, or a box's edges.
+/// their text, a line at the underline's place, a box's edges, or a sprite drawn in place of the
+/// cells' text.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Overlay {
     pub row: u16,
@@ -79,6 +84,51 @@ pub enum OverlayKind {
         top: bool,
         bottom: bool,
     },
+    Sprite(Sprite),
+}
+
+/// A picture centered over cells, as large as their text.
+#[derive(Clone, Copy)]
+pub enum Sprite {
+    Icon(&'static Icon),
+    Letter(char),
+}
+
+impl PartialEq for Sprite {
+    fn eq(&self, other: &Sprite) -> bool {
+        match (self, other) {
+            (Sprite::Icon(a), Sprite::Icon(b)) => std::ptr::eq(*a, *b),
+            (Sprite::Letter(a), Sprite::Letter(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Sprite {}
+
+impl Hash for Sprite {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Sprite::Icon(icon) => std::ptr::hash(*icon, state),
+            Sprite::Letter(letter) => letter.hash(state),
+        }
+    }
+}
+
+impl fmt::Debug for Sprite {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Sprite::Icon(icon) => f.write_str(icon.name),
+            Sprite::Letter(letter) => write!(f, "{letter}"),
+        }
+    }
+}
+
+pub(crate) fn sprite_overlays(overlays: &[Overlay]) -> impl Iterator<Item = (&Overlay, Sprite)> {
+    overlays.iter().filter_map(|o| match o.kind {
+        OverlayKind::Sprite(sprite) => Some((o, sprite)),
+        _ => None,
+    })
 }
 
 /// A kitty image on the terminal: its pixels, and where it is placed.
@@ -189,6 +239,13 @@ impl Grid {
     pub fn set_overlays(&mut self, overlays: Vec<Overlay>) -> bool {
         if overlays == self.overlays {
             return false;
+        }
+        if !sprite_overlays(&self.overlays).eq(sprite_overlays(&overlays)) {
+            let both = sprite_overlays(&self.overlays).chain(sprite_overlays(&overlays));
+            let rows: Vec<u16> = both.map(|(o, _)| o.row).collect();
+            for row in rows {
+                self.mark(row);
+            }
         }
         self.overlays = overlays;
         self.overlays_stamp = next_stamp();

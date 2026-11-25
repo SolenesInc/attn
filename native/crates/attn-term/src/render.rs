@@ -16,7 +16,8 @@ use swash::zeno::Format;
 
 use crate::font::{FAMILY, Metrics, contain, fit};
 use crate::grid::{
-    BOLD, Cell, FAINT, Grid, INVISIBLE, ITALIC, OverlayKind, Rgb, STRIKETHROUGH, UNDERLINE, Width,
+    BOLD, Cell, FAINT, Grid, INVISIBLE, ITALIC, Overlay, OverlayKind, Rgb, STRIKETHROUGH, Sprite,
+    UNDERLINE, Width, sprite_overlays,
 };
 use crate::kitty::{Picture, Viewport, quad, source_rect};
 use crate::sprites;
@@ -125,10 +126,16 @@ struct Slot {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct GlyphKey {
-    text: Box<str>,
-    style: u8,
-    wide: bool,
+enum GlyphKey {
+    Text {
+        text: Box<str>,
+        style: u8,
+        wide: bool,
+    },
+    Sprite {
+        sprite: Sprite,
+        cols: u16,
+    },
 }
 
 struct Raster {
@@ -293,6 +300,38 @@ impl Raster {
             }
         }
         any.then_some(canvas)
+    }
+
+    /// The sprite drawn centered over `cols` cells.
+    fn raster_sprite(&mut self, sprite: Sprite, cols: u16) -> Option<Canvas> {
+        let (cw, ch) = self.cell();
+        let width = cw * f32::from(cols);
+        match sprite {
+            Sprite::Icon(icon) => {
+                let font_px = self.metrics.font_size * self.scale;
+                let size = font_px.min(ch).min(width).round();
+                let px = size as u32;
+                let inset = |room: f32| BIAS + ((room - size) * 0.5).round().max(0.0) as u16;
+                Some(Canvas {
+                    w: px,
+                    h: px,
+                    pixels: rune::text::icon_coverage(icon, px)
+                        .into_iter()
+                        .flat_map(|a| [a; 4])
+                        .collect(),
+                    off: [inset(width), inset(ch)],
+                    color: false,
+                })
+            }
+            Sprite::Letter(letter) => {
+                let text = letter.to_string();
+                let wide = self.layout(&text, 0).full_width() > cw * 1.5;
+                let drawn = if wide { cw * 2.0 } else { cw };
+                let mut canvas = self.raster(&text, 0, wide)?;
+                canvas.off[0] += ((width - drawn) * 0.5).round().max(0.0) as u16;
+                Some(canvas)
+            }
+        }
     }
 }
 
@@ -773,17 +812,24 @@ impl Cells {
         if text.is_empty() || text == " " {
             return None;
         }
-        let key = GlyphKey {
+        self.slot(GlyphKey::Text {
             text: text.as_ref().into(),
             style: cell.flags & (BOLD | ITALIC),
             wide: cell.width == Width::Wide,
-        };
+        })
+    }
+
+    fn slot(&mut self, key: GlyphKey) -> Option<Slot> {
         if let Some(slot) = self.glyphs.get(&key) {
             return *slot;
         }
         let raster = self.raster.as_mut().expect("made before any glyph");
         let atlas = self.atlas.as_mut().expect("made with the raster");
-        let slot = match raster.raster(&key.text, key.style, key.wide) {
+        let canvas = match &key {
+            GlyphKey::Text { text, style, wide } => raster.raster(text, *style, *wide),
+            GlyphKey::Sprite { sprite, cols } => raster.raster_sprite(*sprite, *cols),
+        };
+        let slot = match canvas {
             None => None,
             Some(canvas) => Some(Slot {
                 rect: atlas.place(&canvas)?,
@@ -838,6 +884,28 @@ impl Cells {
             }
         }
         inst
+    }
+
+    /// Draws `overlay`'s sprite in place of the text of its cells on `row`.
+    fn draw_sprite(&mut self, overlay: &Overlay, sprite: Sprite, row: &mut [Inst]) {
+        let cols = overlay.cols.1.saturating_sub(overlay.cols.0);
+        let cells = usize::from(overlay.cols.0)..usize::from(overlay.cols.1);
+        let Some(cells) = row.get_mut(cells).filter(|cells| !cells.is_empty()) else {
+            return;
+        };
+        for cell in &mut *cells {
+            cell.glyph = [0; 4];
+            cell.flags = 0;
+        }
+        let Some(slot) = self.slot(GlyphKey::Sprite { sprite, cols }) else {
+            return;
+        };
+        cells[0].glyph = slot.rect;
+        cells[0].off = slot.off;
+        cells[0].fg = pack(overlay.color, overlay.alpha);
+        if slot.color {
+            cells[0].flags = COLOR_GLYPH;
+        }
     }
 
     /// Brings each grid's GPU copy up to date at `scale` device pixels per point, rewriting only
@@ -1083,6 +1151,7 @@ impl Cells {
             ..Default::default()
         };
         let cols = usize::from(cols);
+        let sprites: Vec<(&Overlay, Sprite)> = sprite_overlays(grid.overlays()).collect();
         let mut changed: Option<(usize, usize)> = None;
         for y in 0..usize::from(rows) {
             let stamp = grid.stamps()[y];
@@ -1092,6 +1161,10 @@ impl Cells {
             rows_drawn[y] = stamp;
             for x in 0..cols {
                 insts[1 + y * cols + x] = self.inst(grid, x, y);
+            }
+            let row = &mut insts[1 + y * cols..][..cols];
+            for (overlay, sprite) in sprites.iter().filter(|(o, _)| usize::from(o.row) == y) {
+                self.draw_sprite(overlay, *sprite, row);
             }
             changed = Some(changed.map_or((y, y), |(first, _)| (first, y)));
         }
@@ -1334,6 +1407,7 @@ fn overlay_insts(grid: &Grid, theme: TerminalColors) -> (Vec<Inst>, Vec<Inst>) {
                     lines.push(edge(EDGE_BOTTOM, [start, o.row], [end - start, 1]));
                 }
             }
+            OverlayKind::Sprite(_) => {}
         }
     }
     if let Some(c) = grid.cursor.filter(|_| !washes.is_empty()) {

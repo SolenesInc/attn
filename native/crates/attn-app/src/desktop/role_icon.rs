@@ -1,4 +1,5 @@
 use attn_protocol::SessionDelegationRole;
+use attn_term::Sprite;
 use attn_ui::Glyph;
 use rune::Icon;
 
@@ -122,6 +123,13 @@ impl Mark {
                     .1,
             ),
             Mark::Letter(letter) => Glyph::Text(letter.clone()),
+        }
+    }
+
+    pub(crate) fn sprite(&self) -> Sprite {
+        match self.glyph() {
+            Glyph::Icon(icon) => Sprite::Icon(icon),
+            Glyph::Text(letter) => Sprite::Letter(letter.chars().next().unwrap_or('○')),
         }
     }
 }

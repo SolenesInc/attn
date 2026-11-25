@@ -7779,6 +7779,48 @@ fn terminal_agent_card(dark: bool) {
     snap(&mut world, "terminal-agent-card", dark);
 }
 
+/// Agent a's terminal naming agents whose role has an icon, only a letter or that have none, and
+/// the other forms of id, beside a commit hash.
+fn terminal_role_icons(dark: bool) {
+    const REVIEWER: &str = "24a1ae04-5d2c-4f7e-8b19-aa01bb02cc03";
+    const GARDENER: &str = "ded1de86-3c4a-4b5e-9f60-718293a4b5c6";
+    let role = |name: &str, builtin: Option<&str>| attn_protocol::SessionDelegationRole {
+        name: name.into(),
+        builtin: builtin.map(Into::into),
+        ..Default::default()
+    };
+    let mut world = popover_world(
+        dark,
+        |state| {
+            let sessions = state.sessions.as_mut().expect("the tour's sessions");
+            sessions[1].id = LIVE_AGENT.into();
+            sessions[1].delegation_role = Some(role("Builder", Some("builder")));
+            sessions[2].id = REVIEWER.into();
+            sessions[2].delegation_role = Some(role("Reviewer", Some("reviewer")));
+            sessions[3].id = GARDENER.into();
+            sessions[3].delegation_role = Some(role("Gardener", None));
+            sessions[4].id = CLOSED_AGENT.into();
+            state.seeds_total = Some(1);
+            state.seeds = Some(vec![seed("s-7k3f9m", "Retry uploads", "growing", None)]);
+        },
+        |_| {},
+    );
+    let [builder, reviewer, gardener, plain] =
+        [LIVE_AGENT, REVIEWER, GARDENER, CLOSED_AGENT].map(attn_protocol::session_id::short);
+    write(
+        &mut world,
+        &format!(
+            "Dispatched {builder} on s-7k3f9m; {reviewer} reviews it.\r\n\
+             {gardener} tends it once {builder} lands.\r\n\
+             {plain} has no role.\r\n\
+             Old forms still work: {} and {REVIEWER}.\r\n\
+             A commit 1d4e6f90 stays plain.\r\n",
+            &LIVE_AGENT[..8]
+        ),
+    );
+    snap(&mut world, "terminal-role-icons", dark);
+}
+
 /// A closed agent's id with its card pinned, then the same card after its resume was refused.
 fn terminal_closed_card(dark: bool) {
     let mut world = naming_agents(dark);
@@ -8951,6 +8993,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("session_seed_context", || session_seed_context(dark));
         scene("terminal_seed_card", || terminal_seed_card(dark));
         scene("terminal_agent_card", || terminal_agent_card(dark));
+        scene("terminal_role_icons", || terminal_role_icons(dark));
         scene("terminal_closed_card", || terminal_closed_card(dark));
         scene("notifications_empty", || notifications_empty(dark));
         scene("notifications_listed", || notifications_listed(dark));

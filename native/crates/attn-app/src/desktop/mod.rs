@@ -19,7 +19,7 @@ mod overview;
 mod peek;
 pub(crate) mod provenance;
 pub(crate) mod refusal;
-mod role_icon;
+pub(crate) mod role_icon;
 mod row_slide;
 mod seed_card;
 pub(crate) mod seed_chip;

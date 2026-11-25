@@ -122,7 +122,7 @@ the 16 ANSI colors and a selection, an agent's header beside an active document
 tile, with a seed's state, an open ask and rounded and square boxes in its
 terminal, and again with the document's Focus pill hovered, the title bar's
 shelf, again with its width control showing, and again with stacks whole and folded into counts, a terminal with a
-comment mark, a seed id, a selected command block and find matches, a Markdown file with code and a Mermaid diagram, a document
+comment mark, a seed id, a selected command block and find matches, one naming agents by id, their role icons in place of `ag-`, a Markdown file with code and a Mermaid diagram, a document
 alone in its tile with every block the reader draws, a document whose file is
 missing, a review stop with its key line, the review's key sheet and file view,
 a review beside its agent, and shown alone beside a second document, with its
