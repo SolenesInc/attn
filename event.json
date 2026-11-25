@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Existing MCP search guidance uses a rejected argument",
+  "at": "2026-11-25T10:06:28.119Z",
+  "detail": "An existing tools-enabled session can retain earlier launch guidance after update, including shared Codex on resume. The guidance names words for seed_search. At pinned f02c67f39 MCP refuses words before search; the same caller succeeds with query. Preserve a usable search path for already-running sessions while teaching query. The implementation seed chose a single advertised name with no alias, so keep that constraint in view when selecting the fix. Independent wire proof is on s-awz1s3.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/catalog/content/seed.yaml",
+    "line": 140
+  },
+  "culprit": "d220bfd0b96f2cdc9a2a71b017e59cb9a4f4a84b"
+}
