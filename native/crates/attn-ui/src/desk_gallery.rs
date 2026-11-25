@@ -326,7 +326,7 @@ fn overview(s: &Desk, cx: &mut Cx<Desk>) -> El {
             .on_press_tx(press),
         )
         .child(Overview::new_desktop("strip.new", &t).on_press_tx(press))
-        .child(Overview::line("line".into(), &approval, "approve?", &t).on_press_tx(press));
+        .child(Overview::line("line".into(), &approval, "Apply this edit?", &t).on_press_tx(press));
     stage(s, cx, &t, vec![row_small, below]).fill(t.bg_app)
 }
 

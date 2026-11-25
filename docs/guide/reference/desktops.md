@@ -115,7 +115,7 @@ On Ubuntu 24.04, GNOME's default keys move a window between workspaces with Ctrl
 
 Cmd+G (Ctrl+Shift+G on Linux) shows the whole row small, on one line or several, with your other desktops as strips above and below it. The sidebar's "Desktop overview" row, the queue bar's desktop overview chip, the palette, a count on the shelf, and the entry of the column you are in open it too. Nothing moves while you look: no tile slides and no terminal changes size.
 
-A terminal shows its text. A terminal that has not been on screen shows the text it had when the overview opened, or its icon and title when there is none to show. A document or a seed on this desktop shows its body. Browser tiles and other kinds show their icon and title. The bar under a column says the column is on screen. A tile that needs you has an outline and a word in its state's color, and a line below the row says what it asks. The tile with the heavy outline has the highlight. The highlight starts on the tile you are in, and moving it does not move the row.
+A terminal shows its text. A terminal that has not been on screen shows the text it had when the overview opened, or its icon and title when there is none to show. A document or a seed on this desktop shows its body. Browser tiles and other kinds show their icon and title. The bar under a column says the column is on screen. A tile that needs you has an outline and a word in its state's color, and when its agent has an open ask, a line below the row shows the question. The tile with the heavy outline has the highlight. The highlight starts on the tile you are in, and moving it does not move the row.
 
 | Key | What it does |
 |---|---|

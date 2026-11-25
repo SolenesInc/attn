@@ -7,7 +7,7 @@ use crate::system::{IconSize, Space, Type, door, icon, keycaps, words};
 use crate::{Glyph, Tokens};
 
 /// A row drawn small over the tile area, and what stands around it: a strip per other desktop
-/// and a line per tile that needs the user.
+/// and a line per tile that needs the user and has a question.
 pub struct Overview;
 
 /// One tile of the row drawn small, under its name.
@@ -35,7 +35,7 @@ const LEAVE_SECONDS: f32 = 0.14;
 
 impl MemberState {
     /// What a tile that needs the user says it is doing.
-    pub fn needs(self) -> Option<&'static str> {
+    fn needs(self) -> Option<&'static str> {
         match self {
             MemberState::Waiting => Some("waits"),
             MemberState::Approval => Some("approve?"),
@@ -111,8 +111,8 @@ impl Overview {
             ))
     }
 
-    /// A desktop's strip: its `number`, its name, a mark per tile in the groups its columns
-    /// make, and what they count to.
+    /// A desktop's strip: its `number`, its name and a mark per tile in the groups its columns
+    /// make. A screen reader hears what they count to.
     pub fn strip(
         key: String,
         number: Option<String>,
@@ -136,12 +136,6 @@ impl Overview {
         strip(key, number.unwrap_or_default(), name, said, t)
             .a11y_value(counts.to_owned())
             .child(marks)
-            .child(
-                ground
-                    .words(counts.to_owned(), Type::Small, t.text_secondary, t)
-                    .single_line()
-                    .a11y_hidden(),
-            )
     }
 
     /// The list above the row at `rect`, `height` points tall whole: it scrolls, from its end
@@ -173,7 +167,7 @@ impl Overview {
         strip(key.to_owned(), "+".to_owned(), "New desktop", said, t)
     }
 
-    /// The line of a tile that needs the user and what it `asks`.
+    /// The line of a tile that needs the user and the question it `asks`.
     pub fn line(key: String, member: &ShelfMember, asks: &str, t: &Tokens) -> El {
         let ground = Ground::of(t.bg_app, t);
         let line = door::gap(row().key(key).w_full().items_center(), Space::S8)

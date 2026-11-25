@@ -1,9 +1,9 @@
 //! The overview as it draws: the row in miniature, the strips around it and a line per tile that
-//! needs the user.
+//! needs the user and has a question.
 
 use attn_client::Desktop;
 use attn_ui::Tokens;
-use attn_ui::blocks::{MemberState, Miniature, Overview as Block, ShelfMember};
+use attn_ui::blocks::{Miniature, Overview as Block, ShelfMember};
 use rune::{El, Tx, el, memo};
 
 use super::layout::{self, Column, Leaf, LeafKind, Node, Rows};
@@ -31,7 +31,7 @@ struct List {
     height: f32,
 }
 
-struct Needing {
+struct Asking {
     leaf: String,
     member: ShelfMember,
     asks: String,
@@ -111,7 +111,7 @@ fn arrange(state: &State, overview: &Overview, desktop: &Desktop, lines: usize) 
     }
 }
 
-fn needing(state: &State, desktop: &Desktop) -> Vec<Needing> {
+fn asking(state: &State, desktop: &Desktop) -> Vec<Asking> {
     let facts = &state.facts;
     let (columns, _) = overview::row_of(state, desktop);
     let Some(tree) = desktop.tree() else {
@@ -123,16 +123,14 @@ fn needing(state: &State, desktop: &Desktop) -> Vec<Needing> {
         .flat_map(|c| &c.leaf_ids)
         .filter_map(|leaf| {
             let member = super::shelf::member(desktop, facts, tree, &unseen, leaf);
-            let word = member.state.and_then(MemberState::needs)?;
-            let asked = super::view::pane_of(desktop, leaf)
-                .and_then(|pane| facts.sessions.iter().find(|s| s.id == pane.session_id))
-                .and_then(|session| crate::asks::chip_of(facts, session));
-            let asks = match asked {
-                Some(ask) if ask.more > 0 => format!("{} and {} more", ask.subject, ask.more),
-                Some(ask) => ask.subject,
-                None => word.to_owned(),
+            let pane = super::view::pane_of(desktop, leaf).filter(|_| member.needs_user())?;
+            let session = facts.sessions.iter().find(|s| s.id == pane.session_id)?;
+            let ask = crate::asks::chip_of(facts, session)?;
+            let asks = match ask.more {
+                0 => ask.subject,
+                more => format!("{} and {more} more", ask.subject),
             };
-            Some(Needing {
+            Some(Asking {
                 leaf: leaf.clone(),
                 member,
                 asks,
@@ -145,7 +143,7 @@ fn needing(state: &State, desktop: &Desktop) -> Vec<Needing> {
 pub(crate) fn miniatures(state: &State) -> Option<(Vec<String>, f32)> {
     let overview = overview::open(state)?;
     let desktop = overview::desktop_of(state, &overview.at().desktop)?;
-    let scale = arrange(state, overview, desktop, needing(state, desktop).len())
+    let scale = arrange(state, overview, desktop, asking(state, desktop).len())
         .rows
         .scale;
     let terminals = desktop.panes.iter().map(|p| p.runtime_id.clone()).collect();
@@ -163,8 +161,8 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
     let Some(desktop) = overview::desktop_of(state, &overview.at().desktop) else {
         return Some(layer);
     };
-    let needing = needing(state, desktop);
-    let placed = arrange(state, overview, desktop, needing.len());
+    let asking = asking(state, desktop);
+    let placed = arrange(state, overview, desktop, asking.len());
     let layer = match &overview.at().leaf {
         Some(leaf) => layer.active_descendant(miniature_key(leaf)),
         None => layer,
@@ -174,7 +172,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
     let row_w = placed.area[2];
     let at = |y: f32, e: El| el().absolute(0.0, y).w_full().child(e);
     let step = |i: usize| i as f32 * Block::STRIP_STEP;
-    let below_lines = with_gap(needing.len() as f32 * Block::LINE);
+    let below_lines = with_gap(asking.len() as f32 * Block::LINE);
     let strips_above = desktops_above
         .iter()
         .enumerate()
@@ -189,7 +187,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
             Block::new_desktop("overview.new", t).on_press_tx(overview::create),
         )
     });
-    let lines = needing.iter().enumerate().map(|(i, n)| {
+    let lines = asking.iter().enumerate().map(|(i, n)| {
         let spot = spot(desktop, &n.leaf);
         let line = Block::line(format!("overview.line.{}", n.leaf), &n.member, &n.asks, t)
             .on_press_tx(move |state: &mut State, tx: &mut Tx| {

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use attn_app::{Action, Binding, Category, Keymap};
 use attn_protocol::{
-    Desktop, DesktopPane, InitialStateMessage, Profile, ProfileActionResultMessage,
+    Ask, Desktop, DesktopPane, InitialStateMessage, Profile, ProfileActionResultMessage,
     ProfileArrangementChangedMessage, Session,
 };
 use attn_testkit::tree::{below, pane, row, tile};
@@ -112,6 +112,21 @@ fn initial(desktops: Vec<Desktop>) -> InitialStateMessage {
         desktops: Some(desktops),
         ..InitialStateMessage::new()
     }
+}
+
+fn question(session: &str) -> Ask {
+    let id = format!("a-{session}");
+    super::asks::ask(&id, session, "Which branch?", 5, vec![])
+}
+
+/// Every session of `state` waits on the user with an open ask.
+fn all_ask(state: &mut InitialStateMessage) {
+    let sessions = state.sessions.iter_mut().flatten();
+    let asks = sessions.map(|session| {
+        session.state = "waiting_input".into();
+        question(&session.id)
+    });
+    state.asks = Some(asks.collect());
 }
 
 fn start_on(daemon: Daemon) -> World {
@@ -443,6 +458,7 @@ fn return_and_a_press_land_on_the_tile_and_close() {
         for session in state.sessions.iter_mut().flatten() {
             if session.id == "s-d" {
                 session.state = "waiting_input".into();
+                state.asks = Some(vec![question("s-d")]);
             }
         }
         let mut world = start_on(Daemon::scripted().state(state));
@@ -898,7 +914,7 @@ fn a_peek_s_open_shows_its_tile_and_closes_the_overview() {
 }
 
 #[test]
-fn a_tile_that_needs_the_user_says_so_on_its_miniature_and_on_a_line_with_what_it_asks() {
+fn a_tile_that_needs_the_user_says_so_on_its_miniature_and_only_its_question_on_a_line() {
     let mut state = initial(three_desktops());
     for session in state.sessions.iter_mut().flatten() {
         match session.id.as_str() {
@@ -908,39 +924,62 @@ fn a_tile_that_needs_the_user_says_so_on_its_miniature_and_on_a_line_with_what_i
             _ => {}
         }
     }
-    state.asks = Some(vec![super::asks::ask(
-        "a-1",
-        "s-b",
-        "Which branch?",
-        5,
-        vec![],
-    )]);
+    let next = super::asks::ask("a-next", "s-b", "Which remote?", 2, vec![]);
+    state.asks = Some(vec![question("s-b"), next]);
     let mut world = start_on(Daemon::scripted().state(state));
     press(&mut world, Action::DesktopOverview);
 
-    let screen = world.screen();
-    let value = |leaf: &str| {
-        let node = screen.get(Target::key(miniature(leaf)));
+    let value = |world: &World, leaf: &str| {
+        let node = world.screen().get(Target::key(miniature(leaf)));
         node.value.filter(|said| !said.is_empty())
     };
-    assert_eq!(value("a").as_deref(), Some("highlighted, on screen"));
-    assert_eq!(value("b").as_deref(), Some("on screen, needs you"));
-    assert_eq!(value("c"), None);
-    assert_eq!(value("e").as_deref(), Some("needs you"));
-    let line = |leaf: &str| {
-        let line = screen.find(Target::key(format!("overview.line.{leaf}")))?;
-        line.name
+    let line = |world: &World, leaf: &str| {
+        let key = format!("overview.line.{leaf}");
+        world.screen().find(Target::key(key))?.name
     };
-    assert_eq!(line("b").as_deref(), Some("Agent b: Which branch?"));
-    assert_eq!(line("e").as_deref(), Some("Agent e: approve?"));
-    assert_eq!(line("a"), None);
-    assert_eq!(
-        screen
-            .get(Target::key(format!("overview.strip.{TWO}")))
-            .value
-            .as_deref(),
-        Some("2 columns, 1 waits")
-    );
+    let lines = |world: &World| {
+        let asks = "Agent b: Which branch? and 1 more";
+        assert_eq!(line(world, "b").as_deref(), Some(asks));
+        for leaf in ["a", "c", "d", "e"] {
+            assert_eq!(line(world, leaf), None);
+        }
+        assert_eq!(value(world, "e").as_deref(), Some("needs you"));
+    };
+    lines(&world);
+    assert_eq!(value(&world, "c"), None);
+    let highlighted = value(&world, "a");
+    assert_eq!(highlighted.as_deref(), Some("highlighted, on screen"));
+    let on_screen = value(&world, "b");
+    assert_eq!(on_screen.as_deref(), Some("on screen, needs you"));
+    key(&mut world, Key::Escape);
+
+    walk_to_b(&mut world);
+    press(&mut world, Action::TerminalFocusRight);
+    assert!(open(&world));
+    lines(&world);
+}
+
+#[test]
+fn a_strip_shows_its_number_and_name_and_says_its_counts_to_a_screen_reader() {
+    let mut state = initial(three_desktops());
+    for session in state.sessions.iter_mut().flatten() {
+        if session.id == "s-y" {
+            session.state = "waiting_input".into();
+        }
+    }
+    let mut world = start_on(Daemon::scripted().state(state));
+    press(&mut world, Action::DesktopOverview);
+    let strip = format!("overview.strip.{TWO}");
+    let all = world.runtime().elements();
+    let words: Vec<&str> = all
+        .iter()
+        .filter(|e| e.path.contains(&format!("/{strip}/")))
+        .filter_map(|e| e.text.as_deref())
+        .filter(|said| !said.is_empty())
+        .collect();
+    assert_eq!(words, ["2", "Desktop 2"]);
+    let said = world.screen().get(Target::key(strip)).value;
+    assert_eq!(said.as_deref(), Some("2 columns, 1 waits"));
 }
 
 #[test]
@@ -1153,9 +1192,7 @@ fn an_outline_in_a_stack_is_round_only_at_the_corners_of_its_column() {
 fn the_row_and_the_lists_take_the_whole_window_inside_its_padding() {
     for size in [SMALLEST, LAPTOP] {
         let mut state = initial(three_desktops());
-        for session in state.sessions.iter_mut().flatten() {
-            session.state = "waiting_input".into();
-        }
+        all_ask(&mut state);
         let mut world = World::start_sized(Daemon::scripted().state(state), size);
         world.open_desktop();
         let fills = |world: &World, way: &str| {
@@ -1194,9 +1231,7 @@ fn in_the_smallest_window_the_row_keeps_its_room_and_the_lists_around_it_scroll(
     desktops[4] = shown.clone();
     let mut state = initial(desktops);
     state.profiles = Some(vec![profile(&shown.id)]);
-    for session in state.sessions.iter_mut().flatten() {
-        session.state = "waiting_input".into();
-    }
+    all_ask(&mut state);
     let mut world = World::start_sized(Daemon::scripted().state(state), SMALLEST);
     world.open_desktop();
     press(&mut world, Action::DesktopOverview);
