@@ -434,6 +434,20 @@ Probed on 2.1.330 with a real account, on a non-production instance with
   consent text says auto mode's safety check reads each script once, before
   it runs, and does not check the tool calls the script makes, so the
   `mcp__attn__*` allow rule does not cover a script. That run passed the check.
+- Claude Code sends its permission rules to the auto-mode classifier. On 2.1.332
+  with Sonnet 5.5, under `--disallowed-tools ListAgents`, a shell `attn agent list`
+  was refused as `[Undermining Oversight]` in 12 of 12 `claude -p` runs and 8 of 8
+  calls in attn sessions. Without the flag it was refused in 0 of 31 runs
+  (`c6-classifier-agent-list.md` on `s-ct56cj`). attn disallows no tool, and
+  Claude's launch instructions say that its `ListAgents` and `SendMessage` are not
+  attn's. In 27 attn sessions launched that way, each with `ListAgents` in its tools
+  and `SendMessage` deferred, no call used either and no `attn agent list` was
+  refused (`s-dqnc07`).
+- With and without the flag, auto mode refuses a shell `attn ask close` followed by
+  `attn seed harvest` for an ask that the session's transcript did not create: 5 of 5
+  without the flag, as `[Destructive or Unwanted Actions]` or
+  `[Undermining Oversight]`. The `ask_close` tool ran 2 of 2 times (2.1.332). Which
+  rule the classifier applies was not seen.
 - Auto mode reads `autoMode.{allow, soft_deny, hard_deny, environment}` from
   policy, flag (`--settings`) and user settings, not from project settings
   (read in the 2.1.330 bundle). `claude [--settings <json>] auto-mode config` prints
