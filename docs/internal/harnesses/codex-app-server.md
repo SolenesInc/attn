@@ -333,6 +333,20 @@ the source at rust-v0.166.0:
   `state=idle` once its chat starts, 3.6 s after Enter in one probe, because
   only the chat widget reports status (`tui/src/chatwidget.rs`).
 
+Probed on 0.167.0 on Linux through attn, as a shared `--remote` TUI and as a
+plain TUI from an attn built to launch Codex outside its app-server, with every
+byte the TUI wrote recorded, and read in the source at rust-v0.167.0:
+
+- For the 40 s the question stayed open, the TUI set no terminal title (no OSC 0
+  or 2) and sent no OSC 7501. attn had the session `launching` until its first
+  screen read 10.0 s after launch, and `waiting_input` with
+  `folder_trust_question` from then on, at 30 s too. A shared launch with a first
+  prompt did the same.
+- A plain TUI asks only inside a project, meaning a git repository or a folder
+  under a `project_root_markers` entry. In any other folder with no saved trust
+  the chat starts. A `--remote` TUI asks in both
+  (`tui/src/config_update.rs`, `read_remote_project_trust`).
+
 Read in the source at openai/codex 1ffa95e:
 
 - `active` carries `waitingOnUserInput` while a turn waits on the user's

@@ -80,6 +80,8 @@ for (const place of [{ name: "home" } as Place, ...outposts])
   }
 const staged = tasks.filter((t) => t.stage)
 if (cells.some((c) => c.place.ssh) && staged.length > 0) throw new Error(`${staged.map((t) => t.id).join(", ")} stage a folder on this machine, so they run on the home only`)
+if (!toolHome && tasks.some((t) => t.id === "msg-delegate") && cells.some((c) => c.harness.agent === "codex"))
+  throw new Error("msg-delegate saves its delegate's folder as trusted in the Codex home, so with codex it runs only with --tool-home <dir>, never on your own ~/.codex")
 cells.sort((a, b) => Number(a.harness.codeMode) - Number(b.harness.codeMode))
 
 const stamp = new Date().toISOString().replace(/[:.]/g, "-")
