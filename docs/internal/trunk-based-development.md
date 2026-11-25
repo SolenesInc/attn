@@ -249,6 +249,12 @@ receives. When neither fixing forward nor reverting is clearly right, the sherif
 user. The `sheriff` skill is the sheriff's procedure. Keep landing while `main` is red. A
 release waits for green.
 
+A green run can finish before the sheriff sees the failure it follows. The
+sheriff's guard reports those failures from its recent CI history, including
+on a green `main`. The sheriff checks for an existing owner or landed repair
+before routing each recovered failure. When CI never opened a branch health
+issue, the repair seed records the owner.
+
 ## Releases
 
 A release is cut on demand from a `main` commit that has green Acceptance and

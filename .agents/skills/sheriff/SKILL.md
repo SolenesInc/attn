@@ -1,6 +1,6 @@
 ---
 name: sheriff
-description: Use when main's CI is red, or when asked to check whether main is green.
+description: Use to triage current and recovered failures on main, or to check whether main is green.
 ---
 
 # Sheriff
@@ -52,8 +52,8 @@ and recorded.
 ### 1. Establish the verdict on `main`
 
 **Outcome**: an exact verdict on `origin/main` across all four CI tracks (Linux
-push and full, macOS push and full), acting on the first failed job without
-waiting for a run to finish or calling `main` green early.
+push and full, macOS push and full), with current failures and recovered runs
+ready for triage.
 
 ```bash
 scripts/ci-main-red.sh
@@ -67,16 +67,23 @@ git rev-parse origin/main
 - Inspect queued or running push runs for already failed or timed-out jobs
   right away:
   `gh run view <id> --json jobs --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | {databaseId, name}'`.
-- Inspect every `<run-id> <attempt>` line from `scripts/ci-main-red.sh`. Its
-  last line, `window <UTC half hour>`, names no run: it changes every 30
-  minutes while anything is red so the automation's guard starts fresh runs
-  ([Step 6](#6-wrap-up-when-the-pass-is-settled)).
-- Call `main` green only when `scripts/ci-main-red.sh` prints nothing, no
-  in-progress run has a failed job, and the newest completed push run of both
-  `ci.yml` and `ci-macos.yml` passed at `origin/main`. When nothing is red, note
-  the green SHA on your seed if `origin/main` passed, or the last green SHA if
-  `origin/main` is still in CI, then wrap up in
-  [Step 6](#6-wrap-up-when-the-pass-is-settled).
+- Read every run from `scripts/ci-main-red.sh`. A `<run-id> <attempt>` line
+  names a current failure. A `recovered <run-id> <attempt>` line names a
+  failure followed by a green run on the same track. Inspect the attempt
+  named on each line. Handle current failures first. A `window <UTC half
+  hour>` line changes every 30 minutes while anything is red so the guard
+  starts fresh runs ([Step 6](#6-wrap-up-when-the-pass-is-settled)).
+- On a scheduled run, also read the captured `guard_output` from the
+  occurrence. Use the fresh scan for current health and triage each distinct
+  failed attempt from either output. If a captured run is absent from the
+  fresh scan, check its track before treating it as current or recovered.
+- Call `main` green when there are no current failures, no in-progress run has
+  a failed job, and the newest completed push run of both `ci.yml` and
+  `ci-macos.yml` passed at `origin/main`. When nothing is red, note the green
+  SHA on your seed if `origin/main` passed, or the last green SHA if it is
+  still in CI. Continue to Step 2 for recovered runs, even when `main` is
+  green. Wrap up in [Step 6](#6-wrap-up-when-the-pass-is-settled) when there
+  are no current or recovered failures to triage.
 - For pass records, carried groups, nightly runs, and release commits, see
   [Verifying before landing](../../../docs/internal/trunk-based-development.md#verifying-before-landing).
 
@@ -93,9 +100,14 @@ ignored, and repeated failed repairs stop patching and question the premise.
 | `CI macOS` (`ci-macos.yml`) | push | `Branch health: main macOS` |
 | `CI macOS` (`ci-macos.yml`) | full (nightly, dispatch, release) | `Branch health: main full run` |
 
-Read recent comments on the matching issue first. Reopen a closed issue
-(`gh issue reopen <number>`) only when acting on an in-progress run of that
-same track. Match each failure by `(job, test, error)`, not run id:
+Find the matching issue, including closed issues, and read its recent
+comments. Reopen it (`gh issue reopen <number>`) only when acting on an
+in-progress run of that track. For both current and recovered failures,
+search the Garden for a repair seed. An earlier pass may have assigned the
+repair before CI opened the issue. Use `(job, test, error)` to match each
+failure. Skip an attempt you already recorded unless its repair needs
+follow-up. When there is no matching issue, keep the owner and evidence on
+the repair seed, including when routing to a live author.
 
 - **Owned or already escalated, no landed repair**: log the new run and skip
   this failure. Do not open a second turn for an already escalated failure or
@@ -110,12 +122,11 @@ same track. Match each failure by `(job, test, error)`, not run id:
   [Attack the premise](../../../internal/prompts/content/skills/attn-workflow/principles/attack-the-premise.md),
   test the shared assumption against the code or evidence, and bring the owner
   a redesign. Escalate if the owner disagrees.
-- **Flaky failure now green on a newer `main` commit**: do not skip it. A test
-  that failed on `main` and then passed enters `test-history` selection and
-  taxes unrelated landings until it passes on 30 later `main` commits in that
-  lane. Check whether an open repair seed already tracks that exact
-  `(test, error)`. If not, dispatch a root-cause fix or investigation in Step 4
-  instead of waiting for a second red run.
+- **Recovered failure without an owner or a landed repair**: send it to Step 4
+  for a root-cause fix or investigation. A flaky test can keep running on
+  unrelated landings until it passes on 30 later `main` commits in that lane.
+  Use the failed job and any newer repair to tell why it recovered. Route an
+  unexplained pass for investigation. Reserve reverts for current breakage.
 
 If no failure needs action, wrap up in
 [Step 6](#6-wrap-up-when-the-pass-is-settled).
@@ -182,8 +193,8 @@ self-contained for a reader with no context.
   is not small, a release commit, a runner or service outage, an owner who
   rejects a premise-attack redesign, or no clear path): never revert a merged
   database migration ([Database migrations](../../../docs/internal/db-migrations.md)).
-  Comment findings on the matching Branch health issue and run `attn turn open`
-  ([Asking the user](#asking-the-user)).
+  Record findings on the matching Branch health issue, or on the repair seed
+  when there is no issue. Run `attn turn open` ([Asking the user](#asking-the-user)).
 
 **Delegation constraints**:
 
@@ -222,10 +233,10 @@ self-contained for a reader with no context.
 the scorecard record, and recurring failure classes only produce Correction
 seeds that keep landings fast.
 
-- **Branch health issue**: post state transitions only (job, test and error,
-  failing SHA, owner, re-land owner for reverts, and repair SHA). Never post
-  `GREEN` updates on a closed issue (`scripts/ci-branch-health.sh` closes the
-  issue and posts recovery).
+- **Branch health issue**: when CI has created one, post state transitions
+  only (job, test and error, failing SHA, owner, re-land owner for reverts,
+  and repair SHA). `scripts/ci-branch-health.sh` posts recovery and closes the
+  issue. Without an issue, keep the failed run, owner and repair on the seed.
 - **Your own seed**: write one concise note when a red `main` traces to a
   commit, when the repair lands, and when the first completed CI run containing
   the repair confirms the repair (run, job, test, culprit SHA and `Attn-Seed:`,
@@ -304,8 +315,8 @@ Write every question for a reader with **no context on the run, test, or seed**:
 - Waiting push runs replaced by a newer push conclude `cancelled` with no jobs,
   so a red run covers every commit since the last green run. Release commits
   run in their own concurrency group and are never dropped.
-- You own tests still red on `main`. [land-on-main](../land-on-main/SKILL.md)
-  lists them without blocking unrelated landings.
+- You own tests still red on `main` and route unowned recovered failures.
+  [land-on-main](../land-on-main/SKILL.md) explains how each affects landings.
 - Before approving a test-only repair while a live author or plot Orchestrator
   is active on the culprit's seed, confirm whether the product change was
   intentional so a Builder does not weaken a test the author is fixing in
