@@ -87,8 +87,16 @@ impl Compositor<State> for Screens {
         let redrawn = f.rt.state().terminals.undrawn();
         let terminals = &mut f.rt.state_mut().terminals;
         let metrics = terminals.metrics();
-        self.cells
-            .prepare(device, queue, key, scale, metrics, theme, terminals.grids());
+        self.cells.prepare(
+            device,
+            queue,
+            key,
+            scale,
+            None,
+            metrics,
+            theme,
+            terminals.grids(),
+        );
         let clear = f.rt.clear_color();
         let core: &mut RuntimeCore = f.rt;
         f.ui.prepare(device, queue, &mut core.text.atlas, &core.instances, f.size);

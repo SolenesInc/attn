@@ -1360,7 +1360,7 @@ impl Terminals {
     }
 
     /// Each drawn terminal's screen brought up to date, by the mark of the slot it draws in.
-    pub(crate) fn grids(&mut self) -> impl Iterator<Item = (u32, &mut Grid)> {
+    pub(crate) fn grids(&mut self) -> impl Iterator<Item = (u32, &Grid)> {
         self.undrawn = false;
         self.refresh_hovers();
         let theme = self.theme;
@@ -1370,7 +1370,7 @@ impl Terminals {
         let seeds = (&*self.seeds, self.card.as_ref());
         self.panes.iter_mut().map(move |(id, term)| {
             Terminals::bring_up_to_date(images, finds, seeds, &theme, metrics, id, term);
-            (mark(id), &mut term.grid)
+            (mark(id), &term.grid)
         })
     }
 

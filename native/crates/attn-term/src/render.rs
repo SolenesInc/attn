@@ -1,6 +1,7 @@
 //! Draws terminal grids at `El::effect` slots: a glyph atlas of its own (parley shaping and
 //! fallback, swash rasterization, sprite rects for box drawing), one 32-byte instance per cell
-//! kept in a GPU buffer and rewritten by dirty row, and a WGSL shader.
+//! kept in a GPU buffer and rewritten where a row's stamp differs from the one drawn, and a WGSL
+//! shader.
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -13,7 +14,7 @@ use rune::{Family, TextStyle};
 use swash::scale::{Render, ScaleContext, Source, StrikeWith, image::Content};
 use swash::zeno::Format;
 
-use crate::font::{FAMILY, Metrics, fit};
+use crate::font::{FAMILY, Metrics, contain, fit};
 use crate::grid::{
     BOLD, Cell, FAINT, Grid, INVISIBLE, ITALIC, OverlayKind, Rgb, STRIKETHROUGH, UNDERLINE, Width,
 };
@@ -107,10 +108,11 @@ struct Uniforms {
     viewport: [f32; 2],
     cell: [f32; 2],
     atlas: [f32; 2],
+    zoom: [f32; 2],
     linear: f32,
-    zoom: f32,
     line: f32,
     underline: f32,
+    unused: f32,
 }
 
 const IMMEDIATE_SIZE: u32 = std::mem::size_of::<Uniforms>() as u32;
@@ -133,6 +135,8 @@ struct Raster {
     scx: ScaleContext,
     scale: f32,
     metrics: Metrics,
+    /// The cell that a kitty image's pixels count in.
+    image_cell: (f32, f32),
     baseline: f32,
     /// The ink every glyph is drawn in before its cell tints it: white, so font smoothing dilates
     /// each glyph as it does white text.
@@ -140,11 +144,12 @@ struct Raster {
 }
 
 impl Raster {
-    fn new(scale: f32, metrics: Metrics) -> Raster {
+    fn new(scale: f32, metrics: Metrics, image_cell: (f32, f32)) -> Raster {
         let mut r = Raster {
             scx: ScaleContext::new(),
             scale,
             metrics,
+            image_cell,
             baseline: 0.0,
             ink: SmoothingInk::of(attn_ui::colors::rgb([255, 255, 255])),
         };
@@ -433,6 +438,10 @@ struct Screen {
     washes: u32,
     lines: u32,
     shape: (u16, u16),
+    /// The stamps of the rows, overlays and images drawn.
+    rows_drawn: Vec<u64>,
+    overlays_drawn: u64,
+    images_drawn: u64,
     insts: Vec<Inst>,
     images: wgpu::Buffer,
     images_cap: u64,
@@ -476,12 +485,13 @@ pub struct Cells {
     /// largest texture.
     pictures: HashMap<u64, Option<wgpu::BindGroup>>,
     theme: TerminalColors,
+    shrink: Option<f32>,
 }
 
 const SHADER: &str = r#"
 struct U {
   origin: vec2f, viewport: vec2f, cell: vec2f, atlas: vec2f,
-  linear: f32, zoom: f32, line: f32, underline: f32,
+  zoom: vec2f, linear: f32, line: f32, underline: f32, unused: f32,
 };
 var<immediate> u: U;
 @group(0) @binding(1) var atlas_t: texture_2d<f32>;
@@ -831,9 +841,12 @@ impl Cells {
     }
 
     /// Brings each grid's GPU copy up to date at `scale` device pixels per point, rewriting only
-    /// the rows the grid marked dirty, and forgets every mark not given. The cursor is a block in
-    /// the theme's cursor color whatever shape the program asked for, and the grid sits on the
-    /// theme's background.
+    /// the rows stamped anew since it drew them, and forgets every mark not given. The cursor is
+    /// a block in the theme's cursor color whatever shape the program asked for, and the grid sits
+    /// on the theme's background.
+    ///
+    /// With `shrink`, every grid fills its slot whole at its own proportions, centered, its glyphs
+    /// rastered near `shrink` of full size. Given no grid, it then keeps nothing.
     #[allow(clippy::too_many_arguments)]
     pub fn prepare<'g>(
         &mut self,
@@ -841,33 +854,41 @@ impl Cells {
         queue: &wgpu::Queue,
         key: DeviceKey,
         scale: f32,
+        shrink: Option<f32>,
         metrics: Metrics,
         theme: TerminalColors,
-        grids: impl IntoIterator<Item = (u32, &'g mut Grid)>,
+        grids: impl IntoIterator<Item = (u32, &'g Grid)>,
     ) {
+        let grids: Vec<(u32, &Grid)> = grids.into_iter().collect();
+        if shrink.is_some() && grids.is_empty() {
+            *self = Cells::default();
+            return;
+        }
+        self.shrink = shrink;
+        let image_cell = metrics.device_cell(scale);
+        let scale = shrink.map_or(scale, |shrink| metrics.whole_row_scale(scale * shrink));
         self.gpu(device, key);
         self.theme = theme;
-        let mut grids: Vec<(u32, &mut Grid)> = grids.into_iter().collect();
         self.screens
             .retain(|mark, _| grids.iter().any(|(drawn, _)| drawn == mark));
         let rescaled = self
             .raster
             .as_ref()
-            .is_none_or(|r| r.scale != scale || r.metrics != metrics);
+            .is_none_or(|r| (r.scale, r.metrics, r.image_cell) != (scale, metrics, image_cell));
         let full = self.atlas.as_ref().is_some_and(|a| a.full);
         if rescaled {
-            self.raster = Some(Raster::new(scale, metrics));
+            self.raster = Some(Raster::new(scale, metrics, image_cell));
         }
         if rescaled || full {
             self.restart_atlas();
         }
-        for (mark, grid) in &mut grids {
+        for (mark, grid) in &grids {
             self.prepare_screen(device, queue, *mark, grid);
         }
         self.prepare_pictures(device, queue, &grids);
         if self.atlas.as_ref().is_some_and(|a| a.full) {
             self.restart_atlas();
-            for (mark, grid) in &mut grids {
+            for (mark, grid) in &grids {
                 self.prepare_screen(device, queue, *mark, grid);
             }
             if self.atlas.as_ref().is_some_and(|a| a.full) {
@@ -914,7 +935,7 @@ impl Cells {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        grids: &[(u32, &mut Grid)],
+        grids: &[(u32, &Grid)],
     ) {
         let shown: HashMap<u64, &Picture> = grids
             .iter()
@@ -1000,7 +1021,7 @@ impl Cells {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         mark: u32,
-        grid: &mut Grid,
+        grid: &Grid,
     ) {
         let (cols, rows) = (grid.cols, grid.rows);
         if cols == 0 || rows == 0 {
@@ -1024,6 +1045,9 @@ impl Cells {
             washes: 0,
             lines: 0,
             shape: (0, 0),
+            rows_drawn: Vec::new(),
+            overlays_drawn: 0,
+            images_drawn: 0,
             insts: Vec::new(),
             images: device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("terminal images"),
@@ -1049,9 +1073,10 @@ impl Cells {
             }
             screen.insts = vec![Inst::default(); count];
             screen.shape = (cols, rows);
-            grid.dirty.iter_mut().for_each(|d| *d = true);
+            screen.rows_drawn = vec![0; usize::from(rows)];
         }
         let mut insts = std::mem::take(&mut screen.insts);
+        let mut rows_drawn = std::mem::take(&mut screen.rows_drawn);
         insts[0] = Inst {
             span: [cols, rows],
             bg: pack(self.theme.bg, 255),
@@ -1060,9 +1085,11 @@ impl Cells {
         let cols = usize::from(cols);
         let mut changed: Option<(usize, usize)> = None;
         for y in 0..usize::from(rows) {
-            if !std::mem::take(&mut grid.dirty[y]) {
+            let stamp = grid.stamps()[y];
+            if rows_drawn[y] == stamp {
                 continue;
             }
+            rows_drawn[y] = stamp;
             for x in 0..cols {
                 insts[1 + y * cols + x] = self.inst(grid, x, y);
             }
@@ -1072,9 +1099,11 @@ impl Cells {
         screen.cursor = grid
             .cursor
             .map(|c| 1 + u32::from(c.row) * cols as u32 + u32::from(c.col));
-        if std::mem::take(&mut grid.images_changed) || reshaped {
-            let cell = self.raster.as_ref().expect("made before any screen").cell();
-            let (quads, drawn) = image_insts(grid, cell);
+        screen.rows_drawn = rows_drawn;
+        if screen.images_drawn != grid.images_stamp() || reshaped {
+            screen.images_drawn = grid.images_stamp();
+            let raster = self.raster.as_ref().expect("made before any screen");
+            let (quads, drawn) = image_insts(grid, raster.image_cell, raster.cell());
             screen.drawn = drawn;
             if screen.images_cap < quads.len() as u64 {
                 screen.images = device.create_buffer(&wgpu::BufferDescriptor {
@@ -1089,9 +1118,10 @@ impl Cells {
                 queue.write_buffer(&screen.images, 0, bytemuck::cast_slice(&quads));
             }
         }
-        if std::mem::take(&mut grid.overlays_changed)
+        if screen.overlays_drawn != grid.overlays_stamp()
             || (changed.is_some() && !grid.overlays().is_empty())
         {
+            screen.overlays_drawn = grid.overlays_stamp();
             let overlays = overlay_insts(grid, self.theme);
             screen.washes = overlays.0.len() as u32;
             screen.lines = overlays.1.len() as u32;
@@ -1144,20 +1174,30 @@ impl Cells {
         let (cw, ch) = raster.cell();
         let (cols, rows) = screen.shape;
         let r = site.instance.rect;
-        let fit = fit((cols, rows), (cw, ch), (r[2], r[3]));
-        let line = raster.scale;
+        let (zoom, offset) = if self.shrink.is_some() {
+            contain((cols, rows), raster.metrics, (cw, ch), (r[2], r[3]))
+        } else {
+            let fit = fit((cols, rows), (cw, ch), (r[2], r[3]));
+            ([fit.zoom; 2], fit.offset)
+        };
+        let line = if self.shrink.is_some() {
+            raster.scale.max(1.0 / zoom[0].min(zoom[1]))
+        } else {
+            raster.scale
+        };
         let uniforms = Uniforms {
             origin: [
-                (r[0] - site.origin[0] + fit.offset[0]).round(),
-                (r[1] - site.origin[1] + fit.offset[1]).round(),
+                (r[0] - site.origin[0] + offset[0]).round(),
+                (r[1] - site.origin[1] + offset[1]).round(),
             ],
             viewport: [site.size[0] as f32, site.size[1] as f32],
             cell: [cw, ch],
             atlas: [ATLAS as f32, ATLAS as f32],
             linear: if site.srgb_blend { 0.0 } else { 1.0 },
-            zoom: fit.zoom,
+            zoom,
             line,
-            underline: ((raster.metrics.font_size * 1.1).ceil() + 2.0) * line,
+            underline: ((raster.metrics.font_size * 1.1).ceil() + 2.0) * raster.scale,
+            unused: 0.0,
         };
         pass.set_bind_group(0, &gpu.bind, &[]);
         let pipelines = Cells::pipelines(gpu, device, site.format);
@@ -1220,15 +1260,23 @@ impl Cells {
 }
 
 /// A grid's kitty images as quads in a grid of `cell`-sized cells, with the picture and layer
-/// each draws from and in.
-fn image_insts(grid: &Grid, cell: (f32, f32)) -> (Vec<ImageInst>, Vec<(u64, Layer)>) {
+/// each draws from and in. Their pixels count in cells of `image_cell`.
+fn image_insts(
+    grid: &Grid,
+    image_cell: (f32, f32),
+    cell: (f32, f32),
+) -> (Vec<ImageInst>, Vec<(u64, Layer)>) {
     let (images, top) = grid.images();
     let viewport = Viewport {
         top,
-        cell,
-        size: (f32::from(grid.cols) * cell.0, f32::from(grid.rows) * cell.1),
+        cell: image_cell,
+        size: (
+            f32::from(grid.cols) * image_cell.0,
+            f32::from(grid.rows) * image_cell.1,
+        ),
         device_per_unit: 1.0,
     };
+    let (across, down) = (cell.0 / image_cell.0, cell.1 / image_cell.1);
     images
         .iter()
         .filter_map(|image| {
@@ -1237,7 +1285,7 @@ fn image_insts(grid: &Grid, cell: (f32, f32)) -> (Vec<ImageInst>, Vec<(u64, Laye
             let [x, y, sw, sh] = source_rect(&image.placed, &q, (w, h));
             let (w, h) = (w as f32, h as f32);
             let inst = ImageInst {
-                rect: [q.x, q.y, q.width, q.height],
+                rect: [q.x * across, q.y * down, q.width * across, q.height * down],
                 uv: [x / w, y / h, sw / w, sh / h],
             };
             Some((inst, (image.picture.id, Layer::of(image.placed.z))))
@@ -1322,7 +1370,7 @@ mod tests {
     #[test]
     fn a_character_the_terminal_families_lack_draws_from_an_installed_font_that_has_it() {
         let metrics = Metrics::of(FONT_SIZE);
-        let mut raster = Raster::new(2.0, metrics);
+        let mut raster = Raster::new(2.0, metrics, metrics.device_cell(2.0));
         for text in ["\u{23f5}", "\u{23f5}\u{23f5} auto mode on"] {
             assert!(
                 !glyph_ids(&mut raster, text).contains(&0),
@@ -1333,7 +1381,7 @@ mod tests {
 
     #[test]
     fn a_text_default_symbol_draws_in_the_cell_colour_not_as_a_colour_emoji() {
-        let mut raster = Raster::new(2.0, Metrics::of(FONT_SIZE));
+        let mut raster = Raster::new(2.0, Metrics::of(FONT_SIZE), (1.0, 1.0));
         for text in ["\u{23fa}", "\u{23f8}"] {
             let canvas = raster.raster(text, 0, false).expect("drawn");
             assert!(!canvas.color, "{text:?} drew as a colour emoji");

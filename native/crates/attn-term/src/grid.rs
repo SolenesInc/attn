@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub type Rgb = [u8; 3];
 
@@ -93,8 +94,16 @@ impl PartialEq for Image {
     }
 }
 
-/// The visible screen of one terminal, read out of libghostty-vt by dirty row. `dirty` marks
-/// the rows that changed since the renderer last took them.
+static LAST_STAMP: AtomicU64 = AtomicU64::new(0);
+
+/// A stamp no grid has carried before.
+fn next_stamp() -> u64 {
+    LAST_STAMP.fetch_add(1, Ordering::Relaxed) + 1
+}
+
+/// The visible screen of one terminal, read out of libghostty-vt by dirty row. Each row, the
+/// overlays and the images carry a stamp that changes when they do and that nothing else in any
+/// grid has, so a renderer draws what differs from the stamps it drew. Zero is never drawn.
 #[derive(Default)]
 pub struct Grid {
     pub cols: u16,
@@ -102,14 +111,12 @@ pub struct Grid {
     pub fg: Rgb,
     pub bg: Rgb,
     pub cells: Vec<Cell>,
-    pub dirty: Vec<bool>,
+    stamps: Vec<u64>,
     pub cursor: Option<Cursor>,
     overlays: Vec<Overlay>,
-    /// The overlays changed since the renderer last took them.
-    pub overlays_changed: bool,
+    overlays_stamp: u64,
     images: Vec<Image>,
-    /// The images, or the row the view starts at, changed since the renderer last took them.
-    pub images_changed: bool,
+    images_stamp: u64,
     /// The screen row the view's top row is, which the images' rows count from.
     image_top: u32,
     /// Each row's runs of kitty placeholder cells, whose cells draw no glyph.
@@ -159,6 +166,21 @@ impl Grid {
         }
     }
 
+    /// The stamp of each row.
+    pub fn stamps(&self) -> &[u64] {
+        &self.stamps
+    }
+
+    /// The stamp of the overlays, zero until there are any.
+    pub(crate) fn overlays_stamp(&self) -> u64 {
+        self.overlays_stamp
+    }
+
+    /// The stamp of the images and the row the view starts at, zero until there are any.
+    pub(crate) fn images_stamp(&self) -> u64 {
+        self.images_stamp
+    }
+
     pub fn overlays(&self) -> &[Overlay] {
         &self.overlays
     }
@@ -169,7 +191,7 @@ impl Grid {
             return false;
         }
         self.overlays = overlays;
-        self.overlays_changed = true;
+        self.overlays_stamp = next_stamp();
         true
     }
 
@@ -193,7 +215,7 @@ impl Grid {
         }
         self.images = images;
         self.image_top = top;
-        self.images_changed = true;
+        self.images_stamp = next_stamp();
     }
 
     pub fn row(&self, y: usize) -> &[Cell] {
@@ -267,7 +289,7 @@ impl Grid {
         self.cols = cols;
         self.rows = rows;
         self.cells = vec![Cell::default(); usize::from(cols) * usize::from(rows)];
-        self.dirty = vec![true; usize::from(rows)];
+        self.stamps = (0..rows).map(|_| next_stamp()).collect();
         self.placeholders = vec![Vec::new(); usize::from(rows)];
     }
 
@@ -276,8 +298,8 @@ impl Grid {
     }
 
     pub(crate) fn mark(&mut self, row: u16) {
-        if let Some(dirty) = self.dirty.get_mut(usize::from(row)) {
-            *dirty = true;
+        if let Some(stamp) = self.stamps.get_mut(usize::from(row)) {
+            *stamp = next_stamp();
         }
     }
 }

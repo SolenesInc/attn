@@ -30,13 +30,13 @@ fn only_rows_that_changed_are_read_again() {
     let mut vt = Vt::new(10, 3);
     vt.write(b"one\r\ntwo");
     let mut grid = screen(&mut vt);
-    grid.dirty.iter_mut().for_each(|d| *d = false);
+    let stamps = grid.stamps().to_vec();
     assert!(!vt.sync(&mut grid), "nothing changed since the last read");
     vt.write(b"\r\nthree");
     assert!(vt.sync(&mut grid));
     assert_eq!(grid.row_text(2), "three");
-    assert!(!grid.dirty[0], "the first row did not change");
-    assert!(grid.dirty[2]);
+    assert_eq!(grid.stamps()[0], stamps[0], "the first row did not change");
+    assert_ne!(grid.stamps()[2], stamps[2]);
 }
 
 #[test]

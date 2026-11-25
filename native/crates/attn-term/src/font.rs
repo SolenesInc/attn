@@ -117,6 +117,11 @@ impl Metrics {
         ]
     }
 
+    /// The scale nearest `scale` at which a row is a whole number of device pixels high.
+    pub(crate) fn whole_row_scale(&self, scale: f32) -> f32 {
+        (self.cell_h * scale).round().max(1.0) / self.cell_h
+    }
+
     /// The pixel size `cols`×`rows` cells take at `scale` device pixels per point.
     pub fn pixels(&self, (cols, rows): (u16, u16), scale: f32) -> (u32, u32) {
         let (cw, ch) = self.device_cell(scale);
@@ -127,6 +132,24 @@ impl Metrics {
 pub(crate) struct Fit {
     pub(crate) zoom: f32,
     pub(crate) offset: [f32; 2],
+}
+
+/// The zoom across and down, and the offset, that show a whole grid of `drawn` cells in a slot at
+/// the proportions `metrics` give its cells, centered. The two zooms differ by what rounding the
+/// drawn cell to whole pixels took.
+pub(crate) fn contain(
+    (cols, rows): (u16, u16),
+    metrics: Metrics,
+    drawn: (f32, f32),
+    (w, h): (f32, f32),
+) -> ([f32; 2], [f32; 2]) {
+    let (cols, rows) = (f32::from(cols), f32::from(rows));
+    let scale = (w / (cols * metrics.cell_w)).min(h / (rows * metrics.cell_h));
+    let (cw, ch) = (metrics.cell_w * scale, metrics.cell_h * scale);
+    (
+        [cw / drawn.0, ch / drawn.1],
+        [(w - cols * cw) / 2.0, (h - rows * ch) / 2.0],
+    )
 }
 
 /// How a grid sits in its slot: a PTY smaller than the slot, sized by another client, is scaled up

@@ -685,8 +685,8 @@ impl Vt {
         }
     }
 
-    /// Brings `grid` up to date with the screen, reading only rows that changed, and marks
-    /// them dirty. True when anything changed.
+    /// Brings `grid` up to date with the screen, reading only rows that changed, and
+    /// stamps them anew. True when anything changed.
     pub fn sync(&mut self, grid: &mut Grid) -> bool {
         let t = self.raw.as_ptr();
         let mut frame = Frame::default();
@@ -749,7 +749,7 @@ impl Vt {
                         ..Cell::default()
                     };
                 }
-                grid.dirty[y] = true;
+                grid.mark(y as u16);
             }
             y += 1;
         }
