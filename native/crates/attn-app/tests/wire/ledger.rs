@@ -382,6 +382,36 @@ fn words_and_dir_narrow_the_page_without_asking_the_daemon() {
 }
 
 #[test]
+fn a_short_id_a_full_id_and_its_prefixes_find_a_closed_session() {
+    const UPLOADER: &str = "3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f";
+    let mut world = World::start(ledger_daemon(
+        state(vec![], vec![]),
+        vec![
+            closed(entry(UPLOADER, "Fix the retry uploader", 30), "user"),
+            closed_docs(),
+        ],
+    ));
+    open(&mut world);
+    click(&mut world, "ledger.scope.closed");
+    assert_eq!(rows(&world), [UPLOADER, "docs"]);
+
+    for typed in [
+        "ag-7yd2rk",
+        "AG-7YD2",
+        "7yd2rk",
+        "3f9a2c4e",
+        UPLOADER,
+        "retry",
+    ] {
+        type_query(&mut world, typed);
+        assert_eq!(rows(&world), [UPLOADER], "{typed}");
+        plain(&mut world, Key::Escape);
+    }
+    type_query(&mut world, "ag-7yd2rj");
+    assert!(rows(&world).is_empty());
+}
+
+#[test]
 fn the_list_and_what_it_says_when_empty_start_on_the_line_of_the_tabs_above_it() {
     let mut world = world();
     open(&mut world);

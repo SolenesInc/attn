@@ -203,6 +203,12 @@ pub(crate) fn rows(state: &State) -> Vec<&KeptConversationRow> {
             let retention = retention(row);
             let mut haystack: Vec<&str> = vec![&row.title, &row.agent, &row.resume_id, &retention];
             haystack.extend(row.session_ids.iter().map(String::as_str));
+            let shorts: Vec<_> = row
+                .session_ids
+                .iter()
+                .map(|id| attn_protocol::session_id::short(id))
+                .collect();
+            haystack.extend(shorts.iter().map(|s| s.as_ref()));
             if row.kept.is_none() {
                 haystack.push("pending");
             }

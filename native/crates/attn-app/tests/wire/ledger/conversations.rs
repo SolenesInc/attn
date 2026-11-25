@@ -9,7 +9,7 @@ use rune::Key;
 use super::super::sidebar::state;
 use super::{
     click, closed, come_back, entry, focused, hang_up, has, heard, ledger_daemon, letter, name,
-    open, plain, rows, selected, text_in,
+    open, plain, rows, selected, text_in, type_query,
 };
 
 const AT: &str = "2026-10-01T12:00:00Z";
@@ -358,6 +358,22 @@ fn deleted_copies_are_asked_for_only_while_shown_and_say_who_deleted_them() {
     click(&mut world, "ledger.deleted");
     assert!(!rows(&world).contains(&"claude:gone".to_owned()));
     assert_eq!(lists(&world), [Some(false), Some(true), Some(false)]);
+}
+
+#[test]
+fn a_short_session_id_finds_the_conversation_that_session_ran() {
+    const UPLOADER: &str = "3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f";
+    let mut result = fixture();
+    result.rows[0].session_ids = vec![UPLOADER.into()];
+    let mut world = start(result);
+
+    for typed in ["ag-7yd2rk", "7yd2rk", "3f9a2c4e", UPLOADER] {
+        type_query(&mut world, typed);
+        assert_eq!(rows(&world), ["claude:pin"], "{typed}");
+        plain(&mut world, Key::Escape);
+    }
+    type_query(&mut world, "ag-7yd2rj");
+    assert!(rows(&world).is_empty());
 }
 
 #[test]

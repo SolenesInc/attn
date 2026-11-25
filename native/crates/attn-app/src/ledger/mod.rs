@@ -652,10 +652,12 @@ pub(crate) fn rows(state: &State) -> Vec<Row<'_>> {
         .iter()
         .filter(|e| query::matches_dir(&e.directory, &parsed.dir))
         .filter(|e| {
+            let short = attn_protocol::session_id::short(&e.id);
             query::matches_words(
                 &[
                     &e.label,
                     &e.id,
+                    &short,
                     &e.agent,
                     e.branch.as_deref().unwrap_or_default(),
                     &e.directory,
