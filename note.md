@@ -1,0 +1,1 @@
+The agent bench has four harder tasks, and `--grid` now runs a chosen scope: Claude Code and Codex at the home with tools on and off, the tasks at three runs and 13 probes at one. Commands that Codex's sandbox blocks from attn's socket are counted in their own column instead of as refusals.
