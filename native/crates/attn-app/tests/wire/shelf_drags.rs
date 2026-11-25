@@ -540,6 +540,34 @@ fn a_tile_dropped_beside_the_entry_already_next_to_it_shows_the_pair() {
 }
 
 #[test]
+fn after_a_drop_the_width_control_waits_for_the_pointer_to_move() {
+    for (entry, share) in [("c", LEFT_HALF), ("b", RIGHT_HALF)] {
+        let mut world = start(THREE_FIT, Some("86"), vec![four("a")]);
+        assert_eq!(screen(&world), ["a", "b"]);
+        let over = at(&world, "shelf.frame", 0.5, 0.5);
+        let to = at(&world, &format!("shelf.entry.{entry}"), share, 0.5);
+
+        world.gesture(|app| app.drag_over(Target::key("tile.b.header"), over));
+        world.gesture(|app| app.move_to(to));
+        world.gesture(|app| app.release(to));
+        assert_eq!(moves(&world), [moved("b", "c", "left", false)], "{entry}");
+        becomes(&mut world, four("b"));
+        rest(&mut world);
+
+        let [x, y, w, h] = world.runtime().presented("shelf.frame").unwrap().0;
+        assert!(
+            (x..x + w).contains(&to.0) && (y..y + h).contains(&to.1),
+            "{entry}: the frame is under the pointer"
+        );
+        let shows = |world: &World| world.screen().find(Target::key("shelf.width")).is_some();
+        assert!(!shows(&world), "{entry}: a still pointer shows no control");
+
+        world.gesture(|app| app.move_to((to.0 + 1.0, to.1)));
+        assert!(shows(&world), "{entry}");
+    }
+}
+
+#[test]
 fn a_tile_dropped_beside_an_entry_whose_dragged_width_keeps_them_apart_clears_it_and_shows_the_pair()
  {
     let row = || [wanted("a", 200, None), pane("b"), pane("c"), pane("d")];

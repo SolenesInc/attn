@@ -559,9 +559,20 @@ fn view(state: &State, shelf: Option<Shelf>, t: &Tokens) -> Option<El> {
     let desk = &state.window.desk;
     let id = &shelf.desktop;
     let (x, width) = shelf.framed();
-    let frame = blocks::Shelf::frame(x, width, t).on_hover_change(
-        |state: &mut State, inside, _: &mut Tx| state.window.desk.width_control.frame = inside,
-    );
+    let frame = blocks::Shelf::frame(x, width, t)
+        .on_pointer_move_local(|state: &mut State, _, tx: &mut Tx| {
+            let hover = &mut state.window.desk.width_control;
+            if hover.frame || tx.pointer_held() {
+                tx.live_only();
+                return;
+            }
+            hover.frame = true;
+        })
+        .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
+            if !inside {
+                state.window.desk.width_control.frame = false;
+            }
+        });
     let drop = desk.drag.as_ref().and_then(|d| d.shelf_mark());
     let count = |side: CountSide| {
         let held = shelf.folded(side);
@@ -834,7 +845,9 @@ fn menu_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx) {
     super::drag::gesture(state, d, tx, Owner::Menu);
 }
 
-/// Where the pointer is that shows the width control: over the shelf's frame or over the control.
+/// Where the pointer moved to, with no button held, that shows the width control: over the
+/// shelf's frame, where a frame that comes under a still pointer does not count, or over the
+/// control.
 #[derive(Default)]
 pub(crate) struct WidthControlHover {
     frame: bool,

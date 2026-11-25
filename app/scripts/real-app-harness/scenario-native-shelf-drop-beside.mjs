@@ -99,7 +99,6 @@ async function dropBeside(moving, anchor, share) {
   const rowBefore = row();
   const shownBefore = await shown();
   const side = share === LEFT_HALF ? 'before' : 'after';
-  await driver.hover(tile(moving));
   await driver.drag(header(moving), { target: entry(anchor), at: [share, 0.5] });
   const landed = await observer.waitFor(() => {
     const now = current();
