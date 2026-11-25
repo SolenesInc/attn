@@ -1,0 +1,10 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Two Linux tests expected the old tool mention in a refusal",
+  "at": "2026-11-25T20:54:29.029Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45693336909",
+  "severity": "p1",
+  "source": "ci",
+  "culprit": "8bf2930b03be0483be3a973d6dacf692fc8cb4ec"
+}
