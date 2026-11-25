@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Narrowed shelf stack pills hide a waiting agent’s dash",
+  "at": "2026-11-25T02:56:30.276Z",
+  "detail": "Narrowed shelf stack pills hide a waiting agent’s dash\n\nA supported four-tile stack with three waiting members below the shown tile can render a 32-point pill. Its third 10-point dash starts at x=32 and disappears. The reviewer also reproduced this at the measured full width of a stack named 1 through 4. Budget space or use a compact representation that still shows each waiting member. Evidence is on s-2bt4aa.\n"
+}
