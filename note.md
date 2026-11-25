@@ -1,0 +1,1 @@
+attnd can now run one JavaScript script in QuickJS, in a child process (`attnd _run-script`) that holds only its pipe and stops at limits on memory, stack and its own compute. Nothing reaches it yet: the four tools on /mcp (s-4k286c) will. It adds 1.7 MB to attnd (3.3 MB on macOS and 4.1 MB on Linux with debug info) and about 5 init allocations.
