@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Native Ledger cannot find a closed session by its short ID",
+  "at": "2026-11-25T01:40:35.333Z",
+  "detail": "Native Ledger cannot find a closed session by the short ID printed by the CLI.\n\nAt 78fa1687c the plain attn session list --closed output changed to ag- IDs. The native Ledger still builds searchable row text from UUID and row metadata. At d902ff55e the reviewer used the native wire boundary with a loaded closed row: its UUID found the row and its matching ag- ID found zero. A fresh reviewer independently confirmed the formatter and matcher result.\n\nInclude the shared formatted short ID in Ledger row search, preserve UUID and ordinary search terms, and cover the Closed path in the native wire suite. The evidence archive on s-1evpsp contains the reproduction and passing checks.\n"
+}
