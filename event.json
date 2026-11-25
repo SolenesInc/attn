@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Agent inbox can clear persisted seed standby",
+  "at": "2026-11-25T18:06:22.541Z",
+  "detail": "The read effect permits moving the caller's read position, while reading the final seed message through agent inbox also clears the persisted seed standby state. Classify it as act or separate the state change under an agreed contract. Focused standby tests and independently checked source trace are on s-0evnyp.\n"
+}
