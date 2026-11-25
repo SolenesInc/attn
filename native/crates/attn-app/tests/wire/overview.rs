@@ -1081,7 +1081,29 @@ fn in_the_smallest_window_the_row_keeps_its_room_and_the_lists_around_it_scroll(
     );
     assert!(first[1] >= top && last[1] + last[3] <= legend);
 
+    let [left, _, width, _] = rect(&world, "overview");
+    let [_, over, _, over_height] = rect(&world, "overview.above");
+    let [_, under, _, _] = rect(&world, "overview.below");
+    let room_top = over + over_height;
+    assert!(
+        (under - room_top) * 2.0 >= legend - over,
+        "the row has {room_top} to {under}, over the legend at {legend}"
+    );
+    for id in &ids {
+        let [x, y, w, h] = rect(&world, &miniature(id));
+        assert!(w > 0.0 && h > 0.0, "{id} is {w} by {h}");
+        assert!(x >= left && x + w <= left + width, "{id} at {x}");
+        assert!(y >= room_top && y + h <= under, "{id} at {y}");
+    }
+    assert_eq!(highlight(&world).as_deref(), Some("p0"));
+    let outline = rect(&world, &format!("{}.outline", miniature("p0")));
+    assert_eq!(outline, first);
+    let nearest = rect(&world, &format!("overview.strip.{}", "work/desktop_4"));
+    assert!(nearest[1] >= over && nearest[1] + nearest[3] <= room_top);
+
     wheel_to_the_end(&mut world, "overview.below");
+    let last_strip = rect(&world, &format!("overview.strip.{}", "work/desktop_9"));
+    assert!(last_strip[1] >= under && last_strip[1] + last_strip[3] <= legend);
     let new = rect(&world, "overview.new");
     assert!(last[1] + last[3] <= new[1] && new[1] + new[3] <= legend);
     wheel_to_the_end(&mut world, "overview.above");
