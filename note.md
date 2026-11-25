@@ -1,0 +1,1 @@
+Garden v2 keeps repository paths intact when you edit a bed, and picking a bed in search returns that bed alone. Waiting on you follows the queue, closed automation runs remain reachable, and the List and Board show clearer navigation and status.
