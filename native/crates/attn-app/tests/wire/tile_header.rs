@@ -2595,7 +2595,7 @@ fn the_command_palette_pins_the_pull_requests_of_the_agent_on_screen() {
 }
 
 /// Whether the element keyed `key` is drawn with the accent around it.
-fn edged_in_accent(world: &World, key: &str) -> bool {
+pub(super) fn edged_in_accent(world: &World, key: &str) -> bool {
     let runtime = world.runtime();
     let t = attn_ui::colors::scheme_for(None).colors(true).ui;
     let accent = [t.accent.r, t.accent.g, t.accent.b].map(rune::theme::srgb_encode);

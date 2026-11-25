@@ -139,7 +139,7 @@ Drag the entry of a column that is off screen. The entries of columns on screen 
 - Drop an entry on a tile's edge to place its column beside the tile, or on the top or bottom edge to stack it there.
 - Drop an entry between other off-screen entries to reorder the row. Focus stays where it is.
 - Drop an entry on a desktop in the sidebar to move its whole column there and go with it.
-- Drop a tile beside an off-screen entry to bring the two together: the tile moves to that side of the entry's column, both come on screen, and the tile takes focus. When a dragged width of either one keeps the two apart, that width is cleared. When two tiles at the narrowest width do not fit side by side, the tile shows alone and a message gives the numbers. On a count, the tile goes beside the outermost column the count holds. A stacked tile leaves its stack and becomes a column of its own.
+- Drop a tile beside an off-screen entry to bring the two together: the tile moves to that side of the entry's column, both come on screen, and the tile takes focus. When a dragged width of either one keeps the two apart, that width is cleared. When two tiles at the narrowest width do not fit side by side, the tile shows alone and a message gives the numbers. On a count, the tile goes to that end of the row: before its first column or after its last. A stacked tile leaves its stack and becomes a column of its own.
 
 Esc cancels any of these drags.
 

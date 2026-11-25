@@ -145,8 +145,10 @@ pub(crate) struct LeafDrag {
 
 #[derive(Clone, Debug, PartialEq)]
 enum Target {
-    /// Beside a column on the shelf, by its first leaf.
+    /// Beside a column on the shelf, by its first leaf, with the entry or the count under the
+    /// pointer marked.
     Shelf {
+        marked: String,
         column: String,
         edge: Edge,
     },
@@ -201,10 +203,10 @@ struct Dock {
 }
 
 impl LeafDrag {
-    /// The shelf column the drag would land beside, and on which side.
-    pub(crate) fn shelf_mark(&self) -> Option<(String, Edge)> {
+    /// The entry or the count on the shelf the drag would land beside, and on which side.
+    pub(crate) fn shelf_mark(&self) -> Option<(&str, Edge)> {
         match &self.target {
-            Some(Target::Shelf { column, edge }) => Some((column.clone(), *edge)),
+            Some(Target::Shelf { marked, edge, .. }) => Some((marked, *edge)),
             _ => None,
         }
     }
@@ -450,6 +452,7 @@ fn shelf_target(state: &State, drag: &LeafDrag) -> Option<Option<Target>> {
         Edge::Right
     });
     Some(Some(Target::Shelf {
+        marked: anchor.element.clone(),
         column: anchor.column.clone(),
         edge,
     }))
@@ -678,7 +681,7 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
                 tx,
             );
         }
-        (Target::Shelf { column, edge }, Some(_)) => {
+        (Target::Shelf { column, edge, .. }, Some(_)) => {
             super::shelf::send_move(
                 state,
                 &source,
@@ -693,7 +696,7 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
                 tx,
             );
         }
-        (Target::Shelf { column, edge }, None) => {
+        (Target::Shelf { column, edge, .. }, None) => {
             let Some(desktop) = state.facts.desktops.iter().find(|d| d.id == source) else {
                 return;
             };

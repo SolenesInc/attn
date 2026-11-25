@@ -310,8 +310,8 @@ pub(crate) struct Shelf {
     marks: usize,
 }
 
-/// A place on the shelf a tile can be dropped beside: an entry by either half, or a count by the
-/// side it holds.
+/// A place on the shelf a tile can be dropped beside: an entry by either half, or a count for its
+/// end of the row.
 pub(crate) struct Anchor {
     pub element: String,
     pub column: String,
@@ -515,21 +515,22 @@ impl Shelf {
             column: e.key.clone(),
             edge: None,
         };
-        let count = |side: CountSide, e: Option<&Entry>| {
-            e.map(|e| Anchor {
+        let count = |side: CountSide, outermost: Option<&Entry>| {
+            let outermost = outermost.filter(|_| !self.folded(side).is_empty())?;
+            Some(Anchor {
                 element: count_key(side).to_owned(),
-                column: e.key.clone(),
+                column: outermost.key.clone(),
                 edge: Some(edge_of(side)),
             })
         };
         let kept = |entries: &[Entry]| -> Vec<Anchor> {
             entries.iter().filter(|e| !e.folded).map(entry).collect()
         };
-        count(CountSide::Before, folded(&self.before).first().copied())
+        count(CountSide::Before, self.before.first())
             .into_iter()
             .chain(kept(&self.before))
             .chain(kept(&self.after))
-            .chain(count(CountSide::After, folded(&self.after).last().copied()))
+            .chain(count(CountSide::After, self.after.last()))
             .collect()
     }
 }
@@ -574,23 +575,15 @@ fn view(state: &State, shelf: Option<Shelf>, t: &Tokens) -> Option<El> {
             }
         });
     let drop = desk.drag.as_ref().and_then(|d| d.shelf_mark());
+    let marked = |key: &str| drop.filter(|(marked, _)| *marked == key).map(|(_, e)| e);
     let count = |side: CountSide| {
-        let held = shelf.folded(side);
-        let marked = drop.as_ref().is_some_and(|(column, edge)| {
-            *edge == edge_of(side) && held.iter().any(|e| e.key == *column)
-        });
+        let marked = marked(count_key(side));
         shelf
             .count(side)
             .map(|c| count(&c, desk.count_open == Some(side), marked, t))
     };
     let entries = shelf.shown().map(|e| match e.drawn.place() {
-        Place::OffScreen => {
-            let mark = drop
-                .as_ref()
-                .filter(|(column, _)| *column == e.key)
-                .map(|(_, edge)| *edge);
-            off_screen(e, id, mark, t)
-        }
+        Place::OffScreen => off_screen(e, id, marked(&entry_key(&e.key)), t),
         Place::OnScreen | Place::Current => on_screen(e, id, t),
     });
     Some(
@@ -780,7 +773,7 @@ fn drop_bar(el: El, drop: Option<Edge>, t: &Tokens) -> El {
     }
 }
 
-fn count(count: &ShelfCount, open: bool, drop: bool, t: &Tokens) -> El {
+fn count(count: &ShelfCount, open: bool, drop: Option<Edge>, t: &Tokens) -> El {
     let side = count.side;
     let key = count_key(side);
     let state = [(open, "open"), (count.needs_user, "needs you")]
@@ -797,7 +790,7 @@ fn count(count: &ShelfCount, open: bool, drop: bool, t: &Tokens) -> El {
         })
         .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| record(state, key, rect, tx))
         .a11y_value(state);
-    drop_bar(count, drop.then_some(edge_of(side)), t)
+    drop_bar(count, drop, t)
 }
 
 /// The open count's menu of the columns it holds, under the title bar on its side.

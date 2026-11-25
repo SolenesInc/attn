@@ -5,11 +5,13 @@ use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
     CommandUsage, Desktop, DesktopPane, GetCommandUsageResultMessage, InitialStateMessage, Profile,
     ProfileActionResultMessage, ProfileArrangementChangedMessage, RecordCommandUsageResultMessage,
-    Session,
+    Session, SessionStateChangedMessage,
 };
 use attn_testkit::tree::{below, pane, row};
 use attn_testkit::{Answer, Daemon, Request, Target, World, key_event, message};
 use serde_json::Value;
+
+use super::tile_header::edged_in_accent;
 
 /// The sidebar beside the tile area, in points: a 1600-point window has 1360
 /// for tiles.
@@ -668,18 +670,36 @@ fn an_entry_dragged_out_of_an_open_counts_menu_onto_a_tiles_bottom_edge_stacks_t
     rest(&mut world);
 }
 
+/// The daemon says the agent `id` waits on the user.
+fn waits(world: &mut World, id: &str) {
+    world.daemon.emit(SessionStateChangedMessage {
+        session: Session {
+            state: "waiting_input".into(),
+            ..session(id)
+        },
+        ..SessionStateChangedMessage::new()
+    });
+    world.settle();
+}
+
+/// Drags `tile`'s header over the count `key` and drops it there: the count is the marked control,
+/// and not the entry of `outermost`, which stayed out because its agent waits.
+fn drop_on_count(world: &mut World, tile: &str, key: &str, outermost: &str) {
+    let to = at(world, key, 0.5, 0.5);
+    let entry = format!("shelf.entry.{outermost}");
+    world.gesture(|app| app.drag_over(Target::key(format!("tile.{tile}.header")), to));
+    assert!(edged_in_accent(world, key), "the count is marked");
+    assert!(!edged_in_accent(world, &entry), "{entry} is not");
+    world.gesture(|app| app.release(to));
+}
+
 #[test]
 fn a_tile_dropped_on_the_trailing_count_moves_past_the_rows_last_column_and_shows_beside_it() {
     let ids = many_ids();
     let mut world = start(TWO_FIT, None, vec![many("p00", &ids)]);
-    assert!(
-        world
-            .screen()
-            .find(Target::key("shelf.count.after"))
-            .is_some()
-    );
+    waits(&mut world, "p23");
 
-    drop_on(&mut world, "p01", "shelf.count.after", 0.5);
+    drop_on_count(&mut world, "p01", "shelf.count.after", "p23");
     assert_eq!(moves(&world), [moved("p01", "p23", "right", false)]);
     let mut order: Vec<String> = ids.into_iter().filter(|id| id != "p01").collect();
     order.push("p01".into());
@@ -695,14 +715,9 @@ fn a_tile_dropped_on_the_leading_count_moves_before_the_rows_first_column_and_sh
     let mut world = start(TWO_FIT, None, vec![many("p00", &ids)]);
     becomes(&mut world, many("p23", &ids));
     assert_eq!(screen(&world), ["p22", "p23"]);
-    assert!(
-        world
-            .screen()
-            .find(Target::key("shelf.count.before"))
-            .is_some()
-    );
+    waits(&mut world, "p00");
 
-    drop_on(&mut world, "p22", "shelf.count.before", 0.5);
+    drop_on_count(&mut world, "p22", "shelf.count.before", "p00");
     assert_eq!(moves(&world), [moved("p22", "p00", "left", false)]);
     let mut order: Vec<String> = ids.into_iter().filter(|id| id != "p22").collect();
     order.insert(0, "p22".into());
