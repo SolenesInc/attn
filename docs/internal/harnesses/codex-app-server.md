@@ -320,7 +320,8 @@ Probed on 0.166.0, a plain TUI in a PTY with its own `CODEX_HOME`, and read in
 the source at rust-v0.166.0:
 
 - The folder trust question reads "Trust this folder?", with "1. Trust and
-  continue" selected.
+  continue" selected. attn recognizes the question by the text "Trust and
+  continue" (`ShowsFolderTrustQuestion`).
 - A plain TUI asks its app-server about trust too, with or without
   `--no-daemon`, so `-c projects."<folder>".trust_level="trusted"` does not
   stop the question (`tui/src/onboarding/directory_trust.rs`).

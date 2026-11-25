@@ -56,7 +56,7 @@ CODEX_HOME=~/attn-agent-bench-home/.codex codex login
 SIGMA_HOME=~/attn-agent-bench-home/.sigma sigma login openai    # for Sigma's own loop
 ```
 
-A bench home needs a sign-in for each harness and nothing else that the driver cannot make. Claude Code's first-run screens for theme and onboarding do not block a run when the home has a `.claude/.claude.json` with `{"hasCompletedOnboarding": true, "theme": "dark"}`. Claude Code and Codex ask once per folder whether to trust it. The driver answers that screen for the folders it makes, and at the end it removes the Codex entries for those folders from the home's `config.toml`.
+A bench home needs a sign-in for each harness and nothing else that the driver cannot make. Claude Code's first-run screens for theme and onboarding do not block a run when the home has a `.claude/.claude.json` with `{"hasCompletedOnboarding": true, "theme": "dark"}`. Claude Code and Codex ask once per folder whether to trust it. The driver answers that screen for the folders it makes, and for `msg-delegate` saves Codex's answer for the delegate's folder, and at the end it removes the Codex entries for those folders from the home's `config.toml`.
 
 Some things stay shared with your `HOME` even with a bench home. Codex reads `~/.agents/skills` whatever `CODEX_HOME` says, so the wrapper below switches each of those skills off. Claude Code's shells load your shell profile, and every agent's shell sees your `PATH`, git configuration and credentials, so its commands can read any file you can.
 
@@ -94,7 +94,7 @@ The seven tasks are the prototype's (`s-fnb9wr`), judged as its checks did, on t
 | `progress` | note progress on its seed and report C1 with `retry-test.log` | a note, C1 reported with the log, C2 and the seed open |
 | `plot-notes` | note the owner file on each open child of a plot | each open child names its file, the closed children have no note |
 | `ask` | ask the user Postgres or SQLite, recommending Postgres | an open ask offers both and recommends Postgres |
-| `msg-delegate` | tell `api-review` to start, then delegate the migration guide into `docs/` | `api-review`'s inbox names api-v2, one session runs in `docs/`, and it tends a seed that briefs the guide |
+| `msg-delegate` | tell `api-review` to start, then delegate the migration guide into `docs/` | `api-review`'s inbox names api-v2, one session runs in `docs/` past its folder-trust question, and it tends a seed that briefs the guide |
 | `standby` | wait for review of PR #482 without keeping the session open | the seed is on standby with a note to merge #482, the standby did not keep the session open, and the agent never ran `agent close` |
 | `coding` | write and run `fizzbuzz.py` | the script prints 1 to 15 right, and the agent made no attn call |
 | `fail` | note a seed by a slug that two seeds share | the Safari seed has the note and the Chrome seed has none |
@@ -110,7 +110,9 @@ The four harder tasks need several steps, tools an agent must load first, or rec
 
 In `open-ask-refusal`, attn refuses the harvest of a seed with an open ask, and names the ask, the command that reads it and the command that withdraws it. An agent that asks the user instead, or that its harness stops from withdrawing the ask, fails.
 
-`ask-still-matters` is its opposite, outside the grid and the groups: run it with `--tasks ask-still-matters`. The agent is asked to close two seeds, one of which has an ask whose answer the work still needs, so it passes when the other seed is harvested and this one is still growing with its ask open, with no forced close.
+`msg-delegate` saves `docs/` as trusted in the Codex home before the prompt, because Codex trusts exactly the folder it was asked about, so the delegate starts healthily. `msg-delegate-stalled` leaves `docs/` untrusted, for Codex cells only (Claude Code trusts `docs/` through its parent): it passes when, besides, the delegate is still at its folder-trust question and the agent's answer or an ask names that question. It is outside the grid and the groups: run it with `--tasks msg-delegate-stalled --harness codex`.
+
+`ask-still-matters` is the opposite of `open-ask-refusal`, outside the grid and the groups: run it with `--tasks ask-still-matters`. The agent is asked to close two seeds, one of which has an ask whose answer the work still needs, so it passes when the other seed is harvested and this one is still growing with its ask open, with no forced close.
 
 The five ask tasks (`instance/asks.ts`) put a decision to the agent without naming attn, asks or any kind of picture, so they measure whether the agent opens an ask on its own and whether the ask shows what the decision turns on. Each copies its files from `instance/fixtures/asks/` into the run's folder. A run with no open ask fails, and every verdict names the asks opened and the visuals they show. A question offers the options when each matches a different choice. A Mermaid fence counts only when the app draws it whole: before a run with an ask task, the driver builds `native/crates/attn-app/examples/mermaid_check.rs` with cargo, which reads a source with the app's renderer.
 

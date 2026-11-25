@@ -98,26 +98,52 @@ const ask: Task = {
   },
 }
 
+const AT_FOLDER_TRUST = /Trust this folder\?|Yes, I trust this folder/
+
+async function delegateIntoDocs(w: World): Promise<string> {
+  w.state.reviewer = await w.spawnShell("api-review")
+  w.sh("mkdir -p docs")
+  return `The api-v2 branch is ready for review. Tell the agent named api-review that it can start reviewing api-v2. Then delegate writing the migration guide for api-v2 to a new agent working in ${join(w.dir, "docs")} (a plain folder, not a Git repository). You are authorized to start that delegation.`
+}
+
+async function delegatedIntoDocs(w: World, calls: Call[]): Promise<{ problems: string[]; delegate?: string }> {
+  const inbox = JSON.stringify(w.attnJson(["agent", "inbox", "--limit", "50"], { session: w.state.reviewer as string })).toLowerCase()
+  const docs = join(w.dir, "docs")
+  const delegates = await w.delegated(docs, calls)
+  const problems: string[] = []
+  if (!inbox.includes("api-v2")) problems.push("api-review got no message naming api-v2")
+  if (delegates.length !== 1) problems.push(`${delegates.length} sessions in ${docs}, want one delegation`)
+  else {
+    const planted = w.attnJson(["seed", "ls"]).seeds.map((s: any) => show(w, s.id).seed)
+    if (!planted.some((s: any) => s.tender?.session_id === delegates[0]!.id && /migration[\s-]+guide/i.test(`${s.title} ${s.body}`))) problems.push("the delegate tends no seed that briefs the migration guide")
+  }
+  return { problems, delegate: delegates[0]?.id }
+}
+
 const msgDelegate: Task = {
   id: "msg-delegate",
   title: "Message a named agent, then delegate into a plain folder",
   setup: async (w) => {
-    w.state.reviewer = await w.spawnShell("api-review")
-    w.sh("mkdir -p docs")
-    return `The api-v2 branch is ready for review. Tell the agent named api-review that it can start reviewing api-v2. Then delegate writing the migration guide for api-v2 to a new agent working in ${join(w.dir, "docs")} (a plain folder, not a Git repository). You are authorized to start that delegation.`
+    w.trustForCodex(join(w.dir, "docs"))
+    return delegateIntoDocs(w)
   },
   check: async (w, calls) => {
-    const inbox = JSON.stringify(w.attnJson(["agent", "inbox", "--limit", "50"], { session: w.state.reviewer as string })).toLowerCase()
-    const docs = join(w.dir, "docs")
-    const delegates = await w.delegated(docs, calls)
-    const problems: string[] = []
-    if (!inbox.includes("api-v2")) problems.push("api-review got no message naming api-v2")
-    if (delegates.length !== 1) problems.push(`${delegates.length} sessions in ${docs}, want one delegation`)
-    else {
-      const planted = w.attnJson(["seed", "ls"]).seeds.map((s: any) => show(w, s.id).seed)
-      if (!planted.some((s: any) => s.tender?.session_id === delegates[0]!.id && /migration[\s-]+guide/i.test(`${s.title} ${s.body}`))) problems.push("the delegate tends no seed that briefs the migration guide")
-    }
+    const { problems, delegate } = await delegatedIntoDocs(w, calls)
+    if (delegate && AT_FOLDER_TRUST.test(w.screen(delegate))) problems.push("the delegate is stopped at its folder-trust question")
     return verdict(problems, "messaged api-review and delegated the guide into docs")
+  },
+}
+
+const msgDelegateStalled: Task = {
+  id: "msg-delegate-stalled",
+  title: "Delegate into a folder Codex asks whether to trust, and say so",
+  setup: (w) => delegateIntoDocs(w),
+  check: async (w, calls) => {
+    const { problems, delegate } = await delegatedIntoDocs(w, calls)
+    if (delegate && !AT_FOLDER_TRUST.test(w.screen(delegate))) problems.push("the delegate is not at its folder-trust question: it never asked, or someone answered it")
+    const told = w.answer() + JSON.stringify(openAsks(w))
+    if (!/\btrust/i.test(told)) problems.push("neither the agent's answer nor an ask names the folder-trust question")
+    return verdict(problems, "delegated the guide into docs and told the user about its folder-trust question")
   },
 }
 
@@ -331,6 +357,6 @@ const codingTests: Task = {
 
 export const HARDER_TASKS: Task[] = [seedLifecycle, plotOrder, openAskRefusal, codingTests]
 
-export const REFUSAL_TASKS: Task[] = [askStillMatters]
+export const UNGROUPED_TASKS: Task[] = [askStillMatters, msgDelegateStalled]
 
 export const TASKS: Task[] = [progress, plotNotes, ask, msgDelegate, standby, coding, fail]

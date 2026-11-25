@@ -50,7 +50,8 @@ const (
 	codexConfiguredServer = "oven"
 )
 
-const codexTrustQuestion = "Trust this folder? Codex can read, edit, and run files here."
+const codexTrustQuestion = "Trust this folder? Codex can read, edit, and run files here, subject to your permission settings.\r\n\r\n" +
+	"› 1. Trust and continue\r\n  2. Back to Agent Command Center\r\n\r\n  enter continue · esc back"
 
 var codexReconnectBackoff = []time.Duration{20 * time.Millisecond, 40 * time.Millisecond, 80 * time.Millisecond, 160 * time.Millisecond}
 

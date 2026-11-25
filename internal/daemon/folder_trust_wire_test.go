@@ -44,6 +44,23 @@ func TestAClaudeStoppedAtTheFolderTrustQuestionWaitsForTheUserAndStartsWhenAnswe
 	})
 }
 
+func TestACodexStoppedAtTheFolderTrustQuestionWaitsForTheUserAndStartsWhenAnswered(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	id, _ := askingWhetherToTrust(w, app)
+	w.advance(10 * time.Second)
+	testworld.AwaitSession(app, id, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateWaitingInput && protocol.Deref(s.StateReason) == "folder_trust_question"
+	})
+
+	app.TypeLine(id, "")
+
+	w.Launched(id)
+	testworld.AwaitSession(app, id, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateIdle && protocol.Deref(s.StateReason) != "folder_trust_question"
+	})
+}
+
 func TestRefusingTheFolderTrustQuestionEndsTheSessionAsAnyExitDoes(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
@@ -54,6 +71,17 @@ func TestRefusingTheFolderTrustQuestionEndsTheSessionAsAnyExitDoes(t *testing.T)
 	testworld.AwaitSession(app, id, func(s protocol.Session) bool {
 		return s.State == protocol.SessionStateIdle && protocol.Deref(s.StateReason) == "process_exited"
 	})
+}
+
+func sessionLabeled(t *testing.T, w *world, label string) protocol.Session {
+	t.Helper()
+	for _, session := range w.App().Initial.Sessions {
+		if session.Label == label {
+			return session
+		}
+	}
+	t.Fatalf("no session is labeled %q", label)
+	return protocol.Session{}
 }
 
 func delegateThatNeverStarts(t *testing.T, w *world, screen string) (protocol.DelegateResult, []protocol.SeedNote, string) {
@@ -78,12 +106,7 @@ func delegateThatNeverStarts(t *testing.T, w *world, screen string) (protocol.De
 		answered <- result
 	}()
 	w.advance(60 * time.Second)
-	var delegate protocol.Session
-	for _, session := range w.App().Initial.Sessions {
-		if session.Label == "hello" {
-			delegate = session
-		}
-	}
+	delegate := sessionLabeled(t, w, "hello")
 	w.terminal(string(delegate.ID)).PaintScreen(screen)
 	w.advance(30 * time.Second)
 	result := <-answered

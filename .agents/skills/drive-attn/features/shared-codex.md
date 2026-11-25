@@ -48,7 +48,7 @@ the tiles still on the old Codex.
 - Once a day attn asks `codex doctor` for the latest Codex, and attn reads the installed Codex when a shared terminal opens, when the app-server starts and when an update it ran finishes (`internal/harness/internal/codex/versions.go` and `update.go`).
 - When the installed Codex differs from the one the app-server runs, attn restarts the app-server once no turn runs and every shared terminal has finished starting (`internal/harness/internal/codex/restart.go`).
 - `--now` relaunches terminals still starting. Like any reload, it gives a Codex that has not taken the prompt it was started with, such as an automation's, that prompt again. A relaunch that fails settles the run or delegation with the reason (`relaunchStarting`, `internal/harness/internal/codex/restart.go`).
-- attn answers Codex's folder trust question for a folder where an agent session already started a conversation, or whose repository Codex already trusts (`docs/guide/reference/using-shared-codex.md`).
+- attn answers Codex's folder trust question for a folder where an agent session already started a conversation, or whose repository Codex already trusts (`docs/guide/reference/using-shared-codex.md`). A Codex still at the question reads `waiting_input` with reason `folder_trust_question` from 10 seconds after launch, as a Claude does.
 
 ## Driving it
 

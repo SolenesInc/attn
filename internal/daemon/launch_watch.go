@@ -173,17 +173,24 @@ func (d *Daemon) noteDelegatedExitOnSeed(seedID string, agent string, sessionID 
 	}
 }
 
-func (d *Daemon) noteDelegatedStallOnSeed(agent string, sessionID protocol.SessionID, unconfirmed string) string {
-	var screen string
+func (d *Daemon) delegateStoppedAt(agent string, sessionID protocol.SessionID) (question, screen string) {
 	if session := d.store.Get(sessionID); session != nil {
 		if peeked := d.agentPeekScreen(session); peeked != nil {
 			screen = peeked.Text
 		}
 	}
+	if reader, ok := harness.As[harness.FolderTrustReader](d.harnessOf(agent)); ok && reader.ShowsFolderTrustQuestion(screen) {
+		question = fmt.Sprintf("%s is stopped at its folder-trust question and starts only after someone answers it in session %s", agent, shortSessionID(sessionID))
+	}
+	return question, screen
+}
+
+func (d *Daemon) noteDelegatedStallOnSeed(agent string, sessionID protocol.SessionID, unconfirmed string) string {
+	stoppedAt, screen := d.delegateStoppedAt(agent, sessionID)
 	var b strings.Builder
-	if reader, ok := harness.As[harness.ScreenReader](d.harnessOf(agent)); ok && reader.ShowsFolderTrustQuestion(screen) {
-		unconfirmed = fmt.Sprintf("%s is waiting at its folder-trust question and starts only after someone answers it in session %s; %s", agent, shortSessionID(sessionID), unconfirmed)
-		fmt.Fprintf(&b, "The delegated agent (%s) is stopped at its folder-trust question, so nothing here is being worked on. Answer the question in session %s to start it.", agent, sessionID)
+	if stoppedAt != "" {
+		unconfirmed = stoppedAt + "; " + unconfirmed
+		fmt.Fprintf(&b, "Nothing here is being worked on: %s.", stoppedAt)
 	} else {
 		fmt.Fprintf(&b, "The delegated agent (%s) reported no first turn within %s, so nothing here may be being worked on. Session: %s. `attn agent peek %s` shows its pane.", agent, delegationFirstTurnTimeout, sessionID, shortSessionID(sessionID))
 	}

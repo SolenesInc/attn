@@ -44,8 +44,8 @@ func (d *Daemon) runDelegate(ctx context.Context, c command.Caller, a command.De
 // first turn. On ai-sandbox, 4 starts of claude took 0.9 to 1.4 s and 3 of codex
 // 1.0 to 1.8 s (2026-11-25), so a wait that reaches it is a stopped start, such as
 // one at a folder-trust question, or a slow machine. It sits 10 s under the
-// shortest tool-call limit of the harnesses that call attn's tools, pi-mcp 1.3.0's
-// 30 s request default, below Claude Code's 60 s and Codex's 300 s.
+// shortest tool-call limit of the harnesses that call attn's tools, pi-mcp
+// 1.5.2's 30 s request default, below Claude Code's 60 s and Codex's 300 s.
 const delegateToolBound = 20 * time.Second
 
 func (d *Daemon) delegationWithinToolBound(ctx context.Context, operationID string) (*protocol.DelegationOperation, error) {
@@ -58,7 +58,16 @@ func (d *Daemon) delegationWithinToolBound(ctx context.Context, operationID stri
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
-	return d.delegationOperation(operationID)
+	operation, err = d.delegationOperation(operationID)
+	if err != nil || delegationSettled(operation) {
+		return operation, err
+	}
+	if session := d.store.Get(operation.SessionID); session != nil {
+		if stoppedAt, _ := d.delegateStoppedAt(string(session.Agent), session.ID); stoppedAt != "" {
+			operation.Progress = stoppedAt + "; " + operation.Progress
+		}
+	}
+	return operation, nil
 }
 
 func delegateRequest(a command.DelegateArgs) (*protocol.DelegateMessage, error) {

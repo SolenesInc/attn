@@ -38,8 +38,12 @@ type WatcherLine struct {
 	AbortAt     time.Time
 }
 
+// FolderTrustReader is the optional part of a harness that asks on its screen whether to trust a folder before it starts.
+type FolderTrustReader interface {
+	ShowsFolderTrustQuestion(screen string) bool
+}
+
 // ScreenReader is the optional part of a harness whose terminal screen shows states attn reads.
 type ScreenReader interface {
-	ShowsFolderTrustQuestion(screen string) bool
 	ShowsComposerSuggestion(snapshot protocol.GetScreenSnapshotResultMessage) bool
 }

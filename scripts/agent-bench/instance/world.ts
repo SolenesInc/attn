@@ -26,6 +26,12 @@ export type World = {
   spawnShell: (label: string) => Promise<string>
   /** This profile's live sessions, as `attn agent list --json` shows them. */
   sessions: () => { id: string; directory: string; state: string; label: string }[]
+  /** A session's screen, as `attn agent peek` shows it. */
+  screen: (session: string) => string
+  /** The agent's last message. */
+  answer: () => string
+  /** Saves `folder` as trusted in the Codex home, so a Codex the agent starts there does not ask. Only at the home. */
+  trustForCodex: (folder: string) => void
   /** The markdown files the agent's session opened in tiles, newest first. */
   opened: () => string[]
   /** Waits for the session an accepted delegation starts in `directory`: the delegate tool answers before it exists. */

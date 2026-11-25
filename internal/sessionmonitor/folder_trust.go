@@ -17,7 +17,7 @@ const (
 )
 
 func (m *Monitor) watchFolderTrustQuestionLocked(agent string) {
-	if _, reads := m.screenReader(agent); !reads {
+	if _, reads := m.folderTrustReader(agent); !reads {
 		return
 	}
 	m.stopFolderTrustReadLocked()
@@ -44,7 +44,7 @@ func (m *Monitor) readFolderTrustQuestion(agent string, nextReadAfter time.Durat
 		m.mu.Unlock()
 		return
 	}
-	terminal := m.watch.terminalID
+	terminal := m.primaryTerminalLocked()
 	m.folderTrustRead = nil
 	if nextReadAfter > 0 {
 		m.armFolderTrustReadLocked(nextReadAfter, func() { m.readFolderTrustQuestion(agent, 0) })
@@ -64,12 +64,12 @@ func (m *Monitor) screenShowsFolderTrustQuestion(agent string, terminal harness.
 		m.registry.host.Logf("folder trust read failed: session=%s err=%v", m.session, err)
 		return false
 	}
-	reader, reads := m.screenReader(agent)
+	reader, reads := m.folderTrustReader(agent)
 	return reads && reader.ShowsFolderTrustQuestion(screen)
 }
 
-func (m *Monitor) screenReader(agent string) (harness.ScreenReader, bool) {
-	return harness.As[harness.ScreenReader](m.registry.host.Harness(agent))
+func (m *Monitor) folderTrustReader(agent string) (harness.FolderTrustReader, bool) {
+	return harness.As[harness.FolderTrustReader](m.registry.host.Harness(agent))
 }
 
 func (m *Monitor) recordFolderTrustQuestion() {

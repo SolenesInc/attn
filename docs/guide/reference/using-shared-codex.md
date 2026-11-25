@@ -48,7 +48,7 @@ Attn answers yes to the trust question in these cases:
   those worktrees.
 - Your Codex config saves the folder's repository as trusted.
 
-Any other folder still asks, except a crew member's home:
+Any other folder still asks, and the session waits for you until you answer, except a crew member's home:
 [Crew](crew.md#configuring-a-member) describes how Attn saves that as trusted.
 An automation never stops at the question: Attn decides before it starts Codex,
 as [Automations](automations.md) describes under "Does a Codex run trust its

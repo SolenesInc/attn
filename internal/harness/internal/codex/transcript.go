@@ -2,6 +2,7 @@ package codex
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/harness"
@@ -28,6 +29,12 @@ func (h codexHarness) UsageSources(root string) transcript.UsageSourceResolver {
 func (codexHarness) LastAssistant(path string, max int, _ time.Time, _ string) (string, string, error) {
 	content, err := transcript.ExtractLastAssistantMessage(path, max)
 	return content, "", err
+}
+
+const codexFolderTrustChoice = "Trust and continue"
+
+func (codexHarness) ShowsFolderTrustQuestion(screen string) bool {
+	return strings.Contains(strings.Join(strings.Fields(screen), " "), codexFolderTrustChoice)
 }
 
 type codexTranscriptWatcherBehavior struct {

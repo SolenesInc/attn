@@ -31,6 +31,7 @@ Generic code asks for an optional interface with `harness.As[T](h)`. These share
 - `harness.OneShot` (`internal/harness/oneshot.go`): answers one prompt without a session for background tasks and `attn model` (Claude Code, Codex, Sigma).
 - `harness.Trust` (`internal/harness/harness.go`): pre-records folder trust before unattended launches with `TrustFolder` (Claude Code, Codex).
 - `harness.Transcript` (`internal/harness/transcript.go`): provides transcript format, live `TranscriptWatcher`, usage source resolution, and `LastAssistant` reading (Claude Code, Codex).
+- `harness.FolderTrustReader` (`internal/harness/transcript.go`): tells whether a terminal screen shows the harness's folder-trust question (Claude Code, Codex).
 - `harness.CallerResolver` (`internal/harness/caller.go`): authenticates and resolves server-backed tool and CLI callers (`OwnsCredential`, `Authenticate`, `IdentifyCall`, `ResolveCaller`). Codex implements it as an adapter, and `appserver.Client` implements it for Sigma and server-backed plugins.
 
 ### Wire catalog and logos
@@ -50,7 +51,7 @@ Generic code asks for these interfaces with `harness.As[T](h)` only in the calle
 - `harness.Keeper` (`internal/daemon/conversation_keep.go`): copies, restores, and forgets conversations and auxiliary files (Claude Code).
 - `harness.SpareStarter` (`internal/daemon/model_call_spare.go`): starts a warm spare process ahead of a one-shot call (Claude Code).
 - `harness.Targets` (`internal/daemon/harness_targets.go`): lists and validates execution targets (server-backed plugins).
-- `harness.ScreenReader` (`internal/sessionmonitor/folder_trust.go`, `internal/daemon/launch_watch.go`, `internal/daemon/agent_peek.go`): reads folder-trust prompts and composer suggestions off a terminal screen (Claude Code).
+- `harness.ScreenReader` (`internal/daemon/agent_peek.go`): reads composer suggestions off a terminal screen (Claude Code).
 - `harness.Renamer` (`internal/daemon/monitor_leaves.go`): mirrors a session rename into the harness server (shared Codex).
 - `harness.Channel` (`internal/daemon/harnesses.go`): checks whether a harness's direct delivery channel is up (Claude mod).
 - `harness.Runs` (`internal/daemon/harnesses.go`): notifies a plugin's RPC driver when a run ends and resolves its route (plugin adapter).

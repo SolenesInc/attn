@@ -158,6 +158,34 @@ func TestADelegateToolCallStopsWaitingForASilentAgentAndTheStartGoesOn(t *testin
 	})
 }
 
+func TestADelegateToolCallNamesTheFolderTrustQuestionItsDelegateIsStoppedAt(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		caller := w.bubbleClaude(t, w.App(), "shop")
+		answered := make(chan protocol.DelegationOperation, 1)
+		go func() {
+			var operation protocol.DelegationOperation
+			args := map[string]any{"brief": "Say hello", "cwd": w.Path("shop"), "model": "default", "request_id": "untrusted-folder", "name": "hello"}
+			if err := caller.cli.RunCommand("delegate", protocol.SessionID(caller.id), args, &operation); err != nil {
+				t.Errorf("delegating: %v", err)
+			}
+			answered <- operation
+		}()
+		w.advance(5 * time.Second)
+		delegate := sessionLabeled(t, w, "hello")
+		w.terminal(string(delegate.ID)).PaintScreen("Quick safety check\r\n❯ No, exit\r\n  " + folderTrustChoice)
+
+		operation := <-answered
+		if operation.State != protocol.DelegationOperationStatePreparing {
+			t.Errorf("delegate answered %+v, want the operation still preparing", operation)
+		}
+		for _, want := range []string{"folder-trust question", shortID(delegate.ID)} {
+			if !strings.Contains(operation.Progress, want) {
+				t.Errorf("the answer's progress is %q, want it to name %q", operation.Progress, want)
+			}
+		}
+	})
+}
+
 func TestADelegationThatFailsAfterItWasAcceptedAnswersFailedAndReachesTheCallersInbox(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
