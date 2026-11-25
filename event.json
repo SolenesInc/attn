@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Vent can queue the full report for external sharing",
+  "at": "2026-11-25T18:06:23.538Z",
+  "detail": "With the user's sharing option enabled, a normal vent can queue its full text for external upload. The record effect does not cover this external delivery. Classify it as act unless the effect contract is updated explicitly. The isolated outbox verification and source trace are on s-0evnyp.\n"
+}
