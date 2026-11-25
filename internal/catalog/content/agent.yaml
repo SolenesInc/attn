@@ -9,7 +9,7 @@ groups:
       See what other agents are doing, message one, read your inbox, close or reload one.
     map:
       rows:
-        - {need: "See or message other agents; read your inbox", tools: [agent_list, agent_peek, agent_msg, agent_inbox], references: [converse-and-observe]}
+        - {need: "See or message other agents by name; read your inbox", tools: [agent_list, agent_peek, agent_msg, agent_inbox], references: [converse-and-observe]}
         - {need: "Close or reload an agent, wrap up, or close yourself", tools: [agent_close, agent_reload], references: [wrap-up]}
     flags:
       - {name: source-session, placeholder: "<id>", doc: "the session acting (defaults to the current session)"}
