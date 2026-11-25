@@ -1,0 +1,3 @@
+Trimmed `docs/internal/` from 30 files (7,479 lines) to 20 files (2,267 lines) by removing pure code mirrors, test-helper API copies, and human-only guides, moving small subsystem-local notes next to their code (`pty-host/AGENTS.md`, `mobile/AGENTS.md`, constant receipt comments, and `scripts/windows-vm --help`), and reorganizing `docs/internal/harnesses/*.md` by topic with version tags.
+
+Updated `AGENTS.md` and `.agents/skills/verify-docs/SKILL.md` to reject code mirrors, human tutorials, probe diaries, and duplicated rules going forward. `docs/internal/glossary.md`, `cloud-relay-contract.md`, and `db-migrations.md` are unchanged.
