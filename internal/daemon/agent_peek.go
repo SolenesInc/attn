@@ -53,7 +53,15 @@ func (d *Daemon) resolveAgentPeekTarget(asker crewAsker, target string) (*protoc
 		if session, resolveErr := d.resolveLiveSession(target, ""); !errors.Is(resolveErr, errSessionNotFound) {
 			return session, resolveErr
 		}
-		return nil, errors.New("crew names resolve in a profile: " + err.Error())
+		namesMember, crewErr := d.namesMemberOfALiveProfile(target)
+		if crewErr != nil {
+			d.logf("agent peek crew resolution: target=%q err=%v", target, crewErr)
+			return nil, errors.New("internal_error")
+		}
+		if namesMember {
+			return nil, errors.New("crew names resolve in a profile: " + err.Error())
+		}
+		return d.liveSessionNamed(target, asker.profileID)
 	}
 	member, found, err := d.crewMemberIn(profileID, target)
 	if err != nil {
@@ -74,6 +82,19 @@ func (d *Daemon) resolveAgentPeekTarget(asker crewAsker, target string) (*protoc
 		return d.liveSessionNamed(target, profileID)
 	}
 	return session, err
+}
+
+func (d *Daemon) namesMemberOfALiveProfile(target string) (bool, error) {
+	live, err := d.store.ListProfiles(false)
+	if err != nil {
+		return false, err
+	}
+	for _, profile := range live {
+		if _, found, err := d.crewMemberIn(profile.ID, target); err != nil || found {
+			return found, err
+		}
+	}
+	return false, nil
 }
 
 func (d *Daemon) agentPeekResult(session *protocol.Session) *protocol.AgentPeekResult {

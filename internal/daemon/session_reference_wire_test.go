@@ -224,6 +224,28 @@ func TestALiveSessionIsAddressedByItsNameAndACallerIsNot(t *testing.T) {
 		if err := agent.RunCommand("terminal read", "", map[string]any{"terminal": "keel"}, &done); err == nil || !strings.Contains(err.Error(), "terminal \"keel\" not found") {
 			t.Errorf("terminal read of a member between sessions = %v, want no terminal found", err)
 		}
+		if _, err := agent.AgentPeek("keel"); client.ErrorCode(err) != "crew_member_asleep" {
+			t.Errorf("peek of a name a member between sessions shares with a live session = %v, want the member, crew_member_asleep", err)
+		}
+		if reloaded, err := agent.AgentReload([]string{"keel"}, "", false); err != nil || len(reloaded.Outcomes) != 1 || !strings.Contains(protocol.Deref(reloaded.Outcomes[0].Error), "Keel is between sessions") {
+			t.Errorf("reload of a name a member between sessions shares with a live session = %+v, %v, want the member, refused as between sessions", reloaded, err)
+		}
+
+		outside, err := cli.AgentPeek("Caller")
+		if err != nil || string(outside.SessionID) != caller {
+			t.Errorf("peek by name outside a profile = %+v, %v, want %s", outside, err, caller)
+		}
+		if _, err := cli.AgentPeek("api-review"); client.ErrorCode(err) != "ambiguous_session" || !strings.Contains(err.Error(), "\"api-review\" (claude") || !strings.Contains(err.Error(), "\"API-Review\" (claude") {
+			t.Errorf("peek outside a profile of a name two profiles hold = %v, want ambiguous_session naming both sessions", err)
+		}
+		if _, err := cli.AgentPeek("gone"); client.ErrorCode(err) != "session_not_found" {
+			t.Errorf("peek outside a profile of a closed session's name = %v, want session_not_found", err)
+		}
+		for _, member := range []string{"keel", "chief"} {
+			if _, err := cli.AgentPeek(member); err == nil || !strings.Contains(err.Error(), "crew names resolve in a profile: choose --profile") {
+				t.Errorf("peek outside a profile of the member %s = %v, want a profile asked for", member, err)
+			}
+		}
 		if _, err := cli.AgentMsg("caller", "api-review", "who am I"); client.ErrorCode(err) != "session_not_found" {
 			t.Errorf("a name as the sender = %v, want session_not_found", err)
 		}
