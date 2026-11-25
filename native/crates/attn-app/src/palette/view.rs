@@ -1,3 +1,4 @@
+use attn_protocol::SessionDelegationRole;
 use attn_ui::Tokens;
 use attn_ui::blocks::{Inline, Stack};
 use attn_ui::finder::{self, FinderSize, Hint};
@@ -9,6 +10,7 @@ use rune::{El, Tx, col, row};
 use rune_kit::TextInput;
 
 use super::{Look, Mode, Row, Status};
+use crate::desktop::chain::role_slot;
 use crate::{Action, State};
 
 /// The search palette over the window: its field, the rows its query lists with the
@@ -269,28 +271,21 @@ pub(crate) fn row_face(r: &Row, key: String, place: Place, t: &Tokens) -> El {
         }
         Look::Agent {
             agent,
+            role,
             crew,
             status,
             slot,
             age: owed,
             tag,
         } => {
-            let mut title = Inline::tight().child(
-                words(agent.name.clone(), Type::Body, t.text_primary)
-                    .single_line()
-                    .truncate()
-                    .shrink(),
-            );
-            if agent.priority {
-                title = Inline::tight()
-                    .child(crate::sidebar::priority_flag(&key, t))
-                    .child(
-                        words(agent.name.clone(), Type::Body, t.text_primary)
-                            .single_line()
-                            .truncate()
-                            .shrink(),
-                    );
-            }
+            let title = Inline::tight()
+                .children(details.then(|| role_mark(&key, role.as_ref(), t)))
+                .children(
+                    agent
+                        .priority
+                        .then(|| crate::sidebar::priority_flag(&key, t)),
+                )
+                .child(row_name(&agent.name, t));
             row = row.title_el(title).lead(status_dot(&key, *status, t));
             if *crew && details {
                 row = row
@@ -327,12 +322,12 @@ pub(crate) fn row_face(r: &Row, key: String, place: Place, t: &Tokens) -> El {
                 (false, true, None) => Some("· crew".to_owned()),
                 (false, true, Some(desk)) => Some(format!("· crew · {desk}")),
             };
-            row = row.title(r.label.clone()).lead(state_mark(
-                &key,
-                word,
-                t.text_tertiary,
-                DotShape::Hollow,
-            ));
+            let title = Inline::tight()
+                .children(details.then(|| role_mark(&key, None, t)))
+                .child(row_name(&r.label, t));
+            row =
+                row.title_el(title)
+                    .lead(state_mark(&key, word, t.text_tertiary, DotShape::Hollow));
             if let Some(role) = role {
                 row = row.tag(words(role, Type::Body, t.text_tertiary).key(format!("{key}.crew")));
             }
@@ -392,6 +387,24 @@ fn state_mark(row_key: &str, said: &str, ink: rune::Color, shape: DotShape) -> E
         .label(said.to_owned())
         .a11y_value(said.to_owned())
         .child(dot(ink, shape, DotSize::Regular))
+}
+
+fn row_name(name: &str, t: &Tokens) -> El {
+    words(name.to_owned(), Type::Body, t.text_primary)
+        .single_line()
+        .truncate()
+        .shrink()
+}
+
+fn role_mark(row_key: &str, role: Option<&SessionDelegationRole>, t: &Tokens) -> El {
+    let mark = Stack::tight().child(role_slot(role, t));
+    match role {
+        Some(role) => mark
+            .key(format!("{row_key}.role"))
+            .role("img")
+            .label(role.name.clone()),
+        None => mark.a11y_hidden(),
+    }
 }
 
 /// How a state's tag reads.

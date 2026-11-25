@@ -10,7 +10,7 @@ top. Commands the user picks often rise in the list.
 
 ## Sub-features
 
-- `agent-palette`: ⌘K lists the chief and crew, then turns in queue order, the other agents, snoozed agents and tiles. Enter opens one, or starts a session for a crew member between sessions. An off-screen tile on the current desktop comes beside the active tile ([desktops.md](desktops.md)).
+- `agent-palette`: ⌘K lists the chief and crew, then turns in queue order, the other agents, snoozed agents and tiles. A delegate's name follows its role's icon. Typing four or more characters of an agent's id finds that agent. Enter opens one, or starts a session for a crew member between sessions. An off-screen tile on the current desktop comes beside the active tile ([desktops.md](desktops.md)).
 - `command-palette`: ⌘⇧K, or `>` in the agent palette, lists every command attn offers, with its shortcut.
 - `palette-switch`: ⌘K and ⌘⇧K switch between the two and keep the typed text. The same key again closes the palette.
 - `palette-actions`: in the agent palette, ⌘⇧E settles, ⌘⇧I marks priority and ⌘⇧S snoozes the highlighted agent, without closing.
@@ -47,6 +47,7 @@ Preconditions:
 
 - **Open the agent palette.** Run `bridge key '{"chord":"mod+k"}'`: `bridge find '{"target":{"key":"palette.dialog"}}'` is named `Agents`, `palette.count` reads `3 of 3`, and the tree holds `palette.row.agent:pal-a`, `palette.row.agent:pal-b` and one `palette.row.tile:` row.
 - **Search and go to an agent.** Run `bridge type '{"text":"pal-b"}'`: the count reads `1 of 3`. Press `enter`: `bridge wait '{"target":{"key":"palette"},"gone":true}'` answers and `bridge state '{"of":"window","expect":{"on_screen":"pal-b"}}'` answers.
+- **Search by id, and the role icon.** Delegate from an agent as [delegation.md](delegation.md) does, so one agent has a role. `./attn agent list` prints the delegate's short id, `ag-` and six characters, and `./attn agent list --json` its full id. Press `mod+k`: `bridge find '{"target":{"key":"palette.row.agent:<session>.role"}}'` is named by the role, and an agent without a role has no such element. Type the short id, then the same without `ag-`, then the first eight characters of the full id, then the whole id: each time the count reads `1 of <all>` and the row is the delegate's. Press `enter`: the delegate is on screen. Three characters of an id, or characters from its middle, find nothing by id.
 - **Go to a tile.** Press `mod+k`, type `<seed>` and press `enter`; the native seed tile is named by the seed's id, not its title. `wsctl list` shows the tile as its desktop's `active_pane_id`.
 - **Commands by typing `>`.** Press `mod+k` and type `>keyboard shortcuts`: `palette.dialog` is named `Commands` and the tree marks `palette.row.command:keyboard-shortcuts` `selected`. Press `enter`: `bridge wait '{"target":{"key":"shortcuts-dialog"}}'` answers. Press `escape`.
 - **The command palette from its key and the button.** Press `mod+shift+k`: `palette.dialog` is named `Commands`. Press `escape`. Run `bridge press '{"target":{"key":"titlebar.commands"}}'`: the same palette opens. Press `escape`.

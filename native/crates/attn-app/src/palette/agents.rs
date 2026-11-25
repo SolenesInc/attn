@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
-use attn_protocol::Session;
+use attn_protocol::go_values::SESSION_SHORT_ID_PREFIX;
+use attn_protocol::{Session, session_id};
 
 use super::{Look, Pick, Row, Status};
 use crate::sidebar::model::{self, AgentRow, Line, TileRow};
@@ -175,6 +176,8 @@ pub(crate) fn run_rows(state: &State) -> Vec<Row> {
     list.rows
 }
 
+const SHORTEST_ID_QUERY: usize = 4;
+
 struct List<'a> {
     state: &'a State,
     terms: &'a [String],
@@ -189,6 +192,17 @@ impl List<'_> {
         self.terms.iter().all(|t| haystack.contains(t.as_str()))
     }
 
+    fn names(&self, id: &str) -> bool {
+        let [word] = self.terms else { return false };
+        let short = session_id::short(id);
+        let body = short.strip_prefix(SESSION_SHORT_ID_PREFIX);
+        word.len() >= SHORTEST_ID_QUERY
+            && [Some(id), Some(&*short), body]
+                .into_iter()
+                .flatten()
+                .any(|form| form.starts_with(word.as_str()))
+    }
+
     fn agent(&mut self, session: &Session) {
         if !self.seen.insert(session.id.clone()) {
             return;
@@ -200,7 +214,7 @@ impl List<'_> {
             .map(|a| a.definition_name.as_str())
             .unwrap_or_default();
         let crew = session.crew_member.as_deref().unwrap_or_default();
-        if !self.matches(&[&name, crew, automation]) {
+        if !self.names(&session.id) && !self.matches(&[&name, crew, automation]) {
             return;
         }
         let state = self.state;
@@ -225,6 +239,7 @@ impl List<'_> {
                     &state.facts.outposts,
                     false,
                 )),
+                role: session.delegation_role.clone(),
                 crew: !crew.is_empty() && session.chief_of_staff != Some(true),
                 status: status(
                     session,

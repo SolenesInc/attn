@@ -439,9 +439,9 @@ pub(crate) fn reveal(pop: &Pop, picked: usize, tx: &mut Tx) {
     tx.scroll_into_view_in(body_key(pop), row_key(pop, picked));
 }
 
-/// The role's mark at the end of a row, and the room of one where the agent has no role, so the
-/// badges before it line up.
-fn role_slot(role: Option<&attn_protocol::SessionDelegationRole>, t: &Tokens) -> El {
+/// The role's mark on a row, and the room of one where the agent has no role, so what stands
+/// beside it lines up.
+pub(crate) fn role_slot(role: Option<&attn_protocol::SessionDelegationRole>, t: &Tokens) -> El {
     match role {
         Some(role) => glyph(
             Mark::of(Some(role)).glyph(),

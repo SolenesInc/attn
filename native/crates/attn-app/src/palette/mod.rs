@@ -6,7 +6,7 @@ pub(crate) use view::{Place, row_face};
 
 use attn_protocol::{
     CommandUsage, GetCommandUsageMessage, GetCommandUsageResultMessage, RecordCommandUsageMessage,
-    RecordCommandUsageResultMessage, Session,
+    RecordCommandUsageResultMessage, Session, SessionDelegationRole,
 };
 use rune::{Key, KeyEvent, TextEdit, Tx};
 
@@ -180,6 +180,7 @@ pub(crate) enum Look {
     },
     Agent {
         agent: Box<AgentRow>,
+        role: Option<SessionDelegationRole>,
         crew: bool,
         status: Status,
         slot: String,

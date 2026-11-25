@@ -6,7 +6,7 @@ use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
     AutomationProvenance, CommandUsage, Desktop, DesktopPane, GetCommandUsageResultMessage,
     InitialStateMessage, Profile, ProfileArrangementChangedMessage,
-    RecordCommandUsageResultMessage, Session, SessionStateChangedMessage,
+    RecordCommandUsageResultMessage, Session, SessionDelegationRole, SessionStateChangedMessage,
     SessionUnregisteredMessage,
 };
 use attn_testkit::{Daemon, Request, Target, World, key_event, message};
@@ -1154,6 +1154,98 @@ fn a_query_filters_every_kind_of_row_and_drops_the_queue_tag() {
         Some("No match")
     );
     rest_but_for_ages(&mut world);
+}
+
+fn on_one_desktop(sessions: Vec<Session>) -> World {
+    let panes = sessions.iter().map(|s| agent_pane(&s.id)).collect();
+    World::start(daemon(
+        initial(vec![desktop("d1", "work", 1, panes)], sessions),
+        vec![],
+    ))
+}
+
+fn fixing_the_uploader() -> Session {
+    Session {
+        label: "Fix the retry uploader".into(),
+        ..session("3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f")
+    }
+}
+
+#[test]
+fn a_short_id_an_8_hex_prefix_or_a_uuid_finds_its_agent_and_a_pick_shows_it() {
+    let neighbour = Session {
+        label: "Review the upload fix".into(),
+        ..session("3f9a2c50-8b1d-4c6e-9a7f-2d5e8c1b4a6f")
+    };
+    let mut world = on_one_desktop(vec![neighbour, fixing_the_uploader()]);
+    open_agents(&mut world);
+
+    for id in [
+        "ag-7yd2rk",
+        "7yd2rk",
+        "AG-7YD2RK",
+        "3f9a2c4e",
+        "3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f",
+    ] {
+        retype(&mut world, id);
+        assert_eq!(titles(&world), ["Fix the retry uploader"], "{id}");
+    }
+    retype(&mut world, "ag-7yd2");
+    assert_eq!(titles(&world).len(), 2, "both ids start with it");
+
+    retype(&mut world, "ag-7yd2rk");
+    press(&mut world, Key::Enter);
+    let shown = world.daemon.sent_of("desktop_show_session");
+    assert_eq!(shown.len(), 1);
+    assert_eq!(
+        shown[0]["session_id"],
+        "3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f"
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn a_query_finds_no_agent_by_the_inside_of_its_id_by_three_characters_or_by_two_words() {
+    let deface = Session {
+        label: "Deface the wall".into(),
+        ..session("01234567-89ab-7cde-8f01-23456789abcd")
+    };
+    let face_inside = Session {
+        label: "Rework the ledger".into(),
+        ..session("e78dface-f4c4-4eb6-8c45-b4bd58ddface")
+    };
+    let mut world = on_one_desktop(vec![deface, face_inside, fixing_the_uploader()]);
+    open_agents(&mut world);
+
+    retype(&mut world, "face");
+    assert_eq!(titles(&world), ["Deface the wall"]);
+    for unfound in ["2c4e", "3f9", "ag-", "7yd", "3f9a2c4e 8b1d"] {
+        retype(&mut world, unfound);
+        assert_eq!(titles(&world), [""; 0], "{unfound}");
+    }
+    rest(&mut world);
+}
+
+#[test]
+fn an_agent_row_leads_its_name_with_its_role() {
+    let builder = Session {
+        delegation_role: Some(SessionDelegationRole {
+            name: "Builder".into(),
+            builtin: Some("builder".into()),
+            ..SessionDelegationRole::default()
+        }),
+        ..fixing_the_uploader()
+    };
+    let mut world = on_one_desktop(vec![builder, session("roleless")]);
+    open_agents(&mut world);
+
+    let role = |id: &str| row_text(&world, &format!("agent:{id}"), "role");
+    assert_eq!(
+        role("3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f").as_deref(),
+        Some("Builder")
+    );
+    assert_eq!(role("roleless"), None);
+    rest(&mut world);
 }
 
 #[test]
