@@ -16,15 +16,15 @@ use objc2::runtime::{AnyObject, Bool, NSObjectProtocol, ProtocolObject};
 use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, Message, define_class, msg_send};
 use objc2_app_kit::{
     NSAlert, NSAlertFirstButtonReturn, NSBitmapImageFileType, NSBitmapImageRep, NSEvent,
-    NSEventModifierFlags, NSImage, NSResponder, NSTextField, NSView,
+    NSEventModifierFlags, NSEventType, NSImage, NSResponder, NSTextField, NSView, NSWindow,
 };
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_foundation::{
     NSArray, NSData, NSDate, NSDictionary, NSError, NSHTTPCookie, NSHTTPCookieDomain,
     NSHTTPCookieExpires, NSHTTPCookieName, NSHTTPCookiePath, NSHTTPCookieSameSitePolicy,
     NSHTTPCookieSecure, NSHTTPCookieValue, NSKeyValueObservingOptions, NSObject,
-    NSObjectNSKeyValueObserverRegistration, NSPoint, NSRect, NSSize, NSString, NSURL, NSURLRequest,
-    NSUUID, ns_string,
+    NSObjectNSKeyValueObserverRegistration, NSPoint, NSRect, NSRunLoop, NSSize, NSString, NSURL,
+    NSURLRequest, NSUUID, ns_string,
 };
 use objc2_web_kit::{
     WKContentWorld, WKFrameInfo, WKHTTPCookieStore, WKPDFConfiguration, WKSnapshotConfiguration,
@@ -885,6 +885,21 @@ fn same<T: Message>(responder: &NSResponder, view: &T) -> bool {
     std::ptr::addr_eq(responder, view)
 }
 
+fn restore_window_focus(window: Retained<NSWindow>) {
+    let block = RcBlock::new(move || {
+        if window
+            .firstResponder()
+            .is_some_and(|responder| same(&responder, &*window))
+        {
+            HANDING.set(true);
+            let content = window.contentView();
+            window.makeFirstResponder(content.as_deref().map(|view| &**view));
+            HANDING.set(false);
+        }
+    });
+    unsafe { NSRunLoop::mainRunLoop().performBlock(&block) };
+}
+
 /// The key a page heard, as the window's keymap reads keys.
 fn key_event(event: &NSEvent) -> Option<KeyEvent> {
     let flags = event.modifierFlags();
@@ -952,13 +967,26 @@ define_class!(
             true
         }
 
+        #[unsafe(method(acceptsFirstResponder))]
+        fn accepts_first_responder(&self) -> bool {
+            (HANDING.get() || self.holds_first_responder() || self.receiving_pointer_down())
+                && unsafe { msg_send![super(self), acceptsFirstResponder] }
+        }
+
         #[unsafe(method(becomeFirstResponder))]
         fn become_first_responder(&self) -> bool {
-            let became: bool = unsafe { msg_send![super(self), becomeFirstResponder] };
-            if became && !HANDING.get() {
-                tell(Heard::Focused { page: self.ivars().clone() });
+            if !HANDING.get() && !self.receiving_pointer_down() {
+                if let Some(window) = self.window() {
+                    restore_window_focus(window);
+                }
+                false
+            } else {
+                let became: bool = unsafe { msg_send![super(self), becomeFirstResponder] };
+                if became && !HANDING.get() {
+                    tell(Heard::Focused { page: self.ivars().clone() });
+                }
+                became
             }
-            became
         }
 
         #[unsafe(method(flagsChanged:))]
@@ -994,6 +1022,46 @@ define_class!(
 );
 
 impl PageView {
+    fn holds_first_responder(&self) -> bool {
+        let Some(responder) = self.window().and_then(|window| window.firstResponder()) else {
+            return false;
+        };
+        same(&responder, self)
+            || responder
+                .downcast_ref::<NSView>()
+                .is_some_and(|view| view.isDescendantOf(self))
+    }
+
+    fn receiving_pointer_down(&self) -> bool {
+        if self.isHiddenOrHasHiddenAncestor() {
+            return false;
+        }
+        let Some(window) = self.window() else {
+            return false;
+        };
+        let Some(event) = window.currentEvent() else {
+            return false;
+        };
+        if !matches!(
+            event.r#type(),
+            NSEventType::LeftMouseDown | NSEventType::RightMouseDown | NSEventType::OtherMouseDown
+        ) {
+            return false;
+        }
+        if !event
+            .window(MainThreadMarker::from(self))
+            .is_some_and(|w| same(&w, &*window))
+        {
+            return false;
+        }
+        let loc = event.locationInWindow();
+        let in_self = self.mouse_inRect(self.convertPoint_fromView(loc, None), self.bounds());
+        let in_clip = unsafe { self.superview() }.is_some_and(|clip| {
+            clip.mouse_inRect(clip.convertPoint_fromView(loc, None), clip.bounds())
+        });
+        in_self && in_clip
+    }
+
     /// Runs `edit` on the page, as AppKit's Edit menu would for a web view with the keyboard:
     /// undo and redo through the undo manager the page records its edits in, the others as
     /// the page's own commands.

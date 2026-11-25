@@ -26,7 +26,7 @@ const driver = createWindowDriver({ appPath: options.appPath, client });
 const receipts = [];
 
 const pages = {
-  page: '<title>page</title><h1 id="page">page</h1><input id="field" aria-label="Field"><button id="go" onclick="document.querySelector(\'h1\').textContent=\'Clicked \'+document.querySelector(\'input\').value">Go</button><button id="ask" onclick="document.querySelector(\'h1\').textContent=\'Asked \'+prompt(\'Your name?\',\'Ada\')">Ask</button><a id="next" href="/other">Other</a><script>document.cookie="drive=1; path=/"</script>',
+  page: '<title>page</title><h1 id="page">page</h1><input id="field" aria-label="Field" autofocus><button id="go" onclick="document.querySelector(\'h1\').textContent=\'Clicked \'+document.querySelector(\'input\').value">Go</button><button id="ask" onclick="document.querySelector(\'h1\').textContent=\'Asked \'+prompt(\'Your name?\',\'Ada\')">Ask</button><a id="next" href="/other">Other</a><script>document.cookie="drive=1; path=/"</script>',
   other: '<title>other</title><h1 id="other">Other heading</h1>',
 };
 const server = http.createServer((request, response) => {
@@ -111,12 +111,22 @@ try {
     runner.assert(read.title === 'page', 'the snapshot reads the page the tile shows', read);
     const stored = leafOf(observer.desktop(desktop.id), TILE);
     runner.assert(stored?.tile_params === at('page'), 'the tile stores the address', stored);
+    await driver.atRest();
+    const windowAfterOpen = await driver.state('window');
+    runner.assert(observer.desktop(desktop.id)?.active_pane_id === shell.pane, 'opening an autofocus page keeps the shell active', { active: observer.desktop(desktop.id)?.active_pane_id, shell: shell.pane });
+    runner.assert(windowAfterOpen?.keyboard?.pane === shell.pane, 'opening an autofocus page keeps the keyboard on the shell', windowAfterOpen);
   });
 
   await runner.step('type_click_and_wait', async () => {
     await browser('type', '--selector', '#field', '--text', 'drive');
+    const activeEl = JSON.parse(await browser('command', 'get_active_element'));
+    runner.assert(typeof activeEl['element-6066-11e4-a52e-4f735466cecf'] === 'string', 'typing still focuses the DOM input inside the page', activeEl);
     await browser('click', '--selector', '#go');
     await waitText('Clicked drive');
+    await driver.atRest();
+    const windowAfterDrive = await driver.state('window');
+    runner.assert(observer.desktop(desktop.id)?.active_pane_id === shell.pane, 'typing and clicking in the browser keeps the shell active', { active: observer.desktop(desktop.id)?.active_pane_id, shell: shell.pane });
+    runner.assert(windowAfterDrive?.keyboard?.pane === shell.pane, 'typing and clicking in the browser keeps the keyboard on the shell', windowAfterDrive);
   });
 
   await runner.step('a_dialog_during_an_action_is_the_agents', async () => {
