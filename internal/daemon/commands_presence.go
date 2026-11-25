@@ -15,12 +15,12 @@ func (d *Daemon) presenceCommands() map[string]command.Handler {
 	}
 }
 
-func (d *Daemon) runPresence(_ context.Context, c command.Caller, a command.PresenceArgs) (any, error) {
+func (d *Daemon) runPresence(ctx context.Context, c command.Caller, a command.PresenceArgs) (any, error) {
 	if c.Session == "" || a.SessionOnly {
 		return protocol.PresenceResult{SessionID: c.Session, SeedIds: []string{}}, nil
 	}
 	if !d.enrollmentStatus().IsHome() {
-		result, refusal := d.forwardCommand(c, "presence", nil)
+		result, refusal := d.forwardCommand(ctx, c, "presence", nil)
 		if refusal != nil {
 			return nil, refusal
 		}

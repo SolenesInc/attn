@@ -179,7 +179,7 @@ func homeForwardRefusal(err error) *command.Refusal {
 	return command.AsRefusal(err)
 }
 
-func (d *Daemon) forwardCommand(c command.Caller, name string, args json.RawMessage) (any, *command.Refusal) {
+func (d *Daemon) forwardCommand(ctx context.Context, c command.Caller, name string, args json.RawMessage) (any, *command.Refusal) {
 	msg := protocol.RunCommandMessage{Cmd: protocol.CmdRunCommand, Command: name, Args: args}
 	if c.Session != "" {
 		msg.SessionID = protocol.Ptr(c.Session)
@@ -199,7 +199,7 @@ func (d *Daemon) forwardCommand(c command.Caller, name string, args json.RawMess
 		return nil, command.AsRefusal(err)
 	}
 	var out bytes.Buffer
-	if err := d.router().Forward(append(frame, '\n'), forwardRequest{Caller: c.Session}, nil, &out); err != nil {
+	if err := d.router().Forward(ctx, append(frame, '\n'), forwardRequest{Caller: c.Session}, nil, &out); err != nil {
 		return nil, homeForwardRefusal(err)
 	}
 	var reply protocol.Response

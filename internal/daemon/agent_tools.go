@@ -366,7 +366,7 @@ func refusalText(r *command.Refusal) string {
 
 func (d *Daemon) runAgentCommand(ctx context.Context, caller command.Caller, name string, args json.RawMessage) (any, *command.Refusal) {
 	if protocol.CommandRuns[name] == protocol.LocatorHome && !d.enrollmentStatus().IsHome() {
-		return d.forwardCommand(caller, name, args)
+		return d.forwardCommand(ctx, caller, name, args)
 	}
 	return d.commandLayer().Run(ctx, caller, name, args)
 }

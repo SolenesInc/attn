@@ -8,6 +8,7 @@ import (
 
 	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/stepclock"
 )
 
 func (d *Daemon) delegateCommands() map[string]command.Handler {
@@ -48,9 +49,13 @@ func (d *Daemon) runDelegate(ctx context.Context, c command.Caller, a command.De
 // 1.5.2's 30 s request default, below Claude Code's 60 s and Codex's 300 s.
 const delegateToolBound = 20 * time.Second
 
+const delegateBoundTimer stepclock.Name = "agent-delegate-bound"
+
 func (d *Daemon) delegationWithinToolBound(ctx context.Context, operationID string) (*protocol.DelegationOperation, error) {
-	bounded, cancel := context.WithTimeout(ctx, delegateToolBound)
-	defer cancel()
+	bounded, end := context.WithCancel(ctx)
+	defer end()
+	boundTimer := d.clock.AfterFunc(delegateBoundTimer, delegateToolBound, end)
+	defer boundTimer.Stop()
 	operation, err := d.awaitDelegationSettled(operationID, bounded.Done())
 	if !errors.Is(err, errCallerGone) {
 		return operation, err

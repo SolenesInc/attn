@@ -131,27 +131,32 @@ func (e toolEndpoint) at(stack *testworld.Stack) toolEndpoint {
 
 func (e toolEndpoint) post(t *testing.T, tool string, args map[string]any) (int, []byte) {
 	t.Helper()
-	body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{"name": tool, "arguments": args}})
+	status, reply, err := e.send(tool, args)
 	if err != nil {
 		t.Fatal(err)
 	}
+	return status, reply
+}
+
+func (e toolEndpoint) send(tool string, args map[string]any) (int, []byte, error) {
+	body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{"name": tool, "arguments": args}})
+	if err != nil {
+		return 0, nil, err
+	}
 	req, err := http.NewRequest(http.MethodPost, e.url, bytes.NewReader(body))
 	if err != nil {
-		t.Fatal(err)
+		return 0, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+e.bearer)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatal(err)
+		return 0, nil, err
 	}
 	defer resp.Body.Close()
 	reply, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return resp.StatusCode, reply
+	return resp.StatusCode, reply, err
 }
 
 func (e toolEndpoint) call(t *testing.T, command string, args map[string]any) toolAnswer {

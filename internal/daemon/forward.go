@@ -21,6 +21,7 @@ import (
 
 const bridgeForward = "forward"
 const forwardComplete = "forward-complete"
+const forwardCallLimit = "forward-call-limit"
 
 type forwardRequest struct {
 	Caller        protocol.SessionID `json:"caller"`
@@ -42,7 +43,7 @@ type forwardInput interface {
 // Forward runs a frame on the home for caller and copies the home's reply
 // frames to out. input carries what the caller sends after the frame, as a
 // socket client does; nil sends the frame alone.
-func (r *Router) Forward(frame []byte, caller forwardRequest, input forwardInput, out io.Writer) error {
+func (r *Router) Forward(ctx context.Context, frame []byte, caller forwardRequest, input forwardInput, out io.Writer) error {
 	d := r.daemon
 	conn, name, err := d.homeConn(d.enrollmentStatus())
 	if err != nil {
@@ -69,6 +70,11 @@ func (r *Router) Forward(frame []byte, caller forwardRequest, input forwardInput
 		return d.homeUnreachable(name)
 	}
 	defer channel.Close()
+	defer context.AfterFunc(ctx, func() {
+		if errors.Is(context.Cause(ctx), errScriptCallLimit) {
+			_, _ = channel.SendRequest(forwardCallLimit, false, nil)
+		}
+	})()
 	completed := make(chan bool, 1)
 	goTransport(func() {
 		done := false
@@ -145,7 +151,18 @@ func (d *Daemon) forwardBridgeHandler(host string) func(*bridge.Conn, ssh.NewCha
 				return
 			}
 			defer channel.Close()
-			goTransport(func() { ssh.DiscardRequests(requests) })
+			ctx, end := context.WithCancelCause(d.life.Context())
+			defer end(nil)
+			goTransport(func() {
+				for request := range requests {
+					if request.Type == forwardCallLimit {
+						end(errScriptCallLimit)
+					}
+					if request.WantReply {
+						_ = request.Reply(false, nil)
+					}
+				}
+			})
 			stop := context.AfterFunc(conn.Context(), func() { _ = relay.Close() })
 			defer stop()
 			inputEnded := make(chan struct{})
@@ -159,7 +176,7 @@ func (d *Daemon) forwardBridgeHandler(host string) func(*bridge.Conn, ssh.NewCha
 				defer close(outputEnded)
 				_, _ = io.Copy(channel, relay)
 			})
-			ctx := context.WithValue(d.life.Context(), originKey{}, Origin{Host: host, Name: row.Name, Caller: request.Caller, CallerProfile: request.CallerProfile, bridge: conn})
+			ctx = context.WithValue(ctx, originKey{}, Origin{Host: host, Name: row.Name, Caller: request.Caller, CallerProfile: request.CallerProfile, bridge: conn})
 			d.handleConnectionContext(ctx, server)
 			<-outputEnded
 			if conn.Context().Err() == nil {

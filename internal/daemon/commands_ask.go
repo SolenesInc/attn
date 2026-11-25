@@ -32,7 +32,7 @@ func (d *Daemon) askCommands() map[string]command.Handler {
 	}
 }
 
-func (d *Daemon) runAsk(_ context.Context, c command.Caller, a command.AskArgs) (any, error) {
+func (d *Daemon) runAsk(ctx context.Context, c command.Caller, a command.AskArgs) (any, error) {
 	if strings.TrimSpace(a.Markdown) == "" {
 		return nil, command.Usage("the ask has no markdown; write it in {markdown}")
 	}
@@ -65,10 +65,10 @@ func (d *Daemon) runAsk(_ context.Context, c command.Caller, a command.AskArgs) 
 	if d.enrollmentStatus().IsHome() {
 		return d.askOpen(&msg)
 	}
-	return d.askOnHome(msg, msg.SessionID, func(reply protocol.Response) *protocol.Ask { return reply.AskOpenResult })
+	return d.askOnHome(ctx, msg, msg.SessionID, func(reply protocol.Response) *protocol.Ask { return reply.AskOpenResult })
 }
 
-func (d *Daemon) runAskAmend(_ context.Context, c command.Caller, a command.AskAmendArgs) (any, error) {
+func (d *Daemon) runAskAmend(ctx context.Context, c command.Caller, a command.AskAmendArgs) (any, error) {
 	if strings.TrimSpace(a.Markdown) == "" {
 		return nil, command.Usage("the amendment has no markdown; write it in {markdown}")
 	}
@@ -92,7 +92,7 @@ func (d *Daemon) runAskAmend(_ context.Context, c command.Caller, a command.AskA
 	if d.enrollmentStatus().IsHome() {
 		return d.askAmend(&msg)
 	}
-	return d.askOnHome(msg, msg.SessionID, func(reply protocol.Response) *protocol.Ask { return reply.AskAmendResult })
+	return d.askOnHome(ctx, msg, msg.SessionID, func(reply protocol.Response) *protocol.Ask { return reply.AskAmendResult })
 }
 
 func (d *Daemon) askBaseDir(c command.Caller, given string) (string, error) {
@@ -132,13 +132,13 @@ func readAskImages(paths []string) ([]protocol.AskImage, error) {
 	return images, nil
 }
 
-func (d *Daemon) askOnHome(msg any, sessionID protocol.SessionID, result func(protocol.Response) *protocol.Ask) (protocol.Ask, error) {
+func (d *Daemon) askOnHome(ctx context.Context, msg any, sessionID protocol.SessionID, result func(protocol.Response) *protocol.Ask) (protocol.Ask, error) {
 	frame, err := json.Marshal(msg)
 	if err != nil {
 		return protocol.Ask{}, err
 	}
 	var out bytes.Buffer
-	if err := d.router().Forward(append(frame, '\n'), forwardRequest{Caller: sessionID}, nil, &out); err != nil {
+	if err := d.router().Forward(ctx, append(frame, '\n'), forwardRequest{Caller: sessionID}, nil, &out); err != nil {
 		return protocol.Ask{}, err
 	}
 	var reply protocol.Response
