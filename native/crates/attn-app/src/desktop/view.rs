@@ -3,7 +3,7 @@ use attn_protocol::session_id::short;
 use attn_protocol::{DesktopPane, Session};
 use attn_term::mouse;
 use attn_ui::Tokens;
-use attn_ui::blocks::{HeaderPiece, Settling, SettlingChip, Tabs, TileHeader};
+use attn_ui::blocks::{HeaderPiece, Settling, SettlingChip, Shelf, Tabs, TileHeader};
 use attn_ui::colors::TerminalColors;
 use attn_ui::system::{Button as SystemButton, IconSize, Look, Size, icon_button};
 use rune::{Drag, El, Mods, PointerButton, Tx, col, el, memo};
@@ -787,7 +787,7 @@ fn laid_out(
         let tile = if joins {
             tile.transition(super::row_slide::joining(
                 slide,
-                row_spring(),
+                Shelf::row_spring(),
                 tile_transition(&leaf.kind),
             ))
         } else {
@@ -811,7 +811,7 @@ fn laid_out(
     if slide == 0.0 {
         return row;
     }
-    row.child_exit(super::row_slide::leaving(slide, row_spring()))
+    row.child_exit(super::row_slide::leaving(slide, Shelf::row_spring()))
 }
 
 fn pinned(child: El, [x, y, w, h]: [f32; 4]) -> El {
@@ -1205,15 +1205,10 @@ fn document_controls(leaf: &Leaf, cx: &TileCx) -> Option<El> {
     ))
 }
 
-/// The spring a row's tiles move on.
-fn row_spring() -> rune::Spring {
-    rune::Spring::from_stiffness_damping(630.0, 39.0, 1.0)
-}
-
 /// `el` and what it holds move on the row's spring: launched hard and passing their rest a
 /// little, by design.
 pub(super) fn moves_with_the_row(el: El) -> El {
-    el.motion(row_spring())
+    el.motion(Shelf::row_spring())
         .motion_intent(rune::MotionIntent::OVERSHOOT | rune::MotionIntent::IMPULSE)
 }
 
@@ -1225,7 +1220,7 @@ fn tile_transition(kind: &LeafKind) -> rune::Transition {
         return Transition::none();
     }
     Transition::asymmetric(Transition::scale(0.9), Transition::scale(0.92)).springs(SpringPair {
-        enter: row_spring(),
+        enter: Shelf::row_spring(),
         exit: Spring::new(0.11, 0.0),
     })
 }

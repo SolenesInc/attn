@@ -763,6 +763,24 @@ fn the_shelf_shows_the_row_of_a_previewed_desktop_until_the_overview_closes() {
 }
 
 #[test]
+fn the_shelf_s_colours_change_at_once_as_the_highlight_moves_and_on_a_previewed_desktop() {
+    let right = || chord(&Action::TerminalFocusRight);
+    let mut own = start(two_rows());
+    press(&mut own, Action::DesktopOverview);
+    let stepped = own.record(60.0, 0.5, |_, app| app.key(right()));
+    assert_eq!(
+        super::shelf_entries::recolored_at_once(&stepped),
+        ["a", "b"]
+    );
+    let mut previewed = previewing();
+    let stepped = previewed.record(60.0, 0.5, |_, app| app.key(right()));
+    assert_eq!(
+        super::shelf_entries::recolored_at_once(&stepped),
+        ["p", "y"]
+    );
+}
+
+#[test]
 fn an_entry_of_a_previewed_desktop_lands_there_and_the_current_one_closes_the_overview() {
     let entries = [("one on screen", "x"), ("one off screen", "r")];
     for (name, leaf) in entries {

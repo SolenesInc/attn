@@ -261,6 +261,81 @@ fn the_slice_scrolls_to_the_next_member_while_its_dot_shrinks_away() {
     assert!(world.runtime_is_at_rest());
 }
 
+/// The shelf's entries that `rec` drew in a new colour, after asserting that everything in an entry
+/// had its last colours from the frame the change landed on.
+pub(crate) fn recolored_at_once(rec: &rune::motion_gate::Recording) -> Vec<String> {
+    let from = rec.inputs[0].0;
+    let mut recolored = std::collections::BTreeSet::new();
+    for track in rec
+        .tracks
+        .iter()
+        .filter(|t| t.path.contains("/shelf.entry."))
+    {
+        let colors = |at: usize| track.paint_at(at).map(|paint| paint.colors);
+        let (Some(before), Some(after)) = (colors(0), colors(rec.frames - 1)) else {
+            continue;
+        };
+        for at in from..rec.frames {
+            assert_eq!(colors(at), Some(after), "{} on frame {at}", track.path);
+        }
+        if before != after {
+            let (_, entry) = track.path.split_once("/shelf.entry.").unwrap();
+            recolored.insert(entry.split(['/', '.']).next().unwrap().to_owned());
+        }
+    }
+    recolored.into_iter().collect()
+}
+
+/// How many places `rec` drew what `path` ends in at, from the frame the change landed on.
+fn places(rec: &rune::motion_gate::Recording, path: &str) -> usize {
+    let from = rec.inputs[0].0;
+    let track = rec.tracks.iter().find(|t| t.path.ends_with(path));
+    let track = track.unwrap_or_else(|| panic!("{path} is drawn"));
+    let frames = track.frames.iter().filter(|(at, _)| *at >= from);
+    let places: std::collections::BTreeSet<_> =
+        frames.map(|(_, s)| s.rect.map(f32::to_bits)).collect();
+    places.len()
+}
+
+#[test]
+fn a_new_column_in_use_changes_the_entries_colours_at_once_while_the_frame_and_the_slice_slide() {
+    let ids = ["a", "b", "c", "d", "e"];
+    let of = Row::of(
+        &ids,
+        row([pane("a"), below(pane("b"), pane("c")), pane("d"), pane("e")]),
+    )
+    .waiting(&["c"]);
+    let mut world = of.start("a", TWO_FIT);
+
+    let walked = world.record(60.0, 0.5, |daemon, _| daemon.emit(of.arrangement("c")));
+    assert_eq!(recolored_at_once(&walked), ["a", "b"]);
+    assert!(places(&walked, "/shelf.entry.b.slice.1") > 4);
+    assert!(places(&walked, "/shelf.entry.b.below.1") > 4, "its dash");
+
+    let scrolled = world.record(60.0, 0.5, |daemon, _| daemon.emit(of.arrangement("e")));
+    assert_eq!(recolored_at_once(&scrolled), ["a", "b", "d", "e"]);
+    assert!(places(&scrolled, "/shelf.frame") > 4);
+    assert!(places(&scrolled, "/shelf.frame.edge") > 4);
+
+    let [x, y, w, h] = entry(&world, "a");
+    world.gesture(|app| app.move_to((x + w / 2.0, y + h / 2.0)));
+    let left = world.record(60.0, 0.3, |_, app| app.move_to((x, y + 400.0)));
+    let hovered = left
+        .tracks
+        .iter()
+        .find(|t| t.path.ends_with("/shelf.entry.a"));
+    let hovered: std::collections::BTreeSet<_> = hovered
+        .unwrap()
+        .paint
+        .iter()
+        .flatten()
+        .map(|paint| paint.colors[0].a.to_bits())
+        .collect();
+    assert!(hovered.len() > 3, "the hover fades out");
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
 const MANY: [&str; 24] = [
     "p00", "p01", "p02", "p03", "p04", "p05", "p06", "p07", "p08", "p09", "p10", "p11", "p12",
     "p13", "p14", "p15", "p16", "p17", "p18", "p19", "p20", "p21", "p22", "p23",

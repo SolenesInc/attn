@@ -145,6 +145,12 @@ pub(super) fn legible(ink: Color, ground: Color, floor: f32, t: &Tokens) -> Colo
     moved_until_it_reads(ink, toward, ground, floor)
 }
 
+/// `e` taking a new colour at once, while its place and size still move with the row.
+fn recolored_at_once(e: El) -> El {
+    e.motion(Spring::NONE)
+        .lead(Shelf::row_spring(), Shelf::row_spring())
+}
+
 fn cut(name: &str, chars: usize) -> String {
     if name.chars().count() <= chars {
         return name.to_owned();
@@ -372,15 +378,12 @@ impl ShelfEntry {
             Place::OffScreen => (Type::Small, t.text_tertiary),
         };
         let named = self.names(member, name).then(|| {
-            ground
-                .words(self.name_of(member), kind, ink, t)
-                .single_line()
-                .truncate()
-                .w(name)
+            let words = ground.words(self.name_of(member), kind, ink, t);
+            recolored_at_once(words.single_line().truncate().w(name))
         });
         door::gap(row().items_center(), NAME_GAP)
             .h(self.shape().height)
-            .child(mark(member, ground, t))
+            .child(recolored_at_once(mark(member, ground, t)))
             .children(named)
     }
 
@@ -478,6 +481,7 @@ impl ShelfEntry {
         let body = door::gap(row().items_center(), NAME_GAP)
             .absolute(shape.start, 0.0)
             .h(shape.height)
+            .motion(Shelf::row_spring())
             .child(slices)
             .children(asks);
         let entry = el()
@@ -489,7 +493,7 @@ impl ShelfEntry {
             .h(shape.height)
             .child(body)
             .children(dots);
-        let entry = ground.pressable(entry, shape.corner);
+        let entry = recolored_at_once(ground.pressable(entry, shape.corner));
         let entry = if self.place == Place::Current || self.stacked() {
             entry.fill(ground.rest)
         } else {
@@ -611,6 +615,11 @@ impl Shelf {
     /// The room before the shelf's first entry and after its last.
     pub const START: f32 = Space::S4.pt();
     pub const END: f32 = Space::S4.pt();
+
+    /// The spring a row's tiles and the shelf's entries move on.
+    pub fn row_spring() -> Spring {
+        Spring::from_stiffness_damping(630.0, 39.0, 1.0)
+    }
 
     /// The shelf's entries one after another, keyed `key`.
     pub fn row(key: impl Into<String>) -> El {
