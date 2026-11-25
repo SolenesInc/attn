@@ -695,7 +695,7 @@ func TestAReportReplacesNoFileButItsOwnChecksEvidence(t *testing.T) {
 	_, err := report("C1", fresh, other)
 	lifeRefusal(t, "evidence named like the planner's file", err, "plan.md", "another name", onSeed("plan.md"))
 	refused := tools.mustCall(t, "seed_check_report", map[string]any{"seed": seed, "id": "C1", "summary": "it ran", "evidence": []any{fresh, other}})
-	if text := resultText(refused); !refused.IsError || !strings.HasPrefix(text, "evidence_name_taken: ") || !strings.Contains(text, "plan.md") || !strings.Contains(text, "\nFix: Give the evidence file another name") {
+	if text := resultText(refused); !refused.IsError || !strings.HasPrefix(text, "evidence_name_taken: ") || !strings.Contains(text, "plan.md") || !strings.Contains(text, "\nFix: If your evidence is the file already on the seed") {
 		t.Errorf("the tool answered %q, want an evidence_name_taken refusal that names plan.md and the fix", text)
 	}
 	holds("after two refused reports", "plan.md", "the planner's only copy")
@@ -715,6 +715,19 @@ func TestAReportReplacesNoFileButItsOwnChecksEvidence(t *testing.T) {
 	if after, err := os.Stat(onSeed("plan.md")); err != nil || !os.SameFile(before, after) || !after.ModTime().Equal(before.ModTime()) {
 		t.Errorf("citing the seed's own plan.md rewrote it: %v, %v", after, err)
 	}
+	for _, citation := range []struct{ how, evidence string }{{"its name", "plan.md"}, {"its path", onSeed("plan.md")}, {"identical bytes", same}} {
+		how, cited := citation.how, citation.evidence
+		if _, err := report("C1", cited); err != nil {
+			t.Fatalf("C1 citing plan.md by %s: %v", how, err)
+		}
+		_, err := report("C1", other)
+		lifeRefusal(t, "C1 evidence that would replace the plan.md it cited by "+how, err, "plan.md", "another name", onSeed("plan.md"))
+		refused := tools.mustCall(t, "seed_check_report", map[string]any{"seed": seed, "id": "C1", "summary": "it ran", "evidence": []any{other}})
+		if text := resultText(refused); !refused.IsError || !strings.HasPrefix(text, "evidence_name_taken: ") {
+			t.Errorf("after C1 cited plan.md by %s the tool answered %q, want an evidence_name_taken refusal", how, text)
+		}
+		holds("after C1 cited it by "+how, "plan.md", "the planner's only copy")
+	}
 
 	run := seedArtifactsWrite(t, t.TempDir(), "run.log", []byte("first run"))
 	attached("the first run", []protocol.SeedCheckAttachment{{Filename: "run.log"}}, "C1", run)
@@ -730,6 +743,17 @@ func TestAReportReplacesNoFileButItsOwnChecksEvidence(t *testing.T) {
 	seedArtifactsWrite(t, filepath.Dir(run), "run.log", []byte("third run"))
 	attached("C1's third run, cited two reports ago", []protocol.SeedCheckAttachment{{Filename: "run.log", Replaced: true}}, "C1", run)
 	holds("after C1's third run", "run.log", "third run")
+
+	attachedOver := seedArtifactsWrite(t, t.TempDir(), "run.log", []byte("the planner's run"))
+	seedArtifactsTransfer(t, cli, seed, "move", attachedOver, "", "")
+	seedArtifactsWrite(t, filepath.Dir(run), "run.log", []byte("fourth run"))
+	_, err = report("C1", run)
+	lifeRefusal(t, "C1 evidence that would replace the run.log attached over C1's", err, "run.log", "another name", onSeed("run.log"))
+	refused = tools.mustCall(t, "seed_check_report", map[string]any{"seed": seed, "id": "C1", "summary": "it ran", "evidence": []any{run}})
+	if text := resultText(refused); !refused.IsError || !strings.HasPrefix(text, "evidence_name_taken: ") {
+		t.Errorf("after the planner attached over C1's run.log the tool answered %q, want an evidence_name_taken refusal", text)
+	}
+	holds("after the planner attached over it", "run.log", "the planner's run")
 }
 
 func TestAReportWithSeveralProblemsIsRefusedOnceNamingEach(t *testing.T) {

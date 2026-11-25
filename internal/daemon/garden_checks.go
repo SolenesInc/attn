@@ -160,7 +160,7 @@ func (d *Daemon) attachReportEvidence(ctx context.Context, msg *protocol.SeedChe
 	if err != nil {
 		return nil, nil, err
 	}
-	citedBefore := read.plots.ReportedArtifacts(seedID, move.CheckID)
+	copiedBefore := read.plots.CopiedEvidence(seedID, move.CheckID)
 	carry := func(path string, heldHash *string) (*seedArtifactMachineTransfer, protocol.SeedArtifactTransferMessage, error) {
 		transfer := protocol.SeedArtifactTransferMessage{
 			Cmd: protocol.CmdSeedArtifactTransfer, ProfileID: msg.ProfileID, SeedID: seedID, Operation: "copy",
@@ -177,10 +177,6 @@ func (d *Daemon) attachReportEvidence(ctx context.Context, msg *protocol.SeedChe
 	var taken []string
 	for _, path := range copies {
 		name := filepath.Base(path)
-		if slices.Contains(citedBefore, name) {
-			landing = append(landing, evidenceCopy{path, nil})
-			continue
-		}
 		hash, err := hashRegularFile(filepath.Join(homeDir, name))
 		if os.IsNotExist(err) {
 			landing = append(landing, evidenceCopy{path, protocol.Ptr("")})
@@ -188,6 +184,10 @@ func (d *Daemon) attachReportEvidence(ctx context.Context, msg *protocol.SeedChe
 		}
 		if err != nil {
 			return nil, nil, copyEvidenceError(path, seedID, err)
+		}
+		if copiedBefore[name] == hash {
+			landing = append(landing, evidenceCopy{path, nil})
+			continue
 		}
 		carried, _, err := carry(path, &hash)
 		if err != nil {
@@ -201,6 +201,7 @@ func (d *Daemon) attachReportEvidence(ctx context.Context, msg *protocol.SeedChe
 		return nil, nil, evidenceNameTaken(seedID, move.CheckID, taken)
 	}
 	attached := make([]protocol.SeedCheckAttachment, 0, len(landing))
+	move.CopiedHashes = make(map[string]string, len(landing))
 	for _, evidence := range landing {
 		carried, transfer, err := carry(evidence.path, evidence.heldHash)
 		if err != nil {
@@ -213,7 +214,12 @@ func (d *Daemon) attachReportEvidence(ctx context.Context, msg *protocol.SeedChe
 		if err != nil {
 			return nil, nil, copyEvidenceError(evidence.path, seedID, err)
 		}
-		attached = append(attached, protocol.SeedCheckAttachment{Filename: filepath.Base(copied.DestinationPath), Replaced: protocol.Deref(copied.Replaced)})
+		replaced := protocol.Deref(copied.Replaced)
+		replacesOwn := evidence.heldHash == nil
+		if !copied.Recovered && (replacesOwn || !replaced) {
+			move.CopiedHashes[carried.Receipt.Filename] = carried.Receipt.Hash
+		}
+		attached = append(attached, protocol.SeedCheckAttachment{Filename: carried.Receipt.Filename, Replaced: replaced})
 	}
 	if citable, err = d.citableSeedArtifacts(seedID); err != nil {
 		return nil, nil, err
@@ -234,8 +240,8 @@ func evidenceNameTaken(seedID, checkID string, seedFiles []string) error {
 		names[i] = filepath.Base(path)
 	}
 	return command.Refuse(command.CodeEvidenceNameTaken,
-		"%s already holds another %s, which no earlier report on %s cited, so evidence may not replace it; nothing was reported. Give your evidence another name, or cite the seed's own file by its path: %s",
-		seedID, joinAnd(names), checkID, strings.Join(seedFiles, ", "))
+		"%s already holds %s with other contents; nothing was reported. A report on %s replaces a file only when an earlier report on %s copied it onto the seed and the seed's file is still that copy. If your evidence is the file on the seed, cite that file by its path: %s. Give new evidence another name",
+		seedID, joinAnd(names), checkID, checkID, strings.Join(seedFiles, ", "))
 }
 
 func (g gardenRead) withSeed(next garden.Seed, doc docstore.Document) gardenRead {

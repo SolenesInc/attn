@@ -2,6 +2,7 @@ package garden
 
 import (
 	"fmt"
+	"maps"
 	"net/url"
 	"slices"
 	"strconv"
@@ -21,30 +22,33 @@ type Check struct {
 }
 
 type CheckResult struct {
-	Report       *CheckReport  `json:"report,omitempty"`
-	Verdict      *CheckVerdict `json:"verdict,omitempty"`
-	CitedEarlier []string      `json:"cited_earlier,omitempty"`
+	Report       *CheckReport      `json:"report,omitempty"`
+	Verdict      *CheckVerdict     `json:"verdict,omitempty"`
+	CopiedHashes map[string]string `json:"copied_hashes,omitempty"`
 }
 
-func (r CheckResult) CitedArtifacts() []string {
-	cited := slices.Clone(r.CitedEarlier)
-	if r.Report != nil {
-		for _, evidence := range r.Report.Evidence {
-			if evidence.Artifact != "" && !slices.Contains(cited, evidence.Artifact) {
-				cited = append(cited, evidence.Artifact)
-			}
-		}
+func (r CheckResult) withCopied(hashes map[string]string) map[string]string {
+	if len(r.CopiedHashes)+len(hashes) == 0 {
+		return nil
 	}
-	return cited
+	copied := make(map[string]string, len(r.CopiedHashes)+len(hashes))
+	maps.Copy(copied, r.CopiedHashes)
+	maps.Copy(copied, hashes)
+	return copied
 }
 
-func (t PlotTree) ReportedArtifacts(seedID, checkID string) []string {
-	for _, check := range t.EffectiveChecks(seedID) {
-		if check.ID == checkID {
-			return check.Result.CitedArtifacts()
+func (t PlotTree) CopiedEvidence(seedID, checkID string) map[string]string {
+	check, _ := activeCheck(t.EffectiveChecks(seedID), checkID)
+	return check.Result.CopiedHashes
+}
+
+func activeCheck(effective []EffectiveCheck, checkID string) (EffectiveCheck, bool) {
+	for _, check := range effective {
+		if check.ID == checkID && !check.Removed {
+			return check, true
 		}
 	}
-	return nil
+	return EffectiveCheck{}, false
 }
 
 type CheckReport struct {
@@ -102,14 +106,15 @@ func ParseCheckVerb(raw string) (CheckVerb, error) {
 }
 
 type CheckMove struct {
-	Verb     CheckVerb
-	CheckID  string
-	Text     string
-	Shared   bool
-	Summary  string
-	Evidence []string
-	Commit   string
-	Actor    who.Actor
+	Verb         CheckVerb
+	CheckID      string
+	Text         string
+	Shared       bool
+	Summary      string
+	Evidence     []string
+	CopiedHashes map[string]string
+	Commit       string
+	Actor        who.Actor
 }
 
 type CheckState string
@@ -476,8 +481,8 @@ func ApplyCheckMove(tree PlotTree, id string, move CheckMove, artifacts []CheckE
 		}
 	default:
 		effective := tree.EffectiveChecks(id)
-		index := slices.IndexFunc(effective, func(c EffectiveCheck) bool { return c.ID == checkID && !c.Removed })
-		if index < 0 {
+		check, ok := activeCheck(effective, checkID)
+		if !ok {
 			missing := notEffective(seed.ID, checkID, effective)
 			if move.Verb == CheckVerbReport {
 				_, _, problems := buildCheckReport(seed.ID, checkID, move, artifacts, at)
@@ -485,16 +490,16 @@ func ApplyCheckMove(tree PlotTree, id string, move CheckMove, artifacts []CheckE
 			}
 			return Seed{}, Note{}, missing
 		}
-		result, key := effective[index].Result, checkID
-		if from := effective[index].From; from != "" {
-			key = sharedResultKey(from, checkID)
+		result, key := check.Result, checkID
+		if check.From != "" {
+			key = sharedResultKey(check.From, checkID)
 		}
 		var err error
 		headline, detail, result, err = applyResultMove(seed.ID, checkID, result, move, artifacts, at)
 		if err != nil {
 			return Seed{}, Note{}, err
 		}
-		if result.Report == nil && result.Verdict == nil && len(result.CitedEarlier) == 0 {
+		if result.Report == nil && result.Verdict == nil && len(result.CopiedHashes) == 0 {
 			delete(next.CheckResults, key)
 		} else {
 			next.CheckResults[key] = result
@@ -590,7 +595,7 @@ func applyResultMove(seedID, checkID string, result CheckResult, move CheckMove,
 		if err := JoinProblems(problems); err != nil {
 			return "", "", result, err
 		}
-		return checkID + " reported", detail, CheckResult{Report: report, CitedEarlier: result.CitedArtifacts()}, nil
+		return checkID + " reported", detail, CheckResult{Report: report, CopiedHashes: result.withCopied(move.CopiedHashes)}, nil
 	case CheckVerbConfirm, CheckVerbReject:
 		confirmed := move.Verb == CheckVerbConfirm
 		if !confirmed && summary == "" {
@@ -615,7 +620,7 @@ func applyResultMove(seedID, checkID string, result CheckResult, move CheckMove,
 		if state == CheckOpen {
 			return "", "", result, protocol.Refuse(protocol.RefusalWrongState, "%s on %s is already open: it has no report and no verdict", checkID, seedID)
 		}
-		return checkID + " reopened", summary, CheckResult{CitedEarlier: result.CitedArtifacts()}, nil
+		return checkID + " reopened", summary, CheckResult{CopiedHashes: result.CopiedHashes}, nil
 	}
 	return "", "", result, protocol.Refuse(protocol.RefusalInvalidInput, "%q is not a result move", move.Verb)
 }

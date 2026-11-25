@@ -487,7 +487,7 @@ commands:
     grant: own
     effect: record
     doc: |
-      Records the proof for a check in one call: `summary`, one line of at most {max_check_summary_chars} characters that `seed_show` prints, and `detail`, kept in the report's check note. Together they fit in {max_note_kib} KiB. `evidence` is a local file, an artifact on the seed, or an http(s) URL, and can repeat. A local file is copied onto the seed, unless it already sits in the seed's artifact folder. A report is refused when its copy would change a file on the seed that no earlier report on this check cited. A refused report lists every problem it found; nothing is recorded. A new report clears the verdict. `seed_show` marks cited evidence replaced after the report. If a check doesn't apply, report that too: say why and cite what shows it. The verdict decides.
+      Records the proof for a check in one call: `summary`, one line of at most {max_check_summary_chars} characters that `seed_show` prints, and `detail`, kept in the report's check note. Together they fit in {max_note_kib} KiB. `evidence` is a local file, an artifact on the seed, or an http(s) URL, and can repeat. A local file is copied onto the seed, unless it already sits in the seed's artifact folder. A copy replaces a file on the seed only when an earlier report on this check copied that file there and the seed's file is still that copy. A report whose copy would change any other file is refused: cite the seed's file by its path when that file is the evidence, and give new evidence another name. A refused report lists every problem it found; nothing is recorded. A new report clears the verdict. `seed_show` marks cited evidence replaced after the report. If a check doesn't apply, report that too: say why and cite what shows it. The verdict decides.
     args:
       - {name: seed, type: seed, required: true, cli: pos}
       - {name: id, type: check_id, required: true, cli: pos}
@@ -499,7 +499,7 @@ commands:
     result: SeedCheckResult
     receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, seed.checks.report.at, seed.checks.report.evidence.artifact, seed.checks.report.evidence.url, attached, ring_recipients, live_delegate]
     errors:
-      - {code: evidence_name_taken, fix: 'Give the evidence file another name, or pass the path of the file on the seed in {evidence}.'}
+      - {code: evidence_name_taken, fix: 'If your evidence is the file already on the seed, pass the path of that file in {evidence}. Give new evidence another file name.'}
     examples:
       - {seed: s-7k3f9m, id: C1, summary: "Retries pass", evidence: [retry.log]}
 

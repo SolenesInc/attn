@@ -239,6 +239,11 @@ func TestOutpostSeedTransfersUseItsNotebookAndWaitForTheHome(t *testing.T) {
 	if data, err := os.ReadFile(notebookPath(home, "seeds", seed.ID, "copy.md")); err != nil || string(data) != "copy from outpost, changed" {
 		t.Fatalf("after the outpost's refused report the home's copy.md holds %q, %v; want it unchanged", data, err)
 	}
+	writeFileAt(t, proof, "another proof from outpost")
+	requireStdout(t, outpost.Attn("seed", "check", "report", seed.ID, "C1", "-m", "Received again", "--evidence", proof), "attached proof.log (replacing the earlier file)")
+	if data, err := os.ReadFile(notebookPath(home, "seeds", seed.ID, "proof.log")); err != nil || string(data) != "another proof from outpost" {
+		t.Fatalf("after the outpost replaced C1's proof.log the home holds %q, %v", data, err)
+	}
 	destination := filepath.Join(outpost.Dir, "detached.md")
 	outpost.Attn("seed", "detach", seed.ID, "--path", "move.md", "--to", destination, "--json").JSON(t, &attached)
 	if data, err := os.ReadFile(destination); err != nil || !strings.Contains(string(data), "move from outpost") {

@@ -323,10 +323,12 @@ to the destination on that outpost. Each command waits for the matching change
 at the home before returning, so a following check report can name the artifact
 as evidence. `attn seed check report <seed> <C#> --evidence <file>` from an
 outpost shell copies that outpost's file onto the seed before it records the
-report, and is refused when the copy would change a file on the seed that no
-earlier report on that check cited. If the sync fails, the error names what is left to sync. After you fix the failure, retry the
-same command. `attn seed show <seed>` prints the artifact folder for the machine
-you called from.
+report. The copy replaces a file on the seed only when an earlier report on that
+check copied that file there and the seed's file is still that copy. A report
+whose copy would change any other file is refused. If the sync fails, the error
+names what is left to sync. After you fix the failure, retry the same command.
+`attn seed show <seed>` prints the artifact folder for the machine you called
+from.
 
 The machine-local `.attn` folder, atomic-write and seed-transfer temporary files,
 and `.DS_Store` do not sync. Other dotfiles remain content. Attn writes its

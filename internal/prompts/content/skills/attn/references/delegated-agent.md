@@ -36,7 +36,7 @@ The first line of `-m` is a summary line of at most 400 characters. Put what a r
 
 For a check that does not apply, report why and cite what shows it. The reviewer then rules on the check.
 
-Each later run is a new report. The new report replaces the earlier report and clears its verdict, so the seed always shows which evidence is current. When the plan or notes cite the earlier file, cite the new evidence under a new name. Otherwise, to replace the earlier file, cite the new evidence under the same name.
+Each later run is a new report. The new report replaces the earlier report and clears its verdict, so the seed always shows which evidence is current. When the plan or notes cite the earlier file, cite the new evidence under a new name. Otherwise, to replace a file that the check's earlier report copied onto the seed, cite the new evidence under the same name. attn refuses evidence that would change any other file on the seed.
 
 When the brief lists numbered checks that the seed does not have, report each of them in a note with its evidence.
 
