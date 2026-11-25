@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "info",
+  "title": "Review disposition: Vent remains a record under amended D29",
+  "at": "2026-11-25T18:20:56.255Z",
+  "detail": "Victor approved a-df4m41. The amended D29 in s-ct56cj explicitly permits vent as a record when a user-enabled setting can upload it. The observed behavior is unchanged. This resolves the classification finding as intended behavior without a fixing commit.\n"
+}
