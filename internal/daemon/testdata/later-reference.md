@@ -21,3 +21,5 @@ Report with `attn seed check report s-1 C2 -m "ok" --evidence a.txt --evidence b
 ```sh
 attn seed check report s-1 C3 -m "ok" --evidence c.txt --evidence d.txt
 ```
+
+Give a payload with `attn automation run 3 --input-file input.json`, `attn delegate roles apply roles.json` or `attn seed plot -f -`.

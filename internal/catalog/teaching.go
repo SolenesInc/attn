@@ -508,8 +508,9 @@ func (t *teaching) toolCall(line string) (teachingCall, bool) {
 			continue
 		}
 		name, isFile := strings.CutSuffix(arg.name, "_file")
-		if isFile && slices.ContainsFunc(cmds[0].Args, func(a Arg) bool { return a.Name == name }) {
-			call.args = append(call.args, mentionArg{name: name, value: contentsOf(arg.value)})
+		holds := slices.IndexFunc(cmds[0].Args, func(a Arg) bool { return a.Name == name })
+		if isFile && holds >= 0 {
+			call.args = append(call.args, mentionArg{name: name, value: t.c.slot(cmds[0].Args[holds], contentsOf(arg.value))})
 			continue
 		}
 		call.leavesOut = append(call.leavesOut, arg.written)

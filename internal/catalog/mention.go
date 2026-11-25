@@ -161,6 +161,9 @@ func mentionArgs(c *Catalog, cmd *Command, words []string) ([]mentionArg, error)
 				return nil, fmt.Errorf("%s takes no %s", cmd.Name, word)
 			}
 			var value any = "…"
+			if c.takesObject(*arg) {
+				value = objectSlot("{…}")
+			}
 			switch {
 			case choice != "":
 				value = choice
@@ -177,9 +180,9 @@ func mentionArgs(c *Catalog, cmd *Command, words []string) ([]mentionArg, error)
 				i++
 				value = mentionValue(c, *arg, words[i])
 				if words[i] == "-" && arg.Stdin {
-					value = "<text>"
+					value = c.slot(*arg, "text")
 					if stdin != "" {
-						value = contentsOf(stdin)
+						value = c.slot(*arg, contentsOf(stdin))
 					}
 				}
 			}
@@ -296,7 +299,18 @@ func namesSeed(word, prefix string) bool {
 	return strings.HasPrefix(word, prefix) || word == "<plot>" || word == "<seed>" || word == "<seed-id>"
 }
 
-func contentsOf(file any) string { return fmt.Sprintf("<the contents of %v>", file) }
+type objectSlot string
+
+func (c *Catalog) takesObject(arg Arg) bool { return c.ArgType(arg).Schema["type"] == "object" }
+
+func (c *Catalog) slot(arg Arg, content string) any {
+	if c.takesObject(arg) {
+		return objectSlot("<" + content + ", a JSON object>")
+	}
+	return "<" + content + ">"
+}
+
+func contentsOf(file any) string { return fmt.Sprintf("the contents of %v", file) }
 
 func isFlag(word string) bool { return strings.HasPrefix(word, "-") && word != "-" }
 
@@ -325,10 +339,13 @@ func flagArg(cmd *Command, flag string) (*Arg, string) {
 
 func mentionValue(c *Catalog, arg Arg, word string) any {
 	if output := shellOutput().FindStringSubmatch(word); output != nil {
-		return "<the output of " + output[1] + ">"
+		return c.slot(arg, "the output of "+output[1])
 	}
 	if arg.File && word != "-" {
-		return contentsOf(word)
+		return c.slot(arg, contentsOf(word))
+	}
+	if c.takesObject(arg) {
+		return c.slot(arg, "text")
 	}
 	if c.ArgType(arg).Schema["type"] == "integer" {
 		if n, err := strconv.Atoi(word); err == nil {
@@ -342,6 +359,9 @@ func mentionValue(c *Catalog, arg Arg, word string) any {
 }
 
 func jsonText(v any) string {
+	if slot, ok := v.(objectSlot); ok {
+		return string(slot)
+	}
 	var b bytes.Buffer
 	encoder := json.NewEncoder(&b)
 	encoder.SetEscapeHTML(false)

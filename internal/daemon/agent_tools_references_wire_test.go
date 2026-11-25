@@ -18,6 +18,7 @@ import (
 var (
 	shownCommand = regexp.MustCompile("`(attn\\s[^`]+)`|(?m)^\\s*(attn [^\\n]+)$")
 	shownCall    = regexp.MustCompile("(?m)`?([a-z_]+)`? (?:with )?(\\{.*)")
+	shownSlot    = regexp.MustCompile(`": <[^"]*>([,}])`)
 	shownFlag    = regexp.MustCompile("`--?[a-z][^`]*`(?: \\(CLI only\\))?")
 )
 
@@ -79,17 +80,22 @@ func checkShownCalls(t *testing.T, offered map[string]toolArguments, read, text 
 		}
 		var call map[string]any
 		if strings.HasPrefix(match[2], "{\"") {
-			if err := json.NewDecoder(strings.NewReader(match[2])).Decode(&call); err != nil {
+			args := shownSlot.ReplaceAllString(match[2], `": {}$1`)
+			if err := json.NewDecoder(strings.NewReader(args)).Decode(&call); err != nil {
 				t.Errorf("%s shows %s with arguments that are not JSON: %s", read, match[1], match[2])
 				continue
 			}
 			checked++
-			if name := repeatedArgument(match[2]); name != "" {
+			if name := repeatedArgument(args); name != "" {
 				t.Errorf("%s shows %s with the argument %s twice: %s", read, match[1], name, match[2])
 			}
-			for name := range call {
-				if _, takes := tool.Properties[name]; !takes {
+			for name, value := range call {
+				property, takes := tool.Properties[name].(map[string]any)
+				if !takes {
 					t.Errorf("%s shows %s with the argument %s, which the tool does not take", read, match[1], name)
+				}
+				if shown := structureOf(value); shown != structureOfType(property["type"]) {
+					t.Errorf("%s shows %s with %s as %s, but its schema says %v", read, match[1], name, shown, property["type"])
 				}
 			}
 			continue
@@ -111,6 +117,23 @@ func checkShownCalls(t *testing.T, offered map[string]toolArguments, read, text 
 		}
 	}
 	return checked
+}
+
+func structureOf(value any) string {
+	switch value.(type) {
+	case map[string]any:
+		return "object"
+	case []any:
+		return "array"
+	}
+	return "a single value"
+}
+
+func structureOfType(schemaType any) string {
+	if schemaType == "object" || schemaType == "array" {
+		return schemaType.(string)
+	}
+	return "a single value"
 }
 
 func repeatedArgument(call string) string {
@@ -224,7 +247,19 @@ func TestAReferenceReadThroughAToolTeachesTheToolsAndReadFromTheCLIKeepsItsText(
 	for _, name := range references {
 		read("skill", "skill", map[string]any{"reference": name}, source("skills/attn/references/"+name+".md"))
 	}
-	read("seed_guide", "seed guide", map[string]any{}, source("resources/seed-guide.md"))
+	guide := read("seed_guide", "seed guide", map[string]any{}, source("resources/seed-guide.md"))
+
+	example := regexp.MustCompile("(?s)seed_plot (\\{[^\n]*\\})\n.*?```json\n(.*?)```").FindStringSubmatch(guide)
+	if example == nil {
+		t.Fatalf("the seed guide shows no seed_plot call with a payload:\n%s", guide)
+	}
+	var plot map[string]any
+	if err := json.Unmarshal([]byte(shownSlot.ReplaceAllLiteralString(example[1], `": `+example[2]+`}`)), &plot); err != nil {
+		t.Fatalf("the seed guide's seed_plot call is not one with its payload in place: %v:\n%s", err, example[1])
+	}
+	if planted, err := agent.call(t, "seed_plot", plot); err != nil || planted.IsError {
+		t.Errorf("seed_plot called as the seed guide shows it: %v %q", err, resultText(planted))
+	}
 
 	if calls == 0 {
 		t.Error("no reference shows a call of a tool")
