@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Sheriff misses recovered failures between runs",
+  "at": "2026-11-25T00:44:07.843Z",
+  "detail": "At reviewed head 84a7881ce, a failing main CI run followed by a green run on the same track before the Sheriff checks can leave a recovered failure without an owner. The automation guard emits nothing and the manual workflow exits before dispatch. The imported receipt can still select the test for unrelated landings. Reproduced with an isolated fixture and independently confirmed. Evidence: s-cbg4gm/review-84a7881.md.\n"
+}
