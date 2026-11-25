@@ -48,7 +48,7 @@ Each run keeps `transcript.jsonl`, `calls.json`, `records.json` (at the home onl
 
 ### Harness homes
 
-By default, the agents run with your own `~/.claude`, `~/.codex` and `~/.sigma`. Your global `CLAUDE.md`, plugins and MCP servers then add to every Claude Code prompt, which raises input tokens, and Claude Code adds an entry for each run's folder to your `~/.claude.json`, as it does for any folder it runs in. To measure attn alone, make a bench home once and pass `--tool-home <dir>`. The driver then starts the daemon with `CLAUDE_CONFIG_DIR=<dir>/.claude`, `CODEX_HOME=<dir>/.codex`, `SIGMA_HOME=<dir>/.sigma` and `ATTN_TOOL_HOME=<dir>`. To make the home, sign each harness in:
+By default, the agents run with your own `~/.claude`, `~/.codex` and `~/.sigma`. Your global `CLAUDE.md`, plugins and MCP servers then add to every Claude Code prompt, which raises input tokens, and Claude Code adds an entry for each run's folder to your `~/.claude.json`, as it does for any folder it runs in. Codex keeps its trust answer for each run's folder in your `~/.codex/config.toml` until the run ends and the driver removes it. `msg-delegate` would write a further entry there, so the driver refuses a Codex cell of it without `--tool-home`. To measure attn alone, make a bench home once and pass `--tool-home <dir>`. The driver then starts the daemon with `CLAUDE_CONFIG_DIR=<dir>/.claude`, `CODEX_HOME=<dir>/.codex`, `SIGMA_HOME=<dir>/.sigma` and `ATTN_TOOL_HOME=<dir>`. To make the home, sign each harness in:
 
 ```sh
 CLAUDE_CONFIG_DIR=~/attn-agent-bench-home/.claude claude    # then /login
@@ -110,7 +110,7 @@ The four harder tasks need several steps, tools an agent must load first, or rec
 
 In `open-ask-refusal`, attn refuses the harvest of a seed with an open ask, and names the ask, the command that reads it and the command that withdraws it. An agent that asks the user instead, or that its harness stops from withdrawing the ask, fails.
 
-`msg-delegate` saves `docs/` as trusted in the Codex home before the prompt, because Codex trusts exactly the folder it was asked about, so the delegate starts healthily. The driver refuses a Codex cell of `msg-delegate` without `--tool-home`, so it never writes that entry to your own `~/.codex/config.toml`. `msg-delegate-stalled` leaves `docs/` untrusted, for Codex cells only (Claude Code trusts `docs/` through its parent): it passes when, besides, the delegate is still at its folder-trust question and the agent's answer or an ask names that question. It is outside the grid and the groups: run it with `--tasks msg-delegate-stalled --harness codex`.
+`msg-delegate` saves `docs/` as trusted in the Codex home before the prompt, because Codex trusts exactly the folder it was asked about, so the delegate starts healthily. It needs `--tool-home` for Codex, as [Harness homes](#harness-homes) says. `msg-delegate-stalled` leaves `docs/` untrusted, for Codex cells only (Claude Code trusts `docs/` through its parent): it passes when, besides, the delegate is still at its folder-trust question and the agent's answer or an ask names that question. It is outside the grid and the groups: run it with `--tasks msg-delegate-stalled --harness codex`.
 
 `ask-still-matters` is the opposite of `open-ask-refusal`, outside the grid and the groups: run it with `--tasks ask-still-matters`. The agent is asked to close two seeds, one of which has an ask whose answer the work still needs, so it passes when the other seed is harvested and this one is still growing with its ask open, with no forced close.
 

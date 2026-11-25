@@ -316,36 +316,33 @@ Read in the source at openai/codex rust-v0.164.0:
   main repository for a worktree), or on the folder outside git
   (`app-server/src/request_processors/thread_processor.rs`).
 
-Probed on 0.166.0, a plain TUI in a PTY with its own `CODEX_HOME`, and read in
-the source at rust-v0.166.0:
+Probed on 0.166.0 with a plain TUI in a PTY and its own `CODEX_HOME`, and on
+0.167.0 through attn on Linux, as a shared `--remote` TUI and as a plain TUI from
+an attn built to launch Codex outside its app-server, with every byte the TUI
+wrote recorded. Read in the source at rust-v0.166.0 and rust-v0.167.0:
 
 - The folder trust question reads "Trust this folder?", with "1. Trust and
   continue" selected. attn recognizes the question by the text "Trust and
   continue" (`ShowsFolderTrustQuestion`).
 - A plain TUI asks its app-server about trust too, with or without
   `--no-daemon`, so `-c projects."<folder>".trust_level="trusted"` does not
-  stop the question (`tui/src/onboarding/directory_trust.rs`).
+  stop the question (`tui/src/onboarding/directory_trust.rs`). It asks only
+  inside a project, meaning a git repository or a folder under a
+  `project_root_markers` entry. In any other folder with no saved trust the chat
+  starts (probed on 0.167.0). A `--remote` TUI asks in a project and outside one
+  (`tui/src/config_update.rs`, `read_remote_project_trust`).
 - Trust saved on a repository's root covers its worktrees and subfolders: the
   TUI does not ask there.
 - In a folder saved untrusted, the TUI asks a different question, "Open
   restricted" or "Quit".
-- The TUI sends no OSC 7501 while the question is open. It reports
-  `state=idle` once its chat starts, 3.6 s after Enter in one probe, because
-  only the chat widget reports status (`tui/src/chatwidget.rs`).
-
-Probed on 0.167.0 on Linux through attn, as a shared `--remote` TUI and as a
-plain TUI from an attn built to launch Codex outside its app-server, with every
-byte the TUI wrote recorded, and read in the source at rust-v0.167.0:
-
-- For the 40 s the question stayed open, the TUI set no terminal title (no OSC 0
-  or 2) and sent no OSC 7501. attn had the session `launching` until its first
-  screen read 10.0 s after launch, and `waiting_input` with
-  `folder_trust_question` from then on, at 30 s too. A shared launch with a first
-  prompt did the same.
-- A plain TUI asks only inside a project, meaning a git repository or a folder
-  under a `project_root_markers` entry. In any other folder with no saved trust
-  the chat starts. A `--remote` TUI asks in both
-  (`tui/src/config_update.rs`, `read_remote_project_trust`).
+- While the question is open, the TUI sets no terminal title (no OSC 0 or 2) and
+  sends no OSC 7501, plain or shared, for the 40 s of the 0.167.0 probe. It
+  reports `state=idle` once its chat starts, 3.6 s after Enter in one probe on
+  0.166.0, because only the chat widget reports status
+  (`tui/src/chatwidget.rs`).
+- On 0.167.0 attn had the session `launching` until its first screen read 10.0 s
+  after launch, and `waiting_input` with `folder_trust_question` from then on, at
+  30 s too. A shared launch with a first prompt did the same.
 
 Read in the source at openai/codex 1ffa95e:
 
