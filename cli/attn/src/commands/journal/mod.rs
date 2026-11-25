@@ -50,9 +50,9 @@ impl Family for Journal {
 
     fn before_send(&self, cmd: &Command, parsed: &mut Parsed) -> Result<(), Stop> {
         let usage = |message: &str| self.usage_error(cmd.name, message);
-        let entry = parsed.text("entry").trim().to_string();
-        let file = parsed.text("entry_file").trim().to_string();
-        parsed.args.remove("entry_file");
+        let entry = parsed.text("text").trim().to_string();
+        let file = parsed.text("text_file").trim().to_string();
+        parsed.args.remove("text_file");
         if !entry.is_empty() && !file.is_empty() {
             return Err(usage("pass only one of --entry or --entry-file"));
         }
@@ -64,7 +64,7 @@ impl Family for Journal {
         if text.is_empty() {
             return Err(usage("--entry or --entry-file is required"));
         }
-        parsed.args.insert("entry".to_string(), Json::from(text));
+        parsed.args.insert("text".to_string(), Json::from(text));
         Ok(())
     }
 

@@ -139,7 +139,7 @@ impl Family for Seed {
                 run, &Seed, cmd, &result,
             )?),
             "search" => render::search(
-                parsed.text("words"),
+                parsed.text("query"),
                 &command::decode::<SeedSearchResult>(run, &Seed, cmd, &result)?,
             ),
             "plant" => plant(&command::decode(run, &Seed, cmd, &result)?),

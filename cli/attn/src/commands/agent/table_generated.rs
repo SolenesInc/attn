@@ -56,7 +56,7 @@ pub const COMMANDS: &[Command] = &[
         runs_without_daemon: false,
         usage: &["no_sender"],
         args: &[
-            Arg { name: "targets", cli: Cli::Rest, value: Value::Text, source: Source::Given, required: false, list: true },
+            Arg { name: "targets", cli: Cli::Rest("targets"), value: Value::Text, source: Source::Given, required: false, list: true },
             Arg { name: "all", cli: Cli::Flag("all"), value: Value::Bool, source: Source::Given, required: false, list: false },
         ],
     },

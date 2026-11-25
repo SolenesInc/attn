@@ -14,8 +14,8 @@ pub const COMMANDS: &[Command] = &[
         runs_without_daemon: false,
         usage: &[],
         args: &[
-            Arg { name: "entry", cli: Cli::Flag("entry"), value: Value::Text, source: Source::Given, required: true, list: false },
-            Arg { name: "entry_file", cli: Cli::Flag("entry-file"), value: Value::Text, source: Source::Given, required: false, list: false },
+            Arg { name: "text", cli: Cli::Flag("entry"), value: Value::Text, source: Source::Given, required: true, list: false },
+            Arg { name: "text_file", cli: Cli::Flag("entry-file"), value: Value::Text, source: Source::Given, required: false, list: false },
             Arg { name: "date", cli: Cli::Flag("date"), value: Value::Text, source: Source::Given, required: false, list: false },
         ],
     },

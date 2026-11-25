@@ -50,7 +50,7 @@ func TestJournalAppendKeepsEveryEntryInItsDaysFileAndRefusesMalformedOnes(t *tes
 	}
 
 	for _, refused := range []struct{ date, entry, want string }{
-		{"2026-07-05", "   ", "{entry} is required"},
+		{"2026-07-05", "   ", "{text} is required"},
 		{"not-a-date", "an entry", "not-a-date"},
 	} {
 		if _, err := cli.AppendJournal("", refused.date, refused.entry); err == nil || !strings.Contains(err.Error(), refused.want) {

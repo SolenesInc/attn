@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"go/format"
 	"os"
@@ -219,7 +220,7 @@ func (g *generator) rustCLI(cmd *catalog.Command, a catalog.Arg) string {
 	case a.CLI == "pos":
 		return "Cli::Pos"
 	case a.CLI == "rest":
-		return "Cli::Rest"
+		return fmt.Sprintf("Cli::Rest(%s)", rustString(cmp.Or(a.CLIName, a.Name)))
 	case a.AfterDashes():
 		return "Cli::AfterDashes"
 	case a.FlagWords() != "":

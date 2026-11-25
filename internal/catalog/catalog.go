@@ -148,6 +148,7 @@ type Arg struct {
 	Required    bool     `yaml:"required"`
 	List        bool     `yaml:"list"`
 	CLI         string   `yaml:"cli"`
+	CLIName     string   `yaml:"cli_name"`
 	Stdin       bool     `yaml:"stdin"`
 	File        bool     `yaml:"file"`
 	Piped       bool     `yaml:"piped"`

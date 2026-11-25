@@ -73,7 +73,7 @@ pub const COMMANDS: &[Command] = &[
         runs_without_daemon: false,
         usage: &["bad_until"],
         args: &[
-            Arg { name: "ids", cli: Cli::Rest, value: Value::Text, source: Source::Given, required: true, list: true },
+            Arg { name: "ids", cli: Cli::Rest("ids"), value: Value::Text, source: Source::Given, required: true, list: true },
             Arg { name: "until", cli: Cli::Flag("until"), value: Value::Text, source: Source::Given, required: true, list: false },
         ],
     },
@@ -83,7 +83,7 @@ pub const COMMANDS: &[Command] = &[
         runs_without_daemon: false,
         usage: &[],
         args: &[
-            Arg { name: "ids", cli: Cli::Rest, value: Value::Text, source: Source::Given, required: true, list: true },
+            Arg { name: "ids", cli: Cli::Rest("ids"), value: Value::Text, source: Source::Given, required: true, list: true },
         ],
     },
     Command {

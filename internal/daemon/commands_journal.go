@@ -18,9 +18,9 @@ func (d *Daemon) journalCommands() map[string]command.Handler {
 }
 
 func (d *Daemon) runJournalAppend(_ context.Context, c command.Caller, a command.JournalAppendArgs) (any, error) {
-	entry := strings.TrimSpace(a.Entry)
+	entry := strings.TrimSpace(a.Text)
 	if entry == "" {
-		return nil, command.Usage("{entry} is required")
+		return nil, command.Usage("{text} is required")
 	}
 	date := strings.TrimSpace(a.Date)
 	if date == "" {

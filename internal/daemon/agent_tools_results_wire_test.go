@@ -144,7 +144,7 @@ func TestEverySeedToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) 
 		t.Fatalf("seed_plant answered no seed ids: %q %q %q; %v", x, y, z, shapes.mismatches)
 	}
 	call("seed_plot", map[string]any{"plot": map[string]any{"title": "Checkout plot", "children": []any{map[string]any{"title": "Step one"}}}})
-	call("seed_search", map[string]any{"words": "flaky checkout"})
+	call("seed_search", map[string]any{"query": "flaky checkout"})
 	call("seed_link", map[string]any{"a": x, "relation": "blocks", "b": y})
 	call("seed_unlink", map[string]any{"a": x, "relation": "blocks", "b": y})
 	call("seed_ready", map[string]any{})

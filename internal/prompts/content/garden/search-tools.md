@@ -1,1 +1,1 @@
-call `seed_search` with `words`
+call `seed_search` with `query`

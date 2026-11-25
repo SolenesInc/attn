@@ -74,7 +74,7 @@ func TestAnAskWithAnImageFromAnOutpostAgentsToolShowsAtTheHome(t *testing.T) {
 		t.Errorf("an ask showing a missing image answered error=%v %q, want a refusal naming %s", missing.IsError, missing.Text, want)
 	}
 	unknown := tools.call(t, "ask", map[string]any{"markdown": "About the work." + question, "seed": "s-nope00"})
-	if want := "not_found: "; !unknown.IsError || !strings.HasPrefix(unknown.Text, want) || !strings.Contains(unknown.Text, "`seed_search` with {\"words\": \"<words>\"}") {
+	if want := "not_found: "; !unknown.IsError || !strings.HasPrefix(unknown.Text, want) || !strings.Contains(unknown.Text, "`seed_search` with {\"query\": \"<words>\"}") {
 		t.Errorf("an ask about an unknown seed, refused by the home, answered error=%v %q, want the code %q and the seed_search tool", unknown.IsError, unknown.Text, want)
 	}
 	untended := tools.call(t, "ask", map[string]any{"markdown": "About the work." + question, "seed": o.seed})

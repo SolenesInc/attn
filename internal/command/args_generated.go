@@ -667,9 +667,9 @@ type HandoffArgs struct {
 }
 
 type JournalAppendArgs struct {
-	Entry     string `json:"entry,omitempty"`
-	EntryFile string `json:"entry_file,omitempty"`
-	Date      string `json:"date,omitempty"`
+	Text     string `json:"text,omitempty"`
+	TextFile string `json:"text_file,omitempty"`
+	Date     string `json:"date,omitempty"`
 }
 
 type ListArgs struct {
@@ -771,7 +771,7 @@ type ReviewAnswerArgs struct {
 }
 
 type SeedSearchArgs struct {
-	Words string `json:"words,omitempty"`
+	Query string `json:"query,omitempty"`
 	Limit *int64 `json:"limit,omitempty"`
 }
 

@@ -2,7 +2,8 @@
 # name in backticks (`summary`) and another command by its tool name in
 # backticks (`seed_show`). The CLI's help prints them as the flag (`-m`) and
 # the command (`attn seed show`). A `path` arg's help says where a relative
-# path resolves. `cli_only` keeps an arg out of the tool. `piped` marks a required arg
+# path resolves. `cli_only` keeps an arg out of the tool. `cli_name` is the word the CLI
+# calls a `rest` arg by when the tool names it differently. `piped` marks a required arg
 # that the CLI reads from stdin when its flag is omitted, so the CLI's usage
 # shows it in brackets while the tool's schema still requires it.
 # A refusal's message or fix, here or in Go, names an arg as {name} and another
@@ -136,11 +137,11 @@ commands:
     doc: |
       Finds seeds by words across your profile's garden, harvested and withered included: titles, bodies and log entries. Words match as stemmed prefixes; identifier parts match too. Seeds carrying some words also appear. Ranks by title coverage, word coverage, relevance and recency, with a boost for open seeds. Prints status, last active and an original matching line. Search before you plant, so a duplicate is found instead of created.
     args:
-      - {name: words, type: text, required: true, cli: rest, placeholder: "<words>", doc: "the words to find"}
+      - {name: query, type: text, required: true, cli: rest, cli_name: words, placeholder: "<words>", doc: "the words to find"}
       - {name: limit, type: count, cli: "--limit", doc: "how many hits to answer with (default {default_results}, at most {max_results})"}
     result: SeedSearchResult
     examples:
-      - {words: "retry uploader"}
+      - {query: "retry uploader"}
 
   - name: seed plant
     summary: plant a seed and print its id, slug and title

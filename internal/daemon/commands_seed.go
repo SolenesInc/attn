@@ -134,7 +134,7 @@ func (d *Daemon) scoped(msg any, cmd string) error {
 }
 
 func (d *Daemon) runSeedSearch(_ context.Context, c command.Caller, args command.SeedSearchArgs) (any, error) {
-	msg := seedSearchRequest{Cmd: cmdSeedSearch, Query: args.Words}
+	msg := seedSearchRequest{Cmd: cmdSeedSearch, Query: args.Query}
 	if args.Limit != nil && *args.Limit != 0 {
 		msg.Limit = protocol.Ptr(int(*args.Limit))
 	}

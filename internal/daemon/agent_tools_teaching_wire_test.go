@@ -60,7 +60,7 @@ func TestALaunchThatCarriesTheToolsLeavesTheirFamiliesCLITeachingToTheServer(t *
 		if viaTool := strings.Contains(text, "call `skill` with `reference` delegation"); viaTool != taught || strings.Contains(text, "attn skill --reference delegation") == taught {
 			t.Errorf("%s points at the delegation reference through the tool: %t, want %t, and through the CLI only without the tools:\n%s", launch, viaTool, taught, text)
 		}
-		if viaTool := strings.Contains(text, "call `seed_search` with `words`"); viaTool != taught || strings.Contains(text, "run `attn seed search <words>`") == taught {
+		if viaTool := strings.Contains(text, "call `seed_search` with `query`"); viaTool != taught || strings.Contains(text, "run `attn seed search <words>`") == taught {
 			t.Errorf("%s says to search the garden through the tool: %t, want %t, and through the CLI only without the tools:\n%s", launch, viaTool, taught, text)
 		}
 		if dropped := !strings.Contains(text, "Use `attn agent msg` to reach sessions attn runs."); dropped != taught {

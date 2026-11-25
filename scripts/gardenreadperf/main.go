@@ -62,7 +62,7 @@ func main() {
 		requests = append(requests, request{"show", map[string]any{"cmd": "run_command", "command": "seed show", "args": map[string]any{"seed": *show}}, nil})
 	}
 	if *search != "" {
-		requests = append(requests, request{"search", map[string]any{"cmd": "run_command", "command": "seed search", "args": map[string]any{"words": *search}}, nil})
+		requests = append(requests, request{"search", map[string]any{"cmd": "run_command", "command": "seed search", "args": map[string]any{"query": *search}}, nil})
 	}
 	for _, r := range requests {
 		r.msg["profile_id"] = *profile

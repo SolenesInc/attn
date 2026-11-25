@@ -14,7 +14,7 @@ pub const COMMANDS: &[Command] = &[
         runs_without_daemon: false,
         usage: &[],
         args: &[
-            Arg { name: "words", cli: Cli::Rest, value: Value::Text, source: Source::Given, required: true, list: false },
+            Arg { name: "query", cli: Cli::Rest("words"), value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "limit", cli: Cli::Flag("limit"), value: Value::Int, source: Source::Given, required: false, list: false },
         ],
     },

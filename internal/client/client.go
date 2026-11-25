@@ -825,7 +825,7 @@ func (c *Client) AskClose(sessionID protocol.SessionID, askID, reason string) er
 }
 
 func (c *Client) AppendJournal(sourceSessionID protocol.SessionID, date string, entry string) (*protocol.JournalAppendResult, error) {
-	return commandResult[protocol.JournalAppendResult](c, "journal append", sourceSessionID, command.JournalAppendArgs{Entry: entry, Date: date})
+	return commandResult[protocol.JournalAppendResult](c, "journal append", sourceSessionID, command.JournalAppendArgs{Text: entry, Date: date})
 }
 
 func (c *Client) ActivityStatus() (*protocol.ActivityStatusResult, error) {

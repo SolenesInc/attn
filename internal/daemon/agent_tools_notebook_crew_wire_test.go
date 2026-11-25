@@ -85,7 +85,7 @@ func TestEveryJournalToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
 	tools := &schemaCheckedTools{t: t, agent: agent, tools: listOfferedTools(t, agent), called: map[string]bool{}}
 
-	appended := tools.call("journal_append", map[string]any{"entry": "Shipped the parser fix.", "date": "2026-07-05"})
+	appended := tools.call("journal_append", map[string]any{"text": "Shipped the parser fix.", "date": "2026-07-05"})
 	if appended["rel_path"] != "journal/2026-07-05.md" {
 		t.Errorf("journal_append answered %v, want journal/2026-07-05.md", appended)
 	}
@@ -164,7 +164,7 @@ func TestAJournalOrCrewCallerReadsAndChangesNothingOfAnotherProfile(t *testing.T
 	}
 	for surface, call := range surfaces {
 		day := map[string]string{"/mcp": "2026-07-06", "run_command": "2026-07-07"}[surface]
-		if _, err := call("journal append", map[string]any{"entry": "Side's day.", "date": day}); err != nil {
+		if _, err := call("journal append", map[string]any{"text": "Side's day.", "date": day}); err != nil {
 			t.Fatalf("%s journal append from Side: %v", surface, err)
 		}
 		if _, err := os.Stat(filepath.Join(sideNotebook, "journal", day+".md")); err != nil {

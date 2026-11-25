@@ -254,7 +254,7 @@ func (c *Client) SeedPlot(sessionID protocol.SessionID, plot Plot) (*protocol.Se
 }
 
 func (c *Client) SeedSearch(sessionID protocol.SessionID, query string, limit int) (*protocol.SeedSearchResult, error) {
-	args := map[string]any{"words": query}
+	args := map[string]any{"query": query}
 	if limit != 0 {
 		args["limit"] = limit
 	}

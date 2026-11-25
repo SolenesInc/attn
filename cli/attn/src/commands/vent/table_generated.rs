@@ -15,7 +15,7 @@ pub const COMMANDS: &[Command] = &[
         usage: &[],
         args: &[
             Arg { name: "about", cli: Cli::Flag("about"), value: Value::Text, source: Source::Given, required: true, list: false },
-            Arg { name: "text", cli: Cli::Rest, value: Value::Text, source: Source::Given, required: false, list: false },
+            Arg { name: "text", cli: Cli::Rest("text"), value: Value::Text, source: Source::Given, required: false, list: false },
             Arg { name: "file", cli: Cli::Flag("file"), value: Value::Text, source: Source::Given, required: false, list: false },
         ],
     },

@@ -14,7 +14,7 @@ static STALE_PROTOCOL_PROBE: Once = Once::new();
 
 pub enum Cli {
     Pos,
-    Rest,
+    Rest(&'static str),
     Flag(&'static str),
     Choice(&'static [(&'static str, &'static str)]),
     SplitRest,
@@ -281,12 +281,13 @@ fn wrong_args(cmd: &Command, positionals: &[String]) -> String {
             .collect();
         format!("{}: {}", positionals.len(), quoted.join(" "))
     };
-    if let Some(rest) = cmd
-        .args
-        .iter()
-        .find(|arg| matches!(arg.cli, Cli::Rest | Cli::Words(_)))
-    {
-        return format!("needs {}, got {got}", rest.name);
+    let rest = cmd.args.iter().find_map(|arg| match arg.cli {
+        Cli::Rest(name) => Some(name),
+        Cli::Words(_) => Some(arg.name),
+        _ => None,
+    });
+    if let Some(name) = rest {
+        return format!("needs {name}, got {got}");
     }
     let pos: Vec<&Arg> = cmd
         .args
@@ -530,7 +531,7 @@ fn positional_values(
         values.insert(arg.name.to_string(), word_items(cmd, positionals, fields)?);
         return Ok(values);
     }
-    if let Some(arg) = cmd.args.iter().find(|arg| matches!(arg.cli, Cli::Rest)) {
+    if let Some(arg) = cmd.args.iter().find(|arg| matches!(arg.cli, Cli::Rest(_))) {
         if arg.list {
             if arg.required && positionals.is_empty() {
                 return Err(ParseStop::Usage(wrong_args(cmd, positionals)));
