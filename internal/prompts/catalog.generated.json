@@ -1130,6 +1130,12 @@
                   },
                   {
                     "kind": "text",
+                    "id": "session.attn-map.ask-reference",
+                    "source": "content/session/attn-map/ask-reference.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
                     "id": "session.attn-map.table",
                     "source": "content/session/attn-map/table.md",
                     "keep_final_newline": true
@@ -4531,6 +4537,18 @@
             "kind": "text",
             "id": "attn-skill",
             "source": "content/skills/attn/SKILL.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "ask",
+          "delivery": "reference",
+          "description": "Printed on demand by attn skill --reference.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.ask",
+            "source": "content/skills/attn/references/ask.md",
             "verbatim": true,
             "keep_final_newline": true
           }
@@ -8524,5 +8542,5 @@
       ]
     }
   ],
-  "definitions_hash": "e0aeb04b28f6c5e2b31bd57fb4dc501d62a7bd85caa4e6e27d58c2484230b228"
+  "definitions_hash": "6184b3a0080ef2e4e9153b1dffdda081b03d5f3d4dfebeab37d8d808f972564b"
 }

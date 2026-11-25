@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -150,5 +152,43 @@ func TestTheAskToolRequiresItsMarkdownAndSpeaksOnlyInToolWords(t *testing.T) {
 	text := resultText(refused)
 	if !refused.IsError || !strings.Contains(text, "the ask has no markdown; write it in markdown") || strings.Contains(text, "stdin") || strings.Contains(text, "--file") {
 		t.Errorf("an empty ask answered %q, want a refusal that names the markdown argument and no stdin or --file", text)
+	}
+}
+
+func TestAPluginWithoutLaunchInstructionsCanReadAskGuidance(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	setSetting(t, app, "agent_tools_enabled", "true")
+	setSetting(t, app, "asks_enabled", "true")
+	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"agent_tools": true})
+	awaitDriverAvailable(app, "snipe")
+	_, launch := spawnDriven(w, app, driver, w.Path("shop"))
+	if launch.Instructions != nil || launch.AgentTools == nil {
+		t.Fatal("want a plugin launch with MCP tools and without instructions")
+	}
+	agent := agentToolsCaller{w: w, bearer: launch.AgentTools.Credential}
+	session, err := agent.connect(t, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index := slices.IndexFunc(listed.Tools, func(tool *mcp.Tool) bool { return tool.Name == "ask" })
+	if index < 0 {
+		t.Fatal("the plugin's MCP server did not offer ask")
+	}
+	if description := listed.Tools[index].Description; !strings.Contains(description, "`skill` with `reference` set to `ask`") {
+		t.Errorf("the ask description does not direct the plugin to its MCP reference:\n%s", description)
+	}
+	reference := agent.mustCall(t, "skill", map[string]any{"reference": "ask"})
+	if reference.IsError {
+		t.Fatalf("the ask reference was refused: %s", resultText(reference))
+	}
+	for _, rule := range []string{"The user reads the ask cold", "draw a compact `mermaid` code block", "Do not wait or poll."} {
+		if text := resultText(reference); !strings.Contains(text, rule) {
+			t.Errorf("the ask reference is missing %q:\n%s", rule, text)
+		}
 	}
 }

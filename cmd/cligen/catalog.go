@@ -34,6 +34,7 @@ var catalogValues = map[string]string{
 	"max_inbox":               fmt.Sprint(inbox.MaxInboxLimit),
 	"vent_text_limit":         fmt.Sprint(analytics.VentTextLimit),
 	"ask_example":             prompts.RenderText("ask", "example", nil),
+	"ask_reference_rules":     prompts.RenderText("ask", "rules", nil),
 }
 
 var surfaceValues = map[string]map[surface]string{

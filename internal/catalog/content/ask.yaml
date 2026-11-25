@@ -16,6 +16,10 @@ groups:
       After you ask, carry on with work that does not depend on the answer, then end your turn. Your session stays open, so the user can find you, talk to you and run commands in your terminal, and attn types the answer into this conversation as the user's message. While any of your asks is open, attn refuses a standby that would close your session, and an `attn agent close --self` that would leave the answer with no agent, and names each ask.
 
       You can also read and withdraw the asks of the agents you oversee: the agents below you in your delegation chain, or every agent in your profile when you are the Chief. They are not your asks, and only the user answers them.
+    reference:
+      name: ask
+      title: "Asks"
+      intro: "{ask_reference_rules}"
     sections:
       - title: Asking
         commands: [ask, ask list, ask show, ask amend, ask close]

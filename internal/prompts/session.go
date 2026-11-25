@@ -96,7 +96,8 @@ func attnMapNode(launch bool) Node {
 	}
 	parts := append([]Node{head}, bullets...)
 	if !launch {
-		return Trim(Join("", append(append(parts, attnMapPart("table")), attnMapTable(attnMapRows, false)...)...))
+		parts = append(parts, attnMapPart("ask-reference"), attnMapPart("table"))
+		return Trim(Join("", append(parts, attnMapTable(attnMapRows, false)...)...))
 	}
 	reviewRows := []attnMapRow{{"review", []string{"review"}}, {"nav", []string{"nav"}}}
 	parts = append(parts, cliTeaching(attnMapPart("table"), attnMapFamilies(append(slices.Clone(attnMapRows), reviewRows...))...))
