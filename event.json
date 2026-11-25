@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Two Linux tests expected the old tool mention in a refusal",
+  "at": "2026-11-25T20:54:32.137Z",
+  "repairs": "8bf2930b03be0483be3a973d6dacf692fc8cb4ec"
+}
