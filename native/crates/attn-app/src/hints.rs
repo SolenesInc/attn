@@ -147,10 +147,7 @@ pub(crate) fn start(state: &mut State, tx: &mut Tx) -> bool {
         typed: String::new(),
         shown: Shown::default(),
     };
-    for pane in &found {
-        held.take_in(pane);
-    }
-    held.keys = keys_for(held.targets.len());
+    held.take_in(&found);
     held.shown = draw(state, &held, found);
     state.window.hints = Hints::On(held);
     true
@@ -169,9 +166,7 @@ pub(crate) fn follow(state: &mut State) -> bool {
     let Hints::On(mut held) = std::mem::take(&mut state.window.hints) else {
         return false;
     };
-    for pane in &found {
-        held.take_in(pane);
-    }
+    held.take_in(&found);
     let shown = draw(state, &held, found);
     let changed = shown != held.shown;
     held.shown = shown;
@@ -246,11 +241,16 @@ fn open(state: &mut State, target: &Subject, tx: &mut Tx) {
 }
 
 impl Held {
-    fn take_in(&mut self, pane: &Pane) {
-        for mark in &pane.marks {
+    fn take_in(&mut self, panes: &[Pane]) {
+        for mark in panes.iter().flat_map(|pane| &pane.marks) {
             if !self.targets.contains(&mark.target) {
                 self.targets.push(mark.target.clone());
             }
+        }
+        let keys = keys_for(self.targets.len());
+        if keys > self.keys {
+            self.keys = keys;
+            self.typed.clear();
         }
     }
 }
@@ -293,12 +293,11 @@ fn keys_for(targets: usize) -> usize {
     keys
 }
 
-fn keys_of(target: usize, keys: usize) -> Option<String> {
+fn keys_of(target: usize, keys: usize) -> String {
     let base = LETTERS_NO_MENU_OR_HOLD_TAKES.len();
     let letter =
         |place: usize| LETTERS_NO_MENU_OR_HOLD_TAKES[target / base.pow(place as u32) % base];
-    (target < base.pow(keys as u32))
-        .then(|| (0..keys).rev().map(|p| char::from(letter(p))).collect())
+    (0..keys).rev().map(|p| char::from(letter(p))).collect()
 }
 
 fn place(state: &State) -> Option<String> {
@@ -344,7 +343,7 @@ fn draw(state: &State, held: &Held, panes: Vec<Pane>) -> Shown {
         .iter()
         .enumerate()
         .filter(|(_, target)| on_screen(target))
-        .filter_map(|(i, target)| label(state, target, keys_of(i, held.keys)?))
+        .filter_map(|(i, target)| label(state, target, keys_of(i, held.keys)))
         .collect();
     let named = drawing(&state.facts.settings) == NAME_IN_PLACE;
     Shown {

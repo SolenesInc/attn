@@ -386,6 +386,88 @@ fn past_one_letter_each_every_label_has_two_and_none_starts_another() {
     assert_eq!(inputs(&world), []);
 }
 
+#[test]
+fn an_id_that_appears_past_one_letter_each_is_labelled_and_a_late_letter_only_starts_a_label() {
+    let (seeds, _) = many(17);
+    let first: Vec<&str> = seeds[..16].iter().map(|s| s.id.as_str()).collect();
+    let (first, last) = (first.join("\r\n"), seeds[16].id.clone());
+    let mut world = start(vec![], seeds, vec![]);
+    write(&mut world, 1, &first);
+    hold(&mut world);
+    let labels = on_ids(&world, "r1");
+    assert_eq!(
+        (labels.len(), labels[0].as_str(), labels[1].as_str()),
+        (16, "S Seed 0, growing", "D Seed 1, growing")
+    );
+
+    write(&mut world, 2, &format!("\r\n{last}"));
+    let labels = on_ids(&world, "r1");
+    assert_eq!(
+        (labels.len(), labels[0].as_str(), labels[16].as_str()),
+        (17, "SS Seed 0, growing", "DS Seed 16, growing")
+    );
+    press(&mut world, 'd', false);
+    assert!(!shown(&world, SEED_CARD), "D alone opens no card now");
+    assert_eq!(on_ids(&world, "r1"), ["DS Seed 16, growing"]);
+    press(&mut world, 's', false);
+    lets_go(&mut world);
+    assert!(shown(&world, SEED_CARD));
+    key(&mut world, Key::Enter);
+    assert_eq!(
+        world.daemon.sent_of("open_seed")[0]["seed_id"],
+        json!("s-000016")
+    );
+    assert_eq!(inputs(&world), []);
+    rests(&mut world);
+}
+
+#[test]
+fn a_half_typed_label_is_cleared_when_the_labels_get_one_letter_more() {
+    let (seeds, _) = many(257);
+    let ids: Vec<String> = seeds.iter().map(|s| s.id.clone()).collect();
+    let mut world = start(vec![], seeds, vec![]);
+    write(&mut world, 1, &ids[..17].join("\r\n"));
+    hold(&mut world);
+    let mut seq = 1;
+    for screen in ids[..256].chunks(16) {
+        seq += 1;
+        write(
+            &mut world,
+            seq,
+            &format!("\x1b[2J\x1b[H{}", screen.join("\r\n")),
+        );
+        assert_eq!(on_ids(&world, "r1").len(), screen.len());
+    }
+    write(
+        &mut world,
+        seq + 1,
+        &format!("\x1b[2J\x1b[H{}\r\n{}", ids[1], ids[16]),
+    );
+    press(&mut world, 'd', false);
+    assert_eq!(on_ids(&world, "r1"), ["DS Seed 16, growing"]);
+
+    write(
+        &mut world,
+        seq + 2,
+        &format!("\x1b[2J\x1b[H{}\r\n{}", ids[1], ids[256]),
+    );
+    assert_eq!(
+        on_ids(&world, "r1"),
+        ["SSD Seed 1, growing", "DSS Seed 256, growing"]
+    );
+    press(&mut world, 's', false);
+    press(&mut world, 's', false);
+    press(&mut world, 'd', false);
+    lets_go(&mut world);
+    key(&mut world, Key::Enter);
+    assert_eq!(
+        world.daemon.sent_of("open_seed")[0]["seed_id"],
+        json!("s-000001")
+    );
+    assert_eq!(inputs(&world), []);
+    rests(&mut world);
+}
+
 fn whole(world: &World, count: usize, drawing: &str) {
     let (pane, _) = world.runtime().presented("terminal.r1").unwrap();
     let elements = world.runtime().elements();
