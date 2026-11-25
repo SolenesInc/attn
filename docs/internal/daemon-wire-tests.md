@@ -6,8 +6,7 @@ says which app flow such a test follows.
 
 Daemon wire tests live in `package daemon_test` in `internal/daemon`, so they
 can reach the daemon only through the protocol, the CLI client, and the hooks
-`export_test.go` exposes. Those hooks make the daemon's external dependencies
-fail, and `ServeReference` serves agents a reference that attn does not ship.
+`export_test.go` exposes. Those hooks make the daemon's external dependencies fail.
 The one way to reach inside is a pause point, below.
 
 ## The world

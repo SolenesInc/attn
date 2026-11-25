@@ -95,7 +95,7 @@ func (c *Catalog) ToolMention(line string) (string, error) {
 	if len(args) == 0 {
 		return tools, nil
 	}
-	return tools + " with " + jsonArgs(args), nil
+	return tools + " with " + jsonObject(jsonFields(args)), nil
 }
 
 func shellCommand(line string) string {
@@ -161,8 +161,11 @@ func mentionArgs(c *Catalog, cmd *Command, words []string) ([]mentionArg, error)
 				return nil, fmt.Errorf("%s takes no %s", cmd.Name, word)
 			}
 			var value any = "…"
-			if c.takesObject(*arg) {
-				value = objectSlot("{…}")
+			switch {
+			case c.takesObject(*arg):
+				value = rawSlot("{…}")
+			case c.takesInteger(*arg):
+				value = rawSlot("…")
 			}
 			switch {
 			case choice != "":
@@ -231,20 +234,14 @@ func (arg *mentionArg) addRepeat(cmd *Command, again mentionArg) error {
 	return nil
 }
 
-func jsonArgs(args []mentionArg) string {
-	if len(args) == 0 {
-		return ""
+func jsonObject(fields []string) string { return "{" + strings.Join(fields, ", ") + "}" }
+
+func jsonFields(args []mentionArg) []string {
+	var fields []string
+	for _, arg := range args {
+		fields = append(fields, jsonText(arg.name)+": "+jsonText(arg.value))
 	}
-	var b bytes.Buffer
-	b.WriteString("{")
-	for i, arg := range args {
-		if i > 0 {
-			b.WriteString(", ")
-		}
-		b.WriteString(jsonText(arg.name) + ": " + jsonText(arg.value))
-	}
-	b.WriteString("}")
-	return b.String()
+	return fields
 }
 
 func withoutRedirect(words []string) ([]string, string) {
@@ -299,13 +296,15 @@ func namesSeed(word, prefix string) bool {
 	return strings.HasPrefix(word, prefix) || word == "<plot>" || word == "<seed>" || word == "<seed-id>"
 }
 
-type objectSlot string
+type rawSlot string
 
 func (c *Catalog) takesObject(arg Arg) bool { return c.ArgType(arg).Schema["type"] == "object" }
 
+func (c *Catalog) takesInteger(arg Arg) bool { return c.ArgType(arg).Schema["type"] == "integer" }
+
 func (c *Catalog) slot(arg Arg, content string) any {
 	if c.takesObject(arg) {
-		return objectSlot("<" + content + ", a JSON object>")
+		return rawSlot("<" + content + ", a JSON object>")
 	}
 	return "<" + content + ">"
 }
@@ -347,10 +346,11 @@ func mentionValue(c *Catalog, arg Arg, word string) any {
 	if c.takesObject(arg) {
 		return c.slot(arg, "text")
 	}
-	if c.ArgType(arg).Schema["type"] == "integer" {
+	if c.takesInteger(arg) {
 		if n, err := strconv.Atoi(word); err == nil {
 			return n
 		}
+		return rawSlot(word)
 	}
 	if arg.List {
 		return []string{word}
@@ -359,7 +359,7 @@ func mentionValue(c *Catalog, arg Arg, word string) any {
 }
 
 func jsonText(v any) string {
-	if slot, ok := v.(objectSlot); ok {
+	if slot, ok := v.(rawSlot); ok {
 		return string(slot)
 	}
 	var b bytes.Buffer

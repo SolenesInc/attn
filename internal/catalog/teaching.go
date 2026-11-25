@@ -105,7 +105,7 @@ func (t *teaching) split(text string) {
 			summaryColumn = columnOfSummary(match)
 			continue
 		}
-		if summaryColumn > 0 && leadingSpaces(line) >= summaryColumn {
+		if fence == "" && summaryColumn > 0 && leadingSpaces(line) >= summaryColumn {
 			add(teachBlockSummary, lines[i], "")
 			continue
 		}
@@ -269,7 +269,7 @@ func (t *teaching) plainText(i int, text string) string {
 	text = plainFlag().ReplaceAllStringFunc(text, func(match string) string {
 		before, flag, _ := strings.Cut(match, "--")
 		flag = "--" + flag
-		return before + t.renderFlags(i, flag, flag)
+		return before + t.renderFlags(t.blockCommand(i), flag, flag)
 	})
 	return plainAttn().ReplaceAllStringFunc(text, func(match string) string {
 		words := strings.Fields(match)[1:]
@@ -280,6 +280,16 @@ func (t *teaching) plainText(i int, text string) string {
 		}
 		return match
 	})
+}
+
+func (t *teaching) blockCommand(i int) []*Command {
+	for t.parts[i].kind == teachBlockSummary {
+		i--
+	}
+	if cmd := t.parts[i].command; cmd != nil {
+		return []*Command{cmd}
+	}
+	return nil
 }
 
 func (t *teaching) renderBlock(i int) string {
@@ -308,7 +318,7 @@ func (t *teaching) renderSpan(i int, span string) string {
 		}
 		return literal
 	case isFlag(span):
-		return t.renderFlags(i, literal, span)
+		return t.renderFlags(append(t.nearestCommands(i), t.c.onlyMeaningOfFlag(strings.Fields(span)[0])...), literal, span)
 	case t.family == "" || !strings.Contains(span, " "):
 		return literal
 	}
@@ -356,12 +366,12 @@ func (t *teaching) renderHelp(literal, line string) string {
 	return literal
 }
 
-func (t *teaching) renderFlags(i int, literal, span string) string {
+func (t *teaching) renderFlags(cmds []*Command, literal, span string) string {
 	words, err := mentionWords(span)
 	if err != nil || len(words) == 0 {
 		return literal
 	}
-	for _, cmd := range append(t.nearestCommands(i), t.c.onlyMeaningOfFlag(words[0])...) {
+	for _, cmd := range cmds {
 		if t.c.flagOnlyOnCLI(cmd, words[0]) {
 			return literal + cliOnlyMark
 		}
@@ -384,11 +394,7 @@ func flagMention(cmd *Command, args []mentionArg, words []string) string {
 		}
 		return "`" + args[0].name + "`"
 	}
-	text := jsonArgs(args)
-	if len(args) == 1 {
-		text = strings.TrimSuffix(strings.TrimPrefix(text, "{"), "}")
-	}
-	return "`" + text + "`"
+	return "`" + strings.Join(jsonFields(args), ", ") + "`"
 }
 
 func splitRest(cmd *Command, name string) string {
@@ -452,17 +458,17 @@ func (t *teaching) nearestCommands(i int) []*Command {
 
 type teachingCall struct {
 	tools     []string
-	args      []mentionArg
+	args      string
 	leavesOut []string
 }
 
 func (call teachingCall) inline() string {
 	inline := call.tools[0]
-	if len(call.args) > 0 {
-		inline += " " + jsonArgs(call.args)
+	if call.args != "" {
+		inline += " " + call.args
 	}
 	if len(call.leavesOut) > 0 {
-		inline += " without " + strings.Join(call.leavesOut, " ") + cliOnlyMark
+		inline += " (without the CLI-only " + strings.Join(call.leavesOut, " ") + ")"
 	}
 	return inline
 }
@@ -473,11 +479,11 @@ func (call teachingCall) mention() string {
 		names = append(names, "`"+tool+"`")
 	}
 	mention := strings.Join(names, " or ")
-	if args := jsonArgs(call.args); args != "" {
-		mention += " with " + args
+	if call.args != "" {
+		mention += " with " + call.args
 	}
 	if len(call.leavesOut) > 0 {
-		mention += " without `" + strings.Join(call.leavesOut, " ") + "`" + cliOnlyMark
+		mention += " (without the CLI-only `" + strings.Join(call.leavesOut, " ") + "`)"
 	}
 	return mention
 }
@@ -502,20 +508,34 @@ func (t *teaching) toolCall(line string) (teachingCall, bool) {
 	if err != nil {
 		return teachingCall{}, false
 	}
+	var given []mentionArg
 	for _, arg := range args {
 		if !arg.cliOnly {
-			call.args = append(call.args, arg)
+			given = append(given, arg)
 			continue
 		}
 		name, isFile := strings.CutSuffix(arg.name, "_file")
 		holds := slices.IndexFunc(cmds[0].Args, func(a Arg) bool { return a.Name == name })
 		if isFile && holds >= 0 {
-			call.args = append(call.args, mentionArg{name: name, value: t.c.slot(cmds[0].Args[holds], contentsOf(arg.value))})
+			given = append(given, mentionArg{name: name, value: t.c.slot(cmds[0].Args[holds], contentsOf(arg.value))})
 			continue
 		}
 		call.leavesOut = append(call.leavesOut, arg.written)
 	}
+	if len(given) > 0 {
+		fields := jsonFields(given)
+		if slices.ContainsFunc(cmds, func(cmd *Command) bool { return leavesOutRequired(cmd, given) }) {
+			fields = append(fields, "…")
+		}
+		call.args = jsonObject(fields)
+	}
 	return call, true
+}
+
+func leavesOutRequired(cmd *Command, given []mentionArg) bool {
+	return slices.ContainsFunc(cmd.Args, func(a Arg) bool {
+		return a.requiredByTool() && !slices.ContainsFunc(given, func(arg mentionArg) bool { return arg.name == a.Name })
+	})
 }
 
 func (c *Catalog) toolSignature(cmd *Command) string {
@@ -525,7 +545,7 @@ func (c *Catalog) toolSignature(cmd *Command) string {
 			continue
 		}
 		text := a.Name
-		if !a.Required || a.Unless != "" {
+		if !a.requiredByTool() {
 			text += "?"
 		}
 		schema := c.ArgType(a).Schema

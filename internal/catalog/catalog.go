@@ -165,6 +165,8 @@ const CLIInternal = "internal"
 
 func (a Arg) Internal() bool { return a.CLI == CLIInternal }
 
+func (a Arg) requiredByTool() bool { return a.Required && a.Unless == "" }
+
 func (a Arg) AfterDashes() bool { return a.CLI == "--" }
 
 func (a Arg) FlagWords() string {

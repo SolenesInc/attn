@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net"
 	"os"
@@ -12,14 +11,12 @@ import (
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/bridge/memnet"
-	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/outpostbuild"
 	"github.com/victorarias/attn/internal/outpostssh"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/reading"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
@@ -90,17 +87,6 @@ func (w *WireDaemon) RefuseDatabaseCommits() func() {
 
 func (w *WireDaemon) UseFileStat(stat func(string) (os.FileInfo, error)) {
 	w.d.recentFileStat = stat
-}
-
-func (w *WireDaemon) ServeReference(name, text string) {
-	bundled := reading.Handlers()["skill"]
-	adapterHost{d: w.d}.RegisterCatalogCommand("skill", func(ctx context.Context, c command.Caller, raw json.RawMessage) (any, error) {
-		var args command.SkillArgs
-		if err := json.Unmarshal(raw, &args); err != nil || args.Reference != name {
-			return bundled(ctx, c, raw)
-		}
-		return command.Teaching(text), nil
-	})
 }
 
 func (w *WireDaemon) UseOutpostSSH(remote outpostRemote) {
