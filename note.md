@@ -1,0 +1,1 @@
+Agents with attn's tools on (`agent_tools_enabled`) now get four tools instead of 159: `attn_do` and `attn_read` run a JavaScript script in which every attn command is a function, and `ask` and `skill` stay tools of their own. The answer lists every change a script made, and one call can do what took many. Codex keeps the CLI.
