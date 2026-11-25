@@ -16,12 +16,12 @@ id, so you can repeat the command with the id.
 
 `attn agent list` lists the sessions you can address. It prints each session's
 short id, such as `ag-7yd2r4`. Use the short id when you name a session to the
-user or to another agent. Commands that act on a session take its name, short
-id, full id or a unique prefix of the full id. `--json` carries full ids and
-the machine-readable shape. The stable name of a crew member in session also
-works as the address for `peek`, `msg` and `reload`. To name yourself with
-`--session` or `--source-session`, pass an id: a name does not say who the
-caller is.
+user or to another agent. Commands that act on a live session take its name,
+short id, full id or a unique prefix of the full id. `attn session reopen`
+takes an id. `--json` carries full ids and the machine-readable shape. The
+stable name of a crew member in session also works as the address for `peek`,
+`msg` and `reload`. To name yourself with `--session` or `--source-session`,
+pass an id: a name does not say who the caller is.
 
 `attn session list --tree` shows every live session under its dispatcher, with
 short ids, labels, harnesses, states, owed or snoozed turns, and seed slugs. Use
