@@ -938,7 +938,13 @@ fn v2_bed_search_autocomplete_pulse_session_jump_and_flag_off_keeps_bed_literal(
     world.gesture(|app| app.key(board()));
     world.gesture(|app| app.click(Target::key("garden.bed.b-attn01")));
     world.gesture(|app| app.click(Target::key("garden.search.field")));
-    world.gesture(|app| app.type_text("bed:payments"));
+    world.gesture(|app| app.type_text("OAuth"));
+    assert_eq!(rows(&world), vec!["Auth work"]);
+    assert!(row_says(&world, "s-one001", "Waiting on OAuth callback"));
+    world.gesture(|app| {
+        app.press("mod+a");
+        app.type_text("bed:payments");
+    });
     assert!(has_row(&world, "Stripe retry"));
     assert!(has_row(&world, "Express checkout"));
     world.gesture(|app| {
@@ -970,8 +976,11 @@ fn v2_bed_search_autocomplete_pulse_session_jump_and_flag_off_keeps_bed_literal(
     assert!(world.screen().find(Target::key("garden.body")).is_none());
     assert!(world.runtime_is_at_rest());
 
+    let literal = with(seed("s-literal", "Literal bed token"), |s| {
+        s.body = "Instructions mention bed:payments in plain text.".into();
+    });
     let mut off_world = open_garden_sized(
-        v2_daemon(false, beds, vec![s1, s2], Vec::new(), Vec::new()),
+        v2_daemon(false, beds, vec![s1, s2, literal], Vec::new(), Vec::new()),
         TWO_COLUMNS,
     );
     off_world.gesture(|app| app.key(board()));
@@ -983,6 +992,8 @@ fn v2_bed_search_autocomplete_pulse_session_jump_and_flag_off_keeps_bed_literal(
             .find(Target::key("garden.search.bed.b-pay001"))
             .is_none()
     );
+    off_world.gesture(|app| app.type_text("payments"));
+    assert_eq!(rows(&off_world), vec!["Literal bed token"]);
     assert!(off_world.runtime_is_at_rest());
 }
 

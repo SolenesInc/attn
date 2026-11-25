@@ -568,26 +568,4 @@ mod tests {
         let hit = match_seed(&seed, &parse("sea search", false), &Fixed::default()).unwrap();
         assert_eq!(hit.title_ranges, [(0, 6), (10, 16)]);
     }
-
-    #[test]
-    fn matches_pulse_text() {
-        let seed = with(seed("s-pay001", "Checkout"), |seed| {
-            seed.pulse = Some("Waiting on Stripe webhook".into());
-        });
-        let hit = match_seed(&seed, &parse("webhook", true), &Fixed::default()).unwrap();
-        assert_eq!(
-            hit.snippet.as_ref().map(|s| s.text.as_str()),
-            Some("Waiting on Stripe webhook")
-        );
-    }
-
-    #[test]
-    fn recognizes_bed_operators_with_the_feature_enabled() {
-        assert_eq!(parse("bed:", true).partial, Some(Partial::Bed));
-        assert_eq!(parse("bed:payments", true).beds, ["payments"]);
-        let off = parse("bed:payments", false);
-        assert!(off.beds.is_empty());
-        assert_eq!(off.terms, ["bed:payments"]);
-        assert_eq!(parse("bed:", false).partial, None);
-    }
 }
