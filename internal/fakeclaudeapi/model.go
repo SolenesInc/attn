@@ -158,7 +158,12 @@ func (m *Model) AwaitPromptSince(t testing.TB, mark int, contains string) (openi
 
 func (m *Model) AwaitToolsOffered(t testing.TB, contains string) []string {
 	t.Helper()
-	i := m.awaitPromptIndex(t, 0, contains)
+	return m.AwaitToolsOfferedSince(t, 0, contains)
+}
+
+func (m *Model) AwaitToolsOfferedSince(t testing.TB, mark int, contains string) []string {
+	t.Helper()
+	i := m.awaitPromptIndex(t, mark, contains)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.offered[i]

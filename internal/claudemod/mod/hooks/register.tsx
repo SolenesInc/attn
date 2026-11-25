@@ -256,7 +256,12 @@ async function submitPrompt($: EngineInterface, prompt: Message[], interrupted: 
 
 async function awaitAttnTools($: EngineInterface): Promise<void> {
   try {
-    await Promise.race([$.mcp.connect('attn'), $.clock.sleep(TOOLS_WAIT_MS)])
+    const ended = await Promise.race([$.mcp.connect('attn'), $.clock.sleep(TOOLS_WAIT_MS).then(() => 'bound' as const)])
+    if (ended === 'bound') {
+      $.ui.log(`attn's tools had not connected after ${TOOLS_WAIT_MS} ms, so the session starts without them`, { to: 'debug' })
+    } else if (!ended.isConnected && ended.reason !== 'unlisted') {
+      $.ui.log(`attn's tools did not connect (${ended.reason}): ${ended.message}`, { to: 'debug' })
+    }
   } catch (err) {
     $.ui.log(`waiting for attn's tools failed: ${String(err)}`, { to: 'debug' })
   }

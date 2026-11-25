@@ -148,8 +148,12 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
   `$.prompt.submit`); awaiting `$.mcp.connect('attn')` there gives the first
   turn the tools (~0.15 s idle; refused/500 fails in ~7.6–8.1 s, 401 in ~0.1 s,
   unresponsive servers hang >80 s, unlisted resolves immediately). attn caps
-  that wait at 8 s before starting its poll; sessions without the mod keep the
-  race.
+  that wait at 8 s before starting its poll, and says in the debug log
+  (`--debug-file`) when the cap or a refusal ended it; a rejected bearer token
+  reads `failed`, not `auth` `[2.1.329–332]`. `$.mcp.connect` waits for a pending
+  connection on 2.1.329, the oldest probed; on an older one that answers at
+  once, the mod logs that answer and starts the turn, so it keeps the race
+  (read from the mod, not probed). A session without the mod keeps it too.
 - Under `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1`, auto mode checks each REPL
   script once before execution and does not apply `mcp__attn__*` allow rules to
   calls inside the script.
