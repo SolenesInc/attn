@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Callout show ends the current callout",
+  "at": "2026-11-25T18:06:19.211Z",
+  "detail": "Calling callout show while another callout is active explicitly ends the current callout and replaces it. Record does not cover closing active state under D29. Classify it as act unless the effect contract is updated explicitly. Independent source review and focused tests are recorded on s-0evnyp.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/catalog/content/callout.yaml",
+    "line": 55
+  },
+  "culprit": "1babc79562723e5c21d03b89bf3cbe57cce198ec"
+}
