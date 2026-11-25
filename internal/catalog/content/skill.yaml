@@ -6,7 +6,7 @@ commands:
     map:
       rows:
         - {need: "Read the rules for an attn capability before you first use it", tools: [skill]}
-        - {need: "Write anything longer than a few sentences for a reader (reference: showing)", tools: [skill]}
+        - {need: "Write anything longer than a few sentences for a reader", tools: [skill], references: [showing]}
     runs: here
     grant: any
     read_only: true

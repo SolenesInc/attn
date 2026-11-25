@@ -10,4 +10,4 @@ server:
   name: attn
   description: attn's tools for the work you share with the user and the agents beside you. Reach for them to track, report or hand off work, and before you tell the user attn can't do something.
   intro: |
-    attn runs you beside the user's other agents. These tools are attn's. Each tool's description holds its rules: read it before the first call. Find a tool by the words in this map.
+    attn runs you beside the user's other agents. These tools are attn's. Each tool's description holds its rules: read it before the first call. Find a tool by the words in this map. When a row names a reference, call `skill` with that `reference` before you first call the row's tools; for `guide X`, call `guide` with `topic` X.

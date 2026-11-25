@@ -58,6 +58,9 @@ func TestALaunchThatCarriesTheToolsLeavesTheirFamiliesCLITeachingToTheServer(t *
 		if header := strings.Contains(text, "| When you need to | Run | Reference |"); header == taught {
 			t.Errorf("%s launched with the attn map's table header %t, want it only while a row of the table is left:\n%s", launch, header, text)
 		}
+		if viaTool := strings.Contains(text, "call `skill` with `reference` delegation"); viaTool != taught || strings.Contains(text, "attn skill --reference delegation") == taught {
+			t.Errorf("%s points at the delegation reference through the tool: %t, want %t, and through the CLI only without the tools:\n%s", launch, viaTool, taught, text)
+		}
 		if dropped := !strings.Contains(text, "Use `attn agent msg` to reach sessions attn runs."); dropped != taught {
 			t.Errorf("%s left out the agent and session families' CLI teaching: %t, want %t:\n%s", launch, dropped, taught, text)
 		}

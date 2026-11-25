@@ -402,6 +402,53 @@ func launchedToolsCaller(t *testing.T, w *world, claude *fakeagent.Run) agentToo
 
 var coreTools = []string{"seed_show", "seed_note", "seed_check_report", "ask", "agent_msg", "delegate"}
 
+func TestTheIntentMapNamesEveryReferenceTheCLIMapNames(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	setSetting(t, app, "agent_tools_enabled", "true")
+	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(w.Spawn(app, fakeagent.Claude, w.Path("shop"))))}
+	session, err := agent.connect(t, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundled := strings.Fields(resultText(agent.mustCall(t, "skill", map[string]any{"list": true})))
+
+	lastCells := func(table string) []string {
+		var names []string
+		for _, line := range strings.Split(table, "\n") {
+			cells := strings.Split(strings.Trim(strings.TrimSpace(line), "|"), "|")
+			if !strings.HasPrefix(line, "| ") || len(cells) != 3 || strings.TrimSpace(cells[2]) == "Reference" {
+				continue
+			}
+			for _, name := range strings.Split(cells[2], ",") {
+				if name = strings.ReplaceAll(strings.TrimSpace(name), "`", ""); name != "" {
+					names = append(names, name)
+				}
+			}
+		}
+		return names
+	}
+	cliMap := lastCells(resultText(agent.mustCall(t, "skill", map[string]any{})))
+	intentMap := lastCells(session.InitializeResult().Instructions)
+	if len(cliMap) == 0 {
+		t.Fatal("the CLI map names no reference")
+	}
+	for _, name := range cliMap {
+		if !slices.Contains(intentMap, name) {
+			t.Errorf("the CLI map names the reference %q and the intent map does not: %v", name, intentMap)
+		}
+	}
+	for _, name := range intentMap {
+		if topic, guide := strings.CutPrefix(name, "guide "); guide {
+			if page := agent.mustCall(t, "guide", map[string]any{"topic": topic}); page.IsError {
+				t.Errorf("the intent map names guide topic %q, which the guide refuses: %s", topic, resultText(page))
+			}
+		} else if !slices.Contains(bundled, name) {
+			t.Errorf("the intent map names reference %q, which attn does not bundle: %v", name, bundled)
+		}
+	}
+}
+
 func TestEachToolServerTeachesInTheTextItsHarnessShows(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
@@ -426,7 +473,7 @@ func TestEachToolServerTeachesInTheTextItsHarnessShows(t *testing.T) {
 	}
 
 	intentMap := served[""].Instructions
-	for _, want := range []string{"| When you need to | Tools |", "| seed_ready, seed_show, seed_tend |", "Tools take a seed's id or its slug"} {
+	for _, want := range []string{"| When you need to | Tools | Reference |", "| seed_ready, seed_show, seed_tend | garden |", "Tools take a seed's id or its slug"} {
 		if !strings.Contains(intentMap, want) {
 			t.Errorf("the server's instructions lack %q:\n%s", want, intentMap)
 		}

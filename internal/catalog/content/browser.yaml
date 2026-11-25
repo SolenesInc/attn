@@ -5,7 +5,7 @@ groups:
     summary: "use the in-app browser"
     map:
       rows:
-        - {need: "Use the in-app browser", tools: [browser_open, browser_snapshot]}
+        - {need: "Use the in-app browser", tools: [browser_open, browser_snapshot], references: [browser]}
     doc: |
       Drive attn's persistent, user-visible browser tile. Commands act on the tile of your session's desktop; open one first with `browser_open`.
     flags:

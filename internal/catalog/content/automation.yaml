@@ -6,7 +6,7 @@ groups:
     summary: "run an agent on a schedule or an event"
     map:
       rows:
-        - {need: "Run an agent on a schedule or an event", tools: [automation_list, automation_apply]}
+        - {need: "Run an agent on a schedule or an event", tools: [automation_list, automation_apply], guides: [automations]}
     doc: |
       An automation starts a steerable agent on a schedule or an event, from a definition written in YAML. Every definition belongs to a profile. Inside attn, your session's profile applies; outside, pass --profile <name|id> when several profiles exist. `attn guide automations` explains automations to the user.
     flags:

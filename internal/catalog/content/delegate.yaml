@@ -11,8 +11,8 @@ groups:
     summary: "start another agent on work you may hand off; roles picks its models"
     map:
       rows:
-        - {need: "Start another agent on work you may hand off, and follow its start", tools: [delegate, delegate_status]}
-        - {need: "Read or change the models and harnesses each delegation role uses", tools: [delegate_roles, delegate_roles_set, delegate_roles_history, delegate_roles_rollback]}
+        - {need: "Start another agent on work you may hand off, and follow its start", tools: [delegate, delegate_status], references: [delegation]}
+        - {need: "Read or change the models and harnesses each delegation role uses", tools: [delegate_roles, delegate_roles_set, delegate_roles_history, delegate_roles_rollback], references: [delegation-roles]}
     flags:
       - {name: profile, placeholder: "<name|id>", doc: "the garden of this profile; required outside attn when several profiles exist"}
       - {name: session, placeholder: "<id>", doc: "the session asking (defaults to the current session)"}

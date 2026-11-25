@@ -1,0 +1,1 @@
+- Use attn's tools for everything they offer. Run `attn` in a shell only for what no tool offers.

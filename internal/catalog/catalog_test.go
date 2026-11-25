@@ -70,7 +70,7 @@ func TestABareCommandCarriesItsFamilysMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := c.Instructions(); !strings.Contains(got, "| See every session | list |\n| Read a seed | seed_show |") {
+	if got := c.Instructions(); !strings.Contains(got, "| See every session | list | |\n| Read a seed | seed_show | |") {
 		t.Fatalf("instructions do not hold both families' rows in name order:\n%s", got)
 	}
 }

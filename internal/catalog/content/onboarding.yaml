@@ -5,7 +5,7 @@ groups:
     summary: "show, finish or restart the Chief's onboarding"
     map:
       rows:
-        - {need: "Show or finish the Chief's onboarding", tools: [onboarding]}
+        - {need: "Show or finish the Chief's onboarding", tools: [onboarding], references: [onboarding]}
     flags:
       - {name: profile, placeholder: "<name|id>", doc: "the profile whose crew to address, by name or id; inside attn, your session's profile"}
     doc: |

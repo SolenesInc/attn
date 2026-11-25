@@ -5,7 +5,7 @@ groups:
     summary: "present a change for the user to review"
     map:
       rows:
-        - {need: "Present a change for the user to review, or answer their question on it", tools: [review_start, review_check, review_answer]}
+        - {need: "Present a change for the user to review, or answer their question on it", tools: [review_start, review_check, review_answer], references: [review]}
     doc: |
       Present a change for review as a review document: markdown with `attn: review` in its frontmatter that `attn open` shows in a tile. Keep the document out of the repository's tracked tree: in your seed's artifact folder when you tend a seed, else in your session's scratch folder. `attn skill --reference review` has the document's grammar, the frames and the diagrams. Needs the experimental setting code_review_enabled.
     reference:

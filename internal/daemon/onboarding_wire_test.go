@@ -10,7 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-const onboardingReference = "attn skill --reference onboarding"
+const onboardingReference = "attn's `onboarding` reference"
 
 func onboardingPending(t *testing.T, cli *client.Client, action protocol.OnboardingAction, want protocol.OnboardingPath) *protocol.OnboardingResult {
 	t.Helper()
@@ -34,7 +34,7 @@ func TestANewUsersChiefRunsTheFullPathUntilItSaysDoneOnBothHarnesses(t *testing.
 			first := startCrew(t, cli, "chief", "")
 			run := w.Launched(string(first.SessionID))
 			guidance := launchGuidance(t, w, run)
-			for _, want := range []string{onboardingReference, "open with the full path", "attn onboarding done"} {
+			for _, want := range []string{onboardingReference, "open with the full path", "mark onboarding done"} {
 				if !strings.Contains(guidance, want) {
 					t.Fatalf("the first day's launch lacks %q: %s", want, guidance)
 				}

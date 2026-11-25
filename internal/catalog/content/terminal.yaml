@@ -5,7 +5,7 @@ groups:
     summary: "open a shell, read a terminal, move between desktops"
     map:
       rows:
-        - {need: "Open a shell, run in it, read a terminal", tools: [terminal_open, terminal_run, terminal_read]}
+        - {need: "Open a shell, run in it, read a terminal, move between desktops", tools: [terminal_open, terminal_run, terminal_read, terminal_move], references: [terminal]}
     doc: |
       Run inside an attn agent. A target is a terminal id or unique terminal-id prefix printed by ls. A session id or prefix, or the name of a crew member in session, also works when that session shows in exactly one terminal; otherwise choose a terminal id. All targets belong to the caller's profile. `attn skill --reference terminal` has placement, reach, moving, reading and waiting, and the key names.
     flags:

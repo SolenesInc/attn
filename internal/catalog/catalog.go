@@ -78,8 +78,18 @@ type FamilyMap struct {
 }
 
 type MapRow struct {
-	Need  string   `yaml:"need"`
-	Tools []string `yaml:"tools"`
+	Need       string   `yaml:"need"`
+	Tools      []string `yaml:"tools"`
+	References []string `yaml:"references"`
+	Guides     []string `yaml:"guides"`
+}
+
+func (r MapRow) reading() string {
+	names := slices.Clone(r.References)
+	for _, topic := range r.Guides {
+		names = append(names, "guide "+topic)
+	}
+	return strings.Join(names, ", ")
 }
 
 type Flag struct {
@@ -550,7 +560,7 @@ func (c *Catalog) Instructions() string {
 			continue
 		}
 		for _, row := range m.Rows {
-			rows = append(rows, fmt.Sprintf("| %s | %s |", strings.TrimSpace(row.Need), strings.Join(row.Tools, ", ")))
+			rows = append(rows, strings.ReplaceAll(fmt.Sprintf("| %s | %s | %s |", strings.TrimSpace(row.Need), strings.Join(row.Tools, ", "), row.reading()), "|  |", "| |"))
 		}
 		if text := strings.TrimSpace(m.Notes); text != "" {
 			notes = append(notes, text)
@@ -558,7 +568,7 @@ func (c *Catalog) Instructions() string {
 	}
 	parts := []string{strings.TrimSpace(c.Server.Intro)}
 	if len(rows) > 0 {
-		parts = append(parts, "| When you need to | Tools |\n|---|---|\n"+strings.Join(rows, "\n"))
+		parts = append(parts, "| When you need to | Tools | Reference |\n|---|---|---|\n"+strings.Join(rows, "\n"))
 	}
 	return strings.Join(append(parts, notes...), "\n\n")
 }
@@ -572,7 +582,7 @@ func (c *Catalog) mapShares() string {
 		}
 		n := utf8.RuneCountInString(m.Notes)
 		for _, row := range m.Rows {
-			n += utf8.RuneCountInString(row.Need + strings.Join(row.Tools, ", "))
+			n += utf8.RuneCountInString(row.Need + strings.Join(row.Tools, ", ") + row.reading())
 		}
 		shares = append(shares, fmt.Sprintf("%s %d", top.File(), n))
 	}

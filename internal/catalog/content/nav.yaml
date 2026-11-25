@@ -5,7 +5,7 @@ groups:
     summary: "code navigation for a review"
     map:
       rows:
-        - {need: "Set up code navigation in a review for a language with no working server", tools: [nav_status, nav_check, nav_set]}
+        - {need: "Set up code navigation for a language with no working server", tools: [nav_status, nav_check, nav_set], references: [code-navigation]}
     doc: |
       Code navigation in a review: definition, uses and type of a name, answered by a language server that attn starts on the machine that holds the files and stops once no shown review needs it. Built-in definitions: go (gopls), typescript (typescript-language-server --stdio), rust (rust-analyzer), python (pyright-langserver --stdio). `attn skill --reference code-navigation` says how to find, install and define a server. Needs the experimental setting code_review_enabled.
     reference:

@@ -65,6 +65,31 @@
                         "keep_final_newline": true
                       },
                       {
+                        "kind": "when",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map.tools",
+                            "source": "content/session/attn-map/tools.md",
+                            "keep_final_newline": true
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.attn-map.cli",
+                        "source": "content/session/attn-map/cli.md",
+                        "keep_final_newline": true
+                      },
+                      {
                         "kind": "choose",
                         "condition": {
                           "field": {
@@ -585,7 +610,35 @@
                   {
                     "kind": "text",
                     "id": "delegation.boundary",
-                    "source": "content/delegation-boundary.md"
+                    "source": "content/delegation-boundary.md",
+                    "bindings": [
+                      {
+                        "name": "read_reference",
+                        "node": {
+                          "kind": "choose",
+                          "condition": {
+                            "field": {
+                              "name": "agent_tools",
+                              "kind": "flag",
+                              "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                            },
+                            "test": "enabled"
+                          },
+                          "children": [
+                            {
+                              "kind": "text",
+                              "id": "delegation.boundary-tools",
+                              "source": "content/delegation-boundary/tools.md"
+                            },
+                            {
+                              "kind": "text",
+                              "id": "delegation.boundary-cli",
+                              "source": "content/delegation-boundary/cli.md"
+                            }
+                          ]
+                        }
+                      }
+                    ]
                   }
                 ]
               },
@@ -913,6 +966,12 @@
                     "kind": "text",
                     "id": "session.attn-map",
                     "source": "content/session/attn-map.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.cli",
+                    "source": "content/session/attn-map/cli.md",
                     "keep_final_newline": true
                   },
                   {
@@ -8251,5 +8310,5 @@
       ]
     }
   ],
-  "definitions_hash": "9ed0c4c60b752b121701ea0c82cad4e749211a6b15fe7abb2adace656ca2f189"
+  "definitions_hash": "8020f5f8d52bdd614cf899274bdb1553536f355c89b54fe4d2448be753757d6d"
 }

@@ -88,9 +88,9 @@ func attnMapTable(rows []attnMapRow, launch bool) []Node {
 
 func attnMapNode(launch bool) Node {
 	head := Exact(Use("session.attn-map", "content/session/attn-map.md"))
-	bullets := []Node{attnMapPart("skill"), attnMapPart("guide")}
+	bullets := []Node{attnMapPart("cli"), attnMapPart("skill"), attnMapPart("guide")}
 	if launch {
-		bullets = []Node{cliTeaching(bullets[0], "skill"), cliTeaching(bullets[1], "guide")}
+		bullets = []Node{When(Enabled(agentToolsCarried), attnMapPart("tools")), bullets[0], cliTeaching(bullets[1], "skill"), cliTeaching(bullets[2], "guide")}
 	}
 	parts := append([]Node{head}, bullets...)
 	if !launch {
@@ -104,8 +104,10 @@ func attnMapNode(launch bool) Node {
 }
 
 var (
-	delegationBoundary = Use("delegation.boundary", "content/delegation-boundary.md")
-	agentGuidance      = Compose(
+	delegationBoundary = Use("delegation.boundary", "content/delegation-boundary.md", Bind("read_reference", Choose(Enabled(agentToolsCarried),
+		Use("delegation.boundary-tools", "content/delegation-boundary/tools.md"),
+		Use("delegation.boundary-cli", "content/delegation-boundary/cli.md"))))
+	agentGuidance = Compose(
 		Use("session.agent", "content/agent.md"),
 		cliTeaching(Use("session.agent-reach", "content/agent-reach.md"), "agent", "session"),
 		Use("session.agent-trust", "content/agent-trust.md"),
