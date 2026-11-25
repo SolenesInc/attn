@@ -1,0 +1,5 @@
+**Cmd+G shows the row itself, small, in place of a grid of desktop cards.** Every column of the desktop is drawn over the tile area, on one line or several, with the other desktops as strips above and below it and a line for each tile that needs you. A highlight moves with the arrows, the walk keys or digits; Return goes to the tile, Esc leaves everything as it was. The sidebar's row, the queue strip's chip, the palette, the shelf's current entry and the shelf's counts all open it, and a click on the current entry closes it. The menu the counts used to open is gone, and the old overview with it.
+
+Opening sends no attach and no resize. A terminal that no tile shows is asked once for its screen, and one with no screen to show is a card.
+
+Terminals are drawn small straight from their grids, by a second raster that costs nothing while the overview is closed. Open over 12 columns with one terminal streaming, a frame costs 0.6 ms more CPU and 0.6 ms more GPU (RTX 3080, offscreen; not measured on a Mac's GPU). Idle, no frame is drawn. The alternative, keeping a texture per terminal, saved 0.055 ms of GPU per frame and held 121 MB.
