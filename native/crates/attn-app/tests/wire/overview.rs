@@ -1056,6 +1056,34 @@ fn wheel_to_the_end(world: &mut World, key: &str) {
 }
 
 #[test]
+fn a_terminal_s_screen_stands_clear_of_every_edge_and_outline_over_it() {
+    const HIGHLIGHT: f32 = 3.0;
+    let daemon = Daemon::scripted().state(initial(vec![stacked("a")]));
+    daemon.on("get_screen_snapshot", |r: &Request| {
+        json!({
+            "event": "get_screen_snapshot_result", "id": r["id"], "success": true,
+            "screen_snapshot": "aGVsbG8=", "screen_cols": 80, "screen_rows": 24,
+        })
+    });
+    let mut world = start_on(daemon);
+    press(&mut world, Action::DesktopOverview);
+    for leaf in ["a", "b", "c", "d", "e"] {
+        let rect = |key: String| world.runtime().presented(&key).unwrap().0;
+        let [x, y, w, h] = rect(miniature(leaf));
+        let [sx, sy, sw, sh] = rect(format!("{}.screen", miniature(leaf)));
+        assert!(sw > 0.0 && sh > 0.0, "{leaf}");
+        assert!(
+            sx >= x + HIGHLIGHT && sx + sw <= x + w - HIGHLIGHT,
+            "{leaf}"
+        );
+        assert!(
+            sy >= y + HIGHLIGHT && sy + sh <= y + h - HIGHLIGHT,
+            "{leaf}"
+        );
+    }
+}
+
+#[test]
 fn the_row_and_the_lists_take_the_whole_window_inside_its_padding() {
     for size in [SMALLEST, LAPTOP] {
         let mut state = initial(three_desktops());

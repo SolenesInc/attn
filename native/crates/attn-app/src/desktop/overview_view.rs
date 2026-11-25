@@ -312,8 +312,11 @@ fn picture(
             .filter(|pane| state.terminals.pictured(&pane.runtime_id))
             .map(|pane| {
                 let scheme = crate::color_scheme(&state.facts.settings);
-                el().fill(attn_ui::colors::rgb(scheme.colors(t.dark).terminal.bg))
-                    .effect(crate::terminal::miniature_mark(&pane.runtime_id))
+                let ground = attn_ui::colors::rgb(scheme.colors(t.dark).terminal.bg);
+                let screen = el()
+                    .key(format!("{key}.screen"))
+                    .effect(crate::terminal::miniature_mark(&pane.runtime_id));
+                Miniature::screen(screen, ground)
             }),
         LeafKind::Tile { kind, params, .. } if current => {
             let body = match kind.as_str() {

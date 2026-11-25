@@ -19,6 +19,7 @@ const LABEL_EDGE: f32 = 1.0;
 const COLUMN_EDGE: f32 = 1.0;
 const NEEDS_EDGE: f32 = 2.0;
 const HIGHLIGHT_EDGE: f32 = 3.0;
+const SCREEN_INSET: Space = Space::S4;
 const COLUMN_CORNER: f32 = 6.0;
 const BAR: f32 = 3.0;
 const BAR_CORNER: f32 = 2.0;
@@ -243,6 +244,13 @@ impl Miniature {
         member
             .needs_user()
             .then(|| outline(key, rect, NEEDS_EDGE, needing(member, t)))
+    }
+
+    /// A terminal's `screen` on its own `ground`, clear of the edges and outlines drawn over it.
+    pub fn screen(screen: El, ground: rune::Color) -> El {
+        door::inset(col(), SCREEN_INSET, SCREEN_INSET)
+            .fill(ground)
+            .child(screen.w_full().grow(1.0).min_h(0.0))
     }
 
     /// What a tile with no picture shows: its icon and `title`.
