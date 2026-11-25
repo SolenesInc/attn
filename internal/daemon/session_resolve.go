@@ -2,6 +2,9 @@ package daemon
 
 import (
 	"errors"
+	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/protocol"
@@ -12,6 +15,21 @@ var (
 	errSessionNotFound  = errors.New(command.CodeSessionNotFound)
 	errAmbiguousSession = errors.New(command.CodeAmbiguousSession)
 )
+
+type severalSessionsNamed struct {
+	name     string
+	sessions []*protocol.Session
+}
+
+func (e *severalSessionsNamed) Error() string {
+	candidates := make([]string, len(e.sessions))
+	for i, session := range e.sessions {
+		candidates[i] = fmt.Sprintf("%s %q (%s, %s)", shortSessionID(session.ID), session.Label, session.Agent, session.State)
+	}
+	return fmt.Sprintf("%q names %d live sessions: %s; pass the id of the one you mean", e.name, len(e.sessions), strings.Join(candidates, ", "))
+}
+
+func (e *severalSessionsNamed) Is(target error) bool { return target == errAmbiguousSession }
 
 type sessionMatch struct {
 	Live   *protocol.Session
@@ -91,12 +109,61 @@ func (d *Daemon) resolveLiveSession(ref, profileID string) (*protocol.Session, e
 	return match, nil
 }
 
+func (d *Daemon) resolveTargetSession(ref, profileID string) (sessionMatch, error) {
+	match, err := d.resolveSession(ref, profileID)
+	if !errors.Is(err, errSessionNotFound) {
+		return match, err
+	}
+	named, err := d.liveSessionNamed(ref, profileID)
+	if err != nil {
+		return sessionMatch{}, err
+	}
+	return sessionMatch{Live: named}, nil
+}
+
+func (d *Daemon) resolveLiveTargetSession(ref, profileID string) (*protocol.Session, error) {
+	session, err := d.resolveLiveSession(ref, profileID)
+	if !errors.Is(err, errSessionNotFound) {
+		return session, err
+	}
+	return d.liveSessionNamed(ref, profileID)
+}
+
+func (d *Daemon) liveSessionNamed(name, profileID string) (*protocol.Session, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, errSessionNotFound
+	}
+	var named []*protocol.Session
+	for _, session := range d.store.List("") {
+		if (profileID == "" || session.ProfileID == profileID) && strings.EqualFold(strings.TrimSpace(session.Label), name) {
+			named = append(named, session)
+		}
+	}
+	switch len(named) {
+	case 0:
+		return nil, errSessionNotFound
+	case 1:
+		return named[0], nil
+	}
+	slices.SortFunc(named, func(a, b *protocol.Session) int { return strings.Compare(string(a.ID), string(b.ID)) })
+	return nil, &severalSessionsNamed{name: name, sessions: named}
+}
+
+func ambiguousSessionMessage(ref string, err error, idMessage string) string {
+	var several *severalSessionsNamed
+	if errors.As(err, &several) {
+		return several.Error()
+	}
+	return fmt.Sprintf(idMessage, protocol.TrimID(ref))
+}
+
 func sessionRefusal(ref string, err, notFound error) error {
 	switch {
 	case errors.Is(err, errSessionNotFound):
 		return notFound
 	case errors.Is(err, errAmbiguousSession):
-		return command.Refuse(command.CodeAmbiguousSession, "%q matches more than one session; give more of the full id", protocol.TrimID(ref))
+		return command.Refuse(command.CodeAmbiguousSession, "%s", ambiguousSessionMessage(ref, err, "%q matches more than one session; give more of the full id"))
 	default:
 		return err
 	}

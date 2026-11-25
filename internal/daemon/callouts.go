@@ -28,7 +28,7 @@ var calloutAnchorDirectory = []protocol.CalloutAnchorInfo{
 	{Name: "queue", Description: "The waiting-turns card in queue flow"},
 	{Name: "crew", Description: "The crew"},
 	{Name: "settings-button", Description: "Open Settings"},
-	{Name: "agent:<who>", Description: "An agent by session id, short id or crew name; Enter on the last step goes there"},
+	{Name: "agent:<who>", Description: "An agent by its name, session id, short id or crew name; Enter on the last step goes there"},
 	{Name: "desktop:<which>", Description: "A desktop by slot digit, name or id; Enter on the last step goes there"},
 }
 

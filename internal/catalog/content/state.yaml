@@ -20,10 +20,10 @@ commands:
     doc: |
       Replays the daemon's recorded state observations for one session: which source claimed what, and whether the claim was applied, vetoed before the store, discarded by it, or skipped by its own source. Identical observations in a row fold into one with a count. Reading it changes nothing.
     args:
-      - {name: id, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the short id, full id or unique prefix of the live session to explain"}
+      - {name: id, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the name, short id, full id or unique prefix of the live session to explain"}
     result: StateExplainResult
     errors:
-      - {code: session_not_found, fix: "Pass the short id, full id or unique prefix of a live session."}
-      - {code: ambiguous_session, fix: "Give more of the full id; agent_list and session_list carry full ids."}
+      - {code: session_not_found, fix: "Pass the name, short id, full id or unique prefix of a live session."}
+      - {code: ambiguous_session, fix: "Pass the id of the session you mean, or more of the full id; agent_list and session_list carry full ids."}
     examples:
       - {id: 3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f}

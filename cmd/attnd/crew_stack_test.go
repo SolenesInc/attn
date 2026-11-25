@@ -132,7 +132,7 @@ func TestCrewMembersStartCloseAndKeepTheirLaunchSettings(t *testing.T) {
 	trellis.Prompted()
 	requireLines(t, "trellis's row", crewRow(t, s.Attn("crew", "list").Stdout, "Trellis"), " in session ", " "+shortID(day)+" ")
 	agents := s.Attn("agent", "list").Stdout
-	requireLines(t, "agent list", agents, "MEMBER", "An ID, or the MEMBER of a member in session, here works with `attn agent peek <target>`")
+	requireLines(t, "agent list", agents, "MEMBER", "An ID, a NAME shown whole, or the MEMBER of a member in session, here works with `attn agent peek <target>`")
 	requireLines(t, "trellis's agent row", crewRow(t, agents, shortID(day)), " Trellis ")
 	requireStdout(t, s.Attn("agent", "peek", "trellis"), "session "+shortID(day), "crew member: this session is Trellis today")
 	requireFailure(t, s.Attn("agent", "peek", "keel"), "agent peek: ", "keel is between sessions", "never starts a session", "`attn crew start keel`")

@@ -128,3 +128,95 @@ func TestASessionIsNamedByItsShortIDOrAUniquePrefixOfItsIDLiveOrClosed(t *testin
 		}
 	})
 }
+
+func TestALiveSessionIsAddressedByItsNameAndACallerIsNot(t *testing.T) {
+	const (
+		caller   = "3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f"
+		review   = "71c0d9ab-0f42-4e0b-8d0e-5a9f1c3b7e22"
+		twin     = "a4b6d210-1c5e-4d27-8e3f-6b90c2d7f148"
+		twinTwo  = "b4b6d210-7e29-4a61-9f0c-3d58e1b4a7c6"
+		gone     = "c5e81f07-4a36-4f8f-b2d9-7701aa5c9e3d"
+		shadowed = "e07b3c95-2d64-4f18-a5c7-94f1b8e60d2a"
+		prefix   = "9d2e4f61-5b08-4c3a-87e9-f1a60d7c2b54"
+		stranger = "58f1a7c3-6e90-4d2b-9c14-0b7e3f5a8d61"
+	)
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		for _, s := range []struct{ id, name string }{
+			{caller, "caller"}, {review, "api-review"}, {twin, "Twin"}, {twinTwo, "twin"},
+			{gone, "gone"}, {prefix, "prefix"}, {shadowed, "9d2e"},
+		} {
+			if err := w.InjectSession(s.id, s.name, w.Path(s.id), "claude"); err != nil {
+				t.Fatalf("register %s: %v", s.name, err)
+			}
+		}
+		side := createProfile(w.App(), "Side")
+		if err := w.InjectSession(stranger, "API-Review", w.Path(stranger), "claude", side.ID); err != nil {
+			t.Fatal(err)
+		}
+		if err := cli.Unregister(protocol.SessionID(gone)); err != nil {
+			t.Fatal(err)
+		}
+		agent := cli.WithCaller(protocol.TerminalID(w.Terminal(caller)))
+
+		for _, named := range []struct{ ref, want string }{{"api-review", review}, {" API-Review ", review}, {"9d2e", prefix}, {review, review}} {
+			var shown protocol.SessionShowResult
+			if err := agent.RunCommand("session show", "", map[string]any{"id": named.ref}, &shown); err != nil || string(shown.Entry.ID) != named.want {
+				t.Errorf("session show %q = %s, %v, want %s", named.ref, shown.Entry.ID, err, named.want)
+			}
+		}
+		var explained protocol.StateExplainResult
+		if err := agent.RunCommand("state explain", "", map[string]any{"id": "api-review"}, &explained); err != nil || string(explained.SessionID) != review {
+			t.Errorf("state explain by name = %+v, %v", explained, err)
+		}
+		peeked, err := agent.AgentPeek("api-review")
+		if err != nil || string(peeked.SessionID) != review {
+			t.Errorf("peek by name = %+v, %v", peeked, err)
+		}
+		if sent, err := agent.AgentMsg("api-review", "", "api-v2 is ready"); err != nil || string(sent.TargetSessionID) != review {
+			t.Errorf("message by name = %+v, %v", sent, err)
+		}
+		var done any
+		for name, args := range map[string]map[string]any{
+			"session priority": {"priority": "on", "target": "api-review"},
+			"activity clear":   {"id": "api-review"},
+			"session rename":   {"name": "api-review", "target": "api-review"},
+		} {
+			if err := agent.RunCommand(name, "", args, &done); err != nil {
+				t.Errorf("%s by name: %v", name, err)
+			}
+		}
+		if _, err := agent.AgentClose("api-review", "", "done"); err == nil || !strings.Contains(err.Error(), "outside "+caller+"'s chain") {
+			t.Errorf("close of an agent outside the caller's chain by name = %v, want it refused as that rule", err)
+		}
+		reloaded, err := agent.AgentReload([]string{"api-review"}, "", false)
+		if err != nil || len(reloaded.Outcomes) != 1 || string(protocol.Deref(reloaded.Outcomes[0].SessionID)) != review {
+			t.Errorf("reload by name = %+v, %v", reloaded, err)
+		}
+
+		for name, args := range map[string]map[string]any{
+			"session show":  {"id": "twin"},
+			"state explain": {"id": "twin"},
+			"agent peek":    {"target": "twin"},
+			"agent msg":     {"target": "twin", "text": "hello"},
+			"agent close":   {"target": "twin", "reason": "done"},
+		} {
+			err := agent.RunCommand(name, "", args, &done)
+			if client.ErrorCode(err) != "ambiguous_session" || !strings.Contains(err.Error(), "ag-mjvd44 \"Twin\"") || !strings.Contains(err.Error(), "\"twin\" (claude") {
+				t.Errorf("%s twin = %v, want ambiguous_session naming both sessions", name, err)
+			}
+		}
+		for name, args := range map[string]map[string]any{
+			"session show":   {"id": "gone"},
+			"session reopen": {"id": "api-review"},
+			"agent peek":     {"target": "api"},
+		} {
+			if err := agent.RunCommand(name, "", args, &done); client.ErrorCode(err) != "session_not_found" {
+				t.Errorf("%s %v = %v, want session_not_found", name, args, err)
+			}
+		}
+		if _, err := cli.AgentMsg("caller", "api-review", "who am I"); client.ErrorCode(err) != "session_not_found" {
+			t.Errorf("a name as the sender = %v, want session_not_found", err)
+		}
+	})
+}

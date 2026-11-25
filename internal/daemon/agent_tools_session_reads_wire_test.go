@@ -39,7 +39,7 @@ func TestEveryAgentSessionAndStateToolAnswersWithTheShapeItsOutputSchemaDescribe
 	shapes.finish("state_", "list", "activity", "session_list", "session_show", "session_rename", "session_priority", "session_snooze", "session_unsnooze", "session_reopen")
 
 	unknown := agent.mustCall(t, "state_explain", map[string]any{"id": "no-such-session"})
-	if text := resultText(unknown); !unknown.IsError || text != `session_not_found: no session "no-such-session"; pass a short id, full id or unique prefix`+"\nFix: Pass the short id, full id or unique prefix of a live session." {
+	if text := resultText(unknown); !unknown.IsError || text != `session_not_found: no session "no-such-session"; pass a name, short id, full id or unique prefix`+"\nFix: Pass the name, short id, full id or unique prefix of a live session." {
 		t.Errorf("state_explain of a session that does not exist answered %q, want session_not_found with the catalog's fix", text)
 	}
 }

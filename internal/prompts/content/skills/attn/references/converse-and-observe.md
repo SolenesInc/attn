@@ -8,12 +8,20 @@ file gives the rules.
 
 ## Who else is here
 
+When you know a session's name, pass the name: `attn agent msg api-review "…"`
+and `attn agent peek api-review` need no lookup first. A name finds a live
+session of your profile by its whole name, in upper or lower case. When several
+live sessions share the name, attn refuses it and lists each one with its short
+id, so you can repeat the command with the id.
+
 `attn agent list` lists the sessions you can address. It prints each session's
 short id, such as `ag-7yd2r4`. Use the short id when you name a session to the
-user or to another agent. Commands take the short id, the full id or a unique
-prefix of the full id. `--json` carries full ids and the machine-readable shape.
-The stable name of a crew member in session also works as the
-address for `peek`, `msg` and `reload`.
+user or to another agent. Commands that act on a session take its name, short
+id, full id or a unique prefix of the full id. `--json` carries full ids and
+the machine-readable shape. The stable name of a crew member in session also
+works as the address for `peek`, `msg` and `reload`. To name yourself with
+`--session` or `--source-session`, pass an id: a name does not say who the
+caller is.
 
 `attn session list --tree` shows every live session under its dispatcher, with
 short ids, labels, harnesses, states, owed or snoozed turns, and seed slugs. Use
@@ -47,7 +55,7 @@ before you ask. Ask only what looking cannot answer.
 
 ## Speaking to a session
 
-`attn agent msg <id> "text"` sends a message to that session, attributed to
+`attn agent msg <session> "text"` sends a message to that session, attributed to
 you, with the command to reply already in it. By default the message waits in
 the recipient's inbox until its turn ends, so it never breaks the recipient's
 focus. Most messages should wait.

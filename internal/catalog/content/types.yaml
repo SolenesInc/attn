@@ -194,7 +194,7 @@ types:
     placeholder: "prompt|exit"
   terminal_ref:
     json: {type: string, minLength: 1}
-    doc: "A terminal id or a unique prefix of one, as terminal_ls lists them. A session's short id, full id or unique prefix of it, or a crew member's name, works when that session shows in exactly one terminal. Only terminals of your profile."
+    doc: "A terminal id or a unique prefix of one, as terminal_ls lists them. A live session's name, its short id, full id or unique prefix of it, or a crew member's name, works when that session shows in exactly one terminal. Only terminals of your profile."
     placeholder: "<terminal>"
   automation_id:
     json: {type: integer, minimum: 1}

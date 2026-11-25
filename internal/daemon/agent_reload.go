@@ -84,12 +84,12 @@ func (d *Daemon) resolveAgentReloadTarget(ref, profileID string) (*protocol.Sess
 		}
 		return nil, fmt.Errorf("crew member %s is between sessions; reload does not start sessions for members", member.Name)
 	}
-	target, err := d.resolveLiveSession(ref, profileID)
+	target, err := d.resolveLiveTargetSession(ref, profileID)
 	switch {
 	case err == nil:
 		return target, nil
 	case errors.Is(err, errAmbiguousSession):
-		return nil, fmt.Errorf("%q matches more than one session; give more of the full id", ref)
+		return nil, errors.New(ambiguousSessionMessage(ref, err, "%q matches more than one session; give more of the full id"))
 	default:
 		return nil, fmt.Errorf("no session or crew member in session matches %q in the caller's profile", ref)
 	}

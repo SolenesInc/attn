@@ -6,7 +6,7 @@ Point at the attn app when the user asks where something is, during a guided fir
 
 The fixed anchors are `sidebar`, `home`, `commands`, `garden`, `asks`, `desktops`, `queue`, `crew` and `settings-button`. Which of them are visible depends on the sidebar's shape. `queue` is the waiting-turns card in queue flow.
 
-`agent:<who>` accepts a session id, short id or crew name. `desktop:<which>` accepts a slot digit, name or id. Both address only the profile of the pointing session. The app reveals the target when it can. Otherwise the app shows the step with the target's name.
+`agent:<who>` accepts a live session's name, id or short id, or a crew name. `desktop:<which>` accepts a slot digit, name or id. Both address only the profile of the pointing session. The app reveals the target when it can. Otherwise the app shows the step with the target's name.
 
 - `attn callout anchors [--json]`: list the anchors and which are on screen
 

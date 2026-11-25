@@ -17,7 +17,7 @@ An opened terminal is an ordinary interactive shell. The command enters the shel
 
 ## Reach
 
-A target is a terminal id, or a unique prefix of one, as printed by `ls`. `attn terminal open` prints the new terminal id. A session's short id, full id or unique prefix of it, or the name of a crew member in session, also works when that session shows in exactly one terminal. Shared Codex can show one session in several tiles. When it does, choose a terminal id. Every target belongs to your profile. A crew name follows the member's current session and never starts a session for a member between sessions.
+A target is a terminal id, or a unique prefix of one, as printed by `ls`. `attn terminal open` prints the new terminal id. A session's name, short id, full id or unique prefix of it, or the name of a crew member in session, also works when that session shows in exactly one terminal. Shared Codex can show one session in several tiles. When it does, choose a terminal id. Every target belongs to your profile. A crew name follows the member's current session and never starts a session for a member between sessions.
 
 If your session has tiles on several desktops, pass `--desktop` when you list, type, or close. If your session has several tiles on one desktop, `attn terminal open` also needs `--desktop` to select that desktop's active tile as the anchor.
 

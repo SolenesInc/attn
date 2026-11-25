@@ -201,7 +201,7 @@ fn list(result: &AgentListResult) -> String {
             if row.turn_owed { "owed" } else { "-" }
         );
     }
-    out.push_str("\nAn ID, or the MEMBER of a member in session, here works with `attn agent peek <target>`; --json carries full ids.\n");
+    out.push_str("\nAn ID, a NAME shown whole, or the MEMBER of a member in session, here works with `attn agent peek <target>`; --json carries full ids and names.\n");
     out
 }
 

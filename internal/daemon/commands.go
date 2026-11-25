@@ -126,13 +126,17 @@ func (d *Daemon) sessionCallerFor(session protocol.SessionID, profile, requested
 }
 
 func (d *Daemon) resolveFramedSession(cmd string, named protocol.SessionID, scope string) (protocol.SessionID, string, error) {
-	match, err := d.resolveSession(string(named), scope)
 	target := command.SessionFlagNamesTarget(cmd)
+	resolve := d.resolveSession
+	if target {
+		resolve = d.resolveTargetSession
+	}
+	match, err := resolve(string(named), scope)
 	switch {
 	case err == nil:
 		return match.ID(), match.ProfileID(), nil
 	case errors.Is(err, errAmbiguousSession) && target:
-		return "", "", command.Refuse(command.CodeAmbiguousSession, "session %s matches more than one session; give more of the full id", named)
+		return "", "", command.Refuse(command.CodeAmbiguousSession, "%s", ambiguousSessionMessage(string(named), err, "session %s matches more than one session; give more of the full id"))
 	case errors.Is(err, errAmbiguousSession):
 		return "", "", command.Refuse(command.CodeAmbiguousSession, "the %s %q matches more than one session; give more of the full id", command.CallerRole(cmd), named)
 	case !errors.Is(err, errSessionNotFound):

@@ -30,10 +30,10 @@ func (d *Daemon) sessionCommands() map[string]command.Handler {
 	}
 }
 
-func (d *Daemon) ledgerEntryInScope(c command.Caller, id string) (*protocol.SessionLedgerEntry, error) {
+func (d *Daemon) ledgerEntryInScope(c command.Caller, id string, resolve func(ref, profileID string) (sessionMatch, error)) (*protocol.SessionLedgerEntry, error) {
 	id = strings.TrimSpace(id)
 	notFound := command.Refuse(command.CodeSessionNotFound, "no session %q in the ledger", id)
-	match, err := d.resolveSession(id, c.Profile)
+	match, err := resolve(id, c.Profile)
 	if err != nil {
 		return nil, sessionRefusal(id, err, notFound)
 	}
@@ -45,7 +45,7 @@ func (d *Daemon) ledgerEntryInScope(c command.Caller, id string) (*protocol.Sess
 }
 
 func (d *Daemon) liveSessionInScope(c command.Caller, id protocol.SessionID) (protocol.SessionID, error) {
-	session, err := d.resolveLiveSession(string(id), c.Profile)
+	session, err := d.resolveLiveTargetSession(string(id), c.Profile)
 	if err != nil {
 		return "", sessionRefusal(string(id), err, fmt.Errorf("unknown live session %s", id))
 	}
@@ -187,7 +187,7 @@ func sessionListInstant(name, raw string, now time.Time) (string, error) {
 }
 
 func (d *Daemon) runSessionShow(ctx context.Context, c command.Caller, a command.SessionShowArgs) (any, error) {
-	entry, err := d.ledgerEntryInScope(c, a.ID)
+	entry, err := d.ledgerEntryInScope(c, a.ID, d.resolveTargetSession)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +343,7 @@ func (d *Daemon) runSessionReopen(ctx context.Context, c command.Caller, a comma
 		}
 		return nil, command.Refuse(command.CodeUnknownAction, "%q is not a reopen action; the actions are %s", string(action), strings.Join(names, ", "))
 	}
-	entry, err := d.ledgerEntryInScope(c, a.ID)
+	entry, err := d.ledgerEntryInScope(c, a.ID, d.resolveSession)
 	if err != nil {
 		return nil, err
 	}

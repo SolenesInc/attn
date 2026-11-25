@@ -19,7 +19,7 @@ import (
 const sessionTranscriptPageSize = 200
 
 func (d *Daemon) runSessionTranscript(ctx context.Context, c command.Caller, a command.SessionTranscriptArgs) (any, error) {
-	match, err := d.resolveSession(a.ID, c.Profile)
+	match, err := d.resolveTargetSession(a.ID, c.Profile)
 	if err != nil {
 		return nil, sessionRefusal(a.ID, err, sessionTranscriptRefusal(command.CodeSessionNotFound))
 	}

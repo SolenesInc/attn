@@ -93,7 +93,7 @@ func (d *Daemon) runAgentMsg(ctx context.Context, c command.Caller, a command.Ag
 		if found {
 			address = who.Member(member.Key).Address()
 		} else {
-			target, err := d.resolveLiveSession(string(targetRef), "")
+			target, err := d.resolveLiveTargetSession(string(targetRef), sender.ProfileID)
 			if err != nil {
 				if memberErr != nil {
 					return nil, memberErr
@@ -101,7 +101,7 @@ func (d *Daemon) runAgentMsg(ctx context.Context, c command.Caller, a command.Ag
 				if errors.Is(err, errSessionNotFound) {
 					return nil, notFound()
 				}
-				return nil, command.Refuse(err.Error(), "%q matches more than one session; give more of the full id (`{attn agent list --json}` carries full ids)", protocol.TrimID(targetRef))
+				return nil, command.Refuse(command.CodeAmbiguousSession, "%s", ambiguousSessionMessage(string(targetRef), err, "%q matches more than one session; give more of the full id (`{attn agent list --json}` carries full ids)"))
 			}
 			if target.ProfileID != sender.ProfileID {
 				return nil, notFound()

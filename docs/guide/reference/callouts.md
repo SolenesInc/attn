@@ -40,7 +40,7 @@ Agents point at these named parts of the window:
 | `queue` | The waiting-turns card in queue flow |
 | `crew` | The crew |
 | `settings-button` | Open Settings |
-| `agent:<who>` | An agent by session id, short id, or crew name |
+| `agent:<who>` | An agent by name, session id, short id, or crew name |
 | `desktop:<which>` | A desktop by slot digit, name, or id |
 
 Which of the named parts are on screen depends on the sidebar's shape and on your

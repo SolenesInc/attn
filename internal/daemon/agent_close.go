@@ -192,12 +192,15 @@ func (d *Daemon) resolveAgentCloseTarget(msg *agentCloseRequest, caller *protoco
 		reference = protocol.SessionID(tender)
 	}
 	target, err := d.resolveLiveSession(string(reference), "")
+	if errors.Is(err, errSessionNotFound) {
+		target, err = d.liveSessionNamed(string(reference), caller.ProfileID)
+	}
 	switch {
 	case err == nil:
 		return target, nil
 	case errors.Is(err, errAmbiguousSession):
-		return nil, &agentCloseRefusal{err.Error(), fmt.Sprintf(
-			"%q matches more than one session; give more of the full id (`attn agent list --json` carries full ids)", reference)}
+		return nil, &agentCloseRefusal{command.CodeAmbiguousSession, ambiguousSessionMessage(string(reference), err,
+			"%q matches more than one session; give more of the full id (`attn agent list --json` carries full ids)")}
 	default:
 		return nil, &agentCloseRefusal{err.Error(), fmt.Sprintf(
 			"no session matches %q; `attn agent list` names the sessions this daemon can reach", reference)}

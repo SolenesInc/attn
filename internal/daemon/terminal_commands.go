@@ -101,6 +101,12 @@ func (d *Daemon) terminalTarget(caller *protocol.Session, ref string) (*selected
 		}
 	}
 	if match == nil {
+		match, err = d.liveSessionNamed(ref, caller.ProfileID)
+		if errors.Is(err, errAmbiguousSession) {
+			return nil, protocol.Refuse(protocol.RefusalInvalidInput, "target rule: %s", err)
+		}
+	}
+	if match == nil {
 		return nil, protocol.Refuse(protocol.RefusalNotFound, "target rule: terminal %q not found in the caller's profile; `{attn terminal ls --all}` lists its terminals", ref)
 	}
 	ids := d.terminalsOf(match.ID)

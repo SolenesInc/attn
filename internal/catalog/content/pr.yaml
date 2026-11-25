@@ -13,7 +13,7 @@ groups:
 
       `--seed <id>` addresses a watch to a seed instead of the session. Updates go to whoever tends the seed when they arrive, so a handover moves the watch with no new watch. Harvesting or withering the seed stops its watches and clears their unread updates.
     flags:
-      - {name: session, placeholder: "<id>", target: true, doc: "the session, open or closed, whose pull requests to act on (defaults to the current session)"}
+      - {name: session, placeholder: "<id>", target: true, doc: "the session whose pull requests to act on, open or closed by id, or open by name (defaults to the current session)"}
     sections:
       - title: Recording
         commands: [pr record, pr ls, pr forget]

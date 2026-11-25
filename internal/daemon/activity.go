@@ -383,8 +383,8 @@ func (d *Daemon) runActivity(ctx context.Context, c command.Caller, a command.Ac
 }
 
 func (d *Daemon) runActivityClear(ctx context.Context, c command.Caller, a command.ActivityClearArgs) (any, error) {
-	notFound := command.Refuse(command.CodeSessionNotFound, "no session %q; pass a short id, full id or unique prefix", a.ID)
-	session, err := d.resolveLiveSession(a.ID, c.Profile)
+	notFound := command.Refuse(command.CodeSessionNotFound, "no session %q; pass a name, short id, full id or unique prefix", a.ID)
+	session, err := d.resolveLiveTargetSession(a.ID, c.Profile)
 	if err != nil {
 		return nil, sessionRefusal(a.ID, err, notFound)
 	}

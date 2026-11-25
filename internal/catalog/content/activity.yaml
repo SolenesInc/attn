@@ -29,7 +29,7 @@ commands:
     doc: |
       Forgets one session's activity line and its read position, so the next line is written from what happens next.
     args:
-      - {name: id, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the short id, full id or unique prefix of the live session"}
+      - {name: id, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the name, short id, full id or unique prefix of the live session"}
     errors:
-      - {code: session_not_found, fix: "Pass the short id, full id or unique prefix of a live session."}
-      - {code: ambiguous_session, fix: "Give more of the full id; agent_list and session_list carry full ids."}
+      - {code: session_not_found, fix: "Pass the name, short id, full id or unique prefix of a live session."}
+      - {code: ambiguous_session, fix: "Pass the id of the session you mean, or more of the full id; agent_list and session_list carry full ids."}

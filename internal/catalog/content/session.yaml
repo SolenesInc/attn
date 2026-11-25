@@ -21,12 +21,12 @@ commands:
     doc: |
       Answers a free-form question from the target session's bounded Codex conversation, returning validated exact excerpts. Unclear is a successful answer.
     args:
-      - {name: id, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the short id, full id or unique prefix of the session whose conversation to read"}
+      - {name: id, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the name of a live session, or the short id, full id or unique prefix of the session whose conversation to read"}
       - {name: question, type: text, required: true, cli: "--question", doc: "the question to answer from that conversation"}
     result: SessionInstructionsResult
     errors:
-      - {code: session_not_found, fix: "Pass the short id, full id or unique prefix of a session in the ledger."}
-      - {code: ambiguous_session, fix: "Give more of the full id; agent_list and session_list carry full ids."}
+      - {code: session_not_found, fix: "Pass a live session's name, or the short id, full id or unique prefix of a session in the ledger."}
+      - {code: ambiguous_session, fix: "Pass the id of the session you mean, or more of the full id; agent_list and session_list carry full ids."}
       - {code: transcript_unavailable, fix: "Ask again once the session has written its conversation."}
       - {code: conversation_too_large, fix: "Read the conversation with session_transcript instead."}
       - {code: model_unavailable, fix: "Choose a model for session instructions in Settings, or read the conversation with session_transcript."}
@@ -42,13 +42,13 @@ commands:
     doc: |
       Reads provider-neutral, timestamped, redacted conversation and tool events of one session. `after` resumes strictly after the cursor an earlier read ended on. `follow` keeps reading until interrupted; `--json` prints one event per line.
     args:
-      - {name: id, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the short id, full id or unique prefix of the session to read"}
+      - {name: id, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the name of a live session, or the short id, full id or unique prefix of the session to read"}
       - {name: after, type: text, cli: "--after", placeholder: "<cursor>", doc: "resume strictly after this cursor"}
       - {name: follow, type: bool, cli: "--follow", cli_only: true, doc: "keep reading new events until interrupted"}
     result: SessionTranscriptResult
     errors:
-      - {code: session_not_found, fix: "Pass the short id, full id or unique prefix of a session in the ledger."}
-      - {code: ambiguous_session, fix: "Give more of the full id; agent_list and session_list carry full ids."}
+      - {code: session_not_found, fix: "Pass a live session's name, or the short id, full id or unique prefix of a session in the ledger."}
+      - {code: ambiguous_session, fix: "Pass the id of the session you mean, or more of the full id; agent_list and session_list carry full ids."}
       - {code: transcript_unavailable, fix: "Read again once the session has written its conversation."}
       - {code: invalid_cursor, fix: "Pass a cursor an earlier read ended on, or leave out {after}."}
       - {code: cursor_mismatch, fix: "Pass a cursor from a read of this session, or leave out {after}."}
@@ -90,11 +90,11 @@ commands:
     doc: |
       Reads one ledger row, live or closed, including who closed it and why. A closed row also carries the reopen verdict: whether it comes back, why not when it does not, and the actions offered instead.
     args:
-      - {name: id, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the short id, full id or unique prefix of the session to read"}
+      - {name: id, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the name of a live session, or the short id, full id or unique prefix of the session to read"}
     result: SessionShowResult
     errors:
-      - {code: session_not_found, fix: "Pass the short id, full id or unique prefix of a session in the ledger."}
-      - {code: ambiguous_session, fix: "Give more of the full id; agent_list and session_list carry full ids."}
+      - {code: session_not_found, fix: "Pass a live session's name, or the short id, full id or unique prefix of a session in the ledger."}
+      - {code: ambiguous_session, fix: "Pass the id of the session you mean, or more of the full id; agent_list and session_list carry full ids."}
 
   - name: session priority
     summary: mark a session so its owed turns go first, or clear the mark
@@ -105,9 +105,9 @@ commands:
       Marks a session so its owed turns go first, or clears that mark. `target` defaults to the session running this command. Any agent may mark any session.
     args:
       - {name: priority, type: text, required: true, cli: pos, placeholder: "on|off", doc: "on marks the session, off clears the mark"}
-      - {name: target, type: text, cli: "--session", placeholder: "<id>", doc: "the short id, full id or unique prefix of the live session to mark (defaults to the current session)"}
+      - {name: target, type: text, cli: "--session", placeholder: "<id>", doc: "the name, short id, full id or unique prefix of the live session to mark (defaults to the current session)"}
     errors:
-      - {code: ambiguous_session, fix: "Give more of the full id; agent_list and session_list carry full ids."}
+      - {code: ambiguous_session, fix: "Pass the id of the session you mean, or more of the full id; agent_list and session_list carry full ids."}
       - {code: no_session, usage: true, fix: "Pass {target}, or run it inside an attn session."}
 
   - name: session snooze
@@ -118,7 +118,7 @@ commands:
     doc: |
       Defers sessions until an RFC3339 instant, a positive duration (30m, 1h, 2h, 4h, 8h), or tomorrow, saturday or monday. Day choices use local 09:00; quote a custom time, e.g. "tomorrow 09:00". A session may snooze itself and agents below it in its delegation chain, including delegates of delegates; the chief any session of its profile. Each id reports success or why it failed. session_unsnooze ends a snooze early.
     args:
-      - {name: ids, type: text, list: true, required: true, cli: rest, placeholder: "<id>", doc: "the short ids, full ids or unique prefixes of the sessions to snooze"}
+      - {name: ids, type: text, list: true, required: true, cli: rest, placeholder: "<id>", doc: "the names, short ids, full ids or unique prefixes of the sessions to snooze"}
       - {name: until, type: text, required: true, cli: "--until", placeholder: "<when>", doc: "when the snooze ends"}
     result: SessionSnoozeResult
     errors:
@@ -132,7 +132,7 @@ commands:
     doc: |
       Ends snoozes early, with the same permissions as session_snooze. Already unsnoozed is a successful no-op. session_list and session_show include the snoozed-until instant.
     args:
-      - {name: ids, type: text, list: true, required: true, cli: rest, placeholder: "<id>", doc: "the short ids, full ids or unique prefixes of the sessions to unsnooze"}
+      - {name: ids, type: text, list: true, required: true, cli: rest, placeholder: "<id>", doc: "the names, short ids, full ids or unique prefixes of the sessions to unsnooze"}
     result: SessionSnoozeResult
 
   - name: session rename
@@ -144,9 +144,9 @@ commands:
       Gives a session the name a person reads in the sidebar and the ledger: a few plain words about the work, up to 48 characters. `target` defaults to the session running this command. Rename when the main work drifts from the name it started with.
     args:
       - {name: name, type: text, required: true, cli: pos, placeholder: "<name>", doc: "the new name; quote it when it has spaces"}
-      - {name: target, type: text, cli: "--session", placeholder: "<id>", doc: "the short id, full id or unique prefix of the live session to rename (defaults to the current session)"}
+      - {name: target, type: text, cli: "--session", placeholder: "<id>", doc: "the name, short id, full id or unique prefix of the live session to rename (defaults to the current session)"}
     errors:
-      - {code: ambiguous_session, fix: "Give more of the full id; agent_list and session_list carry full ids."}
+      - {code: ambiguous_session, fix: "Pass the id of the session you mean, or more of the full id; agent_list and session_list carry full ids."}
       - {code: no_session, usage: true, fix: "Pass {target}, or run it inside an attn session."}
 
   - name: session reopen

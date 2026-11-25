@@ -198,7 +198,7 @@ func (h hostSessions) ConversationOwner(session harness.SessionID, conversation 
 	return h.d.store.ConversationOwner(session, conversation)
 }
 func (h hostSessions) Resolve(ref, profile string) (harness.SessionID, error) {
-	match, err := h.d.resolveSession(ref, profile)
+	match, err := h.d.resolveTargetSession(ref, profile)
 	if err != nil {
 		return "", sessionRefusal(ref, err, command.Refuse(command.CodeSessionNotFound, "The target session was not found"))
 	}
