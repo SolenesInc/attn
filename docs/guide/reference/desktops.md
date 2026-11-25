@@ -56,7 +56,9 @@ button in the tile's header, or "Pop out tile" in the palette moves the active
 tile into its own window, and the tile keeps its place on its desktop. The same
 keys, or closing the window, bring it back. A popped-out tile returns to its
 window and saved position when Attn restarts. Showing a popped-out tile from
-another desktop leaves the main window where it is.
+another desktop leaves the main window where it is. What you open from an
+agent's or a seed's id in a popped-out terminal shows in the main window, which
+comes to the front.
 
 ## Moving agents
 

@@ -555,6 +555,14 @@ pub(crate) fn open_tile(state: &mut State, id: &str, tx: &mut Tx) {
 /// Opens seed `id` as a tile beside `session` and shows it, putting the keyboard in it unless
 /// the user moved the keyboard while it opened.
 pub(crate) fn open_tile_beside(state: &mut State, id: &str, session: Option<String>, tx: &mut Tx) {
+    if state.window.tile.is_some() {
+        let id = id.to_owned();
+        let update =
+            move |state: &mut State, tx: &mut Tx| open_tile_beside(state, &id, session, tx);
+        crate::desktop::to_main(state, Box::new(update));
+        crate::frame::raise_main();
+        return;
+    }
     let before = tx.focused().map(str::to_owned);
     state.act(
         |request_id| OpenSeedMessage {

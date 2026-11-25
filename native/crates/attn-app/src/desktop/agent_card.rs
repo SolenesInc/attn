@@ -11,6 +11,7 @@ use rune::{Color, El, Tx};
 use super::header_pop;
 use super::role_icon::Mark;
 use crate::State;
+use crate::action::Action;
 use crate::sidebar::model::{AgentState, display_name, harness_label};
 
 /// An agent a card shows: a live session, a closed one that tends a seed on standby and
@@ -491,7 +492,8 @@ pub(super) fn follow(state: &mut State, go: &Go, session: &str, tx: &mut Tx) {
         }
         Go::Ask(id) => {
             header_pop::close(state);
-            crate::asks::show(state, Some(id), tx);
+            let ask = Some(id.clone());
+            crate::dispatch(state, Action::ShowAsks { ask }, tx);
         }
     }
 }
@@ -503,7 +505,8 @@ pub(super) fn open_seed(state: &mut State, seed: &str, session: &str, tx: &mut T
 
 pub(super) fn select(state: &mut State, session: &str, tx: &mut Tx) {
     header_pop::close(state);
-    crate::sidebar::open_agent(state, session, tx);
+    let session = session.to_owned();
+    crate::dispatch(state, Action::OpenAgent { session }, tx);
 }
 
 /// How attn names a closed agent on standby.

@@ -17,6 +17,7 @@ use attn_protocol::{
 use rune::{TextEdit, Tx};
 
 use crate::State;
+use crate::action::Action;
 use crate::requests::Answer;
 use crate::shell::Layer;
 use query::{Filters, ProfileChoice, Scope, Verdict, Window};
@@ -944,7 +945,7 @@ fn reopen(state: &mut State, entry: SessionLedgerEntry, action: String, tx: &mut
                     close(state, tx);
                 }
                 crate::desktop::header_pop::close_of(state, &session);
-                crate::sidebar::open_agent(state, &session, tx);
+                crate::dispatch(state, Action::OpenAgent { session }, tx);
             }
             Reopened::Refused { why, verdict } => {
                 let note = Note::Refused(why.clone());

@@ -2,13 +2,13 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use attn_protocol::{
-    Desktop, DesktopPane, OutpostInfo, OutpostsUpdatedMessage, Profile,
+    Ask, Desktop, DesktopPane, OpenSeedResultMessage, OutpostInfo, OutpostsUpdatedMessage, Profile,
     ProfileArrangementChangedMessage, ProfilesChangedMessage, ResolveSessionsResultMessage,
     ResolvedSession, Seed, Session, SessionClosedMessage, SessionDelegationRole,
     SessionLedgerEntry, SessionReopen, SessionReopenResult, SessionReopenResultMessage,
     SessionStateChangedMessage, SessionUnregisteredMessage,
 };
-use attn_testkit::{Daemon, Node, Request, Target, World, message, tree};
+use attn_testkit::{Driver, Node, Request, Target, World, message, tree};
 use rune::{Cursor, Key, KeyEvent, Mods, PhysicalInput};
 use serde_json::{Value, json};
 
@@ -204,12 +204,20 @@ pub(super) fn rest_on(world: &mut World, col: u16, row: u16) {
     world.advance(Duration::from_millis(200));
 }
 
-fn accelerator(world: &mut World, held: bool) {
-    let mods = Mods {
-        logo: held && mac(),
-        cmd: held,
-        ctrl: held && !mac(),
+fn held_accelerator() -> Mods {
+    Mods {
+        logo: mac(),
+        cmd: true,
+        ctrl: !mac(),
         ..Mods::default()
+    }
+}
+
+fn accelerator(world: &mut World, held: bool) {
+    let mods = if held {
+        held_accelerator()
+    } else {
+        Mods::default()
     };
     world.gesture(|app| app.runtime.physical_input(PhysicalInput::Modifiers(mods)));
 }
@@ -1067,41 +1075,261 @@ fn a_seed_card_takes_the_keyboard_opens_its_seed_with_return_and_closes_with_esc
     rests(&mut world);
 }
 
-#[test]
-fn a_popped_out_terminal_shows_the_card_in_its_own_window() {
-    let reader = DesktopPane {
-        session_id: "s1".into(),
-        ..pane("t1", "r1")
-    };
-    let mut state = showing(vec![reader], "daemon-1");
+/// The main window on Home, `s1`'s terminal popped out into its own window, and the builder in
+/// a tile docked on the same desktop. The daemon makes the tile it is asked to show active.
+fn popped_out(
+    seeds: Vec<Seed>,
+    ledger: Vec<SessionLedgerEntry>,
+    asks: Vec<Ask>,
+) -> (World, String) {
+    let mut state = showing(vec![], "daemon-1");
     state.sessions = Some(vec![agent("s1", "Reader"), builder()]);
-    let mut tile = tree::pane("t1");
-    tile["window"] = json!({"x": 10, "y": 20, "width": 900, "height": 600});
-    state.desktops.as_mut().unwrap()[0].tree_json = tree::row([tile]).to_string();
-    let mut world = World::start(Daemon::scripted().state(state));
-    world.open_desktop();
+    state.desktops = Some(vec![beside_popped_out("t1")]);
+    state.seeds_total = Some(seeds.len() as i64);
+    state.seeds = Some(seeds);
+    state.asks = Some(asks);
+    let world = World::start_sized(ledger_daemon(state, ledger.clone()), (1400.0, 900.0));
+    world
+        .daemon
+        .on("resolve_sessions", move |r| {
+            answer(r, ledger.iter().map(|e| resolved(r, e)).collect())
+        })
+        .on("desktop_show_session", |r| {
+            let pane = if r["session_id"] == BUILDER {
+                "t2"
+            } else {
+                "t3"
+            };
+            vec![arranged(pane), shown_at("desktop_show_session", pane)]
+        })
+        .on("open_seed", |r| {
+            vec![
+                message(OpenSeedResultMessage {
+                    request_id: r["request_id"].as_str().map(str::to_owned),
+                    success: true,
+                    seed_id: SEED.into(),
+                    desktop_id: Some("d1".into()),
+                    tile_id: Some("tile-seed".into()),
+                    ..OpenSeedResultMessage::new()
+                }),
+                arranged("t2"),
+                arranged("tile-seed"),
+            ]
+        })
+        .on("desktop_show_leaf", |_| {
+            shown_at("desktop_show_leaf", "tile-seed")
+        })
+        .on("session_reopen", |_| message(resumed(MAPPER)));
     let window = world.tile_windows()[0].key.clone();
-    write(&mut world, 1, BUILDER_SHORT);
+    assert!(!shown(&world, "terminal.r2"), "the main window is on Home");
+    (world, window)
+}
 
-    world.tile_gesture(&window, |app| {
-        let (rect, _) = app.runtime.presented("terminal.r1").expect("r1 is drawn");
-        app.runtime.pointer_move(rect[0] + 20.0, rect[1] + 8.0);
+fn beside_popped_out(active: &str) -> Desktop {
+    let of = |session: &str, n: u8| DesktopPane {
+        session_id: session.into(),
+        ..pane(&format!("t{n}"), &format!("r{n}"))
+    };
+    let mut popped = tree::pane("t1");
+    popped["window"] = json!({"x": 10, "y": 20, "width": 900, "height": 600});
+    let mut row = vec![popped, tree::pane("t2")];
+    let mut panes = vec![of("s1", 1), of(BUILDER, 2)];
+    match active {
+        "t3" => {
+            row.push(tree::pane("t3"));
+            panes.push(of(MAPPER, 3));
+        }
+        "tile-seed" => row.push(json!({
+            "type": "tile",
+            "tile_id": "tile-seed",
+            "tile_kind": "seed",
+            "tile_params": SEED,
+            "tile_session_id": "s1",
+        })),
+        _ => {}
+    }
+    Desktop {
+        tree_json: tree::row(row).to_string(),
+        active_pane_id: active.into(),
+        ..desktop(panes)
+    }
+}
+
+fn arranged(active: &str) -> Value {
+    message(ProfileArrangementChangedMessage {
+        profile: profile(),
+        desktops: vec![Desktop {
+            revision: 2,
+            ..beside_popped_out(active)
+        }],
+        ..ProfileArrangementChangedMessage::new()
+    })
+}
+
+fn shown_at(action: &str, pane: &str) -> Value {
+    json!({
+        "event": "profile_action_result",
+        "action": action,
+        "success": true,
+        "profile_id": "work",
+        "desktop_id": "d1",
+        "pane_id": pane,
+    })
+}
+
+fn first_row(app: &Driver, col: u16) -> (f32, f32) {
+    let (rect, _) = app.runtime.presented("terminal.r1").expect("r1 is drawn");
+    let metrics = attn_term::Metrics::of(attn_term::FONT_SIZE);
+    (
+        rect[0] + (f32::from(col) + 0.5) * metrics.cell_w,
+        rect[1] + metrics.cell_h / 2.0,
+    )
+}
+
+fn rest_in(world: &mut World, window: &str, col: u16) {
+    world.tile_gesture(window, |app| {
+        let (x, y) = first_row(app, col);
+        app.runtime.pointer_move(x, y);
     });
     world.advance(Duration::from_millis(200));
-    let card = |world: &World| {
-        let screen = world.tile_screen(&window);
-        screen.find(Target::key(AGENT_CARD)).is_some()
-    };
-    assert!(card(&world));
-    assert!(!shown(&world, AGENT_CARD), "the main window shows no card");
+}
 
-    world.tile_gesture(&window, |app| app.press(into_card()));
-    world.tile_gesture(&window, |app| {
+fn shown_in(world: &World, window: &str, key: &str) -> bool {
+    world.tile_screen(window).find(Target::key(key)).is_some()
+}
+
+/// Takes the open card's keyboard in tile window `window` and presses `key` there.
+fn card_key(world: &mut World, window: &str, key: Key) {
+    world.tile_gesture(window, |app| app.press(into_card()));
+    world.tile_gesture(window, |app| {
         app.key(KeyEvent {
-            key: Key::Enter,
+            key,
             mods: Mods::default(),
         })
     });
-    assert_eq!(sessions_shown(&world), [BUILDER]);
-    assert!(!card(&world));
+}
+
+fn opens_in(world: &mut World, window: &str, col: u16) {
+    rest_in(world, window, col);
+    world.tile_gesture(window, |app| app.hold(held_accelerator()));
+    world.tile_gesture(window, |app| {
+        let (x, y) = first_row(app, col);
+        app.runtime.pointer_down(x, y);
+        app.runtime.pointer_up(x, y);
+    });
+    world.tile_gesture(window, |app| app.hold(Mods::default()));
+}
+
+/// Asserts that the main window shows the tile `pane` holding its keyboard, so a key typed there
+/// goes to the terminal `runtime` it shows, if it shows one.
+fn main_has(world: &mut World, pane: &str, runtime: Option<&str>) {
+    let window = world.automate("state", json!({"of": "window"})).unwrap();
+    assert_eq!(window["view"], "Desktop");
+    assert_eq!(window["keyboard"]["pane"], pane);
+    assert!(shown(world, &format!("tile.{pane}")));
+    if let Some(runtime) = runtime {
+        world.gesture(|app| app.type_text("x"));
+        let typed = world.daemon.sent_of("pty_input");
+        assert_eq!(typed.len(), 1);
+        assert_eq!(typed[0]["id"], runtime);
+    }
+}
+
+fn is_at_rest(world: &mut World) -> bool {
+    world.advance(Duration::from_secs(1));
+    world.runtime_is_at_rest() && world.tile_windows_are_at_rest()
+}
+
+#[test]
+fn a_live_agents_id_in_a_popped_out_terminal_shows_its_card_there_and_opens_the_agent_in_the_main_window()
+ {
+    let by_click = |world: &mut World, window: &str| opens_in(world, window, 3);
+    let by_card = |world: &mut World, window: &str| {
+        rest_in(world, window, 3);
+        assert!(shown_in(world, window, AGENT_CARD));
+        assert!(!shown(world, AGENT_CARD), "the main window shows no card");
+        card_key(world, window, Key::Enter);
+    };
+    let by_seed_card = |world: &mut World, window: &str| {
+        rest_in(world, window, 13);
+        assert!(shown_in(world, window, SEED_CARD));
+        let go = format!("{SEED_CARD}.agent");
+        world.tile_gesture(window, |app| app.click(Target::key(go)));
+    };
+    let ways: [fn(&mut World, &str); 3] = [by_click, by_card, by_seed_card];
+    for way in ways {
+        let tended = Seed {
+            last_execution_id: Some(BUILDER.into()),
+            ..mapped()
+        };
+        let (mut world, window) = popped_out(vec![tended], vec![], vec![]);
+        write(&mut world, 1, &format!("{BUILDER_SHORT} {SEED}"));
+        way(&mut world, &window);
+        assert_eq!(sessions_shown(&world), [BUILDER]);
+        assert!(!shown_in(&world, &window, AGENT_CARD));
+        assert!(!shown_in(&world, &window, SEED_CARD));
+        main_has(&mut world, "t2", Some("r2"));
+        assert!(is_at_rest(&mut world));
+    }
+}
+
+#[test]
+fn a_closed_agents_card_in_a_popped_out_terminal_resumes_it_and_opens_the_ledger_in_the_main_window()
+ {
+    let (mut world, window) = popped_out(vec![], vec![mapper()], vec![]);
+    write(&mut world, 1, MAPPER_SHORT);
+    opens_in(&mut world, &window, 3);
+    assert!(shown_in(&world, &window, AGENT_CARD));
+    world.tile_gesture(&window, |app| {
+        app.key(KeyEvent {
+            key: Key::Text("r".into()),
+            mods: Mods::default(),
+        })
+    });
+    assert_eq!(reopens(&world), [(MAPPER.into(), "reopen".into())]);
+    assert!(!shown_in(&world, &window, AGENT_CARD));
+    main_has(&mut world, "t3", Some("r3"));
+
+    let (mut world, window) = popped_out(vec![], vec![mapper()], vec![]);
+    write(&mut world, 1, MAPPER_SHORT);
+    rest_in(&mut world, &window, 3);
+    card_key(&mut world, &window, Key::Text("l".into()));
+    assert!(!shown_in(&world, &window, AGENT_CARD));
+    assert_eq!(query_text(&world), MAPPER_SHORT);
+    assert_eq!(rows(&world), [MAPPER]);
+}
+
+#[test]
+fn a_seed_opened_from_an_id_in_a_popped_out_terminal_shows_as_a_tile_in_the_main_window() {
+    let by_click = |world: &mut World, window: &str| opens_in(world, window, 3);
+    let by_card = |world: &mut World, window: &str| {
+        rest_in(world, window, 3);
+        card_key(world, window, Key::Enter);
+    };
+    let by_closed_agents_card = |world: &mut World, window: &str| {
+        rest_in(world, window, 13);
+        card_key(world, window, Key::Text("s".into()));
+    };
+    let ways: [fn(&mut World, &str); 3] = [by_click, by_card, by_closed_agents_card];
+    for way in ways {
+        let (mut world, window) = popped_out(vec![mapped()], vec![mapper()], vec![]);
+        write(&mut world, 1, &format!("{SEED} {MAPPER_SHORT}"));
+        way(&mut world, &window);
+        let opened = world.daemon.sent_of("open_seed");
+        assert_eq!(opened.len(), 1);
+        assert_eq!(opened[0]["session_id"], "s1");
+        main_has(&mut world, "tile-seed", None);
+        assert!(is_at_rest(&mut world));
+    }
+}
+
+#[test]
+fn an_agents_ask_opened_from_its_card_in_a_popped_out_terminal_shows_in_the_main_window() {
+    let ask = super::asks::ask("a-store", BUILDER, "Cache store", 5, vec![]);
+    let (mut world, window) = popped_out(vec![], vec![], vec![ask]);
+    write(&mut world, 1, BUILDER_SHORT);
+    rest_in(&mut world, &window, 3);
+    card_key(&mut world, &window, Key::Text("a".into()));
+    assert!(!shown_in(&world, &window, AGENT_CARD));
+    assert!(shown(&world, "asks.sheet"));
 }
