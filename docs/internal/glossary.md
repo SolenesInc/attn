@@ -79,6 +79,9 @@ agent                   a harness that runs in a terminal, which the user talks
    └─ unknown           attn cannot tell; it may be an error
 session                 attn's record of one conversation in one profile; like
                         one chat in a chat app's history
+├─ short id (1)         ag- and 6 characters, computed from the session's id;
+│                       people and agents read and type it; like a short
+│                       commit hash
 ├─ conversation (1)     the harness's chat history
 │  ├─ lifetime (1)      where the conversation runs: in its terminal's process,
 │  │                    or in a server that outlives the terminal
