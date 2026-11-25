@@ -301,7 +301,7 @@ const plainCodex = join(out, "codex-without-user-skills")
 function writePlainCodex() {
   const codex = spawnSync("bash", ["-c", "command -v codex"], { encoding: "utf8" }).stdout.trim()
   const skills = spawnSync("find", ["-L", join(homedir(), ".agents/skills"), "-name", "SKILL.md"], { encoding: "utf8" }).stdout.split("\n").filter(Boolean)
-  const off = skills.map((path) => `{path=${JSON.stringify(path)},enabled=false}`).join(",")
+  const off = skills.map((path) => `{path=${JSON.stringify(path)},enabled=false}`).join(",").replace(/'/g, "'\\''")
   writeFileSync(plainCodex, `#!/bin/bash\nexec '${codex}' -c allow_login_shell=false -c 'skills.config=[${off}]' "$@"\n`, { mode: 0o755 })
 }
 

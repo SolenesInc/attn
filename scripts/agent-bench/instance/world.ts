@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process"
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
 export type Check = { pass: boolean; why: string }
@@ -51,6 +51,7 @@ export type Task = {
 export const run = (command: string, args: string[], env: NodeJS.ProcessEnv, opts: { stdin?: string; cwd?: string } = {}) =>
   spawnSync(command, args, { env, input: opts.stdin ?? "", cwd: opts.cwd, encoding: "utf8", timeout: 120_000, maxBuffer: 64 << 20 })
 
+const CATALOG = join(import.meta.dir, "../../../internal/catalog/content")
 const TOOL_NAME = /^mcp__attn\w*?__(\w+)$/
 /** A tool called in a code-mode script, as tools.mcp__attn__seed_note(…) or tools["mcp__attn__seed_note"](…). */
 const TOOL_IN_SCRIPT = /mcp__attn\w*?__(\w+)["'\x60]?\]?\s*\(/g
@@ -220,7 +221,7 @@ function shellScripts(tool: string, text: string): string[] {
   return Array.isArray(command) ? [command.map((w) => "'" + String(w).replace(/'/g, "'\\''") + "'").join(" ")] : [String(command ?? "")]
 }
 
-const CLI_USAGE = /(^|\n|\\n)usage: attn [^\n]*\(attn [^\n]* --help\)/
+const CLI_FAILED = /(^|\n|\\n)usage: attn [^\n]*\(attn [^\n]* --help\)|^Exit code [1-9]|exit_code\\?":\s*[1-9]|Process exited with code [1-9]|\[exit [1-9]/
 const HELP = (word: string) => word === "--help" || word === "-h"
 
 /** One line of the daemon's log for a tool call this session made, in order. */
@@ -281,12 +282,14 @@ function mentioned(events: any[]): Call[] {
       continue
     }
     if (SCRIPT_TOOLS.has(name)) for (const m of withoutComments(text).matchAll(TOOL_IN_SCRIPT)) calls.push({ via: "tool", command: m[1]!.replace(/_/g, " "), text })
-    for (const script of shellScripts(name, text)) {
+    const scripts = shellScripts(name, text)
+    for (const script of scripts) {
       const commands = attnWords(script)
-      const alone = commands.length === 1 && shellCommands(script).length === 1 && !SCRIPT_TOOLS.has(name)
+      const alone = scripts.length === 1 && commands.length === 1 && shellCommands(script).length === 1
+      const failed = CLI_FAILED.test(answer) || (result?.is_error && !SCRIPT_TOOLS.has(name))
       for (const words of commands) {
         const call = cliCall(words)
-        calls.push({ ...call, ...(alone && !call.help && (result?.is_error || CLI_USAGE.test(answer)) ? { refused: answer.slice(0, 600) } : {}) })
+        calls.push({ ...call, ...(alone && !call.help && failed ? { refused: answer.slice(0, 600) } : {}) })
       }
     }
   }
@@ -322,7 +325,12 @@ export function unrecorded(events: any[], records: Records): string[] {
 
 export const isHelp = (call: Call) => call.help === true
 export const isCommand = (call: Call, commands: string | string[]) => [commands].flat().includes(call.command)
-export const isUsageRefusal = (call: { refused?: string }) => call.refused !== undefined && /(^|\n|\\n)usage:/.test(call.refused)
+const USAGE_CODES = new Set(["usage"])
+for (const name of readdirSync(CATALOG)) for (const m of readFileSync(join(CATALOG, name), "utf8").matchAll(/code: (\w+), usage: true/g)) USAGE_CODES.add(m[1]!)
+/** A refusal because the arguments did not fit: a tool's refusal starts with its code, and the CLI prints a usage line for
+ * the same codes. */
+export const isUsageRefusal = (call: { refused?: string }) =>
+  call.refused !== undefined && (USAGE_CODES.has(call.refused.match(/^(\w+):/)?.[1] ?? "") || /(^|\n|\\n)usage:/.test(call.refused))
 
 export const reached = (calls: Call[], commands: string | string[], mentions?: RegExp) =>
   calls.some((c) => isCommand(c, commands) && !isHelp(c) && c.refused === undefined && (mentions === undefined || mentions.test(c.text)))
