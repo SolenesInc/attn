@@ -20,7 +20,7 @@ command's own behavior belongs to its feature's file, such as
 - `tools-plugin-server`: a plugin server that declares `caller_conversation_header` gets attn's server through `mcp/register`, and each conversation acts as its own session ([harnesses.md](harnesses.md) `plugin-server`).
 - `tools-sigma`: a new Sigma conversation starts with `--mcp-server attn=<description>`. A call acts as the session that holds the call's root conversation ([harnesses.md](harnesses.md) `sigma`).
 - `tools-outposts`: a session on an outpost calls the outpost's own `/mcp`. A `home` tool runs at the home as that session ([outposts.md](outposts.md) `remote-tools`).
-- `tools-teaching`: the server's instructions carry the intent map, a table from what an agent needs to the tools that do it. A launch with the tools leaves the CLI teaching of the moved families to the server.
+- `tools-teaching`: the server's instructions carry the intent map, a list from what an agent needs to the tools that do it. A launch with the tools leaves the CLI teaching of the moved families to the server.
 - `tools-call-log`: each call writes an `agent tools:` line to the daemon log of the machine that served it, naming the tool, the credential and the session it acted as.
 
 ## How to get to it
