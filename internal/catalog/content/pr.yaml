@@ -7,7 +7,7 @@ groups:
     summary: "deliver through the repository's pull requests or trunk"
     map:
       rows:
-        - {need: "Deliver through pull requests or trunk; watch one", tools: [pr_record, pr_watch], references: [delivery]}
+        - {need: "Deliver through pull requests or trunk; record or watch a pull request", tools: [pr_record, pr_watch], references: [delivery]}
     doc: |
       Records the pull requests a session opens and watches them. A recorded pull request shows on the session's header with its status, which attn keeps fresh. A watch delivers readiness and feedback to the agent inbox until it stops.
 

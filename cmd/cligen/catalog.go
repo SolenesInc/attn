@@ -39,7 +39,7 @@ var catalogValues = map[string]string{
 var surfaceValues = map[string]map[surface]string{
 	"ask_rules": {
 		cliSurface:  prompts.RenderText("ask", "help-rules", nil),
-		toolSurface: "Use it for a decision only the user can make, instead of stopping to ask in the conversation. Your launch instructions, under \"Asking the user\", say how to write an ask and which visuals to show.",
+		toolSurface: "Use it for a decision only the user can make, instead of stopping to ask in the conversation. The user reads it without this conversation. Your launch instructions, under \"Asking the user\", say how to write an ask and which visuals to show.",
 	},
 	"ask_waiting": {
 		cliSurface: "Carry on with work that does not depend on the answer; when none is left, end your turn, and do not wait or poll. While any of your asks is open, attn refuses a standby that would close your session, and a close of your own session that would leave the answer with no agent. ",

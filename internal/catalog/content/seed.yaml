@@ -25,8 +25,8 @@ groups:
         - {need: "Finish, pause, abandon or give back a seed", tools: [seed_harvest, seed_park, seed_wither, seed_replant]}
         - {need: "Track new work, find existing work, split a plan", tools: [seed_search, seed_plant, seed_plot, seed_link], references: [garden]}
         - {need: "Change a seed's body, checks, files or reminders", tools: [seed_edit, seed_check_add, seed_attach, seed_remind]}
-        - {need: "Wait, session closed, for a time, pull request or seed", tools: [seed_standby], references: [garden]}
-        - {need: "Update a seed's pulse or bed", tools: [seed_pulse, seed_bed_assign]}
+        - {need: "Wait for a time, a pull request or a seed, with your session closed", tools: [seed_standby], references: [garden]}
+        - {need: "Update a seed's pulse or bed", tools: [seed_pulse, seed_bed_ls, seed_bed_assign]}
       notes: |
         An update about a seed asks you to read what changed. Act only when it needs you or the user.
     reference:

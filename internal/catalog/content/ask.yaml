@@ -7,7 +7,7 @@ groups:
     summary: "ask the user something they answer from attn"
     map:
       rows:
-        - {need: "Ask the user a decision only they can make", tools: [ask, ask_amend, ask_close]}
+        - {need: "Ask the user a decision only they can make", tools: [ask, ask_list, ask_amend, ask_close]}
     flags:
       - {name: session, placeholder: "<id>", doc: "session id (defaults to the current session)"}
     doc: |

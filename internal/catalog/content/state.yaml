@@ -8,7 +8,7 @@ groups:
       Replay why a session's state is what it is.
     map:
       rows:
-        - {need: "Why a session shows its state", tools: [state_explain]}
+        - {need: "Find out why a session shows its state", tools: [state_explain]}
 
 commands:
   - name: state explain
