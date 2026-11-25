@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/bus"
-	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -27,7 +26,7 @@ func (d *Daemon) worktreeListResult(mainRepo string, limit int) *protocol.Worktr
 
 	var rows []*store.Worktree
 	if mainRepo != "" {
-		rows = d.store.ListWorktreesByRepo(git.CanonicalizePath(mainRepo))
+		rows = d.store.ListWorktreesByRepo(localMachine().canonicalize(mainRepo).path)
 	} else {
 		rows = d.store.ListWorktrees()
 	}
@@ -71,7 +70,7 @@ func (d *Daemon) setWorktreeKeep(path string, keep bool) (*protocol.Worktree, er
 }
 
 func (d *Daemon) setWorktreeKeepProtected(_ foregroundCleanupProtection, path string, keep bool) (*protocol.Worktree, error) {
-	path = git.CanonicalizePath(path)
+	path = localMachine().canonicalize(path).path
 	if !d.store.SetWorktreePin(path, keep, time.Now()) {
 		return nil, &worktreeNotFoundError{path: path}
 	}

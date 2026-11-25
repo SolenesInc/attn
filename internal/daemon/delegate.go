@@ -16,7 +16,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/delegationprefs"
-	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/harness/builtin"
 	"github.com/victorarias/attn/internal/layouttree"
@@ -149,7 +148,7 @@ func (d *Daemon) defaultDelegationEffort(agent, effort string) string {
 }
 
 func validateDelegationDirectory(path string) (string, error) {
-	path = git.CanonicalizePath(path)
+	path = localMachine().canonicalize(path).path
 	info, err := os.Stat(path)
 	if err != nil {
 		return "", fmt.Errorf("delegation directory: %w", err)

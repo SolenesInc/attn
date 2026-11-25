@@ -215,7 +215,7 @@ func providerLogValue(value string) string {
 }
 
 func (d *Daemon) validateCreatedProviderWorktree(mainRepo string, result worktreeCreateProviderResult, preExisting map[string]bool) (string, string, error) {
-	path := git.CanonicalizePath(strings.TrimSpace(result.Path))
+	path := localMachine().canonicalize(strings.TrimSpace(result.Path)).path
 	if path == "" {
 		return "", "", fmt.Errorf("handled create result is missing path")
 	}
@@ -235,7 +235,7 @@ func (d *Daemon) validateCreatedProviderWorktree(mainRepo string, result worktre
 		return "", "", fmt.Errorf("list worktrees: %w", err)
 	}
 	for _, worktree := range worktrees {
-		if git.CanonicalizePath(worktree.Path) != path {
+		if localMachine().canonicalize(worktree.Path).path != path {
 			continue
 		}
 		if worktree.Branch != branch {
@@ -256,13 +256,13 @@ func (d *Daemon) currentWorktreePathSet(mainRepo string) (map[string]bool, error
 	}
 	paths := make(map[string]bool, len(worktrees))
 	for _, worktree := range worktrees {
-		paths[git.CanonicalizePath(worktree.Path)] = true
+		paths[localMachine().canonicalize(worktree.Path).path] = true
 	}
 	return paths, nil
 }
 
 func (d *Daemon) validateDeletedProviderWorktree(mainRepo, path string) error {
-	expectedPath := git.CanonicalizePath(path)
+	expectedPath := localMachine().canonicalize(path).path
 	worktrees, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) ([]git.WorktreeEntry, error) {
 		return client.ObserveLiveWorktrees(ctx, mainRepo)
 	})
@@ -270,7 +270,7 @@ func (d *Daemon) validateDeletedProviderWorktree(mainRepo, path string) error {
 		return fmt.Errorf("list worktrees: %w", err)
 	}
 	for _, worktree := range worktrees {
-		if git.CanonicalizePath(worktree.Path) == expectedPath {
+		if localMachine().canonicalize(worktree.Path).path == expectedPath {
 			return fmt.Errorf("deleted path %q is still a worktree of %q", expectedPath, mainRepo)
 		}
 	}

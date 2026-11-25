@@ -78,12 +78,12 @@ func (d *Daemon) createOwnedWorktree(ctx context.Context, repo, branch string, p
 		if createdPath == "" {
 			return err
 		}
-		result.Path = git.CanonicalizePath(createdPath)
+		result.Path = localMachine().canonicalize(createdPath).path
 		if err != nil {
 			return err
 		}
 		if owner != nil {
-			if requested := protocol.Deref(path); requested != "" && result.Path != git.CanonicalizePath(requested) {
+			if requested := protocol.Deref(path); requested != "" && result.Path != localMachine().canonicalize(requested).path {
 				return fmt.Errorf("worktree provider returned %s, expected requested path %s; checkout was left in place", result.Path, requested)
 			}
 		}
@@ -106,7 +106,7 @@ func (d *Daemon) createOwnedWorktree(ctx context.Context, repo, branch string, p
 
 func (d *Daemon) checkDelegationWorktree(protection foregroundCleanupProtection, repo, branch, path string, owner *protocol.DelegationWorktreeOwner, result *protocol.WorktreeCreation) error {
 	if path == "" {
-		path = git.CanonicalizePath(git.GenerateWorktreePath(repo, branch))
+		path = localMachine().canonicalize(git.GenerateWorktreePath(repo, branch)).path
 	}
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
@@ -118,7 +118,7 @@ func (d *Daemon) checkDelegationWorktree(protection foregroundCleanupProtection,
 	if !info.IsDir() {
 		return fmt.Errorf("worktree path already exists and is not branch %q: %s", branch, path)
 	}
-	if pathRepo, pathErr := d.resolveMainRepo(protection.Context(), delegationGitTask, path); pathErr == nil && git.CanonicalizePath(pathRepo) != git.CanonicalizePath(repo) {
+	if pathRepo, pathErr := d.resolveMainRepo(protection.Context(), delegationGitTask, path); pathErr == nil && localMachine().canonicalize(pathRepo).path != localMachine().canonicalize(repo).path {
 		return fmt.Errorf("repository placement conflict: selected repository resolves to %s, but --worktree-path resolves to %s; choose a worktree path from the selected repository", repo, pathRepo)
 	}
 	if owner.Recovering {

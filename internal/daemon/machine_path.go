@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -68,10 +69,21 @@ func (m machine) normalize(raw string) normalizedPath {
 	if raw == "" {
 		return normalizedPath{on: m}
 	}
+	return m.canonicalize(raw)
+}
+
+func (m machine) canonicalize(raw string) normalizedPath {
 	if m.IsLocal() {
 		return normalizedPath{on: m, path: attngit.CanonicalizePath(raw)}
 	}
 	return normalizedPath{on: m, path: filepath.Clean(raw)}
+}
+
+func (m machine) resolveSymlinks(raw string) (string, error) {
+	if !m.IsLocal() {
+		return "", fmt.Errorf("cannot resolve symlinks without a known local machine")
+	}
+	return filepath.EvalSymlinks(raw)
 }
 
 type normalizedPath struct {

@@ -487,7 +487,7 @@ func canonicalizeForComparison(path string) string {
 		remainder = append([]string{filepath.Base(ancestor)}, remainder...)
 		ancestor = parent
 	}
-	resolved, err := filepath.EvalSymlinks(ancestor)
+	resolved, err := localMachine().resolveSymlinks(ancestor)
 	if err != nil {
 		return clean
 	}

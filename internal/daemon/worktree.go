@@ -69,7 +69,7 @@ func (d *Daemon) doCreateWorktreeProtected(protection foregroundCleanupProtectio
 	if path == "" {
 		path = git.GenerateWorktreePath(mainRepo, msg.Branch)
 	}
-	path = git.CanonicalizePath(path)
+	path = localMachine().canonicalize(path).path
 
 	startingFrom := protocol.Deref(msg.StartingFrom)
 	createdBranch := msg.Branch
@@ -188,7 +188,7 @@ func (d *Daemon) doDeleteWorktree(path string, opts deleteWorktreeOptions) error
 }
 
 func (d *Daemon) doDeleteWorktreeProtected(protection foregroundCleanupProtection, path string, opts deleteWorktreeOptions) (err error) {
-	path = git.CanonicalizePath(path)
+	path = localMachine().canonicalize(path).path
 	finishOperation := d.beginGitOperation(protocol.GitOperationKindDeleteWorktree, path)
 	defer func() {
 		finishOperation(err)

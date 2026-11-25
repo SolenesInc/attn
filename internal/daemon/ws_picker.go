@@ -121,7 +121,7 @@ func inspectPickerPath(ctx context.Context, client *git.Client, input string) (*
 	if err != nil {
 		return nil, err
 	}
-	resolved = git.CanonicalizePath(resolved)
+	resolved = localMachine().canonicalize(resolved).path
 
 	inspection := &protocol.PathInspection{
 		InputPath:    input,

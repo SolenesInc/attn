@@ -37,7 +37,7 @@ func (d *Daemon) doCreateWorktreeFromBranchProtected(protection foregroundCleanu
 	if path == "" {
 		path = git.GenerateWorktreePath(mainRepo, localBranch)
 	}
-	path = git.CanonicalizePath(path)
+	path = localMachine().canonicalize(path).path
 
 	if hookErr := d.dispatchWorktreeBeforeCreateHooks(mainRepo, localBranch, branch, requestedPath); hookErr != nil {
 		return "", hookErr
@@ -103,7 +103,7 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 }
 
 func (d *Daemon) readRepoInfoHere(ctx context.Context, msg protocol.GetRepoInfoMessage) (protocol.GetRepoInfoResultMessage, error) {
-	repo := git.CanonicalizePath(msg.Repo)
+	repo := localMachine().canonicalize(msg.Repo).path
 	type repoInfo struct {
 		currentBranch string
 		commitHash    string

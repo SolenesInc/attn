@@ -29,6 +29,7 @@ var remotePathFields = []trackedField{
 	{pkgSuffix: "/internal/protocol", typeName: "SessionLedgerEntry", field: "Directory"},
 	{pkgSuffix: "/internal/garden", typeName: "Execution", field: "Cwd"},
 	{pkgSuffix: "/internal/garden", typeName: "Execution", field: "RepositoryRoot"},
+	{pkgSuffix: "/internal/garden", typeName: "RepoPath", field: "Path"},
 	{pkgSuffix: "/internal/store", typeName: "SessionConversation", field: "TranscriptPath"},
 }
 
@@ -41,8 +42,6 @@ type sinkSpec struct {
 var localFSSinks = []sinkSpec{
 	{pkgPath: "os", name: "Stat"},
 	{pkgPath: "os", name: "Lstat"},
-	{pkgPath: "path/filepath", name: "EvalSymlinks"},
-	{pkgSuffix: "/internal/git", name: "CanonicalizePath"},
 	{pkgSuffix: "/internal/git", name: "ReadRepoTraits"},
 	{pkgSuffix: "/internal/daemon", name: "repoTraits"},
 }
@@ -59,7 +58,7 @@ func main() {
 		os.Exit(1)
 	}
 	if len(violations) > 0 {
-		fmt.Fprintf(os.Stderr, "local filesystem or git path call on an unguarded remote-capable path:\n%s\n", strings.Join(violations, "\n"))
+		fmt.Fprintf(os.Stderr, "filesystem path lookup without verified machine ownership:\n%s\n", strings.Join(violations, "\n"))
 		os.Exit(1)
 	}
 }
@@ -93,8 +92,10 @@ func remotePathViolations() ([]string, error) {
 	var violations []string
 	used := map[string]bool{}
 	for _, pkg := range pkgs {
+		checkedFiles := make(map[string]bool, len(pkg.Syntax))
 		for _, file := range pkg.Syntax {
-			relPath, err := filepath.Rel(root, pkg.Fset.Position(file.Pos()).Filename)
+			filename := pkg.Fset.Position(file.Pos()).Filename
+			relPath, err := filepath.Rel(root, filename)
 			if err != nil {
 				return nil, err
 			}
@@ -103,6 +104,7 @@ func remotePathViolations() ([]string, error) {
 			if !strings.HasPrefix(relPath, daemonDir+"/") || strings.HasSuffix(base, "_test.go") || base == "machine_path.go" {
 				continue
 			}
+			checkedFiles[filename] = true
 			for _, decl := range file.Decls {
 				fn, ok := decl.(*ast.FuncDecl)
 				if !ok || fn.Body == nil {
@@ -125,6 +127,19 @@ func remotePathViolations() ([]string, error) {
 					continue
 				}
 				violations = append(violations, c.violations...)
+			}
+		}
+		for ident, obj := range pkg.TypesInfo.Uses {
+			fn, ok := obj.(*types.Func)
+			if !ok || !isRawSymlinkResolver(fn) {
+				continue
+			}
+			where := pkg.Fset.Position(ident.Pos())
+			if checkedFiles[where.Filename] {
+				violations = append(violations, fmt.Sprintf(
+					"%s: uses %s.%s outside machine_path.go; use the path's machine to resolve it",
+					where, fn.Pkg().Name(), fn.Name(),
+				))
 			}
 		}
 	}
@@ -278,6 +293,15 @@ func (c *funcChecker) inspectExpr(expr ast.Expr) {
 		}
 		return true
 	})
+}
+
+func isRawSymlinkResolver(fn *types.Func) bool {
+	if fn.Pkg() == nil {
+		return false
+	}
+	pkg, name := fn.Pkg().Path(), fn.Name()
+	return pkg == "path/filepath" && name == "EvalSymlinks" ||
+		strings.HasSuffix(pkg, "/internal/git") && name == "CanonicalizePath"
 }
 
 func (c *funcChecker) taintOf(expr ast.Expr) string {

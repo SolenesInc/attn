@@ -397,7 +397,7 @@ func reopenDirectoryInsideWorktree(worktree string, execution garden.Execution) 
 	if subdir == "" || subdir == "." {
 		return worktree
 	}
-	candidate := attngit.CanonicalizePath(worktree + string(os.PathSeparator) + subdir)
+	candidate := localMachine().canonicalize(worktree + string(os.PathSeparator) + subdir).path
 	if info, err := os.Stat(candidate); err == nil && info.IsDir() {
 		return candidate
 	}

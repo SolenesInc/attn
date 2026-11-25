@@ -45,7 +45,7 @@ func (d *Daemon) worktreeBelongsTo(ctx context.Context, worktree, mainRepo strin
 		if _, err := os.Stat(worktree); err != nil {
 			return false, nil
 		}
-		return attngit.CanonicalizePath(client.ResolveMainRepoPath(runCtx, worktree)) == attngit.CanonicalizePath(mainRepo), nil
+		return localMachine().canonicalize(client.ResolveMainRepoPath(runCtx, worktree)).path == localMachine().canonicalize(mainRepo).path, nil
 	})
 	return belongs
 }

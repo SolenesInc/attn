@@ -46,7 +46,7 @@ func nonEmptyHost(host string) *string {
 }
 
 func canonicalCheckoutPath(path string) (string, error) {
-	return filepath.Abs(git.CanonicalizePath(path))
+	return filepath.Abs(localMachine().canonicalize(path).path)
 }
 
 func (d *Daemon) inspectCheckout(ctx context.Context, msg protocol.CheckoutInspectMessage) (protocol.CheckoutInspection, error) {
@@ -72,8 +72,8 @@ func (d *Daemon) inspectCheckout(ctx context.Context, msg protocol.CheckoutInspe
 		if rootErr != nil {
 			return nil
 		}
-		result.RepoRoot = git.CanonicalizePath(root)
-		result.MainRepo = git.CanonicalizePath(client.ResolveMainRepoPath(ctx, root))
+		result.RepoRoot = localMachine().canonicalize(root).path
+		result.MainRepo = localMachine().canonicalize(client.ResolveMainRepoPath(ctx, root)).path
 		if relative, err := filepath.Rel(result.RepoRoot, result.Cwd); err == nil && relative != "." {
 			result.RepositorySubdir = relative
 		}
@@ -85,7 +85,7 @@ func (d *Daemon) inspectCheckout(ctx context.Context, msg protocol.CheckoutInspe
 		}
 		for _, directory := range msg.Directories {
 			root, _ := client.GetRepoRoot(ctx, directory)
-			result.Directories = append(result.Directories, protocol.CheckoutDirectory{Path: directory, RepoRoot: git.CanonicalizePath(root)})
+			result.Directories = append(result.Directories, protocol.CheckoutDirectory{Path: directory, RepoRoot: localMachine().canonicalize(root).path})
 		}
 		return nil
 	})

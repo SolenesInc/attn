@@ -86,7 +86,7 @@ func (g scheduledReopenGit) BranchAvailability(
 		return branchInspection{}, fmt.Errorf("inspect repository %s: %w", repository, err)
 	}
 	key := reopenBranchKey{
-		Repository: attngit.CanonicalizePath(repository),
+		Repository: localMachine().canonicalize(repository).path,
 		Branch:     strings.TrimSpace(branch),
 	}
 	return g.daemon.reopenBranchSharedCalls().Do(ctx, key, func(sharedCtx context.Context) (branchInspection, error) {

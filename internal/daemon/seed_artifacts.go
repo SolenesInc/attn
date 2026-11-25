@@ -978,7 +978,7 @@ func syncDirectory(path string) error {
 }
 
 func (d *Daemon) gitTrackedSource(source string) (bool, string, error) {
-	resolvedSource, err := filepath.EvalSymlinks(source)
+	resolvedSource, err := localMachine().resolveSymlinks(source)
 	if err != nil {
 		return false, source, fmt.Errorf("resolve source for Git tracking check: %w", err)
 	}
