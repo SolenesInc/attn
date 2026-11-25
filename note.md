@@ -1,0 +1,1 @@
+The overview has fewer words: a strip keeps its number, name and marks without "12 columns, 2 wait" (a screen reader still hears it), and a line stands below the row only for a tile with an open ask, so a tile that only waits or wants approval no longer takes a line. Its outline, mark and word stay.
