@@ -65,7 +65,7 @@
                         "keep_final_newline": true
                       },
                       {
-                        "kind": "when",
+                        "kind": "choose",
                         "condition": {
                           "field": {
                             "name": "agent_tools",
@@ -80,14 +80,14 @@
                             "id": "session.attn-map.tools",
                             "source": "content/session/attn-map/tools.md",
                             "keep_final_newline": true
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map.cli",
+                            "source": "content/session/attn-map/cli.md",
+                            "keep_final_newline": true
                           }
                         ]
-                      },
-                      {
-                        "kind": "text",
-                        "id": "session.attn-map.cli",
-                        "source": "content/session/attn-map/cli.md",
-                        "keep_final_newline": true
                       },
                       {
                         "kind": "choose",
@@ -577,9 +577,27 @@
                 "kind": "compose",
                 "children": [
                   {
-                    "kind": "text",
-                    "id": "session.agent",
-                    "source": "content/agent.md"
+                    "kind": "choose",
+                    "condition": {
+                      "field": {
+                        "name": "agent_tools",
+                        "kind": "flag",
+                        "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                      },
+                      "test": "enabled"
+                    },
+                    "children": [
+                      {
+                        "kind": "text",
+                        "id": "session.agent-tools",
+                        "source": "content/agent-tools.md"
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.agent-cli",
+                        "source": "content/agent-cli.md"
+                      }
+                    ]
                   },
                   {
                     "kind": "choose",
@@ -677,7 +695,113 @@
                       {
                         "kind": "text",
                         "id": "session.garden",
-                        "source": "content/garden.md"
+                        "source": "content/garden.md",
+                        "bindings": [
+                          {
+                            "name": "ids",
+                            "node": {
+                              "kind": "choose",
+                              "condition": {
+                                "field": {
+                                  "name": "agent_tools",
+                                  "kind": "flag",
+                                  "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                                },
+                                "test": "enabled"
+                              },
+                              "children": [
+                                {
+                                  "kind": "text",
+                                  "id": "session.garden.ids-tools",
+                                  "source": "content/garden/ids-tools.md"
+                                },
+                                {
+                                  "kind": "text",
+                                  "id": "session.garden.ids-cli",
+                                  "source": "content/garden/ids-cli.md"
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "name": "guide",
+                            "node": {
+                              "kind": "choose",
+                              "condition": {
+                                "field": {
+                                  "name": "agent_tools",
+                                  "kind": "flag",
+                                  "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                                },
+                                "test": "enabled"
+                              },
+                              "children": [
+                                {
+                                  "kind": "text",
+                                  "id": "session.garden.guide-tools",
+                                  "source": "content/garden/guide-tools.md"
+                                },
+                                {
+                                  "kind": "text",
+                                  "id": "session.garden.guide-cli",
+                                  "source": "content/garden/guide-cli.md"
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "name": "search",
+                            "node": {
+                              "kind": "choose",
+                              "condition": {
+                                "field": {
+                                  "name": "agent_tools",
+                                  "kind": "flag",
+                                  "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                                },
+                                "test": "enabled"
+                              },
+                              "children": [
+                                {
+                                  "kind": "text",
+                                  "id": "session.garden.search-tools",
+                                  "source": "content/garden/search-tools.md"
+                                },
+                                {
+                                  "kind": "text",
+                                  "id": "session.garden.search-cli",
+                                  "source": "content/garden/search-cli.md"
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "name": "planting",
+                            "node": {
+                              "kind": "choose",
+                              "condition": {
+                                "field": {
+                                  "name": "agent_tools",
+                                  "kind": "flag",
+                                  "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                                },
+                                "test": "enabled"
+                              },
+                              "children": [
+                                {
+                                  "kind": "text",
+                                  "id": "session.garden.planting-tools",
+                                  "source": "content/garden/planting-tools.md"
+                                },
+                                {
+                                  "kind": "text",
+                                  "id": "session.garden.planting-cli",
+                                  "source": "content/garden/planting-cli.md"
+                                }
+                              ]
+                            }
+                          }
+                        ]
                       },
                       {
                         "kind": "choose",
@@ -1131,7 +1255,41 @@
               {
                 "kind": "text",
                 "id": "session.garden",
-                "source": "content/garden.md"
+                "source": "content/garden.md",
+                "bindings": [
+                  {
+                    "name": "ids",
+                    "node": {
+                      "kind": "text",
+                      "id": "session.garden.ids-cli",
+                      "source": "content/garden/ids-cli.md"
+                    }
+                  },
+                  {
+                    "name": "guide",
+                    "node": {
+                      "kind": "text",
+                      "id": "session.garden.guide-cli",
+                      "source": "content/garden/guide-cli.md"
+                    }
+                  },
+                  {
+                    "name": "search",
+                    "node": {
+                      "kind": "text",
+                      "id": "session.garden.search-cli",
+                      "source": "content/garden/search-cli.md"
+                    }
+                  },
+                  {
+                    "name": "planting",
+                    "node": {
+                      "kind": "text",
+                      "id": "session.garden.planting-cli",
+                      "source": "content/garden/planting-cli.md"
+                    }
+                  }
+                ]
               },
               {
                 "kind": "text",
@@ -5835,13 +5993,23 @@
           }
         },
         {
-          "id": "visuals",
+          "id": "help-rules",
           "delivery": "message_fragment",
-          "description": "Which visual shows what a decision turns on, for the ask tool's description and attn ask --help.",
+          "description": "When to ask, how to write for a cold reader, and which visual to show, for attn ask --help. A launch that carries the ask tool has them in its ask rules.",
           "body": {
             "kind": "text",
-            "id": "ask.visuals",
-            "source": "content/ask/visuals.md"
+            "id": "ask.help-rules",
+            "source": "content/ask/help-rules.md",
+            "bindings": [
+              {
+                "name": "visuals",
+                "node": {
+                  "kind": "text",
+                  "id": "ask.visuals",
+                  "source": "content/ask/visuals.md"
+                }
+              }
+            ]
           }
         },
         {
@@ -8328,5 +8496,5 @@
       ]
     }
   ],
-  "definitions_hash": "aa8ee4fd2b2e72433a3620002cf565a177f9fc786103bc6879ec4fa8f9caf42a"
+  "definitions_hash": "564bef68393430bd7b567a0add70986a314fbe4deb24f47a4154eb002265e74b"
 }

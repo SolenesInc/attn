@@ -428,8 +428,22 @@ func TestTheIntentMapNamesEveryReferenceTheCLIMapNames(t *testing.T) {
 		}
 		return names
 	}
+	rowReferences := func(list string) []string {
+		var names []string
+		for _, line := range strings.Split(list, "\n") {
+			row, isRow := strings.CutPrefix(line, "- ")
+			open := strings.LastIndex(row, " (")
+			if !isRow || open < 0 || !strings.HasSuffix(row, ")") {
+				continue
+			}
+			for _, name := range strings.Split(strings.TrimSuffix(row[open+2:], ")"), ",") {
+				names = append(names, strings.TrimSpace(name))
+			}
+		}
+		return names
+	}
 	cliMap := lastCells(resultText(agent.mustCall(t, "skill", map[string]any{})))
-	intentMap := lastCells(session.InitializeResult().Instructions)
+	intentMap := rowReferences(session.InitializeResult().Instructions)
 	if len(cliMap) == 0 {
 		t.Fatal("the CLI map names no reference")
 	}
