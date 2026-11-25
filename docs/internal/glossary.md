@@ -335,6 +335,9 @@ window (1..n)           one macOS app window
 │     └─ collapsed      a thin column of desktop chips
 ├─ drawer (0..n)        a panel that slides in from the right: attention,
 │                       automations or garden; like a side drawer
+├─ overview (0..1)      a desktop's row drawn small over the tiles, to find a
+│  │                    tile; like macOS Mission Control
+│  └─ miniature (0..n)  one tile drawn small; like a thumbnail
 ├─ popover (0..1)       a floating panel anchored to a button: notifications
 ├─ menu (0..1)          a short list of choices: snooze options
 ├─ palette (0..1)       search and run commands, agents and tiles; like the
