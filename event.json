@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Closed automation history disappears from ordinary search",
+  "at": "2026-11-25T00:48:16.992Z",
+  "fixesBug": "c330303"
+}
