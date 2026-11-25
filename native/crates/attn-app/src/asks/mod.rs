@@ -781,7 +781,7 @@ fn from(
     if let (None, Some(tender)) = (holder, standby) {
         return format!(
             "{} · on standby",
-            crate::desktop::chain::dormant_name(tender, harnesses)
+            crate::desktop::agent_card::dormant_name(tender, harnesses)
         );
     }
     match (holder, &ask.seed_id) {
@@ -813,12 +813,12 @@ fn follow_up_notice(ask: &Ask, chief: bool, holder: Option<&str>, facts: &Facts)
     }
     let waits_for = match (standby_tender(ask, facts), &ask.crew_member, &ask.seed_id) {
         (Some(standby), _, _) if standby.resumes => {
-            let name = crate::desktop::chain::dormant_name(standby.tender, &facts.harnesses);
+            let name = crate::desktop::agent_card::dormant_name(standby.tender, &facts.harnesses);
             return format!("Follow-up resumes {name}");
         }
         (Some(standby), _, _) => format!(
             "{} · on standby",
-            crate::desktop::chain::dormant_name(standby.tender, &facts.harnesses)
+            crate::desktop::agent_card::dormant_name(standby.tender, &facts.harnesses)
         ),
         (None, Some(member), _) => format!("{}'s next session", crew_display_name(member)),
         (None, None, Some(seed)) => next_tender_of(seed, ask),

@@ -2,6 +2,7 @@
 //! and what the window does to it.
 
 mod actions;
+pub(crate) mod agent_card;
 pub(crate) mod annotating;
 pub(crate) mod arrival;
 pub(crate) mod chain;

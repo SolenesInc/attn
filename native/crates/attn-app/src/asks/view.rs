@@ -677,7 +677,7 @@ fn article(state: &State, item: &Item<'_>, measure: Option<f32>, t: &Tokens) -> 
         _ if item.to_chief => "Anything else for the Chief?".to_owned(),
         (None, Some(standby), _) => format!(
             "Anything else for {}?",
-            crate::desktop::chain::dormant_name(standby.tender, &state.facts.harnesses)
+            crate::desktop::agent_card::dormant_name(standby.tender, &state.facts.harnesses)
         ),
         (None, None, Some(_)) => "Anything else for its next tender?".to_owned(),
         _ => format!("Anything else for {}?", item.from),
