@@ -31,6 +31,7 @@ type agentToolDefinition struct {
 	ReadOnly     bool            `json:"read_only"`
 	InputSchema  json.RawMessage `json:"inputSchema"`
 	OutputSchema json.RawMessage `json:"outputSchema"`
+	Receipt      []string        `json:"receipt"`
 }
 
 const (
@@ -53,8 +54,9 @@ type agentToolServers struct {
 }
 
 type agentTool struct {
-	def   agentToolDefinition
-	input *mcpserver.Schema
+	def     agentToolDefinition
+	input   *mcpserver.Schema
+	receipt catalog.Receipt
 }
 
 func (d *Daemon) agentToolsHandler() http.Handler {
@@ -169,11 +171,11 @@ var agentToolsCatalog = sync.OnceValue(func() agentToolCatalog {
 
 func (d *Daemon) agentToolServers() map[string]*mcpserver.Server {
 	d.agentToolSet.once.Do(func() {
-		catalog := agentToolsCatalog()
+		offered := agentToolsCatalog()
 		sets := map[string][]mcpserver.Tool{}
 		d.agentToolSet.tools = map[string]agentTool{}
-		for _, def := range catalog.Tools {
-			d.agentToolSet.tools[def.Name] = agentTool{def: def, input: def.parsedInput()}
+		for _, def := range offered.Tools {
+			d.agentToolSet.tools[def.Name] = agentTool{def: def, input: def.parsedInput(), receipt: catalog.ReceiptOf(def.Receipt)}
 			sets[agentToolsAll] = append(sets[agentToolsAll], def.offered())
 			if def.Core {
 				sets[agentToolsCore] = append(sets[agentToolsCore], def.offered())
@@ -182,8 +184,8 @@ func (d *Daemon) agentToolServers() map[string]*mcpserver.Server {
 			}
 		}
 		d.agentToolSet.servers = map[string]*mcpserver.Server{}
-		for set, instructions := range map[string]string{agentToolsAll: catalog.Instructions, agentToolsCore: catalog.Instructions, agentToolsRest: catalog.Description} {
-			d.agentToolSet.servers[set] = mcpserver.New(catalog.Name, buildinfo.Version, instructions, sets[set])
+		for set, instructions := range map[string]string{agentToolsAll: offered.Instructions, agentToolsCore: offered.Instructions, agentToolsRest: offered.Description} {
+			d.agentToolSet.servers[set] = mcpserver.New(offered.Name, buildinfo.Version, instructions, sets[set])
 		}
 	})
 	return d.agentToolSet.servers
@@ -240,7 +242,24 @@ func (d *Daemon) callAgentTool(ctx context.Context, call *agentCall, tool agentT
 	case string:
 		return mcpserver.Result{Content: []mcpserver.Content{mcpserver.Text(text)}}
 	}
-	return mcpserver.Result{Content: []mcpserver.Content{}, StructuredContent: result}
+	return mcpserver.Result{Content: []mcpserver.Content{}, StructuredContent: tool.answer(result)}
+}
+
+func (tool agentTool) answer(result any) any {
+	if tool.receipt.Whole() {
+		return result
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		panic(fmt.Sprintf("%s: result: %v", tool.def.Name, err))
+	}
+	var whole any
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&whole); err != nil {
+		panic(fmt.Sprintf("%s: result: %v", tool.def.Name, err))
+	}
+	return tool.receipt.Of(whole)
 }
 
 func (def agentToolDefinition) checkArguments(raw json.RawMessage, schema *mcpserver.Schema) *command.Refusal {

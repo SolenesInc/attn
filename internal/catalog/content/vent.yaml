@@ -35,6 +35,7 @@ commands:
       - {name: text, type: text, cli: rest, placeholder: '"<what happened, what you expected, what you did instead>"', doc: "the vent, required; at most {vent_text_limit} bytes"}
       - {name: file, type: path, cli: "--file", cli_only: true, doc: "read the vent from a file instead of the arguments or stdin"}
     result: Vent
+    receipt: [id, kind, send, planted_seed_id]
     examples:
       - {about: attn, text: "attn seed show printed no bookmark, though its help says it does; I read the whole log instead."}
 

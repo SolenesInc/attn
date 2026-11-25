@@ -33,6 +33,7 @@ commands:
       - {code: deleted_elsewhere, fix: "Remove the id from the definition to create it again."}
       - {code: id_mismatch, fix: "Remove the id from the definition to create a new automation."}
     result: AutomationDefinitionSummary
+    receipt: [id, name, enabled, revision, next_run_at]
 
   - name: automation validate
     summary: check a definition without saving it
@@ -86,6 +87,7 @@ commands:
     args:
       - {name: id, type: automation_id, required: true, cli: pos}
     result: AutomationDefinitionSummary
+    receipt: [id, name, enabled, revision, next_run_at]
 
   - name: automation disable
     summary: stop an automation's trigger from starting runs
@@ -96,6 +98,7 @@ commands:
     args:
       - {name: id, type: automation_id, required: true, cli: pos}
     result: AutomationDefinitionSummary
+    receipt: [id, name, enabled, revision, next_run_at]
 
   - name: automation run
     summary: start a run now
@@ -110,6 +113,7 @@ commands:
       - {name: request_id, type: text, cli: "--request-id", placeholder: "<id>", doc: "a key for retrying an uncertain request; a fresh one by default"}
       - {name: wait, type: bool, cli: internal, doc: "answer once the run's session is launched; the CLI always waits"}
     result: AutomationRunSummary
+    receipt: [id, definition_id, state, seed_id, session_id, last_error, cancel_reason]
 
   - name: automation runs
     summary: list an automation's runs

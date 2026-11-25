@@ -50,10 +50,11 @@ func TestTheAskToolsOpenListShowAndCloseAnAskWithItsImages(t *testing.T) {
 	if err := os.WriteFile(afterPath, after, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	var amended protocol.Ask
-	structuredAs(t, s.shapes.call("ask_amend", map[string]any{"ask": asked.ID, "markdown": "Moved the tabs down:\n\n![after](shots/after.png)"}), &amended)
-	if last := amended.Parts[len(amended.Parts)-1]; last.AmendedAt == nil || !strings.Contains(protocol.Deref(last.Markdown), "Moved the tabs down") {
-		t.Errorf("ask_amend answered the parts %+v, want the amendment last with its time", amended.Parts)
+	s.shapes.call("ask_amend", map[string]any{"ask": asked.ID, "markdown": "Moved the tabs down:\n\n![after](shots/after.png)"})
+	var amended protocol.AskShowResult
+	structuredAs(t, s.shapes.call("ask_show", map[string]any{"ask": asked.ID}), &amended)
+	if last := amended.Ask.Parts[len(amended.Ask.Parts)-1]; last.AmendedAt == nil || !strings.Contains(protocol.Deref(last.Markdown), "Moved the tabs down") {
+		t.Errorf("ask_show after ask_amend answered the parts %+v, want the amendment last with its time", amended.Ask.Parts)
 	}
 	requestID := "ask-image-amended"
 	image := testworld.Request(s.app, protocol.AskImageMessage{Cmd: protocol.CmdAskImage, RequestID: requestID, AskID: asked.ID, Path: afterPath},

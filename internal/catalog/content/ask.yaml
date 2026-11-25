@@ -49,6 +49,7 @@ commands:
       - {name: re, type: text, cli: "--re", placeholder: "<id>", doc: "the earlier ask this one follows up; the user sees its question and their answer above this one"}
       - {name: base_dir, type: path, cli: internal, doc: "the folder the markdown's image paths resolve against: the working directory, or beside the file"}
     result: Ask
+    receipt: [id, subject, seed_id, seed_slug]
 
   - name: ask list
     summary: your open asks and those about seeds you tend, then the open asks of the agents you oversee
@@ -83,6 +84,7 @@ commands:
       - {name: markdown, type: markdown, required: true, piped: true, cli: "--file", placeholder: "<path>", doc: "the markdown to add, required"}
       - {name: base_dir, type: path, cli: internal, doc: "the folder the markdown's image paths resolve against: the working directory, or beside the file"}
     result: Ask
+    receipt: [id, subject, seed_id, seed_slug]
 
   - name: ask close
     summary: withdraw an ask you no longer need answered

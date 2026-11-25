@@ -194,6 +194,11 @@ func TestLoadRefusesWhatWouldBreakAHarnessOrAnUnmarkedCommand(t *testing.T) {
 			want:  []string{"seed.yaml: seed show", "usage is generated from the args"},
 		},
 		{
+			name:  "a receipt on a command that only reads",
+			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "grant: own", "grant: own\n    read_only: true\n    result: SeedShowResult\n    receipt: [seed.id]", 1)},
+			want:  []string{"seed.yaml: seed show", "a read answers whole"},
+		},
+		{
 			name:  "a hidden command that is offered",
 			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "grant: own", "grant: own\n    hidden: true", 1)},
 			want:  []string{"seed.yaml: seed show", "hidden is for a command that is not offered"},

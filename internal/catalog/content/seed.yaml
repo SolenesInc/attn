@@ -156,6 +156,7 @@ commands:
       - {name: bed, type: text, cli: "--bed", placeholder: "<bed>", doc: "assign a root seed to this existing curated bed (requires garden_v2_enabled)"}
       - {name: checks, type: check_definition, list: true, cli: "--check", doc: "a check the seed must prove; attn picks the id unless C#= names it; repeats"}
     result: SeedPlantResult
+    receipt: [id, step_slug, status, ready, bed, checks.id, checks.from, similar.like, similar.last_active, similar.seed.id, similar.seed.step_slug, similar.seed.title, similar.seed.status]
     examples:
       - {title: "Retry the uploader on 503", part_of: s-p4k2m1, checks: ["A 503 is retried three times"]}
 
@@ -170,6 +171,7 @@ commands:
     args:
       - {name: plot, type: plot, required: true, cli: "-f", file: true, stdin: true, doc: "the plot payload to read; - or omitted reads stdin"}
     result: SeedPlotResult
+    receipt: [crown.id, crown.step_slug, crown.status, crown.bed, crown.checks.id, crown.checks.from, crown.shared_checks.id, children.id, children.step_slug, children.title, children.ready, children.checks.id, children.checks.from, similar.like, similar.last_active, similar.seed.id, similar.seed.step_slug, similar.seed.title, similar.seed.status]
     errors:
       - {code: not_a_plot, fix: 'Pass a plot payload: a JSON object with title, body, checks and children, as {attn seed guide} describes.'}
 
@@ -184,6 +186,7 @@ commands:
       - {name: relation, type: relation, required: true, cli: pos}
       - {name: b, type: seed, required: true, cli: pos, placeholder: "<b>"}
     result: SeedLinkResult
+    receipt: [changed, seed.id, seed.step_slug, seed.status, seed.ready]
     examples:
       - {a: s-7k3f9m, relation: blocks, b: s-p4k2m1}
 
@@ -198,6 +201,7 @@ commands:
       - {name: relation, type: relation, required: true, cli: pos}
       - {name: b, type: seed, required: true, cli: pos, placeholder: "<b>"}
     result: SeedLinkResult
+    receipt: [changed, seed.id, seed.step_slug, seed.status, seed.ready]
 
   - name: seed ready
     summary: what you can tend right now
@@ -299,6 +303,7 @@ commands:
       - {name: for, type: name, cli: "--for", doc: "the crew member to assign the seed to"}
       - {name: force, type: bool, cli: "--force", doc: "act even though somebody else holds the seed; the log records it"}
     result: SeedTransitionResult
+    receipt: [moved, seed.id, seed.step_slug, seed.status, audit.body, noted.id, ring_recipients, handoff.author.name, handoff.created_at, handoff.body]
 
   - name: seed note
     summary: append to the seed's log
@@ -313,6 +318,7 @@ commands:
       - {name: handoff, type: bool, cli: "--handoff", doc: "write a note to whoever tends the seed next"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this note lands, and print who gets it"}
     result: SeedNoteResult
+    receipt: [id, seed_id, kind, ring_recipients]
     examples:
       - {seed: s-7k3f9m, text: "The parser change passes focused checks. Integration verification remains."}
 
@@ -327,6 +333,7 @@ commands:
       - {name: reason, type: text, cli: "-m", stdin: true, placeholder: '"<where you left it>"', doc: "where you left it, saved on the move"}
       - {name: force, type: bool, cli: "--force", doc: "act even though somebody else holds the seed; the log records it"}
     result: SeedTransitionResult
+    receipt: [moved, seed.id, seed.step_slug, seed.status, audit.body, noted.id, ring_recipients, seed.reason]
 
   - name: seed replant
     summary: put the seed back in the pool
@@ -339,6 +346,7 @@ commands:
       - {name: reason, type: text, cli: "-m", stdin: true, placeholder: '"<why>"', doc: "why, saved on the move"}
       - {name: force, type: bool, cli: "--force", doc: "act even though somebody else holds the seed; the log records it"}
     result: SeedTransitionResult
+    receipt: [moved, seed.id, seed.step_slug, seed.status, audit.body, noted.id, ring_recipients]
 
   - name: seed wither
     summary: close the seed as abandoned
@@ -351,6 +359,7 @@ commands:
       - {name: reason, type: text, cli: "-m", stdin: true, placeholder: '"<why>"', doc: "why, saved on the move"}
       - {name: force, type: bool, cli: "--force", doc: "act even though somebody else holds the seed; the log records it"}
     result: SeedTransitionResult
+    receipt: [moved, seed.id, seed.step_slug, seed.status, audit.body, noted.id, ring_recipients, seed.reason, seed.checks.id, seed.checks.state, seed.checks.removed, unblocked.id, unblocked.step_slug, unblocked.title, unblocked.tender.name, plot_emptied.id, plot_emptied.step_slug, plot_emptied.status, closed_asks, live_delegate]
 
   - name: seed send-to-chief
     summary: give the seed to the Chief to decide its next working context
@@ -362,6 +371,7 @@ commands:
       - {name: seed, type: seed, required: true, cli: pos}
       - {name: guidance, type: text, cli: "-m", stdin: true, placeholder: '"<optional guidance>"', doc: "an exception for the Chief, such as a special branch or directory"}
     result: SeedSendToChiefResult
+    receipt: [chief_session_id, delivery_status, detail, seed.id, seed.step_slug, seed.status]
 
   - name: seed harvest
     summary: close the seed as done
@@ -379,6 +389,7 @@ commands:
       - {name: clear, type: bool, cli: "--clear", doc: "take back the harvest condition (with --when-merged)"}
       - {name: force, type: bool, cli: "--force", doc: "act even though somebody else holds the seed; the log records it"}
     result: SeedTransitionResult
+    receipt: [moved, seed.id, seed.step_slug, seed.status, audit.body, noted.id, ring_recipients, seed.harvest_when.pull_request, seed.reason, seed.checks.id, seed.checks.state, seed.checks.removed, unblocked.id, unblocked.step_slug, unblocked.title, unblocked.tender.name, plot_emptied.id, plot_emptied.step_slug, plot_emptied.status, closed_asks, live_delegate]
     errors:
       - {code: pr_without_when_merged, usage: true, fix: 'Pass the pull request together with {when_merged}, or leave it out.'}
       - {code: clear_without_when_merged, usage: true, fix: 'Pass {clear} together with {when_merged}.'}
@@ -402,6 +413,7 @@ commands:
       - {name: shared, type: bool, cli: "--shared", doc: "each seed below this plot that has no children proves the check with its own report"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
+    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, attached, ring_recipients, live_delegate]
     errors:
       - {code: not_a_check_id, usage: true, fix: 'Pass a check id like C3, and the statement in {statement}.'}
       - {code: needs_statement, usage: true, fix: 'Pass the statement the seed must prove in {statement}.'}
@@ -418,6 +430,7 @@ commands:
       - {name: statement, type: text, required: true, cli: "-m", stdin: true, placeholder: '"<statement>"', doc: "what the seed must prove"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
+    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, attached, ring_recipients, live_delegate]
     errors:
       - {code: not_a_check_id, usage: true, fix: 'Pass a check id like C3, and the statement in {statement}.'}
       - {code: needs_statement, usage: true, fix: 'Pass the statement the seed must prove in {statement}.'}
@@ -434,6 +447,7 @@ commands:
       - {name: reason, type: text, cli: "-m", stdin: true, placeholder: '"<why>"', doc: "why, saved on the check move"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
+    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, attached, ring_recipients, live_delegate]
 
   - name: seed check restore
     summary: bring a removed check back
@@ -447,6 +461,7 @@ commands:
       - {name: reason, type: text, cli: "-m", stdin: true, placeholder: '"<why>"', doc: "why, saved on the check move"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
+    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, attached, ring_recipients, live_delegate]
 
   - name: seed check report
     summary: record the proof for a check in one call
@@ -464,6 +479,7 @@ commands:
       - {name: commit, type: revision, cli: "--commit", doc: "the commit the evidence came from, resolved with git rev-parse in the current directory, or for a tool the folder the session started in"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
+    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, attached, ring_recipients, live_delegate]
     examples:
       - {seed: s-7k3f9m, id: C1, summary: "Retries pass", evidence: [retry.log]}
 
@@ -479,6 +495,7 @@ commands:
       - {name: how, type: text, cli: "-m", stdin: true, placeholder: '"<how you verified it>"', doc: "how you verified it"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
+    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, attached, ring_recipients, live_delegate]
 
   - name: seed check reject
     summary: reject the check
@@ -492,6 +509,7 @@ commands:
       - {name: proof, type: text, required: true, cli: "-m", stdin: true, placeholder: '"<what would prove it>"', doc: "what would prove it"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
+    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, attached, ring_recipients, live_delegate]
 
   - name: seed check uncheck
     summary: clear the verdict and keep the report
@@ -505,6 +523,7 @@ commands:
       - {name: reason, type: text, cli: "-m", stdin: true, placeholder: '"<why>"', doc: "why, saved on the check move"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
+    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, attached, ring_recipients, live_delegate]
 
   - name: seed check reopen
     summary: clear the report and verdict
@@ -518,6 +537,7 @@ commands:
       - {name: reason, type: text, cli: "-m", stdin: true, placeholder: '"<why>"', doc: "why, saved on the check move"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
+    receipt: [check_id, seed.id, seed.step_slug, seed.status, seed.checks.id, seed.checks.state, seed.checks.removed, attached, ring_recipients, live_delegate]
 
   - name: seed watch
     summary: watch this seed and its descendants
@@ -552,6 +572,7 @@ commands:
       - {name: message, type: text, cli: "-m", stdin: true, placeholder: '"<message>"', unless: clear, doc: "the message to post; required unless --clear"}
       - {name: clear, type: bool, cli: "--clear", doc: "remove the reminder"}
     result: SeedReminderResult
+    receipt: [changed, seed.id, seed.step_slug, seed.reminder.at]
     errors:
       - {code: clear_with_reminder, usage: true, fix: 'Pass {clear} alone.'}
       - {code: needs_time, usage: true, fix: 'Pass one of {in} or {at}, or {clear}.'}
@@ -579,6 +600,7 @@ commands:
       - {name: stay, type: bool, cli: "--stay", doc: "keep this session open on standby"}
       - {name: clear, type: bool, cli: "--clear", doc: "end standby; the reminder stays"}
     result: SeedStandbyResult
+    receipt: [changed, seed.id, seed.step_slug, seed.status, seed.reminder.at, seed.standby.set_at, seed.standby.pull_requests, seed.standby.resume_blocked, close.target_session_id, close.pending_compact]
     errors:
       - {code: clear_with_standby, usage: true, fix: 'Pass {clear} alone.'}
       - {code: in_and_at, usage: true, fix: 'Pass {in} or {at}, not both.'}
@@ -612,6 +634,7 @@ commands:
       - {name: body, type: markdown, required: true, cli: "-m", stdin: true, placeholder: "-", doc: "the exported text, edited, with its first stamp line"}
       - {name: note, type: text, cli: "--note", placeholder: '"<what changed>"', doc: "what changed, saved on the edit entry"}
     result: SeedEditResult
+    receipt: [body_version, previous_bytes, new_bytes, seed.id, seed.step_slug]
     errors:
       - {code: not_exported, usage: true, fix: 'Export the seed, edit the file, and pass its whole text as {body}.'}
       - {code: not_stamped, fix: 'Pass the exported text whole as {body}, its first stamp line included.'}
@@ -628,6 +651,7 @@ commands:
       - {name: seed, type: seed, required: true, cli: pos}
       - {name: version, type: version, cli: pos}
     result: SeedRollbackResult
+    receipt: [restored_version, body_version, previous_bytes, new_bytes, seed.id, seed.step_slug]
 
   - name: seed authorization
     summary: set, clear or print the task's authorization
@@ -640,6 +664,7 @@ commands:
       - {name: words, type: text, cli: pos, one_of: change, placeholder: '"<words>"', doc: "the instructions"}
       - {name: clear, type: bool, cli: "--clear", one_of: change, doc: "remove the authorization"}
     result: SeedAuthorizationResult
+    receipt: [changed, caller_tends, update, seed.id, seed.step_slug, seed.authorization]
     errors:
       - {code: empty_words, usage: true, fix: 'Pass the words, or {clear} to remove the authorization.'}
       - {code: words_and_clear, usage: true, fix: 'Pass the words or {clear}, not both.'}
@@ -659,6 +684,7 @@ commands:
       - {name: repo, type: name, cli: "--repo", placeholder: "<repository>", doc: "the repository that path lives in"}
       - {name: note, type: text, cli: "-m", stdin: true, placeholder: '"<note>"', doc: "a note on the log for an association"}
     result: SeedArtifactResult
+    receipt: [seed_id, id, operation, operation_id, recovered, replaced, artifact.filename, artifact.kind, artifact.repository, artifact.path, artifact.notebook_document_id, artifact.url, source_path, destination_path, relative_target]
     errors:
       - {code: no_document, fix: 'Name one document with {path}, {notebook} or {url}.'}
       - {code: two_documents, fix: 'Name one document per call.'}
@@ -687,6 +713,7 @@ commands:
       - {name: repo, type: name, cli: "--repo", placeholder: "<repository>", doc: "the repository that path lives in"}
       - {name: note, type: text, cli: "-m", stdin: true, placeholder: '"<note>"', doc: "a note on the log for an association"}
     result: SeedArtifactResult
+    receipt: [seed_id, id, operation, operation_id, recovered, replaced, artifact.filename, artifact.kind, artifact.repository, artifact.path, artifact.notebook_document_id, artifact.url, source_path, destination_path, relative_target]
     errors:
       - {code: reference_needs_path, fix: 'Pass the linked {path} without {repo}.'}
       - {code: no_document, fix: 'Name one document with {path}, {notebook} or {url}.'}
@@ -761,6 +788,7 @@ commands:
       - {name: bed, type: text, cli: pos, one_of: target, placeholder: "<bed>", doc: "the existing bed's id, name or slug"}
       - {name: clear, type: bool, cli: "--clear", one_of: target, doc: "clear the seed's bed assignment"}
     result: SeedBedAssignResult
+    receipt: [changed, seed.id, seed.step_slug, seed.bed, seed.bed_id]
     errors:
       - {code: bed_and_clear, usage: true, fix: 'Pass a bed or {clear}, not both.'}
       - {code: needs_bed, usage: true, fix: 'Pass an existing bed or {clear}.'}
@@ -779,6 +807,7 @@ commands:
       - {name: text, type: text, cli: "-m", stdin: true, one_of: change, maxLength: 160, placeholder: '"<one-line status>"', doc: "one-line summary of where the work stands"}
       - {name: clear, type: bool, cli: "--clear", one_of: change, doc: "clear the seed's pulse"}
     result: SeedPulseResult
+    receipt: [changed, seed.id, seed.step_slug, seed.pulse]
     errors:
       - {code: text_and_clear, usage: true, fix: 'Pass {text} or {clear}, not both.'}
       - {code: needs_pulse, usage: true, fix: 'Pass a one-line status in {text}, or {clear}.'}

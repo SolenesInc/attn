@@ -25,6 +25,7 @@ type toolDefinition struct {
 	ReadOnly     bool           `json:"read_only,omitempty"`
 	InputSchema  map[string]any `json:"inputSchema"`
 	OutputSchema map[string]any `json:"outputSchema,omitempty"`
+	Receipt      []string       `json:"receipt,omitempty"`
 }
 
 func writeTools(c *catalog.Catalog, goRoot string) error {
@@ -55,6 +56,12 @@ func writeTools(c *catalog.Catalog, goRoot string) error {
 			}
 			if schema["type"] != "object" {
 				return fmt.Errorf("%s: result %s is not an object; an MCP outputSchema must be one", where, cmd.Result)
+			}
+			if tool.Receipt = cmd.Receipt; len(tool.Receipt) > 0 {
+				schema, err = receiptSchema(schema, tool.Receipt)
+				if err != nil {
+					return fmt.Errorf("%s: receipt of %s: %w", where, cmd.Result, err)
+				}
 			}
 			tool.OutputSchema = schema
 		}
@@ -129,6 +136,8 @@ func (g *generator) inputSchema(cmd *catalog.Command) map[string]any {
 	return schema
 }
 
+const defsPrefix = "#/$defs/"
+
 func bundledSchema(model string) (map[string]any, error) {
 	root, err := readModelSchema(model)
 	if err != nil {
@@ -155,6 +164,82 @@ func bundledSchema(model string) (map[string]any, error) {
 	return root, nil
 }
 
+func receiptSchema(model map[string]any, paths []string) (map[string]any, error) {
+	defs, _ := model["$defs"].(map[string]any)
+	cut, err := cutSchema(model, defs, catalog.ReceiptOf(paths), "")
+	if err != nil {
+		return nil, err
+	}
+	kept := map[string]any{}
+	var keep func(schema any)
+	keep = func(schema any) {
+		eachRef(schema, func(_ map[string]any, ref string) {
+			name := strings.TrimPrefix(ref, defsPrefix)
+			if _, done := kept[name]; !done {
+				kept[name] = defs[name]
+				keep(defs[name])
+			}
+		})
+	}
+	keep(cut)
+	if len(kept) > 0 {
+		cut["$defs"] = kept
+	}
+	return cut, nil
+}
+
+func cutSchema(schema, defs map[string]any, receipt catalog.Receipt, at string) (map[string]any, error) {
+	if receipt.Whole() {
+		return schema, nil
+	}
+	if ref, ok := schema["$ref"].(string); ok {
+		return cutSchema(defs[strings.TrimPrefix(ref, defsPrefix)].(map[string]any), defs, receipt, at)
+	}
+	if items, ok := schema["items"].(map[string]any); ok {
+		cut, err := cutSchema(items, defs, receipt, at)
+		return map[string]any{"type": "array", "items": cut}, err
+	}
+	properties, required := objectFields(schema, defs)
+	kept := map[string]any{}
+	var keptRequired []any
+	for _, name := range receipt.Names() {
+		path := strings.TrimPrefix(at+"."+name, ".")
+		property, ok := properties[name].(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("no field %q; fields here: %s", path, strings.Join(slices.Sorted(maps.Keys(properties)), ", "))
+		}
+		cut, err := cutSchema(property, defs, receipt[name], path)
+		if err != nil {
+			return nil, err
+		}
+		kept[name] = cut
+		if slices.Contains(required, any(name)) {
+			keptRequired = append(keptRequired, name)
+		}
+	}
+	cut := map[string]any{"type": "object", "properties": kept}
+	if len(keptRequired) > 0 {
+		cut["required"] = keptRequired
+	}
+	return cut, nil
+}
+
+func objectFields(schema, defs map[string]any) (map[string]any, []any) {
+	properties := map[string]any{}
+	var required []any
+	bases, _ := schema["allOf"].([]any)
+	for _, base := range bases {
+		ref := base.(map[string]any)["$ref"].(string)
+		inherited, inheritedRequired := objectFields(defs[strings.TrimPrefix(ref, defsPrefix)].(map[string]any), defs)
+		maps.Copy(properties, inherited)
+		required = append(required, inheritedRequired...)
+	}
+	own, _ := schema["properties"].(map[string]any)
+	maps.Copy(properties, own)
+	ownRequired, _ := schema["required"].([]any)
+	return properties, append(required, ownRequired...)
+}
+
 func readModelSchema(model string) (map[string]any, error) {
 	data, err := os.ReadFile(filepath.Join(protocolSchemas, model+".json"))
 	if err != nil {
@@ -171,23 +256,29 @@ func readModelSchema(model string) (map[string]any, error) {
 
 func refsIn(schema any) []string {
 	var refs []string
+	eachRef(schema, func(node map[string]any, ref string) {
+		name := strings.TrimSuffix(ref, ".json")
+		node["$ref"] = defsPrefix + name
+		refs = append(refs, name)
+	})
+	return refs
+}
+
+func eachRef(schema any, visit func(node map[string]any, ref string)) {
 	switch v := schema.(type) {
 	case map[string]any:
 		for _, key := range slices.Sorted(maps.Keys(v)) {
 			if ref, ok := v[key].(string); ok && key == "$ref" {
-				name := strings.TrimSuffix(ref, ".json")
-				v[key] = "#/$defs/" + name
-				refs = append(refs, name)
+				visit(v, ref)
 				continue
 			}
-			refs = append(refs, refsIn(v[key])...)
+			eachRef(v[key], visit)
 		}
 	case []any:
 		for _, item := range v {
-			refs = append(refs, refsIn(item)...)
+			eachRef(item, visit)
 		}
 	}
-	return refs
 }
 
 func writeToolFamilies(c *catalog.Catalog, goRoot string) error {

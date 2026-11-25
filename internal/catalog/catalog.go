@@ -125,6 +125,7 @@ type Command struct {
 	Caller            string           `yaml:"caller"`
 	RunsWithoutDaemon bool             `yaml:"runs_without_daemon"`
 	Result            string           `yaml:"result"`
+	Receipt           []string         `yaml:"receipt"`
 	Errors            []Error          `yaml:"errors"`
 	Examples          []map[string]any `yaml:"examples"`
 	Offered           *bool            `yaml:"offered"`
@@ -429,6 +430,9 @@ func (c *Catalog) check() []string {
 		}
 		if strings.TrimSpace(cmd.Doc) == "" && cmd.ThroughLayer() {
 			add("%s: doc is missing", where)
+		}
+		if len(cmd.Receipt) > 0 && (cmd.Result == "" || cmd.ReadOnly) {
+			add("%s: receipt cuts the result of a command that changes something; a read answers whole", where)
 		}
 		codes := map[string]bool{}
 		for _, e := range cmd.Errors {

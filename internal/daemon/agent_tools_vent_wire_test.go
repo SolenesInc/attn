@@ -6,6 +6,7 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 type twoProfileTools struct {
@@ -40,9 +41,9 @@ func TestTheVentToolsRecordAndWithdrawTheCallersVent(t *testing.T) {
 	s := newSessionTools(t, "analytics.enabled")
 	var vent protocol.Vent
 	structuredAs(t, s.shapes.call("vent", map[string]any{"about": "attn", "text": "attn seed show printed no bookmark."}), &vent)
-	if vent.SessionID != protocol.SessionID(s.session) || vent.Kind != protocol.VentKindAttn {
-		t.Errorf("vent recorded %+v, want an attn vent of session %s", vent, s.session)
-	}
+	testworld.Await(s.app, protocol.EventVentsUpdated, func(m protocol.VentsUpdatedMessage) bool {
+		return len(m.Vents) == 1 && m.Vents[0].ID == vent.ID && m.Vents[0].SessionID == protocol.SessionID(s.session) && m.Vents[0].Kind == protocol.VentKindAttn
+	})
 	var withdrawn protocol.VentWithdrawResult
 	structuredAs(t, s.shapes.call("vent_withdraw", map[string]any{"vent": vent.ID}), &withdrawn)
 	if withdrawn.ID != vent.ID {

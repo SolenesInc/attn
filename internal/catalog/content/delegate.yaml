@@ -65,6 +65,7 @@ commands:
       - {name: source_session, type: name, cli: "--source-session", cli_only: true, placeholder: "<id>", doc: "the session delegating (default: the current session)"}
       - {name: yolo, type: bool, cli: "--yolo", doc: "launch the agent with its approval prompts bypassed"}
     result: DelegationOperation
+    receipt: [operation_id, request_id, state, progress, session_id, seed_id, failure, error]
     examples:
       - {brief: "Fix the flaky checkout test", cwd: /src/shop, new_worktree: true, branch: fix/checkout, from: main, model: default}
 
@@ -131,6 +132,7 @@ commands:
       - {name: render, type: bool, cli: internal, doc: "answer the text the CLI prints too"}
       - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
     result: DelegateRolesChangeResult
+    receipt: [changes, installed, restores, preferences.revision, preferences.enabled]
     errors:
       - {code: conflict, fix: "The table changed while the command ran; run it again."}
 
@@ -155,6 +157,7 @@ commands:
       - {name: effort, type: clearable, cli: "--effort", doc: 'the effort; "default" selects the harness default'}
       - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
     result: DelegateRolesChangeResult
+    receipt: [changes, installed, restores, preferences.revision, preferences.enabled]
     errors:
       - {code: no_role, fix: "Use a role id that delegate_roles_show lists."}
       - {code: conflict, fix: "The table changed while the command ran; run it again."}
@@ -181,6 +184,7 @@ commands:
       - {name: effort, type: clearable, cli: "--effort", doc: 'the effort; "default" selects the harness default'}
       - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
     result: DelegateRolesChangeResult
+    receipt: [changes, installed, restores, preferences.revision, preferences.enabled]
     errors:
       - {code: no_role, fix: "Use a role id that delegate_roles_show lists."}
       - {code: no_alternative, fix: "Use an alternative that delegate_roles_show lists for the role."}
@@ -201,6 +205,7 @@ commands:
       - {name: name, type: clearable, cli: "--name", doc: "the copy's name (default: the role's name with (custom))"}
       - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
     result: DelegateRolesChangeResult
+    receipt: [changes, installed, restores, preferences.revision, preferences.enabled]
     errors:
       - {code: no_role, fix: "Use a role id that delegate_roles_show lists."}
       - {code: conflict, fix: "The table changed while the command ran; run it again."}
@@ -217,6 +222,7 @@ commands:
       - {name: target, type: role_target, required: true, cli: pos, doc: "a role id, or role/alternative"}
       - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
     result: DelegateRolesChangeResult
+    receipt: [changes, installed, restores, preferences.revision, preferences.enabled]
     errors:
       - {code: no_role, fix: "Use a role id that delegate_roles_show lists."}
       - {code: no_alternative, fix: "Use an alternative that delegate_roles_show lists for the role."}
@@ -234,6 +240,7 @@ commands:
       - {name: role, type: name, cli: pos, placeholder: "<role>", doc: "the role to turn on"}
       - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
     result: DelegateRolesChangeResult
+    receipt: [changes, installed, restores, preferences.revision, preferences.enabled]
     errors:
       - {code: no_role, fix: "Use a role id that delegate_roles_show lists."}
       - {code: conflict, fix: "The table changed while the command ran; run it again."}
@@ -250,6 +257,7 @@ commands:
       - {name: role, type: name, cli: pos, placeholder: "<role>", doc: "the role to turn off"}
       - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
     result: DelegateRolesChangeResult
+    receipt: [changes, installed, restores, preferences.revision, preferences.enabled]
     errors:
       - {code: no_role, fix: "Use a role id that delegate_roles_show lists."}
       - {code: conflict, fix: "The table changed while the command ran; run it again."}
@@ -266,6 +274,7 @@ commands:
       - {name: table, type: delegation_table, required: true, cli: pos, file: true, placeholder: "<file|->", doc: "the table, as delegate_roles_show returns it"}
       - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
     result: DelegateRolesChangeResult
+    receipt: [changes, installed, restores, preferences.revision, preferences.enabled]
     errors:
       - {code: not_a_table, fix: "Pass the table delegate_roles_show returns, with only its fields."}
       - {code: conflict, fix: "Export the table again with delegate_roles_show, change it, and apply that."}
@@ -282,3 +291,4 @@ commands:
       - {name: revision, type: table_revision, cli: pos, doc: "the revision to restore, as delegate_roles_history lists it"}
       - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
     result: DelegateRolesChangeResult
+    receipt: [changes, installed, restores, preferences.revision, preferences.enabled]

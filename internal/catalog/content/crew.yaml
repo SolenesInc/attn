@@ -39,6 +39,7 @@ commands:
       - {name: name, type: name, required: true, cli: pos, doc: "the new member's name, unique in its profile"}
       - {name: agent, type: name, required: true, cli: "--agent", doc: "the harness the member's days run on"}
     result: CrewMember
+    receipt: [id, name, home_dir, charter_path, revision, resolved_agent, resolved_model, resolved_effort]
     examples:
       - {name: scout, agent: claude}
 
@@ -106,6 +107,7 @@ commands:
       - {code: nothing_to_set, usage: true, fix: "Pass at least one setting."}
       - {code: desktop_name_needs_desktop, usage: true, fix: "Pass {launch_desktop} own or an empty slot with {desktop_name}."}
     result: CrewMember
+    receipt: [id, name, revision, switch_pending, resolved_agent, resolved_model, resolved_effort]
     examples:
       - {member: scout, model: opus, effort: high}
 
@@ -129,6 +131,7 @@ commands:
     args:
       - {name: member, type: member, required: true, cli: pos}
     result: CrewMoveHomeResult
+    receipt: [previous_home, member.id, member.name, member.home_dir, member.charter_path]
 
   - name: crew retire
     summary: stop a member's work
@@ -139,6 +142,7 @@ commands:
     args:
       - {name: member, type: member, required: true, cli: pos}
     result: CrewRetireResult
+    receipt: [already_retired, member.id, member.name, close.session_id, close.already_closed, released_seeds, closed_asks, removed_watches, unread]
 
   - name: crew restore
     summary: bring a retired member back
@@ -149,3 +153,4 @@ commands:
     args:
       - {name: member, type: member, required: true, cli: pos}
     result: CrewRestoreResult
+    receipt: [already_active, member.id, member.name, member.revision]

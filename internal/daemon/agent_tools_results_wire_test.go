@@ -201,6 +201,74 @@ func TestEverySeedToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) 
 	shapes.finish("seed_")
 }
 
+func TestAChangingToolAnswersWithAReceiptTheNextCallChainsOnAndReadsStayWhole(t *testing.T) {
+	s := newSessionTools(t, "asks_enabled")
+	sent := "Retry the payment call twice, then give up and tell the shopper."
+	receipt := func(tool string, args map[string]any, into any) {
+		t.Helper()
+		result := s.shapes.call(tool, args)
+		answer, err := json.Marshal(result.StructuredContent)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.IsError || strings.Contains(string(answer), sent) {
+			t.Errorf("%s answered %s %s, want a receipt that leaves out the text the call sent", tool, answer, resultText(result))
+		}
+		structuredAs(t, result, into)
+	}
+
+	var plot protocol.SeedPlotResult
+	receipt("seed_plot", map[string]any{"plot": map[string]any{"title": "Checkout plot", "body": sent, "children": []any{map[string]any{"title": "Retry the call", "body": sent}}}}, &plot)
+	if len(plot.Children) != 1 || plot.Crown.ID == "" || !plot.Children[0].Ready || plot.Children[0].StepSlug != "retry-call" {
+		t.Fatalf("seed_plot answered %+v, want the plot's id and its ready child", plot)
+	}
+	child := plot.Children[0].ID
+	var tended protocol.SeedTransitionResult
+	receipt("seed_tend", map[string]any{"seed": child}, &tended)
+	if tended.Seed.ID != child || tended.Seed.Status != "growing" || !protocol.Deref(tended.Moved) {
+		t.Errorf("seed_tend answered %+v, want %s growing", tended, child)
+	}
+	var added, reported protocol.SeedCheckResult
+	receipt("seed_check_add", map[string]any{"seed": child, "statement": sent}, &added)
+	receipt("seed_check_report", map[string]any{"seed": child, "id": added.CheckID, "summary": sent}, &reported)
+	if checks := reported.Seed.Checks; reported.CheckID != added.CheckID || len(checks) != 1 || checks[0].State != "reported" {
+		t.Errorf("seed_check_report answered %+v, want %s reported", reported, added.CheckID)
+	}
+	var noted protocol.SeedNoteResult
+	receipt("seed_note", map[string]any{"seed": child, "text": sent, "handoff": true}, &noted)
+	if noted.SeedID != child || noted.ID == "" {
+		t.Errorf("seed_note answered %+v, want the note's id on %s", noted, child)
+	}
+	var asked protocol.Ask
+	receipt("ask", map[string]any{"subject": "Retries", "seed": child, "markdown": sent + askQuestion}, &asked)
+	if asked.ID == "" || protocol.Deref(asked.SeedID) != child {
+		t.Errorf("ask answered %+v, want an ask about %s", asked, child)
+	}
+	s.shapes.call("ask_close", map[string]any{"ask": asked.ID})
+	var parked, retended protocol.SeedTransitionResult
+	receipt("seed_park", map[string]any{"seed": child}, &parked)
+	structuredAs(t, s.shapes.call("seed_tend", map[string]any{"seed": child}), &retended)
+	if retended.Handoff == nil || retended.Handoff.Body != sent {
+		t.Errorf("seed_tend answered %+v, want the handoff left for the tender", retended)
+	}
+	var harvested protocol.SeedTransitionResult
+	receipt("seed_harvest", map[string]any{"seed": child, "reason": "Shipped"}, &harvested)
+	if harvested.Seed.Status != "harvested" || harvested.PlotEmptied == nil || harvested.PlotEmptied.ID != plot.Crown.ID {
+		t.Errorf("seed_harvest answered %+v, want %s harvested and its plot %s emptied", harvested, child, plot.Crown.ID)
+	}
+
+	var shown protocol.SeedShowResult
+	structuredAs(t, s.shapes.call("seed_show", map[string]any{"seed": child}), &shown)
+	if shown.Seed.Body != sent || len(shown.Seed.Checks) != 1 || shown.Seed.Checks[0].Report == nil || shown.Seed.Checks[0].Report.Summary != sent {
+		t.Errorf("seed_show answered %+v, want the whole seed", shown.Seed)
+	}
+	var replanted protocol.SeedTransitionResult
+	if err := s.w.Client().RunCommand("seed replant", protocol.SessionID(s.session), map[string]any{"seed": child}, &replanted); err != nil || replanted.Seed.Body != sent {
+		t.Errorf("seed replant through run_command answered %+v, %v; want the whole seed the CLI prints", replanted.Seed, err)
+	}
+	s.shapes.finish()
+}
+
 func TestEverySeedToolRefusesWithACodeAndAFix(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
@@ -290,7 +358,11 @@ func TestAToolCallDoesTheCallersWorkInTheFolderTheSessionStartedIn(t *testing.T)
 	if len(reported.Attached) != 1 || reported.Attached[0].Filename != "retry.log" {
 		t.Errorf("seed_check_report attached %+v, want retry.log copied from the session's folder", reported.Attached)
 	}
-	for _, check := range reported.Seed.Checks {
+	shown, err := w.Client().SeedShow("", seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, check := range shown.Seed.Checks {
 		if check.ID != "C1" {
 			continue
 		}
