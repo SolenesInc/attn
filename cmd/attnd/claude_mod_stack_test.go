@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -71,6 +72,42 @@ func TestAgentMessageReachesRealClaudeThroughTheMod(t *testing.T) {
 		}
 	}
 	t.Fatalf("Claude's transcript has no user row with %q; rows: %+v", ring, rows)
+}
+
+func TestRealClaudesFirstTurnOnItsBriefHasAttnsTools(t *testing.T) {
+	t.Parallel()
+	claude, err := exec.LookPath("claude")
+	if err != nil {
+		t.Skip("claude is not on PATH")
+	}
+	model := fakeclaudeapi.Start(t)
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	work := s.Path("shop")
+	configDir := filepath.Join(s.Dir, "toolhome", ".claude")
+	writeClaudeConfig(t, claude, configDir, work)
+	s.Vars = append(s.Vars,
+		"ATTN_CLAUDE_EXECUTABLE="+claude,
+		"CLAUDE_CONFIG_DIR="+configDir,
+		"ANTHROPIC_BASE_URL="+model.URL,
+		"ANTHROPIC_API_KEY="+fakeclaudeapi.APIKey,
+		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
+		"DISABLE_AUTOUPDATER=1",
+	)
+	s.Start()
+	requireStdout(t, s.Attn("settings", "set", "agent_tools_enabled", "true"), "true")
+
+	const brief = "write the migration guide"
+	app := s.App()
+	delegate := s.Spawn(app, fakeagent.Claude, work, func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr(brief) })
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("delegate screen:\n%s", s.Attn("agent", "peek", delegate).Stdout)
+		}
+	})
+
+	if offered := model.AwaitToolsOffered(t, brief); !slices.Contains(offered, "mcp__attn__seed_show") {
+		t.Fatalf("the first request offered %q, want attn's tools among them", offered)
+	}
 }
 
 func TestRefusingAPermissionQuestionLeavesRealClaudeFreeToTakeMessages(t *testing.T) {

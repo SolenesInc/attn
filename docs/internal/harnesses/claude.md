@@ -430,6 +430,31 @@ Probed on 2.1.330 with a real account, on a non-production instance with
 - After the daemon restarts, with the agent's process kept, the next call
   succeeds with no reconnect step from the agent. A reload resumes with
   `-r` and the same server.
+- Interactive Claude Code sends its first request without waiting for an MCP
+  server to connect, so a prompt on the command line or typed at once can
+  run its first turn without the server's tools. The next turn has them.
+  On 2.1.332, with attn's real server, none of 4 briefs and 0 of 1 prompts typed
+  at once had attn's tools, while 6 of 6 prompts typed a little later did.
+  `alwaysLoad: true` on the server does not change this (0 of 5), nor does
+  `MCP_CONNECTION_NONBLOCKING=0`, nor a UserPromptSubmit hook or a mod's
+  `prompt.submit` hook that waits (those load the tools named up front and miss
+  the deferred ones). A SessionStart hook that returns once the server has
+  answered `tools/list` is still too early (0 of 10).
+- A mod's `session.start` hook holds a prompt from the command line or the
+  composer until it resolves, for at most 10 s. The composer draws meanwhile,
+  and a resumed conversation draws in it at once. A prompt that a mod submits
+  with `$.prompt.submit` is not held. Awaiting `$.mcp.connect('attn')` there
+  gives the first request the server's tools: 4 of 4 launches on an idle
+  machine, 12 of 12 with 22 and 66 busy loops on 22 cores, and with the server
+  answering 3 s late. An idle machine pays about 0.15 s. `$.mcp.connect` waits
+  for a failing server: 8.1 s on a refused port, 7.6 s on 500s, still waiting
+  after 80 s on a server that never answers, about 0.1 s on a 401. With no
+  server of that name it resolves `unlisted` at once. attn's mod waits at most
+  8 s and starts its poll afterwards, so a message that wakes a resumed
+  session has the tools too (2.1.332, probed with a mock server; the first
+  requests of 2.1.329, 2.1.330 and 2.1.331 through attn's mod have the tools
+  too). A session without the mod, because the mod failed to load or the user
+  runs `claude` without attn, keeps the race.
 - `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1` asks for consent at the first launch.
   In code mode the agent wrote one REPL script that found `seed_note` with
   `searchTools`, read its schema with `describeTool`, and called

@@ -26,7 +26,11 @@ Read in the source at openai/codex 60947e2341.
   parse but are skipped (0.164, `codex-rs/config/src/hook_config.rs`).
 - An HTTP MCP server gets `initialize` at protocol 2025-06-18, then
   `notifications/initialized` and `tools/list`, and no GET (probed on 0.171.0
-  with `codex exec`; captures on `s-vadq83`). `bearer_token_env_var` names the
+  with `codex exec`; captures on `s-vadq83`). The tool list of a turn waits for a
+  server that is still starting, up to its `startup_timeout_sec` (30 s by
+  default), unless a cached catalog exists (read in the 0.164 source,
+  `codex-mcp/src/rmcp_client.rs` `listed_catalog`; not probed on 0.167 or
+  later). `bearer_token_env_var` names the
   environment variable that holds the bearer token, and
   `http_headers.Authorization="Bearer ..."` sends that header on every request.
   Set as `-c mcp_servers.<name>.bearer_token_env_var="ATTN_AGENT_CREDENTIAL"`,

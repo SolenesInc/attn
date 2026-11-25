@@ -31,6 +31,7 @@ type Model struct {
 	mu            sync.Mutex
 	prompts       []string
 	opening       []string
+	offered       [][]string
 	requestTimes  []time.Time
 	compactCount  int
 	changed       chan struct{}
@@ -149,15 +150,31 @@ func (m *Model) CompactCount() int {
 
 func (m *Model) AwaitPromptSince(t testing.TB, mark int, contains string) (opening string) {
 	t.Helper()
+	i := m.awaitPromptIndex(t, mark, contains)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.opening[i]
+}
+
+func (m *Model) AwaitToolsOffered(t testing.TB, contains string) []string {
+	t.Helper()
+	i := m.awaitPromptIndex(t, 0, contains)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.offered[i]
+}
+
+func (m *Model) awaitPromptIndex(t testing.TB, mark int, contains string) int {
+	t.Helper()
 	guard := time.NewTimer(fakeagent.HangGuard)
 	defer guard.Stop()
 	for {
 		m.mu.Lock()
-		seen, openings, changed := append([]string(nil), m.prompts...), append([]string(nil), m.opening...), m.changed
+		seen, changed := append([]string(nil), m.prompts...), m.changed
 		m.mu.Unlock()
 		for i := mark; i < len(seen); i++ {
 			if strings.Contains(seen[i], contains) {
-				return openings[i]
+				return i
 			}
 		}
 		select {
@@ -168,11 +185,12 @@ func (m *Model) AwaitPromptSince(t testing.TB, mark int, contains string) (openi
 	}
 }
 
-func (m *Model) record(prompt, opening string) {
+func (m *Model) record(prompt, opening string, offered []string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.prompts = append(m.prompts, prompt)
 	m.opening = append(m.opening, opening)
+	m.offered = append(m.offered, offered)
 	close(m.changed)
 	m.changed = make(chan struct{})
 }
@@ -180,7 +198,7 @@ func (m *Model) record(prompt, opening string) {
 func (m *Model) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Path == QuestionWaitingPath:
-		m.record(QuestionWaitingPath, "")
+		m.record(QuestionWaitingPath, "", nil)
 	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/messages/count_tokens"):
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"input_tokens":1200}`))
@@ -232,7 +250,11 @@ func (m *Model) answer(w http.ResponseWriter, r *http.Request) {
 			step, m.bash = m.bash[0], m.bash[1:]
 		}
 		m.mu.Unlock()
-		m.record(prompt, ContentText(body.Messages[0].Content))
+		offered := make([]string, 0, len(body.Tools))
+		for _, t := range body.Tools {
+			offered = append(offered, t.Name)
+		}
+		m.record(prompt, ContentText(body.Messages[0].Content), offered)
 	}
 	usage := m.usage()
 	say := "Noted."

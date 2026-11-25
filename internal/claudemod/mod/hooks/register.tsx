@@ -8,6 +8,9 @@ type Outcome = 'submitted' | 'held' | 'appended' | 'interrupted' | 'refused'
 type Compacted = 'compacted' | 'skipped' | 'busy' | 'ready' | 'failed'
 
 const POLL_RETRY_MS = 1000
+// Receipt (2.1.332, 22 cores): the slowest healthy connect came 2.2 s after the composer drew, with
+// 66 busy loops running. The mod API gives a hook 10 s, counting $.clock waits.
+const TOOLS_WAIT_MS = 8000
 const RING_ID_PREFIX = 'inbox-ring/'
 const BETWEEN_TURNS_ONLY = ['compacts between turns', 'a newer turn began']
 
@@ -251,6 +254,14 @@ async function submitPrompt($: EngineInterface, prompt: Message[], interrupted: 
   }
 }
 
+async function awaitAttnTools($: EngineInterface): Promise<void> {
+  try {
+    await Promise.race([$.mcp.connect('attn'), $.clock.sleep(TOOLS_WAIT_MS)])
+  } catch (err) {
+    $.ui.log(`waiting for attn's tools failed: ${String(err)}`, { to: 'debug' })
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
@@ -261,6 +272,7 @@ export const register: Register = on => {
     isTurnRunning = await read($, persistedTurnRunning)
     turnId = await read($, persistedTurnId)
     await setQueued($, [])
+    await awaitAttnTools($)
     void pollForever($)
     return started
   })

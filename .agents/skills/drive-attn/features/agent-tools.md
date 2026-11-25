@@ -21,7 +21,8 @@ command's own behavior belongs to its feature's file, such as
 - `tools-sigma`: a new Sigma conversation starts with `--mcp-server attn=<description>`. A call acts as the session that holds the call's root conversation ([harnesses.md](harnesses.md) `sigma`).
 - `tools-outposts`: a session on an outpost calls the outpost's own `/mcp`. A `home` tool runs at the home as that session ([outposts.md](outposts.md) `remote-tools`).
 - `tools-teaching`: the server's instructions carry the intent map, a list from what an agent needs to the tools that do it. A launch with the tools leaves the CLI teaching of the moved families to the server.
-- `tools-call-log`: each call writes an `agent tools:` line to the daemon log of the machine that served it, naming the tool, the credential and the session it acted as.
+- `tools-call-log`: each call writes an `agent tools:` line to the daemon log of the machine that served it, naming the tool, the credential and the session it acted as. A harness's `initialize` and `tools/list` write one too, with how long the answer took.
+- `tools-first-turn`: a Claude Code session's first turn has the tools, also on its brief, because attn's mod holds the turn until the server has connected, for 8 s at most. `TestRealClaudesFirstTurnOnItsBriefHasAttnsTools` (`cmd/attnd`) checks it on the real binary.
 
 ## How to get to it
 
