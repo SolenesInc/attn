@@ -298,6 +298,10 @@ const cliCall = (argv: string[], code?: number): Call => {
 
 const withoutComments = (code: string) => code.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[\s;{}()])\/\/.*$/gm, "$1")
 
+const DENIED = /^Permission (for this action|to use )/
+/** Whether a tool's result is Claude Code's refusal to run it, by its auto mode classifier or a permission rule. */
+const denied = (result: any) => result?.is_error === true && DENIED.test(String(result.text ?? ""))
+
 /** The attn calls a transcript mentions, in order. A call that shares its shell command or script with other work has no
  * refusal here, because the transcript cannot say which part failed. */
 function mentioned(events: any[]): Call[] {
@@ -308,6 +312,7 @@ function mentioned(events: any[]): Call[] {
     const name = String(e.tool_name ?? "")
     const text = String(e.text ?? "")
     const result = results.get(e.tool_call_id)
+    if (denied(result)) continue
     const answer = String(result?.text ?? "")
     const direct = name.match(TOOL_NAME)
     if (direct) {
@@ -390,6 +395,21 @@ export const retryWaitMs = (warnings: string[]) => {
   }, 0)
 }
 
+const TOOL_IN_REPL = /\btools\.(?:mcp__attn\w*?__)?(\w+)/g
+/** Whether a call holds an attn command or tool: one of attn's tools, a shell command, or a Claude Code REPL script of either. */
+function holdsAttn(name: string, text: string): boolean {
+  if (TOOL_NAME.test(name)) return true
+  if (name !== "REPL") return shellScripts(name, text).some((script) => attnWords(script).length > 0)
+  const code = withoutComments(shellScripts("Bash", text)[0] ?? "")
+  return shellStrings(code).some((script) => attnWords(script).length > 0) || [...code.matchAll(TOOL_IN_REPL)].some((m) => COMMANDS.has(m[1]!.replace(/_/g, " ")))
+}
+
+/** The calls holding an attn command or tool that Claude Code refused to run, as `denied` says. They reached no attn. */
+const deniedCalls = (events: any[]) => {
+  const results = new Map(events.filter((e) => e.kind === "tool_result").map((e) => [e.tool_call_id, e]))
+  return events.filter((e) => e.kind === "tool_call" && denied(results.get(e.tool_call_id)) && holdsAttn(String(e.tool_name ?? ""), String(e.text ?? ""))).length
+}
+
 export const isHelp = (call: Call) => call.help === true
 export const isCommand = (call: Call, commands: string | string[]) => [commands].flat().includes(call.command)
 const USAGE_CODES = new Set(["usage"])
@@ -415,6 +435,7 @@ export type Metrics = {
   cliCalls: number
   cliFailures: number
   sandboxBlocked: number
+  harnessDenied: number
   usageRefusals: number
   searches: number
   cliHelpReads: number
@@ -440,6 +461,7 @@ export function metrics(events: any[], calls: Call[], blocked = 0): Metrics {
     cliCalls: cli.length,
     cliFailures: cli.filter((c) => c.refused !== undefined).length,
     sandboxBlocked: blocked,
+    harnessDenied: deniedCalls(events),
     usageRefusals: [...tool, ...cli].filter(isUsageRefusal).length,
     searches,
     cliHelpReads: calls.filter(isHelp).length,
