@@ -1,0 +1,1 @@
+`seed pulse` is now `effect: record`: it replaces only the seed's own status, which D29 lets a record do. The effect paragraph in AGENTS.md matches D29 again. `seed check report` stays `act`, because its evidence replaces any same-named file on the seed, whoever attached it; the user is deciding how that should work.
