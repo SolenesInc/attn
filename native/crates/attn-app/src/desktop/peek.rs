@@ -632,7 +632,7 @@ fn open_tile(state: &mut State, tx: &mut Tx) {
         }
     }
     dismiss(state);
-    super::actions::show_leaf(state, &desktop, &leaf, tx);
+    crate::sidebar::open_tile(state, &desktop, &leaf, tx);
 }
 
 impl Peeks {

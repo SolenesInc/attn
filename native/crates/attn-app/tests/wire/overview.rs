@@ -866,6 +866,20 @@ fn an_entry_of_the_shelf_shows_its_tile_and_closes_the_overview() {
 }
 
 #[test]
+fn a_peek_s_open_shows_its_tile_and_closes_the_overview() {
+    let mut world = start(vec![stacked("a")]);
+    press(&mut world, Action::DesktopOverview);
+    let [x, y, w, h] = world.runtime().presented("shelf.entry.e").unwrap().0;
+    world.gesture(|app| app.move_to((x + w / 2.0, y + h / 2.0)));
+    world.advance(Duration::from_millis(200));
+    click(&mut world, "shelf.peek.open");
+
+    assert!(!open(&world));
+    let shown = sent(&world, "desktop_show_leaf");
+    assert_eq!(shown.last().unwrap()["leaf_id"], "e");
+}
+
+#[test]
 fn a_tile_that_needs_the_user_says_so_on_its_miniature_and_on_a_line_with_what_it_asks() {
     let mut state = initial(three_desktops());
     for session in state.sessions.iter_mut().flatten() {
