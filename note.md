@@ -1,0 +1,1 @@
+`browser cookies` and `review answer` are now `act` in the command catalog. `browser cookies` returns HttpOnly session cookies, so it no longer carries a read-only hint, and a wire test on the served tool list keeps it that way. `review answer` replaces an earlier answer with no history. The rule for `read` in AGENTS.md now says a read hands out no credential.
