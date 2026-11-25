@@ -28,9 +28,9 @@ type Limits struct {
 }
 
 var DefaultLimits = Limits{
-	Memory:  64 << 20,
-	Stack:   512 << 10,
-	Compute: 2 * time.Second,
+	Memory:  64 << 20,        // Parsing a 211 KB result leaves the child at 28 to 31 MB; an endless allocation ended at 90 to 99 MB.
+	Stack:   512 << 10,       // 494 nested calls fit on darwin/arm64 and 816 on linux/amd64.
+	Compute: 2 * time.Second, // 1,000 commands took 0.04 to 0.08 s of CPU, and 192 reads of a 211 KB result 0.5 to 1.3 s.
 }
 
 type Answer struct {
