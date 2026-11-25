@@ -1,11 +1,12 @@
-import { spawnSync } from "node:child_process"
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
+import { Database } from "bun:sqlite"
+import { spawn, spawnSync } from "node:child_process"
+import { constants, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
-import { join, resolve } from "node:path"
+import { dirname, join, resolve } from "node:path"
 import { ASK_TASKS } from "./asks.ts"
 import { PROBES } from "./probes.ts"
 import { TASKS } from "./tasks.ts"
-import { attnCalls, type Call, type Check, isCommand, metrics, type Metrics, run, type Task, toolOutcomes, type World } from "./world.ts"
+import { attnCalls, type Call, type Check, cliRuns, isCommand, metrics, type Metrics, type Records, run, type Task, toolOutcomes, unrecorded, type World } from "./world.ts"
 
 const repository = resolve(import.meta.dir, "../../..")
 /** Tripwires. The prototype's runs took 13 to 38 s and C16's under a minute; a run that reaches these is stuck. */
@@ -23,14 +24,14 @@ const flag = (name: string) => process.argv.includes(`--${name}`)
 const list = (value: string | undefined, fallback: string) => (value ?? fallback).split(",").filter(Boolean)
 
 const grid = flag("grid")
-const attnBinary = resolve(arg("attn") ?? join(repository, "attn"))
-if (!existsSync(attnBinary)) throw new Error(`${attnBinary} does not exist: run make build, or pass --attn <binary>`)
+const builtAttn = resolve(arg("attn") ?? join(repository, "attn"))
+if (!existsSync(builtAttn)) throw new Error(`${builtAttn} does not exist: run make build, or pass --attn <binary>`)
 const withoutAttnEnv = () => Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(ATTN_|CLAUDE|CODEX_|SIGMA_)/.test(key)))
 
 function newInstance(requested: string | undefined) {
   const usage = "pass --instance <name>: a new instance this run creates, changes and cleans"
   if (!requested) throw new Error(usage)
-  const attn = (args: string[]) => spawnSync(attnBinary, args, { env: withoutAttnEnv(), encoding: "utf8" })
+  const attn = (args: string[]) => spawnSync(builtAttn, args, { env: withoutAttnEnv(), encoding: "utf8" })
   const resolved = attn(["instance", "resolve", "--instance", requested])
   if (resolved.status !== 0) throw new Error(`${usage}: ${resolved.stderr.trim()}`)
   const name: string = JSON.parse(resolved.stdout).instance
@@ -80,9 +81,41 @@ cells.sort((a, b) => Number(a.harness.codeMode) - Number(b.harness.codeMode))
 
 const stamp = new Date().toISOString().replace(/[:.]/g, "-")
 const out = join(import.meta.dir, "runs", stamp)
-const dataDir: string = JSON.parse(run(attnBinary, ["instance", "resolve", "--instance", instance], withoutAttnEnv()).stdout).dataDir
+const dataDir: string = JSON.parse(run(builtAttn, ["instance", "resolve", "--instance", instance], withoutAttnEnv()).stdout).dataDir
 const workRoot = mkdtempSync(join(realpathSync(tmpdir()), "attn-agent-bench-"))
 mkdirSync(out, { recursive: true })
+
+/** The instance runs from a folder where `attn` is a recorder: it notes each command an agent runs, with its arguments
+ * and exit code, and runs the real CLI beside it. A harness's own hook calls pass through unrecorded. It writes to a pipe because Codex's
+ * read-only sandbox refuses a file, in lines short enough for the pipe to keep whole. */
+const cliLog = join(workRoot, "attn-cli.log")
+const recorder = join(workRoot, "attn-cli.pipe")
+const binaries = join(workRoot, "bin")
+const attnBinary = join(binaries, "attn-cli")
+mkdirSync(binaries)
+copyFileSync(builtAttn, attnBinary, constants.COPYFILE_FICLONE)
+copyFileSync(join(dirname(builtAttn), "attnd"), join(binaries, "attnd"), constants.COPYFILE_FICLONE)
+writeFileSync(cliLog, "")
+if (spawnSync("mkfifo", [recorder]).status !== 0) throw new Error(`mkfifo ${recorder} failed`)
+const recording = spawn("bash", ["-c", `exec cat <>'${recorder}' >>'${cliLog}'`], { stdio: "ignore" })
+recording.unref()
+process.on("exit", () => recording.kill())
+writeFileSync(
+  join(binaries, "attn"),
+  `#!/bin/bash
+case "$1" in _*) exec '${attnBinary}' "$@" ;; esac
+id=$$.$EPOCHREALTIME
+argv=$([ $# -eq 0 ] || printf '%s\\0' "$@" | base64 | tr -d '\\n')
+note() { { printf '%s\\n' "$*" 1<>'${recorder}'; } 2>/dev/null; }
+for ((i = 0; i < \${#argv}; i += 3000)); do note arg "$id" "\${argv:i:3000}"; done
+note start "$id" "$EPOCHREALTIME" "\${ATTN_TERMINAL_ID:--}" "\${CODEX_THREAD_ID:-\${SIGMA_ROOT_CONVERSATION:--}}"
+'${attnBinary}' "$@"
+code=$?
+note end "$id" "$code"
+exit $code
+`,
+  { mode: 0o755 },
+)
 
 const baseEnv = (): NodeJS.ProcessEnv => {
   return {
@@ -100,6 +133,16 @@ function attnRaw(args: string[], opts: { stdin?: string; cwd?: string; env?: Nod
   return r.stdout
 }
 const json = (text: string) => JSON.parse(text.slice(text.search(/[[{]/)))
+
+/** The harness's own id for the conversation a session holds, which its shells carry when one server runs them all. */
+function conversationOf(session: string): string {
+  const db = new Database(join(dataDir, "attn.db"), { readonly: true })
+  try {
+    return db.query<{ id: string }, [string]>("SELECT resume_session_id AS id FROM sessions WHERE id = ?").get(session)?.id ?? ""
+  } finally {
+    db.close()
+  }
+}
 
 const wsctlBinary = join(out, "wsctl")
 function wsctl(args: string[]) {
@@ -252,6 +295,16 @@ function toolsHeld(cell: Cell, directory: string, startedAt: number): "on" | "of
   return added.some((a) => (a.addedNames ?? []).some((n: string) => n === "attn" || n.startsWith("mcp__attn"))) ? "on" : "off"
 }
 
+/** A Codex that does not load the user's own skills, which it reads from HOME whatever CODEX_HOME says, and whose commands
+ * skip the login shell, where a user's profile can put an installed attn before the one the bench runs. */
+const plainCodex = join(out, "codex-without-user-skills")
+function writePlainCodex() {
+  const codex = spawnSync("bash", ["-c", "command -v codex"], { encoding: "utf8" }).stdout.trim()
+  const skills = spawnSync("find", ["-L", join(homedir(), ".agents/skills"), "-name", "SKILL.md"], { encoding: "utf8" }).stdout.split("\n").filter(Boolean)
+  const off = skills.map((path) => `{path=${JSON.stringify(path)},enabled=false}`).join(",")
+  writeFileSync(plainCodex, `#!/bin/bash\nexec '${codex}' -c allow_login_shell=false -c 'skills.config=[${off}]' "$@"\n`, { mode: 0o755 })
+}
+
 /** A Claude Code that runs with code mode off, whatever the user's settings say: their `env` beats the process environment,
  * and only the settings attn passes on the command line beat it. */
 const plainClaude = join(out, "claude-code-mode-off")
@@ -292,7 +345,7 @@ let profiles = 0
 
 /** `fault` says why a run measures something other than its cell, such as another model; such a run fails and stays out
  * of the comparisons. `launchMs` is from the run's start to the prompt being typed; `turnMs` from its Enter to settled. */
-type RunResult = { task: string; cell: string; n: number; pass: boolean; why: string; fault: string; ended: string; tools: string; toolsHeld: string; metrics: Metrics; usage: Usage; launchMs: number; turnMs: number }
+type RunResult = { task: string; cell: string; n: number; pass: boolean; why: string; fault: string; ended: string; tools: string; toolsHeld: string; missed: string[]; metrics: Metrics; usage: Usage; launchMs: number; turnMs: number }
 
 async function judged(task: Task, w: World, calls: Call[], ended: string): Promise<Check> {
   try {
@@ -337,6 +390,7 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
       wsctl(["add-session", "--cwd", dir, "--agent", cell.harness.agent, "--profile", profile, "--label", label, "--id", session, ...(remote ? ["--host", cell.place.name] : [])])
     }
     await atPrompt(session, cell.harness.agent)
+    const terminals: string[] = json(attnRaw(["terminal", "ls", "--all", "--session", session, "--json"])).filter((t: any) => t.session_id === session).map((t: any) => t.terminal_id)
     if (task.launch === "chief") await settled(session, 0)
     const scoped = (args: string[], who?: string) => [...args, ...(who ? ["--session", who] : ["--profile", profile])]
     const w: World = {
@@ -368,8 +422,8 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
     }
     const prompt = await task.setup(w)
     const before = transcript(session).length
-    const toolLog = () => (remote ? undefined : toolOutcomes(readFileSync(join(dataDir, "daemon.log"), "utf8"), session))
-    const loggedBefore = toolLog()?.length ?? 0
+    const toolLog = () => toolOutcomes(readFileSync(join(dataDir, "daemon.log"), "utf8"), session)
+    const loggedBefore = remote ? 0 : toolLog().length
     if (before > 0) baseline = await steadyUsage(session)
     wsctl(["input", "--id", session, "--text", prompt])
     await wait(500)
@@ -383,24 +437,28 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
     }
     turn.turnMs = Date.now() - turn.at
     events = transcript(session).slice(before)
-    const outcomes = toolLog()?.slice(loggedBefore)
-    const calls = attnCalls(events, outcomes)
+    const conversation = remote ? "" : conversationOf(session)
+    const records: Records | undefined = remote
+      ? undefined
+      : { tools: toolLog().slice(loggedBefore), cli: cliRuns(readFileSync(cliLog, "utf8")).filter((c) => c.at >= turn.at && (c.conversation ? c.conversation === conversation : terminals.includes(c.terminal))) }
+    const calls = attnCalls(events, records)
     const verdict: Check = stopped ? { pass: false, why: stopped } : await judged(task, w, calls, ended)
     const used = since(await steadyUsage(session), baseline)
     const held = toolsHeld(cell, directory, started)
-    const fault = faultOf(cell, held, used, events)
+    const missed = records ? unrecorded(events, records) : []
+    const fault = records?.cli.length === 0 && missed.length > 0 ? "the session ran an attn the bench did not record" : faultOf(cell, held, used, events)
     const result: RunResult = {
       task: task.id, cell: cell.id, n, pass: verdict.pass && !fault, why: fault ? `bench: ${fault}; ${verdict.why}` : verdict.why, fault, ended,
-      tools: cell.tools, toolsHeld: held, metrics: metrics(events, calls, outcomes), usage: used, launchMs: turn.launchMs, turnMs: turn.turnMs,
+      tools: cell.tools, toolsHeld: held, missed, metrics: metrics(events, calls), usage: used, launchMs: turn.launchMs, turnMs: turn.turnMs,
     }
     writeFileSync(join(evidence, "calls.json"), JSON.stringify(calls, null, 1))
-    if (outcomes) writeFileSync(join(evidence, "tool-log.json"), JSON.stringify(outcomes, null, 1))
+    if (records) writeFileSync(join(evidence, "records.json"), JSON.stringify(records, null, 1))
     if (ended !== "closed itself") writeFileSync(join(evidence, "asks.json"), JSON.stringify(w.attnJson(["ask", "list"], { session }), null, 1))
     writeFileSync(join(evidence, "result.json"), JSON.stringify(result, null, 1))
     return result
   } catch (error) {
     const fault = (error as Error).message
-    return { task: task.id, cell: cell.id, n, pass: false, why: `bench: ${fault}`, fault, ended, tools: cell.tools, toolsHeld: "unknown", metrics: metrics(events, []), usage: NO_USAGE, launchMs: turn.launchMs, turnMs: turn.turnMs }
+    return { task: task.id, cell: cell.id, n, pass: false, why: `bench: ${fault}`, fault, ended, tools: cell.tools, toolsHeld: "unknown", missed: [], metrics: metrics(events, []), usage: NO_USAGE, launchMs: turn.launchMs, turnMs: turn.turnMs }
   } finally {
     if (session) {
       writeFileSync(join(evidence, "screen.txt"), screen(session))
@@ -418,7 +476,7 @@ const median = (xs: number[]) => {
 
 function table(results: RunResult[]) {
   const lines = [
-    `${runs} run(s) per cell on instance ${instance}, attn ${attnRaw(["version"]).trim()}, ${new Date().toISOString().slice(0, 10)}. Turns, tokens in thousands (uncached input, cache reads, cache writes), output tokens, calls and seconds are medians per run. Tool and CLI show calls, then failed ones in parentheses. Usage is calls refused because their arguments did not fit, on either surface. Help is --help reads, ref is skill and guide reads. Cost is the mean per run at API prices, as attn accounts it; "+ unpriced" marks a model attn has no price for. Runs whose fault says they measured something else fail.`,
+    `${runs} run(s) per cell on instance ${instance}, attn ${attnRaw(["version"]).trim()}, ${new Date().toISOString().slice(0, 10)}. Turns, tokens in thousands (uncached input, cache reads, cache writes), output tokens, calls and seconds are medians per run. Tool and CLI show calls, then failed ones in parentheses. Usage is calls refused because their arguments did not fit, on either surface. Help is --help reads, ref is skill and guide reads. Cost is the mean per run at API prices, as attn accounts it; "+ unpriced" marks a model attn has no price for. Runs whose fault says they measured something else fail. A run whose usage attn could not measure whole is marked and left out of tokens and cost.`,
     "",
     "| task | harness | models | tools | place | pass | turns | in k | read k | write k | out | tool | CLI | usage | searches | help | ref | turn s | cost/run | failures |",
     "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
@@ -428,11 +486,15 @@ function table(results: RunResult[]) {
       const rs = results.filter((r) => r.task === task.id && r.cell === cell.id)
       if (rs.length === 0) continue
       const m = (f: (r: RunResult) => number) => median(rs.map(f))
-      const k = (f: (r: RunResult) => number) => (m(f) / 1000).toFixed(1)
+      const measured = rs.filter((r) => !r.usage.incomplete && r.usage.models.length > 0)
+      const used = (f: (u: Usage) => number) => median(measured.map((r) => f(r.usage)))
+      const k = (f: (u: Usage) => number) => (measured.length === 0 ? "-" : (used(f) / 1000).toFixed(1))
+      const missed = rs.filter((r) => r.missed.length > 0).map((r) => `#${r.n} unrecorded: ${r.missed.join(", ")}`)
+      const unmeasured = rs.filter((r) => !measured.includes(r)).map((r) => `#${r.n} usage incomplete`)
       const fails = rs.filter((r) => !r.pass).map((r) => `#${r.n}: ${r.why}`.slice(0, 160).replace(/\|/g, "/"))
       const cli = rs.filter((r) => cell.tools === "on" && r.metrics.cliCalls > 0).map((r) => `#${r.n} used the CLI`)
       lines.push(
-        `| ${task.id} | ${cell.harness.name} | ${[...new Set(rs.flatMap((r) => r.usage.models))].join(" ") || "-"} | ${cell.tools} | ${cell.place.name} | ${rs.filter((r) => r.pass).length}/${rs.length} | ${m((r) => r.metrics.turns)} | ${k((r) => r.usage.input)} | ${k((r) => r.usage.cacheRead)} | ${k((r) => r.usage.cacheWrite)} | ${m((r) => r.usage.output)} | ${m((r) => r.metrics.toolCalls)} (${m((r) => r.metrics.toolRefusals)}) | ${m((r) => r.metrics.cliCalls)} (${m((r) => r.metrics.cliFailures)}) | ${m((r) => r.metrics.usageRefusals)} | ${m((r) => r.metrics.searches)} | ${m((r) => r.metrics.cliHelpReads)} | ${m((r) => r.metrics.referenceReads)} | ${(m((r) => r.turnMs) / 1000).toFixed(1)} | $${(rs.reduce((a, r) => a + r.usage.cost, 0) / rs.length).toFixed(3)}${rs.some((r) => r.usage.unpriced) ? " + unpriced" : ""} | ${[...fails, ...cli].join("<br>") || "-"} |`,
+        `| ${task.id} | ${cell.harness.name} | ${[...new Set(rs.flatMap((r) => r.usage.models))].join(" ") || "-"} | ${cell.tools} | ${cell.place.name} | ${rs.filter((r) => r.pass).length}/${rs.length} | ${m((r) => r.metrics.turns)} | ${k((u) => u.input)} | ${k((u) => u.cacheRead)} | ${k((u) => u.cacheWrite)} | ${measured.length === 0 ? "-" : used((u) => u.output)} | ${m((r) => r.metrics.toolCalls)} (${m((r) => r.metrics.toolRefusals)}) | ${m((r) => r.metrics.cliCalls)} (${m((r) => r.metrics.cliFailures)}) | ${m((r) => r.metrics.usageRefusals)} | ${m((r) => r.metrics.searches)} | ${m((r) => r.metrics.cliHelpReads)} | ${m((r) => r.metrics.referenceReads)} | ${(m((r) => r.turnMs) / 1000).toFixed(1)} | ${measured.length === 0 ? "-" : `$${(measured.reduce((a, r) => a + r.usage.cost, 0) / measured.length).toFixed(3)}`}${rs.some((r) => r.usage.unpriced) ? " + unpriced" : ""} | ${[...fails, ...cli, ...unmeasured, ...missed].join("<br>") || "-"} |`,
       )
     }
   return lines.join("\n")
@@ -448,6 +510,10 @@ function interval(xs: number[]): [number, number] {
   const means = Array.from({ length: 10_000 }, () => xs.reduce((a) => a + xs[Math.floor(next() * xs.length)]!, 0) / xs.length).sort((a, b) => a - b)
   return [means[Math.floor(means.length * 0.025)]!, means[Math.floor(means.length * 0.975)]!]
 }
+
+/** D22 asks one way, whether Sigma is worse. Five pairs all worse come by chance 0.5^5 = 3% of the time, four 6%, so a
+ * verdict at 95% needs five. */
+const D22_PAIRS = 5
 
 const strata: [string, Task[]][] = [["the seven tasks", TASKS], ["the ask tasks", ASK_TASKS], ["the probes", PROBES]]
 
@@ -472,7 +538,8 @@ function judgeD22(results: RunResult[]) {
         if (pairs.length === 0) continue
         const [low, high] = interval(pairs.map((p) => p.gap))
         const mean = pairs.reduce((a, p) => a + p.gap, 0) / pairs.length
-        lines.push(`${high < 0 ? "FAILS" : "holds"}  ${group}, ${against}: ${points(mean)} points (95% ${points(low)} to ${points(high)}) over ${pairs.length} tasks, better on ${pairs.filter((p) => p.gap > 0).length}, worse on ${pairs.filter((p) => p.gap < 0).length}`)
+        const verdict = pairs.length < D22_PAIRS ? `too few pairs for a verdict (${D22_PAIRS} needed)` : high < 0 ? "FAILS" : "holds"
+        lines.push(`${verdict}  ${group}, ${against}: ${points(mean)} points (95% ${points(low)} to ${points(high)}) over ${pairs.length} tasks, better on ${pairs.filter((p) => p.gap > 0).length}, worse on ${pairs.filter((p) => p.gap < 0).length}`)
         for (const p of pairs.filter((p) => Math.min(p.s.n, p.o.n) >= 3 && p.s.rate <= 1 / 3 && p.o.rate === 1))
           lines.push(`RERUN  ${p.task.id}, ${against}: ${Math.round(p.s.rate * p.s.n)}/${p.s.n} against ${p.o.n}/${p.o.n}`)
       }
@@ -511,6 +578,7 @@ function drawsMermaid(source: string) {
   return { drawn: true, skipped: r.stdout.split("\n").filter(Boolean) }
 }
 writePlainClaude()
+writePlainCodex()
 const taskSettings = [...new Set(tasks.flatMap((t) => Object.keys(t.settings ?? {})))]
 const results: RunResult[] = []
 try {
@@ -525,6 +593,7 @@ try {
         setting(`default_model_${cell.harness.agent}`, cell.harness.model)
         setting(`default_effort_${cell.harness.agent}`, cell.harness.effort)
         if (cell.harness.agent === "claude") setting("claude_executable", cell.harness.codeMode ? "" : plainClaude)
+        if (cell.harness.agent === "codex") setting("codex_executable", plainCodex)
         if (cell.harness.agent === "sigma") setting("sigma_enabled", "true")
         const jobs = Array.from({ length: runs }, (_, i) => i + 1)
         await Promise.all(

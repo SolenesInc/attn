@@ -7,7 +7,7 @@ export type Check = { pass: boolean; why: string }
 /** One call the agent made to attn. `command` is the catalog's command on both surfaces, such as `seed note`; `text` is
  * the CLI line or the tool's arguments. A code-mode script that calls several tools counts once per tool, with the whole
  * script as its text. `refused` is the failed call's answer. */
-export type Call = { via: "cli" | "tool"; command: string; text: string; refused?: string }
+export type Call = { via: "cli" | "tool"; command: string; text: string; help?: boolean; refused?: string }
 
 export type World = {
   dir: string
@@ -63,6 +63,13 @@ const COMMANDS = new Set(catalog.tools.map((t) => t.name.replace(/_/g, " ")))
 
 const KEYWORDS = new Set(["then", "do", "else", "elif", "if", "while", "until", "!", "{", "time", "exec", "command", "sudo", "nohup"])
 
+const HEREDOC = /^<<-?(?!<)[ \t]*(['"]?)([\w.-]+)\1/
+/** Where the script goes on after a heredoc body that starts at `from`. */
+function afterHeredoc(script: string, from: number, tag: string) {
+  const close = script.slice(from).match(new RegExp("^[ \\t]*" + tag.replace(/\./g, "\\.") + "[ \\t]*$", "m"))
+  return close ? from + close.index! + close[0].length : script.length
+}
+
 /** The commands a shell script runs, as words: quotes resolved, heredoc bodies and redirections left out, and the
  * commands inside $( ) and backquotes listed before the command that holds them. */
 function shellCommands(script: string): string[][] {
@@ -85,10 +92,16 @@ function shellCommands(script: string): string[][] {
   const substitution = (from: number, close: ")" | "\x60") => {
     let depth = 1
     let i = from
+    const pending: string[] = []
     for (let quote = ""; i < script.length; i++) {
       const c = script[i]!
+      const tag: RegExpMatchArray | null = quote || c !== "<" ? null : script.slice(i).match(HEREDOC)
       if (c === "\\") i++
       else if (quote) quote = c === quote ? "" : quote
+      else if (tag) {
+        pending.push(tag[2]!)
+        i += tag[0].length - 1
+      } else if (c === "\n" && pending.length > 0) i = pending.splice(0).reduce((at, t) => afterHeredoc(script, at, t), i + 1) - 1
       else if (c === "'" || c === '"') quote = c
       else if (close === ")" && c === "(") depth++
       else if (c === close && --depth === 0) break
@@ -134,10 +147,7 @@ function shellCommands(script: string): string[][] {
     } else if (c === " " || c === "\t") flush()
     else if (c === "\n") {
       end()
-      for (const tag of heredocs.splice(0)) {
-        const close = script.slice(i + 1).match(new RegExp("^[ \\t]*" + tag.replace(/\./g, "\\.") + "[ \\t]*$", "m"))
-        i = close ? i + 1 + close.index! + close[0].length : script.length
-      }
+      i = heredocs.splice(0).reduce((at, tag) => afterHeredoc(script, at, tag), i + 1) - 1
     } else if (";|&".includes(c) || (word === undefined && "()".includes(c)) || c === ")") end()
     else word = (word ?? "") + c
   }
@@ -210,22 +220,53 @@ function shellScripts(tool: string, text: string): string[] {
   return Array.isArray(command) ? [command.map((w) => "'" + String(w).replace(/'/g, "'\\''") + "'").join(" ")] : [String(command ?? "")]
 }
 
-const EXIT_CODE = /exit_code\\?":\s*\d+/g
-const CLI_FAILED = /(^|\n|\\n)usage: attn [^\n]*\(attn [^\n]* --help\)|^Exit code [1-9]|exit_code\\?":\s*[1-9]|Process exited with code [1-9]|\[exit [1-9]/
-const HELP = /(^|\s)(--help|-h)(\s|$)/
+const CLI_USAGE = /(^|\n|\\n)usage: attn [^\n]*\(attn [^\n]* --help\)/
+const HELP = (word: string) => word === "--help" || word === "-h"
 
 /** One line of the daemon's log for a tool call this session made, in order. */
-export type ToolOutcome = { command: string; refused?: string }
+export type ToolOutcome = { at: number; command: string; refused?: string }
 const TOOL_LOG = /agent tools: (\w+) by .* \(session ([^)]+)\): (?:ok|refused ([\s\S]*))$/
 export const toolOutcomes = (log: string, session: string): ToolOutcome[] =>
   log.split("\n").flatMap((line) => {
     const m = line.match(TOOL_LOG)
-    return m && m[2] === session ? [{ command: m[1]!.replace(/_/g, " "), ...(m[3] ? { refused: m[3] } : {}) }] : []
+    const at = Date.parse(line.match(/^\[([^\]]+)\]/)?.[1] ?? "")
+    return m && m[2] === session ? [{ at: Number.isNaN(at) ? 0 : at, command: m[1]!.replace(/_/g, " "), ...(m[3] ? { refused: m[3] } : {}) }] : []
   })
 
-/** The attn calls in a transcript from `attn session transcript --json`, in order. A tool call's refusal comes from the
- * daemon's log when it lists as many calls of that tool as the transcript, else from the tool's result. */
-export function attnCalls(events: any[], outcomes: ToolOutcome[] = []): Call[] {
+/** One `attn` command that the recorder in `bench.ts` saw run, with its exit code once it ended. A shell of a harness
+ * whose server runs every conversation carries the conversation; the others carry the terminal. */
+export type CliRun = { at: number; terminal: string; conversation: string; argv: string[]; code?: number }
+export function cliRuns(log: string): CliRun[] {
+  const args = new Map<string, string>()
+  const runs = new Map<string, CliRun>()
+  for (const line of log.split("\n")) {
+    const [kind, id = "", a = "", terminal = "", conversation = ""] = line.split(" ")
+    if (kind === "arg") args.set(id, (args.get(id) ?? "") + a)
+    if (kind === "start") {
+      const argv = Buffer.from(args.get(id) ?? "", "base64").toString("utf8").split("\0").slice(0, -1)
+      runs.set(id, { at: Number(a.replace(",", ".")) * 1000, terminal: terminal === "-" ? "" : terminal, conversation: conversation === "-" ? "" : conversation, argv })
+    }
+    const ended = kind === "end" && runs.get(id)
+    if (ended) ended.code = Number(a)
+  }
+  return [...runs.values()]
+}
+
+/** What the home recorded for a session: every tool call its daemon logged and every `attn` command it ran. */
+export type Records = { tools: ToolOutcome[]; cli: CliRun[] }
+
+const CLOSED_PIPE = 141
+const cliCall = (argv: string[], code?: number): Call => {
+  const help = argv.some(HELP)
+  const failed = code !== undefined && code !== 0 && code !== CLOSED_PIPE && !help
+  return { via: "cli", command: commandOf(argv), text: argv.join(" "), ...(help ? { help } : {}), ...(failed ? { refused: code === 2 ? "usage: attn exited 2" : `attn exited ${code}` } : {}) }
+}
+
+const withoutComments = (code: string) => code.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[\s;{}()])\/\/.*$/gm, "$1")
+
+/** The attn calls a transcript mentions, in order. A call that shares its shell command or script with other work has no
+ * refusal here, because the transcript cannot say which part failed. */
+function mentioned(events: any[]): Call[] {
   const calls: Call[] = []
   const results = new Map(events.filter((e) => e.kind === "tool_result").map((e) => [e.tool_call_id, e]))
   for (const e of events) {
@@ -239,26 +280,47 @@ export function attnCalls(events: any[], outcomes: ToolOutcome[] = []): Call[] {
       calls.push({ via: "tool", command: direct[1]!.replace(/_/g, " "), text, ...(result?.is_error ? { refused: answer } : {}) })
       continue
     }
-    if (SCRIPT_TOOLS.has(name)) for (const m of text.matchAll(TOOL_IN_SCRIPT)) calls.push({ via: "tool", command: m[1]!.replace(/_/g, " "), text })
-    const scripts = shellScripts(name, text)
-    const codes = [...answer.matchAll(EXIT_CODE)]
-    scripts.forEach((script, i) => {
-      const own = codes.length === scripts.length ? answer.slice(codes[i]!.index, codes[i + 1]?.index) : answer
-      for (const words of attnWords(script)) {
-        const help = words.some((w) => HELP.test(w))
-        calls.push({ via: "cli", command: commandOf(words), text: words.join(" "), ...(!help && (result?.is_error || CLI_FAILED.test(own)) ? { refused: own.slice(0, 600) } : {}) })
+    if (SCRIPT_TOOLS.has(name)) for (const m of withoutComments(text).matchAll(TOOL_IN_SCRIPT)) calls.push({ via: "tool", command: m[1]!.replace(/_/g, " "), text })
+    for (const script of shellScripts(name, text)) {
+      const commands = attnWords(script)
+      const alone = commands.length === 1 && shellCommands(script).length === 1 && !SCRIPT_TOOLS.has(name)
+      for (const words of commands) {
+        const call = cliCall(words)
+        calls.push({ ...call, ...(alone && !call.help && (result?.is_error || CLI_USAGE.test(answer)) ? { refused: answer.slice(0, 600) } : {}) })
       }
-    })
-  }
-  for (const command of new Set(outcomes.map((o) => o.command))) {
-    const logged = outcomes.filter((o) => o.command === command)
-    const called = calls.filter((c) => c.via === "tool" && c.command === command)
-    if (logged.length === called.length) called.forEach((c, i) => (logged[i]!.refused ? (c.refused = logged[i]!.refused) : delete c.refused))
+    }
   }
   return calls
 }
 
-export const isHelp = (call: Call) => call.via === "cli" && HELP.test(call.text)
+/** The attn calls of a session, one per execution. At the home they are what was recorded, and the transcript supplies
+ * a tool call's arguments. On an outpost, which records nothing here, they are what the transcript mentions. */
+export function attnCalls(events: any[], records?: Records): Call[] {
+  const seen = mentioned(events)
+  if (!records) return seen
+  const used = new Map<string, number>()
+  const tools = records.tools.map((t) => {
+    const texts = seen.filter((c) => c.via === "tool" && c.command === t.command)
+    const n = used.get(t.command) ?? 0
+    used.set(t.command, n + 1)
+    return { at: t.at, call: { via: "tool" as const, command: t.command, text: texts[Math.min(n, texts.length - 1)]?.text ?? "", ...(t.refused ? { refused: t.refused } : {}) } }
+  })
+  return [...tools, ...records.cli.map((r) => ({ at: r.at, call: cliCall(r.argv, r.code) }))].sort((a, b) => a.at - b.at).map((x) => x.call)
+}
+
+/** The attn commands a transcript shows more often than the recorder saw them: the session ran another attn, or the
+ * harness refused the command before it ran. */
+export function unrecorded(events: any[], records: Records): string[] {
+  const left = records.cli.map((r) => commandOf(r.argv))
+  return mentioned(events).flatMap((c) => {
+    if (c.via !== "cli") return []
+    const i = left.indexOf(c.command)
+    if (i >= 0) left.splice(i, 1)
+    return i >= 0 ? [] : [c.command]
+  })
+}
+
+export const isHelp = (call: Call) => call.help === true
 export const isCommand = (call: Call, commands: string | string[]) => [commands].flat().includes(call.command)
 export const isUsageRefusal = (call: { refused?: string }) => call.refused !== undefined && /(^|\n|\\n)usage:/.test(call.refused)
 
@@ -283,7 +345,7 @@ export type Metrics = {
   referenceReads: number
 }
 
-export function metrics(events: any[], calls: Call[], outcomes?: ToolOutcome[]): Metrics {
+export function metrics(events: any[], calls: Call[]): Metrics {
   let turns = 0
   let inAssistant = false
   let searches = 0
@@ -293,7 +355,7 @@ export function metrics(events: any[], calls: Call[], outcomes?: ToolOutcome[]):
     inAssistant = assistant
     if (e.kind === "tool_call" && (SEARCH_TOOLS.has(e.tool_name) || /searchTools\(|describeTool\(|ALL_TOOLS/.test(String(e.text ?? "")))) searches++
   }
-  const tool: ToolOutcome[] = outcomes ?? calls.filter((c) => c.via === "tool")
+  const tool = calls.filter((c) => c.via === "tool")
   const cli = calls.filter((c) => c.via === "cli")
   return {
     turns,
