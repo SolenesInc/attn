@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "info",
+  "title": "Review disposition: Agent inbox remains a read under amended D29",
+  "at": "2026-11-25T18:20:56.387Z",
+  "detail": "Victor approved a-4afwnf. The amended D29 in s-ct56cj explicitly permits a read to settle the caller's own state, including ending seed standby after reading its mail. The observed behavior is unchanged. This resolves the classification finding as intended behavior without a fixing commit.\n"
+}
