@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Garden duplicates descendant attention aggregation",
+  "at": "2026-11-25T00:48:13.687Z",
+  "fixesBug": "e7dd2e7"
+}
