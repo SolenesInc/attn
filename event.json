@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Agent inbox can clear persisted seed standby",
+  "at": "2026-11-25T18:06:18.858Z",
+  "detail": "The read effect permits moving the caller's read position, while reading the final seed message through agent inbox also clears the persisted seed standby state. Classify it as act or separate the state change under an agreed contract. Focused standby tests and independently checked source trace are on s-0evnyp.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/catalog/content/agent.yaml",
+    "line": 112
+  },
+  "culprit": "1babc79562723e5c21d03b89bf3cbe57cce198ec"
+}
