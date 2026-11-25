@@ -236,7 +236,7 @@ export const toolOutcomes = (log: string, session: string): ToolOutcome[] =>
 
 /** One `attn` command that the recorder in `bench.ts` saw run, with its exit code once it ended. A shell of a harness
  * whose server runs every conversation carries the conversation; the others carry the terminal. */
-export type CliRun = { at: number; terminal: string; conversation: string; argv: string[]; code?: number }
+export type CliRun = { at: number; terminal: string; conversation: string; argv: string[]; code?: number; blocked?: true }
 export function cliRuns(log: string): CliRun[] {
   const args = new Map<string, string>()
   const runs = new Map<string, CliRun>()
@@ -248,13 +248,22 @@ export function cliRuns(log: string): CliRun[] {
       runs.set(id, { at: Number(a.replace(",", ".")) * 1000, terminal: terminal === "-" ? "" : terminal, conversation: conversation === "-" ? "" : conversation, argv })
     }
     const ended = kind === "end" && runs.get(id)
-    if (ended) ended.code = Number(a)
+    if (ended) {
+      ended.code = Number(a)
+      if (terminal === "blocked") ended.blocked = true
+    }
   }
   return [...runs.values()]
 }
 
 /** What the home recorded for a session: every tool call its daemon logged and every `attn` command it ran. */
 export type Records = { tools: ToolOutcome[]; cli: CliRun[] }
+
+/** The catalog's runs_without_daemon commands, which answer inside a sandbox. */
+const OFFLINE = new Set(["skill", "guide"])
+/** A command that a sandbox kept from attn's socket: attn saw nothing of it. */
+const isBlocked = (r: CliRun) => r.blocked === true && !OFFLINE.has(commandOf(r.argv))
+export const blockedRuns = (records?: Records) => (records?.cli ?? []).filter(isBlocked).length
 
 const CLOSED_PIPE = 141
 const cliCall = (argv: string[], code?: number): Call => {
@@ -297,7 +306,7 @@ function mentioned(events: any[]): Call[] {
 }
 
 /** The attn calls of a session, one per execution. At the home they are what was recorded, and the transcript supplies
- * a tool call's arguments. On an outpost, which records nothing here, they are what the transcript mentions. */
+ * a tool call's arguments. Commands the sandbox blocked reached no attn, so they are not among them. On an outpost, which records nothing here, they are what the transcript mentions. */
 export function attnCalls(events: any[], records?: Records): Call[] {
   const seen = mentioned(events)
   if (!records) return seen
@@ -308,7 +317,7 @@ export function attnCalls(events: any[], records?: Records): Call[] {
     used.set(t.command, n + 1)
     return { at: t.at, call: { via: "tool" as const, command: t.command, text: texts[Math.min(n, texts.length - 1)]?.text ?? "", ...(t.refused ? { refused: t.refused } : {}) } }
   })
-  return [...tools, ...records.cli.map((r) => ({ at: r.at, call: cliCall(r.argv, r.code) }))].sort((a, b) => a.at - b.at).map((x) => x.call)
+  return [...tools, ...records.cli.filter((r) => !isBlocked(r)).map((r) => ({ at: r.at, call: cliCall(r.argv, r.code) }))].sort((a, b) => a.at - b.at).map((x) => x.call)
 }
 
 /** The attn commands a transcript shows more often than the recorder saw them: the session ran another attn, or the
@@ -347,13 +356,14 @@ export type Metrics = {
   toolRefusals: number
   cliCalls: number
   cliFailures: number
+  sandboxBlocked: number
   usageRefusals: number
   searches: number
   cliHelpReads: number
   referenceReads: number
 }
 
-export function metrics(events: any[], calls: Call[]): Metrics {
+export function metrics(events: any[], calls: Call[], blocked = 0): Metrics {
   let turns = 0
   let inAssistant = false
   let searches = 0
@@ -371,6 +381,7 @@ export function metrics(events: any[], calls: Call[]): Metrics {
     toolRefusals: tool.filter((c) => c.refused !== undefined).length,
     cliCalls: cli.length,
     cliFailures: cli.filter((c) => c.refused !== undefined).length,
+    sandboxBlocked: blocked,
     usageRefusals: [...tool, ...cli].filter(isUsageRefusal).length,
     searches,
     cliHelpReads: calls.filter(isHelp).length,

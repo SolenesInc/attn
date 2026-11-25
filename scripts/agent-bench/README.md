@@ -9,14 +9,14 @@ Both spend model tokens on your subscriptions, so CI never runs them. A person r
 
 ## Run the instance driver
 
-You need `make build` done in this checkout, bun, Go, and signed-in `claude` and `codex` on `PATH`. Run from the repository root:
+You need `make build` done in this checkout, bun, Go, cargo for the ask tasks, bash 5 or newer, `mkfifo`, and signed-in `claude` and `codex`, all on `PATH`. macOS ships bash 3.2, so put a newer one ahead of it. Run from the repository root:
 
 ```sh
 make build
 bun scripts/agent-bench/instance/bench.ts --instance bench --tasks standby --harness claude,codex --tools on,off
 ```
 
-The driver starts the instance's daemon with headless model tasks off, runs every cell, prints the table, and ends with `attn instance clean <name>`. Pass `--keep` to leave the instance running for inspection.
+The driver starts the instance's daemon with headless model tasks off, runs every cell, prints the table, and ends with `attn instance clean <name>`. Ctrl-C and SIGTERM clean the instance the same way and write no table or `results.json`. Pass `--keep` to leave the instance running for inspection.
 
 `--instance` must name a new instance, because the run changes the instance's settings and cleans it. The driver asks attn for the canonical name, so `Bench` and ` bench ` both mean `bench`. Before it runs anything, it refuses the default and `dev` instances and any instance that `attn instance list` already shows. To run again on a name you kept, clean it first with `attn instance clean <name>`.
 
@@ -26,8 +26,9 @@ The numbers come from attn itself:
 
 - The models, tokens and cost come from `attn session show --json` for the session the prompt went to, less what the session had used before the prompt. Uncached input, cache reads, cache writes and output are kept apart, and an approval reviewer's tokens apart from the agent's. Cost is at API prices. A model attn has no price for, such as Codex's, shows as `+ unpriced`. A run whose usage attn could not measure whole, or that shows no model, is marked `usage incomplete` and left out of the token and cost figures. Other sessions a run starts, such as the delegate in `msg-delegate`, are stopped once the run is judged and not counted.
 - Turns and searches come from `attn session transcript --json`, from the prompt on. `--help` reads, and skill and guide reads, are counted from the attn calls below. A run with `--tools on` that used the CLI is marked `used the CLI`.
-- At the home, attn calls are executions, counted alike on both surfaces. A tool call is a line of the daemon's log (`agent tools: …`), with its refusal. A CLI call is one run of the `attn` the session's shell finds: the driver starts the daemon from a folder where `attn` is a recorder that notes each command's arguments and exit code and then runs the real CLI. Hook calls (`attn _…`) pass through unrecorded. Exit 2 is a usage refusal, and any other non-zero exit a refusal unless the command asks for `--help`, so a command that answers with its exit code, such as `presence --seed-ids` without seeds, counts as refused. The transcript supplies a tool call's arguments, matched by order. Commands the transcript shows but the recorder missed are named as `unrecorded` in the table, and a run whose commands were all missed has a fault.
+- At the home, attn calls are executions, counted alike on both surfaces. A tool call is a line of the daemon's log (`agent tools: …`), with its refusal. A CLI call is one run of the `attn` the session's shell finds: the driver starts the daemon from a folder where `attn` is a recorder that notes each command's arguments and exit code and then runs the real CLI. The driver refuses to start when the recorder records nothing. Hook calls (`attn _…`) pass through unrecorded. Exit 2 is a usage refusal. Any other non-zero exit is a refusal, except of a command that asks for `--help`, that lost its pipe's reader (exit 141) or that the sandbox blocked (`blocked` below), so a command that answers with its exit code, such as `presence --seed-ids` without seeds, counts as refused. The transcript supplies a tool call's arguments, matched by order. Commands the transcript shows but the recorder missed are named as `unrecorded` in the table, and a run whose commands were all missed has a fault.
 - On an outpost, nothing records the calls, so they are read from the transcript: a tool of attn's server, a tool named in a code-mode script, or an `attn` command in the agent's shell. A loop there counts once, and a command shows as refused only when it is the whole shell command and its result is an error, so a failure inside a longer line or a script that runs several commands does not show. Compare an outpost's counts only with another outpost's.
+- `blocked` counts, at the home only, the commands that Codex's sandbox kept from attn's socket. attn refused nothing, so they are not CLI calls, refusals or failures, and a probe does not pass on one. Codex usually reruns such a command outside the sandbox, so each adds time. How many there are depends on the rules in the harness home's `.codex/rules`, where attn's own message suggests allowing the prefix.
 - `usage` counts calls refused because their arguments did not fit, on either surface, such as a call of a deferred tool before the agent loaded its schema. It does not fail a run.
 - `turn s` runs from the prompt's Enter until the session settles. Launch and setup are not in it.
 
@@ -60,17 +61,19 @@ A cell is a harness, a setting and a place:
 | Flag | Values | Default |
 |---|---|---|
 | `--harness` | `claude`, `claude-code-mode`, `codex`, `sigma`, each with an optional `@<model>` that sets `default_model_<harness>`, and `:<effort>` after it that sets `default_effort_<harness>` | `claude,codex` |
-| `--tools` | `on`, `off`: `agent_tools_enabled` | `on` |
+| `--tools` | `on`, `off`: `agent_tools_enabled` | `on`; with `--grid`, `on,off` |
 | `--outpost` | `<outpost name>=<ssh destination>`, repeatable as a comma list | none: the home only |
-| `--tasks` | task and probe ids, `asks` for the five ask tasks, or `probes` for every probe | the seven tasks |
-| `--runs` | runs per cell | 1 |
+| `--tasks` | task and probe ids, `harder` for the four harder tasks, `asks` for the five ask tasks, `probes` for every probe, or `grid` for the grid's set | the seven tasks, or `grid` with `--grid` |
+| `--runs` | runs per cell | 1; with `--grid`, 3 for a task and 1 for a probe |
 | `--parallel` | runs of one cell at a time | 2 |
 
 `claude-code-mode` restarts the instance's daemon with `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1`, so the driver runs those cells last. Claude Code asks for consent the first time code mode starts in a harness home. Answer it once in that home before you run these cells.
 
 `sigma` turns `sigma_enabled` on, and needs `sigma` on `PATH` or `sigma_executable` set. Its model picks its path: an OpenAI model runs Sigma's own loop, a Claude model runs its Claude path. Sigma's TUI drops what is typed before its composer shows, while attn already reports the session idle, so the driver also waits for Sigma's composer on screen before it sets up the task. Remove that wait once `s-rc8kfp` keeps Sigma's typeahead.
 
-For each `--outpost`, the driver turns `outposts_enabled` on, adds the outpost to the new instance and waits for it to connect, so the destination must take ssh without a prompt. Before it cleans the instance, it removes those outposts, which stops the instance's daemon on each outpost and leaves its pairing; with `--keep` they stay, so remove them in the instance's Settings before you clean it. On an outpost, the driver makes each run's folder over SSH and runs Claude Code, Codex and Sigma there. It skips code mode, and refuses `present-change`, whose clone is made on this machine.
+When a run has a Sigma cell beside a Claude Code or Codex cell, the table ends with the D22 verdict: whether Sigma passes as often as the other harness. For each setting and place, and apart for the tasks (the seven and the harder), the ask tasks and the probes, it compares Sigma's pass rate with each other cell, paired by task, with a bootstrapped 95% interval. It prints `FAILS` when the whole interval is below zero and `holds` otherwise, and no verdict on fewer than five pairs, which could not show that Sigma is worse even if all of them were. `RERUN` marks a task where Sigma passed at most one of three runs and the other cell passed all three, so it needs three runs of that task.
+
+For each `--outpost`, the driver turns `outposts_enabled` on, adds the outpost to the new instance and waits for it to connect, so the destination must take ssh without a prompt. Before it cleans the instance, it removes those outposts, which stops the instance's daemon on each outpost and leaves its pairing; with `--keep` they stay, so remove them in the instance's Settings before you clean it. On an outpost, the driver makes each run's folder over SSH and runs Claude Code, Codex and Sigma there. It skips code mode, and the driver refuses to start with a task that stages files on this machine: `coding-tests`, `present-change` and the ask tasks that copy files.
 
 ### Tasks
 
@@ -86,6 +89,17 @@ The seven tasks are the prototype's (`s-fnb9wr`), judged as its checks did, on t
 | `coding` | write and run `fizzbuzz.py` | the script prints 1 to 15 right, and the agent made no attn call |
 | `fail` | note a seed by a slug that two seeds share | the Safari seed has the note and the Chrome seed has none |
 
+The four harder tasks need several steps, tools an agent must load first, or recovery from a refusal. Their prompts name no attn command or tool. Each passes on the end state in the garden, the asks or the folder, and `open-ask-refusal` and `coding-tests` also read the attn calls of the run:
+
+| id | the agent is asked to | passes when |
+|---|---|---|
+| `seed-lifecycle` | plant a seed with two checks, take it on, attach `runbook.md`, report both checks with `rotation.log` and close the seed | one seed has the title, the session tended it, both checks are reported with the log, the runbook is on the seed and still in the folder, and it is harvested with a reason |
+| `plot-order` | plan a search rewrite as three pieces, one waiting for another | one plot whose body holds the plan has three child seeds, each with a sentence of its own, only the ranking one is blocked, by the indexing one, and none is started |
+| `open-ask-refusal` | close three shipped seeds, one of which has an open ask of the agent's own that shipping made moot, and leave `import-customers` alone | all three are harvested with their reasons, that ask is withdrawn, `import-customers` is still growing with its ask open, no close was forced, and attn refused at most three closes for a reason other than usage |
+| `coding-tests` | fix code across several files until 16 tests pass | the 16 tests pass, the tests are unchanged, and the agent made no attn call |
+
+In `open-ask-refusal`, attn refuses the harvest of a seed with an open ask and names the ask and the command that withdraws it. An agent that asks the user instead, or that its harness stops from withdrawing the ask, fails.
+
 The five ask tasks (`instance/asks.ts`) put a decision to the agent without naming attn, asks or any kind of picture, so they measure whether the agent opens an ask on its own and whether the ask shows what the decision turns on. Each copies its files from `instance/fixtures/asks/` into the run's folder. A run with no open ask fails, and every verdict names the asks opened and the visuals they show. A question offers the options when each matches a different choice. A Mermaid fence counts only when the app draws it whole: before a run with an ask task, the driver builds `native/crates/attn-app/examples/mermaid_check.rs` with cargo, which reads a source with the app's renderer.
 
 | id | the agent is asked to | passes when an open ask |
@@ -100,18 +114,16 @@ The probes are the former `scripts/agent-eval.mjs`, each a plain request. A prob
 
 ## Run the grid
 
-The grid is check C6: every task on Claude Code with code mode off and on, Codex, and Sigma on both paths, at the home, plus Claude Code, Codex and Sigma on an outpost, each with the setting on and off. Run it in one command:
+The grid is check C6: Claude Code and Codex at the home, with the tools on and off. Run it in one command:
 
 ```sh
 bun scripts/agent-bench/instance/bench.ts --instance bench --grid --tool-home ~/attn-agent-bench-home \
-  --harness claude,claude-code-mode,codex,sigma@<OpenAI model>,sigma@<Claude model> --outpost <outpost>=<ssh destination>
+  --harness claude@<model>:<effort>,codex@<model>:<effort>
 ```
 
-`--grid` sets `--tools on,off`, the seven tasks and `--runs 2`. That is 16 cells, 112 runs a pass, 224 runs in all. One cell is the same command with one `--harness`, one `--tools` and no `--outpost`.
+`--grid` sets `--tools on,off` and the tasks: the seven, the harder and the ask tasks at three runs each, and the 13 probes in `GRID_PROBE_IDS` (`instance/probes.ts`) at one run each. The set leaves out probes whose family a task or another probe in the set covers, and every `chief-*` probe but `chief-journal`. Over the two harnesses and two settings, that is 16 tasks at 12 runs each and 13 probes at 4 each: 244 runs. Flags given beside `--grid` override it, so one cell is the same command with one `--harness` and one `--tools`. Sigma and code mode are outside the grid; add them with `--harness`. The grid's staged tasks keep it on the home. The cells of one task run one after another, in an order that reverses from task to task, so a drift in the provider hits them alike.
 
-The table ends with the D22 verdict when the run has a Sigma cell beside a Claude Code or Codex cell. For each setting and place, and apart for the seven tasks, the asks and the probes, it compares Sigma's pass rate with each other cell, paired by task, with a bootstrapped 95% interval. It prints `FAILS` when the whole interval is below zero and `holds` otherwise, and no verdict on fewer than five pairs, which could not show that Sigma is worse even if all of them were. `RERUN` marks a task where Sigma passed at most one of three runs and the other cell passed all three, so it appears only with `--runs 3` or more. The cells of one task run one after another, in an order that reverses from task to task, so a drift in the provider hits them alike.
-
-What the grid costs, from the proof runs of 2026-11-21: a Claude Code run with Sonnet 5.5 took 30 to 60 s, about 175k to 230k input tokens (mostly cache reads) and $0.13 to $0.15 at API prices. An Opus 5.5 run cost $0.51. Codex took 113k to 128k input tokens a run. About half the grid's runs are Claude Code or Sigma's Claude path, so a grid on Sonnet costs about $15 to $20 at API prices, and about three times that on Opus. On subscriptions it spends that share of your plan's limits. With two runs at a time, the grid takes about two hours.
+What the grid costs, from 29 runs on 2026-11-25 (the harder tasks, `progress` and `ask-tradeoff`, with Sonnet 5.5 and GPT-6.2 Sol at medium effort): the prompt's turn took 8 to 24 s on Claude Code and 14 to 45 s on Codex, and a run took about 26 s on average with its launch, setup and judging. A Claude Code run used 126k to 365k input tokens, mostly cache reads, and cost $0.09 to $0.16 at API prices, $0.12 on average. A Codex run used 76k to 378k input tokens. attn has no price for that model. The grid has 122 Claude Code runs, so on Sonnet it costs about $15 at API prices if its other tasks and probes cost what these did. With two runs of a cell at a time, the grid is 180 rounds one after another, about an hour and a half with the cargo build and slower tasks such as `msg-delegate`. On subscriptions it spends that share of your plan's limits.
 
 ## Run the container driver
 

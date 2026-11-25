@@ -199,3 +199,7 @@ const presentChange: Task = {
 }
 
 export const PROBES: Task[] = [...probes.map(probeTask), presentChange]
+
+/** The grid's probes: one for each family of commands that no task and no other probe in it reaches, and one Chief. */
+const GRID_PROBE_IDS = ["read-agent", "close-self", "open-shell", "show-markdown", "change-setting", "add-crew", "queue", "browser", "automation", "roles", "rename-session", "chief-journal", "present-change"]
+export const GRID_PROBES: Task[] = GRID_PROBE_IDS.map((id) => PROBES.find((p) => p.id === id)!)

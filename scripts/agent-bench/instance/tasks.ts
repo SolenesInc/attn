@@ -1,6 +1,7 @@
+import { cpSync, existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { offers, openAsks, recommends } from "./asks.ts"
-import { type Check, isCommand, STAYS, type Task, type World } from "./world.ts"
+import { type Call, type Check, isCommand, isUsageRefusal, STAYS, type Task, type World } from "./world.ts"
 
 const verdict = (problems: string[], ok: string): Check =>
   problems.length === 0 ? { pass: true, why: ok } : { pass: false, why: problems.join("; ") }
@@ -168,5 +169,141 @@ const fail: Task = {
     return verdict(problems, "noted the Safari seed only")
   },
 }
+
+const ROTATION_LOG = "2026-11-20 release 4.2 signed with key B: verified\n2026-11-20 key A revoked in the registry: confirmed\n"
+const RUNBOOK = "# Rotating the signing keys\n\n1. Make the key. 2. Sign a build. 3. Revoke the old key.\n"
+const ROTATION_CHECKS = ["New key signs the builds", "Old key is revoked"]
+const movedBy = (w: World, seed: string, move: RegExp): boolean =>
+  w.attnJson(["seed", "notes", seed]).notes.some((n: any) => n.kind === "move" && n.author?.ref === `session:${w.session}` && move.test(n.body))
+const everySeed = (w: World, words: RegExp) =>
+  w.attnJson(["seed", "search", "signing keys rotate"]).hits.map((h: any) => show(w, h.seed.id)).filter((s: any) => words.test(s.seed.title))
+
+const seedLifecycle: Task = {
+  id: "seed-lifecycle",
+  title: "Carry a seed with checks from planting to done",
+  setup: (w) => {
+    w.sh("cat > rotation.log", ROTATION_LOG)
+    w.sh("cat > runbook.md", RUNBOOK)
+    return `Track the rotation of the signing keys on a new seed of its own, from start to finish. Title it "Rotate the signing keys" and give it two checks: "${ROTATION_CHECKS[0]}" and "${ROTATION_CHECKS[1]}". Take it on yourself. Put a copy of runbook.md, in your working directory, on the seed, and leave the original where it is. rotation.log, beside it, shows that both checks hold: report each with that log as its evidence. Then close the seed as done, saying what was done.`
+  },
+  check: (w) => {
+    const seeds = everySeed(w, /rotate the signing keys/i)
+    if (seeds.length !== 1) return verdict([`${seeds.length} seeds titled Rotate the signing keys, want one`], "")
+    const { seed: s, artifacts } = seeds[0]
+    const problems: string[] = []
+    if (s.status !== "harvested") problems.push(`the seed is ${s.status}, not done`)
+    if (!String(s.reason ?? "").trim()) problems.push("closed with no reason")
+    if (!movedBy(w, s.id, /^tended/)) problems.push("this session never took the seed on")
+    if (s.checks.length !== ROTATION_CHECKS.length) problems.push(`${s.checks.length} checks, want ${ROTATION_CHECKS.length}`)
+    for (const text of ROTATION_CHECKS) {
+      const c = s.checks.find((x: any) => x.text.toLowerCase().includes(text.toLowerCase()))
+      if (!c) problems.push(`no check "${text}"`)
+      else if (c.state !== "reported") problems.push(`"${text}" is ${c.state}, not reported`)
+      else if (!JSON.stringify(c.report.evidence).includes("rotation.log")) problems.push(`"${text}" lacks rotation.log as evidence`)
+    }
+    if (!artifacts.some((a: any) => a.filename === "runbook.md")) problems.push("runbook.md is not on the seed")
+    if (w.sh("cat runbook.md").out !== RUNBOOK) problems.push("the original runbook.md moved or changed")
+    return verdict(problems, "planted, taken, filed, reported and closed")
+  },
+}
+
+const PIECES = ["Index the documents", "Parse the query", "Rank the results"] as const
+const plotOrder: Task = {
+  id: "plot-order",
+  title: "Plant a plot whose children have an order",
+  setup: () =>
+    `Plan this as one plot in the garden, titled "Search rewrite", whose plan is: "Replace the SQL search with an index." It has three pieces of work: "${PIECES[0]}", "${PIECES[1]}" and "${PIECES[2]}". Ranking cannot start until indexing is done, and the other two can start right away. Give each piece a sentence that says what it does. Start none of them.`,
+  check: (w) => {
+    const all = w.attnJson(["seed", "ls", "--flat"]).seeds
+    const plots = all.filter((s: any) => /search rewrite/i.test(s.title))
+    if (plots.length !== 1) return verdict([`${plots.length} seeds titled Search rewrite, want one`], "")
+    const plot = show(w, plots[0].id).seed
+    const problems: string[] = []
+    if (!/index/i.test(plot.body) || !/sql/i.test(plot.body)) problems.push("the plot's body lacks the plan")
+    const children = w.attnJson(["seed", "ls", "--plot", plot.id]).seeds.map((s: any) => show(w, s.id))
+    if (children.length !== PIECES.length) problems.push(`${children.length} children, want ${PIECES.length}`)
+    const named = (title: string) => children.find((c: any) => c.seed.title.toLowerCase().includes(title.toLowerCase()))
+    const waits = (c: any) => c.relations.filter((r: any) => r.label === "blocked-by").map((r: any) => r.seed_id)
+    for (const title of PIECES) {
+      const c = named(title)
+      if (!c) problems.push(`no child "${title}"`)
+      else {
+        if (String(c.seed.body).trim().length < 10) problems.push(`"${title}" has no sentence saying what it does`)
+        if (c.seed.status !== "planted" || c.seed.claimed) problems.push(`"${title}" was started`)
+        const want = title === PIECES[2] ? [named(PIECES[0])?.seed.id] : []
+        if (JSON.stringify(waits(c)) !== JSON.stringify(want)) problems.push(`"${title}" waits for ${JSON.stringify(waits(c))}, want ${JSON.stringify(want)}`)
+      }
+    }
+    return verdict(problems, "one plot, three children, ranking after indexing")
+  },
+}
+
+/** A tripwire for a loop: a run that reads the refusal is refused once, and one that retries before it reads it twice. */
+const HARVEST_REFUSALS = 3
+const askAbout = (w: World, seed: string, subject: string, question: string) =>
+  w.attn(["ask", "--seed", seed, "--subject", subject], { session: w.session, stdin: question })
+const SHIPPED: Record<string, string> = {
+  "Rotate logs": "Logs rotate daily, live since 14:00",
+  "Export orders": "Exports orders as CSV, live since 14:05",
+  "Cache headers": "Cache headers set on assets, live since 14:10",
+}
+const openAskRefusal: Task = {
+  id: "open-ask-refusal",
+  title: "Close three seeds, one held by its own open question",
+  setup: (w) => {
+    const ids = Object.fromEntries(Object.keys(SHIPPED).map((title) => [title, plant(w, title, `${title} for the store.`)]))
+    const other = plant(w, "Import customers", "Import the customers.")
+    for (const id of [...Object.values(ids), other]) w.attn(["seed", "tend", id], { session: w.session })
+    askAbout(w, ids["Export orders"]!, "Export format", "The export can be CSV or JSON. It goes out as CSV unless you pick JSON, and once it has shipped this question is moot.\n:::question\nWhich format should the export use?\n- [ ] CSV\n- [ ] JSON\nRecommended: CSV\n:::\n")
+    askAbout(w, other, "Import source", "The customers are in two places.\n:::question\nWhich source should the import read?\n- [ ] The CRM\n- [ ] The spreadsheet\nRecommended: The CRM\n:::\n")
+    w.state.ids = ids
+    w.state.other = other
+    const list = Object.entries(SHIPPED).map(([title, reason]) => `${title.toLowerCase().replace(/ /g, "-")} (${ids[title]}): "${reason}"`)
+    return `Three of your seeds shipped today. Close each one as done with the reason beside it.\n${list.join("\n")}\nLeave import-customers as it is.`
+  },
+  check: (w, calls) => {
+    const ids = w.state.ids as Record<string, string>
+    const open = w.attnJson(["ask", "list"], { session: w.session }).asks.map((a: any) => a.seed_id)
+    const problems: string[] = []
+    for (const [title, id] of Object.entries(ids)) {
+      const { seed: s } = show(w, id)
+      if (s.status !== "harvested") problems.push(`${title} is ${s.status}, not done`)
+      else if (!String(s.reason).includes(SHIPPED[title]!.split(",")[0]!)) problems.push(`${title} closed with another reason`)
+    }
+    if (open.includes(ids["Export orders"])) problems.push("its moot question is still open")
+    if (!open.includes(w.state.other)) problems.push("withdrew the other seed's question")
+    if (show(w, w.state.other as string).seed.status !== "growing") problems.push("import-customers is not growing any more")
+    const tries = calls.filter((c: Call) => isCommand(c, "seed harvest"))
+    const refused = tries.filter((c) => c.refused !== undefined && !isUsageRefusal(c)).length
+    if (refused > HARVEST_REFUSALS) problems.push(`its closes were refused ${refused} times`)
+    if (tries.some((c) => /--force\b|\bforce\\?["']?\s*:\s*true/.test(c.text))) problems.push("forced a close")
+    return verdict(problems, `closed all three and withdrew the moot question only, after ${refused} refused close(s)`)
+  },
+}
+
+const CODING = join(import.meta.dir, "fixtures", "coding")
+const codingTests: Task = {
+  id: "coding-tests",
+  title: "Fix several files until their tests pass",
+  stage: (dir) => {
+    cpSync(CODING, dir, { recursive: true })
+    return dir
+  },
+  setup: () => "The tests in this folder fail. Fix the code under orders/ until python3 -m unittest passes, and leave the tests as they are. Then say what was wrong.",
+  check: (w, calls) => {
+    const problems: string[] = []
+    for (const name of ["__init__.py", "test_parse.py", "test_pricing.py", "test_report.py", "test_stock.py"]) {
+      const pristine = readFileSync(join(CODING, "tests", name), "utf8")
+      const path = join(w.dir, "tests", name)
+      if (!existsSync(path) || readFileSync(path, "utf8") !== pristine) problems.push(`changed tests/${name}`)
+    }
+    const r = w.sh("python3 -m unittest")
+    if (r.code !== 0 || !/Ran 16 tests/.test(r.out)) problems.push(`the tests do not pass: ${r.out.trim().split("\n").at(-1)}`)
+    if (calls.length > 0) problems.push(`used attn during a coding task: ${calls.map((c) => c.command).join(", ")}`)
+    return verdict(problems, "all 16 tests pass, the tests untouched, no attn call")
+  },
+}
+
+export const HARDER_TASKS: Task[] = [seedLifecycle, plotOrder, openAskRefusal, codingTests]
 
 export const TASKS: Task[] = [progress, plotNotes, ask, msgDelegate, standby, coding, fail]
