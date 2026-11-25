@@ -1,3 +1,4 @@
+import { YAML } from "bun"
 import { spawnSync } from "node:child_process"
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -15,9 +16,9 @@ export type World = {
   session: string
   /** What setup leaves for check, such as the ids of the seeds it planted. */
   state: Record<string, unknown>
-  /** Runs the instance's attn in this run's profile; throws with the output when it exits non-zero. */
+  /** Runs the instance's attn as `session`, or else in this run's profile when the command takes one; throws with the output when it exits non-zero. */
   attn: (args: string[], opts?: { stdin?: string; session?: string; cwd?: string }) => string
-  /** Runs a command that takes no profile or session, such as a settings read. */
+  /** Runs a command on the instance, in no profile. */
   instance: (args: string[]) => string
   attnJson: (args: string[], opts?: { stdin?: string; session?: string }) => any
   /** A shell command in the agent's folder, on the machine the agent runs on. */
@@ -25,6 +26,8 @@ export type World = {
   spawnShell: (label: string) => Promise<string>
   /** This profile's live sessions, as `attn agent list --json` shows them. */
   sessions: () => { id: string; directory: string; state: string; label: string }[]
+  /** The markdown files the agent's session opened in tiles, newest first. */
+  opened: () => string[]
   /** Waits for the session an accepted delegation starts in `directory`: the delegate tool answers before it exists. */
   delegated: (directory: string, calls: Call[]) => Promise<{ id: string; directory: string }[]>
   /** Whether the app draws a Mermaid source, and the statements it leaves out. Only for a task that sets `mermaid`. */
@@ -59,6 +62,12 @@ const SHELL_TOOLS = new Set(["Bash", "bash", "shell", "local_shell", "exec_comma
 /** Code-mode scripts whose inner calls the transcript does not list. Claude Code's REPL lists its own. */
 const SCRIPT_TOOLS = new Set(["exec", "codemode"])
 
+type CatalogFile = { groups?: { name: string; flags?: { name: string }[] }[]; commands?: { name: string; args?: { cli?: string }[] }[] }
+const CATALOG_FILES = readdirSync(CATALOG).filter((name) => name.endsWith(".yaml")).map((name) => YAML.parse(readFileSync(join(CATALOG, name), "utf8")) as CatalogFile)
+const FAMILY_FLAGS = new Map(CATALOG_FILES.flatMap((f) => f.groups ?? []).map((g) => [g.name, (g.flags ?? []).map((flag) => flag.name)]))
+/** Whether the CLI takes `--profile` on a command: the flag belongs to a whole family, as the catalog says. */
+export const takesProfile = (args: string[]) => FAMILY_FLAGS.get(args[0]!)?.includes("profile") === true
+
 const catalog: { tools: { name: string }[] } = JSON.parse(readFileSync(join(import.meta.dir, "../../../internal/daemon/agent_tools_generated.json"), "utf8"))
 const COMMANDS = new Set(catalog.tools.map((t) => t.name.replace(/_/g, " ")))
 
@@ -71,9 +80,11 @@ function afterHeredoc(script: string, from: number, tag: string) {
   return close ? from + close.index! + close[0].length : script.length
 }
 
-/** The commands a shell script runs, as words: quotes resolved, heredoc bodies and redirections left out, and the
- * commands inside $( ) and backquotes listed before the command that holds them. */
-function shellCommands(script: string): string[][] {
+const COMPOUND = new Set(["if", "for", "while", "until", "case", "select", "function", "{"])
+/** The commands a shell script names, as words: quotes resolved, heredoc bodies and redirections left out, and the
+ * commands inside $( ) and backquotes listed before the command that holds them. `joins` are the operators between them,
+ * with `(` for a compound command. */
+function shellCommands(script: string, joins = new Set<string>()): { commands: string[][]; joins: Set<string> } {
   const out: string[][] = []
   let words: string[] = []
   let word: string | undefined
@@ -88,6 +99,7 @@ function shellCommands(script: string): string[][] {
   const end = () => {
     flush()
     if (words.length > 0) out.push(words)
+    if (COMPOUND.has(words[0] ?? "")) joins.add("(")
     words = []
   }
   const substitution = (from: number, close: ")" | "\x60") => {
@@ -107,7 +119,7 @@ function shellCommands(script: string): string[][] {
       else if (close === ")" && c === "(") depth++
       else if (c === close && --depth === 0) break
     }
-    out.push(...shellCommands(script.slice(from, i)))
+    out.push(...shellCommands(script.slice(from, i), joins).commands)
     word = (word ?? "") + script.slice(from, i)
     return i
   }
@@ -147,19 +159,33 @@ function shellCommands(script: string): string[][] {
       } else dropNext = true
     } else if (c === " " || c === "\t") flush()
     else if (c === "\n") {
+      if (script.slice(i).trim()) joins.add(";")
       end()
       i = heredocs.splice(0).reduce((at, tag) => afterHeredoc(script, at, tag), i + 1) - 1
-    } else if (";|&".includes(c) || (word === undefined && "()".includes(c)) || c === ")") end()
-    else word = (word ?? "") + c
+    } else if (";|&".includes(c) || (word === undefined && "()".includes(c)) || c === ")") {
+      const doubled = "|&".includes(c) && script[i + 1] === c
+      if (doubled) i++
+      joins.add(doubled ? c + c : "()".includes(c) ? "(" : c === "&" ? ";" : c)
+      end()
+    } else word = (word ?? "") + c
   }
   end()
-  return out
+  return { commands: out, joins }
 }
 
-/** The attn commands a shell script runs, each as the words after attn, past env assignments, keywords and wrappers such
- * as timeout, and inside bash -c. */
-function attnWords(script: string): string[][] {
-  return shellCommands(script).flatMap((words) => {
+const everyCommand = (script: string) => shellCommands(script).commands
+/** The commands a shell script ran for certain: all of a plain sequence, all of one `&&` chain that succeeded, and
+ * otherwise only the first, because a branch may not have been taken. */
+const certainCommands = (succeeded: boolean) => (script: string) => {
+  const { commands, joins } = shellCommands(script)
+  const branches = joins.has("||") || joins.has("(") || (joins.has("&&") && !(succeeded && !joins.has(";")))
+  return branches ? commands.slice(0, 1) : commands
+}
+
+/** The attn commands among those `pick` takes from a shell script, each as the words after attn, past env assignments,
+ * keywords and wrappers such as timeout, and inside bash -c. */
+function attnWords(script: string, pick: (script: string) => string[][] = everyCommand): string[][] {
+  return pick(script).flatMap((words) => {
     let i = 0
     while (i < words.length) {
       const word = words[i]!
@@ -172,7 +198,7 @@ function attnWords(script: string): string[][] {
     const [head = "", ...rest] = words.slice(i)
     if (/(^|\/)(ba|z|da)?sh$/.test(head)) {
       const c = rest.findIndex((w) => /^-\w*c$/.test(w))
-      return c >= 0 ? attnWords(rest[c + 1] ?? "") : []
+      return c >= 0 ? attnWords(rest[c + 1] ?? "", pick) : []
     }
     return /(^|\/)attn$/.test(head) || /^\$\{?ATTN_WRAPPER_PATH/.test(head) ? [rest] : []
   })
@@ -208,6 +234,8 @@ function shellStrings(code: string): string[] {
   return out
 }
 
+const shellWords = (words: string[]) => words.map((w) => "'" + String(w).replace(/'/g, "'\\''") + "'").join(" ")
+
 function shellScripts(tool: string, text: string): string[] {
   let args: any
   try {
@@ -218,7 +246,7 @@ function shellScripts(tool: string, text: string): string[] {
   if (SCRIPT_TOOLS.has(tool)) return shellStrings(String(args?.code ?? text))
   if (!SHELL_TOOLS.has(tool)) return []
   const command = args?.command ?? args?.cmd ?? args?.code
-  return Array.isArray(command) ? [command.map((w) => "'" + String(w).replace(/'/g, "'\\''") + "'").join(" ")] : [String(command ?? "")]
+  return [Array.isArray(command) ? shellWords(command) : String(command ?? "")]
 }
 
 const CLI_FAILED = /(^|\n|\\n)usage: attn [^\n]*\(attn [^\n]* --help\)|^Exit code [1-9]|exit_code\\?":\s*[1-9]|Process exited with code [1-9]|\[exit [1-9]/
@@ -259,11 +287,7 @@ export function cliRuns(log: string): CliRun[] {
 /** What the home recorded for a session: every tool call its daemon logged and every `attn` command it ran. */
 export type Records = { tools: ToolOutcome[]; cli: CliRun[] }
 
-/** The catalog's runs_without_daemon commands, which answer inside a sandbox. */
-const OFFLINE = new Set(["skill", "guide"])
-/** A command that a sandbox kept from attn's socket: attn saw nothing of it. */
-const isBlocked = (r: CliRun) => r.blocked === true && !OFFLINE.has(commandOf(r.argv))
-export const blockedRuns = (records?: Records) => (records?.cli ?? []).filter(isBlocked).length
+export const blockedRuns = (records?: Records) => (records?.cli ?? []).filter((r) => r.blocked).length
 
 const CLOSED_PIPE = 141
 const cliCall = (argv: string[], code?: number): Call => {
@@ -294,7 +318,7 @@ function mentioned(events: any[]): Call[] {
     const scripts = shellScripts(name, text)
     for (const script of scripts) {
       const commands = attnWords(script)
-      const alone = scripts.length === 1 && commands.length === 1 && shellCommands(script).length === 1
+      const alone = scripts.length === 1 && commands.length === 1 && everyCommand(script).length === 1
       const failed = CLI_FAILED.test(answer) || (result?.is_error && !SCRIPT_TOOLS.has(name))
       for (const words of commands) {
         const call = cliCall(words)
@@ -317,19 +341,53 @@ export function attnCalls(events: any[], records?: Records): Call[] {
     used.set(t.command, n + 1)
     return { at: t.at, call: { via: "tool" as const, command: t.command, text: texts[Math.min(n, texts.length - 1)]?.text ?? "", ...(t.refused ? { refused: t.refused } : {}) } }
   })
-  return [...tools, ...records.cli.filter((r) => !isBlocked(r)).map((r) => ({ at: r.at, call: cliCall(r.argv, r.code) }))].sort((a, b) => a.at - b.at).map((x) => x.call)
+  return [...tools, ...records.cli.filter((r) => !r.blocked).map((r) => ({ at: r.at, call: cliCall(r.argv, r.code) }))].sort((a, b) => a.at - b.at).map((x) => x.call)
 }
 
-/** The attn commands a transcript shows more often than the recorder saw them: the session ran another attn, or the
- * harness refused the command before it ran. */
-export function unrecorded(events: any[], records: Records): string[] {
-  const left = records.cli.map((r) => commandOf(r.argv))
-  return mentioned(events).flatMap((c) => {
-    if (c.via !== "cli") return []
-    const i = left.indexOf(c.command)
-    if (i >= 0) left.splice(i, 1)
-    return i >= 0 ? [] : [c.command]
+/** A shell command that a harness's own record shows it ran, and whether it exited 0. */
+export type Ran = { script: string; succeeded: boolean }
+
+/** The shell commands a transcript shows ran. One without a result, or whose error is the harness's refusal rather than
+ * an exit code, never ran, and a code-mode script does not say which of its commands did. */
+export function shellRuns(events: any[]): Ran[] {
+  const results = new Map(events.filter((e) => e.kind === "tool_result").map((e) => [e.tool_call_id, e]))
+  return events.flatMap((e) => {
+    const result = e.kind === "tool_call" && SHELL_TOOLS.has(e.tool_name) && results.get(e.tool_call_id)
+    if (!result) return []
+    const exitedNonZero = CLI_FAILED.test(String(result.text ?? ""))
+    if (result.is_error && !exitedNonZero) return []
+    return shellScripts(e.tool_name, String(e.text ?? "")).map((script) => ({ script, succeeded: !exitedNonZero }))
   })
+}
+
+/** The shell commands a Codex rollout shows ran since `from`: one item each, also for a command in a code-mode script. */
+export const codexRuns = (rollout: string, from: number): Ran[] =>
+  rollout.split("\n").flatMap((line) => {
+    if (!line.includes('"CommandExecution"')) return []
+    const { timestamp, payload } = JSON.parse(line)
+    const { type, command, exit_code } = payload?.item ?? {}
+    if (type !== "CommandExecution" || typeof exit_code !== "number" || exit_code < 0 || Date.parse(timestamp) < from) return []
+    return [{ script: /^-\w*c$/.test(command[1] ?? "") ? command[2] : shellWords(command), succeeded: exit_code === 0 }]
+  })
+
+/** The attn commands that ran for certain more often than the recorder saw them: the session ran another attn. */
+export function unrecorded(ran: Ran[], records: Records): string[] {
+  const left = records.cli.map((r) => commandOf(r.argv))
+  return ran.flatMap((r) => attnWords(r.script, certainCommands(r.succeeded))).flatMap((words) => {
+    const command = commandOf(words)
+    const i = left.indexOf(command)
+    if (i >= 0) left.splice(i, 1)
+    return i >= 0 ? [] : [command]
+  })
+}
+
+/** How long Codex waited to send a conversation's requests again, from the bodies of its log's retry warnings. */
+export const retryWaitMs = (warnings: string[]) => {
+  const UNITS: Record<string, number> = { s: 1000, ms: 1, "µs": 0.001, ns: 0.000001 }
+  return warnings.reduce((total, body) => {
+    const m = body.match(/retrying sampling request \(\d+\/\d+ in ([\d.]+)(ns|µs|ms|s)\)/)
+    return m ? total + Number(m[1]) * UNITS[m[2]!]! : total
+  }, 0)
 }
 
 export const isHelp = (call: Call) => call.help === true

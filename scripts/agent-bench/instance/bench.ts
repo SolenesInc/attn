@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path"
 import { ASK_TASKS } from "./asks.ts"
 import { GRID_PROBES, PROBES } from "./probes.ts"
 import { HARDER_TASKS, TASKS } from "./tasks.ts"
-import { attnCalls, blockedRuns, type Call, type Check, cliRuns, isCommand, metrics, type Metrics, type Records, run, type Task, toolOutcomes, unrecorded, type World } from "./world.ts"
+import { attnCalls, blockedRuns, type Call, type Check, cliRuns, codexRuns, isCommand, metrics, type Metrics, type Records, retryWaitMs, run, shellRuns, takesProfile, type Task, toolOutcomes, unrecorded, type World } from "./world.ts"
 
 const repository = resolve(import.meta.dir, "../../..")
 /** Tripwires. The prototype's runs took 13 to 38 s and C16's under a minute; a run that reaches these is stuck. */
@@ -90,8 +90,9 @@ mkdirSync(out, { recursive: true })
 
 /** The instance runs from a folder where `attn` is a recorder: it notes each command an agent runs, with its arguments
  * and exit code, and runs the real CLI beside it. A harness's own hook calls pass through unrecorded. It writes to a pipe because Codex's
- * read-only sandbox refuses a file, in lines short enough for the pipe to keep whole. After a failure it asks whether the
- * sandbox blocks attn's socket here, because Codex marks the commands it runs outside the sandbox as sandboxed too. */
+ * read-only sandbox refuses a file, in lines short enough for the pipe to keep whole. A command's id is random, because a
+ * sandbox gives each command the same few process ids. It reads what the command says on stderr, where attn names a sandbox
+ * that keeps it from its socket. */
 const bash = spawnSync("bash", ["-c", "command -v bash"], { encoding: "utf8" }).stdout.trim()
 const cliLog = join(workRoot, "attn-cli.log")
 const recorder = join(workRoot, "attn-cli.pipe")
@@ -109,28 +110,34 @@ writeFileSync(
   join(binaries, "attn"),
   `#!${bash}
 case "$1" in _*) exec '${attnBinary}' "$@" ;; esac
-id=$$.$EPOCHREALTIME
+id=\${SRANDOM:?}.$SRANDOM
 argv=$([ $# -eq 0 ] || printf '%s\\0' "$@" | base64 | tr -d '\\n')
 note() { { printf '%s\\n' "$*" 1<>'${recorder}'; } 2>/dev/null; }
 for ((i = 0; i < \${#argv}; i += 3000)); do note arg "$id" "\${argv:i:3000}"; done
 note start "$id" "$EPOCHREALTIME" "\${ATTN_TERMINAL_ID:--}" "\${CODEX_THREAD_ID:-\${SIGMA_ROOT_CONVERSATION:--}}"
-'${attnBinary}' "$@"
+exec 3>&1 4>&2
+blocked=$(
+  '${attnBinary}' "$@" 2>&1 >&3 3>&- 4>&- | while IFS= read -r line || [ -n "$line" ]; do
+    printf '%s\\n' "$line" >&4
+    [[ $line == *"the sandbox blocks attn's socket"* ]] && printf blocked
+  done
+  exit "\${PIPESTATUS[0]}"
+)
 code=$?
-blocked=
-[ "$code" = 1 ] && '${attnBinary}' agent list 2>&1 </dev/null | grep -q "sandbox blocks attn's socket" && blocked=blocked
-note end "$id" "$code" $blocked
+[ "$code" = 0 ] && blocked=
+note end "$id" "$code" "\${blocked:+blocked}"
 exit $code
 `,
   { mode: 0o755 },
 )
 
-/** The recorder must be proven before a run depends on it: it needs a bash 5 for its clock, and the pipe must reach the log. */
+/** The recorder must be proven before a run depends on it: it needs a bash 5.1 for its clock and random ids, and the pipe must reach the log. */
 const recorded = () => {
   spawnSync(join(binaries, "attn"), ["version"], { env: withoutAttnEnv(), stdio: "ignore" })
   return cliRuns(readFileSync(cliLog, "utf8")).some((r) => r.at > 0 && r.code === 0)
 }
 for (let waited = 0; !recorded(); waited += 50) {
-  if (waited > 5_000) throw new Error(`the recorder at ${join(binaries, "attn")} logs no attn command with ${bash}: it needs bash 5 or newer on PATH, and a system with mkfifo`)
+  if (waited > 5_000) throw new Error(`the recorder at ${join(binaries, "attn")} logs no attn command with ${bash}: it needs bash 5.1 or newer on PATH, and a system with mkfifo`)
   await new Promise((r) => setTimeout(r, 50))
 }
 
@@ -151,15 +158,31 @@ function attnRaw(args: string[], opts: { stdin?: string; cwd?: string; env?: Nod
 }
 const json = (text: string) => JSON.parse(text.slice(text.search(/[[{]/)))
 
-/** The harness's own id for the conversation a session holds, which its shells carry when one server runs them all. */
-function conversationOf(session: string): string {
-  const db = new Database(join(dataDir, "attn.db"), { readonly: true })
+function column(path: string, sql: string, ...values: (string | number)[]): string[] {
+  const db = new Database(path, { readonly: true })
   try {
-    return db.query<{ id: string }, [string]>("SELECT resume_session_id AS id FROM sessions WHERE id = ?").get(session)?.id ?? ""
+    return db.query(sql).values(...values).map((row) => String(row[0]))
   } finally {
     db.close()
   }
 }
+
+/** The harness's own id for the conversation a session holds, which its shells carry when one server runs them all. */
+const conversationOf = (session: string) => column(join(dataDir, "attn.db"), "SELECT resume_session_id FROM sessions WHERE id = ?", session)[0] ?? ""
+
+const codexHome = toolHome ? join(toolHome, ".codex") : join(homedir(), ".codex")
+const found = (folder: string, name: string, ...options: string[]) => spawnSync("find", [folder, ...options, "-name", name], { encoding: "utf8" }).stdout.split("\n").filter(Boolean)
+const codexRollout = (conversation: string) =>
+  ["sessions", "archived_sessions"].flatMap((folder) => found(join(codexHome, folder), `rollout-*-${conversation}.jsonl`)).map((path) => readFileSync(path, "utf8")).join("\n")
+
+/** How long Codex waited since `from` to send a conversation's requests again after the provider refused them, which its
+ * log names and its rollout does not. */
+const codexRetryWaitMs = (conversation: string, from: number) =>
+  retryWaitMs(
+    found(codexHome, "logs_*.sqlite", "-maxdepth", "1").flatMap((path) =>
+      column(path, "SELECT feedback_log_body FROM logs WHERE target = 'codex_core::responses_retry' AND thread_id = ? AND ts >= ?", conversation, Math.floor(from / 1000)),
+    ),
+  )
 
 const wsctlBinary = join(out, "wsctl")
 function wsctl(args: string[]) {
@@ -193,30 +216,40 @@ const agents = (): Agent[] => json(attnRaw(["agent", "list", "--json"]))
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const screen = (session: string) => run(attnBinary, ["agent", "peek", session], daemonEnv).stdout
 
-/** Waits for a new session to reach its prompt. A trust screen for the bench's own folder is answered once. Sigma's TUI
+/** Waits for a new session to reach its prompt, answering a trust screen for the bench's own folder. Claude Code's drops the
+ * keys it gets before it is ready, so each poll presses what the screen shows is next. Sigma's TUI
  * drops what is typed before its composer shows (s-rc8kfp), so a Sigma session also waits for the composer on screen. */
 const SIGMA_COMPOSER = /❯ type a message/
 async function atPrompt(session: string, agent: Harness["agent"]) {
   const deadline = Date.now() + LAUNCH_DEADLINE_MS
   let trusted = false
   while (Date.now() < deadline) {
-    if (!trusted) {
-      const shown = screen(session)
-      const claudeRefuses = /❯ No, exit\s+Yes, I trust this folder/.test(shown)
-      if (claudeRefuses) wsctl(["input", "--id", session, "--text", "\x1b[B"])
-      if (claudeRefuses) await wait(POLL_MS)
-      if (claudeRefuses || /Trust this folder\?|Do you trust the files in this folder\?/.test(shown)) {
-        wsctl(["input", "--id", session, "--enter"])
-        trusted = true
-        continue
-      }
+    const shown = screen(session)
+    if (/❯ No, exit\s+Yes, I trust this folder/.test(shown)) wsctl(["input", "--id", session, "--text", "\x1b[B"])
+    else if (/❯ Yes, I trust this folder/.test(shown)) wsctl(["input", "--id", session, "--enter"])
+    else if (!trusted && /Trust this folder\?|Do you trust the files in this folder\?/.test(shown)) {
+      wsctl(["input", "--id", session, "--enter"])
+      trusted = true
+    } else {
+      const me = agents().find((a) => a.id === session)
+      if (me && ["idle", "waiting_input"].includes(me.state) && (agent !== "sigma" || SIGMA_COMPOSER.test(shown))) return
     }
-    const me = agents().find((a) => a.id === session)
-    if (me && ["idle", "waiting_input"].includes(me.state) && (agent !== "sigma" || SIGMA_COMPOSER.test(screen(session)))) return
     await wait(POLL_MS)
   }
   const state = agents().find((a) => a.id === session)?.state ?? "gone"
   throw new Error(`the session never reached its prompt: ${state}${agent === "sigma" ? ", or Sigma's composer never showed on screen (the bench waits for it until s-rc8kfp keeps Sigma's typeahead)" : ""}`)
+}
+
+/** When a turn ends, Claude Code may show a dialog, such as its offer to set up auto mode, over an idle composer or above
+ * one. It takes the prompt's Enter as its choice. Esc declines it. */
+const DIALOG = /· Esc to cancel\s*$/m
+async function declineDialogs(session: string) {
+  const deadline = Date.now() + LAUNCH_DEADLINE_MS
+  for (let shown = screen(session); DIALOG.test(shown); shown = screen(session)) {
+    if (Date.now() > deadline) throw new Error(`a dialog stays over the composer: ${shown.slice(-400)}`)
+    wsctl(["input", "--id", session, "--text", "\x1b"])
+    await wait(POLL_MS)
+  }
 }
 
 const transcript = (session: string): any[] =>
@@ -298,7 +331,7 @@ const onPlace = (place: Place, command: string) => (place.ssh ? run("ssh", [plac
 function toolsHeld(cell: Cell, directory: string, startedAt: number): "on" | "off" | "unknown" {
   const newer = `-newermt @${Math.floor(startedAt / 1000) - 1}`
   if (cell.harness.agent === "codex") {
-    const home = !cell.place.ssh && toolHome ? join(toolHome, ".codex") : "~/.codex"
+    const home = cell.place.ssh ? "~/.codex" : codexHome
     const lines = onPlace(cell.place, `find ${home}/sessions ${home}/archived_sessions -name 'rollout-*.jsonl' ${newer} -print0 2>/dev/null | xargs -0 -r grep -lF '"cwd":"${directory}"' | xargs -r grep -hE '"type":"(session_meta|additional_tools)"'`).split("\n").filter(Boolean)
     const offered = lines.filter((line) => line.includes('"additional_tools"'))
     if (offered.length === 0) return "unknown"
@@ -361,8 +394,9 @@ function faultOf(cell: Cell, held: string, used: Usage, events: any[]): string {
 let profiles = 0
 
 /** `fault` says why a run measures something other than its cell, such as another model; such a run fails and stays out
- * of the comparisons. `launchMs` is from the run's start to the prompt being typed; `turnMs` from its Enter to settled. */
-type RunResult = { task: string; cell: string; n: number; pass: boolean; why: string; fault: string; ended: string; tools: string; toolsHeld: string; missed: string[]; metrics: Metrics; usage: Usage; launchMs: number; turnMs: number }
+ * of the comparisons. `launchMs` is from the run's start to the prompt being typed; `turnMs` from its Enter to settled, and
+ * `retryMs` is how long Codex waited in it for the provider to take a request again. */
+type RunResult = { task: string; cell: string; n: number; pass: boolean; why: string; fault: string; ended: string; tools: string; toolsHeld: string; missed: string[]; metrics: Metrics; usage: Usage; launchMs: number; turnMs: number; retryMs: number }
 
 async function judged(task: Task, w: World, calls: Call[], ended: string): Promise<Check> {
   try {
@@ -408,7 +442,7 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
     await atPrompt(session, cell.harness.agent)
     const terminals: string[] = json(attnRaw(["terminal", "ls", "--all", "--session", session, "--json"])).filter((t: any) => t.session_id === session).map((t: any) => t.terminal_id)
     if (task.launch === "chief") await settled(session, 0)
-    const scoped = (args: string[], who?: string) => [...args, ...(who ? ["--session", who] : ["--profile", profile])]
+    const scoped = (args: string[], who?: string) => [...args, ...(who ? ["--session", who] : takesProfile(args) ? ["--profile", profile] : [])]
     const w: World = {
       dir,
       profile,
@@ -427,6 +461,7 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
         return id
       },
       sessions: mine,
+      opened: () => column(join(dataDir, "attn.db"), "SELECT path FROM file_activity WHERE source = 'opened' AND session_id = ? ORDER BY last_at DESC", session),
       delegated: async (folder, calls) => {
         const deadline = Date.now() + DELEGATE_DEADLINE_MS
         const there = () => mine().filter((a) => a.directory === folder && a.id !== session)
@@ -441,6 +476,7 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
     const toolLog = () => toolOutcomes(readFileSync(join(dataDir, "daemon.log"), "utf8"), session)
     const loggedBefore = remote ? 0 : toolLog().length
     if (before > 0) baseline = await steadyUsage(session)
+    await declineDialogs(session)
     wsctl(["input", "--id", session, "--text", prompt])
     await wait(500)
     turn = { at: Date.now(), launchMs: Date.now() - started, turnMs: 0 }
@@ -461,11 +497,19 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
     const verdict: Check = stopped ? { pass: false, why: stopped } : await judged(task, w, calls, ended)
     const used = since(await steadyUsage(session), baseline)
     const held = toolsHeld(cell, directory, started)
-    const missed = records ? unrecorded(events, records) : []
-    const fault = records?.cli.length === 0 && missed.length > 0 ? "the session ran an attn the bench did not record" : faultOf(cell, held, used, events)
+    const codex = cell.harness.agent === "codex" && !remote
+    const retryMs = codex ? Math.min(codexRetryWaitMs(conversation, turn.at), turn.turnMs) : 0
+    const missed = records ? unrecorded(codex ? codexRuns(codexRollout(conversation), turn.at) : shellRuns(events), records) : []
+    const fault = !events.some((e) => e.role === "user")
+      ? "the prompt never reached the agent"
+      : stopped && retryMs > 0
+        ? `the provider made Codex wait ${Math.round(retryMs / 1000)}s`
+        : records?.cli.length === 0 && missed.length > 0
+          ? "the session ran an attn the bench did not record"
+          : faultOf(cell, held, used, events)
     const result: RunResult = {
       task: task.id, cell: cell.id, n, pass: verdict.pass && !fault, why: fault ? `bench: ${fault}; ${verdict.why}` : verdict.why, fault, ended,
-      tools: cell.tools, toolsHeld: held, missed, metrics: metrics(events, calls, blockedRuns(records)), usage: used, launchMs: turn.launchMs, turnMs: turn.turnMs,
+      tools: cell.tools, toolsHeld: held, missed, metrics: metrics(events, calls, blockedRuns(records)), usage: used, launchMs: turn.launchMs, turnMs: turn.turnMs, retryMs,
     }
     writeFileSync(join(evidence, "calls.json"), JSON.stringify(calls, null, 1))
     if (records) writeFileSync(join(evidence, "records.json"), JSON.stringify(records, null, 1))
@@ -474,7 +518,7 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
     return result
   } catch (error) {
     const fault = (error as Error).message
-    return { task: task.id, cell: cell.id, n, pass: false, why: `bench: ${fault}`, fault, ended, tools: cell.tools, toolsHeld: "unknown", missed: [], metrics: metrics(events, []), usage: NO_USAGE, launchMs: turn.launchMs, turnMs: turn.turnMs }
+    return { task: task.id, cell: cell.id, n, pass: false, why: `bench: ${fault}`, fault, ended, tools: cell.tools, toolsHeld: "unknown", missed: [], metrics: metrics(events, []), usage: NO_USAGE, launchMs: turn.launchMs, turnMs: turn.turnMs, retryMs: 0 }
   } finally {
     if (session) {
       writeFileSync(join(evidence, "screen.txt"), screen(session))
@@ -492,7 +536,7 @@ const median = (xs: number[]) => {
 
 function table(results: RunResult[]) {
   const lines = [
-    `${[...new Set(tasks.map(runsOf))].join(" or ")} run(s) per cell on instance ${instance}, attn ${attnRaw(["version"]).trim()}, ${new Date().toISOString().slice(0, 10)}. Turns, tokens in thousands (uncached input, cache reads, cache writes), output tokens, calls and seconds are medians per run. Tool and CLI show calls, then failed ones in parentheses. Blocked is commands a Codex sandbox kept from attn, not counted as CLI calls. Usage is calls refused because their arguments did not fit, on either surface. Help is --help reads, ref is skill and guide reads. Cost is the mean per run at API prices, as attn accounts it; "+ unpriced" marks a model attn has no price for. Runs whose fault says they measured something else fail. A run whose usage attn could not measure whole is marked and left out of tokens and cost.`,
+    `${[...new Set(tasks.map(runsOf))].join(" or ")} run(s) per cell on instance ${instance}, attn ${attnRaw(["version"]).trim()}, ${new Date().toISOString().slice(0, 10)}. Turns, tokens in thousands (uncached input, cache reads, cache writes), output tokens, calls and seconds are medians per run. Tool and CLI show calls, then failed ones in parentheses. Blocked is commands a Codex sandbox kept from attn, not counted as CLI calls. Usage is calls refused because their arguments did not fit, on either surface. Help is --help reads, ref is skill and guide reads. Cost is the mean per run at API prices, as attn accounts it; "+ unpriced" marks a model attn has no price for. Runs whose fault says they measured something else fail. A run whose usage attn could not measure whole is marked and left out of tokens and cost, and one that waited for the provider out of the seconds.`,
     "",
     "| task | harness | models | tools | place | pass | turns | in k | read k | write k | out | tool | CLI | blocked | usage | searches | help | ref | turn s | cost/run | failures |",
     "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
@@ -507,10 +551,12 @@ function table(results: RunResult[]) {
       const k = (f: (u: Usage) => number) => (measured.length === 0 ? "-" : (used(f) / 1000).toFixed(1))
       const missed = rs.filter((r) => r.missed.length > 0).map((r) => `#${r.n} unrecorded: ${r.missed.join(", ")}`)
       const unmeasured = rs.filter((r) => !measured.includes(r)).map((r) => `#${r.n} usage incomplete`)
+      const timed = rs.filter((r) => r.retryMs === 0)
+      const waited = rs.filter((r) => r.retryMs > 0).map((r) => `#${r.n} waited ${Math.round(r.retryMs / 1000)}s for the provider`)
       const fails = rs.filter((r) => !r.pass).map((r) => `#${r.n}: ${r.why}`.slice(0, 160).replace(/\|/g, "/"))
       const cli = rs.filter((r) => cell.tools === "on" && r.metrics.cliCalls > 0).map((r) => `#${r.n} used the CLI`)
       lines.push(
-        `| ${task.id} | ${cell.harness.name} | ${[...new Set(rs.flatMap((r) => r.usage.models))].join(" ") || "-"} | ${cell.tools} | ${cell.place.name} | ${rs.filter((r) => r.pass).length}/${rs.length} | ${m((r) => r.metrics.turns)} | ${k((u) => u.input)} | ${k((u) => u.cacheRead)} | ${k((u) => u.cacheWrite)} | ${measured.length === 0 ? "-" : used((u) => u.output)} | ${m((r) => r.metrics.toolCalls)} (${m((r) => r.metrics.toolRefusals)}) | ${m((r) => r.metrics.cliCalls)} (${m((r) => r.metrics.cliFailures)}) | ${m((r) => r.metrics.sandboxBlocked)} | ${m((r) => r.metrics.usageRefusals)} | ${m((r) => r.metrics.searches)} | ${m((r) => r.metrics.cliHelpReads)} | ${m((r) => r.metrics.referenceReads)} | ${(m((r) => r.turnMs) / 1000).toFixed(1)} | ${measured.length === 0 ? "-" : `$${(measured.reduce((a, r) => a + r.usage.cost, 0) / measured.length).toFixed(3)}`}${rs.some((r) => r.usage.unpriced) ? " + unpriced" : ""} | ${[...fails, ...cli, ...unmeasured, ...missed].join("<br>") || "-"} |`,
+        `| ${task.id} | ${cell.harness.name} | ${[...new Set(rs.flatMap((r) => r.usage.models))].join(" ") || "-"} | ${cell.tools} | ${cell.place.name} | ${rs.filter((r) => r.pass).length}/${rs.length} | ${m((r) => r.metrics.turns)} | ${k((u) => u.input)} | ${k((u) => u.cacheRead)} | ${k((u) => u.cacheWrite)} | ${measured.length === 0 ? "-" : used((u) => u.output)} | ${m((r) => r.metrics.toolCalls)} (${m((r) => r.metrics.toolRefusals)}) | ${m((r) => r.metrics.cliCalls)} (${m((r) => r.metrics.cliFailures)}) | ${m((r) => r.metrics.sandboxBlocked)} | ${m((r) => r.metrics.usageRefusals)} | ${m((r) => r.metrics.searches)} | ${m((r) => r.metrics.cliHelpReads)} | ${m((r) => r.metrics.referenceReads)} | ${timed.length === 0 ? "-" : (median(timed.map((r) => r.turnMs)) / 1000).toFixed(1)} | ${measured.length === 0 ? "-" : `$${(measured.reduce((a, r) => a + r.usage.cost, 0) / measured.length).toFixed(3)}`}${rs.some((r) => r.usage.unpriced) ? " + unpriced" : ""} | ${[...fails, ...cli, ...unmeasured, ...waited, ...missed].join("<br>") || "-"} |`,
       )
     }
   return lines.join("\n")
@@ -568,7 +614,7 @@ function judgeD22(results: RunResult[]) {
 /** Codex saves a trust entry for each folder whose trust screen the bench answered; remove the ones under this run's
  * work root, so the harness home keeps only what it had. */
 function forgetCodexTrust() {
-  const config = join(toolHome ? join(toolHome, ".codex") : join(homedir(), ".codex"), "config.toml")
+  const config = join(codexHome, "config.toml")
   if (!existsSync(config)) return
   const lines = readFileSync(config, "utf8").split("\n")
   const kept: string[] = []

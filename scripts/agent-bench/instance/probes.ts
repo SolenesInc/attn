@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process"
 import { existsSync } from "node:fs"
-import { join, resolve } from "node:path"
+import { basename, join, resolve } from "node:path"
 import { offers, openAsks } from "./asks.ts"
 import { type Call, type Check, isCommand, isHelp, isUsageRefusal, reached, STAYS, type Task, type World } from "./world.ts"
 
@@ -65,7 +65,7 @@ const probes: Probe[] = [
       return "What is the agent called fern doing? Read its screen."
     },
     command: ["agent peek", "terminal read"],
-    end: (w, calls) => expect(calls.some((c) => isCommand(c, "terminal read") || (isCommand(c, "agent peek") && ([String(w.state.fern).slice(0, 8), w.attn(["session", "show", String(w.state.fern)]).split(" ")[0]!].some((id) => c.text.includes(id)) || /fern|\w\.id\b/.test(c.text)))), "read another screen than fern's"),
+    end: (w, calls) => expect(calls.some((c) => isCommand(c, "terminal read") || (isCommand(c, "agent peek") && c.refused === undefined && ([String(w.state.fern).slice(0, 8), w.attn(["session", "show", String(w.state.fern)]).split(" ")[0]!].some((id) => c.text.includes(id)) || /fern|\w\.id\b/.test(c.text)))), "read another screen than fern's"),
   },
   { id: "close-self", ask: "Close yourself. There is nothing left to do.", command: "agent close", reads: "wrap-up", end: (_w, _calls, ended) => expect(ended === "closed itself", "still open") },
   {
@@ -102,7 +102,7 @@ const probes: Probe[] = [
     command: "terminal move",
     end: (w) => expect(JSON.stringify(w.attnJson(["terminal", "ls"], { session: w.session })).includes("desktop_3"), "the terminal is not on desktop 3"),
   },
-  { id: "show-markdown", ask: "Show me plan.md in the app.", command: "open", mentions: /plan\.md/ },
+  { id: "show-markdown", ask: "Show me plan.md in the app.", command: "open", end: (w) => expect(w.opened().some((path) => basename(path) === "plan.md"), "plan.md is not open") },
   {
     id: "change-setting",
     ask: "Set the attn setting auto_settle_countdown_seconds to 7.",
@@ -182,15 +182,12 @@ const presentChange: Task = {
   },
   setup: () => "Present the change.",
   check: (w, calls): Check => {
-    const opened = calls.filter((c) => isCommand(c, "open")).at(-1)
-    if (!opened) return { pass: false, why: "never opened a review document" }
+    const document = w.opened()[0]
+    if (document === undefined) return { pass: false, why: "never opened a review document" }
     if (!reached(calls, "skill", /review/)) return { pass: false, why: "skipped the review reference" }
-    const path = opened.text.match(/([^\s"']+\.md)/)?.[1]
-    const clone = w.dir
-    const document = path === undefined ? undefined : resolve(clone, path)
-    if (document === undefined || !existsSync(document)) return { pass: false, why: `opened ${path ?? opened.text.slice(0, 80)}, which does not exist` }
+    if (!existsSync(document)) return { pass: false, why: `opened ${document}, which does not exist` }
     try {
-      w.attn(["review", "check", document], { cwd: clone })
+      w.attn(["review", "check", document], { cwd: w.dir })
       return { pass: true, why: `presented ${document}` }
     } catch (error) {
       return { pass: false, why: `attn review check: ${String((error as Error).message).split("\n").slice(0, 3).join("; ")}` }
