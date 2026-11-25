@@ -1,0 +1,1 @@
+The agent bench no longer fails runs for faults of its own. Its judges read files attn recorded as opened, its recorder calls a command blocked only on that command's own message, and its driver survives Claude Code's trust screen and auto-mode dialog. Codex runs that waited for the provider are marked and left out of the turn median.
