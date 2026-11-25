@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/victorarias/attn/internal/testworld"
@@ -23,7 +24,10 @@ func TestTheCLINamesThePathItSearchedWhenAttndIsMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	alone := filepath.Join(dir, "attn")
-	if err := os.WriteFile(alone, contents, 0o755); err != nil {
+	syscall.ForkLock.RLock()
+	err = os.WriteFile(alone, contents, 0o755)
+	syscall.ForkLock.RUnlock()
+	if err != nil {
 		t.Fatal(err)
 	}
 
