@@ -52,7 +52,7 @@ commands:
     summary: show a callout the user steps through
     runs: home
     grant: full
-    effect: record
+    effect: act
     doc: |
       Shows a callout: each step's text beside its anchor, in order. Put the agent or desktop the user should go to on the last step, because Enter and → go there only from the last step. If a fixed anchor is missing, the whole callout is refused and the message names the anchors on screen. A new callout replaces the one showing. The call returns when the app accepts the callout.
     args:
