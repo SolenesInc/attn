@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Shelf hover falls below the Classic Light contrast floors",
+  "at": "2026-11-25T02:56:27.545Z",
+  "detail": "Shelf hover falls below the Classic Light contrast floors\n\nAn off-screen entry in Classic Light drops to 4.13:1 label contrast and 2.56:1 approval mark contrast when hovered, below the agreed 4.5:1 and 3:1. Rune darkens the background while the ink remains tuned for rest. Preserve the agreed contrast against the composited background in rest, hover and press. Evidence is on s-2bt4aa.\n"
+}
