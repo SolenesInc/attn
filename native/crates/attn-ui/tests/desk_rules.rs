@@ -321,21 +321,23 @@ fn shelf_count(side: CountSide, columns: usize, marks: Vec<ShelfMember>) -> Shel
 }
 
 /// Every entry the shelf draws, a row per place: one tile in each state, a stack that shows each
-/// state between one more of every state on both edges, and the counts with and without marks.
+/// state between a dot of it on both edges, the counts with and without marks, and a row of a
+/// count's menu.
 fn shelf_board(t: &Tokens, _: &mut Cx<Tokens>) -> El {
     let rows = PLACES.iter().enumerate().map(|(p, &place)| {
         let flat = STATES.iter().map(|&state| vec![shelf_member(state)]);
-        let stacks = STATES.iter().map(|&shown| {
-            let all = || STATES.iter().map(|&state| shelf_member(state));
-            all().chain([shelf_member(shown)]).chain(all()).collect()
-        });
+        let stacks = STATES
+            .iter()
+            .map(|&shown| [shown; 3].map(shelf_member).to_vec());
         let entries = flat
             .map(|members| (members, 0))
-            .chain(stacks.map(|members| (members, STATES.len())))
+            .chain(stacks.map(|members| (members, 1)))
             .enumerate()
             .map(|(i, (members, shown))| {
                 let entry = ShelfEntry::new(members, shown, place, 1);
-                entry.build(&format!("entry.{p}.{i}"), "plan", entry.name_width(), t)
+                entry
+                    .build(&format!("entry.{p}.{i}"), "plan", entry.name_width(), t)
+                    .on_press(|_: &mut Tokens| {})
             });
         let framed = (place != Place::OffScreen).then(|| {
             [
@@ -354,14 +356,20 @@ fn shelf_board(t: &Tokens, _: &mut Cx<Tokens>) -> El {
             .map(move |needing| (open, needing.to_vec()))
     });
     let counts = counts.enumerate().map(|(i, (open, needing))| {
-        shelf_count(CountSide::After, 3, needing).build(format!("count.{i}"), "3 more", open, t)
+        shelf_count(CountSide::After, 3, needing)
+            .build(format!("count.{i}"), "3 more", open, t)
+            .on_press(|_: &mut Tokens| {})
     });
+    let marks = STATES.map(|state| Shelf::mark(&shelf_member(state), t.bg_panel, t));
+    let asks = Shelf::asks("folded", 1, t.bg_panel, t);
+    let folded = Shelf::folded("folded", "plan", marks, asks, t).on_press(|_: &mut Tokens| {});
     rune::col()
         .w_full()
         .h_full()
         .fill(t.bg_panel)
         .children(rows)
         .child(Shelf::row("counts").children(counts))
+        .child(folded)
 }
 
 #[test]
@@ -429,93 +437,215 @@ fn contrast(a: rune::Color, b: rune::Color) -> f32 {
     (a.max(b) + 0.05) / (a.min(b) + 0.05)
 }
 
-/// What the board shows that reads too little against what is directly behind it: the last
-/// opaque surface drawn before it under its middle.
-fn faults(t: Tokens, dark: bool) -> (usize, Vec<String>) {
-    SHELF_TOKENS.with(|cell| cell.set(Some(t)));
-    let mut rt = App::new(AppSpec {
-        fonts: attn_ui::FONTS,
-        families: attn_ui::FAMILIES,
-        ..AppSpec::new("shelf", SHELF_WINDOW, shelf_tokens, shelf_board)
-    })
-    .headless_runtime(SHELF_WINDOW, Env::new(dark, SCALE));
-    rt.frame(0.0);
-    let all = rt.elements();
-    let behind = |at: usize| {
-        let [x, y, w, h] = all[at].visible;
-        let (x, y) = (x + w / 2.0, y + h / 2.0);
-        all[..at]
-            .iter()
-            .rev()
-            .find(|e| {
-                let [ex, ey, ew, eh] = e.visible;
-                e.fill.a > 0.999 && x >= ex && x <= ex + ew && y >= ey && y <= ey + eh
-            })
-            .expect("the board's own ground")
-            .fill
-    };
-    let mut found = vec![];
-    let mut seen = 0;
-    let mut check = |what: &str, ink: rune::Color, ground: rune::Color, floor: f32| {
-        seen += 1;
-        let reads = contrast(ink, ground);
-        if reads < floor - 0.01 {
-            found.push(format!("{what} reads {reads:.2}:1, under {floor}:1"));
-        }
-    };
-    for (i, e) in all.iter().enumerate().skip(1) {
-        let [_, _, w, h] = e.visible;
-        if w <= 0.0 || h <= 0.0 {
-            continue;
-        }
-        let ground = behind(i);
-        match (e.role, e.text_color) {
-            ("icon", Some(ink)) => check(&e.path, ink, ground, 3.0),
-            (_, Some(ink)) if e.text.is_some() => check(&e.path, ink, ground, 4.5),
-            _ => {}
-        }
-        let dot = h == 4.0 && e.fill.a > 0.0;
-        let cut_out = all
-            .iter()
-            .filter(|part| part.parent == Some(i) && part.role == "icon")
-            .any(|icon| contrast(icon.text_color.expect("an icon's ink"), ground) < 1.01);
-        if dot || (e.fill.a > 0.0 && cut_out) {
-            check(&e.path, e.fill, ground, 3.0);
-        }
-        if e.key.as_deref() == Some("shelf.frame.edge") {
-            let frame = e.rect.map(|v| v * SCALE);
-            let edge = rt
-                .instances
-                .iter()
-                .find(|drawn| {
-                    drawn.border[3] > 0.0
-                        && drawn
-                            .rect
-                            .iter()
-                            .zip(frame)
-                            .all(|(a, b)| (a - b).abs() <= 1.0)
-                })
-                .expect("the frame's edge");
-            let [r, g, b] = [0, 1, 2].map(|c| rune::theme::srgb_decode(edge.border[c]));
-            check(&e.path, rune::Color { r, g, b, a: 1.0 }, ground, 3.0);
+/// What the pointer does to the control it is on.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Pointer {
+    Away,
+    Over,
+    Down,
+}
+
+/// The board in one scheme, and what it draws that reads too little against what is directly
+/// behind it: the last opaque surface drawn before it under its middle.
+struct Board {
+    rt: Runtime<Tokens>,
+    /// The marks with their icon cut out, which have to be told from what is behind them.
+    cut_out: Vec<String>,
+    seen: usize,
+    found: Vec<String>,
+}
+
+impl Board {
+    fn new(t: Tokens, dark: bool) -> Board {
+        SHELF_TOKENS.with(|cell| cell.set(Some(t)));
+        let mut rt = App::new(AppSpec {
+            fonts: attn_ui::FONTS,
+            families: attn_ui::FAMILIES,
+            ..AppSpec::new("shelf", SHELF_WINDOW, shelf_tokens, shelf_board)
+        })
+        .headless_runtime(SHELF_WINDOW, Env::new(dark, SCALE));
+        rt.frame(0.0);
+        Board {
+            rt,
+            cut_out: vec![],
+            seen: 0,
+            found: vec![],
         }
     }
-    (seen, found)
+
+    /// What element `at` paints over `below`, hover and press layers included.
+    fn painted(&self, e: &ElementInfo, below: rune::Color) -> rune::Color {
+        let pixels = e.rect.map(|v| v * SCALE);
+        let near = |rect: &[f32; 4]| rect.iter().zip(pixels).all(|(a, b)| (a - b).abs() <= 1.0);
+        let Some(drawn) = self
+            .rt
+            .instances
+            .iter()
+            .find(|i| i.fill[3] > 0.0 && near(&i.rect))
+        else {
+            return below;
+        };
+        let below = [below.r, below.g, below.b].map(rune::theme::srgb_encode);
+        let [r, g, b] = [0, 1, 2]
+            .map(|c| rune::theme::srgb_decode(drawn.fill[c] + (1.0 - drawn.fill[3]) * below[c]));
+        rune::Color { r, g, b, a: 1.0 }
+    }
+
+    /// Checks what the control keyed `key` draws, or the whole board with no key.
+    fn check(&mut self, key: Option<&str>, pointer: Pointer) {
+        let all = self.rt.elements();
+        let control = key.map(|key| {
+            all.iter()
+                .position(|e| e.key.as_deref() == Some(key))
+                .unwrap_or_else(|| panic!("{key} is drawn"))
+        });
+        let opaque_behind = |at: usize| {
+            let [x, y, w, h] = all[at].visible;
+            let (x, y) = (x + w / 2.0, y + h / 2.0);
+            let covers = |e: &ElementInfo| {
+                let [ex, ey, ew, eh] = e.visible;
+                x >= ex && x <= ex + ew && y >= ey && y <= ey + eh
+            };
+            (0..at)
+                .rev()
+                .find(|&j| {
+                    let opaque = all[j].fill.a > 0.999 && all[j].opacity > 0.999;
+                    (opaque || Some(j) == control) && covers(&all[j])
+                })
+                .expect("the board's own ground")
+        };
+        let control_ground = control.map(|c| {
+            let below = all[opaque_behind(c)].fill;
+            self.painted(&all[c], below)
+        });
+        let behind = |at: usize| {
+            let j = opaque_behind(at);
+            match control_ground {
+                Some(ground) if Some(j) == control => ground,
+                _ => all[j].fill,
+            }
+        };
+        let inside = |at: usize| {
+            control.is_none_or(|c| {
+                std::iter::successors(all[at].parent, |&p| all[p].parent).any(|p| p == c)
+            })
+        };
+        let shown_fill = |at: usize| {
+            all.iter()
+                .rfind(|e| e.parent == Some(at) && e.fill.a > 0.999 && e.opacity > 0.999)
+                .map_or(all[at].fill, |lit| lit.fill)
+        };
+        let mut checks: Vec<(String, rune::Color, rune::Color, f32)> = vec![];
+        for (i, e) in all.iter().enumerate().skip(1) {
+            let [_, _, w, h] = e.visible;
+            if w <= 0.0 || h <= 0.0 || !inside(i) {
+                continue;
+            }
+            let ground = behind(i);
+            match (e.role, e.text_color) {
+                ("icon", Some(ink)) => checks.push((e.path.clone(), ink, ground, 3.0)),
+                (_, Some(ink)) if e.text.is_some() => {
+                    checks.push((e.path.clone(), ink, ground, 4.5));
+                }
+                _ => {}
+            }
+            let icon_cut_out = || {
+                all.iter()
+                    .filter(|part| part.parent == Some(i) && part.role == "icon")
+                    .any(|icon| contrast(icon.text_color.expect("an icon's ink"), ground) < 1.01)
+            };
+            if pointer == Pointer::Away && e.fill.a > 0.0 && icon_cut_out() {
+                self.cut_out.push(e.path.clone());
+            }
+            let dot = e
+                .key
+                .as_deref()
+                .is_some_and(|k| k.contains(".above.") || k.contains(".below."));
+            if dot || self.cut_out.contains(&e.path) {
+                checks.push((e.path.clone(), shown_fill(i), ground, 3.0));
+            }
+            if e.key.as_deref() == Some("shelf.frame.edge") {
+                let frame = e.rect.map(|v| v * SCALE);
+                let edge = self
+                    .rt
+                    .instances
+                    .iter()
+                    .find(|drawn| {
+                        drawn.border[3] > 0.0
+                            && drawn
+                                .rect
+                                .iter()
+                                .zip(frame)
+                                .all(|(a, b)| (a - b).abs() <= 1.0)
+                    })
+                    .expect("the frame's edge");
+                let [r, g, b] = [0, 1, 2].map(|c| rune::theme::srgb_decode(edge.border[c]));
+                let edge = rune::Color { r, g, b, a: 1.0 };
+                checks.push((e.path.clone(), edge, ground, 3.0));
+            }
+        }
+        self.seen += checks.len();
+        for (what, ink, ground, floor) in checks {
+            let reads = contrast(ink, ground);
+            if reads < floor - 0.01 {
+                self.found.push(format!(
+                    "{what} reads {reads:.2}:1, under {floor}:1, pointer {pointer:?}"
+                ));
+            }
+        }
+    }
+
+    fn controls(&self) -> Vec<(String, (f32, f32))> {
+        self.rt
+            .elements()
+            .iter()
+            .filter(|e| e.role == "button")
+            .map(|e| {
+                let [x, y, w, h] = e.visible;
+                let key = e.key.clone().expect("a control's key");
+                (key, (x + w / 2.0, y + h / 2.0))
+            })
+            .collect()
+    }
 }
 
 #[test]
-fn the_shelfs_marks_and_names_read_on_what_is_behind_them_in_every_scheme() {
+fn the_shelfs_marks_and_names_read_at_rest_hovered_and_pressed_in_every_scheme() {
     for scheme in attn_ui::colors::SCHEMES.iter() {
         for dark in [true, false] {
-            let t = scheme.colors(dark).ui;
-            let (seen, found) = faults(t, dark);
-            println!("{}, dark={dark}: {seen} marks and words read", scheme.id);
-            assert!(seen > 400, "only {seen} marks and words were found");
+            let mut board = Board::new(scheme.colors(dark).ui, dark);
+            board.check(None, Pointer::Away);
+            let at_rest = board.seen;
+            for (key, (x, y)) in board.controls() {
+                board.rt.pointer_move(x, y);
+                board.rt.frame(0.0);
+                board.check(Some(&key), Pointer::Over);
+                board.rt.pointer_down(x, y);
+                board.rt.frame(0.0);
+                board.check(Some(&key), Pointer::Down);
+                board.rt.pointer_move(-1.0, -1.0);
+                board.rt.pointer_up(-1.0, -1.0);
+            }
+            println!(
+                "{}, dark={dark}: {at_rest} marks and words read at rest, {} hovered and pressed",
+                scheme.id,
+                board.seen - at_rest
+            );
+            assert!(at_rest > 200, "only {at_rest} marks and words were found");
             assert!(
-                found.is_empty(),
+                !board.cut_out.is_empty(),
+                "no mark with its icon cut out was found"
+            );
+            assert!(
+                board.seen > 2 * at_rest,
+                "only {} with the pointer on them",
+                board.seen - at_rest
+            );
+            assert!(
+                board.found.is_empty(),
                 "{}, dark={dark}:\n{}",
                 scheme.id,
-                found.join("\n")
+                board.found.join("\n")
             );
         }
     }

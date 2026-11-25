@@ -52,9 +52,9 @@ impl ShelfMember {
         if self.needs_user() { DASH } else { DOT }
     }
 
-    fn ink(&self, ground: Color, t: &Tokens) -> Color {
+    fn ink(&self, ground: &Ground, t: &Tokens) -> Ink {
         let ink = self.state.map_or(t.text_tertiary, |state| state.ink(t));
-        legible(ink, ground, MARK_READS, t)
+        ground.ink(ink, MARK_READS, t)
     }
 }
 
@@ -154,44 +154,113 @@ fn cut(name: &str, chars: usize) -> String {
     format!("{}…", kept.trim_end())
 }
 
-fn drawn(icon: &Glyph, points: f32, ink: Color) -> El {
-    match icon {
-        Glyph::Icon(icon) => door::icon_at(*icon, points).color(ink),
-        Glyph::Text(letter) => door::font(rune::text(letter.clone()), Type::Control).color(ink),
+fn laid_over(below: Color, layer: Color) -> Color {
+    mix_srgb(below, layer.alpha(1.0), layer.a)
+}
+
+/// What is behind a control's inks, at rest and under the pointer.
+#[derive(Clone, Copy)]
+struct Ground {
+    rest: Color,
+    hovered: Color,
+    pressed: Color,
+}
+
+impl Ground {
+    /// `rest` with the steps every control takes, each only as far as words on it still read.
+    fn of(rest: Color, t: &Tokens) -> Ground {
+        let furthest = reads_furthest(rest, [t.text_primary, t.bg_panel]);
+        let step = |below: Color, layer: Color| {
+            moved_until_it_reads(laid_over(below, layer), below, furthest, READS)
+        };
+        let hovered = step(rest, layers::hover_layer(rest, t));
+        let pressed = step(hovered, layers::pressed_layer(rest, t));
+        Ground {
+            rest,
+            hovered,
+            pressed,
+        }
+    }
+
+    fn ink(&self, ink: Color, floor: f32, t: &Tokens) -> Ink {
+        let rest = legible(ink, self.rest, floor, t);
+        let hovered = legible(rest, self.hovered, floor, t);
+        Ink {
+            rest,
+            lit: legible(hovered, self.pressed, floor, t),
+        }
+    }
+
+    fn words(&self, said: String, kind: Type, ink: Color, t: &Tokens) -> El {
+        let ink = self.ink(ink, READS, t);
+        words(said, kind, ink.rest).group_color(ink.lit)
+    }
+
+    fn pressable(&self, e: El, corner: f32) -> El {
+        door::round(e, corner)
+            .hover(self.hovered)
+            .press(self.pressed)
     }
 }
 
-fn mark(member: &ShelfMember, ground: Color, t: &Tokens) -> El {
+/// A colour at rest, and while the pointer is over the control it is on.
+#[derive(Clone, Copy)]
+struct Ink {
+    rest: Color,
+    lit: Color,
+}
+
+impl Ink {
+    fn tint(self, e: El) -> El {
+        e.color(self.rest).group_color(self.lit)
+    }
+
+    fn fill(self, e: El, corner: f32) -> El {
+        let lit = (self.lit != self.rest).then(|| {
+            door::round(el(), corner)
+                .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                .fill(self.lit)
+                .group_opacity(0.0, 1.0)
+                .inert()
+        });
+        door::round(e, corner).fill(self.rest).children(lit)
+    }
+}
+
+fn drawn(icon: &Glyph, points: f32, ink: Ink) -> El {
+    ink.tint(match icon {
+        Glyph::Icon(icon) => door::icon_at(*icon, points),
+        Glyph::Text(letter) => door::font(rune::text(letter.clone()), Type::Control),
+    })
+}
+
+fn mark(member: &ShelfMember, ground: &Ground, t: &Tokens) -> El {
     let ink = member.ink(ground, t);
-    let face = |corner: f32, fill: Color, icon: El| {
-        door::round(
-            row().size(MARK, MARK).center().a11y_hidden().child(icon),
-            corner,
-        )
-        .fill(fill)
+    let square = || row().size(MARK, MARK).center().a11y_hidden();
+    let cut_out = |corner: f32| {
+        let behind = Ink {
+            rest: ground.rest,
+            lit: ground.rest,
+        };
+        ink.fill(square(), corner)
+            .child(drawn(&member.icon, CUT_ICON, behind))
     };
     match member.state {
-        Some(MemberState::Waiting) => face(MARK / 2.0, ink, drawn(&member.icon, CUT_ICON, ground)),
-        Some(MemberState::Approval) => {
-            face(MARK_CORNER, ink, drawn(&member.icon, CUT_ICON, ground))
-        }
+        Some(MemberState::Waiting) => cut_out(MARK / 2.0),
+        Some(MemberState::Approval) => cut_out(MARK_CORNER),
         Some(MemberState::Working) => {
-            let wash = mix_srgb(ground, ink, WORKING_WASH);
-            let icon = legible(ink, wash, MARK_READS, t);
-            face(MARK / 2.0, wash, drawn(&member.icon, CUT_ICON, icon))
+            let wash = mix_srgb(ground.rest, ink.rest, WORKING_WASH);
+            let icon = legible(ink.rest, wash, MARK_READS, t);
+            let icon = Ink {
+                rest: icon,
+                lit: icon,
+            };
+            door::round(square(), MARK / 2.0)
+                .fill(wash)
+                .child(drawn(&member.icon, CUT_ICON, icon))
         }
-        _ => {
-            row()
-                .size(MARK, MARK)
-                .center()
-                .a11y_hidden()
-                .child(drawn(&member.icon, BARE_ICON, ink))
-        }
+        _ => square().child(drawn(&member.icon, BARE_ICON, ink)),
     }
-}
-
-fn pressable(e: El, ground: Color, corner: f32, t: &Tokens) -> El {
-    layers::pressable(door::round(e, corner), ground, t)
 }
 
 impl ShelfEntry {
@@ -297,23 +366,15 @@ impl ShelfEntry {
         moved_until_it_reads(washed, bar, t.text_primary, READS)
     }
 
-    fn name_ink(&self, ground: Color, t: &Tokens) -> Color {
-        let ink = match self.place {
-            Place::Current => t.bg_panel,
-            Place::OnScreen => t.text_primary,
-            Place::OffScreen => t.text_tertiary,
-        };
-        legible(ink, ground, READS, t)
-    }
-
-    fn slice(&self, member: &ShelfMember, name: f32, t: &Tokens) -> El {
-        let ground = self.ground(t);
-        let kind = match self.place {
-            Place::Current => Type::Control,
-            _ => Type::Small,
+    fn slice(&self, member: &ShelfMember, name: f32, ground: &Ground, t: &Tokens) -> El {
+        let (kind, ink) = match self.place {
+            Place::Current => (Type::Control, t.bg_panel),
+            Place::OnScreen => (Type::Small, t.text_primary),
+            Place::OffScreen => (Type::Small, t.text_tertiary),
         };
         let named = self.names(member, name).then(|| {
-            words(self.name_of(member), kind, self.name_ink(ground, t))
+            ground
+                .words(self.name_of(member), kind, ink, t)
                 .single_line()
                 .truncate()
                 .w(name)
@@ -376,8 +437,8 @@ impl ShelfEntry {
     /// The entry keyed `key` and read as `label`, with `name` points for its name.
     pub fn build(&self, key: &str, label: &str, name: f32, t: &Tokens) -> El {
         let shape = self.shape();
-        let ground = self.ground(t);
-        let asks = Shelf::asks(key, self.asking, ground, t);
+        let ground = Ground::of(self.ground(t), t);
+        let asks = asks(key, self.asking, &ground, t);
         let slices = MARK + self.name_room(name);
         let slices = if self.stacked() {
             let reel = col()
@@ -385,7 +446,7 @@ impl ShelfEntry {
                 .offset(0.0, -PILL.height * self.shown as f32)
                 .offset_motion(SCROLL)
                 .children(self.members.iter().enumerate().map(|(i, member)| {
-                    let slice = self.slice(member, name, t);
+                    let slice = self.slice(member, name, &ground, t);
                     let slice = slice.key(format!("{key}.slice.{i}"));
                     if i == self.shown {
                         slice
@@ -395,16 +456,17 @@ impl ShelfEntry {
                 }));
             el().w(slices).min_w(slices).h(PILL.height).child(reel)
         } else {
-            let slice = self.slice(&self.members[0], name, t);
+            let slice = self.slice(&self.members[0], name, &ground, t);
             slice.w(slices).min_w(slices)
         };
         let dots = self.dots().into_iter().map(|dot| {
             let member = &self.members[dot.member];
             let side = if dot.above { "above" } else { "below" };
             let rest = if dot.shows { 0.0 } else { -dot.width / 2.0 };
-            door::round(el().size(dot.width, DOT), DOT / 2.0)
+            member
+                .ink(&ground, t)
+                .fill(el().size(dot.width, DOT), DOT / 2.0)
                 .key(format!("{key}.{side}.{}", dot.member))
-                .fill(member.ink(ground, t))
                 .absolute(0.0, if dot.above { 0.0 } else { PILL.height - DOT })
                 .offset(dot.x + rest, 0.0)
                 .offset_motion(SCROLL)
@@ -428,9 +490,9 @@ impl ShelfEntry {
             .h(shape.height)
             .child(body)
             .children(dots);
-        let entry = pressable(entry, ground, shape.corner, t);
+        let entry = ground.pressable(entry, shape.corner);
         let entry = if self.place == Place::Current || self.stacked() {
-            entry.fill(ground)
+            entry.fill(ground.rest)
         } else {
             entry
         };
@@ -440,6 +502,18 @@ impl ShelfEntry {
             entry
         }
     }
+}
+
+fn asks(key: &str, count: usize, ground: &Ground, t: &Tokens) -> Vec<El> {
+    (0..count)
+        .map(|i| {
+            ground
+                .words(ASK.to_owned(), Type::Label, t.accent, t)
+                .key(format!("{key}.ask.{i}"))
+                .role("img")
+                .label("Open ask")
+        })
+        .collect()
 }
 
 #[derive(Clone)]
@@ -497,15 +571,16 @@ impl ShelfCount {
         open: bool,
         t: &Tokens,
     ) -> El {
-        let ground = if open { t.bg_elevated } else { t.bg_panel };
+        let ground = Ground::of(if open { t.bg_elevated } else { t.bg_panel }, t);
         let ink = if self.needs_user {
             t.text_primary
         } else {
             t.text_tertiary
         };
-        let ink = legible(ink, ground, READS, t);
-        let said = words(self.caption(), self.kind(), ink).single_line();
-        let marks = self.marks.iter().map(|member| mark(member, ground, t));
+        let said = ground
+            .words(self.caption(), self.kind(), ink, t)
+            .single_line();
+        let marks = self.marks.iter().map(|member| mark(member, &ground, t));
         let face = door::gap(
             door::inset(row().items_center(), COUNT_INSET, Space::S0),
             COUNT_GAP,
@@ -523,8 +598,8 @@ impl ShelfCount {
             .w(width)
             .min_w(width)
             .h(FLAT.height)
-            .fill(ground);
-        focus::ring(pressable(count, ground, FLAT.corner, t), t)
+            .fill(ground.rest);
+        focus::ring(ground.pressable(count, FLAT.corner), t)
     }
 }
 
@@ -571,20 +646,12 @@ impl Shelf {
 
     /// A "?" on `ground` for each of `count` open asks of the entry keyed `key`.
     pub fn asks(key: &str, count: usize, ground: Color, t: &Tokens) -> Vec<El> {
-        let ink = legible(t.accent, ground, READS, t);
-        (0..count)
-            .map(|i| {
-                words(ASK, Type::Label, ink)
-                    .key(format!("{key}.ask.{i}"))
-                    .role("img")
-                    .label("Open ask")
-            })
-            .collect()
+        asks(key, count, &Ground::of(ground, t), t)
     }
 
     /// A tile's mark on `ground`.
     pub fn mark(member: &ShelfMember, ground: Color, t: &Tokens) -> El {
-        mark(member, ground, t)
+        mark(member, &Ground::of(ground, t), t)
     }
 
     /// A folded column in a count's menu, keyed `key` and read as `label`: `marks`, the words
@@ -600,7 +667,8 @@ impl Shelf {
         let face = door::gap(row().w_full().items_center(), NAME_GAP)
             .child(door::gap(row().items_center(), MARK_GAP).children(marks))
             .child(
-                words(label.clone(), Type::Small, t.text_secondary)
+                Ground::of(t.bg_panel, t)
+                    .words(label.clone(), Type::Small, t.text_secondary, t)
                     .single_line()
                     .truncate()
                     .grow(1.0),
