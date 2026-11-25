@@ -1,0 +1,1 @@
+The Ledger's Sessions list and Conversations list now find a session by the short id attn prints (`ag-7yd2rk`, with or without `ag-`), as well as by its full id and prefixes. Before, an id copied from `attn session list --closed` found no row.
