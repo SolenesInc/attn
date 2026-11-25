@@ -259,7 +259,7 @@ func TestARemoteShellExitReachesItsHomeAfterTheOutpostStopsListening(t *testing.
 	testworld.AwaitSince(app, mark, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == id && e.ExitCode == 0 })
 	testworld.AwaitSessionSince(app, mark, id, func(s protocol.Session) bool { return s.TerminalExit != nil && s.TerminalExit.Code == 0 })
 	testworld.AwaitSince(app, mark, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool { return e.Session != nil && string(e.Session.ID) == id })
-	requireStdout(t, home.Attn("session", "show", id), "state      closed", " by "+id, "because    Agent exited normally")
+	requireStdout(t, home.Attn("session", "show", id), "state      closed", " by "+shortID(id), "because    Agent exited normally")
 	if rows := outpostLedgerRows(t, remote, false, true); slices.Contains(rows, id) {
 		t.Fatalf("the outpost closed its copy of %s itself: %v", id, rows)
 	}

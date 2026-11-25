@@ -54,7 +54,7 @@ func TestStateExplainReplaysEachClaimAndWhatBecameOfIt(t *testing.T) {
 
 	text := s.Attn("state", "explain", id).Stdout
 	for _, want := range []string{
-		fmt.Sprintf("session %s (claude)\n", id),
+		fmt.Sprintf("session %s (claude)\n", shortID(id)),
 		"state:   waiting_input since ",
 		"model request: ",
 		"OBSERVED",
