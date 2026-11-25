@@ -1,0 +1,1 @@
+The native-desktop-order scenario failed some landings (5 of 67 landing-runner runs) because it read the app's sidebar before the app had received the order. The daemon answers the scenario's own client before it tells the app. The scenario now waits for the app's desktops to hold the order first. The sidebar assertion is unchanged, and no product code changed.
