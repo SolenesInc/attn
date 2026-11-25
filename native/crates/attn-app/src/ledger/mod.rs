@@ -4,13 +4,14 @@
 
 mod mark;
 pub(crate) mod query;
+pub(crate) mod reopen;
 mod view;
 
 use std::collections::HashMap;
 
 use attn_protocol::{
     KeptConversationKeepMessage, SessionLedgerEntry, SessionLedgerFacets, SessionListResultMessage,
-    SessionReopenMessage, SessionReopenResultMessage, SetSettingMessage,
+    SetSettingMessage,
 };
 use rune::{TextEdit, Tx};
 
@@ -18,6 +19,7 @@ use crate::State;
 use crate::requests::Answer;
 use crate::shell::Layer;
 use query::{Filters, ProfileChoice, Scope, Verdict, Window};
+use reopen::Reopened;
 
 pub(crate) use view::{row_menu, view};
 
@@ -869,57 +871,24 @@ fn reopen(state: &mut State, entry: SessionLedgerEntry, action: String, tx: &mut
         .window
         .ledger
         .record(&entry, Some(Note::Busy("reopening…".into())), None);
-    let session_id = entry.id.clone();
-    let asked = action.clone();
-    state.ask(
-        |request_id| SessionReopenMessage {
-            request_id: Some(request_id),
-            session_id,
-            action: Some(asked),
-            ..SessionReopenMessage::new()
-        },
-        move |state, answer, tx| {
-            let reply = answer.parse::<SessionReopenResultMessage>();
-            if let Some(result) = reply
-                .as_ref()
-                .filter(|r| r.success)
-                .and_then(|r| r.result.clone())
-            {
+    let session = entry.id.clone();
+    reopen::ask(
+        state,
+        session,
+        action,
+        move |state, answer, tx| match answer {
+            Reopened::Shown(session) => {
                 state.window.ledger.record(&entry, None, None);
                 if is_open(state) {
                     close(state, tx);
                 }
-                crate::sidebar::open_agent(state, &result.session_id, tx);
-                return;
+                crate::sidebar::open_agent(state, &session, tx);
             }
-            if let Some(offer) = reply.as_ref().and_then(|r| r.reopen.as_ref()) {
-                let verdict = Verdict::of(offer);
-                let note = Note::Refused(verdict.refusal(&action));
-                state
-                    .window
-                    .ledger
-                    .record(&entry, Some(note), Some(verdict));
+            Reopened::Refused { why, verdict } => {
+                let note = Note::Refused(why);
+                state.window.ledger.record(&entry, Some(note), verdict);
                 read(state, tx);
-                return;
             }
-            let why = answer_error(&answer, "Reopening that session failed");
-            let held = state
-                .facts
-                .desktops
-                .iter()
-                .any(|d| d.panes.iter().any(|p| p.session_id == entry.id));
-            if held {
-                state.window.notify(why, tx);
-                state.window.ledger.record(&entry, None, None);
-                if is_open(state) {
-                    close(state, tx);
-                }
-                crate::sidebar::open_agent(state, &entry.id, tx);
-                return;
-            }
-            let note = Note::Refused(query::compact_paths(&why));
-            state.window.ledger.record(&entry, Some(note), None);
-            read(state, tx);
         },
         tx,
     );
