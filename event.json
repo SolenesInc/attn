@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Codex CLI failures can be counted as sandbox blocks",
+  "at": "2026-11-25T01:38:16.401Z",
+  "detail": "Codex’s CLI failures can be counted as sandbox blocks.\n\nAt scripts/agent-bench/instance/bench.ts:120, the recorder treats an original exit-1 invocation as sandbox blocked if a later attn agent list probe cannot connect. In the plot-order task, invalid JSON for attn seed plot -f fails in local parsing before it tries the socket. The paired probe shows exit 1 and the same local parse error on both revisions. The parent counted one call and one failure. d902ff55e counted one sandbox block and zero CLI calls or failures. This distorts the CLI comparison used for the default-on decision.\n\nClassify the original invocation and keep genuine local failures in the CLI counts. The reviewer and an independent verifier confirmed the result. Evidence and the reproduction are on s-kp86zk.\n"
+}
