@@ -175,6 +175,26 @@ func TestAScriptRunsCommandsAndEndsAsTheAgentIsTold(t *testing.T) {
 			want:   stopped("memory limit of 64 MB"),
 		},
 		{
+			name:   "an endless allocation the script catches",
+			source: "try {\n  const a = [];\n  for (;;) a.push({x: [1, 2, 3]});\n} catch (e) { return 'fallback' }",
+			want:   stopped("memory limit of 64 MB"),
+		},
+		{
+			name:   "an endless allocation whose promise the script catches",
+			source: "return (async () => {\n  const a = [];\n  for (;;) a.push({x: [1, 2, 3]});\n})().catch(() => 'fallback')",
+			want:   stopped("memory limit of 64 MB"),
+		},
+		{
+			name:   "a built-in past the memory limit that the script catches",
+			source: "try { JSON.parse('[' + '[1],'.repeat(3e6) + '1]') } catch { return 'fallback' }",
+			want:   stopped("memory limit of 64 MB"),
+		},
+		{
+			name:   "null thrown",
+			source: "throw null",
+			want:   script.Output{Failed: "the script threw null"},
+		},
+		{
 			name:   "an endless recursion",
 			source: "const f = () => f() + 1;\nf()",
 			want:   stopped("stack limit of 512 KB"),

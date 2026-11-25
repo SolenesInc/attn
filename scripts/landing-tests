@@ -79,6 +79,7 @@ go ./internal/daemon TestAnUnreachableOutpostPublishesOnlyWhenItsFailureChanges
 go ./cmd/attnd TestTwoProfilesOnOneNotebookFolderSyncItOnce
 go ./cmd/attnd TestOneProfilesNotebookFolderFailsAloneAndOnlyItNamesItsConflictCopies
 go ./cmd/attnd TestSettingsCLIDiscoversReadsAndSavesDaemonSettings
+go ./cmd/attnd TestAScriptRunsCommandsAndEndsAsTheAgentIsTold
 go ./internal/daemon TestAnAppliedObservationIsNotReplayedOverALaterHomeBinding
 go ./internal/daemon TestAReloadedSessionSurvivesItsReplacedWorkerStoppingLate
 go ./internal/store TestUpgradeKeepsEveryProfileOnTheNotebookFolderItUsed

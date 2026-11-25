@@ -39,6 +39,9 @@ func executeOnLockedThread(job Job, host func(line []byte) Answer) Output {
 		quickjs.WithMemoryLimit(uint64(job.Limits.Memory)),
 		quickjs.WithMaxStackSize(uint64(job.Limits.Stack)),
 	)
+	if err := limitHeap(e.rt, job.Limits.Memory); err != nil {
+		return Output{Failed: fmt.Sprintf("the script's runner did not start: %v", err)}
+	}
 	e.ctx = e.rt.NewBareContext()
 	names, _ := json.Marshal(job.Functions)
 	start := e.ctx.Eval(prelude, quickjs.EvalFileName("attn"))
@@ -55,8 +58,9 @@ func executeOnLockedThread(job Job, host func(line []byte) Answer) Output {
 	if !returned.IsException() {
 		e.ctx.Loop()
 	}
-	e.makeRoomToReadWhatWasThrown()
+	raiseHeapLimit(2 * job.Limits.Memory)
 	out := e.outcome(returned)
+	e.stopAtHeapLimit()
 	if e.stopped != "" {
 		out = Output{Failed: stoppedBy(e.stopped)}
 	}
@@ -66,8 +70,10 @@ func executeOnLockedThread(job Job, host func(line []byte) Answer) Output {
 	return out
 }
 
-func (e *engine) makeRoomToReadWhatWasThrown() {
-	e.rt.SetMemoryLimit(2 * uint64(e.job.Limits.Memory))
+func (e *engine) stopAtHeapLimit() {
+	if e.stopped == "" && heapWasRefused() {
+		e.stopped = e.memoryLimit()
+	}
 }
 
 func (e *engine) outcome(returned *quickjs.Value) Output {
@@ -96,7 +102,7 @@ func (e *engine) outcome(returned *quickjs.Value) Output {
 }
 
 func (e *engine) threw(what string, reason *quickjs.Value) Output {
-	if reason.IsError() || reason.IsNull() {
+	if reason.IsError() {
 		return e.failure(reason.ToError())
 	}
 	return Output{Failed: what + reason.JSONStringify()}
@@ -116,7 +122,10 @@ func (e *engine) call(c *quickjs.Context, _ *quickjs.Value, args []*quickjs.Valu
 	if len(args) != 2 || !args[0].IsString() {
 		return c.ThrowTypeError("a command is called with its name and its arguments")
 	}
-	name, sent := args[0].ToString(), args[1].ToString()
+	name, sent := args[0].ToString(), ""
+	if args[1].IsString() {
+		sent = args[1].ToString()
+	}
 	if c.HasException() {
 		return c.ThrowInternalError(outOfMemory)
 	}
@@ -181,6 +190,7 @@ func cutAndSaySo(text string, limit int) string {
 }
 
 func (e *engine) interrupt() int {
+	e.stopAtHeapLimit()
 	if e.stopped == "" && threadCPU()-e.began > e.job.Limits.Compute {
 		e.stopped = fmt.Sprintf("compute limit of %s of its own work", e.job.Limits.Compute)
 	}
@@ -201,8 +211,6 @@ const (
 	stackOverflow = "Maximum call stack size exceeded"
 )
 
-var outOfMemoryThrownAsNull = &quickjs.Error{Name: "InternalError", Message: outOfMemory}
-
 func stoppedBy(limit string) string {
 	return "the script stopped: it reached its " + limit
 }
@@ -214,12 +222,9 @@ func (e *engine) memoryLimit() string {
 func (e *engine) failure(thrown error) Output {
 	var err *quickjs.Error
 	if !errors.As(thrown, &err) {
-		err = outOfMemoryThrownAsNull
+		return Output{Failed: fmt.Sprintf("the script ended with an error that could not be read: %v", thrown)}
 	}
-	switch {
-	case err.Name == "InternalError" && err.Message == outOfMemory:
-		return Output{Failed: stoppedBy(e.memoryLimit())}
-	case err.Name == "RangeError" && err.Message == stackOverflow:
+	if err.Name == "RangeError" && err.Message == stackOverflow {
 		return Output{Failed: stoppedBy("stack limit of " + size(e.job.Limits.Stack))}
 	}
 	line, at := e.line(err.Stack), ""
