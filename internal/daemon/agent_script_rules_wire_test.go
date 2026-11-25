@@ -131,6 +131,7 @@ func TestACallPastItsTimeEndsWithTheLimitAndTheChangesBeforeItNamed(t *testing.T
 		{"a command that does not end", "browser_back(); AFTER", "one call runs at most 50 s", false, true},
 		{"a script that calls no command", "browser_back(); for (;;); AFTER", "one call runs at most 50 s", true, true},
 		{"a script that calls on", "browser_back(); AFTER", "call_limit: one call runs at most 50 s, and they have passed", true, false},
+		{"a last command that ends after the limit", "browser_back();", "one call runs at most 50 s. The script went on", true, false},
 		{"a script that catches the limit", "browser_back(); try { AFTER } catch {}", "one call runs at most 50 s. The script went on", true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -161,6 +162,12 @@ func TestACallPastItsTimeEndsWithTheLimitAndTheChangesBeforeItNamed(t *testing.T
 				if !strings.Contains(text, want) {
 					t.Errorf("the answer lacks %q:\n%s", want, text)
 				}
+			}
+			if !tc.kill && !strings.HasSuffix(text, "\nbrowser_back {}") {
+				t.Errorf("the ledger does not end with the command that ended:\n%s", text)
+			}
+			if !got.result.IsError {
+				t.Error("the call past its time did not fail")
 			}
 			if !tc.host && !strings.Contains(text, "browser_back {} -> call_limit: it may have taken effect") {
 				t.Errorf("the ledger does not hold the command that had not ended:\n%s", text)

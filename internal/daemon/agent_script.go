@@ -73,6 +73,9 @@ func (d *Daemon) runAgentScript(ctx context.Context, call *agentCall, tool scrip
 	started := time.Now()
 	run := &scriptRun{d: d, call: call, tool: tool, whole: whole, working: working}
 	out := script.Run(whole, script.Job{Source: source, Functions: d.agentToolSet.commandNames, Limits: script.DefaultLimits}, run.command)
+	if context.Cause(working) == errScriptCallLimit {
+		run.limit = errScriptCallLimit.Error()
+	}
 	if run.limit != "" && !strings.Contains(out.Failed, run.limit) {
 		out.Failed = strings.TrimSpace(out.Failed + "\nThe call reached a limit: " + run.limit + ". The script went on, and no command after the limit ran.")
 	}
@@ -128,8 +131,7 @@ func (run *scriptRun) atLimit() *command.Refusal {
 		return &command.Refusal{Code: codeCommandLimit, Message: run.limit, Fix: "Run the rest in another call."}
 	}
 	if run.working.Err() != nil {
-		run.limit = errScriptCallLimit.Error()
-		return &command.Refusal{Code: codeCallLimit, Message: run.limit + ", and they have passed", Fix: "Run the rest in another call."}
+		return &command.Refusal{Code: codeCallLimit, Message: errScriptCallLimit.Error() + ", and they have passed", Fix: "Run the rest in another call."}
 	}
 	return nil
 }
@@ -179,8 +181,7 @@ func (run *scriptRun) runInTime(tool agentTool, args json.RawMessage) (any, *com
 }
 
 func (run *scriptRun) cutOff(tool agentTool) *command.Refusal {
-	run.limit = errScriptCallLimit.Error()
-	return &command.Refusal{Code: codeCallLimit, Message: run.limit + ", and " + tool.def.Name + " had not ended", Fix: "It may have taken effect. Read what it changes before you call it again."}
+	return &command.Refusal{Code: codeCallLimit, Message: errScriptCallLimit.Error() + ", and " + tool.def.Name + " had not ended", Fix: "It may have taken effect. Read what it changes before you call it again."}
 }
 
 func mayHaveTakenEffect(refusal *command.Refusal) bool {
