@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Callout show ends the current callout",
+  "at": "2026-11-25T18:06:22.629Z",
+  "detail": "Calling callout show while another callout is active explicitly ends the current callout and replaces it. Record does not cover closing active state under D29. Classify it as act unless the effect contract is updated explicitly. Independent source review and focused tests are recorded on s-0evnyp.\n"
+}
