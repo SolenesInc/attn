@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "MCP seed guide shows an invalid plot argument",
+  "at": "2026-11-25T09:05:54.899Z",
+  "detail": "At bf8fba16e the seed_guide MCP result teaches seed_plot {\"plot\":\"<the contents of plan.json>\"} for the worked plot example. Inserting the file contents as a JSON string fails MCP validation with “want an object.” The actual catalog schema expects an object, and the renderer emits the quoted slot at internal/catalog/mention.go:302. An agent following the guide cannot plant the example. Render the parsed JSON as the object value, and exercise the guide's actual example against MCP with isolated state. The reviewer and a fresh verifier independently confirmed the mismatch. See s-2h1k5t.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/catalog/mention.go",
+    "line": 302
+  },
+  "culprit": "50386d5a5051de58957e98caf9ccaa64bddfc4a8"
+}
