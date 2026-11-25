@@ -9,6 +9,9 @@
 # command as {attn seed tend <id> --for <name>}: the CLI prints the flag and the
 # command line, and a tool caller reads the argument name and the tool with its
 # arguments. The generator and a test refuse a command named in plain words.
+# `receipt` lists the fields of `result` that the tool of a command that changes
+# something answers with: what a next call needs, and what the caller cannot
+# know. The CLI and a tool that only reads answer with the whole result.
 groups:
   - name: seed
     summary: track work in the garden; plant, tend, note and harvest seeds

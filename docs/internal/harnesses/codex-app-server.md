@@ -479,6 +479,12 @@ isolated `CODEX_HOME` (seed `s-z7cfmc`):
   `tools.mcp__attn_core__seed_note`. The server's name `attn-core` becomes
   `attn_core` in the tool name. MCP calls are made by the app-server, outside
   the sandbox.
+- Code mode prints a tool's `outputSchema` as a TypeScript type in the `exec`
+  tool's description, or in `ALL_TOOLS` for a deferred tool. It expands at most
+  32 `$ref`s for each schema, in property-name order, and prints `unknown` for
+  every later one (`code-mode-protocol/src/json_schema_types.rs`, read at
+  `6aaac69480`). A 0.167.0 rollout printed `seed_show`'s `seed`, `notes` and
+  `since` as `unknown`, because `board` had used the 32 (seed `s-fkmy5z`).
 
 ## Model calls on the shared app-server
 
