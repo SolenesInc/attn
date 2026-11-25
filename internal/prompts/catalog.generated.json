@@ -5995,18 +5995,46 @@
         {
           "id": "help-rules",
           "delivery": "message_fragment",
-          "description": "When to ask, how to write for a cold reader, and which visual to show, for attn ask --help. A launch that carries the ask tool has them in its ask rules.",
+          "description": "When to ask, how to write for a cold reader, and which visual to show, for attn ask --help. Launch instructions that cover asks have them in their ask rules.",
           "body": {
             "kind": "text",
             "id": "ask.help-rules",
             "source": "content/ask/help-rules.md",
             "bindings": [
               {
+                "name": "permission",
+                "node": {
+                  "kind": "text",
+                  "id": "ask.permission",
+                  "source": "content/ask/permission.md"
+                }
+              },
+              {
                 "name": "visuals",
                 "node": {
                   "kind": "text",
                   "id": "ask.visuals",
                   "source": "content/ask/visuals.md"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "tool-rules",
+          "delivery": "message_fragment",
+          "description": "When to ask and how far an answer's permission goes, for the ask tool's description, whose readers may have no launch instructions.",
+          "body": {
+            "kind": "text",
+            "id": "ask.tool-rules",
+            "source": "content/ask/tool-rules.md",
+            "bindings": [
+              {
+                "name": "permission",
+                "node": {
+                  "kind": "text",
+                  "id": "ask.permission",
+                  "source": "content/ask/permission.md"
                 }
               }
             ]
@@ -8496,5 +8524,5 @@
       ]
     }
   ],
-  "definitions_hash": "564bef68393430bd7b567a0add70986a314fbe4deb24f47a4154eb002265e74b"
+  "definitions_hash": "e0aeb04b28f6c5e2b31bd57fb4dc501d62a7bd85caa4e6e27d58c2484230b228"
 }

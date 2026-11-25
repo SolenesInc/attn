@@ -1,0 +1,1 @@
+Use it for a decision only the user can make, instead of stopping to ask in the conversation. The user reads it without this conversation. {{permission}} Launch instructions with an "Asking the user" section add how to write an ask and which visuals to show.

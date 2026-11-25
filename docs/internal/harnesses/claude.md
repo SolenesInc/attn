@@ -89,6 +89,9 @@ Probed on 2.1.288 with a mock API.
 - Launch instructions from `--append-system-prompt` stay in force after
   `/clear`: the new conversation still follows them (probed on 2.1.314 with
   the real model).
+- A subagent does not get the `--append-system-prompt` text. Its system prompt
+  comes from its agent definition. A fork gets its parent's system prompt, with
+  the appended text (read in the 2.1.332 bundle, not run).
 - `--settings <JSON>` accepts inline hook settings (probed on 2.1.296 on
   macOS and Linux). SessionStart, UserPromptSubmit and Stop use the
   `--session-id` conversation id.

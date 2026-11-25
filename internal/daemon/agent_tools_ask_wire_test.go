@@ -128,6 +128,11 @@ func TestTheAskToolRequiresItsMarkdownAndSpeaksOnlyInToolWords(t *testing.T) {
 		if !strings.Contains(tool.Description, "```mermaid\nflowchart") {
 			t.Errorf("the ask tool's description has no worked Mermaid example:\n%s", tool.Description)
 		}
+		for _, rule := range []string{"name the exact action and its target", "approves only what the question names", "do not wait or poll"} {
+			if !strings.Contains(tool.Description, rule) {
+				t.Errorf("the ask tool's description does not say %q, and its reader may have no launch instructions:\n%s", rule, tool.Description)
+			}
+		}
 		schema, _ := tool.InputSchema.(map[string]any)
 		properties, _ := schema["properties"].(map[string]any)
 		markdown, _ := properties["markdown"].(map[string]any)

@@ -1,11 +1,13 @@
 package prompts
 
 var (
-	askVisuals = Use("ask.visuals", "content/ask/visuals.md")
-	askExample = Use("ask.example", "content/ask/example.md")
-	askRules   = Use("ask.rules", "content/ask/rules.md", Bind("visuals", askVisuals))
-	askHelp    = Use("ask.help-rules", "content/ask/help-rules.md", Bind("visuals", askVisuals))
-	askCLI     = Use("ask.cli", "content/ask/cli.md", Bind("example", askExample))
+	askVisuals    = Use("ask.visuals", "content/ask/visuals.md")
+	askExample    = Use("ask.example", "content/ask/example.md")
+	askRules      = Use("ask.rules", "content/ask/rules.md", Bind("visuals", askVisuals))
+	askPermission = Use("ask.permission", "content/ask/permission.md")
+	askHelp       = Use("ask.help-rules", "content/ask/help-rules.md", Bind("permission", askPermission), Bind("visuals", askVisuals))
+	askTool       = Use("ask.tool-rules", "content/ask/tool-rules.md", Bind("permission", askPermission))
+	askCLI        = Use("ask.cli", "content/ask/cli.md", Bind("example", askExample))
 )
 
 func askRecipient() Recipient {
@@ -58,7 +60,8 @@ func askRecipient() Recipient {
 	return Recipient{ID: "ask", Description: "Asks: questions an agent asks the user through attn, and the answers that come back.", Events: []Event{
 		On("rules", "message_fragment", "Launch guidance for every session that launched with asks, whether it asks through attn's tools or the CLI: when to ask, how to write for a cold reader, and which visual to show.", askRules),
 		On("cli", "message_fragment", "Launch guidance for a session that launched with asks and asks through the CLI: the attn ask syntax with a worked example.", askCLI),
-		On("help-rules", "message_fragment", "When to ask, how to write for a cold reader, and which visual to show, for attn ask --help. A launch that carries the ask tool has them in its ask rules.", askHelp),
+		On("help-rules", "message_fragment", "When to ask, how to write for a cold reader, and which visual to show, for attn ask --help. Launch instructions that cover asks have them in their ask rules.", askHelp),
+		On("tool-rules", "message_fragment", "When to ask and how far an answer's permission goes, for the ask tool's description, whose readers may have no launch instructions.", askTool),
 		On("example", "message_fragment", "A worked ask's markdown, for the ask tool's description and attn ask --help.", askExample),
 		On("answer", "inbox_content", "The user's answer, typed into the conversation of the ask's addressee: the seed's tender, or the asking agent when the ask is about no seed. A seed also keeps it as a note. The adapter validates answers against the ask.", reply),
 		On("follow-up", "inbox_content", "The user's follow-up on an ask they already answered, typed into the conversation of whoever holds the ask now, as the answer was. A seed also keeps it as a note.", followUp),
