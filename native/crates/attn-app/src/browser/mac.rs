@@ -103,6 +103,9 @@ thread_local! {
     static WAKE: RefCell<Option<Box<dyn Fn()>>> = const { RefCell::new(None) };
     /// Set while the window hands the keyboard to a page itself, which it need not hear about.
     static HANDING: Cell<bool> = const { Cell::new(false) };
+    /// A page that just resigned first responder during an AppKit `makeFirstResponder:` call,
+    /// cleared on the next runloop turn, so a rejected steal by another page restores it.
+    static RESIGNING: RefCell<Option<Retained<PageView>>> = const { RefCell::new(None) };
     /// The tile windows' content views, by window key.
     static TILE_WINDOWS: RefCell<HashMap<String, Retained<NSView>>> = RefCell::new(HashMap::new());
     /// Loads that wait for the session cookies of the last launch to be back in the store, so a
@@ -885,19 +888,36 @@ fn same<T: Message>(responder: &NSResponder, view: &T) -> bool {
     std::ptr::addr_eq(responder, view)
 }
 
-fn restore_window_focus(window: Retained<NSWindow>) {
+fn restore_window_focus(window: Retained<NSWindow>, previous: Option<Retained<PageView>>) {
     let block = RcBlock::new(move || {
         if window
             .firstResponder()
             .is_some_and(|responder| same(&responder, &*window))
         {
             HANDING.set(true);
-            let content = window.contentView();
-            window.makeFirstResponder(content.as_deref().map(|view| &**view));
+            let page = previous.as_ref().filter(|prev| {
+                !prev.isHiddenOrHasHiddenAncestor()
+                    && prev.window().is_some_and(|w| same(&w, &*window))
+            });
+            if let Some(prev) = page {
+                let web: &NSResponder = prev;
+                window.makeFirstResponder(Some(web));
+            } else {
+                let content = window.contentView();
+                window.makeFirstResponder(content.as_deref().map(|view| &**view));
+            }
             HANDING.set(false);
         }
     });
     unsafe { NSRunLoop::mainRunLoop().performBlock(&block) };
+}
+
+fn note_resigning(page: Retained<PageView>) {
+    RESIGNING.with_borrow_mut(|slot| *slot = Some(page));
+    let clear = RcBlock::new(|| {
+        RESIGNING.with_borrow_mut(Option::take);
+    });
+    unsafe { NSRunLoop::mainRunLoop().performBlock(&clear) };
 }
 
 /// The key a page heard, as the window's keymap reads keys.
@@ -975,9 +995,15 @@ define_class!(
 
         #[unsafe(method(becomeFirstResponder))]
         fn become_first_responder(&self) -> bool {
+            let resigned = RESIGNING.with_borrow_mut(Option::take);
             if !HANDING.get() && !self.receiving_pointer_down() {
                 if let Some(window) = self.window() {
-                    restore_window_focus(window);
+                    let previous = resigned.filter(|prev| {
+                        !same(prev, self)
+                            && !prev.isHiddenOrHasHiddenAncestor()
+                            && prev.window().is_some_and(|w| same(&w, &*window))
+                    });
+                    restore_window_focus(window, previous);
                 }
                 false
             } else {
@@ -987,6 +1013,15 @@ define_class!(
                 }
                 became
             }
+        }
+
+        #[unsafe(method(resignFirstResponder))]
+        fn resign_first_responder(&self) -> bool {
+            let resigned: bool = unsafe { msg_send![super(self), resignFirstResponder] };
+            if resigned && !HANDING.get() {
+                note_resigning(self.retain());
+            }
+            resigned
         }
 
         #[unsafe(method(flagsChanged:))]

@@ -118,9 +118,13 @@ try {
   });
 
   await runner.step('type_click_and_wait', async () => {
-    await browser('type', '--selector', '#field', '--text', 'drive');
+    const typed = JSON.parse(await browser('type', '--selector', '#field', '--text', 'drive'));
     const activeEl = JSON.parse(await browser('command', 'get_active_element'));
-    runner.assert(typeof activeEl['element-6066-11e4-a52e-4f735466cecf'] === 'string', 'typing still focuses the DOM input inside the page', activeEl);
+    runner.assert(
+      activeEl['element-6066-11e4-a52e-4f735466cecf'] === typed.element?.['element-6066-11e4-a52e-4f735466cecf'],
+      'typing still focuses the DOM input inside the page',
+      { typed, activeEl },
+    );
     await browser('click', '--selector', '#go');
     await waitText('Clicked drive');
     await driver.atRest();
