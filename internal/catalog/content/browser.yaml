@@ -181,8 +181,7 @@ commands:
     summary: list cookies for the current page
     runs: home
     grant: full
-    effect: read
-    needs_session: true
+    effect: act
     doc: |
       Lists the cookies of the current page.
     result: BrowserResult

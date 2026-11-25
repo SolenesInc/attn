@@ -343,12 +343,12 @@ entry the command layer runs without `runs` or `grant`, and an offered entry
 without `effect`.
 
 A command's `effect` is the strongest effect any of its calls can have. `read`
-changes nothing but the caller's own read position. `record` adds to the work
-record, or speaks to the user or to an agent the caller works with; it deletes
-nothing, closes nothing, starts no process and changes no setting. `act` is
-everything else, and the choice when in doubt. A `read` also answers a terminal
-that shows no session, in that terminal's profile, unless it sets
-`needs_session`.
+changes nothing but the caller's own read position, and hands out no
+credential. `record` adds to the work record, or speaks to the user or to an
+agent the caller works with; it deletes nothing, closes nothing, starts no
+process and changes no setting. `act` is everything else, and the choice when
+in doubt. A `read` also answers a terminal that shows no session, in that
+terminal's profile, unless it sets `needs_session`.
 
 A `record` or `act` command may list in `receipt` the paths of its result that
 its tool answers with, such as `seed.id`; the CLI, `--json` and the tools that

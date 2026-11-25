@@ -207,7 +207,7 @@ commands:
     summary: answer a question the user asked on the review
     runs: home
     grant: full
-    effect: record
+    effect: act
     doc: |
       Answers a question the user asked on the review. The question arrives as the user's message with this command and the question's id; the answer shows under the line in the user's review.
     args:
