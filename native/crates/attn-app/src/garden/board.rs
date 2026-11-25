@@ -1185,10 +1185,12 @@ fn card_face(seed: &Arc<Seed>, look: &CardLook, t: &Tokens) -> El {
                     .min_w(0.0),
             )
             .child(words(look.age.clone(), Type::Mono, t.text_muted));
-        let readiness = (look.column == Column::Ready && !seed.ready)
-            .then(|| card_meta(look, seed, t))
-            .filter(|facts| !facts.is_empty())
-            .map(|facts| Byline::new().wrap().push_all(facts).build(t));
+        let facts = match look.column {
+            Column::Ready if !seed.ready => card_meta(look, seed, t),
+            Column::Ready | Column::Parked => harvest_marker(seed, t).into_iter().collect(),
+            _ => Vec::new(),
+        };
+        let readiness = (!facts.is_empty()).then(|| Byline::new().wrap().push_all(facts).build(t));
         Card::new(card_key(&seed.id))
             .control("button", seed.title.clone())
             .standing(standing)
@@ -1259,6 +1261,11 @@ fn card_face(seed: &Arc<Seed>, look: &CardLook, t: &Tokens) -> El {
     card
 }
 
+fn harvest_marker(seed: &Seed, t: &Tokens) -> Option<El> {
+    model::harvest_when(seed)
+        .map(|(sentence, marker)| words(marker, Type::Small, t.text_secondary).help(sentence))
+}
+
 fn card_meta(look: &CardLook, seed: &Seed, t: &Tokens) -> Vec<El> {
     let word = |said: String, color| words(said, Type::Small, color);
     if model::is_plot(seed) {
@@ -1267,8 +1274,7 @@ fn card_meta(look: &CardLook, seed: &Seed, t: &Tokens) -> Vec<El> {
             .map(|count| word(count, t.text_secondary))
             .collect();
     }
-    let marker = model::harvest_when(seed)
-        .map(|(sentence, marker)| word(marker, t.text_secondary).help(sentence));
+    let marker = harvest_marker(seed, t);
     let blockers = look.blockers;
     match look.column {
         Column::Ready if seed.ready => std::iter::once(word("ready".into(), t.accent))

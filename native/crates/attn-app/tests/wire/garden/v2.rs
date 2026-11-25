@@ -1106,7 +1106,7 @@ fn v2_walks_into_the_children_of_the_plot_opened_in_the_wide_list() {
 }
 
 #[test]
-fn v2_board_says_why_work_is_unready() {
+fn v2_board_shows_readiness_reasons_and_harvest_conditions() {
     let blocker = with(seed("s-one001", "Start here"), |s| {
         s.ready = true;
         s.edges.push(edge("blocks", "s-two002"));
@@ -1115,17 +1115,29 @@ fn v2_board_says_why_work_is_unready() {
     let packet = with(seed("s-pack01", "Release packet"), |s| s.template = true);
     let gate = with(seed("s-gate01", "Release gate"), |s| s.gate = true);
     let merge = with(seed("s-pr0001", "Merge release"), |s| {
-        s.harvest_when = Some(SeedHarvestCondition {
-            pull_request: "github.com:victorarias/attn#42".into(),
-            url: "https://github.com/victorarias/attn/pull/42".into(),
-            ..SeedHarvestCondition::default()
-        });
+        s.harvest_when = Some(super::board::armed_on(42));
+    });
+    let parked_merge = with(seed("s-pr0002", "Parked for merge"), |s| {
+        s.status = "parked".into();
+        s.harvest_when = Some(super::board::armed_on(43));
+    });
+    let ready_merge = with(seed("s-pr0003", "Ready and armed"), |s| {
+        s.ready = true;
+        s.harvest_when = Some(super::board::armed_on(44));
     });
     let mut world = open_garden_sized(
         v2_daemon(
             true,
             Vec::new(),
-            vec![blocker, blocked, packet, gate, merge],
+            vec![
+                blocker,
+                blocked,
+                packet,
+                gate,
+                merge,
+                parked_merge,
+                ready_merge,
+            ],
             Vec::new(),
             Vec::new(),
         ),
@@ -1139,6 +1151,8 @@ fn v2_board_says_why_work_is_unready() {
         ("s-pack01", "packet"),
         ("s-gate01", "gate"),
         ("s-pr0001", "harvests on #42"),
+        ("s-pr0002", "harvests on #43"),
+        ("s-pr0003", "harvests on #44"),
     ] {
         let card = Target::key(format!("garden.board.card.{id}"));
         assert!(

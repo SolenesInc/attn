@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use super::*;
 
-fn armed_on(number: u32) -> SeedHarvestCondition {
+pub(super) fn armed_on(number: u32) -> SeedHarvestCondition {
     SeedHarvestCondition {
         pull_request: format!("github.com:victorarias/attn#{number}"),
         url: format!("https://github.com/victorarias/attn/pull/{number}"),
