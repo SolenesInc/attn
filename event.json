@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Home symlinks can misroute outpost repositories",
+  "at": "2026-11-25T00:47:54.545Z",
+  "fixesBug": "05b67fc"
+}
