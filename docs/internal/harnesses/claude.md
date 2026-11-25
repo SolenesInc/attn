@@ -443,11 +443,11 @@ Probed on 2.1.330 with a real account, on a non-production instance with
   attn's. In 27 attn sessions launched that way, each with `ListAgents` in its tools
   and `SendMessage` deferred, no call used either and no `attn agent list` was
   refused (`s-dqnc07`).
-- With and without the flag, auto mode refuses a shell `attn ask close` followed by
-  `attn seed harvest` for an ask that the session's transcript did not create: 5 of 5
-  without the flag, as `[Destructive or Unwanted Actions]` or
-  `[Undermining Oversight]`. The `ask_close` tool ran 2 of 2 times (2.1.332). Which
-  rule the classifier applies was not seen.
+- Auto mode refuses a shell `attn ask close` followed by `attn seed harvest` for an
+  ask that the session's transcript did not create: 6 of 7 tries with
+  `ListAgents` disallowed and 5 of 5 without, as `[Destructive or Unwanted
+  Actions]` or `[Undermining Oversight]`. The `ask_close` tool ran 2 of 2 times
+  (2.1.332). Which rule the classifier applies was not seen.
 - Auto mode reads `autoMode.{allow, soft_deny, hard_deny, environment}` from
   policy, flag (`--settings`) and user settings, not from project settings
   (read in the 2.1.330 bundle). `claude [--settings <json>] auto-mode config` prints

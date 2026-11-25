@@ -103,7 +103,7 @@ Preconditions:
 - Prompts and references are embedded at build time. After editing `internal/prompts/content/**`, run `make build` before `./attn prompts` shows the change, restart the instance's daemon before `./attn skill` does, and relaunch the agent before it reads the change.
 - The prompt editor (`go run ./cmd/prompt-editor`, `cmd/prompt-editor/main.go`, with `docs/internal/prompt-authoring.md`) is how maintainers change the text. It is not a way in for people or agents, so nothing here drives it. Its tests are under Kernel and Stack.
 - `attn prompts` is a preview: it says so, and it is not proof that an agent received the text. The proof is the mock agent's launch record.
-- An input left out of `--set` is false or absent. `render session launch` without `--set garden_available=true` drops the garden guidance that every real launch carries.
+- An input left out of `--set` is false or absent. `render session launch` without `--set garden_available=true` drops the garden guidance that every real launch carries, and without `--set claude_code_peer_tools=true` it drops the line on Claude Code's own tools that every Claude Code launch carries.
 - A named instance does not touch skills in your harness homes. Only production and `dev` do, and so does an instance whose shell sets `ATTN_AUTOMATION=1`, `ATTN_HARNESS_SKILL_SYNC=1` and `ATTN_TOOL_HOME`.
 - The baseline cannot drive a plugin harness's launch instructions: the mock agent stands in only for `claude` and `codex`. `internal/daemon/plugin_launch_instructions_wire_test.go` covers that way in.
 - `./attn presence` in the instance shell says `not running inside attn` because the launch unsets `ATTN_INSIDE_APP`. That is the right answer for that shell.
