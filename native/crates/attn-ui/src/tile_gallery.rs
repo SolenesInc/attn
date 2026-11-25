@@ -482,7 +482,7 @@ fn id_labels_story(s: &Tiles, cx: &mut Cx<Tiles>) -> El {
             drawing(format!("story.tile.label.{i}"), label, place, &t)
         });
     let list = (!s.on).then(|| id_list("story.tile.labels", &labels, pane, &t));
-    let layers = [id_scrim(t.bg_tile)]
+    let layers = [id_scrim(t.bg_tile, s.on)]
         .into_iter()
         .chain(over)
         .chain(list)

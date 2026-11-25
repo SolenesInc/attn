@@ -132,7 +132,7 @@ pub fn lantern(key: impl Into<String>, label: &IdLabel, place: IdPlace, t: &Toke
     let chip = chip(key.into(), label, place.over(width), width, t)
         .child(cap(label, Radius::Tag, t))
         .child(mark(label, ink))
-        .child(words(label.id.to_owned(), Type::Mono, ink).single_line());
+        .child(words(label.id.to_owned(), Type::Mono, t.text_primary).single_line());
     door::corner(chip, Radius::Control)
 }
 
@@ -149,7 +149,7 @@ pub fn name_in_place(key: impl Into<String>, label: &IdLabel, place: IdPlace, t:
         .child(cap(label, Radius::Round, t))
         .child(mark(label, ink))
         .child(
-            words(label.name.to_owned(), Type::Name, ink)
+            words(label.name.to_owned(), Type::Name, t.text_primary)
                 .single_line()
                 .truncate()
                 .w(width - head - Space::S8.pt())
@@ -158,11 +158,15 @@ pub fn name_in_place(key: impl Into<String>, label: &IdLabel, place: IdPlace, t:
     door::corner(chip, Radius::Round)
 }
 
-pub fn id_scrim(ground: Color) -> El {
+const LANTERN_DIM: f32 = 0.68;
+const NAMES_DIM: f32 = 0.4;
+
+pub fn id_scrim(ground: Color, named: bool) -> El {
+    let dim = if named { NAMES_DIM } else { LANTERN_DIM };
     el().absolute(0.0, 0.0)
         .w_full()
         .h_full()
-        .fill(ground.alpha(0.72))
+        .fill(ground.alpha(dim))
         .a11y_hidden()
 }
 

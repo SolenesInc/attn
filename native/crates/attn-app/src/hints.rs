@@ -450,7 +450,7 @@ pub(crate) fn layer(
             .w_full()
             .h_full()
             .inert()
-            .child(id_scrim(attn_ui::colors::rgb(terminal.bg)))
+            .child(id_scrim(attn_ui::colors::rgb(terminal.bg), shown.named))
             .children(labels)
             .children(list),
     )

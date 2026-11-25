@@ -7701,7 +7701,7 @@ const LIVE_AGENT: &str = "3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f";
 const CLOSED_AGENT: &str = "c5e81f07-4a36-4f8f-b2d9-7701aa5c9e3d";
 
 /// Agent a's terminal naming agent `s1` by a real id and a closed agent by its short one.
-fn naming_agents(dark: bool, more: &str) -> World {
+fn naming_agents(dark: bool) -> World {
     let mapped = Seed {
         last_execution_id: Some(CLOSED_AGENT.into()),
         ..seed("s-7k3f9m", "Map where uploads retry", "harvested", None)
@@ -7746,7 +7746,7 @@ fn naming_agents(dark: bool, more: &str) -> World {
     let closed = attn_protocol::session_id::short(CLOSED_AGENT);
     write(
         &mut world,
-        &format!("{live} builds the fix\r\n{closed} mapped it; its id is {CLOSED_AGENT}\r\n{more}"),
+        &format!("{live} builds the fix\r\n{closed} mapped it; its id is {CLOSED_AGENT}\r\n"),
     );
     world
 }
@@ -7754,7 +7754,7 @@ fn naming_agents(dark: bool, more: &str) -> World {
 /// A live agent's id in agent a's terminal with the pointer resting on it, so its card opens
 /// there.
 fn terminal_agent_card(dark: bool) {
-    let mut world = naming_agents(dark, "");
+    let mut world = naming_agents(dark);
     let at = cell(&world, 4, 0);
     world.gesture(|app| app.runtime.pointer_move(at.0, at.1));
     world.advance(std::time::Duration::from_millis(400));
@@ -7804,9 +7804,78 @@ fn terminal_role_icons(dark: bool) {
 }
 
 fn terminal_labels(dark: bool) {
-    let live = attn_protocol::session_id::short(LIVE_AGENT);
-    let more = format!("{live} read s-7k3f9m, then asked {live} again\r\n");
-    let mut world = naming_agents(dark, &more);
+    const CHIEF: &str = "52617e5f-1f0a-4c11-8a51-3f2b6d1c9a01";
+    const BUILDER: &str = "ded1de86-0c44-4b0a-9a3e-70f1a2b3c4d5";
+    const REVIEWER: &str = "24a1ae04-5d2c-4f7e-8b19-aa01bb02cc03";
+    let mut world = popover_world(
+        dark,
+        |state| {
+            let sessions = state.sessions.as_mut().expect("the tour's sessions");
+            sessions[0].label = "Agents' ids people can see, find and jump to".into();
+            let named = [
+                (CHIEF, "Chief", ("Chief", "spark")),
+                (BUILDER, "Fix the retry uploader", ("Builder", "code")),
+                (REVIEWER, "Review the upload fix", ("Reviewer", "list")),
+            ];
+            for (session, (id, label, (role, icon))) in sessions[1..].iter_mut().zip(named) {
+                session.id = id.into();
+                session.label = label.into();
+                session.dispatcher_session_id = None;
+                session.delegation_role = Some(attn_protocol::SessionDelegationRole {
+                    name: role.into(),
+                    icon: Some(icon.into()),
+                    ..Default::default()
+                });
+            }
+            state.seeds_total = Some(1);
+            state.seeds = Some(vec![seed(
+                "s-7k3f9m",
+                "Colors in one place",
+                "growing",
+                None,
+            )]);
+        },
+        |daemon| {
+            daemon.on("resolve_sessions", |r: &Request| {
+                message(ResolveSessionsResultMessage {
+                    request_id: request_id(r),
+                    success: true,
+                    found: vec![ResolvedSession {
+                        r#ref: attn_protocol::session_id::short(CLOSED_AGENT).into_owned(),
+                        closed: SessionLedgerEntry {
+                            id: CLOSED_AGENT.into(),
+                            label: "Map where uploads retry".into(),
+                            agent: "claude".into(),
+                            branch: Some("upload-retry-map".into()),
+                            profile_id: PROFILE.into(),
+                            last_seen: "2026-11-12T06:00:00Z".into(),
+                            closed_at: Some("2026-11-12T06:00:00Z".into()),
+                            ..SessionLedgerEntry::default()
+                        },
+                    }],
+                    ..ResolveSessionsResultMessage::new()
+                })
+            });
+        },
+    );
+    let [chief, builder, reviewer, closed] =
+        [CHIEF, BUILDER, REVIEWER, CLOSED_AGENT].map(attn_protocol::session_id::short);
+    write(
+        &mut world,
+        &format!(
+            "Dispatched {builder} on s-7k3f9m; {reviewer} reviews it.\r\n\
+             {chief} asked for a summary once {builder} lands.\r\n\
+             The map came from {closed}, closed this morning.\r\n\
+             Old forms still work: {} and {REVIEWER}\r\n\
+             A commit 1d4e6f90 stays plain.\r\n\r\n\
+             $ attn agent list\r\n\
+             {builder}  builder   wants approval  Fix the retry uploader\r\n\
+             {reviewer}  reviewer  scheduled       Review the upload fix\r\n\
+             {chief}  chief     waiting         Chief\r\n\
+             {closed}  builder   closed          Map where uploads retry\r\n",
+            &BUILDER[..8]
+        ),
+    );
     let mac = attn_testkit::mac();
     world.gesture(|app| {
         app.hold(rune::Mods {
@@ -7834,7 +7903,7 @@ fn terminal_labels(dark: bool) {
 
 /// A closed agent's id with its card pinned, then the same card after its resume was refused.
 fn terminal_closed_card(dark: bool) {
-    let mut world = naming_agents(dark, "");
+    let mut world = naming_agents(dark);
     world.daemon.on("session_reopen", |r: &Request| {
         message(SessionReopenResultMessage {
             request_id: request_id(r),
