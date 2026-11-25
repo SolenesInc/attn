@@ -228,6 +228,12 @@ pub(crate) fn dismiss(state: &mut State) -> bool {
     peeks.open.take().is_some()
 }
 
+/// The shelf shows another row: the peek closes, keeping its reply, and the pointer is on no entry.
+pub(crate) fn leave_row(state: &mut State) {
+    dismiss(state);
+    state.window.desk.peeks.arrived = None;
+}
+
 /// Closes the peek and forgets a reply only drafted in it.
 pub(crate) fn close(state: &mut State) -> bool {
     let peeks = &mut state.window.desk.peeks;

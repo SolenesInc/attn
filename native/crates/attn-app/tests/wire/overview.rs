@@ -657,48 +657,201 @@ fn a_terminal_whose_screen_was_asked_for_and_not_answered_is_not_asked_again() {
     assert!(shows_card(&world, "e"));
 }
 
+/// The columns the shelf has an entry for, by their first leaf, as `said` describes them.
+fn entries(world: &World, said: &str) -> Vec<String> {
+    let screen = world.screen();
+    screen
+        .all(Target::role("button"))
+        .into_iter()
+        .filter(|n| n.value.as_deref().unwrap_or_default().contains(said))
+        .filter_map(|n| Some(n.key?.strip_prefix("shelf.entry.")?.to_owned()))
+        .collect()
+}
+
+/// The words on the shelf's entry of `column`.
+fn written_on(world: &World, column: &str) -> Vec<String> {
+    let path = format!("shelf.entry.{column}/");
+    let elements = world.runtime().elements();
+    let seen = elements
+        .into_iter()
+        .filter(|e| e.path.contains(&path) && e.visible[2] * e.visible[3] > 1.0);
+    seen.filter_map(|e| e.text).collect()
+}
+
+/// The columns whose entries the shelf's frame stands behind.
+fn framed(world: &World) -> Vec<String> {
+    let [x, _, w, _] = world.runtime().presented("shelf.frame").unwrap().0;
+    let mut framed = entries(world, "");
+    framed.retain(|column| {
+        let key = format!("shelf.entry.{column}");
+        let [left, _, width, _] = world.runtime().presented(&key).unwrap().0;
+        x <= left && left + width <= x + w
+    });
+    framed
+}
+
 #[test]
 fn the_shelf_s_current_entry_follows_the_highlight_and_goes_back_when_the_overview_closes() {
     let mut world = start(vec![stacked("a")]);
-    let current = |world: &World| -> Vec<String> {
-        ["a", "b", "c", "d", "e"]
-            .into_iter()
-            .filter(|leaf| {
-                world
-                    .screen()
-                    .find(Target::key(format!("shelf.entry.{leaf}")))
-                    .and_then(|n| n.value)
-                    .is_some_and(|said| said.contains("current"))
-            })
-            .map(str::to_owned)
-            .collect()
-    };
-    assert_eq!(current(&world), ["a"]);
+    assert_eq!(entries(&world, "current"), ["a"]);
 
     press(&mut world, Action::DesktopOverview);
     key(&mut world, Key::Right);
-    assert_eq!(current(&world), ["b"]);
+    assert_eq!(entries(&world, "current"), ["b"]);
     key(&mut world, Key::Right);
     key(&mut world, Key::Down);
-    let entry = current(&world);
-    assert_eq!(entry.len(), 1, "{entry:?}");
-    let path = format!("shelf.entry.{}/", entry[0]);
-    let written: Vec<String> = world
-        .runtime()
-        .elements()
-        .into_iter()
-        .filter(|e| e.path.contains(&path) && e.visible[2] * e.visible[3] > 1.0)
-        .filter_map(|e| e.text)
-        .collect();
+    assert_eq!(entries(&world, "current"), ["c"]);
     assert_eq!(
-        written,
+        written_on(&world, "c"),
         ["Agent d"],
         "the slice shows the highlighted member"
     );
 
     key(&mut world, Key::Escape);
-    assert_eq!(current(&world), ["a"]);
+    assert_eq!(entries(&world, "current"), ["a"]);
     rest(&mut world);
+}
+
+/// Desktop 1 with `a` active, and desktop 2 with `x` and `y` on screen, then a stack of `p` over
+/// `q`, then `r`.
+fn two_rows() -> Vec<Desktop> {
+    let columns = [pane("x"), pane("y"), below(pane("p"), pane("q")), pane("r")];
+    vec![stacked("a"), desktop(2, "y", Some(row(columns)))]
+}
+
+/// The overview of `two_rows`, previewing desktop 2.
+fn previewing() -> World {
+    let mut world = start(two_rows());
+    press(&mut world, Action::DesktopOverview);
+    click(&mut world, &format!("overview.strip.{TWO}"));
+    world
+}
+
+#[test]
+fn the_shelf_shows_the_row_of_a_previewed_desktop_until_the_overview_closes() {
+    type Preview = (&'static str, fn(&mut World));
+    let previews: [Preview; 2] = [
+        ("a strip", |w| click(w, &format!("overview.strip.{TWO}"))),
+        ("an arrow", |w| key(w, Key::Down)),
+    ];
+    for (name, preview) in previews {
+        let mut world = start(two_rows());
+        press(&mut world, Action::DesktopOverview);
+        let acted = acts(&world);
+
+        preview(&mut world);
+        assert_eq!(entries(&world, ""), ["x", "y", "p", "r"], "{name}");
+        assert_eq!(entries(&world, "current"), ["y"], "{name}");
+        assert_eq!(framed(&world), ["x", "y"], "{name}");
+
+        key(&mut world, Key::Right);
+        key(&mut world, Key::Down);
+        assert_eq!(entries(&world, "current"), ["p"], "{name}");
+        assert_eq!(written_on(&world, "p"), ["Agent q"], "{name}");
+        assert_eq!(framed(&world), ["x", "y"], "{name}: the row does not move");
+        assert_eq!(acts(&world), acted, "{name}: a preview shows nothing");
+        rest(&mut world);
+
+        key(&mut world, Key::Escape);
+        assert!(!open(&world), "{name}");
+        assert_eq!(entries(&world, ""), ["a", "b", "c", "e"], "{name}");
+        assert_eq!(entries(&world, "current"), ["a"], "{name}");
+        assert_eq!(framed(&world), ["a", "b"], "{name}");
+        assert_eq!(acts(&world), acted, "{name}");
+        rest(&mut world);
+    }
+}
+
+#[test]
+fn an_entry_of_a_previewed_desktop_lands_there_and_the_current_one_closes_the_overview() {
+    let entries = [("one on screen", "x"), ("one off screen", "r")];
+    for (name, leaf) in entries {
+        let mut world = previewing();
+        click(&mut world, &format!("shelf.entry.{leaf}"));
+        assert!(!open(&world), "{name}");
+        assert_eq!(
+            sent(&world, "desktop_show_leaf"),
+            [json!({"desktop_id": TWO, "leaf_id": leaf})],
+            "{name}"
+        );
+    }
+
+    let highlights: [(&str, &[Key]); 2] = [("y", &[]), ("r", &[Key::Right, Key::Right])];
+    for (current, steps) in highlights {
+        let mut world = previewing();
+        for step in steps {
+            key(&mut world, step.clone());
+        }
+        assert_eq!(highlight(&world).as_deref(), Some(current));
+        let acted = acts(&world);
+        click(&mut world, &format!("shelf.entry.{current}"));
+        assert!(!open(&world), "{current}");
+        assert_eq!(acts(&world), acted, "{current}");
+        rest(&mut world);
+    }
+}
+
+#[test]
+fn an_entry_dragged_from_a_previewed_desktop_moves_that_desktop_s_column() {
+    let middle = |world: &World, key: &str, across: f32| {
+        let [x, y, w, h] = world.runtime().presented(key).unwrap().0;
+        (x + w * across, y + h / 2.0)
+    };
+    let drops = [
+        (
+            "shelf.entry.p",
+            json!({"source_desktop_id": TWO, "target_desktop_id": TWO, "leaf_id": "r",
+                "anchor_id": "p", "edge": "left", "whole_column": true, "activate": false}),
+        ),
+        (
+            "sidebar.desktop.work/desktop_1",
+            json!({"source_desktop_id": TWO, "target_desktop_id": ONE, "leaf_id": "r",
+                "edge": "left", "leaf_share": 0.32, "whole_column": true}),
+        ),
+    ];
+    for (on, moved) in drops {
+        let mut world = previewing();
+        let to = middle(&world, on, 0.25);
+        world.gesture(|app| {
+            app.drag(Target::key("shelf.entry.r"), to);
+            app.release(to);
+        });
+        assert_eq!(sent(&world, "desktop_move_leaf"), [moved], "{on}");
+    }
+}
+
+#[test]
+fn the_shelf_of_a_previewed_desktop_peeks_at_no_tile_and_has_no_width_control() {
+    let mut world = start(two_rows());
+    let rest_on = |world: &mut World, key: &str| {
+        let [x, y, w, h] = world.runtime().presented(key).unwrap().0;
+        world.gesture(|app| app.move_to((x + w / 2.0, y + h / 2.0)));
+        world.advance(Duration::from_millis(200));
+    };
+    let over_the_frame = |world: &mut World| {
+        let [x, y, _, h] = world.runtime().presented("shelf.frame").unwrap().0;
+        world.gesture(|app| app.move_to((x + 1.0, y + h / 2.0)));
+    };
+    press(&mut world, Action::DesktopOverview);
+    over_the_frame(&mut world);
+    assert!(has(&world, "shelf.width"));
+    rest_on(&mut world, "shelf.entry.e");
+    assert!(has(&world, "shelf.peek"));
+
+    key(&mut world, Key::Down);
+    assert_eq!(entries(&world, "current"), ["y"]);
+    assert!(!has(&world, "shelf.peek"), "the peek goes with its row");
+    rest_on(&mut world, "shelf.entry.r");
+    assert!(!has(&world, "shelf.peek"));
+    over_the_frame(&mut world);
+    assert!(!has(&world, "shelf.width"));
+
+    key(&mut world, Key::Escape);
+    assert!(!open(&world));
+    rest_on(&mut world, "shelf.entry.e");
+    assert!(has(&world, "shelf.peek"));
+    over_the_frame(&mut world);
+    assert!(has(&world, "shelf.width"));
 }
 
 #[test]

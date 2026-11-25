@@ -49,7 +49,7 @@ struct Contents {
     desktops: usize,
     runs: bool,
     critical: bool,
-    shelf: Option<[usize; 3]>,
+    shelf: Option<(String, [usize; 3])>,
     profile: String,
     scale: u32,
     sidebar: u32,

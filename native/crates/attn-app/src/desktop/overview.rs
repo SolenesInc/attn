@@ -76,14 +76,6 @@ pub(crate) fn open(state: &State) -> Option<&Overview> {
         .flatten()
 }
 
-/// The highlight on `desktop`, while the open overview shows it.
-pub(crate) fn highlight_on<'s>(state: &'s State, desktop: &str) -> Option<&'s str> {
-    let at = open(state)?.at();
-    (at.desktop == desktop)
-        .then_some(at.leaf.as_deref())
-        .flatten()
-}
-
 pub(super) fn ordered(state: &State) -> Vec<&Desktop> {
     let mut desktops: Vec<&Desktop> = state.facts.desktops.iter().collect();
     desktops.sort_by(|a, b| a.order_key.cmp(&b.order_key));
@@ -321,6 +313,7 @@ pub(super) fn preview(state: &mut State, desktop: &str, _: &mut Tx) {
     overview.order.extend(unused);
     overview.at = at;
     overview.seen = seen;
+    super::peek::leave_row(state);
     ask_snapshots(state, desktop);
 }
 

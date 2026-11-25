@@ -126,7 +126,7 @@ A terminal shows its text. A terminal that has not been on screen shows the text
 | 1–9 | Go to that desktop |
 | Esc, or the key that opened it | Go back to where you were, as a click on the shelf's current entry or on the background does |
 
-The keys that move between tiles also move the highlight. A click on a tile, or on its line below the row, goes to the tile. A click on a desktop's strip shows that desktop, and the **New desktop** strip makes one. In a small window the strips and lines scroll, and the row keeps its room. The shelf's current entry follows the highlight.
+The keys that move between tiles also move the highlight. A click on a tile, or on its line below the row, goes to the tile. A click on a desktop's strip shows that desktop, and the **New desktop** strip makes one. In a small window the strips and lines scroll, and the row keeps its room. The shelf shows the row of the desktop shown, and its current entry follows the highlight. While that is another desktop, hovering the shelf shows no peek and no width control.
 
 You can also open it by holding the keys that move between tiles. Press Cmd+Option (Ctrl+Shift on Linux) with an arrow and keep the modifiers down: after a fifth of a second, or at the next step, the overview opens on the tile you stepped to. The arrows then move the highlight along the row and in a stack, and letting go of a modifier goes to the highlighted tile. A click on the background, or Esc on Linux, goes back to the tile you came from. A step you let go of sooner only moves you, and a step that takes you to another desktop opens nothing. Opened this way, the overview shows only this desktop.
 

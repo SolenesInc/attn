@@ -1,5 +1,6 @@
-//! The shelf: an entry per column of the current desktop's row, in the title bar, with a frame
-//! behind the columns on screen and a count for the ones folded away at either end.
+//! The shelf: an entry per column of a desktop's row, in the title bar, with a frame behind the
+//! columns on screen and a count for the ones folded away at either end. The row is the current
+//! desktop's, or while the overview is open, that of the desktop it shows.
 
 use attn_client::Desktop;
 use attn_protocol::{DesktopMoveLeafMessage, DesktopSetWantedColsMessage, SetSettingMessage};
@@ -311,10 +312,12 @@ fn cut_names(shown: &mut [&mut Entry], room: f32) {
     }
 }
 
-/// The current desktop's shelf as this window lays it out: an entry per column of its row, and
-/// the entries the title bar has no room for in the counts.
+/// A desktop's shelf as this window lays it out: an entry per column of its row, and the entries
+/// the title bar has no room for in the counts.
 pub(crate) struct Shelf {
     pub desktop: String,
+    /// The overview shows this desktop over the current one.
+    previewed: bool,
     before: Vec<Entry>,
     screen: Vec<Entry>,
     after: Vec<Entry>,
@@ -330,14 +333,18 @@ pub(crate) struct Anchor {
     pub edge: Option<Edge>,
 }
 
-/// The current desktop with its row's plan, when the shelf shows: it has more than one tile, the
-/// window shows the desktop, and the active tile is not in focus mode.
+/// The desktop of the shelf with its row's plan, when the shelf shows: it has more than one tile,
+/// the window shows the desktop, and the active tile is not in focus mode. An open overview's
+/// shelf is of the desktop the overview shows.
 fn shelved(state: &State) -> Option<(&Desktop, Node, layout::RowPlan)> {
     if state.window.view != crate::shell::View::Desktop {
         return None;
     }
     let desk = &state.window.desk;
-    let desktop = state.facts.current_desktop()?;
+    let desktop = match super::overview::open(state) {
+        Some(overview) => super::overview::desktop_of(state, &overview.at().desktop)?,
+        None => state.facts.current_desktop()?,
+    };
     if matches!(desk.row(&desktop.id).view, View::Focused(_)) {
         return None;
     }
@@ -350,15 +357,17 @@ fn shelved(state: &State) -> Option<(&Desktop, Node, layout::RowPlan)> {
     (tiles > 1).then_some((desktop, tree, plan))
 }
 
-/// How many columns stand before the screen, on it and after it while the shelf shows: what
-/// changes the room the shelf takes in the title bar.
-pub(crate) fn columns(state: &State) -> Option<[usize; 3]> {
-    shelved(state).map(|(_, _, p)| [p.before.len(), p.screen.len(), p.after.len()])
+/// The shelf's desktop and how many columns stand before its screen, on it and after it while the
+/// shelf shows: what changes the room the shelf takes in the title bar.
+pub(crate) fn columns(state: &State) -> Option<(String, [usize; 3])> {
+    let (desktop, _, p) = shelved(state)?;
+    let columns = [p.before.len(), p.screen.len(), p.after.len()];
+    Some((desktop.id.clone(), columns))
 }
 
 impl Shelf {
-    /// The shelf of the current desktop, or None when it has one tile, the window shows Home, or
-    /// the active tile is in focus mode.
+    /// The shelf of the current desktop, or of the one an open overview shows. None when that
+    /// desktop has one tile, the window shows Home, or the active tile is in focus mode.
     pub(crate) fn of(state: &State) -> Option<Shelf> {
         let (desktop, tree, plan) = shelved(state)?;
         let facts = &state.facts;
@@ -370,8 +379,9 @@ impl Shelf {
             .filter(|f| f.desktop == desktop.id)
             .map(|f| (f.leaf.as_str(), f.until.to_bits()))
             .collect();
-        let active =
-            super::overview::highlight_on(state, &desktop.id).unwrap_or(&desktop.active_pane_id);
+        let active = super::overview::open(state)
+            .and_then(|o| o.at().leaf.as_deref())
+            .unwrap_or(&desktop.active_pane_id);
         let entries = |columns: &[Column], on_screen: bool| -> Vec<Entry> {
             let stands = (active, on_screen);
             columns
@@ -386,6 +396,7 @@ impl Shelf {
         );
         let mut shelf = Shelf {
             desktop: desktop.id.clone(),
+            previewed: facts.current_desktop().is_none_or(|d| d.id != desktop.id),
             before,
             screen,
             after,
@@ -609,7 +620,10 @@ fn view(state: &State, shelf: Option<Shelf>, t: &Tokens) -> Option<El> {
         shelf.count(side).map(|c| count(&c, marked, t))
     };
     let entries = shelf.shown().map(|e| match e.drawn.place() {
-        Place::OffScreen => off_screen(e, id, marked(&entry_key(&e.key)), t),
+        Place::OffScreen => {
+            let drop = marked(&entry_key(&e.key));
+            off_screen(e, id, shelf.previewed, drop, t)
+        }
         Place::OnScreen => on_screen(e, id, t),
         Place::Current => current(e, t),
     });
@@ -713,10 +727,17 @@ fn current(entry: &Entry, t: &Tokens) -> El {
 }
 
 /// The entry of a column off screen. The pointer resting on it peeks at the tile it goes to, or
-/// at the one whose dot it rests on.
-fn off_screen(entry: &Entry, desktop: &str, drop: Option<Edge>, t: &Tokens) -> El {
+/// at the one whose dot it rests on, unless its desktop is previewed.
+fn off_screen(entry: &Entry, desktop: &str, previewed: bool, drop: Option<Edge>, t: &Tokens) -> El {
+    let recorded = entry_key(&entry.key);
+    let drawn = drawn(entry, t).on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| {
+        record(state, &recorded, rect, tx)
+    });
+    if previewed {
+        return drop_bar(drawn, drop, t);
+    }
     let stack = (entry.drawn.clone(), entry.leaves.clone());
-    let drawn = peeks(drawn(entry, t), entry, desktop, move |p: PointerEvent| {
+    let drawn = peeks(drawn, entry, desktop, move |p: PointerEvent| {
         let (drawn, leaves) = &stack;
         drawn.dot_at(p.x, p.y).map(|i| leaves[i].clone())
     });
@@ -731,22 +752,20 @@ fn peeks(
     desktop: &str,
     pointed: impl Fn(PointerEvent) -> Option<String> + 'static,
 ) -> El {
-    let recorded = entry_key(&entry.key);
     let moved = (desktop.to_owned(), entry.go.clone(), entry.key.clone());
     let left = entry.key.clone();
-    el.on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| record(state, &recorded, rect, tx))
-        .on_hover_change(move |state: &mut State, inside, tx: &mut Tx| {
-            if !inside {
-                super::peek::leave_entry(state, &left, tx);
-            }
-        })
-        .on_pointer_move_local(move |state: &mut State, p, tx: &mut Tx| {
-            let (desktop, leaf, column) = &moved;
-            match pointed(p) {
-                Some(pointed) => super::peek::hover_member(state, desktop, &pointed, column, tx),
-                None => super::peek::hover_entry(state, desktop, leaf, column, tx),
-            }
-        })
+    el.on_hover_change(move |state: &mut State, inside, tx: &mut Tx| {
+        if !inside {
+            super::peek::leave_entry(state, &left, tx);
+        }
+    })
+    .on_pointer_move_local(move |state: &mut State, p, tx: &mut Tx| {
+        let (desktop, leaf, column) = &moved;
+        match pointed(p) {
+            Some(pointed) => super::peek::hover_member(state, desktop, &pointed, column, tx),
+            None => super::peek::hover_entry(state, desktop, leaf, column, tx),
+        }
+    })
 }
 
 /// The accent ring an entry shows while its tile's arrival flashes, held and then fading; keyed
@@ -797,7 +816,7 @@ pub(crate) fn width_control_layer(state: &State, t: &Tokens) -> Option<El> {
     if !(hover.frame || hover.control) {
         return None;
     }
-    let shelf = Shelf::of(state)?;
+    let shelf = Shelf::of(state).filter(|s| !s.previewed)?;
     let leading = shelf.before.is_empty();
     let control = raised(
         "shelf.width.anchor",
