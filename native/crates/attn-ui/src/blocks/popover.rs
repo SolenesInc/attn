@@ -120,10 +120,15 @@ impl Popover {
             .child(col().grow(1.0).min_w(0.0).child(title))
             .child(beside);
         let about = self.about.map(|about| spaced(vec![about], gap, None));
+        let parted = !self.body.is_empty();
         let head = if self.sectioned {
             about.map(|about| {
-                let about = door::rows(about, Space::S0, Space::S12)
-                    .border_sides([0.0, 0.0, 1.0, 0.0], t.border);
+                let about = if parted {
+                    door::rows(about, Space::S0, Space::S12)
+                        .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
+                } else {
+                    about
+                };
                 door::inset(col().w_full().child(about), INSET, Space::S0)
             })
         } else {

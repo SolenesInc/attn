@@ -7289,6 +7289,24 @@ fn session_chain_tile(dark: bool) {
     snap(&mut world, "session-chain-tile", dark);
 }
 
+/// Terminal `a`'s agent is alone in its chain, pinned open by the role in its header.
+fn session_chain_lone(dark: bool) {
+    let mut world = popover_world(
+        dark,
+        |state| {
+            let session = first_session(state);
+            session.delegation_role = Some(attn_protocol::SessionDelegationRole {
+                name: "Builder".into(),
+                icon: Some("code".into()),
+                ..Default::default()
+            });
+        },
+        |_| {},
+    );
+    world.gesture(|app| app.click(Target::key("tile.a.role")));
+    snap(&mut world, "session-chain-lone", dark);
+}
+
 /// A chain of nine agents four levels deep pinned beside the sidebar: delegates named after their
 /// dispatcher's worktree, every badge, a role with no icon whose name runs past any width, an
 /// agent on an outpost, and a closed delegate on standby whose resume is blocked. The picked agent
@@ -8772,6 +8790,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("session_chain_row", || session_chain_row(dark));
         scene("session_chain_hover", || session_chain_hover(dark));
         scene("session_chain_tile", || session_chain_tile(dark));
+        scene("session_chain_lone", || session_chain_lone(dark));
         scene("session_pr_details", || session_pr_details(dark));
         scene("session_chain_wide", || session_chain_wide(dark));
         scene("session_pr_wide", || session_pr_wide(dark));

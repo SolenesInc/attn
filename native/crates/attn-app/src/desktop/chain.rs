@@ -344,17 +344,18 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         .picked
         .min(agents.len().checked_sub(1)?);
     let surface_key = pop.surface();
-    let tree_el = col()
-        .key(agents_key(pop))
-        .role("tree")
-        .label("Agents in delegation chain")
-        .w_full()
-        .children(
-            agents
-                .iter()
-                .enumerate()
-                .map(|(i, agent)| agent_row(pop, i, agent, &state.facts, now_ms, i == picked, t)),
-        );
+    let lone = agents.len() == 1;
+    let tree_el =
+        (!lone).then(|| {
+            col()
+                .key(agents_key(pop))
+                .role("tree")
+                .label("Agents in delegation chain")
+                .w_full()
+                .children(agents.iter().enumerate().map(|(i, agent)| {
+                    agent_row(pop, i, agent, &state.facts, now_ms, i == picked, t)
+                }))
+        });
     let mut blocks = Vec::new();
     blocks.extend(earlier.map(|name| {
         Prose::hint(
@@ -363,17 +364,17 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         )
         .build(t)
     }));
-    blocks.push(Block::custom(format!("{surface_key}.tree"), tree_el));
+    blocks.extend(tree_el.map(|tree| Block::custom(format!("{surface_key}.tree"), tree)));
     let need = agents.iter().filter(|a| a.card.needs.is_some()).count();
     let need = (need > 0).then(|| {
         words(format!("{need} need you"), Type::Small, t.state_waiting)
             .single_line()
             .key(format!("{surface_key}.needs"))
     });
-    let moves = [
-        keys_hint(["↑", "↓", "←", "→"], "move", t),
-        keys_hint(["↵"], "open", t),
-    ];
+    let moves = (!lone)
+        .then(|| keys_hint(["↑", "↓", "←", "→"], "move", t))
+        .into_iter()
+        .chain([keys_hint(["↵"], "open", t)]);
     let surface = Popover::new(surface_key.clone(), "Delegation chain")
         .sectioned()
         .holding(pop.pinned)

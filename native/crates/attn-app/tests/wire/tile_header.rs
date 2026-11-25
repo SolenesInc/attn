@@ -1119,6 +1119,70 @@ fn a_chain_whose_first_dispatcher_attn_cannot_show_names_it_above_the_agents() {
 }
 
 #[test]
+fn a_chain_of_one_agent_is_its_card_without_a_tree_and_return_opens_the_agent() {
+    let card = |world: &World| {
+        world
+            .screen()
+            .find(Target::role("dialog").name("Delegation chain"))
+            .is_some()
+    };
+    for (dispatcher, said) in [
+        (None, None),
+        (
+            Some(ActorView {
+                name: "Alder".into(),
+                r#ref: "member:alder".into(),
+            }),
+            Some("Started by Alder, which attn cannot show."),
+        ),
+    ] {
+        let mut world = start_with(vec![
+            Session {
+                dispatcher,
+                ..with_role("Builder", "builder", session("a", "ledger sweep", None))
+            },
+            session("b", "docs", None),
+        ]);
+        world.gesture(|app| app.click(Target::key("tile.a.role")));
+        let surface = "tile.a.role.popover";
+        assert!(card(&world), "a press pins the card");
+        assert!(
+            world
+                .screen()
+                .find(Target::role("tree").name("Agents in delegation chain"))
+                .is_none(),
+            "one agent has no tree to walk"
+        );
+        let words = texts(&world, surface);
+        assert!(
+            words.contains(&"ledger sweep".to_owned()),
+            "{words:?} name the agent"
+        );
+        assert_eq!(
+            words
+                .iter()
+                .find(|w| w.starts_with("Started by"))
+                .map(String::as_str),
+            said
+        );
+        assert!(
+            words.contains(&"↵ open".to_owned()) && !words.iter().any(|w| w.contains("move")),
+            "the foot names the key that opens the agent and none that moves: {words:?}"
+        );
+        key(&mut world, Key::Down);
+        assert!(card(&world), "an arrow leaves the card open");
+        key(&mut world, Key::Enter);
+        assert!(!card(&world), "Enter closes it");
+        let shown = world.daemon.sent_of("desktop_show_session");
+        assert_eq!(
+            shown.last().map(|r| r["session_id"].clone()),
+            Some("s-a".into())
+        );
+        rest(&mut world);
+    }
+}
+
+#[test]
 fn a_chain_never_loops_around_a_dispatch_cycle() {
     let mut world = start_with(vec![
         delegate_of("a", "first", "b"),
