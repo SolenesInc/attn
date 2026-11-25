@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Complete short shelf titles disappear",
+  "at": "2026-11-25T02:55:54.187Z",
+  "detail": "Complete short shelf titles disappear\n\nWith ample room, A and B disappear because the ellipsis cutoff rejects a complete 9- or 8-point title. The independent renderer drew neither title and drew the longer QA and Build controls. Preserve complete names that fit and apply the ellipsis allowance only when the text needs shortening. Evidence is on s-2bt4aa.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-ui/src/blocks/shelf.rs",
+    "line": 414
+  },
+  "culprit": "e8252e7ecd1d852585a6921e4c64ef031a09edcd"
+}
