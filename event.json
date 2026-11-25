@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Blank terminal padding activates a marked agent ID",
+  "at": "2026-11-25T03:00:31.819Z",
+  "detail": "Blank terminal padding activates a marked agent ID.\n\nAt terminal/ids.rs:254, an ID pointer hit uses the screen-cell conversion that clamps to the nearest edge cell. Mod-click just below a bottom-row agent ID or in the left margin of a centered small grid. In both cases the pointer changes to a hand and the app sends desktop_show_session for the nearby ID. A scratch app wire test and an independent source review confirmed both cases at d0e7eca4 in macOS and Linux input modes.\n\nRestrict marked ID hover and click to drawn cells. Preserve clamping for selection. The reviewer attached the probe and receipt to s-nxmegk.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/terminal/ids.rs",
+    "line": 254
+  },
+  "culprit": "58ad5b1b598cb87c2fb204b6cce8a16e8557eb81"
+}
