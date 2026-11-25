@@ -68,7 +68,7 @@ commands:
       - {name: closed, type: bool, cli: "--closed", doc: "the sessions that ended"}
       - {name: all, type: bool, cli: "--all", doc: "live and closed sessions together"}
       - {name: limit, type: count, cli: "--limit", doc: "rows in one page (default 20)"}
-      - {name: before, type: text, cli: "--before", placeholder: "<id>", doc: "start after this session id, from a previous page's notice"}
+      - {name: before, type: text, cli: "--before", placeholder: "<id>", doc: "start after this session id or unique prefix, from a previous page's notice"}
       - {name: repository, type: text, cli: "--repository", placeholder: "<path>", doc: "only sessions that ran in this repository path"}
       - {name: last, type: text, cli: "--last", placeholder: "<preset>", doc: "a date preset: 30d, 7d, today, yesterday"}
       - {name: since, type: text, cli: "--since", placeholder: "<when>", doc: "only sessions from this date or RFC3339 instant onwards"}
@@ -105,7 +105,7 @@ commands:
       Marks a session so its owed turns go first, or clears that mark. `target` defaults to the session running this command. Any agent may mark any session.
     args:
       - {name: priority, type: text, required: true, cli: pos, placeholder: "on|off", doc: "on marks the session, off clears the mark"}
-      - {name: target, type: text, cli: "--session", placeholder: "<id>", doc: "the session to mark (defaults to the current session)"}
+      - {name: target, type: text, cli: "--session", placeholder: "<id>", doc: "the id or unique prefix of the live session to mark (defaults to the current session)"}
     errors:
       - {code: ambiguous_session, fix: "Give more of the id; agent_list and session_list carry full ids."}
       - {code: no_session, usage: true, fix: "Pass {target}, or run it inside an attn session."}
@@ -144,7 +144,7 @@ commands:
       Gives a session the name a person reads in the sidebar and the ledger: a few plain words about the work, up to 48 characters. `target` defaults to the session running this command. Rename when the main work drifts from the name it started with.
     args:
       - {name: name, type: text, required: true, cli: pos, placeholder: "<name>", doc: "the new name; quote it when it has spaces"}
-      - {name: target, type: text, cli: "--session", placeholder: "<id>", doc: "the session to rename (defaults to the current session)"}
+      - {name: target, type: text, cli: "--session", placeholder: "<id>", doc: "the id or unique prefix of the live session to rename (defaults to the current session)"}
     errors:
       - {code: ambiguous_session, fix: "Give more of the id; agent_list and session_list carry full ids."}
       - {code: no_session, usage: true, fix: "Pass {target}, or run it inside an attn session."}
