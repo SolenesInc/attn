@@ -227,8 +227,12 @@ impl Overview {
         .child(swatch)
         .children(hints.into_iter().map(|(keys, what)| {
             let whole = keys_hint_width(keys.iter().map(String::as_str), &what);
-            let least = whole.min(share);
-            keys_hint(keys, what, t).shrink().min_w(least)
+            let hint = keys_hint(keys, what, t);
+            if whole > share {
+                hint.shrink().min_w(share)
+            } else {
+                hint
+            }
         }))
     }
 }
