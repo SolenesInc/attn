@@ -318,6 +318,22 @@ fn arrows_show_the_neighbouring_tile_and_leave_the_desktop_past_the_row_end() {
 }
 
 #[test]
+fn down_from_a_tile_beside_another_goes_by_the_zoomed_layout_while_the_tile_is_zoomed() {
+    let mut below_ratio = below(row([pane("x"), pane("y")]), row([pane("p"), pane("q")]));
+    below_ratio["children"][1]["ratio"] = 0.2.into();
+    let mut world = start(vec![desktop(1, "x", Some(below_ratio))]);
+
+    press(&mut world, Action::TerminalFocusDown);
+    press(&mut world, Action::TerminalToggleZoom);
+    press(&mut world, Action::TerminalFocusDown);
+    let shown: Vec<_> = sent(&world, "desktop_show_leaf")
+        .iter()
+        .map(|r| r["leaf_id"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(shown, ["p", "q"]);
+}
+
+#[test]
 fn the_row_keys_walk_off_an_empty_desktop_while_its_launcher_holds_the_keyboard() {
     let desktops = || {
         vec![

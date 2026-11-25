@@ -7,7 +7,7 @@ use attn_protocol::{
 };
 use rune::Tx;
 
-use super::layout::{self, Direction, LeafKind, Node, Toward, View};
+use super::layout::{self, Column, Direction, LeafKind, Node, Toward, View};
 use super::{Visit, arrival, leaf_ids};
 use crate::State;
 use crate::action::Action;
@@ -53,10 +53,18 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         | DesktopSendStay9 => send_to_slot(state, slot_of(action), false, tx),
         SessionPrev => step_desktop(state, -1, tx),
         SessionNext => step_desktop(state, 1, tx),
-        TerminalFocusLeft => focus_toward(state, Toward::Left, tx),
-        TerminalFocusRight => focus_toward(state, Toward::Right, tx),
-        TerminalFocusUp => focus_toward(state, Toward::Up, tx),
-        TerminalFocusDown => focus_toward(state, Toward::Down, tx),
+        TerminalFocusLeft => {
+            focus_toward(state, Toward::Left, tx);
+        }
+        TerminalFocusRight => {
+            focus_toward(state, Toward::Right, tx);
+        }
+        TerminalFocusUp => {
+            focus_toward(state, Toward::Up, tx);
+        }
+        TerminalFocusDown => {
+            focus_toward(state, Toward::Down, tx);
+        }
         TerminalSplitVertical => split(state, Direction::Vertical, tx),
         TerminalSplitHorizontal => split(state, Direction::Horizontal, tx),
         TerminalToggleZoom => toggle_view(state, false, tx),
@@ -559,49 +567,52 @@ fn hold_keyboard(state: &mut State, desktop: &str, leaf: &str) {
     state.terminals.focus(keyboard, &state.daemon);
 }
 
-/// Moves the active tile to its neighbour on screen: along the row by columns for left and
-/// right, by geometry within a column and for up and down. Past the edge it leaves the pane, as
-/// `leave_pane` says.
-fn focus_toward(state: &mut State, toward: Toward, tx: &mut Tx) {
+/// Moves the active tile to where `layout::step` sends it along the row, and returns that tile.
+/// Past the edge it leaves the pane, as `leave_pane` says, and returns None.
+fn focus_toward(state: &mut State, toward: Toward, tx: &mut Tx) -> Option<String> {
     let edge = match toward {
         Toward::Left | Toward::Up => -1,
         Toward::Right | Toward::Down => 1,
     };
-    let Some(desktop) = state.facts.current_desktop() else {
-        return;
-    };
+    let desktop = state.facts.current_desktop()?;
     let desk = &state.window.desk;
-    let Some((tree, plan)) = desk.plan(&state.facts, desktop) else {
-        return leave_pane(state, toward, edge, tx);
+    let Some((_, plan)) = desk.plan(&state.facts, desktop) else {
+        leave_pane(state, toward, edge, tx);
+        return None;
     };
     let active = desk.acting_leaf(desktop);
-    let active = active.as_str();
     let row_state = desk.row(&desktop.id);
-    let sideways = matches!(toward, Toward::Left | Toward::Right);
-    let next = if sideways && !matches!(row_state.view, View::Focused(_)) {
-        let row: Vec<_> = plan
+    let vertical = matches!(toward, Toward::Up | Toward::Down);
+    let zoomed_column = (vertical && row_state.view == View::Zoomed)
+        .then(|| plan.screen.iter().find(|c| c.holds(&active)))
+        .flatten()
+        .map(|c| Column {
+            node: c.node.zoomed_toward(&active),
+            ..c.clone()
+        });
+    let row: Vec<_> = match row_state.view {
+        View::Focused(_) => Vec::new(),
+        _ => plan
             .before
             .iter()
             .chain(&plan.screen)
             .chain(&plan.after)
-            .filter(|c| c.holds(active) || !c.leaf_ids.iter().any(|id| row_state.held.contains(id)))
-            .collect();
-        let at = row.iter().position(|c| c.holds(active));
-        at.and_then(|at| row[at].node.leaf_toward(active, toward))
-            .or_else(|| {
-                let at = at? as i32 + edge;
-                let column = row.get(usize::try_from(at).ok()?)?;
-                Some(column.last_used(&row_state.focus_order).to_owned())
+            .filter(|c| {
+                c.holds(&active) || !c.leaf_ids.iter().any(|id| row_state.held.contains(id))
             })
-    } else {
-        plan.rendered(&tree, &row_state.view, active)
-            .leaf_toward(active, toward)
+            .map(|c| match &zoomed_column {
+                Some(zoomed) if c.holds(&active) => zoomed,
+                _ => c,
+            })
+            .collect(),
     };
+    let next = layout::step(&row, &active, toward, &row_state.focus_order);
     let desktop = desktop.id.clone();
-    match next {
-        Some(leaf) => show_leaf(state, &desktop, &leaf, tx),
+    match &next {
+        Some(leaf) => show_leaf(state, &desktop, leaf, tx),
         None => leave_pane(state, toward, edge, tx),
     }
+    next
 }
 
 /// Past the last tile, left and right step desktops. In queue flow up and down step the queue,

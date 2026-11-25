@@ -275,6 +275,21 @@ pub enum Toward {
     Down,
 }
 
+/// The tile one step from `from` along `row`; None when the step leaves it. Left and right
+/// stay in the column while its tiles lead on, then go to the next column's last used tile.
+/// Up and down stay in the column.
+pub fn step(row: &[&Column], from: &str, toward: Toward, focus_order: &[String]) -> Option<String> {
+    let at = row.iter().position(|c| c.holds(from))?;
+    row[at].node.leaf_toward(from, toward).or_else(|| {
+        let next = match toward {
+            Toward::Left => at.checked_sub(1)?,
+            Toward::Right => at + 1,
+            Toward::Up | Toward::Down => return None,
+        };
+        Some(row.get(next)?.last_used(focus_order).to_owned())
+    })
+}
+
 fn overlap(a0: f32, a1: f32, b0: f32, b1: f32) -> f32 {
     (a1.min(b1) - a0.max(b0)).max(0.0)
 }
