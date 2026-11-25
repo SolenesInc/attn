@@ -1,0 +1,1 @@
+`attn agent peek <name>` now reads a uniquely named live session from a shell outside attn with several profiles and no `--profile`, as `attn session show` already did. An ambiguous name lists its matches. A crew member's name still asks for a profile.
