@@ -52,13 +52,15 @@ export type Task = {
   restore?: (attn: (args: string[], stdin?: string) => string) => void
   /** Prepares the agent's folder before the session starts and returns the folder to start it in, when not `dir`. */
   stage?: (dir: string) => string
+  /** Its staged folder is `dir` and its check reads that folder through `World.sh`, so the bench can copy it to an outpost. */
+  stagesOnOutposts?: boolean
   /** Prepares the world with the agent's session already at its prompt, and returns the prompt. */
   setup: (w: World) => Promise<string> | string
   check: (w: World, calls: Call[], ended: string) => Promise<Check> | Check
 }
 
-export const run = (command: string, args: string[], env: NodeJS.ProcessEnv, opts: { stdin?: string; cwd?: string } = {}) =>
-  spawnSync(command, args, { env, input: opts.stdin ?? "", cwd: opts.cwd, encoding: "utf8", timeout: 120_000, maxBuffer: 64 << 20 })
+export const run = (command: string, args: string[], env: NodeJS.ProcessEnv, opts: { stdin?: string; cwd?: string; timeoutMs?: number } = {}) =>
+  spawnSync(command, args, { env, input: opts.stdin ?? "", cwd: opts.cwd, encoding: "utf8", timeout: opts.timeoutMs ?? 120_000, maxBuffer: 64 << 20 })
 
 const CATALOG = join(import.meta.dir, "../../../internal/catalog/content")
 const TOOL_NAME = /^mcp__attn\w*?__(\w+)$/

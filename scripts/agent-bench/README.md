@@ -9,7 +9,7 @@ Both spend model tokens on your subscriptions, so CI never runs them. A person r
 
 ## Run the instance driver
 
-You need `make build` done in this checkout, bun, Go, cargo for the ask tasks, bash 5.1 or newer, `mkfifo`, and signed-in `claude` and `codex`, all on `PATH`. macOS ships bash 3.2, so put a newer one ahead of it. Run from the repository root:
+You need `make build` done in this checkout, bun, Go, cargo for the ask tasks, bash 5.1 or newer, `mkfifo`, and signed-in `claude` and `codex`, all on `PATH`. An outpost's cells use the outpost's harnesses, or those of [`--outpost-tool-home`](#harness-homes). macOS ships bash 3.2, so put a newer one ahead of it. Run from the repository root:
 
 ```sh
 make build
@@ -48,7 +48,7 @@ Each run keeps `transcript.jsonl`, `calls.json`, `records.json` (at the home onl
 
 ### Harness homes
 
-By default, the agents run with your own `~/.claude`, `~/.codex` and `~/.sigma`. Your global `CLAUDE.md`, plugins and MCP servers then add to every Claude Code prompt, which raises input tokens, and Claude Code adds an entry for each run's folder to your `~/.claude.json`, as it does for any folder it runs in. Codex keeps its trust answer for each run's folder in your `~/.codex/config.toml` until the run ends and the driver removes it. `msg-delegate` would write a further entry there, so the driver refuses a Codex cell of it without `--tool-home`. To measure attn alone, make a bench home once and pass `--tool-home <dir>`. The driver then starts the daemon with `CLAUDE_CONFIG_DIR=<dir>/.claude`, `CODEX_HOME=<dir>/.codex`, `SIGMA_HOME=<dir>/.sigma` and `ATTN_TOOL_HOME=<dir>`. To make the home, sign each harness in:
+By default, the agents run with your own `~/.claude`, `~/.codex` and `~/.sigma`. Your global `CLAUDE.md`, plugins and MCP servers then add to every Claude Code prompt, which raises input tokens, and Claude Code adds an entry for each run's folder to your `~/.claude.json`, as it does for any folder it runs in. Codex keeps its trust answer for each run's folder in your `~/.codex/config.toml` until the run ends and the driver removes it. `msg-delegate` would write a further entry there, so the driver refuses a Codex cell of it without `--tool-home`, or on an outpost without `--outpost-tool-home`. To measure attn alone, make a bench home once and pass `--tool-home <dir>`. The driver then starts the daemon with `CLAUDE_CONFIG_DIR=<dir>/.claude`, `CODEX_HOME=<dir>/.codex`, `SIGMA_HOME=<dir>/.sigma` and `ATTN_TOOL_HOME=<dir>`. To make the home, sign each harness in:
 
 ```sh
 CLAUDE_CONFIG_DIR=~/attn-agent-bench-home/.claude claude    # then /login
@@ -56,7 +56,11 @@ CODEX_HOME=~/attn-agent-bench-home/.codex codex login
 SIGMA_HOME=~/attn-agent-bench-home/.sigma sigma login openai    # for Sigma's own loop
 ```
 
-A bench home needs a sign-in for each harness and nothing else that the driver cannot make. Claude Code's first-run screens for theme and onboarding do not block a run when the home has a `.claude/.claude.json` with `{"hasCompletedOnboarding": true, "theme": "dark"}`. Claude Code and Codex ask once per folder whether to trust it. The driver answers that screen for the folders it makes, and for `msg-delegate` saves Codex's answer for the delegate's folder, and at the end it removes the Codex entries for those folders from the home's `config.toml`.
+A bench home needs a sign-in for each harness and nothing else that the driver cannot make. Claude Code's first-run screens for theme and onboarding do not block a run when the home has a `.claude/.claude.json` with `{"hasCompletedOnboarding": true, "theme": "dark"}`. Claude Code and Codex ask once per folder whether to trust it. The driver answers that screen for the folders it makes, and for `msg-delegate` saves Codex's answer for the delegate's folder, and at the end it removes the Codex entries for those folders from the tool home's `config.toml`, also on an outpost with `--outpost-tool-home`.
+
+An outpost's daemon gets its environment from ssh, so `--tool-home` sets the home's harness homes only, and `--outpost-tool-home <dir>` sets an outpost's. Without it, the agents there run with the outpost user's own `~/.claude`, `~/.codex` and `~/.sigma`. `<dir>/.claude` and `<dir>/.codex` hold the sign-ins, made or copied as above, and `<dir>/bin` holds `claude` and `codex`, for example from `npm install -g --prefix <dir> @anthropic-ai/claude-code @openai/codex`. Neither needs to be on the outpost's `PATH`. `node` does for Codex, whose launcher is a script. The driver turns Outposts off, restarts the instance's daemon on the outpost with `ATTN_TOOL_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `SIGMA_HOME`, `ATTN_HEADLESS_TASKS=off` and `DISABLE_AUTOUPDATER=1` set, sets that daemon's `claude_executable` and `codex_executable` to the wrappers it writes in `<dir>/bench-bin`, and turns Outposts on again. It does not set up Sigma there.
+
+The harnesses leave files on an outpost outside `<dir>`. Claude Code leaves a log folder per run folder in `~/.cache/claude-cli-nodejs`, temporary folders in `/tmp/claude-<uid>`, and a `claude-cli` URL handler in `~/.local/share/applications` and `~/.config/mimeapps.list` that names `<dir>/bin`. Codex leaves `/tmp/codex-daemon-<uid>` and `/tmp/codex-bwrap-synthetic-mount-targets-<uid>`.
 
 Some things stay shared with your `HOME` even with a bench home. Codex reads `~/.agents/skills` whatever `CODEX_HOME` says, so the wrapper below switches each of those skills off. Claude Code's shells load your shell profile, and every agent's shell sees your `PATH`, git configuration and credentials, so its commands can read any file you can.
 
@@ -73,6 +77,8 @@ A cell is a harness, a setting and a place:
 | `--harness` | `claude`, `claude-code-mode`, `codex`, `sigma`, each with an optional `@<model>` that sets `default_model_<harness>`, and `:<effort>` after it that sets `default_effort_<harness>` | `claude,codex` |
 | `--tools` | `on`, `off`: `agent_tools_enabled` | `on`; with `--grid`, `on,off` |
 | `--outpost` | `<outpost name>=<ssh destination>`, repeatable as a comma list | none: the home only |
+| `--no-home` | with `--outpost`, run the outposts' cells only; refused without it | the home's cells run too |
+| `--outpost-tool-home` | an absolute path on the outposts, the same one for every outpost: its [tool home](#harness-homes) | the outpost user's own harness homes |
 | `--tasks` | task and probe ids, `harder` for the four harder tasks, `asks` for the five ask tasks, `probes` for every probe, or `grid` for the grid's set | the seven tasks, or `grid` with `--grid` |
 | `--runs` | runs per cell | 1; with `--grid`, 3 for a task and 1 for a probe |
 | `--parallel` | runs of one cell at a time | 2 |
@@ -83,7 +89,9 @@ A cell is a harness, a setting and a place:
 
 When a run has a Sigma cell beside a Claude Code or Codex cell, the table ends with the D22 verdict: whether Sigma passes as often as the other harness. For each setting and place, and apart for the tasks (the seven and the harder), the ask tasks and the probes, it compares Sigma's pass rate with each other cell, paired by task, with a bootstrapped 95% interval. It prints `FAILS` when the whole interval is below zero and `holds` otherwise, and no verdict on fewer than five pairs, which could not show that Sigma is worse even if all of them were. `RERUN` marks a task where Sigma passed at most one of three runs and the other cell passed all three, so it needs three runs of that task.
 
-For each `--outpost`, the driver turns `outposts_enabled` on, adds the outpost to the new instance and waits for it to connect, so the destination must take ssh without a prompt. Before it cleans the instance, it removes those outposts, which stops the instance's daemon on each outpost and leaves its pairing; with `--keep` they stay, so remove them in the instance's Settings before you clean it. On an outpost, the driver makes each run's folder over SSH and runs Claude Code, Codex and Sigma there. It skips code mode, and the driver refuses to start with a task that stages files on this machine: `coding-tests`, `present-change` and the ask tasks that copy files.
+For each `--outpost`, the driver turns `outposts_enabled` on, adds the outpost to the new instance and waits for it to connect, so the destination must take ssh without a prompt. Adding builds attn for the outpost, which took 4m25s on a cold cache, so the driver waits up to 15 minutes. On an outpost, the driver makes each run's folder over SSH and runs Claude Code, Codex and Sigma there. It skips code mode. It copies `coding-tests`' files to the outpost, which then needs `python3` and `tar`, and refuses to start with a task whose check reads its files on this machine: `present-change` and the ask tasks that copy files. attn refuses a session on an outpost until its profile's Notebook folder has synced there once, so the driver retries a refused start for up to 3 minutes.
+
+Before it cleans the instance, the driver removes those outposts, which releases their enrollment and stops the instance's daemon on each, and it deletes the run folders it made there under `/tmp/attn-agent-bench`. With `--keep`, the outposts and the run folders stay, so remove the outposts in the instance's Settings before you clean it. Removing an outpost keeps the instance's binaries, data folder and Notebook copies on it. To clear those, run `ATTN_INSTANCE=<name> ~/.local/share/attn-outpost-instances/<name>/attn instance clean <name>` on the outpost, then delete `~/.local/share/attn-outpost-instances/<name>` and the folders that `ls -d ~/attn-notebook-<name> ~/attn-notebook-<name>-*` lists, after you check that none belongs to another instance whose name starts with `<name>-`.
 
 ### Tasks
 
@@ -110,7 +118,7 @@ The four harder tasks need several steps, tools an agent must load first, or rec
 
 In `open-ask-refusal`, attn refuses the harvest of a seed with an open ask, and names the ask, the command that reads it and the command that withdraws it. An agent that asks the user instead, or that its harness stops from withdrawing the ask, fails.
 
-`msg-delegate` saves `docs/` as trusted in the Codex home before the prompt, because Codex trusts exactly the folder it was asked about, so the delegate starts healthily. It needs `--tool-home` for Codex, as [Harness homes](#harness-homes) says. `msg-delegate-stalled` leaves `docs/` untrusted, for Codex cells only (Claude Code trusts `docs/` through its parent): it passes when, besides, the delegate is still at its folder-trust question and the agent's answer or an ask names that question. It is outside the grid and the groups: run it with `--tasks msg-delegate-stalled --harness codex`.
+`msg-delegate` saves `docs/` as trusted in the Codex home before the prompt, because Codex trusts exactly the folder it was asked about, so the delegate starts healthily. It needs `--tool-home` for Codex, and `--outpost-tool-home` on an outpost, as [Harness homes](#harness-homes) says. `msg-delegate-stalled` leaves `docs/` untrusted, for Codex cells only (Claude Code trusts `docs/` through its parent): it passes when, besides, the delegate is still at its folder-trust question and the agent's answer or an ask names that question. It is outside the grid and the groups: run it with `--tasks msg-delegate-stalled --harness codex`.
 
 `ask-still-matters` is the opposite of `open-ask-refusal`, outside the grid and the groups: run it with `--tasks ask-still-matters`. The agent is asked to close two seeds, one of which has an ask whose answer the work still needs, so it passes when the other seed is harvested and this one is still growing with its ask open, with no forced close.
 

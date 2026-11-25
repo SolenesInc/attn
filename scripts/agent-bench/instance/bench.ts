@@ -14,6 +14,8 @@ const LAUNCH_DEADLINE_MS = 3 * 60_000
 const RUN_DEADLINE_MS = 10 * 60_000
 /** Tripwire for a delegation that attn accepted: its agent starts as any session does. */
 const DELEGATE_DEADLINE_MS = LAUNCH_DEADLINE_MS
+/** Tripwire. Adding an outpost builds attn for it first, which took 4m25s on a cold cache. */
+const OUTPOST_ADD_MS = 15 * 60_000
 const POLL_MS = 500
 
 const arg = (name: string) => {
@@ -44,6 +46,9 @@ function newInstance(requested: string | undefined) {
 }
 const instance = newInstance(arg("instance"))
 const toolHome = arg("tool-home") && resolve(arg("tool-home")!)
+/** The tool home on each outpost, as ssh resolves it there: an absolute path, because the outpost's own HOME may differ. */
+const outpostToolHome = arg("outpost-tool-home")
+if (outpostToolHome && !/^\/[\w./-]+$/.test(outpostToolHome)) throw new Error(`--outpost-tool-home takes an absolute path on the outpost, got ${outpostToolHome}`)
 const parallel = Number(arg("parallel") ?? 2)
 const keep = flag("keep")
 
@@ -73,15 +78,18 @@ const tools = list(arg("tools"), grid ? "on,off" : "on")
 type Place = { name: string; ssh?: string }
 type Cell = { harness: Harness; tools: string; place: Place; id: string }
 const cells: Cell[] = []
-for (const place of [{ name: "home" } as Place, ...outposts])
+const places: Place[] = flag("no-home") ? outposts : [{ name: "home" }, ...outposts]
+if (places.length === 0) throw new Error("--no-home runs the cells on the outposts only: pass --outpost")
+for (const place of places)
   for (const harness of harnesses) {
     if (place.name !== "home" && (harness.codeMode || harnesses.find((h) => h.agent === harness.agent && !h.codeMode) !== harness)) continue
     for (const t of tools) cells.push({ harness, tools: t, place, id: `${harness.name} tools-${t} ${place.name}`.replace(/[^\w.@ -]/g, "_") })
   }
-const staged = tasks.filter((t) => t.stage)
-if (cells.some((c) => c.place.ssh) && staged.length > 0) throw new Error(`${staged.map((t) => t.id).join(", ")} stage a folder on this machine, so they run on the home only`)
-if (!toolHome && tasks.some((t) => t.id === "msg-delegate") && cells.some((c) => c.harness.agent === "codex"))
-  throw new Error("msg-delegate saves its delegate's folder as trusted in the Codex home, so with codex it runs only with --tool-home <dir>, never on your own ~/.codex")
+const homeOnly = tasks.filter((t) => t.stage && !t.stagesOnOutposts)
+if (cells.some((c) => c.place.ssh) && homeOnly.length > 0) throw new Error(`${homeOnly.map((t) => t.id).join(", ")} stage a folder on this machine, so they run on the home only`)
+const codexDelegates = (onOutpost: boolean) => tasks.some((t) => t.id === "msg-delegate") && cells.some((c) => c.harness.agent === "codex" && Boolean(c.place.ssh) === onOutpost)
+if ((!toolHome && codexDelegates(false)) || (!outpostToolHome && codexDelegates(true)))
+  throw new Error("msg-delegate saves its delegate's folder as trusted in the Codex home, so with codex it runs only with --tool-home <dir>, and on an outpost with --outpost-tool-home <dir>, never on your own ~/.codex")
 cells.sort((a, b) => Number(a.harness.codeMode) - Number(b.harness.codeMode))
 
 const stamp = new Date().toISOString().replace(/[:.]/g, "-")
@@ -187,13 +195,13 @@ const codexRetryWaitMs = (conversation: string, from: number) =>
   )
 
 const wsctlBinary = join(out, "wsctl")
-function wsctl(args: string[]) {
-  const r = run(wsctlBinary, args, daemonEnv)
+function wsctl(args: string[], timeoutMs?: number) {
+  const r = run(wsctlBinary, args, daemonEnv, { timeoutMs })
   if (r.status !== 0) throw new Error(`wsctl ${args.join(" ")}: ${r.stderr.trim().slice(-400)}`)
   return r.stdout
 }
 
-function startDaemon(codeMode: boolean) {
+async function startDaemon(codeMode: boolean) {
   const env = { ...baseEnv(), ...(codeMode ? { CLAUDE_CODE_EXPERIMENTAL_CODE_MODE: "1" } : {}) }
   if (env.CLAUDE_CODE_EXPERIMENTAL_CODE_MODE === daemonEnv.CLAUDE_CODE_EXPERIMENTAL_CODE_MODE && started) return
   if (started) attnRaw(["daemon", "stop"])
@@ -202,11 +210,54 @@ function startDaemon(codeMode: boolean) {
   if (!started && outposts.length > 0) {
     setting("outposts_enabled", "true")
     for (const o of outposts) {
-      const added = json(wsctl(["outposts", "--add", o.name, "--destination", o.ssh, "--until", "connected"]).trim().split("\n").at(-1)!)
+      const added = json(wsctl(["outposts", "--add", o.name, "--destination", o.ssh, "--until", "connected"], OUTPOST_ADD_MS).trim().split("\n").at(-1)!)
       addedOutposts.push(added.outposts.find((row: { name: string }) => row.name === o.name).id)
+    }
+    if (outpostToolHome) {
+      setting("outposts_enabled", "false")
+      for (const o of outposts) useOutpostToolHome(o, outpostToolHome)
+      setting("outposts_enabled", "true")
+      await outpostsConnected()
     }
   }
   started = true
+}
+
+/** attn refuses a session on an outpost until its profile's Notebook folder synced there once. */
+async function afterFirstSync(start: () => void) {
+  const deadline = Date.now() + LAUNCH_DEADLINE_MS
+  for (;;)
+    try {
+      return start()
+    } catch (error) {
+      if (Date.now() > deadline || !/first sync of the Notebook folder/.test((error as Error).message)) throw error
+      await wait(POLL_MS)
+    }
+}
+
+const outpostRows = (): { id: string; state: string }[] => json(wsctl(["outposts"]).trim().split("\n").at(-1)!).outposts
+const allConnected = (rows: { id: string; state: string }[]) => addedOutposts.every((id) => rows.find((row) => row.id === id)?.state === "connected")
+
+async function outpostsConnected() {
+  const deadline = Date.now() + LAUNCH_DEADLINE_MS
+  for (;;) {
+    const rows = outpostRows()
+    if (allConnected(rows)) return
+    if (Date.now() > deadline) throw new Error(`the outposts did not connect: ${JSON.stringify(rows)}`)
+    await wait(POLL_MS)
+  }
+}
+
+/** A dial in flight starts the daemon that a removal stops, so a removal waits for it. A setup that failed may have left
+ * Outposts off, which refuses a removal. The wait is a tripwire: attn-linux connects within 2 s. */
+const REMOVE_WAIT_MS = 30_000
+function connectBeforeRemoving() {
+  run(attnBinary, ["settings", "set", "outposts_enabled", "true"], daemonEnv)
+  for (const deadline = Date.now() + REMOVE_WAIT_MS; Date.now() < deadline; Bun.sleepSync(POLL_MS)) {
+    const r = run(wsctlBinary, ["outposts"], daemonEnv)
+    if (r.status === 0 && allConnected(json(r.stdout.trim().split("\n").at(-1)!).outposts)) return
+  }
+  console.error(`the outposts did not connect before their removal: their daemons may keep running`)
 }
 let started = false
 const addedOutposts: string[] = []
@@ -333,13 +384,14 @@ const onPlace = (place: Place, command: string) => (place.ssh ? run("ssh", [plac
 function toolsHeld(cell: Cell, directory: string, startedAt: number): "on" | "off" | "unknown" {
   const newer = `-newermt @${Math.floor(startedAt / 1000) - 1}`
   if (cell.harness.agent === "codex") {
-    const home = cell.place.ssh ? "~/.codex" : codexHome
+    const home = cell.place.ssh ? `${outpostToolHome ?? "~"}/.codex` : codexHome
     const lines = onPlace(cell.place, `find ${home}/sessions ${home}/archived_sessions -name 'rollout-*.jsonl' ${newer} -print0 2>/dev/null | xargs -0 -r grep -lF '"cwd":"${directory}"' | xargs -r grep -hE '"type":"(session_meta|additional_tools)"'`).split("\n").filter(Boolean)
     const offered = lines.filter((line) => line.includes('"additional_tools"'))
     if (offered.length === 0) return "unknown"
     return offered.some((line) => line.includes("mcp__attn")) ? "on" : "off"
   }
-  const home = !cell.place.ssh && toolHome ? join(toolHome, ".claude") : "~/.claude"
+  const claudeHome = cell.place.ssh ? outpostToolHome : toolHome
+  const home = claudeHome ? join(claudeHome, ".claude") : "~/.claude"
   const folder = directory.replace(/[^a-zA-Z0-9]/g, "-")
   const lines = onPlace(cell.place, `find ${home}/projects/${folder} -maxdepth 1 -name '*.jsonl' ${newer} -print0 2>/dev/null | xargs -0 -r cat`).split("\n").filter((line) => line.startsWith("{"))
   if (lines.length === 0) return "unknown"
@@ -349,23 +401,17 @@ function toolsHeld(cell: Cell, directory: string, startedAt: number): "on" | "of
 
 /** A Codex that does not load the user's own skills, which it reads from HOME whatever CODEX_HOME says, and whose commands
  * skip the login shell, where a user's profile can put an installed attn before the one the bench runs. */
-const plainCodex = join(out, "codex-without-user-skills")
-function writePlainCodex() {
-  const codex = spawnSync("bash", ["-c", "command -v codex"], { encoding: "utf8" }).stdout.trim()
-  const skills = spawnSync("find", ["-L", join(homedir(), ".agents/skills"), "-name", "SKILL.md"], { encoding: "utf8" }).stdout.split("\n").filter(Boolean)
+function plainCodexScript(place: Place, codex: string) {
+  const skills = onPlace(place, 'find -L "$HOME/.agents/skills" -name SKILL.md 2>/dev/null').split("\n").filter(Boolean)
   const off = skills.map((path) => `{path=${JSON.stringify(path)},enabled=false}`).join(",").replace(/'/g, "'\\''")
-  writeFileSync(plainCodex, `#!/bin/bash\nexec '${codex}' -c allow_login_shell=false -c 'skills.config=[${off}]' "$@"\n`, { mode: 0o755 })
+  return `#!/bin/bash\nexec '${codex}' -c allow_login_shell=false -c 'skills.config=[${off}]' "$@"\n`
 }
 
 /** A Claude Code that runs with code mode off, whatever the user's settings say: their `env` beats the process environment,
  * and only the settings attn passes on the command line beat it. */
-const plainClaude = join(out, "claude-code-mode-off")
-function writePlainClaude() {
-  const claude = spawnSync("bash", ["-c", "command -v claude"], { encoding: "utf8" }).stdout.trim()
+function plainClaudeScript(claude: string) {
   const env = '"env":{"CLAUDE_CODE_EXPERIMENTAL_CODE_MODE":"0"}'
-  writeFileSync(
-    plainClaude,
-    `#!/bin/bash
+  return `#!/bin/bash
 args=("$@")
 found=
 for i in "\${!args[@]}"; do
@@ -377,9 +423,32 @@ for i in "\${!args[@]}"; do
 done
 [ -n "$found" ] || args+=(--settings '{${env}}')
 exec '${claude}' "\${args[@]}"
-`,
-    { mode: 0o755 },
-  )
+`
+}
+
+const plainCodex = join(out, "codex-without-user-skills")
+const plainClaude = join(out, "claude-code-mode-off")
+function writeHomeWrappers() {
+  const found = (name: string) => spawnSync("bash", ["-c", `command -v ${name}`], { encoding: "utf8" }).stdout.trim()
+  writeFileSync(plainCodex, plainCodexScript({ name: "home" }, found("codex")), { mode: 0o755 })
+  writeFileSync(plainClaude, plainClaudeScript(found("claude")), { mode: 0o755 })
+}
+
+function outpostShell(o: { name: string; ssh: string }, command: string, stdin?: string) {
+  const r = run("ssh", [o.ssh, command], process.env, { stdin })
+  if (r.status !== 0) throw new Error(`on outpost ${o.name}: ${command.slice(0, 200)} exited ${r.status}: ${(r.stdout + r.stderr).trim().slice(0, 600)}`)
+  return r.stdout
+}
+
+/** An outpost's daemon starts over ssh with the environment a login gives it, so the bench restarts it with the tool home
+ * while the home is not dialing it, and the home's next dial finds it running. Its executables are the outpost's own machine settings. */
+function useOutpostToolHome(o: { name: string; ssh: string }, home: string) {
+  const bin = `${home}/bench-bin`
+  const env = { ATTN_INSTANCE: instance, ATTN_HEADLESS_TASKS: "off", ATTN_TOOL_HOME: home, CLAUDE_CONFIG_DIR: `${home}/.claude`, CODEX_HOME: `${home}/.codex`, SIGMA_HOME: `${home}/.sigma`, DISABLE_AUTOUPDATER: "1" }
+  const attn = `env -u SSH_CONNECTION -u SSH_CLIENT -u SSH_TTY ${Object.entries(env).map(([k, v]) => `${k}='${v}'`).join(" ")} ~/.local/share/attn-outpost-instances/${instance}/attn`
+  outpostShell(o, `mkdir -p '${bin}' && cat > '${bin}/claude' && chmod +x '${bin}/claude'`, plainClaudeScript(`${home}/bin/claude`))
+  outpostShell(o, `cat > '${bin}/codex' && chmod +x '${bin}/codex'`, plainCodexScript(o, `${home}/bin/codex`))
+  outpostShell(o, `${attn} daemon stop && ${attn} daemon ensure && ${attn} settings set claude_executable '${bin}/claude' && ${attn} settings set codex_executable '${bin}/codex'`)
 }
 
 const pinned = (harness: Harness) => harness.model.split("/").at(-1)!
@@ -417,7 +486,12 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
   mkdirSync(local, { recursive: true })
   const remote = cell.place.ssh && `/tmp/attn-agent-bench/${stamp}/${local.split("/").at(-1)}`
   if (remote) run("ssh", [cell.place.ssh!, "mkdir", "-p", remote], process.env)
-  const dir = remote ?? task.stage?.(local) ?? local
+  const folder = task.stage?.(local) ?? local
+  if (remote && task.stage) {
+    const copied = spawnSync("bash", ["-c", 'set -o pipefail; tar -C "$0" -cf - . | ssh "$1" tar -C "$2" -xf -', folder, cell.place.ssh!, remote], { encoding: "utf8" })
+    if (copied.status !== 0) throw new Error(`staging ${task.id} on ${cell.place.name}: ${copied.stderr.trim()}`)
+  }
+  const dir = remote ?? folder
   const profileName = `bench ${++profiles} ${task.id} ${cell.id}`
   const mine = () => agents().filter((a) => a.profile === profileName)
   let session = ""
@@ -439,7 +513,9 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
       session = json(attnRaw(["crew", "start", "chief", "--agent", cell.harness.agent, "--profile", profile, "--json"])).session_id
     } else {
       session = crypto.randomUUID()
-      wsctl(["add-session", "--cwd", dir, "--agent", cell.harness.agent, "--profile", profile, "--label", label, "--id", session, ...(remote ? ["--host", cell.place.name] : [])])
+      const spawned = ["add-session", "--cwd", dir, "--agent", cell.harness.agent, "--profile", profile, "--label", label, "--id", session, ...(remote ? ["--host", cell.place.name] : [])]
+      if (remote) await afterFirstSync(() => wsctl(spawned))
+      else wsctl(spawned)
     }
     await atPrompt(session, cell.harness.agent)
     const terminals: string[] = json(attnRaw(["terminal", "ls", "--all", "--session", session, "--json"])).filter((t: any) => t.session_id === session).map((t: any) => t.terminal_id)
@@ -466,7 +542,10 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
       screen,
       answer: () => String(transcript(session).findLast((e) => e.role === "assistant")?.text ?? ""),
       trustForCodex: (folder) => {
-        if (cell.harness.agent === "codex" && !remote) appendFileSync(join(codexHome, "config.toml"), `\n[projects.${JSON.stringify(folder)}]\ntrust_level = "trusted"\n`)
+        if (cell.harness.agent !== "codex") return
+        const entry = `\n[projects.${JSON.stringify(folder)}]\ntrust_level = "trusted"\n`
+        if (remote) outpostShell({ name: cell.place.name, ssh: cell.place.ssh! }, `cat >> '${outpostToolHome}/.codex/config.toml'`, entry)
+        else appendFileSync(join(codexHome, "config.toml"), entry)
       },
       opened: () => column(join(dataDir, "attn.db"), "SELECT path FROM file_activity WHERE source = 'opened' AND session_id = ? ORDER BY last_at DESC", session),
       delegated: async (folder, calls) => {
@@ -621,17 +700,29 @@ function judgeD22(results: RunResult[]) {
 
 /** Codex saves a trust entry for each folder whose trust screen the bench answered; remove the ones under this run's
  * work root, so the harness home keeps only what it had. */
-function forgetCodexTrust() {
-  const config = join(codexHome, "config.toml")
-  if (!existsSync(config)) return
-  const lines = readFileSync(config, "utf8").split("\n")
+function withoutTrust(config: string, root: string) {
   const kept: string[] = []
   let dropping = false
-  for (const line of lines) {
-    if (line.startsWith("[")) dropping = line.startsWith(`[projects."${workRoot}`)
+  for (const line of config.split("\n")) {
+    if (line.startsWith("[")) dropping = line.startsWith(`[projects."${root}`)
     if (!dropping) kept.push(line)
   }
-  if (kept.length !== lines.length) writeFileSync(config, kept.join("\n"))
+  return kept.join("\n")
+}
+function forgetCodexTrust() {
+  const config = join(codexHome, "config.toml")
+  if (existsSync(config)) {
+    const before = readFileSync(config, "utf8")
+    const after = withoutTrust(before, workRoot)
+    if (after !== before) writeFileSync(config, after)
+  }
+  for (const o of outposts) {
+    if (!outpostToolHome) continue
+    const path = `${outpostToolHome}/.codex/config.toml`
+    const read = run("ssh", [o.ssh, `cat '${path}'`], process.env)
+    const after = withoutTrust(read.stdout, `/tmp/attn-agent-bench/${stamp}`)
+    if (read.status === 0 && after !== read.stdout) run("ssh", [o.ssh, `cat > '${path}'`], process.env, { stdin: after })
+  }
 }
 
 const build = spawnSync("go", ["build", "-o", wsctlBinary, "./scripts/wsctl"], { cwd: repository, encoding: "utf8" })
@@ -647,16 +738,17 @@ function drawsMermaid(source: string) {
   if (r.status !== 0 && r.status !== 1) throw new Error(`mermaid_check exited ${r.status}: ${r.stderr.trim()}`)
   return { drawn: true, skipped: r.stdout.split("\n").filter(Boolean) }
 }
-writePlainClaude()
-writePlainCodex()
+writeHomeWrappers()
 const taskSettings = [...new Set(tasks.flatMap((t) => Object.keys(t.settings ?? {})))]
 function cleanUp() {
   forgetCodexTrust()
   if (keep) return
+  if (addedOutposts.length > 0) connectBeforeRemoving()
   for (const id of addedOutposts) {
     const r = run(wsctlBinary, ["outposts", "--remove", id], daemonEnv)
     if (r.status !== 0) console.error(`wsctl outposts --remove ${id}: ${r.stderr.trim()}`)
   }
+  for (const o of outposts) run("ssh", [o.ssh, `rm -rf '/tmp/attn-agent-bench/${stamp}'`], process.env)
   spawnSync(attnBinary, ["instance", "clean", instance], { env: baseEnv(), stdio: "inherit" })
 }
 for (const signal of ["SIGINT", "SIGTERM"] as const)
@@ -670,7 +762,7 @@ try {
   for (const codeMode of [false, true]) {
     const group = cells.filter((c) => c.harness.codeMode === codeMode)
     if (group.length === 0) continue
-    startDaemon(codeMode)
+    await startDaemon(codeMode)
     for (const [index, task] of tasks.entries()) {
       for (const name of taskSettings) setting(name, task.settings?.[name] ?? "")
       for (const cell of index % 2 ? [...group].reverse() : group) {

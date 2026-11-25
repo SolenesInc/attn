@@ -1,4 +1,4 @@
-import { cpSync, existsSync, readFileSync } from "node:fs"
+import { cpSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { offers, openAsks, recommends } from "./asks.ts"
 import { type Call, type Check, isCommand, isUsageRefusal, STAYS, type Task, type World } from "./world.ts"
@@ -336,6 +336,7 @@ const CODING = join(import.meta.dir, "fixtures", "coding")
 const codingTests: Task = {
   id: "coding-tests",
   title: "Fix several files until their tests pass",
+  stagesOnOutposts: true,
   stage: (dir) => {
     cpSync(CODING, dir, { recursive: true })
     return dir
@@ -345,8 +346,7 @@ const codingTests: Task = {
     const problems: string[] = []
     for (const name of ["__init__.py", "test_parse.py", "test_pricing.py", "test_report.py", "test_stock.py"]) {
       const pristine = readFileSync(join(CODING, "tests", name), "utf8")
-      const path = join(w.dir, "tests", name)
-      if (!existsSync(path) || readFileSync(path, "utf8") !== pristine) problems.push(`changed tests/${name}`)
+      if (w.sh(`cat tests/${name}`).out !== pristine) problems.push(`changed tests/${name}`)
     }
     const r = w.sh("python3 -m unittest")
     if (r.code !== 0 || !/Ran 16 tests/.test(r.out)) problems.push(`the tests do not pass: ${r.out.trim().split("\n").at(-1)}`)
