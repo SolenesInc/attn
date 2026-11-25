@@ -108,7 +108,9 @@ The four harder tasks need several steps, tools an agent must load first, or rec
 | `open-ask-refusal` | close three shipped seeds, one of which has an open ask of the agent's own that shipping made moot, and leave `import-customers` alone | all three are harvested with their reasons, that ask is withdrawn, `import-customers` is still growing with its ask open, no close was forced, and attn refused at most three closes for a reason other than usage |
 | `coding-tests` | fix code across several files until 16 tests pass | the 16 tests pass, the tests are unchanged, and the agent made no attn call |
 
-In `open-ask-refusal`, attn refuses the harvest of a seed with an open ask and names the ask and the command that withdraws it. An agent that asks the user instead, or that its harness stops from withdrawing the ask, fails.
+In `open-ask-refusal`, attn refuses the harvest of a seed with an open ask, and names the ask, the command that reads it and the command that withdraws it. An agent that asks the user instead, or that its harness stops from withdrawing the ask, fails.
+
+`ask-still-matters` is its opposite, outside the grid and the groups: run it with `--tasks ask-still-matters`. The agent is asked to close two seeds, one of which has an ask whose answer the work still needs, so it passes when the other seed is harvested and this one is still growing with its ask open, with no forced close.
 
 The five ask tasks (`instance/asks.ts`) put a decision to the agent without naming attn, asks or any kind of picture, so they measure whether the agent opens an ask on its own and whether the ask shows what the decision turns on. Each copies its files from `instance/fixtures/asks/` into the run's folder. A run with no open ask fails, and every verdict names the asks opened and the visuals they show. A question offers the options when each matches a different choice. A Mermaid fence counts only when the app draws it whole: before a run with an ask task, the driver builds `native/crates/attn-app/examples/mermaid_check.rs` with cargo, which reads a source with the app's renderer.
 

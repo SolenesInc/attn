@@ -701,12 +701,13 @@ func (e *openAsksError) Refusal() protocol.Refusal { return protocol.RefusalWron
 func (e *openAsksError) Error() string { return protocol.CLIText(e.Mentioned()) }
 
 func (e *openAsksError) Mentioned() string {
-	asks := make([]string, len(e.asks))
+	asks, reads := make([]string, len(e.asks)), make([]string, len(e.asks))
 	for i, ask := range e.asks {
 		asks[i] = fmt.Sprintf("%s (%q)", ask.ID, ask.Subject)
+		reads[i] = fmt.Sprintf("`{attn ask show %s}`", ask.ID)
 	}
-	refusal := fmt.Sprintf("%s has %d open ask(s) to the user: %s. The answer comes to whoever tends the seed: end your turn, and %s after you act on the answer. Withdraw an ask that no longer matters with `{attn ask close <id>}`",
-		e.seedID, len(asks), strings.Join(asks, ", "), e.then)
+	refusal := fmt.Sprintf("%s has %d open ask(s) to the user: %s. Read what each asks with %s before you choose. If the answer still matters, end your turn, and %s after you act on the answer, which comes to whoever tends the seed. If the answer no longer matters, withdraw the ask with `{attn ask close <id>}`, then %s",
+		e.seedID, len(asks), strings.Join(asks, ", "), strings.Join(reads, ", "), e.then, e.then)
 	if e.then == string(garden.VerbHarvest) {
 		refusal += fmt.Sprintf(". If you do not tend the seed, `{attn seed tend %s}` first", e.seedID)
 	}

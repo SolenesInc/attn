@@ -5,7 +5,7 @@ import { homedir, tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { ASK_TASKS } from "./asks.ts"
 import { GRID_PROBES, PROBES } from "./probes.ts"
-import { HARDER_TASKS, TASKS } from "./tasks.ts"
+import { HARDER_TASKS, REFUSAL_TASKS, TASKS } from "./tasks.ts"
 import { attnCalls, blockedRuns, type Call, type Check, cliRuns, codexRuns, isCommand, metrics, type Metrics, type Records, retryWaitMs, run, shellRuns, takesProfile, type Task, toolOutcomes, unrecorded, type World } from "./world.ts"
 
 const repository = resolve(import.meta.dir, "../../..")
@@ -47,7 +47,7 @@ const toolHome = arg("tool-home") && resolve(arg("tool-home")!)
 const parallel = Number(arg("parallel") ?? 2)
 const keep = flag("keep")
 
-const ALL = [...TASKS, ...HARDER_TASKS, ...ASK_TASKS, ...PROBES]
+const ALL = [...TASKS, ...HARDER_TASKS, ...REFUSAL_TASKS, ...ASK_TASKS, ...PROBES]
 const groups: Record<string, Task[]> = { probes: PROBES, asks: ASK_TASKS, harder: HARDER_TASKS, grid: [...TASKS, ...HARDER_TASKS, ...ASK_TASKS, ...GRID_PROBES] }
 const taskIds = list(arg("tasks") ?? (grid ? "grid" : undefined), TASKS.map((t) => t.id).join(",")).flatMap((id) => groups[id]?.map((t) => t.id) ?? [id])
 /** Runs per cell of a task: in the grid, three of each task and one of each probe. */

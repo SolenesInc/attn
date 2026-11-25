@@ -65,7 +65,7 @@ groups:
         commands: [seed tend, seed note, seed park, seed replant, seed wither, seed send-to-chief]
       - title: Closing a seed
         text: |
-          Harvest a seed when the outcome and the verification its body asks for are complete. An ask about the seed keeps it open: an agent's harvest refuses while the user has not answered, and names each open ask. The answer comes to whoever tends the seed, so end your turn and harvest after you act on the answer, or withdraw an ask that no longer matters with `attn ask close <id>`. The user's own harvest and any wither withdraw the seed's open asks, and the command names them.
+          Harvest a seed when the outcome and the verification its body asks for are complete. An ask about the seed keeps it open: an agent's harvest refuses while the user has not answered, and names each open ask. Read the ask with `attn ask show <id>`. If its answer still matters, end your turn, and harvest after you act on the answer, which comes to whoever tends the seed. If it no longer matters, withdraw the ask with `attn ask close <id>`, then harvest. The user's own harvest and any wither withdraw the seed's open asks, and the command names them.
         commands: [seed harvest]
       - title: Closing a plot
         text: |
@@ -323,7 +323,7 @@ commands:
     runs: home
     grant: own
     doc: |
-      Pauses the seed deliberately: it is parked and lets go of its tender. An optional `reason` lands on the log in the same move. Tending it again picks it back up. Parking it again keeps the state and adds only the reason. The tender's park refuses while the seed has an ask the user has not answered, and names the ask: end your turn, park after you act on the answer, or withdraw the ask with `attn ask close`. Moves print who they rang.
+      Pauses the seed deliberately: it is parked and lets go of its tender. An optional `reason` lands on the log in the same move. Tending it again picks it back up. Parking it again keeps the state and adds only the reason. The tender's park refuses while the seed has an ask the user has not answered, and names the ask: read it with `attn ask show`, then either end your turn and park after you act on the answer, or withdraw an ask that no longer matters with `attn ask close`. Moves print who they rang.
     args:
       - {name: seed, type: seed, required: true, cli: pos}
       - {name: reason, type: text, cli: "-m", stdin: true, placeholder: '"<where you left it>"', doc: "where you left it, saved on the move"}
@@ -370,7 +370,7 @@ commands:
     runs: home
     grant: own
     doc: |
-      Closes the seed as done, with a required `reason` unless `when_merged` is set. Repeating a harvest succeeds with the earlier reason; a different reason goes on its log. A withered seed must be replanted first. A plot refuses while any direct child is open. A seed with an ask the user has not answered refuses and names the ask: end your turn, harvest after you act on the answer, or withdraw the ask with `attn ask close`. Closing a plot's last child leaves a ringing note on the plot and names the plot in the output. Moves print who they rang.
+      Closes the seed as done, with a required `reason` unless `when_merged` is set. Repeating a harvest succeeds with the earlier reason; a different reason goes on its log. A withered seed must be replanted first. A plot refuses while any direct child is open. A seed with an ask the user has not answered refuses and names the ask: read it with `attn ask show`, then either end your turn and harvest after you act on the answer, or withdraw an ask that no longer matters with `attn ask close`. Closing a plot's last child leaves a ringing note on the plot and names the plot in the output. Moves print who they rang.
 
       `when_merged` releases your claim and harvests the seed with your `reason` when the pull request merges. It refuses while the seed has an ask the user has not answered, as harvest does. Without a reason it uses "PR #N merged: <title>". This command merges nothing. With no `pr` it takes this session's single open pull request, and names the pull requests when there is more than one; `when_merged` with `clear` takes the arming back.
     args:

@@ -51,7 +51,7 @@ Repeating a move to the same state succeeds without rewriting the seed or ringin
 
 ## Closing a seed
 
-Harvest a seed when the outcome and the verification its body asks for are complete. An ask about the seed keeps it open: an agent's harvest refuses while the user has not answered, and names each open ask. The answer comes to whoever tends the seed, so end your turn and harvest after you act on the answer, or withdraw an ask that no longer matters with `attn ask close <id>`. The user's own harvest and any wither withdraw the seed's open asks, and the command names them.
+Harvest a seed when the outcome and the verification its body asks for are complete. An ask about the seed keeps it open: an agent's harvest refuses while the user has not answered, and names each open ask. Read the ask with `attn ask show <id>`. If its answer still matters, end your turn, and harvest after you act on the answer, which comes to whoever tends the seed. If it no longer matters, withdraw the ask with `attn ask close <id>`, then harvest. The user's own harvest and any wither withdraw the seed's open asks, and the command names them.
 
 - `attn seed harvest <id> [<pr-url>] [-m "<what got done>"] [--when-merged] [--clear] [--force] [--json]`: close the seed as done
 

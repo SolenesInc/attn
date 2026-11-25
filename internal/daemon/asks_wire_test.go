@@ -666,7 +666,7 @@ func TestAnAgentHarvestsASeedOnlyAfterItsAskIsAnsweredAndAWitherWithdrawsTheAsk(
 	asked := ask(side, side)
 	for _, harvester := range []string{string(delegated.SessionID), "caller"} {
 		_, err := cli.SeedTransition(protocol.SessionID(harvester), side, "harvest", "tuned", true, client.SeedTransitionOptions{})
-		for _, want := range []string{asked.ID, asked.Subject, "end your turn", "attn ask close", "attn seed tend " + side} {
+		for _, want := range []string{asked.ID, asked.Subject, "attn ask show " + asked.ID, "end your turn", "attn ask close", "attn seed tend " + side} {
 			if err == nil || !strings.Contains(err.Error(), want) {
 				t.Fatalf("%s harvested %s with an open ask: %v; want a refusal naming %q", harvester, side, err, want)
 			}
@@ -1197,7 +1197,7 @@ func TestAnAgentWaitingOnTheUserCannotLetGoOfItsSeedOrCloseItselfButItsOverseerC
 
 	for _, verb := range []string{"park", "replant"} {
 		_, err := cli.SeedTransition(asker, delegated.SeedID, verb, "", false, client.SeedTransitionOptions{})
-		refusedNaming("the tender's "+verb, err, stakeAsk, verb+" after you act on the answer")
+		refusedNaming("the tender's "+verb, err, stakeAsk, "attn ask show "+stakeAsk.ID, verb+" after you act on the answer")
 	}
 	_, err = cli.SeedTransition(asker, delegated.SeedID, "harvest", "", false, client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: shopPull(7)})
 	refusedNaming("arming the harvest on merge", err, stakeAsk, "--when-merged")
