@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Garden WebSocket search misses exact automation seed IDs from All",
+  "at": "2026-11-25T08:08:01.680Z",
+  "detail": "At 537ce738f, the new garden_search WebSocket command returns zero rows for a closed automation seed's exact ID with is:any from the Garden All bed. The same automation seed returns one row from Automations. internal/daemon/garden_search.go:436 applies the bed scope before exact-ID matching. The existing native search promises the All-bed exact-ID exception in native/crates/attn-app/tests/wire/garden/v2.rs:1068. Preserve that exception before the planned native search migration, while honoring explicit bed filters and the selected status lens. The current UI still uses local search. Two isolated wire runs, one independently, reproduced the mismatch. Probe and logs are attached to s-232k2j.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/garden_search.go",
+    "line": 436
+  },
+  "culprit": "a92b87924f9659bd4548ceb81ba1881f51e41103"
+}
