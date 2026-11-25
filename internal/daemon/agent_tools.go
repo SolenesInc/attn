@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/catalog"
@@ -73,9 +74,13 @@ func (d *Daemon) agentToolsHandler() http.Handler {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
-		server.Serve(w, r, func(ctx context.Context, tool string, arguments, meta json.RawMessage) mcpserver.Result {
+		started := time.Now()
+		method := server.Serve(w, r, func(ctx context.Context, tool string, arguments, meta json.RawMessage) mcpserver.Result {
 			return d.callAgentTool(ctx, call, d.agentToolSet.tools[tool], arguments, meta)
 		})
+		if method == "initialize" || method == "tools/list" {
+			d.logf("agent tools: %s for %s (session %s) in %s", method, call.who, call.caller.Session, time.Since(started).Round(time.Microsecond))
+		}
 		if call.after != nil {
 			_ = http.NewResponseController(w).Flush()
 			call.after()

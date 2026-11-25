@@ -83,34 +83,35 @@ const (
 	codeInvalidParams  = -32602
 )
 
-func (s *Server) Serve(w http.ResponseWriter, r *http.Request, call Call) {
+func (s *Server) Serve(w http.ResponseWriter, r *http.Request, call Call) (method string) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		return
+		return ""
 	}
 	if media, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); media != "application/json" {
 		http.Error(w, "Content-Type must be 'application/json'", http.StatusUnsupportedMediaType)
-		return
+		return ""
 	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("reading the request: %v", err), http.StatusBadRequest)
-		return
+		return ""
 	}
 	var req request
 	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, fmt.Sprintf("a request is one JSON-RPC message: %v", err), http.StatusBadRequest)
-		return
+		return ""
 	}
 	if len(req.ID) == 0 || req.Method == "" {
 		w.WriteHeader(http.StatusAccepted)
-		return
+		return req.Method
 	}
 	reply := response{JSONRPC: "2.0", ID: req.ID}
 	reply.Result, reply.Error = s.answer(r.Context(), req, call)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(reply)
+	return req.Method
 }
 
 func (s *Server) answer(ctx context.Context, req request, call Call) (any, *rpcError) {
