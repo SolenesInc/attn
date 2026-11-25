@@ -602,8 +602,8 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
                 .into_iter()
                 .flatten(),
         )
-        .child(body.min_h(WORK_AREA_FLOOR))
-        .children(crate::desktop::header_pop::words_anchor(state));
+        .children(crate::desktop::header_pop::words_anchor(state))
+        .child(body.min_h(WORK_AREA_FLOOR));
     crate::markdown::with_image_preview(root, layers(state, &t), state, cx.is_reduced_motion(), &t)
         .children(crate::hints::words_layers(state, &t))
         .children(crate::markdown::annotating::layers(state, cx, &t))

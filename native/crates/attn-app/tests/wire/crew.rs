@@ -2835,7 +2835,11 @@ fn an_agent_a_letter_names_shows_its_card_over_the_page_and_opens_in_place_of_it
     world.gesture(|app| app.runtime.pointer_move(x + w / 2.0, y + h / 2.0));
     world.advance(std::time::Duration::from_millis(200));
     let card = Target::key("words.agent-card");
-    assert!(world.screen().find(card.clone()).is_some());
+    let [left, top, width, _] = world.screen().bounds(card.clone()).unwrap();
+    assert!(
+        left < x + w && x < left + width && (y + h..y + h + 20.0).contains(&top),
+        "the card hangs under the id at {x}, {y}: {left}, {top}"
+    );
     assert!(world.runtime_is_at_rest());
 
     world.gesture(|app| app.press(into_card()));

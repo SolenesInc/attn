@@ -134,6 +134,15 @@ fn said(world: &World, part: &str) -> Option<String> {
     world.screen().find(Target::key(key))?.name
 }
 
+fn assert_hangs_under(world: &World, link: &str) {
+    let id = world.screen().bounds(Target::key(link)).unwrap();
+    let card = world.screen().bounds(Target::key(AGENT_CARD)).unwrap();
+    assert!(
+        card[1] >= id[1] + id[3] && card[1] < id[1] + id[3] + 20.0,
+        "the card hangs under the id at {id:?}: {card:?}"
+    );
+}
+
 fn has_keyboard(world: &World, key: &str) -> bool {
     world.screen().focused().and_then(|n| n.key).as_deref() == Some(key)
 }
@@ -249,12 +258,7 @@ fn a_documents_id_shows_its_card_under_a_resting_pointer_and_takes_the_keyboard(
         said(&world, "name").as_deref(),
         Some("Fix the retry uploader")
     );
-    let id = world.screen().bounds(Target::key(TO_BUILDER)).unwrap();
-    let card = world.screen().bounds(Target::key(AGENT_CARD)).unwrap();
-    assert!(
-        card[1] >= id[1] + id[3] && card[1] < id[1] + id[3] + 20.0,
-        "the card hangs under the id at {id:?}: {card:?}"
-    );
+    assert_hangs_under(&world, TO_BUILDER);
 
     rest_on(&mut world, TO_SEED);
     world.advance(Duration::from_millis(300));
@@ -648,7 +652,7 @@ fn the_card_key_gives_a_hovered_card_in_an_ask_the_keyboard_and_gives_it_back() 
     let choice = "asks.q.q1.choice.0";
     assert!(has_keyboard(&world, choice));
     rest_on(&mut world, TO_BUILDER);
-    assert!(shown(&world, AGENT_CARD));
+    assert_hangs_under(&world, TO_BUILDER);
     assert!(has_keyboard(&world, choice), "pointing leaves the keyboard");
     takes_keyboard(&mut world);
     assert!(has_keyboard(&world, AGENT_CARD));
@@ -717,7 +721,7 @@ fn the_card_key_gives_a_hovered_card_in_the_garden_over_the_window_the_keyboard(
     }
     click(&mut world, "garden.row.s-plan11");
     rest_on(&mut world, TO_BUILDER);
-    assert!(shown(&world, AGENT_CARD));
+    assert_hangs_under(&world, TO_BUILDER);
     takes_keyboard(&mut world);
     assert!(has_keyboard(&world, AGENT_CARD));
     key(&mut world, Key::Enter);
