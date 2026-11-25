@@ -1,0 +1,8 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "fix: short session ids broke outpost copy and state explain tests",
+  "at": "2026-11-25T06:32:47.886Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45555819254",
+  "repairs": "78fa1687c"
+}
