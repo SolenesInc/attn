@@ -11,11 +11,13 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/script"
@@ -114,15 +116,22 @@ func (c *scriptChild) finish() (calls []string, out script.Output) {
 	}
 }
 
+const daemonAllocates = 64 << 20 // An argument of 8 MB, the most a script may send, takes 40 MB.
+
+const takeHostFunction = `let call;
+Error.prepareStackTrace = (e, sites) => { call = sites[0].getFunction(); return '' };
+try { seed_show({toJSON() {}}) } catch (e) { e.stack }
+`
+
 func TestAScriptRunsCommandsAndEndsAsTheAgentIsTold(t *testing.T) {
 	t.Parallel()
-	short := script.DefaultLimits
-	short.Compute = 100 * time.Millisecond
+	const short = 100 * time.Millisecond
 	stopped := func(limit string) script.Output {
 		return script.Output{Failed: "the script stopped: it reached its " + limit}
 	}
 	for _, tc := range []struct {
 		name, source string
+		compute      time.Duration
 		calls        []string
 		want         script.Output
 	}{
@@ -143,19 +152,22 @@ func TestAScriptRunsCommandsAndEndsAsTheAgentIsTold(t *testing.T) {
 			calls:  []string{`seed_note {"text":"x"}`},
 		},
 		{
-			name:   "an endless loop",
-			source: "let i = 0;\nwhile (true) i++",
-			want:   stopped("compute limit of 100ms of its own work"),
+			name:    "an endless loop",
+			source:  "let i = 0;\nwhile (true) i++",
+			compute: short,
+			want:    stopped("compute limit of 100ms of its own work"),
 		},
 		{
-			name:   "an endless loop inside a try, after an await",
-			source: "await null;\ntry {\n  for (;;) {}\n} catch { return 'caught' }",
-			want:   stopped("compute limit of 100ms of its own work"),
+			name:    "an endless loop inside a try, after an await",
+			source:  "await null;\ntry {\n  for (;;) {}\n} catch { return 'caught' }",
+			compute: short,
+			want:    stopped("compute limit of 100ms of its own work"),
 		},
 		{
-			name:   "a regular expression that backtracks",
-			source: "return /^(a+)+$/.test('a'.repeat(40) + 'b')",
-			want:   stopped("compute limit of 100ms of its own work"),
+			name:    "a regular expression that backtracks",
+			source:  "return /^(a+)+$/.test('a'.repeat(40) + 'b')",
+			compute: short,
+			want:    stopped("compute limit of 100ms of its own work"),
 		},
 		{
 			name:   "an endless allocation",
@@ -216,6 +228,37 @@ return [found, typeof Date.now(), typeof Math.random()]`,
 			want:   script.Output{Line: 2, Failed: "SyntaxError at line 2: unexpected token in expression: ')'"},
 		},
 		{
+			name:   "an object thrown",
+			source: "throw {a: 1}",
+			want:   script.Output{Failed: `the script threw {"a":1}`},
+		},
+		{
+			name:   "an object rejected in a promise nothing awaits",
+			source: "Promise.reject({a: 1});\nreturn 'done'",
+			want:   script.Output{Failed: `the script rejected a promise that nothing handles with {"a":1}`},
+		},
+		{
+			name:   "an endless allocation in a promise nothing awaits",
+			source: "(async () => {\n  await null;\n  const a = [];\n  for (;;) a.push({x: [1, 2, 3]});\n})()",
+			want:   stopped("memory limit of 64 MB"),
+		},
+		{
+			name:   "the host function called with nothing",
+			source: takeHostFunction + "call()",
+			want:   script.Output{Failed: "TypeError: a command is called with its name and its arguments"},
+		},
+		{
+			name: "the log function called with text that is not JSON",
+			source: `const map = Array.prototype.map;
+Array.prototype.map = () => ({join: () => ({toJSON() {}})});
+let log;
+Error.prepareStackTrace = (e, sites) => { log = sites[0].getFunction(); return '' };
+try { console.log('x') } catch (e) { e.stack }
+Array.prototype.map = map;
+log('x')`,
+			want: script.Output{Failed: "TypeError: log takes one JSON string"},
+		},
+		{
 			name:   "a promise nothing resolves",
 			source: "await new Promise(() => {})",
 			want:   script.Output{Failed: "the script did not finish: it waits for a promise that nothing resolves"},
@@ -223,7 +266,11 @@ return [found, typeof Date.now(), typeof Math.random()]`,
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			calls, out := startScript(t, tc.source, short).finish()
+			limits := script.DefaultLimits
+			if tc.compute > 0 {
+				limits.Compute = tc.compute
+			}
+			calls, out := startScript(t, tc.source, limits).finish()
 			if !reflect.DeepEqual(calls, tc.calls) {
 				t.Errorf("calls %q, want %q", calls, tc.calls)
 			}
@@ -325,13 +372,119 @@ func TestACrashInTheInterpreterFailsItsRunAndNamesTheSignal(t *testing.T) {
 	}
 }
 
-func TestAScriptThatFloodsItsLogStopsAtItsMemoryAndKeepsWhatItLogged(t *testing.T) {
+func TestRunRefusesACallThatIsNotOneOfItsCommandsWithOneObject(t *testing.T) {
 	t.Parallel()
-	job := script.Job{Source: "for (;;) console.log('x'.repeat(1000))", Functions: []string{"seed_show"}, Limits: script.DefaultLimits}
-	job.Limits.Memory = 4 << 20
-	out := script.Run(context.Background(), job, nil)
-	if want := "the script stopped: it reached its memory limit of 4 MB"; out.Failed != want || len(out.Logs) == 0 {
-		t.Errorf("the run ended with %q and %d logs, want %q and the logs", out.Failed, len(out.Logs), want)
+	source := takeHostFunction + `const refusals = ['["not","an","object"]', '7'].map((args) => JSON.parse(call('seed_harvest', args)).refusal.message);
+refusals.push(...['_update-apply', 'seed harvest'].map((name) => JSON.parse(call(name, '{}')).refusal.message));
+try { seed_show(new Date(0)) } catch (e) { refusals.push(e.name + ' ' + e.code + ' ' + e.message) }
+return [...refusals, seed_show({seed: 's-a1'})]`
+	var calls []string
+	out := script.Run(context.Background(), script.Job{Source: source, Functions: []string{"seed_show", "seed_note", "seed_harvest"}, Limits: script.DefaultLimits}, func(name string, args json.RawMessage) script.Answer {
+		calls = append(calls, name+" "+string(args))
+		return script.Answer{JSON: "7"}
+	})
+	if want := []string{`seed_show {"seed":"s-a1"}`}; !reflect.DeepEqual(calls, want) {
+		t.Errorf("the host was called with %q, want %q", calls, want)
+	}
+	notAnObject := func(name string) string { return name + " takes one object of named arguments" }
+	var got []any
+	if err := json.Unmarshal([]byte(out.Returned), &got); err != nil {
+		t.Fatalf("the run ended with %+v", out)
+	}
+	if want := []any{notAnObject("seed_harvest"), notAnObject("seed_harvest"), "this script may not call that command", "this script may not call that command", "Refusal usage " + notAnObject("seed_show"), 7.0}; !reflect.DeepEqual(got, want) {
+		t.Errorf("the script read\n%q, want\n%q", got, want)
+	}
+}
+
+func TestWhatAScriptCanMakeTheDaemonKeepIsBoundedAndSaysWhatItDropped(t *testing.T) {
+	for _, tc := range []struct {
+		name, source string
+		compute      time.Duration
+		failed       string
+		logged       int
+		returned     int
+		dropped      int
+	}{
+		{
+			name:    "a log flood",
+			source:  "for (;;) console.log('x'.repeat(1000))",
+			compute: 100 * time.Millisecond,
+			failed:  "the script stopped: it reached its compute limit of 100ms of its own work",
+			logged:  script.ResultText,
+			dropped: -1,
+		},
+		{
+			name:    "a log flood in characters that JSON writes as six bytes",
+			source:  "const s = String.fromCharCode(0x2028).repeat(100000);\nfor (;;) console.log(s)",
+			compute: 100 * time.Millisecond,
+			failed:  "the script stopped: it reached its compute limit of 100ms of its own work",
+			logged:  script.ResultText,
+			dropped: -1,
+		},
+		{
+			name:     "more logged and returned than fits",
+			source:   "for (let i = 0; i < 4; i++) console.log('x'.repeat(39999));\nreturn 'y'.repeat(100005)",
+			logged:   script.ResultText,
+			returned: script.ResultText,
+			dropped:  60_000 + 5,
+		},
+		{
+			name:     "exactly what fits",
+			source:   "console.log('é'.repeat(99999));\nreturn 'é'.repeat(100000)",
+			logged:   script.ResultText - 1,
+			returned: script.ResultText,
+		},
+		{
+			name:   "one argument within the arguments of a script",
+			source: "seed_note({text: 'x'.repeat((8 << 20) - 1024)})",
+		},
+		{
+			name:   "one argument past the arguments of a script",
+			source: "seed_note({text: 'x'.repeat(20 << 20)})",
+			failed: "the script stopped: it reached its limit of 8 MB of arguments to commands",
+		},
+		{
+			name:   "many arguments past the arguments of a script",
+			source: "const text = String.fromCharCode(0x2028).repeat(100000);\nfor (let i = 0; i < 300; i++) try { seed_note({text}) } catch {}",
+			failed: "the script stopped: it reached its limit of 8 MB of arguments to commands",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			job := script.Job{Source: tc.source, Functions: []string{"seed_note"}, Limits: script.DefaultLimits}
+			if tc.compute > 0 {
+				job.Limits.Compute = tc.compute
+			}
+			sent := 0
+			var before, after runtime.MemStats
+			runtime.ReadMemStats(&before)
+			out := script.Run(context.Background(), job, func(_ string, args json.RawMessage) script.Answer {
+				sent += len(args)
+				return script.Answer{JSON: "{}"}
+			})
+			runtime.ReadMemStats(&after)
+			if allocated := int(after.TotalAlloc - before.TotalAlloc); allocated > daemonAllocates {
+				t.Errorf("the daemon's end of the run allocated %d bytes", allocated)
+			}
+			if sent > script.Arguments {
+				t.Errorf("the host was sent %d bytes of arguments", sent)
+			}
+			logged := utf8.RuneCountInString(strings.Join(out.Logs, "\n"))
+			if out.Failed != tc.failed || logged != tc.logged || utf8.RuneCountInString(out.Returned) != tc.returned {
+				t.Errorf("the run ended with %q, %d characters logged and %d returned", out.Failed, logged, utf8.RuneCountInString(out.Returned))
+			}
+			if tc.dropped >= 0 && out.Dropped != tc.dropped || tc.dropped < 0 && out.Dropped == 0 {
+				t.Errorf("the run dropped %d characters, want %d", out.Dropped, tc.dropped)
+			}
+		})
+	}
+}
+
+func TestAnErrorLongerThanItsRoomSaysHowMuchWasCut(t *testing.T) {
+	t.Parallel()
+	out := script.Run(context.Background(), script.Job{Source: "throw new Error('x'.repeat(30000))", Functions: []string{"seed_show"}, Limits: script.DefaultLimits}, nil)
+	const at = "Error at line 1: "
+	if want := at + strings.Repeat("x", 20_000-len(at)) + "\n…attn left out the last 10017 characters of this error."; out.Failed != want {
+		t.Errorf("the run ended with %q", out.Failed)
 	}
 }
 

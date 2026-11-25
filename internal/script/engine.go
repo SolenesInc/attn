@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/buke/quickjs-go"
 	"golang.org/x/sys/unix"
@@ -20,16 +21,18 @@ var prelude string
 
 type engine struct {
 	job     Job
-	host    func(name string, args json.RawMessage) Answer
+	host    func(line []byte) Answer
 	rt      *quickjs.Runtime
 	ctx     *quickjs.Context
 	began   time.Duration
+	sent    int
 	logs    []string
 	logged  int
+	dropped int
 	stopped string
 }
 
-func executeOnLockedThread(job Job, host func(name string, args json.RawMessage) Answer) Output {
+func executeOnLockedThread(job Job, host func(line []byte) Answer) Output {
 	e := &engine{job: job, host: host}
 	e.rt = quickjs.NewRuntime(
 		quickjs.WithCanBlock(false),
@@ -57,7 +60,9 @@ func executeOnLockedThread(job Job, host func(name string, args json.RawMessage)
 	if e.stopped != "" {
 		out = Output{Failed: stoppedBy(e.stopped)}
 	}
+	out.Failed = cutAndSaySo(out.Failed, failedText)
 	out.Logs = e.logs
+	out.Dropped += e.dropped
 	return out
 }
 
@@ -70,14 +75,14 @@ func (e *engine) outcome(returned *quickjs.Value) Output {
 	case e.ctx.HasException():
 		return e.failure(e.ctx.Exception())
 	case returned.PromiseState() == quickjs.PromiseRejected:
-		reason := returned.PromiseResult()
-		if reason.IsError() || reason.IsNull() {
-			return e.failure(reason.ToError())
-		}
-		return Output{Failed: "the script threw " + reason.JSONStringify()}
+		return e.threw("the script threw ", returned.PromiseResult())
 	}
-	if rejection := e.rejectionNothingHandled(); rejection != nil {
-		return e.failure(rejection)
+	rejection := e.rejectionNothingHandled()
+	if rejection.IsException() {
+		return e.failure(e.ctx.Exception())
+	}
+	if rejection.IsArray() {
+		return e.threw("the script rejected a promise that nothing handles with ", rejection.GetIdx(0))
 	}
 	if returned.PromiseState() == quickjs.PromisePending {
 		return Output{Failed: "the script did not finish: it waits for a promise that nothing resolves"}
@@ -85,16 +90,32 @@ func (e *engine) outcome(returned *quickjs.Value) Output {
 	var out Output
 	if result := returned.PromiseResult(); !result.IsUndefined() {
 		out.Has = json.Unmarshal([]byte(result.ToString()), &out.Returned) == nil
+		out.Returned, out.Dropped = cut(out.Returned, ResultText)
 	}
 	return out
 }
 
-func (e *engine) rejectionNothingHandled() error {
-	e.ctx.Eval("Promise.resolve()", quickjs.EvalAwait(true))
-	return e.ctx.Exception()
+func (e *engine) threw(what string, reason *quickjs.Value) Output {
+	if reason.IsError() || reason.IsNull() {
+		return e.failure(reason.ToError())
+	}
+	return Output{Failed: what + reason.JSONStringify()}
+}
+
+func (e *engine) rejectionNothingHandled() *quickjs.Value {
+	caught := e.ctx.Eval("(wait) => { try { wait() } catch (reason) { return [reason] } }")
+	return caught.Execute(e.ctx.NewUndefined(), e.ctx.NewFunction(func(c *quickjs.Context, _ *quickjs.Value, _ []*quickjs.Value) *quickjs.Value {
+		return c.Eval("Promise.resolve()", quickjs.EvalAwait(true))
+	}))
 }
 
 func (e *engine) call(c *quickjs.Context, _ *quickjs.Value, args []*quickjs.Value) *quickjs.Value {
+	if e.interrupt() != 0 {
+		return c.ThrowInternalError("%s", stoppedBy(e.stopped))
+	}
+	if len(args) != 2 || !args[0].IsString() {
+		return c.ThrowTypeError("a command is called with its name and its arguments")
+	}
 	name, sent := args[0].ToString(), args[1].ToString()
 	if c.HasException() {
 		return c.ThrowInternalError(outOfMemory)
@@ -102,22 +123,61 @@ func (e *engine) call(c *quickjs.Context, _ *quickjs.Value, args []*quickjs.Valu
 	if !json.Valid([]byte(sent)) {
 		return c.ThrowTypeError("%s takes one object of named arguments", name)
 	}
-	answer, _ := json.Marshal(e.host(name, json.RawMessage(sent)))
+	line := encodeLine(message{Call: &call{Name: name, Args: json.RawMessage(sent)}})
+	if e.sent += len(line); e.sent > Arguments {
+		e.stopped = "limit of " + size(Arguments) + " of arguments to commands"
+		return c.ThrowInternalError("%s", stoppedBy(e.stopped))
+	}
+	answer, _ := json.Marshal(e.host(line))
 	return c.NewString(string(answer))
 }
 
 func (e *engine) log(c *quickjs.Context, _ *quickjs.Value, args []*quickjs.Value) *quickjs.Value {
+	if e.interrupt() != 0 {
+		return c.ThrowInternalError("%s", stoppedBy(e.stopped))
+	}
+	if len(args) != 1 || !args[0].IsString() {
+		return c.ThrowTypeError("log takes one JSON string")
+	}
 	encoded := args[0].ToString()
+	if c.HasException() {
+		return c.ThrowInternalError(outOfMemory)
+	}
 	var line string
-	if err := json.Unmarshal([]byte(encoded), &line); err != nil || c.HasException() {
-		return c.ThrowInternalError(outOfMemory)
+	if json.Unmarshal([]byte(encoded), &line) != nil {
+		return c.ThrowTypeError("log takes one JSON string")
 	}
-	if e.logged += len(encoded) + len(","); e.logged > e.job.Limits.Memory {
-		e.stopped = e.memoryLimit()
-		return c.ThrowInternalError(outOfMemory)
+	line += "\n"
+	kept, dropped := cut(line, ResultText-e.logged)
+	e.logged += utf8.RuneCountInString(kept)
+	e.dropped += dropped
+	if kept != "" {
+		e.logs = append(e.logs, strings.TrimSuffix(kept, "\n"))
 	}
-	e.logs = append(e.logs, line)
 	return c.NewUndefined()
+}
+
+func cut(text string, limit int) (kept string, dropped int) {
+	dropped = utf8.RuneCountInString(text) - limit
+	if dropped <= 0 {
+		return text, 0
+	}
+	runes := 0
+	for at := range text {
+		if runes == limit {
+			return text[:at], dropped
+		}
+		runes++
+	}
+	return text, 0
+}
+
+func cutAndSaySo(text string, limit int) string {
+	kept, dropped := cut(text, limit)
+	if dropped == 0 {
+		return text
+	}
+	return fmt.Sprintf("%s\n…attn left out the last %d characters of this error.", kept, dropped)
 }
 
 func (e *engine) interrupt() int {

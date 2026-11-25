@@ -37,8 +37,8 @@ func Serve(in io.Reader, out io.Writer) error {
 	}()
 	go func() {
 		runtime.LockOSThread()
-		ended <- executeOnLockedThread(*first.Job, func(name string, args json.RawMessage) Answer {
-			_ = enc.Encode(message{Call: &call{Name: name, Args: args}})
+		ended <- executeOnLockedThread(*first.Job, func(line []byte) Answer {
+			_, _ = out.Write(line)
 			return <-answers
 		})
 	}()

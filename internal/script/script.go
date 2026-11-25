@@ -1,7 +1,13 @@
+// Package script runs a model's JavaScript in a child process. The script is
+// hostile: it can send any call the pipe can carry. Run refuses a call to a
+// command outside Job.Functions and a call whose arguments are not one JSON
+// object, and nothing more. The host function must itself check, for every
+// call, that the command's effect is one the tool may have and that the caller
+// holds its grant.
 package script
 
 import (
-	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +15,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 )
@@ -33,6 +40,14 @@ var DefaultLimits = Limits{
 	Compute: 2 * time.Second, // 1,000 commands took 0.04 to 0.08 s of CPU, and 192 reads of a 211 KB result 0.5 to 1.3 s.
 }
 
+const (
+	ResultText = 100_000 // Claude Code 2.1.330 saves a longer MCP result to a file, so what a script logs or returns past this never reaches its model.
+	failedText = 20_000  // The daemon's result cuts an error at 25,000; the longest command's rules, which a refusal carries, take 2,900.
+	Arguments  = 8 << 20 // All calls of one script. Of 1,000 seeds the longest body is 113 KB and the largest plot's bodies together 430 KB; a seed's body may be 1 MB.
+
+	fromChild = Arguments + 2<<20 // Beside its calls a run sends its logs, returned text and error, cut to at most 1.4 MB at 6 bytes a character.
+)
+
 type Answer struct {
 	JSON    string   `json:"json,omitempty"`
 	Text    string   `json:"text,omitempty"`
@@ -50,6 +65,7 @@ type Output struct {
 	Returned string   `json:"returned,omitempty"`
 	Has      bool     `json:"has,omitempty"`
 	Logs     []string `json:"logs,omitempty"`
+	Dropped  int      `json:"dropped,omitempty"` // characters of Logs and Returned past ResultText
 	Failed   string   `json:"failed,omitempty"`
 	Line     int      `json:"line,omitempty"`
 }
@@ -70,6 +86,12 @@ func newEncoder(w io.Writer) *json.Encoder {
 	enc := json.NewEncoder(w)
 	enc.SetEscapeHTML(false)
 	return enc
+}
+
+func encodeLine(m message) []byte {
+	var line bytes.Buffer
+	_ = newEncoder(&line).Encode(m)
+	return line.Bytes()
 }
 
 func Run(ctx context.Context, job Job, host func(name string, args json.RawMessage) Answer) Output {
@@ -124,19 +146,25 @@ func converse(job Job, host func(name string, args json.RawMessage) Answer, stdi
 	if err := enc.Encode(message{Job: &job}); err != nil {
 		return Output{}, errRunnerGone
 	}
-	lines := bufio.NewScanner(stdout)
-	longest := 2 * job.Limits.Memory // a done message carries the logs and the returned text, and the memory limit bounds each
-	lines.Buffer(nil, longest)
-	for lines.Scan() {
+	pipe := &io.LimitedReader{R: stdout, N: fromChild}
+	dec := json.NewDecoder(pipe)
+	for {
 		var m message
-		if err := json.Unmarshal(lines.Bytes(), &m); err != nil {
-			return Output{}, fmt.Errorf("the script's runner sent a broken message: %w", err)
+		if err := dec.Decode(&m); err != nil {
+			switch {
+			case pipe.N == 0:
+				return Output{}, fmt.Errorf("the script stopped: its runner sent more than %s", size(fromChild))
+			case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
+				return Output{}, errRunnerGone
+			default:
+				return Output{}, fmt.Errorf("the script's runner sent a broken message: %w", err)
+			}
 		}
 		switch {
 		case m.Done != nil:
 			return *m.Done, nil
 		case m.Call != nil:
-			answer := host(m.Call.Name, m.Call.Args)
+			answer := answerCall(job, *m.Call, host)
 			if err := enc.Encode(message{Answer: &answer}); err != nil {
 				return Output{}, errRunnerGone
 			}
@@ -144,10 +172,16 @@ func converse(job Job, host func(name string, args json.RawMessage) Answer, stdi
 			return Output{}, errors.New("the script's runner sent a message that is neither a call nor done")
 		}
 	}
-	if errors.Is(lines.Err(), bufio.ErrTooLong) {
-		return Output{}, fmt.Errorf("the script sent more than %s in one message", size(longest))
+}
+
+func answerCall(job Job, c call, host func(name string, args json.RawMessage) Answer) Answer {
+	switch {
+	case !slices.Contains(job.Functions, c.Name):
+		return Answer{Refusal: &Refusal{Code: "no_such_command", Message: "this script may not call that command"}}
+	case !bytes.HasPrefix(bytes.TrimSpace(c.Args), []byte("{")):
+		return Answer{Refusal: &Refusal{Code: "usage", Message: c.Name + " takes one object of named arguments", Command: c.Name}}
 	}
-	return Output{}, errRunnerGone
+	return host(c.Name, c.Args)
 }
 
 type firstLine struct{ kept []byte }
