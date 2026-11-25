@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Outpost bed routing ignores the caller directory",
+  "at": "2026-11-25T00:47:57.366Z",
+  "fixesBug": "2ce33f0"
+}
