@@ -379,3 +379,54 @@ func TestGardenSearchWSFiltersSnippetsAndPaging(t *testing.T) {
 		}
 	})
 }
+
+func TestGardenSearchFindsAnExactAutomationSeedIDFromAll(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	cli := w.Client().WithGardenProfile(app.SelectedProfile(), "")
+	setSetting(t, app, "garden_v2_enabled", "true")
+
+	var automation protocol.AutomationDefinitionSummary
+	automationUnreachableFolder(t, w, "check", func() {
+		automation = applyAutomation(t, cli, manualAutomation(w, "Check locally."))
+	})
+	if _, err := cli.AutomationRun(automation.ID, "first", ""); err == nil {
+		t.Fatal("an automation with a missing working directory succeeded")
+	}
+	runs := automationRuns(t, cli, automation.ID)
+	if len(runs) != 1 || runs[0].SeedID == nil {
+		t.Fatalf("automation runs = %+v, want one run with a seed", runs)
+	}
+	id := *runs[0].SeedID
+
+	for _, tc := range []struct {
+		name  string
+		term  string
+		beds  []string
+		lens  []string
+		found bool
+	}{
+		{name: "full ID from All", term: id, lens: []string{"any"}, found: true},
+		{name: "partial ID from All", term: id[:len(id)-1], lens: []string{"any"}},
+		{name: "explicit automation bed", term: id, beds: []string{"automations"}, lens: []string{"any"}, found: true},
+		{name: "explicit unassigned bed", term: id, beds: []string{"unassigned"}, lens: []string{"any"}},
+		{name: "open lens", term: id, lens: []string{"open"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result := testworld.Request(app, protocol.GardenSearchMessage{
+				Cmd: protocol.CmdGardenSearch, RequestID: tc.name, BedScope: protocol.Ptr("all"),
+				Terms: []string{tc.term}, Beds: tc.beds, Is: tc.lens,
+			}, protocol.EventGardenSearchResult, func(m protocol.GardenSearchResultMessage) bool { return m.RequestID == tc.name })
+			if !result.Success {
+				t.Fatalf("search failed: %s", protocol.Deref(result.Error))
+			}
+			if tc.found {
+				if len(result.Hits) != 1 || result.Hits[0].Seed.ID != id || !result.Hits[0].IDHit {
+					t.Errorf("search hits = %+v, want exact ID hit for %s", result.Hits, id)
+				}
+			} else if len(result.Hits) != 0 {
+				t.Errorf("search hits = %+v, want no hits", result.Hits)
+			}
+		})
+	}
+}

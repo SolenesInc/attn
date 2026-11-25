@@ -433,10 +433,9 @@ func (d *Daemon) handleGardenSearch(client *wsClient, profileID string, msg *pro
 			if !matchesBedTokens(read, seed, beds) {
 				continue
 			}
-		} else if bedScope != "" {
-			if !gardenMatchesBedScope(read, seed, bedScope) {
-				continue
-			}
+		} else if !gardenMatchesBedScope(read, seed, bedScope) &&
+			!(bedScope == "all" && slices.Contains(terms, seed.ID)) {
+			continue
 		}
 
 		cand := gardenSearchCandidate{
