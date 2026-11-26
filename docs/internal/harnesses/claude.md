@@ -179,9 +179,20 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
   sentences. It reads no tool description, annotation, server `instructions` or
   tool result. `readOnlyHint` only lets calls overlap. A `permissions.allow`
   rule allows the call before the classifier runs (a session that called
-  `attn_do` under attn's rule sent the classifier nothing, measured). In the
+  `attn_do` under a rule naming it sent the classifier nothing, measured). In the
   default mode an MCP tool without a rule always asks. `autoMode` is read from
   user, flag and policy settings only.
+- **The classifier on attn's scripts `[2.1.332, Sonnet 5.5, measured]`:** with
+  no allow rule for `attn_do`, auto mode denied none of 68 scripts in 37
+  sessions whose prompt asked for the work: scripts that only record (notes,
+  check reports, planted seeds, a ringing note), and scripts that only act
+  (`seed_harvest`, `ask_close` of an ask the session made before its
+  conversation began). That held with and without an `autoMode.allow` sentence
+  naming the record functions. Told to put acts in a call of their own, the
+  agent split a record-and-act task into two scripts in 12 of 12 runs. In the
+  default mode, `attn_read`, `skill` and `ask` under allow rules ran without a
+  prompt, and the next `attn_do` asked "Do you want to proceed?". Rig and runs:
+  seed `s-ynb430`.
 - Under `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1`, auto mode checks each REPL
   script once before execution and does not apply `mcp__attn__…` allow rules to
   calls inside the script.
@@ -189,8 +200,9 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
   `--disallowed-tools ListAgents` causes shell `attn agent list` calls to be
   refused as `[Undermining Oversight]`, so attn disallows no tool and relies on
   launch instructions instead. Auto mode also refuses shell `attn ask close` +
-  `attn seed harvest` for asks not created in the session's transcript (a
-  script that calls `ask_close` under the allow rule does not reach it).
+  `attn seed harvest` for asks not created in the session's transcript (the same
+  close as an `attn_do` script, asked for by the user, was not denied; see the
+  classifier bullet above).
 - `autoMode.allow` merges policy + `--settings` + user settings (not project
   settings); omitting `"$defaults"` when setting `allow` drops Claude's 16
   built-in defaults (`claude [--settings <json>] auto-mode config` prints the
