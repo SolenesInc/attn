@@ -19,6 +19,8 @@ const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 const driver = createWindowDriver({ appPath: options.appPath, client });
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
+runner.registerFailureEvidence('native_screenshot', () => driver.screenshot(path.join(runner.runDir, 'failure-native.png')));
+runner.registerFailureEvidence('native_tree', async () => runner.writeJson('failure-tree.json', await driver.tree()));
 
 const ORIGINAL = '# Undo probe\n\nThe original line.\n';
 const TYPED = 'Typed in attn.';

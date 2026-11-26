@@ -18,6 +18,7 @@ use attn_protocol::{
 };
 use rune::Tx;
 
+pub(crate) use finder::take_keyboard as finder_takes_keyboard;
 pub use model::Notebook;
 pub(crate) use root_picker::{overlay as root_picker_overlay, trigger as root_picker};
 pub(crate) use view::{fullscreen, tile_body};

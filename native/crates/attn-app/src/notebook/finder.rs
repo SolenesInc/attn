@@ -55,6 +55,15 @@ pub(crate) fn open(state: &mut State, id: SurfaceId, tx: &mut Tx) {
     );
 }
 
+/// The finder open over editor tile `tile`, if there is one, takes the keyboard the tile was
+/// given.
+pub(crate) fn take_keyboard(state: &State, tile: &str, tx: &mut Tx) {
+    let over = |f: &Finder| matches!(&f.surface, SurfaceId::Tile(t) if t == tile);
+    if state.notebook.finder.as_ref().is_some_and(over) {
+        tx.focus(FIELD, false);
+    }
+}
+
 pub(crate) fn close(state: &mut State, _: &mut Tx) {
     state.notebook.finder = None;
     state.notebook.revision += 1;

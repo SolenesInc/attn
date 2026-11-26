@@ -520,42 +520,73 @@ fn an_editor_tile_opened_from_home_brings_its_desktop_and_the_tile_on_screen() {
 }
 
 #[test]
-fn an_editor_tile_opened_from_home_types_into_its_finder_whichever_reaches_the_app_first() {
-    for arrangement_first in [false, true] {
-        let disk = Disk::default();
-        let mut world = start_with(&disk, Some(row(vec![pane("a")])));
-        world.daemon.on(
-            "desktop_show_leaf",
-            |_| json!({ "event": "profile_action_result", "success": true }),
-        );
+fn an_editor_tile_opened_from_home_types_into_its_finder_when_the_dock_reply_comes_first() {
+    types_into_the_new_tiles_finder(true, false);
+}
+
+#[test]
+fn an_editor_tile_opened_from_home_types_into_its_finder_when_the_arrangement_comes_first() {
+    types_into_the_new_tiles_finder(true, true);
+}
+
+#[test]
+fn an_editor_tile_opened_on_its_desktop_types_into_its_finder_when_the_dock_reply_comes_first() {
+    types_into_the_new_tiles_finder(false, false);
+}
+
+#[test]
+fn an_editor_tile_opened_on_its_desktop_types_into_its_finder_when_the_arrangement_comes_first() {
+    types_into_the_new_tiles_finder(false, true);
+}
+
+/// Opens an editor tile from Home or from its desktop, with the daemon's arrangement reaching
+/// the app before or after the dock reply, and checks the finder takes typing and Escape.
+fn types_into_the_new_tiles_finder(from_home: bool, arrangement_first: bool) {
+    let disk = Disk::default();
+    let mut world = start_with(&disk, Some(row(vec![pane("a")])));
+    world.daemon.on(
+        "desktop_show_leaf",
+        |_| json!({ "event": "profile_action_result", "success": true }),
+    );
+    if from_home {
         world.gesture(|d| d.click(Target::key("sidebar.home")));
-        world
-            .daemon
-            .answer_in_turn("desktop_dock_tile", [Answer::Hold]);
-        world
-            .automate("run", json!({ "name": "notebook.openTile" }))
-            .unwrap();
-        world.settle();
-        let dock = world.daemon.sent_of("desktop_dock_tile").pop().unwrap();
-        let tile = dock["tile_id"].as_str().unwrap().to_owned();
-        let params = dock["tile_params"].as_str().unwrap_or("").to_owned();
-        let docked = || row(vec![pane("a"), editor_tile(&tile, &params)]);
-        let reply = json!({ "event": "profile_action_result", "success": true });
-        if arrangement_first {
-            arrange(&mut world, docked(), 2);
-            world.daemon.reply_to(&dock, reply);
-        } else {
-            world.daemon.reply_to(&dock, reply);
-            world.settle();
-            arrange(&mut world, docked(), 2);
-        }
-        world.settle();
-        assert_eq!(
-            world.screen().focused().and_then(|n| n.key).as_deref(),
-            Some("notebook.finder.field"),
-            "arrangement first: {arrangement_first}"
-        );
+    } else {
+        world.gesture(|d| d.click(Target::key("terminal.r-a")));
     }
+    world
+        .daemon
+        .answer_in_turn("desktop_dock_tile", [Answer::Hold]);
+    world
+        .automate("run", json!({ "name": "notebook.openTile" }))
+        .unwrap();
+    world.settle();
+    let dock = world.daemon.sent_of("desktop_dock_tile").pop().unwrap();
+    let tile = dock["tile_id"].as_str().unwrap().to_owned();
+    let params = dock["tile_params"].as_str().unwrap_or("").to_owned();
+    let docked = || row(vec![pane("a"), editor_tile(&tile, &params)]);
+    let reply = json!({ "event": "profile_action_result", "success": true });
+    if arrangement_first {
+        arrange(&mut world, docked(), 2);
+        world.daemon.reply_to(&dock, reply);
+    } else {
+        world.daemon.reply_to(&dock, reply);
+        world.settle();
+        arrange(&mut world, docked(), 2);
+    }
+    arrange(&mut world, docked(), 3);
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some("notebook.finder.field"),
+        "from home: {from_home}, arrangement first: {arrangement_first}"
+    );
+    world.gesture(|d| d.press("escape"));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("notebook.finder.field"))
+            .is_none(),
+        "Escape closes the finder; from home: {from_home}, arrangement first: {arrangement_first}"
+    );
 }
 
 #[test]

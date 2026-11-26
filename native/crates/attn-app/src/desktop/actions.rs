@@ -562,6 +562,7 @@ fn is_active(state: &State, desktop: &str, leaf: &str) -> bool {
 pub(crate) fn give_keyboard(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
     tx.blur();
     hold_keyboard(state, desktop, leaf);
+    crate::notebook::finder_takes_keyboard(state, leaf, tx);
 }
 
 fn hold_keyboard(state: &mut State, desktop: &str, leaf: &str) {
