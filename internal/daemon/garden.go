@@ -459,6 +459,15 @@ func (g gardenRead) seed(seed garden.Seed, doc docstore.Document) protocol.Seed 
 func (g gardenRead) seedWithoutBody(seed garden.Seed, doc docstore.Document) protocol.Seed {
 	wire := g.seedToProtocol(seed, doc)
 	wire.PlotProgress = g.progress(seed.ID)
+	if wire.PlotProgress != nil {
+		closed := 0
+		for _, child := range g.plots.Children(seed.ID) {
+			if g.plots.IsHiddenClosed(child) {
+				closed++
+			}
+		}
+		wire.HiddenClosedChildren = protocol.Ptr(closed)
+	}
 	wire.Checks = g.checks(seed.ID)
 	wire.SharedChecks = g.sharedChecks(seed.ID)
 	return wire

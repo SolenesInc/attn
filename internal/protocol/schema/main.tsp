@@ -6017,6 +6017,8 @@ model Seed {
   // whole garden on every read and push, like `ready`, so a crown row renders
   // progress instead of re-deriving the readiness rules.
   "plot_progress"?: SeedPlotProgress;
+  // Direct closed children that have no open work below them. Present on plots.
+  "hidden_closed_children"?: int32;
   // What this seed must prove: its own checks, then those inherited from the
   // plots above it, each with its state. Computed by the daemon on every read
   // and push, like `ready`. Absent when the seed has none.

@@ -300,3 +300,51 @@ func TestGardenSeedsPageLookupAndClosedCounts(t *testing.T) {
 		}
 	})
 }
+
+func TestGardenPlotPushCountsOnlyDirectHiddenClosedChildren(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		outer := plantSeedAs(t, cli, "", "Release")
+		inner := plantSeedAs(t, cli, "", "Packaging")
+		archived := plantSeedAs(t, cli, "", "Build the package")
+		edgeLink(t, cli, inner, "part-of", outer)
+		edgeLink(t, cli, archived, "part-of", inner)
+		lifeMove(t, cli, "", archived, "harvest", "built", "")
+
+		kept := plantSeedAs(t, cli, "", "Published package")
+		edgeLink(t, cli, kept, "part-of", inner)
+		lifeMove(t, cli, "", kept, "harvest", "published", "")
+		followUp := plantSeedAs(t, cli, "", "Document how to install it")
+		edgeLink(t, cli, followUp, "part-of", kept)
+
+		app := w.App()
+		requireCount := func(seeds []protocol.Seed, id string, want int) {
+			t.Helper()
+			idx := slices.IndexFunc(seeds, func(s protocol.Seed) bool { return s.ID == id })
+			if idx < 0 {
+				t.Fatalf("missing plot %s in %v", id, lifeSeedIDs(seeds))
+			}
+			got := seeds[idx].HiddenClosedChildren
+			if got == nil || *got != want {
+				t.Errorf("plot %s hidden closed children = %v, want %d", id, protocol.Deref(got), want)
+			}
+		}
+
+		requireCount(app.Initial.Seeds, outer, 0)
+		requireCount(app.Initial.Seeds, inner, 1)
+		page := testworld.Request(app, protocol.GardenSeedsPageMessage{
+			Cmd: protocol.CmdGardenSeedsPage, RequestID: "inner-history", PlotID: &inner,
+		}, protocol.EventGardenSeedsPageResult, func(m protocol.GardenSeedsPageResultMessage) bool {
+			return m.RequestID == "inner-history"
+		})
+		if !page.Success || page.Total != 1 || !slices.Equal(lifeSeedIDs(page.Seeds), []string{archived}) {
+			t.Fatalf("archive page = %+v, want only %s", page, archived)
+		}
+
+		lifeMove(t, cli, "", followUp, "harvest", "documented", "")
+		requireCount(nextGardenChange(app).Seeds, inner, 2)
+
+		lifeMove(t, cli, "", followUp, "replant", "", "")
+		requireCount(nextGardenChange(app).Seeds, inner, 1)
+	})
+}

@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "e9d2c174d29a";
+pub const PROTOCOL_VERSION: &str = "c9ce8188f539";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -9442,6 +9442,8 @@ pub struct Seed {
     pub gate: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub harvest_when: Option<SeedHarvestCondition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hidden_closed_children: Option<i64>,
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_execution_id: Option<SessionID>,
@@ -10254,6 +10256,8 @@ pub struct SeedPlantResult {
     pub gate: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub harvest_when: Option<SeedHarvestCondition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hidden_closed_children: Option<i64>,
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_execution_id: Option<SessionID>,

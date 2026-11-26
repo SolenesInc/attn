@@ -297,6 +297,9 @@ impl Place {
     }
 
     fn plot_closed_count(&self, state: &State, here: &Seed) -> usize {
+        if let Some(count) = here.hidden_closed_children {
+            return count.max(0) as usize;
+        }
         if let Some(bucket) = state
             .window
             .garden

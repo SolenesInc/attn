@@ -90,29 +90,6 @@ func gardenRelatedOf(seed garden.Seed, seeds []garden.Seed, plots garden.PlotTre
 	return out
 }
 
-func openAncestors(seeds []garden.Seed, plots garden.PlotTree) map[string]bool {
-	hasOpen := map[string]bool{}
-	for _, seed := range seeds {
-		if garden.Closed(seed.Status) {
-			continue
-		}
-		cur := seed
-		for range maxGardenParentHops {
-			parentID, ok := garden.ParentOf(cur)
-			if !ok || hasOpen[parentID] {
-				break
-			}
-			parent, exists := plots.Seed(parentID)
-			if !exists {
-				break
-			}
-			hasOpen[parentID] = true
-			cur = parent
-		}
-	}
-	return hasOpen
-}
-
 func addClosedTally(tally *protocol.GardenClosedTally, status string) {
 	switch status {
 	case garden.StatusHarvested:
@@ -123,7 +100,6 @@ func addClosedTally(tally *protocol.GardenClosedTally, status string) {
 }
 
 func gardenClosedCounts(read gardenRead) *protocol.GardenClosedCounts {
-	hasOpen := openAncestors(read.seeds, read.plots)
 	counts := &protocol.GardenClosedCounts{ByBed: []protocol.GardenBedClosedTally{}}
 	byBed := map[string]*protocol.GardenClosedTally{}
 	for _, seed := range read.seeds {
@@ -132,7 +108,7 @@ func gardenClosedCounts(read gardenRead) *protocol.GardenClosedCounts {
 				continue
 			}
 		}
-		if !garden.Closed(seed.Status) || hasOpen[seed.ID] {
+		if !read.plots.IsHiddenClosed(seed) {
 			continue
 		}
 		if seed.AutomationID > 0 {
@@ -297,10 +273,6 @@ func (d *Daemon) handleGardenSeedsPage(client *wsClient, profileID string, msg *
 		return
 	}
 	closedOrder := status == "closed"
-	var hasOpen map[string]bool
-	if closedOrder {
-		hasOpen = openAncestors(read.seeds, read.plots)
-	}
 	plotID := strings.TrimSpace(protocol.Deref(msg.PlotID))
 	bedScope := strings.TrimSpace(protocol.Deref(msg.Bed))
 	planter := strings.TrimSpace(protocol.Deref(msg.Planter))
@@ -327,7 +299,7 @@ func (d *Daemon) handleGardenSeedsPage(client *wsClient, profileID string, msg *
 
 	filtered := make([]garden.Seed, 0, len(pool))
 	for _, seed := range pool {
-		if closedOrder && (!garden.Closed(seed.Status) || hasOpen[seed.ID]) {
+		if closedOrder && !read.plots.IsHiddenClosed(seed) {
 			continue
 		}
 		if planter != "" && seed.Planter.String() != planter {

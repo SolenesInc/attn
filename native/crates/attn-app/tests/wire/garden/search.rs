@@ -746,3 +746,66 @@ fn fullscreen_columns_name_hidden_closed_children_and_keep_the_closed_toggle_for
     assert!(has_row(&world, "Archived task 0001"));
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn fullscreen_closed_count_counts_an_archived_seed_once_across_nested_columns() {
+    let live = vec![
+        with(tallied(plot("s-crown1", "Release", ""), 1, 0, 2), |s| {
+            s.hidden_closed_children = Some(0);
+        }),
+        with(
+            tallied(plot("s-mid111", "Packaging", "s-crown1"), 1, 0, 1),
+            |s| s.hidden_closed_children = Some(1),
+        ),
+        part_of("s-mid111", "s-leaf11", "Sign the package"),
+    ];
+    let archived = closed(
+        part_of("s-mid111", "s-done11", "Build the package"),
+        "harvested",
+    );
+    let d = daemon(live.clone(), Vec::new()).rewriting(|m| {
+        if m["event"] == "initial_state" {
+            m["seeds_total"] = serde_json::json!(4);
+        }
+    });
+    let mut history = live.clone();
+    history.push(archived.clone());
+    d.on("garden_seeds_page", move |r: &Request| {
+        page_reply(r, &history)
+    });
+
+    let mut world = open_garden_sized(d, TWO_COLUMNS);
+    click(&mut world, "Expand the garden");
+    open_row(&mut world, "Release");
+    open_row(&mut world, "Packaging");
+    open_row(&mut world, "Sign the package");
+
+    assert_eq!(closed_lens(&world), Some(("1 closed".into(), false)));
+    world.gesture(|app| app.click(Target::key("garden.closed")));
+    assert!(has_row(&world, "Build the package"));
+    assert_eq!(heading(&world).as_deref(), Some("Sign the package"));
+    assert_eq!(closed_lens(&world), Some(("hide 1 closed".into(), true)));
+    world.daemon.answer_in_turn(
+        "garden_seeds_page",
+        [
+            attn_testkit::Answer::Hold,
+            attn_testkit::Answer::Hold,
+            attn_testkit::Answer::Hold,
+        ],
+    );
+    let mut replanted = live;
+    for plot in &mut replanted[..2] {
+        let progress = plot.plot_progress.as_mut().unwrap();
+        progress.done = 0;
+        plot.hidden_closed_children = Some(0);
+    }
+    replanted.push(with(archived, |s| s.status = "planted".into()));
+    push_change(&mut world, &replanted, replanted.clone());
+
+    assert_eq!(closed_lens(&world), Some(("hide closed".into(), true)));
+    assert_eq!(heading(&world).as_deref(), Some("Sign the package"));
+    world.gesture(|app| app.click(Target::key("garden.closed")));
+    assert_eq!(closed_lens(&world), None);
+    assert!(has_row(&world, "Build the package"));
+    assert!(world.runtime_is_at_rest());
+}

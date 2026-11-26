@@ -20,10 +20,11 @@ type Progress struct {
 }
 
 type PlotTree struct {
-	seeds    []Seed
-	byID     map[string]Seed
-	children map[string][]Seed
-	blocked  map[string]bool
+	seeds     []Seed
+	byID      map[string]Seed
+	children  map[string][]Seed
+	blocked   map[string]bool
+	openBelow map[string]bool
 }
 
 func NewPlotTree(seeds []Seed) PlotTree {
@@ -33,7 +34,25 @@ func NewPlotTree(seeds []Seed) PlotTree {
 			children[parent] = append(children[parent], seed)
 		}
 	}
-	return PlotTree{seeds: seeds, byID: byID(seeds), children: children, blocked: blockedIDs(seeds)}
+	tree := PlotTree{seeds: seeds, byID: byID(seeds), children: children, blocked: blockedIDs(seeds), openBelow: map[string]bool{}}
+	for _, seed := range seeds {
+		if Closed(seed.Status) {
+			continue
+		}
+		for cur := seed; ; {
+			parentID, ok := ParentOf(cur)
+			if !ok || tree.openBelow[parentID] {
+				break
+			}
+			parent, exists := tree.Seed(parentID)
+			if !exists {
+				break
+			}
+			tree.openBelow[parentID] = true
+			cur = parent
+		}
+	}
+	return tree
 }
 
 func (t PlotTree) descendants(crownID string) []Seed {
@@ -64,6 +83,10 @@ func (t PlotTree) Seed(id string) (Seed, bool) {
 
 func (t PlotTree) Children(plotID string) []Seed {
 	return t.children[plotID]
+}
+
+func (t PlotTree) IsHiddenClosed(seed Seed) bool {
+	return Closed(seed.Status) && !t.openBelow[seed.ID]
 }
 
 func (t PlotTree) InPlot(crownID string) []Seed {

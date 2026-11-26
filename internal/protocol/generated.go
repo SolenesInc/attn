@@ -10457,6 +10457,10 @@ type Seed struct {
 	// HarvestWhen corresponds to the JSON schema field "harvest_when".
 	HarvestWhen *SeedHarvestCondition `json:"harvest_when,omitempty,omitzero"`
 
+	// HiddenClosedChildren corresponds to the JSON schema field
+	// "hidden_closed_children".
+	HiddenClosedChildren *int `json:"hidden_closed_children,omitempty,omitzero"`
+
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 
@@ -11562,6 +11566,10 @@ type SeedPlantResult struct {
 
 	// HarvestWhen corresponds to the JSON schema field "harvest_when".
 	HarvestWhen *SeedHarvestCondition `json:"harvest_when,omitempty,omitzero"`
+
+	// HiddenClosedChildren corresponds to the JSON schema field
+	// "hidden_closed_children".
+	HiddenClosedChildren *int `json:"hidden_closed_children,omitempty,omitzero"`
 
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
