@@ -73,9 +73,8 @@ commands:
     runs: home
     grant: own
     effect: act
-    upfront: true
     doc: |
-      Closes a session for good. A session may close itself and agents below it in its delegation chain, including delegates of delegates. The profile's Chief may close any agent of that profile. The reason is required because the session row stays in the ledger, and the reason is what the next reader gets. Without `compact` the close is immediate, so say what you have to say first. Pass a session's name or id, a seed id to close whoever tends it, or `self` to close yourself with no target.
+      Closes a session for good. Before you close yourself, read `{attn skill --reference wrap-up}`: it says what to check and record first. A session may close itself and agents below it in its delegation chain, including delegates of delegates. The profile's Chief may close any agent of that profile. The reason is required because the session row stays in the ledger, and the reason is what the next reader gets. Without `compact` the close is immediate, so say what you have to say first. Pass a session's name or id, a seed id to close whoever tends it, or `self` to close yourself with no target.
 
       When a session closes, each seed it tends keeps its tender and gets a note about the close. When `garden_v2_enabled` is on, closing another session instead parks its growing seeds that are not on standby. Seeds on standby still keep their tender with a note.
 
