@@ -427,7 +427,9 @@ func prepareLaunch(opts harness.DirectLaunchOpts) error {
 func generateHooksConfig(opts harness.DirectLaunchOpts) string {
 	var allow []string
 	if opts.AgentTools != nil {
-		allow = []string{"mcp__" + claudeAgentToolsServer + "__*"}
+		for _, tool := range []string{"attn_read", "skill", "ask"} {
+			allow = append(allow, "mcp__"+claudeAgentToolsServer+"__"+tool)
+		}
 	}
 	return hooks.Generate(string(opts.TerminalID), opts.SocketPath, opts.WrapperPath, claudeSettingsEnv(opts), allow)
 }

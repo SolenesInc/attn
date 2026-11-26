@@ -135,8 +135,8 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
   Claude falls back to `initialize` (`2025-11-25`) + `notifications/initialized`,
   accepts `405` on GET, and lists/calls tools.
 - Inline `--mcp-config` expands `Bearer ${ATTN_AGENT_CREDENTIAL}` from env
-  without exposing the token in `ps`. `permissions.allow: ["mcp__attn__*"]`
-  approves direct calls in auto mode. Background subagents inherit the parent
+  without exposing the token in `ps`. A `permissions.allow` rule such as
+  `mcp__attn__attn_read` approves that tool's calls in auto mode. Background subagents inherit the parent
   credential; the server survives `/clear` and daemon restarts without
   reconnecting.
 - **First-turn MCP race `[2.1.329–332]`:** interactive Claude sends its first
@@ -183,7 +183,7 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
   default mode an MCP tool without a rule always asks. `autoMode` is read from
   user, flag and policy settings only.
 - Under `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1`, auto mode checks each REPL
-  script once before execution and does not apply `mcp__attn__*` allow rules to
+  script once before execution and does not apply `mcp__attn__…` allow rules to
   calls inside the script.
 - Auto mode sends permission rules to its classifier `[2.1.332]`: passing
   `--disallowed-tools ListAgents` causes shell `attn agent list` calls to be

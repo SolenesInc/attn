@@ -345,8 +345,9 @@ func TestALaunchedClaudeCallsTheToolsAsItsSessionWithACredentialOnlyItsEnvironme
 			var parsed struct {
 				Permissions struct{ Allow []string } `json:"permissions"`
 			}
-			if err := json.Unmarshal([]byte(settings), &parsed); err != nil || !slices.Contains(parsed.Permissions.Allow, "mcp__attn__*") {
-				t.Errorf("claude launched with --settings allowing %v (%v), want mcp__attn__*", parsed.Permissions.Allow, err)
+			want := []string{"mcp__attn__attn_read", "mcp__attn__skill", "mcp__attn__ask"}
+			if err := json.Unmarshal([]byte(settings), &parsed); err != nil || !slices.Equal(parsed.Permissions.Allow, want) {
+				t.Errorf("claude launched with --settings allowing %v (%v), want %v", parsed.Permissions.Allow, err, want)
 			}
 
 			agent.mustCall(t, "seed_note", map[string]any{"seed": seed, "text": "From the launched claude."})
