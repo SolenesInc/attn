@@ -1,0 +1,1 @@
+Fixes the red main from `TestCodexResumeFromATerminalWithNoConversationYetReopensTheClosedSession`. The test typed by the session `/resume` had just retired and raced the pane move; attn itself was not at fault. It now types into the reopened session, its last wait no longer matches an update from before the close, and it runs in the landing tests.
