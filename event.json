@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Marked-read receipt can omit inbox item IDs",
+  "at": "2026-11-26T01:06:09.523Z",
+  "detail": "An isolated MCP check marked 50 inbox items read but received 33 IDs. A second unread batch returned zero, and by-ID retrieval worked when given an omitted ID. The compact per-read receipt limit drops identities despite room in the full response. Preserve every identity before allocating space to message text and metadata. Evidence on s-zqrc7w.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/agent_script.go",
+    "line": 324
+  },
+  "culprit": "899665d1bd360684e547e4927e51d9edc3513de3"
+}
