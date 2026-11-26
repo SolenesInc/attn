@@ -184,7 +184,6 @@ fn set_order(
     );
 }
 
-/// Opens find in the terminal holding the keyboard; false when no terminal holds it.
 /// Opens the find bar of the tile holding the keyboard: a terminal's, or a document's.
 pub(crate) fn find(state: &mut State, tx: &mut Tx) -> bool {
     let Some(id) = state.window.keyboard_terminal(&state.facts) else {

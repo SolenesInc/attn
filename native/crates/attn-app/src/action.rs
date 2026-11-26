@@ -294,7 +294,7 @@ actions! {
     ShelfCarryRight = "shelf.carryRight", Panes, "Carry tile right along the row";
     ShelfSendToShelf = "shelf.sendToShelf", Panes, "Send tile to the shelf";
     TilePopOut = "tile.popOut", Panes, "Pop out or bring back tile";
-    TerminalFind = "terminal.find", Panes, "Find in terminal";
+    TerminalFind = "terminal.find", Panes, "Find in terminal or document";
     TerminalLabelIds = "terminal.labelIds", Panes, "Label the ids on screen";
 
     MarkdownSendAnnotations = "markdown.sendAnnotations", Markdown, "Send annotations to session";
@@ -370,7 +370,6 @@ impl Action {
                 | Action::TerminalFocusRight
                 | Action::TerminalFocusUp
                 | Action::TerminalFocusDown
-                | Action::TerminalFind
                 | Action::TerminalLabelIds
                 | Action::TerminalSendAnnotations
         )

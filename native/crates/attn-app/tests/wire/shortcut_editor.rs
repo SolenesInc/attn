@@ -386,7 +386,7 @@ fn a_rebound_row_is_marked_customized_and_offers_its_default() {
 #[test]
 fn the_shortcuts_that_need_a_terminal_say_so_customized_or_not() {
     let mut world = start(Some(
-        json!({"terminal.find": {"key": "y", "meta": true, "alt": true}}),
+        json!({"terminal.toggleZoom": {"key": "y", "meta": true, "alt": true}}),
     ));
     open_editor(&mut world);
 
@@ -396,8 +396,9 @@ fn the_shortcuts_that_need_a_terminal_say_so_customized_or_not() {
         "needs terminal"
     ));
     assert!(!badge(&world, &Action::SessionNew, "needs terminal"));
-    assert!(badge(&world, &Action::TerminalFind, "customized"));
-    assert!(badge(&world, &Action::TerminalFind, "needs terminal"));
+    assert!(!badge(&world, &Action::TerminalFind, "needs terminal"));
+    assert!(badge(&world, &Action::TerminalToggleZoom, "customized"));
+    assert!(badge(&world, &Action::TerminalToggleZoom, "needs terminal"));
 }
 
 #[test]
