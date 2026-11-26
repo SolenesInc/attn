@@ -1,0 +1,1 @@
+After a running Claude process uses /resume to enter another conversation, attn now describes the process that is actually running there. The session takes the process's launch intent, so a process without the MCP tools is told to run attn CLI lines, and one with them is told to call functions, instead of following whatever that conversation was first launched with.
