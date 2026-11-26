@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/script"
 	"github.com/victorarias/attn/internal/testworld"
@@ -322,22 +325,67 @@ func TestMailAScriptReturnsIsInItsAnswerOnce(t *testing.T) {
 func TestAnInboxTooLongForTheAnswerStillNamesEveryMessageItMarkedRead(t *testing.T) {
 	s := newSessionTools(t)
 	s.w.Launched(s.session)
-	other := s.w.Spawn(s.app, fakeagent.Claude, s.w.Path("blog"))
-	s.w.Launched(other)
-	sender := agentToolsCaller{w: s.w, bearer: terminalCredential(t, s.w, s.app.Terminal(other))}
-	sent, failed := sender.script(t, "attn_do", fmt.Sprintf("const ids = [];\nfor (let n = 0; n < 20; n++) { ids.push(agent_msg({target: %q, text: n + ' ' + 'm'.repeat(%d)}).message_id) }\nreturn ids", s.session, protocol.AgentMessageMaxChars-3))
-	said, _ := scriptAnswer(t, sent)
-	var ids []string
-	if err := json.Unmarshal([]byte(said), &ids); failed || err != nil || len(ids) != 20 {
-		t.Fatalf("sending 20 of the longest messages answered %.300s: %v", sent, err)
+	seed := plantForTools(t, s.w)
+	sentSoFar := 0
+	fillInbox := func(messages int) []string {
+		t.Helper()
+		var ids []string
+		for len(ids) < messages {
+			other := s.w.Spawn(s.app, fakeagent.Claude, s.w.Path("blog"))
+			s.w.Launched(other)
+			sender := agentToolsCaller{w: s.w, bearer: terminalCredential(t, s.w, s.app.Terminal(other))}
+			count := min(8, messages-len(ids))
+			sent, failed := sender.script(t, "attn_do", fmt.Sprintf("const ids = [];\nfor (let n = 0; n < %d; n++) { ids.push(agent_msg({target: %q, text: (%d + n) + ' ' + 'm'.repeat(%d)}).message_id) }\nreturn ids", count, s.session, sentSoFar, protocol.AgentMessageMaxChars-4))
+			said, _ := scriptAnswer(t, sent)
+			var batch []string
+			if err := json.Unmarshal([]byte(said), &batch); failed || err != nil || len(batch) != count {
+				t.Fatalf("sending %d of the longest messages answered %.300s: %v", count, sent, err)
+			}
+			ids = append(ids, batch...)
+			sentSoFar += count
+		}
+		return ids
 	}
-	text, _ := s.agent.script(t, "attn_read", "agent_inbox();\nreturn 'read'")
-	if length := len([]rune(text)); length > 100_000 {
-		t.Errorf("the answer holds %d characters, past what a tool answer holds", length)
+	reads := []struct {
+		what, tool, source string
+		messages           int
+	}{
+		{"reads the most messages one call can", "attn_read", fmt.Sprintf("agent_inbox({limit: %d});\nreturn 'read'", inbox.MaxInboxLimit), inbox.MaxInboxLimit},
 	}
-	for _, id := range ids {
-		if !strings.Contains(text, id) {
-			t.Errorf("the answer does not name message %s, which the script marked read:\n%.2000s", id, text)
+	noted, _ := s.agent.script(t, "attn_do", fmt.Sprintf("for (let n = 0; n < 1000; n++) { seed_note({seed: %q, text: 'n'.repeat(200)}) }", seed))
+	limit := regexp.MustCompile(`at most (\d+) characters of changes`).FindStringSubmatch(noted)
+	_, attn := scriptAnswer(t, noted)
+	_, ledger, _ := strings.Cut(attn, "changed:\n")
+	if limit == nil || ledger == "" {
+		t.Fatalf("notes until the limit answered %.500s", noted)
+	}
+	ledgerLimit, _ := strconv.Atoi(limit[1])
+	noteLine := len([]rune(strings.SplitN(ledger, "\n", 2)[0])) + len("\n")
+	children := make([]map[string]string, 150)
+	for n := range children {
+		children[n] = map[string]string{"title": fmt.Sprintf("Child %d of a plot whose receipt is as long as a receipt in the ledger can be", n), "body": fmt.Sprintf("Do part %d.", n)}
+	}
+	plot, _ := json.Marshal(map[string]any{"title": "A plot with many children", "body": "Split the work.", "children": children})
+	reads = append(reads, struct {
+		what, tool, source string
+		messages           int
+	}{"reads the most messages one call can, then fills its changes up to the limit and ends on a long receipt", "attn_do", fmt.Sprintf("agent_inbox({limit: %d});\nfor (let n = 0; n < %d; n++) { seed_note({seed: %q, text: 'n'.repeat(200)}) }\nseed_plot({plot: %s});\nreturn 'planned'", inbox.MaxInboxLimit, ledgerLimit/noteLine-1, seed, plot), inbox.MaxInboxLimit})
+	for _, read := range reads {
+		what := read.what
+		ids := fillInbox(read.messages)
+		text, _ := s.agent.script(t, read.tool, read.source)
+		if length := len([]rune(text)); length > script.ResultText {
+			t.Errorf("a script that %s got %d characters, past what a tool answer holds", what, length)
+		}
+		_, attn := scriptAnswer(t, text)
+		var missing []string
+		for _, id := range ids {
+			if !strings.Contains(attn, id) {
+				missing = append(missing, id)
+			}
+		}
+		if len(missing) > 0 {
+			t.Errorf("a script that %s marked %d messages read and its answer names %d of them; missing %v:\n%.1500s", what, len(ids), len(ids)-len(missing), missing, attn)
 		}
 	}
 }

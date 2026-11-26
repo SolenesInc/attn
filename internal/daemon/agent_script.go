@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/catalog"
 	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/mcpserver"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/script"
 	"github.com/victorarias/attn/internal/stepclock"
 )
@@ -237,8 +238,8 @@ func (run *scriptRun) result(out script.Output) mcpserver.Result {
 	if utf8.RuneCountInString(joinParts([]string{said, threw}, "\n\n"))+out.Dropped > room-utf8.RuneCountInString(attnSays) {
 		attnSays = run.attnLines(out, failed, run.unshownReads(""))
 	}
+	readsRoom := room - utf8.RuneCountInString(run.attnLines(out, failed, "")) - len("\n\n") - len("…")
 	if utf8.RuneCountInString(attnSays) > room {
-		readsRoom := room - utf8.RuneCountInString(run.attnLines(out, failed, "")) - len("\n\n") - len("…")
 		attnSays = run.attnLines(out, failed, cutEnd(run.shortReads(), max(0, readsRoom)))
 	}
 	output, leftOut := fitScriptText(said, threw, out.Dropped, saidShortened+threwShortened, room-utf8.RuneCountInString(attnSays))
@@ -337,11 +338,29 @@ func (run *scriptRun) shortReads() string {
 	if len(run.readOnce) == 0 {
 		return ""
 	}
-	lines := []string{"marked read, with long text cut; agent_inbox({message: id}) reads one message whole:"}
+	ids := []string{"marked read; agent_inbox({message: id}) reads one message whole:"}
+	said := []string{"what they hold, with long text cut:"}
 	for _, read := range run.readOnce {
-		lines = append(lines, read.call+" -> "+ledgerValue(json.RawMessage(read.result), ledgerReceiptChars))
+		ids = append(ids, read.call+" -> "+strings.Join(inboxItemIDs(read.result), ", "))
+		said = append(said, read.call+" -> "+ledgerValue(json.RawMessage(read.result), math.MaxInt))
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(ids, "\n") + "\n\n" + strings.Join(said, "\n")
+}
+
+func inboxItemIDs(result string) []string {
+	var batch protocol.AgentInboxBatchResult
+	_ = json.Unmarshal([]byte(result), &batch)
+	var ids []string
+	for _, item := range batch.Items {
+		ids = append(ids, item.ItemID)
+	}
+	if batch.Item != nil {
+		ids = append(ids, batch.Item.ItemID)
+	}
+	if batch.Message != nil {
+		ids = append(ids, batch.Message.MessageID)
+	}
+	return ids
 }
 
 func (run *scriptRun) ledgerText() string {
