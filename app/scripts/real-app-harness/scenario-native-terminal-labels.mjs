@@ -48,10 +48,7 @@ try {
   let desktop;
   await runner.step('make_a_desktop', async () => {
     desktop = await observer.createDesktop();
-    runner.registerCleanup('close_desktop', () => {
-      const left = observer.desktop(desktop.id);
-      return left && observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
-    });
+    runner.registerCleanup('close_desktop', () => observer.closeDesktop(desktop.id));
     if (launcher) runner.registerCleanup('restore_current_desktop', () => observer.returnToDesktop(launcher));
     await driver.click({ key: `sidebar.desktop.${desktop.id}` });
     await driver.waitFor({ key: 'launcher.path.field' });

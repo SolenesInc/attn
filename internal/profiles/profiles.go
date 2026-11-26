@@ -45,6 +45,7 @@ type Desktop struct {
 	ProfileID    string
 	Name         string
 	ShortcutSlot int
+	Ephemeral    bool
 	OrderKey     string
 	Tree         layouttree.Node
 	ActivePaneID string

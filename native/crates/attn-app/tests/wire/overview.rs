@@ -67,6 +67,7 @@ fn desktop(slot: u32, active: &str, tree: Option<Value>) -> Desktop {
             })
             .collect(),
         revision: 1,
+        ..Desktop::default()
     }
 }
 

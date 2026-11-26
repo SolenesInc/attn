@@ -24,12 +24,11 @@ Each time a trigger fires is an occurrence, and each occurrence gets one run.
 
 ## Create an automation
 
-Open the automations drawer with the Automations button at the top of the
-sidebar, or "Show automations" in the command palette (Cmd+Shift+K,
+Open the automations drawer with the Automations button in the title bar, **all** in the desktop sidebar's **Automations** heading, or "Show automations" in the command palette (Cmd+Shift+K,
 Ctrl+Alt+K on Linux). Click **New automation** and fill in:
 
 - **Name**, and the **Trigger** with its settings (below).
-- **Runs as**. The harness, model, effort, and launch desktop where its agents start. Automations offer every harness that supports auto-approve (see [Harnesses](harnesses.md)). By default, runs start on a new desktop named after the automation.
+- **Runs as**. The harness, model, effort, and launch desktop where its agents start. Automations offer every harness that supports auto-approve (see [Harnesses](harnesses.md)). By default, runs start on an unnumbered desktop named after the automation, created when a run starts and removed 30 seconds after its last run ends and you leave it.
 - **Prompt**. The instruction the agent receives. Details of the occurrence,
   such as the pull request, arrive separately as data, and Attn never changes the prompt with them.
 
@@ -96,9 +95,21 @@ Automations group under the queue that lists each automation with its runs.
 A run that stopped and is owed a turn shows a count beside its automation,
 and the group's header offers "N runs need you". Click it, or press
 Cmd+Shift+J (Ctrl+Alt+J on Linux), to open the next run that needs you. Press
-the same keys again to open the run after that. Settle a run with ✓ on its row or Cmd+Shift+E
-(Ctrl+Alt+E on Linux), as you would any agent. In desktop flow, runs are
-tiles on their launch desktop like any other agent.
+the same keys again to open the run after that.
+
+In [desktop flow](desktops.md), runs on an unnumbered desktop that holds only
+automation runs appear in a unified **Automations** section below your desktops
+instead of adding separate desktops to your desktop list. Runs that need you,
+are working, or are currently on screen stay visible, and finished off-screen
+runs fold behind a disclosure row. Click the waiting count in the heading, or
+press Cmd+Shift+J (Ctrl+Alt+J on Linux), to open the next run that needs you.
+Click **all** to open the automations drawer. When you collapse the sidebar, a
+single ⚡ chip on the rail represents these runs. A run on a numbered desktop,
+or on a desktop that also holds another agent or tile, stays under that desktop
+like any other agent.
+
+In either flow, settle a run with ✓ on its row or Cmd+Shift+E (Ctrl+Alt+E on
+Linux), as you would any agent.
 
 In the drawer, click an automation to see its runs: state (pending,
 delivered, failed or cancelled), when it started, and a click through to its

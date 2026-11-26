@@ -48,6 +48,7 @@ pub(super) fn desktop(
             })
             .collect(),
         revision: 1,
+        ..Desktop::default()
     }
 }
 

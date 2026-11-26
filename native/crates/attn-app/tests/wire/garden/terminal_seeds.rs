@@ -49,6 +49,7 @@ fn desktop(tree_json: String) -> Desktop {
         active_pane_id: "a".into(),
         panes: vec![agent_pane("a", "s1")],
         revision: 1,
+        ..Desktop::default()
     }
 }
 

@@ -193,10 +193,7 @@ try {
   const made = await observer.profileCommand('desktop_create', { profile_id: observer.profileId, shortcut_slot: slot });
   const desktopId = made.desktops?.[0]?.id;
   runner.assert(desktopId, 'the scenario makes its own desktop', made);
-  runner.registerCleanup('close_scenario_desktop', () => {
-    const left = observer.desktop(desktopId);
-    return left && observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
-  });
+  runner.registerCleanup('close_scenario_desktop', () => observer.closeDesktop(desktopId));
   const startedOn = observer.currentDesktopId();
   if (startedOn) runner.registerCleanup('restore_current_desktop', () => observer.returnToDesktop(startedOn));
   await observer.returnToDesktop(desktopId);

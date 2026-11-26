@@ -1986,3 +1986,36 @@ fn a_capped_agent_offers_to_change_its_cap_and_a_shell_offers_none() {
     world.gesture(|app| app.type_text("context window"));
     assert!(titles(&world).is_empty(), "Sigma takes no context cap");
 }
+
+#[test]
+fn the_agents_face_keeps_settled_automation_runs_on_unslotted_desktops() {
+    let run = Session {
+        automation: Some(AutomationProvenance {
+            definition_name: "Nightly audit".into(),
+            run_id: "run-unslotted".into(),
+            trigger_type: "schedule".into(),
+            ..AutomationProvenance::default()
+        }),
+        ..session("nightly-run")
+    };
+    let mut auto_desktop = desktop(
+        "d-auto",
+        "work",
+        0,
+        vec![DesktopPane {
+            desktop_id: "d-auto".into(),
+            ..agent_pane("nightly-run")
+        }],
+    );
+    auto_desktop.shortcut_slot = None;
+    let init = initial(
+        vec![
+            desktop("d1", "work", 1, vec![agent_pane("regular")]),
+            auto_desktop,
+        ],
+        vec![session("regular"), run],
+    );
+    let mut world = World::start(daemon(init, vec![]));
+    open_agents(&mut world);
+    assert_eq!(titles(&world), ["regular", "nightly-run"]);
+}

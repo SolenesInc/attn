@@ -500,8 +500,10 @@ func (s *Store) ProfileArrangementSeq(id string) (profiles.Profile, []profiles.D
 		if profile, err = loadProfile(tx, id); err != nil {
 			return err
 		}
-		desktops, err = listDesktops(tx, id)
-		return err
+		if desktops, err = listDesktops(tx, id); err != nil {
+			return err
+		}
+		return markEphemeralDesktops(tx, id, desktops)
 	})
 	return profile, desktops, seq, err
 }
@@ -521,7 +523,9 @@ func deleteProfileDesktops(tx *sql.Tx, profileID string) error {
 	if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id IN (SELECT id FROM desktops WHERE profile_id = ?)`, profileID); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM launch_desktops WHERE desktop_id IN (SELECT id FROM desktops WHERE profile_id = ?)`, profileID); err != nil {
+	if _, err := tx.Exec(`DELETE FROM launch_desktops WHERE desktop_id IN (SELECT id FROM desktops WHERE profile_id = ?)
+		OR (kind = 'crew' AND item_id IN (SELECT member_key FROM crew_members WHERE profile_id = ?))
+		OR (kind = 'automation' AND item_id IN (SELECT CAST(id AS TEXT) FROM automation_definitions WHERE profile_id = ?))`, profileID, profileID, profileID); err != nil {
 		return err
 	}
 	_, err := tx.Exec(`DELETE FROM desktops WHERE profile_id = ?`, profileID)
@@ -664,8 +668,10 @@ func (s *Store) GetDesktop(id string) (profiles.Desktop, error) {
 	var desktop profiles.Desktop
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
 		var err error
-		desktop, err = loadDesktop(tx, id)
-		return err
+		if desktop, err = loadDesktop(tx, id); err != nil {
+			return err
+		}
+		return loadDesktopEphemeral(tx, &desktop)
 	})
 	return desktop, err
 }
@@ -698,6 +704,9 @@ func (s *Store) editDesktopRow(id string, edit func(tx *sql.Tx, desktop *profile
 		if desktop, err = loadDesktop(tx, id); err != nil {
 			return err
 		}
+		if err := loadDesktopEphemeral(tx, &desktop); err != nil {
+			return err
+		}
 		if err := edit(tx, &desktop); err != nil {
 			return err
 		}
@@ -708,10 +717,15 @@ func (s *Store) editDesktopRow(id string, edit func(tx *sql.Tx, desktop *profile
 
 func (s *Store) RenameDesktop(id, name string) (profiles.Desktop, error) {
 	return s.editDesktopRow(id, func(tx *sql.Tx, desktop *profiles.Desktop) error {
-		if desktop.Name == strings.TrimSpace(name) {
+		trimmed := strings.TrimSpace(name)
+		if desktop.Name == trimmed && !desktop.Ephemeral {
 			return nil
 		}
-		desktop.Name = strings.TrimSpace(name)
+		desktop.Name = trimmed
+		desktop.Ephemeral = false
+		if _, err := tx.Exec(`UPDATE desktops SET ephemeral = 0 WHERE id = ?`, desktop.ID); err != nil {
+			return err
+		}
 		return appendLaunchDesktopFacts(tx, desktop.ID)
 	})
 }
@@ -759,6 +773,9 @@ func (s *Store) SetDesktopOrder(profileID string, ids []string) ([]profiles.Desk
 		}
 		desktops, err := listDesktops(tx, profileID)
 		if err != nil {
+			return err
+		}
+		if err := markEphemeralDesktops(tx, profileID, desktops); err != nil {
 			return err
 		}
 		remaining := make(map[string]profiles.Desktop, len(desktops))

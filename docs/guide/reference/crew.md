@@ -77,18 +77,20 @@ named instance, `~/.attn-<instance>/crew/<key>/`) and run
 
 ## The Crew section
 
-The sidebar has a Crew section. In [queue flow](queue.md) it lists every
-member who is not retired, whether the member is in session or not. In desktop
-flow it lists the members who are between sessions and not retired. Members in
-session are tiles on their desktops.
+The sidebar has a **Crew** section. In [queue flow](queue.md), it lists every
+non-retired member as a row, whether the member is in session or between
+sessions. In [desktop flow](desktops.md), it shows every non-retired member as a
+compact pill above your desktops, and omits a member's solo unnumbered launch
+desktop from the desktop list so active members are not duplicated.
 
-- The row of a member between sessions shows a sun. Click it once to arm it and
-  again to start a session.
-- The row of a member in session has a ☾ that asks the member to file its letter
-  and close the session.
-- ••• on a row opens **Member details**. **manage** in the section header, or
-  "Manage crew" in the command palette (Cmd+Shift+K, Ctrl+Alt+K on Linux),
-  opens the same window.
+- A member between sessions shows a sun. Click it once to arm it and again to
+  start a session.
+- A member in session shows its state mark, any open ask count, and ••• for its
+  session menu, which includes **Ask \<member\> to close** and **Member details**.
+  In queue flow, its row also shows a ☾ button to ask the member to file its
+  letter and close.
+- **manage** in the section header, or "Manage crew" in the command palette
+  (Cmd+Shift+K, Ctrl+Alt+K on Linux), opens **Manage crew**.
 
 **Manage crew** has four tabs for each member:
 
@@ -145,7 +147,7 @@ sessions.
 
 ## Closing a session
 
-The ☾ in the sidebar, the close button in Manage crew, and
+**Ask \<member\> to close** in the member's sidebar menu (or ☾ on its row in queue flow), the close button in Manage crew, and
 `attn crew close <member>` all ask the member to finish its current work, write its letter and
 file it. The member ends its own session, and nothing stops the member mid-sentence.
 
@@ -172,7 +174,7 @@ It never touches the member's markdown files.
 
 | Flag | What it sets |
 |---|---|
-| `--launch-desktop <own\|digit\|name\|id>` | Where sessions start. `own` or an empty desktop digit creates a new desktop, and `--desktop-name` names the desktop. |
+| `--launch-desktop <own\|digit\|name\|id>` | Where sessions start. `own` assigns an unnumbered desktop created on demand when the member starts (or immediately if you also pass `--desktop-name`). An empty desktop digit creates that numbered desktop immediately. |
 | `--cwd <dir>` | The working folder. Without it, the member works in its home. |
 | `--agent <name>` | Any offered, available harness that takes an initial prompt (see [Harnesses](harnesses.md)). Every member needs a harness, so Attn refuses `--agent ""`. |
 | `--model <name>`, `--effort <level>` | The model and effort. `--model ""` goes back to `default_model_<harness>`, or `fable` on Claude Code when that is empty; `--model default` runs on the harness's own default. `--effort ""` goes back to the harness default. |
@@ -184,8 +186,9 @@ Claude Code's or Codex's config when a session starts, and the harness doesn't
 ask whether to trust it. With `--cwd`, Attn saves nothing and the harness asks as
 usual. A folder you marked untrusted in Codex stays untrusted.
 
-By default a member starts on its own desktop, named after the member. Attn
-creates that desktop when you add the member.
+By default, a member starts on its own unnumbered desktop named after the
+member. Attn creates that desktop when the member's session starts, and removes
+it 30 seconds after the session ends and you leave it.
 
 ## Applying changed settings
 

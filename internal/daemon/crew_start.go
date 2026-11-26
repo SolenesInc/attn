@@ -449,7 +449,11 @@ func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bo
 		}
 		setting := storeLaunchSetting(msg.LaunchDesktopSetting)
 		if msg.LaunchDesktop != nil {
-			chosen, err := d.launchDesktopFromRef(member.ProfileID, member.ID, *msg.LaunchDesktop, msg.LaunchDesktopName)
+			itemName := member.Name
+			if itemName == "" {
+				itemName = member.ID
+			}
+			chosen, err := d.launchDesktopFromRef(member.ProfileID, itemName, *msg.LaunchDesktop, msg.LaunchDesktopName)
 			if err != nil {
 				return nil, false, err
 			}

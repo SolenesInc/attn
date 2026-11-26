@@ -82,6 +82,7 @@ fn desktop(active: &str) -> Desktop {
         active_pane_id: active.into(),
         panes: vec![agent_pane("a"), agent_pane("b")],
         revision: 1,
+        ..Desktop::default()
     }
 }
 

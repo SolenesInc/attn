@@ -154,6 +154,23 @@ func (d *Daemon) deliverGitHubReviewRequests(host string, client *github.Client,
 		if pr == nil {
 			continue
 		}
+		latest, err := d.store.GetAutomationDefinition(definition.ID)
+		if err != nil {
+			d.logf("automation GitHub observation reload %d: %v", definition.ID, err)
+			return
+		}
+		if latest == nil || !latest.Enabled {
+			return
+		}
+		if latest.SpecJSON != definition.SpecJSON {
+			var parsed automation.DefinitionSpec
+			if err := json.Unmarshal([]byte(latest.SpecJSON), &parsed); err != nil {
+				d.logf("automation GitHub observation parse %d: %v", definition.ID, err)
+				return
+			}
+			spec = parsed
+		}
+		definition = *latest
 		run, err := d.claimReviewRequest(host, client, definition, spec, candidate, pr, observedAt)
 		if err != nil {
 			d.logf("automation GitHub observation %s: %v", candidate.SubjectKey, err)

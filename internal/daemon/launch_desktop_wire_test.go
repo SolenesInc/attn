@@ -28,8 +28,6 @@ func readLaunchSetting(app *testworld.Peer, kind, id string) protocol.LaunchDesk
 }
 
 // awaitDesktopRemoved waits, on a client that saw the desktop, for the arrangement without it.
-
-// awaitDesktopRemoved waits, on a client that saw the desktop, for the arrangement without it.
 func awaitDesktopRemoved(t *testing.T, w *world, profileID, desktopID string) {
 	t.Helper()
 	observer := w.AppOn(profileID)
@@ -141,8 +139,11 @@ func TestANewAutomationStartsOnItsOwnNamedDesktopWithoutTakingFocus(t *testing.T
 	spec := fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nname: Nightly check\ntrigger: {type: manual}\nprompt: Check locally.\nlaunch: {driver: claude}\nlocation: {type: directory, path: %q}\n", dir)
 	defined := applyAutomation(t, cli, spec)
 	own := protocol.Deref(defined.LaunchDesktop.DesktopID)
-	if desktop, exists := viewProfile(t, w, profile).desktops[own]; !exists || desktop.Name != "Nightly check" || desktop.ShortcutSlot != nil || protocol.Deref(defined.LaunchDesktop.Label) != "Nightly check (no ⌘ number)" {
-		t.Fatalf("default desktop %+v for %+v", desktop, defined.LaunchDesktop)
+	if own == "" || protocol.Deref(defined.LaunchDesktop.Label) != "Nightly check (no ⌘ number)" {
+		t.Fatalf("default launch desktop setting = %+v, want lazy own desktop label", defined.LaunchDesktop)
+	}
+	if _, exists := viewProfile(t, w, profile).desktops[own]; exists {
+		t.Fatalf("creating an automation eagerly created an empty desktop %s", own)
 	}
 	run, err := cli.AutomationRun(defined.ID, "first", "")
 	if err != nil {
@@ -150,7 +151,16 @@ func TestANewAutomationStartsOnItsOwnNamedDesktopWithoutTakingFocus(t *testing.T
 	}
 	session := protocol.Deref(run.SessionID)
 	w.Launched(string(session))
-	assertBackgroundPlacement(t, w, profile, string(session), own, current, active)
+	after := viewProfile(t, w, profile)
+	created, _ := after.paneOf(t, string(session))
+	if created.Name != "Nightly check" || created.ShortcutSlot != nil {
+		t.Fatalf("lazily created automation desktop = %+v, want unslotted Nightly check", created)
+	}
+	assertBackgroundPlacement(t, w, profile, string(session), created.ID, current, active)
+	rebound := readLaunchSetting(app, "automation", fmt.Sprint(defined.ID))
+	if protocol.Deref(rebound.Setting.DesktopID) != created.ID || protocol.Deref(rebound.Setting.Label) != "Nightly check (no ⌘ number)" {
+		t.Fatalf("launch setting after first run = %+v, want rebound to %s", rebound, created.ID)
+	}
 }
 
 func TestUpgradingAnInstallWithOnlyAutomationsGivesEachItsDesktopAndPlacesExistingAgents(t *testing.T) {
@@ -348,13 +358,172 @@ func TestACompletedMigrationDoesNotReopenForALaterAutomation(t *testing.T) {
 }
 
 func TestAFreshInstanceStartsCrewFoundAtFirstStartOnTheirOwnDesktopsWithoutALaunchReview(t *testing.T) {
-	w := newCrewWorld(t)
-	app := w.App()
-	view := viewProfile(t, w, app.SelectedProfile())
+	w := newCrewWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	profile := app.SelectedProfile()
+	view := viewProfile(t, w, profile)
+	if len(view.desktops) != 1 {
+		t.Fatalf("fresh instance created %d desktops before any crew woke: %+v", len(view.desktops), view.desktops)
+	}
 	for member, name := range map[string]string{"alder": "Alder", "keel": "Keel", "trellis": "Trellis"} {
 		item := readLaunchSetting(app, "crew", member)
-		if desktop, exists := view.desktops[protocol.Deref(item.Setting.DesktopID)]; !exists || desktop.Name != name {
-			t.Fatalf("%s starts on %+v, want its own desktop %q", member, item, name)
+		wantLabel := name + " (no ⌘ number)"
+		if !item.Confirmed || protocol.Deref(item.Setting.DesktopID) == "" || protocol.Deref(item.Setting.Label) != wantLabel {
+			t.Fatalf("%s starts on %+v, want confirmed lazy own desktop %q", member, item, wantLabel)
 		}
 	}
+	giveImportedMemberAHarness(t, cli, "alder")
+	wake := startCrew(t, cli, "alder", "")
+	w.Launched(string(wake.SessionID))
+	desktop, _ := viewProfile(t, w, profile).paneOf(t, string(wake.SessionID))
+	if desktop.Name != "Alder" || desktop.ShortcutSlot != nil {
+		t.Fatalf("woken alder placed on %+v, want unslotted Alder desktop", desktop)
+	}
+}
+
+func TestEphemeralOwnLaunchDesktopsReapWhenEmptyAndRecreateOnNextRun(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		profile := app.SelectedProfile()
+		homeDesktop := viewProfile(t, w, profile).profile.CurrentDesktopID
+		w.bubbleClaude(t, app, "anchor")
+		dir := w.Path("nightly")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		makeSpec := func(name string) string {
+			return fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nname: %s\ntrigger: {type: manual}\nprompt: Check locally.\nlaunch: {driver: claude}\nlocation: {type: directory, path: %q}\n", name, dir)
+		}
+		defined := applyAutomation(t, cli, makeSpec("Nightly check"))
+		if len(viewProfile(t, w, profile).desktops) != 1 {
+			t.Fatalf("defining an automation created an eager empty desktop: %+v", viewProfile(t, w, profile).desktops)
+		}
+
+		// User-kept launch desktops that must never be reaped when empty:
+		// 1. Slotted launch desktop
+		slottedDef := applyAutomation(t, cli, makeSpec("Slotted check"))
+		slottedChoice := writeLaunchChoice(app, "automation", fmt.Sprint(slottedDef.ID), protocol.LaunchDesktopSetting{DesktopName: protocol.Ptr("Slotted check"), DesktopID: protocol.Ptr(profile + "/desktop_5")})
+		slottedID := protocol.Deref(slottedChoice.Setting.DesktopID)
+		// 2. Custom-named unslotted launch desktop (name differs from item's own name)
+		customDef := applyAutomation(t, cli, makeSpec("Custom check"))
+		customChoice := writeLaunchChoice(app, "automation", fmt.Sprint(customDef.ID), protocol.LaunchDesktopSetting{DesktopName: protocol.Ptr("Ops")})
+		customID := protocol.Deref(customChoice.Setting.DesktopID)
+		// 3. Shared unslotted launch desktop (two items share it)
+		sharedDefA := applyAutomation(t, cli, makeSpec("Shared check"))
+		sharedDefB := applyAutomation(t, cli, makeSpec("Shared buddy"))
+		sharedChoice := writeLaunchChoice(app, "automation", fmt.Sprint(sharedDefA.ID), protocol.LaunchDesktopSetting{DesktopName: protocol.Ptr("Shared check")})
+		sharedID := protocol.Deref(sharedChoice.Setting.DesktopID)
+		writeLaunchChoice(app, "automation", fmt.Sprint(sharedDefB.ID), protocol.LaunchDesktopSetting{DesktopID: protocol.Ptr(sharedID)})
+
+		// Run the default-own-desktop automation: lazily creates its unslotted desktop.
+		firstRun, err := cli.AutomationRun(defined.ID, "first", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		firstSession := string(protocol.Deref(firstRun.SessionID))
+		w.bootBubbleClaude(t, firstSession)
+		firstDesktop, _ := viewProfile(t, w, profile).paneOf(t, firstSession)
+		if firstDesktop.Name != "Nightly check" || firstDesktop.ShortcutSlot != nil || !protocol.Deref(firstDesktop.Ephemeral) {
+			t.Fatalf("first run desktop = %+v", firstDesktop)
+		}
+
+		// Switch to it, close its run while viewing it: must stay alive while current.
+		switchDesktop(app, profile, firstDesktop.ID)
+		closeSession(t, cli, firstSession, "done")
+		awaitClosed(app, firstSession)
+		w.advance(time.Hour)
+		if _, exists := viewProfile(t, w, profile).desktops[firstDesktop.ID]; !exists {
+			t.Fatal("currently viewed empty ephemeral launch desktop was reaped")
+		}
+
+		// Leave it: stays for 29s grace, reaped at 30s.
+		switchDesktop(app, profile, homeDesktop)
+		w.advance(29 * time.Second)
+		if _, exists := viewProfile(t, w, profile).desktops[firstDesktop.ID]; !exists {
+			t.Fatal("ephemeral launch desktop was reaped before the 30s grace elapsed")
+		}
+		w.advance(time.Second)
+		awaitDesktopRemoved(t, w, profile, firstDesktop.ID)
+
+		// All user-kept launch desktops survived the entire hour+30s and are non-ephemeral.
+		kept := viewProfile(t, w, profile).desktops
+		for label, id := range map[string]string{"slotted": slottedID, "custom-named": customID, "shared": sharedID} {
+			desktop, exists := kept[id]
+			if !exists {
+				t.Fatalf("%s launch desktop %s was unexpectedly reaped", label, id)
+			}
+			if protocol.Deref(desktop.Ephemeral) {
+				t.Fatalf("%s launch desktop %s was unexpectedly marked ephemeral", label, id)
+			}
+		}
+
+		// Launch setting still shows the automation's own desktop label, and a second run recreates it.
+		setting := readLaunchSetting(app, "automation", fmt.Sprint(defined.ID))
+		if protocol.Deref(setting.Setting.Label) != "Nightly check (no ⌘ number)" {
+			t.Fatalf("launch setting after reap = %+v", setting)
+		}
+		secondRun, err := cli.AutomationRun(defined.ID, "second", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		secondSession := string(protocol.Deref(secondRun.SessionID))
+		w.bootBubbleClaude(t, secondSession)
+		secondDesktop, _ := viewProfile(t, w, profile).paneOf(t, secondSession)
+		if secondDesktop.Name != "Nightly check" || secondDesktop.ShortcutSlot != nil || secondDesktop.ID == firstDesktop.ID || !protocol.Deref(secondDesktop.Ephemeral) {
+			t.Fatalf("recreated automation desktop = %+v (previous %s)", secondDesktop, firstDesktop.ID)
+		}
+
+		// Renaming the automation while its ephemeral desktop is live keeps it ephemeral and updates its name.
+		renamedSpec := fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nid: %d\nname: Daily check\ntrigger: {type: manual}\nprompt: Check locally.\nlaunch: {driver: claude}\nlocation: {type: directory, path: %q}\n", defined.ID, dir)
+		applyAutomation(t, cli, renamedSpec)
+		if got := viewProfile(t, w, profile).desktops[secondDesktop.ID]; got.Name != "Daily check" || !protocol.Deref(got.Ephemeral) {
+			t.Fatalf("renamed ephemeral desktop = %+v", got)
+		}
+
+		// Deleting the automation while its ephemeral desktop exists still lets it reap once empty.
+		if err := cli.AutomationDelete(defined.ID); err != nil {
+			t.Fatal(err)
+		}
+		closeSession(t, cli, secondSession, "done")
+		awaitClosed(app, secondSession)
+		w.advance(30 * time.Second)
+		awaitDesktopRemoved(t, w, profile, secondDesktop.ID)
+
+		// Crew member's own launch desktop follows the same lazy -> reap -> recreate lifecycle.
+		agent := "claude"
+		if _, err := cli.CrewSet("chief", &dir, &agent, nil, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+		chiefStart1, err := cli.CrewStart("chief", "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		chiefSession1 := string(chiefStart1.SessionID)
+		w.bootBubbleClaude(t, chiefSession1)
+		chiefDesktop1, _ := viewProfile(t, w, profile).paneOf(t, chiefSession1)
+		if chiefDesktop1.Name != "Chief" || chiefDesktop1.ShortcutSlot != nil || !protocol.Deref(chiefDesktop1.Ephemeral) {
+			t.Fatalf("first chief desktop = %+v", chiefDesktop1)
+		}
+		if _, err := cli.CrewHandoff(chiefStart1.SessionID, "done", false); err != nil {
+			t.Fatal(err)
+		}
+		awaitClosed(app, chiefSession1)
+		w.advance(29 * time.Second)
+		if _, exists := viewProfile(t, w, profile).desktops[chiefDesktop1.ID]; !exists {
+			t.Fatal("chief ephemeral desktop was reaped before the 30s grace elapsed")
+		}
+		w.advance(time.Second)
+		awaitDesktopRemoved(t, w, profile, chiefDesktop1.ID)
+
+		chiefStart2, err := cli.CrewStart("chief", "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		chiefSession2 := string(chiefStart2.SessionID)
+		w.bootBubbleClaude(t, chiefSession2)
+		chiefDesktop2, _ := viewProfile(t, w, profile).paneOf(t, chiefSession2)
+		if chiefDesktop2.Name != "Chief" || chiefDesktop2.ShortcutSlot != nil || chiefDesktop2.ID == chiefDesktop1.ID || !protocol.Deref(chiefDesktop2.Ephemeral) {
+			t.Fatalf("recreated chief desktop = %+v (previous %s)", chiefDesktop2, chiefDesktop1.ID)
+		}
+	})
 }

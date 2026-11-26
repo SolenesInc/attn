@@ -119,11 +119,19 @@ pub(crate) fn dispatch(state: &mut State, action: &crate::Action, tx: &mut Tx) -
 pub(crate) use actions::{advance, closing, queue_flow, settle, step, toggle_priority, wake};
 pub(crate) use queue_view::{LIST as QUEUE_LIST, agent_rows as queue_rows};
 pub(crate) const DESKTOP_LIST: &str = "sidebar.desktops";
+pub(crate) const AUTOMATIONS_LIST: &str = "sidebar.automations";
 
-/// The next wall-clock moment a turn age the window shows reads differently.
+/// The next wall-clock moment a turn age or automation snooze the window shows reads differently.
 pub(crate) fn next_change(state: &State, now_ms: i64) -> Option<i64> {
     if !actions::queue_flow(state) {
-        return None;
+        return state
+            .facts
+            .sessions
+            .iter()
+            .filter(|s| s.profile_id == state.facts.profiles.selected && s.automation.is_some())
+            .filter_map(|s| queue::epoch_ms(s.turn_snoozed_until.as_deref()?))
+            .filter(|&at| at > now_ms)
+            .min();
     }
     queue::bands(&state.facts, now_ms)
         .turns
@@ -181,7 +189,22 @@ pub(crate) fn draws_row(state: &State, key: &str) -> bool {
     if actions::queue_flow(state) {
         queue_view::agent_rows(state).iter().any(|r| r.key == key)
     } else {
-        lines(state).iter().any(|l| l.key() == key)
+        if lines(state).iter().any(|l| l.key() == key) {
+            return true;
+        }
+        let section = automations(state);
+        section
+            .active
+            .iter()
+            .chain(
+                state
+                    .window
+                    .automations_finished_open
+                    .then_some(section.finished.iter())
+                    .into_iter()
+                    .flatten(),
+            )
+            .any(|run| format!("sidebar.session.{}", run.row.id) == key)
     }
 }
 
@@ -196,6 +219,13 @@ pub(crate) fn lines(state: &State) -> Vec<Line> {
         &on_screen,
         &crew::desktop_entries(state),
     )
+}
+
+/// The desktop sidebar's unified Automations section.
+pub(crate) fn automations(state: &State) -> model::AutomationSection {
+    let home = state.window.view == View::Home;
+    let on_screen = crate::desktop::on_screen_sessions(state);
+    model::desktop_automations(&state.facts, home, &on_screen, state.window.now_ms)
 }
 
 fn desktop_sidebar(state: &State, t: &Tokens) -> El {
@@ -217,6 +247,16 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
     let dock = dock::of(state);
     let home_keys = crate::palette::label_of(state, &Action::SessionGoToDashboard);
     let overview_keys = crate::palette::label_of(state, &Action::DesktopOverview);
+    let next_run_keys = crate::palette::label_of(state, &Action::SessionNextRun);
+    let snoozed_automations = facts
+        .sessions
+        .iter()
+        .filter(|s| {
+            s.profile_id == facts.profiles.selected
+                && s.automation.is_some()
+                && queue::is_snoozed(s.turn_snoozed_until.as_deref(), state.window.now_ms)
+        })
+        .count();
     let chief = crate::chief::view(state);
     let active_session = state.window.on_screen(facts);
     let marked = Marked::of(state);
@@ -246,14 +286,25 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
             logos_on,
             state.logos.revision(),
         ),
-        (home, marked.clone(), countdowns),
+        (
+            home,
+            marked.clone(),
+            countdowns,
+            state.window.automations_finished_open,
+            snoozed_automations,
+        ),
         (on_screen.clone(), active_session),
         width::of(state).to_bits(),
         (
             state.window.reorder.clone(),
             drag_marks,
             new_desktop,
-            (dock.clone(), home_keys.clone(), overview_keys.clone()),
+            (
+                dock.clone(),
+                home_keys.clone(),
+                overview_keys.clone(),
+                next_run_keys.clone(),
+            ),
             (chief, state.window.crew_rows.armed()),
         ),
         (
@@ -272,6 +323,8 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
             &on_screen,
             &crew_entries,
         );
+        let automations = model::desktop_automations(facts, home, &on_screen, state.window.now_ms);
+        let has_automations = !automations.active.is_empty() || !automations.finished.is_empty();
         let t = *t;
         col()
             .key("sidebar")
@@ -324,6 +377,16 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                             .w_full()
                             .children(desktop_groups(state, &lines, &marked, logos_on, &t)),
                     )
+                    .children(has_automations.then(|| {
+                        automations_section(
+                            state,
+                            &automations,
+                            next_run_keys.clone(),
+                            &marked,
+                            logos_on,
+                            &t,
+                        )
+                    }))
                     .children(new_desktop.map(|over| new_desktop_drop(over, &t)))
                     .scroll_bar_styled(attn_ui::scroll_bar(&t)),
             )
@@ -354,6 +417,165 @@ fn desktops_rule(overview_keys: Option<String>, t: &Tokens) -> El {
         )
         .action_keys(overview_keys)
         .build(t)
+}
+
+fn automations_section(
+    state: &State,
+    section: &model::AutomationSection,
+    next_run_keys: Option<String>,
+    marked: &Marked,
+    logos_on: bool,
+    t: &Tokens,
+) -> El {
+    let logo_rev = if logos_on { state.logos.revision() } else { 0 };
+    let build = RowBuild {
+        marked,
+        logos_on,
+        logo_rev,
+        in_current: false,
+    };
+    let finished_open = state.window.automations_finished_open;
+    let finished_count = section.finished.len();
+    col()
+        .key("sidebar.automations.section")
+        .w_full()
+        .child(
+            rune::el()
+                .key("sidebar.rule.automations.gap")
+                .w_full()
+                .h(ListRow::section_gap())
+                .a11y_hidden(),
+        )
+        .child(automations_rule(section.needing, next_run_keys, t))
+        .child(
+            col()
+                .key(AUTOMATIONS_LIST)
+                .role("list")
+                .label("Automations")
+                .w_full()
+                .children(
+                    section
+                        .active
+                        .iter()
+                        .map(|run| automation_run_row(state, run, &build, t)),
+                )
+                .children(
+                    (finished_count > 0)
+                        .then(|| finished_runs_toggle(finished_count, finished_open, t)),
+                )
+                .children(
+                    finished_open
+                        .then(|| {
+                            section
+                                .finished
+                                .iter()
+                                .map(|run| automation_run_row(state, run, &build, t))
+                        })
+                        .into_iter()
+                        .flatten(),
+                ),
+        )
+}
+
+fn automations_rule(needing: usize, next_run_keys: Option<String>, t: &Tokens) -> El {
+    let mut head = GroupHead::new("sidebar.rule.automations", "Automations")
+        .heading()
+        .section("Automations")
+        .action(
+            "sidebar.automations.all",
+            "all",
+            "Open Automations",
+            |state: &mut State, tx: &mut Tx| crate::automations::open(state, tx),
+        );
+    if needing > 0 {
+        let label = format!("{needing} waiting");
+        let help = match &next_run_keys {
+            Some(keys) => format!("Open the next automation run needing you ({keys})"),
+            None => "Open the next automation run needing you".to_owned(),
+        };
+        let face = Inline::joined()
+            .child(system::dot(t.warning, DotShape::Filled, DotSize::Small))
+            .child(words(label.clone(), Type::Small, t.warning).single_line());
+        let chip = system::chip_button(
+            "sidebar.automations.needing",
+            format!("{label} — open next"),
+            face,
+            false,
+            system::Size::Small,
+            t,
+        )
+        .help(help)
+        .on_press_tx(|state: &mut State, tx: &mut Tx| {
+            crate::automations::runs::next_run(state, tx);
+        });
+        head = head.aside(chip);
+    }
+    head.build(t)
+}
+
+fn finished_runs_toggle(count: usize, open: bool, t: &Tokens) -> El {
+    let label = if count == 1 {
+        "1 finished run".to_owned()
+    } else {
+        format!("{count} finished runs")
+    };
+    let caret = if open {
+        attn_ui::glyph::CARET_DOWN
+    } else {
+        attn_ui::glyph::CARET_RIGHT
+    };
+    ListRow::new("sidebar.automations.finished", label.clone())
+        .lead(system::glyph(caret, IconSize::Small, t.text_tertiary))
+        .title_el(
+            words(label, Type::Small, t.text_tertiary)
+                .single_line()
+                .truncate()
+                .shrink(),
+        )
+        .build(t)
+        .expanded(open)
+        .on_press(|state: &mut State| {
+            state.window.automations_finished_open = !state.window.automations_finished_open;
+        })
+}
+
+fn automation_run_row(
+    state: &State,
+    run: &model::AutomationRunLine,
+    build: &RowBuild<'_>,
+    t: &Tokens,
+) -> El {
+    let key = format!("sidebar.session.{}", run.row.id);
+    let shown = build.marked.shown(&run.row.id);
+    let draining = state.window.countdowns.contains_key(&run.row.id);
+    let logos_on = build.logos_on;
+    let logo_rev = build.logo_rev;
+    memo(
+        key.clone(),
+        (run, draining, logos_on, logo_rev, shown, *t),
+        || {
+            ROWS_BUILT.with(|n| n.set(n.get() + 1));
+            let bar = settling_bar(state, &key, &run.row, t);
+            let tile = Some((run.desktop.clone(), run.leaf.clone()));
+            let controls = run
+                .row
+                .settle_run
+                .then(|| settle_button(&key, &run.row))
+                .into_iter()
+                .chain([actions_button(&key, &run.row, tile)]);
+            agent_row(
+                state,
+                key.clone(),
+                &run.row,
+                false,
+                shown,
+                logos_on,
+                controls.collect(),
+                t,
+            )
+            .children(bar)
+        },
+    )
 }
 
 struct RowBuild<'a> {
@@ -1266,7 +1488,7 @@ pub(crate) fn row_source_at(state: &State, path: &str) -> Option<crate::desktop:
     let all = lines(state);
     let mut seen_sessions: std::collections::HashMap<&str, usize> =
         std::collections::HashMap::new();
-    all.iter().find_map(|line| {
+    if let Some(found) = all.iter().find_map(|line| {
         let occurrence = match line {
             Line::Agent { row, .. } => {
                 let count = seen_sessions.entry(row.id.as_str()).or_insert(0);
@@ -1298,7 +1520,27 @@ pub(crate) fn row_source_at(state: &State, path: &str) -> Option<crate::desktop:
             }),
             Line::Desktop(_) => None,
         }
-    })
+    }) {
+        return Some(found);
+    }
+    let section = automations(state);
+    section
+        .active
+        .into_iter()
+        .chain(
+            state
+                .window
+                .automations_finished_open
+                .then_some(section.finished)
+                .into_iter()
+                .flatten(),
+        )
+        .find(|run| path.contains(&format!("/sidebar.session.{}/", run.row.id)))
+        .map(|run| crate::desktop::drag::Source::Row {
+            desktop: run.desktop,
+            leaf: run.leaf,
+            label: run.row.name,
+        })
 }
 
 pub(super) fn pane_of(state: &State, session: &str) -> Option<(String, String)> {

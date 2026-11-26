@@ -39,18 +39,13 @@ func TestCloseDesktopSelectsItsNeighbourAndRefusesTheLast(t *testing.T) {
 		if !result.Success || result.Profile.CurrentDesktopID != third.ID {
 			t.Fatalf("close first: %+v", result)
 		}
-		chiefDesktop := viewProfile(t, w, profile).desktops[protocol.Deref(profileChief(t, w).LaunchDesktop.DesktopID)]
 		result = requestCloseDesktop(app, third)
-		if !result.Success || result.Profile.CurrentDesktopID != chiefDesktop.ID {
-			t.Fatalf("close third: %+v", result)
-		}
-		result = requestCloseDesktop(app, chiefDesktop)
 		if result.Success || protocol.Deref(result.ErrorCode) != protocol.ProfileErrorCodeLastDesktop {
 			t.Fatalf("close last: %+v", result)
 		}
 		w.restart()
 		view := viewProfile(t, w, profile)
-		if len(view.desktops) != 1 || view.profile.CurrentDesktopID != chiefDesktop.ID {
+		if len(view.desktops) != 1 || view.profile.CurrentDesktopID != third.ID {
 			t.Fatalf("after restart: %+v", view)
 		}
 	})

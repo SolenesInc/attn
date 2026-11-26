@@ -55,6 +55,7 @@ fn desktop(slot: u32, active: &str, tree: Option<Value>) -> Desktop {
         active_pane_id: active.into(),
         panes,
         revision: 1,
+        ..Desktop::default()
     }
 }
 

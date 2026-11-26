@@ -97,10 +97,7 @@ try {
     const before = observer.currentDesktopId();
     if (before) runner.registerCleanup('restore_current_desktop', () => observer.returnToDesktop(before));
     desktop = await observer.createDesktop();
-    runner.registerCleanup('close_desktop', () => {
-      const left = observer.desktop(desktop.id);
-      return left && observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
-    });
+    runner.registerCleanup('close_desktop', () => observer.closeDesktop(desktop.id));
     runner.registerCleanup('close_sessions', () => observer.unregisterMatchingSessions((s) => created.includes(s.id)));
     const source = crypto.randomUUID();
     const spawned = observer.waitForMessage((m) => m.event === 'spawn_result' && m.id === source && m, 'the source shell spawned', 30_000);
@@ -233,10 +230,7 @@ try {
     const made = await placed;
     runner.assert(result.desktop_id === target && made.panes[0].session_id === result.session_id,
       'the delegate lands on the numbered desktop made for it', { result });
-    runner.registerCleanup('close_numbered_desktop', () => {
-      const left = observer.desktop(target);
-      return left && observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
-    });
+    runner.registerCleanup('close_numbered_desktop', () => observer.closeDesktop(target));
     await driver.waitFor({ key: `sidebar.session.${result.session_id}` });
     const after = await driver.state('window');
     runner.assert(after.on_screen === builder && JSON.stringify(after.keyboard) === JSON.stringify(before.keyboard),

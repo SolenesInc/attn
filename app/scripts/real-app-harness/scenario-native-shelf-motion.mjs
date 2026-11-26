@@ -61,8 +61,7 @@ try {
     runner.registerCleanup('close_desktop', async () => {
       for (const pane of observer.desktop(desktop.id)?.panes ?? []) observer.unregisterSession(pane.session_id);
       await observer.waitFor(() => !observer.desktop(desktop.id) || observer.desktop(desktop.id).panes.length === 0, 'no terminals left', 20_000);
-      const left = observer.desktop(desktop.id);
-      if (left) await observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
+      await observer.closeDesktop(desktop.id);
     });
     if (before) runner.registerCleanup('restore_current_desktop', () => observer.returnToDesktop(before));
     await driver.click({ key: `sidebar.desktop.${desktop.id}` });

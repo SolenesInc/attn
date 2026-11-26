@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,17 +17,25 @@ func TestLaunchDesktopsAreInstallSettingsVisibleThroughTheCLI(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	writeCharter(t, s, "alder")
 	s.Start()
-	requireStdout(t, s.Attn("crew", "set", "alder", "--launch-desktop", "own"), "launch desktop: alder (no ⌘ number)", "profile:")
+	hasDesktop := func(id string) bool {
+		app := s.App()
+		defer app.Close()
+		return slices.ContainsFunc(app.Initial.Desktops, func(d protocol.Desktop) bool { return d.ID == id })
+	}
+	requireStdout(t, s.Attn("crew", "set", "alder", "--launch-desktop", "own"), "launch desktop: Alder (no ⌘ number)", "profile:")
 	member := crewRoster(t, s)["alder"]
 	if member.LaunchDesktop == nil || member.LaunchDesktop.DesktopID == nil || protocol.Deref(member.ProfileName) == "" {
 		t.Fatalf("crew list = %+v", member)
 	}
-	requireStdout(t, s.Attn("crew", "list"), "alder (no ⌘ number)", *member.ProfileName)
+	if hasDesktop(*member.LaunchDesktop.DesktopID) {
+		t.Fatalf("--launch-desktop own eagerly created empty desktop %s for alder", *member.LaunchDesktop.DesktopID)
+	}
+	requireStdout(t, s.Attn("crew", "list"), "Alder (no ⌘ number)", *member.ProfileName)
 	charter, err := os.ReadFile(filepath.Join(s.Dir, "crew", "alder", "CHARTER.md"))
 	if err != nil || string(charter) != "# alder\n" {
 		t.Fatalf("launch setting changed charter: %q %v", charter, err)
 	}
-	requireStdout(t, s.Attn("crew", "set", "alder", "--launch-desktop", "3"), "launch desktop: 3 · alder")
+	requireStdout(t, s.Attn("crew", "set", "alder", "--launch-desktop", "3"), "launch desktop: 3 · Alder")
 	dir := s.Path("check")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
@@ -36,8 +45,19 @@ func TestLaunchDesktopsAreInstallSettingsVisibleThroughTheCLI(t *testing.T) {
 	if err := os.WriteFile(file, []byte(yaml), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	requireStdout(t, s.Attn("automation", "apply", "--file", file, "--launch-desktop", "own"), "Local check (no ⌘ number)")
+	applied := s.Attn("automation", "apply", "--file", file, "--launch-desktop", "own")
+	requireStdout(t, applied, "Local check (no ⌘ number)")
+	var appliedDef protocol.AutomationDefinitionSummary
+	applied.JSON(t, &appliedDef)
+	if ownID := protocol.Deref(appliedDef.LaunchDesktop.DesktopID); ownID == "" || hasDesktop(ownID) {
+		t.Fatalf("--launch-desktop own eagerly created empty desktop %q for automation", ownID)
+	}
 	requireStdout(t, s.Attn("automation", "set", "1", "--launch-desktop", "own", "--desktop-name", "Review"), "Review (no ⌘ number)")
+	var afterCustom []protocol.AutomationDefinitionSummary
+	s.Attn("automation", "list").JSON(t, &afterCustom)
+	if reviewID := protocol.Deref(afterCustom[0].LaunchDesktop.DesktopID); reviewID == "" || !hasDesktop(reviewID) {
+		t.Fatalf("--launch-desktop own --desktop-name Review did not materialize desktop %q", reviewID)
+	}
 	assert := func() {
 		t.Helper()
 		var definitions []protocol.AutomationDefinitionSummary

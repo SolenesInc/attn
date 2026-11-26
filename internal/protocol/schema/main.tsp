@@ -599,6 +599,7 @@ model Desktop {
   profile_id: string;
   name: string;
   shortcut_slot?: int32;        // 1-9; absent for an unnumbered desktop
+  ephemeral?: boolean;          // True for a single-owner own launch desktop that reaps once empty
   order_key: string;
   tree_json: string;            // Split tree of pane and tile leaves; empty for an empty desktop
   active_pane_id: string;

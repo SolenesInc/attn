@@ -265,10 +265,15 @@ func (s *Store) UpsertAutomationDefinitionWithLaunch(id int, name, specJSON, pro
 	if launch != nil {
 		err = saveLaunchSetting(tx, stamp, "automation", itemID, *launch, !activation && oldSpec == specJSON)
 	} else if activation {
-		err = startOnOwnDesktop(tx, stamp, "automation", itemID)
+		err = startOnOwnDesktop(tx, "automation", itemID)
 	}
 	if err != nil {
 		return nil, err
+	}
+	if !activation {
+		if err := renameEphemeralLaunchDesktop(tx, "automation", itemID, name); err != nil {
+			return nil, err
+		}
 	}
 	if enabled && activation {
 		if err := activateAutomationReviewRequestsTx(tx, id, now); err != nil {

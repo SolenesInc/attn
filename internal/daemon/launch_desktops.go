@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
@@ -138,7 +139,10 @@ func (d *Daemon) launchDesktopFromRef(profileID, itemName, ref string, name *str
 		newName = *name
 	}
 	if ref == "own" {
-		return store.LaunchDesktopSetting{DesktopName: newName}, nil
+		if name == nil || strings.TrimSpace(*name) == "" {
+			return store.LaunchDesktopSetting{Own: true}, nil
+		}
+		return store.LaunchDesktopSetting{DesktopName: *name}, nil
 	}
 	profile, err := d.liveLaunchProfile(profileID)
 	if err != nil {

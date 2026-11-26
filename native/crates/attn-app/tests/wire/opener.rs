@@ -140,6 +140,7 @@ fn start(setup: Setup) -> World {
                 ..DesktopPane::default()
             }],
             revision: 1,
+            ..Desktop::default()
         }]),
         ..InitialStateMessage::new()
     };

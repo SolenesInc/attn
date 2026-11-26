@@ -67,10 +67,7 @@ try {
     const create = async (slot, name) => {
       const result = await observer.profileCommand('desktop_create', { profile_id: observer.profileId, shortcut_slot: slot, name });
       const id = result.desktops[0].id;
-      runner.registerCleanup(`close_${name}`, () => {
-        const left = observer.desktop(id);
-        return left && observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
-      });
+      runner.registerCleanup(`close_${name}`, () => observer.closeDesktop(id));
       return id;
     };
     six = await create(6, 'Six');

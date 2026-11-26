@@ -1616,3 +1616,54 @@ fn at_large_text_in_the_smallest_window_a_refusal_keeps_start_in_reach_for_the_r
     press_in_window(&mut world, PRIMARY);
     assert_eq!(sent(&world, "crew_set").len(), 2);
 }
+
+#[test]
+fn in_desktop_flow_chief_setup_sits_beside_the_sidebar_and_dismisses_when_settings_open() {
+    let mut init = state(
+        Vec::new(),
+        vec![desktop("work/desktop_1", "a", "Desktop 1", Vec::new())],
+    );
+    init.settings = Some(settings(false));
+    init.crew = Some(vec![chief(false)]);
+    let mut world = start(init);
+    assert!(shows(&world, SETUP));
+    let elements = world.runtime().elements();
+    let sidebar = elements
+        .iter()
+        .find(|e| e.key.as_deref() == Some("sidebar"))
+        .expect("sidebar is drawn");
+    let setup = elements
+        .iter()
+        .find(|e| e.key.as_deref() == Some(SETUP))
+        .expect("chief-setup is drawn");
+    assert!(
+        setup.rect[0] >= sidebar.rect[0] + sidebar.rect[2],
+        "chief-setup sits past the sidebar's right edge in desktop flow: sidebar={:?} setup={:?}",
+        sidebar.rect,
+        setup.rect
+    );
+
+    dispatch(&mut world, Action::UiOpenSettings);
+    assert!(!shows(&world, SETUP));
+    assert!(shows(&world, "settings-dialog"));
+    click(&mut world, "settings.nav.agents");
+    assert!(shows(&world, "settings.section.agents"));
+
+    press(&mut world, Key::Escape);
+    assert!(!shows(&world, "settings-dialog"));
+
+    dispatch(&mut world, Action::DesktopOverview);
+    assert!(shows(&world, "overview"));
+    click(&mut world, SLOT);
+    assert!(!shows(&world, "overview"));
+    assert!(shows(&world, SETUP));
+
+    press(&mut world, Key::Escape);
+    assert!(!shows(&world, SETUP));
+
+    click(&mut world, "sidebar.rule.crew.manage");
+    assert!(shows(&world, "crew.heading"));
+    dispatch(&mut world, Action::OpenChiefSetup);
+    assert!(!shows(&world, "crew.heading"));
+    assert!(shows(&world, SETUP));
+}

@@ -94,6 +94,9 @@ func protocolDesktop(desktop profiles.Desktop) (protocol.Desktop, error) {
 	if desktop.ShortcutSlot != 0 {
 		out.ShortcutSlot = protocol.Ptr(desktop.ShortcutSlot)
 	}
+	if desktop.Ephemeral {
+		out.Ephemeral = protocol.Ptr(true)
+	}
 	for _, pane := range desktop.Panes {
 		wire := protocol.DesktopPane{
 			PaneID:    pane.PaneID,

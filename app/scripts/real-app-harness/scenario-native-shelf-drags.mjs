@@ -167,10 +167,7 @@ try {
   await runner.step('make_a_desktop', async () => {
     const before = observer.currentDesktopId();
     desktop = await observer.createDesktop();
-    runner.registerCleanup('close_desktop', () => {
-      const left = observer.desktop(desktop.id);
-      return left && observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
-    });
+    runner.registerCleanup('close_desktop', () => observer.closeDesktop(desktop.id));
     if (before) runner.registerCleanup('restore_current_desktop', () => observer.returnToDesktop(before));
     await driver.click({ key: `sidebar.desktop.${desktop.id}` });
     await driver.waitFor({ key: 'launcher.path.field' });
@@ -314,10 +311,7 @@ try {
   await runner.step('stack_entry_to_a_sidebar_desktop_moves_its_whole_column', async () => {
     const created = await observer.profileCommand('desktop_create', { profile_id: observer.profileId, name: 'Drop here' });
     const target = created.desktops[0].id;
-    runner.registerCleanup('close_drop_desktop', () => {
-      const left = observer.desktop(target);
-      return left && observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
-    });
+    runner.registerCleanup('close_drop_desktop', () => observer.closeDesktop(target));
     await driver.waitFor({ key: `sidebar.desktop.${target}` });
     await driver.click({ key: `sidebar.desktop.${desktop.id}` });
     await observer.waitFor(() => observer.currentDesktopId() === desktop.id, 'back on the scenario desktop');

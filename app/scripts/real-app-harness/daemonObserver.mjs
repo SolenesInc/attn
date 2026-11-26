@@ -231,6 +231,28 @@ export class DaemonObserver {
     return this.desktop(desktopId) ? this.setCurrentDesktop(desktopId) : null;
   }
 
+  /** Closes `desktopId` when it is still present and not the profile's only desktop: an empty unnamed starting desktop can disappear while a scenario works on another. */
+  async closeDesktop(desktopId) {
+    for (;;) {
+      const left = this.desktop(desktopId);
+      if (!left || this.desktops.length <= 1) return false;
+      try {
+        await this.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
+        await this.waitFor(() => !this.desktop(desktopId), `desktop ${desktopId} closed`);
+        return true;
+      } catch (error) {
+        const message = String(error?.message ?? error);
+        if (/\b(last_desktop|not_found)\b/.test(message)) return false;
+        if (!/\bstale_revision\b/.test(message)) throw error;
+        await this.waitFor(
+          () => this.desktop(desktopId)?.revision !== left.revision,
+          `desktop ${desktopId} revision past ${left.revision}`,
+          10_000,
+        );
+      }
+    }
+  }
+
   describeArrangement() {
     return JSON.stringify(
       {

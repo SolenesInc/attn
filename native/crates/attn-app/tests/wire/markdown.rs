@@ -70,6 +70,7 @@ fn desktop(tree: serde_json::Value, revision: i64) -> Desktop {
             ..DesktopPane::default()
         }],
         revision,
+        ..Desktop::default()
     }
 }
 

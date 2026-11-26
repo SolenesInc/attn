@@ -258,7 +258,19 @@ fn reveal(state: &mut State, tx: &mut Tx) {
         .into_iter()
         .find(|k| k.starts_with("sidebar."))
     {
-        let container = if key.starts_with(crate::sidebar::crew::CLASSIC_ROW) {
+        let mut in_automations = false;
+        if step.anchor == "agent"
+            && let Some(session) = step.session_id.as_deref()
+        {
+            let automations = crate::sidebar::automations(state);
+            if automations.finished.iter().any(|r| r.row.id == session) {
+                state.window.automations_finished_open = true;
+                in_automations = true;
+            } else if automations.active.iter().any(|r| r.row.id == session) {
+                in_automations = true;
+            }
+        }
+        let container = if in_automations || key.starts_with(crate::sidebar::crew::CLASSIC_ROW) {
             "sidebar.scroll"
         } else {
             crate::sidebar::DESKTOP_LIST

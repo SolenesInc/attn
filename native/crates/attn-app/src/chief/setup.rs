@@ -734,16 +734,29 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         .rotate(std::f32::consts::FRAC_PI_4)
         .a11y_hidden();
     let beside_row = SIDEBAR_INSET + BESIDE_SIDEBAR;
+    let (pop_anchor, notch_placement, notch_offset_y) =
+        if crate::sidebar::actions::queue_flow(state) {
+            (anchor.as_str(), Placement::Right, 0.0)
+        } else {
+            (
+                crate::sidebar::crew::CLASSIC_ROW,
+                Placement::RightStart,
+                (Size::Compact.height() - NOTCH) / 2.0,
+            )
+        };
     layers.push(
-        anchored(k, surface, &anchor, Placement::RightStart, beside_row).offset(0.0, -ABOVE_ROW),
+        anchored(k, surface, pop_anchor, Placement::RightStart, beside_row).offset(0.0, -ABOVE_ROW),
     );
-    layers.push(anchored(
-        k,
-        notch,
-        &anchor,
-        Placement::Right,
-        beside_row - NOTCH / 2.0,
-    ));
+    layers.push(
+        anchored(
+            k,
+            notch,
+            pop_anchor,
+            notch_placement,
+            beside_row - NOTCH / 2.0,
+        )
+        .offset(0.0, notch_offset_y),
+    );
 }
 
 /// How far the popover sits from the sidebar's edge, and how far its top rises above the

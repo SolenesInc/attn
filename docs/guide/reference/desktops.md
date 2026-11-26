@@ -13,7 +13,7 @@ Think of desktops as macOS Spaces you use to organize your work.
 
 Desktop flow is the default. If you turned on the queue, run "Turn off the agent
 queue" from the command palette (Cmd+Shift+K, Ctrl+Alt+K on Linux), or click the
-flow toggle ("Switch to desktop flow") at the top of the sidebar. The flow you
+flow switch ("Switch to desktop flow") in the title bar. The flow you
 pick applies to every profile.
 
 ## Desktops
@@ -27,6 +27,12 @@ small, all at once, with your other desktops above and below.
 
 You can also have as many non-numbered desktops as you want. Cmd+K (Ctrl+Shift+K
 on Linux) finds any agent or tile on any desktop and takes you to it.
+
+In the desktop sidebar, your current desktop sits inside a raised well and empty
+non-current desktops fold into compact dashed pills at the foot of the list.
+Drag a tile onto a dashed pill to move it there, or click the pill to open that
+desktop. Collapsing the sidebar leaves a thin rail with Home, your desktop chips,
+and a single ⚡ chip while automation runs are open on their own desktops.
 
 ## Tiles
 
@@ -138,7 +144,7 @@ On Ubuntu 24.04, GNOME's default keys move a window between workspaces with Ctrl
 
 ### The overview
 
-Cmd+G (Ctrl+Shift+G on Linux) shows the whole row small, on one line or several, with your other desktops as strips above and below it. The sidebar's "Desktop overview" row, the queue bar's desktop overview chip, the palette, a count on the shelf, and the entry of the column you are in open it too. Nothing moves while you look: no tile slides and no terminal changes size.
+Cmd+G (Ctrl+Shift+G on Linux) shows the whole row small, on one line or several, with your other desktops as strips above and below it. The **overview** action in the sidebar's **Desktops** heading, the queue bar's desktop overview chip, the palette, a count on the shelf, and the entry of the column you are in open it too. The overview omits non-current unnumbered desktops that hold only live automation runs, empty ephemeral launch desktops, and empty unnumbered crew launch desktops so your own desktops stay clear, while still opening on an automation desktop if you are viewing one. Nothing moves while you look: no tile slides and no terminal changes size.
 
 A terminal shows its text. A terminal that has not been on screen shows the text it had when the overview opened, or its icon and title when there is none to show. A document or a seed on this desktop shows its body. Browser tiles and other kinds show their icon and title. The bar under a column says the column is on screen. A tile that needs you has an outline and a word in its state's color, and when its agent has an open ask, a line below the row shows the question. The tile with the heavy outline has the highlight. The highlight starts on the tile you are in, and moving it does not move the row.
 
@@ -214,7 +220,7 @@ delete only an empty profile.
 <details>
 <summary>Why did my desktop disappear?</summary>
 
-An empty desktop closes on its own 30 seconds after you leave it. Attn never closes the desktop you're on, and it keeps any desktop you've named or that a crew member or automation starts on. To keep an empty desktop around, give it a name (the pencil on its sidebar row). A numbered desktop that closed this way comes back when you press its digit, or when an agent that was last on it resumes.
+An empty desktop closes on its own 30 seconds after you leave it. Attn never closes the desktop you're on. It also keeps any desktop you named yourself, any numbered launch desktop, any launch desktop shared by several items, and any launch desktop with a custom name. A default unnumbered launch desktop created for a single crew member or automation closes 30 seconds after its last session ends and you leave it, then reappears on the next session. To keep an empty desktop around, give it a name with the pencil on its sidebar row. A numbered desktop that closed this way comes back when you press its digit, or when an agent that was last on it resumes.
 </details>
 
 <details>
@@ -238,7 +244,7 @@ A new desktop takes the lowest free digit from 1 to 9, and gets none only when a
 <details>
 <summary>Why is there a desktop named after my crew member or automation?</summary>
 
-Each crew member and automation starts its sessions on a launch desktop, and a new crew member or automation gets a desktop of its own, named after the member or automation and without a digit. That desktop never closes on its own, even when it's empty. If you close the desktop, the next session makes it again, on its digit if it had one and otherwise as a new desktop named after the member or automation. You can pick a different desktop with the Desktop field in the member's launch settings or in the automation's form.
+Each crew member and automation starts its sessions on a launch desktop. By default, that launch desktop is an unnumbered desktop named after the member or automation, created when its first session starts rather than when you add the item. When its last session ends and you leave that desktop, Attn removes the empty desktop 30 seconds later, and recreates it on the next session. If you pick a numbered desktop, share one desktop between items, or give it a custom name with the **Desktop** field in the member's launch settings or in the automation's form, that desktop stays even when empty. If you close a launch desktop by hand, the next session creates it again, on its digit if it had one and otherwise as a new desktop named after the member or automation.
 </details>
 
 <details>

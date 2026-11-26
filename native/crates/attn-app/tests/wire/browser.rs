@@ -138,6 +138,7 @@ fn desktop_on(tree: Value, revision: i64, active: &str) -> Desktop {
             ..DesktopPane::default()
         }],
         revision,
+        ..Desktop::default()
     }
 }
 

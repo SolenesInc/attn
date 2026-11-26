@@ -1478,6 +1478,7 @@ fn desktop(tiles: Vec<Value>) -> Desktop {
             ..DesktopPane::default()
         }],
         revision: 1,
+        ..Desktop::default()
     }
 }
 

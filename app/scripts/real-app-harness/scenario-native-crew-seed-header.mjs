@@ -82,8 +82,7 @@ try {
         await observer.waitFor(() => !observer.getSession(id), `${name}'s session to end`, 30_000);
       }
       for (const id of new Set(desktops)) {
-        const left = observer.desktop(id);
-        if (left && observer.desktops.length > 1) await observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
+        await observer.closeDesktop(id);
       }
     });
     day = await wake(member);

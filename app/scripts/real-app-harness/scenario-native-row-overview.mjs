@@ -57,10 +57,7 @@ try {
   if (before) runner.registerCleanup('restore_current_desktop', () => observer.returnToDesktop(before));
   const makeDesktop = async () => {
     const desktop = await observer.createDesktop();
-    runner.registerCleanup(`close_desktop_${desktop.id}`, () => {
-      const left = observer.desktop(desktop.id);
-      return left && observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
-    });
+    runner.registerCleanup(`close_desktop_${desktop.id}`, () => observer.closeDesktop(desktop.id));
     return desktop;
   };
 

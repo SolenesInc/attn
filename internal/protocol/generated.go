@@ -4333,6 +4333,9 @@ type Desktop struct {
 	// ActivePaneID corresponds to the JSON schema field "active_pane_id".
 	ActivePaneID string `json:"active_pane_id"`
 
+	// Ephemeral corresponds to the JSON schema field "ephemeral".
+	Ephemeral *bool `json:"ephemeral,omitempty,omitzero"`
+
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 

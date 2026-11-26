@@ -66,21 +66,7 @@ try {
     const before = observer.currentDesktopId();
     if (before) runner.registerCleanup('restore_current_desktop', () => observer.returnToDesktop(before));
     desktop = await observer.createDesktop();
-    runner.registerCleanup('close_desktop', async () => {
-      for (;;) {
-        const left = observer.desktop(desktop.id);
-        if (!left) return;
-        const moved = observer.waitForMessage((m) => m.event === 'profile_arrangement_changed' && m, 'the desktop moves on', 10_000);
-        try {
-          await observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
-          moved.catch(() => {});
-          return;
-        } catch (error) {
-          if (!/stale_revision/.test(error.message)) throw error;
-          await moved;
-        }
-      }
-    });
+    runner.registerCleanup('close_desktop', () => observer.closeDesktop(desktop.id));
     await driver.click({ key: `sidebar.desktop.${desktop.id}` });
     await driver.waitFor({ key: 'launcher.path.field' });
   });

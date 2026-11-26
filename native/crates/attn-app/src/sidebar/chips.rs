@@ -386,10 +386,35 @@ fn wanting_on(state: &State) -> Vec<&str> {
         .collect()
 }
 
-/// The desktop sidebar collapsed: Home, a divider, and a chip for every desktop by its number.
+/// The desktop sidebar collapsed: Home, a divider, a chip for each user desktop by its number,
+/// and a single compact Automations chip when unslotted automation-only desktops hold live runs.
 /// The title bar's toggle brings the sidebar back.
 pub(crate) fn rail(state: &State, t: &Tokens) -> El {
-    let chips = chips(state, wanting_on(state));
+    let facts = &state.facts;
+    let by_id: HashMap<&str, &attn_protocol::Session> =
+        facts.sessions.iter().map(|s| (s.id.as_str(), s)).collect();
+    let crew_launch = super::model::crew_launch_desktops(facts);
+    let desktop_by_id: HashMap<&str, &attn_client::Desktop> =
+        facts.desktops.iter().map(|d| (d.id.as_str(), d)).collect();
+    let chips: Vec<Chip> = chips(state, wanting_on(state))
+        .into_iter()
+        .filter(|c| {
+            let Some(desktop) = desktop_by_id.get(c.desktop.as_str()) else {
+                return true;
+            };
+            if super::model::is_automation_desktop(desktop, &by_id) {
+                return false;
+            }
+            if !c.current
+                && (super::model::is_empty_ephemeral_desktop(desktop)
+                    || super::model::is_empty_crew_launch_desktop(desktop, &crew_launch))
+            {
+                return false;
+            }
+            true
+        })
+        .collect();
+    let automations_chip = rail_automations_chip(state, &by_id, t);
     let home = state.window.view == View::Home;
     let home_button =
         system::icon_button("rail.home", "Home", &attn_ui::icon::HOME, IconSize::Regular)
@@ -420,6 +445,93 @@ pub(crate) fn rail(state: &State, t: &Tokens) -> El {
                 .children(chips.iter().map(|c| rail_chip(c, t)))
                 .scroll_bar_styled(attn_ui::scroll_bar(t)),
         )
+        .children(automations_chip.map(|chip| {
+            Rail::column()
+                .items_center()
+                .child(Rail::rule(t))
+                .child(chip)
+        }))
+}
+
+fn rail_automations_chip(
+    state: &State,
+    by_id: &HashMap<&str, &attn_protocol::Session>,
+    t: &Tokens,
+) -> Option<El> {
+    let facts = &state.facts;
+    let home = state.window.view == View::Home;
+    let current_id = facts.current_desktop().map(|d| d.id.as_str());
+    let mut runs = 0usize;
+    let mut needing = 0usize;
+    let mut current = false;
+    let mut seen: HashSet<&str> = HashSet::new();
+    for desktop in ordered_desktops(&facts.desktops) {
+        if !super::model::is_automation_desktop(desktop, by_id) {
+            continue;
+        }
+        if !home && current_id == Some(desktop.id.as_str()) {
+            current = true;
+        }
+        for pane in &desktop.panes {
+            let Some(session) = by_id.get(pane.session_id.as_str()).copied() else {
+                continue;
+            };
+            if !seen.insert(session.id.as_str()) {
+                continue;
+            }
+            runs += 1;
+            if crate::automations::runs::needs_you(session, state.window.now_ms) {
+                needing += 1;
+            }
+        }
+    }
+    if runs == 0 {
+        return None;
+    }
+    let ink = if current {
+        t.text_primary
+    } else {
+        t.text_tertiary
+    };
+    let face = system::chip_edge(words(attn_ui::glyph::BOLT, Type::Tag, ink), t);
+    let face = if current {
+        face.fill(t.bg_selected).border(1.0, t.border_hover)
+    } else {
+        face
+    }
+    .children((needing > 0).then(|| waiting_dot(t)));
+    let runs_word = if runs == 1 {
+        "1 run".to_owned()
+    } else {
+        format!("{runs} runs")
+    };
+    let label = if needing > 0 {
+        format!(
+            "Automations · {runs_word}, {needing} {} you",
+            if needing == 1 { "needs" } else { "need" }
+        )
+    } else {
+        format!("Automations · {runs_word}")
+    };
+    Some(
+        system::chip_button(
+            "rail.automations",
+            label.clone(),
+            face,
+            false,
+            system::Size::Small,
+            t,
+        )
+        .help(label)
+        .a11y_value(if current { "current" } else { "" })
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            if needing > 0 {
+                crate::automations::runs::next_run(state, tx);
+            } else {
+                crate::automations::toggle(state, tx);
+            }
+        }),
+    )
 }
 
 /// A desktop on the rail: its number chip, with a dot while an agent on it wants the user.

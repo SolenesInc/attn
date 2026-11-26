@@ -352,8 +352,8 @@ export async function createSlottedDesktop(observer) {
 
 export async function closeEmptiedDesktop(observer, id) {
   if (!observer.desktop(id)) return;
-  const left = await observer.waitFor(() => observer.desktop(id)?.panes.length === 0 && observer.desktop(id), `desktop ${id} emptied`);
-  await observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
+  await observer.waitFor(() => !observer.desktop(id) || observer.desktop(id).panes.length === 0, `desktop ${id} emptied`);
+  await observer.closeDesktop(id);
 }
 
 export async function showNativeDesktop(client, observer, desktop) {

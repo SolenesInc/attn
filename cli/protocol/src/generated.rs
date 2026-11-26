@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "7dfbc6c28311";
+pub const PROTOCOL_VERSION: &str = "e9d2c174d29a";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -3709,6 +3709,8 @@ impl DeleteWorktreeResultMessage {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Desktop {
     pub active_pane_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ephemeral: Option<bool>,
     pub id: String,
     pub name: String,
     pub order_key: String,

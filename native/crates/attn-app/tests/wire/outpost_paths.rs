@@ -63,6 +63,7 @@ fn start(directory: &str, remote: bool, tiles: Vec<Value>, active: &str) -> Worl
                 ..DesktopPane::default()
             }],
             revision: 1,
+            ..Desktop::default()
         }]),
         ..InitialStateMessage::new()
     });

@@ -519,9 +519,81 @@ pub fn desktop_title(desktop: &Desktop, desktops: &[Desktop]) -> String {
     }
 }
 
+/// One live automation run row in the desktop sidebar's unified Automations section.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct AutomationRunLine {
+    pub desktop: String,
+    pub leaf: String,
+    pub row: Box<AgentRow>,
+}
+
+/// The desktop sidebar's unified Automations section: live automation runs from unslotted
+/// automation-only desktops, split into active rows shown by default and finished off-screen runs
+/// folded behind a disclosure toggle.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct AutomationSection {
+    pub active: Vec<AutomationRunLine>,
+    pub finished: Vec<AutomationRunLine>,
+    /// Runs in this section that currently need the user (owed a turn and not snoozed).
+    pub needing: usize,
+}
+
+/// The unslotted launch desktop ids of non-retired crew members in the selected profile.
+pub(crate) fn crew_launch_desktops(facts: &Facts) -> HashSet<&str> {
+    let selected = &facts.profiles.selected;
+    facts
+        .crew
+        .iter()
+        .filter(|m| &m.profile_id == selected && !m.retired)
+        .filter_map(|m| {
+            m.launch_desktop
+                .as_ref()?
+                .desktop_id
+                .as_deref()
+                .filter(|id| !id.is_empty())
+        })
+        .collect()
+}
+
+/// Whether `desktop` is an empty unslotted ephemeral launch desktop awaiting its reap grace.
+pub(crate) fn is_empty_ephemeral_desktop(desktop: &Desktop) -> bool {
+    desktop.ephemeral == Some(true)
+        && desktop.shortcut_slot.unwrap_or(0) <= 0
+        && desktop.panes.is_empty()
+        && desktop.leaves().into_iter().all(|l| l.tile().is_none())
+}
+
+/// Whether `desktop` is an empty unslotted desktop reserved as a crew member's launch desktop.
+pub(crate) fn is_empty_crew_launch_desktop(
+    desktop: &Desktop,
+    crew_launch_desktops: &HashSet<&str>,
+) -> bool {
+    desktop.shortcut_slot.unwrap_or(0) <= 0
+        && desktop.panes.is_empty()
+        && desktop.leaves().into_iter().all(|l| l.tile().is_none())
+        && crew_launch_desktops.contains(desktop.id.as_str())
+}
+
+/// Whether `desktop` is an unslotted desktop holding only live automation runs (no manual agents
+/// and no non-pane tiles).
+pub(crate) fn is_automation_desktop(desktop: &Desktop, by_id: &HashMap<&str, &Session>) -> bool {
+    if desktop.shortcut_slot.unwrap_or(0) > 0 || desktop.panes.is_empty() {
+        return false;
+    }
+    if !desktop.leaves().into_iter().all(|l| l.tile().is_none()) {
+        return false;
+    }
+    desktop.panes.iter().all(|p| {
+        by_id
+            .get(p.session_id.as_str())
+            .is_some_and(|s| s.automation.is_some())
+    })
+}
+
 /// What the desktop sidebar lists: each desktop, then its agents and tiles in layout order,
 /// then any agent of it the layout does not hold. An agent not in `on_screen` shows its
-/// countdown.
+/// countdown. Unslotted automation-only desktops are omitted here and shown in
+/// [`desktop_automations`].
 pub fn desktop_lines(
     facts: &Facts,
     garden: Option<&crate::garden::Garden>,
@@ -541,26 +613,20 @@ pub fn desktop_lines(
                 .map(|p| (p.session_id.as_str(), d.id.as_str()))
         })
         .collect();
-    let selected_profile = &facts.profiles.selected;
     let crew_sessions: HashSet<&str> = crew_entries
         .iter()
         .filter_map(super::crew::DesktopEntry::active_session)
         .collect();
-    let crew_launch_desktops: HashSet<&str> = facts
-        .crew
-        .iter()
-        .filter(|m| &m.profile_id == selected_profile && !m.retired)
-        .filter_map(|m| {
-            m.launch_desktop
-                .as_ref()?
-                .desktop_id
-                .as_deref()
-                .filter(|id| !id.is_empty())
-        })
-        .collect();
+    let crew_launch_desktops = crew_launch_desktops(facts);
     let mut lines = Vec::new();
     for desktop in ordered_desktops(desktops) {
+        if is_automation_desktop(desktop, &by_id) {
+            continue;
+        }
         let shown = !home && current == Some(desktop.id.as_str());
+        if !shown && is_empty_ephemeral_desktop(desktop) {
+            continue;
+        }
         let unslotted = desktop.shortcut_slot.unwrap_or(0) <= 0;
         let crew_only_panes = unslotted
             && !desktop.panes.is_empty()
@@ -668,6 +734,24 @@ pub fn desktop_lines(
     lines
 }
 
+fn agent_row_for(
+    facts: &Facts,
+    session: &Session,
+    shown: bool,
+    active: Option<&str>,
+    on_screen: &[String],
+) -> AgentRow {
+    let selected = shown && active == Some(session.id.as_str());
+    let row = AgentRow::of(session, &facts.harnesses, &facts.outposts, selected)
+        .asking(facts, session)
+        .chained(session, facts);
+    if on_screen.contains(&session.id) {
+        row
+    } else {
+        row.off_screen(session)
+    }
+}
+
 fn agent_line(
     facts: &Facts,
     desktop: &Desktop,
@@ -677,18 +761,111 @@ fn agent_line(
     active: Option<&str>,
     on_screen: &[String],
 ) -> Line {
-    let selected = shown && active == Some(session.id.as_str());
-    let row = AgentRow::of(session, &facts.harnesses, &facts.outposts, selected)
-        .asking(facts, session)
-        .chained(session, facts);
     Line::Agent {
         desktop: desktop.id.clone(),
         leaf: leaf.to_owned(),
-        row: Box::new(if on_screen.contains(&session.id) {
-            row
-        } else {
-            row.off_screen(session)
-        }),
+        row: Box::new(agent_row_for(facts, session, shown, active, on_screen)),
+    }
+}
+
+/// Live automation runs on unslotted automation-only desktops, split into active rows (needing
+/// the user, actively working, or currently on screen) and finished off-screen runs.
+pub fn desktop_automations(
+    facts: &Facts,
+    home: bool,
+    on_screen: &[String],
+    now_ms: i64,
+) -> AutomationSection {
+    let desktops = &facts.desktops;
+    let current = facts.current_desktop().map(|d| d.id.as_str());
+    let by_id: HashMap<&str, &Session> =
+        facts.sessions.iter().map(|s| (s.id.as_str(), s)).collect();
+    let mut active: Vec<(u8, Option<&str>, usize, AutomationRunLine)> = Vec::new();
+    let mut finished: Vec<(&str, AutomationRunLine)> = Vec::new();
+    let mut needing = 0usize;
+    let mut seen: HashSet<&str> = HashSet::new();
+    let mut order = 0usize;
+
+    for desktop in ordered_desktops(desktops) {
+        if !is_automation_desktop(desktop, &by_id) {
+            continue;
+        }
+        let shown = !home && current == Some(desktop.id.as_str());
+        let active_session = desktop
+            .panes
+            .iter()
+            .find(|p| p.pane_id == desktop.active_pane_id)
+            .map(|p| p.session_id.as_str());
+        let session_of: HashMap<&str, &str> = desktop
+            .panes
+            .iter()
+            .filter(|p| !p.session_id.is_empty())
+            .map(|p| (p.pane_id.as_str(), p.session_id.as_str()))
+            .collect();
+        let ordered_leaves: Vec<(String, &Session)> = desktop
+            .leaves()
+            .into_iter()
+            .filter(|l| l.tile().is_none())
+            .filter_map(|l| {
+                let session = session_of
+                    .get(l.id.as_str())
+                    .and_then(|id| by_id.get(id))
+                    .copied()?;
+                Some((l.id.clone(), session))
+            })
+            .chain(desktop.panes.iter().filter_map(|p| {
+                let session = by_id.get(p.session_id.as_str()).copied()?;
+                Some((p.pane_id.clone(), session))
+            }))
+            .collect();
+        for (leaf_id, session) in ordered_leaves {
+            if !seen.insert(session.id.as_str()) {
+                continue;
+            }
+            let row = agent_row_for(facts, session, shown, active_session, on_screen);
+            let needs = crate::automations::runs::needs_you(session, now_ms);
+            if needs {
+                needing += 1;
+            }
+            let snoozed = super::queue::is_snoozed(session.turn_snoozed_until.as_deref(), now_ms);
+            let wants_attention = needs || (!snoozed && row.asks > 0);
+            let live = matches!(
+                row.state,
+                AgentState::Launching
+                    | AgentState::Working
+                    | AgentState::Scheduled
+                    | AgentState::Recoverable
+            );
+            let run = AutomationRunLine {
+                desktop: desktop.id.clone(),
+                leaf: leaf_id,
+                row: Box::new(row),
+            };
+            if wants_attention {
+                active.push((0, session.turn_opened_at.as_deref(), order, run));
+            } else if live {
+                active.push((1, None, order, run));
+            } else if run.row.selected || on_screen.contains(&session.id) {
+                active.push((2, None, order, run));
+            } else {
+                finished.push((session.state_since.as_str(), run));
+            }
+            order += 1;
+        }
+    }
+
+    active.sort_by(|a, b| {
+        a.0.cmp(&b.0)
+            .then_with(|| a.1.is_none().cmp(&b.1.is_none()))
+            .then_with(|| a.1.cmp(&b.1))
+            .then_with(|| a.2.cmp(&b.2))
+    });
+    finished.sort_by(|a, b| b.0.cmp(a.0).then_with(|| a.1.row.id.cmp(&b.1.row.id)));
+
+    AutomationSection {
+        active: active.into_iter().map(|(_, _, _, run)| run).collect(),
+        finished: finished.into_iter().map(|(_, run)| run).collect(),
+        needing,
     }
 }
 

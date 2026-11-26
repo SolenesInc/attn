@@ -73,8 +73,7 @@ try {
     for (const id of made) {
       for (const pane of observer.desktop(id)?.panes ?? []) observer.unregisterSession(pane.session_id);
       await observer.waitFor(() => !observer.desktop(id) || observer.desktop(id).panes.length === 0, `no terminals left on ${id}`, 20_000);
-      const left = observer.desktop(id);
-      if (left) await observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
+      await observer.closeDesktop(id);
     }
   });
 

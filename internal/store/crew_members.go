@@ -81,7 +81,7 @@ func (s *Store) EnsureCrewMember(key, profileID string) (CrewIdentity, error) {
 		if _, err := tx.Exec(`INSERT INTO crew_members(member_key, profile_id, name) VALUES (?, ?, ?)`, key, profileID, identity.Name); err != nil {
 			return err
 		}
-		return startOnOwnDesktop(tx, now, "crew", key)
+		return startOnOwnDesktop(tx, "crew", key)
 	})
 	return identity, err
 }
@@ -97,7 +97,7 @@ func (s *Store) CreateCrewMember(identity CrewIdentity) error {
 		if _, err := tx.Exec(`INSERT INTO crew_members(member_key, profile_id, name) VALUES (?, ?, ?)`, identity.Key, identity.ProfileID, identity.Name); err != nil {
 			return err
 		}
-		return startOnOwnDesktop(tx, now, "crew", identity.Key)
+		return startOnOwnDesktop(tx, "crew", identity.Key)
 	})
 }
 
@@ -139,18 +139,21 @@ func (s *Store) CreateChiefMember(profileID, key string) error {
 		if _, err := tx.Exec(`INSERT INTO crew_members(member_key, profile_id, name) VALUES (?, ?, ?)`, key, profileID, crew.ChiefName); err != nil {
 			return err
 		}
-		return startOnOwnDesktop(tx, now, "crew", key)
+		return startOnOwnDesktop(tx, "crew", key)
 	})
 }
 
 func (s *Store) StartChiefOnOwnDesktop(key string) error {
-	return s.profilesTx(func(tx *sql.Tx, now string) error {
-		return startOnOwnDesktop(tx, now, "crew", key)
+	return s.profilesTx(func(tx *sql.Tx, _ string) error {
+		return startOnOwnDesktop(tx, "crew", key)
 	})
 }
 
 func (s *Store) DeleteCrewMember(key string) error {
 	return s.profilesTx(func(tx *sql.Tx, _ string) error {
+		if _, err := tx.Exec(`DELETE FROM launch_desktops WHERE kind = 'crew' AND item_id = ?`, key); err != nil {
+			return err
+		}
 		_, err := tx.Exec(`DELETE FROM crew_members WHERE member_key = ?`, key)
 		return err
 	})
@@ -290,8 +293,10 @@ func renameCrewMember(tx *sql.Tx, key, name string) (previous string, err error)
 	if !errors.Is(err, sql.ErrNoRows) {
 		return "", err
 	}
-	_, err = tx.Exec(`UPDATE crew_members SET name = ? WHERE member_key = ?`, name, key)
-	return previous, err
+	if _, err = tx.Exec(`UPDATE crew_members SET name = ? WHERE member_key = ?`, name, key); err != nil {
+		return previous, err
+	}
+	return previous, renameEphemeralLaunchDesktop(tx, "crew", key, name)
 }
 
 func (s *Store) MemberLatestSession(key string) (protocol.SessionID, error) {

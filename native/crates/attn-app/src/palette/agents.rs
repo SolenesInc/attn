@@ -31,6 +31,7 @@ pub(crate) fn rows(state: &State, query: &str) -> Vec<Row> {
         &[],
         &crate::sidebar::crew::desktop_entries(state),
     );
+    let automations = model::desktop_automations(facts, false, &[], now_ms);
     let mut list = List {
         state,
         terms: &terms,
@@ -57,6 +58,12 @@ pub(crate) fn rows(state: &State, query: &str) -> Vec<Row> {
         })
         .filter(|s| settled.contains(s.id.as_str()) || s.automation.is_some())
         .collect();
+    let automation_runs = automations
+        .active
+        .iter()
+        .chain(&automations.finished)
+        .filter_map(|run| by_id.get(run.row.id.as_str()).copied())
+        .filter(|s| settled.contains(s.id.as_str()) || s.automation.is_some());
     let hidden = bands
         .settled
         .iter()
@@ -65,7 +72,7 @@ pub(crate) fn rows(state: &State, query: &str) -> Vec<Row> {
     for session in bands.turns.iter().map(|r| r.session) {
         list.agent(session);
     }
-    for session in on_desktops.into_iter().chain(hidden) {
+    for session in on_desktops.into_iter().chain(automation_runs).chain(hidden) {
         list.agent(session);
     }
     for session in bands.snoozed.iter().map(|r| r.session) {

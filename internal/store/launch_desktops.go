@@ -15,11 +15,12 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// LaunchDesktopSetting names an existing desktop, or with DesktopName a new desktop to create;
-// a numbered DesktopID then gives the new desktop that ⌘ slot.
+// LaunchDesktopSetting names an existing desktop, Own for a lazy own launch desktop, or with
+// DesktopName a new desktop to create; a numbered DesktopID then gives the new desktop that ⌘ slot.
 type LaunchDesktopSetting struct {
 	DesktopID   string
 	DesktopName string
+	Own         bool
 }
 
 // LaunchDesktopItem is a crew member or automation and the desktop it starts on. DesktopID is
@@ -148,7 +149,9 @@ func saveLaunchSetting(tx *sql.Tx, now string, kind, id string, setting LaunchDe
 		return err
 	}
 	desktopID := setting.DesktopID
-	if name := strings.TrimSpace(setting.DesktopName); name != "" {
+	if setting.Own {
+		desktopID = newProfileEntityID("desktop")
+	} else if name := strings.TrimSpace(setting.DesktopName); name != "" {
 		desktop, err := insertDesktop(tx, now, item.ProfileID, name, profiles.DesktopSlot(desktopID))
 		if err != nil {
 			return err
@@ -157,6 +160,11 @@ func saveLaunchSetting(tx *sql.Tx, now string, kind, id string, setting LaunchDe
 	} else if desktopID == "" || desktopID != item.DesktopID {
 		if _, err := loadLaunchDesktop(tx, profiles.Profile{ID: item.ProfileID}, desktopID); err != nil {
 			return err
+		}
+		if desktopID != "" {
+			if _, err := tx.Exec(`UPDATE desktops SET ephemeral = 0 WHERE id = ?`, desktopID); err != nil {
+				return err
+			}
 		}
 	}
 	if kind == "automation" && bumpAutomationRevision && desktopID != item.DesktopID {
@@ -169,26 +177,24 @@ func saveLaunchSetting(tx *sql.Tx, now string, kind, id string, setting LaunchDe
 	return err
 }
 
-// startOnOwnDesktop gives a new item a desktop named after it. Before an upgraded home's migration
-// finishes, FinishPendingProfileMigration does it instead.
-func startOnOwnDesktop(tx *sql.Tx, now, kind, id string) error {
+// startOnOwnDesktop gives a new item its own unslotted launch desktop binding, created lazily on
+// first launch. Before an upgraded home's migration finishes, FinishPendingProfileMigration does
+// it instead.
+func startOnOwnDesktop(tx *sql.Tx, kind, id string) error {
 	var reviewed bool
 	if err := tx.QueryRow(`SELECT launch_review_complete FROM profile_migration WHERE id = 1`).Scan(&reviewed); err != nil || !reviewed {
 		return err
 	}
-	return createOwnLaunchDesktop(tx, now, kind, id, false)
+	return createOwnLaunchDesktop(tx, kind, id, false)
 }
 
-func createOwnLaunchDesktop(tx *sql.Tx, now, kind, id string, confirmed bool) error {
-	item, err := loadLaunchItem(tx, kind, id)
+func createOwnLaunchDesktop(tx *sql.Tx, kind, id string, confirmed bool) error {
+	item, err := loadCurrentLaunchItem(tx, kind, id)
 	if err != nil || item.DesktopID != "" {
 		return err
 	}
-	desktop, err := insertDesktop(tx, now, item.ProfileID, item.Name, 0)
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec(`INSERT INTO launch_desktops(kind,item_id,desktop_id,confirmed) VALUES (?,?,?,?)`, kind, id, desktop.ID, confirmed)
+	desktopID := newProfileEntityID("desktop")
+	_, err = tx.Exec(`INSERT INTO launch_desktops(kind,item_id,desktop_id,confirmed) VALUES (?,?,?,?)`, kind, id, desktopID, confirmed)
 	return err
 }
 
@@ -202,6 +208,44 @@ func (s *Store) LaunchDesktopItem(kind, id string) (LaunchDesktopItem, error) {
 	return item, err
 }
 
+func markEphemeralDesktops(tx *sql.Tx, profileID string, desktops []profiles.Desktop) error {
+	if len(desktops) == 0 {
+		return nil
+	}
+	has, err := columnExists(tx, "desktops", "ephemeral")
+	if err != nil || !has {
+		return err
+	}
+	ids, err := queryColumn[string](tx, `SELECT id FROM desktops WHERE profile_id = ? AND ephemeral != 0`, profileID)
+	if err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	ephemeral := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		ephemeral[id] = struct{}{}
+	}
+	for i := range desktops {
+		_, desktops[i].Ephemeral = ephemeral[desktops[i].ID]
+	}
+	return nil
+}
+
+func loadDesktopEphemeral(tx *sql.Tx, desktop *profiles.Desktop) error {
+	has, err := columnExists(tx, "desktops", "ephemeral")
+	if err != nil || !has {
+		return err
+	}
+	var ephemeral int
+	if err := tx.QueryRow(`SELECT ephemeral FROM desktops WHERE id = ?`, desktop.ID).Scan(&ephemeral); err != nil {
+		return err
+	}
+	desktop.Ephemeral = ephemeral != 0
+	return nil
+}
+
 func (s *Store) LaunchDesktopChoices(kind, id string) (LaunchDesktopItem, []profiles.Desktop, error) {
 	var item LaunchDesktopItem
 	var desktops []profiles.Desktop
@@ -212,7 +256,10 @@ func (s *Store) LaunchDesktopChoices(kind, id string) (LaunchDesktopItem, []prof
 			return err
 		}
 		desktops, err = listDesktops(tx, item.ProfileID)
-		return err
+		if err != nil {
+			return err
+		}
+		return markEphemeralDesktops(tx, item.ProfileID, desktops)
 	})
 	return item, desktops, err
 }
@@ -226,24 +273,6 @@ func (s *Store) SetLaunchDesktop(kind, id string, setting LaunchDesktopSetting) 
 var launchItemQueries = [][2]string{
 	{"automation", `SELECT id FROM automation_definitions WHERE deleted_at = '' AND profile_id IN (SELECT id FROM profiles WHERE deleted_at = '') ORDER BY id`},
 	{"crew", `SELECT member_key FROM crew_members WHERE retired_at = '' AND profile_id IN (SELECT id FROM profiles WHERE deleted_at = '') ORDER BY member_key`},
-}
-
-func launchItems(tx *sql.Tx) ([]LaunchDesktopItem, error) {
-	items := []LaunchDesktopItem{}
-	for _, query := range launchItemQueries {
-		ids, err := queryColumn[string](tx, query[1])
-		if err != nil {
-			return nil, err
-		}
-		for _, id := range ids {
-			item, err := loadLaunchItem(tx, query[0], id)
-			if err != nil {
-				return nil, err
-			}
-			items = append(items, item)
-		}
-	}
-	return items, nil
 }
 
 func placeEveryProfilesRemainder(tx *sql.Tx, now string) error {
@@ -282,10 +311,16 @@ func launchItemDesktop(tx *sql.Tx, written *documentWrites, now string, profile 
 	case !created:
 		return loadLaunchDesktop(tx, profile, desktopID)
 	}
-	if err := bumpProfile(tx, &profile); err != nil {
-		return desktop, err
-	}
 	return desktop, appendLaunchDesktopFacts(tx, desktop.ID)
+}
+
+func renameEphemeralLaunchDesktop(tx *sql.Tx, kind, itemID, name string) error {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return nil
+	}
+	_, err := tx.Exec(`UPDATE desktops SET name = ? WHERE ephemeral != 0 AND id IN (SELECT desktop_id FROM launch_desktops WHERE kind = ? AND item_id = ?)`, trimmed, kind, itemID)
+	return err
 }
 
 func insertNamedLaunchDesktop(tx *sql.Tx, written *documentWrites, now, profileID, kind, id, missingDesktopID string) (profiles.Desktop, error) {
@@ -295,6 +330,10 @@ func insertNamedLaunchDesktop(tx *sql.Tx, written *documentWrites, now, profileI
 	}
 	desktop, err := insertDesktop(tx, now, profileID, item.Name, 0)
 	if err != nil {
+		return desktop, err
+	}
+	desktop.Ephemeral = true
+	if _, err := tx.Exec(`UPDATE desktops SET ephemeral = 1 WHERE id = ?`, desktop.ID); err != nil {
 		return desktop, err
 	}
 	return desktop, rebindLaunchDesktop(tx, written, missingDesktopID, desktop.ID)
@@ -384,13 +423,13 @@ func (s *Store) PlaceBackgroundSession(sessionID protocol.SessionID, runtimeID p
 	return desktop, paneID, err
 }
 
-func finishLaunchMigration(tx *sql.Tx, now string, view *ProfileMigrationView) error {
-	items, err := launchItems(tx)
+func finishLaunchMigration(tx *sql.Tx, view *ProfileMigrationView) error {
+	items, err := currentLaunchItems(tx)
 	if err != nil {
 		return err
 	}
 	for _, item := range items {
-		if err := createOwnLaunchDesktop(tx, now, item.Kind, item.ID, true); err != nil {
+		if err := createOwnLaunchDesktop(tx, item.Kind, item.ID, true); err != nil {
 			return err
 		}
 	}
@@ -497,19 +536,47 @@ func (s *Store) LaunchDesktopItems(profileID string) ([]LaunchDesktopItem, error
 	return items, err
 }
 
-const removableDesktop = `tree_json = '' AND name = '' AND id != (SELECT current_desktop_id FROM profiles WHERE id = desktops.profile_id) AND NOT EXISTS (SELECT 1 FROM profile_migration WHERE phase = 'placement_required') AND NOT EXISTS (SELECT 1 FROM launch_desktops WHERE desktop_id = desktops.id)`
+const removableUnnamedDesktop = `tree_json = '' ` +
+	`AND name = '' ` +
+	`AND id != (SELECT current_desktop_id FROM profiles WHERE id = desktops.profile_id) ` +
+	`AND NOT EXISTS (SELECT 1 FROM profile_migration WHERE phase = 'placement_required') ` +
+	`AND NOT EXISTS (SELECT 1 FROM launch_desktops WHERE desktop_id = desktops.id)`
 
-// stampEmptyDesktops records when each unnamed desktop no item starts on became empty and not current;
-// true when one just did. It reads first so a read-only profiles transaction never takes SQLite's write lock.
+const removableDesktop = `tree_json = '' ` +
+	`AND id != (SELECT current_desktop_id FROM profiles WHERE id = desktops.profile_id) ` +
+	`AND NOT EXISTS (SELECT 1 FROM profile_migration WHERE phase = 'placement_required') ` +
+	`AND (` +
+	`(name = '' AND NOT EXISTS (SELECT 1 FROM launch_desktops WHERE desktop_id = desktops.id)) ` +
+	`OR ephemeral != 0` +
+	`)`
+
+func removableDesktopCondition(tx *sql.Tx) (string, error) {
+	hasEphemeral, err := columnExists(tx, "desktops", "ephemeral")
+	if err != nil {
+		return "", err
+	}
+	if !hasEphemeral {
+		return removableUnnamedDesktop, nil
+	}
+	return removableDesktop, nil
+}
+
+// stampEmptyDesktops records when each removable desktop (unnamed and untied, or an ephemeral own
+// launch desktop) became empty and not current; true when one just did. It reads first so a
+// read-only profiles transaction never takes SQLite's write lock.
 func stampEmptyDesktops(tx *sql.Tx, now string) (bool, error) {
+	removable, err := removableDesktopCondition(tx)
+	if err != nil {
+		return false, err
+	}
 	var stale bool
-	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM desktops WHERE (empty_since = '') = (` + removableDesktop + `))`).Scan(&stale); err != nil || !stale {
+	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM desktops WHERE (empty_since = '') = (` + removable + `))`).Scan(&stale); err != nil || !stale {
 		return false, err
 	}
-	if _, err := tx.Exec(`UPDATE desktops SET empty_since = '' WHERE empty_since != '' AND NOT (` + removableDesktop + `)`); err != nil {
+	if _, err := tx.Exec(`UPDATE desktops SET empty_since = '' WHERE empty_since != '' AND NOT (` + removable + `)`); err != nil {
 		return false, err
 	}
-	stamped, err := tx.Exec(`UPDATE desktops SET empty_since = ? WHERE empty_since = '' AND `+removableDesktop, now)
+	stamped, err := tx.Exec(`UPDATE desktops SET empty_since = ? WHERE empty_since = '' AND `+removable, now)
 	if err != nil {
 		return false, err
 	}

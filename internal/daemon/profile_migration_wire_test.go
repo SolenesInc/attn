@@ -52,14 +52,20 @@ func TestAnUpgradedHomeOpensFinishedWithEveryWorkspaceOnItsOwnDesktopAndEveryLau
 			}
 			holders[desktop.ID] = agent
 		}
+		if len(view.desktops) != workspaces {
+			t.Fatalf("upgrade left %d desktops, want only the %d workspace desktops", len(view.desktops), workspaces)
+		}
 		for _, item := range []struct{ kind, id, label string }{
 			{"automation", "1", "Local check (no ⌘ number)"},
 			{"crew", "chief", "Chief (no ⌘ number)"},
 		} {
 			got := readLaunchSetting(app, item.kind, item.id)
-			desktop, exists := view.desktops[protocol.Deref(got.Setting.DesktopID)]
-			if !exists || holders[desktop.ID] != "" || protocol.Deref(got.Setting.Label) != item.label {
-				t.Fatalf("%s %s launches on %+v (%+v), want its own desktop", item.kind, item.id, got, desktop)
+			desktopID := protocol.Deref(got.Setting.DesktopID)
+			if desktopID == "" || holders[desktopID] != "" || protocol.Deref(got.Setting.Label) != item.label {
+				t.Fatalf("%s %s launches on %+v, want its own lazy desktop %q", item.kind, item.id, got, item.label)
+			}
+			if _, exists := view.desktops[desktopID]; exists {
+				t.Fatalf("%s %s eagerly created empty desktop %s at upgrade", item.kind, item.id, desktopID)
 			}
 		}
 	}

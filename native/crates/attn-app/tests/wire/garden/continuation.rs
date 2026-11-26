@@ -228,6 +228,7 @@ fn desktop(tiles: Vec<Value>, active: &str) -> Desktop {
         active_pane_id: active.into(),
         panes: vec![agent_pane("a", "s1")],
         revision: 1,
+        ..Desktop::default()
     }
 }
 

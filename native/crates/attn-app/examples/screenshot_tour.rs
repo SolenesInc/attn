@@ -1216,6 +1216,139 @@ fn sidebar_crew_and_empty(dark: bool) {
     snap(&mut world, "sidebar-crew-and-empty", dark);
 }
 
+fn sidebar_automations(dark: bool) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    let auto = |id: i64, name: &str, run_id: &str| AutomationProvenance {
+        run_id: run_id.into(),
+        definition_id: id,
+        definition_name: name.into(),
+        trigger_type: "scheduled".into(),
+        ..AutomationProvenance::default()
+    };
+    let sessions = state.sessions.get_or_insert_default();
+    sessions.push(Session {
+        crew_member: Some("chief".into()),
+        chief_of_staff: Some(true),
+        label: "Chief".into(),
+        ..session("chief-day", "waiting_input")
+    });
+    sessions.push(Session {
+        label: "CI sheriff: main CI".into(),
+        turn_owed: Some(true),
+        turn_opened_at: Some("2026-09-26T09:00:00Z".into()),
+        automation: Some(auto(1, "Sheriff", "r-1")),
+        ..session("auto-sheriff", "waiting_input")
+    });
+    sessions.push(Session {
+        label: "Feature map audit".into(),
+        automation: Some(AutomationProvenance {
+            pull_request: Some(attn_protocol::PullRequestProvenance {
+                repository: "SolenesInc/attn".into(),
+                number: 948,
+                url: "https://github.com/SolenesInc/attn/pull/948".into(),
+                ..attn_protocol::PullRequestProvenance::default()
+            }),
+            ..auto(2, "Feature map audit", "r-2")
+        }),
+        ..session("auto-audit", "working")
+    });
+    sessions.push(Session {
+        label: "Reviewing Recent".into(),
+        state_since: "2026-09-26T11:00:00Z".into(),
+        automation: Some(auto(3, "Review main", "r-3")),
+        ..session("auto-review", "idle")
+    });
+    sessions.push(Session {
+        label: "Sheriff: land drive".into(),
+        state_since: "2026-09-26T10:00:00Z".into(),
+        automation: Some(auto(4, "sigma sheriff", "r-4")),
+        ..session("auto-sigma", "idle")
+    });
+    sessions.push(Session {
+        label: "Land feature map".into(),
+        state_since: "2026-09-26T09:00:00Z".into(),
+        automation: Some(auto(5, "land feature map drive", "r-5")),
+        ..session("auto-land", "idle")
+    });
+    let desktops = state.desktops.get_or_insert_default();
+    desktops.truncate(2);
+    if let Some(first) = desktops.first_mut() {
+        first.shortcut_slot = Some(1);
+    }
+    if let Some(second) = desktops.get_mut(1) {
+        second.shortcut_slot = Some(4);
+        second.name = "MCP".into();
+    }
+    desktops.push(Desktop {
+        id: "work/desktop_chief".into(),
+        profile_id: PROFILE.into(),
+        name: "Chief".into(),
+        order_key: "85".into(),
+        active_pane_id: "p-chief".into(),
+        tree_json: pane("p-chief").to_string(),
+        panes: vec![agent_pane("work/desktop_chief", "p-chief", "chief-day")],
+        ..Desktop::default()
+    });
+    desktops.push(Desktop {
+        id: "work/desktop_6".into(),
+        profile_id: PROFILE.into(),
+        name: "Familiar".into(),
+        order_key: "90".into(),
+        shortcut_slot: Some(6),
+        ..Desktop::default()
+    });
+    for (id, order, name, pid, sid) in [
+        ("auto-d1", "91", "Sheriff", "p-a1", "auto-sheriff"),
+        ("auto-d2", "92", "Feature map audit", "p-a2", "auto-audit"),
+        ("auto-d3", "93", "Review main", "p-a3", "auto-review"),
+        ("auto-d4", "94", "sigma sheriff", "p-a4", "auto-sigma"),
+        ("auto-d5", "95", "land drive", "p-a5", "auto-land"),
+    ] {
+        desktops.push(Desktop {
+            id: id.into(),
+            profile_id: PROFILE.into(),
+            name: name.into(),
+            order_key: order.into(),
+            active_pane_id: pid.into(),
+            tree_json: pane(pid).to_string(),
+            panes: vec![agent_pane(id, pid, sid)],
+            ..Desktop::default()
+        });
+    }
+    let member =
+        |id: &str, name: &str, chief: bool, binding: Option<&str>, desktop: Option<&str>| {
+            CrewMember {
+                id: id.into(),
+                name: name.into(),
+                chief: Some(chief),
+                agent: Some("claude".into()),
+                resolved_agent: "claude".into(),
+                profile_id: PROFILE.into(),
+                binding_session: binding.map(str::to_owned),
+                launch_desktop: desktop.map(|d| LaunchDesktopSetting {
+                    desktop_id: Some(d.into()),
+                    ..LaunchDesktopSetting::default()
+                }),
+                revision: 1,
+                ..CrewMember::default()
+            }
+        };
+    state.crew = Some(vec![
+        member(
+            "chief",
+            "Chief",
+            true,
+            Some("chief-day"),
+            Some("work/desktop_chief"),
+        ),
+        member("vesta", "Vesta", false, None, None),
+        member("tendril", "Tendril", false, None, None),
+    ]);
+    let mut world = start(scripted().state(state));
+    deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
+    snap(&mut world, "sidebar-automations", dark);
+}
+
 /// An agent's header while a document tile is active: lit in the brand colour, with its one
 /// seed's state in a pill and its open ask's chip, beside the document's header and controls;
 /// the agent's terminal draws a rounded box beside a square one. Hovered, the document's Focus
@@ -9016,6 +9149,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
     for dark in [true, false] {
         scene("sidebar_and_terminal", || sidebar_and_terminal(dark));
         scene("sidebar_crew_and_empty", || sidebar_crew_and_empty(dark));
+        scene("sidebar_automations", || sidebar_automations(dark));
         scene("tile_headers", || tile_headers(dark, false));
         scene("browser_tile", || browser_tile(dark));
         scene("tile_headers", || tile_headers(dark, true));

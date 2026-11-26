@@ -196,6 +196,7 @@ fn start_with_tree(tree: serde_json::Value, size: (f32, f32)) -> World {
                 ..DesktopPane::default()
             }],
             revision: 1,
+            ..Desktop::default()
         }]),
         ..InitialStateMessage::new()
     });

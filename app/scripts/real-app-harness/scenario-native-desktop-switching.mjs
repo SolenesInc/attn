@@ -43,10 +43,7 @@ try {
   });
   runner.registerCleanup('close_desktops', async () => {
     for (const id of made) {
-      const left = observer.desktop(id);
-      if (!left) continue;
-      await observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
-      await observer.waitFor(() => !observer.desktop(id), `desktop ${id} closed`);
+      await observer.closeDesktop(id);
     }
   });
 

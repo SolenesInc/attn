@@ -47,10 +47,7 @@ try {
     const before = observer.currentDesktopId();
     if (before) runner.registerCleanup('restore_current_desktop', () => observer.returnToDesktop(before));
     desktop = await observer.createDesktop();
-    runner.registerCleanup('close_desktop', () => {
-      const left = observer.desktop(desktop.id);
-      return left && observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
-    });
+    runner.registerCleanup('close_desktop', () => observer.closeDesktop(desktop.id));
     const cwd = path.join(runner.sessionDir, 'shop');
     fs.mkdirSync(cwd, { recursive: true });
     const shop = crypto.randomUUID();

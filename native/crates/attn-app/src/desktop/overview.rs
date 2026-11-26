@@ -74,7 +74,24 @@ pub(crate) fn open(state: &State) -> Option<&Overview> {
 }
 
 pub(super) fn ordered(state: &State) -> Vec<&Desktop> {
-    let mut desktops: Vec<&Desktop> = state.facts.desktops.iter().collect();
+    let facts = &state.facts;
+    let by_id: std::collections::HashMap<&str, &attn_protocol::Session> =
+        facts.sessions.iter().map(|s| (s.id.as_str(), s)).collect();
+    let crew_launch = crate::sidebar::model::crew_launch_desktops(facts);
+    let current = facts.current_desktop().map(|d| d.id.as_str());
+    let previewed = open(state).map(|o| o.at.desktop.as_str());
+    let mut desktops: Vec<&Desktop> = facts
+        .desktops
+        .iter()
+        .filter(|d| {
+            let id = Some(d.id.as_str());
+            id == current
+                || id == previewed
+                || (!crate::sidebar::model::is_automation_desktop(d, &by_id)
+                    && !crate::sidebar::model::is_empty_ephemeral_desktop(d)
+                    && !crate::sidebar::model::is_empty_crew_launch_desktop(d, &crew_launch))
+        })
+        .collect();
     desktops.sort_by(|a, b| a.order_key.cmp(&b.order_key));
     desktops
 }

@@ -62,6 +62,22 @@ func TestAReviewRequestStartsOneReviewerOnTheHeadGitHubNames(t *testing.T) {
 	}
 }
 
+func TestAMultiPRReviewBatchDeliversEveryRequestAfterLazyDesktopCreation(t *testing.T) {
+	r := newAutomationReviewWorld(t, 41)
+	r.github.request(42, r.head, false)
+	r.github.request(43, r.head, false)
+	r.refresh()
+
+	runs := r.awaitRuns(1, func(runs []protocol.AutomationRunSummary) bool {
+		return len(runs) == 2 && runs[0].State == "delivered" && runs[1].State == "delivered"
+	})
+	numbers := []int{runs[0].Automation.PullRequest.Number, runs[1].Automation.PullRequest.Number}
+	slices.Sort(numbers)
+	if !slices.Equal(numbers, []int{42, 43}) {
+		t.Fatalf("delivered PR numbers = %v, want [42 43]", numbers)
+	}
+}
+
 func TestAReviewWhoseCodeIsOutOfReachWaitsForItAcrossARestartOrFails(t *testing.T) {
 	t.Setenv("GIT_SSH_COMMAND", "false")
 	r := newAutomationReviewWorld(t)

@@ -59,6 +59,7 @@ fn desktop() -> Desktop {
             ..DesktopPane::default()
         }],
         revision: 1,
+        ..Desktop::default()
     }
 }
 

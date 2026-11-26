@@ -44,6 +44,7 @@ fn desktop(id: &str, slot: i64, active: &str) -> Desktop {
             ..DesktopPane::default()
         }],
         revision: 1,
+        ..Desktop::default()
     }
 }
 

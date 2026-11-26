@@ -191,6 +191,7 @@ fn desktop(tree: Value, revision: i64) -> Desktop {
             ..DesktopPane::default()
         }],
         revision,
+        ..Desktop::default()
     }
 }
 

@@ -241,6 +241,7 @@ fn desktop(tree: Value, revision: i64) -> Desktop {
             })
             .to_vec(),
         revision,
+        ..Desktop::default()
     }
 }
 

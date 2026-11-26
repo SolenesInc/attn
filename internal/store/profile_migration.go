@@ -92,7 +92,7 @@ func (s *Store) FinishPendingProfileMigration() error {
 		} else if err := placeEveryProfilesRemainder(tx, now); err != nil {
 			return err
 		}
-		return finishLaunchMigration(tx, now, &view)
+		return finishLaunchMigration(tx, &view)
 	})
 }
 

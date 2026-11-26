@@ -85,10 +85,7 @@ try {
     const result = await observer.profileCommand('desktop_create', { profile_id: observer.profileId, shortcut_slot: slot });
     const id = result.desktops?.[0]?.id;
     runner.assert(id, 'desktop_create makes a desktop', result);
-    runner.registerCleanup(`close_desktop_${slot}`, () => {
-      const left = observer.desktop(id);
-      return left && observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
-    });
+    runner.registerCleanup(`close_desktop_${slot}`, () => observer.closeDesktop(id));
     await observer.waitFor(() => observer.desktop(id), `desktop ${id} in the arrangement`);
     return { id, slot };
   };

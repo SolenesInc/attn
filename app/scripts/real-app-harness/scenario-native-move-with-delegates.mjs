@@ -29,10 +29,7 @@ function rowsIn(node, found = []) {
 }
 
 function closeDesktopLater(desktop) {
-  runner.registerCleanup(`close_desktop_${desktop.id}`, () => {
-    const left = observer.desktop(desktop.id);
-    return left && observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
-  });
+  runner.registerCleanup(`close_desktop_${desktop.id}`, () => observer.closeDesktop(desktop.id));
 }
 
 try {

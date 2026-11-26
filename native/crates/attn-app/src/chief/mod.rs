@@ -161,6 +161,8 @@ pub(crate) fn edit(state: &mut State, tx: &mut Tx) {
     let Some(key) = member(state).map(|m| m.id.clone()) else {
         return;
     };
+    crate::shell::uncover_tiles(state, tx);
+    state.window.close_overview();
     state.window.chief.error = None;
     state.window.chief.editor = Some((key, true));
     setup::poll(state, tx);
@@ -406,6 +408,10 @@ pub(crate) fn poll(state: &mut State, tx: &mut Tx) -> bool {
             crate::dispatch(state, Action::SessionToggleSidebar, tx);
         }
         state.window.chief.seen = seen;
+        changed = true;
+    }
+    if state.window.layer.is_some() && setup_shows(state) {
+        dismiss(state, false, tx);
         changed = true;
     }
     if let Some((key, by_user)) = setup_wanted(state)

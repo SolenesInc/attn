@@ -67,6 +67,7 @@ fn desktop(slot: u32, active: &str, tree: Value) -> Desktop {
         tree_json: tree.to_string(),
         active_pane_id: active.into(),
         revision: 1,
+        ..Desktop::default()
     }
 }
 

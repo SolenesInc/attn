@@ -44,8 +44,7 @@ func TestDesktopOrderIsAtomicAndNewNumbersFollowTheirNearestLowerNumber(t *testi
 	six := createOrderedDesktop(t, app, profileID, 6)
 	named := createOrderedDesktop(t, app, profileID, 0)
 	three := createOrderedDesktop(t, app, profileID, 3)
-	chief := protocol.Deref(profileChief(t, w).LaunchDesktop.DesktopID)
-	previous := []string{six.ID, named.ID, chief, first.ID, three.ID}
+	previous := []string{six.ID, named.ID, first.ID, three.ID}
 	set := func(ids []string) protocol.ProfileActionResultMessage {
 		id := uuid.NewString()
 		return desktopRequest(app, protocol.DesktopSetOrderMessage{Cmd: protocol.CmdDesktopSetOrder, RequestID: id, ProfileID: profileID, DesktopIds: ids}, id)
@@ -62,7 +61,7 @@ func TestDesktopOrderIsAtomicAndNewNumbersFollowTheirNearestLowerNumber(t *testi
 		}
 	}
 	seven := createOrderedDesktop(t, app, profileID, 7)
-	want := []string{six.ID, seven.ID, named.ID, chief, first.ID, three.ID}
+	want := []string{six.ID, seven.ID, named.ID, first.ID, three.ID}
 	if got := desktopOrder(w.App().Initial.Desktops); !slices.Equal(got, want) {
 		t.Fatalf("new 7 order = %v, want %v", got, want)
 	}

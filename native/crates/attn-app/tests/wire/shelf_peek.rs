@@ -63,6 +63,7 @@ fn desktop(tree: Value) -> Desktop {
         active_pane_id: "a".into(),
         panes,
         revision: 1,
+        ..Desktop::default()
     }
 }
 

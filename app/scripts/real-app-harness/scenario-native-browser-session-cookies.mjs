@@ -107,10 +107,7 @@ try {
   await runner.step('make_a_desktop', async () => {
     const before = observer.currentDesktopId();
     desktop = await observer.createDesktop();
-    runner.registerCleanup('close_desktop', () => {
-      const left = observer.desktop(desktop.id);
-      return left && observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
-    });
+    runner.registerCleanup('close_desktop', () => observer.closeDesktop(desktop.id));
     if (before) runner.registerCleanup('restore_current_desktop', () => observer.returnToDesktop(before));
     await observer.setCurrentDesktop(desktop.id);
   });

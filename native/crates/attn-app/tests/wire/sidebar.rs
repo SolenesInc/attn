@@ -991,10 +991,11 @@ fn a_run_row_with_a_long_name_and_definition_keeps_room_for_the_name_and_shows_i
         }),
         ..AutomationProvenance::default()
     });
-    let world = World::start(Daemon::scripted().state(state(
+    let mut world = World::start(Daemon::scripted().state(state(
         vec![run],
         vec![desktop("d1", "a", "One", vec![pane("d1", "p1", "run-a")])],
     )));
+    world.gesture(|app| app.click(Target::key("sidebar.automations.finished")));
     let screen = world.screen();
     let bounds = |key: &str| screen.bounds(Target::key(key)).expect(key);
     let [row_x, _, row_w, _] = bounds("sidebar.session.run-a");
@@ -1632,7 +1633,8 @@ fn a_narrow_sidebar_at_large_text_keeps_an_automation_run_s_name_clear_of_its_pu
     let settings = message.settings.as_mut().unwrap();
     settings.insert("uiScale".into(), "1.5".into());
     settings.insert("sidebar_width".into(), "200".into());
-    let world = World::start_sized(Daemon::scripted().state(message), (800.0, 600.0));
+    let mut world = World::start_sized(Daemon::scripted().state(message), (800.0, 600.0));
+    world.gesture(|app| app.click(Target::key("sidebar.automations.finished")));
     let elements = world.runtime().elements();
     let drawn = |key: &str| {
         elements
@@ -2090,6 +2092,642 @@ fn empty_non_current_desktops_fold_into_dashed_pills_that_open_and_accept_tile_d
         "opening an empty desktop expands it into a full heading with rename and close"
     );
     world.advance(std::time::Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn desktop_sidebar_unifies_automation_desktops_folds_finished_runs_and_cleans_rail_and_overview() {
+    use attn_protocol::{AutomationProvenance, CalloutShowRequestMessage, CalloutStep};
+
+    let auto = |id: i64, name: &str, run_id: &str| AutomationProvenance {
+        run_id: run_id.into(),
+        definition_id: id,
+        definition_name: name.into(),
+        trigger_type: "scheduled".into(),
+        ..AutomationProvenance::default()
+    };
+
+    let mut work_agent = session("work-1", "working");
+    work_agent.label = "Shelf and overview".into();
+
+    let mut waiting_older = session("run-wait-old", "waiting_input");
+    waiting_older.label = "CI sheriff: main CI".into();
+    waiting_older.turn_owed = Some(true);
+    waiting_older.turn_opened_at = Some("2026-09-26T09:00:00Z".into());
+    waiting_older.automation = Some(auto(1, "Sheriff", "r-1"));
+
+    let mut waiting_newer = session("run-wait-new", "waiting_input");
+    waiting_newer.label = "PR review #412".into();
+    waiting_newer.turn_owed = Some(true);
+    waiting_newer.turn_opened_at = Some("2026-09-26T10:00:00Z".into());
+    waiting_newer.automation = Some(auto(2, "Review main", "r-2"));
+
+    let mut working_run = session("run-work", "working");
+    working_run.label = "Feature map audit".into();
+    working_run.automation = Some(auto(3, "Feature map audit", "r-3"));
+
+    let mut finished_old = session("run-fin-old", "idle");
+    finished_old.label = "Sigma sheriff".into();
+    finished_old.state_since = "2026-09-26T08:00:00Z".into();
+    finished_old.automation = Some(auto(4, "sigma sheriff", "r-4"));
+
+    let mut finished_new = session("run-fin-new", "idle");
+    finished_new.label = "Land drive".into();
+    finished_new.state_since = "2026-09-26T11:00:00Z".into();
+    finished_new.automation = Some(auto(5, "land drive", "r-5"));
+
+    let mut slotted_run = session("run-on-slot", "idle");
+    slotted_run.label = "Pinned check".into();
+    slotted_run.automation = Some(auto(6, "Pinned", "r-6"));
+
+    let mut d_work = desktop("d1", "a", "Work", vec![pane("d1", "p-work", "work-1")]);
+    d_work.shortcut_slot = Some(1);
+    let mut d_slot2 = desktop(
+        "d2",
+        "b",
+        "Checks",
+        vec![pane("d2", "p-slot", "run-on-slot")],
+    );
+    d_slot2.shortcut_slot = Some(2);
+    let d_auto_1 = desktop(
+        "auto-1",
+        "c",
+        "Sheriff",
+        vec![pane("auto-1", "p-a1", "run-wait-old")],
+    );
+    let d_auto_2 = desktop(
+        "auto-2",
+        "d",
+        "Review main",
+        vec![pane("auto-2", "p-a2", "run-wait-new")],
+    );
+    let d_auto_3 = desktop(
+        "auto-3",
+        "e",
+        "Feature map audit",
+        vec![pane("auto-3", "p-a3", "run-work")],
+    );
+    let d_auto_4 = desktop(
+        "auto-4",
+        "f",
+        "sigma sheriff",
+        vec![pane("auto-4", "p-a4", "run-fin-old")],
+    );
+    let d_auto_5 = desktop(
+        "auto-5",
+        "g",
+        "land drive",
+        vec![pane("auto-5", "p-a5", "run-fin-new")],
+    );
+    let d_crew_empty = desktop("crew-empty", "h", "Vesta", vec![]);
+
+    let mut d_auto_empty = desktop("auto-empty", "h", "Nightly check", vec![]);
+    d_auto_empty.ephemeral = Some(true);
+    let mut initial = state(
+        vec![
+            work_agent,
+            waiting_older,
+            waiting_newer,
+            working_run,
+            finished_old,
+            finished_new,
+            slotted_run,
+        ],
+        vec![
+            d_work.clone(),
+            d_slot2.clone(),
+            d_auto_1.clone(),
+            d_auto_2.clone(),
+            d_auto_3.clone(),
+            d_auto_4.clone(),
+            d_auto_5.clone(),
+            d_crew_empty.clone(),
+            d_auto_empty.clone(),
+        ],
+    );
+    initial.crew = Some(vec![attn_protocol::CrewMember {
+        id: "vesta".into(),
+        name: "Vesta".into(),
+        profile_id: "work".into(),
+        resolved_agent: "claude".into(),
+        launch_desktop: Some(attn_protocol::LaunchDesktopSetting {
+            desktop_id: Some("crew-empty".into()),
+            label: Some("Vesta".into()),
+            ..attn_protocol::LaunchDesktopSetting::default()
+        }),
+        ..attn_protocol::CrewMember::default()
+    }]);
+
+    let daemon = Daemon::scripted().state(initial);
+    daemon.on("desktop_move_leaf", |r: &attn_testkit::Request| {
+        serde_json::json!({
+            "event": "profile_action_result",
+            "request_id": r["request_id"],
+            "action": "desktop_move_leaf",
+            "success": true,
+        })
+    });
+    let mut world = World::start(daemon);
+    world.open_desktop();
+
+    let screen = world.screen();
+    // Automation-only unslotted desktops do not appear under Desktops; slotted user desktops stay.
+    assert!(screen.find(Target::key("sidebar.desktop.d1")).is_some());
+    assert!(screen.find(Target::key("sidebar.desktop.d2")).is_some());
+    assert!(
+        screen
+            .find(Target::key("sidebar.session.run-on-slot"))
+            .is_some()
+    );
+    for hidden in [
+        "auto-1",
+        "auto-2",
+        "auto-3",
+        "auto-4",
+        "auto-5",
+        "crew-empty",
+        "auto-empty",
+    ] {
+        assert!(
+            screen
+                .find(Target::key(format!("sidebar.desktop.{hidden}")))
+                .is_none(),
+            "{hidden} should not appear under Desktops"
+        );
+    }
+
+    // Unified Automations section shows waiting (oldest first) + working runs and folds finished.
+    assert!(
+        screen
+            .find(Target::key("sidebar.rule.automations"))
+            .is_some()
+    );
+    assert!(
+        screen
+            .get(Target::key("sidebar.automations.needing"))
+            .name
+            .as_deref()
+            .is_some_and(|n| n.starts_with("2 waiting"))
+    );
+    let auto_row_keys = |screen: &attn_testkit::Screen| -> Vec<String> {
+        screen
+            .all(Target::role("button"))
+            .into_iter()
+            .filter_map(|n| n.key)
+            .filter(|k| {
+                k.starts_with("sidebar.session.run-")
+                    && k != "sidebar.session.run-on-slot"
+                    && !k.ends_with(".actions")
+                    && !k.ends_with(".settle")
+            })
+            .collect()
+    };
+    let shown_auto_keys = auto_row_keys(&screen);
+    assert_eq!(
+        shown_auto_keys,
+        [
+            "sidebar.session.run-wait-old",
+            "sidebar.session.run-wait-new",
+            "sidebar.session.run-work",
+        ]
+    );
+    let toggle = screen.get(Target::key("sidebar.automations.finished"));
+    assert_eq!(toggle.name.as_deref(), Some("2 finished runs"));
+    assert!(toggle.is("collapsed"));
+
+    // Expanding finished runs reveals newest first; collapsing hides them again.
+    world.gesture(|app| app.click(Target::key("sidebar.automations.finished")));
+    let expanded_keys = auto_row_keys(&world.screen());
+    assert_eq!(
+        expanded_keys,
+        [
+            "sidebar.session.run-wait-old",
+            "sidebar.session.run-wait-new",
+            "sidebar.session.run-work",
+            "sidebar.session.run-fin-new",
+            "sidebar.session.run-fin-old",
+        ]
+    );
+    world.gesture(|app| app.click(Target::key("sidebar.automations.finished")));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.session.run-fin-old"))
+            .is_none()
+    );
+
+    // Clicking the waiting chip walks runs needing you via desktop_show_session (group order: "Review main" before "Sheriff").
+    world.gesture(|app| app.click(Target::key("sidebar.automations.needing")));
+    let shown = world.daemon.sent_of("desktop_show_session");
+    assert_eq!(
+        shown.last().and_then(|m| m["session_id"].as_str()),
+        Some("run-wait-new")
+    );
+
+    // Dragging an automation run onto a user desktop moves its pane there.
+    let target = centre_of(&world, "sidebar.desktop.d1");
+    world.gesture(|app| app.drag(Target::key("sidebar.session.run-work"), target));
+    let moved = world.daemon.sent_of("desktop_move_leaf");
+    assert_eq!(moved.len(), 1, "{moved:?}");
+    assert_eq!(moved[0]["source_desktop_id"], "auto-3");
+    assert_eq!(moved[0]["leaf_id"], "p-a3");
+    assert_eq!(moved[0]["target_desktop_id"], "d1");
+
+    // Clicking "all" opens the Automations drawer.
+    world.gesture(|app| app.click(Target::key("sidebar.automations.all")));
+    assert!(world.screen().find(Target::key("automations")).is_some());
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Escape,
+            mods: rune::Mods::default(),
+        })
+    });
+    assert!(world.screen().find(Target::key("automations")).is_none());
+
+    // A callout targeting a finished off-screen run expands finished runs and anchors to it.
+    world.daemon.emit(CalloutShowRequestMessage {
+        request_id: "callout-fin".into(),
+        profile_id: "work".into(),
+        from: "Chief".into(),
+        steps: vec![CalloutStep {
+            anchor: "agent".into(),
+            session_id: Some("run-fin-old".into()),
+            text: "Check the finished run".into(),
+            ..CalloutStep::default()
+        }],
+        ..CalloutShowRequestMessage::new()
+    });
+    world.settle();
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.session.run-fin-old"))
+            .is_some(),
+        "callout targeting a folded finished run expands finished runs"
+    );
+    assert!(
+        world.screen().find(Target::key("callout")).is_some()
+            && world
+                .screen()
+                .find(Target::key("callout.unanchored"))
+                .is_none()
+            && world.runtime().presented("callout.ring").is_some(),
+        "callout anchors to and rings the expanded finished run"
+    );
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Escape,
+            mods: rune::Mods::default(),
+        })
+    });
+
+    // ⌘G overview skips non-current automation-only desktops and empty crew launch desktops.
+    world.gesture(|app| app.key(chord(Action::DesktopOverview)));
+    let overview_screen = world.screen();
+    assert!(
+        overview_screen
+            .find(Target::key("overview.strip.d2"))
+            .is_some()
+    );
+    for skipped in [
+        "auto-1",
+        "auto-2",
+        "auto-3",
+        "auto-4",
+        "auto-5",
+        "crew-empty",
+        "auto-empty",
+    ] {
+        assert!(
+            overview_screen
+                .find(Target::key(format!("overview.strip.{skipped}")))
+                .is_none(),
+            "overview should skip {skipped}"
+        );
+    }
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Escape,
+            mods: rune::Mods::default(),
+        })
+    });
+
+    // Collapsed rail omits automation-only, empty crew, and empty ephemeral desktops, showing one ⚡ chip.
+    world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+    let rail_screen = world.screen();
+    let rail_desktops: Vec<Option<String>> = rail_screen
+        .children(Target::key("rail.desktops"))
+        .into_iter()
+        .map(|n| n.key)
+        .collect();
+    assert_eq!(
+        rail_desktops,
+        [Some("rail.desktop.1".into()), Some("rail.desktop.2".into())]
+    );
+    let rail_auto = rail_screen.get(Target::key("rail.automations"));
+    assert_eq!(
+        rail_auto.name.as_deref(),
+        Some("Automations · 5 runs, 2 need you")
+    );
+    let shown_before = world.daemon.sent_of("desktop_show_session").len();
+    world.gesture(|app| app.click(Target::key("rail.automations")));
+    assert_eq!(
+        world.daemon.sent_of("desktop_show_session").len(),
+        shown_before + 1
+    );
+
+    // When currently viewing a finished automation run, it stays visible in Automations,
+    // rail.automations marks current, and ⌘G overview still opens on that desktop.
+    world
+        .daemon
+        .emit(attn_protocol::ProfileArrangementChangedMessage {
+            profile: Profile {
+                id: "work".into(),
+                name: "Work".into(),
+                current_desktop_id: "auto-4".into(),
+                ..Profile::default()
+            },
+            desktops: vec![
+                d_work,
+                d_slot2,
+                d_auto_1,
+                d_auto_2,
+                d_auto_3,
+                d_auto_4,
+                d_auto_5,
+                d_crew_empty,
+            ],
+            ..attn_protocol::ProfileArrangementChangedMessage::new()
+        });
+    world.settle();
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("rail.automations"))
+            .value
+            .as_deref(),
+        Some("current")
+    );
+    world.gesture(|app| app.key(chord(Action::DesktopOverview)));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("overview.miniature.p-a4"))
+            .is_some(),
+        "overview opens on the current automation desktop when pressed there"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("overview.strip.d1"))
+            .is_some()
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("overview.strip.auto-1"))
+            .is_none()
+    );
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Escape,
+            mods: rune::Mods::default(),
+        })
+    });
+
+    world.gesture(|app| app.click(Target::role("button").name("Show sidebar")));
+    // Collapse finished runs again, then verify the currently viewed finished run stays visible.
+    world.gesture(|app| app.click(Target::key("sidebar.automations.finished")));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.session.run-fin-old"))
+            .is_some(),
+        "currently viewed finished run remains visible even while finished runs are folded"
+    );
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("sidebar.automations.finished"))
+            .name
+            .as_deref(),
+        Some("1 finished run")
+    );
+    // Advance past unanswered RPC timers and verify the UI reaches rest cleanly.
+    world.advance(std::time::Duration::from_secs(20));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn automation_runs_fold_settled_and_snoozed_runs_wake_on_snooze_expiry_and_keep_all_on_screen_panes()
+ {
+    let work_agent = Session {
+        label: "Work".into(),
+        ..session("work-1", "idle")
+    };
+    let auto_meta =
+        |def_id: i64, def_name: &str, run_id: &str| attn_protocol::AutomationProvenance {
+            run_id: run_id.into(),
+            definition_id: def_id,
+            definition_name: def_name.into(),
+            trigger_type: "scheduled".into(),
+            ..attn_protocol::AutomationProvenance::default()
+        };
+    let settled_waiting = Session {
+        label: "Settled check".into(),
+        state_since: "2026-09-26T10:00:00Z".into(),
+        turn_owed: None,
+        automation: Some(auto_meta(1, "Settled", "r-settled")),
+        ..session("run-settled", "waiting_input")
+    };
+    let snoozed_waiting = Session {
+        label: "Snoozed check".into(),
+        state_since: "2026-09-26T11:00:00Z".into(),
+        turn_owed: Some(true),
+        turn_opened_at: Some("2026-09-26T10:30:00Z".into()),
+        turn_snoozed_until: Some(super::queue::ago(-1)),
+        automation: Some(auto_meta(2, "Snoozed", "r-snoozed")),
+        ..session("run-snoozed", "waiting_input")
+    };
+    let finished_left = Session {
+        label: "Pair left".into(),
+        state_since: "2026-09-26T08:00:00Z".into(),
+        automation: Some(auto_meta(3, "Pair", "r-left")),
+        ..session("run-left", "idle")
+    };
+    let finished_right = Session {
+        label: "Pair right".into(),
+        state_since: "2026-09-26T08:30:00Z".into(),
+        automation: Some(auto_meta(3, "Pair", "r-right")),
+        ..session("run-right", "idle")
+    };
+
+    let mut d_work = desktop("d1", "a", "Work", vec![pane("d1", "p-work", "work-1")]);
+    d_work.shortcut_slot = Some(1);
+    let d_settled = desktop(
+        "auto-settled",
+        "b",
+        "Settled",
+        vec![pane("auto-settled", "p-settled", "run-settled")],
+    );
+    let d_snoozed = desktop(
+        "auto-snoozed",
+        "c",
+        "Snoozed",
+        vec![pane("auto-snoozed", "p-snoozed", "run-snoozed")],
+    );
+    let d_pair = Desktop {
+        id: "auto-pair".into(),
+        profile_id: "work".into(),
+        name: "Pair".into(),
+        order_key: "d".into(),
+        active_pane_id: "p-left".into(),
+        tree_json: serde_json::json!({
+            "type": "split",
+            "split_id": "s-pair",
+            "direction": "vertical",
+            "ratio": 0.5,
+            "children": [
+                {"type": "pane", "pane_id": "p-left"},
+                {"type": "pane", "pane_id": "p-right"}
+            ]
+        })
+        .to_string(),
+        panes: vec![
+            pane("auto-pair", "p-left", "run-left"),
+            pane("auto-pair", "p-right", "run-right"),
+        ],
+        revision: 1,
+        ..Desktop::default()
+    };
+
+    let initial = state(
+        vec![
+            work_agent,
+            settled_waiting,
+            snoozed_waiting,
+            finished_left,
+            finished_right,
+        ],
+        vec![
+            d_work.clone(),
+            d_settled.clone(),
+            d_snoozed.clone(),
+            d_pair.clone(),
+        ],
+    );
+    let mut world = World::start_sized(Daemon::scripted().state(initial), (1600.0, 900.0));
+    world.open_desktop();
+
+    // Settled and snoozed waiting_input runs fold into finished; needing is 0 so no needing chip.
+    let screen = world.screen();
+    assert!(
+        screen
+            .find(Target::key("sidebar.automations.needing"))
+            .is_none()
+    );
+    assert!(
+        screen
+            .find(Target::key("sidebar.session.run-settled"))
+            .is_none()
+    );
+    assert!(
+        screen
+            .find(Target::key("sidebar.session.run-snoozed"))
+            .is_none()
+    );
+    assert_eq!(
+        screen
+            .get(Target::key("sidebar.automations.finished"))
+            .name
+            .as_deref(),
+        Some("4 finished runs")
+    );
+
+    // With needing == 0, clicking rail.automations opens the Automations drawer.
+    world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("rail.automations"))
+            .name
+            .as_deref(),
+        Some("Automations · 4 runs")
+    );
+    world.gesture(|app| app.click(Target::key("rail.automations")));
+    assert!(world.screen().find(Target::key("automations")).is_some());
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Escape,
+            mods: rune::Mods::default(),
+        })
+    });
+    assert!(world.screen().find(Target::key("automations")).is_none());
+
+    // Advancing past the snooze deadline wakes the snoozed run without any new daemon event.
+    world.advance(std::time::Duration::from_secs(61));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("rail.automations"))
+            .name
+            .as_deref(),
+        Some("Automations · 4 runs, 1 needs you")
+    );
+    world.gesture(|app| app.click(Target::role("button").name("Show sidebar")));
+    let woken = world.screen();
+    assert!(
+        woken
+            .get(Target::key("sidebar.automations.needing"))
+            .name
+            .as_deref()
+            .is_some_and(|n| n.contains("1 waiting"))
+    );
+    assert!(
+        woken
+            .find(Target::key("sidebar.session.run-snoozed"))
+            .is_some()
+    );
+    assert!(
+        woken
+            .find(Target::key("sidebar.session.run-settled"))
+            .is_none()
+    );
+
+    // Viewing a multi-pane automation desktop keeps every on-screen finished run visible (not folded).
+    world
+        .daemon
+        .emit(attn_protocol::ProfileArrangementChangedMessage {
+            profile: Profile {
+                id: "work".into(),
+                name: "Work".into(),
+                current_desktop_id: "auto-pair".into(),
+                ..Profile::default()
+            },
+            desktops: vec![d_work, d_settled, d_snoozed, d_pair],
+            ..attn_protocol::ProfileArrangementChangedMessage::new()
+        });
+    world.settle();
+    let multi = world.screen();
+    assert!(
+        multi
+            .find(Target::key("sidebar.session.run-left"))
+            .is_some()
+    );
+    assert!(
+        multi
+            .find(Target::key("sidebar.session.run-right"))
+            .is_some(),
+        "non-focused on-screen finished run must stay visible beside the focused one"
+    );
+    assert_eq!(
+        multi
+            .get(Target::key("sidebar.automations.finished"))
+            .name
+            .as_deref(),
+        Some("1 finished run")
+    );
+    world.advance(std::time::Duration::from_secs(20));
     assert!(world.runtime_is_at_rest());
 }
 

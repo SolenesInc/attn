@@ -222,10 +222,15 @@ try {
   await runner.step('the_run_on_its_desktop_in_the_palette_the_queue_sidebar_and_the_queue_bar', async () => {
     await closeDrawer();
     const desktopId = cliJSON('automation', 'list').find((row) => row.id === manualID).launch_desktop.desktop_id;
-    await driver.waitFor({ key: `sidebar.session.${manualSessionID}` });
-    const desktop = await driver.waitFor({ key: `sidebar.desktop.${desktopId}` });
+    const desktop = await observer.waitFor(() => {
+      const d = observer.desktop(desktopId);
+      return d?.panes?.some((pane) => pane.session_id === manualSessionID) ? d : null;
+    }, 'the run on its named launch desktop');
     runner.assert((desktop.name ?? '').includes('Testing automations'), 'the run sits on the named launch desktop', desktop);
-    runner.assert(!(await has('queue.runs')), 'desktop flow has no automation runs block');
+    await driver.waitFor({ key: 'sidebar.automations.section' });
+    await driver.waitFor({ key: `sidebar.session.${manualSessionID}` });
+    runner.assert(!(await has(`sidebar.desktop.${desktopId}`)), 'an unslotted automation desktop is unified into Automations instead of Desktops');
+    runner.assert(!(await has('queue.runs')), 'desktop flow has no queue runs block');
     await driver.screenshot(path.join(runner.runDir, 'run-desktop.png')).catch(() => {});
 
     await driver.run('ui.actionMenu');
