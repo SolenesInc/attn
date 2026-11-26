@@ -1,0 +1,13 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "App acceptance waits around DaemonObserver.terminalOf fail instead of waiting, turning native-codex-update red",
+  "at": "2026-11-26T18:17:02.055Z",
+  "severity": "p2",
+  "source": "agent",
+  "location": {
+    "path": "app/scripts/real-app-harness/scenario-native-codex-update.mjs",
+    "line": 75
+  },
+  "culprit": "eb8b468bddfac30fe367317db203f7700145068c"
+}
