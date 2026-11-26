@@ -381,7 +381,7 @@ func TestDeletingAProfileRetiresItsChiefOnlyOnceItCloses(t *testing.T) {
 
 func TestSendingASeedToAChiefBetweenSessionsStartsIt(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		cli := w.Client()
+		cli, app := w.Client(), w.App()
 		profileChief(t, w)
 		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
 		planted, err := cli.SeedPlant("", "Choose where this runs", "Pick the working context.", "", "")
@@ -397,10 +397,15 @@ func TestSendingASeedToAChiefBetweenSessionsStartsIt(t *testing.T) {
 			t.Fatalf("sending a seed to a sleeping Chief: %v", err)
 		}
 		chief := chiefOfRoster(t, crewRoster(t, cli))
-		if sent.Seed.Tender == nil || sent.Seed.Tender.Ref != protocol.PartyRef("member:"+chief.ID) || chief.BindingSession == nil {
-			t.Fatalf("the seed went to %+v and the Chief is %+v; want the Chief member to tend it and wake", sent.Seed.Tender, chief)
+		if sent.Seed.Tender == nil || sent.Seed.Tender.Ref != protocol.PartyRef("member:"+chief.ID) {
+			t.Fatalf("the seed went to %+v; want the Chief member %s to tend it", sent.Seed.Tender, chief.ID)
 		}
-		day := string(*chief.BindingSession)
+		woken := testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
+			awake, found := memberOf(e.Members, chief.ID)
+			return found && awake.BindingSession != nil
+		})
+		awake, _ := memberOf(woken.Members, chief.ID)
+		day := string(*awake.BindingSession)
 		if prompt := startPrompt(t, w, day); prompt != crewStartGreeting {
 			t.Errorf("a Chief woken by its seed assignment opened with %q, want today's greeting", prompt)
 		}
