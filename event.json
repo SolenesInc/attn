@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Fullscreen Garden double-counts closed seeds in nested columns",
+  "at": "2026-11-26T22:06:20.161Z",
+  "detail": "Fullscreen Garden columns can double-count the same archived seed across nested plots. At 31a822d4a, open an outer plot, an inner plot, then an open leaf whose only archived sibling is harvested. The header counts the same leaf in each ancestor's recursive fallback and says 2 closed. After opening the archive, the paged direct-child counts show one closed and reveal one row without a seed mutation. Use exact direct-child totals for visible scopes. Independently source-confirmed, with scratch wire probe on s-z6hx0s.\n"
+}
