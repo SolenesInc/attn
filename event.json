@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Scheduled singletons reopen on the current desktop after cleanup",
+  "at": "2026-11-26T21:08:33.945Z",
+  "detail": "A scheduled singleton retains its conversation after its empty default launch desktop is reaped, but the next run opens on the current desktop. Pass the configured launch binding through unattended reopen when the old desktop no longer exists.\nIndependently corroborated at cec7eaba2. Isolated regression receipts are attached to s-1hpv1w.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/store/launch_desktops.go",
+    "line": 403
+  },
+  "culprit": "a1053b55df616a9cbb8e8a6a16144ac9b881a51d"
+}
