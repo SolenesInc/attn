@@ -13,7 +13,7 @@ groups:
     doc: |
       Ask the user what you cannot settle alone. They answer from attn, without opening your terminal.
 
-      After you ask, carry on with work that does not depend on the answer, then end your turn. Your session stays open, so the user can find you, talk to you and run commands in your terminal, and attn types the answer into this conversation as the user's message. While any of your asks is open, attn refuses a standby that would close your session, and an `attn agent close --self` that would leave the answer with no agent, and names each ask.
+      After you ask, carry on with work that does not depend on the answer, then end your turn. Your session stays open, so the user can find you, talk to you and run commands in your terminal, and attn types the answer as the user's message into the conversation of whoever tends the ask's seed by then, or into this one for an ask about no seed. While any of your asks is open, attn refuses a standby that would close your session, and an `attn agent close --self` that would leave the answer with no agent, and names each ask.
 
       You can also read and withdraw the asks of the agents you oversee: the agents below you in your delegation chain, or every agent in your profile when you are the Chief. They are not your asks, and only the user answers them.
     reference:

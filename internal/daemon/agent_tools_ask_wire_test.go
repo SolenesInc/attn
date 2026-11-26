@@ -128,7 +128,7 @@ func TestTheAskToolRequiresItsMarkdownAndSpeaksOnlyInToolWords(t *testing.T) {
 		if tool.Name != "ask" {
 			continue
 		}
-		for _, rule := range []string{":::question\n", "Recommended: ", "name the exact action and its target", "approves only what the question names", "do not wait or poll", `skill({reference: "ask"})`} {
+		for _, rule := range []string{":::question\n", "Recommended: ", "name the exact action and its target", "approves only what the question names", "do not wait or poll", "the answer goes to whoever tends the seed by then", `skill({reference: "ask"})`} {
 			if !strings.Contains(tool.Description, rule) {
 				t.Errorf("the ask tool's description does not say %q, and its reader may have no launch instructions:\n%s", rule, tool.Description)
 			}
