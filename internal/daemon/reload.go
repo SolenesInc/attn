@@ -362,6 +362,7 @@ func (d *Daemon) announceReload(sessionID protocol.SessionID, opts ptybackend.Sp
 func (d *Daemon) recordReload(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) {
 	intent := launchIntentFromSpawnOptions(opts)
 	intent.Asks = d.launchedWithAsks(sessionID)
+	intent.AgentTools = d.carriesAgentTools(string(opts.Agent))
 	d.launchVentIntent(sessionID).applyTo(&intent)
 	if prior, ok := d.store.LaunchIntent(sessionID); ok {
 		intent.Command = prior.Command

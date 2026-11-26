@@ -362,7 +362,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 	fresh := pending == nil
 	if pending == nil {
 		bellWaitsForPrompt := attempt.Typed > 0 && !sessionmonitor.PromptReady(holder.State, d.stateReason(holder.ID))
-		paste, err := d.inboxPaste(a, holder.ProfileID, bellHeldUntil.IsZero() && !bellWaitsForPrompt, sessionmonitor.RunsIn(holder.State), d.carriesAgentTools(string(holder.Agent)))
+		paste, err := d.inboxPaste(a, holder.ProfileID, bellHeldUntil.IsZero() && !bellWaitsForPrompt, sessionmonitor.RunsIn(holder.State), d.sessionCarriesAgentTools(holder.ID))
 		if err != nil {
 			return receipt, err
 		}

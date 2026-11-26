@@ -405,6 +405,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	intent := launchIntentFromSpawnOptions(plan.spawnOpts)
 	intent.Asks = d.launchedWithAsks(session.ID)
+	intent.AgentTools = d.carriesAgentTools(req.agent)
 	d.launchVentIntent(session.ID).applyTo(&intent)
 	intent.Command = req.policy.command
 	if err := d.store.SetLaunchIntent(session.ID, intent); err != nil {

@@ -91,6 +91,7 @@ type LaunchIntent struct {
 	Effort           string                              `json:"effort,omitempty"`
 	ExecutionTarget  string                              `json:"execution_target,omitempty"`
 	Asks             bool                                `json:"asks,omitempty"`
+	AgentTools       bool                                `json:"agent_tools,omitempty"`
 	Vent             bool                                `json:"vent,omitempty"`
 	ToolVents        bool                                `json:"tool_vents,omitempty"`
 	Experimental     []string                            `json:"experimental,omitempty"`

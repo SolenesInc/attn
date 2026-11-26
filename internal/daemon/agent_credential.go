@@ -128,8 +128,8 @@ func (d *Daemon) carriesAgentTools(agent string) bool {
 }
 
 func (d *Daemon) sessionCarriesAgentTools(id protocol.SessionID) bool {
-	session := d.store.Get(id)
-	return session != nil && d.carriesAgentTools(string(session.Agent))
+	intent, launched := d.store.LaunchIntent(id)
+	return launched && intent.AgentTools && d.agentToolsServed()
 }
 
 func (d *Daemon) tenderCarriesAgentTools(tender who.Party) bool {

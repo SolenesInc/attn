@@ -8,11 +8,14 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestEveryTextAttnTypesToASessionWithToolsWritesItsCommandsAsCalls(t *testing.T) {
@@ -187,15 +190,105 @@ func TestSkillWithNoArgumentsOpensWithTheWayInOfItsCaller(t *testing.T) {
 	}
 }
 
+var shownToolCall = regexp.MustCompile(`attn_do|attn_read|\b[a-z]+_[a-z_]+\(`)
+
+func TestOnlyASessionLaunchedWithTheToolsIsToldToCallThem(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		dispatcher := w.Spawn(app, fakeagent.Claude, w.Path("dispatcher"))
+		launch := func(name string) (*bubbleClaude, string) {
+			seed := plantDelegationSeed(t, cli, dispatcher, name)
+			request := delegateAtSeed(dispatcher, w.Path("dispatcher"), seed)
+			request.Agent = protocol.Ptr("claude")
+			delegated, err := cli.Delegate(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tender := w.bootBubbleClaude(t, string(delegated.SessionID))
+			tender.reply("Started. <!-- attn:state=waiting_input -->")
+			return tender, seed
+		}
+		before, beforeSeed := launch("Launched before the tools")
+		setSetting(t, app, "agent_tools_enabled", "true")
+		with, withSeed := launch("Launched with the tools")
+
+		textsTo := func(tender *bubbleClaude, seed, when string) map[string]string {
+			texts := map[string]string{}
+			typed := func(what string, act func()) {
+				already := len(tender.prompts())
+				act()
+				w.advance(time.Second)
+				synctest.Wait()
+				texts[what] = strings.Join(tender.prompts()[already:], "\n")
+			}
+			typed("a bell's doorbell", func() {
+				bell := plantSeedAs(t, cli, dispatcher, "bell "+when)
+				gardenNudgeWatch(t, cli, tender.id, bell, false)
+				gardenNudgeNote(t, cli, dispatcher, bell, "please look", true)
+			})
+			texts["the bell in the inbox"] = inboxContents(readInbox(t, cli, tender.id, 0).Items)
+			tender.reply("Read it. <!-- attn:state=waiting_input -->")
+			typed("a standby request", func() {
+				app.Send(protocol.StandbySessionMessage{Cmd: protocol.CmdStandbySession, SessionID: protocol.SessionID(tender.id), Until: time.Now().Add(2 * time.Hour)})
+			})
+			tender.reply("Not yet. <!-- attn:state=waiting_input -->")
+			typed("an authorization change", func() {
+				if _, err := cli.WithGardenProfile("", protocol.SessionID(dispatcher)).SeedAuthorization(seed, "Ask me before pushing "+when+".", false); err != nil {
+					t.Fatal(err)
+				}
+			})
+			tender.reply("Noted. <!-- attn:state=waiting_input -->")
+			return texts
+		}
+		judge := func(when string) {
+			for what, text := range textsTo(before, beforeSeed, when) {
+				if text == "" || shownToolCall.MatchString(text) || !strings.Contains(text, "attn ") {
+					t.Errorf("%s: %s reached the session launched before the tools as\n%s\nwant attn commands and no call", when, what, text)
+				}
+			}
+			for what, text := range textsTo(with, withSeed, when) {
+				if !shownToolCall.MatchString(text) {
+					t.Errorf("%s: %s reached the session launched with the tools as\n%s\nwant a call", when, what, text)
+				}
+			}
+		}
+		judge("once the setting is on")
+		w.restart()
+		cli = w.Client()
+		app = w.App()
+		before.cli, with.cli = cli, cli
+		w.advance(0)
+		judge("after a restart")
+
+		reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(before.id), Cols: 100, Rows: 30},
+			protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == before.id })
+		if !reloaded.Success {
+			t.Fatalf("reloading %s: %s", before.id, protocol.Deref(reloaded.Error))
+		}
+		relaunched := w.bootBubbleClaude(t, before.id)
+		relaunched.reply("Back. <!-- attn:state=waiting_input -->")
+		for what, text := range textsTo(relaunched, beforeSeed, "after a reload") {
+			if !shownToolCall.MatchString(text) {
+				t.Errorf("after a reload with the setting on: %s reached the relaunched session as\n%s\nwant a call", what, text)
+			}
+		}
+	})
+}
+
 func TestAPeerTurnsReplyLineNamesACallOnlyForASessionWithTools(t *testing.T) {
-	for _, tools := range []bool{true, false} {
+	for _, launch := range []struct {
+		name          string
+		atLaunch, now bool
+	}{{"launched with tools", true, true}, {"launched without", false, false}, {"launched before the setting turned on", false, true}} {
+		tools := launch.atLaunch
 		for _, turn := range []string{"steer", "interrupt"} {
-			t.Run(fmt.Sprint(turn, "/tools=", tools), func(t *testing.T) {
+			t.Run(turn+"/"+launch.name, func(t *testing.T) {
 				w := newWorld(t, fakeagent.Claude)
 				app, cli := w.App(), w.Client()
-				setSetting(t, app, "agent_tools_enabled", strconv.FormatBool(tools))
+				setSetting(t, app, "agent_tools_enabled", strconv.FormatBool(launch.atLaunch))
 				registerSessions(t, w, cli, "lead")
 				session, run := moddedClaude(t, w, app)
+				setSetting(t, app, "agent_tools_enabled", strconv.FormatBool(launch.now))
 				workingOn(t, app, run, session, "refactor the cache")
 
 				sendPeerMessage(t, cli, "lead", session, "New code logs through slog.", turn)
