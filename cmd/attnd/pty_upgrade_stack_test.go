@@ -80,9 +80,9 @@ done
 	return fixture
 }
 
-func TestAnUpgradedLegacyWorkerKeepsItsModelAndEffortOnReload(t *testing.T) {
-	oldBinary := os.Getenv("ATTN_UPGRADE_OLD_BIN")
-	if oldBinary == "" {
+func TestAnUpgradedLegacyWorkerKeepsItsModelAndEffortWhenItReloadsOntoTheHost(t *testing.T) {
+	oldBinary, hostBinary := os.Getenv("ATTN_UPGRADE_OLD_BIN"), os.Getenv("ATTN_TEST_PTY_HOST")
+	if oldBinary == "" || hostBinary == "" {
 		t.Skip("run scripts/test-pty-upgrade.sh for the two-binary upgrade test")
 	}
 	root, err := os.MkdirTemp("/tmp", "attn-model-upgrade-")
@@ -100,8 +100,8 @@ func TestAnUpgradedLegacyWorkerKeepsItsModelAndEffortOnReload(t *testing.T) {
 			_ = process.Kill()
 		}
 	})
-	start := func(binary string) *upgradeDaemon {
-		d := startUpgradeDaemon(t, root, binary, "")
+	start := func(binary, host string) *upgradeDaemon {
+		d := startUpgradeDaemon(t, root, binary, host)
 		d.workers, d.agentPIDs, d.terminals = workers, agentPIDs, terminals
 		return d
 	}
@@ -113,7 +113,7 @@ func TestAnUpgradedLegacyWorkerKeepsItsModelAndEffortOnReload(t *testing.T) {
 			t.Fatalf("agent arguments lost the selected model or effort: %q", output)
 		}
 	}
-	old := start(oldBinary)
+	old := start(oldBinary, "")
 	old.command(map[string]any{"cmd": "register_workspace", "id": "upgrade", "title": "upgrade", "directory": root}, "workspace_registered", "")
 	old.spawn("pinned-agent", "codex", fixture, func(spawn map[string]any) {
 		spawn["model"], spawn["effort"] = "upgrade-model", "high"
@@ -122,12 +122,12 @@ func TestAnUpgradedLegacyWorkerKeepsItsModelAndEffortOnReload(t *testing.T) {
 	assertPins(old.probe("pinned-agent", identity.ChildPID, "before-upgrade"))
 	old.stop()
 
-	current := start(testworld.AttnBinaryWithSnapshotFormat(t, "upgrade-model-pins"))
+	current := start(testworld.AttnBinaryWithSnapshotFormat(t, "upgrade-model-pins"), hostBinary)
 	current.waitForLog("worker swapped in place", nil)
 	current.assertIdentity("pinned-agent", false, identity)
 	assertPins(current.probe("pinned-agent", identity.ChildPID, "after-upgrade"))
 	current.command(map[string]any{"cmd": "reload_session", "id": "pinned-agent", "cols": 80, "rows": 24}, "reload_session_result", "pinned-agent")
-	reloaded := current.identity("pinned-agent", false)
+	reloaded := current.identity("pinned-agent", true)
 	delete(agentPIDs, "pinned-agent")
 	assertPins(current.probe("pinned-agent", reloaded.ChildPID, "after-reload"))
 	current.command(map[string]any{"cmd": "unregister", "id": "pinned-agent"}, "session_unregistered", "")
@@ -174,16 +174,10 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 	old.stop()
 
 	current := start(newBinary, hostBinary)
-	current.waitForSharedHostActive()
 	for _, id := range []string{"legacy-shell", "legacy-agent", "promote-agent"} {
 		current.assertIdentity(id, false, identities[id])
 		current.probe(id, identities[id].ChildPID, "new-daemon")
 	}
-	current.setSharedSetting(false)
-	current.spawn("stored-off-agent", "claude", fixture)
-	identities["stored-off-agent"] = current.identity("stored-off-agent", false)
-	current.probe("stored-off-agent", identities["stored-off-agent"].ChildPID, "stored-off")
-	current.setSharedSetting(true)
 	current.spawn("new-agent", "claude", fixture)
 	identities["new-agent"] = current.identity("new-agent", true)
 	current.probe("new-agent", identities["new-agent"].ChildPID, "rust-agent")
@@ -215,34 +209,7 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 		t.Fatal(err)
 	}
 	current = start(newBinary, hostBinary)
-	current.waitForSharedHostActive()
 	assertAll(current, "mixed-restart")
-	current.setSharedSetting(false)
-	current.command(map[string]any{"cmd": "reload_session", "id": "promote-agent", "cols": 80, "rows": 24}, "reload_session_result", "promote-agent")
-	dedicated := current.identity("promote-agent", false)
-	if dedicated.ChildPID == promoted.ChildPID || dedicated.WorkerPID == promoted.WorkerPID {
-		t.Fatalf("reload while disabled did not move the selected session to Go: before=%+v after=%+v", promoted, dedicated)
-	}
-	identities["promote-agent"] = dedicated
-	delete(sharedSessions, "promote-agent")
-	priorAgentPID = agentPIDs["promote-agent"]
-	delete(agentPIDs, "promote-agent")
-	output = current.probe("promote-agent", dedicated.ChildPID, "reloaded-off")
-	if !strings.Contains(output, "__RESUME_native-promote-agent__") || agentPIDs["promote-agent"] == priorAgentPID {
-		t.Fatalf("reload while disabled lost native conversation identity: %q", output)
-	}
-	current.spawn("disabled-agent", "claude", fixture)
-	identities["disabled-agent"] = current.identity("disabled-agent", false)
-	assertAll(current, "disabled-live")
-	current.stop()
-
-	current = start(newBinary, hostBinary)
-	current.assertSharedSetting(false, false)
-	assertAll(current, "disabled-restart")
-	current.spawn("restart-off-agent", "claude", fixture)
-	identities["restart-off-agent"] = current.identity("restart-off-agent", false)
-	assertAll(current, "new-after-disabled-restart")
-	current.setSharedSetting(true)
 	current.stop()
 
 	nextHost := filepath.Join(root, "next-pty-host")
@@ -250,7 +217,6 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 		t.Fatal(err)
 	}
 	current = start(newBinary, nextHost)
-	current.assertSharedSetting(true, true)
 	assertAll(current, "host-upgrade")
 	current.waitForLog("shared PTY host artifact promoted", nil)
 	current.spawn("next-agent", "claude", fixture)
@@ -271,7 +237,6 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 		t.Fatal(err)
 	}
 	current = start(newBinary, brokenHost)
-	current.assertSharedSetting(true, true)
 	current.waitForLog("failed validation", nil)
 	if got := current.notificationCount("pty_host_rejected"); got != 1 {
 		t.Fatalf("rejection notifications = %d, want exactly one", got)
@@ -288,7 +253,6 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 	current.stop()
 
 	current = start(newBinary, brokenHost)
-	current.assertSharedSetting(true, true)
 	assertAll(current, "unchanged-rejected-candidate")
 	if got := current.notificationCount("pty_host_rejected"); got != 1 {
 		t.Fatalf("restart rechecked an unchanged rejected build: %d rejection notifications", got)
@@ -296,7 +260,6 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 	current.stop()
 
 	current = start(newBinary, filepath.Join(root, "missing-host"))
-	current.assertSharedSetting(true, true)
 	assertAll(current, "missing-bundle-restart")
 	current.spawn("missing-bundle-agent", "claude", fixture)
 	identities["missing-bundle-agent"] = current.identity("missing-bundle-agent", true)
@@ -304,10 +267,7 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 	if identities["missing-bundle-agent"].WorkerPID != next.WorkerPID {
 		t.Fatal("a missing bundle host moved new launches off the last-known-good host")
 	}
-	current.setSharedSetting(false)
-	current.spawn("fallback-agent", "claude", fixture)
-	identities["fallback-agent"] = current.identity("fallback-agent", false)
-	assertAll(current, "fallback-new-agent")
+	assertAll(current, "missing-bundle-new-agent")
 	for _, id := range slices.Sorted(maps.Keys(identities)) {
 		current.command(map[string]any{"cmd": "unregister", "id": id}, "session_unregistered", "")
 	}
@@ -362,7 +322,6 @@ func TestAnUpdateFromTheReleaseKeepsLiveAgentsAndPutsNewOnesOnTheHostWithDirectL
 			u.assertNoReloadNotice(app, shell.session)
 			shell.assertSameProcess(app)
 
-			awaitTheSharedHost(t, app)
 			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 				agent := u.spawnAgent(app, h)
 				u.assertParent(agent.run, "attn-pty-host")
@@ -419,80 +378,13 @@ func TestAnUpdateFromTheReleaseKeepsWorkerAndHostTerminalsAndReloadsThemOntoTheH
 		u.assertNoReloadNotice(settled, session)
 	}
 
-	awaitTheSharedHost(t, app)
 	for _, agent := range []releaseAgent{onWorker, onHost} {
 		u.reloadOntoTheHost(app, agent)
 	}
 	shellOnHost.assertSameProcess(app)
 }
 
-func TestAnUpdateFromTheReleaseKeepsAHostTerminalAfterTheSettingWasTurnedOff(t *testing.T) {
-	t.Parallel()
-	u := startTheRelease(t)
-	app := u.ReleaseApp()
-	turnOnTheSharedHost(t, app)
-	agent := u.spawnAgent(app, fakeagent.Claude)
-	u.turn(app, agent, "before-update")
-	shell := u.spawnShell(app)
-	terminal := app.Terminal(shell.session)
-	sharedHostOf(t, u.Dir, terminal)
-	setSetting(t, app, upgradeSharedHostEnabled, "false")
-
-	u.InstallBuild(u.currentAttn, u.currentHost)
-	app = u.ensureCurrent()
-	if got := app.Initial.Settings[upgradeSharedHostEnabled]; got != "false" {
-		t.Errorf("%s = %q after the update, want false", upgradeSharedHostEnabled, got)
-	}
-	shell.assertSameProcess(app)
-	app.AwaitScreen(agent.session, "before-update reply")
-	u.turn(app, agent, "after-update")
-	fresh := u.spawnAgent(app, fakeagent.Claude)
-	u.assertNoSharedHost(app.Terminal(fresh.session))
-	u.turn(app, fresh, "on-a-worker")
-	u.assertNoReloadNotice(u.App(), shell.session)
-}
-
-func TestAnUpdateFromTheReleaseWithTheSettingOnAndNoHostLeavesTerminalsOnWorkers(t *testing.T) {
-	t.Parallel()
-	skipUnlessAMachineCanHaveNoHost(t)
-	u := startTheRelease(t)
-	app := u.ReleaseApp()
-	setSetting(t, app, upgradeSharedHostEnabled, "false")
-	live := u.spawnAgent(app, fakeagent.Claude)
-	u.assertNoSharedHost(app.Terminal(live.session))
-	u.turn(app, live, "before-update")
-	turnOnTheSharedHost(t, app)
-	if got := u.Attn("daemon", "stop"); got.Code != 0 {
-		t.Fatalf("attn daemon stop: %+v", got)
-	}
-	u.AwaitStopped()
-	u.Vars = append(u.Vars, "XDG_DATA_HOME="+filepath.Join(u.Dir, "share"))
-	u.InstallBuild(u.currentAttn, "")
-	for _, path := range []string{filepath.Join(u.Dir, "install", ptyhost.BinaryName), filepath.Join(u.Dir, "pty-hosts")} {
-		if err := os.RemoveAll(path); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if got := u.Attn("daemon", "ensure"); got.Code != 0 {
-		t.Fatalf("attn daemon ensure with no host: %+v", got)
-	}
-	t.Cleanup(func() { u.Attn("daemon", "stop") })
-	app = u.App()
-	if active := app.Initial.Settings[upgradeSharedHostActive]; active != "false" {
-		t.Errorf("%s = %q, want false on a machine with no host", upgradeSharedHostActive, active)
-	}
-	if warned := slices.ContainsFunc(app.Initial.Warnings, func(w protocol.DaemonWarning) bool {
-		return strings.Contains(w.Message, "Shared PTY host is unavailable")
-	}); !warned {
-		t.Errorf("a stored true with no host warned %+v, want the warning that names the host", app.Initial.Warnings)
-	}
-	u.turn(app, live, "after-update")
-	fresh := u.spawnAgent(app, fakeagent.Claude)
-	u.assertNoSharedHost(app.Terminal(fresh.session))
-	u.turn(app, fresh, "on-a-worker")
-}
-
-func TestAnUpdateFromTheReleaseWhoseNewHostFailsItsCheckShowsTheNoticeAndUsesWorkers(t *testing.T) {
+func TestAnUpdateFromTheReleaseWhoseNewHostFailsItsCheckShowsTheNoticeAndRefusesNewTerminals(t *testing.T) {
 	t.Parallel()
 	u := startTheRelease(t)
 	app := u.ReleaseApp()
@@ -516,10 +408,7 @@ func TestAnUpdateFromTheReleaseWhoseNewHostFailsItsCheckShowsTheNoticeAndUsesWor
 	if came := initialSession(t, u.App(), shell.session); !protocol.Deref(came.TerminalBuildStale) {
 		t.Errorf("the live shell on the old host shows no reload notice")
 	}
-	fresh := u.spawnAgent(app, fakeagent.Claude)
-	u.assertParent(fresh.run, " pty-worker ")
-	u.assertNoSharedHost(app.Terminal(fresh.session))
-	u.turn(app, fresh, "on-a-worker")
+	u.assertSpawnRefused(app, "Reinstall attn")
 }
 
 func TestAFreshInstallFindsItsHostAndStartsAgentsOnItWithDirectLaunch(t *testing.T) {
@@ -535,7 +424,6 @@ func TestAFreshInstallFindsItsHostAndStartsAgentsOnItWithDirectLaunch(t *testing
 	if len(app.Initial.Warnings) != 0 {
 		t.Errorf("a fresh install warns: %+v", app.Initial.Warnings)
 	}
-	awaitTheSharedHost(t, app)
 	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 		agent := u.spawnAgent(app, h)
 		u.assertParent(agent.run, "attn-pty-host")
@@ -551,7 +439,6 @@ func TestAFreshInstallFindsItsHostAndAnAgentTitledBeforeTheDaemonWatchesLeavesLa
 	s.Start()
 	u := &releaseUpdate{Stack: s, t: t}
 	app := s.App()
-	awaitTheSharedHost(t, app)
 	agent := u.spawnAgent(app, fakeagent.Codex)
 	watching.Await()
 	agent.run.Stream("printed after its title")
@@ -560,41 +447,30 @@ func TestAFreshInstallFindsItsHostAndAnAgentTitledBeforeTheDaemonWatchesLeavesLa
 	u.turn(app, agent, "titled-before-the-watch")
 }
 
-func TestTheFirstStartWithTheHostOnActivatesItAndATerminalOpenedMeanwhileStillRuns(t *testing.T) {
+func TestATerminalOpenedBeforeTheFirstHostCheckFinishesStartsOnTheHost(t *testing.T) {
 	t.Parallel()
 	s, currentHost := newInstalledStack(t)
 	s.InstallBuild(testworld.AttnBinary(t), currentHost)
 	t.Cleanup(func() { s.Attn("daemon", "stop") })
-	if got := s.Attn("daemon", "ensure"); got.Code != 0 {
-		t.Fatalf("attn daemon ensure: %+v", got)
-	}
-	u := &releaseUpdate{Stack: s, t: t}
-	awaitTheSharedHost(t, s.App())
-	if got := s.Attn("daemon", "stop"); got.Code != 0 {
-		t.Fatalf("attn daemon stop: %+v", got)
-	}
 	if err := os.RemoveAll(filepath.Join(s.Dir, "pty-hosts")); err != nil {
 		t.Fatal(err)
 	}
-
-	started := time.Now()
 	if got := s.Attn("daemon", "ensure"); got.Code != 0 {
 		t.Fatalf("attn daemon ensure with no host build checked yet: %+v", got)
 	}
+	u := &releaseUpdate{Stack: s, t: t}
 	app := s.App()
 	if len(app.Initial.Warnings) != 0 {
 		t.Errorf("the first start warns: %+v", app.Initial.Warnings)
 	}
-	early := u.spawnAgent(app, fakeagent.Claude)
-	awaitTheSharedHost(t, app)
-	t.Logf("host-ready window: the host was active %s after the daemon start began", time.Since(started).Round(time.Millisecond))
-	u.turn(app, early, "opened-during-the-window")
-	late := u.spawnAgent(app, fakeagent.Claude)
-	u.assertParent(late.run, "attn-pty-host")
-	u.turn(app, late, "opened-after-the-window")
+	for _, phase := range []string{"opened-during-the-check", "opened-after-the-check"} {
+		agent := u.spawnAgent(app, fakeagent.Claude)
+		u.assertParent(agent.run, "attn-pty-host")
+		u.turn(app, agent, phase)
+	}
 }
 
-func TestAnUpdateFromTheReleaseKeepsStoredOffSettingsOffWithoutANag(t *testing.T) {
+func TestAnUpdateFromTheReleaseDropsStoredOffSettingsAndMovesAgentsOntoTheHostWithoutANag(t *testing.T) {
 	t.Parallel()
 	u := startTheRelease(t)
 	app := u.ReleaseApp()
@@ -605,10 +481,8 @@ func TestAnUpdateFromTheReleaseKeepsStoredOffSettingsOffWithoutANag(t *testing.T
 
 	u.InstallBuild(u.currentAttn, u.currentHost)
 	app = u.ensureCurrent()
-	for key, want := range map[string]string{upgradeSharedHostEnabled: "false", upgradeSharedHostActive: "false"} {
-		if got := app.Initial.Settings[key]; got != want {
-			t.Errorf("%s = %q after the update, want %q", key, got, want)
-		}
+	if got, stored := app.Initial.Settings[upgradeSharedHostEnabled]; stored {
+		t.Errorf("%s = %q after the update, want no such setting", upgradeSharedHostEnabled, got)
 	}
 	if got, stored := app.Initial.Settings[upgradeDirectLaunchEnabled]; stored {
 		t.Errorf("%s = %q after the update, want the key gone", upgradeDirectLaunchEnabled, got)
@@ -619,15 +493,14 @@ func TestAnUpdateFromTheReleaseKeepsStoredOffSettingsOffWithoutANag(t *testing.T
 	u.assertParent(live.run, " -s ")
 	u.turn(app, live, "after-update")
 	fresh := u.spawnAgent(app, fakeagent.Claude)
-	u.assertParent(fresh.run, " pty-worker ")
-	u.assertNoSharedHost(app.Terminal(fresh.session))
+	u.assertParent(fresh.run, "attn-pty-host")
 	result := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(live.session), Cols: 100, Rows: 30},
 		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == live.session })
 	if !result.Success {
 		t.Fatalf("reload: %s", protocol.Deref(result.Error))
 	}
 	reloaded := releaseAgent{session: live.session, run: u.Launched(live.session)}
-	u.assertParent(reloaded.run, " pty-worker ")
+	u.assertParent(reloaded.run, "attn-pty-host")
 	u.turn(app, reloaded, "after-reload")
 	if notifications := u.notifications(app); len(notifications) != 0 {
 		t.Errorf("the update notified: %+v", notifications)
@@ -642,7 +515,6 @@ func TestAfterAnUpdateARebootBringsSessionsBackOnTheHostWithDirectLaunchAndTheir
 	u.turn(app, onWorker, "before-update")
 	u.InstallBuild(u.currentAttn, u.currentHost)
 	app = u.ensureCurrent()
-	awaitTheSharedHost(t, app)
 	onHost := u.spawnAgent(app, fakeagent.Codex)
 	u.turn(app, onHost, "on-the-host")
 
@@ -660,12 +532,11 @@ func TestAfterAnUpdateARebootBringsSessionsBackOnTheHostWithDirectLaunchAndTheir
 	}
 }
 
-func TestAHostThatCannotRunLeavesNewTerminalsOnWorkersWithOneNotification(t *testing.T) {
+func TestAHostThatCannotRunRefusesNewTerminalsWithOneNotification(t *testing.T) {
 	t.Parallel()
 	u := startTheRelease(t)
 	u.InstallBuild(u.currentAttn, u.currentHost)
-	app := u.ensureCurrent()
-	awaitTheSharedHost(t, app)
+	u.ensureCurrent()
 	if got := u.Attn("daemon", "stop"); got.Code != 0 {
 		t.Fatalf("attn daemon stop: %+v", got)
 	}
@@ -680,7 +551,7 @@ func TestAHostThatCannotRunLeavesNewTerminalsOnWorkersWithOneNotification(t *tes
 	if got := u.Attn("daemon", "ensure"); got.Code != 0 {
 		t.Fatalf("attn daemon ensure with a host that cannot run: %+v", got)
 	}
-	app = u.App()
+	app := u.App()
 	if len(u.notifications(app)) == 0 {
 		testworld.Await(app, protocol.EventNotificationsUpdated, func(protocol.NotificationsUpdatedMessage) bool { return true })
 	}
@@ -688,13 +559,13 @@ func TestAHostThatCannotRunLeavesNewTerminalsOnWorkersWithOneNotification(t *tes
 	if len(notifications) != 1 || notifications[0].Kind != "pty_host_rejected" {
 		t.Fatalf("notifications = %+v, want one pty_host_rejected", notifications)
 	}
-	agent := u.spawnAgent(app, fakeagent.Claude)
-	u.assertParent(agent.run, " pty-worker ")
-	u.assertNoSharedHost(app.Terminal(agent.session))
-	u.turn(app, agent, "on-a-worker")
+	if !strings.Contains(notifications[0].Impact, "Reinstall attn") {
+		t.Errorf("the notification's impact %q does not say how to get the host", notifications[0].Impact)
+	}
+	u.assertSpawnRefused(app, "Reinstall attn")
 }
 
-func TestAMachineWithOnlyAttnKeepsTerminalsOnWorkersWithoutAWarning(t *testing.T) {
+func TestAMachineWithOnlyAttnKeepsItsWorkerTerminalsAndRefusesNewOnesWithTheRemedy(t *testing.T) {
 	t.Parallel()
 	skipUnlessAMachineCanHaveNoHost(t)
 	releaseAttn := os.Getenv("ATTN_UPGRADE_RELEASE_BIN")
@@ -715,38 +586,8 @@ func TestAMachineWithOnlyAttnKeepsTerminalsOnWorkersWithoutAWarning(t *testing.T
 	if len(app.Initial.Warnings) != 0 {
 		t.Errorf("the updated daemon warns: %+v", app.Initial.Warnings)
 	}
-	if active := app.Initial.Settings[upgradeSharedHostActive]; active != "false" {
-		t.Errorf("%s = %q, want false on a machine with no host", upgradeSharedHostActive, active)
-	}
 	u.turn(app, live, "after-update")
-	fresh := u.spawnAgent(app, fakeagent.Claude)
-	u.assertNoSharedHost(app.Terminal(fresh.session))
-	u.turn(app, fresh, "on-a-worker")
-}
-
-func TestTurningTheSettingsOffAndOnMovesNewTerminalsAndLeavesLiveOnes(t *testing.T) {
-	t.Parallel()
-	u := startTheRelease(t)
-	u.InstallBuild(u.currentAttn, u.currentHost)
-	app := u.ensureCurrent()
-	awaitTheSharedHost(t, app)
-	first := u.spawnAgent(app, fakeagent.Claude)
-	u.assertParent(first.run, "attn-pty-host")
-
-	setSetting(t, app, upgradeSharedHostEnabled, "false")
-	second := u.spawnAgent(app, fakeagent.Claude)
-	u.assertParent(second.run, " pty-worker ")
-	u.assertNoSharedHost(app.Terminal(second.session))
-	u.turn(app, first, "with-the-settings-off")
-
-	setSetting(t, app, upgradeSharedHostEnabled, "true")
-	third := u.spawnAgent(app, fakeagent.Claude)
-	u.assertParent(third.run, "attn-pty-host")
-	for _, agent := range []releaseAgent{first, second, third} {
-		u.turn(app, agent, "with-the-settings-on-again")
-	}
-	u.assertParent(first.run, "attn-pty-host")
-	u.assertParent(second.run, " pty-worker ")
+	u.assertSpawnRefused(app, "Reinstall attn")
 }
 
 func TestDirectLaunchStartsAgentsThroughTheUsersLoginShell(t *testing.T) {
@@ -762,7 +603,6 @@ func TestDirectLaunchStartsAgentsThroughTheUsersLoginShell(t *testing.T) {
 		t.Parallel()
 		u := startDirectLaunch(t, func(s *testworld.Stack) string { return loginShell(t, s, "printf 'welcome from the rc file\\n'") })
 		app := u.App()
-		awaitTheSharedHost(t, app)
 		agent := u.spawnAgent(app, fakeagent.Claude)
 		u.assertParent(agent.run, "attn-pty-host")
 		u.turn(app, agent, "after-a-chatty-rc")
@@ -778,7 +618,6 @@ func TestDirectLaunchStartsAgentsThroughTheUsersLoginShell(t *testing.T) {
 			return loginShell(t, s, `case "$*" in *attn-agent*) read _ < `+held+`;; esac`)
 		})
 		app := u.App()
-		awaitTheSharedHost(t, app)
 		session := u.Spawn(app, fakeagent.Claude, u.Path("claude"))
 		release, err := os.OpenFile(held, os.O_WRONLY, 0)
 		if err != nil {
@@ -803,7 +642,6 @@ func TestDirectLaunchStartsAgentsThroughTheUsersLoginShell(t *testing.T) {
 			return fish
 		})
 		app := u.App()
-		awaitTheSharedHost(t, app)
 		for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 			agent := u.spawnAgent(app, h)
 			u.assertParent(agent.run, "attn-pty-host")
@@ -1025,7 +863,6 @@ func TestAnOutpostOnTheReleaseKeepsItsTerminalsWhenTheHomeAddsAndUpdatesIt(t *te
 	if prompt := run.Prompted(); prompt != "on-the-updated-outpost" {
 		t.Errorf("the new agent on the outpost took %q", prompt)
 	}
-	awaitTheSharedHost(t, remote.App())
 	inHost := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("in-host"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
 	app.TypeLine(inHost, `echo "owner=$(`+terminalOwner+`)"`)
 	app.AwaitScreen(inHost, "owner="+ptyhost.BinaryName)
@@ -1200,16 +1037,6 @@ func (u *releaseUpdate) ensureCurrent() *testworld.Peer {
 	return u.App()
 }
 
-func awaitTheSharedHost(t *testing.T, app *testworld.Peer) {
-	t.Helper()
-	if app.Initial.Settings[upgradeSharedHostActive] == "true" {
-		return
-	}
-	testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-		return m.Settings[upgradeSharedHostActive] == "true"
-	})
-}
-
 func turnOnTheSharedHost(t *testing.T, app *testworld.Peer) {
 	t.Helper()
 	mark := len(app.Log())
@@ -1223,6 +1050,15 @@ func (u *releaseUpdate) spawnAgent(app *testworld.Peer, h fakeagent.Harness) rel
 	u.T.Helper()
 	session := u.Spawn(app, h, u.Path(string(h)))
 	return releaseAgent{session: session, run: u.Launched(session)}
+}
+
+func (u *releaseUpdate) assertSpawnRefused(app *testworld.Peer, remedy string) {
+	u.T.Helper()
+	result, _, _ := u.RequestSpawn(app, fakeagent.Claude, u.Path("refused"))
+	if result.Success || !strings.Contains(protocol.Deref(result.Error), "shared terminal host is unavailable") || !strings.Contains(protocol.Deref(result.Error), remedy) {
+		u.T.Fatalf("a new terminal with no usable host answered %+v, want a refusal that says %q", result, remedy)
+	}
+	u.T.Logf("refused: %s", protocol.Deref(result.Error))
 }
 
 func (u *releaseUpdate) spawnShell(app *testworld.Peer) *releaseShell {
@@ -1562,68 +1398,6 @@ func (d *upgradeDaemon) command(value any, event, id string) map[string]any {
 	d.t.Helper()
 	d.write(value)
 	return d.event(event, id)
-}
-
-func (d *upgradeDaemon) assertSharedSetting(enabled, active bool) {
-	d.t.Helper()
-	d.write(map[string]any{"cmd": "get_settings"})
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	for {
-		event, _, _ := d.read(ctx)
-		if event["event"] != "settings_updated" || event["changed_key"] != nil {
-			continue
-		}
-		settings, ok := event["settings"].(map[string]any)
-		if !ok || settings[upgradeSharedHostEnabled] != strconv.FormatBool(enabled) || settings[upgradeSharedHostActive] != strconv.FormatBool(active) {
-			d.t.Fatalf("want shared enabled=%v active=%v, got %v", enabled, active, settings)
-		}
-		return
-	}
-}
-
-func (d *upgradeDaemon) waitForSharedHostActive() {
-	d.t.Helper()
-	d.write(map[string]any{"cmd": "get_settings"})
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	for {
-		event, _, _ := d.read(ctx)
-		if event["event"] != "settings_updated" {
-			continue
-		}
-		if event["changed_key"] != nil && event["changed_key"] != upgradeSharedHostActive {
-			continue
-		}
-		settings, ok := event["settings"].(map[string]any)
-		if !ok || settings[upgradeSharedHostEnabled] != "true" {
-			d.t.Fatalf("want shared host enabled, got %v", event)
-		}
-		if settings[upgradeSharedHostActive] == "true" {
-			return
-		}
-		if event["changed_key"] == upgradeSharedHostActive {
-			d.t.Fatalf("shared host activation event reported inactive: %v", event)
-		}
-	}
-}
-
-func (d *upgradeDaemon) setSharedSetting(enabled bool) {
-	d.t.Helper()
-	d.write(map[string]any{"cmd": "set_setting", "key": upgradeSharedHostEnabled, "value": strconv.FormatBool(enabled)})
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	for {
-		event, _, _ := d.read(ctx)
-		if event["event"] != "settings_updated" || event["changed_key"] != upgradeSharedHostEnabled {
-			continue
-		}
-		if event["success"] == false {
-			d.t.Fatalf("toggle failed: %v", event)
-		}
-		break
-	}
-	d.assertSharedSetting(enabled, enabled)
 }
 
 func (d *upgradeDaemon) spawn(id, agent, executable string, options ...func(map[string]any)) {

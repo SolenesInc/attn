@@ -70,12 +70,7 @@ func (d *Daemon) applySetting(_ context.Context, msg protocol.SetSettingMessage)
 	if spec.Kind == setting.Bool && strings.TrimSpace(msg.Value) != "" {
 		msg.Value = strconv.FormatBool(setting.ParseBool(msg.Value))
 	}
-	if msg.Key == setting.SharedPTYHostEnabled.Key {
-		err = d.setSharedPTYHostEnabled(msg.Value)
-	} else {
-		err = d.store.SetSettingChecked(msg.Key, msg.Value)
-	}
-	if err != nil {
+	if err := d.store.SetSettingChecked(msg.Key, msg.Value); err != nil {
 		return nil, err
 	}
 	d.settingChanged(msg.Key, msg.Value)
@@ -173,9 +168,6 @@ func (d *Daemon) refreshChangedSettings(before map[string]string) {
 	for key, value := range after {
 		if before[key] != value {
 			d.settingChanged(key, value)
-			if key == setting.SharedPTYHostEnabled.Key {
-				d.life.Go("followSharedPTYHost", d.followSharedPTYHost)
-			}
 		}
 	}
 }
@@ -249,9 +241,6 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	delete(settings, setting.AnalyticsClearedAt.Key)
 
 	settings[setting.PTYBackendMode.Key] = d.ptyBackendMode()
-	sharedEnabled, sharedActive := d.sharedPTYHostSettings()
-	settings[setting.SharedPTYHostEnabled.Key] = strconv.FormatBool(sharedEnabled)
-	settings[setting.SharedPTYHostActive.Key] = strconv.FormatBool(sharedActive)
 	settings[setting.NotebookSyncState.Key], settings[setting.NotebookSyncLastError.Key] = d.notebookSyncSettings()
 	d.lastBackupMu.Lock()
 	lastBackupAt := d.lastBackupAt

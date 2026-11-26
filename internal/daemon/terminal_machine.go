@@ -192,7 +192,7 @@ func (d *Daemon) spawnSessionRuntime(sessionID protocol.SessionID, opts ptybacke
 func (d *Daemon) startTerminalRuntime(opts ptybackend.SpawnOptions) error {
 	opts = withLifecycleID(opts)
 	opts.DaemonEnv = d.runEnv(opts.LifecycleID)
-	return d.ptyBackend.Spawn(context.Background(), opts)
+	return d.spawnTerminal(context.Background(), opts)
 }
 
 func (d *Daemon) restartTerminal(ctx context.Context, msg protocol.TerminalRestartMessage) (struct{}, error) {
@@ -239,7 +239,7 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 	d.syncMonitorConversation(sessionID)
 	opts.DaemonEnv = d.runEnv(opts.LifecycleID)
 	d.sessionMonitor(sessionID).HarnessStarting(opts.Agent)
-	if spawnErr := d.ptyBackend.Spawn(ctx, opts); spawnErr != nil {
+	if spawnErr := d.spawnTerminal(ctx, opts); spawnErr != nil {
 		unlockEnds()
 		d.logf("reload: respawn failed for %s: %v; finalizing as exited", sessionID, spawnErr)
 		d.noteRelaunchFailed(sessionID, spawnErr)

@@ -9,8 +9,6 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
-  queueDaemonSettingRestore,
-  writeDaemonSettings,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, dataDirForInstance, defaultWSURLForInstance } from './harnessInstance.mjs';
@@ -29,7 +27,7 @@ const PROCESS_CLASSES = ['app', 'webkit_webcontent', 'webkit_networking', 'webki
 
 function parseArgs(argv) {
   const args = argv.filter((arg) => arg !== '--');
-  const extras = { workload: 'drawn', streams: 3, seconds: 30, runs: 5, keys: 30, profileDir: null, pprofPort: null, sharedHost: 'true' };
+  const extras = { workload: 'drawn', streams: 3, seconds: 30, runs: 5, keys: 30, profileDir: null, pprofPort: null };
   const passthrough = [];
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -46,24 +44,21 @@ function parseArgs(argv) {
     else if (arg === '--keys') extras.keys = Number(value());
     else if (arg === '--profile-dir') extras.profileDir = path.resolve(value());
     else if (arg === '--pprof-port') extras.pprofPort = Number(value());
-    else if (arg === '--shared-host') extras.sharedHost = value();
     else passthrough.push(arg);
   }
-  if (!['true', 'false'].includes(extras.sharedHost)) throw new Error(`--shared-host must be true or false, got ${extras.sharedHost}`);
   if (!WORKLOADS.includes(extras.workload)) throw new Error(`--workload must be one of ${WORKLOADS.join(', ')}, got ${extras.workload}`);
   for (const key of ['streams', 'seconds', 'runs']) {
     if (!Number.isInteger(extras[key]) || extras[key] < 1) throw new Error(`--${key} must be a positive integer, got ${extras[key]}`);
   }
   if (!Number.isInteger(extras.keys) || extras.keys < 0) throw new Error(`--keys must be a non-negative integer, got ${extras.keys}`);
   if (extras.pprofPort !== null && !extras.profileDir) throw new Error('--pprof-port needs --profile-dir');
-  if (extras.profileDir && extras.sharedHost === 'false') throw new Error('--profile-dir samples the shared PTY host, so it needs --shared-host true');
   return { options: parseCommonArgs(passthrough), extras, help: args.includes('--help') || args.includes('-h') };
 }
 
 function printHelp() {
   printCommonHelp('scripts/real-app-harness/scenario-perf-pty-stream.mjs');
   console.log(`
-Measures what streaming terminal output costs, with the shared terminal host on unless --shared-host false.
+Measures what streaming terminal output costs in the shared terminal host.
 
   --workload hidden|drawn|unmounted
       hidden: the streaming shells are splits on the previous desktop; a quiet shell is drawn.
@@ -76,9 +71,6 @@ Measures what streaming terminal output costs, with the shared terminal host on 
   --profile-dir D profile the daemon, the PTY host and the app during each window into D.
                   Profiling costs CPU, so profiled runs are not baselines.
   --pprof-port P  restart the instance's daemon with ATTN_PPROF=P so the daemon profile is taken too
-  --shared-host true|false
-                  pty_shared_host_enabled for the run (default true); it also turns on streaming only to drawn panes.
-                  With false, pty_host CPU is the sum of the Go PTY workers.
 
 Prints one {"type":"run"} JSON line per run, then one {"type":"summary"} line with the
 median, min and max of each number.`);
@@ -115,21 +107,6 @@ function liveSharedHostPid(dataDir) {
   }
   if (candidates.length !== 1) throw new Error(`Expected one live shared PTY host under ${root}, found ${JSON.stringify(candidates)}`);
   return candidates[0];
-}
-
-function liveGoWorkerPids(dataDir) {
-  const pids = [];
-  for (const daemonInstance of fs.existsSync(path.join(dataDir, 'workers')) ? fs.readdirSync(path.join(dataDir, 'workers')) : []) {
-    const registry = path.join(dataDir, 'workers', daemonInstance, 'registry');
-    for (const file of fs.existsSync(registry) ? fs.readdirSync(registry).filter((name) => name.endsWith('.json')) : []) {
-      try {
-        const pid = JSON.parse(fs.readFileSync(path.join(registry, file), 'utf8')).worker_pid;
-        process.kill(pid, 0);
-        pids.push(pid);
-      } catch {}
-    }
-  }
-  return pids;
 }
 
 function classifyProcess(proc, { appPid, daemonPid, ptyPids }) {
@@ -385,8 +362,8 @@ async function measureRun({ client, driver, observer, extras, runner, runIndex, 
     const workload = await buildWorkload({ client, observer, extras, cwd, runIndex, createdSessionIds, createdDesktops });
     await assertStreaming(observer, workload.streams);
     await delay(WARMUP_MS);
-    const hostPid = extras.sharedHost === 'true' ? liveSharedHostPid(dataDir) : null;
-    const pids = { ...launchPids, hostPid, ptyPids: new Set(hostPid ? [hostPid] : liveGoWorkerPids(dataDir)) };
+    const hostPid = liveSharedHostPid(dataDir);
+    const pids = { ...launchPids, hostPid, ptyPids: new Set([hostPid]) };
 
     const tree = await appProcessTree(pids);
     const appPids = tree.filter((entry) => entry.processClass === 'app').map((entry) => entry.pid);
@@ -487,9 +464,6 @@ async function main() {
       }
       const webkitBaseline = await captureWebKitPids();
       await launchFreshAppAndConnect(client, observer);
-      queueDaemonSettingRestore(observer, 'pty_shared_host_enabled');
-      await writeDaemonSettings([{ key: 'pty_shared_host_enabled', value: extras.sharedHost }]);
-      await observer.waitFor(() => observer.getSetting('pty_shared_host_active') === extras.sharedHost, `the shared terminal host active=${extras.sharedHost} for new terminals`, 20_000);
       const appPid = client.readManifest()?.pid;
       const daemonPid = readLiveDaemonPid(instance);
       if (!appPid || !daemonPid) throw new Error(`Missing pids: app=${appPid} daemon=${daemonPid}`);
@@ -504,7 +478,7 @@ async function main() {
       records.push(record);
       console.log(JSON.stringify(record));
     }
-    const summary = { type: 'summary', workload: extras.workload, sharedHost: extras.sharedHost, runs: records.length, seconds: extras.seconds, streams: extras.streams, profiled: Boolean(extras.profileDir), metrics: summarize(records) };
+    const summary = { type: 'summary', workload: extras.workload, runs: records.length, seconds: extras.seconds, streams: extras.streams, profiled: Boolean(extras.profileDir), metrics: summarize(records) };
     runner.writeJson('summary-metrics.json', summary);
     console.log(JSON.stringify(summary));
     await runner.finishSuccess({ summary });

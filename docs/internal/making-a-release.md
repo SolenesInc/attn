@@ -51,11 +51,9 @@ Confirm the release assets include the DMG, `attn_aarch64.app.tar.gz`,
 `{attnd,attn,attn-pty-host}-linux-{amd64,arm64}` and `SHA256SUMS-linux-*`.
 Then run `brew upgrade --cask solenesinc/attn/attn`, open the app **from
 Finder** (the only path that tests macOS Gatekeeper/notarization on first
-launch), and confirm the shared PTY host is active and new agents run as its
-children:
+launch), and confirm that new agents run as children of the shared PTY host:
 
 ```sh
-attn settings get pty_shared_host_active                 # true
 ps -o command= -p "$(ps -o ppid= -p <new agent's pid>)"  # attn-pty-host ...
 ```
 

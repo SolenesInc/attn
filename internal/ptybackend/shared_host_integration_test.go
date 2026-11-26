@@ -280,7 +280,7 @@ func TestMigratingHost_RecoversLegacyAndSharedSessionsWithoutMovingEither(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	migrating, err := NewMigrating(legacy, shared, true)
+	migrating, err := NewMigrating(legacy, shared)
 	if err != nil {
 		t.Fatal(err)
 	}

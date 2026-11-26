@@ -33,7 +33,7 @@ func (d *Daemon) startAdapterTerminal(ctx context.Context, owner string, opts pt
 	if err := d.store.SaveAdapterTerminal(string(opts.ID), owner); err != nil {
 		return err
 	}
-	if err := d.ptyBackend.Spawn(ctx, withLifecycleID(opts)); err != nil {
+	if err := d.spawnTerminal(ctx, withLifecycleID(opts)); err != nil {
 		if forgetErr := d.store.DeleteAdapterTerminal(string(opts.ID)); forgetErr != nil {
 			d.logf("forget adapter terminal %s: %v", opts.ID, forgetErr)
 		}

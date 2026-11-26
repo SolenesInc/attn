@@ -52,7 +52,6 @@ import (
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionmonitor"
-	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/unixsock"
@@ -96,7 +95,6 @@ const (
 	warnWorkerRecoveryPartial     = "worker_recovery_partial"
 	warnStaleSessionsPruned       = "stale_sessions_pruned"
 	warnStaleSessionMissingWorker = "stale_session_missing_worker"
-	warnPTYBackendFallback        = "pty_backend_fallback"
 	warnGHNotInstalled            = "gh_not_installed"
 	warnGHVersionTooOld           = "gh_version_too_old"
 )
@@ -177,8 +175,6 @@ type Daemon struct {
 	warnings                []protocol.DaemonWarning
 	warningsMu              sync.RWMutex
 	ptyBackend              ptybackend.Backend
-	ptySettingsMu           sync.Mutex
-	ptySettingsChangeMu     sync.Mutex
 	sharedPTYHost           *ptybackend.WorkerBackend
 	upgradingMu             sync.Mutex
 	upgradingWorkers        map[harness.TerminalID]chan struct{}
@@ -602,36 +598,18 @@ func (d *Daemon) startMigratingPTYBackend() error {
 	}
 	shared, err := d.newSharedPTYHost()
 	if err != nil {
-		d.ptyBackend = legacy
-		d.logf("shared PTY host initialization failed: %v; new sessions remain on legacy workers", err)
-		d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Shared PTY host is unavailable (%v). New terminals will keep using dedicated workers.", err))
-		return nil
+		return fmt.Errorf("start the shared PTY host: %w", err)
 	}
-
-	sharedEnabled := d.on(setting.SharedPTYHostEnabled)
-	useSharedForNew := sharedEnabled && shared.SharedArtifactReady()
-	if sharedEnabled && !useSharedForNew && !shouldRunWorkerStartupProbe() && strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")) != "" {
-		useSharedForNew = true
+	if candidateErr := shared.SharedCandidateError(); candidateErr != nil && !shared.SharedArtifactReady() {
+		d.logf("shared PTY host unavailable: %v; new terminals cannot start", candidateErr)
 	}
-	if candidateErr := shared.SharedCandidateError(); sharedEnabled && !useSharedForNew && candidateErr != nil {
-		d.logf("shared PTY host unavailable: %v; new sessions remain on legacy workers", candidateErr)
-		if d.enrollmentStatus().IsHome() && setting.ParseBool(d.store.GetSetting(setting.SharedPTYHostEnabled.Key)) {
-			d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Shared PTY host is unavailable (%v). New terminals will keep using dedicated workers.", candidateErr))
-		}
-	}
-	migrating, err := ptybackend.NewMigrating(legacy, shared, useSharedForNew)
+	migrating, err := ptybackend.NewMigrating(legacy, shared)
 	if err != nil {
-		d.logf("failed to initialize PTY migration router: %v; using legacy workers", err)
-		d.ptyBackend = legacy
-		return nil
+		return fmt.Errorf("start the PTY migration router: %w", err)
 	}
 	d.ptyBackend = migrating
 	d.sharedPTYHost = shared
-	if useSharedForNew {
-		d.logf("using PTY backend: migrating (existing=owner, new=shared)")
-	} else {
-		d.logf("using PTY backend: migrating (existing=owner, new=legacy)")
-	}
+	d.logf("using PTY backend: migrating (existing=owner, new=shared)")
 	return nil
 }
 
@@ -865,11 +843,7 @@ func (d *Daemon) Start() error {
 		d.upgradeStaleTerminals()
 		d.monitors().registry.ResolveDue(time.Now())
 		d.life.Go("runSessionResolver", d.monitors().registry.Run)
-		if _, routed := d.ptyBackend.(*ptybackend.MigratingBackend); routed {
-			d.life.Go("validateSharedPTYHostAfterRecovery", d.validateSharedPTYHostAfterRecovery)
-		} else {
-			d.validateSharedPTYHostAfterRecovery()
-		}
+		d.life.Go("validateSharedPTYHostAfterRecovery", d.validateSharedPTYHostAfterRecovery)
 		if d.stopping() {
 			return
 		}

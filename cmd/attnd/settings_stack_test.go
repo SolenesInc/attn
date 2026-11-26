@@ -129,19 +129,6 @@ func TestABooleanStoredByAnOlderVersionReadsTheSameEverywhere(t *testing.T) {
 	}
 }
 
-func TestResettingTheSharedHostClearsTheStoredChoice(t *testing.T) {
-	s := testworld.NewStack(t)
-	s.UseSharedHostBinary(filepath.Join(s.Dir, "unused-host"))
-	s.Start()
-	requireStdout(t, s.Attn("settings", "set", "pty_shared_host_enabled", "false"), "false")
-	requireStdout(t, s.Attn("settings", "set", "pty_shared_host_enabled", ""))
-	requireStdout(t, s.Attn("settings", "get", "pty_shared_host_enabled"), "true")
-	requireStdout(t, s.Attn("settings", "get", "pty_shared_host_active"), "false")
-	if warnings := s.App().Initial.Warnings; len(warnings) != 0 {
-		t.Errorf("a reset on a machine with no usable host warns: %+v", warnings)
-	}
-}
-
 func TestSettingsCLIReportsDefaultOnSettingsAsOnUntilStoredOff(t *testing.T) {
 	s := testworld.NewStack(t)
 	s.Start()

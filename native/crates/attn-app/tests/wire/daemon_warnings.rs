@@ -179,11 +179,7 @@ fn shortens_the_links_in_a_github_cli_warning_to_their_host_and_opens_the_full_a
     assert_eq!(world.opened_links(), [guide, "https://cli.github.com"]);
 }
 
-const EVERY_START_WARNING: [(&str, &str); 7] = [
-    (
-        "pty_backend_fallback",
-        "Shared PTY host is unavailable (dial unix /Users/sam/.attn/pty-hosts/daemon-1/host.sock: connect: no such file or directory). New terminals will keep using dedicated workers.",
-    ),
+const EVERY_START_WARNING: [(&str, &str); 6] = [
     (
         "worker_recovery_partial",
         "PTY recovery skipped 3 workers due to transient unavailability.",

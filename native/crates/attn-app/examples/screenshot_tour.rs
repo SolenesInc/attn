@@ -3271,7 +3271,7 @@ fn analytics_populated(dark: bool, smallest: bool, chosen: Chosen) {
             model: Some("claude-opus-5-5".into()),
             model_requested: Some("opus".into()),
             build: build.clone(),
-            experimental: vec!["asks_enabled".into(), "pty_shared_host_enabled".into()],
+            experimental: vec!["asks_enabled".into(), "sigma_enabled".into()],
             ..attn_protocol::VentContext::default()
         },
         ..attn_protocol::Vent::default()
@@ -8894,8 +8894,7 @@ fn smallest_banners(dark: bool) {
 }
 
 /// Every start warning the daemon can send at once, worded as it words them.
-const START_WARNINGS: [&str; 7] = [
-    "Shared PTY host is unavailable (dial unix /Users/sam/.attn/pty-hosts/daemon-1/host.sock: connect: no such file or directory). New terminals will keep using dedicated workers.",
+const START_WARNINGS: [&str; 6] = [
     "PTY recovery skipped 3 workers due to transient unavailability.",
     "Deferred marking 4 tracked sessions idle because PTY recovery was incomplete.",
     "2 sessions can be recovered from a previous daemon run.",

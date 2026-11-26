@@ -278,10 +278,10 @@ Follow [Testing](docs/internal/testing.md). In short:
 
 ## Ownership
 
-- New terminals run in the shared host (`pty-host`). With
-  `pty_shared_host_enabled` off, or on a machine with no usable host, they run in
-  `internal/ptyworker`, using `internal/pty`. A running terminal stays with the
-  runtime that started it.
+- New terminals run in the shared host (`pty-host`). On a machine with no usable
+  host, a new terminal fails to start. Terminals an older build started in a
+  dedicated worker (`internal/ptyworker`, using `internal/pty`) stay there until
+  they end or reload. A running terminal stays with the runtime that started it.
 - `internal/store` owns SQLite/cache; `internal/attention` owns turn predicates.
   Derive `turn_owed` from persisted opened/settled timestamps.
 - `internal/jobs` owns background duties and most periodic ticks. The PR poll,

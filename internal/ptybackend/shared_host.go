@@ -575,7 +575,7 @@ func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) erro
 	}
 	if !b.SharedArtifactReady() {
 		if err := b.ValidateSharedCandidate(ctx, false); err != nil {
-			return err
+			return fmt.Errorf("%w: %w", ErrSharedHostUnavailable, err)
 		}
 	}
 

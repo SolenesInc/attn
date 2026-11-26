@@ -539,78 +539,12 @@ fn asks_sit_under_agents_and_models_on_by_default_and_turn_off() {
 }
 
 #[test]
-fn asks_and_the_shared_host_stay_out_of_experimental() {
+fn asks_stays_out_of_experimental() {
     let (daemon, _) = accepting(&[]);
     let mut world = World::start(daemon);
     open(&mut world);
     click(&mut world, "settings.nav.experimental");
     assert!(!shows(&world, "settings.feature.asks_enabled"));
-    assert!(!shows(&world, "settings.feature.pty_shared_host_enabled"));
-    assert!(!shows(&world, &toggle("pty_shared_host_enabled")));
-    rest(&mut world);
-}
-
-#[test]
-fn the_shared_host_shows_what_the_daemon_holds_not_what_was_sent() {
-    let (daemon, stored) = accepting(&[("pty_backend_mode", "migrating")]);
-    let held = held_saves(&daemon);
-    let mut world = on_agents_with(daemon, &stored);
-    let host = toggle("pty_shared_host_enabled");
-    assert!(node(&world, &host).is("checked"));
-    click(&mut world, &host);
-    assert_eq!(
-        writes(&world),
-        saved(&[("pty_shared_host_enabled", "false")])
-    );
-    assert!(node(&world, &host).is("checked"));
-
-    let request = held.lock().unwrap().remove(0);
-    answer(&mut world, &stored, &request);
-    assert!(!node(&world, &host).is("checked"));
-    rest(&mut world);
-}
-
-#[test]
-fn the_shared_host_turns_back_on_from_a_stored_false() {
-    let mut world = on_agents(&[
-        ("pty_backend_mode", "migrating"),
-        ("pty_shared_host_enabled", "false"),
-        ("pty_shared_host_active", "false"),
-    ]);
-    let host = toggle("pty_shared_host_enabled");
-    assert!(!node(&world, &host).is("checked"));
-    click(&mut world, &host);
-    assert_eq!(
-        writes(&world),
-        saved(&[("pty_shared_host_enabled", "true")])
-    );
-    rest(&mut world);
-}
-
-#[test]
-fn the_shared_host_cannot_be_switched_unless_the_backend_is_migrating() {
-    for mode in ["worker", "shared", "unknown"] {
-        let mut world = on_agents(&[("pty_backend_mode", mode)]);
-        let host = toggle("pty_shared_host_enabled");
-        assert!(node(&world, &host).is("disabled"), "{mode}");
-        let _ = world.automate("press", json!({"target": {"key": host}}));
-        assert!(writes(&world).is_empty(), "{mode}");
-        rest(&mut world);
-    }
-}
-
-#[test]
-fn searching_for_terminal_hosting_finds_the_shared_host_under_agents_and_models() {
-    let (daemon, stored) = accepting(&[]);
-    serve(&daemon, &stored, harnesses());
-    let mut world = World::start(daemon);
-    open(&mut world);
-    for query in ["terminal", "pty", "Shared terminal host"] {
-        retype(&mut world, "settings.search.field", query);
-        assert!(shows(&world, "settings.nav.agents"), "{query}");
-    }
-    click(&mut world, "settings.nav.agents");
-    assert!(shows(&world, &toggle("pty_shared_host_enabled")));
     rest(&mut world);
 }
 
@@ -1399,41 +1333,6 @@ fn a_long_refusal_keeps_the_refused_executable_in_view_in_the_smallest_window() 
         "the refused field at {focused:?} stays inside the page's view {body:?}"
     );
     rest(&mut world);
-}
-
-#[test]
-fn an_unavailable_switch_is_still_heard_with_its_name_and_value_and_takes_no_tab_or_press() {
-    let mut world = on_agents(&[]);
-    let host = toggle("pty_shared_host_enabled");
-    let switch = node(&world, &host);
-    assert_eq!(switch.role, "switch");
-    assert_eq!(switch.name.as_deref(), Some("Shared terminal host"));
-    assert!(switch.is("checked"), "the switch says it is on");
-    assert!(switch.is("disabled"), "the switch says it is unavailable");
-
-    let mut seen = Vec::new();
-    loop {
-        press(&mut world, Key::Tab);
-        let focused = world.screen().focused().and_then(|n| n.key);
-        assert_ne!(
-            focused.as_deref(),
-            Some(host.as_str()),
-            "Tab stops on the unavailable switch"
-        );
-        if seen.contains(&focused) {
-            break;
-        }
-        seen.push(focused);
-    }
-
-    let _refused = world.automate("press", json!({"target": {"key": host}}));
-    world.settle();
-    assert!(
-        writes(&world).is_empty(),
-        "pressing the unavailable switch saved {:?}",
-        writes(&world)
-    );
-    assert!(node(&world, &host).is("checked"));
 }
 
 #[test]

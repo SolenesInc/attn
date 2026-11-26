@@ -2,11 +2,8 @@ package testworld
 
 import (
 	"os"
+	"strings"
 	"testing"
-
-	"github.com/google/uuid"
-
-	"github.com/victorarias/attn/internal/protocol"
 )
 
 type PTYBackend string
@@ -36,17 +33,18 @@ func (s *Stack) UseSharedHostBinary(host string) {
 	s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
 }
 
-func (s *Stack) EnableSharedHost(app *Peer) {
+func (s *Stack) RestartOnTheSharedHost() {
 	s.T.Helper()
-	requestID := uuid.NewString()
-	enabled := Request(app, protocol.SetSettingMessage{
-		Cmd: protocol.CmdSetSetting, Key: "pty_shared_host_enabled", Value: "true", RequestID: protocol.Ptr(requestID),
-	}, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-		return protocol.Deref(m.RequestID) == requestID
-	})
-	if !protocol.Deref(enabled.Success) {
-		s.T.Fatalf("enabling the shared PTY host failed: %s", protocol.Deref(enabled.Error))
+	s.Stop()
+	kept := s.Vars[:0]
+	for _, v := range s.Vars {
+		if !strings.HasPrefix(v, "ATTN_PTY_BACKEND=") && !strings.HasPrefix(v, "ATTN_PTY_HOST_BINARY=") {
+			kept = append(kept, v)
+		}
 	}
+	s.Vars = kept
+	s.UseSharedHostBinary(SharedHostBinary(s.T))
+	s.Start()
 }
 
 func (s *Stack) usePTYBackend(backend PTYBackend) {

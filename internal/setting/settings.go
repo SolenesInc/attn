@@ -94,16 +94,6 @@ var (
 		Since:   "2026-11-19",
 		Search:  "harness sigma pi server",
 	})
-	SharedPTYHostEnabled = feature("pty_shared_host_enabled", "Use the shared terminal host, and stream output only to terminals the window draws: true or false. On by default; applies to new and reloaded terminals.", Info{
-		Name:    "Shared terminal host",
-		Summary: "Reduce memory use by sharing a host process across terminals, and stream output only to the terminals the window shows.",
-		Group:   UnderTheHood,
-		Applies: NewTerminals,
-		Stage:   OnByDefault,
-		Where:   "Agents and models → Session defaults",
-		Since:   "2026-09-04",
-		Search:  "terminal hosting pty backend rust workers memory",
-	})
 )
 
 var (
@@ -187,7 +177,6 @@ var (
 	SessionCostBilledAs          = add(&Setting{Key: "session_cost.billed_as.<model>", Class: Home, Kind: Checked, Description: "Billing model alias. Empty removes the alias."})
 	NotebookRootEffective        = add(&Setting{Key: "notebook.root.effective", Class: Machine, Kind: Computed, Scope: PerProfile, Description: "The Notebook folder this profile uses."})
 	PTYBackendMode               = add(&Setting{Key: "pty_backend_mode", Class: Machine, Kind: Computed, Description: "Active terminal backend."})
-	SharedPTYHostActive          = add(&Setting{Key: "pty_shared_host_active", Class: Machine, Kind: Computed, Description: "Whether the shared terminal host is active."})
 	DBLastBackupAt               = add(&Setting{Key: "db.last_backup_at", Class: Machine, Kind: Computed, Description: "Time of the last database backup."})
 	HeadlessTasksEnabledStored   = add(&Setting{Key: "headless_tasks.enabled.stored", Class: Home, Kind: Computed, Description: "Stored background model task switch."})
 	HeadlessTasksEnabledOverride = add(&Setting{Key: "headless_tasks.enabled.override", Class: Home, Kind: Computed, Description: "Environment override for background model tasks."})

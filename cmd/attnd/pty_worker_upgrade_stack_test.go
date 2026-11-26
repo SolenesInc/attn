@@ -174,9 +174,6 @@ func TestASharedHostTerminalMovesToTheNewBuildAcrossAnUpdate(t *testing.T) {
 	next := testworld.AttnBinaryWithSnapshotFormat(t, "next")
 	s.StartBinary(current, "ATTN_PTY_HOST_BINARY="+ptyhosttest.Variant(t, "current"))
 	app := s.App()
-	if active := s.App().Initial.Settings["pty_shared_host_active"]; active != "true" {
-		t.Fatalf("after enabling it the shared PTY host reads active=%q, want true", active)
-	}
 	shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
 	pidFile := filepath.Join(s.Dir, "shell.pid")
 	app.TypeLine(shell, "echo $$ > "+pidFile+"; echo started-$((1+1))")

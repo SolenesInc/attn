@@ -13,10 +13,6 @@ func TestEveryTerminalComesBackWhenItsSharedHostDies(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex), testworld.OnPTYBackend(testworld.SharedHostPTY))
 	s.Start()
 	app := s.App()
-	setSetting(t, app, "pty_shared_host_enabled", "false")
-	onWorker := s.Spawn(app, fakeagent.Claude, s.Path("worker"))
-	workerRun := lostRuntimeAgentAtRest(s, app, onWorker)
-	s.EnableSharedHost(app)
 	shop := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
 	api := s.Spawn(app, fakeagent.Codex, s.Path("api"))
 	agents := map[string]*fakeagent.Run{shop: lostRuntimeAgentAtRest(s, app, shop), api: lostRuntimeAgentAtRest(s, app, api)}
@@ -46,10 +42,6 @@ func TestEveryTerminalComesBackWhenItsSharedHostDies(t *testing.T) {
 		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == shopTerminal })
 	if protocol.Deref(attached.Cols) != 101 || protocol.Deref(attached.Rows) != 37 {
 		t.Errorf("session %s came back at %dx%d, want the 101x37 its pane asked for", shop, protocol.Deref(attached.Cols), protocol.Deref(attached.Rows))
-	}
-	app.TypeLine(onWorker, "worker still there?")
-	if prompt := workerRun.Prompted(); prompt != "worker still there?" {
-		t.Errorf("the agent on a worker was prompted %q, want it untouched by the host's death", prompt)
 	}
 	for _, event := range app.Received() {
 		if event.Event == protocol.EventSessionExited {
@@ -133,13 +125,13 @@ func TestAnAppServerSessionStillWaitsOnItsQuestionAfterItsTUIRuntimeDies(t *test
 
 func appServerAtWorkApartFromItsServer(t *testing.T) (*testworld.Stack, *testworld.Peer, string, *fakeagent.AppServer, string) {
 	t.Helper()
-	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Sigma), testworld.OnPTYBackend(testworld.SharedHostPTY))
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Sigma), testworld.OnPTYBackend(testworld.WorkerPTY))
 	s.Start()
 	app := s.App()
 	setSetting(t, app, "sigma_enabled", "true")
-	setSetting(t, app, "pty_shared_host_enabled", "false")
-	s.Spawn(app, fakeagent.Sigma, s.Path("server-on-a-worker"))
-	s.EnableSharedHost(app)
+	s.Spawn(app, fakeagent.Sigma, s.Path("server-on-an-older-builds-worker"))
+	s.RestartOnTheSharedHost()
+	app = s.App()
 	session := s.Spawn(app, fakeagent.Sigma, s.Path("shop"))
 	tui := s.Launched(session)
 	server := s.AppServer(fakeagent.Sigma)

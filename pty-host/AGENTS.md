@@ -7,8 +7,8 @@ bash scripts/test-pty-upgrade.sh
 ```
 
 Downloads the latest release and builds the last pre-Rust daemon, the current
-daemon and the host to verify session survival across upgrades, backend toggles,
-failing builds and mid-move daemon crashes. Requires `lsof` and `fish`. CI runs
+daemon and the host to verify session survival across upgrades, failing builds
+and mid-move daemon crashes. Requires `lsof` and `fish`. CI runs
 it on macOS and Linux.
 
 To test compatibility with a pre-move retained host:

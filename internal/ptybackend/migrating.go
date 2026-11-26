@@ -28,10 +28,9 @@ type MigratingBackend struct {
 	mu           sync.RWMutex
 	owners       map[harness.TerminalID]runtimeOwner
 	pendingSpawn map[harness.TerminalID]runtimeOwner
-	useShared    bool
 }
 
-func NewMigrating(legacy, shared Backend, useSharedForNewSessions bool) (*MigratingBackend, error) {
+func NewMigrating(legacy, shared Backend) (*MigratingBackend, error) {
 	if legacy == nil {
 		return nil, errors.New("missing legacy PTY backend")
 	}
@@ -43,32 +42,11 @@ func NewMigrating(legacy, shared Backend, useSharedForNewSessions bool) (*Migrat
 		shared:       shared,
 		owners:       make(map[harness.TerminalID]runtimeOwner),
 		pendingSpawn: make(map[harness.TerminalID]runtimeOwner),
-		useShared:    useSharedForNewSessions,
 	}, nil
 }
 
 func (b *MigratingBackend) PTYBackendMode() string {
 	return "migrating"
-}
-
-func (b *MigratingBackend) ProbeShared(ctx context.Context) error {
-	probe, ok := b.shared.(interface{ Probe(context.Context) error })
-	if !ok {
-		return errors.New("shared PTY backend does not support probing")
-	}
-	return probe.Probe(ctx)
-}
-
-func (b *MigratingBackend) SetSharedForNewSessions(enabled bool) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.useShared = enabled
-}
-
-func (b *MigratingBackend) SharedForNewSessions() bool {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	return b.useShared
 }
 
 func (b *MigratingBackend) SetExitHandler(handler func(ExitInfo)) {
@@ -109,20 +87,14 @@ func (b *MigratingBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 		b.mu.Unlock()
 		return fmt.Errorf("session %s spawn already in progress", opts.ID)
 	}
-	owner := ownerLegacy
-	backend := b.legacy
-	if b.useShared {
-		owner = ownerShared
-		backend = b.shared
-	}
-	b.pendingSpawn[opts.ID] = owner
+	b.pendingSpawn[opts.ID] = ownerShared
 	b.mu.Unlock()
 
-	err := backend.Spawn(ctx, opts)
+	err := b.shared.Spawn(ctx, opts)
 	b.mu.Lock()
 	delete(b.pendingSpawn, opts.ID)
 	if err == nil {
-		b.owners[opts.ID] = owner
+		b.owners[opts.ID] = ownerShared
 	}
 	b.mu.Unlock()
 	return err

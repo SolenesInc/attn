@@ -24,7 +24,10 @@ const (
 	sharedHostProbePrefix   = "probe-"
 )
 
-var errArtifactRejected = errors.New("shared PTY host build is broken")
+var (
+	errArtifactRejected      = errors.New("shared PTY host build is broken")
+	ErrSharedHostUnavailable = errors.New("the shared terminal host is unavailable")
+)
 
 type SharedArtifactRejection struct {
 	ArtifactID string

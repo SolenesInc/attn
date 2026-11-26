@@ -61,8 +61,7 @@ points there, and `notebook.root.effective` names this machine's copy.
 
 Machine settings describe one computer: harness executables, the terminal
 backend and worktree sweep. A switch for an attn feature is never a machine
-setting: the home decides it, and a machine that can't follow yet, such as one
-without the shared terminal host, keeps working the old way. Changing a machine setting on an outpost changes only that
+setting: the home decides it. Changing a machine setting on an outpost changes only that
 outpost. Computed machine values, such as harness
 availability and connection status, also describe the computer where you read
 them.
@@ -89,8 +88,7 @@ rebuild the host, which takes about 30 seconds. If either binary can't be
 downloaded or built, the update fails with the reason and installs nothing. A
 failed build shows the compiler's error in the banner, and **Details** names the
 file under the home's data directory that holds the build's whole output.
-Running shells keep their processes, whether they run on a worker or in the
-shared terminal host. Each old binary
+Running shells keep their processes. Each old binary
 stays beside the new one as `attn.previous` and `attn-pty-host.previous`. Attn
 refuses the installation if the outpost's database needs a newer build.
 
@@ -100,10 +98,9 @@ To see where a terminal runs, type this in it:
 sh -c 'ps -o comm= -p $(ps -o ppid= -p $PPID)'
 ```
 
-It prints `attn-pty-host` for the shared terminal host and `attn` for a
-dedicated worker. On the same machine,
-`attn settings get pty_shared_host_active` says whether new terminals start in
-the host.
+It prints `attn-pty-host` for the shared terminal host, where every new
+terminal starts, and `attn` for a terminal an older build started in a dedicated
+worker.
 
 After pairing, a reconnect never installs a build. If the installed build
 differs or is missing, the row shows why and offers Update.
@@ -112,8 +109,8 @@ An outpost can run the home's build without `attn-pty-host`, for example when
 you installed `attn` there yourself. Add installs both binaries on such a machine.
 If an outpost is already paired, its row says the shared terminal host is not
 installed and offers **Install shared terminal host**, and the banner offers
-**Update outposts**. Until then, its terminals run on dedicated workers.
-Installing the host restarts the outpost's daemon so the daemon finds it.
+**Update outposts**. Until then, new terminals on it fail to start, and the
+error says to update the outpost from its home. Installing the host restarts the outpost's daemon so the daemon finds it.
 Running shells keep their processes.
 
 Keep the data folders, because they hold the pairing identities and work. To return to an older build after a build migrated the database, you may need to restore a backup with `attn db restore`.

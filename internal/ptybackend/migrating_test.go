@@ -24,7 +24,6 @@ type migrationTestBackend struct {
 	recover     error
 	shutdown    error
 	beforeSpawn func()
-	probe       func(context.Context) error
 	removeErr   error
 }
 
@@ -47,50 +46,26 @@ func (b *migrationTestBackend) Spawn(_ context.Context, opts SpawnOptions) error
 	return nil
 }
 
-func (b *migrationTestBackend) Probe(ctx context.Context) error {
-	return b.probe(ctx)
-}
-
-func TestMigratingBackendToggleKeepsExistingAndPendingOwners(t *testing.T) {
+func TestMigratingBackendReachesATerminalWhileItSpawns(t *testing.T) {
 	legacy, shared := newMigrationTestBackend(), newMigrationTestBackend()
-	backend, err := NewMigrating(legacy, shared, false)
+	backend, err := NewMigrating(legacy, shared)
 	if err != nil {
 		t.Fatal(err)
 	}
 	started, release := make(chan struct{}), make(chan struct{})
-	legacy.beforeSpawn = func() { close(started); <-release }
+	shared.beforeSpawn = func() { close(started); <-release }
 	done := make(chan error, 1)
-	go func() { done <- backend.Spawn(context.Background(), SpawnOptions{ID: "pending-legacy"}) }()
+	go func() { done <- backend.Spawn(context.Background(), SpawnOptions{ID: "pending"}) }()
 	<-started
-	if err := backend.Input(context.Background(), "pending-legacy", []byte("while-spawning")); err != nil {
+	if err := backend.Input(context.Background(), "pending", []byte("while-spawning")); err != nil {
 		t.Fatalf("a terminal that exits during its spawn cannot be reached for its exit screen: %v", err)
 	}
-	backend.SetSharedForNewSessions(true)
 	close(release)
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	legacy.beforeSpawn = nil
-	if err := backend.Spawn(context.Background(), SpawnOptions{ID: "shared"}); err != nil {
-		t.Fatal(err)
-	}
-	backend.SetSharedForNewSessions(false)
-	if backend.SharedForNewSessions() {
-		t.Fatal("selection stayed enabled")
-	}
-	if err := backend.Spawn(context.Background(), SpawnOptions{ID: "legacy"}); err != nil {
-		t.Fatal(err)
-	}
-	for _, id := range []harness.TerminalID{"pending-legacy", "shared", "legacy"} {
-		if err := backend.Input(context.Background(), id, []byte(id)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if !reflect.DeepEqual(legacy.spawned, []harness.TerminalID{"pending-legacy", "legacy"}) || !reflect.DeepEqual(shared.spawned, []harness.TerminalID{"shared"}) {
-		t.Fatalf("unexpected launches: legacy=%v shared=%v", legacy.spawned, shared.spawned)
-	}
-	if len(legacy.inputs["pending-legacy"]) != 2 || len(legacy.inputs["legacy"]) != 1 || len(shared.inputs["shared"]) != 1 {
-		t.Fatal("toggle moved a session to a different owner")
+	if len(legacy.spawned) != 0 || len(shared.inputs["pending"]) != 1 {
+		t.Fatalf("unexpected routing: legacy=%v shared inputs=%v", legacy.spawned, shared.inputs)
 	}
 }
 
@@ -149,7 +124,7 @@ func TestMigratingBackendMissingLegacySocketDoesNotBlockReplacement(t *testing.T
 		RegistryPath: filepath.Join(root, "gone.json"),
 	}
 	shared := newMigrationTestBackend()
-	backend, err := NewMigrating(legacy, shared, true)
+	backend, err := NewMigrating(legacy, shared)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +148,7 @@ func TestMigratingBackendFailedRemovalKeepsOwner(t *testing.T) {
 	legacy := newMigrationTestBackend("running")
 	legacy.removeErr = errors.New("worker is busy")
 	shared := newMigrationTestBackend()
-	backend, err := NewMigrating(legacy, shared, true)
+	backend, err := NewMigrating(legacy, shared)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +235,7 @@ func TestMigratingBackendRecoversBothOwnersWithoutMovingSessions(t *testing.T) {
 	legacy.report = RecoveryReport{Recovered: 1}
 	shared.report = RecoveryReport{Recovered: 1}
 
-	backend, err := NewMigrating(legacy, shared, true)
+	backend, err := NewMigrating(legacy, shared)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +264,7 @@ func TestMigratingBackendRecoversBothOwnersWithoutMovingSessions(t *testing.T) {
 func TestMigratingBackendRoutesOnlyNewSessionsToShared(t *testing.T) {
 	legacy := newMigrationTestBackend("already-running")
 	shared := newMigrationTestBackend()
-	backend, err := NewMigrating(legacy, shared, true)
+	backend, err := NewMigrating(legacy, shared)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,28 +286,10 @@ func TestMigratingBackendRoutesOnlyNewSessionsToShared(t *testing.T) {
 	}
 }
 
-func TestMigratingBackendCanKeepNewSessionsOnLegacyWhenSharedProbeFails(t *testing.T) {
-	legacy := newMigrationTestBackend()
-	shared := newMigrationTestBackend()
-	backend, err := NewMigrating(legacy, shared, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := backend.Spawn(context.Background(), SpawnOptions{ID: "fallback"}); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(legacy.spawned, []harness.TerminalID{"fallback"}) {
-		t.Fatalf("legacy spawned = %v, want [fallback]", legacy.spawned)
-	}
-	if len(shared.spawned) != 0 {
-		t.Fatalf("shared spawned = %v, want none", shared.spawned)
-	}
-}
-
 func TestMigratingBackendRejectsConflictingRecoveryOwnership(t *testing.T) {
 	legacy := newMigrationTestBackend("same-session")
 	shared := newMigrationTestBackend("same-session")
-	backend, err := NewMigrating(legacy, shared, true)
+	backend, err := NewMigrating(legacy, shared)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -352,7 +309,7 @@ func TestMigratingBackendRejectsConflictingRecoveryOwnership(t *testing.T) {
 func TestMigratingBackendUnknownLivenessChecksBothRegistries(t *testing.T) {
 	legacy := newMigrationTestBackend()
 	shared := newMigrationTestBackend("stranded-shared-session")
-	backend, err := NewMigrating(legacy, shared, true)
+	backend, err := NewMigrating(legacy, shared)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -76,12 +76,7 @@ impl Omission {
     }
 }
 
-const SETTINGS: [&str; 4] = [
-    "pty_backend_mode",
-    "pty_shared_host_enabled",
-    "pty_shared_host_active",
-    "theme",
-];
+const SETTINGS: [&str; 2] = ["pty_backend_mode", "theme"];
 
 pub(crate) fn chosen_settings(settings: &BTreeMap<String, String>) -> BTreeMap<String, String> {
     SETTINGS

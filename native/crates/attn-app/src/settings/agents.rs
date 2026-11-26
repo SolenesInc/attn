@@ -25,7 +25,6 @@ use crate::{State, setting};
 const DEFAULT_AGENT: &str = "new_session_agent";
 const AUTO_APPROVE: &str = "auto_approve_enabled";
 const ASKS: &str = "asks_enabled";
-const SHARED_HOST: &str = "pty_shared_host_enabled";
 const TENDER_RESUME: &str = "garden.tender_resume";
 const OWN_PR_COMMENTS: &str = "pull_requests.own_comments";
 
@@ -207,20 +206,14 @@ pub(super) fn wanted(state: &State) -> Vec<(String, bool)> {
         .collect()
 }
 
-fn setting_toggle(
-    key: &'static str,
-    name: &str,
-    disabled: bool,
-    t: &Tokens,
-    state: &State,
-) -> Control {
+fn setting_toggle(key: &'static str, name: &str, t: &Tokens, state: &State) -> Control {
     let on = setting::on(&state.facts.settings, key);
     switch(
         format!("settings.toggle.{key}"),
         name,
         on,
         Beside::Nothing,
-        disabled,
+        false,
         t,
         move |state: &mut State, tx: &mut Tx| {
             autosave::apply(state, key, if on { "false" } else { "true" }, tx)
@@ -292,11 +285,7 @@ fn auto_approve_description(harnesses: &[attn_protocol::Harness]) -> String {
 }
 
 fn session_defaults(state: &State, t: &Tokens) -> Block {
-    let settings = &state.facts.settings;
     let any = ordered(state).iter().any(catalog::selectable);
-    let migrating = settings
-        .get("pty_backend_mode")
-        .is_some_and(|m| m.to_lowercase() == "migrating");
     let mut section = Section::new("settings.block.session-defaults", "Session defaults");
     if state.facts.harnesses_loaded && !any {
         section = section.push(
@@ -323,25 +312,21 @@ fn session_defaults(state: &State, t: &Tokens) -> Block {
                 "settings.row.auto-approve",
                 "Auto-approve",
                 auto_approve_description(&state.facts.harnesses),
-                setting_toggle(AUTO_APPROVE, "Auto-approve", false, t, state),
+                setting_toggle(AUTO_APPROVE, "Auto-approve", t, state),
             )
             .build(t),
         )
-        .push(
-            SettingRow::new("settings.row.asks",asks.name, asks.summary, feature_switch(state, ASKS, Beside::Nothing, t))
-                .note(feature_note(state, ASKS, t))
-                .build(t),
-        )
-        .push_all(asks_motion(state, t))
         .push(
             SettingRow::new(
-                "settings.row.shared-host",
-                "Shared terminal host",
-                "Run terminals in one shared process, which uses less memory, and stream output only to the terminals the window shows. On by default; applies to new and reloaded terminals.",
-                setting_toggle(SHARED_HOST, "Shared terminal host", !migrating, t, state),
+                "settings.row.asks",
+                asks.name,
+                asks.summary,
+                feature_switch(state, ASKS, Beside::Nothing, t),
             )
+            .note(feature_note(state, ASKS, t))
             .build(t),
         )
+        .push_all(asks_motion(state, t))
         .build(t)
 }
 
