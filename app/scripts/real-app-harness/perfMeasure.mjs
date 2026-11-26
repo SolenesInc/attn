@@ -387,7 +387,7 @@ export async function openPerfShell({ client, observer, cwd, label }) {
   observer.send({ cmd: 'spawn_session', id, agent: 'shell', cwd, profile_id: observer.profileId, placement: { desktop_id: desktop.id }, label, cols: 100, rows: 30 });
   const result = await spawned;
   if (!result.success) throw new Error(`spawn ${label} failed: ${JSON.stringify(result)}`);
-  const runtimeId = await observer.waitFor(() => { try { return observer.terminalOf(id); } catch { return null; } }, `${label} terminal`, 25_000);
+  const runtimeId = await observer.waitFor(() => observer.terminalOf(id), `${label} terminal`, 25_000);
   await client.request('state', { of: `terminal:${runtimeId}`, includes: '', timeout_ms: 25_000 }, { timeoutMs: 30_000 });
   return id;
 }

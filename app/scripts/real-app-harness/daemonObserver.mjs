@@ -283,7 +283,7 @@ export class DaemonObserver {
     for (const [terminal, session] of this.terminalBindings) {
       if (session === sessionId) return terminal;
     }
-    throw new Error(`No terminal binding received for session ${sessionId}`);
+    return null;
   }
 
   async waitForSession({ id, label, directory, timeoutMs = 20_000 } = {}) {

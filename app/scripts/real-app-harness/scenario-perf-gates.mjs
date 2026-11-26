@@ -232,7 +232,7 @@ async function spawnShell(desktopId, label, cwd, placement = {}) {
   const result = await spawned;
   if (!result.success) throw new Error(`spawn ${label} failed: ${JSON.stringify(result)}`);
   runner.registerCleanup(`unregister_${label}`, () => observer.unregisterSession(id));
-  const runtimeId = await observer.waitFor(() => { try { return observer.terminalOf(id); } catch { return null; } }, `${label} terminal`, 20_000);
+  const runtimeId = await observer.waitFor(() => observer.terminalOf(id), `${label} terminal`, 20_000);
   return { sessionId: id, paneId: result.pane_id, runtimeId };
 }
 

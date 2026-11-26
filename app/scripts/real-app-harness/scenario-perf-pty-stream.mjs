@@ -295,7 +295,7 @@ async function spawnShellOn(observer, desktopId, cwd, label, createdSessionIds, 
   const result = await spawned;
   if (!result.success) throw new Error(`spawn ${label} failed: ${JSON.stringify(result)}`);
   createdSessionIds.push(id);
-  const runtimeId = await observer.waitFor(() => { try { return observer.terminalOf(id); } catch { return null; } }, `${label} terminal`, 20_000);
+  const runtimeId = await observer.waitFor(() => observer.terminalOf(id), `${label} terminal`, 20_000);
   const deadline = Date.now() + 30_000;
   while (!(await daemonScreen(observer, runtimeId)).text.trim()) {
     if (Date.now() > deadline) throw new Error(`${label} showed no prompt in 30 s`);
