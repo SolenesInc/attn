@@ -301,6 +301,7 @@ pub struct Garden {
     pub total: i64,
     pub beds: Vec<GardenBed>,
     pub closed_counts: Option<GardenClosedCounts>,
+    pub revision: u64,
     pub full_push: u64,
 }
 
@@ -572,6 +573,7 @@ impl Store {
                 seeds,
                 beds: state.garden_beds.unwrap_or_default(),
                 closed_counts: state.garden_closed_counts,
+                revision: facts.garden.revision + 1,
                 full_push: facts.garden.full_push + 1,
             });
             facts.asks = Arc::new(state.asks.unwrap_or_default());
@@ -685,6 +687,7 @@ impl Store {
                 total,
                 beds,
                 closed_counts,
+                revision: facts.garden.revision + 1,
                 full_push: facts.garden.full_push + 1,
             });
             Slices::GARDEN
@@ -712,6 +715,7 @@ impl Store {
                 total,
                 beds,
                 closed_counts,
+                revision: facts.garden.revision + 1,
                 full_push: facts.garden.full_push,
             });
             Slices::GARDEN
@@ -766,6 +770,7 @@ impl Store {
                 total,
                 beds: facts.garden.beds.clone(),
                 closed_counts: closed_counts.or_else(|| facts.garden.closed_counts.clone()),
+                revision: facts.garden.revision + 1,
                 full_push: facts.garden.full_push,
             });
             Slices::GARDEN

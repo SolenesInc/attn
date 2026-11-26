@@ -1070,3 +1070,103 @@ fn shows_exact_folded_closed_counts_without_cap_banner_and_pages_expanded_closed
     );
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn refreshes_closed_history_when_an_old_child_changes_state_outside_the_window() {
+    use std::sync::{Arc, Mutex};
+
+    let root = tallied(plot("s-root01", "Release", ""), 1, 0, 0);
+    let child = part_of("s-root01", "s-arch01", "Historical check");
+    let mut live = vec![root.clone(), plot("s-other1", "Unrelated active plot", "")];
+    live.extend((0..998).map(|i| part_of("s-other1", &format!("s-o{i:05}"), "An active step")));
+    let total = live.len() as i64 + 1;
+    let live_order: Vec<String> = live.iter().map(|seed| seed.id.clone()).collect();
+    let mut replanted_order = live_order.clone();
+    replanted_order.push(child.id.clone());
+
+    let d = Daemon::scripted().state(InitialStateMessage {
+        garden_closed_counts: Some(GardenClosedCounts::default()),
+        seeds_total: Some(total),
+        ..initial(live, Vec::new())
+    });
+    let archived = Arc::new(Mutex::new(Some(closed(child.clone(), "harvested"))));
+    let page_data = archived.clone();
+    d.on("garden_seeds_page", move |r: &Request| {
+        assert_eq!(r["plot_id"], "s-root01");
+        let seeds: Vec<_> = page_data.lock().unwrap().clone().into_iter().collect();
+        message(GardenSeedsPageResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            total: seeds.len() as i64,
+            harvested: i64::from(seeds.iter().any(|seed| seed.status == "harvested")),
+            withered: i64::from(seeds.iter().any(|seed| seed.status == "withered")),
+            seeds,
+            ..GardenSeedsPageResultMessage::new()
+        })
+    });
+    let mut world = open_board_with(d);
+    assert!(world.daemon.sent_of("garden_seeds_page").is_empty());
+    world.gesture(|app| app.click(Target::key("garden.board.card.s-root01")));
+    assert!(shows(&world, "1 harvested"));
+    click(&mut world, "show");
+    assert_eq!(column(&world, "Closed"), ["Historical check"]);
+
+    *archived.lock().unwrap() = None;
+    world.daemon.emit(GardenSeedsChangedMessage {
+        profile_id: PROFILE.into(),
+        order: replanted_order,
+        seeds: vec![tallied(root.clone(), 0, 0, 1), child.clone()],
+        total,
+        closed_counts: Some(GardenClosedCounts::default()),
+        ..GardenSeedsChangedMessage::new()
+    });
+    world.settle();
+    assert!(column(&world, "Closed").is_empty());
+
+    *archived.lock().unwrap() = Some(closed(child, "withered"));
+    world.daemon.emit(GardenSeedsChangedMessage {
+        profile_id: PROFILE.into(),
+        order: live_order,
+        seeds: vec![tallied(root, 0, 1, 0)],
+        total,
+        closed_counts: Some(GardenClosedCounts::default()),
+        ..GardenSeedsChangedMessage::new()
+    });
+    world.settle();
+    assert_eq!(column(&world, "Closed"), ["Historical check"]);
+    click(&mut world, "hide");
+    assert!(
+        shows(&world, "0 harvested · 1 withered"),
+        "{}",
+        world.screen()
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn folded_closed_lane_counts_only_direct_children() {
+    let root = tallied(plot("s-root01", "Release", ""), 1, 0, 1);
+    let nested = tallied(plot("s-nest01", "Verification", "s-root01"), 1, 0, 0);
+    let grandchild = closed(part_of("s-nest01", "s-done01", "Smoke test"), "harvested");
+    let mut world = open_board(vec![root, nested, grandchild], Vec::new());
+    world.gesture(|app| app.click(Target::key("garden.board.card.s-root01")));
+    assert!(column(&world, "Closed").is_empty());
+    assert!(
+        world
+            .screen()
+            .find(Target::role("region").name("Closed, 0"))
+            .is_some()
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("garden.board.closed.reveal"))
+            .is_none()
+    );
+
+    world.gesture(|app| app.click(Target::key("garden.board.card.s-nest01")));
+    assert!(shows(&world, "1 harvested"));
+    click(&mut world, "show");
+    assert_eq!(column(&world, "Closed"), ["Smoke test"]);
+    assert!(world.runtime_is_at_rest());
+}

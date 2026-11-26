@@ -332,15 +332,10 @@ impl Place {
                 .closed_counts_of(&state.facts.profiles.selected);
             v2::closed_tally(counts, v2_snap.on.then_some(&v2_snap.bed))
                 .unwrap_or((local_harvested, local_withered))
-        } else if let Some(b) = bucket.filter(|b| b.answered) {
-            (b.harvested.max(0) as usize, b.withered.max(0) as usize)
-        } else if local_foldable.is_empty()
-            && let Some(plot) = trail
-                .last()
-                .and_then(|id| index.by_id.get(id).or_else(|| walk.trail_seeds.get(id)))
-            && let Some(p) = &plot.plot_progress
+        } else if super::history_is_capped(state)
+            && let Some(b) = bucket.filter(|b| b.answered)
         {
-            (p.done.max(0) as usize, p.withered.max(0) as usize)
+            (b.harvested.max(0) as usize, b.withered.max(0) as usize)
         } else {
             (local_harvested, local_withered)
         };
@@ -1122,7 +1117,7 @@ fn column_view(
     )
     .lit(hovered)
     .faded(dragging.is_some() && zones.is_empty());
-    let bucket: Option<&PageBucket> = (column == Column::Closed && !folded)
+    let bucket: Option<&PageBucket> = (column == Column::Closed)
         .then(|| state.window.garden.pages.get(&place.page_key))
         .flatten();
     if column == Column::Closed && (place.foldable_total() > 0 || walk.closed_open) {
@@ -1218,12 +1213,15 @@ fn column_view(
         }
     }
     if column == Column::Closed
-        && !folded
+        && (!folded || bucket.is_some_and(|b| b.error.is_some() || (b.loading && !b.answered)))
         && let Some(tail) = super::view::page_tail(place.page_key.clone(), bucket, t)
     {
         lane = lane.push(tail);
     }
-    if folded && (cards.is_empty() || place.foldable_total() > 0) {
+    if folded
+        && (cards.is_empty() || place.foldable_total() > 0)
+        && !bucket.is_some_and(|b| !b.answered && (b.loading || b.error.is_some()))
+    {
         let harvested = place.foldable_harvested;
         let withered = place.foldable_withered;
         let said = if cards.is_empty() && place.foldable_total() == 0 {

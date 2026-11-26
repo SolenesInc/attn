@@ -117,7 +117,7 @@ impl PageKey {
 
 #[derive(Default)]
 pub(super) struct PageBucket {
-    pub(super) asked_sig: u64,
+    pub(super) asked_revision: u64,
     pub(super) answered: bool,
     pub(super) seeds: Vec<Arc<Seed>>,
     pub(super) next_before: Option<String>,
@@ -621,12 +621,13 @@ fn wanted_pages(state: &State) -> Vec<PageKey> {
         return Vec::new();
     }
     if shows_board(state) {
-        if !state.window.garden.board_walk.closed_open {
-            return Vec::new();
-        }
+        let expanded = state.window.garden.board_walk.closed_open;
         return match board::current_plot(state) {
-            Some(plot_id) => vec![PageKey::plot(state, &plot_id)],
-            None => vec![PageKey::root(state)],
+            Some(plot_id) if expanded || history_is_capped(state) => {
+                vec![PageKey::plot(state, &plot_id)]
+            }
+            None if expanded => vec![PageKey::root(state)],
+            _ => Vec::new(),
         };
     }
     let query = search::parse(&state.window.garden.query.text, v2::enabled(state));
@@ -656,43 +657,8 @@ fn wanted_pages(state: &State) -> Vec<PageKey> {
     keys
 }
 
-fn closed_signature(state: &State) -> u64 {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    let profile = &state.facts.profiles.selected;
-    let garden = &state.facts.garden;
-    profile.hash(&mut hasher);
-    garden.full_push.hash(&mut hasher);
-    garden.total.hash(&mut hasher);
-    if let Some(counts) = garden.closed_counts_of(profile) {
-        true.hash(&mut hasher);
-        counts.all.harvested.hash(&mut hasher);
-        counts.all.withered.hash(&mut hasher);
-        counts.automations.harvested.hash(&mut hasher);
-        counts.automations.withered.hash(&mut hasher);
-        counts.unassigned.harvested.hash(&mut hasher);
-        counts.unassigned.withered.hash(&mut hasher);
-        let mut entries: Vec<(&str, i64, i64)> = counts
-            .by_bed
-            .iter()
-            .map(|b| (b.bed_id.as_str(), b.harvested, b.withered))
-            .collect();
-        entries.sort_by_key(|(k, _, _)| *k);
-        entries.hash(&mut hasher);
-    } else {
-        false.hash(&mut hasher);
-    }
-    for bed in garden.beds_of(profile) {
-        bed.id.hash(&mut hasher);
-        bed.slug.hash(&mut hasher);
-    }
-    for seed in garden.of(profile) {
-        if model::is_closed(seed) {
-            seed.id.hash(&mut hasher);
-            seed.rev.hash(&mut hasher);
-            seed.status.hash(&mut hasher);
-        }
-    }
-    hasher.finish()
+pub(super) fn history_is_capped(state: &State) -> bool {
+    state.facts.garden.total_of(&state.facts.profiles.selected) > seeds(state).len() as i64
 }
 
 fn sync_pages(state: &mut State, tx: &mut Tx) {
@@ -704,10 +670,11 @@ fn sync_pages(state: &mut State, tx: &mut Tx) {
     }
     let profile = state.facts.profiles.selected.clone();
     let wanted = wanted_pages(state);
-    let sig = closed_signature(state);
+    let revision = state.facts.garden.revision;
     let keep_cached = state.window.garden.pages.len() <= 4;
     state.window.garden.pages.retain(|k, b| {
-        k.profile == profile && (wanted.contains(k) || (keep_cached && b.asked_sig == sig))
+        k.profile == profile
+            && (wanted.contains(k) || (keep_cached && b.asked_revision == revision))
     });
     for key in wanted {
         let refresh = state
@@ -716,11 +683,11 @@ fn sync_pages(state: &mut State, tx: &mut Tx) {
             .pages
             .get(&key)
             .map_or(Some(PAGE_LIMIT), |bucket| {
-                (bucket.asked_sig != sig)
+                (bucket.asked_revision != revision)
                     .then(|| (bucket.seeds.len() as i64).clamp(PAGE_LIMIT, MAX_PAGE_LIMIT))
             });
         if let Some(limit) = refresh {
-            fetch_page(state, key, sig, None, limit, tx);
+            fetch_page(state, key, None, limit, tx);
         }
     }
 }
@@ -735,8 +702,7 @@ pub(super) fn load_more_page(state: &mut State, key: PageKey, tx: &mut Tx) -> bo
     let Some(cursor) = cursor else {
         return false;
     };
-    let sig = closed_signature(state);
-    fetch_page(state, key, sig, Some(cursor), PAGE_LIMIT, tx);
+    fetch_page(state, key, Some(cursor), PAGE_LIMIT, tx);
     true
 }
 
@@ -756,23 +722,15 @@ pub(super) fn retry_page(state: &mut State, key: PageKey, tx: &mut Tx) {
             (cursor, limit)
         })
         .unwrap_or((None, PAGE_LIMIT));
-    let sig = closed_signature(state);
-    fetch_page(state, key, sig, cursor, limit, tx);
+    fetch_page(state, key, cursor, limit, tx);
 }
 
-fn fetch_page(
-    state: &mut State,
-    key: PageKey,
-    closed_sig: u64,
-    before: Option<String>,
-    limit: i64,
-    tx: &mut Tx,
-) {
+fn fetch_page(state: &mut State, key: PageKey, before: Option<String>, limit: i64, tx: &mut Tx) {
     let request_id = state.next_request_id();
     let append = before.is_some();
     let failed_before = before.clone();
     let bucket = state.window.garden.pages.entry(key.clone()).or_default();
-    bucket.asked_sig = closed_sig;
+    bucket.asked_revision = state.facts.garden.revision;
     bucket.request_id = Some(request_id.clone());
     bucket.error = None;
     bucket.retry_before = None;
