@@ -5,7 +5,7 @@ import { homedir, tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { ASK_TASKS } from "./asks.ts"
 import { GRID_PROBES, PROBES } from "./probes.ts"
-import { HARDER_TASKS, UNGROUPED_TASKS, TASKS } from "./tasks.ts"
+import { HARDER_TASKS, SCRIPT_TASKS, UNGROUPED_TASKS, TASKS } from "./tasks.ts"
 import { attnCalls, blockedRuns, type Call, type Check, claudeRequests, cliRuns, codexRequests, codexRuns, isCommand, metrics, type Metrics, type Records, type Requests, retryWaitMs, run, shellRuns, takesProfile, type Task, toolOutcomes, unrecorded, type World } from "./world.ts"
 
 const repository = resolve(import.meta.dir, "../../..")
@@ -52,8 +52,18 @@ if (outpostToolHome && !/^\/[\w./-]+$/.test(outpostToolHome)) throw new Error(`-
 const parallel = Number(arg("parallel") ?? 2)
 const keep = flag("keep")
 
-const ALL = [...TASKS, ...HARDER_TASKS, ...UNGROUPED_TASKS, ...ASK_TASKS, ...PROBES]
-const groups: Record<string, Task[]> = { probes: PROBES, asks: ASK_TASKS, harder: HARDER_TASKS, grid: [...TASKS, ...HARDER_TASKS, ...ASK_TASKS, ...GRID_PROBES] }
+const ALL = [...TASKS, ...HARDER_TASKS, ...UNGROUPED_TASKS, ...SCRIPT_TASKS, ...ASK_TASKS, ...PROBES]
+const byId = (ids: string[]) => ids.map((id) => ALL.find((t) => t.id === id)!)
+/** The thirteen tasks of c6-final.md on the plot s-ct56cj, which the four tools are proven on. */
+const C6_FINAL = byId(["progress", "ask", "msg-delegate", "coding", "seed-lifecycle", "plot-order", "open-ask-refusal", "coding-tests", "read-agent", "close-self", "add-crew", "chief-journal", "present-change"])
+const groups: Record<string, Task[]> = {
+  probes: PROBES,
+  asks: ASK_TASKS,
+  harder: HARDER_TASKS,
+  scripts: SCRIPT_TASKS,
+  "c6-final": C6_FINAL,
+  grid: [...TASKS, ...HARDER_TASKS, ...ASK_TASKS, ...GRID_PROBES],
+}
 const taskIds = list(arg("tasks") ?? (grid ? "grid" : undefined), TASKS.map((t) => t.id).join(",")).flatMap((id) => groups[id]?.map((t) => t.id) ?? [id])
 /** Runs per cell of a task: in the grid, three of each task and one of each probe. */
 const runsOf = (task: Task) => Number(arg("runs") ?? (grid && !PROBES.includes(task) ? 3 : 1))
@@ -384,7 +394,7 @@ function harnessRecord(cell: Cell, directory: string, startedAt: number): any[] 
   const newer = `-newermt @${Math.floor(startedAt / 1000) - 1}`
   if (cell.harness.agent === "codex") {
     const home = cell.place.ssh ? `${outpostToolHome ?? "~"}/.codex` : codexHome
-    return onPlace(cell.place, `find ${home}/sessions ${home}/archived_sessions -name 'rollout-*.jsonl' ${newer} -print0 2>/dev/null | xargs -0 -r grep -lF '"cwd":"${directory}"' | xargs -r grep -hE '"type":"(session_meta|additional_tools|token_usage_record)"'`).split("\n").filter(Boolean).map((line) => JSON.parse(line))
+    return onPlace(cell.place, `find ${home}/sessions ${home}/archived_sessions -name 'rollout-*.jsonl' ${newer} -print0 2>/dev/null | xargs -0 -r grep -lF '"cwd":"${directory}"' | xargs -r grep -hE '"type":"(session_meta|additional_tools|token_usage_record|world_state)"'`).split("\n").filter(Boolean).map((line) => JSON.parse(line))
   }
   const claudeHome = cell.place.ssh ? outpostToolHome : toolHome
   const home = claudeHome ? join(claudeHome, ".claude") : "~/.claude"
@@ -396,9 +406,11 @@ function harnessRecord(cell: Cell, directory: string, startedAt: number): any[] 
  * or Codex's `additional_tools` shows. */
 function toolsHeld(cell: Cell, record: any[]): "on" | "off" | "unknown" {
   if (cell.harness.agent === "codex") {
-    const offered = record.filter((l) => l.payload?.type === "additional_tools")
-    if (offered.length === 0) return "unknown"
-    return offered.some((l) => JSON.stringify(l).includes("mcp__attn")) ? "on" : "off"
+    const loaded = record.filter((l) => l.payload?.type === "additional_tools")
+    const deferred = record.filter((l) => l.type === "world_state" && l.payload?.state?.tools)
+    if (loaded.length === 0 && deferred.length === 0) return "unknown"
+    const attn = loaded.some((l) => JSON.stringify(l).includes("mcp__attn")) || deferred.some((l) => Object.keys(l.payload.state.tools).some((name) => name.startsWith("mcp__attn")))
+    return attn ? "on" : "off"
   }
   if (record.length === 0) return "unknown"
   const added = record.map((l) => l.attachment).filter((a) => a?.type === "mcp_instructions_delta" || a?.type === "deferred_tools_delta")

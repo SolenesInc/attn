@@ -80,7 +80,7 @@ A cell is a harness, a setting and a place:
 | `--outpost` | `<outpost name>=<ssh destination>`, repeatable as a comma list | none: the home only |
 | `--no-home` | with `--outpost`, run the outposts' cells only; refused without it | the home's cells run too |
 | `--outpost-tool-home` | an absolute path on the outposts, the same one for every outpost: its [tool home](#harness-homes) | the outpost user's own harness homes |
-| `--tasks` | task and probe ids, `harder` for the four harder tasks, `asks` for the five ask tasks, `probes` for every probe, or `grid` for the grid's set | the seven tasks, or `grid` with `--grid` |
+| `--tasks` | task and probe ids, `harder` for the four harder tasks, `asks` for the five ask tasks, `scripts` for the six tasks built for scripts, `c6-final` for the thirteen tasks the tools are proven on, `probes` for every probe, or `grid` for the grid's set | the seven tasks, or `grid` with `--grid` |
 | `--runs` | runs per cell | 1; with `--grid`, 3 for a task and 1 for a probe |
 | `--parallel` | runs of one cell at a time | 2 |
 

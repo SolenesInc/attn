@@ -355,8 +355,212 @@ const codingTests: Task = {
   },
 }
 
+
+const BLOCKERS: Record<string, string> = {
+  "Shard the search index": "Pick the shard key",
+  "Backfill the index": "Shard the search index",
+  "Switch reads to the index": "Backfill the index",
+}
+const blockedByNote: Task = {
+  id: "blocked-by-note",
+  title: "Link each child to the seed its newest note says it waits on",
+  setup: (w) => {
+    const plot = w.attnJson(["seed", "plot", "-f", "-"], {
+      stdin: JSON.stringify({
+        title: "Search index migration",
+        body: "Move search from SQL to an index. Each child's notes say what it waits on.",
+        children: [...Object.keys(BLOCKERS), "Pick the shard key"].map((title) => ({ title, body: `${title} for the search index.` })),
+      }),
+    })
+    const ids: Record<string, string> = Object.fromEntries(plot.children.map((c: any) => [c.title, c.id]))
+    for (const [title, waits] of Object.entries(BLOCKERS)) {
+      w.attn(["seed", "note", ids[title]!, "-m", `Waits on ${ids["Pick the shard key"]} until the key is known.`])
+      if (waits !== "Pick the shard key") w.attn(["seed", "note", ids[title]!, "-m", `Correction: this waits on ${ids[waits]} (${waits.toLowerCase()}), not on the shard key.`])
+    }
+    w.state.ids = ids
+    return "Each child of the plot search-index-migration says in its newest note which seed it waits on; an older note may say something else. Record each of those waits in the garden, so that the seed it waits on blocks it. Change nothing else."
+  },
+  check: (w) => {
+    const ids = w.state.ids as Record<string, string>
+    const problems: string[] = []
+    for (const title of [...Object.keys(BLOCKERS), "Pick the shard key"]) {
+      const waits = show(w, ids[title]!).relations.filter((r: any) => r.label === "blocked-by").map((r: any) => r.seed_id)
+      const want = BLOCKERS[title] ? [ids[BLOCKERS[title]!]] : []
+      if (JSON.stringify(waits) !== JSON.stringify(want)) problems.push(`"${title}" waits for ${JSON.stringify(waits)}, want ${JSON.stringify(want)}`)
+    }
+    return verdict(problems, "each child waits on the seed its newest note names, and only on it")
+  },
+}
+
+const OPEN_CHECKS: Record<string, { checks: string[]; reported: number[] }> = {
+  "Parse the feed": { checks: ["Parses RSS", "Parses Atom"], reported: [0] },
+  "Store the items": { checks: ["Stores each item once", "Keeps 30 days"], reported: [0, 1] },
+  "Serve the API": { checks: ["Lists items by date", "Pages by cursor", "Answers in 50 ms"], reported: [1] },
+}
+const checkIds = (() => {
+  let n = 0
+  return Object.fromEntries(Object.entries(OPEN_CHECKS).map(([title, { checks }]) => [title, checks.map(() => `C${++n}`)]))
+})()
+const openChecksNote: Task = {
+  id: "open-checks-note",
+  title: "Note each child's open checks, which only the child shows",
+  setup: (w) => {
+    w.sh("cat > proof.log", "PASS\n")
+    const plot = w.attnJson(["seed", "plot", "-f", "-"], {
+      stdin: JSON.stringify({
+        title: "Feed reader",
+        body: "Build a feed reader in three parts.",
+        children: Object.entries(OPEN_CHECKS).map(([title, { checks }]) => ({ title, body: `${title}.`, checks: checks.map((text, i) => ({ id: checkIds[title]![i], text })) })),
+      }),
+    })
+    const ids: Record<string, string> = Object.fromEntries(plot.children.map((c: any) => [c.title, c.id]))
+    for (const [title, { reported }] of Object.entries(OPEN_CHECKS)) {
+      w.attn(["seed", "tend", ids[title]!], { session: w.session })
+      for (const i of reported) w.attn(["seed", "check", "report", ids[title]!, checkIds[title]![i]!, "-m", "Proven.", "--evidence", join(w.dir, "proof.log")], { session: w.session })
+    }
+    w.state.ids = ids
+    return 'For every child of the plot feed-reader that still has open checks, add one note to that child that lists the text of each of its open checks, in the form "Open: <text>; <text>". Leave children with no open check alone.'
+  },
+  check: (w) => {
+    const ids = w.state.ids as Record<string, string>
+    const problems: string[] = []
+    for (const [title, { checks, reported }] of Object.entries(OPEN_CHECKS)) {
+      const open = checks.filter((_, i) => !reported.includes(i))
+      const notes = notesBy(w, ids[title]!, w.session)
+      if (open.length === 0) {
+        if (notes.length > 0) problems.push(`noted "${title}", which has no open check`)
+        continue
+      }
+      if (notes.length !== 1) problems.push(`${notes.length} notes on "${title}", want one`)
+      else if (!open.every((text) => notes[0]!.includes(text)) || checks.some((text, i) => reported.includes(i) && notes[0]!.includes(text))) problems.push(`"${title}" was noted ${JSON.stringify(notes[0])}, want its open checks ${JSON.stringify(open)} only`)
+    }
+    return verdict(problems, "each child with open checks noted with exactly those checks")
+  },
+}
+
+const ORIGINS: Record<string, string> = {
+  "Cache warm-up after deploy": "Profile the cold-start latency",
+  "Retry the webhook sender": "Audit the partner webhooks",
+  "Drop the legacy CSV export": "Count the export formats in use",
+}
+const discoveredFrom: Task = {
+  id: "discovered-from",
+  title: "Link each seed to the seed its newest note says it was found on",
+  setup: (w) => {
+    const origins = Object.fromEntries(Object.values(ORIGINS).map((title) => [title, plant(w, title, `${title}.`)]))
+    plant(w, "Profile the warm-start latency", "Profile the warm-start latency.")
+    plant(w, "Audit the internal webhooks", "Audit the internal webhooks.")
+    w.attn(["seed", "harvest", origins["Count the export formats in use"]!, "-m", "Counted: CSV, JSON, Parquet."])
+    const ids = Object.fromEntries(Object.entries(ORIGINS).map(([title, origin]) => {
+      const id = plant(w, title, `${title}.`)
+      w.attn(["seed", "note", id, "-m", `Found while working on the seed titled "${origin}".`])
+      return [title, id]
+    }))
+    w.state.ids = ids
+    w.state.origins = origins
+    return `The seeds ${Object.values(ids).join(", ")} each say in their newest note which seed they were found on, by its title. Record that in the garden: link each one as discovered from that seed. Change nothing else.`
+  },
+  check: (w) => {
+    const ids = w.state.ids as Record<string, string>
+    const origins = w.state.origins as Record<string, string>
+    const problems: string[] = []
+    for (const [title, origin] of Object.entries(ORIGINS)) {
+      const from = show(w, ids[title]!).relations.filter((r: any) => r.label === "discovered-from").map((r: any) => r.seed_id)
+      if (JSON.stringify(from) !== JSON.stringify([origins[origin]])) problems.push(`"${title}" is discovered from ${JSON.stringify(from)}, want [${origins[origin]}]`)
+    }
+    return verdict(problems, "each seed is linked to the seed its note names, found by title")
+  },
+}
+
+const TRAP_OWNERS: Record<string, string> = {
+  "Redis client": "internal/cache/redis.client.go",
+  "App config": "web/app.config.ts",
+  "Release notes": "docs/v1.2/notes.md",
+  "Lock file": "deps/package.lock.json",
+}
+const pathTrap: Task = {
+  id: "path-trap",
+  title: "Note each child's owner file, where the paths have several dots",
+  setup: (w) => {
+    const plot = w.attnJson(["seed", "plot", "-f", "-"], {
+      stdin: JSON.stringify({
+        title: "Config split",
+        body: "Split the configuration, one owner file per child.",
+        children: Object.entries(TRAP_OWNERS).map(([title, path]) => ({ title, body: `This child owns ${path}. Change only that file.` })),
+      }),
+    })
+    w.state.ids = Object.fromEntries(plot.children.map((c: any) => [c.title, c.id]))
+    return 'For every child of the plot config-split, read the child and add a note to it that names the file its body says it owns, exactly in the form "Owner file: <path>".'
+  },
+  check: (w) => {
+    const ids = w.state.ids as Record<string, string>
+    const problems: string[] = []
+    const wrong: string[] = []
+    for (const [title, path] of Object.entries(TRAP_OWNERS)) {
+      const notes = notesBy(w, ids[title]!, w.session)
+      if (!notes.some((n) => n.trim() === `Owner file: ${path}`)) problems.push(`no note on ${ids[title]} reads "Owner file: ${path}": ${JSON.stringify(notes)}`)
+      wrong.push(...notes.filter((n) => n.trim() !== `Owner file: ${path}`))
+    }
+    return verdict(problems, `each child has a note naming its file exactly; ${wrong.length} other note(s)`)
+  },
+}
+
+const CHAIN_STEPS = 15
+const chainCode = (i: number) => (((i + 7) * 2654435761) % 1000003).toString(36)
+const chain: Task = {
+  id: "chain",
+  title: "Follow fifteen seeds, each found by running the last one's step",
+  setup: (w) => {
+    const ids = Array.from({ length: CHAIN_STEPS }, (_, i) => plant(w, `Chain step ${i + 1}`, "Run the step this seed's notes give, in your working directory."))
+    const steps = ids.map((id, i) => [chainCode(i), id] as const)
+    const table = Object.fromEntries(steps.map(([code], i) => [code, { note: `Step ${i + 1} done: ${chainCode(i + 100)}`, next: steps[i + 1]?.[0] ?? null }]))
+    w.sh("cat > step.py", `import json, sys\nt = json.loads(${JSON.stringify(JSON.stringify(table))})\ns = t[sys.argv[1]]\nprint("note:", s["note"])\nprint("next:", "the seed whose newest note gives code " + s["next"] if s["next"] else "done")\n`)
+    ids.forEach((id, i) => w.attn(["seed", "note", id, "-m", `Run: python3 step.py ${chainCode(i)}`]))
+    w.state.ids = ids
+    return `Work through a chain of seeds. Start at ${ids[0]}: its newest note gives a command to run in your working directory. Run it, add the line it prints after "note:" as a note on that seed, word for word, and then find the seed its "next:" line points to among the seeds titled "Chain step …", and do the same there, until a step prints "next: done".`
+  },
+  check: (w) => {
+    const ids = w.state.ids as string[]
+    const problems: string[] = []
+    ids.forEach((id, i) => {
+      const want = `Step ${i + 1} done: ${chainCode(i + 100)}`
+      if (!notesBy(w, id, w.session).some((n) => n.trim() === want)) problems.push(`no note "${want}" on ${id}`)
+    })
+    return verdict(problems, `all ${CHAIN_STEPS} steps noted`)
+  },
+}
+
+const LONG_BODY = [
+  "# Path rules",
+  "",
+  "Release builds land in `C:\\Users\\build\\out\\release` on Windows and in `${BUILD_DIR}/release` elsewhere.",
+  "",
+  "A tag must match `^v\\d+\\.\\d+\\.\\d+$`, so `v1.2.3` passes and `v1.2` does not.",
+  "",
+  "Set `${NAME}` before you run `make sign`; the script reads it as `$NAME` and fails on \\n in it.",
+].join("\n")
+const markdownBody: Task = {
+  id: "markdown-body",
+  title: "Plant a seed whose markdown body holds code spans, a Windows path, a regex and ${NAME}",
+  setup: () => `Plant a seed titled "Document the path rules" whose body is exactly the markdown between the two lines of dashes below, byte for byte. Do not tend it.\n-----\n${LONG_BODY}\n-----`,
+  check: (w) => {
+    const seeds = w.attnJson(["seed", "ls", "--flat"]).seeds.filter((s: any) => /document the path rules/i.test(s.title))
+    if (seeds.length === 0) return verdict(["no seed titled Document the path rules"], "")
+    const latest = show(w, seeds[0].id)
+    const body = String(latest.seed.body).trim()
+    const edits = w.attnJson(["seed", "notes", latest.seed.id]).notes.filter((n: any) => n.kind === "edit").length
+    const problems: string[] = []
+    if (body !== LONG_BODY) problems.push(`the body differs from the markdown given: ${JSON.stringify(body)}`)
+    const corrected = seeds.length - 1 + edits
+    return verdict(problems, corrected === 0 ? "the body is stored byte for byte, right the first time" : `the body is stored byte for byte, after ${corrected} wrong attempt(s)`)
+  },
+}
+
 export const HARDER_TASKS: Task[] = [seedLifecycle, plotOrder, openAskRefusal, codingTests]
 
 export const UNGROUPED_TASKS: Task[] = [askStillMatters, msgDelegateStalled]
 
 export const TASKS: Task[] = [progress, plotNotes, ask, msgDelegate, standby, coding, fail]
+
+/** Built for scripts: a read that depends on another read, a string a careless pattern cuts wrong, a long session, and a body a script must quote. */
+export const SCRIPT_TASKS: Task[] = [blockedByNote, openChecksNote, discoveredFrom, pathTrap, chain, markdownBody]
