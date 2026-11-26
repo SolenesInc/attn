@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,6 +27,25 @@ func (repo *testRepository) releaseTrain(args ...string) string {
 		repo.t.Fatalf("release-train %s: %v", strings.Join(args, " "), err)
 	}
 	return out.String()
+}
+
+func (repo *testRepository) noteParts(flags ...string) []string {
+	repo.t.Helper()
+	dir := repo.t.TempDir()
+	repo.releaseTrain(append([]string{"notes", "split", dir}, flags...)...)
+	paths, err := filepath.Glob(filepath.Join(dir, "part-*.txt"))
+	if err != nil {
+		repo.t.Fatal(err)
+	}
+	var parts []string
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			repo.t.Fatal(err)
+		}
+		parts = append(parts, string(content))
+	}
+	return parts
 }
 
 func fakeAttn(t *testing.T, seeds map[string]string) {
@@ -76,10 +96,14 @@ func TestNotesGroupTheCommitsSinceTheLastReleaseByTheirSeeds(t *testing.T) {
 	if got, want := repo.releaseTrain("notes", "range"), "<!-- changelog-commits: "+previousMain+".."+head+" -->\n"; got != want {
 		t.Fatalf("range = %q, want %q", got, want)
 	}
-	rendered := repo.releaseTrain("notes", "render")
+	parts := repo.noteParts()
+	if len(parts) != 1 {
+		t.Fatalf("got %d parts, want 1", len(parts))
+	}
+	rendered := parts[0]
 
 	groups := strings.Split(rendered, "\n=== ")
-	if !strings.HasPrefix(groups[0], "4 commits since the last release") {
+	if !strings.HasPrefix(groups[0], "Part 1 of 1 of the 4 commits since the last release") {
 		t.Fatalf("header = %q", groups[0])
 	}
 	want := []struct {
@@ -108,6 +132,49 @@ func TestNotesGroupTheCommitsSinceTheLastReleaseByTheirSeeds(t *testing.T) {
 	for _, released := range []string{"shipped in the previous release", "prepare v0.11.1"} {
 		if strings.Contains(rendered, released) {
 			t.Errorf("notes include %q, which is not part of this release", released)
+		}
+	}
+}
+
+func TestNotesSplitIntoPartsOfWholeGroupsInOrder(t *testing.T) {
+	repo := newTestRepository(t)
+	repo.write("shipped.txt", "already released\n")
+	previousMain := repo.commit("feat: shipped in the previous release")
+	repo.writeManifest(candidateManifest{Version: "0.11.1", MainSHA: previousMain})
+	repo.commit("chore(release): prepare v0.11.1")
+
+	seeds := map[string]string{}
+	for i, size := range []int{300, 300, 900, 100, 100} {
+		id := fmt.Sprintf("seed-%d", i)
+		seeds[id] = fmt.Sprintf(`{"seed":{"title":"Seed %d","body":"%s","status":"harvested"},"notes":[]}`, i, strings.Repeat("x", size))
+		repo.write(id+".txt", id+"\n")
+		repo.commitMessage("feat: "+id, "Attn-Seed: "+id)
+	}
+	repo.write("loose.txt", "loose\n")
+	repo.commitMessage("fix: a commit without a seed")
+	fakeAttn(t, seeds)
+
+	parts := repo.noteParts("--max-bytes", "800")
+	wantGroups := [][]string{{"seed-0", "seed-1"}, {"seed-2"}, {"seed-3", "seed-4", "commits without a seed"}}
+	if len(parts) != len(wantGroups) {
+		t.Fatalf("got %d parts, want %d:\n%s", len(parts), len(wantGroups), strings.Join(parts, "\n-----\n"))
+	}
+	for i, part := range parts {
+		groups := strings.Split(part, "\n=== ")
+		if want := fmt.Sprintf("Part %d of %d of the 6 commits since the last release", i+1, len(parts)); !strings.HasPrefix(groups[0], want) {
+			t.Errorf("part %d header = %q, want prefix %q", i+1, groups[0], want)
+		}
+		if len(groups)-1 != len(wantGroups[i]) {
+			t.Fatalf("part %d holds %d groups, want %v:\n%s", i+1, len(groups)-1, wantGroups[i], part)
+		}
+		for j, name := range wantGroups[i] {
+			heading := "seed " + name + ": "
+			if name == "commits without a seed" {
+				heading = name
+			}
+			if !strings.HasPrefix(groups[j+1], heading) {
+				t.Errorf("part %d group %d starts %q, want %q", i+1, j, firstLine(groups[j+1]), heading)
+			}
 		}
 	}
 }

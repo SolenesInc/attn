@@ -4,13 +4,14 @@ set -euo pipefail
 # Compile the commits since the last release into a dated CHANGELOG.md section.
 #
 # Renders those commits grouped by their Attn-Seed trailers, asks claude to
-# write the user-facing section per the style rules below, inserts it at the
+# write the user-facing section per the style rules below (one draft per part
+# when they are too many for one prompt, then merged), inserts it at the
 # top of CHANGELOG.md with a marker naming the commits it covers, and deletes
 # changelog.d. The result is left staged for review: read the section, fix the
 # copy where it misses, then commit and open a PR. See docs/internal/making-a-release.md.
 #
 # usage: compile-changelog.sh [--dry-run]
-#   --dry-run  print the prompt that would be sent and exit without changes
+#   --dry-run  print the prompts that would be sent and exit without changes
 
 DRY_RUN=0
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
@@ -24,7 +25,9 @@ fi
 
 TODAY="$(date +%Y-%m-%d)"
 
-FACTS="$(go run ./cmd/release-train notes render)"
+PARTS="$(mktemp -d "${TMPDIR:-/tmp}/attn-changelog.XXXXXX")"
+trap 'rm -rf "$PARTS"' EXIT
+go run ./cmd/release-train notes split "$PARTS"
 MARKER="$(go run ./cmd/release-train notes range)"
 MARKER_PATTERN='^<!-- changelog-(fragments-sha256: [0-9a-f]{64}|commits: [0-9a-f]*\.\.[0-9a-f]+) -->$'
 
@@ -39,16 +42,7 @@ if [[ "$TOP_DATE" == "$TODAY" ]]; then
   EXISTING_SECTION="$(printf '%s\n' "$EXISTING_SECTION" | grep -Ev "$MARKER_PATTERN" || true)"
 fi
 
-PROMPT="You are writing the changelog for attn, a macOS app that orchestrates
-coding agents. Below are the commits that landed since the last release. They
-are grouped by the seed (attn's unit of work) each commit names in its
-Attn-Seed trailer: a group opens with the seed's title, state, description and
-notes, then lists its commits. A seed that could not be read is marked unknown;
-judge it from its commits. Commits without a seed are listed last, each on its
-own. Some commits carry a release note their author wrote for users; prefer its
-wording. Compile all of it into one dated CHANGELOG.md section.
-
-Style rules — these matter more than fidelity to the commit wording:
+STYLE="Style rules — these matter more than fidelity to the commit wording:
 - Write for the app's user, not the codebase. Lead every bullet with a bold
   sentence stating the change in terms of what the user experiences, then
   explain in plain prose. Clarity beats technical correctness.
@@ -73,49 +67,109 @@ Match the voice of these examples from the existing changelog:
 Output format: ONLY the markdown section, starting with the line
 ## [${TODAY}]
 and nothing after the last bullet. No preamble, no code fences.
-If no change merits a user-facing bullet, output exactly: EMPTY
+If no change merits a user-facing bullet, output exactly: EMPTY"
 
-Commits:
-
-${FACTS}"
-
+FOLD_EXISTING=""
 if [[ "$REPLACE_TOP" -eq 1 ]]; then
-  PROMPT+="
+  FOLD_EXISTING="
 
-CHANGELOG.md already has a section for ${TODAY}. Fold its bullets and the new
-commits into one merged section (rewriting bullets is fine):
+CHANGELOG.md already has a section for ${TODAY}. Fold its bullets into the
+one section you write (rewriting bullets is fine):
 
 ${EXISTING_SECTION}"
 fi
 
+PART_FILES=("$PARTS"/part-*.txt)
+
+part_prompt() {
+  local facts="$1"
+  printf '%s' "You are writing the changelog for attn, a macOS app that orchestrates
+coding agents. Below are the commits that landed since the last release, or one
+part of them when there are too many to read at once. They are grouped by the
+seed (attn's unit of work) each commit names in its Attn-Seed trailer: a group
+opens with the seed's title, state, description and notes, then lists its
+commits. A seed that could not be read is marked unknown; judge it from its
+commits. Commits without a seed are listed last, each on its own. Some commits
+carry a release note their author wrote for users; prefer its wording. Compile
+all of it into one dated CHANGELOG.md section.
+
+${STYLE}
+
+Commits:
+
+${facts}"
+}
+
+merge_prompt() {
+  printf '%s' "You are writing the changelog for attn, a macOS app that orchestrates
+coding agents. The commits since the last release were too many to read at
+once, so each part of them was drafted into its own CHANGELOG.md section.
+Merge the drafts below into one dated section. When drafts describe the same
+change, write one bullet for it.
+
+${STYLE}${FOLD_EXISTING}
+
+Drafts:
+"
+  printf '\n%s\n' "${DRAFTS[@]}"
+}
+
+write_section() {
+  local output section
+  output="$(claude --strict-mcp-config -p)" || exit
+  if [[ "$output" == "EMPTY" ]]; then
+    return 0
+  fi
+  section="$output"
+  if [[ "$section" != "## [${TODAY}]"* ]]; then
+    if ! section="$(printf '%s\n' "$output" | awk -v header="## [${TODAY}]" '
+      $0 == header { found = 1 }
+      found { print }
+      END { if (!found) exit 1 }
+    ')"; then
+      echo "error: unexpected writer output (expected a section starting with '## [${TODAY}]'):" >&2
+      printf '%s\n' "$output" >&2
+      exit 1
+    fi
+  fi
+  printf '%s\n' "$section"
+}
+
 if [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "--- prompt (dry run, no changes made) ---"
-  echo "$PROMPT"
+  echo "--- prompts (dry run, no changes made) ---"
+  for part in "${PART_FILES[@]}"; do
+    part_prompt "$(<"$part")${FOLD_EXISTING}"
+    printf '\n'
+  done
   exit 0
 fi
 
-echo "writing section with claude..."
-SECTION="$(printf '%s' "$PROMPT" | claude --strict-mcp-config -p)"
+DRAFTS=()
+if [[ "${#PART_FILES[@]}" -eq 1 ]]; then
+  echo "writing section with claude..."
+  SECTION="$(part_prompt "$(<"${PART_FILES[0]}")${FOLD_EXISTING}" | write_section)"
+else
+  for part in "${PART_FILES[@]}"; do
+    echo "writing a draft for $(basename "$part") of ${#PART_FILES[@]} with claude..."
+    draft="$(part_prompt "$(<"$part")" | write_section)"
+    if [[ -n "$draft" ]]; then
+      DRAFTS+=("$draft")
+    fi
+  done
+  if [[ "${#DRAFTS[@]}" -eq 0 && "$REPLACE_TOP" -eq 0 ]]; then
+    SECTION=""
+  else
+    echo "merging ${#DRAFTS[@]} drafts with claude..."
+    SECTION="$(merge_prompt | write_section)"
+  fi
+fi
 
-if [[ "$SECTION" == "EMPTY" ]]; then
+if [[ -z "$SECTION" ]]; then
   if [[ "$REPLACE_TOP" -eq 1 ]]; then
     SECTION="$EXISTING_SECTION"
   else
     SECTION="## [${TODAY}]"$'\n\n'"No changes users will notice."
   fi
-fi
-
-if [[ "$SECTION" != "## [${TODAY}]"* ]]; then
-  if ! NORMALIZED_SECTION="$(printf '%s\n' "$SECTION" | awk -v header="## [${TODAY}]" '
-    $0 == header { found = 1 }
-    found { print }
-    END { if (!found) exit 1 }
-  ')"; then
-    echo "error: unexpected writer output (expected a section starting with '## [${TODAY}]'):" >&2
-    printf '%s\n' "$SECTION" >&2
-    exit 1
-  fi
-  SECTION="$NORMALIZED_SECTION"
 fi
 
 if [[ -n "$EXISTING_MARKERS" ]]; then

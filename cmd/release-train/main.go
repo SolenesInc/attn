@@ -75,7 +75,7 @@ func usage() string {
 commands:
   version set <vX.Y.Z>       update every committed version source
   version check <vX.Y.Z>     require every version source to agree
-  notes render               render the commits since the last release for the release writer
+  notes split <dir>          write the commits since the last release for the release writer, in parts
   notes range                print the changelog marker for the commits since the last release
   manifest write [flags]     write .github/release-candidate.yml
   candidate validate [flags] validate a prepared release candidate

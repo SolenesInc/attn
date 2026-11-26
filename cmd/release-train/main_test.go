@@ -292,8 +292,12 @@ func TestTheNextReleaseCompilesWhatLandedDuringThisOne(t *testing.T) {
 	if got, want := repo.releaseTrain("notes", "range"), "<!-- changelog-commits: "+mainSHA+".."+releaseSHA+" -->\n"; got != want {
 		t.Fatalf("next release range = %q, want %q", got, want)
 	}
-	rendered := repo.releaseTrain("notes", "render")
-	if !strings.HasPrefix(rendered, "1 commits since the last release") || !strings.Contains(rendered, "fix(queue): later work") {
+	parts := repo.noteParts()
+	if len(parts) != 1 {
+		t.Fatalf("got %d parts, want 1", len(parts))
+	}
+	rendered := parts[0]
+	if !strings.HasPrefix(rendered, "Part 1 of 1 of the 1 commits since the last release") || !strings.Contains(rendered, "fix(queue): later work") {
 		t.Fatalf("next release notes do not hold exactly the work that landed during this one:\n%s", rendered)
 	}
 	if strings.Contains(rendered, "accepted change on main") {

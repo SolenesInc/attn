@@ -3,9 +3,12 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -49,24 +52,76 @@ type seedRecord struct {
 	} `json:"notes"`
 }
 
+// A whole release's notes for 1,475 commits rendered to 4.4 MB, which claude -p
+// refused; a 2.0 MB slice of them was accepted.
+const writerPartBytes = 1_000_000
+
+const notesUsage = "usage: release-train notes range | notes split <dir> [--max-bytes N]"
+
 func runNotes(root string, args []string, stdout io.Writer) error {
-	if len(args) != 1 || (args[0] != "render" && args[0] != "range") {
-		return errors.New("usage: release-train notes <render|range>")
+	if len(args) == 0 {
+		return errors.New(notesUsage)
 	}
-	r, err := releaseRangeAt(root, "HEAD")
-	if err != nil {
-		return err
-	}
-	if args[0] == "range" {
+	switch args[0] {
+	case "range":
+		if len(args) != 1 {
+			return errors.New(notesUsage)
+		}
+		r, err := releaseRangeAt(root, "HEAD")
+		if err != nil {
+			return err
+		}
 		_, err = fmt.Fprintln(stdout, r.marker())
 		return err
+	case "split":
+		flags := flag.NewFlagSet("notes split", flag.ContinueOnError)
+		maxBytes := flags.Int("max-bytes", writerPartBytes, "largest part, unless one group alone is larger")
+		if len(args) < 2 {
+			return errors.New(notesUsage)
+		}
+		if err := flags.Parse(args[2:]); err != nil || flags.NArg() != 0 {
+			return errors.New(notesUsage)
+		}
+		r, err := releaseRangeAt(root, "HEAD")
+		if err != nil {
+			return err
+		}
+		header, groups, err := renderNotes(root, r)
+		if err != nil {
+			return err
+		}
+		return writeNoteParts(args[1], header, groups, *maxBytes)
+	default:
+		return errors.New(notesUsage)
 	}
-	rendered, err := renderNotes(root, r)
-	if err != nil {
+}
+
+func packNoteParts(groups []string, maxBytes int) [][]string {
+	parts := [][]string{nil}
+	size := 0
+	for _, group := range groups {
+		if size > 0 && size+len(group) > maxBytes {
+			parts = append(parts, nil)
+			size = 0
+		}
+		parts[len(parts)-1] = append(parts[len(parts)-1], group)
+		size += len(group)
+	}
+	return parts
+}
+
+func writeNoteParts(dir, header string, groups []string, maxBytes int) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	_, err = io.WriteString(stdout, rendered)
-	return err
+	parts := packNoteParts(groups, maxBytes)
+	for i, part := range parts {
+		content := fmt.Sprintf("Part %d of %d of the %s", i+1, len(parts), header) + strings.Join(part, "")
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("part-%03d.txt", i+1)), []byte(content), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func releaseRangeAt(root, ref string) (releaseRange, error) {
@@ -134,10 +189,10 @@ func readReleaseCommit(root, sha string) (releaseCommit, error) {
 	return commit, nil
 }
 
-func renderNotes(root string, r releaseRange) (string, error) {
+func renderNotes(root string, r releaseRange) (string, []string, error) {
 	commits, err := releaseCommits(root, r)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	var seedOrder []string
 	bySeed := map[string][]releaseCommit{}
@@ -154,9 +209,10 @@ func renderNotes(root string, r releaseRange) (string, error) {
 			bySeed[seed] = append(bySeed[seed], commit)
 		}
 	}
-	var out strings.Builder
-	fmt.Fprintf(&out, "%d commits since the last release (%s)\n", len(commits), r.revisions())
+	header := fmt.Sprintf("%d commits since the last release (%s)\n", len(commits), r.revisions())
+	var groups []string
 	for _, id := range seedOrder {
+		var out strings.Builder
 		record, err := showSeed(id)
 		if err != nil {
 			fmt.Fprintf(&out, "\n=== seed %s: unknown (%v); judge its change from the commits alone\n", id, err)
@@ -170,12 +226,15 @@ func renderNotes(root string, r releaseRange) (string, error) {
 			}
 		}
 		writeReleaseCommits(&out, bySeed[id])
+		groups = append(groups, out.String())
 	}
 	if len(loose) > 0 {
+		var out strings.Builder
 		out.WriteString("\n=== commits without a seed\n")
 		writeReleaseCommits(&out, loose)
+		groups = append(groups, out.String())
 	}
-	return out.String(), nil
+	return header, groups, nil
 }
 
 func writeReleaseCommits(out *strings.Builder, commits []releaseCommit) {
