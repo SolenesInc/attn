@@ -44,13 +44,15 @@ function seedTiles(desktop) {
   return tiles;
 }
 
-async function wake() {
+async function wake(member) {
+  const key = `sidebar.crew.${member.id}`;
+  await driver.waitFor({ key, name: `Start ${member.name}` });
   const id = json('crew', 'start', name).session_id;
   sessions.push(id);
   const placed = await observer.waitForDesktopOf(id, (d) => d.panes.some((p) => p.session_id === id) && d, `${name}'s session is placed`, 30_000);
   const pane = placed.panes.find((p) => p.session_id === id).pane_id;
   desktops.push(placed.id);
-  await driver.click({ key: `sidebar.session.${id}` });
+  await driver.click({ key, name: `Open ${member.name}` });
   await driver.waitFor({ key: `tile.${pane}` });
   return { id, desktop: placed.id, pane };
 }
@@ -65,12 +67,13 @@ try {
   let first;
   let second;
   let day;
+  let member;
   await runner.step('a_member_in_session_with_two_seeds_to_claim', async () => {
     writeMockAgentFixture(runner.sessionDir, {
       name: 'Crew header verification', minimumWorkingMs: 0, turns: [],
       defaultActions: [{ type: 'reply', text: 'Ready to verify the seed header.', state: 'idle' }],
     });
-    attn('crew', 'create', name, '--agent', 'claude', '--profile', observer.profileId);
+    member = json('crew', 'create', name, '--agent', 'claude', '--profile', observer.profileId);
     runner.registerCleanup('retire_member', () => attn('crew', 'retire', name, '--profile', observer.profileId));
     attn('crew', 'set', name, '--cwd', runner.sessionDir, '--agent', 'claude', '--model', MOCK_AGENT_MODEL, '--profile', observer.profileId);
     runner.registerCleanup('end_sessions', async () => {
@@ -83,7 +86,7 @@ try {
         if (left && observer.desktops.length > 1) await observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
       }
     });
-    day = await wake();
+    day = await wake(member);
     first = json('seed', 'plant', 'Review release notes', '--profile', observer.profileId).id;
     second = json('seed', 'plant', 'Verify upload completion', '--profile', observer.profileId).id;
     unsettled.add(first);
@@ -122,7 +125,7 @@ try {
   await runner.step('the_claim_outlasts_the_session_and_the_chip_opens_the_seed', async () => {
     attn('handoff', '--session', day.id, '-m', 'Continue checking the member claim.');
     await observer.waitFor(() => !observer.getSession(day.id), 'the first session to close', 30_000);
-    const next = await wake();
+    const next = await wake(member);
     runner.assert(next.id !== day.id, 'the member starts a new session', { first: day.id, next: next.id });
     await header(next.pane, 'Review release notes', 'Growing', 'Open seed');
     await shot('member-claim-after-wake.png');

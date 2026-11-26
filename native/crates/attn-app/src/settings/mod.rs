@@ -211,6 +211,7 @@ pub(crate) fn toggle(state: &mut State, tx: &mut Tx) {
 }
 
 pub(crate) fn open(state: &mut State, section: Section, tx: &mut Tx) {
+    crate::chief::dismiss(state, false, tx);
     state.window.settings.section = section;
     let settings = state.facts.settings.clone();
     for (key, trim) in TEXT_FIELDS {

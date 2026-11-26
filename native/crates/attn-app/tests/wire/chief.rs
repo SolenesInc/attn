@@ -467,6 +467,19 @@ fn with_no_harness_picked_yet_the_first_setup_chooses_none_and_starts_once_one_i
 }
 
 #[test]
+fn opening_settings_dismisses_the_automatic_chief_setup() {
+    let mut world = start(initial(false, chief(false), Vec::new()));
+    assert!(shows(&world, SETUP));
+
+    dispatch(&mut world, Action::UiOpenSettings);
+    assert!(!shows(&world, SETUP));
+
+    click(&mut world, "settings.nav.agents");
+    assert!(shows(&world, "settings.section.agents"));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn settings_from_the_chief_setup_open_on_agents_and_record_only_that_section() {
     let mut first = initial(true, chief(false), Vec::new());
     let mut none = settings(true);

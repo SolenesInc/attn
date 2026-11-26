@@ -573,7 +573,6 @@ fn alert(said: &str, t: &Tokens) -> Block {
 }
 
 fn open_agents_settings(state: &mut State, tx: &mut Tx) {
-    super::dismiss(state, false, tx);
     crate::settings::open(state, crate::settings::Section::Agents, tx);
 }
 
