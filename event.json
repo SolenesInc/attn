@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Archived Garden history can keep stale seed state",
+  "at": "2026-11-26T17:38:10.234Z",
+  "detail": "Closed Garden history can retain stale cards after edits outside the live window. At ac8c5c19d, reopen a check on an old closed card already loaded in Board history. If the root tally stays fixed, the old tally remains visible. With the window filled by open work, replant and then wither an old harvested child and the page restores the cached harvested card. The refresh signature omits off-window revisions. Independently source-confirmed at native/crates/attn-app/src/garden/mod.rs:657 and :717. Use a freshness signal covering page data. Native probe source is on s-g82g06; run in progress.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/garden/mod.rs",
+    "line": 657
+  },
+  "culprit": "42ebee77d2dc4460d2c7613095a26b1853817ed9"
+}
