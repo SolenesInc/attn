@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Script output can crowd out committed inbox receipts",
+  "at": "2026-11-26T01:06:19.628Z",
+  "detail": "The script formatter budgets the full output fence before reserving marked-read receipts. It can omit them after the inbox read committed, or emit an oversized error response that pushes the ledger out of the inline result. Reserve the daemon outcome, receipts, and change ledger before fitting script output. Independent source checks and existing functional evidence are on s-zqrc7w and s-1h0709.\n"
+}
