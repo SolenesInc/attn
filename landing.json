@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "f0f5e7bc9443fc89a8b8fa86e76e3f741cdf5caf",
+  "head": "cba1cc4613bcc263c86ef76db3bfa271a67a225f",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 273.413,
+    "ranOn": "cba1cc4613bcc263c86ef76db3bfa271a67a225f"
+  },
+  "noMediaReason": "The only visible change is a removed Settings row; the app wire tests cover the page",
+  "recordings": []
+}
