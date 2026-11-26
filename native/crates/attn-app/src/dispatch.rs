@@ -86,6 +86,9 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
         Action::OpenWhatsNew => crate::whats_new::open(state, tx),
         Action::NotebookOpenTile => crate::notebook::open_tile(state, tx),
         Action::OpenInEditor { session } => crate::editor::open_session(state, &session, tx),
+        Action::OpenStake { session, seed } => {
+            crate::garden::open_tile_beside(state, &seed, Some(session), tx)
+        }
         Action::CapContextWindow { session } => crate::context_cap::open(state, &session, tx),
         Action::NotebookOpenFullscreen => crate::notebook::open_fullscreen(state, tx),
         Action::CreateDiagnosticReport => crate::diagnostic_report::open(state, tx),

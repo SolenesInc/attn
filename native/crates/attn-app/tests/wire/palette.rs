@@ -2019,3 +2019,51 @@ fn the_agents_face_keeps_settled_automation_runs_on_unslotted_desktops() {
     open_agents(&mut world);
     assert_eq!(titles(&world), ["regular", "nightly-run"]);
 }
+
+#[test]
+fn the_palette_opens_the_stake_of_the_agent_on_screen_beside_it_and_offers_nothing_without_one() {
+    for stake in [Some("s-stake1"), None] {
+        let agent = Session {
+            seed_id: stake.map(str::to_owned),
+            ..session("s1")
+        };
+        let mut world = World::start(daemon(
+            initial(
+                vec![desktop("d1", "work", 1, vec![agent_pane("s1")])],
+                vec![agent],
+            ),
+            vec![],
+        ));
+        world.open_desktop();
+        press_action(&mut world, Action::UiCommandPalette);
+        world.gesture(|app| app.type_text("stake"));
+
+        let Some(stake) = stake else {
+            assert!(
+                !titles(&world).iter().any(|t| t.ends_with("'s stake")),
+                "{:?}",
+                titles(&world)
+            );
+            press(&mut world, Key::Escape);
+            rest(&mut world);
+            continue;
+        };
+        assert_eq!(highlighted(&world).as_deref(), Some("Open s1's stake"));
+        press(&mut world, Key::Enter);
+        let opened = world.daemon.sent_of("open_seed");
+        assert_eq!(opened.len(), 1);
+        assert_eq!(opened[0]["seed_id"], stake);
+        assert_eq!(opened[0]["session_id"], "s1");
+        world.daemon.reply_to(
+            &opened[0],
+            json!({
+                "event": "open_seed_result",
+                "request_id": opened[0]["request_id"],
+                "seed_id": stake,
+                "success": true,
+            }),
+        );
+        world.settle();
+        rest(&mut world);
+    }
+}
