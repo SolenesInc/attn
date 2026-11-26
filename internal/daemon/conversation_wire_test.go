@@ -396,12 +396,13 @@ func TestCodexResumeFromATerminalWithNoConversationYetReopensTheClosedSession(t 
 	if got := app.Terminal(first); got != terminal {
 		t.Fatalf("%s came back in terminal %s, want %s, the one /resume ran in", first, got, terminal)
 	}
+	prompting := len(app.Log())
 	app.TypeLine(first, "now fix it")
 	if got := resumed.Prompted(); got != "now fix it" || resumed.ConversationID != flaky {
 		t.Fatalf("codex took %q in conversation %s, want it in %s", got, resumed.ConversationID, flaky)
 	}
 	awaitClosed(app, fresh)
-	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	testworld.AwaitSessionSince(app, prompting, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 }
 
 func TestASessionLaunchedToResumeAConversationKeepsResumingIt(t *testing.T) {
