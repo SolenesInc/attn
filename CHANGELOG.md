@@ -11,15 +11,18 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
 ### Added
 - **Agents can use attn through tools instead of the shell (experimental).**
   Turn on Agent tools in Settings → Experimental. Claude Code, Codex and plugin
-  harnesses that ask for them then get a few tools that run short scripts of
-  attn commands. The commands cover seeds, agents, sessions, pull requests,
-  terminals, the browser, reviews, asks, crew and automations. Scripts that
-  read, record notes and check reports, or ask you a question run without a
-  permission prompt. A script that acts, such as running a terminal or
-  closing an agent, is still judged first or asks you. A call acts as the
-  session that made it, also on an outpost, and a refusal tells the agent
-  what to call next. The delegate tool waits for the new agent to start, and
-  says if the agent is stuck at a folder-trust question.
+  harnesses that ask for them then get tools that run short scripts of attn
+  commands. The commands cover seeds, agents, sessions, pull requests,
+  terminals, the browser, reviews, asks, crew and automations. There are two
+  script tools, and the agent picks one by asking whether a command in its
+  script acts. `attn_record` runs scripts that only read, record notes and
+  check reports, or ask you a question, and these run without a permission
+  prompt. `attn_do` runs a script that acts, such as running a terminal or
+  closing an agent, and it is still judged first or asks you. A call acts as
+  the session that made it, also on an outpost. A refusal tells the agent
+  what to call next. An agent that calls a command as if it were a tool is
+  told which of the two tools runs it. The delegate tool waits for the new
+  agent to start, and says if the agent is stuck at a folder-trust question.
 - **Sigma is built into attn (experimental).** Turn on Sigma in Settings →
   Experimental and Sigma sessions run without the attn-sigma plugin. They
   take messages while they work, compact on close, and run on outposts, as
@@ -103,10 +106,14 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
   snacks.image and other tools that use kitty's placeholder cells now show
   their images and diagrams inline instead of rows of boxes. Images sent as a
   file path load too.
-- **Read markdown tiles with vim keys, and search them with ⌘F.** With vim
-  mode on, j/k, Ctrl-d/Ctrl-u and gg/G scroll, and ]] and [[ jump between
-  headings. ⌘F (or / in vim mode) opens Document Find, and n/N step through
-  matches.
+- **Read markdown tiles, seeds and the Garden with vim keys, and search them
+  with ⌘F.** With vim mode on, j/k, Ctrl-d/Ctrl-u and gg/G scroll markdown
+  and seed tiles, and ]] and [[ jump between headings. ⌘F (or / in vim mode)
+  opens Document Find, n/N step through matches, and a match inside a
+  collapsed `<details>` block opens it. Find in a seed tile searches the
+  seed's plan. In the Garden, j/k, gg and G walk the list and / goes to
+  search. l or Enter gives the keys to the open seed, and h or Esc gives
+  them back to the list. Shortcuts you saved still win over a vim key.
 - **Move any tile to another desktop.** Drag an agent onto a desktop chip,
   or drag a markdown, browser, seed or editor tile's row onto another
   desktop or "+ New desktop". "Move to desktop…" picks the destination from
@@ -206,6 +213,14 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
   Captures, ask answers and annotations until the turn ends, then sends them
   as your own prompt. A document annotation sent during a mid-turn
   permission question now reaches the agent, as terminal annotations did.
+- **Review documents take vim keys, and code navigation moves to gd, gr and
+  K.** j/k, h/l, [[ and ]], H/L, Ctrl-d/Ctrl-u, gg/G and V work in a review
+  whether or not vim mode is on. The arrow, Page Up/Down, Home and End keys
+  do the same. Go to definition, find references and hover move from f, r
+  and h to gd, gr and K, so h and l are free to step between stops. ⌘, Ctrl
+  and Alt arrows reach the app's shortcuts again, shortcuts you saved run
+  before the review's own keys, and saving a mark ends the selection it
+  covers.
 - **A calmer title bar with a Notebook button.** The title bar is 40 points
   tall with centred window buttons and frameless tool icons. Garden, ledger
   and automations light up while their panel is open.
@@ -236,14 +251,23 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
   page beside the sidebar that shows what each launch default resolves to.
 - **The sidebar and queue are easier to scan.** Desktops read as headings
   with number chips, and the collapsed rail lists every desktop by number.
-  The row in view has an orange bar, and the queue's sections have room
-  between them.
+  The sidebar and queue share the shelf's tonal look. A desktop's crew shows
+  as compact pills, and empty desktops fold away. The row in view has an
+  orange bar, and the queue's sections have room between them.
 - **Documents read better on wide tiles.** Paragraphs, lists and headings
   sit centred at a comfortable reading width. Tables, code, diagrams and
   images use the tile's full width. The notebook sets notes in a serif font.
 - **The garden shows each seed's state at a glance.** Rows start with a
   colored state dot, and seed pages have a clear title, a plot progress bar
   and ruled sections.
+- **The Garden keeps its whole history and loads it as you read.** Closed
+  seeds load a page at a time when you reach the end of a list. This works
+  in the closed lane, in folded plots and in a crew member's planted seeds.
+  Counts are exact, with no cap banner. Open seeds are always shown, however
+  many there are. Search runs on the daemon, so it finds seeds that aren't
+  loaded yet, and a closed seed's id opens its card. The list keeps your
+  place when history refreshes, and an open archived seed's card shows edits
+  as they happen.
 - **Banners stand out and stay short.** Update, shared-Codex and outpost
   banners are tinted bars with a symbol for their kind, and only failures
   are solid red. A banner shows at most three lines of notes, and Details
@@ -354,8 +378,7 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
 - **A Notebook row says "in sync" only when it is.**
 - **Move to desktop… moves the tile of the row you used.**
 - **Open follow-ups under a completed plot stay in view in the Garden.**
-- **Garden search finds an automation seed by its exact id, and open seeds
-  never drop out of a garden with more than 1,000 seeds.**
+- **Garden search finds an automation seed by its exact id.**
 - **A check report can't overwrite another agent's file on a seed.**
 - **`attn terminal --timeout` covers the whole call again.**
 - **An outpost that can't reach its home says the command didn't run.**
@@ -380,6 +403,8 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
   replaces them.
 
 <!-- changelog-commits: 8bf9587f6a0c01e2dd96cf840a36866775064cf9..639d8c06c18276edfce9bd712bd394f628f49a25 -->
+
+<!-- changelog-commits: 639d8c06c18276edfce9bd712bd394f628f49a25..9545f0baa8a003442cf32ac8e45be319876d1df3 -->
 
 ---
 
