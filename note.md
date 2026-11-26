@@ -1,0 +1,1 @@
+Repairs red Linux CI on main: `TestTerminalToolsAnswerWithoutWaitingOnTheShell` now expects the tool-form inbox doorbell (`agent_inbox()`) that a session launched with the tools reads, which is how the doorbell has worded it since 884db23f6. The test still checks that the doorbell names the inbox. Only the test changed.
