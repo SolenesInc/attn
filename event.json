@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Desktop migration can reap a deliberately named launch desktop",
+  "at": "2026-11-26T21:08:41.514Z",
+  "detail": "The old CLI allowed explicitly naming a desktop to match the automation name. Name equality alone classifies that previously saved desktop as ephemeral. Preserve ambiguous existing desks, using only provable default provenance.\nIndependently corroborated at cec7eaba2. Isolated regression receipts are attached to s-1hpv1w.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/store/migrations/1795722363489267_desktop_ephemeral.sql",
+    "line": 17
+  },
+  "culprit": "a1053b55df616a9cbb8e8a6a16144ac9b881a51d"
+}
