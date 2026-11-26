@@ -3,6 +3,7 @@
 
 mod ask;
 mod attachment;
+pub mod attention;
 mod button;
 mod check;
 mod chip;

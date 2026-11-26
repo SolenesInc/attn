@@ -5,9 +5,9 @@ use attn_protocol::{Ask, AskAnswer, AskQuestion, AskSeedMention, AskThread, Sess
 use attn_ui::blocks::{Block, Disclosure, Inline, List, Popover, Section, Sheet, Stack};
 use attn_ui::system::{
     AskChip, Button, Choice, DotShape, DotSize, FieldState, IconSize, ListRow, Look, Reading, Size,
-    Tone, Type, answers, area_box, ask_mark, checks, count_badge, dot, drop_overlay, file_chip,
-    file_kind, file_size, icon_button, image_tile, keycaps, keys_hint, line_box, read_as, tag,
-    words,
+    Tone, Type, answers, area_box, ask_mark, attention, checks, count_badge, dot, drop_overlay,
+    file_chip, file_kind, file_size, icon_button, image_tile, keycaps, keys_hint, line_box,
+    read_as, tag, words,
 };
 use attn_ui::{Backdrop, Frame, Tokens, glyph};
 use rune::{El, Image, Key, KeyEvent, Side, SurfaceFit, Tx, col, row};
@@ -1958,17 +1958,31 @@ pub(crate) fn title_button(state: &State, t: &Tokens) -> Option<El> {
         n => format!("{n} open asks{keys}"),
     };
     let open = super::is_open(state);
-    let button = El::from(
-        icon_button(
-            "titlebar.asks",
-            label,
-            &attn_ui::icon::ASKS,
-            IconSize::Regular,
-        )
-        .count((count > 0).then(|| count.to_string()))
-        .selected(open)
-        .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
-        .build(t),
+    let button = icon_button(
+        "titlebar.asks",
+        label,
+        &attn_ui::icon::ASKS,
+        IconSize::Regular,
     );
-    Some(crate::title_bar::opens(button, open).a11y_value(count.to_string()))
+    let button = match count {
+        0 => button.ink(crate::title_bar::tool_ink(open, t)),
+        n => button.count(Some(n.to_string())),
+    };
+    let button = El::from(
+        button
+            .selected(open)
+            .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
+            .build(t),
+    );
+    let button = crate::title_bar::opens(button, open).a11y_value(count.to_string());
+    let pulse = match state.window.asks.motion.pulse {
+        Some(pulse) if count > 0 && !open => Some((pulse.kind, pulse.played)),
+        _ => None,
+    };
+    Some(attention::pop_bloom(
+        "titlebar.asks.motion",
+        pulse,
+        button,
+        t,
+    ))
 }

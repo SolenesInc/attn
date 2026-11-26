@@ -3885,3 +3885,153 @@ fn a_follow_up_on_a_stranded_replied_ask_goes_to_the_chief() {
     assert_eq!(sent[0]["to_chief"], serde_json::json!(true));
     assert_eq!(name(&world, "notice.text"), "Follow-up sent to Chief");
 }
+
+/// Each pulse of the asks button, by how many played before it, while it plays.
+fn pulses(world: &World) -> Vec<String> {
+    world
+        .runtime()
+        .elements()
+        .into_iter()
+        .filter(|e| !e.exiting)
+        .filter_map(|e| e.key?.strip_prefix("glow.").map(str::to_owned))
+        .collect()
+}
+
+fn next_wake_in(world: &World) -> Option<f64> {
+    let now = world.now().as_secs_f64();
+    world.runtime().wake_deadline().map(|at| at - now)
+}
+
+fn assert_wake(world: &World, after: f64, by: f64) {
+    let wake = next_wake_in(world);
+    assert!(
+        wake.is_some_and(|s| s > after && s <= by),
+        "wake in {wake:?}, not within ({after}, {by}]"
+    );
+}
+
+#[test]
+fn asks_already_open_when_the_app_connects_only_arm_a_reminder() {
+    let mut world = start(vec![cache_store()], vec![api_working()]);
+    assert!(pulses(&world).is_empty());
+    assert!(!world.runtime().animating);
+    assert!(next_wake_in(&world).is_some_and(|s| s > 59.0 && s <= 60.0));
+
+    world.reconnect();
+    assert!(pulses(&world).is_empty());
+}
+
+#[test]
+fn a_new_ask_pops_the_button_once_then_it_rests_until_the_reminder() {
+    let mut world = start(vec![], vec![api_working()]);
+    assert!(world.runtime_is_at_rest());
+
+    update_asks(&mut world, vec![cache_store()]);
+    assert_eq!(pulses(&world), ["1"]);
+    assert!(has(&world, "titlebar.asks"));
+    world.advance(Duration::from_secs(1));
+    assert!(pulses(&world).is_empty());
+    assert!(!world.runtime().animating);
+    assert_wake(&world, 57.0, 59.0);
+
+    update_asks(&mut world, vec![cache_store(), release_day()]);
+    assert_eq!(pulses(&world), ["2"]);
+    world.advance(Duration::from_secs(1));
+    assert!(pulses(&world).is_empty());
+    assert_wake(&world, 57.0, 59.0);
+
+    world.advance(Duration::from_secs(59));
+    assert_eq!(pulses(&world), ["3"]);
+    world.advance(Duration::from_secs(2));
+    assert!(pulses(&world).is_empty());
+    assert!(!world.runtime().animating);
+    assert_wake(&world, 56.0, 58.0);
+}
+
+#[test]
+fn the_button_keeps_still_while_the_sheet_is_open_and_reminds_again_once_it_closes() {
+    let mut world = start(vec![cache_store()], vec![api_working()]);
+    open_sheet(&mut world);
+    update_asks(&mut world, vec![cache_store(), release_day()]);
+    assert!(pulses(&world).is_empty());
+    for _ in 0..4 {
+        world.advance(Duration::from_secs(30));
+        assert!(pulses(&world).is_empty());
+    }
+
+    plain(&mut world, Key::Escape);
+    assert!(!has(&world, "asks.sheet"));
+    assert!(pulses(&world).is_empty());
+    world.advance(Duration::from_secs(59));
+    assert!(pulses(&world).is_empty());
+    world.advance(Duration::from_secs(1));
+    assert_eq!(pulses(&world).len(), 1);
+}
+
+#[test]
+fn with_motion_off_the_button_never_moves_and_arrival_alone_never_reminds() {
+    let mut world = start_with(
+        vec![],
+        vec![api_working()],
+        &[("asks_button_motion", "off")],
+    );
+    update_asks(&mut world, vec![cache_store()]);
+    assert!(pulses(&world).is_empty());
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+
+    let mut world = start_with(
+        vec![],
+        vec![api_working()],
+        &[("asks_button_motion", "arrival")],
+    );
+    update_asks(&mut world, vec![cache_store()]);
+    assert_eq!(pulses(&world), ["1"]);
+    world.advance(Duration::from_secs(1));
+    assert!(pulses(&world).is_empty());
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn the_reminder_comes_at_the_chosen_interval() {
+    let mut world = start_with(
+        vec![cache_store()],
+        vec![api_working()],
+        &[("asks_button_remind_seconds", "300")],
+    );
+    assert!(next_wake_in(&world).is_some_and(|s| s > 299.0 && s <= 300.0));
+    world.advance(Duration::from_secs(299));
+    assert!(pulses(&world).is_empty());
+    world.advance(Duration::from_secs(1));
+    assert_eq!(pulses(&world), ["1"]);
+}
+
+#[test]
+fn an_ask_whose_agent_wakes_from_a_snooze_pops_the_button() {
+    let snoozed = Session {
+        turn_snoozed_until: Some(ago(-1)),
+        ..api_working()
+    };
+    let mut world = start(vec![cache_store()], vec![snoozed]);
+    assert!(name(&world, "titlebar.asks").starts_with("Asks"));
+    assert!(pulses(&world).is_empty());
+
+    world.advance(Duration::from_secs(60));
+    assert!(name(&world, "titlebar.asks").starts_with("1 open ask"));
+    assert_eq!(pulses(&world), ["1"]);
+}
+
+#[test]
+fn the_asks_button_keeps_the_keyboard_while_it_pops_and_settles() {
+    let mut world = start(vec![], vec![api_working()]);
+    world.gesture(|app| app.update(|_, tx| tx.focus("titlebar.asks", true)));
+    let focused = |world: &World| world.screen().focused().and_then(|n| n.key);
+    assert_eq!(focused(&world).as_deref(), Some("titlebar.asks"));
+
+    update_asks(&mut world, vec![cache_store()]);
+    assert_eq!(pulses(&world), ["1"]);
+    assert_eq!(focused(&world).as_deref(), Some("titlebar.asks"));
+    world.advance(Duration::from_secs(1));
+    assert!(pulses(&world).is_empty());
+    assert_eq!(focused(&world).as_deref(), Some("titlebar.asks"));
+}

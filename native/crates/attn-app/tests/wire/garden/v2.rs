@@ -664,7 +664,13 @@ fn v2_dock_shows_bed_chips_and_now_all_toggle_and_plot_bubbles_child_waiting() {
 
     world.gesture(|app| app.click(Target::key("garden.dock.bed.b-mob001")));
     assert_eq!(rows(&world), vec!["Swipe to settle"]);
-    assert!(world.runtime_is_at_rest());
+    let now = world.now().as_secs_f64();
+    let wake = world.runtime().wake_deadline();
+    assert!(!world.runtime().animating);
+    assert!(
+        wake.is_some_and(|at| at - now > 30.0),
+        "only the open ask's reminder may wake the window: {wake:?} at {now}"
+    );
 }
 
 #[test]

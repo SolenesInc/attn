@@ -1,6 +1,7 @@
 mod attach;
 pub(crate) mod inline;
 mod mentions;
+pub(crate) mod motion;
 mod saving;
 mod view;
 
@@ -65,6 +66,7 @@ pub struct Asks {
     /// The points each markdown reading of the ask last laid out across, by its place, so its
     /// tables fit that width as a document's do.
     pub(crate) widths: HashMap<String, u32>,
+    pub(crate) motion: motion::Motion,
 }
 
 #[derive(Default)]
@@ -1086,6 +1088,7 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
         .follow_ups
         .retain(|id, _| listed.contains(id));
     saving::restore(state);
+    motion::sync(state, tx);
     if !is_open(state) {
         return;
     }

@@ -1851,3 +1851,52 @@ fn the_current_model_stands_out_from_its_ground_more_than_hover_does() {
     );
     rest(&mut world);
 }
+
+fn choice_in(world: &World, setting: &str, name: &str) -> Node {
+    world
+        .screen()
+        .descendants(Target::key(format!("settings.choice.{setting}")))
+        .into_iter()
+        .find(|n| n.role == "radio-button" && n.name.as_deref() == Some(name))
+        .unwrap_or_else(|| panic!("no {name} choice for {setting}"))
+}
+
+#[test]
+fn the_asks_button_motion_and_its_reminder_interval_save_under_asks() {
+    let mut world = on_agents(&[]);
+    assert!(choice_in(&world, "asks_button_motion", "New asks and reminders").is("checked"));
+    assert!(choice_in(&world, "asks_button_remind_seconds", "1 min").is("checked"));
+
+    press_named(&mut world, "radio-button", "2 min");
+    assert!(choice_in(&world, "asks_button_remind_seconds", "2 min").is("checked"));
+    press_named(&mut world, "radio-button", "New asks");
+    assert!(choice_in(&world, "asks_button_motion", "New asks").is("checked"));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("settings.row.asks-remind"))
+            .is_none()
+    );
+    assert_eq!(
+        writes(&world),
+        saved(&[
+            ("asks_button_remind_seconds", "120"),
+            ("asks_button_motion", "arrival"),
+        ])
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn the_asks_button_motion_rows_hide_while_asks_are_off() {
+    let world = on_agents(&[("asks_enabled", "false")]);
+    for row in ["settings.row.asks-motion", "settings.row.asks-remind"] {
+        assert!(world.screen().find(Target::key(row)).is_none(), "{row}");
+    }
+    assert!(
+        world
+            .screen()
+            .find(Target::key("settings.row.asks"))
+            .is_some()
+    );
+}

@@ -18,6 +18,7 @@ use rune::{El, Tx, text};
 use super::autosave::{self, Codec, PLAIN, TRIMMED};
 use super::controls::{SettingField, feature, feature_note, feature_switch, segmented};
 use super::route::{self, Route, RouteHarness, Rules, Target, TierInfo};
+use crate::asks::motion;
 use crate::harness::catalog::{self, Availability};
 use crate::{State, setting};
 
@@ -33,6 +34,19 @@ const RESUME_CHOICES: &[(&str, &str)] = &[
     ("any", "Any mail"),
     ("watches", "PRs and reminders"),
     ("off", "Never"),
+];
+
+const ASKS_MOTION_CHOICES: &[(&str, &str)] = &[
+    (motion::OFF, "Off"),
+    (motion::ARRIVAL, "New asks"),
+    (motion::REMIND, "New asks and reminders"),
+];
+
+const REMIND_CHOICES: &[(&str, &str)] = &[
+    (motion::INTERVALS[0], "30 s"),
+    (motion::INTERVALS[1], "1 min"),
+    (motion::INTERVALS[2], "2 min"),
+    (motion::INTERVALS[3], "5 min"),
 ];
 
 const STANDBY_MAIL: &[(&str, &[&str])] = &[
@@ -319,6 +333,7 @@ fn session_defaults(state: &State, t: &Tokens) -> Block {
                 .note(feature_note(state, ASKS, t))
                 .build(t),
         )
+        .push_all(asks_motion(state, t))
         .push(
             SettingRow::new(
                 "settings.row.direct-launch",
@@ -338,6 +353,56 @@ fn session_defaults(state: &State, t: &Tokens) -> Block {
             .build(t),
         )
         .build(t)
+}
+
+/// How the title bar asks button calls for attention, while asks are on.
+fn asks_motion(state: &State, t: &Tokens) -> Vec<Block> {
+    let settings = &state.facts.settings;
+    if !setting::on(settings, ASKS) {
+        return Vec::new();
+    }
+    let mode = motion::Mode::of(settings);
+    let chosen = match mode {
+        motion::Mode::Off => motion::OFF,
+        motion::Mode::Arrival => motion::ARRIVAL,
+        motion::Mode::Remind => motion::REMIND,
+    };
+    let mut rows = vec![
+        SettingRow::new(
+            "settings.row.asks-motion",
+            "Asks button motion",
+            "How the asks button in the title bar catches your eye while asks are open.",
+            segmented(
+                motion::MOTION,
+                "Asks button motion",
+                ASKS_MOTION_CHOICES,
+                chosen,
+                t,
+                |state, value, tx| autosave::apply(state, motion::MOTION, value, tx),
+            ),
+        )
+        .build(t),
+    ];
+    if mode == motion::Mode::Remind {
+        let every = motion::remind_every(settings).to_string();
+        rows.push(
+            SettingRow::new(
+                "settings.row.asks-remind",
+                "Remind every",
+                "How often the asks button reminds you while asks wait.",
+                segmented(
+                    motion::REMIND_EVERY,
+                    "Remind every",
+                    REMIND_CHOICES,
+                    &every,
+                    t,
+                    |state, value, tx| autosave::apply(state, motion::REMIND_EVERY, value, tx),
+                ),
+            )
+            .build(t),
+        );
+    }
+    rows
 }
 
 fn resume_choice(settings: &BTreeMap<String, String>) -> &'static str {

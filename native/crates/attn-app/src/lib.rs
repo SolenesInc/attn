@@ -406,7 +406,9 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     if aged {
         ledger::follow_clock(state, tx);
         state.tick(tx);
+        asks::motion::sync(state, tx);
     }
+    let pulsed = asks::motion::poll(state, now, tx);
     let drains = sidebar::follow_countdowns(state, state.wall_ms())
         | desktop::follow_settling(state, state.wall_ms());
     let greeted = whats_new::greet(state, tx);
@@ -426,6 +428,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     desktop::header_pop::preview_marks(state);
     let browsed_pages = browser::follow(state, tx);
     expired
+        || pulsed
         || automated
         || settings
         || updating

@@ -6,10 +6,6 @@ use super::{
 };
 use crate::{Glyph, Tokens};
 
-/// How much of the accent tints a counted button while what it opens is closed.
-const TINT: f32 = 0.13;
-/// How much of the accent draws a counted button's edge while what it opens is closed.
-const TINT_EDGE: f32 = 0.35;
 /// The widest a button's words stand before they elide: "renovate-bot" and "dependabot[bot]"
 /// whole in `Small`, the longest of the logins that ask for reviews most.
 const SAID_WIDEST: f32 = 96.0;
@@ -100,7 +96,7 @@ impl IconButton {
     }
 
     /// How many things wait behind the button, beside the icon and never over it: the button
-    /// becomes a pill around both, tinted with the accent, and takes the selected fill while what
+    /// becomes a pill around both, filled with the accent, and takes the selected fill while what
     /// it opens is open.
     pub fn count(mut self, count: Option<String>) -> Self {
         self.count = count;
@@ -204,16 +200,8 @@ impl IconButton {
     pub fn build(self, t: &Tokens) -> Control {
         let counted = self.count.is_some();
         let (fill, ink) = match (counted, self.open) {
-            (true, open) => {
-                let ink = if t.dark { t.accent } else { t.text_primary };
-                let fill = if open {
-                    t.bg_selected
-                } else {
-                    crate::colors::mix_srgb(t.bg_panel, t.accent, TINT)
-                };
-                (fill, ink)
-            }
-            (false, true) => (t.bg_selected, t.text_primary),
+            (true, false) => (t.accent, crate::ink_on(t.accent, t)),
+            (_, true) => (t.bg_selected, t.text_primary),
             (false, false) => (Color::TRANSPARENT, t.text_secondary),
         };
         let ink = self.ink.unwrap_or(ink);
@@ -280,14 +268,10 @@ impl IconButton {
         } else {
             button
         };
-        let edge = match (self.edged, counted && !self.open) {
-            (true, _) => Some(t.border),
-            (false, true) => Some(t.accent.alpha(TINT_EDGE)),
-            (false, false) => None,
-        };
-        let button = match edge {
-            Some(edge) => button.border(1.0, edge),
-            None => button,
+        let button = if self.edged {
+            button.border(1.0, t.border)
+        } else {
+            button
         };
         let button = door::corner(door::inset(button, inset, Space::S0), corner);
         let button = focus::ring(button, t);
