@@ -533,6 +533,7 @@ fn read(state: &mut State, id: String, push: Followed, tx: &mut Tx) {
                         reading.looked_for = linked.clone();
                         reading.missing.clear();
                     }
+                    let mut trail_changed = false;
                     if let Some(doc) = doc.as_deref() {
                         if garden.trail.len() == 1
                             && garden.trail[0] == id
@@ -544,6 +545,7 @@ fn read(state: &mut State, id: String, push: Followed, tx: &mut Tx) {
                                 .map(|a| a.id.clone())
                                 .chain(std::iter::once(id.clone()))
                                 .collect();
+                            trail_changed = true;
                         }
                         if garden.pending_open.as_deref() == Some(id.as_str()) {
                             garden.pending_open = None;
@@ -554,9 +556,13 @@ fn read(state: &mut State, id: String, push: Followed, tx: &mut Tx) {
                                 .unwrap_or(&doc.seed)
                                 .clone();
                             align_v2_to_root(state, &root);
+                            trail_changed = true;
                         }
                     }
                     state.window.garden.revision += 1;
+                    if trail_changed {
+                        follow(state, tx);
+                    }
                     if linked_changed {
                         look_for(state, &id, linked, tx);
                         return;

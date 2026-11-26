@@ -676,20 +676,46 @@ pub(super) fn view_switch(state: &State, t: &Tokens) -> El {
         .child(choice("board", board, true))
 }
 
+fn visible_column_start(state: &State, count: usize) -> usize {
+    let max = if frame_width(state) >= THIRD_COLUMN_MIN {
+        3
+    } else {
+        2
+    };
+    count.saturating_sub(max)
+}
+
 /// The closed toggle's count and whether it is on, or nothing when it has nothing to say.
 fn closed_toggle(state: &State, place: &Place, wide: bool) -> Option<(usize, bool)> {
     let on = place.query.is.contains(&"any");
     let other = place.query.is.iter().any(|v| *v != "any");
-    let hidden_here = match place.here() {
-        Some(here) => {
-            let child_hidden = place.plot_closed_count(state, here);
-            if place.v2.on && wide {
-                place.root_closed_count + child_hidden
+    let hidden_here = if wide && !place.v2.on && !place.trail.is_empty() {
+        let levels = place.levels(state);
+        let first = visible_column_start(state, levels.len());
+        (first..levels.len()).fold(0usize, |sum, level| {
+            let hidden = if level == 0 {
+                place.root_closed_count
             } else {
-                child_hidden
+                place
+                    .trail
+                    .get(level - 1)
+                    .and_then(|id| super::lookup_seed(state, id))
+                    .map_or(0, |plot| place.plot_closed_count(state, &plot))
+            };
+            sum + hidden
+        })
+    } else {
+        match place.here() {
+            Some(here) => {
+                let child_hidden = place.plot_closed_count(state, here);
+                if place.v2.on && wide {
+                    place.root_closed_count + child_hidden
+                } else {
+                    child_hidden
+                }
             }
+            None => place.root_closed_count,
         }
-        None => place.root_closed_count,
     };
     let count = if !place.query.searches {
         hidden_here
@@ -1888,12 +1914,7 @@ fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
         );
     } else {
         let levels = place.levels(state);
-        let max = if frame_width(state) >= THIRD_COLUMN_MIN {
-            3
-        } else {
-            2
-        };
-        let first = levels.len().saturating_sub(max);
+        let first = visible_column_start(state, levels.len());
         for (level, (seeds, selected, page_key)) in levels.iter().enumerate().skip(first) {
             let content = if level == 0 {
                 blocks_column(root_list(state, place, Pick::Level(0), t), t)
@@ -1908,7 +1929,17 @@ fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
                     {
                         tail
                     } else {
-                        let empty = Prose::empty("garden.column.empty", "Nothing here yet.").el(t);
+                        let closed = place
+                            .trail
+                            .get(level - 1)
+                            .and_then(|id| super::lookup_seed(state, id))
+                            .map_or(0, |plot| place.plot_closed_count(state, &plot));
+                        let words = if closed > 0 && !place.shows_closed_page() {
+                            hidden_closed_words(closed)
+                        } else {
+                            "Nothing here yet.".to_owned()
+                        };
+                        let empty = Prose::empty("garden.column.empty", words).el(t);
                         match tail {
                             Some(tail) => col().w_full().child(empty).child(tail),
                             None => empty,

@@ -636,3 +636,113 @@ fn discards_out_of_order_search_replies_and_retries_failed_page_at_same_offset()
     );
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn fullscreen_columns_name_hidden_closed_children_and_keep_the_closed_toggle_for_an_archived_hit() {
+    let archived_plot = with(
+        closed(plot("s-aplot1", "Batch plot 0", ""), "harvested"),
+        |s| {
+            s.plot_progress = Some(attn_protocol::SeedPlotProgress {
+                done: 2,
+                total: 2,
+                ..attn_protocol::SeedPlotProgress::default()
+            });
+        },
+    );
+    let archived_child = closed(
+        part_of("s-aplot1", "s-akid01", "Archived task 0000"),
+        "harvested",
+    );
+    let archived_sibling = closed(
+        part_of("s-aplot1", "s-akid02", "Archived task 0001"),
+        "harvested",
+    );
+    let live = vec![seed("s-open01", "Open root")];
+    let d = daemon(live, Vec::new()).rewriting(|m| {
+        if m["event"] == "initial_state" {
+            m["seeds_total"] = serde_json::json!(4);
+            m["garden_closed_counts"] = serde_json::json!({
+                "all": { "harvested": 1, "withered": 0 },
+                "unassigned": { "harvested": 1, "withered": 0 },
+                "automations": { "harvested": 0, "withered": 0 },
+                "by_bed": [],
+            });
+        }
+    });
+    let search_hit = archived_child.clone();
+    d.on("garden_search", move |r: &Request| {
+        message(GardenSearchResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            hits: vec![GardenSearchHit {
+                seed: search_hit.clone(),
+                r#where: "log".into(),
+                id_hit: false,
+                title_ranges: None,
+                snippet: Some("Archived log entry mentioning hyperdrive.".into()),
+                snippet_ranges: None,
+                plot_title: Some("Batch plot 0".into()),
+            }],
+            total: 1,
+            ..GardenSearchResultMessage::new()
+        })
+    });
+    let (doc_plot, doc_child) = (archived_plot.clone(), archived_child.clone());
+    d.on("seed_document_get", move |r: &Request| {
+        if r["seed_id"] == "s-akid01" {
+            return message(SeedDocumentGetResultMessage {
+                request_id: r["request_id"].as_str().unwrap().into(),
+                success: true,
+                document: Some(SeedDocument {
+                    seed: doc_child.clone(),
+                    ancestors: Some(vec![doc_plot.clone()]),
+                    ..SeedDocument::default()
+                }),
+                ..SeedDocumentGetResultMessage::new()
+            });
+        }
+        document_reply(r, None)
+    });
+    let (page_plot, page_child, page_sib) = (
+        archived_plot.clone(),
+        archived_child.clone(),
+        archived_sibling.clone(),
+    );
+    d.on("garden_seeds_page", move |r: &Request| {
+        let seeds = match r["plot_id"].as_str() {
+            Some("s-aplot1") => vec![page_sib.clone(), page_child.clone()],
+            None => vec![page_plot.clone()],
+            _ => Vec::new(),
+        };
+        let total = seeds.len() as i64;
+        message(attn_protocol::GardenSeedsPageResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            seeds,
+            total,
+            harvested: total,
+            ..attn_protocol::GardenSeedsPageResultMessage::new()
+        })
+    });
+
+    let mut world = open_garden_sized(d, TWO_COLUMNS);
+    click(&mut world, "Expand the garden");
+    ask(&mut world, "hyperdrive is:any");
+    open_row(&mut world, "Archived task 0000");
+
+    assert_eq!(heading(&world).as_deref(), Some("Archived task 0000"));
+    assert_eq!(trail(&world), ["Garden", "Batch plot 0"]);
+    assert!(!shows(&world, "Nothing here yet."));
+    assert!(shows(
+        &world,
+        "Nothing open here. 2 closed seeds are behind the closed toggle above."
+    ));
+    assert_eq!(closed_lens(&world), Some(("3 closed".into(), false)));
+
+    click(&mut world, "3 closed");
+    assert_eq!(closed_lens(&world), Some(("hide 3 closed".into(), true)));
+    assert!(has_row(&world, "Batch plot 0"));
+    assert!(has_row(&world, "Archived task 0000"));
+    assert!(has_row(&world, "Archived task 0001"));
+    assert!(world.runtime_is_at_rest());
+}
