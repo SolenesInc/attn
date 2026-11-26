@@ -101,7 +101,7 @@ impl Sheet<'_> {
                 .push_all(live_shared.into_iter().map(|c| {
                     Block::custom(
                         self.key(&format!("shared.{}.block", c.id)),
-                        self.shared_row(c),
+                        self.shared_row(c, document),
                     )
                 }));
         }
@@ -130,7 +130,7 @@ impl Sheet<'_> {
                     .push_all(shared.iter().filter(|c| c.removed).map(|c| {
                         Block::custom(
                             self.key(&format!("shared.{}.block", c.id)),
-                            self.shared_row(c),
+                            self.shared_row(c, document),
                         )
                     }));
             }
@@ -311,7 +311,7 @@ impl Sheet<'_> {
             .child(actions)
     }
 
-    fn shared_row(&self, check: &SeedSharedCheck) -> El {
+    fn shared_row(&self, check: &SeedSharedCheck, document: Option<&SeedDocument>) -> El {
         let t = self.t;
         let key = self.key(&format!("shared.{}", check.id));
         let open = self.garden.folds.contains(&key);
@@ -333,7 +333,14 @@ impl Sheet<'_> {
                 .role("list")
                 .label(format!("Seeds that prove {}", check.id));
             for entry in &check.seeds {
-                let held = self.seeds.iter().find(|s| s.id == entry.seed_id);
+                let held = self
+                    .seeds
+                    .iter()
+                    .map(|s| s.as_ref())
+                    .find(|s| s.id == entry.seed_id)
+                    .or_else(|| {
+                        document.and_then(|doc| doc.children.iter().find(|s| s.id == entry.seed_id))
+                    });
                 let title = held.map_or(entry.seed_id.as_str(), |s| s.title.as_str());
                 let status = held.map_or(entry.seed_id.as_str(), |s| s.status.as_str());
                 let (go, id) = (self.go.clone(), entry.seed_id.clone());

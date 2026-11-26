@@ -68,7 +68,7 @@ pub fn seam_on(state: &State, lines: &[Line], index: usize) -> Option<Seam> {
 /// to seam, and the release moves the desktop there.
 pub(crate) fn drag(state: &mut State, desktop: &str, d: &rune::Drag, tx: &mut Tx) {
     let home = state.window.view == crate::shell::View::Home;
-    let lines = super::model::desktop_lines(&state.facts, home, &[]);
+    let lines = super::model::desktop_lines(&state.facts, Some(&state.window.garden), home, &[]);
     let Some(index) = headers(&lines)
         .into_iter()
         .find_map(|(line, id)| (id == desktop).then_some(line))

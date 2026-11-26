@@ -128,11 +128,12 @@ fn icon_of(session: &attn_protocol::Session) -> Glyph {
 pub(super) fn member(
     desktop: &Desktop,
     facts: &attn_client::Facts,
+    garden: Option<&crate::garden::Garden>,
     tree: &Node,
     unseen: &[String],
     leaf: &str,
 ) -> ShelfMember {
-    let name = title(desktop, facts, tree, leaf);
+    let name = title(desktop, facts, garden, tree, leaf);
     let session = super::view::pane_of(desktop, leaf)
         .and_then(|pane| facts.sessions.iter().find(|s| s.id == pane.session_id));
     if let Some(session) = session {
@@ -163,6 +164,7 @@ pub(super) fn member(
 pub(crate) fn title(
     desktop: &Desktop,
     facts: &attn_client::Facts,
+    garden: Option<&crate::garden::Garden>,
     tree: &Node,
     leaf: &str,
 ) -> String {
@@ -173,6 +175,7 @@ pub(crate) fn title(
             &facts.harnesses,
             &facts.tile_contents,
             facts.garden.of(&facts.profiles.selected),
+            garden,
             l,
         ),
         _ => "Terminal".into(),
@@ -190,7 +193,7 @@ fn label(titles: &[String]) -> String {
 
 fn entry(
     desktop: &Desktop,
-    facts: &attn_client::Facts,
+    (facts, garden): (&attn_client::Facts, Option<&crate::garden::Garden>),
     tree: &Node,
     row: &super::RowState,
     flashing: &[(&str, u64)],
@@ -200,7 +203,7 @@ fn entry(
     let members: Vec<ShelfMember> = column
         .leaf_ids
         .iter()
-        .map(|leaf| member(desktop, facts, tree, &row.unseen, leaf))
+        .map(|leaf| member(desktop, facts, garden, tree, &row.unseen, leaf))
         .collect();
     let titles: Vec<String> = members.iter().map(|m| m.name.clone()).collect();
     let place = match on_screen {
@@ -386,7 +389,17 @@ impl Shelf {
             let stands = (active, on_screen);
             columns
                 .iter()
-                .map(|c| entry(desktop, facts, &tree, &row_state, &flashing, c, stands))
+                .map(|c| {
+                    entry(
+                        desktop,
+                        (facts, Some(&state.window.garden)),
+                        &tree,
+                        &row_state,
+                        &flashing,
+                        c,
+                        stands,
+                    )
+                })
                 .collect()
         };
         let (before, screen, after) = (

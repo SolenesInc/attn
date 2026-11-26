@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+use std::rc::Rc;
+use std::sync::Arc;
+
 use attn_protocol::{CrewMember, Seed};
 use attn_ui::Tokens;
 use attn_ui::blocks::{
@@ -7,7 +11,7 @@ use attn_ui::system::{
     Button, DotShape, DotSize, FieldState, ListRow, Look, Size, Tone, Type, area_box, dot,
     line_box, tag, words,
 };
-use rune::{El, Key, KeyEvent, Tx, col, row};
+use rune::{El, GrowthSpec, Key, KeyEvent, Tx, col, row};
 use rune_kit::{TextArea, TextInput};
 
 use super::autosave::Phase;
@@ -977,125 +981,238 @@ fn state_label(status: &str) -> &'static str {
 }
 
 fn seeds_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<Block> {
-    let garden = &state.facts.garden;
-    let all = garden.of(&state.facts.profiles.selected);
+    let profile = &state.facts.profiles.selected;
+    let all = state.facts.garden.of(profile);
     let tended = seeds::tended(all, member);
-    let planted = seeds::planted(all, member);
+    let planted = &state.window.crew.planted;
+    let planted_count = planted.badge_count(profile, &member.id);
     let place = &state.window.crew.place;
     let filter = place.seed_filter;
-    let capped = garden.total > all.len() as i64;
-    let suffix = if capped { "+" } else { "" };
     let filters = Inline::tight()
         .key("crew.seeds.filters")
         .role("group")
         .label("Seed ownership")
         .children(
             [
-                (SeedFilter::Tending, "tending", "Tending", tended.len()),
-                (SeedFilter::Planted, "planted", "Planted", planted.len()),
+                (
+                    SeedFilter::Tending,
+                    "tending",
+                    "Tending",
+                    Some(tended.len().to_string()),
+                ),
+                (
+                    SeedFilter::Planted,
+                    "planted",
+                    "Planted",
+                    planted_count.map(|n| n.to_string()),
+                ),
             ]
             .into_iter()
             .map(|(f, id, label, count)| {
-                tab_button(
-                    format!("crew.seeds.{id}"),
-                    label,
-                    Some(format!("{count}{suffix}")),
-                    f == filter,
-                    t,
+                tab_button(format!("crew.seeds.{id}"), label, count, f == filter, t).on_press_tx(
+                    move |state: &mut State, tx: &mut Tx| {
+                        tx.instant();
+                        state.window.crew.place.seed_filter = f;
+                        seeds::sync(state, tx);
+                    },
                 )
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    tx.instant();
-                    state.window.crew.place.seed_filter = f
-                })
             }),
         );
     let mut section = Section::new("crew.seeds", "Seeds")
         .push(Block::control("crew.seeds.filters.block", filters));
-    if capped {
-        section = section.push(Block::custom(
-            "crew.seeds.cap.block",
-            status_line(
-                "crew.seeds.cap",
-                format!(
-                    "Showing matches in {} of {} seeds (every open seed and the newest closed).",
-                    all.len(),
-                    garden.total
-                ),
-                t.warning,
-            ),
-        ));
-    }
-    let rows = match filter {
-        SeedFilter::Tending => &tended,
-        SeedFilter::Planted => &planted,
-    };
-    if rows.is_empty() {
-        let mut section = section.push(
-            Prose::lead(
-                "crew.seeds.empty",
-                seeds::empty(&member.name, filter, capped),
-            )
-            .quiet(true)
-            .build(t),
-        );
-        if filter == SeedFilter::Tending && !planted.is_empty() {
-            section = section.push(Block::control(
-                "crew.seeds.planted.block",
-                Button::new("See planted seeds")
-                    .size(Size::Compact)
-                    .look(Look::Quiet)
-                    .on_press(|state: &mut State| {
-                        state.window.crew.place.seed_filter = SeedFilter::Planted
-                    })
-                    .build(t)
-                    .key("crew.seeds.see-planted"),
-            ));
-        }
-        return vec![section.build(t)];
-    }
-    let query = place.seed_query.text.clone();
-    let visible: Vec<&&Seed> = rows.iter().filter(|s| seeds::matches(s, &query)).collect();
-    let find = TextInput::new(&place.seed_query)
-        .key(SEED_FIND)
-        .label("Find a seed")
-        .placeholder("Find a seed…")
-        .on_edit(|state: &mut State| &mut state.window.crew.place.seed_query);
-    section = section.push(Block::custom(
-        "crew.seeds.find.block",
-        line_box(find, FieldState::Ready, t).into(),
-    ));
-    if visible.is_empty() {
-        return vec![
-            section
-                .push(
-                    Prose::lead("crew.seeds.no-match", "No matching seeds.")
+    match filter {
+        SeedFilter::Tending => {
+            if tended.is_empty() {
+                section = section.push(
+                    Prose::lead("crew.seeds.empty", seeds::empty(&member.name, filter))
                         .quiet(true)
                         .build(t),
-                )
-                .build(t),
-        ];
+                );
+                if planted_count.unwrap_or(0) > 0 {
+                    section = section.push(Block::control(
+                        "crew.seeds.planted.block",
+                        Button::new("See planted seeds")
+                            .size(Size::Compact)
+                            .look(Look::Quiet)
+                            .on_press_tx(|state: &mut State, tx: &mut Tx| {
+                                state.window.crew.place.seed_filter = SeedFilter::Planted;
+                                seeds::sync(state, tx);
+                            })
+                            .build(t)
+                            .key("crew.seeds.see-planted"),
+                    ));
+                }
+                return vec![section.build(t)];
+            }
+            let query = place.seed_query.text.clone();
+            let visible: Vec<&&Seed> = tended
+                .iter()
+                .filter(|s| seeds::matches(s, &query))
+                .collect();
+            let find = TextInput::new(&place.seed_query)
+                .key(SEED_FIND)
+                .label("Find a seed")
+                .placeholder("Find a seed…")
+                .on_edit(|state: &mut State| &mut state.window.crew.place.seed_query);
+            section = section.push(Block::custom(
+                "crew.seeds.find.block",
+                line_box(find, FieldState::Ready, t).into(),
+            ));
+            if visible.is_empty() {
+                return vec![
+                    section
+                        .push(
+                            Prose::lead("crew.seeds.no-match", "No matching seeds.")
+                                .quiet(true)
+                                .build(t),
+                        )
+                        .build(t),
+                ];
+            }
+            let by_id = seeds::by_id(all, &[]);
+            let list = visible.into_iter().fold(
+                List::new("crew.seeds.list", "Tended seeds").roving(),
+                |list, seed| list.row(seed_row(seed, &by_id, t)),
+            );
+            vec![section.push(list.build(t)).build(t)]
+        }
+        SeedFilter::Planted => {
+            let query = place.seed_query.text.trim();
+            let has_any =
+                planted_count.unwrap_or(0) > 0 || !planted.seeds.is_empty() || !query.is_empty();
+            if has_any {
+                let find = TextInput::new(&place.seed_query)
+                    .key(SEED_FIND)
+                    .label("Find a seed")
+                    .placeholder("Find a seed…")
+                    .on_edit(|state: &mut State| &mut state.window.crew.place.seed_query)
+                    .on_change(seeds::sync);
+                section = section.push(Block::custom(
+                    "crew.seeds.find.block",
+                    line_box(find, FieldState::Ready, t).into(),
+                ));
+            }
+            if planted.seeds.is_empty() {
+                if planted.loading {
+                    return vec![
+                        section
+                            .push(
+                                Prose::lead("crew.seeds.loading", "Loading planted seeds…")
+                                    .quiet(true)
+                                    .build(t),
+                            )
+                            .build(t),
+                    ];
+                }
+                if let Some(error) = &planted.error {
+                    return vec![
+                        section
+                            .push(
+                                Notice::error("crew.seeds.error", error.clone())
+                                    .action(
+                                        Button::new("Retry")
+                                            .size(Size::Compact)
+                                            .on_press_tx(seeds::retry)
+                                            .build(t)
+                                            .key("crew.seeds.retry"),
+                                    )
+                                    .build(t),
+                            )
+                            .build(t),
+                    ];
+                }
+                if !query.is_empty() {
+                    return vec![
+                        section
+                            .push(
+                                Prose::lead("crew.seeds.no-match", "No matching seeds.")
+                                    .quiet(true)
+                                    .build(t),
+                            )
+                            .build(t),
+                    ];
+                }
+                return vec![
+                    section
+                        .push(
+                            Prose::lead("crew.seeds.empty", seeds::empty(&member.name, filter))
+                                .quiet(true)
+                                .build(t),
+                        )
+                        .build(t),
+                ];
+            }
+            let rows: Rc<[Arc<Seed>]> = planted.seeds.clone().into();
+            let keys = rows.clone();
+            let by_id = Rc::new(seeds::by_id(all, &planted.seeds));
+            let tokens = *t;
+            let list_el = col()
+                .key("crew.seeds.list")
+                .role("list")
+                .label("Planted seeds")
+                .focus_group()
+                .self_stretch()
+                .growth(GrowthSpec::default())
+                .virtual_rows(
+                    rows.len(),
+                    ListRow::two_line_height(),
+                    move |_: &State, i| format!("crew.seed.{}", keys[i].id).into(),
+                    move |_: &State, i| seed_row(&rows[i], &by_id, &tokens),
+                );
+            section = section.push(Block::custom("crew.seeds.list.block", list_el));
+            if planted.loading_more {
+                section = section.push(
+                    Prose::lead("crew.seeds.more.loading", "Loading older seeds…")
+                        .quiet(true)
+                        .build(t),
+                );
+            } else if let Some(error) = &planted.error {
+                section = section.push(
+                    Notice::error("crew.seeds.error", error.clone())
+                        .action(
+                            Button::new("Retry")
+                                .size(Size::Compact)
+                                .on_press_tx(seeds::retry)
+                                .build(t)
+                                .key("crew.seeds.retry"),
+                        )
+                        .build(t),
+                );
+            } else if let Some(next) = &planted.next_before {
+                let load: El = Button::new("Load older seeds")
+                    .size(Size::Compact)
+                    .look(Look::Quiet)
+                    .on_press_tx(|state: &mut State, tx: &mut Tx| {
+                        seeds::load_more(state, tx);
+                    })
+                    .build(t)
+                    .key("crew.seeds.more")
+                    .into();
+                section = section.push(Block::custom(
+                    "crew.seeds.more.block",
+                    col()
+                        .key(format!("crew.seeds.more.sentinel.{next}"))
+                        .w_full()
+                        .on_visible(|state: &mut State, shown: bool, tx: &mut Tx| {
+                            if !shown || !seeds::load_more(state, tx) {
+                                tx.live_only();
+                            }
+                        })
+                        .child(load),
+                ));
+            }
+            vec![section.build(t)]
+        }
     }
-    let list = visible.into_iter().fold(
-        List::new(
-            "crew.seeds.list",
-            match filter {
-                SeedFilter::Tending => "Tended seeds",
-                SeedFilter::Planted => "Planted seeds",
-            },
-        )
-        .roving(),
-        |list, seed| list.row(seed_row(seed, all, t)),
-    );
-    vec![section.push(list.build(t)).build(t)]
 }
 
-fn seed_row(seed: &Seed, all: &[std::sync::Arc<Seed>], t: &Tokens) -> El {
+fn seed_row(seed: &Seed, by_id: &HashMap<String, Arc<Seed>>, t: &Tokens) -> El {
     let title = if seed.title.trim().is_empty() {
         seed.id.clone()
     } else {
         seed.title.trim().to_owned()
     };
-    let plot = seeds::plot(seed, all).map(|p| {
+    let plot = seeds::plot(seed, by_id).map(|p| {
         let name = if p.title.trim().is_empty() {
             p.id.clone()
         } else {

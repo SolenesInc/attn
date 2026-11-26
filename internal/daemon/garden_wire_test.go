@@ -76,23 +76,30 @@ func TestEverySeedMoveReachesTheAppAsOneGardenPush(t *testing.T) {
 			t.Fatalf("the note pushed %v, want no changed seed", lifeSeedIDs(note.Seeds))
 		}
 		lifeMove(t, cli, "gardener", seed, "harvest", "shipped it", "")
-		if harvested := record("harvest"); protocol.Deref(harvested.Reason) != "shipped it" || tenderSessionOf(harvested) != "" || tenderMemberOf(harvested) != "" {
-			t.Fatalf("the harvest reached the app as %+v, want the reason recorded and the claim released", harvested)
+		harvestPush := pushed("harvest")
+		if protocol.Deref(harvestPush.Total) != 2 || slices.Contains(lifeSeedIDs(harvestPush.Seeds), seed) {
+			t.Fatalf("harvest pushed seeds=%v total=%d, want %s omitted from live push with total 2", lifeSeedIDs(harvestPush.Seeds), protocol.Deref(harvestPush.Total), seed)
+		}
+		if harvested := lifeShow(t, cli, seed).Seed; harvested.Status != "harvested" || protocol.Deref(harvested.Reason) != "shipped it" || tenderSessionOf(harvested) != "" || tenderMemberOf(harvested) != "" {
+			t.Fatalf("the harvest left seed as %+v, want harvested with reason recorded and claim released", harvested)
 		}
 		lifeMove(t, cli, "gardener", seed, "replant", "", "")
 		if replanted := record("replant"); replanted.Reason != nil {
 			t.Fatalf("the replant reached the app still carrying reason %q", protocol.Deref(replanted.Reason))
 		}
 		lifeMove(t, cli, "gardener", seed, "wither", "nobody is picking this up", "")
-		record("wither")
+		witherPush := pushed("wither")
+		if protocol.Deref(witherPush.Total) != 2 || slices.Contains(lifeSeedIDs(witherPush.Seeds), seed) {
+			t.Fatalf("wither pushed seeds=%v total=%d, want %s omitted from live push with total 2", lifeSeedIDs(witherPush.Seeds), protocol.Deref(witherPush.Total), seed)
+		}
 
-		if want := []string{"planted", "growing", "harvested", "planted", "withered"}; !slices.Equal(statuses, want) {
+		if want := []string{"planted", "growing", "planted"}; !slices.Equal(statuses, want) {
 			t.Errorf("the app saw %v, want %v", statuses, want)
 		}
 
 		joined := w.App()
-		if ids := lifeSeedIDs(joined.Initial.Seeds); !slices.Contains(ids, seed) || !slices.Contains(ids, plot) || protocol.Deref(joined.Initial.SeedsTotal) != 2 {
-			t.Errorf("a newly connected app's initial state carries %v of %d, want the whole garden", ids, protocol.Deref(joined.Initial.SeedsTotal))
+		if ids := lifeSeedIDs(joined.Initial.Seeds); !slices.Equal(ids, []string{plot}) || protocol.Deref(joined.Initial.SeedsTotal) != 2 {
+			t.Errorf("a newly connected app's initial state carries %v of %d, want only the open plot of 2", ids, protocol.Deref(joined.Initial.SeedsTotal))
 		}
 	})
 }

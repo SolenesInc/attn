@@ -172,6 +172,11 @@ fn a_seed_the_garden_does_not_hold_shows_once_the_daemon_reads_it_and_a_failed_r
     });
     let seen = shown(&world);
     assert!(seen.contains(&"An older seed".to_owned()), "{seen:?}");
+    assert_eq!(titled(&world, "tile.t").as_deref(), Some("An older seed"));
+    assert_eq!(
+        titled(&world, &format!("sidebar.tile.{DESKTOP}.t")).as_deref(),
+        Some("Open An older seed")
+    );
     assert_eq!(
         titled(&world, "seed-tile.t.back").as_deref(),
         Some("Back to Archived Parent")

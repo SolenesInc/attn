@@ -80,10 +80,40 @@ fn initial(crew: Vec<CrewMember>, sessions: Vec<Session>, seeds: Vec<Seed>) -> I
     }
 }
 
+fn answer_planted_pages(daemon: &Daemon, seeds: Vec<Seed>) {
+    daemon.on("garden_seeds_page", move |r: &Request| {
+        let planter = r["planter"].as_str().unwrap_or_default();
+        let query = r["query"]
+            .as_str()
+            .unwrap_or_default()
+            .trim()
+            .to_lowercase();
+        let matched: Vec<Seed> = seeds
+            .iter()
+            .filter(|seed| planter.is_empty() || seed.planter.r#ref == planter)
+            .filter(|seed| {
+                query.is_empty()
+                    || format!("{} {}", seed.title, seed.id)
+                        .to_lowercase()
+                        .contains(&query)
+            })
+            .cloned()
+            .collect();
+        let total = matched.len() as i64;
+        message(attn_protocol::GardenSeedsPageResultMessage {
+            request_id: r["request_id"].as_str().unwrap_or_default().into(),
+            success: true,
+            seeds: matched,
+            total,
+            ..attn_protocol::GardenSeedsPageResultMessage::new()
+        })
+    });
+}
+
 /// A daemon that lists Claude Code and Codex with their test catalogs, and keeps no palette
 /// history.
 fn daemon(crew: Vec<CrewMember>, sessions: Vec<Session>, seeds: Vec<Seed>) -> Daemon {
-    let daemon = super::palette::daemon(initial(crew, sessions, seeds), Vec::new());
+    let daemon = super::palette::daemon(initial(crew, sessions, seeds.clone()), Vec::new());
     daemon.on("delegation_preferences_get", |_| {
         message(preferences_result())
     });
@@ -91,6 +121,7 @@ fn daemon(crew: Vec<CrewMember>, sessions: Vec<Session>, seeds: Vec<Seed>) -> Da
         let harness = r["harness"].as_str().unwrap_or_default().to_owned();
         message(reported(&harness, &Settings::default(), catalog(&harness)))
     });
+    answer_planted_pages(&daemon, seeds);
     daemon
 }
 
@@ -1470,7 +1501,7 @@ fn a_member_with_no_session_opens_its_seed_as_a_standalone_reader_and_back_retur
     let d = daemon(
         vec![member("alder", 1), member("keel", 1)],
         vec![session("s1", "claude")],
-        Vec::new(),
+        seeds.clone(),
     );
     d.answer_hello_with(InitialStateMessage {
         profiles: Some(vec![on_desktop()]),
@@ -1819,6 +1850,7 @@ fn cancelling_the_new_desktops_name_writes_nothing() {
 }
 
 fn push_seeds(world: &mut World, seeds: Vec<Seed>, total: i64) {
+    answer_planted_pages(&world.daemon, seeds.clone());
     world.daemon.emit(attn_protocol::GardenSeedsUpdatedMessage {
         profile_id: PROFILE.into(),
         total,
@@ -1934,36 +1966,284 @@ fn what_a_member_tends_follows_garden_broadcasts_its_days_claims_and_its_own_ali
 }
 
 #[test]
-fn the_seeds_tab_says_when_its_list_is_only_the_newest_part_of_the_garden() {
-    let mut world = World::start(daemon(
+fn the_seeds_tab_pages_planted_seeds_past_the_live_window_without_a_cap_banner() {
+    let page1: Vec<Seed> = (0..30)
+        .map(|i| {
+            let mut s = planted_by(
+                seed(&format!("s-kp{i:04}"), &format!("Archived planted {i:02}")),
+                "keel",
+            );
+            s.status = "harvested".into();
+            s
+        })
+        .collect();
+    let page2 = vec![Seed {
+        status: "withered".into(),
+        ..planted_by(seed("s-kp0030", "Older archived planted"), "keel")
+    }];
+    let live_other = planted_by(seed("s-other1", "Alder open seed"), "alder");
+    let d = daemon(
         vec![member("keel", 1)],
         vec![session("s1", "claude")],
-        Vec::new(),
-    ));
+        vec![live_other],
+    );
+    let failed_once = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (p1, p2, flag) = (page1.clone(), page2.clone(), failed_once.clone());
+    d.on("garden_seeds_page", move |r: &Request| {
+        assert_eq!(r["planter"].as_str(), Some("member:keel"));
+        assert_eq!(r["status"].as_str(), Some("all"));
+        let query = r["query"]
+            .as_str()
+            .unwrap_or_default()
+            .trim()
+            .to_lowercase();
+        if !query.is_empty() {
+            let hits: Vec<Seed> = p1
+                .iter()
+                .chain(p2.iter())
+                .filter(|s| s.title.to_lowercase().contains(&query))
+                .cloned()
+                .collect();
+            let total = hits.len() as i64;
+            return message(attn_protocol::GardenSeedsPageResultMessage {
+                request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                success: true,
+                seeds: hits,
+                total,
+                ..attn_protocol::GardenSeedsPageResultMessage::new()
+            });
+        }
+        match r["before"].as_str() {
+            None => message(attn_protocol::GardenSeedsPageResultMessage {
+                request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                success: true,
+                seeds: p1.clone(),
+                next_before: Some("2026-11-12T00:00:00Z|s-kp0029".into()),
+                total: 31,
+                harvested: 30,
+                withered: 1,
+                ..attn_protocol::GardenSeedsPageResultMessage::new()
+            }),
+            Some("2026-11-12T00:00:00Z|s-kp0029") => {
+                if !flag.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                    return message(attn_protocol::GardenSeedsPageResultMessage {
+                        request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                        success: false,
+                        error: Some("planted page unavailable".into()),
+                        ..attn_protocol::GardenSeedsPageResultMessage::new()
+                    });
+                }
+                message(attn_protocol::GardenSeedsPageResultMessage {
+                    request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                    success: true,
+                    seeds: p2.clone(),
+                    next_before: None,
+                    total: 31,
+                    harvested: 30,
+                    withered: 1,
+                    ..attn_protocol::GardenSeedsPageResultMessage::new()
+                })
+            }
+            _ => message(attn_protocol::GardenSeedsPageResultMessage {
+                request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                success: true,
+                total: 31,
+                ..attn_protocol::GardenSeedsPageResultMessage::new()
+            }),
+        }
+    });
+    let mut world = World::start(d);
     open(&mut world);
     click(&mut world, "crew.tab.seeds");
-    click(&mut world, "crew.seeds.planted");
+    assert!(!shows(&world, "crew.seeds.cap"));
     assert_eq!(
-        named(&world, "crew.seeds.empty").as_deref(),
-        Some("No seeds were explicitly planted by Keel.")
-    );
-
-    let others = ["a", "b", "c", "d"]
-        .map(|id| planted_by(seed(&format!("s-{id}"), id), "alder"))
-        .to_vec();
-    push_seeds(&mut world, others, 481);
-    assert_eq!(
-        named(&world, "crew.seeds.cap").as_deref(),
-        Some("Showing matches in 4 of 481 seeds (every open seed and the newest closed).")
-    );
-    assert_eq!(
-        named(&world, "crew.seeds.empty").as_deref(),
-        Some("No seeds in this Garden snapshot are explicitly planted by Keel.")
+        named(&world, "crew.seeds.tending").as_deref(),
+        Some("Tending 0")
     );
     assert_eq!(
         named(&world, "crew.seeds.planted").as_deref(),
-        Some("Planted 0+")
+        Some("Planted 31")
     );
+    assert_eq!(
+        named(&world, "crew.seeds.empty").as_deref(),
+        Some("Keel isn't tending a seed.")
+    );
+    assert!(shows(&world, "crew.seeds.see-planted"));
+    assert!(world.runtime_is_at_rest());
+
+    click(&mut world, "crew.seeds.see-planted");
+    assert!(shows(&world, "crew.seed.s-kp0000"));
+    assert!(shows(&world, "crew.seeds.more"));
+    assert_eq!(world.daemon.sent_of("garden_seeds_page").len(), 1);
+    assert!(world.runtime_is_at_rest());
+
+    let [dx, dy, dw, dh] = world
+        .screen()
+        .bounds(Target::key("crew.detail"))
+        .expect("crew.detail bounds");
+    let center = (dx + dw / 2.0, dy + dh / 2.0);
+    for _ in 0..40 {
+        if shows(&world, "crew.seeds.retry") {
+            break;
+        }
+        world.gesture(|app| {
+            app.runtime
+                .wheel_event(rune::WheelEvent::new(0.0, -300.0).at(center.0, center.1))
+        });
+    }
+    assert!(shows(&world, "crew.seeds.error"));
+    assert!(shows(&world, "crew.seeds.retry"));
+    assert!(world.runtime_is_at_rest());
+
+    click(&mut world, "crew.seeds.retry");
+    let pages = world.daemon.sent_of("garden_seeds_page");
+    assert_eq!(pages.len(), 3);
+    assert_eq!(pages[1]["before"], "2026-11-12T00:00:00Z|s-kp0029");
+    assert_eq!(pages[2]["before"], "2026-11-12T00:00:00Z|s-kp0029");
+    assert!(shows(&world, "crew.seed.s-kp0030"));
+    assert!(!shows(&world, "crew.seeds.more"));
+    assert!(world.runtime_is_at_rest());
+
+    world.gesture(|app| {
+        app.runtime
+            .wheel_event(rune::WheelEvent::new(0.0, 20_000.0).at(center.0, center.1))
+    });
+    click(&mut world, "crew.seeds.find");
+    world.gesture(|app| app.type_text("Older"));
+    assert_eq!(seed_rows(&world), ["crew.seed.s-kp0030"]);
+    assert_eq!(
+        named(&world, "crew.seeds.planted").as_deref(),
+        Some("Planted 31")
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn planted_seeds_past_200_ignore_unrelated_pushes_and_preserve_tail_on_refresh() {
+    let make_seed = |i: usize| Seed {
+        status: "harvested".into(),
+        ..planted_by(
+            seed(&format!("s-pm{i:04}"), &format!("Planted item {i:03}")),
+            "keel",
+        )
+    };
+    let base: Vec<Seed> = (0..260).map(make_seed).collect();
+    let new_head = planted_by(seed("s-pmnew1", "Brand new planted"), "keel");
+    let live_other = planted_by(seed("s-other1", "Alder open seed"), "alder");
+    let d = daemon(
+        vec![member("keel", 1)],
+        vec![session("s1", "claude")],
+        vec![live_other.clone()],
+    );
+    let refreshed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (all_base, head, flag) = (base.clone(), new_head.clone(), refreshed.clone());
+    d.on("garden_seeds_page", move |r: &Request| {
+        let items: Vec<Seed> = if flag.load(std::sync::atomic::Ordering::SeqCst) {
+            std::iter::once(head.clone())
+                .chain(all_base.iter().cloned())
+                .collect()
+        } else {
+            all_base.clone()
+        };
+        let start = r["before"]
+            .as_str()
+            .and_then(|c| c.strip_prefix("cursor|"))
+            .and_then(|id| items.iter().position(|s| s.id == id))
+            .map_or(0, |idx| idx + 1);
+        let limit = r["limit"].as_u64().unwrap_or(50) as usize;
+        let end = (start + limit).min(items.len());
+        let slice = items[start..end].to_vec();
+        let next_before = (end < items.len())
+            .then(|| slice.last().map(|s| format!("cursor|{}", s.id)))
+            .flatten();
+        message(attn_protocol::GardenSeedsPageResultMessage {
+            request_id: r["request_id"].as_str().unwrap_or_default().into(),
+            success: true,
+            seeds: slice,
+            next_before,
+            total: items.len() as i64,
+            ..attn_protocol::GardenSeedsPageResultMessage::new()
+        })
+    });
+    let mut world = World::start(d);
+    open(&mut world);
+    click(&mut world, "crew.tab.seeds");
+    click(&mut world, "crew.seeds.planted");
+    assert_eq!(world.daemon.sent_of("garden_seeds_page").len(), 1);
+
+    let [dx, dy, dw, dh] = world
+        .screen()
+        .bounds(Target::key("crew.detail"))
+        .expect("crew.detail bounds");
+    let center = (dx + dw / 2.0, dy + dh / 2.0);
+    for _ in 0..120 {
+        if world.daemon.sent_of("garden_seeds_page").len() >= 5 {
+            break;
+        }
+        world.gesture(|app| {
+            app.runtime
+                .wheel_event(rune::WheelEvent::new(0.0, -500.0).at(center.0, center.1))
+        });
+    }
+    let pages = world.daemon.sent_of("garden_seeds_page");
+    assert_eq!(pages.len(), 5);
+    assert_eq!(pages[4]["before"], "cursor|s-pm0199");
+    assert!(
+        seed_rows(&world).len() < 100,
+        "Planted list should virtualize 250 loaded rows, built {}",
+        seed_rows(&world).len()
+    );
+
+    world.daemon.emit(attn_protocol::GardenSeedsChangedMessage {
+        profile_id: PROFILE.into(),
+        order: vec![live_other.id.clone()],
+        seeds: vec![Seed {
+            pulse: Some("Alder working".into()),
+            ..live_other.clone()
+        }],
+        total: 1,
+        ..attn_protocol::GardenSeedsChangedMessage::new()
+    });
+    world.settle();
+    assert_eq!(
+        world.daemon.sent_of("garden_seeds_page").len(),
+        5,
+        "unrelated seed pulse must not refetch Planted"
+    );
+
+    refreshed.store(true, std::sync::atomic::Ordering::SeqCst);
+    world.daemon.emit(attn_protocol::GardenSeedsChangedMessage {
+        profile_id: PROFILE.into(),
+        order: vec![new_head.id.clone(), live_other.id.clone()],
+        seeds: vec![new_head.clone()],
+        total: 2,
+        ..attn_protocol::GardenSeedsChangedMessage::new()
+    });
+    world.settle();
+    let pages = world.daemon.sent_of("garden_seeds_page");
+    assert_eq!(pages.len(), 6);
+    assert!(pages[5]["before"].is_null());
+    assert_eq!(pages[5]["limit"], 200);
+    assert_eq!(
+        named(&world, "crew.seeds.planted").as_deref(),
+        Some("Planted 261")
+    );
+
+    for _ in 0..80 {
+        if world.daemon.sent_of("garden_seeds_page").len() >= 7 {
+            break;
+        }
+        world.gesture(|app| {
+            app.runtime
+                .wheel_event(rune::WheelEvent::new(0.0, -500.0).at(center.0, center.1))
+        });
+    }
+    let pages = world.daemon.sent_of("garden_seeds_page");
+    assert_eq!(pages.len(), 7);
+    assert_eq!(pages[6]["before"], "cursor|s-pm0249");
+    assert!(shows(&world, "crew.seed.s-pm0259"));
+    assert!(!shows(&world, "crew.seeds.more"));
+    assert!(world.runtime_is_at_rest());
 }
 
 fn charter_saves(world: &World) -> Vec<(String, String)> {

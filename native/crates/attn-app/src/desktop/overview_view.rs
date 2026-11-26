@@ -122,7 +122,14 @@ fn asking(state: &State, desktop: &Desktop) -> Vec<Asking> {
         .iter()
         .flat_map(|c| &c.leaf_ids)
         .filter_map(|leaf| {
-            let member = super::shelf::member(desktop, facts, tree, &unseen, leaf);
+            let member = super::shelf::member(
+                desktop,
+                facts,
+                Some(&state.window.garden),
+                tree,
+                &unseen,
+                leaf,
+            );
             let pane = super::view::pane_of(desktop, leaf).filter(|_| member.needs_user())?;
             let session = facts.sessions.iter().find(|s| s.id == pane.session_id)?;
             let ask = crate::asks::chip_of(facts, session)?;
@@ -257,7 +264,14 @@ fn row(
             let Some(Node::Leaf(leaf)) = tree.find_leaf(id) else {
                 return None;
             };
-            let member = super::shelf::member(desktop, &state.facts, tree, &unseen, id);
+            let member = super::shelf::member(
+                desktop,
+                &state.facts,
+                Some(&state.window.garden),
+                tree,
+                &unseen,
+                id,
+            );
             let highlighted = overview.at().leaf.as_deref() == Some(id.as_str());
             let full = (at[2], at[3] - Miniature::HEADER);
             let picture = picture(state, desktop, leaf, &member, full, scale, t);
@@ -372,7 +386,16 @@ fn strip(state: &State, desktop: &Desktop, t: &Tokens) -> El {
     let (columns, _) = overview::row_of(state, desktop);
     let unseen = state.window.desk.row(&desktop.id).unseen;
     let members: Vec<Vec<ShelfMember>> = desktop.tree().map_or_else(Vec::new, |tree| {
-        let member = |leaf: &String| super::shelf::member(desktop, facts, tree, &unseen, leaf);
+        let member = |leaf: &String| {
+            super::shelf::member(
+                desktop,
+                facts,
+                Some(&state.window.garden),
+                tree,
+                &unseen,
+                leaf,
+            )
+        };
         columns
             .iter()
             .map(|c| c.leaf_ids.iter().map(member).collect())

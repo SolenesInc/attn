@@ -657,3 +657,113 @@ fn a_profile_switch_stops_marking_the_seed_ids_of_the_profile_left_behind() {
     assert_eq!(marks_in(&mut world, "r-b"), []);
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn resolves_archived_closed_seeds_on_demand_for_terminal_marks_hover_card_and_profile_switch() {
+    let archived_id = "s-arc901";
+    let missing_id = "s-zzz999";
+    let archived = with(
+        closed(seed(archived_id, "Archived migration"), "harvested"),
+        |s| {
+            s.body = "Moved closed seeds off the live broadcast.".into();
+        },
+    );
+    let mut world = start(vec![seed(OTHER, "Open seed")], vec![], vec![]);
+    let archived_reply = archived.clone();
+    world.daemon.on("garden_seeds_lookup", move |r: &Request| {
+        let ids: Vec<&str> = r["ids"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_str())
+            .collect();
+        let seeds = if ids.contains(&archived_id) {
+            vec![archived_reply.clone()]
+        } else {
+            Vec::new()
+        };
+        message(attn_protocol::GardenSeedsLookupResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            seeds,
+            ..attn_protocol::GardenSeedsLookupResultMessage::new()
+        })
+    });
+
+    write(
+        &mut world,
+        1,
+        &format!("done {archived_id} nope {missing_id}"),
+    );
+    let lookups = world.daemon.sent_of("garden_seeds_lookup");
+    assert_eq!(lookups.len(), 1);
+    assert_eq!(lookups[0]["ids"], json!([archived_id, missing_id]));
+    assert_eq!(marks(&mut world), [(0, [5, 13])]);
+
+    rest_on(&mut world, 7, 0);
+    assert_eq!(card_heading(&world), "Archived migration");
+    assert!(
+        world
+            .screen()
+            .find(Target::key(format!("{CARD}.excerpt")))
+            .and_then(|n| n.name)
+            .is_some_and(|text| text.contains("Moved closed seeds off the live broadcast."))
+    );
+
+    write(&mut world, 2, &format!("\r\nagain {missing_id}"));
+    assert_eq!(
+        world.daemon.sent_of("garden_seeds_lookup").len(),
+        1,
+        "unknown seed id must not be queried again"
+    );
+
+    let side = Profile {
+        id: "side".into(),
+        name: "Side".into(),
+        current_desktop_id: "side/desktop_1".into(),
+        ..Profile::default()
+    };
+    world
+        .daemon
+        .emit(message(attn_protocol::ProfilesChangedMessage {
+            profiles: vec![
+                Profile {
+                    id: PROFILE.into(),
+                    name: "Work".into(),
+                    ..Profile::default()
+                },
+                side.clone(),
+            ],
+            ..attn_protocol::ProfilesChangedMessage::new()
+        }));
+    world.daemon.emit(message(ProfileArrangementChangedMessage {
+        profile: side,
+        desktops: vec![Desktop {
+            id: "side/desktop_1".into(),
+            profile_id: "side".into(),
+            name: "Desktop 1".into(),
+            order_key: "1".into(),
+            tree_json: tree::pane("b").to_string(),
+            active_pane_id: "b".into(),
+            panes: vec![DesktopPane {
+                desktop_id: "side/desktop_1".into(),
+                ..agent_pane("b", "s9")
+            }],
+            revision: 1,
+            ..Desktop::default()
+        }],
+        ..ProfileArrangementChangedMessage::new()
+    }));
+    world.daemon.on("garden_seeds_lookup", |r: &Request| {
+        message(attn_protocol::GardenSeedsLookupResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            seeds: Vec::new(),
+            ..attn_protocol::GardenSeedsLookupResultMessage::new()
+        })
+    });
+    world.settle();
+    write_to(&mut world, "r-b", 1, &format!("done {archived_id}"));
+    assert_eq!(marks_in(&mut world, "r-b"), []);
+    assert!(world.runtime_is_at_rest());
+}

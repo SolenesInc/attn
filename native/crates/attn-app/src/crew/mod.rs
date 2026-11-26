@@ -103,6 +103,7 @@ pub(crate) struct Panel {
     pub(crate) launches: launch::LaunchEdits,
     pub(crate) charters: charter::Charters,
     pub(crate) handoffs: handoffs::Histories,
+    pub(crate) planted: seeds::PlantedPages,
     pub(crate) back: Option<Back>,
     /// The control that opened the panel from a menu, which takes the focus back on close.
     pub(crate) opener: Option<String>,
@@ -178,7 +179,8 @@ fn entered(state: &mut State, tx: &mut Tx) {
             charter::load(state, &member, tx)
         }
         Tab::Handoffs => handoffs::load(state, &member, false, tx),
-        Tab::Charter | Tab::Launch | Tab::Seeds => {}
+        Tab::Seeds => seeds::sync(state, tx),
+        Tab::Charter | Tab::Launch => {}
     }
 }
 
@@ -225,6 +227,7 @@ fn go(state: &mut State, nav: Nav, tx: &mut Tx) {
     match nav {
         Nav::Member(id) => {
             state.window.crew.place.member = Some(id);
+            state.window.crew.place.seed_query = TextEdit::default();
             state.window.crew.rename = None;
             entered(state, tx);
         }
@@ -247,6 +250,7 @@ fn close_now(state: &mut State, tx: &mut Tx) {
     }
     crate::settings::close_route_picker(state, tx);
     state.window.crew.rename = None;
+    state.window.crew.planted.clear();
     state.window.layer = None;
     match state.window.crew.opener.take() {
         Some(opener) => tx.focus(opener, true),
@@ -490,8 +494,9 @@ pub(crate) fn back_tile(state: &State) -> Option<(&str, &str)> {
 
 /// Takes the roster and the desktops: edits adopt the members' new versions, and the way back
 /// goes once its tile, having arrived, leaves.
-pub(crate) fn follow(state: &mut State) {
+pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
     launch::follow(state);
+    seeds::sync(state, tx);
     let Some(back) = &mut state.window.crew.back else {
         return;
     };

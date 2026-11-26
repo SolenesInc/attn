@@ -3,11 +3,13 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::ops::Range;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use attn_client::{Connection, Facts};
 use attn_protocol::session_id;
 use attn_protocol::{
-    ResolveSessionsMessage, ResolveSessionsResultMessage, ResolvedSession, SessionLedgerEntry,
+    GardenSeedsLookupMessage, GardenSeedsLookupResultMessage, ResolveSessionsMessage,
+    ResolveSessionsResultMessage, ResolvedSession, Seed, SessionLedgerEntry,
 };
 use attn_term::links::{Line, Span};
 use attn_term::{Metrics, Overlay, OverlayKind, Sprite};
@@ -34,6 +36,8 @@ const UUID: &[u8] = b"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
 /// Far past the 1,711 short session ids a 220×70 screen holds. Past it, what the daemon was
 /// asked is forgotten and an id still on screen is asked about again.
 const ASKED_KEPT: usize = 20_000;
+/// Matches the daemon's `maxGardenLookupIDs` cap on a single `garden_seeds_lookup` request.
+const SEED_LOOKUP_LIMIT: usize = 200;
 
 /// What an id on screen names.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -127,17 +131,20 @@ fn role_sprite(session: &attn_protocol::Session) -> Option<Sprite> {
 #[derive(Clone, Default)]
 struct Index {
     seeds: HashSet<String>,
+    resolved_seeds: HashSet<String>,
     /// Each live session's role icon.
     live: HashMap<String, Option<Sprite>>,
     by_key: HashMap<u32, Vec<Keyed>>,
 }
 
-/// The session ids on screen that name no session the app holds: the ones to ask the daemon
+/// The ids on screen that name no live seed or session the app holds: the ones to ask the daemon
 /// about, and the ones it was asked.
 #[derive(Default)]
 struct Wondered {
     unresolved: HashSet<String>,
     asked: HashSet<String>,
+    unresolved_seeds: HashSet<String>,
+    asked_seeds: HashSet<String>,
 }
 
 /// What attn knew of ids at `revision`, as whatever marks them in text reads it.
@@ -163,9 +170,7 @@ impl Hash for Known {
 impl Index {
     fn named(&self, word: &Word<'_>) -> Option<Subject> {
         match word {
-            Word::Seed(id) => self
-                .seeds
-                .contains(*id)
+            Word::Seed(id) => (self.seeds.contains(*id) || self.resolved_seeds.contains(*id))
                 .then(|| Subject::Seed((*id).to_owned())),
             Word::Short(id) => self.session(id, |_| true),
             Word::Uuid(id) => self.session(id, |known| known == *id),
@@ -210,14 +215,23 @@ impl Index {
 }
 
 impl Known {
-    /// What `word` names. A session id that names none the app holds is one to ask about.
+    /// What `word` names. A seed or session id that names none the app holds is one to ask about.
     fn named(&self, word: &Word<'_>) -> Option<Subject> {
         let named = self.index.named(word);
-        if let (None, Word::Short(id) | Word::Uuid(id)) = (&named, word) {
-            let mut wondered = self.wondered.borrow_mut();
-            if !wondered.asked.contains(*id) {
-                wondered.unresolved.insert((*id).to_owned());
+        match (&named, word) {
+            (None, Word::Short(id) | Word::Uuid(id)) => {
+                let mut wondered = self.wondered.borrow_mut();
+                if !wondered.asked.contains(*id) {
+                    wondered.unresolved.insert((*id).to_owned());
+                }
             }
+            (None, Word::Seed(id)) => {
+                let mut wondered = self.wondered.borrow_mut();
+                if !wondered.asked_seeds.contains(*id) {
+                    wondered.unresolved_seeds.insert((*id).to_owned());
+                }
+            }
+            _ => {}
         }
         named
     }
@@ -250,8 +264,10 @@ pub(super) struct Ids {
     profile: String,
     known: Known,
     closed: HashMap<String, SessionLedgerEntry>,
+    resolved_seeds: HashMap<String, Arc<Seed>>,
     seen_closes: u64,
     asking: bool,
+    asking_seeds: bool,
     previewing: Option<(String, Subject)>,
 }
 
@@ -277,14 +293,24 @@ impl Ids {
                     ..Known::default()
                 },
                 asking: self.asking,
+                asking_seeds: self.asking_seeds,
                 ..Ids::default()
             };
         }
+        let mut changed = switched;
         if facts.connection != Connection::Connected {
-            self.known.wondered.borrow_mut().asked.clear();
+            let mut wondered = self.known.wondered.borrow_mut();
+            wondered.asked.clear();
+            wondered.asked_seeds.clear();
+            wondered.unresolved_seeds.clear();
+            drop(wondered);
+            if !self.resolved_seeds.is_empty() {
+                self.resolved_seeds.clear();
+                self.known.change().resolved_seeds.clear();
+                changed = true;
+            }
         }
         let closes = &facts.closes;
-        let mut changed = switched;
         for entry in closes.since(self.seen_closes).unwrap_or(&closes.recent) {
             changed |= self.take_closed(entry.clone());
         }
@@ -334,6 +360,35 @@ impl Ids {
         }
         self.index();
     }
+
+    fn learn_seeds(&mut self, asked: Vec<String>, found: Vec<Seed>) -> bool {
+        {
+            let mut wondered = self.known.wondered.borrow_mut();
+            if wondered.asked_seeds.len() + asked.len() > ASKED_KEPT {
+                wondered.asked_seeds.clear();
+            }
+            for id in asked {
+                wondered.unresolved_seeds.remove(&id);
+                if !self.known.index.seeds.contains(&id) {
+                    wondered.asked_seeds.insert(id);
+                }
+            }
+        }
+        let mut learned = false;
+        for seed in found {
+            if self.known.index.seeds.contains(&seed.id) {
+                continue;
+            }
+            let id = seed.id.clone();
+            self.resolved_seeds.insert(id, Arc::new(seed));
+            learned = true;
+        }
+        if learned {
+            let keys: HashSet<String> = self.resolved_seeds.keys().cloned().collect();
+            self.known.change().resolved_seeds = keys;
+        }
+        learned
+    }
 }
 
 impl Terminals {
@@ -342,7 +397,25 @@ impl Terminals {
         if self.ids.known.index.seeds == known {
             return;
         }
-        self.ids.known.change().seeds = known;
+        {
+            let mut wondered = self.ids.known.wondered.borrow_mut();
+            for id in &known {
+                wondered.asked_seeds.remove(id);
+                wondered.unresolved_seeds.remove(id);
+            }
+        }
+        let pruned = !self.ids.resolved_seeds.is_empty()
+            && known
+                .iter()
+                .any(|id| self.ids.resolved_seeds.contains_key(id));
+        if pruned {
+            self.ids.resolved_seeds.retain(|id, _| !known.contains(id));
+        }
+        let index = self.ids.known.change();
+        index.seeds = known;
+        if pruned {
+            index.resolved_seeds.retain(|id| !index.seeds.contains(id));
+        }
         self.mark_again();
     }
 
@@ -362,11 +435,18 @@ impl Terminals {
 
     pub(crate) fn knows(&self, target: &Subject) -> bool {
         match target {
-            Subject::Seed(id) => self.ids.known.index.seeds.contains(id),
+            Subject::Seed(id) => {
+                self.ids.known.index.seeds.contains(id)
+                    || self.ids.known.index.resolved_seeds.contains(id)
+            }
             Subject::Session(id) => {
                 self.ids.known.index.live.contains_key(id) || self.ids.closed.contains_key(id)
             }
         }
+    }
+
+    pub(crate) fn resolved_seed(&self, id: &str) -> Option<&Arc<Seed>> {
+        self.ids.resolved_seeds.get(id)
     }
 
     pub(crate) fn known_ids(&self) -> &Known {
@@ -447,7 +527,9 @@ impl Terminals {
     }
 
     pub(crate) fn has_unresolved_ids(&self) -> bool {
-        !self.ids.asking && !self.ids.known.wondered.borrow().unresolved.is_empty()
+        let wondered = self.ids.known.wondered.borrow();
+        (!self.ids.asking && !wondered.unresolved.is_empty())
+            || (!self.ids.asking_seeds && !wondered.unresolved_seeds.is_empty())
     }
 
     /// Washes and underlines the ids on terminal `term`'s view that attn knows, brighter on the
@@ -509,44 +591,100 @@ impl Terminals {
     }
 }
 
-/// Asks the daemon, in one request at a time, about the session ids on screen that name no
-/// session the app holds. What it does not know it is not asked again, and a request it never
-/// answered leaves its ids to be asked about once the text changes.
+/// Asks the daemon, in one request at a time per kind, about the seed and session ids on screen
+/// that name none the app holds. What it does not know it is not asked again, and a request it
+/// never answered leaves its ids to be asked about once the text changes.
 pub(crate) fn ask_about_unresolved(state: &mut State, tx: &mut Tx) {
-    if !state.terminals.has_unresolved_ids() {
-        return;
-    }
-    let ids = &mut state.terminals.ids;
-    ids.asking = true;
-    let unresolved = std::mem::take(&mut ids.known.wondered.borrow_mut().unresolved);
-    let mut refs: Vec<String> = unresolved.into_iter().collect();
-    refs.sort();
-    let profile = ids.profile.clone();
-    let asked = refs.clone();
-    state.ask(
-        |request_id| ResolveSessionsMessage {
-            request_id: Some(request_id),
-            refs,
-            ..ResolveSessionsMessage::new()
-        },
-        move |state, answer, tx| {
-            let terminals = &mut state.terminals;
-            terminals.ids.asking = false;
-            let reply = answer
-                .parse::<ResolveSessionsResultMessage>()
-                .filter(|r| r.success && terminals.ids.profile == profile);
-            if let Some(reply) = reply {
-                let learns = !reply.found.is_empty();
-                terminals.ids.learn(asked, reply.found);
-                if learns {
-                    terminals.mark_again();
-                    crate::markdown::ids::follow(state);
+    let ask_sessions = {
+        let ids = &state.terminals.ids;
+        !ids.asking && !ids.known.wondered.borrow().unresolved.is_empty()
+    };
+    if ask_sessions {
+        let ids = &mut state.terminals.ids;
+        ids.asking = true;
+        let unresolved = std::mem::take(&mut ids.known.wondered.borrow_mut().unresolved);
+        let mut refs: Vec<String> = unresolved.into_iter().collect();
+        refs.sort();
+        let profile = ids.profile.clone();
+        let asked = refs.clone();
+        state.ask(
+            |request_id| ResolveSessionsMessage {
+                request_id: Some(request_id),
+                refs,
+                ..ResolveSessionsMessage::new()
+            },
+            move |state, answer, tx| {
+                let terminals = &mut state.terminals;
+                terminals.ids.asking = false;
+                let reply = answer
+                    .parse::<ResolveSessionsResultMessage>()
+                    .filter(|r| r.success && terminals.ids.profile == profile);
+                if let Some(reply) = reply {
+                    let learns = !reply.found.is_empty();
+                    terminals.ids.learn(asked, reply.found);
+                    if learns {
+                        terminals.mark_again();
+                        crate::markdown::ids::follow(state);
+                    }
                 }
-            }
-            ask_about_unresolved(state, tx);
-        },
-        tx,
-    );
+                ask_about_unresolved(state, tx);
+            },
+            tx,
+        );
+    }
+
+    let ask_seeds = {
+        let ids = &state.terminals.ids;
+        !ids.asking_seeds && !ids.known.wondered.borrow().unresolved_seeds.is_empty()
+    };
+    if ask_seeds {
+        let ids = &mut state.terminals.ids;
+        ids.asking_seeds = true;
+        let mut pending: Vec<String> = {
+            let mut wondered = ids.known.wondered.borrow_mut();
+            std::mem::take(&mut wondered.unresolved_seeds)
+                .into_iter()
+                .collect()
+        };
+        pending.sort();
+        let rest = if pending.len() > SEED_LOOKUP_LIMIT {
+            pending.split_off(SEED_LOOKUP_LIMIT)
+        } else {
+            Vec::new()
+        };
+        if !rest.is_empty() {
+            ids.known
+                .wondered
+                .borrow_mut()
+                .unresolved_seeds
+                .extend(rest);
+        }
+        let profile = ids.profile.clone();
+        let asked = pending.clone();
+        state.ask(
+            |request_id| GardenSeedsLookupMessage {
+                request_id,
+                ids: pending,
+                ..GardenSeedsLookupMessage::new()
+            },
+            move |state, answer, tx| {
+                let terminals = &mut state.terminals;
+                terminals.ids.asking_seeds = false;
+                let reply = answer
+                    .parse::<GardenSeedsLookupResultMessage>()
+                    .filter(|r| r.success && terminals.ids.profile == profile);
+                if let Some(reply) = reply {
+                    let learns = terminals.ids.learn_seeds(asked, reply.seeds);
+                    if learns {
+                        terminals.mark_again();
+                        crate::markdown::ids::follow(state);
+                    }
+                }
+                ask_about_unresolved(state, tx);
+            },
+            tx,
+        );
+    }
 }
 
 /// The known ids on the rows terminal `term` shows, found once per screen of text.

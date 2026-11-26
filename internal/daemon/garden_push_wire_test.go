@@ -22,13 +22,13 @@ func TestGardenPushSendsOnlyWhatChanged(t *testing.T) {
 		t.Fatalf("initial state carries %v, want the whole garden newest first", got)
 	}
 
-	lifeMove(t, cli, "", older, "wither", "", "")
+	lifeMove(t, cli, "", older, "park", "later", "")
 	changed := nextGardenChange(app)
 	if !slices.Equal(changed.Order, []string{newer, older}) {
-		t.Errorf("the change after a wither orders %v, want the whole window newest first", changed.Order)
+		t.Errorf("the change after a park orders %v, want the whole live window newest first", changed.Order)
 	}
-	if len(changed.Seeds) != 1 || changed.Seeds[0].ID != older || changed.Seeds[0].Status != "withered" {
-		t.Fatalf("the change after a wither carries %+v, want only the withered seed", changed.Seeds)
+	if len(changed.Seeds) != 1 || changed.Seeds[0].ID != older || changed.Seeds[0].Status != "parked" {
+		t.Fatalf("the change after a park carries %+v, want only the parked seed", changed.Seeds)
 	}
 
 	if _, err := cli.SeedNote("", newer, "a note changes no seed", "", false, nil); err != nil {
@@ -38,18 +38,33 @@ func TestGardenPushSendsOnlyWhatChanged(t *testing.T) {
 		t.Fatalf("the change after a note carries %v in %v, want no seed in the same window", lifeSeedIDs(changed.Seeds), changed.Order)
 	}
 
+	lifeMove(t, cli, "", older, "wither", "", "")
+	changed = nextGardenChange(app)
+	if !slices.Equal(changed.Order, []string{newer}) || changed.Total != 2 {
+		t.Errorf("the change after a wither orders %v of %d, want only the open seed of 2", changed.Order, changed.Total)
+	}
+	if len(changed.Seeds) != 0 {
+		t.Errorf("the change after a wither carries %v, want no live seed changed", lifeSeedIDs(changed.Seeds))
+	}
+	if changed.ClosedCounts == nil || changed.ClosedCounts.All.Withered != 1 {
+		t.Errorf("closed_counts after wither = %+v, want withered=1", changed.ClosedCounts)
+	}
+
 	newest := plantSeedAs(t, cli, "", "newest")
 	changed = nextGardenChange(app)
-	if !slices.Equal(changed.Order, []string{newest, newer, older}) || changed.Total != 3 {
-		t.Errorf("the change after planting orders %v of %d, want the new seed first of 3", changed.Order, changed.Total)
+	if !slices.Equal(changed.Order, []string{newest, newer}) || changed.Total != 3 {
+		t.Errorf("the change after planting orders %v of %d, want the two open seeds of 3", changed.Order, changed.Total)
 	}
 	if got := lifeSeedIDs(changed.Seeds); !slices.Equal(got, []string{newest}) {
 		t.Errorf("the change after planting carries %v, want only the new seed", got)
 	}
 
 	late := w.App()
-	if got := lifeSeedIDs(late.Initial.Seeds); !slices.Equal(got, []string{newest, newer, older}) {
-		t.Errorf("a client connecting later starts from %v, want the whole current garden", got)
+	if got := lifeSeedIDs(late.Initial.Seeds); !slices.Equal(got, []string{newest, newer}) {
+		t.Errorf("a client connecting later starts from %v, want only open seeds", got)
+	}
+	if late.Initial.GardenClosedCounts == nil || late.Initial.GardenClosedCounts.All.Withered != 1 {
+		t.Errorf("late client closed_counts = %+v, want withered=1", late.Initial.GardenClosedCounts)
 	}
 }
 
@@ -67,15 +82,15 @@ func TestGardenPushCarriesWhatAHarvestChangesElsewhere(t *testing.T) {
 
 	lifeMove(t, cli, "", blocker, "harvest", "done", "")
 	changed := nextGardenChange(app)
+	if slices.Contains(changed.Order, blocker) {
+		t.Errorf("harvested unpinned blocker %s stayed in live order %v", blocker, changed.Order)
+	}
 	seeds := map[string]protocol.Seed{}
 	for _, seed := range changed.Seeds {
 		seeds[seed.ID] = seed
 	}
-	if _, ok := seeds[bystander]; ok || len(seeds) != 3 {
-		t.Errorf("the change after the harvest carries %v, want the blocker, the dependent and the plot", lifeSeedIDs(changed.Seeds))
-	}
-	if seeds[blocker].Status != "harvested" {
-		t.Errorf("the blocker arrives %q, want harvested", seeds[blocker].Status)
+	if _, ok := seeds[bystander]; ok || len(seeds) != 2 {
+		t.Errorf("the change after the harvest carries %v, want the dependent and the plot", lifeSeedIDs(changed.Seeds))
 	}
 	if !seeds[dependent].Ready {
 		t.Error("the dependent the harvest unblocked arrives not ready")
@@ -151,7 +166,7 @@ func TestGardenPushAfterAProfileSwitchSendsOnlyWhatChangedInTheNewProfile(t *tes
 	} {
 		selectProfile(app, step.profile)
 		testworld.Await(app, protocol.EventGardenSeedsUpdated, func(m protocol.GardenSeedsUpdatedMessage) bool { return m.ProfileID == step.profile })
-		lifeMove(t, step.seeds, "", step.moved, "wither", "", "")
+		lifeMove(t, step.seeds, "", step.moved, "park", "hold", "")
 		changed := testworld.Await(app, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool { return m.ProfileID == step.profile })
 		if !slices.Equal(changed.Order, step.window) {
 			t.Errorf("after switching to %s, the change orders %v, want %v", step.profile, changed.Order, step.window)
@@ -159,6 +174,53 @@ func TestGardenPushAfterAProfileSwitchSendsOnlyWhatChangedInTheNewProfile(t *tes
 		if got := lifeSeedIDs(changed.Seeds); !slices.Equal(got, []string{step.moved}) {
 			t.Errorf("after switching to %s, the change carries %v, want only %s", step.profile, got, step.moved)
 		}
+	}
+}
+
+func TestGardenPushPinsLiveSessionDispatchCrownAfterHarvestUntilSessionCloses(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	cwd := registerDelegationCaller(t, w, cli, "caller")
+	crown := plantDelegationSeed(t, cli, "caller", "Worker crown")
+	unpinned := plantSeedAs(t, cli, "", "Unpinned task")
+	delegated, err := cli.Delegate(delegateAtSeed("caller", cwd, crown))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(string(delegated.SessionID))
+
+	beforeUnpinned := len(app.Log())
+	lifeMove(t, cli, "", unpinned, "harvest", "done", "")
+	testworld.AwaitSince(app, beforeUnpinned, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
+		return !slices.Contains(m.Order, unpinned) && slices.Contains(m.Order, crown)
+	})
+
+	beforeCrownHarvest := len(app.Log())
+	lifeMove(t, cli, string(delegated.SessionID), crown, "harvest", "shipped", "")
+	harvested := testworld.AwaitSince(app, beforeCrownHarvest, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
+		return slices.ContainsFunc(m.Seeds, func(s protocol.Seed) bool {
+			return s.ID == crown && s.Status == "harvested"
+		})
+	})
+	if !slices.Contains(harvested.Order, crown) {
+		t.Fatalf("harvested live dispatch crown %s dropped from order %v", crown, harvested.Order)
+	}
+	if fresh := w.App(); !slices.Contains(lifeSeedIDs(fresh.Initial.Seeds), crown) || slices.Contains(lifeSeedIDs(fresh.Initial.Seeds), unpinned) {
+		t.Fatalf("fresh client initial_state = %v, want %s pinned and %s omitted", lifeSeedIDs(fresh.Initial.Seeds), crown, unpinned)
+	}
+
+	beforeClose := len(app.Log())
+	if err := cli.Unregister(delegated.SessionID); err != nil {
+		t.Fatal(err)
+	}
+	dropped := testworld.AwaitSince(app, beforeClose, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
+		return !slices.Contains(m.Order, crown)
+	})
+	if slices.Contains(dropped.Order, crown) {
+		t.Fatalf("closed session crown %s stayed in live order %v", crown, dropped.Order)
+	}
+	if afterClose := w.App(); slices.Contains(lifeSeedIDs(afterClose.Initial.Seeds), crown) {
+		t.Fatalf("fresh client after close still received closed crown %s in %v", crown, lifeSeedIDs(afterClose.Initial.Seeds))
 	}
 }
 

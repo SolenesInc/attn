@@ -604,6 +604,23 @@ func (d *Daemon) seedDetailsWire(read gardenRead, seed garden.Seed, doc docstore
 	return wire
 }
 
+func (d *Daemon) pinnedGardenSeeds(read gardenRead) map[string]bool {
+	var pinned map[string]bool
+	for sessionID, seedID := range d.gardenDispatchSeedsBySession() {
+		if seedID == "" || !read.parties.sessions[sessionID].open {
+			continue
+		}
+		if _, exists := read.plots.Seed(seedID); !exists {
+			continue
+		}
+		if pinned == nil {
+			pinned = map[string]bool{}
+		}
+		pinned[seedID] = true
+	}
+	return pinned
+}
+
 func (d *Daemon) seedsForBroadcast(profileID ...string) (seeds []protocol.Seed, total int, closedCounts *protocol.GardenClosedCounts) {
 	if d.store == nil {
 		return nil, 0, nil
@@ -615,7 +632,8 @@ func (d *Daemon) seedsForBroadcast(profileID ...string) (seeds []protocol.Seed, 
 		}
 		return nil, 0, nil
 	}
-	return read.wireWithoutBodies(garden.Window(read.seeds, gardenSnapshotLimit)), len(read.seeds), gardenClosedCounts(read)
+	live := garden.LiveWindow(read.seeds, read.plots, d.pinnedGardenSeeds(read))
+	return read.wireWithoutBodies(live), len(read.seeds), gardenClosedCounts(read)
 }
 
 func (d *Daemon) projectGardenSeeds() {

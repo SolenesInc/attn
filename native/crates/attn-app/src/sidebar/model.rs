@@ -248,6 +248,7 @@ pub fn tile_title(
     params: &str,
     content: Option<&attn_protocol::DesktopTileContentMessage>,
     seeds: &[std::sync::Arc<attn_protocol::Seed>],
+    garden: Option<&crate::garden::Garden>,
 ) -> String {
     let readable = content.filter(|c| c.error.as_deref().is_none_or(str::is_empty));
     if kind == "markdown"
@@ -256,9 +257,14 @@ pub fn tile_title(
         return title;
     }
     match kind {
-        "seed" if !params.is_empty() => seeds
-            .iter()
-            .find(|s| s.id == params)
+        "seed" if !params.is_empty() => garden
+            .and_then(|g| crate::garden::shown_seed(g, seeds, params))
+            .or_else(|| {
+                seeds
+                    .iter()
+                    .find(|s| s.id == params)
+                    .map(std::sync::Arc::as_ref)
+            })
             .map_or_else(|| params.to_owned(), |s| s.title.clone()),
         "seed" => "seed".into(),
         "browser" if !params.is_empty() => params
@@ -519,7 +525,12 @@ pub fn desktop_title(desktop: &Desktop, desktops: &[Desktop]) -> String {
 /// What the desktop sidebar lists: each desktop, then its agents and tiles in layout order,
 /// then any agent of it the layout does not hold. An agent not in `on_screen` shows its
 /// countdown.
-pub fn desktop_lines(facts: &Facts, home: bool, on_screen: &[String]) -> Vec<Line> {
+pub fn desktop_lines(
+    facts: &Facts,
+    garden: Option<&crate::garden::Garden>,
+    home: bool,
+    on_screen: &[String],
+) -> Vec<Line> {
     let desktops = &facts.desktops;
     let current = facts.current_desktop().map(|d| d.id.as_str());
     let by_id: HashMap<&str, &Session> =
@@ -563,6 +574,7 @@ pub fn desktop_lines(facts: &Facts, home: bool, on_screen: &[String]) -> Vec<Lin
                             })
                             .map(|c| &*c.message),
                         facts.garden.of(&facts.profiles.selected),
+                        garden,
                     ),
                     selected: shown && leaf.id == desktop.active_pane_id,
                     id: leaf.id.clone(),

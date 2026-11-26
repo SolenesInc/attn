@@ -313,7 +313,7 @@ pub fn bind(
             state.terminals.know_sessions(&state.facts);
             markdown::ids::follow(state);
             markdown::keys::follow(state);
-            crew::follow(state);
+            crew::follow(state, tx);
             automations::follow(state, tx);
             follow_terminals(state, tx);
             annotations::draft::follow(state, tx);

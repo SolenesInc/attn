@@ -857,6 +857,7 @@ pub(crate) fn leaf_title(
     harnesses: &[attn_protocol::Harness],
     contents: &attn_client::TileContents,
     seeds: &[std::sync::Arc<attn_protocol::Seed>],
+    garden: Option<&crate::garden::Garden>,
     leaf: &Leaf,
 ) -> String {
     match &leaf.kind {
@@ -870,6 +871,7 @@ pub(crate) fn leaf_title(
                 params.as_deref().unwrap_or(""),
                 contents.get(&key).map(|c| &*c.message),
                 seeds,
+                garden,
             )
         }
         LeafKind::Pane => {
@@ -933,6 +935,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
         cx.seeds.harnesses,
         cx.contents,
         cx.seeds.seeds,
+        Some(cx.seeds.garden),
         leaf,
     );
     let holder = Holder {
@@ -1292,7 +1295,7 @@ pub(crate) fn header_source(state: &State, leaf: &str) -> Option<super::drag::So
     Some(super::drag::Source::Header {
         desktop: desktop.id.clone(),
         leaf: leaf.to_owned(),
-        label: super::shelf::title(desktop, facts, &tree, leaf),
+        label: super::shelf::title(desktop, facts, Some(&state.window.garden), &tree, leaf),
         movable: matches!(kind, LeafKind::Tile { .. }) || tree.leaves().len() > 1,
     })
 }

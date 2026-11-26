@@ -402,7 +402,13 @@ fn leaf_label(state: &State, desktop: &str, leaf: &str) -> Option<String> {
     let desk = state.facts.desktops.iter().find(|d| d.id == desktop)?;
     let tree = desk.tree()?;
     tree.find_leaf(leaf)?;
-    Some(crate::desktop::leaf_title(desk, &state.facts, tree, leaf))
+    Some(crate::desktop::leaf_title(
+        desk,
+        &state.facts,
+        Some(&state.window.garden),
+        tree,
+        leaf,
+    ))
 }
 
 fn move_rows(state: &State, source_desktop: &str, query: &str) -> Vec<Row> {

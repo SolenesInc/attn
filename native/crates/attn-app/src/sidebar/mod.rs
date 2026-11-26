@@ -187,7 +187,7 @@ pub(crate) fn draws_row(state: &State, key: &str) -> bool {
 pub(crate) fn lines(state: &State) -> Vec<Line> {
     let home = state.window.view == View::Home;
     let on_screen = crate::desktop::on_screen_sessions(state);
-    model::desktop_lines(&state.facts, home, &on_screen)
+    model::desktop_lines(&state.facts, Some(&state.window.garden), home, &on_screen)
 }
 
 fn desktop_sidebar(state: &State, t: &Tokens) -> El {
@@ -221,6 +221,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
         (
             std::sync::Arc::as_ptr(&facts.asks) as usize,
             std::sync::Arc::as_ptr(&facts.garden) as usize,
+            state.window.garden.revision,
             std::sync::Arc::as_ptr(&facts.outposts) as usize,
             std::sync::Arc::as_ptr(&facts.harnesses) as usize,
             state.logos.revision(),
@@ -246,7 +247,8 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
         ),
     );
     memo("sidebar", reads, || {
-        let lines: Rc<[Line]> = model::desktop_lines(facts, home, &on_screen).into();
+        let lines: Rc<[Line]> =
+            model::desktop_lines(facts, Some(&state.window.garden), home, &on_screen).into();
         let keys = lines.clone();
         let t = *t;
         col()

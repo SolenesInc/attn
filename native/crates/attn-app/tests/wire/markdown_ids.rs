@@ -727,3 +727,56 @@ fn the_card_key_gives_a_hovered_card_in_the_garden_over_the_window_the_keyboard(
     key(&mut world, Key::Enter);
     assert_eq!(sessions_shown(&world), [BUILDER]);
 }
+
+#[test]
+fn resolves_an_archived_closed_seed_in_markdown_via_lookup_and_shows_its_card() {
+    let archived = Seed {
+        profile_id: "work".into(),
+        id: "s-arc777".into(),
+        title: "Archived markdown seed".into(),
+        body: "Body returned by garden_seeds_lookup.".into(),
+        status: "harvested".into(),
+        ..Seed::default()
+    };
+    let mut world = start_tile((vec![], vec![], vec![]), vec![], document());
+    let reply_seed = archived.clone();
+    world.daemon.on("garden_seeds_lookup", move |r| {
+        let ids: Vec<&str> = r["ids"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_str())
+            .collect();
+        let seeds = if ids.contains(&"s-arc777") {
+            vec![reply_seed.clone()]
+        } else {
+            Vec::new()
+        };
+        attn_testkit::message(attn_protocol::GardenSeedsLookupResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            seeds,
+            ..attn_protocol::GardenSeedsLookupResultMessage::new()
+        })
+    });
+    reads(&mut world, "See s-arc777 for the shipped design.");
+
+    assert_eq!(linked(&world), [to("s-arc777", "attn-seed:s-arc777")]);
+    rest_on(&mut world, "attn-seed:s-arc777");
+    assert!(
+        world
+            .screen()
+            .find(Target::key(format!("{SEED_CARD}.heading")))
+            .and_then(|n| n.name)
+            .as_deref()
+            == Some("Archived markdown seed")
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key(format!("{SEED_CARD}.excerpt")))
+            .and_then(|n| n.name)
+            .is_some_and(|text| text.contains("Body returned by garden_seeds_lookup."))
+    );
+    assert!(world.runtime_is_at_rest());
+}
