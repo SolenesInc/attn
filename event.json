@@ -1,0 +1,8 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "fix: native-codex-update did not wait for the terminal binding",
+  "at": "2026-11-26T18:18:11.187Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45866027952",
+  "repairs": "eb8b468bd"
+}
