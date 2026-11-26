@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "a61281b5b2038f6cbd19df287273334eaf35e77c",
+  "head": "c4945c1a444e7b6b802cdd97c87270fcfb2dd6e0",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 92.397,
+    "ranOn": "c4945c1a444e7b6b802cdd97c87270fcfb2dd6e0"
+  },
+  "noMediaReason": "Daemon refusal text, a test and a feature file; no visual surface",
+  "recordings": []
+}
