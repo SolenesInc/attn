@@ -1,0 +1,8 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "fix: TestTerminalToolsAnswerWithoutWaitingOnTheShell expects tool wording",
+  "at": "2026-11-26T06:06:29.302Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45741661128",
+  "repairs": "884db23f6"
+}
