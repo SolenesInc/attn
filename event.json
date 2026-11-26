@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Current automation desktops lose the Rename action",
+  "at": "2026-11-26T21:05:25.164Z",
+  "detail": "The desktop sidebar drops the heading for the current unslotted automation-only desktop at cec7eaba2. Start a run on its default desktop, then open desktop flow there. The model skips this desktop before checking whether it is current, making the heading pencil and in-app Rename action unavailable. Changing the automation destination affects future launches. The documented and landed lifecycle preserves user-renamed desktops. Restore Rename for the current desktop while preserving grouped run rows. Independently source-confirmed. Focused wire verification is in progress on s-h7d2nc.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/sidebar/model.rs",
+    "line": 623
+  },
+  "culprit": "a1053b55df616a9cbb8e8a6a16144ac9b881a51d"
+}
