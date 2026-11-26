@@ -102,6 +102,7 @@ func TestAPluginPromptReportTitlesTheSessionAndLaterTitleOverridesUnlessUserPinn
 		}
 	}
 
+	app.TypeLine(session, "the login form rejects valid passwords")
 	if err := reportPrompt(driver, run.SessionID, run.RunID, "the login form rejects valid passwords"); err != nil {
 		t.Fatal(err)
 	}
@@ -128,37 +129,6 @@ func TestAPluginPromptReportTitlesTheSessionAndLaterTitleOverridesUnlessUserPinn
 	}
 }
 
-func TestAPromptTheReloadingRunReportsBeforeItsLaunchCommitsTitlesTheSession(t *testing.T) {
-	w := newTitlingWorld(t, fakeagent.Claude)
-	app := w.App()
-	driver := connectDriver(t, w, "attn-plug", "plug", map[string]bool{"state_reporting": true, "resume": true})
-	awaitDriverAvailable(app, "plug")
-	session, first := spawnDriven(w, app, driver, w.Path("shop"))
-	driver.mu.Lock()
-	driver.holdLaunch = true
-	driver.mu.Unlock()
-	app.Send(protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 80, Rows: 24})
-	var reloading driverLaunch
-	reply := driver.asked("driver.resume", &reloading)
-	driver.launched()
-	if err := reportPrompt(driver, reloading.SessionID, reloading.RunID, "audit the checkout retry queue"); err != nil {
-		t.Fatalf("the reloading run's prompt report was refused: %v", err)
-	}
-	driver.answer(reply, map[string]any{"argv": []string{"/bin/cat"}})
-	if result := testworld.Await(app, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session }); !result.Success {
-		t.Fatal(protocol.Deref(result.Error))
-	}
-	if closed := driver.closed(); closed.RunID != first.RunID {
-		t.Fatalf("the reload closed run %s, want the replaced run %s", closed.RunID, first.RunID)
-	}
-	task := w.HeadlessTask()
-	if !strings.Contains(task.Prompt, "audit the checkout retry queue") {
-		t.Fatalf("the title task asked %q, want the queued prompt", task.Prompt)
-	}
-	task.Answer("Audit checkout retries")
-	awaitLabel(app, session, "Audit checkout retries")
-}
-
 func TestANotificationRingDoesNotTitleAPluginSessionThatReportsItsPrompt(t *testing.T) {
 	w := newTitlingWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
@@ -173,17 +143,16 @@ func TestANotificationRingDoesNotTitleAPluginSessionThatReportsItsPrompt(t *test
 	}
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
-	delivering := make(chan deliveredMessage, 1)
+	reported := make(chan error, 1)
 	go func() {
 		var input deliveredMessage
 		call := driver.asked("driver.deliver_message", &input)
+		err := reportPrompt(driver, run.SessionID, run.RunID, input.Text)
 		driver.answer(call, map[string]bool{"ok": true})
-		delivering <- input
+		reported <- err
 	}()
 	sendAgentMessage(t, cli, sender, session, "check the staging deploy")
-	ring := <-delivering
-
-	if err := reportPrompt(driver, run.SessionID, run.RunID, ring.Text); err != nil {
+	if err := <-reported; err != nil {
 		t.Fatal(err)
 	}
 	if err := driver.state(run, 3, protocol.StateWorking); err != nil {
@@ -194,6 +163,7 @@ func TestANotificationRingDoesNotTitleAPluginSessionThatReportsItsPrompt(t *test
 	}
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
+	app.TypeLine(session, "investigate the webhook timeout")
 	if err := reportPrompt(driver, run.SessionID, run.RunID, "investigate the webhook timeout"); err != nil {
 		t.Fatal(err)
 	}

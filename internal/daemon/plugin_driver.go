@@ -592,7 +592,6 @@ func (d *Daemon) applyPluginReportedPrompt(params pluginReportPromptParams) {
 	d.events().Prompt(harness.FromSession(params.SessionID), time.Now(), harness.Prompt{
 		Text:   params.Text,
 		Live:   true,
-		User:   true,
 		Titles: true,
 	})
 }

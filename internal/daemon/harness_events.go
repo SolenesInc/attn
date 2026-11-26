@@ -142,14 +142,14 @@ func (e harnessEvents) fencedTurn(sessionID protocol.SessionID, at time.Time, ev
 
 func (e harnessEvents) Prompt(r harness.Reporter, at time.Time, p harness.Prompt) {
 	session, monitor := e.resolve(r)
-	typed, notification := false, false
+	typed := false
 	if p.Live {
 		e.reported(session, false)
-		typed, notification = monitor.ObservePromptSubmitted(at)
+		typed = monitor.ObservePromptSubmitted(at)
 		monitor.Touch(at)
 	}
 	if p.Titles {
-		text, user := p.Text, typed || p.History || (p.User && !notification)
+		text, user := p.Text, typed || p.History
 		e.daemon.life.Go("maybeGenerateSessionTitleFromPrompt", func() { monitor.TitleFromPrompt(text, user) })
 	}
 }
