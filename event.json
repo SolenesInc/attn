@@ -1,0 +1,10 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "TestTerminalToolsAnswerWithoutWaitingOnTheShell left expecting the CLI inbox wording",
+  "at": "2026-11-26T06:06:33.315Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45741661128",
+  "severity": "p1",
+  "source": "ci",
+  "culprit": "884db23f62c74fadc2e15ebc8448ad395cb163ed"
+}
