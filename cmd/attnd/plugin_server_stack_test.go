@@ -32,7 +32,7 @@ func authorsServerPlugin(t *testing.T, id, tarball, gate, callerVariable string)
 		}
 		content := string(data)
 		if file == "package.json" {
-			content = strings.Replace(content, `"0.8.0"`, `"file:`+tarball+`"`, 1)
+			content = strings.Replace(content, `"0.9.0"`, `"file:`+tarball+`"`, 1)
 		}
 		if file == "src/index.ts" {
 			content = strings.Replace(content, `const harnessId = "sample-server"`, `const harnessId = "`+id+`"`, 1)
