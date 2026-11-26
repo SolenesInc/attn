@@ -105,6 +105,7 @@ func (h Harness) Facts() harness.Facts {
 		Recovery:       h.recovery(),
 		ModelDiscovery: declared["model_discovery"] || declared["server_binding"],
 		Activity:       h.link().WatchesConversations(),
+		AgentTools:     declared["agent_tools"],
 		Owner:          h.reg.Plugin,
 	}
 	if l := h.link(); l != nil {

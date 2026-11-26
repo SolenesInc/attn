@@ -65,6 +65,7 @@ func Facts() harness.Facts {
 		},
 		ModelDiscovery:        true,
 		Activity:              true,
+		AgentTools:            true,
 		ConversationIsSession: true,
 	})
 }

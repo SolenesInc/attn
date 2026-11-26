@@ -50,12 +50,13 @@ type Server struct {
 	version      string
 	instructions string
 	tools        []Tool
+	notServed    func(tool string) string
 }
 
-func New(name, version, instructions string, tools []Tool) *Server {
+func New(name, version, instructions string, tools []Tool, notServed func(tool string) string) *Server {
 	sorted := slices.Clone(tools)
 	slices.SortFunc(sorted, func(a, b Tool) int { return strings.Compare(a.Name, b.Name) })
-	return &Server{name: name, version: version, instructions: instructions, tools: sorted}
+	return &Server{name: name, version: version, instructions: instructions, tools: sorted, notServed: notServed}
 }
 
 type request struct {
@@ -150,7 +151,7 @@ func (s *Server) answer(ctx context.Context, req request, call Call) (any, *rpcE
 			return nil, err
 		}
 		if !slices.ContainsFunc(s.tools, func(t Tool) bool { return t.Name == params.Name }) {
-			return nil, &rpcError{Code: codeInvalidParams, Message: fmt.Sprintf("unknown tool %q", params.Name)}
+			return nil, &rpcError{Code: codeInvalidParams, Message: fmt.Sprintf("unknown tool %q: %s", params.Name, s.notServed(params.Name))}
 		}
 		return call(ctx, params.Name, params.Arguments, params.Meta), nil
 	default:

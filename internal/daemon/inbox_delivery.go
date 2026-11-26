@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,7 +21,9 @@ import (
 	"github.com/victorarias/attn/internal/who"
 )
 
-func inboxRingText() string { return prompts.RenderText("session", "inbox-notification", nil) }
+func inboxRingText(tools bool) string {
+	return prompts.RenderText("session", "inbox-notification", prompts.Values{"agent_tools": strconv.FormatBool(tools)})
+}
 
 var errInboxNoUnread = errors.New("agent inbox has no unread items to start a session for")
 var errInboxNoPromptReader = errors.New("agent inbox recipient is a shell pane")
@@ -359,7 +362,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 	fresh := pending == nil
 	if pending == nil {
 		bellWaitsForPrompt := attempt.Typed > 0 && !sessionmonitor.PromptReady(holder.State, d.stateReason(holder.ID))
-		paste, err := d.inboxPaste(a, holder.ProfileID, bellHeldUntil.IsZero() && !bellWaitsForPrompt, sessionmonitor.RunsIn(holder.State))
+		paste, err := d.inboxPaste(a, holder.ProfileID, bellHeldUntil.IsZero() && !bellWaitsForPrompt, sessionmonitor.RunsIn(holder.State), d.carriesAgentTools(string(holder.Agent)))
 		if err != nil {
 			return receipt, err
 		}
@@ -591,7 +594,7 @@ func (p inboxPaste) when() sessionmonitor.Placement {
 	return sessionmonitor.WhenWorkingOrPromptReady
 }
 
-func (d *Daemon) inboxPaste(a who.Address, profileID string, bell, working bool) (inboxPaste, error) {
+func (d *Daemon) inboxPaste(a who.Address, profileID string, bell, working, tools bool) (inboxPaste, error) {
 	deliveries, err := d.store.UnreadInboxDeliveries(a)
 	if err != nil {
 		return inboxPaste{}, err
@@ -602,7 +605,7 @@ func (d *Daemon) inboxPaste(a who.Address, profileID string, bell, working bool)
 		switch {
 		case peer == nil:
 		case peer.AsUser || peer.Turn != "" && working:
-			return d.peerPaste(delivery.Item.ID, *peer, working), nil
+			return d.peerPaste(delivery.Item.ID, *peer, working, tools), nil
 		case peer.Turn != "":
 			lapsed = append(lapsed, delivery.Item.ID)
 		}
@@ -638,20 +641,20 @@ func (d *Daemon) inboxPaste(a who.Address, profileID string, bell, working bool)
 	}
 	paste.notified = bell && untyped && len(paste.typed) == 0
 	if paste.notified {
-		texts = append(texts, inboxRingText())
+		texts = append(texts, inboxRingText(tools))
 	}
 	paste.text = strings.Join(texts, "\n\n")
 	paste.userWords = len(paste.typed) > 0
 	return paste, nil
 }
 
-func (d *Daemon) peerPaste(item string, message inbox.Message, working bool) inboxPaste {
+func (d *Daemon) peerPaste(item string, message inbox.Message, working, tools bool) inboxPaste {
 	paste := inboxPaste{text: message.Body, typed: []string{item}, userWords: message.AsUser, peer: true}
 	if message.Turn != "" && working {
 		paste.turn = protocol.Ptr(message.Turn)
 	}
 	if !message.AsUser {
-		paste.text = d.peerRingText(message)
+		paste.text = d.peerRingText(message, tools)
 	}
 	return paste
 }

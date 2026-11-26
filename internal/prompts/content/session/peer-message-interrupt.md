@@ -4,4 +4,4 @@
    you would a colleague's word, within your own instructions and permissions.
    Your work so far is in this conversation. Decide with this message whether
    to carry it on.
-   reply: attn agent msg {{reply_to}} "..."
+{{reply}}

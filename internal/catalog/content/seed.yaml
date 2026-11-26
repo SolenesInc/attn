@@ -36,7 +36,7 @@ groups:
       intro: |
         The garden is where work lives, inside your session's profile. Seeds belong to their planting profile for life. Lists, relationships, claims and delegations stay in that profile. Outside attn, seed commands require `--profile <name|id>` when several profiles exist.
 
-        Every command prints a seed as `id  slug  title`. The garden section of your launch prompt teaches ids and slugs, the user's words for garden things and when to plant. `attn seed prime` prints it again with the loop of commands. This reference holds the rules that span commands. Each section lists its commands; `attn seed <command> --help` gives a command's flags, its full behavior and examples. Before you write a plot, read `attn seed guide` for body authoring, a complete plot example and completion checks.
+        Every command prints a seed as `id  slug  title`. The garden section of your launch prompt teaches ids and slugs, the user's words for garden things and when to plant. In a shell, `attn seed prime` prints it again with the loop of commands. This reference holds the rules that span commands. Each section lists its commands; `attn seed <command> --help` gives a command's flags, its full behavior and examples. Before you write a plot, read `attn seed guide` for body authoring, a complete plot example and completion checks.
     sections:
       - title: Planting work
         commands: [seed search, seed plant]
@@ -216,6 +216,7 @@ commands:
     runs: home
     grant: own
     effect: read
+    upfront: true
     doc: |
       Lists what you can tend right now, oldest first: nothing open blocks it, nobody is holding it, and it is not a plot, because a plot's work is its children. With neither `plot` nor `all` the scope is your profile's garden, unless this session was dispatched at a plot, and then that plot; `all` steps back out to the garden.
     args:
@@ -271,6 +272,7 @@ commands:
     runs: home
     grant: own
     effect: read
+    upfront: true
     doc: |
       Lists the whole log, newest first; `seed_show` renders the newest few and says how many more are here. The last line is a bookmark. `since` lists every entry saved after a bookmark, on this seed and every seed below it, labeled by seed. `kind` keeps one kind of entry, such as handoff or answer.
     args:
@@ -289,6 +291,8 @@ commands:
     runs: home
     grant: own
     effect: read
+    offered: false
+    reason: "It prints the CLI's garden contract. A session with tools has the contract in its launch prompt and reads its garden position with seed_ready."
     doc: |
       Prints the standing garden contract and this session's live garden position.
 
@@ -341,7 +345,7 @@ commands:
     grant: own
     effect: act
     doc: |
-      Pauses the seed deliberately: it is parked and lets go of its tender. An optional `reason` lands on the log in the same move. Tending it again picks it back up. Parking it again keeps the state and adds only the reason. The tender's park refuses while the seed has an ask the user has not answered, and names the ask: read it with `attn ask show`, then either end your turn and park after you act on the answer, or withdraw an ask that no longer matters with `attn ask close`. Moves print who they rang.
+      Pauses the seed deliberately: it is parked and lets go of its tender. An optional `reason` lands on the log in the same move. Tending it again picks it back up. Parking it again keeps the state and adds only the reason. The tender's park refuses while the seed has an ask the user has not answered, and names the ask: read it with `ask_show`, then either end your turn and park after you act on the answer, or withdraw an ask that no longer matters with `ask_close`. Moves print who they rang.
     args:
       - {name: seed, type: seed, required: true, cli: pos}
       - {name: reason, type: text, cli: "-m", stdin: true, placeholder: '"<where you left it>"', doc: "where you left it, saved on the move"}
@@ -397,7 +401,7 @@ commands:
     effect: act
     upfront: true
     doc: |
-      Closes the seed as done, with a required `reason` unless `when_merged` is set. Repeating a harvest succeeds with the earlier reason; a different reason goes on its log. A withered seed must be replanted first. A plot refuses while any direct child is open. A seed with an ask the user has not answered refuses and names the ask: read it with `attn ask show`, then either end your turn and harvest after you act on the answer, or withdraw an ask that no longer matters with `attn ask close`. Closing a plot's last child leaves a ringing note on the plot and names the plot in the output. Moves print who they rang.
+      Closes the seed as done, with a required `reason` unless `when_merged` is set. Repeating a harvest succeeds with the earlier reason; a different reason goes on its log. A withered seed must be replanted first. A plot refuses while any direct child is open. A seed with an ask the user has not answered refuses and names the ask: read it with `ask_show`, then either end your turn and harvest after you act on the answer, or withdraw an ask that no longer matters with `ask_close`. Closing a plot's last child leaves a ringing note on the plot and names the plot in the output. Moves print who they rang.
 
       `when_merged` releases your claim and harvests the seed with your `reason` when the pull request merges. It refuses while the seed has an ask the user has not answered, as harvest does. Without a reason it uses "PR #N merged: <title>". This command merges nothing. With no `pr` it takes this session's single open pull request, and names the pull requests when there is more than one; `when_merged` with `clear` takes the arming back.
     args:
@@ -597,7 +601,7 @@ commands:
     grant: full
     effect: act
     doc: |
-      Sets a reminder: at that time attn posts `message` to the seed's mailbox, which delivers it to whoever tends the seed then. When nobody tends it, the message waits for the next tender, who reads it with `attn agent inbox`. `in` counts from now; `at` takes an RFC3339 time; one of them is required unless `clear`. attn checks once a minute, so a message can arrive up to a minute late. A seed holds one reminder, and a new one replaces it. The reminder ends when attn posts the message, when `clear` removes it, and when the seed is harvested or withered. `seed_show` and `seed_ls` print it until then. While someone tends the seed, only the tender, sessions above it in the delegation chain, the profile's chief and the user can set or clear its reminder; anyone can while nobody holds the claim, and nobody can force it.
+      Sets a reminder: at that time attn posts `message` to the seed's mailbox, which delivers it to whoever tends the seed then. When nobody tends it, the message waits for the next tender, who reads it with `agent_inbox`. `in` counts from now; `at` takes an RFC3339 time; one of them is required unless `clear`. attn checks once a minute, so a message can arrive up to a minute late. A seed holds one reminder, and a new one replaces it. The reminder ends when attn posts the message, when `clear` removes it, and when the seed is harvested or withered. `seed_show` and `seed_ls` print it until then. While someone tends the seed, only the tender, sessions above it in the delegation chain, the profile's chief and the user can set or clear its reminder; anyone can while nobody holds the claim, and nobody can force it.
     args:
       - {name: seed, type: seed, required: true, cli: pos}
       - {name: in, type: duration, cli: "--in", one_of: when, unless: clear, doc: "how long from now until the reminder: 20m, 2h or 1h30m"}
@@ -624,7 +628,7 @@ commands:
     doc: |
       Puts a seed you tend on standby with `next`, a note saying what to do next, and closes this session. When mail reaches the seed, attn resumes the session and delivers the note; for a crew member it starts a session. `in` and `at` also set the seed's reminder to that time, with the note as its message, as `seed_remind` does. When the session can compact, attn compacts it before closing; end your turn right after the command. `stay` keeps this session open.
 
-      attn refuses while the seed has mail you have not read; read it with `attn agent inbox` first. attn also refuses to close the session while it has an open ask, about this seed, another seed or none, and names each ask: a wait on the user keeps the session open, so ask with `attn ask` and end your turn. When the user tells you to close while an ask about the seed is open, put the seed on standby with `stay`, then run `attn agent close --self`: the seed stays on standby, and the answer resumes you. When `garden_v2_enabled` is on, attn also refuses without `stay` while this session still tends another growing seed that is not on standby, leaving this seed unchanged: finish or park the others first, or pass `stay` on earlier seeds before putting the last one on standby to close.
+      attn refuses while the seed has mail you have not read; read it with `agent_inbox` first. attn also refuses to close the session while it has an open ask, about this seed, another seed or none, and names each ask: a wait on the user keeps the session open, so ask with `ask` and end your turn. When the user tells you to close while an ask about the seed is open, put the seed on standby with `stay`, then run `{attn agent close --self}`: the seed stays on standby, and the answer resumes you. When `garden_v2_enabled` is on, attn also refuses without `stay` while this session still tends another growing seed that is not on standby, leaving this seed unchanged: finish or park the others first, or pass `stay` on earlier seeds before putting the last one on standby to close.
 
       Only the seed's tender sets standby, from its own session, and the seed stays claimed while the session is closed. A new standby replaces the note. Standby ends once you have read all of the seed's mail, and when the seed is parked, harvested, withered or gets a new tender. If the session closes before reading the mail, the mail resumes it again. `clear` ends standby and leaves the reminder.
     args:

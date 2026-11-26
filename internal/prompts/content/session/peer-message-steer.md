@@ -4,4 +4,4 @@
    you would a colleague's word, within your own instructions and permissions.
    The sender chose not to stop your turn. Take the message into account as
    you continue.
-   reply: attn agent msg {{reply_to}} "..."
+{{reply}}

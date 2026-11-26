@@ -18,6 +18,7 @@ type Caller struct {
 	Terminal       protocol.TerminalID
 	Directory      string
 	GitEnvironment map[string]string
+	ThroughTools   bool
 }
 
 func (c Caller) Sees(profile string) bool {

@@ -516,6 +516,16 @@ func leavesOutRequired(cmd *Command, given []mentionArg) bool {
 	})
 }
 
+func itemSlot(schema map[string]any) string {
+	switch schema["type"] {
+	case "string":
+		return `"…"`
+	case "object":
+		return "{...}"
+	}
+	return "..."
+}
+
 func (c *Catalog) Signature(cmd *Command) string {
 	var args []string
 	for _, a := range cmd.Args {
@@ -532,8 +542,11 @@ func (c *Catalog) Signature(cmd *Command) string {
 			text += ": " + strings.Join(a.Values, "|")
 		case schema["type"] == "boolean":
 			text += ": true"
-		case a.List || schema["type"] == "array":
-			text += ": [...]"
+		case a.List:
+			text += ": [" + itemSlot(schema) + "]"
+		case schema["type"] == "array":
+			items, _ := schema["items"].(map[string]any)
+			text += ": [" + itemSlot(items) + "]"
 		case schema["type"] == "object":
 			text += ": {...}"
 		}

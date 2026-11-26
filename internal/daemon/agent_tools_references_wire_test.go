@@ -17,7 +17,7 @@ import (
 var (
 	shownCommand = regexp.MustCompile("`(attn\\s[^`]+)`|(?m)^\\s*(attn [^\\n]+)$")
 	shownCall    = regexp.MustCompile(`\b([a-z]+(?:_[a-z]+)*)\(`)
-	typeName     = regexp.MustCompile(`^(?:[a-z]+(?:\|[a-z]+)*|true|\[\.\.\.\]|\{\.\.\.\})$`)
+	typeName     = regexp.MustCompile(`^(?:[a-z]+(?:\|[a-z]+)*|true|\[(?:\.\.\.|"…"|\{\.\.\.\})\]|\{\.\.\.\})$`)
 	shownFlag    = regexp.MustCompile("(?:CLI-only )?`--?[a-z][^`]*`(?: \\(CLI only\\))?")
 )
 
@@ -148,7 +148,7 @@ func checkShownCalls(t *testing.T, schemas map[string]toolArguments, read, text 
 		checked++
 		tool := schemas[name]
 		signature := slices.ContainsFunc(args, func(arg shownArg) bool {
-			return arg.optional || !arg.valued || arg.value == "[...]" || arg.value == "{...}"
+			return arg.optional || !arg.valued || typeName.MatchString(arg.value) && strings.ContainsAny(arg.value, "[{")
 		})
 		shown := map[string]bool{}
 		for _, arg := range args {

@@ -826,7 +826,7 @@ func (d *Daemon) automationSessionLaunch(req automation.WorkRequest, directory, 
 	if err != nil {
 		return "", "", err
 	}
-	prompt := automationSessionPrompt(req.Prompt, inputPath, req.IDs.SeedID, seed.Title, checkIDs, definitionName, pullRequestTarget, pullRequestErr == nil)
+	prompt := automationSessionPrompt(req.Prompt, inputPath, req.IDs.SeedID, seed.Title, checkIDs, definitionName, pullRequestTarget, pullRequestErr == nil, d.carriesAgentTools(req.Launch.Agent))
 	return automationSessionLabel(req, directory), prompt, nil
 }
 
@@ -921,7 +921,7 @@ func (d *Daemon) ensureAutomationOccurrenceInput(req automation.WorkRequest) (st
 	}
 	return path, nil
 }
-func automationSessionPrompt(configuredPrompt, inputPath, seedID, seedTitle, checkIDs, definitionName string, pullRequest *automation.PullRequestInput, localOnlyReview bool) string {
+func automationSessionPrompt(configuredPrompt, inputPath, seedID, seedTitle, checkIDs, definitionName string, pullRequest *automation.PullRequestInput, localOnlyReview, tools bool) string {
 	values := prompts.Values{
 		"brief":        configuredPrompt,
 		"input_path":   inputPath,
@@ -930,6 +930,7 @@ func automationSessionPrompt(configuredPrompt, inputPath, seedID, seedTitle, che
 		"check_ids":    checkIDs,
 		"local_review": fmt.Sprint(localOnlyReview),
 		"has_target":   fmt.Sprint(pullRequest != nil && localOnlyReview),
+		"agent_tools":  fmt.Sprint(tools),
 	}
 	if pullRequest != nil && localOnlyReview {
 		values["definition"] = fmt.Sprintf("%q", definitionName)

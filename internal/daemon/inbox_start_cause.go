@@ -46,7 +46,7 @@ func (d *Daemon) inboxStartCause(a who.Address) (string, error) {
 func (d *Daemon) startCauseLine(delivery store.InboxDelivery) string {
 	switch delivery.Item.Kind {
 	case inbox.SeedUpdate:
-		return mailboxItemContent(delivery)
+		return mailboxItemContent(delivery, false)
 	case inbox.PeerMessage:
 		if delivery.Peer != nil {
 			return prompts.RenderText("session", "start-cause-message", prompts.Values{"sender": d.peerSenderName(delivery.Peer.Sender)})

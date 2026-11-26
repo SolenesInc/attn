@@ -23,7 +23,6 @@ commands:
     runs: home
     grant: full
     effect: read
-    upfront: true
     doc: |
       Shows your profile's members and their active sessions, if any. `all` includes retired members.
     args:
@@ -64,7 +63,7 @@ commands:
     grant: full
     effect: act
     doc: |
-      Asks the member to write a handoff and close with `attn handoff`. The member closes its own session. Does nothing if it is between sessions.
+      Asks the member to write a handoff and close with `handoff`. The member closes its own session. Does nothing if it is between sessions.
     args:
       - {name: member, type: member, required: true, cli: pos}
     result: CrewCloseResult
@@ -84,7 +83,7 @@ commands:
     grant: full
     effect: act
     doc: |
-      Applies the member's saved launch settings and charter to its running session. On the same harness the session reloads in place and keeps its conversation. On a different harness the member is asked to file its letter with `attn handoff`, which ends the session and starts the next one on the saved harness. The member itself, an agent above it in the delegation chain, and the profile's chief may apply. Does nothing if the member is between sessions; its next session uses the saved settings.
+      Applies the member's saved launch settings and charter to its running session. On the same harness the session reloads in place and keeps its conversation. On a different harness the member is asked to file its letter with `handoff`, which ends the session and starts the next one on the saved harness. The member itself, an agent above it in the delegation chain, and the profile's chief may apply. Does nothing if the member is between sessions; its next session uses the saved settings.
     args:
       - {name: member, type: member, required: true, cli: pos}
     result: CrewApplyResult

@@ -149,6 +149,7 @@ func (d *Daemon) agentInboxBatch(recipientSessionID protocol.SessionID, limit in
 	}
 	items := make([]protocol.AgentInboxItem, 0, len(deliveries))
 	parties := d.partiesNow()
+	tools := d.sessionCarriesAgentTools(recipientSessionID)
 	var read []who.Address
 	for _, delivery := range deliveries {
 		if !slices.Contains(read, delivery.Item.To) {
@@ -156,7 +157,7 @@ func (d *Daemon) agentInboxBatch(recipientSessionID protocol.SessionID, limit in
 		}
 		item := protocol.AgentInboxItem{
 			Address: delivery.Item.To.String(), ItemID: delivery.Item.ID, Kind: string(delivery.Item.Kind),
-			Content: mailboxItemContent(delivery), CreatedAt: delivery.Item.CreatedAt,
+			Content: mailboxItemContent(delivery, tools), CreatedAt: delivery.Item.CreatedAt,
 			NotifiedAt: delivery.Item.NotifiedAt, ReadAt: delivery.Item.ReadAt,
 		}
 		if delivery.Item.Source != "" {
@@ -185,7 +186,7 @@ func (d *Daemon) agentInboxBatch(recipientSessionID protocol.SessionID, limit in
 	return result, after, nil
 }
 
-func mailboxItemContent(delivery store.InboxDelivery) string {
+func mailboxItemContent(delivery store.InboxDelivery, tools bool) string {
 	switch delivery.Item.Kind {
 	case inbox.SeedUpdate:
 		change := delivery.Item.Text
@@ -196,7 +197,7 @@ func mailboxItemContent(delivery store.InboxDelivery) string {
 		if delivery.Item.AfterSeq > 0 {
 			after = strconv.FormatInt(delivery.Item.AfterSeq, 10)
 		}
-		return prompts.RenderText("session", "garden-update", prompts.Values{"seed_id": delivery.Item.Source, "change": change, "after": after})
+		return prompts.RenderText("session", "garden-update", prompts.Values{"seed_id": delivery.Item.Source, "change": change, "after": after, "agent_tools": strconv.FormatBool(tools)})
 	case inbox.PeerMessage:
 		if delivery.Peer != nil {
 			return delivery.Peer.Body
@@ -304,18 +305,24 @@ func agentPeerMessageText(sender protocol.PartyView, replyTo, content string) st
 	return peerMessageText("peer-message", sender, replyTo, content)
 }
 
-func (d *Daemon) peerRingText(message inbox.Message) string {
+func (d *Daemon) peerRingText(message inbox.Message, tools bool) string {
 	event := "peer-message-steer"
 	if message.Turn == protocol.PeerTurnInterrupt {
 		event = "peer-message-interrupt"
 	}
-	return peerMessageText(event, d.partyView(message.Sender), d.replyTo(message.Sender), message.Body)
+	values := peerMessageValues(d.partyView(message.Sender), d.replyTo(message.Sender), message.Body)
+	values["agent_tools"] = strconv.FormatBool(tools)
+	return prompts.RenderText("session", event, values)
 }
 
 func peerMessageText(event string, sender protocol.PartyView, replyTo, content string) string {
+	return prompts.RenderText("session", event, peerMessageValues(sender, replyTo, content))
+}
+
+func peerMessageValues(sender protocol.PartyView, replyTo, content string) prompts.Values {
 	origin := replyTo
 	if name := strings.TrimSpace(sender.Name); name != "" && name != origin {
 		origin = fmt.Sprintf("%s (%s)", origin, name)
 	}
-	return prompts.RenderText("session", event, prompts.Values{"origin": origin, "message": content, "reply_to": replyTo})
+	return prompts.Values{"origin": origin, "message": content, "reply_to": replyTo}
 }

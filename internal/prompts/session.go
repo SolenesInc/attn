@@ -27,6 +27,8 @@ var claudeCodePeerTools = FlagField("claude_code_peer_tools", "The session's har
 
 var agentToolsCarried = FlagField("agent_tools", "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer.")
 
+func toolsOr(tools, cli Node) Node { return Choose(Enabled(agentToolsCarried), tools, cli) }
+
 func cliTeaching(node Node, families ...string) Node {
 	for _, family := range families {
 		offered, known := catalogFamilies[family]
@@ -88,9 +90,12 @@ func attnMapTable(rows []attnMapRow, launch bool) []Node {
 	return nodes
 }
 
-func attnMapNode(launch bool) Node {
+func attnMapNode(launch, tools bool) Node {
 	head := Exact(Use("session.attn-map", "content/session/attn-map.md"))
 	bullets := []Node{attnMapPart("cli"), attnMapPart("skill"), attnMapPart("guide")}
+	if tools {
+		bullets[0] = attnMapPart("tools")
+	}
 	if launch {
 		bullets = []Node{Choose(Enabled(agentToolsCarried), attnMapPart("tools"), bullets[0]), cliTeaching(bullets[1], "skill"), cliTeaching(bullets[2], "guide")}
 	}
@@ -138,8 +143,9 @@ var (
 	gardenV2CLI          = Use("session.garden-v2-cli", "content/garden-v2-cli.md")
 	gardenGuidance       = Compose(gardenRulesWith(cliWords), gardenCLI)
 	queueGuidance        = Use("session.queue", "content/session/queue.md")
-	attnMap              = attnMapNode(false)
-	launchAttnMap        = attnMapNode(true)
+	attnMap              = attnMapNode(false, false)
+	toolsAttnMap         = attnMapNode(false, true)
+	launchAttnMap        = attnMapNode(true, false)
 	pullRequestGuidance  = Use("session.pull-request-guidance", "content/session/pull-request-guidance.md")
 	ventGuidance         = Compose(
 		Use("session.vent-guidance", "content/session/vent-guidance.md"),
@@ -174,6 +180,7 @@ var session = Recipient{
 				When(Enabled(selfReportPullRequests), cliTeaching(pullRequestGuidance, "pr")),
 			)),
 		On("attn-map", "cli_output", "attn skill and attn --help: what attn offers and where to learn more.", attnMap),
+		On("attn-map-tools", "cli_output", "skill with no arguments, called through attn's tools: what attn offers and where to learn more.", toolsAttnMap),
 		On("seed-artifacts", "cli_output", "attn seed show, under a seed's artifacts.", Use("session.seed-artifacts", "content/session/seed-artifacts.md")),
 		On("garden-guidance", "message_fragment", "Garden instructions.", gardenGuidance),
 		On("codex-opened", "instructions",

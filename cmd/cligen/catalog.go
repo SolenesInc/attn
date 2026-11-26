@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const (
@@ -45,6 +46,10 @@ var surfaceValues = map[string]map[surface]string{
 	"ask_image_base": {
 		cliSurface:  "resolve against the working directory, or beside the file passed to --file",
 		toolSurface: "resolve against the folder the session started in",
+	},
+	"msg_after_dashes": {
+		cliSurface:  ` In the CLI, a message that starts with - goes after --, as: attn agent msg -- <target> "-text".`,
+		toolSurface: "",
 	},
 	"skill_command": {
 		cliSurface:  "",
@@ -143,7 +148,7 @@ func (g *generator) expand(where, text string, on surface) string {
 }
 
 func (g *generator) cliText(cmd *catalog.Command, where, text string) string {
-	text = g.expand(where, text, cliSurface)
+	text = protocol.CLIText(g.expand(where, text, cliSurface))
 	return backtickedPattern.ReplaceAllStringFunc(text, func(match string) string {
 		word := match[1 : len(match)-1]
 		if cmd != nil {

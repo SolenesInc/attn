@@ -23,13 +23,13 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 			out["delegation/"+body+"/"+seed] = prompts.RenderText("delegation", "opening", prompts.Values{"seed_id": seed, "seed_title": "Review the queue change"})
 			for _, review := range []bool{false, true} {
 				for _, pr := range []*automation.PullRequestInput{nil, {Number: 12, URL: "https://example.org/review/12", HeadSHA: "abc"}} {
-					out[fmt.Sprintf("automation/%s/%s/%t/%t", body, seed, review, pr != nil)] = automationSessionPrompt(body, "/tmp/input", seed, "Review the queue change", "", "Daily \"review\"", pr, review)
+					out[fmt.Sprintf("automation/%s/%s/%t/%t", body, seed, review, pr != nil)] = automationSessionPrompt(body, "/tmp/input", seed, "Review the queue change", "", "Daily \"review\"", pr, review, false)
 				}
 			}
 		}
 	}
 	out["delegation/checks"] = prompts.RenderText("delegation", "opening", prompts.Values{"seed_id": "s-example", "seed_title": "Review the queue change", "check_ids": "C3 and the plot's shared C1"})
-	out["automation/checks"] = automationSessionPrompt("", "/tmp/input", "s-example", "Review the queue change", "C1", "Daily \"review\"", nil, false)
+	out["automation/checks"] = automationSessionPrompt("", "/tmp/input", "s-example", "Review the queue change", "C1", "Daily \"review\"", nil, false, false)
 	for mask := 0; mask < 16; mask++ {
 		s := transcript.ConversationSlice{}
 		if mask&1 != 0 {
@@ -46,7 +46,7 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 		}
 		out[fmt.Sprint("title/", mask)] = sessionTitleInstructions() + "\n\n" + prompts.RenderText("session-title", "generate", prompts.Values{"conversation": s.Render()})
 	}
-	out["inbox-notification"] = inboxRingText()
+	out["inbox-notification"] = inboxRingText(false)
 	for _, kind := range []string{"comment", "global", "deletion"} {
 		for mask := 0; mask < 8; mask++ {
 			a := protocol.MarkdownAnnotation{ID: "a", Type: kind, Anchor: mdAnchor(2, 4, 0, "quote λ\n{{literal}}"), Text: protocol.Ptr("comment")}
@@ -68,7 +68,13 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 			out["handover/"+body+"/"+handoff+"/checks"] = prompts.RenderText("delegation", "handover", prompts.Values{"seed_id": "s-example", "seed_title": "Review the queue change", "check_ids": "C3, C4 and the plot's shared C1"})
 		}
 	}
-	out["garden-update"] = mailboxItemContent(store.InboxDelivery{Item: store.InboxItem{Item: inbox.Item{Kind: inbox.SeedUpdate, Source: "s-example", Hint: "note"}}})
-	out["garden-update/since"] = mailboxItemContent(store.InboxDelivery{Item: store.InboxItem{Item: inbox.Item{Kind: inbox.SeedUpdate, Source: "s-example", Hint: "note"}, AfterSeq: 2711491}})
+	out["garden-update"] = mailboxItemContent(store.InboxDelivery{Item: store.InboxItem{Item: inbox.Item{Kind: inbox.SeedUpdate, Source: "s-example", Hint: "note"}}}, false)
+	out["garden-update/since"] = mailboxItemContent(store.InboxDelivery{Item: store.InboxItem{Item: inbox.Item{Kind: inbox.SeedUpdate, Source: "s-example", Hint: "note"}, AfterSeq: 2711491}}, false)
+	for _, event := range []string{"peer-message", "peer-message-steer", "peer-message-interrupt"} {
+		out[event] = peerMessageText(event, protocol.PartyView{Name: "Builder λ"}, "ab12", "Ship it {{literal}}\nnext line")
+	}
+	out["tender-resume"] = prompts.RenderText("session", "tender-resume", prompts.Values{"seed_id": "s-example", "seed_title": "Review the queue change", "note": "Merge once approved {{literal}}"})
+	out["delegation/brief"] = prompts.RenderText("delegation", "brief", prompts.Values{"seed_id": "s-example", "seed_title": "Review the queue change"})
+	out["delegation/brief/checks"] = prompts.RenderText("delegation", "brief", prompts.Values{"seed_id": "s-example", "seed_title": "Review the queue change", "check_ids": "C3 and the plot's shared C1"})
 	prompttest.Equal(t, "daemon", out)
 }

@@ -36,7 +36,7 @@ does to the queue.
 ### Agents
 
 - `attn agent` (`cli/attn/src/commands/agent/`, `internal/catalog/content/agent.yaml`, handlers in `internal/daemon/commands_agent.go` and the `agent_*.go` files; each verb is also the tool `agent_<verb>` when `agent_tools_enabled` is on): `msg <session-or-member-or-seed> "text"` with `--source-session`, `msg-status <message-id>` with `--session`, and `inbox [message-id]` with `--limit` and `--session`. Each takes `--json`.
-- Prompts: the ring's 📬 line (`internal/prompts/content/session/inbox-notification.md`), how `attn agent inbox` prints items (`session/inbox-item.md`, `inbox-more.md`, `inbox-empty.md`, `peer-message.md`), the quiet-run note (`session/inbox-quiet.md`) and the rules for reaching another agent in `attn skill --reference converse-and-observe` (`internal/prompts/content/skills/attn/references/converse-and-observe.md`).
+- Prompts: the ring's 📬 line (`internal/prompts/content/session/inbox-notification.md`, or `inbox-notification-tools.md` for a session with attn's tools), how `attn agent inbox` prints items (`session/inbox-item.md`, `inbox-more.md`, `inbox-empty.md`, `peer-message.md`), the quiet-run note (`session/inbox-quiet.md`) and the rules for reaching another agent in `attn skill --reference converse-and-observe` (`internal/prompts/content/skills/attn/references/converse-and-observe.md`).
 
 ### Triggers
 

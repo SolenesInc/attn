@@ -38,7 +38,7 @@ func queuedSeedBells(t *testing.T, d *Daemon, sessionID string) []string {
 	}
 	contents := make([]string, 0, len(messages))
 	for _, delivery := range messages {
-		contents = append(contents, mailboxItemContent(delivery))
+		contents = append(contents, mailboxItemContent(delivery, false))
 	}
 	return contents
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -377,9 +378,10 @@ func (d *Daemon) unblockTenderResume(seedID string) {
 
 func (d *Daemon) tenderResumeText(delivery *tenderResumeDelivery) string {
 	return prompts.RenderText("session", "tender-resume", prompts.Values{
-		"seed_id":    delivery.seedID,
-		"seed_title": delivery.title,
-		"note":       delivery.note,
+		"seed_id":     delivery.seedID,
+		"seed_title":  delivery.title,
+		"note":        delivery.note,
+		"agent_tools": strconv.FormatBool(d.sessionCarriesAgentTools(delivery.session)),
 	})
 }
 

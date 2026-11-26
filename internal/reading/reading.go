@@ -12,14 +12,14 @@ import (
 
 func Handlers(commandRules func(name string) (string, bool)) map[string]command.Handler {
 	return map[string]command.Handler{
-		"skill": command.Typed(func(_ context.Context, _ command.Caller, args command.SkillArgs) (any, error) {
-			return runSkill(args, commandRules)
+		"skill": command.Typed(func(_ context.Context, c command.Caller, args command.SkillArgs) (any, error) {
+			return runSkill(args, commandRules, c.ThroughTools)
 		}),
 		"guide": command.Typed(runGuide),
 	}
 }
 
-func runSkill(args command.SkillArgs, commandRules func(name string) (string, bool)) (any, error) {
+func runSkill(args command.SkillArgs, commandRules func(name string) (string, bool), throughTools bool) (any, error) {
 	reference, name := strings.TrimSpace(args.Reference), strings.TrimSpace(args.Command)
 	switch {
 	case name != "" && (args.List || reference != ""):
@@ -34,6 +34,8 @@ func runSkill(args command.SkillArgs, commandRules func(name string) (string, bo
 		return nil, command.Refuse(command.CodeListAndReference, "{list} and {reference} are mutually exclusive; pass one")
 	case args.List:
 		return strings.Join(attnskill.SkillReferenceNames(), "\n") + "\n", nil
+	case reference == "" && throughTools:
+		return command.Teaching(prompts.RenderText("session", "attn-map-tools", prompts.Values{}) + "\n"), nil
 	case reference == "":
 		return command.Teaching(prompts.RenderText("session", "attn-map", prompts.Values{}) + "\n"), nil
 	}

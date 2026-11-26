@@ -54,7 +54,6 @@ func TestEverySeedCommandReturnsToAScriptWhatItsCLIPrints(t *testing.T) {
 	call("seed_ls", map[string]any{})
 	call("seed_show", map[string]any{"seed": x})
 	call("seed_notes", map[string]any{"seed": x})
-	call("seed_prime", map[string]any{})
 	call("seed_guide", map[string]any{})
 	call("seed_tend", map[string]any{"seed": x})
 	call("seed_pulse", map[string]any{"seed": x, "text": "Running retry tests"})

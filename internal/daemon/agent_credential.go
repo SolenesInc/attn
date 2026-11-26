@@ -122,6 +122,15 @@ func (d *Daemon) agentToolsServed() bool {
 	return d.on(setting.AgentToolsEnabled) && d.agentKey.err == nil
 }
 
+func (d *Daemon) carriesAgentTools(agent string) bool {
+	return d.agentToolsServed() && d.factsOrNone(agent).AgentTools
+}
+
+func (d *Daemon) sessionCarriesAgentTools(id protocol.SessionID) bool {
+	session := d.store.Get(id)
+	return session != nil && d.carriesAgentTools(string(session.Agent))
+}
+
 func (d *Daemon) agentToolsFor(c agentCredential) *harness.AgentTools {
 	if !d.agentToolsServed() {
 		return nil

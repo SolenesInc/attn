@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -194,9 +195,16 @@ func (d *Daemon) agentToolServer() *mcpserver.Server {
 			}
 		}
 		set.script = parsedSchema(doToolName, tools[0].InputSchema)
-		set.server = mcpserver.New(offered.Name, buildinfo.Version, offered.Instructions, tools)
+		set.server = mcpserver.New(offered.Name, buildinfo.Version, offered.Instructions, tools, set.notServed)
 	})
 	return set.server
+}
+
+func (set *agentToolServers) notServed(tool string) string {
+	if slices.Contains(set.commandNames, tool) {
+		return fmt.Sprintf("attn's commands are functions of a script. Call attn_do with the script %[1]s({...}), or attn_read when it only reads; skill({command: %[1]q}) prints its arguments.", tool)
+	}
+	return "attn serves attn_do, attn_read, ask and skill. attn_do runs a script of attn's commands; skill() prints what attn can do and skill({command: \"seed\"}) a family's functions."
 }
 
 func parsedSchema(tool string, raw json.RawMessage) *mcpserver.Schema {
@@ -238,6 +246,7 @@ func (def agentToolDefinition) offered() mcpserver.Tool {
 
 func (d *Daemon) callAgentTool(ctx context.Context, call *agentCall, name string, arguments, meta json.RawMessage) mcpserver.Result {
 	refusal := d.refusesAgentCall(call, meta)
+	call.caller.ThroughTools = true
 	if refusal == nil && (name == doToolName || name == readToolName) {
 		var in struct {
 			Script string `json:"script"`

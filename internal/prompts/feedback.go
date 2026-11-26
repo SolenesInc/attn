@@ -5,23 +5,37 @@ func feedbackEvents() []Event {
 		On("quick-capture-file", "cli_output", "Retrieve one attachment: a file sent with a Quick Capture or an ask's answer.", template("session.quick-capture-file", "content/session/quick-capture-file.md", TextField("name", "Quoted file name"), TextField("media_type", "Media type"), TextField("bytes", "Byte count"), TextField("attachment_id", "Attachment ID"))),
 		On("quick-capture-file-saved", "cli_output", "Inspect a downloaded attachment.", template("session.quick-capture-file-saved", "content/session/quick-capture-file-saved.md", TextField("path", "Saved file path"))),
 		On("quick-capture", "user_message", "A Quick Capture the user sent: typed into the conversation by its ring, or printed by attn agent inbox when read first.", template("session.quick-capture", "content/session/quick-capture-item.md", TextField("message", "User message"), TextField("files", "File retrieval instructions"))),
-		On("inbox-notification", "user_message", "Generic notification directing the recipient to the durable inbox.", Use("session.inbox-notification", "content/session/inbox-notification.md")),
+		On("inbox-notification", "user_message", "Generic notification directing the recipient to the durable inbox.", toolsOr(Use("session.inbox-notification-tools", "content/session/inbox-notification-tools.md"), Use("session.inbox-notification", "content/session/inbox-notification.md"))),
 		On("inbox-empty", "cli_output", "No unread items remain.", Use("session.inbox-empty", "content/session/inbox-empty.md")),
 		On("inbox-more", "cli_output", "Read the next batch of unread items.", template("session.inbox-more", "content/session/inbox-more.md", TextField("remaining", "Unread items remaining."))),
 		On("inbox-phone-silent", "cli_output", "After the items, when a notification started the reader's run, its stop still opens a turn, and phone access is on, so only the phone stays silent.", Use("session.inbox-phone-silent", "content/session/inbox-phone-silent.md")),
 		On("inbox-quiet", "cli_output", "After the items, when a notification started the reader's run and quiet notifications keep its stop out of the queue.", Use("session.inbox-quiet", "content/session/inbox-quiet.md")),
 		On("inbox-item", "cli_output", "An inbox item other than a peer message or maintenance prompt.", template("session.inbox-item", "content/session/inbox-item.md", TextField("content", "Rendered inbox item."))),
-		On("tender-resume", "user_message", "Typed before the seed mail that resumed the closed session tending a seed on standby. Carries the standby note and the ways to end the turn.", template("session.tender-resume", "content/session/tender-resume.md", TextField("seed_id", "Seed id."), TextField("seed_title", "Seed title."), TextField("note", "The standby note."))),
+		On("tender-resume", "user_message", "Typed before the seed mail that resumed the closed session tending a seed on standby. Carries the standby note and the ways to end the turn.", toolsOr(tenderResume("session.tender-resume-tools", "content/session/tender-resume-tools.md"), tenderResume("session.tender-resume", "content/session/tender-resume.md"))),
 		On("standby-request", "user_message", "Typed into a session when the user picks Standby until… for it in the app. Asks the agent to put the seed it tends on standby until that time.", template("session.standby-request", "content/session/standby-request.md", TextField("until", "The RFC3339 time the user picked."))),
 		On("start-cause-message", "message_fragment", "inboxStartCause: an unread peer message that started the recipient's run. Names the sender, never the body.", template("session.start-cause-message", "content/session/start-cause-message.md", TextField("sender", "Sender name."))),
 		On("start-cause-more", "message_fragment", "inboxStartCause: the unread items past the listing's tripwire.", template("session.start-cause-more", "content/session/start-cause-more.md", TextField("count", "Items not listed."))),
 		On("peer-message", "cli_output", "Attributed peer message, including the trust boundary and reply command.",
-			template("session.peer-message", "content/session/peer-message.md", TextField("origin", "Sender identity."), TextField("message", "Literal peer message."), TextField("reply_to", "Reply target."))),
+			peerMessage("session.peer-message", "content/session/peer-message.md", peerReplyCLI)),
 		On("peer-message-steer", "user_message", "A peer message sent with --steer, put into the recipient's running turn at its next step.",
-			template("session.peer-message-steer", "content/session/peer-message-steer.md", TextField("origin", "Sender identity."), TextField("message", "Literal peer message."), TextField("reply_to", "Reply target."))),
+			peerMessage("session.peer-message-steer", "content/session/peer-message-steer.md", peerReply)),
 		On("peer-message-interrupt", "user_message", "A peer message sent with --interrupt: attn stopped the recipient's turn, and the message starts its next one.",
-			template("session.peer-message-interrupt", "content/session/peer-message-interrupt.md", TextField("origin", "Sender identity."), TextField("message", "Literal peer message."), TextField("reply_to", "Reply target."))),
+			peerMessage("session.peer-message-interrupt", "content/session/peer-message-interrupt.md", peerReply)),
 	}
+}
+
+var (
+	peerReplyTo  = TextField("reply_to", "Reply target.")
+	peerReplyCLI = template("session.peer-reply", "content/session/peer-reply.md", peerReplyTo)
+	peerReply    = toolsOr(template("session.peer-reply-tools", "content/session/peer-reply-tools.md", peerReplyTo), peerReplyCLI)
+)
+
+func peerMessage(id, source string, reply Node) Node {
+	return Use(id, source, Bind("origin", Input(TextField("origin", "Sender identity."))), Bind("message", Input(TextField("message", "Literal peer message."))), Bind("reply", reply))
+}
+
+func tenderResume(id, source string) Node {
+	return template(id, source, TextField("seed_id", "Seed id."), TextField("seed_title", "Seed title."), TextField("note", "The standby note."))
 }
 
 func resourceRecipient() Recipient {

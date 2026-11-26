@@ -46,8 +46,8 @@ func writeTools(c *catalog.Catalog, goRoot string) error {
 		tool := toolDefinition{
 			Command:     cmd.Name,
 			Name:        cmd.ToolName(),
-			Title:       g.expand(where, cmd.Summary, toolSurface),
-			Description: strings.TrimSpace(g.expand(where, cmd.Doc, toolSurface)),
+			Title:       g.toolText(where, cmd.Summary),
+			Description: strings.TrimSpace(g.toolText(where, cmd.Doc)),
 			Core:        cmd.Core,
 			Tool:        cmd.Tool,
 			Signature:   c.Signature(cmd),
@@ -105,6 +105,14 @@ func writeTools(c *catalog.Catalog, goRoot string) error {
 	return os.WriteFile(filepath.Join(goRoot, "daemon", "agent_tools_generated.json"), out.Bytes(), 0o644)
 }
 
+func (g *generator) toolText(where, text string) string {
+	text = g.expand(where, text, toolSurface)
+	for _, problem := range g.c.MentionProblems(text) {
+		g.problems = append(g.problems, where+": "+problem)
+	}
+	return g.c.ToolText(text)
+}
+
 func (g *generator) inputSchema(cmd *catalog.Command) map[string]any {
 	where := fmt.Sprintf("%s: %s", cmd.File, cmd.Name)
 	properties := map[string]any{}
@@ -135,7 +143,7 @@ func (g *generator) inputSchema(cmd *catalog.Command) map[string]any {
 			value = map[string]any{"type": "array", "items": value}
 		}
 		if doc := g.argDoc(a, toolSurface); doc != "" {
-			value["description"] = g.expand(where, doc, toolSurface)
+			value["description"] = g.toolText(where, doc)
 		}
 		properties[a.Name] = value
 		if a.Required && a.Unless == "" {
