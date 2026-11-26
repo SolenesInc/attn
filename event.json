@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Chief setup popover stays open over the Settings dialog and takes its clicks (native-agent-settings)",
+  "at": "2026-11-26T20:22:41.050Z",
+  "fixesBug": "264a6f2d54ef06dc45eab122877448382de9736d"
+}
