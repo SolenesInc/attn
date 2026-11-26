@@ -1,0 +1,3 @@
+In fullscreen v1 Garden columns, opening an archived child inside a closed plot now reports the plot's hidden closed count instead of "Nothing here yet." and keeps the `N closed` toggle in the chrome bar across the visible columns. Also runs `follow` when `seed_document_get` expands `trail` or resolves `pending_open` so active closed pages fetch immediately.
+
+Verified with 261/261 Garden wire tests (including a new regression test for archived hits in fullscreen v1 columns), clippy `-D warnings`, `cargo fmt`, `scripts/native-clippy-allows`, `scripts/native-host-reads`, and clean `verify-tests` + adversarial reviews (no P0/P1 findings).
