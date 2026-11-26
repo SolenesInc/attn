@@ -23,7 +23,7 @@ func TestEverySchemeDefinesExactlyAttnNames(t *testing.T) {
 					t.Errorf("%s %s.%s names %v, want %v", scheme.ID, appearance.name, group, names, want)
 				}
 				for name, color := range got {
-					if !colorFormats[group].pattern.MatchString(color) {
+					if !colorFormats[group].valid(color) {
 						t.Errorf("%s %s.%s.%s is %q, not %s", scheme.ID, appearance.name, group, name, color, colorFormats[group].spelled)
 					}
 				}

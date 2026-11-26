@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"path"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -30,13 +29,29 @@ type Appearance struct {
 }
 
 type colorFormat struct {
-	pattern *regexp.Regexp
-	spelled string
+	allowAlpha bool
+	spelled    string
+}
+
+func (f colorFormat) valid(s string) bool {
+	if len(s) != 7 && (!f.allowAlpha || len(s) != 9) {
+		return false
+	}
+	if s[0] != '#' {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		c := s[i]
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 var colorFormats = map[string]colorFormat{
-	"ui":       {regexp.MustCompile(`^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$`), "#rrggbb or #rrggbbaa"},
-	"terminal": {regexp.MustCompile(`^#[0-9a-fA-F]{6}$`), "#rrggbb"},
+	"ui":       {allowAlpha: true, spelled: "#rrggbb or #rrggbbaa"},
+	"terminal": {allowAlpha: false, spelled: "#rrggbb"},
 }
 
 var embedded = sync.OnceValue(func() []Scheme {
@@ -126,7 +141,7 @@ func CheckOverrides(value string) error {
 				if _, ok := known[name]; !ok {
 					return fmt.Errorf("%s.%s.%s is not a color name; %s names: %s", appearance, group, name, group, strings.Join(slices.Sorted(maps.Keys(known)), ", "))
 				}
-				if color, ok := names[name].(string); !ok || !colorFormats[group].pattern.MatchString(color) {
+				if color, ok := names[name].(string); !ok || !colorFormats[group].valid(color) {
 					shown, _ := json.Marshal(names[name])
 					return fmt.Errorf("%s.%s.%s: %s is not a %s color; use %s", appearance, group, name, shown, group, colorFormats[group].spelled)
 				}
