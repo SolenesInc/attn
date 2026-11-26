@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Crew authorization notices use CLI wording for tool sessions",
+  "at": "2026-11-26T00:35:48.563Z",
+  "detail": "At 8ea42dcf7, an authorization update or clear delivered to a live MCP-enabled Claude crew tender uses shell CLI wording. The renderer tests the member address as a session address, while inbox delivery resolves the member to its live session. Source: internal/daemon/garden_authorization.go:178, agent_credential.go:135 and inbox_delivery.go:122. Choose the wording using the actual receiving session and preserve the CLI form for recipients without tools. Two independent reviewer areas reproduced the same issue in isolated functional wire checks. Evidence: s-2t08zc and s-tc86ec.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/garden_authorization.go",
+    "line": 178
+  },
+  "culprit": "d01c56c8038814171707dfd25208dd961ac6809b"
+}
