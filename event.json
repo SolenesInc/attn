@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Shared Garden checks lose archived descendant metadata",
+  "at": "2026-11-26T18:10:09.075Z",
+  "detail": "Shared Garden check rollups at 23b1ccf3a lose title and lifecycle status for an unpinned harvested grandchild. Open the shared check on the open root. The rollup includes descendant leaves, but document fallback only has direct children. Supply metadata for every rollup entry. Independently confirmed and reproduced using app wire in both input modes. Review s-xmzdax.\n"
+}
