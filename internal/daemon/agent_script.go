@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 	"sync"
@@ -28,7 +29,7 @@ const (
 )
 
 const (
-	scriptLedgerChars  = 58_000 // 192 notes of 190 characters, each after a read, took 41,294. With one more line and a failure, the answer stays within script.ResultText.
+	scriptLedgerChars  = 58_000 // 192 notes of 190 characters, each after a read, took 41,294. attn's lines take their room before the script's text, so the ledger, with one more line of at most ledgerArgsChars and ledgerReceiptChars, stays within script.ResultText.
 	ledgerStringChars  = 120    // The notes a script cut out of other text wrongly were 44 to 60.
 	ledgerArgsChars    = 1_000  // The longest of 131 changing calls in the stored bench runs, a plot, wrote 719.
 	ledgerReceiptChars = 20_000 // A plot of 96 children answered 12,940.
@@ -227,27 +228,25 @@ func (run *scriptRun) result(out script.Output) mcpserver.Result {
 	case len(out.Logs) == 0 && out.Failed == "":
 		body = run.results
 	}
-	said := strings.Join(body, "\n")
+	said, saidShortened := plainBackticks(strings.Join(body, "\n"))
+	threw, threwShortened := plainBackticks(out.Failed)
 	failed := run.failure(out) != ""
-	fence := fenceFor(said + out.Failed)
-	roomBeside := func(attnSays string) int {
-		return script.ResultText - utf8.RuneCountInString(attnSays) - utf8.RuneCountInString(out.Failed) - 2*len(fence) - len("\n\n")*4
-	}
+	fence := fenceFor(said + threw)
+	room := script.ResultText - 2*len(fence) - len("\n")*3 - len("\n\n")*2 - leftOutNoticeChars
 	attnSays := run.attnLines(out, failed, run.unshownReads(said))
-	if utf8.RuneCountInString(said)+out.Dropped > roomBeside(attnSays) {
+	if utf8.RuneCountInString(joinParts([]string{said, threw}, "\n\n"))+out.Dropped > room-utf8.RuneCountInString(attnSays) {
 		attnSays = run.attnLines(out, failed, run.unshownReads(""))
 	}
-	if roomBeside(attnSays) < 0 {
-		readsRoom := roomBeside(run.attnLines(out, failed, "")) - len("\n\n")
+	if utf8.RuneCountInString(attnSays) > room {
+		readsRoom := room - utf8.RuneCountInString(run.attnLines(out, failed, "")) - len("\n\n") - len("…")
 		attnSays = run.attnLines(out, failed, cutEnd(run.shortReads(), max(0, readsRoom)))
 	}
-	room := roomBeside(attnSays)
-	kept, cut := cutText(said, out.Dropped, room)
+	output, leftOut := fitScriptText(said, threw, out.Dropped, saidShortened+threwShortened, room-utf8.RuneCountInString(attnSays))
 	var scriptSays string
-	if output := joinParts([]string{kept, out.Failed}, "\n\n"); output != "" {
-		scriptSays = fence + "\n" + output + "\n" + fence + cut
+	if output != "" {
+		scriptSays = fence + "\n" + output + "\n" + fence
 	}
-	text := joinParts([]string{scriptSays, attnSays}, "\n\n")
+	text := joinParts([]string{joinParts([]string{scriptSays, leftOut}, "\n"), attnSays}, "\n\n")
 	if text == "" {
 		text = "The script ran and returned nothing."
 	}
@@ -273,12 +272,28 @@ func (run *scriptRun) limitPassed(out script.Output) string {
 	return "The call reached a limit: " + run.limit + ". The script went on, and " + run.limitStops + "."
 }
 
+const longestFence = 16 // The longest run of backticks in the repository's markdown and catalog is 4.
+
+var backtickRun = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile("`(?:[\\p{Cf}\\p{Mn}]*`)*") })
+
+func plainBackticks(text string) (string, int) {
+	shortened := 0
+	plain := backtickRun().ReplaceAllStringFunc(text, func(run string) string {
+		if strings.Count(run, "`") < longestFence {
+			return run
+		}
+		shortened += utf8.RuneCountInString(run) - (longestFence - 1)
+		return strings.Repeat("`", longestFence-1)
+	})
+	return plain, shortened
+}
+
 func fenceFor(text string) string {
-	fence := "```"
-	for strings.Contains(text, fence) {
-		fence += "`"
+	longest := 0
+	for _, run := range backtickRun().FindAllString(text, -1) {
+		longest = max(longest, strings.Count(run, "`"))
 	}
-	return fence
+	return strings.Repeat("`", max(3, longest+1))
 }
 
 func joinParts(parts []string, separator string) string {
@@ -319,6 +334,9 @@ func (run *scriptRun) unshownReads(said string) string {
 }
 
 func (run *scriptRun) shortReads() string {
+	if len(run.readOnce) == 0 {
+		return ""
+	}
 	lines := []string{"marked read, with long text cut; agent_inbox({message: id}) reads one message whole:"}
 	for _, read := range run.readOnce {
 		lines = append(lines, read.call+" -> "+ledgerValue(json.RawMessage(read.result), ledgerReceiptChars))
@@ -333,14 +351,32 @@ func (run *scriptRun) ledgerText() string {
 	return "changed:\n" + strings.Join(run.ledger, "\n")
 }
 
-func cutText(text string, dropped, limit int) (string, string) {
-	total := utf8.RuneCountInString(text) + dropped
-	if total <= limit {
-		return text, ""
+const (
+	leftOutNotice    = "attn left out %d of %d characters the script returned, logged or threw. Return only the parts you need."
+	shortenedRunNote = " attn shortens each run of backticks to %d."
+)
+
+var leftOutNoticeChars = len(fmt.Sprintf(leftOutNotice+shortenedRunNote, math.MaxInt, math.MaxInt, longestFence))
+
+func fitScriptText(said, threw string, dropped, shortened, limit int) (string, string) {
+	saidChars, threwChars := utf8.RuneCountInString(said), utf8.RuneCountInString(threw)
+	total := saidChars + threwChars + dropped + shortened
+	output := joinParts([]string{said, threw}, "\n\n")
+	keptSaid, keptThrew := saidChars, threwChars
+	if utf8.RuneCountInString(output)+dropped > limit {
+		keptThrew = min(threwChars, max(0, limit))
+		keptSaid = min(saidChars, max(0, limit-keptThrew-len("\n\n")))
+		output = joinParts([]string{string([]rune(said)[:keptSaid]), string([]rune(threw)[:keptThrew])}, "\n\n")
 	}
-	const notice = "\nattn left out the last %d of %d characters the script returned or logged. Return only the parts you need."
-	kept := max(0, min(total-dropped, limit-len(fmt.Sprintf(notice, total, total))))
-	return string([]rune(text)[:kept]), fmt.Sprintf(notice, total-kept, total)
+	leftOut := total - keptSaid - keptThrew
+	if leftOut == 0 {
+		return output, ""
+	}
+	notice := fmt.Sprintf(leftOutNotice, leftOut, total)
+	if shortened > 0 {
+		notice += fmt.Sprintf(shortenedRunNote, longestFence-1)
+	}
+	return output, notice
 }
 
 func ledgerCall(name string, args json.RawMessage) string {
