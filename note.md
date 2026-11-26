@@ -1,0 +1,1 @@
+Opening an agent's stake from the command palette now gives the seed tile the keyboard even when the palette opened from Garden search. A focus move you make while the seed is opening still takes precedence.
