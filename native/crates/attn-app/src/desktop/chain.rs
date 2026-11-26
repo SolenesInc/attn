@@ -285,7 +285,7 @@ impl Agent<'_> {
 /// its dispatcher's, so the end is what tells delegates apart.
 fn folded(name: &str, dispatcher: &str) -> Option<String> {
     let rest = name.strip_prefix(dispatcher)?;
-    (rest.chars().count() > 1 && rest.starts_with(['-', '_', '/', ' '])).then(|| rest.to_owned())
+    (rest.chars().count() > 1 && rest.starts_with(['-', '_', '/'])).then(|| rest.to_owned())
 }
 
 /// The lines of the row at `i` of a tree listed in order at these depths.

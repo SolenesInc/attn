@@ -1690,6 +1690,7 @@ fn a_chain_marks_what_each_agent_needs_from_the_user_counts_them_and_folds_the_n
                 state: "pending_approval".into(),
                 ..delegate_of("links", "attn--sweep-links", "a")
             },
+            delegate_of("dup", "attn--sweep (2)", "a"),
             delegate_of("notes", "release notes", "a"),
         ]),
         asks: Some(vec![
@@ -1706,6 +1707,7 @@ fn a_chain_marks_what_each_agent_needs_from_the_user_counts_them_and_folds_the_n
             "attn--sweep · Unknown harness · current",
             "attn--sweep-terms · Codex",
             "attn--sweep-links · Codex",
+            "attn--sweep (2) · Codex",
             "release notes · Codex",
         ],
         "a screen reader hears each whole name"
@@ -1717,15 +1719,16 @@ fn a_chain_marks_what_each_agent_needs_from_the_user_counts_them_and_folds_the_n
         Some("3 need you")
     );
     for (i, shown, needs) in [
-        (1, "-terms", "waiting for you"),
-        (2, "-links", "wants approval"),
-        (3, "release notes", "2 asks"),
+        (1, "-terms", Some("waiting for you")),
+        (2, "-links", Some("wants approval")),
+        (3, "attn--sweep (2)", None),
+        (4, "release notes", Some("2 asks")),
     ] {
         let said = texts(&world, &format!("{surface}.agent.{i}"));
         assert!(said.iter().any(|s| s == shown), "{shown:?} in {said:?}");
         assert_eq!(
             named(&world, format!("{surface}.agent.{i}.needs")).as_deref(),
-            Some(needs)
+            needs
         );
     }
     assert_eq!(
