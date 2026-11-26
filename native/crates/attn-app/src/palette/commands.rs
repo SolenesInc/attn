@@ -745,6 +745,9 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
                 .pin(),
             );
         }
+        if let Some(stake) = session.seed_id.as_deref().filter(|id| !id.is_empty()) {
+            commands.push(stake_command(state, session, &name, stake));
+        }
     }
     let snoozed = on_screen.filter(|s| {
         queue_on
@@ -779,6 +782,34 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         );
     }
     commands
+}
+
+fn stake_command(
+    state: &State,
+    session: &attn_protocol::Session,
+    name: &str,
+    stake: &str,
+) -> Command {
+    let facts = &state.facts;
+    let title = facts
+        .garden
+        .of(&facts.profiles.selected)
+        .iter()
+        .find(|s| s.id == stake)
+        .map_or(stake, |s| s.title.as_str());
+    Command::new(
+        "open-stake",
+        &format!("Open {name}'s stake"),
+        &[
+            "seed", "stake", "brief", "task", "garden", "read", "agent", "session",
+        ],
+        Action::OpenStake {
+            session: session.id.clone(),
+            seed: stake.to_owned(),
+        },
+    )
+    .describe(title)
+    .pin()
 }
 
 /// Pops the active tile out into a window of its own, or brings it back.

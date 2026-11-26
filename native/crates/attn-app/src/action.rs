@@ -55,6 +55,8 @@ macro_rules! actions {
             CapContextWindow { session: String },
             /// Pin the seeds an agent tends, and the one it reports to, in its tile header.
             ShowSessionSeeds { session: String },
+            /// Open the seed an agent reports to in a tile beside it, or focus that tile.
+            OpenStake { session: String, seed: String },
             /// Restart an agent in its pane.
             ReloadSession { session: String },
             /// Open an agent's folder in the user's editor.
@@ -133,6 +135,7 @@ macro_rules! actions {
                     Action::ShowPullRequests { .. } => "session.showPullRequests",
                     Action::CapContextWindow { .. } => "session.capContextWindow",
                     Action::ShowSessionSeeds { .. } => "session.showSeeds",
+                    Action::OpenStake { .. } => "session.openStake",
                     Action::WakeSession { .. } => "session.wake",
                     Action::SetSetting { .. } => "setting.set",
                     Action::SetTileFocus { .. } => "tileFocus.set",
@@ -179,6 +182,7 @@ macro_rules! actions {
                     Action::ShowPullRequests { .. } => "Show an agent's pull requests",
                     Action::CapContextWindow { .. } => "Cap an agent's context window",
                     Action::ShowSessionSeeds { .. } => "Show an agent's seeds",
+                    Action::OpenStake { .. } => "Open an agent's stake",
                     Action::WakeSession { .. } => "Unsnooze an agent",
                     Action::SetSetting { .. } => "Change a setting",
                     Action::SetTileFocus { .. } => "Change the tile focus style",
