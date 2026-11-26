@@ -1304,6 +1304,9 @@ impl Motion {
                 _ => return None,
             });
         }
+        if ev.mods.cmd || ev.mods.ctrl || ev.mods.alt {
+            return None;
+        }
         Some(match ev.key {
             Key::Down => Motion::Down,
             Key::Up => Motion::Up,

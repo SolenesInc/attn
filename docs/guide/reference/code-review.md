@@ -100,7 +100,7 @@ left out.
 
 Put the cursor on a line, or select several lines: `V` starts a selection at
 the cursor and the moving keys extend it, and `V` again or Escape drops it. ⇧↑
-and ⇧↓ select too. Then:
+and ⇧↓ select too. Saving a note or a question ends the selection. Then:
 
 - `c` writes a note. Notes wait until you send the review.
 - `a` asks the agent a question. The question goes at once, and the answer

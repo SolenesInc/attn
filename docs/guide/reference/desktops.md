@@ -52,7 +52,9 @@ default. Then, in the markdown tile that has the keyboard, j and k scroll a line
 Ctrl+D and Ctrl+U scroll half a page, gg and G go to the top and the bottom, and
 ]] and [[ go to the next and previous heading. / opens the find bar, and n and N
 step through its matches. The keys never reach a terminal, a text field or a
-browser page, and selecting text and typing still starts a comment.
+browser page, and selecting text and typing still starts a comment. A review
+document takes vim keys whether or not this is on; see
+[Code review](code-review.md).
 
 Cmd+Option+arrows (Ctrl+Shift+arrows on Linux) move between tiles. At the edge of
 a desktop, they move to the next desktop, and on an empty desktop they move

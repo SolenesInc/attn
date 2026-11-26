@@ -8342,3 +8342,24 @@ fn escape_after_g_drops_the_g_and_leaves_the_file_view_open() {
     press(&mut world, Key::Escape);
     assert!(file_view(&world).is_none());
 }
+
+#[test]
+fn leaves_the_app_shortcuts_on_modified_arrows_to_the_app() {
+    let mut world = open();
+    type_key(&mut world, "l");
+    let at = cursor(&world).key;
+    let keymap = attn_app::Keymap::from_setting(None, attn_testkit::platform());
+    for action in [
+        attn_app::Action::SessionNext,
+        attn_app::Action::SessionPrev,
+        attn_app::Action::TerminalFocusDown,
+        attn_app::Action::TerminalFocusUp,
+        attn_app::Action::TerminalFocusRight,
+    ] {
+        let Some(attn_app::Binding::Chord(chord)) = keymap.binding(&action) else {
+            panic!("{action:?} has no single chord");
+        };
+        world.gesture(|app| app.key(attn_testkit::key_event(&chord)));
+        assert_eq!(cursor(&world).key, at, "{action:?} moved the review cursor");
+    }
+}
