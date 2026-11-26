@@ -176,7 +176,11 @@ func (d *Daemon) requestedProfileID(requested string) (string, error) {
 func (d *Daemon) runCommand(ctx context.Context, c command.Caller, name string, args json.RawMessage) (protocol.Response, func()) {
 	result, refusal := d.commandLayer().Run(ctx, c, name, args)
 	if then, ok := result.(command.Then); ok {
-		return command.Response(then.Result, nil), then.After
+		response := command.Response(then.Result, nil)
+		if then.ShownOnce {
+			response.CommandShownOnce = protocol.Ptr(true)
+		}
+		return response, then.After
 	}
 	return command.Response(result, refusal), nil
 }

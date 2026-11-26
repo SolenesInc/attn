@@ -9728,6 +9728,9 @@ type Response struct {
 	// CommandResult corresponds to the JSON schema field "command_result".
 	CommandResult interface{} `json:"command_result,omitempty,omitzero"`
 
+	// CommandShownOnce corresponds to the JSON schema field "command_shown_once".
+	CommandShownOnce *bool `json:"command_shown_once,omitempty,omitzero"`
+
 	// CrewCharterGetResult corresponds to the JSON schema field
 	// "crew_charter_get_result".
 	CrewCharterGetResult *CrewCharterGetResult `json:"crew_charter_get_result,omitempty,omitzero"`

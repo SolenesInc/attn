@@ -248,6 +248,7 @@ func TestMailAScriptReadIsInItsAnswerHoweverTheScriptEnds(t *testing.T) {
 		name, tool, script string
 		pastItsTime, kill  bool
 	}{
+		{"a read of one message by its id", "attn_read", "agent_inbox({message: 'MESSAGE'});\nreturn missing.field", false, false},
 		{"a refusal nothing catches", "attn_do", "const inbox = agent_inbox();\nseed_note({seed: 's-zzzzzz', text: 'Read ' + inbox.items.length});", false, false},
 		{"a TypeError", "attn_read", "const inbox = agent_inbox();\nreturn inbox.items[0].content.missing.field", false, false},
 		{"the compute limit", "attn_read", "agent_inbox();\nfor (;;);", false, false},
@@ -257,12 +258,14 @@ func TestMailAScriptReadIsInItsAnswerHoweverTheScriptEnds(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mail := "URGENT: stop the deploy, from " + tc.name
-			if _, failed := sender.script(t, "attn_do", fmt.Sprintf("agent_msg({target: %q, text: %q})", s.session, mail)); failed {
-				t.Fatal("the message was not sent")
+			sent, failed := sender.script(t, "attn_do", fmt.Sprintf("return agent_msg({target: %q, text: %q}).message_id", s.session, mail))
+			message, _ := scriptAnswer(t, sent)
+			if failed || message == "" {
+				t.Fatalf("the message was not sent: %s", sent)
 			}
 			answered := make(chan *mcp.CallToolResult, 1)
 			go func() {
-				result, err := s.agent.tool(t, tc.tool, map[string]any{"script": tc.script}, nil)
+				result, err := s.agent.tool(t, tc.tool, map[string]any{"script": strings.ReplaceAll(tc.script, "MESSAGE", message)}, nil)
 				if err != nil {
 					t.Error(err)
 				}
@@ -312,6 +315,29 @@ func TestMailAScriptReturnsIsInItsAnswerOnce(t *testing.T) {
 	}
 	if text, _ := s.agent.script(t, "attn_read", "console.log('y'.repeat(60000));\nreturn 'z'.repeat(45000) + JSON.stringify(agent_inbox())"); !strings.Contains(text, mail) || len([]rune(text)) > 100_000 {
 		t.Errorf("a script whose answer attn cuts before the mail it returned answered %d characters, ending %q; want the mail in them", len([]rune(text)), text[max(0, len(text)-300):])
+	}
+}
+
+func TestAnInboxTooLongForTheAnswerStillNamesEveryMessageItMarkedRead(t *testing.T) {
+	s := newSessionTools(t)
+	s.w.Launched(s.session)
+	other := s.w.Spawn(s.app, fakeagent.Claude, s.w.Path("blog"))
+	s.w.Launched(other)
+	sender := agentToolsCaller{w: s.w, bearer: terminalCredential(t, s.w, s.app.Terminal(other))}
+	sent, failed := sender.script(t, "attn_do", fmt.Sprintf("const ids = [];\nfor (let n = 0; n < 20; n++) { ids.push(agent_msg({target: %q, text: n + ' ' + 'm'.repeat(%d)}).message_id) }\nreturn ids", s.session, protocol.AgentMessageMaxChars-3))
+	said, _ := scriptAnswer(t, sent)
+	var ids []string
+	if err := json.Unmarshal([]byte(said), &ids); failed || err != nil || len(ids) != 20 {
+		t.Fatalf("sending 20 of the longest messages answered %.300s: %v", sent, err)
+	}
+	text, _ := s.agent.script(t, "attn_read", "agent_inbox();\nreturn 'read'")
+	if length := len([]rune(text)); length > 100_000 {
+		t.Errorf("the answer holds %d characters, past what a tool answer holds", length)
+	}
+	for _, id := range ids {
+		if !strings.Contains(text, id) {
+			t.Errorf("the answer does not name message %s, which the script marked read:\n%.2000s", id, text)
+		}
 	}
 }
 

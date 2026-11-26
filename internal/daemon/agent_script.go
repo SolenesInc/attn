@@ -230,12 +230,18 @@ func (run *scriptRun) result(out script.Output) mcpserver.Result {
 	said := strings.Join(body, "\n")
 	failed := run.failure(out) != ""
 	fence := fenceFor(said + out.Failed)
-	attnSays := run.attnLines(out, failed, run.unshownReads(said))
-	room := script.ResultText - utf8.RuneCountInString(attnSays) - utf8.RuneCountInString(out.Failed) - 2*len(fence) - len("\n\n")*4
-	if utf8.RuneCountInString(said)+out.Dropped > room {
-		attnSays = run.attnLines(out, failed, run.unshownReads(""))
-		room = script.ResultText - utf8.RuneCountInString(attnSays) - utf8.RuneCountInString(out.Failed) - 2*len(fence) - len("\n\n")*4
+	roomBeside := func(attnSays string) int {
+		return script.ResultText - utf8.RuneCountInString(attnSays) - utf8.RuneCountInString(out.Failed) - 2*len(fence) - len("\n\n")*4
 	}
+	attnSays := run.attnLines(out, failed, run.unshownReads(said))
+	if utf8.RuneCountInString(said)+out.Dropped > roomBeside(attnSays) {
+		attnSays = run.attnLines(out, failed, run.unshownReads(""))
+	}
+	if roomBeside(attnSays) < 0 {
+		readsRoom := roomBeside(run.attnLines(out, failed, "")) - len("\n\n")
+		attnSays = run.attnLines(out, failed, cutEnd(run.shortReads(), max(0, readsRoom)))
+	}
+	room := roomBeside(attnSays)
 	kept, cut := cutText(said, out.Dropped, room)
 	var scriptSays string
 	if output := joinParts([]string{kept, out.Failed}, "\n\n"); output != "" {
@@ -310,6 +316,14 @@ func (run *scriptRun) unshownReads(said string) string {
 		return ""
 	}
 	return "marked read:\n" + strings.Join(lines, "\n")
+}
+
+func (run *scriptRun) shortReads() string {
+	lines := []string{"marked read, with long text cut; agent_inbox({message: id}) reads one message whole:"}
+	for _, read := range run.readOnce {
+		lines = append(lines, read.call+" -> "+ledgerValue(json.RawMessage(read.result), ledgerReceiptChars))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (run *scriptRun) ledgerText() string {

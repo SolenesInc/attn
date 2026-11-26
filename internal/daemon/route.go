@@ -212,6 +212,8 @@ func (d *Daemon) forwardCommand(ctx context.Context, c command.Caller, name stri
 		}
 	}
 	switch {
+	case reply.Ok && protocol.Deref(reply.CommandShownOnce):
+		return command.Then{Result: reply.CommandResult, ShownOnce: true}, nil
 	case reply.Ok:
 		return reply.CommandResult, nil
 	case reply.CommandRefusal != nil:

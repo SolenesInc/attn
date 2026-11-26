@@ -483,3 +483,17 @@ func TestTheSettingsToolOnAnOutpostSavesAHomeSettingAtTheHomeAndAMachineSettingH
 		t.Errorf("the outpost's machine setting reached the home: %+v", got)
 	}
 }
+
+func TestMailAFailedScriptOnAnOutpostReadIsInItsAnswer(t *testing.T) {
+	o := newOutpostTools(t, fakeagent.Claude)
+	mine, claude := o.spawn(fakeagent.Claude, o.outpost.Path("shop"))
+	_, other := o.spawn(fakeagent.Claude, o.outpost.Path("blog"))
+	mail := "URGENT: stop the deploy"
+	if sent := claudeToolEndpoint(t, other).call(t, "agent_msg", map[string]any{"target": mine, "text": mail}); sent.IsError {
+		t.Fatalf("agent_msg on the outpost answered %+v", sent)
+	}
+	status, reply := claudeToolEndpoint(t, claude).post(t, "attn_read", map[string]any{"script": "const inbox = agent_inbox();\nreturn inbox.items[0].content.missing.field"})
+	if status != http.StatusOK || !strings.Contains(string(reply), mail) || !strings.Contains(string(reply), "marked read:") {
+		t.Errorf("a script on the outpost that read its inbox and failed answered %d %s, want the mail it marked read", status, reply)
+	}
+}

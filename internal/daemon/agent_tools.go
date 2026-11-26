@@ -288,7 +288,10 @@ func (d *Daemon) callCommandTool(ctx context.Context, call *agentCall, tool agen
 		refusal = tool.withRules(refusal)
 	}
 	if then, ok := result.(command.Then); ok {
-		result, call.after = then.Result, append(call.after, then.After)
+		result = then.Result
+		if then.After != nil {
+			call.after = append(call.after, then.After)
+		}
 	}
 	d.logAgentCommand(call, tool.def.Name, refusal)
 	if refusal != nil {

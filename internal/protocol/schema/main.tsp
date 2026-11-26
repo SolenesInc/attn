@@ -7358,6 +7358,9 @@ model GardenSeedsChangedMessage {
 
 model Response {
   command_result?: unknown;
+  // Set when command_result shows state the call settled, such as mail it
+  // marked read, which no later call shows again.
+  command_shown_once?: boolean;
   command_refusal?: CommandRefusal;
   settings_list?: SettingsListResult;
   setting?: SettingEntry;
