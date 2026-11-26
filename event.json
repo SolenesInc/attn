@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: GitHub review batch can launch from a newly excluded repository",
+  "at": "2026-11-26T21:08:37.814Z",
+  "detail": "Updating repository filters rejects the first claim on its old revision, but a later candidate from the same stale batch can use the refreshed revision. Retain the spec edit fence while permitting desktop-only revision changes. Verified with an isolated mock provider.\nIndependently corroborated at cec7eaba2. Isolated regression receipts are attached to s-1hpv1w.\n"
+}
