@@ -417,9 +417,15 @@ fn a_tile_row_shows_its_tile_and_its_close_button_takes_the_tile_off_its_desktop
 fn three_desktops() -> InitialStateMessage {
     let mut state = two_desktops();
     state
-        .desktops
+        .sessions
         .get_or_insert_default()
-        .push(desktop("d3", "c", "Notes", vec![]));
+        .push(session("side-d", "idle"));
+    state.desktops.get_or_insert_default().push(desktop(
+        "d3",
+        "c",
+        "Notes",
+        vec![pane("d3", "p4", "side-d")],
+    ));
     state
 }
 
@@ -1789,5 +1795,383 @@ fn the_current_desktop_sits_in_a_tonal_well_and_unslotted_desktops_omit_syntheti
         d1_rebound.iter().any(|w| w.contains('1') && w != "1") && d1_rebound != d1_texts,
         "rebinding desktop.select1 updates the heading keys: {d1_rebound:?} vs {d1_texts:?}"
     );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn crew_pills_deduplicate_own_launch_desktops_while_keeping_companion_tiles() {
+    use attn_protocol::{CrewMember, LaunchDesktopSetting};
+
+    let chief_session = Session {
+        chief_of_staff: Some(true),
+        crew_member: Some("chief".into()),
+        label: "Chief".into(),
+        ..session("sess-chief", "waiting_input")
+    };
+    let companion = session("sess-comp", "working");
+    let work = session("sess-work", "idle");
+
+    let mut d_work = desktop(
+        "d-work",
+        "a",
+        "Work",
+        vec![pane("d-work", "p1", "sess-work")],
+    );
+    d_work.shortcut_slot = Some(1);
+    let d_chief_solo = desktop(
+        "d-chief",
+        "b",
+        "Chief",
+        vec![pane("d-chief", "p2", "sess-chief")],
+    );
+    let d_vesta_empty = desktop("d-vesta", "c", "Vesta", vec![]);
+
+    let chief = CrewMember {
+        id: "chief".into(),
+        name: "Chief".into(),
+        profile_id: "work".into(),
+        chief: Some(true),
+        agent: Some("claude".into()),
+        resolved_agent: "claude".into(),
+        binding_session: Some("sess-chief".into()),
+        launch_desktop: Some(LaunchDesktopSetting {
+            desktop_id: Some("d-chief".into()),
+            ..LaunchDesktopSetting::default()
+        }),
+        revision: 1,
+        ..CrewMember::default()
+    };
+    let vesta = CrewMember {
+        id: "vesta".into(),
+        name: "Vesta".into(),
+        profile_id: "work".into(),
+        resolved_agent: "claude".into(),
+        launch_desktop: Some(LaunchDesktopSetting {
+            desktop_id: Some("d-vesta".into()),
+            ..LaunchDesktopSetting::default()
+        }),
+        revision: 1,
+        ..CrewMember::default()
+    };
+
+    let mut initial = state(
+        vec![work.clone(), chief_session.clone()],
+        vec![d_work.clone(), d_chief_solo, d_vesta_empty.clone()],
+    );
+    initial.crew = Some(vec![chief.clone(), vesta.clone()]);
+    let mut world = World::start(Daemon::scripted().state(initial));
+    world.open_desktop();
+
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.crew.chief"))
+            .is_some(),
+        "active Chief appears as a pill in the Crew bar"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.crew.vesta"))
+            .is_some(),
+        "resting Vesta appears as a pill in the Crew bar"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.desktop.d-chief"))
+            .is_none(),
+        "Chief's solo unslotted launch desktop is omitted from DESKTOPS"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.session.sess-chief"))
+            .is_none(),
+        "Chief is not duplicated under DESKTOPS"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.desktop.d-vesta"))
+            .is_none(),
+        "resting crew's empty launch desktop is omitted from DESKTOPS"
+    );
+
+    let d_chief_with_companion = desktop(
+        "d-chief",
+        "b",
+        "Chief",
+        vec![
+            pane("d-chief", "p2", "sess-chief"),
+            pane("d-chief", "p3", "sess-comp"),
+        ],
+    );
+    let mut with_companion = state(
+        vec![work.clone(), chief_session.clone(), companion.clone()],
+        vec![
+            d_work.clone(),
+            d_chief_with_companion.clone(),
+            d_vesta_empty.clone(),
+        ],
+    );
+    with_companion.crew = Some(vec![chief.clone(), vesta.clone()]);
+    world.daemon.emit(with_companion);
+    world.settle();
+
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.desktop.d-chief"))
+            .is_some(),
+        "Chief's desktop appears when companion tiles share it"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.session.sess-comp"))
+            .is_some(),
+        "companion tile appears under Chief's desktop"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.session.sess-chief"))
+            .is_none(),
+        "Chief itself stays deduplicated into the Crew pill bar"
+    );
+
+    let unconfigured_chief = CrewMember {
+        agent: None,
+        binding_session: None,
+        ..chief
+    };
+    let retired_member = CrewMember {
+        id: "old".into(),
+        name: "Old".into(),
+        profile_id: "work".into(),
+        retired: true,
+        resolved_agent: "claude".into(),
+        launch_desktop: Some(LaunchDesktopSetting {
+            desktop_id: Some("d-old".into()),
+            ..LaunchDesktopSetting::default()
+        }),
+        revision: 1,
+        ..CrewMember::default()
+    };
+    let d_old = desktop("d-old", "d", "Old", vec![]);
+    let stale_chief_session = Session {
+        crew_member: None,
+        ..chief_session
+    };
+    let mut mixed = state(
+        vec![work, stale_chief_session, companion],
+        vec![d_work, d_chief_with_companion, d_vesta_empty, d_old],
+    );
+    mixed.crew = Some(vec![unconfigured_chief, vesta, retired_member]);
+    world.daemon.emit(mixed);
+    world.settle();
+    let crew_items: Vec<Option<String>> = world
+        .screen()
+        .children(Target::key("sidebar.crew"))
+        .into_iter()
+        .map(|n| n.name)
+        .collect();
+    assert_eq!(
+        crew_items,
+        vec![Some("Set up Chief".into()), Some("Start Vesta".into())],
+        "an unconfigured Chief renders once in the Crew bar even with a stale chief_of_staff session"
+    );
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("chief-slot"))
+            .value
+            .as_deref(),
+        Some("unconfigured")
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.session.sess-chief"))
+            .is_some(),
+        "an unbound live session not shown as an active Crew pill stays visible under DESKTOPS"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.desktop.d-old"))
+            .is_some(),
+        "a retired crew member's empty launch desktop is not hidden"
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn empty_non_current_desktops_fold_into_dashed_pills_that_open_and_accept_tile_drops() {
+    let mut d_work = desktop("d1", "a", "Work", vec![pane("d1", "p1", "s1")]);
+    d_work.shortcut_slot = Some(1);
+    let mut d_familiar = desktop("d6", "b", "Familiar", vec![]);
+    d_familiar.shortcut_slot = Some(6);
+    let d_assistant = desktop("d-asst", "c", "assistant", vec![]);
+
+    let mut world = World::start(Daemon::scripted().state(state(
+        vec![session("s1", "working")],
+        vec![d_work.clone(), d_familiar.clone(), d_assistant.clone()],
+    )));
+    world
+        .daemon
+        .on("desktop_move_leaf", |r: &attn_testkit::Request| {
+            serde_json::json!({
+                "event": "profile_action_result",
+                "request_id": r["request_id"],
+                "action": "desktop_move_leaf",
+                "success": true,
+            })
+        });
+    world.open_desktop();
+
+    let all = world.runtime().elements();
+    let strip = all
+        .iter()
+        .find(|e| e.key.as_deref() == Some("sidebar.empty_desktops"))
+        .expect("empty desktops strip is drawn");
+    let strip_prefix = format!("{}/", strip.path);
+    for key in ["sidebar.desktop.d6", "sidebar.desktop.d-asst"] {
+        let pill = all
+            .iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("{key} is drawn"));
+        assert!(
+            pill.path.starts_with(&strip_prefix),
+            "{key} sits inside the folded empty desktops strip: {}",
+            pill.path
+        );
+    }
+
+    let opened_before = world.daemon.sent_of("desktop_set_current").len();
+    let drop_target = centre_of(&world, "sidebar.desktop.d6");
+    world.gesture(|app| app.drag_over(Target::key("sidebar.session.s1"), drop_target));
+    world.advance(std::time::Duration::from_millis(400));
+    assert_eq!(
+        world.daemon.sent_of("desktop_set_current").len(),
+        opened_before,
+        "hovering a folded empty desktop pill during a drag does not switch and shift targets"
+    );
+    world.gesture(|app| app.release(drop_target));
+    let moved = world.daemon.sent_of("desktop_move_leaf");
+    assert_eq!(moved.len(), 1, "{moved:?}");
+    assert_eq!(moved[0]["source_desktop_id"], "d1");
+    assert_eq!(moved[0]["leaf_id"], "p1");
+    assert_eq!(moved[0]["target_desktop_id"], "d6");
+
+    world.gesture(|app| app.click(Target::key("sidebar.desktop.d-asst")));
+    let opened = world.daemon.sent_of("desktop_set_current");
+    assert_eq!(
+        opened.last().and_then(|m| m["desktop_id"].as_str()),
+        Some("d-asst")
+    );
+    world
+        .daemon
+        .emit(attn_protocol::ProfileArrangementChangedMessage {
+            profile: Profile {
+                id: "work".into(),
+                name: "Work".into(),
+                current_desktop_id: "d-asst".into(),
+                ..Profile::default()
+            },
+            desktops: vec![d_work, d_familiar, d_assistant],
+            ..attn_protocol::ProfileArrangementChangedMessage::new()
+        });
+    world.settle();
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("sidebar.desktop.d-asst"))
+            .value
+            .as_deref(),
+        Some("current, Empty desktop")
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::role("button").name("Rename assistant"))
+            .is_some(),
+        "opening an empty desktop expands it into a full heading with rename and close"
+    );
+    world.advance(std::time::Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn dragging_a_stacked_desktop_skips_interleaved_and_trailing_folded_empty_desktops() {
+    let mut initial = three_desktops();
+    let desktops = initial.desktops.as_mut().unwrap();
+    desktops[1].order_key = "c".into();
+    desktops[2].order_key = "d".into();
+    desktops.push(desktop("d-mid", "b", "Middle empty", vec![]));
+    desktops.push(desktop("d-end", "e", "Trailing empty", vec![]));
+
+    let mut world = World::start(Daemon::scripted().state(initial));
+    world.open_desktop();
+    let (d1_rect, _) = world
+        .runtime()
+        .presented("sidebar.desktop.d1")
+        .expect("d1 drawn");
+    let (d2_rect, _) = world
+        .runtime()
+        .presented("sidebar.desktop.d2")
+        .expect("d2 drawn");
+    let (d3_row, _) = world
+        .runtime()
+        .presented("sidebar.session.side-d")
+        .expect("last stacked row drawn");
+
+    let (x, y) = (d1_rect[0] + d1_rect[2] / 2.0, d1_rect[1] + d1_rect[3] / 2.0);
+    let bottom_y = d3_row[1] + d3_row[3] + 4.0;
+    world.gesture(|app| {
+        app.runtime.pointer_down(x, y);
+        app.runtime.pointer_move(x, bottom_y);
+    });
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.session.side-d.seam"))
+            .is_some(),
+        "bottom seam attaches to the last stacked desktop's row, not the trailing empty pill"
+    );
+    world.gesture(|app| app.runtime.pointer_up(x, bottom_y));
+    let moved = world.daemon.sent_of("desktop_reorder");
+    assert_eq!(moved.len(), 1, "{moved:?}");
+    assert_eq!(
+        (
+            moved[0]["desktop_id"].as_str(),
+            moved[0]["previous_desktop_id"].as_str(),
+            moved[0]["next_desktop_id"].as_str(),
+        ),
+        (Some("d1"), Some("d3"), None)
+    );
+
+    let (d3_rect, _) = world
+        .runtime()
+        .presented("sidebar.desktop.d3")
+        .expect("d3 drawn");
+    let (dx, dy) = (d3_rect[0] + d3_rect[2] / 2.0, d3_rect[1] + d3_rect[3] / 2.0);
+    world.gesture(|app| {
+        app.runtime.pointer_down(dx, dy);
+        app.runtime.pointer_move(dx, d2_rect[1] + 2.0);
+        app.runtime.pointer_up(dx, d2_rect[1] + 2.0);
+    });
+    let moved = world.daemon.sent_of("desktop_reorder");
+    assert_eq!(moved.len(), 2, "{moved:?}");
+    assert_eq!(
+        (
+            moved[1]["desktop_id"].as_str(),
+            moved[1]["previous_desktop_id"].as_str(),
+            moved[1]["next_desktop_id"].as_str(),
+        ),
+        (Some("d3"), Some("d1"), Some("d2"))
+    );
+    world.advance(std::time::Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }

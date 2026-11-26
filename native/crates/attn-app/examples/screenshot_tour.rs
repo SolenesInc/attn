@@ -1135,6 +1135,87 @@ fn sidebar_and_terminal(dark: bool) {
     snap(&mut world, "sidebar-terminal-markdown", dark);
 }
 
+fn sidebar_crew_and_empty(dark: bool) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    let chief_session = Session {
+        crew_member: Some("chief".into()),
+        chief_of_staff: Some(true),
+        label: "Chief".into(),
+        ..session("chief-day", "waiting_input")
+    };
+    state.sessions.get_or_insert_default().push(chief_session);
+    let desktops = state.desktops.get_or_insert_default();
+    desktops.truncate(3);
+    if let Some(first) = desktops.first_mut() {
+        first.shortcut_slot = Some(1);
+    }
+    if let Some(second) = desktops.get_mut(1) {
+        second.shortcut_slot = Some(4);
+        second.name = "MCP".into();
+    }
+    if let Some(third) = desktops.get_mut(2) {
+        third.shortcut_slot = Some(8);
+        third.name = "Agents".into();
+    }
+    desktops.push(Desktop {
+        id: "work/desktop_chief".into(),
+        profile_id: PROFILE.into(),
+        name: "Chief".into(),
+        order_key: "85".into(),
+        active_pane_id: "p-chief".into(),
+        tree_json: pane("p-chief").to_string(),
+        panes: vec![agent_pane("work/desktop_chief", "p-chief", "chief-day")],
+        ..Desktop::default()
+    });
+    desktops.push(Desktop {
+        id: "work/desktop_6".into(),
+        profile_id: PROFILE.into(),
+        name: "Familiar".into(),
+        order_key: "90".into(),
+        shortcut_slot: Some(6),
+        ..Desktop::default()
+    });
+    desktops.push(Desktop {
+        id: "work/desktop_asst".into(),
+        profile_id: PROFILE.into(),
+        name: "assistant".into(),
+        order_key: "95".into(),
+        ..Desktop::default()
+    });
+    let member =
+        |id: &str, name: &str, chief: bool, binding: Option<&str>, desktop: Option<&str>| {
+            CrewMember {
+                id: id.into(),
+                name: name.into(),
+                chief: Some(chief),
+                agent: Some("claude".into()),
+                resolved_agent: "claude".into(),
+                profile_id: PROFILE.into(),
+                binding_session: binding.map(str::to_owned),
+                launch_desktop: desktop.map(|d| LaunchDesktopSetting {
+                    desktop_id: Some(d.into()),
+                    ..LaunchDesktopSetting::default()
+                }),
+                revision: 1,
+                ..CrewMember::default()
+            }
+        };
+    state.crew = Some(vec![
+        member(
+            "chief",
+            "Chief",
+            true,
+            Some("chief-day"),
+            Some("work/desktop_chief"),
+        ),
+        member("vesta", "Vesta", false, None, None),
+        member("tendril", "Tendril", false, None, None),
+    ]);
+    let mut world = start(scripted().state(state));
+    deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
+    snap(&mut world, "sidebar-crew-and-empty", dark);
+}
+
 /// An agent's header while a document tile is active: lit in the brand colour, with its one
 /// seed's state in a pill and its open ask's chip, beside the document's header and controls;
 /// the agent's terminal draws a rounded box beside a square one. Hovered, the document's Focus
@@ -8934,6 +9015,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
     }));
     for dark in [true, false] {
         scene("sidebar_and_terminal", || sidebar_and_terminal(dark));
+        scene("sidebar_crew_and_empty", || sidebar_crew_and_empty(dark));
         scene("tile_headers", || tile_headers(dark, false));
         scene("browser_tile", || browser_tile(dark));
         scene("tile_headers", || tile_headers(dark, true));

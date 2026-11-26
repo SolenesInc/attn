@@ -1287,6 +1287,7 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::shelf::ShelfEntry::build(label)", false),
     ("blocks::shelf::ShelfCount::build(label)", false),
     ("system::group_head::GroupHead::action_keys(keys)", false),
+    ("system::chip::pill_surface(label)", false),
 ];
 
 #[test]

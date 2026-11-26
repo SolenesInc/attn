@@ -33,19 +33,26 @@ struct Span<'a> {
     bottom: f32,
 }
 
-/// The line index of each desktop, in order.
+/// Whether a desktop sits in the vertical desktop stack (folded empty desktops sit in the strip
+/// at the foot of the list instead).
+pub(super) fn stacked(desktop: &super::model::DesktopHeader) -> bool {
+    !desktop.empty || desktop.current
+}
+
+/// The line index of each vertically stacked desktop, in order.
 fn headers(lines: &[Line]) -> Vec<(usize, &str)> {
     lines
         .iter()
         .enumerate()
         .filter_map(|(i, line)| match line {
-            Line::Desktop(d) => Some((i, d.id.as_str())),
+            Line::Desktop(d) if stacked(d) => Some((i, d.id.as_str())),
             _ => None,
         })
         .collect()
 }
 
-/// Vertical layout of each desktop group in `lines`, matching `ListRow::group` and `ListRow::well`.
+/// Vertical layout of each stacked desktop group in `lines`, matching `ListRow::group` and
+/// `ListRow::well`.
 fn spans(lines: &[Line]) -> Vec<Span<'_>> {
     let mut out = Vec::new();
     let mut y = 0.0;
@@ -55,6 +62,14 @@ fn spans(lines: &[Line]) -> Vec<Span<'_>> {
             i += 1;
             continue;
         };
+        let mut next = i + 1;
+        while next < lines.len() && !matches!(lines[next], Line::Desktop(_)) {
+            next += 1;
+        }
+        if !stacked(desktop) {
+            i = next;
+            continue;
+        }
         if !out.is_empty() {
             y += ListRow::group_gap();
         }
@@ -66,10 +81,8 @@ fn spans(lines: &[Line]) -> Vec<Span<'_>> {
         };
         let header_top = group_top + pad;
         let mut cursor = header_top + line_height(&lines[i]);
-        let mut next = i + 1;
-        while next < lines.len() && !matches!(lines[next], Line::Desktop(_)) {
-            cursor += line_height(&lines[next]);
-            next += 1;
+        for line in &lines[i + 1..next] {
+            cursor += line_height(line);
         }
         let bottom = cursor + pad;
         out.push(Span {
@@ -102,7 +115,14 @@ pub fn seam_target(state: &State, lines: &[Line]) -> Option<(usize, Seam)> {
     let headers = headers(lines);
     match headers.get(seam) {
         Some((line, _)) => Some((*line, Seam::Above)),
-        None => lines.len().checked_sub(1).map(|last| (last, Seam::Below)),
+        None => {
+            let &(start, _) = headers.last()?;
+            let mut end = start + 1;
+            while end < lines.len() && !matches!(lines[end], Line::Desktop(_)) {
+                end += 1;
+            }
+            Some((end - 1, Seam::Below))
+        }
     }
 }
 

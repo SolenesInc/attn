@@ -211,14 +211,9 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
     let dock = dock::of(state);
     let home_keys = crate::palette::label_of(state, &Action::SessionGoToDashboard);
     let overview_keys = crate::palette::label_of(state, &Action::DesktopOverview);
-    let has_crew = !crate::crew::members(state).is_empty();
     let chief = crate::chief::view(state);
+    let active_session = state.window.on_screen(facts);
     let marked = Marked::of(state);
-    let resting: Vec<crew::Resting> = crew::between_sessions(state)
-        .into_iter()
-        .filter(|m| chief.as_ref().is_none_or(|c| c.key != m.id))
-        .map(|m| crew::resting(state, &m.id))
-        .collect();
     let logos_on = logos(state);
     let mut countdowns: Vec<(String, String)> = state
         .window
@@ -232,6 +227,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
             std::sync::Arc::as_ptr(&facts.sessions) as usize,
             std::sync::Arc::as_ptr(&facts.desktops) as usize,
             std::sync::Arc::as_ptr(&facts.profiles) as usize,
+            std::sync::Arc::as_ptr(&facts.crew) as usize,
             facts.tile_contents.revision,
         ),
         (
@@ -245,19 +241,14 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
             state.logos.revision(),
         ),
         (home, marked.clone(), countdowns),
-        on_screen.clone(),
+        (on_screen.clone(), active_session),
         width::of(state).to_bits(),
         (
             state.window.reorder.clone(),
             drag_marks,
             new_desktop,
             (dock.clone(), home_keys.clone(), overview_keys.clone()),
-            (
-                resting.clone(),
-                has_crew,
-                chief.clone(),
-                state.window.crew_rows.armed(),
-            ),
+            (chief, state.window.crew_rows.armed()),
         ),
         (
             *t,
@@ -266,6 +257,8 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
         ),
     );
     memo("sidebar", reads, || {
+        let crew_entries = crew::desktop_entries(state);
+        let has_crew = !crew_entries.is_empty();
         let lines = model::desktop_lines(facts, Some(&state.window.garden), home, &on_screen);
         let t = *t;
         col()
@@ -291,20 +284,10 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                     })
                     .children(has_crew.then(|| {
                         col()
-                            .key(crew::CLASSIC_ROW)
-                            .role("list")
-                            .label("Crew between sessions")
+                            .key("sidebar.crew.section")
                             .w_full()
                             .child(queue_view::crew_rule("sidebar.rule.crew".into(), &t))
-                            .children(queue_view::chief_slot(state, &marked, &t))
-                            .children(resting.iter().map(|m| {
-                                crew::row_view(
-                                    state,
-                                    format!("{}.{}", crew::CLASSIC_ROW, m.member),
-                                    m,
-                                    &t,
-                                )
-                            }))
+                            .child(crew::pill_bar(state, &crew_entries, logos_on, &t))
                     }))
                     .children(has_crew.then(|| {
                         rune::el()
@@ -380,6 +363,7 @@ fn desktop_groups(
     let mut seen_sessions: std::collections::HashMap<&str, usize> =
         std::collections::HashMap::new();
     let mut groups = Vec::new();
+    let mut folded_empty: Vec<&DesktopHeader> = Vec::new();
     let mut i = 0;
     while i < lines.len() {
         let Line::Desktop(desktop) = &lines[i] else {
@@ -391,11 +375,16 @@ fn desktop_groups(
         while i < lines.len() && !matches!(lines[i], Line::Desktop(_)) {
             i += 1;
         }
+        if !reorder::stacked(desktop) {
+            folded_empty.push(desktop);
+            continue;
+        }
+        let first = groups.is_empty();
         let key = format!("sidebar.group.{}", desktop.id);
         let group = if desktop.current {
-            ListRow::well(key, desktop.first, t)
+            ListRow::well(key, first, t)
         } else {
-            ListRow::group(key, desktop.first)
+            ListRow::group(key, first)
         };
         let build = RowBuild {
             marked,
@@ -422,7 +411,80 @@ fn desktop_groups(
             .collect();
         groups.push(group.children(rows));
     }
+    if !folded_empty.is_empty() {
+        let strip = ListRow::pill_strip("sidebar.empty_desktops")
+            .role("list")
+            .label("Empty desktops")
+            .children(
+                folded_empty
+                    .into_iter()
+                    .map(|desktop| empty_desktop_pill(state, desktop, t)),
+            );
+        groups.push(ListRow::group("sidebar.empty_desktops.group", groups.is_empty()).child(strip));
+    }
     groups
+}
+
+fn empty_desktop_pill(state: &State, desktop: &DesktopHeader, t: &Tokens) -> El {
+    let key = format!("sidebar.desktop.{}", desktop.id);
+    let id = desktop.id.clone();
+    let keys = desktop
+        .slot
+        .and_then(Action::desktop_select)
+        .and_then(|select| crate::palette::label_of(state, &select));
+    let mark = state
+        .window
+        .desk
+        .drag
+        .as_ref()
+        .and_then(|d| d.desktop_mark(&desktop.id));
+    let help = match &keys {
+        Some(keys) => format!("{} ({keys})", desktop.title),
+        None => desktop.title.clone(),
+    };
+    let pill = system::pill_surface(
+        key,
+        format!("Open {}", desktop.title),
+        system::PillLook::Dashed,
+        t,
+    )
+    .role("button")
+    .focusable(true)
+    .a11y_value("Empty desktop")
+    .help(help)
+    .children(desktop.slot.map(|slot| {
+        words(slot.to_string(), Type::Tag, t.text_tertiary)
+            .single_line()
+            .a11y_hidden()
+    }))
+    .children((desktop.named || desktop.slot.is_none()).then(|| {
+        words(desktop.title.clone(), Type::Small, t.text_tertiary)
+            .single_line()
+            .truncate()
+            .shrink()
+            .min_w(0.0)
+            .a11y_hidden()
+    }))
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| open_desktop(state, &id, tx));
+    let pill = match keys {
+        Some(keys) => pill.description(keys),
+        None => pill,
+    };
+    pill_drop_mark(pill, mark, t)
+}
+
+fn pill_drop_mark(pill: El, mark: Option<DesktopMark>, t: &Tokens) -> El {
+    match mark {
+        None => pill,
+        Some(DesktopMark::Source) => pill.opacity(0.45),
+        Some(DesktopMark::Accepts) => pill
+            .fill(t.accent.alpha(0.07))
+            .border(1.0, t.accent.alpha(0.45)),
+        Some(DesktopMark::Target) => pill
+            .border_dash(0.0, 0.0)
+            .fill(t.accent.alpha(0.14))
+            .border(1.0, t.accent),
+    }
 }
 
 /// A row that goes somewhere rather than to an agent, with the keys that go there too:

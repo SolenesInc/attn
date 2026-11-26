@@ -225,26 +225,6 @@ fn agent(
     })
 }
 
-/// The Chief's slot as the desktop sidebar draws it, above the crew between sessions.
-pub(super) fn chief_slot(state: &State, marked: &Marked, t: &Tokens) -> Option<El> {
-    let chief = crate::chief::view(state)?;
-    let bands = queue::bands(&state.facts, state.window.now_ms);
-    let on_screen = crate::desktop::on_screen_sessions(state);
-    let line = chief_line(state, &on_screen, &bands, chief);
-    let key = line.key();
-    Some(match &line {
-        QLine::Agent(agent) => {
-            let shown = marked.shown(&agent.agent.id);
-            queue_row(state, key, agent, false, shown, super::logos(state), t)
-        }
-        QLine::ChiefSetup(chief) => {
-            super::crew::chief_setup_row(state, key, chief, super::logos(state), t)
-        }
-        QLine::Member(member) => super::crew::row_view(state, key, member, t),
-        _ => return None,
-    })
-}
-
 /// The Chief's slot: setup while it has none, its session's row while it has one, and a start
 /// between sessions.
 pub(super) fn chief_line(

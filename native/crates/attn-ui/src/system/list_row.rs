@@ -260,6 +260,19 @@ impl ListRow {
         }
     }
 
+    /// A wrapping row of compact pills inside a list column, aligned to its row edges.
+    pub fn pill_strip(key: impl Into<String>) -> El {
+        door::inset(
+            door::gaps(
+                row().key(key.into()).flex_wrap().items_center().w_full(),
+                Space::S4,
+                Space::S4,
+            ),
+            Space::S0,
+            Space::S4,
+        )
+    }
+
     /// How tall every list row of one line stands.
     pub fn height() -> f32 {
         Size::Regular.height()

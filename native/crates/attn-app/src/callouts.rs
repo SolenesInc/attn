@@ -89,6 +89,15 @@ fn step_keys(state: &State, step: &CalloutStep) -> Vec<String> {
                 .filter(|row| row.session == id)
                 .map(|row| row.key)
                 .collect();
+            if !crate::sidebar::queue_flow(state) {
+                for entry in crate::sidebar::crew::desktop_entries(state) {
+                    if let crate::sidebar::crew::DesktopEntry::Active(pill) = entry
+                        && pill.agent.id == id
+                    {
+                        keys.push(pill.key);
+                    }
+                }
+            }
             keys.push(format!("sidebar.session.{id}"));
             keys
         }
@@ -245,8 +254,16 @@ fn reveal(state: &mut State, tx: &mut Tx) {
         {
             tx.scroll_into_view_in(crate::sidebar::QUEUE_LIST, key);
         }
-    } else if let Some(key) = step_keys(state, &step).pop() {
-        tx.scroll_into_view_in(crate::sidebar::DESKTOP_LIST, key);
+    } else if let Some(key) = step_keys(state, &step)
+        .into_iter()
+        .find(|k| k.starts_with("sidebar."))
+    {
+        let container = if key.starts_with(crate::sidebar::crew::CLASSIC_ROW) {
+            "sidebar.scroll"
+        } else {
+            crate::sidebar::DESKTOP_LIST
+        };
+        tx.scroll_into_view_in(container, key);
     }
 }
 

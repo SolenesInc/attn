@@ -277,6 +277,25 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> Vec<El> {
             }),
         );
     } else if !chief {
+        if let Some(member_id) = member.clone() {
+            let member_name = crate::crew::members(state)
+                .into_iter()
+                .find(|m| m.id == member_id)
+                .map(|m| m.name.clone())
+                .filter(|n| !n.is_empty())
+                .unwrap_or_else(|| crate::asks::crew_display_name(&member_id));
+            kit_menu = kit_menu.item(
+                item(
+                    "ask-close",
+                    (&attn_ui::icon::MOON).into(),
+                    &format!("Ask {member_name} to close"),
+                )
+                .on_select_tx(move |state: &mut State, tx: &mut Tx| {
+                    state.window.session_menu = None;
+                    crate::crew::ask_to_close(state, &member_id, tx);
+                }),
+            );
+        }
         kit_menu = kit_menu
             .item(item("close", attn_ui::glyph::TIMES.into(), "Close session").on_select_tx(close));
     }

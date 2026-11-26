@@ -197,8 +197,6 @@ pub struct DesktopHeader {
     pub empty: bool,
     /// The desktop has a name of its own; the heading shows only its number otherwise.
     pub named: bool,
-    /// The list's first desktop, which no gap separates from what is above it.
-    pub first: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -542,9 +540,33 @@ pub fn desktop_lines(
                 .map(|p| (p.session_id.as_str(), d.id.as_str()))
         })
         .collect();
+    let selected_profile = &facts.profiles.selected;
+    let crew_sessions = super::crew::shown_crew_sessions(facts);
+    let crew_launch_desktops: HashSet<&str> = facts
+        .crew
+        .iter()
+        .filter(|m| &m.profile_id == selected_profile && !m.retired)
+        .filter_map(|m| {
+            m.launch_desktop
+                .as_ref()?
+                .desktop_id
+                .as_deref()
+                .filter(|id| !id.is_empty())
+        })
+        .collect();
     let mut lines = Vec::new();
     for desktop in ordered_desktops(desktops) {
         let shown = !home && current == Some(desktop.id.as_str());
+        let unslotted = desktop.shortcut_slot.unwrap_or(0) <= 0;
+        let crew_only_panes = unslotted
+            && !desktop.panes.is_empty()
+            && desktop.leaves().into_iter().all(|l| l.tile().is_none())
+            && desktop
+                .panes
+                .iter()
+                .all(|p| crew_sessions.contains(p.session_id.as_str()));
+        let crew_own_desktop =
+            unslotted && (crew_launch_desktops.contains(desktop.id.as_str()) || crew_only_panes);
         let active_session = desktop
             .panes
             .iter()
@@ -558,6 +580,7 @@ pub fn desktop_lines(
             .collect();
         let mut children = Vec::new();
         let mut placed = HashSet::new();
+        let mut suppressed_crew = false;
         for leaf in desktop.leaves() {
             match leaf.tile() {
                 Some((kind, params)) => children.push(Line::Tile(TileRow {
@@ -586,6 +609,11 @@ pub fn desktop_lines(
                     else {
                         continue;
                     };
+                    if crew_own_desktop && crew_sessions.contains(session.id.as_str()) {
+                        suppressed_crew = true;
+                        placed.insert(session.id.as_str());
+                        continue;
+                    }
                     if placed.insert(session.id.as_str()) {
                         children.push(agent_line(
                             facts,
@@ -605,6 +633,10 @@ pub fn desktop_lines(
                 && let Some(pane) = desktop.panes.iter().find(|p| p.session_id == session.id)
                 && placed.insert(session.id.as_str())
             {
+                if crew_own_desktop && crew_sessions.contains(session.id.as_str()) {
+                    suppressed_crew = true;
+                    continue;
+                }
                 children.push(agent_line(
                     facts,
                     desktop,
@@ -616,6 +648,9 @@ pub fn desktop_lines(
                 ));
             }
         }
+        if crew_own_desktop && children.is_empty() && (suppressed_crew || !shown) {
+            continue;
+        }
         lines.push(Line::Desktop(DesktopHeader {
             id: desktop.id.clone(),
             title: desktop_title(desktop, desktops),
@@ -623,7 +658,6 @@ pub fn desktop_lines(
             current: shown,
             empty: children.is_empty(),
             named: !desktop.name.trim().is_empty(),
-            first: !lines.iter().any(|l| matches!(l, Line::Desktop(_))),
         }));
         lines.extend(children);
     }

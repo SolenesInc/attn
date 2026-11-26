@@ -162,3 +162,62 @@ pub fn chip_button(
     let button = door::corner(door::inset(button, Space::S4, Space::S0), Radius::Control);
     super::focus::ring(super::layers::pressable(button, rest, t), t)
 }
+
+/// How a compact sidebar pill sits against the panel: active on screen, running off screen,
+/// quiet outlined, dashed empty, or armed for confirmation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PillLook {
+    Current,
+    Elevated,
+    Quiet,
+    Dashed,
+    Armed,
+}
+
+impl PillLook {
+    pub fn ground(self, t: &Tokens) -> Color {
+        match self {
+            PillLook::Current => t.bg_selected,
+            PillLook::Elevated => t.bg_elevated,
+            PillLook::Quiet | PillLook::Dashed => t.bg_panel,
+            PillLook::Armed => {
+                crate::colors::mix_srgb(t.bg_panel, t.warning, super::tag::PILL_WASH)
+            }
+        }
+    }
+}
+
+/// A compact tonal pill frame for wrapping sidebar strips such as crew members and empty
+/// desktops. Callers set its role, focusability, children, and press behaviour.
+pub fn pill_surface(
+    key: impl Into<String>,
+    label: impl Into<String>,
+    look: PillLook,
+    t: &Tokens,
+) -> El {
+    let ground = look.ground(t);
+    let base = door::gap(
+        row()
+            .key(key.into())
+            .label(label.into())
+            .h(super::Size::Compact.height())
+            .max_w_frac(1.0)
+            .min_w(0.0)
+            .items_center(),
+        Space::S4,
+    );
+    let styled = match look {
+        PillLook::Current => base.fill(t.bg_selected).border(1.0, t.border_hover),
+        PillLook::Elevated => base.fill(t.bg_elevated).border(1.0, t.border),
+        PillLook::Quiet => base.border(1.0, t.border),
+        PillLook::Dashed => base
+            .border(
+                1.0,
+                crate::colors::mix_srgb(t.border_hover, t.border_focus, 0.4),
+            )
+            .border_dash(2.0, 2.0),
+        PillLook::Armed => base.fill(ground).border(1.0, t.warning),
+    };
+    let pill = door::corner(door::inset(styled, Space::S8, Space::S0), Radius::Control);
+    super::focus::ring(super::layers::pressable(pill, ground, t), t)
+}

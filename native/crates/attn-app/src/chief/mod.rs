@@ -217,7 +217,11 @@ pub(crate) fn row_key(state: &State) -> Option<String> {
         (Phase::InSession | Phase::Closing, Some(session))
             if state.facts.sessions.iter().any(|s| &s.id == session) =>
         {
-            format!("queue-chief.{session}")
+            if crate::sidebar::actions::queue_flow(state) {
+                format!("queue-chief.{session}")
+            } else {
+                format!("{}.{}", crate::sidebar::crew::CLASSIC_ROW, view.key)
+            }
         }
         _ => SLOT.to_owned(),
     })

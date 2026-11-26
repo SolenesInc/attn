@@ -193,9 +193,16 @@ fn a_day_whose_member_left_the_roster_still_has_its_row() {
 }
 
 #[test]
-fn with_the_queue_off_members_between_sessions_sit_above_the_desktops() {
-    let mut state = one_desktop(vec![keel_day()]);
+fn with_the_queue_off_the_crew_pill_bar_shows_every_member_above_the_desktops() {
+    let chief_day = crew("sess-chief", "chief", true);
+    let mut state = one_desktop(vec![chief_day, keel_day()]);
     state.crew = Some(vec![
+        CrewMember {
+            chief: Some(true),
+            agent: Some("claude".into()),
+            binding_session: Some("sess-chief".into()),
+            ..member("chief")
+        },
         member("alder"),
         CrewMember {
             binding_session: Some("sess-keel".into()),
@@ -203,8 +210,70 @@ fn with_the_queue_off_members_between_sessions_sit_above_the_desktops() {
         },
     ]);
     let mut world = start(state);
+    starting(&world);
+    assert!(shows(&world, "sidebar.crew.chief"));
     assert!(shows(&world, "sidebar.crew.alder"));
-    assert!(!shows(&world, "sidebar.crew.keel"));
+    assert!(shows(&world, "sidebar.crew.keel"));
+
+    click(&mut world, "sidebar.crew.alder");
+    assert!(starts(&world).is_empty());
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("sidebar.crew.alder"))
+            .value
+            .as_deref(),
+        Some("armed")
+    );
+    assert!(shows(&world, "sidebar.crew.alder.confirm"));
+    press(&mut world, Key::Escape);
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("sidebar.crew.alder"))
+            .value
+            .as_deref(),
+        Some("between sessions")
+    );
+    world.advance(Duration::from_secs(4));
+    assert!(world.runtime_is_at_rest());
+
+    click(&mut world, "sidebar.crew.alder");
+    click(&mut world, "sidebar.crew.alder.start");
+    assert_eq!(starts(&world), [json!("member:alder")]);
+
+    click(&mut world, "sidebar.crew.keel");
+    assert_eq!(
+        world.daemon.sent_of("desktop_show_session").last().unwrap()["session_id"],
+        "sess-keel"
+    );
+    click(&mut world, "sidebar.crew.keel.actions");
+    click(&mut world, "session.menu.ask-close");
+    assert_eq!(
+        world.daemon.sent_of("crew_close")[0]["member"],
+        "member:keel"
+    );
+
+    click(&mut world, "sidebar.crew.chief.actions");
+    click(&mut world, "session.menu.route");
+    assert!(shows(&world, "chief-setup"));
+    press(&mut world, Key::Escape);
+    assert!(!shows(&world, "chief-setup"));
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some("sidebar.crew.chief"),
+        "closing Chief setup in desktop flow returns focus to Chief's pill"
+    );
+
+    world.daemon.on("crew_close", |_| ());
+    click(&mut world, "sidebar.crew.chief.actions");
+    click(&mut world, "session.menu.ask-close");
+    assert_eq!(
+        world.daemon.sent_of("crew_close").last().unwrap()["member"],
+        "member:chief"
+    );
+    assert!(shows(&world, "sidebar.crew.chief.closing"));
+
     click(&mut world, "sidebar.rule.crew.manage");
     assert!(shows(&world, "crew.page"));
 }

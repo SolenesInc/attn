@@ -351,8 +351,16 @@ fn over_sidebar(state: &mut State, picked: Option<rune::Picked>, tx: &mut Tx) {
     };
     let target = picked.and_then(|p| sidebar_target(state, drag, p.path()));
     let current = state.facts.current_desktop().map(|d| d.id.as_str());
+    let is_empty = |id: &str| {
+        state
+            .facts
+            .desktops
+            .iter()
+            .find(|d| d.id == id)
+            .is_some_and(crate::desktop::holds_nothing)
+    };
     let entering = match &target {
-        Some(Target::Desktop(id)) if current == Some(id.as_str()) => None,
+        Some(Target::Desktop(id)) if current == Some(id.as_str()) || is_empty(id) => None,
         Some(Target::Desktop(id)) => match &drag.entering {
             Some((on, until)) if on == id => Some((on.clone(), *until)),
             _ => {
