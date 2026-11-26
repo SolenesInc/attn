@@ -122,9 +122,11 @@ func TestABodyWrittenAsTheUpfrontTextSaysIsStoredAsMeant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stated := slices.ContainsFunc(listed.Tools, func(tool *mcp.Tool) bool { return tool.Name == "attn_do" && strings.Contains(tool.Description, rule) })
+	stated := slices.ContainsFunc(listed.Tools, func(tool *mcp.Tool) bool {
+		return tool.Name == "attn_record" && strings.Contains(tool.Description, rule)
+	})
 	if !stated {
-		t.Fatalf("attn_do's description does not state how to write long text, %q", rule)
+		t.Fatalf("attn_record's description does not state how to write long text, %q", rule)
 	}
 
 	meant := "## Repro\n\nRun `go test -run 'TestParse\\d+' ./parser` with ${ATTN_DATA_DIR} set.\nA tab is written \\t, and the path C:\\Users\\victor stays one.\n"
