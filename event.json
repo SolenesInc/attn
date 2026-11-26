@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Offline automation delegates appear as actionable waiting turns",
+  "at": "2026-11-26T23:38:26.754Z",
+  "detail": "Offline automation delegates can appear as actionable waiting turns. If a run delegates to an outpost beside itself and the outpost disconnects while the delegate owes a turn, desktop waiting and traversal surfaces open the offline tile. With only that turn owed, the rail returns to the offline tile instead of opening the drawer. The row also offers Settle despite the unreachable monitor. Retain visibility and grouping while excluding unreachable owed turns from actionable counts and traversal and suppressing the unreachable settle control. Independently source-confirmed at 90dd08587. Review evidence on s-qwa6vj.\n"
+}
