@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -55,6 +56,7 @@ func TestEveryTextAttnTypesToASessionWithToolsWritesItsCommandsAsCalls(t *testin
 		"session/standby-request":             prompts.RenderText("session", "standby-request", prompts.Values{"until": "2026-11-26T09:00:00+01:00", "agent_tools": "true"}),
 		"delegation/authorization-update":     prompts.RenderText("delegation", "authorization-update", seedValues(prompts.Values{"authorization": "Push to main.", "previous": "Ask first."})),
 		"delegation/authorization-cleared":    prompts.RenderText("delegation", "authorization-cleared", seedValues(prompts.Values{"previous": "Push to main."})),
+		"an automation's opening":             prompts.RenderText("automation", "opening", seedValues(prompts.Values{"brief": "Review the queue change.", "input_path": "/tmp/input", "check_ids": "C1", "local_review": "false", "has_target": "false"})),
 	}
 	for read, text := range texts {
 		for _, match := range shownCommand.FindAllStringSubmatch(text, -1) {
@@ -182,5 +184,37 @@ func TestSkillWithNoArgumentsOpensWithTheWayInOfItsCaller(t *testing.T) {
 	}
 	if !strings.Contains(shell, cliWayIn) || strings.Contains(shell, toolsWayIn) {
 		t.Errorf("attn skill in a shell answered\n%s\nwant it to open with %q", shell, cliWayIn)
+	}
+}
+
+func TestAPeerTurnsReplyLineNamesACallOnlyForASessionWithTools(t *testing.T) {
+	for _, tools := range []bool{true, false} {
+		for _, turn := range []string{"steer", "interrupt"} {
+			t.Run(fmt.Sprint(turn, "/tools=", tools), func(t *testing.T) {
+				w := newWorld(t, fakeagent.Claude)
+				app, cli := w.App(), w.Client()
+				setSetting(t, app, "agent_tools_enabled", strconv.FormatBool(tools))
+				registerSessions(t, w, cli, "lead")
+				session, run := moddedClaude(t, w, app)
+				workingOn(t, app, run, session, "refactor the cache")
+
+				sendPeerMessage(t, cli, "lead", session, "New code logs through slog.", turn)
+				modEvent(t, run, fakeagent.ModEventHeld, "slog")
+				var typed []string
+				if turn == "steer" {
+					typed = run.ModToolBoundary()
+				} else {
+					run.ModAbortLands()
+					typed = []string{run.Prompted()}
+				}
+				want := "reply: attn agent msg "
+				if tools {
+					want = "reply: agent_msg({target: "
+				}
+				if len(typed) != 1 || !strings.Contains(typed[0], "New code logs through slog.") || !strings.Contains(typed[0], want) {
+					t.Fatalf("the %s reached the Claude session as %q, want its reply line to read %q", turn, typed, want)
+				}
+			})
+		}
 	}
 }
