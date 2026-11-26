@@ -1,0 +1,10 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Chief setup popover stays open over the Settings dialog and takes its clicks (native-agent-settings)",
+  "at": "2026-11-26T20:22:37.732Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45887328937",
+  "severity": "p1",
+  "source": "ci",
+  "culprit": "a0d2c0cd2b054b12d4eff15e639fdccd48947f52"
+}
