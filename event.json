@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Ask tool guidance omits seed handover routing",
+  "at": "2026-11-26T17:06:01.595Z",
+  "detail": "The trimmed ask MCP tool description gives incorrect answer delivery guidance for delegates. It says the answer comes into the asking conversation, dropping the qualification that seed-bound asks follow the tender. A delegate's ask defaults to its staked seed. When the seed changes tenders before a reply, the successor receives the answer. The isolated TestADelegatesAskIsAboutItsSeedAndItsAnswerIsTypedToTheNextTender wire test observed this at 714921f2a and independent source review confirmed the route. Restore the qualification in the tool description and check the related lookup and launch guidance for consistency. Review evidence is on s-97c28d.\n"
+}
