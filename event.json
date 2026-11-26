@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Scheduled singletons reopen on the current desktop after cleanup",
+  "at": "2026-11-26T21:08:41.625Z",
+  "detail": "A scheduled singleton retains its conversation after its empty default launch desktop is reaped, but the next run opens on the current desktop. Pass the configured launch binding through unattended reopen when the old desktop no longer exists.\nIndependently corroborated at cec7eaba2. Isolated regression receipts are attached to s-1hpv1w.\n"
+}
