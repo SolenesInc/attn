@@ -26,7 +26,6 @@ const (
 	claudeDisplayName       = "Claude Code"
 	claudeDefaultExecutable = "claude"
 	claudeExecutableEnvVar  = "ATTN_CLAUDE_EXECUTABLE"
-	claudeModDirEnv         = "ATTN_CLAUDE_MOD_DIR"
 	claudeModSocketEnv      = "ATTN_CLAUDE_MOD_SOCKET"
 )
 
@@ -147,39 +146,6 @@ func BuildArgsForPromptTest(opts harness.DirectLaunchOpts, hookSettings string) 
 
 func HeadlessArgs(request headless.TaskRequest, instructionsPath string) []string {
 	return claudeHeadlessArgs(request, instructionsPath)
-}
-
-type directLauncher struct{}
-
-func Launcher() harness.DirectLauncher { return directLauncher{} }
-
-func (directLauncher) Facts() harness.Facts { return Facts() }
-
-func (directLauncher) ResolveExecutable(configured string) string {
-	return resolveExecutable(configured)
-}
-
-func (directLauncher) Prepare(opts harness.DirectLaunchOpts) error {
-	return prepareLaunch(opts)
-}
-
-func (directLauncher) Build(opts harness.DirectLaunchOpts) (*exec.Cmd, []string) {
-	mod := claudeModSpec{
-		Dir:    harness.ConsumeOneShotEnv(claudeModDirEnv),
-		Socket: harness.ConsumeOneShotEnv(claudeModSocketEnv),
-	}
-	hookSettings := ""
-	if Facts().Signals.ReportsTools {
-		hookSettings = generateHooksConfig(opts)
-	}
-	return buildCommand(opts, hookSettings, mod), buildEnv(opts, mod)
-}
-
-func (directLauncher) FindTranscript(resumeID string) string {
-	if !Facts().Signals.StopsReadable {
-		return ""
-	}
-	return transcript.FindClaudeTranscript(resumeID)
 }
 
 var claudeNativeDefaultTools = []string{"Read", "Write", "Edit", "Grep", "Glob"}

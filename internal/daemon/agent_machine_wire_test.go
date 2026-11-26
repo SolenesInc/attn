@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -16,35 +15,30 @@ import (
 )
 
 func TestAgentLaunchUsesTheMachineExecutableSettingAndReloadReadsItAgain(t *testing.T) {
-	for _, direct := range []bool{false, true} {
-		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
-			w := newWorld(t, fakeagent.Claude)
-			app := w.App()
-			setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
-			executable := func(name string) string {
-				path := filepath.Join(w.Dir, name)
-				body := fmt.Sprintf("#!/bin/sh\nexport LAUNCHED_BY=%s\nexec %s/bin/claude \"$@\"\n", name, w.Dir)
-				if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
-					t.Fatal(err)
-				}
-				return path
-			}
-			first, second := executable("first"), executable("second")
-			setSetting(t, app, "claude_executable", first)
-			session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
-			assertLauncher := func(want string) {
-				t.Helper()
-				run := w.Launched(session)
-				if !slices.Contains(run.Env, "LAUNCHED_BY="+want) {
-					t.Errorf("agent did not use machine executable %s", want)
-				}
-			}
-			assertLauncher("first")
-			setSetting(t, app, "claude_executable", second)
-			launchIntentReload(t, app, session)
-			assertLauncher("second")
-		})
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	executable := func(name string) string {
+		path := filepath.Join(w.Dir, name)
+		body := fmt.Sprintf("#!/bin/sh\nexport LAUNCHED_BY=%s\nexec %s/bin/claude \"$@\"\n", name, w.Dir)
+		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return path
 	}
+	first, second := executable("first"), executable("second")
+	setSetting(t, app, "claude_executable", first)
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	assertLauncher := func(want string) {
+		t.Helper()
+		run := w.Launched(session)
+		if !slices.Contains(run.Env, "LAUNCHED_BY="+want) {
+			t.Errorf("agent did not use machine executable %s", want)
+		}
+	}
+	assertLauncher("first")
+	setSetting(t, app, "claude_executable", second)
+	launchIntentReload(t, app, session)
+	assertLauncher("second")
 }
 
 func TestAnUnavailableHarnessIsRefusedNamingTheMachine(t *testing.T) {
@@ -64,34 +58,31 @@ func TestAnUnavailableHarnessIsRefusedNamingTheMachine(t *testing.T) {
 }
 
 func TestAgentHooksReachTheLaunchingDaemonAndDefaultExecutableComesFromPath(t *testing.T) {
-	for _, direct := range []bool{false, true} {
-		for _, agent := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
-			t.Run(string(agent)+"/direct="+strconv.FormatBool(direct), func(t *testing.T) {
-				w := &world{World: prepareWorld(t, agent)}
-				t.Setenv("ATTN_CLAUDE_EXECUTABLE", "")
-				t.Setenv("ATTN_CODEX_EXECUTABLE", "")
-				w.start()
-				app := w.App()
-				setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
-				session := w.Spawn(app, agent, w.Path("shop"))
-				run := w.Launched(session)
-				if filepath.Base(run.Argv[0]) != string(agent) {
-					t.Errorf("executable = %q, want the harness on this daemon's PATH", run.Argv[0])
-				}
-				hooks := run.Argv
-				if agent == fakeagent.Codex {
-					hooks = w.CodexServer().Argv()
-				}
-				if !strings.Contains(strings.Join(hooks, "\n"), w.Socket) {
-					t.Errorf("hooks %q do not name the launching daemon's socket %s", hooks, w.Socket)
-				}
-				app.TypeLine(session, "price the cart")
-				run.Prompted()
-				working := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
-				run.Reply("Priced. <!-- attn:state=idle -->")
-				testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-			})
-		}
+	for _, agent := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+		t.Run(string(agent), func(t *testing.T) {
+			w := &world{World: prepareWorld(t, agent)}
+			t.Setenv("ATTN_CLAUDE_EXECUTABLE", "")
+			t.Setenv("ATTN_CODEX_EXECUTABLE", "")
+			w.start()
+			app := w.App()
+			session := w.Spawn(app, agent, w.Path("shop"))
+			run := w.Launched(session)
+			if filepath.Base(run.Argv[0]) != string(agent) {
+				t.Errorf("executable = %q, want the harness on this daemon's PATH", run.Argv[0])
+			}
+			hooks := run.Argv
+			if agent == fakeagent.Codex {
+				hooks = w.CodexServer().Argv()
+			}
+			if !strings.Contains(strings.Join(hooks, "\n"), w.Socket) {
+				t.Errorf("hooks %q do not name the launching daemon's socket %s", hooks, w.Socket)
+			}
+			app.TypeLine(session, "price the cart")
+			run.Prompted()
+			working := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+			run.Reply("Priced. <!-- attn:state=idle -->")
+			testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+		})
 	}
 }
 

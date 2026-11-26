@@ -100,7 +100,7 @@ pub(crate) const GROUPS: &[Group] = &[
                 Section::Agents,
                 "Agents and models",
                 "Defaults for new sessions, with configuration for each agent.",
-                "agents executables default asks questions answer decisions drawer capabilities model effort pricing context window cap tokens compaction auto-approve unattended direct agent launches memory shared terminal host pty backend rust workers seeds standby pull request pr comments ring quiet",
+                "agents executables default asks questions answer decisions drawer capabilities model effort pricing context window cap tokens compaction auto-approve unattended memory shared terminal host pty backend rust workers seeds standby pull request pr comments ring quiet",
             ),
             item(
                 Section::Models,

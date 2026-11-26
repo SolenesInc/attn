@@ -407,20 +407,6 @@ func fprintJSON(w io.Writer, v interface{}) error {
 	return enc.Encode(v)
 }
 
-func runWrapper() {
-	if os.Getenv("ATTN_DAEMON_MANAGED") == "1" {
-		agentName := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_AGENT")))
-		if agentName == "" {
-			fmt.Fprintf(os.Stderr, "attn: this terminal names no harness: set ATTN_AGENT to one of %s\n", builtinHarnesses())
-			exit(1)
-		}
-		runAgentDirectly(agentName)
-		return
-	}
-
-	openAppWithDeepLink()
-}
-
 func openAppWithDeepLink() {
 	cwd, err := os.Getwd()
 	if err != nil {

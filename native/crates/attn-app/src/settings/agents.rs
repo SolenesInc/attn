@@ -25,7 +25,6 @@ use crate::{State, setting};
 const DEFAULT_AGENT: &str = "new_session_agent";
 const AUTO_APPROVE: &str = "auto_approve_enabled";
 const ASKS: &str = "asks_enabled";
-const DIRECT_LAUNCH: &str = "direct_agent_launch_enabled";
 const SHARED_HOST: &str = "pty_shared_host_enabled";
 const TENDER_RESUME: &str = "garden.tender_resume";
 const OWN_PR_COMMENTS: &str = "pull_requests.own_comments";
@@ -334,15 +333,6 @@ fn session_defaults(state: &State, t: &Tokens) -> Block {
                 .build(t),
         )
         .push_all(asks_motion(state, t))
-        .push(
-            SettingRow::new(
-                "settings.row.direct-launch",
-                "Direct agent launches",
-                "Start agents without an attn process beside each one, which uses less memory. On by default; applies to new and reloaded agents.",
-                setting_toggle(DIRECT_LAUNCH, "Direct agent launches", false, t, state),
-            )
-            .build(t),
-        )
         .push(
             SettingRow::new(
                 "settings.row.shared-host",

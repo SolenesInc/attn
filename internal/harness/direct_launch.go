@@ -1,9 +1,7 @@
 package harness
 
 import (
-	"encoding/json"
 	"os"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -13,31 +11,9 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-const (
-	AgentToolsURLEnv    = "ATTN_AGENT_TOOLS_URL"
-	AgentCredentialEnv  = "ATTN_AGENT_CREDENTIAL"
-	SharedAgentToolsEnv = "ATTN_SHARED_AGENT_TOOLS"
-)
+const AgentCredentialEnv = "ATTN_AGENT_CREDENTIAL"
 
 var ApprovedAgentTools = []string{"attn_record", "skill", "ask"}
-
-func (t *AgentTools) LauncherEnv() []string {
-	if t == nil {
-		return nil
-	}
-	return []string{AgentToolsURLEnv + "=" + t.URL, AgentCredentialEnv + "=" + t.Credential}
-}
-
-func (t *AgentTools) SharedLauncherEnv() []string {
-	if t == nil {
-		return nil
-	}
-	raw, err := json.Marshal(t)
-	if err != nil {
-		panic(err)
-	}
-	return []string{SharedAgentToolsEnv + "=" + string(raw)}
-}
 
 type DirectLaunchOpts struct {
 	TerminalID        protocol.TerminalID
@@ -65,14 +41,6 @@ func (o DirectLaunchOpts) EffectiveGuidance() prompts.Launch {
 	return g
 }
 
-type DirectLauncher interface {
-	Facts() Facts
-	ResolveExecutable(configured string) string
-	Prepare(opts DirectLaunchOpts) error
-	Build(opts DirectLaunchOpts) (cmd *exec.Cmd, env []string)
-	FindTranscript(resumeID string) string
-}
-
 func ResolveExecutable(envVar, configured, fallback string) string {
 	if v := strings.TrimSpace(configured); v != "" {
 		return v
@@ -83,12 +51,6 @@ func ResolveExecutable(envVar, configured, fallback string) string {
 		}
 	}
 	return fallback
-}
-
-func ConsumeOneShotEnv(key string) string {
-	value := strings.TrimSpace(os.Getenv(key))
-	_ = os.Unsetenv(key)
-	return value
 }
 
 var capabilityEnvNameSanitizer = sync.OnceValue(func() *regexp.Regexp {

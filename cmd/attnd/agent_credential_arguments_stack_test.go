@@ -11,7 +11,6 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -30,21 +29,18 @@ func TestNoProcessALaunchStartsHoldsTheAgentCredentialInItsArguments(t *testing.
 			s.Start()
 			app := s.App()
 			requireStdout(t, s.Attn("settings", "set", "agent_tools_enabled", "true"), "true")
-			for _, direct := range []bool{true, false} {
-				setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
-				for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
-					launch := string(h) + " direct=" + strconv.FormatBool(direct)
-					session := s.Spawn(app, h, s.Path(string(h)))
-					agent := s.Launched(session)
-					credential := stackCredential(t, s, "t."+app.Terminal(session))
-					if h == fakeagent.Claude && (!slices.Contains(agent.Env, "ATTN_AGENT_CREDENTIAL="+credential) || len(credentialsSignedBy(t, s, strings.Join(agent.Env, " "))) == 0) {
-						t.Errorf("%s: the agent's environment lacks a credential the scan finds", launch)
-					}
-					arguments := append([]string{strings.Join(agent.Argv, " ")}, runningProcessArguments(t)...)
-					for _, args := range append(arguments, loginShell.launches(t)...) {
-						if held := credentialsSignedBy(t, s, args); len(held) > 0 {
-							t.Errorf("%s: a process started with the credentials %q in its arguments", launch, held)
-						}
+			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+				launch := string(h)
+				session := s.Spawn(app, h, s.Path(string(h)))
+				agent := s.Launched(session)
+				credential := stackCredential(t, s, "t."+app.Terminal(session))
+				if h == fakeagent.Claude && (!slices.Contains(agent.Env, "ATTN_AGENT_CREDENTIAL="+credential) || len(credentialsSignedBy(t, s, strings.Join(agent.Env, " "))) == 0) {
+					t.Errorf("%s: the agent's environment lacks a credential the scan finds", launch)
+				}
+				arguments := append([]string{strings.Join(agent.Argv, " ")}, runningProcessArguments(t)...)
+				for _, args := range append(arguments, loginShell.launches(t)...) {
+					if held := credentialsSignedBy(t, s, args); len(held) > 0 {
+						t.Errorf("%s: a process started with the credentials %q in its arguments", launch, held)
 					}
 				}
 			}

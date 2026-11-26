@@ -2,7 +2,7 @@
 
 Every coding agent harness sits behind the Go contract in `internal/harness/`
 (`Harness`, `Facts`, `Conversation`, `ConversationStore`, `Events`, `Host`,
-`DirectLauncher`, shared optional parts
+shared optional parts
 `OneShot`/`Trust`/`Transcript`/`FolderTrustReader`/`CallerResolver`, and
 `internal/harness/appserver` for `attn-app-server-v2`) and the pushed wire
 catalog (`harness_catalog` / `harness_logo`). Adapters live under

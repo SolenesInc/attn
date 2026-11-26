@@ -30,7 +30,7 @@ const MODEL = 'agent-settings-check-model';
 const RATES = {
   input_usd_per_mtok: '2', output_usd_per_mtok: '10', cache_read_usd_per_mtok: '0.2', cache_write_5m_usd_per_mtok: '2.5', cache_write_1h_usd_per_mtok: '4',
 };
-const SETTINGS = ['direct_agent_launch_enabled', 'auto_approve_enabled', 'new_session_agent', 'codex_executable', 'default_context_window_cap_codex', `session_cost.price.${MODEL}`, 'headless_context_window_cap'];
+const SETTINGS = ['auto_approve_enabled', 'new_session_agent', 'codex_executable', 'default_context_window_cap_codex', `session_cost.price.${MODEL}`, 'headless_context_window_cap'];
 
 const savedAs = (key, value) => observer.waitForMessage((m) => m.event === 'settings_updated' && m.settings?.[key] === value && m, `${key} saved as ${JSON.stringify(value)}`, 15_000);
 const nodes = async () => {
@@ -82,8 +82,7 @@ try {
     await section('agents');
   });
 
-  await runner.step('the_switches_save_both_ways', async () => {
-    await flip('direct_agent_launch_enabled');
+  await runner.step('the_switch_saves_both_ways', async () => {
     await flip('auto_approve_enabled');
     await screenshot('native-agents.png');
   });

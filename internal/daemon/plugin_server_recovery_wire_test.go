@@ -2,7 +2,6 @@ package daemon_test
 
 import (
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -164,16 +163,11 @@ func TestAServerListsTheExecutionTargetsOfAFolder(t *testing.T) {
 }
 
 func TestAServerConversationStartsOnTheTargetItsSessionLaunchedWith(t *testing.T) {
-	for _, direct := range []bool{false, true} {
-		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
-			w := newWorld(t, fakeagent.SampleServer)
-			app := w.App()
-			setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
-			_, view, server := appServerSession(t, w, app, fakeagent.SampleServer, func(m *protocol.SpawnSessionMessage) { m.ExecutionTarget = protocol.Ptr("devvm") })
-			if started := server.Started(view.ConversationID); started.Target != "devvm" {
-				t.Fatalf("the conversation started on %q, want devvm", started.Target)
-			}
-		})
+	w := newWorld(t, fakeagent.SampleServer)
+	app := w.App()
+	_, view, server := appServerSession(t, w, app, fakeagent.SampleServer, func(m *protocol.SpawnSessionMessage) { m.ExecutionTarget = protocol.Ptr("devvm") })
+	if started := server.Started(view.ConversationID); started.Target != "devvm" {
+		t.Fatalf("the conversation started on %q, want devvm", started.Target)
 	}
 }
 

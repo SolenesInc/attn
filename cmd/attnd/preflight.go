@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 
+	"github.com/victorarias/attn/internal/harness/builtin"
 	"github.com/victorarias/attn/internal/preflight"
 )
 
@@ -142,4 +144,10 @@ options:
   --app-path <path> packaged app to check (defaults to the selected instance app)
   --json           emit the stable machine-readable report
 `)
+}
+
+func builtinHarnesses() string {
+	names := builtin.IDs()
+	slices.Sort(names)
+	return strings.Join(names, ", ")
 }

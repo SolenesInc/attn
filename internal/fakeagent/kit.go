@@ -80,9 +80,9 @@ func Install(t testing.TB, dir, binary string, harnesses []Harness, wrapper stri
 	if err := setClaudeTrust(toolHome, resolved); err != nil {
 		t.Fatal(err)
 	}
-	links := map[string]string{wrapperName: binary}
+	links := map[string]string{attnName: binary}
 	if wrapper != "" {
-		links[wrapperName] = wrapper
+		links[attnName] = wrapper
 	}
 	for _, h := range []Harness{Claude, Codex, Plug, Sigma, SampleServer} {
 		links[string(h)] = binary
@@ -119,7 +119,7 @@ func (k *Kit) Env() []string {
 		"SIGMA_HOME=" + appServerHome(filepath.Dir(k.cfg.Control), Sigma),
 		"ATTN_SAMPLE_SERVER_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(SampleServer)),
 		"SAMPLE_SERVER_HOME=" + appServerHome(filepath.Dir(k.cfg.Control), SampleServer),
-		"ATTN_WRAPPER_PATH=" + filepath.Join(k.cfg.Bin, wrapperName),
+		"ATTN_WRAPPER_PATH=" + filepath.Join(k.cfg.Bin, attnName),
 	}
 }
 

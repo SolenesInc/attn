@@ -16,13 +16,11 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/sessionstate"
-	"github.com/victorarias/attn/internal/setting"
 )
 
 type AgentLaunch struct {
 	Context              hooks.Launch
 	AwarenessDirs        []string
-	Direct               bool
 	InitialPrompt        string
 	Lifetime             harness.Lifetime
 	PreviousLifetime     harness.Lifetime
@@ -61,7 +59,7 @@ func (d *Daemon) agentLaunchContext(sessionID protocol.SessionID, agent string) 
 	if err != nil {
 		return nil, err
 	}
-	return &AgentLaunch{Context: launch, AwarenessDirs: awareness, Direct: d.on(setting.DirectAgentLaunchEnabled), Owner: d.factsOrNone(agent).Owner}, nil
+	return &AgentLaunch{Context: launch, AwarenessDirs: awareness, Owner: d.factsOrNone(agent).Owner}, nil
 }
 
 func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptybackend.SpawnOptions, launch *AgentLaunch, reload bool) error {
@@ -100,7 +98,7 @@ func launchRequestOf(sessionID protocol.SessionID, opts ptybackend.SpawnOptions,
 			Target: opts.ExecutionTarget, ContextCap: opts.ContextWindowCap,
 		},
 		Executable: opts.Executable, Unattended: opts.UnattendedLaunch,
-		Guidance: launch.Context, AwarenessDirs: launch.AwarenessDirs, Trust: launch.RepositoryTrust, Direct: launch.Direct,
+		Guidance: launch.Context, AwarenessDirs: launch.AwarenessDirs, Trust: launch.RepositoryTrust,
 		Lifecycle: opts.LifecycleID, Owner: launch.Owner,
 	}
 	switch {

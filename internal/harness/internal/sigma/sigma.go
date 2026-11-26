@@ -82,12 +82,7 @@ func (h *Harness) Launch(_ context.Context, req harness.LaunchRequest) (harness.
 	} else if served, ok := h.host.TerminalTools(req.Terminal); ok {
 		tools = &harness.AgentTools{URL: served.URL, Credential: served.Credential}
 	}
-	var command harness.Command
-	if req.Direct {
-		command = directCommand(req, executable, tools, shared)
-	} else {
-		command = launcherCommand(req, executable, tools, shared)
-	}
+	command := directCommand(req, executable, tools, shared)
 	command.Executable = configured
 	if onServer {
 		command.Env = append(command.Env, h.link.HomeEnv())
@@ -100,27 +95,6 @@ func explicitExecutable(req harness.LaunchRequest) string {
 		return req.Unattended.Executable
 	}
 	return req.Executable
-}
-
-func launcherCommand(req harness.LaunchRequest, executable string, tools *harness.AgentTools, shared *harness.AgentTools) harness.Command {
-	guidance := req.Guidance
-	var env []string
-	if guidance.Crew != "" {
-		env = append(env, "ATTN_CREW_MEMBER=1")
-	}
-	env = append(env, tools.LauncherEnv()...)
-	env = append(env, shared.SharedLauncherEnv()...)
-	env = append(env, fmt.Sprintf("ATTN_VENT_ENABLED=%t", guidance.Vent), fmt.Sprintf("ATTN_TOOL_VENTS_ENABLED=%t", guidance.ToolVents), fmt.Sprintf("ATTN_CODE_REVIEW_ENABLED=%t", guidance.CodeReview))
-	autoApprove, model, effort := req.Options.AutoApprove, req.Options.Model, req.Options.Effort
-	if unattended := req.Unattended; !unattended.IsZero() {
-		autoApprove, model, effort = true, unattended.Model, unattended.Effort
-	}
-	return harness.LauncherCommand(harness.LauncherLaunch{
-		Label: req.Label, Conversation: req.Conversation, Picker: req.Picker, Yolo: req.Options.Yolo, InitialPrompt: req.InitialPrompt,
-		ExecutableEnv: executableEnvVar, Executable: executable,
-		AutoApprove: autoApprove, Model: model, Effort: effort, Target: req.Options.Target, ContextCap: req.Options.ContextCap,
-		Env: env,
-	})
 }
 
 func directCommand(req harness.LaunchRequest, explicit string, tools *harness.AgentTools, shared *harness.AgentTools) harness.Command {

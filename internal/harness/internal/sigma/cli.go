@@ -59,24 +59,6 @@ func serverDeclaration() appserver.Declaration {
 	}
 }
 
-type directLauncher struct{}
-
-func Launcher() harness.DirectLauncher { return directLauncher{} }
-
-func (directLauncher) Facts() harness.Facts { return Facts() }
-
-func (directLauncher) ResolveExecutable(configured string) string {
-	return harness.ResolveExecutable(executableEnvVar, configured, defaultExecutable)
-}
-
-func (directLauncher) Prepare(harness.DirectLaunchOpts) error { return nil }
-
-func (directLauncher) Build(opts harness.DirectLaunchOpts) (*exec.Cmd, []string) {
-	return buildCommand(opts), buildEnv(opts)
-}
-
-func (directLauncher) FindTranscript(string) string { return "" }
-
 func buildCommand(opts harness.DirectLaunchOpts) *exec.Cmd {
 	args := []string{"--conversation", sigmaConversation(opts)}
 	if opts.YoloMode || opts.AutoApprove {

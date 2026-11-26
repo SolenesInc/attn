@@ -441,7 +441,7 @@ func validateDaemonDatabaseIsolation(socketPath string) error {
 // EnvOutsideSessions removes what marks a process as a session's child, so a
 // process the daemon starts can replace the daemon as a person's terminal can.
 func EnvOutsideSessions(env []string) []string {
-	drop := []string{sessionHomeEnv, sessionBinaryEnv, "ATTN_WRAPPER_PATH", "ATTN_INSIDE_APP", "ATTN_DAEMON_MANAGED", "ATTN_PTY_WORKER", "ATTN_TERMINAL_ID", "ATTN_SESSION_ID", "ATTN_AGENT"}
+	drop := []string{sessionHomeEnv, sessionBinaryEnv, "ATTN_WRAPPER_PATH", "ATTN_INSIDE_APP", "ATTN_PTY_WORKER", "ATTN_TERMINAL_ID", "ATTN_SESSION_ID", "ATTN_AGENT"}
 	kept := make([]string, 0, len(env))
 	for _, entry := range env {
 		name, _, _ := strings.Cut(entry, "=")

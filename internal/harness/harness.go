@@ -58,7 +58,6 @@ type LaunchRequest struct {
 	AwarenessDirs []string
 	Trust         *RepositoryTrust
 	Note          json.RawMessage
-	Direct        bool
 	// Lifecycle names this run of the terminal, minted before the launch.
 	Lifecycle string
 	// Owner is the Facts.Owner the home planned the launch with.

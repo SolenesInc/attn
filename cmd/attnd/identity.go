@@ -3,18 +3,12 @@ package main
 import (
 	"errors"
 	"fmt"
-	"os"
-	"syscall"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/harness/builtin"
 	"github.com/victorarias/attn/internal/protocol"
 )
-
-func ownTerminalID() protocol.TerminalID {
-	return protocol.TrimID(harness.TerminalFromEnv(builtin.CallerEnvs()...))
-}
 
 var errNoCurrentSession = errors.New("not showing a session")
 
@@ -34,17 +28,4 @@ func currentSession(c *client.Client) (protocol.SessionID, error) {
 		return "", fmt.Errorf("terminal %s is %w", terminalID, errNoCurrentSession)
 	}
 	return sessionID, nil
-}
-
-func currentSessionOrExit() protocol.SessionID {
-	sessionID, err := currentSession(client.New(""))
-	if err != nil {
-		if errors.Is(err, syscall.EPERM) {
-			fmt.Fprintf(os.Stderr, "attn: %v\n", err)
-		} else {
-			fmt.Fprintf(os.Stderr, "attn: resolve current session: %v\n", err)
-		}
-		exit(1)
-	}
-	return sessionID
 }

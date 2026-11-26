@@ -26,66 +26,54 @@ func launchGuidance(t *testing.T, w *world, run *fakeagent.Run) string {
 }
 
 func TestEachHarnessReadsAttnsGuidanceAndLeavesItsPullRequestsToItsHooks(t *testing.T) {
-	for _, direct := range []bool{false, true} {
-		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
-			w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
-			app := w.App()
-			if direct {
-				setSetting(t, app, "direct_agent_launch_enabled", "true")
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
+	app := w.App()
+	yolo := map[fakeagent.Harness]string{
+		fakeagent.Claude: "--dangerously-skip-permissions",
+	}
+	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+		run := w.Launched(w.Spawn(app, h, w.Path(string(h)), func(m *protocol.SpawnSessionMessage) {
+			m.YoloMode = protocol.Ptr(true)
+		}))
+		if h == fakeagent.Codex {
+			if got, want := w.CodexServer().Permissions(run.ConversationID), (fakeagent.CodexPermissions{ApprovalPolicy: "never", Sandbox: "danger-full-access"}); got.ApprovalPolicy != want.ApprovalPolicy || got.Sandbox != want.Sandbox {
+				t.Errorf("a yolo codex runs with permissions %+v, want %+v", got, want)
 			}
-			yolo := map[fakeagent.Harness]string{
-				fakeagent.Claude: "--dangerously-skip-permissions",
-			}
-			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
-				run := w.Launched(w.Spawn(app, h, w.Path(string(h)), func(m *protocol.SpawnSessionMessage) {
-					m.YoloMode = protocol.Ptr(true)
-				}))
-				if h == fakeagent.Codex {
-					if got, want := w.CodexServer().Permissions(run.ConversationID), (fakeagent.CodexPermissions{ApprovalPolicy: "never", Sandbox: "danger-full-access"}); got.ApprovalPolicy != want.ApprovalPolicy || got.Sandbox != want.Sandbox {
-						t.Errorf("a yolo codex runs with permissions %+v, want %+v", got, want)
-					}
-				} else if !slices.Contains(run.Argv, yolo[h]) {
-					t.Errorf("a yolo %s launched without %s: %q", h, yolo[h], run.Argv)
-				}
-				guidance := launchGuidance(t, w, run)
-				if !strings.Contains(guidance, agentGuidanceLead) {
-					t.Errorf("%s launched without attn's agent guidance:\n%s", h, guidance)
-				}
-				if strings.Contains(guidance, "attn pr record") {
-					t.Errorf("%s, whose hooks report its pull requests, is told to record them itself", h)
-				}
-			}
-		})
+		} else if !slices.Contains(run.Argv, yolo[h]) {
+			t.Errorf("a yolo %s launched without %s: %q", h, yolo[h], run.Argv)
+		}
+		guidance := launchGuidance(t, w, run)
+		if !strings.Contains(guidance, agentGuidanceLead) {
+			t.Errorf("%s launched without attn's agent guidance:\n%s", h, guidance)
+		}
+		if strings.Contains(guidance, "attn pr record") {
+			t.Errorf("%s, whose hooks report its pull requests, is told to record them itself", h)
+		}
 	}
 }
 
 func TestAClaudeCodeSessionKeepsItsPeerToolsAndIsToldToReachOtherAgentsThroughAttn(t *testing.T) {
 	const notAttns = "Claude Code's own `ListAgents` and `SendMessage` tools are not attn's"
-	for _, direct := range []bool{false, true} {
-		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
-			w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
-			app := w.App()
-			setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
-			for _, tools := range []bool{false, true} {
-				setSetting(t, app, "agent_tools_enabled", strconv.FormatBool(tools))
-				claude := w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("claude"), func(m *protocol.SpawnSessionMessage) {
-					m.InitialPrompt = protocol.Ptr("--help is text, not a flag")
-				}))
-				if slices.Contains(claude.Argv, "--disallowed-tools") {
-					t.Errorf("with agent_tools_enabled %t, claude launched with tools disallowed: %q", tools, claude.Argv)
-				}
-				if got := claude.Prompted(); got != "--help is text, not a flag" {
-					t.Errorf("claude was prompted %q", got)
-				}
-				if guidance := launchGuidance(t, w, claude); !strings.Contains(guidance, notAttns) {
-					t.Errorf("with agent_tools_enabled %t, claude launched without being told its peer tools are not attn's:\n%s", tools, guidance)
-				}
-				codex := w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("codex")))
-				if guidance := launchGuidance(t, w, codex); strings.Contains(guidance, notAttns) {
-					t.Errorf("with agent_tools_enabled %t, codex was told about Claude Code's peer tools:\n%s", tools, guidance)
-				}
-			}
-		})
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
+	app := w.App()
+	for _, tools := range []bool{false, true} {
+		setSetting(t, app, "agent_tools_enabled", strconv.FormatBool(tools))
+		claude := w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("claude"), func(m *protocol.SpawnSessionMessage) {
+			m.InitialPrompt = protocol.Ptr("--help is text, not a flag")
+		}))
+		if slices.Contains(claude.Argv, "--disallowed-tools") {
+			t.Errorf("with agent_tools_enabled %t, claude launched with tools disallowed: %q", tools, claude.Argv)
+		}
+		if got := claude.Prompted(); got != "--help is text, not a flag" {
+			t.Errorf("claude was prompted %q", got)
+		}
+		if guidance := launchGuidance(t, w, claude); !strings.Contains(guidance, notAttns) {
+			t.Errorf("with agent_tools_enabled %t, claude launched without being told its peer tools are not attn's:\n%s", tools, guidance)
+		}
+		codex := w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("codex")))
+		if guidance := launchGuidance(t, w, codex); strings.Contains(guidance, notAttns) {
+			t.Errorf("with agent_tools_enabled %t, codex was told about Claude Code's peer tools:\n%s", tools, guidance)
+		}
 	}
 }
 
@@ -106,41 +94,28 @@ func TestACodexDefaultContextWindowCapBecomesItsCompactLimit(t *testing.T) {
 }
 
 func TestCrewLaunchesWithQuickCaptureGuidance(t *testing.T) {
-	for _, direct := range []bool{false, true} {
-		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
-			w := newCrewWorld(t, fakeagent.Codex)
-			app := w.App()
-			setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
-			day := w.Launched(string(startCrew(t, w.Client(), "alder", "codex").SessionID))
-			if !strings.Contains(launchGuidance(t, w, day), "The user can send you messages from Quick Capture") {
-				t.Fatal("a crew member launched without the Quick Capture guidance")
-			}
-		})
+	w := newCrewWorld(t, fakeagent.Codex)
+	day := w.Launched(string(startCrew(t, w.Client(), "alder", "codex").SessionID))
+	if !strings.Contains(launchGuidance(t, w, day), "The user can send you messages from Quick Capture") {
+		t.Fatal("a crew member launched without the Quick Capture guidance")
 	}
 }
 
 func TestAnAgentIsTaughtToPresentAReviewOnlyWhenItLaunchedWithCodeReviewOn(t *testing.T) {
 	const reviewRow = "`attn review` | `review` |"
-	for _, direct := range []bool{false, true} {
-		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
-			w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
-			app := w.App()
-			if direct {
-				setSetting(t, app, "direct_agent_launch_enabled", "true")
-			}
-			for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
-				off := w.Spawn(app, harness, w.Path(string(harness)+"-off"))
-				if guidance := launchGuidance(t, w, w.Launched(off)); strings.Contains(guidance, reviewRow) || !strings.Contains(guidance, "| `attn open` | `markdown` |") {
-					t.Fatalf("%s launched with code_review_enabled off: want the map without the review row:\n%s", harness, guidance)
-				}
-			}
-			setSetting(t, app, "code_review_enabled", "true")
-			for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
-				on := w.Spawn(app, harness, w.Path(string(harness)+"-on"))
-				if guidance := launchGuidance(t, w, w.Launched(on)); !strings.Contains(guidance, reviewRow) {
-					t.Fatalf("%s launched with code_review_enabled on: want the review row in the map:\n%s", harness, guidance)
-				}
-			}
-		})
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
+	app := w.App()
+	for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+		off := w.Spawn(app, harness, w.Path(string(harness)+"-off"))
+		if guidance := launchGuidance(t, w, w.Launched(off)); strings.Contains(guidance, reviewRow) || !strings.Contains(guidance, "| `attn open` | `markdown` |") {
+			t.Fatalf("%s launched with code_review_enabled off: want the map without the review row:\n%s", harness, guidance)
+		}
+	}
+	setSetting(t, app, "code_review_enabled", "true")
+	for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+		on := w.Spawn(app, harness, w.Path(string(harness)+"-on"))
+		if guidance := launchGuidance(t, w, w.Launched(on)); !strings.Contains(guidance, reviewRow) {
+			t.Fatalf("%s launched with code_review_enabled on: want the review row in the map:\n%s", harness, guidance)
+		}
 	}
 }

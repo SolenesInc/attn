@@ -153,41 +153,13 @@ func (h codexHarness) Launch(_ context.Context, req harness.LaunchRequest) (harn
 	if served, ok := h.host.TerminalTools(req.Terminal); ok && remote == "" {
 		tools = &harness.AgentTools{URL: served.URL, Credential: served.Credential}
 	}
-	var cmd harness.Command
-	if req.Direct {
-		var err error
-		if cmd, err = h.directCommand(req, executable, remote, tools); err != nil {
-			return harness.Command{}, fmt.Errorf("prepare %s launch: %w", h.Facts().ID, err)
-		}
-	} else {
-		cmd = h.launcherCommand(req, executable, remote, tools)
+	cmd, err := h.directCommand(req, executable, remote, tools)
+	if err != nil {
+		return harness.Command{}, fmt.Errorf("prepare %s launch: %w", h.Facts().ID, err)
 	}
 	cmd.Executable = launchExecutable
 	cmd.TitleSignals = h.Facts().Signals.Titles
 	return cmd, nil
-}
-
-func (h codexHarness) launcherCommand(req harness.LaunchRequest, executable, remote string, tools *harness.AgentTools) harness.Command {
-	guidance := req.Guidance
-	var env []string
-	if remote != "" {
-		env = append(env, codexRemoteEnv+"="+remote)
-	}
-	if guidance.Crew != "" {
-		env = append(env, "ATTN_CREW_MEMBER=1")
-	}
-	env = append(env, tools.LauncherEnv()...)
-	env = append(env, fmt.Sprintf("ATTN_VENT_ENABLED=%t", guidance.Vent), fmt.Sprintf("ATTN_TOOL_VENTS_ENABLED=%t", guidance.ToolVents), fmt.Sprintf("ATTN_CODE_REVIEW_ENABLED=%t", guidance.CodeReview))
-	autoApprove, model, effort := req.Options.AutoApprove, req.Options.Model, req.Options.Effort
-	if unattended := req.Unattended; !unattended.IsZero() {
-		autoApprove, model, effort = true, unattended.Model, unattended.Effort
-	}
-	return harness.LauncherCommand(harness.LauncherLaunch{
-		Label: req.Label, Conversation: req.Conversation, Picker: req.Picker, Yolo: req.Options.Yolo, InitialPrompt: req.InitialPrompt,
-		ExecutableEnv: codexExecutableEnvVar, Executable: executable,
-		AutoApprove: autoApprove, Model: model, Effort: effort, Target: req.Options.Target, ContextCap: req.Options.ContextCap,
-		Env: env,
-	})
 }
 
 func (h codexHarness) directCommand(req harness.LaunchRequest, explicit, remote string, tools *harness.AgentTools) (harness.Command, error) {

@@ -269,7 +269,7 @@ fn the_saved_resume_choice_shows_and_a_profile_without_one_resumes_on_any_mail()
 }
 
 #[test]
-fn auto_approve_and_direct_launches_start_on_and_switch_both_ways() {
+fn auto_approve_starts_on_and_switches_both_ways() {
     let mut world = on_agents(&both(&[("auto_approve_enabled", "false")]));
     let approve = toggle("auto_approve_enabled");
     assert_eq!(node(&world, &approve).name.as_deref(), Some("Auto-approve"));
@@ -282,20 +282,8 @@ fn auto_approve_and_direct_launches_start_on_and_switch_both_ways() {
     let mut world = on_agents(BOTH);
     assert!(node(&world, &approve).is("checked"));
     click(&mut world, &approve);
-    let direct = toggle("direct_agent_launch_enabled");
-    assert!(node(&world, &direct).is("checked"));
-    click(&mut world, &direct);
-    assert!(!node(&world, &direct).is("checked"));
-    click(&mut world, &direct);
-    assert!(node(&world, &direct).is("checked"));
-    assert_eq!(
-        writes(&world),
-        saved(&[
-            ("auto_approve_enabled", "false"),
-            ("direct_agent_launch_enabled", "false"),
-            ("direct_agent_launch_enabled", "true"),
-        ])
-    );
+    assert!(!node(&world, &approve).is("checked"));
+    assert_eq!(writes(&world), saved(&[("auto_approve_enabled", "false")]));
     rest(&mut world);
 }
 

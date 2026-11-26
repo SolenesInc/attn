@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -320,41 +319,36 @@ func TestAgentToolsAnswerEachPostAloneWithOneJSONBodyAndRefuseAStream(t *testing
 }
 
 func TestALaunchedClaudeCallsTheToolsAsItsSessionWithACredentialOnlyItsEnvironmentHolds(t *testing.T) {
-	for _, direct := range []bool{false, true} {
-		t.Run("direct="+strconv.FormatBool(direct), func(t *testing.T) {
-			w := newWorld(t, fakeagent.Claude)
-			app := w.App()
-			setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
-			seed := plantForTools(t, w)
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	seed := plantForTools(t, w)
 
-			without := w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("off")))
-			if config, ok := flagValue(without.Argv, "--mcp-config"); ok {
-				t.Errorf("with agent_tools_enabled off claude launched with --mcp-config %s, want none", config)
-			}
+	without := w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("off")))
+	if config, ok := flagValue(without.Argv, "--mcp-config"); ok {
+		t.Errorf("with agent_tools_enabled off claude launched with --mcp-config %s, want none", config)
+	}
 
-			setSetting(t, app, "agent_tools_enabled", "true")
-			session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
-			claude := w.Launched(session)
-			agent := launchedToolsCaller(t, w, claude)
-			for _, arg := range claude.Argv {
-				if strings.Contains(arg, agent.bearer) {
-					t.Fatalf("claude's argv holds the credential in %q", arg)
-				}
-			}
-			settings, _ := flagValue(claude.Argv, "--settings")
-			var parsed struct {
-				Permissions struct{ Allow []string } `json:"permissions"`
-			}
-			want := []string{"mcp__attn__attn_record", "mcp__attn__skill", "mcp__attn__ask"}
-			if err := json.Unmarshal([]byte(settings), &parsed); err != nil || !slices.Equal(parsed.Permissions.Allow, want) {
-				t.Errorf("claude launched with --settings allowing %v (%v), want %v", parsed.Permissions.Allow, err, want)
-			}
+	setSetting(t, app, "agent_tools_enabled", "true")
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	claude := w.Launched(session)
+	agent := launchedToolsCaller(t, w, claude)
+	for _, arg := range claude.Argv {
+		if strings.Contains(arg, agent.bearer) {
+			t.Fatalf("claude's argv holds the credential in %q", arg)
+		}
+	}
+	settings, _ := flagValue(claude.Argv, "--settings")
+	var parsed struct {
+		Permissions struct{ Allow []string } `json:"permissions"`
+	}
+	want := []string{"mcp__attn__attn_record", "mcp__attn__skill", "mcp__attn__ask"}
+	if err := json.Unmarshal([]byte(settings), &parsed); err != nil || !slices.Equal(parsed.Permissions.Allow, want) {
+		t.Errorf("claude launched with --settings allowing %v (%v), want %v", parsed.Permissions.Allow, err, want)
+	}
 
-			agent.mustCall(t, "seed_note", map[string]any{"seed": seed, "text": "From the launched claude."})
-			if author, body := newestNoteAuthor(t, w, seed); author != session || body != "From the launched claude." {
-				t.Errorf("the seed's newest note is %q by %s, want it by %s", body, author, session)
-			}
-		})
+	agent.mustCall(t, "seed_note", map[string]any{"seed": seed, "text": "From the launched claude."})
+	if author, body := newestNoteAuthor(t, w, seed); author != session || body != "From the launched claude." {
+		t.Errorf("the seed's newest note is %q by %s, want it by %s", body, author, session)
 	}
 }
 

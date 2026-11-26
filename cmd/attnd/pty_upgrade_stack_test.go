@@ -605,18 +605,30 @@ func TestAnUpdateFromTheReleaseKeepsStoredOffSettingsOffWithoutANag(t *testing.T
 
 	u.InstallBuild(u.currentAttn, u.currentHost)
 	app = u.ensureCurrent()
-	for key, want := range map[string]string{upgradeSharedHostEnabled: "false", upgradeSharedHostActive: "false", upgradeDirectLaunchEnabled: "false"} {
+	for key, want := range map[string]string{upgradeSharedHostEnabled: "false", upgradeSharedHostActive: "false"} {
 		if got := app.Initial.Settings[key]; got != want {
 			t.Errorf("%s = %q after the update, want %q", key, got, want)
 		}
 	}
+	if got, stored := app.Initial.Settings[upgradeDirectLaunchEnabled]; stored {
+		t.Errorf("%s = %q after the update, want the key gone", upgradeDirectLaunchEnabled, got)
+	}
 	if len(app.Initial.Warnings) != 0 {
 		t.Errorf("the updated daemon warns: %+v", app.Initial.Warnings)
 	}
+	u.assertParent(live.run, " -s ")
 	u.turn(app, live, "after-update")
 	fresh := u.spawnAgent(app, fakeagent.Claude)
-	u.assertParent(fresh.run, " -s ")
+	u.assertParent(fresh.run, " pty-worker ")
 	u.assertNoSharedHost(app.Terminal(fresh.session))
+	result := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(live.session), Cols: 100, Rows: 30},
+		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == live.session })
+	if !result.Success {
+		t.Fatalf("reload: %s", protocol.Deref(result.Error))
+	}
+	reloaded := releaseAgent{session: live.session, run: u.Launched(live.session)}
+	u.assertParent(reloaded.run, " pty-worker ")
+	u.turn(app, reloaded, "after-reload")
 	if notifications := u.notifications(app); len(notifications) != 0 {
 		t.Errorf("the update notified: %+v", notifications)
 	}
@@ -722,21 +734,19 @@ func TestTurningTheSettingsOffAndOnMovesNewTerminalsAndLeavesLiveOnes(t *testing
 	u.assertParent(first.run, "attn-pty-host")
 
 	setSetting(t, app, upgradeSharedHostEnabled, "false")
-	setSetting(t, app, upgradeDirectLaunchEnabled, "false")
 	second := u.spawnAgent(app, fakeagent.Claude)
-	u.assertParent(second.run, " -s ")
+	u.assertParent(second.run, " pty-worker ")
 	u.assertNoSharedHost(app.Terminal(second.session))
 	u.turn(app, first, "with-the-settings-off")
 
 	setSetting(t, app, upgradeSharedHostEnabled, "true")
-	setSetting(t, app, upgradeDirectLaunchEnabled, "true")
 	third := u.spawnAgent(app, fakeagent.Claude)
 	u.assertParent(third.run, "attn-pty-host")
 	for _, agent := range []releaseAgent{first, second, third} {
 		u.turn(app, agent, "with-the-settings-on-again")
 	}
 	u.assertParent(first.run, "attn-pty-host")
-	u.assertParent(second.run, " -s ")
+	u.assertParent(second.run, " pty-worker ")
 }
 
 func TestDirectLaunchStartsAgentsThroughTheUsersLoginShell(t *testing.T) {
@@ -800,45 +810,40 @@ func TestDirectLaunchStartsAgentsThroughTheUsersLoginShell(t *testing.T) {
 			u.turn(app, agent, "under-fish")
 		}
 	})
-	for _, direct := range []string{"true", "false"} {
-		t.Run("the harness is missing with direct launch "+direct, func(t *testing.T) {
-			t.Parallel()
-			u := startDirectLaunch(t, func(s *testworld.Stack) string {
-				s.Vars = append(s.Vars, "ATTN_CLAUDE_EXECUTABLE="+filepath.Join(s.Dir, "no-claude"))
-				return ""
-			})
-			app := u.App()
-			setSetting(t, app, upgradeDirectLaunchEnabled, direct)
-			result, _, _ := u.RequestSpawn(app, fakeagent.Claude, u.Path("claude"))
-			if result.Success || !strings.Contains(protocol.Deref(result.Error), `agent "claude" is not available`) {
-				t.Errorf("starting an agent with no harness: success=%t error=%q, want a refusal that names the harness", result.Success, protocol.Deref(result.Error))
+	t.Run("the harness is missing", func(t *testing.T) {
+		t.Parallel()
+		u := startDirectLaunch(t, func(s *testworld.Stack) string {
+			s.Vars = append(s.Vars, "ATTN_CLAUDE_EXECUTABLE="+filepath.Join(s.Dir, "no-claude"))
+			return ""
+		})
+		app := u.App()
+		result, _, _ := u.RequestSpawn(app, fakeagent.Claude, u.Path("claude"))
+		if result.Success || !strings.Contains(protocol.Deref(result.Error), `agent "claude" is not available`) {
+			t.Errorf("starting an agent with no harness: success=%t error=%q, want a refusal that names the harness", result.Success, protocol.Deref(result.Error))
+		}
+	})
+	t.Run("an rc file that exits", func(t *testing.T) {
+		t.Parallel()
+		u := startDirectLaunch(t, func(s *testworld.Stack) string {
+			return loginShell(t, s, `case "$*" in *attn-agent*) echo 'rc: broken config' >&2; exit 7;; esac`)
+		})
+		app := u.App()
+		u.assertStopsShowing(app, u.Spawn(app, fakeagent.Claude, u.Path("claude")), "rc: broken config")
+	})
+	t.Run("the harness cannot run", func(t *testing.T) {
+		t.Parallel()
+		const name = "claude-cannot-run"
+		u := startDirectLaunch(t, func(s *testworld.Stack) string {
+			path := filepath.Join(s.Dir, name)
+			if err := os.WriteFile(path, []byte("#!/no/such/interpreter\n"), 0o755); err != nil {
+				t.Fatal(err)
 			}
+			s.Vars = append(s.Vars, "ATTN_CLAUDE_EXECUTABLE="+path)
+			return ""
 		})
-		t.Run("an rc file that exits with direct launch "+direct, func(t *testing.T) {
-			t.Parallel()
-			u := startDirectLaunch(t, func(s *testworld.Stack) string {
-				return loginShell(t, s, `case "$*" in *attn-agent*) echo 'rc: broken config' >&2; exit 7;; esac`)
-			})
-			app := u.App()
-			setSetting(t, app, upgradeDirectLaunchEnabled, direct)
-			u.assertStopsShowing(app, u.Spawn(app, fakeagent.Claude, u.Path("claude")), "rc: broken config")
-		})
-		t.Run("the harness cannot run with direct launch "+direct, func(t *testing.T) {
-			t.Parallel()
-			const name = "claude-cannot-run"
-			u := startDirectLaunch(t, func(s *testworld.Stack) string {
-				path := filepath.Join(s.Dir, name)
-				if err := os.WriteFile(path, []byte("#!/no/such/interpreter\n"), 0o755); err != nil {
-					t.Fatal(err)
-				}
-				s.Vars = append(s.Vars, "ATTN_CLAUDE_EXECUTABLE="+path)
-				return ""
-			})
-			app := u.App()
-			setSetting(t, app, upgradeDirectLaunchEnabled, direct)
-			u.assertStopsShowing(app, u.Spawn(app, fakeagent.Claude, u.Path("claude")), name)
-		})
-	}
+		app := u.App()
+		u.assertStopsShowing(app, u.Spawn(app, fakeagent.Claude, u.Path("claude")), name)
+	})
 }
 
 func TestAPhoneReattachesToAHostTerminalAndDrawsAfterAnUpdate(t *testing.T) {

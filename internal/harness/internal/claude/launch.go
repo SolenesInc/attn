@@ -25,14 +25,9 @@ func (h claudeHarness) Launch(_ context.Context, req harness.LaunchRequest) (har
 		tools = &harness.AgentTools{URL: served.URL, Credential: served.Credential}
 	}
 	mod := h.mod.forLaunch(req.Terminal)
-	var command harness.Command
-	if req.Direct {
-		var err error
-		if command, err = h.directCommand(req, executable, tools, mod); err != nil {
-			return harness.Command{}, fmt.Errorf("prepare %s launch: %w", h.Facts().ID, err)
-		}
-	} else {
-		command = claudeLauncherCommand(req, executable, tools, mod)
+	command, err := h.directCommand(req, executable, tools, mod)
+	if err != nil {
+		return harness.Command{}, fmt.Errorf("prepare %s launch: %w", h.Facts().ID, err)
 	}
 	command.Executable = configured
 	command.TitleSignals = h.Facts().Signals.Titles
@@ -44,29 +39,6 @@ func claudeExplicitExecutable(req harness.LaunchRequest) string {
 		return req.Unattended.Executable
 	}
 	return req.Executable
-}
-
-func claudeLauncherCommand(req harness.LaunchRequest, executable string, tools *harness.AgentTools, mod claudeModSpec) harness.Command {
-	guidance := req.Guidance
-	var env []string
-	if mod != (claudeModSpec{}) {
-		env = append(env, claudeModDirEnv+"="+mod.Dir, claudeModSocketEnv+"="+mod.Socket)
-	}
-	if guidance.Crew != "" {
-		env = append(env, "ATTN_CREW_MEMBER=1")
-	}
-	env = append(env, tools.LauncherEnv()...)
-	env = append(env, fmt.Sprintf("ATTN_VENT_ENABLED=%t", guidance.Vent), fmt.Sprintf("ATTN_TOOL_VENTS_ENABLED=%t", guidance.ToolVents), fmt.Sprintf("ATTN_CODE_REVIEW_ENABLED=%t", guidance.CodeReview))
-	autoApprove, model, effort := req.Options.AutoApprove, req.Options.Model, req.Options.Effort
-	if unattended := req.Unattended; !unattended.IsZero() {
-		autoApprove, model, effort = true, unattended.Model, unattended.Effort
-	}
-	return harness.LauncherCommand(harness.LauncherLaunch{
-		Label: req.Label, Conversation: req.Conversation, Picker: req.Picker, Yolo: req.Options.Yolo, InitialPrompt: req.InitialPrompt,
-		ExecutableEnv: claudeExecutableEnvVar, Executable: executable,
-		AutoApprove: autoApprove, Model: model, Effort: effort, Target: req.Options.Target, ContextCap: req.Options.ContextCap,
-		Env: env,
-	})
 }
 
 func (h claudeHarness) directCommand(req harness.LaunchRequest, explicit string, tools *harness.AgentTools, mod claudeModSpec) (harness.Command, error) {

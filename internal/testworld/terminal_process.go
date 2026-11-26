@@ -10,7 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
-func (s *Stack) SignalAgentWrapper(session string, signal syscall.Signal) {
+func (s *Stack) SignalTerminalProcess(session string, signal syscall.Signal) {
 	s.T.Helper()
 	terminal := s.Terminal(session)
 	path, err := s.registryPath(terminal)
@@ -22,14 +22,14 @@ func (s *Stack) SignalAgentWrapper(session string, signal syscall.Signal) {
 		s.T.Fatal(err)
 	}
 	if entry.ChildPID <= 0 {
-		s.T.Fatalf("terminal %s has no wrapper PID", terminal)
+		s.T.Fatalf("terminal %s has no child PID", terminal)
 	}
 	if err := syscall.Kill(entry.ChildPID, signal); err != nil {
-		s.T.Fatalf("signal wrapper %d for terminal %s: %v", entry.ChildPID, terminal, err)
+		s.T.Fatalf("signal process %d of terminal %s: %v", entry.ChildPID, terminal, err)
 	}
 }
 
-func (s *Stack) WrapperEvidence(session string) string {
+func (s *Stack) TerminalEvidence(session string) string {
 	s.T.Helper()
 	terminal := s.Terminal(session)
 	path, err := s.registryPath(terminal)
@@ -65,7 +65,7 @@ func (s *Stack) registryPath(terminal string) (string, error) {
 		paths = append(paths, found...)
 	}
 	if len(paths) != 1 {
-		return "", fmt.Errorf("terminal %s has registry entries %v; want one wrapper", terminal, paths)
+		return "", fmt.Errorf("terminal %s has registry entries %v; want one", terminal, paths)
 	}
 	return paths[0], nil
 }

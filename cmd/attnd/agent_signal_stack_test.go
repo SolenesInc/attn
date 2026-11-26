@@ -12,7 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestTheAgentWrapperForwardsEverySignalUnchanged(t *testing.T) {
+func TestEverySignalToTheTerminalProcessReachesTheAgentUnchanged(t *testing.T) {
 	for _, backend := range testworld.WorkerAndSharedHost {
 		t.Run(string(backend), func(t *testing.T) {
 			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(backend))
@@ -30,9 +30,9 @@ while :; do read hold; done
 			id := s.Spawn(app, fakeagent.Claude, s.Path("signals"), func(m *protocol.SpawnSessionMessage) { m.Executable = protocol.Ptr(executable) })
 			app.AwaitScreen(id, "signal-ready")
 			terminal := protocol.TerminalID(app.Terminal(id))
-			s.SignalAgentWrapper(id, syscall.SIGTERM)
+			s.SignalTerminalProcess(id, syscall.SIGTERM)
 			app.AwaitScreen(id, "forwarded-TERM")
-			s.SignalAgentWrapper(id, syscall.SIGHUP)
+			s.SignalTerminalProcess(id, syscall.SIGHUP)
 			testworld.Await(app, protocol.EventSessionExited, func(event protocol.SessionExitedMessage) bool {
 				return string(event.SessionID) == id && event.ExitCode == 7
 			})
@@ -40,7 +40,7 @@ while :; do read hold; done
 			if !final.Success || final.Exit == nil || final.Exit.Code != 7 || final.Screen == nil || !strings.Contains(final.Screen.Text, "forwarded-HUP") {
 				t.Fatalf("final output after exit: %+v", final)
 			}
-			t.Log("the wrapper forwarded TERM, then HUP, with both signal identities preserved")
+			t.Log("the agent received TERM, then HUP, with both signal identities preserved")
 		})
 	}
 }

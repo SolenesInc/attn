@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/victorarias/attn/internal/config"
@@ -80,7 +78,7 @@ func run() {
 	if len(os.Args) < 2 {
 		checkInstance(checkInstanceAndRouting)
 		maybePrintInstanceBanner()
-		runWrapper()
+		openAppWithDeepLink()
 		return
 	}
 	command, known := topLevelCommandNamed(os.Args[1])
@@ -123,24 +121,11 @@ func checkInstance(checks instanceChecks) {
 func runUnknownCommand(name string) {
 	if strings.HasPrefix(name, "-") {
 		maybePrintInstanceBanner()
-		runWrapper()
+		openAppWithDeepLink()
 		return
 	}
 	fmt.Fprintf(os.Stderr, "attnd: unknown command %q\n", name)
 	exit(1)
-}
-
-func writeHelp(w io.Writer) {
-	executable, err := os.Executable()
-	if err == nil {
-		help := exec.Command(filepath.Join(filepath.Dir(executable), "attn"), "help")
-		help.Stdout = w
-		help.Stderr = w
-		err = help.Run()
-	}
-	if err != nil {
-		fmt.Fprintln(w, "run `attn help` for the commands")
-	}
 }
 
 func runVersionCommand() {

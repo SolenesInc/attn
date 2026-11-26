@@ -15,14 +15,12 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/toolhome"
-	"github.com/victorarias/attn/internal/transcript"
 )
 
 const (
 	codexDisplayName       = "Codex"
 	codexDefaultExecutable = "codex"
 	codexExecutableEnvVar  = "ATTN_CODEX_EXECUTABLE"
-	codexRemoteEnv         = "ATTN_CODEX_REMOTE"
 )
 
 type codexCLI struct{}
@@ -116,34 +114,6 @@ func BuildArgsForPromptTest(opts harness.DirectLaunchOpts) []string {
 
 func HeadlessArgs(request headless.TaskRequest, window int, instructionsPath string) []string {
 	return codexToolFreeHeadlessArgs(request, window, instructionsPath)
-}
-
-type directLauncher struct{}
-
-func Launcher() harness.DirectLauncher { return directLauncher{} }
-
-func (directLauncher) Facts() harness.Facts { return Facts() }
-
-func (directLauncher) ResolveExecutable(configured string) string {
-	return resolveExecutable(configured)
-}
-
-func (directLauncher) Prepare(harness.DirectLaunchOpts) error { return nil }
-
-func (directLauncher) Build(opts harness.DirectLaunchOpts) (*exec.Cmd, []string) {
-	remote := harness.ConsumeOneShotEnv(codexRemoteEnv)
-	var overrides []string
-	if Facts().Signals.ReportsTools {
-		overrides = generateConfigOverrides(opts, remote)
-	}
-	return buildCommand(opts, remote, overrides), buildEnv(opts)
-}
-
-func (directLauncher) FindTranscript(resumeID string) string {
-	if !Facts().Signals.StopsReadable {
-		return ""
-	}
-	return transcript.FindCodexTranscriptForResume(resumeID)
 }
 
 func (codexCLI) RunHeadlessTask(ctx context.Context, request headless.TaskRequest) (headless.TaskResult, error) {

@@ -15,7 +15,6 @@ var agentSessionIdentityEnvKeys = []string{
 	"CLAUDE_CODE_SSE_PORT",
 	"ATTN_CLAUDE_MOD_SOCKET",
 	"ATTN_AGENT_CREDENTIAL",
-	"ATTN_AGENT_TOOLS_URL",
 }
 
 var agentSessionTuningEnvKeys = []string{

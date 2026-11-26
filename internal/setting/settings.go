@@ -67,16 +67,6 @@ var (
 		Since:   "2026-11-08",
 		Search:  "update upgrade version release install",
 	})
-	DirectAgentLaunchEnabled = feature("direct_agent_launch_enabled", "Launch agents directly, without an attn process beside each one: true or false. On by default; applies to new and reloaded agents.", Info{
-		Name:    "Direct agent launches",
-		Summary: "Launch agents using less memory.",
-		Group:   UnderTheHood,
-		Applies: NewAgents,
-		Stage:   OnByDefault,
-		Where:   "Agents and models → Session defaults",
-		Since:   "2026-10-15",
-		Search:  "memory launcher",
-	})
 	CodeReviewEnabled = feature("code_review_enabled", "Let agents present a change for review as a review document: true or false. Experimental; off by default.", Info{
 		Name:    "Code review",
 		Summary: "Agents present a change as a review document that resolves against its repository.",

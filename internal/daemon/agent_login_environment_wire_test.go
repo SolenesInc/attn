@@ -33,7 +33,6 @@ func TestDirectLaunchReadsTheCurrentProfileEvenWhenEnvironmentCaptureFails(t *te
 			}
 			w.start()
 			app := w.App()
-			setSetting(t, app, "direct_agent_launch_enabled", "true")
 			for _, phase := range []string{"first", "edited", "removed"} {
 				var content strings.Builder
 				for _, h := range []fakeagent.Harness{fakeagent.Claude} {

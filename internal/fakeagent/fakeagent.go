@@ -33,7 +33,7 @@ const (
 const (
 	configName                 = "fakeagent.json"
 	plugPluginName             = "attn-plug"
-	wrapperName                = "attn"
+	attnName                   = "attn"
 	tripwireExitCode           = 97
 	folderTrustRefusedExitCode = 1
 	roleAgent                  = "agent"
@@ -122,7 +122,7 @@ var programs = map[string]func(config) int{
 	string(Sigma):        appServerProgram(Sigma),
 	string(SampleServer): appServerProgram(SampleServer),
 	plugPluginName:       runPlugDriver,
-	wrapperName:          runWrapperTripwire,
+	attnName:             runAttnTripwire,
 	miseName:             runMise,
 }
 
@@ -148,7 +148,7 @@ func Main() {
 	if name == plugPluginName {
 		harness = Plug
 	}
-	if name != wrapperName && name != miseName && !slices.Contains(cfg.Harnesses, harness) {
+	if name != attnName && name != miseName && !slices.Contains(cfg.Harnesses, harness) {
 		if isCodexVersionProbe(name, os.Args[1:]) {
 			fmt.Fprintf(os.Stderr, "%s: command not found\n", name)
 			os.Exit(127)
@@ -184,8 +184,8 @@ func loadConfig(dir string) (config, error) {
 	return cfg, nil
 }
 
-func runWrapperTripwire(cfg config) int {
-	return tripwire(cfg, wrapperName, "agent spawned in a world that named no agents")
+func runAttnTripwire(cfg config) int {
+	return tripwire(cfg, attnName, "attn ran in a world that links no attn binary")
 }
 
 func tripwire(cfg config, program, reason string) int {

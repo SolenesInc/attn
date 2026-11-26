@@ -125,7 +125,6 @@ func TestACodexLaunchCarriesOneAttnServerAndLeavesTheCLITeachingToIt(t *testing.
 	t.Run("plain", func(t *testing.T) {
 		inBubbleWithAgents(t, func(t *testing.T, w *world) {
 			app := w.App()
-			setSetting(t, app, "direct_agent_launch_enabled", "true")
 			launch := func() (string, ptybackend.SpawnOptions) {
 				session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 				return session, w.terms.Terminal(app.Terminal(session)).Options

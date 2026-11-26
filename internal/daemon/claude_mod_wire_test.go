@@ -582,37 +582,32 @@ func TestAReplacedModCannotTakeItsTerminalBackWithALatePoll(t *testing.T) {
 
 func TestAClaudeLaunchLoadsTheModFromTheDaemonsFolder(t *testing.T) {
 	t.Setenv("ATTN_CLAUDE_MOD_SOCKET", "/inherited/claude-mod.sock")
-	for _, launch := range []struct{ name, direct string }{{"through attn -s", "false"}, {"direct", "true"}} {
-		t.Run(launch.name, func(t *testing.T) {
-			w := newWorld(t, fakeagent.Claude)
-			app := w.App()
-			setSetting(t, app, "direct_agent_launch_enabled", launch.direct)
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
 
-			_, on := moddedClaude(t, w, app)
-			at := slices.Index(on.Argv, "--plugin-dir")
-			if at < 0 || runEnv(on, "ATTN_CLAUDE_MOD_SOCKET") == "" {
-				t.Fatalf("the agent launched with %v, socket %q", on.Argv, runEnv(on, "ATTN_CLAUDE_MOD_SOCKET"))
-			}
-			folder := on.Argv[at+1]
-			module := filepath.Join(folder, "hooks", "register.tsx")
-			for _, file := range []string{filepath.Join(folder, ".claude-plugin", "plugin.json"), filepath.Join(folder, "hooks", "hooks.json"), module} {
-				if _, err := os.Stat(file); err != nil {
-					t.Errorf("the mod folder lacks %s: %v", file, err)
-				}
-			}
-			before, err := os.Stat(module)
-			if err != nil {
-				t.Fatal(err)
-			}
-			w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("again")))
-			after, err := os.Stat(module)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !os.SameFile(before, after) || !before.ModTime().Equal(after.ModTime()) {
-				t.Errorf("another launch rewrote the unchanged module, which would reload the mod in live sessions")
-			}
-		})
+	_, on := moddedClaude(t, w, app)
+	at := slices.Index(on.Argv, "--plugin-dir")
+	if at < 0 || runEnv(on, "ATTN_CLAUDE_MOD_SOCKET") == "" {
+		t.Fatalf("the agent launched with %v, socket %q", on.Argv, runEnv(on, "ATTN_CLAUDE_MOD_SOCKET"))
+	}
+	folder := on.Argv[at+1]
+	module := filepath.Join(folder, "hooks", "register.tsx")
+	for _, file := range []string{filepath.Join(folder, ".claude-plugin", "plugin.json"), filepath.Join(folder, "hooks", "hooks.json"), module} {
+		if _, err := os.Stat(file); err != nil {
+			t.Errorf("the mod folder lacks %s: %v", file, err)
+		}
+	}
+	before, err := os.Stat(module)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("again")))
+	after, err := os.Stat(module)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(before, after) || !before.ModTime().Equal(after.ModTime()) {
+		t.Errorf("another launch rewrote the unchanged module, which would reload the mod in live sessions")
 	}
 }
 
