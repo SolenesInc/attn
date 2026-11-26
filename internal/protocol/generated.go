@@ -11870,7 +11870,7 @@ type SeedSearchHit struct {
 	LastActive string `json:"last_active"`
 
 	// Seed corresponds to the JSON schema field "seed".
-	Seed Seed `json:"seed"`
+	Seed SeedRow `json:"seed"`
 
 	// Snippet corresponds to the JSON schema field "snippet".
 	Snippet string `json:"snippet"`
@@ -12025,7 +12025,7 @@ type SeedSimilar struct {
 	Like string `json:"like"`
 
 	// Seed corresponds to the JSON schema field "seed".
-	Seed Seed `json:"seed"`
+	Seed SeedRow `json:"seed"`
 }
 
 type SeedSince struct {

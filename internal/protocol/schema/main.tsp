@@ -6447,7 +6447,7 @@ model SeedCheckResultMessage {
 }
 
 model SeedSimilar {
-  "seed": Seed;
+  "seed": SeedRow;
   "last_active": string;
   "like": string;
 }
@@ -6476,7 +6476,7 @@ model SeedListResult {
 }
 
 model SeedSearchHit {
-  "seed": Seed;
+  "seed": SeedRow;
   // title | body | log: the field carrying the most query words.
   "where": string;
   // The original line with the most matching spans, elided when it runs long.

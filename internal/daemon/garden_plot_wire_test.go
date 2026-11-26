@@ -187,14 +187,14 @@ func TestEveryResultCarriesThePlotProgressShowDoes(t *testing.T) {
 	if got := shown.Seed.PlotProgress; got == nil || *got != want {
 		t.Fatalf("show progress = %+v, want %+v", got, want)
 	}
-	for name, seed := range map[string]protocol.Seed{
-		"plot":           planted.Crown,
-		"edit":           edited.Seed,
-		"link":           linked.Seed,
-		"unchanged link": relinked.Seed,
-		"search":         found.Hits[0].Seed,
+	for name, got := range map[string]*protocol.SeedPlotProgress{
+		"plot":           planted.Crown.PlotProgress,
+		"edit":           edited.Seed.PlotProgress,
+		"link":           linked.Seed.PlotProgress,
+		"unchanged link": relinked.Seed.PlotProgress,
+		"search":         found.Hits[0].Seed.PlotProgress,
 	} {
-		if got := seed.PlotProgress; got == nil || *got != want {
+		if got == nil || *got != want {
 			t.Errorf("%s returned the crown with progress %+v, want %+v as show has", name, got, want)
 		}
 	}

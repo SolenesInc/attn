@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "c9ce8188f539";
+pub const PROTOCOL_VERSION: &str = "d1b4785cfdf6";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -10442,7 +10442,7 @@ pub struct SeedRow {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedSearchHit {
     pub last_active: String,
-    pub seed: Seed,
+    pub seed: SeedRow,
     pub snippet: String,
     pub r#where: String,
 }
@@ -10551,7 +10551,7 @@ pub struct SeedShowResult {
 pub struct SeedSimilar {
     pub last_active: String,
     pub like: String,
-    pub seed: Seed,
+    pub seed: SeedRow,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedSince {

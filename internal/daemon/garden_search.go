@@ -76,7 +76,7 @@ func (d *Daemon) seedSearch(msg *seedSearchRequest) (*protocol.SeedSearchResult,
 		}
 
 		result.Hits = append(result.Hits, protocol.SeedSearchHit{
-			Seed:       read.seed(hit.Seed, read.docs[hit.Seed.ID]),
+			Seed:       read.row(hit.Seed, read.docs[hit.Seed.ID]),
 			Where:      hit.Where,
 			Snippet:    snippet,
 			LastActive: hit.LastActive.UTC().Format(docstore.TimeFormat),

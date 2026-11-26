@@ -556,9 +556,45 @@ const markdownBody: Task = {
   },
 }
 
+const UPLOAD_DECOYS = [
+  "Resumable uploads for large attachments",
+  "Upload progress bar jumps back after a retry",
+  "Show a clear error when an upload is rejected for size",
+  "Retry budget for the sync worker",
+  "Connection pool drops idle sockets too early",
+  "Upload thumbnails in the background",
+  "Rate-limit the upload endpoint per account",
+  "Measure upload throughput on slow networks",
+  "Move upload storage to the new bucket",
+  "Log the connection type with each upload",
+]
+const longBody = (title: string): string => {
+  const lines = [`# ${title}`, "", "## Findings", ""]
+  for (let i = 1; lines.join("\n").length < 14_000; i++)
+    lines.push(`F${i}. On build ${700 + i} the upload worker reported retry attempt ${i} after the connection changed from wifi to cellular; the trace for ${title.toLowerCase()} shows the request queue, the socket state and the retry timer at each step, and the dashboards show no drop in completed uploads.`, "")
+  return lines.join("\n")
+}
+const findExisting: Task = {
+  id: "find-existing",
+  title: "Find the seed that already tracks a report among seeds with long bodies",
+  setup: (w) => {
+    w.state.existing = plant(w, "Uploads retry forever after the connection drops", longBody("Uploads retry forever after the connection drops"))
+    for (const title of UPLOAD_DECOYS) plant(w, title, longBody(title))
+    w.state.seeds = w.attnJson(["seed", "ls", "--flat"]).total
+    return "Users report that uploads keep retrying forever once their connection drops. Check whether the garden already tracks this. If a seed does, add a note to it saying the Lisbon office reported it again; if none does, plant one."
+  },
+  check: (w) => {
+    const problems: string[] = []
+    if (!notesBy(w, w.state.existing as string, w.session).some((n) => /lisbon/i.test(n))) problems.push("no note about Lisbon on the existing seed")
+    const seeds = w.attnJson(["seed", "ls", "--flat"]).total
+    if (seeds !== w.state.seeds) problems.push(`the garden has ${seeds} seeds, want ${w.state.seeds}: the agent planted a duplicate`)
+    return verdict(problems, "noted the existing seed and planted nothing")
+  },
+}
+
 export const HARDER_TASKS: Task[] = [seedLifecycle, plotOrder, openAskRefusal, codingTests]
 
-export const UNGROUPED_TASKS: Task[] = [askStillMatters, msgDelegateStalled]
+export const UNGROUPED_TASKS: Task[] = [askStillMatters, msgDelegateStalled, findExisting]
 
 export const TASKS: Task[] = [progress, plotNotes, ask, msgDelegate, standby, coding, fail]
 

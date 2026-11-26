@@ -915,7 +915,7 @@ func similarWire(read gardenRead, hits []garden.SimilarHit, planted []string) []
 	out := make([]protocol.SeedSimilar, 0, len(hits))
 	for _, hit := range hits {
 		out = append(out, protocol.SeedSimilar{
-			Seed:       read.seed(hit.Seed, read.docs[hit.Seed.ID]),
+			Seed:       read.row(hit.Seed, read.docs[hit.Seed.ID]),
 			LastActive: hit.LastActive.UTC().Format(docstore.TimeFormat),
 			Like:       planted[hit.TitleIndex],
 		})
