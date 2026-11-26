@@ -6,15 +6,9 @@ Present a change when the user asks you to present it, to review it, or to show 
 
 ## Present a change
 
-1. Pick where the document lives: your seed's artifact folder when you tend a seed, else your scratch folder. Never put it in the repository's tracked tree.
+1. Pick where the document lives: your seed's artifact folder when you tend a seed (`attn seed show <id>` prints it), else your harness's scratch folder if it gives you one, or a new folder outside the repository, such as one `mktemp -d` makes. Never put it in the repository's tracked tree.
 2. Write the review, as the next sections describe. To pick a frame, put `frame:` in the document's frontmatter.
-3. From the repository, start the review:
-
-   ```sh
-   attn review start <document> --base <commit>
-   ```
-
-   `attn review start` records the working tree as the review's head. It writes `attn`, `repository`, `base` and `head` into the document's frontmatter, and `frame` when the document picks none. It keeps the rest of the document. Pick the base for what you changed:
+3. Pick the base for what you changed:
 
    | You changed | Base |
    |---|---|
@@ -22,8 +16,15 @@ Present a change when the user asks you to present it, to review it, or to show 
    | only uncommitted work | `--base HEAD` |
    | nothing: you are showing how existing code works | no `--base`, on a new document. The review is a tour |
 
-4. Run `attn review check <document>`. Each problem names its line and the fix. Fix them all.
-5. Run `attn open <document>`. It prints any problem left as a warning and opens the tile anyway.
+4. From the repository, start, check and open the review in one go:
+
+   ```sh
+   attn review start <document> --base <commit>
+   attn review check <document>
+   attn open <document>
+   ```
+
+   `attn review start` records the working tree as the review's head. It writes `attn`, `repository`, `base` and `head` into the document's frontmatter, and `frame` when the document picks none. It keeps the rest of the document. `attn review check` lists each problem with its line and the fix, and `attn open` opens the tile even when there are problems. Fix them all; the open tile reloads by itself.
 
 Keep the frontmatter that `attn review start` wrote. If you write the whole file again, run `attn review start <document>` again to put it back.
 
