@@ -979,7 +979,17 @@
                                 "node": {
                                   "kind": "text",
                                   "id": "ask.example",
-                                  "source": "content/ask/example.md"
+                                  "source": "content/ask/example.md",
+                                  "bindings": [
+                                    {
+                                      "name": "question",
+                                      "node": {
+                                        "kind": "text",
+                                        "id": "ask.example-question",
+                                        "source": "content/ask/example-question.md"
+                                      }
+                                    }
+                                  ]
                                 }
                               }
                             ]
@@ -7207,7 +7217,17 @@
                 "node": {
                   "kind": "text",
                   "id": "ask.example",
-                  "source": "content/ask/example.md"
+                  "source": "content/ask/example.md",
+                  "bindings": [
+                    {
+                      "name": "question",
+                      "node": {
+                        "kind": "text",
+                        "id": "ask.example-question",
+                        "source": "content/ask/example-question.md"
+                      }
+                    }
+                  ]
                 }
               }
             ]
@@ -7262,13 +7282,53 @@
           }
         },
         {
-          "id": "example",
+          "id": "help-details",
           "delivery": "message_fragment",
-          "description": "A worked ask's markdown, for the ask tool's description and attn ask --help.",
+          "description": "The rest of attn ask --help after the markdown's syntax: a worked example, which seed an ask is about, images, and what to do after asking.",
           "body": {
             "kind": "text",
-            "id": "ask.example",
-            "source": "content/ask/example.md"
+            "id": "ask.help-details",
+            "source": "content/ask/help-details.md",
+            "bindings": [
+              {
+                "name": "example",
+                "node": {
+                  "kind": "text",
+                  "id": "ask.example",
+                  "source": "content/ask/example.md",
+                  "bindings": [
+                    {
+                      "name": "question",
+                      "node": {
+                        "kind": "text",
+                        "id": "ask.example-question",
+                        "source": "content/ask/example-question.md"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "tool-details",
+          "delivery": "message_fragment",
+          "description": "The rest of the ask tool's description after the markdown's syntax: a worked question and where image paths resolve. Launch rules and the ask reference say the rest.",
+          "body": {
+            "kind": "text",
+            "id": "ask.tool-details",
+            "source": "content/ask/tool-details.md",
+            "bindings": [
+              {
+                "name": "question",
+                "node": {
+                  "kind": "text",
+                  "id": "ask.example-question",
+                  "source": "content/ask/example-question.md"
+                }
+              }
+            ]
           }
         },
         {
@@ -9745,5 +9805,5 @@
       ]
     }
   ],
-  "definitions_hash": "82b3198822d3adaa424efc76c5b8e06713f0b8dfa6e9af67342af00e3e6be71e"
+  "definitions_hash": "339780bc0f70e63560c668e214100b0443fba4f28b4035f9164d075efdbeec9a"
 }

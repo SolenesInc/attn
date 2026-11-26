@@ -34,7 +34,6 @@ var catalogValues = map[string]string{
 	"max_note_kib":            fmt.Sprint(garden.MaxNoteBytes >> 10),
 	"max_inbox":               fmt.Sprint(inbox.MaxInboxLimit),
 	"vent_text_limit":         fmt.Sprint(analytics.VentTextLimit),
-	"ask_example":             prompts.RenderText("ask", "example", nil),
 	"ask_reference_rules":     prompts.RenderText("ask", "rules", nil),
 }
 
@@ -43,9 +42,9 @@ var surfaceValues = map[string]map[surface]string{
 		cliSurface:  prompts.RenderText("ask", "help-rules", nil),
 		toolSurface: prompts.RenderText("ask", "tool-rules", nil),
 	},
-	"ask_image_base": {
-		cliSurface:  "resolve against the working directory, or beside the file passed to --file",
-		toolSurface: "resolve against the folder the session started in",
+	"ask_details": {
+		cliSurface:  prompts.RenderText("ask", "help-details", nil),
+		toolSurface: prompts.RenderText("ask", "tool-details", nil),
 	},
 	"msg_after_dashes": {
 		cliSurface:  ` In the CLI, a message that starts with - goes after --, as: attn agent msg -- <target> "-text".`,

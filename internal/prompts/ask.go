@@ -2,12 +2,15 @@ package prompts
 
 var (
 	askVisuals    = Use("ask.visuals", "content/ask/visuals.md")
-	askExample    = Use("ask.example", "content/ask/example.md")
+	askQuestion   = Use("ask.example-question", "content/ask/example-question.md")
+	askExample    = Use("ask.example", "content/ask/example.md", Bind("question", askQuestion))
 	askRules      = Use("ask.rules", "content/ask/rules.md", Bind("visuals", askVisuals))
 	askPermission = Use("ask.permission", "content/ask/permission.md")
 	askHelp       = Use("ask.help-rules", "content/ask/help-rules.md", Bind("permission", askPermission), Bind("visuals", askVisuals))
 	askTool       = Use("ask.tool-rules", "content/ask/tool-rules.md", Bind("permission", askPermission))
 	askCLI        = Use("ask.cli", "content/ask/cli.md", Bind("example", askExample))
+	askHelpMore   = Use("ask.help-details", "content/ask/help-details.md", Bind("example", askExample))
+	askToolMore   = Use("ask.tool-details", "content/ask/tool-details.md", Bind("question", askQuestion))
 )
 
 func askRecipient() Recipient {
@@ -62,7 +65,8 @@ func askRecipient() Recipient {
 		On("cli", "message_fragment", "Launch guidance for a session that launched with asks and asks through the CLI: the attn ask syntax with a worked example.", askCLI),
 		On("help-rules", "message_fragment", "When to ask, how to write for a cold reader, and which visual to show, for attn ask --help. Launch instructions that cover asks have them in their ask rules.", askHelp),
 		On("tool-rules", "message_fragment", "When to ask and how far an answer's permission goes, for the ask tool's description, whose readers may have no launch instructions.", askTool),
-		On("example", "message_fragment", "A worked ask's markdown, for the ask tool's description and attn ask --help.", askExample),
+		On("help-details", "message_fragment", "The rest of attn ask --help after the markdown's syntax: a worked example, which seed an ask is about, images, and what to do after asking.", askHelpMore),
+		On("tool-details", "message_fragment", "The rest of the ask tool's description after the markdown's syntax: a worked question and where image paths resolve. Launch rules and the ask reference say the rest.", askToolMore),
 		On("answer", "inbox_content", "The user's answer, typed into the conversation of the ask's addressee: the seed's tender, or the asking agent when the ask is about no seed. A seed also keeps it as a note. The adapter validates answers against the ask.", reply),
 		On("follow-up", "inbox_content", "The user's follow-up on an ask they already answered, typed into the conversation of whoever holds the ask now, as the answer was. A seed also keeps it as a note.", followUp),
 		On("entry", "message_fragment", "One question and the user's answer to it.", entry),
