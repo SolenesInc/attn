@@ -379,3 +379,61 @@ fn a_saved_shortcut_takes_precedence_over_markdown_vim_keys() {
     assert!(scrolled(&world) > 0.0);
     rest(&mut world);
 }
+
+#[test]
+fn document_find_reveals_a_match_inside_collapsed_details() {
+    let mut world = start(true, "m");
+    let filler = "An unrelated paragraph.\n\n".repeat(30);
+    let content = format!(
+        "# Plan\n\nVisible needle.\n\n{filler}<details>\n<summary>Setup details</summary>\n\n<details>\n<summary>Nested details</summary>\n\nHidden needle.\n\n</details>\n\n</details>\n\n<details>\n<summary>Other details</summary>\n\nSpare text.\n\n</details>\n\n{filler}",
+    );
+    world.daemon.emit(DesktopTileContentMessage {
+        desktop_id: DESKTOP.into(),
+        tile_id: "m".into(),
+        tile_kind: "markdown".into(),
+        path: PLAN.into(),
+        content,
+        ..DesktopTileContentMessage::new()
+    });
+    world.settle();
+
+    press_action(&mut world, &Action::TerminalFind);
+    typed(&mut world, "needle");
+    assert_eq!(find_count(&world).as_deref(), Some("1/2"));
+    let nested = Target::role("button").name("Nested details");
+    assert!(world.screen().find(nested.clone()).is_none());
+
+    press(&mut world, Key::Enter, Mods::default());
+    assert_eq!(find_count(&world).as_deref(), Some("2/2"));
+    rest(&mut world);
+    let hidden_on_screen = |world: &World| {
+        let screen = world.screen();
+        let view = screen.bounds(Target::key(VIEW)).unwrap();
+        assert!(
+            screen
+                .bounds(Target::role("label").name("Hidden needle."))
+                .is_some_and(|hit| hit[1] >= view[1] && hit[1] + hit[3] <= view[1] + view[3]),
+            "Find should scroll the revealed match into view"
+        );
+    };
+    hidden_on_screen(&world);
+    assert!(world.screen().get(nested.clone()).is("expanded"));
+    assert!(
+        world
+            .screen()
+            .get(Target::role("button").name("Other details"))
+            .is("collapsed")
+    );
+
+    press(&mut world, Key::Escape, Mods::default());
+    let [x, y, w, h] = world.screen().bounds(nested.clone()).unwrap();
+    world.gesture(|app| app.click_at((x + w / 2.0, y + h / 2.0)));
+    world.settle();
+    assert!(world.screen().get(nested).is("collapsed"));
+
+    press_action(&mut world, &Action::TerminalFind);
+    typed(&mut world, "Hidden needle");
+    assert_eq!(find_count(&world).as_deref(), Some("1/1"));
+    rest(&mut world);
+    hidden_on_screen(&world);
+}

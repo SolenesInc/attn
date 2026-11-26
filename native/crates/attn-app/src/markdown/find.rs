@@ -77,24 +77,58 @@ pub(crate) fn close(state: &mut State, view: &str, tx: &mut Tx) -> bool {
 /// Steps to the next match in the document `source` reads, or the previous one, wrapping at
 /// the ends, and brings it to the middle of the view.
 pub(crate) fn step(state: &mut State, view: &str, source: &Source, forward: bool, tx: &mut Tx) {
-    let count = match (finding(&state.readings, view), source(state)) {
-        (Some(finding), Some(text)) => finding.matches(text).len(),
-        _ => return,
-    };
-    let Some(finding) = state.readings.finds.get_mut(view) else {
+    select(
+        state,
+        view,
+        source,
+        |current, count| {
+            current.map(|at| {
+                if forward {
+                    (at + 1) % count
+                } else {
+                    (at + count - 1) % count
+                }
+            })
+        },
+        tx,
+    );
+}
+
+fn select(
+    state: &mut State,
+    view: &str,
+    source: &Source,
+    pick: impl FnOnce(Option<usize>, usize) -> Option<usize>,
+    tx: &mut Tx,
+) {
+    let (Some(finding), Some(text)) = (finding(&state.readings, view), source(state)) else {
         return;
     };
-    let Some(at) = finding.current(count) else {
+    let matches = finding.matches(text);
+    let Some(current) = pick(finding.current(matches.len()), matches.len()) else {
         return;
     };
-    finding.current = if forward {
-        (at + 1) % count
-    } else {
-        (at + count - 1) % count
-    };
-    let current = finding.current;
+    let folds = matches
+        .get(current)
+        .and_then(|ranges| ranges.first())
+        .map_or_else(Vec::new, |range| enclosing_folds(text, range.start));
+    state.readings.finds.get_mut(view).unwrap().current = current;
     state.readings.revision += 1;
+    for fold in folds {
+        state.readings.fold(view, fold, true);
+    }
     tx.scroll_center(match_key(view, current));
+}
+
+fn enclosing_folds(source: &str, at: usize) -> Vec<usize> {
+    let mut offsets = Markdown::enclosing_details(source, at);
+    if !offsets.is_empty() {
+        let order = super::details_order(source);
+        for offset in &mut offsets {
+            *offset = order(*offset);
+        }
+    }
+    offsets
 }
 
 /// What the find bar of the document `view` scrolls washes over `source`: every match, the
@@ -130,6 +164,7 @@ pub(crate) fn highlights(
 pub(crate) fn bar(view: &str, finding: &Finding, count: usize, source: Source, t: &Tokens) -> El {
     let (edit, edited, keyed) = (view.to_owned(), view.to_owned(), view.to_owned());
     let typed = source.clone();
+    let changed = source.clone();
     let field = TextInput::new(&finding.query)
         .key(field_key(view))
         .label("Find in document")
@@ -137,7 +172,9 @@ pub(crate) fn bar(view: &str, finding: &Finding, count: usize, source: Source, t
         .on_edit(move |state: &mut State| {
             &mut state.readings.finds.entry(edit.clone()).or_default().query
         })
-        .on_change(move |state: &mut State, tx: &mut Tx| edited_query(state, &edited, tx))
+        .on_change(move |state: &mut State, tx: &mut Tx| {
+            select(state, &edited, &changed, |_, _| Some(0), tx);
+        })
         .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
             field_key_pressed(state, &keyed, &typed, ev, tx)
         });
@@ -174,14 +211,6 @@ pub(crate) fn bar(view: &str, finding: &Finding, count: usize, source: Source, t
         ))
         .build(t);
     TerminalBar::corner(vec![bar])
-}
-
-fn edited_query(state: &mut State, view: &str, tx: &mut Tx) {
-    if let Some(finding) = state.readings.finds.get_mut(view) {
-        finding.current = 0;
-    }
-    state.readings.revision += 1;
-    tx.scroll_center(match_key(view, 0));
 }
 
 fn field_key_pressed(
