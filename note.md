@@ -1,0 +1,3 @@
+The ask tool's description is 2,075 characters instead of 3,606. Its Mermaid sample, its seed and image refusal details and its follow-up rules are gone: the launch rules, the ask reference, attn's refusals and the answer message already say them. It keeps the question syntax, one worked question, where image paths resolve, and when to end the turn. `attn ask --help` keeps its text, and both now say that `Recommended:` names a choice's label alone.
+
+Claude Code's first request on the ask task is 0.5k tokens smaller (43.6k against 44.1k). All 30 ask runs passed, 15 on each harness (seed s-yhgx03).
