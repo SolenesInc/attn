@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Document Find counts hidden matches it cannot reveal",
+  "at": "2026-11-26T16:39:11.440Z",
+  "detail": "Document Find counts matches in collapsed Markdown details but cannot navigate to them. At ddce3c119 the native wire probe for 95ab129a6 searches a term with one visible match and one collapsed match. Enter advances from 1/2 to 2/2 while the matching body stays hidden and scroll stays at the first hit. The search traverses collapsed bodies while rendering omits them. Make every counted result reachable. Independently confirmed in source and reproduced in both input modes on ai-sandbox. Review seed s-qx85b3 holds qx85b3-wire-probes.patch and qx85b3-wire-results.txt.\n"
+}
