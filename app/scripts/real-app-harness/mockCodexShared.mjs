@@ -495,6 +495,7 @@ export async function runSharedMockView() {
     selected = conversation.id;
     blocks.length = 0;
     showConversation(conversation);
+    blocks.push(`Switched from ${previous}`);
     await call('thread/unsubscribe', { threadId: previous });
     repaint();
     if (needsAnswer()) showApproval();

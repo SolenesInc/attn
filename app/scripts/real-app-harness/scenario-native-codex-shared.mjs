@@ -63,9 +63,10 @@ async function focusTerminalOf(id) {
   return runtime;
 }
 
-async function lastConversation(runtime, shown) {
+async function lastConversation(runtime, shown, { switchedFrom } = {}) {
   await observer.waitFor(() => observer.terminalOf(shown) === runtime, `${shown} in the terminal`, 30_000);
-  const value = await driver.state(`terminal:${runtime}`, { includes: 'Conversation mock-', timeoutMs: 30_000 });
+  const drawn = switchedFrom ? `Switched from ${switchedFrom}` : 'Conversation mock-';
+  const value = await driver.state(`terminal:${runtime}`, { includes: drawn, timeoutMs: 30_000 });
   const text = typeof value === 'string' ? value : JSON.stringify(value);
   return [...text.matchAll(CONVERSATION)].at(-1)?.[1];
 }
@@ -142,7 +143,7 @@ try {
     await observer.waitFor(() => isHidden(checkout), 'checkout is hidden as soon as its terminal moved on', 30_000);
     discount = await observer.waitFor(() => { const id = sessionIn(terminal); return id && id !== checkout ? id : null; }, 'the terminal shows another session', 30_000);
     sessions.push(discount);
-    discountConversation = await lastConversation(terminal, discount);
+    discountConversation = await lastConversation(terminal, discount, { switchedFrom: checkoutConversation });
     runner.assert(discountConversation && discountConversation !== checkoutConversation, 'the terminal shows a new conversation', { checkoutConversation, discountConversation });
     await submit('look at the tax table');
     runner.assert(session(checkout).state === 'waiting_input', 'the hidden session keeps its queue state', session(checkout));
@@ -161,7 +162,7 @@ try {
     await submit(`/agents ${checkoutConversation}`);
     await observer.waitFor(() => tileOf(checkout) && !isHidden(checkout) && isHidden(discount), 'checkout is shown again and discount hidden', 30_000);
     runner.assert(tileOf(checkout).pane.pane_id === pane, 'the switch reused the same tile');
-    runner.assert(await lastConversation(terminal, checkout) === checkoutConversation, 'the terminal switches back to checkout');
+    runner.assert(await lastConversation(terminal, checkout, { switchedFrom: discountConversation }) === checkoutConversation, 'the terminal switches back to checkout');
     await submit('lock it');
     await observer.waitFor(() => session(checkout)?.state === 'idle', 'the lock turn finishes', 30_000);
     await driver.typeInto(null, 'still typing');
