@@ -85,7 +85,7 @@ fn route(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> bool
     if !field && crate::review::on_key(state, ev, tx) {
         return true;
     }
-    if !field && crate::markdown::reading_key(state, ev, tx) {
+    if !field && ev.key == Key::Escape && crate::markdown::reading_key(state, ev, tx) {
         return true;
     }
     if ev.key == Key::Escape
@@ -136,13 +136,18 @@ fn route(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> bool
     };
     match state.keymap.press(ev, tx, focus) {
         Press::Action(action) => {
+            state.window.vim_prefix = None;
             held(state, &action)
                 || crate::browser::press_page_key(state, &action, tx)
                 || run_chord(state, action, tx)
                 || send_to_terminal(state, terminal, ev, trace, tx)
         }
-        Press::Unbound => send_to_terminal(state, terminal, ev, trace, tx),
+        Press::Unbound => {
+            (ev.key != Key::Escape && crate::markdown::reading_key(state, ev, tx))
+                || send_to_terminal(state, terminal, ev, trace, tx)
+        }
         Press::Leader { chord, sequences } => {
+            state.window.vim_prefix = None;
             start_leader(&mut state.window.leader, chord, sequences, tx);
             true
         }

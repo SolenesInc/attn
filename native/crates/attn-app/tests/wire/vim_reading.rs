@@ -349,3 +349,33 @@ fn the_palette_turns_vim_keys_on_and_off() {
         rest(&mut world);
     }
 }
+
+#[test]
+fn a_saved_shortcut_takes_precedence_over_markdown_vim_keys() {
+    let mut world = start(true, "m");
+    world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+        settings: Some(
+            [
+                ("vim_mode_enabled".into(), "true".into()),
+                (
+                    "keybindings_config".into(),
+                    json!({"version": 1, "overrides": {"terminal.find": {"key": "j"}}}).to_string(),
+                ),
+            ]
+            .into(),
+        ),
+        ..attn_protocol::SettingsUpdatedMessage::new()
+    });
+    world.settle();
+
+    typed(&mut world, "j");
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some("tile.m.document.find.input")
+    );
+    assert_eq!(scrolled(&world), 0.0);
+    press(&mut world, Key::Escape, Mods::default());
+    typed(&mut world, "G");
+    assert!(scrolled(&world) > 0.0);
+    rest(&mut world);
+}
