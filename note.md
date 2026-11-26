@@ -1,0 +1,1 @@
+Review documents now read with vim keys whether or not vim mode is on: j/k, h/l, [[/]], Ctrl-d/Ctrl-u, gg/G, H/L sideways and V to select, with the arrow and page keys still working. Code navigation moves to gd, gr and K, so h and l are free to step stops, arrows and changes.
