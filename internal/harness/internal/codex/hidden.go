@@ -214,7 +214,9 @@ func (r *codexShared) withResumed(ctx context.Context, client *codexshared.Clien
 	}
 	info := r.host.Sessions().LaunchInfo(sessionID, codexID)
 	config := make(map[string]any)
-	r.loadConfig(config, info.ContextCap)
+	if session := r.host.Sessions().Get(sessionID); session != nil {
+		r.loadConfig(config, info.ContextCap, string(session.ProfileID))
+	}
 	resume := map[string]any{"threadId": conversation, "excludeTurns": true, "config": config}
 	grantCodexApprovals(resume, info.ApprovalRoute)
 	if err := call("thread/resume", resume, &resumed); err != nil {

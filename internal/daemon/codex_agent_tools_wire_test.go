@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -18,11 +19,10 @@ func sharedCodexCaller(t *testing.T, w *world, app *testworld.Peer) agentToolsCa
 	return agentToolsCaller{w: w, bearer: agentCredential(t, w, "s.codex:"+app.SelectedProfile())}
 }
 
-func (c agentToolsCaller) noteFrom(t *testing.T, conversation, seed, text string) {
+func noteThroughCodexConfig(t *testing.T, server *fakeagent.CodexServer, conversation, seed, text string) {
 	t.Helper()
-	result, err := c.callNaming(t, "seed_note", map[string]any{"seed": seed, "text": text}, mcp.Meta{"threadId": conversation})
-	if err != nil || result.IsError {
-		t.Fatalf("seed_note from conversation %s was refused: %v %s", conversation, err, resultText(result))
+	if result := server.CallTool(conversation, "attn", "attn_do", noteScript(seed, text)); result.IsError {
+		t.Fatalf("seed_note from conversation %s was refused: %s", conversation, result.Text)
 	}
 }
 
@@ -33,7 +33,6 @@ func TestSharedCodexConversationsCallAttnToolsAsTheSessionThatShowsThem(t *testi
 	seed := plantForTools(t, w)
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
 	server := w.CodexServer()
-	agent := sharedCodexCaller(t, w, app)
 	tax := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	taxCodex := w.Launched(tax)
 	if len(w.CodexServers()) != 1 {
@@ -41,7 +40,7 @@ func TestSharedCodexConversationsCallAttnToolsAsTheSessionThatShowsThem(t *testi
 	}
 	note := func(conversation, text, want string) {
 		t.Helper()
-		agent.noteFrom(t, conversation, seed, text)
+		noteThroughCodexConfig(t, server, conversation, seed, text)
 		if author, body := newestNoteAuthor(t, w, seed); author != want || body != text {
 			t.Errorf("seed_note from conversation %s wrote %q by %s, want it by %s", conversation, body, author, want)
 		}
@@ -64,54 +63,97 @@ func TestSharedCodexConversationsCallAttnToolsAsTheSessionThatShowsThem(t *testi
 		t.Fatalf("after /agents to %s, terminal %s shows session %s, want %s", first, terminal, got, checkout)
 	}
 	note(first, "Back on the checkout test.", checkout)
+
+	typeInto(app, terminal, "/side\r")
+	codex.Prompted()
+	if codex.ConversationID == first {
+		t.Fatalf("/side left terminal %s on conversation %s", terminal, first)
+	}
+	note(codex.ConversationID, "Asked on the side.", checkout)
 }
 
-func TestACodexLaunchCarriesNoAttnServerAndReadsThePromptItReadWithTheSettingOff(t *testing.T) {
+func TestACodexLaunchCarriesOneAttnServerAndLeavesTheCLITeachingToIt(t *testing.T) {
+	wantServer := func(t *testing.T, given map[string]string, auth string) {
+		t.Helper()
+		var keys []string
+		for key := range given {
+			if strings.HasPrefix(key, "mcp_servers.") {
+				keys = append(keys, key)
+			}
+		}
+		slices.Sort(keys)
+		want := []string{"mcp_servers.attn." + auth, "mcp_servers.attn.default_tools_approval_mode", "mcp_servers.attn.url"}
+		slices.Sort(want)
+		if !slices.Equal(keys, want) || given["mcp_servers.attn.default_tools_approval_mode"] != "approve" || !strings.HasSuffix(given["mcp_servers.attn.url"], "/mcp") {
+			t.Errorf("Codex was configured with %v, want one attn server %v that approves its tools", given, want)
+		}
+	}
 	t.Run("shared", func(t *testing.T) {
 		w := newWorld(t, fakeagent.Codex)
 		app := w.App()
-		off := launchGuidance(t, w, w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("shop"))))
-		setSetting(t, app, "agent_tools_enabled", "true")
-		_, codex, terminal := sharedCodexWaiting(t, w, app)
-		moved := *codex
-		typeInto(app, terminal, "/side\r")
-		codex.Prompted()
-		for _, conversation := range []string{moved.ConversationID, codex.ConversationID} {
-			for key := range w.CodexServer().MemoryConfig(conversation) {
-				if strings.HasPrefix(key, "mcp_servers.") {
-					t.Errorf("conversation %s was configured with %s", conversation, key)
-				}
+		_, before, _ := sharedCodexWaiting(t, w, app)
+		for key := range w.CodexServer().MemoryConfig(before.ConversationID) {
+			if strings.HasPrefix(key, "mcp_servers.") {
+				t.Errorf("with agent_tools_enabled off, the conversation was configured with %s", key)
 			}
 		}
-		if on := launchGuidance(t, w, &moved); on != off {
-			t.Errorf("with agent_tools_enabled on, Codex launched with the prompt\n%s\nwant the one it has with the setting off\n%s", on, off)
+		setSetting(t, app, "agent_tools_enabled", "true")
+		seed := plantForTools(t, w)
+		session, codex, _ := sharedCodexWaiting(t, w, app)
+		given := map[string]string{}
+		for key, value := range w.CodexServer().MemoryConfig(codex.ConversationID) {
+			given[key] = fmt.Sprint(value)
+		}
+		wantServer(t, given, "http_headers.Authorization")
+		if prompt := launchGuidance(t, w, codex); strings.Contains(prompt, seedCLITeaching) {
+			t.Errorf("a shared Codex launched with attn's server still reads the garden's CLI teaching:\n%s", prompt)
+		}
+		noteThroughCodexConfig(t, w.CodexServer(), codex.ConversationID, seed, "Called through the server Codex was given.")
+		if author, _ := newestNoteAuthor(t, w, seed); author != session {
+			t.Errorf("the note is by %s, want the session %s", author, session)
 		}
 	})
 	t.Run("plain", func(t *testing.T) {
 		inBubbleWithAgents(t, func(t *testing.T, w *world) {
 			app := w.App()
 			setSetting(t, app, "direct_agent_launch_enabled", "true")
-			launch := func() ptybackend.SpawnOptions {
+			launch := func() (string, ptybackend.SpawnOptions) {
 				session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
-				return w.terms.Terminal(app.Terminal(session)).Options
+				return session, w.terms.Terminal(app.Terminal(session)).Options
 			}
-			prompt := func(options ptybackend.SpawnOptions) string {
-				at := slices.IndexFunc(options.AgentArgv, func(arg string) bool { return strings.HasPrefix(arg, "developer_instructions=") })
-				if at < 0 {
-					t.Fatalf("Codex launched without instructions: %q", options.AgentArgv)
+			overrides := func(options ptybackend.SpawnOptions) map[string]string {
+				given := map[string]string{}
+				for _, arg := range options.AgentArgv {
+					if key, value, ok := strings.Cut(arg, "="); ok {
+						given[key] = strings.Trim(value, "\"")
+					}
 				}
-				return options.AgentArgv[at]
+				return given
 			}
-			off := launch()
+			_, off := launch()
+			for key := range overrides(off) {
+				if strings.HasPrefix(key, "mcp_servers.") {
+					t.Errorf("with agent_tools_enabled off, Codex launched with %s", key)
+				}
+			}
 			setSetting(t, app, "agent_tools_enabled", "true")
-			on := launch()
-			for _, given := range slices.Concat(on.AgentArgv, on.AgentEnv) {
-				if strings.Contains(given, "mcp_servers.attn") || strings.Contains(given, "ATTN_AGENT_CREDENTIAL") || strings.Contains(given, "ATTN_AGENT_TOOLS_URL") {
-					t.Errorf("Codex launched with %q", given)
+			session, on := launch()
+			given := overrides(on)
+			wantServer(t, given, "bearer_token_env_var")
+			if prompt := given["developer_instructions"]; prompt == "" || strings.Contains(prompt, seedCLITeaching) {
+				t.Errorf("a plain Codex launched with attn's server reads the prompt %q, want one without the garden's CLI teaching", prompt)
+			}
+			credential := ""
+			for _, env := range on.AgentEnv {
+				if value, ok := strings.CutPrefix(env, given["mcp_servers.attn.bearer_token_env_var"]+"="); ok {
+					credential = value
 				}
 			}
-			if prompt(on) != prompt(off) {
-				t.Errorf("with agent_tools_enabled on, Codex launched with the prompt\n%s\nwant the one it has with the setting off\n%s", prompt(on), prompt(off))
+			if credential == "" {
+				t.Fatalf("Codex launched without the credential its server entry names: %q", on.AgentEnv)
+			}
+			if want := terminalCredential(t, w, app.Terminal(session)); credential != want {
+				t.Errorf("Codex launched with the credential %q, want its terminal's %q", credential, want)
 			}
 		})
 	})
@@ -127,7 +169,6 @@ func TestASharedCodexConversationResumedInASecondTerminalCallsToolsAsItsOwnSessi
 	tax := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	taxCodex := w.Launched(tax)
 	second := app.Terminal(tax)
-	agent := sharedCodexCaller(t, w, app)
 
 	mark := len(app.Log())
 	typeInto(app, second, "/resume "+conversation+"\r")
@@ -139,7 +180,7 @@ func TestASharedCodexConversationResumedInASecondTerminalCallsToolsAsItsOwnSessi
 	moveOn(t, app, codex, first, "/new", "add a discount field")
 	discount := awaitTerminalSessionChange(app, mark, first, cart)
 
-	agent.noteFrom(t, conversation, seed, "Locked the tax lookup.")
+	noteThroughCodexConfig(t, w.CodexServer(), conversation, seed, "Locked the tax lookup.")
 	if author, _ := newestNoteAuthor(t, w, seed); author != cart {
 		t.Errorf("seed_note from the conversation of %s, which terminal %s shows, is by %s (the first terminal now shows %s)", cart, second, author, discount)
 	}
@@ -190,7 +231,7 @@ func TestAHiddenSharedCodexConversationThatAttnWakesKeepsItsAttnTools(t *testing
 		t.Fatalf("feedback to the hidden session = %+v", got)
 	}
 	w.CodexServer().Prompted(conversation)
-	sharedCodexCaller(t, w, app).noteFrom(t, conversation, seed, "Woken by feedback.")
+	noteThroughCodexConfig(t, w.CodexServer(), conversation, seed, "Woken by feedback.")
 	if author, _ := newestNoteAuthor(t, w, seed); author != checkout {
 		t.Errorf("seed_note from the woken conversation of %s is by %s", checkout, author)
 	}

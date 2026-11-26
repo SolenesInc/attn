@@ -101,6 +101,9 @@ func buildEnv(opts harness.DirectLaunchOpts) []string {
 	if opts.SocketPath != "" {
 		env = append(env, "ATTN_SOCKET_PATH="+opts.SocketPath)
 	}
+	if opts.AgentTools != nil {
+		env = append(env, harness.AgentCredentialEnv+"="+opts.AgentTools.Credential)
+	}
 	if opts.Executable != "" && opts.Executable != codexDefaultExecutable {
 		env = append(env, codexExecutableEnvVar+"="+opts.Executable)
 	}
@@ -367,6 +370,11 @@ func generateConfigOverrides(opts harness.DirectLaunchOpts, remote string) []str
 	}
 	if remote == "" {
 		overrides = append(overrides, GenerateCodexConfigOverrides(string(opts.TerminalID), opts.SocketPath, opts.WrapperPath, opts.EffectiveGuidance())...)
+		if tools := opts.AgentTools; tools != nil {
+			for _, setting := range CodexAgentToolServer(tools.URL, CodexSetting{Key: "bearer_token_env_var", Value: harness.AgentCredentialEnv}) {
+				overrides = append(overrides, setting.Override())
+			}
+		}
 	}
 	return overrides
 }

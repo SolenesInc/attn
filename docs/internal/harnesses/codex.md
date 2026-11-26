@@ -76,6 +76,10 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
   `structuredContent`, and the model reads what the script prints:
   `text(r.content)` prints `[]` when the server sends no content, and `text(r)`
   prints both fields, so it shows a result twice.
+- **Deferred tools `[0.167.0, measured on gpt-6.2-sol]`:** an MCP server's
+  tools are deferred. The rollout names the server in `world_state`
+  `state.tools`, not in `additional_tools`, and the model's first script
+  usually lists `ALL_TOOLS` to read their descriptions, one request per session.
 
 ## Updates and versions
 

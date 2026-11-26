@@ -86,6 +86,7 @@ func Facts() harness.Facts {
 		},
 		ModelDiscovery:        true,
 		Activity:              true,
+		AgentTools:            true,
 		ConversationIsSession: true,
 		ServerTerminal:        codexServerTerminal,
 		Caller:                harness.CallerEnv{Scope: SharedProfileEnv, Conversation: ThreadEnv},
@@ -148,21 +149,25 @@ func (h codexHarness) Launch(_ context.Context, req harness.LaunchRequest) (harn
 			executable = launchExecutable
 		}
 	}
+	var tools *harness.AgentTools
+	if served, ok := h.host.TerminalTools(req.Terminal); ok && remote == "" {
+		tools = &harness.AgentTools{URL: served.URL, Credential: served.Credential}
+	}
 	var cmd harness.Command
 	if req.Direct {
 		var err error
-		if cmd, err = h.directCommand(req, executable, remote); err != nil {
+		if cmd, err = h.directCommand(req, executable, remote, tools); err != nil {
 			return harness.Command{}, fmt.Errorf("prepare %s launch: %w", h.Facts().ID, err)
 		}
 	} else {
-		cmd = h.launcherCommand(req, executable, remote)
+		cmd = h.launcherCommand(req, executable, remote, tools)
 	}
 	cmd.Executable = launchExecutable
 	cmd.TitleSignals = h.Facts().Signals.Titles
 	return cmd, nil
 }
 
-func (h codexHarness) launcherCommand(req harness.LaunchRequest, executable, remote string) harness.Command {
+func (h codexHarness) launcherCommand(req harness.LaunchRequest, executable, remote string, tools *harness.AgentTools) harness.Command {
 	guidance := req.Guidance
 	var env []string
 	if remote != "" {
@@ -171,6 +176,7 @@ func (h codexHarness) launcherCommand(req harness.LaunchRequest, executable, rem
 	if guidance.Crew != "" {
 		env = append(env, "ATTN_CREW_MEMBER=1")
 	}
+	env = append(env, tools.LauncherEnv()...)
 	env = append(env, fmt.Sprintf("ATTN_VENT_ENABLED=%t", guidance.Vent), fmt.Sprintf("ATTN_TOOL_VENTS_ENABLED=%t", guidance.ToolVents), fmt.Sprintf("ATTN_CODE_REVIEW_ENABLED=%t", guidance.CodeReview))
 	autoApprove, model, effort := req.Options.AutoApprove, req.Options.Model, req.Options.Effort
 	if unattended := req.Unattended; !unattended.IsZero() {
@@ -184,7 +190,7 @@ func (h codexHarness) launcherCommand(req harness.LaunchRequest, executable, rem
 	})
 }
 
-func (h codexHarness) directCommand(req harness.LaunchRequest, explicit, remote string) (harness.Command, error) {
+func (h codexHarness) directCommand(req harness.LaunchRequest, explicit, remote string, tools *harness.AgentTools) (harness.Command, error) {
 	executable := explicit
 	if executable == "" {
 		executable = codexDefaultExecutable
@@ -197,6 +203,7 @@ func (h codexHarness) directCommand(req harness.LaunchRequest, explicit, remote 
 		Executable: executable, SocketPath: h.host.DaemonSocket(),
 		WrapperPath: launchenv.ActiveAttnExecutable(),
 		Guidance:    req.Guidance, AwarenessDirs: req.AwarenessDirs,
+		AgentTools: tools,
 	}
 	if unattended := req.Unattended; !unattended.IsZero() {
 		spawn.AutoApprove = true

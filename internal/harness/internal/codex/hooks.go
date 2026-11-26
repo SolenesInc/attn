@@ -39,6 +39,15 @@ func (s CodexSetting) Override() string {
 	return s.Key + "=" + string(value)
 }
 
+func CodexAgentToolServer(url string, auth CodexSetting) []CodexSetting {
+	const key = "mcp_servers.attn."
+	return []CodexSetting{
+		{key + "url", url},
+		{key + auth.Key, auth.Value},
+		{key + "default_tools_approval_mode", "approve"},
+	}
+}
+
 func GenerateCodexServerConfigOverrides(wrapperPath, socketPath, profile string) []string {
 	wrapper := hookWrapper(wrapperPath)
 	environment := "env " + shellQuote(SharedProfileEnv+"="+profile) + " " + shellQuote("ATTN_TERMINAL_ID=") + " " + shellQuote("ATTN_SESSION_ID=") + " "

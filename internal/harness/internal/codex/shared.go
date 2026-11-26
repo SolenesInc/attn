@@ -751,6 +751,11 @@ func (r *codexShared) identifySideConversationTools(m *codexshared.Message, para
 		config = make(map[string]any)
 	}
 	config["shell_environment_policy.set.ATTN_TERMINAL_ID"] = terminal
+	if tools, ok := r.host.TerminalTools(terminal); ok {
+		for _, s := range CodexAgentToolServer(tools.URL, CodexSetting{Key: "http_headers.Authorization", Value: "Bearer " + tools.Credential}) {
+			config[s.Key] = s.Value
+		}
+	}
 	params["config"] = config
 	raw, err := json.Marshal(params)
 	if err != nil {
@@ -791,14 +796,15 @@ func (r *codexShared) prepare(connection context.Context, v *codexView, m *codex
 	if config == nil {
 		config = make(map[string]any)
 	}
-	r.loadConfig(config, info.ContextCap)
+	_, hasTools := r.host.ServerTools(sharedCodexServerPrefix + v.profile)
+	r.loadConfig(config, info.ContextCap, v.profile)
 	if info.CrewBound {
 		config["features.memories"] = false
 		config["memories.generate_memories"] = false
 	}
 	grantCodexApprovals(params, info.ApprovalRoute)
 	if method != "thread/resume" {
-		if instructions := r.host.Sessions().Instructions(launchAs); instructions != "" {
+		if instructions := r.host.Sessions().Instructions(launchAs, hasTools); instructions != "" {
 			prior, _ := params["developerInstructions"].(string)
 			params["developerInstructions"] = strings.TrimSpace(prior + "\n\n" + instructions)
 		}
@@ -962,9 +968,14 @@ func (r *codexShared) launching(v *codexView, method string, params map[string]a
 	return session, session
 }
 
-func (r *codexShared) loadConfig(config map[string]any, contextCap int) {
+func (r *codexShared) loadConfig(config map[string]any, contextCap int, profile string) {
 	if contextCap > 0 {
 		config["model_auto_compact_token_limit"] = contextCap
+	}
+	if tools, ok := r.host.ServerTools(sharedCodexServerPrefix + profile); ok {
+		for _, s := range CodexAgentToolServer(tools.URL, CodexSetting{Key: "http_headers.Authorization", Value: "Bearer " + tools.Credential}) {
+			config[s.Key] = s.Value
+		}
 	}
 }
 

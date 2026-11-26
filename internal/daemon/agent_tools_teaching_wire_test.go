@@ -45,7 +45,7 @@ func TestALaunchThatCarriesTheToolsLeavesTheirFamiliesCLITeachingToTheServer(t *
 
 	setSetting(t, app, "agent_tools_enabled", "true")
 	for launch, text := range guidance() {
-		taught := launch != "a plugin that takes no tool" && launch != "shared codex"
+		taught := launch != "a plugin that takes no tool"
 		if dropped := !strings.Contains(text, hooks.GardenGuidance()) && !strings.Contains(text, seedCLITeaching); dropped != taught {
 			t.Errorf("%s left out the seed family's CLI teaching: %t, want %t, because its launch carries the tools: %t:\n%s", launch, dropped, taught, taught, text)
 		}
@@ -143,7 +143,7 @@ func TestEveryLaunchWithAsksTeachesTheirRulesAndVisualsAndLeavesTheCLIToLaunches
 					t.Errorf("with agent_tools_enabled %t, %s launched without the ask rule %q:\n%s", toolsOn, launch, rule, section)
 				}
 			}
-			carried := toolsOn && launch != "a plugin that takes no tool" && launch != "shared codex"
+			carried := toolsOn && launch != "a plugin that takes no tool"
 			if taught := strings.Contains(section, askCLITeaching); taught == carried {
 				t.Errorf("with agent_tools_enabled %t, %s launched with the ask CLI teaching %t, want it only without attn's tools:\n%s", toolsOn, launch, taught, section)
 			}
