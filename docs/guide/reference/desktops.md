@@ -41,20 +41,30 @@ on Linux) opens a shell beside the tile you're looking at, and Cmd+Shift+D
 Drag a tile to rearrange it on the desktop. Drag it over a desktop in the
 sidebar to switch to that desktop and drop it there.
 
-In a markdown tile, Cmd+F (Ctrl+Shift+F on Linux) finds text in the document.
-Enter and Shift+Enter step to the next and previous match and give the keys back
-to the document, and Esc closes the find bar.
+In a markdown tile or a seed tile, Cmd+F (Ctrl+Shift+F on Linux) finds text in
+the document, or in the seed's plan. Enter and Shift+Enter step to the next and
+previous match and give the keys back to the document, and Esc closes the find
+bar.
 
-To read markdown tiles with vim keys, turn on **Read documents with vim keys** in
+To read documents with vim keys, turn on **Read documents with vim keys** in
 **Settings → Appearance**, or run "Turn on vim keys for documents" from the
 command palette, or `attn settings set vim_mode_enabled true`. It is off by
-default. Then, in the markdown tile that has the keyboard, j and k scroll a line,
-Ctrl+D and Ctrl+U scroll half a page, gg and G go to the top and the bottom, and
-]] and [[ go to the next and previous heading. / opens the find bar, and n and N
-step through its matches. The keys never reach a terminal, a text field or a
-browser page, and selecting text and typing still starts a comment. A review
-document takes vim keys whether or not this is on; see
-[Code review](code-review.md).
+default. Then, in the markdown or seed tile that has the keyboard, j and k scroll
+a line, Ctrl+D and Ctrl+U scroll half a page, gg and G go to the top and the
+bottom, and ]] and [[ go to the next and previous heading, a seed's sections
+included. / opens the find bar, and n and N step through its matches. In a seed
+tile, Esc closes the find bar first; with the bar closed, Esc goes up to the
+seed's plot. The keys never reach a terminal, a text field or a browser page, and
+selecting text and typing still starts a comment. A review document takes vim
+keys whether or not this is on; see [Code review](code-review.md).
+
+The garden splits these keys between its list and the seed it shows. In the
+list, j, k, gg and G walk the rows and / goes to the search. Fullscreen, with
+the seeds in columns, Ctrl+D and Ctrl+U scroll the open seed from the list, and l
+or Enter on the open seed's row moves the keys into the seed, as a click on it
+does. There the reading keys and Cmd+F work as in a tile, and h or Esc goes back
+to the row once the find bar is closed. In the dock, the reading keys act on the
+seed as soon as you open one, until you search again.
 
 Cmd+Option+arrows (Ctrl+Shift+arrows on Linux) move between tiles. At the edge of
 a desktop, they move to the next desktop, and on an empty desktop they move

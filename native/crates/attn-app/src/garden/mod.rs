@@ -5,6 +5,7 @@ mod checks;
 mod continuation;
 mod handover;
 pub(crate) mod model;
+mod reading;
 pub(crate) mod search;
 mod sheet;
 mod spot;
@@ -29,6 +30,7 @@ use crate::State;
 use crate::requests::Refused;
 use crate::shell::Drawer;
 
+pub(crate) use reading::{home_of, reads_in, tile_doc, tile_view};
 pub(crate) use tile::{Reads as TileReads, body as tile_body, climb as climb_tile};
 pub(crate) use v2::overlay;
 pub(crate) use view::{frame_layer, panel};
@@ -1432,10 +1434,14 @@ fn put_away_written(state: &mut State, tx: &mut Tx) -> bool {
     spot::Spot::put_away_written(state, ("garden", &here), BODY, tx)
 }
 
-/// The garden's keys while focus is inside it: `/` or ⌘F goes to the search field, the arrows
-/// walk the rows of the place it stands in, → drills into the focused row in columns, ← climbs
-/// out, and Escape closes the garden.
+/// The garden's keys while focus is inside it: the seed page it reads takes them first, as
+/// [`reading::key`] says; then `/` or ⌘F goes to the search field, the arrows walk the rows of
+/// the place it stands in, → drills into the focused row in columns, ← climbs out, and Escape
+/// closes the garden.
 pub(crate) fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    if !tx.in_text_field() && reading::key(state, ev, tx) {
+        return true;
+    }
     let accel = if rune::Platform::current() == rune::Platform::Mac {
         ev.mods.cmd
     } else {
@@ -1495,6 +1501,18 @@ fn focused_row(tx: &Tx) -> Option<String> {
     tx.focused()?
         .strip_prefix(view::ROW_PREFIX)
         .map(str::to_owned)
+}
+
+/// Moves focus to the last row of the focused row's column, or of the place the garden stands
+/// in, or to its first.
+fn walk_to_end(state: &mut State, last: bool, tx: &mut Tx) -> bool {
+    let rows = view::walkable_rows(state, focused_row(tx).as_deref());
+    let end = if last { rows.last() } else { rows.first() };
+    let Some(end) = end else {
+        return false;
+    };
+    tx.focus(view::row_key(end), true);
+    true
 }
 
 /// Moves focus one row down or up the rows of the focused row's column, or of the place the

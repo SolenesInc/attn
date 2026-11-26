@@ -73,6 +73,30 @@ impl Go {
     }
 }
 
+/// The parts of a seed page that stand under a heading of their own, which `]]` and `[[` stop
+/// at besides the plan's headings.
+const SECTIONS: [&str; 6] = [
+    "plot",
+    "authorization",
+    "checks",
+    "related",
+    "artifacts",
+    "log",
+];
+
+/// The keys of the section headings on a seed page whose parts are keyed under `prefix`.
+pub(super) fn section_headings(prefix: &str) -> Vec<String> {
+    (SECTIONS.iter())
+        .map(|part| format!("{prefix}.{part}.heading"))
+        .collect()
+}
+
+/// The key a seed page whose parts are keyed under `prefix` reads seed `id`'s plan under, with
+/// nothing to mark in it, its headings keyed by their slugs.
+pub(super) fn plan_key(prefix: &str, id: &str) -> String {
+    format!("{prefix}.plan.{id}")
+}
+
 impl Sheet<'_> {
     pub(super) fn key(&self, part: &str) -> String {
         format!("{}.{part}", self.prefix)
@@ -338,6 +362,8 @@ impl Sheet<'_> {
         };
         let pictures = self.pictures.of_seed(&here.id);
         let pictured = self.pictures.revision;
+        let finding = crate::markdown::find::finding(self.readings, &view);
+        let found = crate::markdown::find::highlights(finding, &body, &view);
         let read = {
             let (body, view, kept, seed) =
                 (body.clone(), view.clone(), kept.clone(), here.id.clone());
@@ -384,7 +410,7 @@ impl Sheet<'_> {
             let (reading, over) = crate::markdown::seed_reader(
                 (drafts, self.readings),
                 tile,
-                &here.id,
+                (&here.id, found),
                 (&body, &self.view, &kept, pictured, t),
                 read,
                 &t,
@@ -392,9 +418,16 @@ impl Sheet<'_> {
             return Block::part(plan(reading).children(over));
         }
         Block::part(memo(
-            self.key(&format!("plan.{}", here.id)),
-            (body.clone(), self.view.clone(), kept.clone(), pictured, t),
-            move || plan(read(None)),
+            plan_key(&self.prefix, &here.id),
+            (
+                body.clone(),
+                self.view.clone(),
+                kept.clone(),
+                pictured,
+                t,
+                found.clone(),
+            ),
+            move || plan(read(Some(crate::markdown::Marking::washes(found)))),
         ))
     }
 

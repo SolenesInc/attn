@@ -1353,7 +1353,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let step = if reads_labels {
         vim::Step::None
     } else {
-        vim::step(&mut state.window.vim_prefix, ev, tx)
+        vim::step(&mut state.window.vim_prefix, &tile, ev, tx)
     };
     if step == vim::Step::Pending {
         return true;

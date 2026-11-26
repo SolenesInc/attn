@@ -38,7 +38,7 @@ pub(crate) fn body(
     t: &Tokens,
 ) -> El {
     let prefix = format!("seed-tile.{leaf}");
-    let view = format!("{prefix}.viewport");
+    let view = super::tile_view(leaf);
     let (document, error) = super::reading(reads.garden, id);
     let held = reads.seeds.iter().find(|s| s.id == id);
     let names = model::session_names(&reads.facts.sessions, reads.harnesses);
@@ -154,7 +154,11 @@ pub(crate) fn body(
         .push_all(sheet.artifacts(document))
         .push(sheet.log(document, error))
         .build(sheet.key("page"), Room::Narrow, t);
-    super::zoomed(reads.zoom, super::view::scroll(&view, page, t))
+    let bar = super::reading::find_bar(reads.readings, &view, (id, &here.body), t);
+    super::zoomed(
+        reads.zoom,
+        super::view::scroll(&view, page, t).children(bar),
+    )
 }
 
 /// Escape in a seed tile that holds the keyboard climbs to its seed's plot; false when the

@@ -252,6 +252,10 @@ const VIM: Section = Section {
             "Next / previous match",
             &[Typed("vim.n", &["n"]), Typed("vim.N", &["N"])],
         ),
+        line(
+            "Garden: read the open seed / back to its row",
+            &[Typed("vim.l", &["l"]), Typed("vim.h", &["h"])],
+        ),
     ],
 };
 

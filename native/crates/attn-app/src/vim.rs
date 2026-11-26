@@ -22,11 +22,13 @@ pub(crate) enum Prefix {
     CloseBracket,
 }
 
-/// A sequence's first key, waiting for its second until `until`.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// A sequence's first key, heard on the reading surface `surface`, waiting for its second until
+/// `until`.
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Pending {
     pub(crate) prefix: Prefix,
     pub(crate) until: f64,
+    surface: String,
 }
 
 /// What a key, or a sequence of two, asks a reading surface to do. A surface takes the
@@ -64,12 +66,19 @@ pub(crate) enum Step {
     None,
 }
 
-/// Reads `ev` against the sequence `pending` holds. A second key that completes no sequence
-/// drops it and reads as a first key; Escape drops it and is taken. A typed character counts
-/// whatever Option or Shift made it, as `[` takes Option on some layouts.
-pub(crate) fn step(pending: &mut Option<Pending>, ev: &KeyEvent, tx: &mut Tx) -> Step {
+/// Reads `ev`, heard on the reading surface `surface`, against the sequence `pending` holds. A
+/// sequence started on another surface is dropped, so the keyboard moving between surfaces
+/// never pairs their keys. A second key that completes no sequence drops it and reads as a
+/// first key; Escape drops it and is taken. A typed character counts whatever Option or Shift
+/// made it, as `[` takes Option on some layouts.
+pub(crate) fn step(
+    pending: &mut Option<Pending>,
+    surface: &str,
+    ev: &KeyEvent,
+    tx: &mut Tx,
+) -> Step {
     let now = tx.clock();
-    let waiting = pending.take().filter(|p| now < p.until);
+    let waiting = (pending.take()).filter(|p| now < p.until && p.surface == surface);
     if waiting.is_some() && ev.key == Key::Escape {
         return Step::Pending;
     }
@@ -84,7 +93,7 @@ pub(crate) fn step(pending: &mut Option<Pending>, ev: &KeyEvent, tx: &mut Tx) ->
             _ => Step::None,
         };
     }
-    if let Some(prefix) = waiting
+    if let Some(prefix) = &waiting
         && let Some(command) = second(prefix.prefix, typed(ev))
     {
         return Step::Command(command);
@@ -96,7 +105,11 @@ pub(crate) fn step(pending: &mut Option<Pending>, ev: &KeyEvent, tx: &mut Tx) ->
         key => return first(key).map_or(Step::None, Step::Command),
     };
     let until = now + LEADER_TIMEOUT;
-    *pending = Some(Pending { prefix, until });
+    *pending = Some(Pending {
+        prefix,
+        until,
+        surface: surface.to_owned(),
+    });
     tx.wake_at(until);
     Step::Pending
 }

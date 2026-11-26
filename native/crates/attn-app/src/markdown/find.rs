@@ -69,9 +69,18 @@ pub(crate) fn close(state: &mut State, view: &str, tx: &mut Tx) -> bool {
     };
     finding.open = false;
     finding.query.focused = false;
+    hand_back(view, tx);
     state.readings.revision += 1;
-    tx.blur();
     true
+}
+
+/// Gives the keyboard back to the document `view` scrolls: to the garden's part that reads it,
+/// or to nothing, so the tile holding the keyboard takes the keys again.
+fn hand_back(view: &str, tx: &mut Tx) {
+    match crate::garden::home_of(view) {
+        Some(home) => tx.focus(home, false),
+        None => tx.blur(),
+    }
 }
 
 /// Steps to the next match in the document `source` reads, or the previous one, wrapping at
@@ -229,7 +238,7 @@ fn field_key_pressed(
     if let Some(finding) = state.readings.finds.get_mut(view) {
         finding.query.focused = false;
     }
-    tx.blur();
+    hand_back(view, tx);
     true
 }
 

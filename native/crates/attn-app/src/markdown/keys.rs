@@ -1,5 +1,6 @@
-//! The keys a plain document tile reads by while it holds the keyboard: Escape closes its find
-//! bar, and with vim keys on, the vim reading commands move through it.
+//! The keys a document reads by: Escape closes its find bar, and with vim keys on, the vim
+//! reading commands move through it. A document tile reads by them while it holds the keyboard,
+//! and the garden's seed page while the garden's reader has it.
 
 use std::rc::Rc;
 
@@ -10,9 +11,29 @@ use super::find;
 use crate::State;
 use crate::vim::{self, Command, Step};
 
-/// The plain document tile holding the keyboard, on screen with nothing over it: a markdown
-/// tile showing a file, not a review.
-fn held(state: &State) -> Option<String> {
+/// A document read with the keys: the scroll view it reads in, its source as its find bar
+/// searches it, and where its headings sit.
+pub(crate) struct Doc {
+    pub(crate) view: String,
+    pub(crate) source: find::Source,
+    /// The keyed element its source's headings sit in, each keyed by its slug.
+    pub(crate) headings_in: String,
+    /// The keys of the headings around its source, which `]]` and `[[` stop at too.
+    pub(crate) sections: Vec<String>,
+}
+
+impl Doc {
+    fn headings(&self, source: &str) -> Vec<String> {
+        (super::anchors::heading_keys(source).into_iter())
+            .map(|(_, slug)| format!("{}/{slug}", self.headings_in))
+            .chain(self.sections.iter().cloned())
+            .collect()
+    }
+}
+
+/// The document tile holding the keyboard, on screen with nothing over it: a markdown tile
+/// showing a file, not a review, or a seed tile.
+fn held(state: &State) -> Option<Doc> {
     if !state.window.tiles_in_front() {
         return None;
     }
@@ -23,20 +44,46 @@ fn held(state: &State) -> Option<String> {
         .iter()
         .find(|d| d.id == holder.desktop)?;
     let leaf = desktop.leaves().into_iter().find(|l| l.id == holder.pane)?;
-    if leaf.tile()?.0 != "markdown" {
-        return None;
+    match leaf.tile()? {
+        ("seed", seed) => Some(crate::garden::tile_doc(&holder.pane, seed)),
+        ("markdown", _) => {
+            let key = attn_client::TileKey {
+                desktop: holder.desktop.clone(),
+                tile: holder.pane.clone(),
+            };
+            let message = &state.facts.tile_contents.get(&key)?.message;
+            message.review.is_none().then(|| doc(&holder.pane))
+        }
+        _ => None,
     }
-    let key = attn_client::TileKey {
-        desktop: holder.desktop.clone(),
-        tile: holder.pane.clone(),
-    };
-    let message = &state.facts.tile_contents.get(&key)?.message;
-    message.review.is_none().then(|| holder.pane.clone())
+}
+
+/// Forgets the find bars of document tiles that closed.
+pub(crate) fn follow(state: &mut State) {
+    let shown: std::collections::HashSet<String> = (state.facts.desktops.iter())
+        .flat_map(|d| d.leaves())
+        .filter_map(|leaf| match leaf.tile()? {
+            ("seed", _) => Some(crate::garden::tile_view(&leaf.id)),
+            ("markdown", _) => Some(view(&leaf.id)),
+            _ => None,
+        })
+        .collect();
+    (state.readings.finds).retain(|view, _| shown.contains(view) || crate::garden::reads_in(view));
 }
 
 /// The scroll view tile `tile`'s document reads in.
 pub(crate) fn view(tile: &str) -> String {
     format!("tile.{tile}.document")
+}
+
+/// The document tile `tile` shows, as the keys read it.
+fn doc(tile: &str) -> Doc {
+    Doc {
+        view: view(tile),
+        source: source(tile),
+        headings_in: format!("{}/{}", view(tile), super::annotating::root_key(tile)),
+        sections: Vec::new(),
+    }
 }
 
 /// The document tile `tile` shows, as its find bar reads it.
@@ -51,10 +98,10 @@ pub(crate) fn source(tile: &str) -> find::Source {
 
 /// Opens the find bar of the document tile holding the keyboard: false when none does.
 pub(crate) fn open_find(state: &mut State, tx: &mut Tx) -> bool {
-    let Some(tile) = held(state) else {
+    let Some(doc) = held(state) else {
         return false;
     };
-    find::open(state, &view(&tile), tx);
+    find::open(state, &doc.view, tx);
     true
 }
 
@@ -64,23 +111,28 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if tx.focused().is_some() {
         return false;
     }
-    let Some(tile) = held(state) else {
+    let Some(doc) = held(state) else {
         return false;
     };
-    let view = view(&tile);
-    if vim::enabled(&state.facts.settings) {
-        match vim::step(&mut state.window.vim_prefix, ev, tx) {
-            Step::Pending => return true,
-            Step::Command(command) => return read(state, &tile, &view, command, tx),
-            Step::None => {}
-        }
+    match step(state, &doc, ev, tx) {
+        Step::Pending => true,
+        Step::Command(command) => read(state, &doc, command, tx),
+        Step::None => ev.key == Key::Escape && find::close(state, &doc.view, tx),
     }
-    ev.key == Key::Escape && find::close(state, &view, tx)
 }
 
-/// Carries out `command` on tile `tile`'s document, scrolled in `view`: false for a command a
-/// document has no meaning for, which goes on as a plain key.
-fn read(state: &mut State, tile: &str, view: &str, command: Command, tx: &mut Tx) -> bool {
+/// What the vim keys make of `ev` on `doc`: nothing while they are off.
+pub(crate) fn step(state: &mut State, doc: &Doc, ev: &KeyEvent, tx: &mut Tx) -> Step {
+    if !vim::enabled(&state.facts.settings) {
+        return Step::None;
+    }
+    vim::step(&mut state.window.vim_prefix, &doc.view, ev, tx)
+}
+
+/// Carries out `command` on `doc`: false for a command a document has no meaning for, which
+/// goes on as a plain key.
+pub(crate) fn read(state: &mut State, doc: &Doc, command: Command, tx: &mut Tx) -> bool {
+    let view = doc.view.as_str();
     match command {
         Command::LineDown => tx.scroll_by(view, Reading::Text.line_height()),
         Command::LineUp => tx.scroll_by(view, -Reading::Text.line_height()),
@@ -94,16 +146,11 @@ fn read(state: &mut State, tile: &str, view: &str, command: Command, tx: &mut Tx
                 return false;
             }
             let forward = command == Command::NextMatch;
-            find::step(state, view, &source(tile), forward, tx);
+            find::step(state, view, &doc.source, forward, tx);
         }
         Command::NextSection | Command::PrevSection => {
-            let Some(text) = source(tile)(state) else {
-                return false;
-            };
-            let root = super::annotating::root_key(tile);
-            let keys = (super::anchors::heading_keys(text).into_iter())
-                .map(|(_, slug)| format!("{view}/{root}/{slug}"))
-                .collect();
+            let keys =
+                (doc.source)(state).map_or_else(|| doc.sections.clone(), |text| doc.headings(text));
             tx.scroll_adjacent_key(view, keys, command == Command::NextSection, 0.0);
         }
         Command::Left

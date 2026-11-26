@@ -16,6 +16,7 @@ use rune::{El, GrowthSpec, ScrollSpec, Tx, col, memo, row};
 use rune_kit::{ScrollBar, TextInput};
 
 use super::model::{self, Index, SessionNames};
+use super::reading;
 use super::search::{self, Lookups, Partial, Query};
 use super::sheet::{Go, Sheet};
 use super::v2::{self, Attention, BedFilter, Lens};
@@ -37,6 +38,11 @@ const COLUMN_WIDTH: f32 = 300.0;
 const READER_MAX_WIDTH: f32 = 760.0;
 /// How wide the expanded garden's root list grows before it centers.
 const ROOT_MAX_WIDTH: f32 = 880.0;
+
+/// Whether the garden's query searches, so its answers stand in the walk's place.
+pub(super) fn searching(state: &State) -> bool {
+    search::parse(&state.window.garden.query.text, v2::enabled(state)).searches
+}
 
 pub(super) fn row_key(id: &str) -> String {
     format!("{ROW_PREFIX}{id}")
@@ -1798,11 +1804,48 @@ fn stack_view(state: &State, place: &Place, t: &Tokens) -> El {
             (None, None) => Reader::new().push_all(root_list(state, place, Pick::Drill, t)),
         }
     };
+    let bar = (place.here())
+        .filter(|_| !place.query.searches)
+        .and_then(|here| {
+            reading::find_bar(
+                &state.readings,
+                reading::VIEWPORT,
+                (&here.id, &here.body),
+                t,
+            )
+        });
     scroll(
-        "garden.viewport",
+        reading::VIEWPORT,
         content.build("garden.page", Room::Narrow, t),
         t,
     )
+    .children(bar)
+}
+
+/// The open seed's page beside the columns, which takes the keyboard on a press anywhere in it
+/// that leaves the focus outside it.
+fn reader_pane(state: &State, place: &Place, page: El, t: &Tokens) -> El {
+    let bar = (place.here()).and_then(|here| {
+        reading::find_bar(&state.readings, reading::READER, (&here.id, &here.body), t)
+    });
+    col()
+        .key(reading::READER)
+        .focusable(true)
+        .on_press_within(|_: &mut State, tx: &mut Tx| {
+            if !tx.focus_within() {
+                tx.focus(reading::READER, false);
+            }
+        })
+        .grow(1.0)
+        .h_full()
+        .min_h(0.0)
+        .items_center()
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
+        .child(page.max_w(READER_MAX_WIDTH))
+        .scroll_bar_styled(attn_ui::thin_scroll_bar(t))
+        .children(bar)
 }
 
 fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
@@ -1822,30 +1865,15 @@ fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
             ));
         }
         let reader_inner = match (place.here(), place.trail.last()) {
-            (Some(here), _) => page(state, place, here, false, t)
-                .build("garden.page", Room::Wide, t)
-                .max_w(READER_MAX_WIDTH),
-            (None, Some(id)) => loading_page(state, id, t)
-                .build("garden.page", Room::Wide, t)
-                .max_w(READER_MAX_WIDTH),
+            (Some(here), _) => {
+                page(state, place, here, false, t).build("garden.page", Room::Wide, t)
+            }
+            (None, Some(id)) => loading_page(state, id, t).build("garden.page", Room::Wide, t),
             (None, None) => Reader::new()
                 .push(Prose::empty("garden.reader.empty", "Select a seed to read it.").build(t))
-                .build("garden.page", Room::Wide, t)
-                .max_w(READER_MAX_WIDTH),
+                .build("garden.page", Room::Wide, t),
         };
-        return columns.child(
-            col()
-                .key("garden.reader")
-                .grow(1.0)
-                .h_full()
-                .min_h(0.0)
-                .items_center()
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(reader_inner)
-                .scroll_bar_styled(attn_ui::thin_scroll_bar(t)),
-        );
+        return columns.child(reader_pane(state, place, reader_inner, t));
     }
     if place.query.searches {
         columns = columns.child(column(
@@ -1906,41 +1934,11 @@ fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
         }
     }
     if let Some(here) = place.here() {
-        columns = columns.child(
-            col()
-                .key("garden.reader")
-                .grow(1.0)
-                .h_full()
-                .min_h(0.0)
-                .items_center()
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(
-                    page(state, place, here, false, t)
-                        .build("garden.page", Room::Wide, t)
-                        .max_w(READER_MAX_WIDTH),
-                )
-                .scroll_bar_styled(attn_ui::thin_scroll_bar(t)),
-        );
+        let page = page(state, place, here, false, t).build("garden.page", Room::Wide, t);
+        columns = columns.child(reader_pane(state, place, page, t));
     } else if let Some(id) = place.trail.last() {
-        columns = columns.child(
-            col()
-                .key("garden.reader")
-                .grow(1.0)
-                .h_full()
-                .min_h(0.0)
-                .items_center()
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(
-                    loading_page(state, id, t)
-                        .build("garden.page", Room::Wide, t)
-                        .max_w(READER_MAX_WIDTH),
-                )
-                .scroll_bar_styled(attn_ui::thin_scroll_bar(t)),
-        );
+        let page = loading_page(state, id, t).build("garden.page", Room::Wide, t);
+        columns = columns.child(reader_pane(state, place, page, t));
     }
     columns
 }
@@ -1963,9 +1961,9 @@ fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Token
     let sheet = Sheet {
         prefix: "garden".into(),
         view: if stacked {
-            "garden.viewport"
+            reading::VIEWPORT
         } else {
-            "garden.reader"
+            reading::READER
         }
         .into(),
         go: Go::Garden,

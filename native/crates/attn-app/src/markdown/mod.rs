@@ -5,7 +5,7 @@ pub(crate) mod anchors;
 pub(crate) mod annotating;
 pub(crate) mod drafts;
 pub(crate) mod find;
-mod keys;
+pub(crate) mod keys;
 pub(crate) use keys::{on_key as reading_key, open_find};
 mod front_matter;
 pub(crate) use front_matter::{Value as FrontMatterValue, entries as front_matter_entries};
@@ -174,8 +174,7 @@ pub(crate) fn body(
     if let Some(bundle) = content.review.as_ref() {
         let read_part = |part: std::ops::Range<usize>| {
             let marking = Marking {
-                tile: tile.to_owned(),
-                uri: uri.clone(),
+                by: Some((tile.to_owned(), uri.clone())),
                 highlights: within(&marks, &part),
             };
             read_source(&content.content[part.clone()], Some(part.start), marking)
@@ -209,8 +208,7 @@ pub(crate) fn body(
             &content.content,
             None,
             Marking {
-                tile: tile.to_owned(),
-                uri,
+                by: Some((tile.to_owned(), uri)),
                 highlights: marks,
             },
         )
@@ -278,13 +276,27 @@ pub(crate) fn still(
     Some(Surface::gutter(page).child(card(padding, reading, t)))
 }
 
-/// The marks a reader in tile `tile` paints over document `uri`, and where its selections go.
+/// Washes over a document's rendered text: each over its ranges of the source.
+pub(crate) type Highlights = Vec<(Vec<std::ops::Range<usize>>, rune_kit::Highlight)>;
+
+/// The marks a reader paints over its document, and, in a tile, where its selections go.
 /// Reading a part of the document ([`links::Document::part`]), the reader paints marks by
 /// where they sit in it.
 pub(crate) struct Marking {
-    tile: String,
-    uri: String,
-    highlights: Vec<(Vec<std::ops::Range<usize>>, rune_kit::Highlight)>,
+    /// The tile a selection in the reader opens the toolbar of, and the document its marks are
+    /// on: none for a reader that only washes `highlights`, as a find bar does.
+    by: Option<(String, String)>,
+    highlights: Highlights,
+}
+
+impl Marking {
+    /// The washes of `highlights` alone, on a reader nothing is marked in.
+    pub(crate) fn washes(highlights: Highlights) -> Self {
+        Marking {
+            by: None,
+            highlights,
+        }
+    }
 }
 
 /// The marks `highlights` paints on the document, as a reader of its bytes `part` alone
@@ -292,7 +304,7 @@ pub(crate) struct Marking {
 fn within(
     highlights: &[(Vec<std::ops::Range<usize>>, rune_kit::Highlight)],
     part: &std::ops::Range<usize>,
-) -> Vec<(Vec<std::ops::Range<usize>>, rune_kit::Highlight)> {
+) -> Highlights {
     highlights
         .iter()
         .filter_map(|(ranges, highlight)| {
@@ -306,26 +318,28 @@ fn within(
         .collect()
 }
 
-/// The reader of seed `seed`'s body in tile `tile`, with the marks `drafts` hold on it, where
-/// people mark it as they mark a file: the reader, keyed so its marks' toolbar and comment box
-/// find their passage, then those, placed over it.
+/// The reader of seed `seed`'s body in tile `tile`, with the marks `drafts` hold on it and the
+/// washes of its find bar's matches, `found`, where people mark it as they mark a file: the
+/// reader, keyed so its marks' toolbar and comment box find their passage, then those, placed
+/// over it.
 pub(crate) fn seed_reader(
     (drafts, readings): (&Drafts, &Readings),
     tile: &str,
-    seed: &str,
+    (seed, found): (&str, Highlights),
     version: impl std::hash::Hash,
     read: impl FnOnce(Option<Marking>) -> El,
     t: &Tokens,
 ) -> (El, Vec<El>) {
     let uri = drafts::Source::Seed(seed.to_owned()).uri();
-    let highlights = annotating::highlights(drafts.get(&uri), readings.tiles.get(tile), tile, t);
+    let mut highlights =
+        annotating::highlights(drafts.get(&uri), readings.tiles.get(tile), tile, t);
+    highlights.extend(found);
     let reading = memo(
         annotating::root_key(tile),
         (version, highlights.clone()),
         || {
             read(Some(Marking {
-                tile: tile.to_owned(),
-                uri,
+                by: Some((tile.to_owned(), uri)),
                 highlights,
             }))
         },
@@ -359,10 +373,13 @@ pub(crate) fn reader(
     let copied_in = document.view.clone();
     let nth = details_order(source);
     let part = document.part;
-    let root = marking.as_ref().map(|m| match part {
-        None => annotating::root_key(&m.tile),
-        Some(start) => annotating::part_key(&m.tile, start),
-    });
+    let root = marking
+        .as_ref()
+        .and_then(|m| m.by.as_ref())
+        .map(|(tile, _)| match part {
+            None => annotating::root_key(tile),
+            Some(start) => annotating::part_key(tile, start),
+        });
     if let Some(root) = &root {
         document.view = format!("{}/{root}", document.view);
     }
@@ -390,22 +407,17 @@ pub(crate) fn reader(
     let markdown = diagrams(markdown, bars, t);
     let markdown = linked(markdown, document, pictures, t);
     let markdown = markdown.style(style);
-    let (
-        Some(Marking {
-            tile,
-            uri,
-            highlights,
-        }),
-        Some(root),
-    ) = (marking, root)
-    else {
+    let Some(Marking { by, highlights }) = marking else {
+        return ids::pointed(markdown.build(attn_ui::kit(t)), ids::Cards::All);
+    };
+    let markdown = markdown.highlights(highlights);
+    let (Some((tile, uri)), Some(root)) = (by, root) else {
         return ids::pointed(markdown.build(attn_ui::kit(t)), ids::Cards::All);
     };
     let pressed = tile.clone();
     let in_part = part.is_some();
     let part = part.map(|start| (start, source.to_owned()));
     let reading = markdown
-        .highlights(highlights)
         .on_highlight(move |state: &mut State, key: &str, _: &mut Tx| {
             annotating::mark_pressed(state, &pressed, key)
         })

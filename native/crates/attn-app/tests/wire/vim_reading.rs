@@ -2,11 +2,11 @@ use std::time::Duration;
 
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
-    Desktop, DesktopPane, DesktopTileContentMessage, InitialStateMessage, Profile,
-    ProfileArrangementChangedMessage, Session,
+    Desktop, DesktopPane, DesktopTileContentMessage, GardenSeedsUpdatedMessage,
+    InitialStateMessage, Profile, ProfileArrangementChangedMessage, Seed, SeedEdge, Session,
 };
 use attn_testkit::tree::{pane, row};
-use attn_testkit::{Target, World, key_event};
+use attn_testkit::{Daemon, Request, Target, World, key_event};
 use rune::{Key, KeyEvent, Mods};
 use serde_json::json;
 
@@ -436,4 +436,419 @@ fn document_find_reveals_a_match_inside_collapsed_details() {
     assert_eq!(find_count(&world).as_deref(), Some("1/1"));
     rest(&mut world);
     hidden_on_screen(&world);
+}
+
+const SEED_VIEW: &str = "seed-tile.t.viewport";
+const READER: &str = "garden.reader";
+const STACKED: &str = "garden.viewport";
+
+fn long_seed(id: &str, title: &str) -> Seed {
+    Seed {
+        body: document(),
+        ..super::garden::seed(id, title)
+    }
+}
+
+fn child_of(plot: &str, seed: Seed) -> Seed {
+    let mut seed = seed;
+    seed.edges.push(SeedEdge {
+        kind: "part-of".into(),
+        to: plot.into(),
+    });
+    seed
+}
+
+/// The garden of these tests: a plot holding the seed `s-long01`, whose plan is the long
+/// document, beside two loose seeds.
+fn garden() -> Vec<Seed> {
+    vec![
+        super::garden::seed("s-plot01", "The plot"),
+        child_of("s-plot01", long_seed("s-long01", "The long seed")),
+        long_seed("s-loose1", "A loose seed"),
+        super::garden::seed("s-loose2", "Another loose seed"),
+    ]
+}
+
+/// A window of `size` over the garden, with a desktop whose tiles `tiles` hold the keyboard
+/// from `active`, and vim keys on or off.
+fn start_garden(vim: bool, size: (f32, f32), tiles: serde_json::Value, active: &str) -> World {
+    let seeds = garden();
+    let known = seeds.clone();
+    let daemon = Daemon::scripted().state(InitialStateMessage {
+        settings: Some([("vim_mode_enabled".to_owned(), vim.to_string())].into()),
+        selected_profile_id: Some("work".into()),
+        profiles: Some(vec![profile(DESKTOP)]),
+        desktops: Some(vec![Desktop {
+            tree_json: tiles.to_string(),
+            active_pane_id: active.into(),
+            ..desktop(DESKTOP, 1, active)
+        }]),
+        sessions: Some(vec![Session {
+            id: "s-a".into(),
+            label: "Agent a".into(),
+            directory: "/work/a".into(),
+            profile_id: "work".into(),
+            ..Session::default()
+        }]),
+        seeds_total: Some(seeds.len() as i64),
+        seeds: Some(seeds),
+        ..InitialStateMessage::new()
+    });
+    daemon.on("seed_document_get", move |r: &Request| {
+        super::garden::document_reply(r, known.iter().find(|s| s.id == r["seed_id"]).cloned())
+    });
+    let mut world = World::start_sized(daemon, size);
+    world.open_desktop();
+    world.settle();
+    world
+}
+
+fn seed_tile(leaf: &str, id: &str) -> serde_json::Value {
+    json!({
+        "type": "tile",
+        "tile_id": leaf,
+        "tile_kind": "seed",
+        "tile_params": id,
+    })
+}
+
+/// A desktop of the agent `a` beside a tile of seed `s-long01` holding the keyboard.
+fn start_seed_tile(vim: bool) -> World {
+    start_garden(
+        vim,
+        (1600.0, 900.0),
+        row(vec![pane("a"), seed_tile("t", "s-long01")]),
+        "t",
+    )
+}
+
+fn scrolled_in(world: &World, view: &str) -> f32 {
+    world.screen().scrolled(Target::key(view)).unwrap()
+}
+
+/// How far below the top of the view `view` the element keyed `key` sits.
+fn below(world: &World, view: &str, key: &str) -> f32 {
+    let screen = world.screen();
+    let view = screen.bounds(Target::key(view)).unwrap();
+    let at = screen.bounds(Target::key(key)).unwrap();
+    at[1] - view[1]
+}
+
+fn count_in(world: &World, view: &str) -> Option<String> {
+    world
+        .screen()
+        .find(Target::key(format!("{view}.find.count")))
+        .and_then(|n| n.name)
+}
+
+fn row_focused(world: &World) -> Option<String> {
+    focused(world).filter(|k| k.starts_with("garden.row."))
+}
+
+#[test]
+fn vim_keys_read_a_seed_tile_and_its_find_bar_searches_the_seed() {
+    let mut world = start_seed_tile(true);
+    typed(&mut world, "jj");
+    assert_eq!(scrolled_in(&world, SEED_VIEW), 2.0 * LINE);
+    let height = world.screen().bounds(Target::key(SEED_VIEW)).unwrap()[3];
+    ctrl(&mut world, 'd');
+    assert!((scrolled_in(&world, SEED_VIEW) - (2.0 * LINE + height / 2.0)).abs() < 1.0);
+    typed(&mut world, "gg");
+    assert_eq!(scrolled_in(&world, SEED_VIEW), 0.0);
+
+    typed(&mut world, "]]");
+    assert!(
+        below(&world, SEED_VIEW, "seed-tile.t.authorization.heading").abs() < 1.0,
+        "the sections' headings are stops too"
+    );
+    typed(&mut world, "]]");
+    assert!(below(&world, SEED_VIEW, "plan").abs() < 1.0);
+    typed(&mut world, "]]");
+    assert!(below(&world, SEED_VIEW, "setup").abs() < 1.0);
+    typed(&mut world, "[[");
+    assert!(below(&world, SEED_VIEW, "plan").abs() < 1.0);
+
+    typed(&mut world, "/");
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some("seed-tile.t.viewport.find.input")
+    );
+    typed(&mut world, "needle");
+    assert_eq!(count_in(&world, SEED_VIEW).as_deref(), Some("1/3"));
+    press(&mut world, Key::Enter, Mods::default());
+    typed(&mut world, "n");
+    assert_eq!(count_in(&world, SEED_VIEW).as_deref(), Some("3/3"));
+    typed(&mut world, "N");
+    assert_eq!(count_in(&world, SEED_VIEW).as_deref(), Some("2/3"));
+    rest(&mut world);
+}
+
+#[test]
+fn with_vim_keys_off_a_seed_tile_ignores_them_and_its_find_bar_still_opens() {
+    let mut world = start_seed_tile(false);
+    typed(&mut world, "jG");
+    assert_eq!(scrolled_in(&world, SEED_VIEW), 0.0);
+    press_action(&mut world, &Action::TerminalFind);
+    typed(&mut world, "needle");
+    assert_eq!(count_in(&world, SEED_VIEW).as_deref(), Some("1/3"));
+    rest(&mut world);
+}
+
+#[test]
+fn escape_in_a_seed_tile_drops_a_sequence_then_closes_find_then_climbs_to_the_plot() {
+    let mut world = start_seed_tile(true);
+    typed(&mut world, "g");
+    press(&mut world, Key::Escape, Mods::default());
+    typed(&mut world, "/");
+    press(&mut world, Key::Escape, Mods::default());
+    assert!(count_in(&world, SEED_VIEW).is_none());
+    assert!(world.daemon.sent_of("desktop_update_tile").is_empty());
+
+    press(&mut world, Key::Escape, Mods::default());
+    let moves = world.daemon.sent_of("desktop_update_tile");
+    assert_eq!(moves.len(), 1);
+    assert_eq!(moves[0]["tile_params"], "s-plot01");
+    rest(&mut world);
+}
+
+#[test]
+fn a_selection_in_a_seed_tile_still_takes_a_typed_key_as_a_comment() {
+    let mut world = start_seed_tile(true);
+    world.gesture(|app| app.update(|_, tx| tx.select_text("tile.t.document.md/b1", 0..4)));
+    world.settle();
+    typed(&mut world, "j");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("tile.t.document.composer"))
+            .is_some(),
+        "{}",
+        world.screen()
+    );
+    assert_eq!(scrolled_in(&world, SEED_VIEW), 0.0);
+    rest(&mut world);
+}
+
+#[test]
+fn a_sequence_started_in_one_tile_does_not_finish_in_another() {
+    let tiles = row(vec![seed_tile("t", "s-long01"), seed_tile("u", "s-loose1")]);
+    let mut world = start_garden(true, (1600.0, 900.0), tiles, "t");
+    typed(&mut world, "G");
+    let bottom = scrolled_in(&world, SEED_VIEW);
+    assert!(bottom > 1000.0, "{bottom}");
+
+    world.gesture(|app| app.click(Target::key("seed-tile.u.head.title")));
+    world.settle();
+    typed(&mut world, "g");
+    world.gesture(|app| app.click(Target::key("seed-tile.t.head.title")));
+    world.settle();
+    typed(&mut world, "g");
+    assert_eq!(scrolled_in(&world, SEED_VIEW), bottom);
+    rest(&mut world);
+}
+
+#[test]
+fn a_tile_that_closes_takes_its_find_bar_with_it() {
+    let mut world = start_seed_tile(true);
+    typed(&mut world, "/");
+    assert!(count_in(&world, SEED_VIEW).is_some());
+
+    for tree in [pane("a"), row(vec![pane("a"), seed_tile("t", "s-long01")])] {
+        world.daemon.emit(ProfileArrangementChangedMessage {
+            profile: profile(DESKTOP),
+            desktops: vec![Desktop {
+                tree_json: tree.to_string(),
+                ..desktop(DESKTOP, 1, "a")
+            }],
+            ..ProfileArrangementChangedMessage::new()
+        });
+        world.settle();
+    }
+    assert!(world.screen().find(Target::key(SEED_VIEW)).is_some());
+    assert!(count_in(&world, SEED_VIEW).is_none());
+    rest(&mut world);
+}
+
+/// The garden open in the dock, or holding the window, over a desktop of the agent alone.
+fn open_garden(vim: bool, full: bool) -> World {
+    let size = if full {
+        (1520.0, 900.0)
+    } else {
+        (1100.0, 800.0)
+    };
+    let mut world = start_garden(vim, size, pane("a"), "a");
+    world.gesture(|app| app.key(super::sidebar::chord(Action::BoardOpen)));
+    world.settle();
+    if full {
+        world.gesture(|app| app.click(Target::role("button").name("Expand the garden")));
+        world.settle();
+    }
+    world
+}
+
+fn open_row(world: &mut World, id: &str) {
+    world.gesture(|app| app.click(Target::key(format!("garden.row.{id}"))));
+    world.settle();
+}
+
+#[test]
+fn in_columns_the_list_walks_with_vim_keys_and_the_reader_reads_once_it_has_focus() {
+    let mut world = open_garden(true, true);
+    open_row(&mut world, "s-loose1");
+    assert_eq!(row_focused(&world), None);
+    typed(&mut world, "j");
+    let first = row_focused(&world).expect("j walks to a row");
+    typed(&mut world, "G");
+    let last = row_focused(&world).expect("G walks to the last row");
+    assert_ne!(first, last);
+    typed(&mut world, "gg");
+    assert_eq!(row_focused(&world), Some(first));
+
+    ctrl(&mut world, 'd');
+    assert!(
+        scrolled_in(&world, READER) > 0.0,
+        "Ctrl-d scrolls the reader"
+    );
+    ctrl(&mut world, 'u');
+    assert_eq!(scrolled_in(&world, READER), 0.0);
+
+    for _ in 0..3 {
+        if row_focused(&world).as_deref() != Some("garden.row.s-loose1") {
+            typed(&mut world, "j");
+        }
+    }
+    typed(&mut world, "l");
+    assert_eq!(focused(&world).as_deref(), Some(READER));
+    typed(&mut world, "jj");
+    assert_eq!(scrolled_in(&world, READER), 2.0 * LINE);
+    typed(&mut world, "]]]]");
+    assert!(below(&world, READER, "plan").abs() < 1.0);
+
+    typed(&mut world, "/");
+    assert_eq!(focused(&world).as_deref(), Some("garden.reader.find.input"));
+    typed(&mut world, "needle");
+    press(&mut world, Key::Enter, Mods::default());
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some(READER),
+        "Enter hands the keyboard back"
+    );
+    typed(&mut world, "n");
+    assert_eq!(count_in(&world, READER).as_deref(), Some("3/3"));
+
+    press(&mut world, Key::Escape, Mods::default());
+    assert!(count_in(&world, READER).is_none());
+    assert_eq!(focused(&world).as_deref(), Some(READER));
+    typed(&mut world, "h");
+    assert_eq!(row_focused(&world).as_deref(), Some("garden.row.s-loose1"));
+
+    press(&mut world, Key::Enter, Mods::default());
+    assert_eq!(focused(&world).as_deref(), Some(READER));
+    press(&mut world, Key::Escape, Mods::default());
+    assert_eq!(row_focused(&world).as_deref(), Some("garden.row.s-loose1"));
+    rest(&mut world);
+}
+
+#[test]
+fn a_press_in_the_columns_reader_gives_it_the_keyboard_and_cmd_f_finds_in_the_seed() {
+    let mut world = open_garden(false, true);
+    open_row(&mut world, "s-loose1");
+    world.gesture(|app| app.click(Target::key("garden.head.title")));
+    world.settle();
+    assert_eq!(focused(&world).as_deref(), Some(READER));
+
+    let accel = if attn_testkit::platform() == rune::Platform::Mac {
+        Mods {
+            cmd: true,
+            ..Mods::default()
+        }
+    } else {
+        Mods {
+            ctrl: true,
+            ..Mods::default()
+        }
+    };
+    press(&mut world, Key::Command('f'), accel);
+    typed(&mut world, "needle");
+    assert_eq!(count_in(&world, READER).as_deref(), Some("1/3"));
+    rest(&mut world);
+}
+
+#[test]
+fn in_the_dock_the_list_walks_until_the_walk_stands_on_a_seed_whose_page_vim_keys_read() {
+    let mut world = open_garden(true, false);
+    typed(&mut world, "j");
+    assert!(row_focused(&world).is_some(), "j walks the root list");
+
+    open_row(&mut world, "s-loose1");
+    typed(&mut world, "jj");
+    assert_eq!(scrolled_in(&world, STACKED), 2.0 * LINE);
+    typed(&mut world, "/");
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some("garden.viewport.find.input")
+    );
+    typed(&mut world, "needle");
+    assert_eq!(count_in(&world, STACKED).as_deref(), Some("1/3"));
+    press(&mut world, Key::Escape, Mods::default());
+    assert!(count_in(&world, STACKED).is_none());
+    assert!(
+        world
+            .screen()
+            .find(Target::role("region").name("The garden"))
+            .is_some(),
+        "Escape closed the find bar, not the garden"
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn in_columns_l_opens_a_walked_row_and_a_second_l_reads_it() {
+    let mut world = open_garden(true, true);
+    for _ in 0..3 {
+        if row_focused(&world).as_deref() != Some("garden.row.s-loose1") {
+            typed(&mut world, "j");
+        }
+    }
+    typed(&mut world, "l");
+    assert!(world.screen().find(Target::key(READER)).is_some());
+    typed(&mut world, "l");
+    assert_eq!(focused(&world).as_deref(), Some(READER));
+    typed(&mut world, "j");
+    assert_eq!(scrolled_in(&world, READER), LINE);
+    rest(&mut world);
+}
+
+#[test]
+fn escape_in_the_reader_of_a_seed_whose_row_left_the_list_goes_to_the_garden() {
+    let mut world = open_garden(true, true);
+    open_row(&mut world, "s-loose1");
+    world.gesture(|app| app.click(Target::key("garden.head.title")));
+    world.settle();
+    assert_eq!(focused(&world).as_deref(), Some(READER));
+
+    let mut seeds = garden();
+    seeds[2].status = "harvested".into();
+    world.daemon.emit(GardenSeedsUpdatedMessage {
+        profile_id: "work".into(),
+        total: seeds.len() as i64,
+        seeds,
+        ..GardenSeedsUpdatedMessage::new()
+    });
+    world.settle();
+    assert!(
+        world
+            .screen()
+            .find(Target::key("garden.row.s-loose1"))
+            .is_none()
+    );
+
+    press(&mut world, Key::Escape, Mods::default());
+    assert_eq!(focused(&world).as_deref(), Some("garden.body"));
+    press(&mut world, Key::Escape, Mods::default());
+    assert!(
+        world.screen().find(Target::key(READER)).is_none(),
+        "the garden closed"
+    );
+    rest(&mut world);
 }
