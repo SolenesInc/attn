@@ -61,6 +61,20 @@ pub fn tag(key: impl Into<String>, said: impl Into<Said>, tone: Tone, t: &Tokens
     Control::new(tag, Size::Compact)
 }
 
+/// A quiet borderless label in small caps on a soft tonal wash, such as a sidebar tile's kind
+/// (`DOC`, `SEED`).
+pub fn quiet_tag(key: impl Into<String>, said: impl Into<Said>, ground: Color, t: &Tokens) -> El {
+    let fill = crate::colors::mix_srgb(ground, t.text_primary, 0.06);
+    let ink = crate::colors::moved_until_it_reads(
+        t.text_muted,
+        t.text_primary,
+        fill,
+        crate::colors::READS,
+    );
+    let tag = words(said, Type::Tag, ink).key(key.into()).fill(fill);
+    door::corner(door::inset(tag, Space::S6, Space::S2), Radius::Tag)
+}
+
 /// The ink and the wash of a thing that reads in `tone`.
 pub(crate) fn inks(tone: Tone, t: &Tokens) -> (Color, Color) {
     match tone {

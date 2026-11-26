@@ -97,16 +97,17 @@ and the group's header offers "N runs need you". Click it, or press
 Cmd+Shift+J (Ctrl+Alt+J on Linux), to open the next run that needs you. Press
 the same keys again to open the run after that.
 
-In [desktop flow](desktops.md), runs on an unnumbered desktop that holds only
-automation runs appear in a unified **Automations** section below your desktops
-instead of adding separate desktops to your desktop list. Runs that need you,
-are working, or are currently on screen stay visible, and finished off-screen
-runs fold behind a disclosure row. Click the waiting count in the heading, or
-press Cmd+Shift+J (Ctrl+Alt+J on Linux), to open the next run that needs you.
-Click **all** to open the automations drawer. When you collapse the sidebar, a
-single ⚡ chip on the rail represents these runs. A run on a numbered desktop,
-or on a desktop that also holds another agent or tile, stays under that desktop
-like any other agent.
+In [desktop flow](desktops.md), when an unnumbered desktop holds only
+automation runs and agents delegated from them, those runs and delegates appear
+in a unified **Automations** section below your desktops instead of adding
+separate desktops to your desktop list. Rows that need you, are working, or are
+currently on screen stay visible, and finished off-screen rows fold behind a
+disclosure row. Click the waiting count in the heading, or press Cmd+Shift+J
+(Ctrl+Alt+J on Linux), to open the next automation run or delegate that needs
+you. Click **all** to open the automations drawer. When you collapse the
+sidebar, a single ⚡ chip on the rail represents these rows. A run on a numbered
+desktop, or on a desktop that also holds an unrelated agent or tile, stays
+under that desktop like any other agent.
 
 In either flow, settle a run with ✓ on its row or Cmd+Shift+E (Ctrl+Alt+E on
 Linux), as you would any agent.

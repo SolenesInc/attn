@@ -526,7 +526,7 @@ fn rail_automations_chip(
         .a11y_value(if current { "current" } else { "" })
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             if needing > 0 {
-                crate::automations::runs::next_run(state, tx);
+                super::next_automation_needing(state, tx);
             } else {
                 crate::automations::toggle(state, tx);
             }

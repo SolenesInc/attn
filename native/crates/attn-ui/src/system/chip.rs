@@ -4,23 +4,28 @@ use super::{Radius, Said, Space, Type, door, words};
 use crate::Tokens;
 
 /// A number in a small frame: a desktop's, raised on the selected surface while it is the current
-/// one and dashed while it holds nothing.
+/// one, soft tonal while it holds tiles, and dashed while it holds nothing.
 pub fn number_chip(number: i64, current: bool, empty: bool, t: &Tokens) -> El {
-    let ink = if current {
-        t.text_primary
-    } else {
-        t.text_tertiary
-    };
-    let chip = chip_frame(words(number.to_string(), Type::Tag, ink));
     match (current, empty) {
-        (true, _) => chip.fill(t.bg_selected).border(1.0, t.border_hover),
-        (false, true) => chip
+        (true, _) => chip_frame(words(number.to_string(), Type::Tag, t.text_primary))
+            .fill(t.bg_selected)
+            .border(1.0, t.border_hover),
+        (false, true) => chip_frame(words(number.to_string(), Type::Tag, t.text_tertiary))
             .border(
                 1.0,
                 crate::colors::mix_srgb(t.border_hover, t.border_focus, 0.4),
             )
             .border_dash(2.0, 2.0),
-        (false, false) => chip.border(1.0, t.border),
+        (false, false) => {
+            let fill = crate::colors::mix_srgb(t.bg_panel, t.text_primary, 0.06);
+            let ink = crate::colors::moved_until_it_reads(
+                t.text_tertiary,
+                t.text_primary,
+                fill,
+                crate::colors::READS,
+            );
+            chip_frame(words(number.to_string(), Type::Tag, ink)).fill(fill)
+        }
     }
 }
 
@@ -163,8 +168,33 @@ pub fn chip_button(
     super::focus::ring(super::layers::pressable(button, rest, t), t)
 }
 
+/// `face` as a capsule button washed in `tint` over the panel, such as the automations waiting
+/// count chip.
+pub fn pill_button(
+    key: impl Into<String>,
+    label: impl Into<String>,
+    face: El,
+    tint: Color,
+    size: super::Size,
+    t: &Tokens,
+) -> El {
+    let ground = crate::colors::mix_srgb(t.bg_panel, tint, super::tag::PILL_WASH);
+    let button = row()
+        .key(key.into())
+        .role("button")
+        .focusable(true)
+        .label(label.into())
+        .h(size.height())
+        .justify_center()
+        .items_center()
+        .fill(ground)
+        .child(face);
+    let button = door::corner(door::inset(button, Space::S6, Space::S0), Radius::Round);
+    super::focus::ring(super::layers::pressable(button, ground, t), t)
+}
+
 /// How a compact sidebar pill sits against the panel: active on screen, running off screen,
-/// quiet outlined, dashed empty, or armed for confirmation.
+/// quiet tonal, dashed empty, or armed for confirmation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PillLook {
     Current,
@@ -179,7 +209,8 @@ impl PillLook {
         match self {
             PillLook::Current => t.bg_selected,
             PillLook::Elevated => t.bg_elevated,
-            PillLook::Quiet | PillLook::Dashed => t.bg_panel,
+            PillLook::Quiet => crate::colors::mix_srgb(t.bg_panel, t.text_primary, 0.04),
+            PillLook::Dashed => t.bg_panel,
             PillLook::Armed => {
                 crate::colors::mix_srgb(t.bg_panel, t.warning, super::tag::PILL_WASH)
             }
@@ -187,7 +218,7 @@ impl PillLook {
     }
 }
 
-/// A compact tonal pill frame for wrapping sidebar strips such as crew members and empty
+/// A compact tonal capsule frame for wrapping sidebar strips such as crew members and empty
 /// desktops. Callers set its role, focusability, children, and press behaviour.
 pub fn pill_surface(
     key: impl Into<String>,
@@ -209,15 +240,10 @@ pub fn pill_surface(
     let styled = match look {
         PillLook::Current => base.fill(t.bg_selected).border(1.0, t.border_hover),
         PillLook::Elevated => base.fill(t.bg_elevated).border(1.0, t.border),
-        PillLook::Quiet => base.border(1.0, t.border),
-        PillLook::Dashed => base
-            .border(
-                1.0,
-                crate::colors::mix_srgb(t.border_hover, t.border_focus, 0.4),
-            )
-            .border_dash(2.0, 2.0),
+        PillLook::Quiet => base.fill(ground),
+        PillLook::Dashed => base.border(1.0, t.border).border_dash(2.0, 2.0),
         PillLook::Armed => base.fill(ground).border(1.0, t.warning),
     };
-    let pill = door::corner(door::inset(styled, Space::S8, Space::S0), Radius::Control);
+    let pill = door::corner(door::inset(styled, Space::S8, Space::S0), Radius::Round);
     super::focus::ring(super::layers::pressable(pill, ground, t), t)
 }

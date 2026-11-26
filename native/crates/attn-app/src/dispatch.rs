@@ -81,7 +81,13 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
     match action {
         Action::SessionToggleSidebar => window.sidebar_hidden = !window.sidebar_hidden,
         Action::ToggleAutomations => crate::automations::toggle(state, tx),
-        Action::SessionNextRun => crate::automations::runs::next_run(state, tx),
+        Action::SessionNextRun => {
+            if crate::sidebar::queue_flow(state) {
+                crate::automations::runs::next_run(state, tx);
+            } else {
+                crate::sidebar::next_automation_needing(state, tx);
+            }
+        }
         Action::CreateDesktop => crate::desktop::create_desktop(state, tx),
         Action::OpenWhatsNew => crate::whats_new::open(state, tx),
         Action::NotebookOpenTile => crate::notebook::open_tile(state, tx),

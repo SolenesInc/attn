@@ -1191,6 +1191,7 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("system::stepper::stepper(value)", true),
     ("system::switch::switch(label)", false),
     ("system::tag::pill(said)", true),
+    ("system::tag::quiet_tag(said)", true),
     ("system::tag::tinted_pill(said)", true),
     ("system::tag::tag(said)", true),
     ("system::tag::tag_width(said)", true),
@@ -1287,6 +1288,7 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::shelf::ShelfEntry::build(label)", false),
     ("blocks::shelf::ShelfCount::build(label)", false),
     ("system::group_head::GroupHead::action_keys(keys)", false),
+    ("system::chip::pill_button(label)", false),
     ("system::chip::pill_surface(label)", false),
 ];
 

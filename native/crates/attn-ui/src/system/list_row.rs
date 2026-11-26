@@ -240,19 +240,26 @@ impl ListRow {
         }
     }
 
+    /// The surface behind a current group's [`Self::well`]: one calm tonal step above the panel.
+    pub fn well_surface(t: &Tokens) -> Color {
+        crate::colors::mix_srgb(t.bg_panel, t.bg_elevated, 0.55)
+    }
+
     /// The current group of rows in a list, held in a quiet tonal well matching the shelf's
-    /// frame: elevated surface, hairline border, and room around its rows.
+    /// frame: elevated surface, hairline border, and room around its rows without shifting their
+    /// horizontal alignment.
     pub fn well(key: impl Into<String>, first: bool, t: &Tokens) -> El {
+        let edge = crate::colors::mix_srgb(t.border_subtle, t.border, 0.5);
         let well = door::corner(
             door::inset(
-                door::hang(col().key(key.into()), Space::S2),
+                door::hang(col().key(key.into()), Space::S4),
                 Space::S4,
                 Space::S4,
             ),
-            Radius::Card,
+            Radius::Panel,
         )
-        .fill(t.bg_elevated)
-        .border(1.0, t.border);
+        .fill(Self::well_surface(t))
+        .border(1.0, edge);
         if first {
             well
         } else {
@@ -646,6 +653,7 @@ impl ListRow {
         };
         let below = self.surface.unwrap_or(t.bg_panel);
         let lit = self.mark != Mark::None;
+        let on_raised = below == t.bg_elevated || below == Self::well_surface(t);
         let (rest, fill, edge) = match (self.tint, lit) {
             (Some(tint), lit) => {
                 let fill = tint.alpha(if lit { TINT.1 } else { TINT.0 });
@@ -653,14 +661,14 @@ impl ListRow {
             }
             (None, true) if self.mark == Mark::Chosen => (t.bg_selected, t.bg_selected, None),
             (None, true) if self.mark == Mark::InView => {
-                if below == t.bg_elevated {
+                if on_raised {
                     (t.bg_selected, t.bg_selected, Some(t.border_hover))
                 } else {
                     (t.bg_elevated, t.bg_elevated, Some(t.border))
                 }
             }
             (None, true) => {
-                let lit = if below == t.bg_elevated {
+                let lit = if on_raised {
                     t.bg_selected
                 } else {
                     t.bg_elevated

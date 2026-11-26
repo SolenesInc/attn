@@ -182,8 +182,11 @@ pub fn actions(facts: &Facts, session: &Session, now_ms: i64) -> QueueActions {
     let settings = &facts.settings;
     let in_queue = setting::on(settings, QUEUE_MODE)
         && participates(session, setting::on(settings, QUEUE_CREW));
+    let by_id: HashMap<&str, &Session> =
+        facts.sessions.iter().map(|s| (s.id.as_str(), s)).collect();
+    let automation_member = super::model::is_automation_session(session, &by_id);
     QueueActions {
-        settle: session.turn_owed == Some(true) && (in_queue || session.automation.is_some()),
+        settle: session.turn_owed == Some(true) && (in_queue || automation_member),
         snooze: in_queue,
     }
 }

@@ -574,8 +574,31 @@ pub(crate) fn is_empty_crew_launch_desktop(
         && crew_launch_desktops.contains(desktop.id.as_str())
 }
 
-/// Whether `desktop` is an unslotted desktop holding only live automation runs (no manual agents
-/// and no non-pane tiles).
+/// Whether `session` is an automation run or belongs to one through its live delegation or
+/// split-shell chain.
+pub(crate) fn is_automation_session(session: &Session, by_id: &HashMap<&str, &Session>) -> bool {
+    let mut current = Some(session);
+    let mut visited = HashSet::new();
+    while let Some(s) = current {
+        if s.automation.is_some() {
+            return true;
+        }
+        if !visited.insert(s.id.as_str()) {
+            return false;
+        }
+        let next_id = s
+            .dispatcher_session_id
+            .as_deref()
+            .filter(|id| !id.is_empty())
+            .or_else(|| s.parent_session_id.as_deref().filter(|id| !id.is_empty()));
+        current = next_id.and_then(|id| by_id.get(id).copied());
+    }
+    false
+}
+
+/// Whether `desktop` is an unslotted desktop holding at least one live automation run and
+/// nothing outside that automation chain (delegates and split shells stay grouped with it;
+/// manual agents and non-pane tiles promote the desktop into Desktops).
 pub(crate) fn is_automation_desktop(desktop: &Desktop, by_id: &HashMap<&str, &Session>) -> bool {
     if desktop.shortcut_slot.unwrap_or(0) > 0 || desktop.panes.is_empty() {
         return false;
@@ -583,11 +606,17 @@ pub(crate) fn is_automation_desktop(desktop: &Desktop, by_id: &HashMap<&str, &Se
     if !desktop.leaves().into_iter().all(|l| l.tile().is_none()) {
         return false;
     }
-    desktop.panes.iter().all(|p| {
+    let has_direct_run = desktop.panes.iter().any(|p| {
         by_id
             .get(p.session_id.as_str())
             .is_some_and(|s| s.automation.is_some())
-    })
+    });
+    has_direct_run
+        && desktop.panes.iter().all(|p| {
+            by_id
+                .get(p.session_id.as_str())
+                .is_some_and(|s| is_automation_session(s, by_id))
+        })
 }
 
 /// What the desktop sidebar lists: each desktop, then its agents and tiles in layout order,
@@ -687,6 +716,7 @@ pub fn desktop_lines(
                     if placed.insert(session.id.as_str()) {
                         children.push(agent_line(
                             facts,
+                            &by_id,
                             desktop,
                             &leaf.id,
                             session,
@@ -709,6 +739,7 @@ pub fn desktop_lines(
                 }
                 children.push(agent_line(
                     facts,
+                    &by_id,
                     desktop,
                     &pane.pane_id,
                     session,
@@ -736,15 +767,17 @@ pub fn desktop_lines(
 
 fn agent_row_for(
     facts: &Facts,
+    by_id: &HashMap<&str, &Session>,
     session: &Session,
     shown: bool,
     active: Option<&str>,
     on_screen: &[String],
 ) -> AgentRow {
     let selected = shown && active == Some(session.id.as_str());
-    let row = AgentRow::of(session, &facts.harnesses, &facts.outposts, selected)
+    let mut row = AgentRow::of(session, &facts.harnesses, &facts.outposts, selected)
         .asking(facts, session)
         .chained(session, facts);
+    row.settle_run = is_automation_session(session, by_id) && session.turn_owed == Some(true);
     if on_screen.contains(&session.id) {
         row
     } else {
@@ -752,8 +785,10 @@ fn agent_row_for(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn agent_line(
     facts: &Facts,
+    by_id: &HashMap<&str, &Session>,
     desktop: &Desktop,
     leaf: &str,
     session: &Session,
@@ -764,7 +799,9 @@ fn agent_line(
     Line::Agent {
         desktop: desktop.id.clone(),
         leaf: leaf.to_owned(),
-        row: Box::new(agent_row_for(facts, session, shown, active, on_screen)),
+        row: Box::new(agent_row_for(
+            facts, by_id, session, shown, active, on_screen,
+        )),
     }
 }
 
@@ -822,7 +859,7 @@ pub fn desktop_automations(
             if !seen.insert(session.id.as_str()) {
                 continue;
             }
-            let row = agent_row_for(facts, session, shown, active_session, on_screen);
+            let row = agent_row_for(facts, &by_id, session, shown, active_session, on_screen);
             let needs = crate::automations::runs::needs_you(session, now_ms);
             if needs {
                 needing += 1;

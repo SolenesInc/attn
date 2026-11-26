@@ -11,8 +11,8 @@ use crate::Tokens;
 pub(crate) const INSET: Space = Space::S4;
 
 /// The heading of a group in a list, such as a desktop's in the sidebar or a section of the
-/// queue: a mark, the group's name, a hairline to the end, and the keys that go to it. Pressing
-/// it goes to the group, or opens and closes it, unless it is only a heading.
+/// queue: a mark, the group's name, and the keys or action at its end. Pressing it goes to the
+/// group, or opens and closes it, unless it is only a heading.
 pub struct GroupHead {
     key: String,
     label: String,
@@ -157,7 +157,7 @@ impl GroupHead {
         self
     }
 
-    /// The group is the current one: its name reads in primary ink and omits the divider rule.
+    /// The group is the current one: its name reads in primary ink.
     pub fn current(mut self, current: bool) -> Self {
         self.current = current;
         self
@@ -214,11 +214,7 @@ impl GroupHead {
             Name::Section(name) => words(name, Type::Label, t.text_tertiary),
             Name::Built(name) => name,
         });
-        let rule = if self.current {
-            el().grow(1.0)
-        } else {
-            el().grow(1.0).h(1.0).fill(t.border_subtle)
-        };
+        let spacer = el().grow(1.0);
         let content = row()
             .grow(1.0)
             .min_w(0.0)
@@ -233,7 +229,7 @@ impl GroupHead {
                     .grow_from(1.0, 0.0)
                     .h_full()
                     .items_center()
-                    .child(rule)
+                    .child(spacer)
                     .children(self.keys.map(|keys| {
                         words(keys, Type::Mono, t.text_dimmed)
                             .key(keys_key)

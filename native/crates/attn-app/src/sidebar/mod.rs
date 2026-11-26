@@ -18,7 +18,7 @@ use std::cell::Cell;
 use attn_protocol::DesktopShowSessionMessage;
 use attn_ui::Tokens;
 use attn_ui::blocks::{self, Inline, MemberState};
-use attn_ui::system::{self, DotShape, DotSize, GroupHead, IconSize, ListRow, Tone, Type, words};
+use attn_ui::system::{self, DotShape, DotSize, GroupHead, IconSize, ListRow, Type, words};
 use rune::{El, ScrollSpec, Tx, col, memo, row};
 use rune_kit::ScrollBar;
 
@@ -124,11 +124,20 @@ pub(crate) const AUTOMATIONS_LIST: &str = "sidebar.automations";
 /// The next wall-clock moment a turn age or automation snooze the window shows reads differently.
 pub(crate) fn next_change(state: &State, now_ms: i64) -> Option<i64> {
     if !actions::queue_flow(state) {
+        let by_id: std::collections::HashMap<&str, &attn_protocol::Session> = state
+            .facts
+            .sessions
+            .iter()
+            .map(|s| (s.id.as_str(), s))
+            .collect();
         return state
             .facts
             .sessions
             .iter()
-            .filter(|s| s.profile_id == state.facts.profiles.selected && s.automation.is_some())
+            .filter(|s| {
+                s.profile_id == state.facts.profiles.selected
+                    && model::is_automation_session(s, &by_id)
+            })
             .filter_map(|s| queue::epoch_ms(s.turn_snoozed_until.as_deref()?))
             .filter(|&at| at > now_ms)
             .min();
@@ -248,12 +257,14 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
     let home_keys = crate::palette::label_of(state, &Action::SessionGoToDashboard);
     let overview_keys = crate::palette::label_of(state, &Action::DesktopOverview);
     let next_run_keys = crate::palette::label_of(state, &Action::SessionNextRun);
+    let by_id: std::collections::HashMap<&str, &attn_protocol::Session> =
+        facts.sessions.iter().map(|s| (s.id.as_str(), s)).collect();
     let snoozed_automations = facts
         .sessions
         .iter()
         .filter(|s| {
             s.profile_id == facts.profiles.selected
-                && s.automation.is_some()
+                && model::is_automation_session(s, &by_id)
                 && queue::is_snoozed(s.turn_snoozed_until.as_deref(), state.window.now_ms)
         })
         .count();
@@ -493,24 +504,78 @@ fn automations_rule(needing: usize, next_run_keys: Option<String>, t: &Tokens) -
             Some(keys) => format!("Open the next automation run needing you ({keys})"),
             None => "Open the next automation run needing you".to_owned(),
         };
+        let ground = attn_ui::colors::mix_srgb(t.bg_panel, t.warning, 0.14);
+        let ink = attn_ui::colors::moved_until_it_reads(
+            t.warning,
+            t.text_primary,
+            ground,
+            attn_ui::colors::READS,
+        );
         let face = Inline::joined()
-            .child(system::dot(t.warning, DotShape::Filled, DotSize::Small))
-            .child(words(label.clone(), Type::Small, t.warning).single_line());
-        let chip = system::chip_button(
+            .child(system::dot(ink, DotShape::Filled, DotSize::Small))
+            .child(words(label.clone(), Type::Small, ink).single_line());
+        let chip = system::pill_button(
             "sidebar.automations.needing",
             format!("{label} — open next"),
             face,
-            false,
+            t.warning,
             system::Size::Small,
             t,
         )
         .help(help)
         .on_press_tx(|state: &mut State, tx: &mut Tx| {
-            crate::automations::runs::next_run(state, tx);
+            next_automation_needing(state, tx);
         });
         head = head.aside(chip);
     }
     head.build(t)
+}
+
+/// Opens the next automation run or automation delegate needing the user in desktop flow:
+/// first walks needing rows in the unified Automations section (oldest first), then any needing
+/// direct automation runs on numbered or mixed desktops so none are starved.
+pub(crate) fn next_automation_needing(state: &mut State, tx: &mut Tx) {
+    let now_ms = state.wall_ms();
+    let section = model::desktop_automations(
+        &state.facts,
+        state.window.view == View::Home,
+        &crate::desktop::on_screen_sessions(state),
+        now_ms,
+    );
+    let by_id: std::collections::HashMap<&str, &attn_protocol::Session> = state
+        .facts
+        .sessions
+        .iter()
+        .map(|s| (s.id.as_str(), s))
+        .collect();
+    let mut batch: Vec<&str> = Vec::new();
+    let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    for run in &section.active {
+        let Some(session) = by_id.get(run.row.id.as_str()) else {
+            continue;
+        };
+        if crate::automations::runs::needs_you(session, now_ms) && seen.insert(run.row.id.as_str())
+        {
+            batch.push(run.row.id.as_str());
+        }
+    }
+    for group in crate::automations::runs::on_desktops(&state.facts, now_ms) {
+        for run in group.needing_you {
+            if seen.insert(run.id.as_str()) {
+                batch.push(run.id.as_str());
+            }
+        }
+    }
+    if batch.is_empty() {
+        return;
+    }
+    let current = state.window.on_screen(&state.facts);
+    let at = current
+        .as_deref()
+        .and_then(|id| batch.iter().position(|&run| run == id))
+        .map_or(0, |i| (i + 1) % batch.len());
+    let next = batch[at].to_owned();
+    open_agent(state, &next, tx);
 }
 
 fn finished_runs_toggle(count: usize, open: bool, t: &Tokens) -> El {
@@ -878,13 +943,13 @@ pub(super) fn line_height(line: &Line) -> f32 {
     }
 }
 
-/// A desktop's heading: its slot chip when it has one, its name, a hairline when not current,
-/// and the keys that go to it, with its rename and close controls on hover.
+/// A desktop's heading: its slot chip when it has one, its name, and the keys that go to it,
+/// with its rename and close controls on hover.
 fn desktop_row(key: String, desktop: &DesktopHeader, keys: Option<String>, t: &Tokens) -> El {
     let id = desktop.id.clone();
     let dragged = desktop.id.clone();
     let surface = if desktop.current {
-        t.bg_elevated
+        ListRow::well_surface(t)
     } else {
         t.bg_panel
     };
@@ -962,7 +1027,7 @@ fn agent_row(
 ) -> El {
     let id = agent.id.clone();
     let surface = if in_current {
-        t.bg_elevated
+        ListRow::well_surface(t)
     } else {
         t.bg_panel
     };
@@ -1305,9 +1370,18 @@ pub(crate) fn state_color(state: AgentState, t: &Tokens) -> rune::Color {
 fn tile_row(key: String, tile: &TileRow, in_current: bool, t: &Tokens) -> El {
     let (desktop, leaf) = (tile.desktop.clone(), tile.id.clone());
     let surface = if in_current {
-        t.bg_elevated
+        ListRow::well_surface(t)
     } else {
         t.bg_panel
+    };
+    let ground = if tile.selected {
+        if in_current {
+            t.bg_selected
+        } else {
+            t.bg_elevated
+        }
+    } else {
+        surface
     };
     let (title_kind, title_ink) = if tile.selected {
         (Type::Name, t.text_primary)
@@ -1333,10 +1407,10 @@ fn tile_row(key: String, tile: &TileRow, in_current: bool, t: &Tokens) -> El {
                 .truncate()
                 .shrink(),
         )
-        .aside(system::tag(
+        .aside(system::quiet_tag(
             format!("{key}.kind"),
             tile.word(),
-            Tone::Neutral,
+            ground,
             t,
         ))
         .hover_controls(controls)

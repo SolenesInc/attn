@@ -2316,12 +2316,12 @@ fn desktop_sidebar_unifies_automation_desktops_folds_finished_runs_and_cleans_ra
             .is_none()
     );
 
-    // Clicking the waiting chip walks runs needing you via desktop_show_session (group order: "Review main" before "Sheriff").
+    // Clicking the waiting chip walks runs needing you in sidebar order (oldest first).
     world.gesture(|app| app.click(Target::key("sidebar.automations.needing")));
     let shown = world.daemon.sent_of("desktop_show_session");
     assert_eq!(
         shown.last().and_then(|m| m["session_id"].as_str()),
-        Some("run-wait-new")
+        Some("run-wait-old")
     );
 
     // Dragging an automation run onto a user desktop moves its pane there.
@@ -2791,6 +2791,224 @@ fn dragging_a_stacked_desktop_keeps_folded_desktops_in_the_saved_order() {
     assert_eq!(
         moved[1]["desktop_ids"],
         serde_json::json!(["d1", "d-mid", "d3", "d2", "d-end"])
+    );
+    world.advance(std::time::Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn automation_delegates_on_launch_desktop_stay_unified_until_manual_or_orphaned() {
+    use attn_protocol::AutomationProvenance;
+
+    let mut work_agent = session("work-1", "working");
+    work_agent.label = "Main work".into();
+
+    let mut auto_root = session("auto-root", "idle");
+    auto_root.label = "Review Recent Main Commits".into();
+    auto_root.state_since = "2026-09-26T09:00:00Z".into();
+    auto_root.automation = Some(AutomationProvenance {
+        run_id: "r-review".into(),
+        definition_id: 10,
+        definition_name: "Review main".into(),
+        trigger_type: "scheduled".into(),
+        ..AutomationProvenance::default()
+    });
+
+    let mut delegate_working = session("del-work", "working");
+    delegate_working.label = "Review Garden fullscreen".into();
+    delegate_working.dispatcher_session_id = Some("auto-root".into());
+
+    let mut delegate_nested_waiting = session("del-wait", "waiting_input");
+    delegate_nested_waiting.label = "Verify edge case".into();
+    delegate_nested_waiting.turn_owed = Some(true);
+    delegate_nested_waiting.turn_opened_at = Some("2026-09-26T10:00:00Z".into());
+    delegate_nested_waiting.dispatcher_session_id = Some("del-work".into());
+
+    let mut delegate_finished = session("del-fin", "idle");
+    delegate_finished.label = "Review palette action".into();
+    delegate_finished.state_since = "2026-09-26T08:30:00Z".into();
+    delegate_finished.dispatcher_session_id = Some("auto-root".into());
+
+    let mut d_work = desktop("d1", "a", "Work", vec![pane("d1", "p-work", "work-1")]);
+    d_work.shortcut_slot = Some(1);
+    let d_review = desktop(
+        "auto-review",
+        "b",
+        "Review main",
+        vec![
+            pane("auto-review", "p-root", "auto-root"),
+            pane("auto-review", "p-work-del", "del-work"),
+            pane("auto-review", "p-wait-del", "del-wait"),
+            pane("auto-review", "p-fin-del", "del-fin"),
+        ],
+    );
+
+    let initial = state(
+        vec![
+            work_agent.clone(),
+            auto_root.clone(),
+            delegate_working.clone(),
+            delegate_nested_waiting.clone(),
+            delegate_finished.clone(),
+        ],
+        vec![d_work.clone(), d_review.clone()],
+    );
+    let mut world = World::start(Daemon::scripted().state(initial));
+    world.open_desktop();
+
+    let screen = world.screen();
+    assert!(
+        screen
+            .find(Target::key("sidebar.desktop.auto-review"))
+            .is_none(),
+        "an unslotted automation desktop holding only the run and its delegates must stay in Automations"
+    );
+    assert!(
+        screen
+            .find(Target::key("sidebar.session.del-wait"))
+            .is_some()
+    );
+    assert!(
+        screen
+            .find(Target::key("sidebar.session.del-work"))
+            .is_some()
+    );
+    assert!(
+        screen
+            .find(Target::key("sidebar.session.auto-root"))
+            .is_none(),
+        "finished automation root folds behind finished runs"
+    );
+    assert!(
+        screen
+            .find(Target::key("sidebar.session.del-fin"))
+            .is_none(),
+        "finished delegate folds behind finished runs"
+    );
+    assert_eq!(
+        screen
+            .get(Target::key("sidebar.automations.finished"))
+            .name
+            .as_deref(),
+        Some("2 finished runs")
+    );
+    assert!(
+        screen
+            .get(Target::key("sidebar.automations.needing"))
+            .name
+            .as_deref()
+            .is_some_and(|n| n.starts_with("1 waiting"))
+    );
+
+    // Clicking the waiting chip and pressing Cmd+Shift+J both open the waiting delegate.
+    world.gesture(|app| app.click(Target::key("sidebar.automations.needing")));
+    let shown = world.daemon.sent_of("desktop_show_session");
+    assert_eq!(
+        shown.last().and_then(|m| m["session_id"].as_str()),
+        Some("del-wait")
+    );
+    world.gesture(|app| app.key(chord(attn_app::Action::SessionNextRun)));
+    let shown = world.daemon.sent_of("desktop_show_session");
+    assert_eq!(shown.len(), 2);
+    assert_eq!(
+        shown.last().and_then(|m| m["session_id"].as_str()),
+        Some("del-wait")
+    );
+
+    // Waiting automation delegates expose the row settle control in desktop flow.
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.session.del-wait.settle"))
+            .is_some(),
+        "a waiting automation delegate must expose its row settle control"
+    );
+    world.gesture(|app| app.click(Target::key("sidebar.session.del-wait.settle")));
+    let settled = world.daemon.sent_of("settle_turn");
+    assert_eq!(
+        settled.last().and_then(|m| m["session_id"].as_str()),
+        Some("del-wait")
+    );
+
+    // Adding a manual (non-delegated) session promotes the desktop into Desktops.
+    let mut manual = session("manual-1", "working");
+    manual.label = "Manual debug".into();
+    let d_mixed = desktop(
+        "auto-review",
+        "b",
+        "Review main",
+        vec![
+            pane("auto-review", "p-root", "auto-root"),
+            pane("auto-review", "p-work-del", "del-work"),
+            pane("auto-review", "p-manual", "manual-1"),
+        ],
+    );
+    world.daemon.emit(attn_protocol::SessionsUpdatedMessage {
+        sessions: Some(vec![
+            work_agent.clone(),
+            auto_root.clone(),
+            delegate_working.clone(),
+            manual,
+        ]),
+        ..attn_protocol::SessionsUpdatedMessage::new()
+    });
+    world
+        .daemon
+        .emit(attn_protocol::ProfileArrangementChangedMessage {
+            profile: Profile {
+                id: "work".into(),
+                name: "Work".into(),
+                current_desktop_id: "d1".into(),
+                ..Profile::default()
+            },
+            desktops: vec![d_work.clone(), d_mixed],
+            ..attn_protocol::ProfileArrangementChangedMessage::new()
+        });
+    world.settle();
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.desktop.auto-review"))
+            .is_some(),
+        "a manual session on an automation desktop promotes it to Desktops"
+    );
+
+    // Closing the automation root leaves the surviving delegate visible under Desktops.
+    let d_orphaned = desktop(
+        "auto-review",
+        "b",
+        "Review main",
+        vec![pane("auto-review", "p-work-del", "del-work")],
+    );
+    world.daemon.emit(attn_protocol::SessionsUpdatedMessage {
+        sessions: Some(vec![work_agent, delegate_working]),
+        ..attn_protocol::SessionsUpdatedMessage::new()
+    });
+    world
+        .daemon
+        .emit(attn_protocol::ProfileArrangementChangedMessage {
+            profile: Profile {
+                id: "work".into(),
+                name: "Work".into(),
+                current_desktop_id: "d1".into(),
+                ..Profile::default()
+            },
+            desktops: vec![d_work, d_orphaned],
+            ..attn_protocol::ProfileArrangementChangedMessage::new()
+        });
+    world.settle();
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.desktop.auto-review"))
+            .is_some(),
+        "once the automation root closes, a surviving delegate surfaces under Desktops"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.session.del-work"))
+            .is_some()
     );
     world.advance(std::time::Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
