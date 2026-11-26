@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Grouped delegate rows stop accepting sidebar drops",
+  "at": "2026-11-26T23:42:24.315Z",
+  "detail": "Grouped delegate rows stop accepting sidebar drops\n\nnative/crates/attn-app/src/sidebar/mod.rs:184\n\nDrag a tile from another desktop onto a visible working delegate in Automations. Hover and release resolve the owning desktop through desktop_at, which searches only ordinary Desktops. Grouping omits this desktop from those lines (sidebar/model.rs:652), so the drop submits no move. Resolve visible automation rows to AutomationRunLine.desktop so the move can promote the desktop after a manual addition.\n\nReviewed at 90dd08587830aa15e6c2158d10f006dfc325f5e4. Independently confirmed by source trace. Review seed s-ncxe0p.\n"
+}
