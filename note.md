@@ -1,0 +1,1 @@
+Fixes the intermittent red main in the plugin prompt-title wire tests. They reported a prompt before the daemon had recorded the typed Enter, so no title task ran. They now wait for the terminal write's acknowledgment, which matches the order a real harness sees. Test-only: product behavior is unchanged.
