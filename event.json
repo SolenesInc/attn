@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Closed Garden search hits can omit the root breadcrumb",
+  "at": "2026-11-26T17:37:07.798Z",
+  "detail": "Closed Garden log-search hits can open with a partial seed breadcrumb. At ac8c5c19d, open a closed hit where the capped snapshot contains the seed and immediate subplot but omits the older root. The real daemon probe reproduced that snapshot and search hit. The app accepts [subplot, seed]. The daemon returns [root, subplot] with the document, but the callback uses it only for a single-item trail. The user loses direct navigation to the root. An independent reviewer confirmed the app trace. Reconcile the opened target's breadcrumb with document ancestry even when the snapshot supplied a nonempty partial path. Native screen assertion and attachments are in progress on s-wxwcq5.\n"
+}
