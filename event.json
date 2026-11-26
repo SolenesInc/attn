@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Archived seed ID previews can show stale content",
+  "at": "2026-11-26T18:10:21.485Z",
+  "detail": "Archived seed ID preview can stay stale at 23b1ccf3a. Resolve a closed seed ID, then edit its body through the CLI. The lookup revision moves from 2 to 3, but the terminal or Markdown preview keeps the old excerpt after the Garden delta because the app caches the seed payload with the ID. Keep ID resolution and refresh visible preview data. Independently confirmed and reproduced through wire in both input modes. Review s-xmzdax.\n"
+}
