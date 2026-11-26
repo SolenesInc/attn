@@ -180,6 +180,9 @@ pub(crate) fn desktop_at(state: &State, path: &str) -> Option<String> {
             .find(|d| d.shortcut_slot == Some(slot))
             .map(|d| d.id.clone());
     }
+    if path.split('/').any(|segment| segment == AUTOMATIONS_LIST) {
+        return automation_row_at(state, path).map(|run| run.desktop);
+    }
     let path = format!("/{path}/");
     lines(state)
         .into_iter()
@@ -616,9 +619,15 @@ fn automation_run_row(
     let draining = state.window.countdowns.contains_key(&run.row.id);
     let logos_on = build.logos_on;
     let logo_rev = build.logo_rev;
+    let mark = state
+        .window
+        .desk
+        .drag
+        .as_ref()
+        .and_then(|drag| drag.desktop_mark(&run.desktop));
     memo(
         key.clone(),
-        (run, draining, logos_on, logo_rev, shown, *t),
+        (run, draining, logos_on, logo_rev, shown, mark, *t),
         || {
             ROWS_BUILT.with(|n| n.set(n.get() + 1));
             let bar = settling_bar(state, &key, &run.row, t);
@@ -629,7 +638,7 @@ fn automation_run_row(
                 .then(|| settle_button(&key, &run.row))
                 .into_iter()
                 .chain([actions_button(&key, &run.row, tile)]);
-            agent_row(
+            let row = agent_row(
                 state,
                 key.clone(),
                 &run.row,
@@ -639,7 +648,8 @@ fn automation_run_row(
                 controls.collect(),
                 t,
             )
-            .children(bar)
+            .children(bar);
+            drop_mark(row, mark, false, t)
         },
     )
 }
@@ -1598,6 +1608,17 @@ pub(crate) fn row_source_at(state: &State, path: &str) -> Option<crate::desktop:
     }) {
         return Some(found);
     }
+    automation_row_at(state, &path).map(|run| crate::desktop::drag::Source::Row {
+        desktop: run.desktop,
+        leaf: run.leaf,
+        label: run.row.name,
+    })
+}
+
+fn automation_row_at(state: &State, path: &str) -> Option<model::AutomationRunLine> {
+    let session = path
+        .split('/')
+        .find_map(|segment| segment.strip_prefix("sidebar.session."))?;
     let section = automations(state);
     section
         .active
@@ -1610,12 +1631,7 @@ pub(crate) fn row_source_at(state: &State, path: &str) -> Option<crate::desktop:
                 .into_iter()
                 .flatten(),
         )
-        .find(|run| path.contains(&format!("/sidebar.session.{}/", run.row.id)))
-        .map(|run| crate::desktop::drag::Source::Row {
-            desktop: run.desktop,
-            leaf: run.leaf,
-            label: run.row.name,
-        })
+        .find(|run| run.row.id == session)
 }
 
 pub(super) fn pane_of(state: &State, session: &str) -> Option<(String, String)> {

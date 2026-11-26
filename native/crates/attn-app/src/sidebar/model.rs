@@ -866,13 +866,14 @@ pub fn desktop_automations(
             }
             let snoozed = super::queue::is_snoozed(session.turn_snoozed_until.as_deref(), now_ms);
             let wants_attention = needs || (!snoozed && row.asks > 0);
-            let live = matches!(
-                row.state,
-                AgentState::Launching
-                    | AgentState::Working
-                    | AgentState::Scheduled
-                    | AgentState::Recoverable
-            );
+            let live = session.agent == "shell"
+                || matches!(
+                    row.state,
+                    AgentState::Launching
+                        | AgentState::Working
+                        | AgentState::Scheduled
+                        | AgentState::Recoverable
+                );
             let keep_offline_row = row.offline && row.owed;
             let run = AutomationRunLine {
                 desktop: desktop.id.clone(),

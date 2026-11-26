@@ -210,6 +210,7 @@ mod wire {
     mod shelf_peek;
     mod shortcut_editor;
     mod sidebar;
+    mod sidebar_automation;
     mod sidebar_width;
     mod terminal;
     mod terminal_annotations;
