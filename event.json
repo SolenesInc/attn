@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "GitHub review batch can launch from a newly excluded repository",
+  "at": "2026-11-26T21:08:32.292Z",
+  "detail": "Updating repository filters rejects the first claim on its old revision, but a later candidate from the same stale batch can use the refreshed revision. Retain the spec edit fence while permitting desktop-only revision changes. Verified with an isolated mock provider.\nIndependently corroborated at cec7eaba2. Isolated regression receipts are attached to s-1hpv1w.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/automations_github.go",
+    "line": 157
+  },
+  "culprit": "a1053b55df616a9cbb8e8a6a16144ac9b881a51d"
+}
