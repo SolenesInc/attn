@@ -1,0 +1,3 @@
+Agent tools: attn's own lines in a script's answer (the verdict, the mail a script marked read, the ledger of changes) now take their room first, so a script that prints a wall of backticks can no longer cut them away or push the answer past what Claude Code keeps inline. A fenced run of backticks is capped at 15, and the answer says what attn left out.
+
+Turning Agent tools on no longer tells running sessions to call tools they don't have: each spawn and reload records in the session's launch intent whether it carried the tools, and every text attn types later reads that. The record survives daemon restarts.
