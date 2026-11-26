@@ -189,7 +189,13 @@ pub(crate) fn draws_row(state: &State, key: &str) -> bool {
 pub(crate) fn lines(state: &State) -> Vec<Line> {
     let home = state.window.view == View::Home;
     let on_screen = crate::desktop::on_screen_sessions(state);
-    model::desktop_lines(&state.facts, Some(&state.window.garden), home, &on_screen)
+    model::desktop_lines(
+        &state.facts,
+        Some(&state.window.garden),
+        home,
+        &on_screen,
+        &crew::desktop_entries(state),
+    )
 }
 
 fn desktop_sidebar(state: &State, t: &Tokens) -> El {
@@ -259,7 +265,13 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
     memo("sidebar", reads, || {
         let crew_entries = crew::desktop_entries(state);
         let has_crew = !crew_entries.is_empty();
-        let lines = model::desktop_lines(facts, Some(&state.window.garden), home, &on_screen);
+        let lines = model::desktop_lines(
+            facts,
+            Some(&state.window.garden),
+            home,
+            &on_screen,
+            &crew_entries,
+        );
         let t = *t;
         col()
             .key("sidebar")

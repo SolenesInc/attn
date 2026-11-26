@@ -24,7 +24,13 @@ pub(crate) fn rows(state: &State, query: &str) -> Vec<Row> {
         .is_empty()
         .then(|| bands.head().map(|s| s.id.clone()))
         .flatten();
-    let lines = model::desktop_lines(facts, Some(&state.window.garden), false, &[]);
+    let lines = model::desktop_lines(
+        facts,
+        Some(&state.window.garden),
+        false,
+        &[],
+        &crate::sidebar::crew::desktop_entries(state),
+    );
     let mut list = List {
         state,
         terms: &terms,

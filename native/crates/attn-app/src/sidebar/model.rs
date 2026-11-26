@@ -527,6 +527,7 @@ pub fn desktop_lines(
     garden: Option<&crate::garden::Garden>,
     home: bool,
     on_screen: &[String],
+    crew_entries: &[super::crew::DesktopEntry],
 ) -> Vec<Line> {
     let desktops = &facts.desktops;
     let current = facts.current_desktop().map(|d| d.id.as_str());
@@ -541,7 +542,10 @@ pub fn desktop_lines(
         })
         .collect();
     let selected_profile = &facts.profiles.selected;
-    let crew_sessions = super::crew::shown_crew_sessions(facts);
+    let crew_sessions: HashSet<&str> = crew_entries
+        .iter()
+        .filter_map(super::crew::DesktopEntry::active_session)
+        .collect();
     let crew_launch_desktops: HashSet<&str> = facts
         .crew
         .iter()

@@ -121,78 +121,13 @@ pub(crate) enum DesktopEntry {
     Resting(Resting),
 }
 
-/// The live sessions currently represented as active pills in the desktop sidebar's Crew bar.
-pub(crate) fn shown_crew_sessions(facts: &attn_client::Facts) -> std::collections::HashSet<&str> {
-    let profile = &facts.profiles.selected;
-    let live_session = |id: &str| {
-        facts
-            .sessions
-            .iter()
-            .find(|s| s.id == id && &s.profile_id == profile)
-            .map(|s| s.id.as_str())
-    };
-    let mut shown = std::collections::HashSet::new();
-    let mut covered_members = std::collections::HashSet::new();
-    let mut chief_covered = false;
-
-    if let Some(chief) = crate::chief::of(facts) {
-        chief_covered = true;
-        covered_members.insert(chief.id.as_str());
-        let configured = chief.agent.as_deref().is_some_and(|a| !a.is_empty());
-        if configured
-            && let Some(id) = chief
-                .binding_session
-                .as_deref()
-                .filter(|s| !s.is_empty())
-                .and_then(live_session)
-        {
-            shown.insert(id);
+impl DesktopEntry {
+    pub(super) fn active_session(&self) -> Option<&str> {
+        match self {
+            Self::Active(pill) => Some(&pill.agent.id),
+            _ => None,
         }
     }
-
-    for member in facts
-        .crew
-        .iter()
-        .filter(|m| &m.profile_id == profile && !m.retired)
-    {
-        if !covered_members.insert(member.id.as_str()) {
-            continue;
-        }
-        if let Some(id) = member
-            .binding_session
-            .as_deref()
-            .filter(|s| !s.is_empty())
-            .and_then(live_session)
-        {
-            shown.insert(id);
-        }
-    }
-
-    for session in facts.sessions.iter() {
-        if &session.profile_id != profile || shown.contains(session.id.as_str()) {
-            continue;
-        }
-        if session.chief_of_staff == Some(true) && chief_covered {
-            continue;
-        }
-        if session
-            .crew_member
-            .as_deref()
-            .is_some_and(|m| covered_members.contains(m))
-        {
-            continue;
-        }
-        if session.chief_of_staff == Some(true)
-            || session
-                .crew_member
-                .as_deref()
-                .is_some_and(|c| !c.is_empty())
-        {
-            shown.insert(session.id.as_str());
-        }
-    }
-
-    shown
 }
 
 fn resting_of(

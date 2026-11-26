@@ -881,6 +881,36 @@ fn in_desktop_flow_the_slot_sits_in_the_desktop_sidebar_and_opens_its_first_setu
 }
 
 #[test]
+fn saving_the_chiefs_route_keeps_its_session_reachable_in_desktop_flow() {
+    let member = bound(chief(true), "chief-day");
+    let mut fixture = initial(false, member.clone(), vec![chief_day()]);
+    let desktop = &mut fixture.desktops.as_mut().unwrap()[0];
+    desktop.shortcut_slot = None;
+    desktop.name = "Captain".into();
+    let mut world = start(fixture);
+    assert!(shows(&world, "sidebar.crew.chief-key"));
+    assert!(!shows(&world, "sidebar.session.chief-day"));
+
+    click(&mut world, "sidebar.crew.chief-key.actions");
+    click(&mut world, "session.menu.route");
+    world.daemon.on("crew_set", |_| ());
+    click(&mut world, PRIMARY);
+    assert_eq!(value(&world, SLOT).as_deref(), Some("configuring"));
+    assert!(shows(&world, "sidebar.session.chief-day"));
+
+    save(
+        &mut world,
+        CrewMember {
+            revision: 2,
+            ..member
+        },
+    );
+    assert!(shows(&world, "sidebar.crew.chief-key"));
+    assert!(!shows(&world, "sidebar.session.chief-day"));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn a_hidden_sidebar_shows_again_for_a_chief_that_needs_setup_but_not_for_a_configured_one() {
     let mut world = start(initial(true, chief(true), Vec::new()));
     dispatch(&mut world, Action::SessionToggleSidebar);
