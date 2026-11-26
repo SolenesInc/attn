@@ -80,6 +80,7 @@ const verdict = await run.classifyStop(lastAssistantText);
 await run.stop(verdict);
 await run.transcriptPath("/abs/path/transcript.jsonl");
 await run.title("Refactor session titles");
+await run.prompt("Fix the checkout retry queue");
 await run.pullRequest("https://github.com/owner/repo/pull/1");
 await run.compaction({ inputId, conversationId, outcome: "completed" });
 ```

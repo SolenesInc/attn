@@ -596,6 +596,7 @@ Plugin to Attn, for a run you launched:
 | `session.report_metadata` | `session_id`, `run_id`, `seq`, `metadata` (any JSON), optionally `resume_session_id` |
 | `session.report_transcript_path` | `session_id`, `run_id`, `path` (absolute) |
 | `session.report_title` | `session_id`, `run_id`, `title` |
+| `session.report_prompt` | `session_id`, `run_id`, `text` |
 | `session.report_pull_request` | `session_id`, `run_id`, `url` |
 | `session.report_compaction` | `session_id`, `run_id`, `input_id`, `conversation_id`, `outcome` (`completed`, `busy`, `failed`), optionally `reason` |
 | `attn.classify_stop` | `session_id`, `run_id`, `assistant_text`; returns `{"verdict":"…"}` |

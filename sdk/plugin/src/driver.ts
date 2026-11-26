@@ -152,6 +152,7 @@ export interface DriverRun {
   reportMetadata(metadata: unknown, options?: { resumeSessionId?: string }): Promise<void>;
   transcriptPath(path: string): Promise<void>;
   title(title: string): Promise<void>;
+  prompt(text: string): Promise<void>;
   pullRequest(url: string): Promise<void>;
   compaction(report: {
     inputId: string;

@@ -104,6 +104,13 @@ type pluginReportTitleParams struct {
 	Title      string              `json:"title"`
 }
 
+type pluginReportPromptParams struct {
+	TerminalID protocol.TerminalID `json:"session_id"`
+	SessionID  protocol.SessionID  `json:"-"`
+	RunID      string              `json:"run_id"`
+	Text       string              `json:"text"`
+}
+
 type pluginClassifyStopParams struct {
 	TerminalID    protocol.TerminalID `json:"session_id"`
 	SessionID     protocol.SessionID  `json:"-"`
@@ -130,6 +137,7 @@ type pendingPluginReport struct {
 	Metadata   *pluginReportMetadataParams
 	Transcript *pluginReportTranscriptPathParams
 	Title      *pluginReportTitleParams
+	Prompt     *pluginReportPromptParams
 }
 
 func (r *pluginRegistry) registerDriver(plugin *pluginConnection, params pluginDriverRegisterParams, bindServer func() error) error {
@@ -435,6 +443,23 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 			d.applyPluginReportedTitle(params)
 		}
 		return struct{}{}, true, nil
+	case "session.report_prompt":
+		var params pluginReportPromptParams
+		if err := json.Unmarshal(msg.Params, &params); err != nil {
+			return nil, true, fmt.Errorf("decode session.report_prompt params: %w", err)
+		}
+		params.SessionID = d.sessionInTerminal(params.TerminalID)
+		params.Text = strings.TrimSpace(params.Text)
+		if params.Text == "" {
+			return nil, true, errors.New("session.report_prompt text is required")
+		}
+		if !d.queueReportDuringPluginLaunch(plugin, params.SessionID, pendingPluginReport{Prompt: &params}) {
+			if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
+				return nil, true, err
+			}
+			d.applyPluginReportedPrompt(params)
+		}
+		return struct{}{}, true, nil
 	default:
 		return nil, false, nil
 	}
@@ -562,6 +587,16 @@ func (d *Daemon) applyPluginReportedTitle(params pluginReportTitleParams) {
 	d.events().Named(params.SessionID, params.Title)
 }
 
+func (d *Daemon) applyPluginReportedPrompt(params pluginReportPromptParams) {
+	d.notePluginDriverReport(params.SessionID)
+	d.events().Prompt(harness.FromSession(params.SessionID), time.Now(), harness.Prompt{
+		Text:   params.Text,
+		Live:   true,
+		User:   true,
+		Titles: true,
+	})
+}
+
 func (d *Daemon) queueReportDuringPluginLaunch(plugin *pluginConnection, sessionID protocol.SessionID, report pendingPluginReport) bool {
 	var watch *launchWatch
 	queued := d.sessionMonitor(sessionID).QueueDuringLaunch(plugin.name, report.runID(), func() { d.replayPluginReport(report) }, func() {
@@ -594,6 +629,8 @@ func (d *Daemon) replayPluginReport(report pendingPluginReport) {
 		d.applyPluginReportedTranscriptPath(*report.Transcript)
 	case report.Title != nil:
 		d.applyPluginReportedTitle(*report.Title)
+	case report.Prompt != nil:
+		d.applyPluginReportedPrompt(*report.Prompt)
 	}
 }
 
@@ -623,6 +660,8 @@ func (r pendingPluginReport) runID() string {
 		return r.Transcript.RunID
 	case r.Title != nil:
 		return r.Title.RunID
+	case r.Prompt != nil:
+		return r.Prompt.RunID
 	default:
 		return ""
 	}

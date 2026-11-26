@@ -91,6 +91,8 @@ type Prompt struct {
 	Live bool
 	// History: the prompt is from before this launch, so it can only title the session.
 	History bool
+	// User: the harness already knows the user submitted this prompt.
+	User bool
 	// Titles: attn may title the session from this prompt.
 	Titles bool
 }

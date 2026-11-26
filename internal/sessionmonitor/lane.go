@@ -499,9 +499,9 @@ func PhaseAllows(placement Placement, state protocol.SessionState) bool {
 }
 
 // attn's own words earned credit at custody; this hook never matches prompt text.
-func (m *Monitor) ObservePromptSubmitted(at time.Time) (typed bool) {
+func (m *Monitor) ObservePromptSubmitted(at time.Time) (typed, notification bool) {
 	if m == nil {
-		return false
+		return false, false
 	}
 	m.harnessStarted()
 	m.mu.Lock()
@@ -515,13 +515,13 @@ func (m *Monitor) ObservePromptSubmitted(at time.Time) (typed bool) {
 	current.prompted = true
 	m.runPromptedLocked()
 	m.heldCaptureAnsweredByNextPromptLocked()
-	run, credited := current.ref, current.credited
+	run, credited, notification := current.ref, current.credited, current.startedByNotification()
 	m.mu.Unlock()
 	m.MarkModelRequestStarted(at)
 	if credited {
 		m.armAutoSettleForUserInput(run)
 	}
-	return typed
+	return typed, notification
 }
 
 func (l *lane) ensureRunLocked() *runState {

@@ -363,6 +363,25 @@ describe("AttnPluginClient driver", () => {
     expect((await reported).params).toEqual({ session_id: "t1", run_id: "r1", title: "Fix session titles" });
   });
 
+  test("reports a user prompt for its run", async () => {
+    const daemon = await startDaemon();
+    const client = connectable(daemon);
+    let promptReported: Promise<void> = Promise.resolve();
+    client.driver({
+      ...baseDriver,
+      spawn: (_params, run) => {
+        promptReported = run.prompt("Fix the checkout retry queue");
+        return { argv: ["sample"] };
+      },
+    });
+    await client.connect();
+
+    const reported = daemon.next("session.report_prompt");
+    await daemon.call("driver.spawn", { agent: "sample", session_id: "t1", run_id: "r1", cwd: "/work" });
+    await promptReported;
+    expect((await reported).params).toEqual({ session_id: "t1", run_id: "r1", text: "Fix the checkout retry queue" });
+  });
+
   test("explains a daemon that refuses a capability", async () => {
     const daemon = await startDaemon({ "driver.register": new Error('unsupported driver capability "attributed_input"') });
     const client = connectable(daemon);
