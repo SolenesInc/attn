@@ -1,0 +1,1 @@
+Restores the seed routing of an ask's answer in the ask tool description, the ask rules and the ask family help (bug 22b438b, review s-97c28d). Text only; ask wire tests, prompts, catalog and legacy prompt compatibility pass.
