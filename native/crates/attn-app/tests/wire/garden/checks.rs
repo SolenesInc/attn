@@ -244,7 +244,7 @@ fn a_plots_shared_check_opens_to_the_seeds_that_prove_it_and_removed_checks_wait
 }
 
 #[test]
-fn a_plots_shared_check_resolves_closed_children_from_the_plot_document_outside_the_live_push() {
+fn a_plots_shared_check_names_closed_descendants_outside_the_live_push() {
     let crown = with(plot("s-plot22", "Shipped release", ""), |s| {
         s.shared_checks = Some(vec![SeedSharedCheck {
             id: "C1".into(),
@@ -255,6 +255,11 @@ fn a_plots_shared_check_resolves_closed_children_from_the_plot_document_outside_
                     seed_id: "s-ckid01".into(),
                     state: "confirmed".into(),
                     has_report: true,
+                },
+                SeedCheckRollupEntry {
+                    seed_id: "s-ckid02".into(),
+                    state: "open".into(),
+                    has_report: false,
                 },
                 SeedCheckRollupEntry {
                     seed_id: "s-okid02".into(),
@@ -268,8 +273,28 @@ fn a_plots_shared_check_resolves_closed_children_from_the_plot_document_outside_
         part_of("s-plot22", "s-ckid01", "Migrated schema"),
         "harvested",
     );
+    let inner = closed(part_of("s-plot22", "s-inner1", "Migration"), "harvested");
+    let archived_grandchild = closed(
+        part_of("s-inner1", "s-ckid02", "Verified schema"),
+        "harvested",
+    );
     let open_child = part_of("s-plot22", "s-okid02", "Cut over traffic");
     let d = daemon(vec![crown.clone(), open_child.clone()], Vec::new());
+    d.on("garden_seeds_lookup", move |r: &Request| {
+        let seeds = r["ids"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|id| id.as_str() == Some(archived_grandchild.id.as_str()))
+            .map(|_| archived_grandchild.clone())
+            .collect();
+        message(attn_protocol::GardenSeedsLookupResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            seeds,
+            ..attn_protocol::GardenSeedsLookupResultMessage::new()
+        })
+    });
     let (doc_crown, doc_archived, doc_open) = (crown, archived_child, open_child);
     d.on("seed_document_get", move |r: &Request| {
         if r["seed_id"] == "s-plot22" {
@@ -278,7 +303,7 @@ fn a_plots_shared_check_resolves_closed_children_from_the_plot_document_outside_
                 success: true,
                 document: Some(SeedDocument {
                     seed: doc_crown.clone(),
-                    children: vec![doc_archived.clone(), doc_open.clone()],
+                    children: vec![doc_archived.clone(), inner.clone(), doc_open.clone()],
                     ..SeedDocument::default()
                 }),
                 ..SeedDocumentGetResultMessage::new()
@@ -288,13 +313,20 @@ fn a_plots_shared_check_resolves_closed_children_from_the_plot_document_outside_
     });
     let mut world = open_garden_with(d);
     open_row(&mut world, "Shipped release");
-    click(&mut world, "C1 verified on staging · 1 of 2 confirmed");
+    click(&mut world, "C1 verified on staging · 1 of 3 confirmed");
     assert!(
         world
             .screen()
             .find(Target::role("button").name("Migrated schema · harvested · confirmed"))
             .is_some(),
         "closed child outside live push should resolve title and status from document.children"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::role("button").name("Verified schema · harvested · open"))
+            .is_some(),
+        "shared check should name its harvested grandchild"
     );
     assert!(world.runtime_is_at_rest());
 }

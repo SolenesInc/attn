@@ -15,6 +15,7 @@ use crate::State;
 pub(crate) struct Reads<'a> {
     pub(crate) garden: &'a Garden,
     pub(crate) seeds: &'a [Arc<Seed>],
+    pub(crate) terminals: &'a crate::terminal::Terminals,
     pub(crate) facts: &'a Facts,
     pub(crate) v2: bool,
     pub(crate) readings: &'a crate::markdown::Readings,
@@ -52,6 +53,7 @@ pub(crate) fn body(
         names: &names,
         garden: reads.garden,
         seeds: reads.seeds,
+        terminals: reads.terminals,
         facts: reads.facts,
         v2: reads.v2,
         chief: reads.chief,

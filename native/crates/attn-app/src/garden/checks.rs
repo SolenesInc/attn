@@ -340,7 +340,8 @@ impl Sheet<'_> {
                     .find(|s| s.id == entry.seed_id)
                     .or_else(|| {
                         document.and_then(|doc| doc.children.iter().find(|s| s.id == entry.seed_id))
-                    });
+                    })
+                    .or_else(|| self.terminals.resolve_seed(&entry.seed_id));
                 let title = held.map_or(entry.seed_id.as_str(), |s| s.title.as_str());
                 let status = held.map_or(entry.seed_id.as_str(), |s| s.status.as_str());
                 let (go, id) = (self.go.clone(), entry.seed_id.clone());

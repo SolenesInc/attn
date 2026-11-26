@@ -24,6 +24,7 @@ pub(super) struct Sheet<'a> {
     pub(super) names: &'a SessionNames,
     pub(super) garden: &'a super::Garden,
     pub(super) seeds: &'a [Arc<Seed>],
+    pub(super) terminals: &'a crate::terminal::Terminals,
     pub(super) facts: &'a Facts,
     pub(super) v2: bool,
     pub(super) chief: bool,

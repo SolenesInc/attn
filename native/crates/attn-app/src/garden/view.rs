@@ -1970,6 +1970,7 @@ fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Token
         names: &place.names,
         garden: &state.window.garden,
         seeds: super::seeds(state),
+        terminals: &state.terminals,
         facts: &state.facts,
         v2: place.v2.on,
         chief: model::has_chief(&state.facts.sessions, &state.facts.profiles.selected),

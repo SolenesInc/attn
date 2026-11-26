@@ -1131,6 +1131,7 @@ pub(super) fn seed_reads(state: &State) -> crate::garden::TileReads<'_> {
     crate::garden::TileReads {
         garden: &state.window.garden,
         seeds: crate::garden::seeds(state),
+        terminals: &state.terminals,
         facts: &state.facts,
         v2: crate::garden::v2::enabled(state),
         readings: &state.readings,

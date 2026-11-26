@@ -225,15 +225,17 @@ impl Known {
                     wondered.unresolved.insert((*id).to_owned());
                 }
             }
-            (None, Word::Seed(id)) => {
-                let mut wondered = self.wondered.borrow_mut();
-                if !wondered.asked_seeds.contains(*id) {
-                    wondered.unresolved_seeds.insert((*id).to_owned());
-                }
-            }
+            (None, Word::Seed(id)) => self.ask_seed(id),
             _ => {}
         }
         named
+    }
+
+    fn ask_seed(&self, id: &str) {
+        let mut wondered = self.wondered.borrow_mut();
+        if !wondered.asked_seeds.contains(id) {
+            wondered.unresolved_seeds.insert(id.to_owned());
+        }
     }
 
     /// The ids in `text` that attn knows, in its order.
@@ -447,6 +449,14 @@ impl Terminals {
 
     pub(crate) fn resolved_seed(&self, id: &str) -> Option<&Arc<Seed>> {
         self.ids.resolved_seeds.get(id)
+    }
+
+    pub(crate) fn resolve_seed(&self, id: &str) -> Option<&Seed> {
+        let seed = self.resolved_seed(id);
+        if seed.is_none() {
+            self.ids.known.ask_seed(id);
+        }
+        seed.map(Arc::as_ref)
     }
 
     pub(crate) fn known_ids(&self) -> &Known {
@@ -677,6 +687,7 @@ pub(crate) fn ask_about_unresolved(state: &mut State, tx: &mut Tx) {
                     let learns = terminals.ids.learn_seeds(asked, reply.seeds);
                     if learns {
                         terminals.mark_again();
+                        state.window.garden.revision += 1;
                         crate::markdown::ids::follow(state);
                     }
                 }
