@@ -60,7 +60,6 @@ type Server struct {
 	Description string     `yaml:"description"`
 	Intro       string     `yaml:"intro"`
 	Do          ScriptTool `yaml:"do"`
-	Read        ScriptTool `yaml:"read"`
 	Record      ScriptTool `yaml:"record"`
 }
 
@@ -370,8 +369,7 @@ func (c *Catalog) check() []string {
 	}
 	for _, upfront := range []struct{ name, text, cut string }{
 		{"attn_do", c.DoDescription(), "cut do.text or a command's upfront: true"},
-		{"attn_read", c.Server.Read.Text, "cut read.text"},
-		{"attn_record", c.Server.Record.Text, "cut record.text"},
+		{"attn_record", c.RecordDescription(), "cut record.text or a command's upfront: true"},
 	} {
 		if n := utf8.RuneCountInString(upfront.text); n > MaxUpfrontChars {
 			add("%s: the description of %s is %d characters, over the limit of %d that Claude Code keeps; %s", ServerFile, upfront.name, n, MaxUpfrontChars, upfront.cut)
@@ -380,7 +378,7 @@ func (c *Catalog) check() []string {
 	for _, tool := range []struct {
 		name string
 		ScriptTool
-	}{{"do", c.Server.Do}, {"read", c.Server.Read}, {"record", c.Server.Record}} {
+	}{{"do", c.Server.Do}, {"record", c.Server.Record}} {
 		if tool.Title == "" || strings.TrimSpace(tool.Text) == "" || tool.Script == "" {
 			add("%s: server %s needs a title, a text and a script", ServerFile, tool.name)
 		}
@@ -457,7 +455,10 @@ func (c *Catalog) check() []string {
 			add("%s: tool and upfront are for an offered command", where)
 		}
 		if cmd.Tool && cmd.Upfront {
-			add("%s: upfront lists a command in attn_do's description, and a command served as a tool has a description of its own", where)
+			add("%s: upfront lists a command in attn_do's or attn_record's description, and a command served as a tool has a description of its own", where)
+		}
+		if cmd.IsTool() && cmd.Effect == EffectRecord && !namesWord(c.Server.Record.Text, cmd.ToolName()) {
+			add("%s: %s records, so %s's record.text must name it among the commands that record", where, cmd.ToolName(), ServerFile)
 		}
 		if cmd.Hidden && cmd.IsOffered() {
 			add("%s: hidden is for a command that is not offered", where)
@@ -622,9 +623,21 @@ func (t TopLevel) File() string {
 func (c *Catalog) Instructions() string { return c.instructions(c.Server.Intro) }
 
 func (c *Catalog) DoDescription() string {
-	parts := []string{strings.TrimSpace(c.Server.Do.Text)}
+	return c.scriptDescription(c.Server.Do.Text, func(e Effect) bool { return e == EffectAct })
+}
+
+func (c *Catalog) RecordDescription() string {
+	return c.scriptDescription(c.Server.Record.Text, func(e Effect) bool { return e != EffectAct })
+}
+
+func namesWord(text, word string) bool {
+	return regexp.MustCompile(`(^|[^a-z_])` + regexp.QuoteMeta(word) + `([^a-z_]|$)`).MatchString(text)
+}
+
+func (c *Catalog) scriptDescription(text string, runs func(Effect) bool) string {
+	parts := []string{strings.TrimSpace(text)}
 	for i := range c.Commands {
-		if c.Commands[i].Upfront {
+		if c.Commands[i].Upfront && runs(c.Commands[i].Effect) {
 			parts = append(parts, c.Signature(&c.Commands[i]))
 		}
 	}

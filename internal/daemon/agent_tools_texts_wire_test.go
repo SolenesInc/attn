@@ -93,7 +93,7 @@ func TestTheRecipientsHarnessDecidesWhetherAGardenBellNamesACallOrACommand(t *te
 		gardenNudgeNote(t, cli, "worker", seed, "please look", true)
 		w.advance(0)
 
-		if got := watcher.promptsContaining("Read them with `agent_inbox()` in `attn_read`."); got != 1 {
+		if got := watcher.promptsContaining("Read them with `agent_inbox()` in `attn_record`."); got != 1 {
 			t.Errorf("the Claude watcher with tools was rung with %q; want the doorbell that names agent_inbox()", watcher.prompts())
 		}
 		items := readInbox(t, cli, watcher.id, 0).Items
@@ -175,7 +175,7 @@ func TestSkillWithNoArgumentsOpensWithTheWayInOfItsCaller(t *testing.T) {
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
 	cliWayIn := "`attn <command> --help` shows a command's syntax."
-	toolsWayIn := "- Run attn's commands as functions in a script: `attn_read` runs those that only read, `attn_record` those that read or record your work, and `attn_do` runs any."
+	toolsWayIn := "- Run attn's commands as functions in a script: `attn_record` runs a script whose commands only read or record your work, and `attn_do` one in which a command acts."
 
 	called := resultText(agent.mustCall(t, "skill", map[string]any{}))
 	if !strings.Contains(called, toolsWayIn) || strings.Contains(called, cliWayIn) {
@@ -190,7 +190,7 @@ func TestSkillWithNoArgumentsOpensWithTheWayInOfItsCaller(t *testing.T) {
 	}
 }
 
-var shownToolCall = regexp.MustCompile(`attn_do|attn_read|\b[a-z]+_[a-z_]+\(`)
+var shownToolCall = regexp.MustCompile(`attn_do|attn_record|\b[a-z]+_[a-z_]+\(`)
 
 func TestOnlyASessionLaunchedWithTheToolsIsToldToCallThem(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {

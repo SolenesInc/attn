@@ -83,7 +83,7 @@ func TestACodexLaunchCarriesOneAttnServerAndLeavesTheCLITeachingToIt(t *testing.
 		}
 		slices.Sort(keys)
 		want := []string{"mcp_servers.attn." + auth, "mcp_servers.attn.url"}
-		approved := []string{"attn_read", "attn_record", "skill", "ask"}
+		approved := []string{"attn_record", "skill", "ask"}
 		for _, tool := range approved {
 			want = append(want, "mcp_servers.attn.tools."+tool+".approval_mode")
 		}

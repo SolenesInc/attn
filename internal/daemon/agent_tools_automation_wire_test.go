@@ -122,7 +122,7 @@ func TestAScriptPassesWholeNumbersAndNothingElseForAnIntegerArgument(t *testing.
 
 	for _, spelling := range []string{"%d", "%d.0", "%de0", "%d * 2 / 2"} {
 		written := fmt.Sprintf("return automation_show({id: "+spelling+"}).spec_yaml", applied.ID)
-		if shown, failed := agent.script(t, "attn_read", written); failed || !strings.Contains(shown, "Check the shop.") {
+		if shown, failed := agent.script(t, "attn_record", written); failed || !strings.Contains(shown, "Check the shop.") {
 			t.Errorf("%s answered %s, want the automation", written, shown)
 		}
 	}

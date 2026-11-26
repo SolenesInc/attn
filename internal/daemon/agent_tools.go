@@ -44,7 +44,6 @@ type scriptToolDefinition struct {
 
 const (
 	doToolName     = "attn_do"
-	readToolName   = "attn_read"
 	recordToolName = "attn_record"
 )
 
@@ -170,7 +169,6 @@ type agentToolCatalog struct {
 	Description  string                `json:"description"`
 	Instructions string                `json:"instructions"`
 	Do           scriptToolDefinition  `json:"do"`
-	Read         scriptToolDefinition  `json:"read"`
 	Record       scriptToolDefinition  `json:"record"`
 	Tools        []agentToolDefinition `json:"tools"`
 }
@@ -187,7 +185,7 @@ func (d *Daemon) agentToolServer() *mcpserver.Server {
 	set := &d.agentToolSet
 	set.once.Do(func() {
 		offered := agentToolsCatalog()
-		tools := []mcpserver.Tool{offered.Do.offered(doToolName, false), offered.Read.offered(readToolName, true), offered.Record.offered(recordToolName, false)}
+		tools := []mcpserver.Tool{offered.Record.offered(recordToolName), offered.Do.offered(doToolName)}
 		set.tools = map[string]agentTool{}
 		for _, def := range offered.Tools {
 			set.tools[def.Name] = agentTool{def: def, input: def.parsedInput(), receipt: catalog.ReceiptOf(def.Receipt)}
@@ -196,7 +194,7 @@ func (d *Daemon) agentToolServer() *mcpserver.Server {
 				tools = append(tools, def.offered())
 			}
 		}
-		set.script = parsedSchema(doToolName, tools[0].InputSchema)
+		set.script = parsedSchema(recordToolName, tools[0].InputSchema)
 		set.server = mcpserver.New(offered.Name, buildinfo.Version, offered.Instructions, tools, set.notServed)
 	})
 	return set.server
@@ -204,9 +202,9 @@ func (d *Daemon) agentToolServer() *mcpserver.Server {
 
 func (set *agentToolServers) notServed(tool string) string {
 	if slices.Contains(set.commandNames, tool) {
-		return fmt.Sprintf("attn's commands are functions of a script. Call attn_do with the script %[1]s({...}), attn_record when it only reads or records, or attn_read when it only reads; skill({command: %[1]q}) prints its arguments.", tool)
+		return fmt.Sprintf("attn's commands are functions of a script. Call attn_record with the script %[1]s({...}), or attn_do when a command in it acts; skill({command: %[1]q}) prints its arguments.", tool)
 	}
-	return "attn serves attn_do, attn_read, attn_record, ask and skill. attn_do runs a script of attn's commands; skill() prints what attn can do and skill({command: \"seed\"}) a family's functions."
+	return "attn serves attn_record, attn_do, ask and skill. attn_record and attn_do run a script of attn's commands; skill() prints what attn can do and skill({command: \"seed\"}) a family's functions."
 }
 
 func parsedSchema(tool string, raw json.RawMessage) *mcpserver.Schema {
@@ -223,7 +221,7 @@ func (def agentToolDefinition) parsedInput() *mcpserver.Schema {
 
 var inEveryRequest = map[string]any{"anthropic/alwaysLoad": true}
 
-func (def scriptToolDefinition) offered(name string, readOnly bool) mcpserver.Tool {
+func (def scriptToolDefinition) offered(name string) mcpserver.Tool {
 	input, err := json.Marshal(map[string]any{
 		"type":                 "object",
 		"properties":           map[string]any{"script": map[string]any{"type": "string", "description": def.Script}},
@@ -235,7 +233,7 @@ func (def scriptToolDefinition) offered(name string, readOnly bool) mcpserver.To
 	}
 	return mcpserver.Tool{
 		Name: name, Title: def.Title, Description: def.Description, InputSchema: input, Meta: inEveryRequest,
-		Annotations: &mcpserver.Annotations{Title: def.Title, ReadOnlyHint: readOnly},
+		Annotations: &mcpserver.Annotations{Title: def.Title},
 	}
 }
 

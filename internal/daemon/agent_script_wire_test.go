@@ -104,7 +104,7 @@ type offeredTools map[string]bool
 
 func listOfferedTools(t *testing.T, agent agentToolsCaller) offeredTools {
 	t.Helper()
-	names, failed := agent.script(t, "attn_read", `return Object.keys(globalThis).filter(name => typeof globalThis[name] === "function" && name !== "Refusal")`)
+	names, failed := agent.script(t, "attn_record", `return Object.keys(globalThis).filter(name => typeof globalThis[name] === "function" && name !== "Refusal")`)
 	said, _ := scriptAnswer(t, names)
 	var listed []string
 	if err := json.Unmarshal([]byte(said), &listed); failed || err != nil {

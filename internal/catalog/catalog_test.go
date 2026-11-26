@@ -17,7 +17,6 @@ const goodServer = `server:
   description: attn's tools.
   intro: Reach for attn to track work.
   do: {title: Run commands, script: the script, text: Runs a script.}
-  read: {title: Read, script: the script, text: Runs a script that reads.}
   record: {title: Record, script: the script, text: Runs a script that records.}
 `
 
@@ -108,17 +107,17 @@ func TestLoadRefusesWhatWouldBreakAHarnessOrAnUnmarkedCommand(t *testing.T) {
 			want:  []string{"server.yaml", "characters, over the limit of 4096", "server.yaml 4097, seed.yaml 20"},
 		},
 		{
-			name: "an attn_do description over Claude Code's cut once its signatures are in it",
+			name: "an attn_record description over Claude Code's cut once its signatures are in it",
 			files: map[string]string{
-				ServerFile:  strings.Replace(goodServer, "text: Runs a script.}", "text: "+strings.Repeat("x", 4080)+"}", 1),
+				ServerFile:  strings.Replace(goodServer, "text: Runs a script that records.}", "text: "+strings.Repeat("x", 4080)+"}", 1),
 				"seed.yaml": strings.Replace(goodFamily, "effect: read", "effect: read\n    upfront: true", 1),
 			},
-			want: []string{"server.yaml", "the description of attn_do is 4098 characters, over the limit of 4096"},
+			want: []string{"server.yaml", "the description of attn_record is 4098 characters, over the limit of 4096"},
 		},
 		{
-			name:  "an attn_read description over Claude Code's cut",
-			files: map[string]string{ServerFile: strings.Replace(goodServer, "text: Runs a script that reads.}", "text: "+strings.Repeat("x", 4097)+"}", 1)},
-			want:  []string{"server.yaml", "the description of attn_read is 4097 characters, over the limit of 4096"},
+			name:  "a command that records which attn_record's description does not name",
+			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "effect: read", "effect: record", 1)},
+			want:  []string{"seed.yaml: seed show", "seed_show records, so server.yaml's record.text must name it"},
 		},
 		{
 			name:  "an attn_record description over Claude Code's cut",

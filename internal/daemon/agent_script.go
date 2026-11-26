@@ -37,11 +37,11 @@ const (
 )
 
 const (
-	codeChangesSomething = "changes_something"
-	codeCommandLimit     = "command_limit"
-	codeChangeLimit      = "change_limit"
-	codeCallLimit        = "call_limit"
-	codeHomeLost         = "home_lost"
+	codeActs         = "acts"
+	codeCommandLimit = "command_limit"
+	codeChangeLimit  = "change_limit"
+	codeCallLimit    = "call_limit"
+	codeHomeLost     = "home_lost"
 )
 
 var errScriptCallLimit = fmt.Errorf("one call runs at most %d s", int(scriptCallLimit.Seconds()))
@@ -51,9 +51,7 @@ type scriptTool struct {
 	most catalog.Effect
 }
 
-var scriptToolEffects = map[string]catalog.Effect{doToolName: catalog.EffectAct, recordToolName: catalog.EffectRecord, readToolName: catalog.EffectRead}
-
-var effectStrength = map[catalog.Effect]int{catalog.EffectRead: 0, catalog.EffectRecord: 1, catalog.EffectAct: 2}
+var scriptToolEffects = map[string]catalog.Effect{doToolName: catalog.EffectAct, recordToolName: catalog.EffectRecord}
 
 type scriptRun struct {
 	d           *Daemon
@@ -162,11 +160,8 @@ func (run *scriptRun) atLimit(tool agentTool) *command.Refusal {
 }
 
 func (run *scriptRun) refuses(tool agentTool, args json.RawMessage) *command.Refusal {
-	if effectStrength[tool.def.Effect] > effectStrength[run.tool.most] {
-		if run.tool.most == catalog.EffectRead {
-			return &command.Refusal{Code: codeChangesSomething, Message: run.tool.name + " runs commands that only read, and " + tool.def.Name + " changes something", Fix: "Call it in a script for attn_do."}
-		}
-		return &command.Refusal{Code: codeChangesSomething, Message: run.tool.name + " runs commands that read or record, and " + tool.def.Name + " acts", Fix: "Call it in a script for attn_do."}
+	if tool.def.Effect == catalog.EffectAct && run.tool.most != catalog.EffectAct {
+		return &command.Refusal{Code: codeActs, Message: run.tool.name + " runs commands that read or record, and " + tool.def.Name + " acts", Fix: "Call it in a script for attn_do."}
 	}
 	return tool.withRules(checkArguments(tool.def.Name, args, tool.input))
 }

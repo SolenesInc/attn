@@ -375,7 +375,7 @@ func TestAnOutpostAgentsCredentialIsRefusedByTheHomeAndByAnotherOutpost(t *testi
 		t.Fatalf("the outpost refused its own agent's credential: %s", answer.Text)
 	}
 	for name, elsewhere := range map[string]*testworld.Stack{"the home": o.home, "another outpost": other} {
-		status, reply := tools.at(elsewhere).post(t, "attn_read", map[string]any{"script": "return seed_show({seed: '" + o.seed + "'})"})
+		status, reply := tools.at(elsewhere).post(t, "attn_record", map[string]any{"script": "return seed_show({seed: '" + o.seed + "'})"})
 		if status != http.StatusUnauthorized || !strings.Contains(string(reply), "not signed by this daemon's agent key") {
 			t.Errorf("%s answered the outpost agent's credential with %d %q, want 401 naming its agent key", name, status, reply)
 		}
@@ -492,7 +492,7 @@ func TestMailAFailedScriptOnAnOutpostReadIsInItsAnswer(t *testing.T) {
 	if sent := claudeToolEndpoint(t, other).call(t, "agent_msg", map[string]any{"target": mine, "text": mail}); sent.IsError {
 		t.Fatalf("agent_msg on the outpost answered %+v", sent)
 	}
-	status, reply := claudeToolEndpoint(t, claude).post(t, "attn_read", map[string]any{"script": "const inbox = agent_inbox();\nreturn inbox.items[0].content.missing.field"})
+	status, reply := claudeToolEndpoint(t, claude).post(t, "attn_record", map[string]any{"script": "const inbox = agent_inbox();\nreturn inbox.items[0].content.missing.field"})
 	if status != http.StatusOK || !strings.Contains(string(reply), mail) || !strings.Contains(string(reply), "marked read:") {
 		t.Errorf("a script on the outpost that read its inbox and failed answered %d %s, want the mail it marked read", status, reply)
 	}

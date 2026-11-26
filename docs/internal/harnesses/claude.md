@@ -136,7 +136,7 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
   accepts `405` on GET, and lists/calls tools.
 - Inline `--mcp-config` expands `Bearer ${ATTN_AGENT_CREDENTIAL}` from env
   without exposing the token in `ps`. A `permissions.allow` rule such as
-  `mcp__attn__attn_read` approves that tool's calls in auto mode. Background subagents inherit the parent
+  `mcp__attn__attn_record` approves that tool's calls in auto mode. Background subagents inherit the parent
   credential; the server survives `/clear` and daemon restarts without
   reconnecting.
 - **First-turn MCP race `[2.1.329–332]`:** interactive Claude sends its first
@@ -190,7 +190,7 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
   conversation began). That held with and without an `autoMode.allow` sentence
   naming the record functions. Told to put acts in a call of their own, the
   agent split a record-and-act task into two scripts in 12 of 12 runs. In the
-  default mode, `attn_read`, `skill` and `ask` under allow rules ran without a
+  default mode, the tools under allow rules ran without a
   prompt, and the next `attn_do` asked "Do you want to proceed?". Rig and runs:
   seed `s-ynb430`.
 - Under `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1`, auto mode checks each REPL

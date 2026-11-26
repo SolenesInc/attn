@@ -217,10 +217,10 @@ func TestEveryAgentToolCallIsRefusedWithTheSettingOff(t *testing.T) {
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
 	for tool, args := range map[string]map[string]any{
-		"attn_read": {"script": "return seed_show({seed: '" + seed + "'})"},
-		"attn_do":   {"script": "seed_note({seed: '" + seed + "', text: 'with the setting off'})"},
-		"ask":       {"markdown": "Ship it?"},
-		"skill":     {},
+		"attn_record": {"script": "return seed_show({seed: '" + seed + "'})"},
+		"attn_do":     {"script": "seed_note({seed: '" + seed + "', text: 'with the setting off'})"},
+		"ask":         {"markdown": "Ship it?"},
+		"skill":       {},
 	} {
 		refused, err := agent.tool(t, tool, args, nil)
 		if err != nil {
@@ -345,7 +345,7 @@ func TestALaunchedClaudeCallsTheToolsAsItsSessionWithACredentialOnlyItsEnvironme
 			var parsed struct {
 				Permissions struct{ Allow []string } `json:"permissions"`
 			}
-			want := []string{"mcp__attn__attn_read", "mcp__attn__attn_record", "mcp__attn__skill", "mcp__attn__ask"}
+			want := []string{"mcp__attn__attn_record", "mcp__attn__skill", "mcp__attn__ask"}
 			if err := json.Unmarshal([]byte(settings), &parsed); err != nil || !slices.Equal(parsed.Permissions.Allow, want) {
 				t.Errorf("claude launched with --settings allowing %v (%v), want %v", parsed.Permissions.Allow, err, want)
 			}
@@ -476,7 +476,7 @@ func TestTheServerOffersExactlyFiveToolsEachWholeInTheFirstRequest(t *testing.T)
 	if kept := len([]rune(session.InitializeResult().Instructions)); kept == 0 || kept > claudeCodeKeeps {
 		t.Errorf("the server's instructions are %d characters; Claude Code keeps %d", kept, claudeCodeKeeps)
 	}
-	onlyReads := map[string]bool{"attn_do": false, "attn_read": true, "attn_record": false, "ask": false, "skill": true}
+	onlyReads := map[string]bool{"attn_do": false, "attn_record": false, "ask": false, "skill": true}
 	var names []string
 	for _, tool := range listed.Tools {
 		names = append(names, tool.Name)
