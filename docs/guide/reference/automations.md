@@ -103,10 +103,8 @@ instead of adding separate desktops to your desktop list. Runs that need you,
 are working, or are currently on screen stay visible, and finished off-screen
 runs fold behind a disclosure row. Click the waiting count in the heading, or
 press Cmd+Shift+J (Ctrl+Alt+J on Linux), to open the next run that needs you.
-Click **all** to open the automations drawer. While you are on an automation
-desktop, use the pencil in the heading to name that desktop and keep it after
-the run closes. When you collapse the sidebar, a single ⚡ chip on the rail
-represents these runs. A run on a numbered desktop,
+Click **all** to open the automations drawer. When you collapse the sidebar, a
+single ⚡ chip on the rail represents these runs. A run on a numbered desktop,
 or on a desktop that also holds another agent or tile, stays under that desktop
 like any other agent.
 

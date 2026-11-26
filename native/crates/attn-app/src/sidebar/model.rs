@@ -530,8 +530,8 @@ pub struct AutomationRunLine {
 /// The desktop sidebar's unified Automations section: live automation runs from unslotted
 /// automation-only desktops, split into active rows shown by default and finished off-screen runs
 /// folded behind a disclosure toggle.
-pub struct AutomationSection<'a> {
-    pub viewed_desktop: Option<&'a Desktop>,
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct AutomationSection {
     pub active: Vec<AutomationRunLine>,
     pub finished: Vec<AutomationRunLine>,
     /// Runs in this section that currently need the user (owed a turn and not snoozed).
@@ -770,12 +770,12 @@ fn agent_line(
 
 /// Live automation runs on unslotted automation-only desktops, split into active rows (needing
 /// the user, actively working, or currently on screen) and finished off-screen runs.
-pub fn desktop_automations<'a>(
-    facts: &'a Facts,
+pub fn desktop_automations(
+    facts: &Facts,
     home: bool,
     on_screen: &[String],
     now_ms: i64,
-) -> AutomationSection<'a> {
+) -> AutomationSection {
     let desktops = &facts.desktops;
     let current = facts.current_desktop().map(|d| d.id.as_str());
     let by_id: HashMap<&str, &Session> =
@@ -785,16 +785,12 @@ pub fn desktop_automations<'a>(
     let mut needing = 0usize;
     let mut seen: HashSet<&str> = HashSet::new();
     let mut order = 0usize;
-    let mut viewed_desktop = None;
 
     for desktop in ordered_desktops(desktops) {
         if !is_automation_desktop(desktop, &by_id) {
             continue;
         }
         let shown = !home && current == Some(desktop.id.as_str());
-        if shown {
-            viewed_desktop = Some(desktop);
-        }
         let active_session = desktop
             .panes
             .iter()
@@ -867,7 +863,6 @@ pub fn desktop_automations<'a>(
     finished.sort_by(|a, b| b.0.cmp(a.0).then_with(|| a.1.row.id.cmp(&b.1.row.id)));
 
     AutomationSection {
-        viewed_desktop,
         active: active.into_iter().map(|(_, _, _, run)| run).collect(),
         finished: finished.into_iter().map(|(_, run)| run).collect(),
         needing,

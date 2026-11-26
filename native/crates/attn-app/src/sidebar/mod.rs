@@ -222,7 +222,7 @@ pub(crate) fn lines(state: &State) -> Vec<Line> {
 }
 
 /// The desktop sidebar's unified Automations section.
-pub(crate) fn automations(state: &State) -> model::AutomationSection<'_> {
+pub(crate) fn automations(state: &State) -> model::AutomationSection {
     let home = state.window.view == View::Home;
     let on_screen = crate::desktop::on_screen_sessions(state);
     model::desktop_automations(&state.facts, home, &on_screen, state.window.now_ms)
@@ -421,7 +421,7 @@ fn desktops_rule(overview_keys: Option<String>, t: &Tokens) -> El {
 
 fn automations_section(
     state: &State,
-    section: &model::AutomationSection<'_>,
+    section: &model::AutomationSection,
     next_run_keys: Option<String>,
     marked: &Marked,
     logos_on: bool,
@@ -436,13 +436,6 @@ fn automations_section(
     };
     let finished_open = state.window.automations_finished_open;
     let finished_count = section.finished.len();
-    let rename = section.viewed_desktop.map(|desktop| {
-        rename_desktop_button(
-            &format!("sidebar.automations.desktop.{}", desktop.id),
-            &desktop.id,
-            &model::desktop_title(desktop, &state.facts.desktops),
-        )
-    });
     col()
         .key("sidebar.automations.section")
         .w_full()
@@ -453,7 +446,7 @@ fn automations_section(
                 .h(ListRow::section_gap())
                 .a11y_hidden(),
         )
-        .child(automations_rule(section.needing, next_run_keys, rename, t))
+        .child(automations_rule(section.needing, next_run_keys, t))
         .child(
             col()
                 .key(AUTOMATIONS_LIST)
@@ -484,12 +477,7 @@ fn automations_section(
         )
 }
 
-fn automations_rule(
-    needing: usize,
-    next_run_keys: Option<String>,
-    rename: Option<system::IconButton>,
-    t: &Tokens,
-) -> El {
+fn automations_rule(needing: usize, next_run_keys: Option<String>, t: &Tokens) -> El {
     let mut head = GroupHead::new("sidebar.rule.automations", "Automations")
         .heading()
         .section("Automations")
@@ -521,9 +509,6 @@ fn automations_rule(
             crate::automations::runs::next_run(state, tx);
         });
         head = head.aside(chip);
-    }
-    if let Some(rename) = rename {
-        head = head.trailing(rename.size(system::Size::Small).build(t).into());
     }
     head.build(t)
 }
@@ -908,7 +893,7 @@ fn desktop_row(key: String, desktop: &DesktopHeader, keys: Option<String>, t: &T
         .current(desktop.current)
         .keys(keys.clone())
         .controls([
-            rename_desktop_button(&key, &desktop.id, &desktop.title),
+            rename_desktop_button(&key, desktop),
             close_desktop_button(&key, desktop),
         ]);
     if let Some(slot) = desktop.slot {
@@ -1070,12 +1055,12 @@ pub(crate) fn priority_flag(row_key: &str, t: &Tokens) -> El {
         .label("Priority")
 }
 
-fn rename_desktop_button(row_key: &str, desktop: &str, title: &str) -> system::IconButton {
-    let (id, under) = (desktop.to_owned(), format!("{row_key}.rename"));
+fn rename_desktop_button(row_key: &str, desktop: &DesktopHeader) -> system::IconButton {
+    let (id, under) = (desktop.id.clone(), format!("{row_key}.rename"));
     queue_view::control(
         row_key,
         "rename",
-        format!("Rename {title}"),
+        format!("Rename {}", desktop.title),
         attn_ui::glyph::PENCIL,
         move |state, tx| rename::desktop(state, &id, rename::Opener::Control(under.clone()), tx),
     )

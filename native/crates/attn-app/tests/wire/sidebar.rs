@@ -2256,12 +2256,6 @@ fn desktop_sidebar_unifies_automation_desktops_folds_finished_runs_and_cleans_ra
         );
     }
 
-    assert!(
-        screen
-            .find(Target::role("button").name("Rename sigma sheriff"))
-            .is_none()
-    );
-
     // Unified Automations section shows waiting (oldest first) + working runs and folds finished.
     assert!(
         screen
@@ -2519,33 +2513,6 @@ fn desktop_sidebar_unifies_automation_desktops_folds_finished_runs_and_cleans_ra
             .as_deref(),
         Some("1 finished run")
     );
-    assert!(
-        world
-            .screen()
-            .find(Target::key("sidebar.desktop.auto-4"))
-            .is_none()
-    );
-    world.gesture(|app| app.click(Target::role("button").name("Rename sigma sheriff")));
-    assert_eq!(
-        world
-            .screen()
-            .get(Target::key("desktop.rename.field"))
-            .value
-            .as_deref(),
-        Some("sigma sheriff")
-    );
-    world.gesture(|app| {
-        app.type_text("Saved sheriff desktop");
-        app.key(rune::KeyEvent {
-            key: rune::Key::Enter,
-            mods: rune::Mods::default(),
-        });
-    });
-    let renames = world.daemon.sent_of("desktop_rename");
-    assert_eq!(renames.len(), 1);
-    assert_eq!(renames[0]["desktop_id"], "auto-4");
-    assert_eq!(renames[0]["name"], "Saved sheriff desktop");
-
     // Advance past unanswered RPC timers and verify the UI reaches rest cleanly.
     world.advance(std::time::Duration::from_secs(20));
     assert!(world.runtime_is_at_rest());
