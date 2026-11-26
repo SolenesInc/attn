@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Shared Garden checks lose archived descendant metadata",
+  "at": "2026-11-26T18:10:02.899Z",
+  "detail": "Shared Garden check rollups at 23b1ccf3a lose title and lifecycle status for an unpinned harvested grandchild. Open the shared check on the open root. The rollup includes descendant leaves, but document fallback only has direct children. Supply metadata for every rollup entry. Independently confirmed and reproduced using app wire in both input modes. Review s-xmzdax.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/garden/checks.rs",
+    "line": 335
+  },
+  "culprit": "23b1ccf3af57b7e0b88e84cacd63ea3cd7fa081e"
+}
