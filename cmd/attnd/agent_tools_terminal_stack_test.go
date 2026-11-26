@@ -147,7 +147,7 @@ func TestTerminalToolsAnswerWithoutWaitingOnTheShell(t *testing.T) {
 	waiting.Await()
 	tools.structured(t, "terminal_close", map[string]any{"terminal": string(closing.TerminalID)}, &protocol.TerminalCloseResult{})
 	waiting.Release()
-	if ring := claude.Prompted(); !strings.Contains(ring, "attn agent inbox") {
+	if ring := claude.Prompted(); !strings.Contains(ring, "agent_inbox()") {
 		t.Fatalf("the opener was rung with %q, want its inbox named", ring)
 	}
 	inbox := s.Run(testworld.Invocation{Session: session, Args: []string{"agent", "inbox"}})
