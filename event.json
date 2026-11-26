@@ -1,0 +1,8 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "fix: App acceptance native-desktop-order, native-crew-seed-header, native-agent-settings (f75ccdd2f, e97965c05, 9545f0baa)",
+  "at": "2026-11-26T20:22:34.374Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45887328937",
+  "repairs": "a0d2c0cd2"
+}
