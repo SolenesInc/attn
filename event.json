@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: TestABodyWrittenAsTheUpfrontTextSaysIsStoredAsMeant fails on main",
+  "at": "2026-11-26T19:52:15.525Z",
+  "fixesBug": "fb6e97e0c72c2352d60d51b3b77edf6c08e3e78e"
+}
