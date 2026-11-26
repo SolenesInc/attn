@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Refreshing Garden Board history loses the scroll position",
+  "at": "2026-11-26T19:10:40.827Z",
+  "detail": "An unrelated open-seed check report makes a reader lose their place in deep Garden Board history. At 274bbd196, load a 650-row Closed lane, scroll until card 550 appears, and report a check on unrelated open work. The revision advances, refresh replaces all loaded rows with 200, and viewport-driven paging adds 50. Card 550 disappears in both Rune input modes. The parent 955897e01 kept card 550 and its scroll position. Independently reproduced. Keep the loaded depth and visible anchor while refreshing, including on empty Garden deltas. Reproduction and results on s-vmseqx.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/garden/mod.rs",
+    "line": 687
+  },
+  "culprit": "49d4770b84be97dcd34c4982aa72ae3e8dfabeaf"
+}
