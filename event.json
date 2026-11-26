@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Recreated shared launch desktops become ephemeral",
+  "at": "2026-11-26T21:08:34.005Z",
+  "detail": "After a crew and automation share an unslotted launch desktop and it is manually closed, a new launch restores both bindings but marks the desktop ephemeral. Keep shared permanence when recreating it.\nIndependently corroborated at cec7eaba2. Isolated regression receipts are attached to s-1hpv1w.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/store/launch_desktops.go",
+    "line": 335
+  },
+  "culprit": "a1053b55df616a9cbb8e8a6a16144ac9b881a51d"
+}
