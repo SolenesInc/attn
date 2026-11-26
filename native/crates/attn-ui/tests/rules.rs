@@ -1707,7 +1707,7 @@ fn every_buttons_words_read_on_its_rest_fill_in_every_scheme() {
         for dark in [true, false] {
             let t = scheme.colors(dark).ui;
             let rt = buttons_in(scheme, dark, "Rest");
-            for (look, _) in BUTTONS.iter().filter(|(look, _)| *look != "danger") {
+            for (look, _) in BUTTONS.iter() {
                 for (size, _) in SIZES {
                     let key = format!("button.{look}.{size}");
                     let fill = surface(&rt, &keyed(&rt, &key), t.bg_panel);
@@ -1721,6 +1721,227 @@ fn every_buttons_words_read_on_its_rest_fill_in_every_scheme() {
             }
         }
     }
+}
+
+#[test]
+fn every_schemes_tags_settle_chips_chosen_controls_focus_rings_and_state_marks_read() {
+    use attn_ui::blocks::{Settling, SettlingChip};
+    use attn_ui::colors::{MARK_READS, READS, contrast as wcag, mix_srgb};
+    use attn_ui::system::{Button, Look, Segment, Segmented, Tone, Trigger, tag, words};
+
+    fn scheme_controls_view(_: &(), _: &mut Cx<()>) -> El {
+        let (t, _, _) = BOARD.with(|cell| cell.get()).expect("the board's colours");
+        let tags = [
+            ("tag.neutral", Tone::Neutral),
+            ("tag.warn", Tone::Warn),
+            ("tag.bad", Tone::Bad),
+            ("tag.good", Tone::Good),
+            ("tag.accent", Tone::Accent),
+        ]
+        .into_iter()
+        .map(|(k, tone)| El::from(tag(k, "Label", tone, &t)));
+        let settle = rune::row().fill(t.bg_elevated).children([
+            SettlingChip::new("settle.counting", "Settling", "4s", Settling::Counting)
+                .build(&t, |_: &mut ()| {}),
+            SettlingChip::new("settle.paused", "Paused", "Paused", Settling::Paused)
+                .build(&t, |_: &mut ()| {}),
+        ]);
+        let chosen_btn: El = Button::new("Open")
+            .look(Look::Plain)
+            .expanded(true)
+            .on_press(|_: &mut ()| {})
+            .build(&t)
+            .key("chosen.button")
+            .into();
+        let rest_btn: El = Button::new("Rest")
+            .look(Look::Plain)
+            .on_press(|_: &mut ()| {})
+            .build(&t)
+            .key("rest.button")
+            .into();
+        let trigger: El = Trigger::new(
+            "chosen.trigger",
+            "Profile",
+            words("Work", attn_ui::system::Type::Control, t.text_primary),
+        )
+        .open(true)
+        .build(&t, |_: &mut (), _| {})
+        .into();
+        let segmented: El = Segmented::new("chosen.segmented", "Mode")
+            .option(Segment::new("chosen.segment", "Dark").chosen(true))
+            .option(Segment::new("other.segment", "Light"))
+            .build(&t)
+            .into();
+        rune::col()
+            .w_full()
+            .h_full()
+            .fill(t.bg_panel)
+            .child(rune::row().children(tags))
+            .child(settle)
+            .child(
+                rune::row()
+                    .child(chosen_btn)
+                    .child(rest_btn)
+                    .child(trigger)
+                    .child(segmented),
+            )
+    }
+
+    let border_of = |rt: &Runtime<()>, key: &str| {
+        let e = keyed(rt, key);
+        let [x, y, w, h] = device(e.rect);
+        let edge = rt
+            .instances
+            .iter()
+            .find(|i| {
+                let [ix, iy, iw, ih] = i.rect;
+                [ix - x, iy - y, iw - w, ih - h]
+                    .iter()
+                    .all(|d| d.abs() < 0.5)
+                    && i.border[3] > 0.0
+                    && i.params[0] == SCALE
+            })
+            .unwrap_or_else(|| panic!("{key} draws no 1pt border"));
+        [edge.border[0], edge.border[1], edge.border[2]]
+    };
+
+    let mut failures = Vec::new();
+    for scheme in SCHEMES.iter() {
+        for dark in [true, false] {
+            let id = scheme.id;
+            let t = scheme.colors(dark).ui;
+            BOARD.with(|cell| cell.set(Some((t, false, false))));
+            let mut rt = App::new(AppSpec {
+                fonts: attn_ui::FONTS,
+                families: attn_ui::FAMILIES,
+                ..AppSpec::new("scheme-controls", WINDOW, || (), scheme_controls_view)
+            })
+            .headless_runtime(WINDOW, Env::new(dark, SCALE));
+            rt.frame(0.0);
+
+            for key in [
+                "tag.neutral",
+                "tag.warn",
+                "tag.bad",
+                "tag.good",
+                "tag.accent",
+            ] {
+                let el = keyed(&rt, key);
+                let fill = surface(&rt, &el, t.bg_panel);
+                let ink = drawn_over(el.text_color.expect("tag ink"), fill);
+                let ratio = contrast(ink, fill);
+                if ratio < TEXT_READS {
+                    failures.push(format!("{id}, dark={dark}: {key} reads {ratio:.2}:1"));
+                }
+            }
+
+            for key in ["settle.counting", "settle.paused"] {
+                let el = keyed(&rt, key);
+                let fill = surface(&rt, &el, t.bg_elevated);
+                let word = rt
+                    .elements()
+                    .into_iter()
+                    .find(|e| e.path.starts_with(&format!("{}/", el.path)) && e.text.is_some())
+                    .unwrap_or_else(|| panic!("{key} has no words"));
+                let ink = drawn_over(word.text_color.expect("settle ink"), fill);
+                let ratio = contrast(ink, fill);
+                if ratio < TEXT_READS {
+                    failures.push(format!("{id}, dark={dark}: {key} reads {ratio:.2}:1"));
+                }
+            }
+
+            let rest_fill = surface(&rt, &keyed(&rt, "rest.button"), t.bg_panel);
+            for key in ["chosen.button", "chosen.trigger", "chosen.segment"] {
+                let fill = surface(&rt, &keyed(&rt, key), t.bg_panel);
+                let edge = border_of(&rt, key);
+                let edge_vs_fill = contrast(edge, fill);
+                if edge_vs_fill < 1.30 {
+                    failures.push(format!(
+                        "{id}, dark={dark}: {key} border stands {edge_vs_fill:.2}:1 from its fill"
+                    ));
+                }
+                if key == "chosen.button" {
+                    let apart = contrast(fill, rest_fill);
+                    if apart < 1.08 {
+                        failures.push(format!(
+                            "{id}, dark={dark}: open Plain button stands {apart:.2}:1 from rest"
+                        ));
+                    }
+                }
+            }
+
+            for (ground_name, ground) in [
+                ("bg_panel", t.bg_panel),
+                ("bg_elevated", t.bg_elevated),
+                ("bg_selected", t.bg_selected),
+            ] {
+                let ratio = wcag(t.focus, ground);
+                if ratio < RING_READS {
+                    failures.push(format!(
+                        "{id}, dark={dark}: focus ring reads {ratio:.2}:1 on {ground_name}"
+                    ));
+                }
+            }
+
+            for (name, ink) in [
+                ("state_idle", t.state_idle),
+                ("state_working", t.state_working),
+                ("state_waiting", t.state_waiting),
+                ("state_approval", t.state_approval),
+                ("state_scheduled", t.state_scheduled),
+                ("state_unknown", t.state_unknown),
+            ] {
+                for (gname, ground) in [("bg_panel", t.bg_panel), ("bg_selected", t.bg_selected)] {
+                    let ratio = wcag(ink, ground);
+                    if ratio < MARK_READS {
+                        failures.push(format!(
+                            "{id}, dark={dark}: {name} reads {ratio:.2}:1 on {gname}"
+                        ));
+                    }
+                }
+            }
+
+            for (name, fg, bg, floor) in [
+                ("on_brand on brand", t.on_brand, t.brand, READS),
+                ("brand on panel", t.brand, t.bg_panel, READS),
+                ("text_muted on panel", t.text_muted, t.bg_panel, READS),
+            ] {
+                let ratio = wcag(fg, bg);
+                if ratio < floor {
+                    failures.push(format!("{id}, dark={dark}: {name} reads {ratio:.2}:1"));
+                }
+            }
+
+            let step = if dark {
+                ROW_STEPS_DARK.0
+            } else {
+                ROW_STEPS_LIGHT.0
+            };
+            let disabled = mix_srgb(t.bg_input, t.text_primary, 0.5);
+            let disabled_empty = mix_srgb(t.bg_input, t.text_dimmed, 0.5);
+            let field_inks = [
+                ("Empty", t.text_dimmed),
+                ("Filled", t.text_primary),
+                ("Disabled", disabled),
+                ("Disabled empty", disabled_empty),
+            ];
+            for (i, (a, ink_a)) in field_inks.iter().enumerate() {
+                for (b, ink_b) in &field_inks[i + 1..] {
+                    let apart = wcag(*ink_a, *ink_b);
+                    if apart < step - ROUNDING {
+                        failures.push(format!(
+                            "{id}, dark={dark}: field {a} and {b} inks stand {apart:.2}:1 apart"
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "scheme contrast failures:\n{}",
+        failures.join("\n")
+    );
 }
 
 #[test]

@@ -725,3 +725,82 @@ fn a_column_of_the_overview_has_an_edge_all_round_that_reads_on_the_layer_in_eve
         }
     }
 }
+
+#[test]
+fn the_shelfs_frame_current_entry_and_stacked_pills_keep_their_order_and_edges_in_every_scheme() {
+    let border_of = |rt: &Runtime<Tokens>, key: &str| {
+        let e = rt
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("no {key}"));
+        let [x, y, w, h] = e.rect.map(|v| v * SCALE);
+        let edge = rt
+            .instances
+            .iter()
+            .find(|i| {
+                let [ix, iy, iw, ih] = i.rect;
+                [ix - x, iy - y, iw - w, ih - h]
+                    .iter()
+                    .all(|d| d.abs() < 0.5)
+                    && i.border[3] > 0.0
+                    && i.params[0] == SCALE
+            })
+            .unwrap_or_else(|| panic!("{key} draws no 1pt border"));
+        let [r, g, b] = [0, 1, 2].map(|c| rune::theme::srgb_decode(edge.border[c]));
+        rune::Color { r, g, b, a: 1.0 }
+    };
+    let fill_of = |rt: &Runtime<Tokens>, key: &str| {
+        rt.elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("no {key}"))
+            .fill
+    };
+    for scheme in attn_ui::colors::SCHEMES.iter() {
+        for dark in [true, false] {
+            let t = scheme.colors(dark).ui;
+            let board = Board::new(t, dark);
+            let frame = fill_of(&board.rt, "shelf.frame");
+            let frame_edge = border_of(&board.rt, "shelf.frame.edge");
+            let off_stack = fill_of(&board.rt, &format!("entry.0.{}", STATES.len()));
+            let on_stack = fill_of(&board.rt, &format!("entry.1.{}", STATES.len()));
+            let current = fill_of(&board.rt, "entry.2.0");
+            let current_edge = border_of(&board.rt, "entry.2.0");
+
+            let frame_vs_panel = contrast(frame, t.bg_panel);
+            let frame_edge_vs_frame = contrast(frame_edge, frame);
+            let frame_edge_vs_panel = contrast(frame_edge, t.bg_panel);
+            let current_vs_frame = contrast(current, frame);
+            let current_edge_vs_fill = contrast(current_edge, current);
+            let off_stack_vs_panel = contrast(off_stack, t.bg_panel);
+            let on_stack_vs_frame = contrast(on_stack, frame);
+
+            let id = scheme.id;
+            assert!(
+                frame_vs_panel >= 1.12,
+                "{id}, dark={dark}: shelf.frame reads {frame_vs_panel:.2}:1 on bg_panel"
+            );
+            assert!(
+                frame_edge_vs_frame >= 1.18 && frame_edge_vs_panel >= 1.35,
+                "{id}, dark={dark}: shelf.frame.edge reads {frame_edge_vs_frame:.2}:1 on frame and {frame_edge_vs_panel:.2}:1 on panel"
+            );
+            assert!(
+                current_vs_frame >= 1.15,
+                "{id}, dark={dark}: current shelf entry reads {current_vs_frame:.2}:1 on shelf.frame"
+            );
+            assert!(
+                current_edge_vs_fill >= 1.30,
+                "{id}, dark={dark}: current shelf entry edge reads {current_edge_vs_fill:.2}:1 on its fill"
+            );
+            assert!(
+                off_stack_vs_panel < frame_vs_panel,
+                "{id}, dark={dark}: off-screen stacked pill ({off_stack_vs_panel:.2}:1) outshines shelf.frame ({frame_vs_panel:.2}:1)"
+            );
+            assert!(
+                on_stack_vs_frame < current_vs_frame,
+                "{id}, dark={dark}: on-screen stacked pill ({on_stack_vs_frame:.2}:1) outshines current entry ({current_vs_frame:.2}:1)"
+            );
+        }
+    }
+}
