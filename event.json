@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: A folded plot lane counts closed grandchildren it cannot show",
+  "at": "2026-11-26T17:38:26.331Z",
+  "detail": "The folded Board lane counts closed grandchildren it cannot display. At ac8c5c19d, open a plot with one open direct subplot containing one harvested seed and no direct closed seed. The parent offers a closed item, but Show produces an empty lane. The fallback uses recursive progress, while the board lane and daemon page use direct children. Independently source-confirmed. Use an authoritative direct foldable count for both the count and Show, including off-window direct children. Native probe source is on s-g82g06; run in progress.\n"
+}
