@@ -83,7 +83,7 @@ pub use split::{Join, split};
 pub use stepper::{arrows, stepper};
 pub use switch::{Beside, switch};
 pub(crate) use tag::inks;
-pub use tag::{Tone, mark_chip, pill, tag, tag_width, tinted_pill};
+pub use tag::{Tone, pill, tag, tag_width, tinted_pill};
 pub use trigger::{Trigger, TriggerLook};
 pub(crate) use type_role::lines_at;
 pub use type_role::{Type, width_of, words};

@@ -241,7 +241,7 @@ pub(crate) fn on_row(
 fn chip(row: &str, session: &str, trigger: &Trigger, t: &Tokens) -> El {
     let host = header_pop::Host::Row(row.to_owned());
     let pressed = (host.clone(), session.to_owned());
-    face(trigger, String::new(), Level::Icon, ink(trigger, t))
+    face(trigger, String::new(), Level::Icon, t.text_tertiary)
         .button(header_pop::row_anchor(row), trigger.label.clone(), t)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             header_pop::press_on(state, pressed.0.clone(), &pressed.1, What::Chain, tx)

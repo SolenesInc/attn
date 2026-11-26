@@ -14,13 +14,12 @@ pub(crate) mod snooze;
 pub(crate) mod width;
 
 use std::cell::Cell;
-use std::rc::Rc;
 
 use attn_protocol::DesktopShowSessionMessage;
 use attn_ui::Tokens;
-use attn_ui::blocks::Inline;
+use attn_ui::blocks::{self, Inline, MemberState};
 use attn_ui::system::{self, DotShape, DotSize, GroupHead, IconSize, ListRow, Tone, Type, words};
-use rune::{El, GrowthSpec, ScrollSpec, Tx, col, memo, row};
+use rune::{El, ScrollSpec, Tx, col, memo, row};
 use rune_kit::ScrollBar;
 
 pub(crate) use model::{AgentRow, Line, display_name, tile_icon, tile_title};
@@ -167,7 +166,10 @@ pub(crate) fn desktop_at(state: &State, path: &str) -> Option<String> {
     let path = format!("/{path}/");
     lines(state)
         .into_iter()
-        .find(|l| path.contains(&format!("/{}/", l.key())))
+        .find(|l| {
+            path.contains(&format!("/{}/", l.key()))
+                || path.contains(&format!("/sidebar.group.{}/", l.desktop()))
+        })
         .map(|l| l.desktop().to_owned())
 }
 
@@ -194,6 +196,12 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
     let facts = &state.facts;
     let home = state.window.view == View::Home;
     let on_screen = crate::desktop::on_screen_sessions(state);
+    let drag_marks = state
+        .window
+        .desk
+        .drag
+        .as_ref()
+        .and_then(|d| d.desktop_marks());
     let new_desktop = state
         .window
         .desk
@@ -211,6 +219,14 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
         .filter(|m| chief.as_ref().is_none_or(|c| c.key != m.id))
         .map(|m| crew::resting(state, &m.id))
         .collect();
+    let logos_on = logos(state);
+    let mut countdowns: Vec<(String, String)> = state
+        .window
+        .countdowns
+        .iter()
+        .map(|(id, c)| (id.clone(), c.fires_at.clone()))
+        .collect();
+    countdowns.sort();
     let reads = (
         (
             std::sync::Arc::as_ptr(&facts.sessions) as usize,
@@ -224,13 +240,16 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
             state.window.garden.revision,
             std::sync::Arc::as_ptr(&facts.outposts) as usize,
             std::sync::Arc::as_ptr(&facts.harnesses) as usize,
+            std::sync::Arc::as_ptr(&state.keymap) as usize,
+            logos_on,
             state.logos.revision(),
         ),
-        (home, marked.clone()),
+        (home, marked.clone(), countdowns),
         on_screen.clone(),
         width::of(state).to_bits(),
         (
             state.window.reorder.clone(),
+            drag_marks,
             new_desktop,
             (dock.clone(), home_keys.clone(), overview_keys.clone()),
             (
@@ -247,9 +266,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
         ),
     );
     memo("sidebar", reads, || {
-        let lines: Rc<[Line]> =
-            model::desktop_lines(facts, Some(&state.window.garden), home, &on_screen).into();
-        let keys = lines.clone();
+        let lines = model::desktop_lines(facts, Some(&state.window.garden), home, &on_screen);
         let t = *t;
         col()
             .key("sidebar")
@@ -289,20 +306,28 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                                 )
                             }))
                     }))
-                    .child(overview_row(overview_keys.clone(), &t))
+                    .children(has_crew.then(|| {
+                        rune::el()
+                            .key("sidebar.rule.desktops.gap")
+                            .w_full()
+                            .h(ListRow::section_gap())
+                            .a11y_hidden()
+                    }))
+                    .child(desktops_rule(overview_keys.clone(), &t))
+                    .child(
+                        rune::el()
+                            .key("sidebar.desktops.gap")
+                            .w_full()
+                            .h(ListRow::well_pad_y())
+                            .a11y_hidden(),
+                    )
                     .child(
                         col()
                             .key(DESKTOP_LIST)
                             .role("list")
                             .label("Desktops")
                             .w_full()
-                            .growth(GrowthSpec::default())
-                            .virtual_rows(
-                                lines.len(),
-                                ListRow::height(),
-                                move |_: &State, i| keys[i].key().into(),
-                                move |state: &State, i| line(state, &lines, i, &marked, &t),
-                            ),
+                            .children(desktop_groups(state, &lines, &marked, logos_on, &t)),
                     )
                     .children(new_desktop.map(|over| new_desktop_drop(over, &t)))
                     .scroll_bar_styled(attn_ui::scroll_bar(&t)),
@@ -320,18 +345,84 @@ pub(crate) fn home_row(home: bool, keys: Option<String>, t: &Tokens) -> El {
     )
 }
 
-fn overview_row(keys: Option<String>, t: &Tokens) -> El {
-    nav_row(
-        "sidebar.overview",
-        &attn_ui::icon::OVERVIEW,
-        "Desktop overview",
-        keys,
-        false,
-        t,
-    )
-    .on_press_tx(|state: &mut State, tx: &mut Tx| {
-        crate::desktop::run(state, &Action::DesktopOverview, tx);
-    })
+fn desktops_rule(overview_keys: Option<String>, t: &Tokens) -> El {
+    GroupHead::new("sidebar.rule.desktops", "Desktops")
+        .heading()
+        .section("Desktops")
+        .action(
+            "sidebar.overview",
+            "overview",
+            "Desktop overview",
+            |state: &mut State, tx: &mut Tx| {
+                crate::desktop::run(state, &Action::DesktopOverview, tx);
+            },
+        )
+        .action_keys(overview_keys)
+        .build(t)
+}
+
+struct RowBuild<'a> {
+    marked: &'a Marked,
+    logos_on: bool,
+    logo_rev: u64,
+    in_current: bool,
+}
+
+fn desktop_groups(
+    state: &State,
+    lines: &[Line],
+    marked: &Marked,
+    logos_on: bool,
+    t: &Tokens,
+) -> Vec<El> {
+    let seam_target = reorder::seam_target(state, lines);
+    let logo_rev = if logos_on { state.logos.revision() } else { 0 };
+    let mut seen_sessions: std::collections::HashMap<&str, usize> =
+        std::collections::HashMap::new();
+    let mut groups = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        let Line::Desktop(desktop) = &lines[i] else {
+            i += 1;
+            continue;
+        };
+        let start = i;
+        i += 1;
+        while i < lines.len() && !matches!(lines[i], Line::Desktop(_)) {
+            i += 1;
+        }
+        let key = format!("sidebar.group.{}", desktop.id);
+        let group = if desktop.current {
+            ListRow::well(key, desktop.first, t)
+        } else {
+            ListRow::group(key, desktop.first)
+        };
+        let build = RowBuild {
+            marked,
+            logos_on,
+            logo_rev,
+            in_current: desktop.current,
+        };
+        let rows: Vec<El> = (start..i)
+            .map(|at| {
+                let occurrence = match &lines[at] {
+                    Line::Agent { row, .. } => {
+                        let count = seen_sessions.entry(row.id.as_str()).or_insert(0);
+                        let current = *count;
+                        *count += 1;
+                        current
+                    }
+                    _ => 0,
+                };
+                let seam = seam_target
+                    .filter(|(target, _)| *target == at)
+                    .map(|(_, seam)| seam);
+                line(state, &lines[at], occurrence, seam, &build, t)
+            })
+            .collect();
+        groups.push(group.children(rows));
+    }
+    groups
 }
 
 /// A row that goes somewhere rather than to an agent, with the keys that go there too:
@@ -361,39 +452,53 @@ fn nav_row(
     }
 }
 
-fn line(state: &State, lines: &[Line], index: usize, marked: &Marked, t: &Tokens) -> El {
-    let line = &lines[index];
+fn line(
+    state: &State,
+    line: &Line,
+    occurrence: usize,
+    seam: Option<reorder::Seam>,
+    build: &RowBuild<'_>,
+    t: &Tokens,
+) -> El {
     let key = line.key();
+    let unique_key = if occurrence == 0 {
+        key.clone()
+    } else {
+        format!("{key}#{}", occurrence + 1)
+    };
     let shown = match line {
-        Line::Agent { row, .. } => marked.shown(&row.id),
+        Line::Agent { row, .. } => build.marked.shown(&row.id),
         _ => Shown::default(),
     };
     let draining = match line {
         Line::Agent { row, .. } => state.window.countdowns.contains_key(&row.id),
         _ => false,
     };
-    let seam = reorder::seam_on(state, lines, index);
     let mark = state
         .window
         .desk
         .drag
         .as_ref()
         .and_then(|d| d.desktop_mark(line.desktop()));
-    let logos = logos(state);
-    let logo_rev = if logos { state.logos.revision() } else { 0 };
     let keys = match line {
-        Line::Desktop(desktop) => Action::desktop_select(desktop.number)
+        Line::Desktop(desktop) => desktop
+            .slot
+            .and_then(Action::desktop_select)
             .and_then(|select| crate::palette::label_of(state, &select)),
         _ => None,
     };
+    let in_current = build.in_current;
+    let logos_on = build.logos_on;
+    let logo_rev = build.logo_rev;
     memo(
-        key.clone(),
+        unique_key.clone(),
         (
             line,
+            in_current,
             draining,
             seam,
             mark,
-            logos,
+            logos_on,
             logo_rev,
             keys.clone(),
             shown,
@@ -411,10 +516,24 @@ fn line(state: &State, lines: &[Line], index: usize, marked: &Marked, t: &Tokens
                         .then(|| settle_button(&key, row))
                         .into_iter()
                         .chain([actions_button(&key, row, tile)]);
-                    agent_row(state, key.clone(), row, shown, logos, controls.collect(), t)
-                        .children(bar)
+                    agent_row(
+                        state,
+                        key.clone(),
+                        row,
+                        in_current,
+                        shown,
+                        logos_on,
+                        controls.collect(),
+                        t,
+                    )
+                    .children(bar)
                 }
-                Line::Tile(tile) => tile_row(key.clone(), tile, t),
+                Line::Tile(tile) => tile_row(key.clone(), tile, in_current, t),
+            };
+            let row = if occurrence > 0 {
+                row.key(unique_key.clone())
+            } else {
+                row
             };
             drop_mark(row, mark, matches!(line, Line::Desktop(_)), t).children(seam.map(|seam| {
                 let edge = match seam {
@@ -463,28 +582,32 @@ pub(super) fn line_height(line: &Line) -> f32 {
     }
 }
 
-/// A desktop's heading: its number, its name when it has one, a hairline, and the keys that go
-/// to it, with its rename and close controls on hover.
+/// A desktop's heading: its slot chip when it has one, its name, a hairline when not current,
+/// and the keys that go to it, with its rename and close controls on hover.
 fn desktop_row(key: String, desktop: &DesktopHeader, keys: Option<String>, t: &Tokens) -> El {
     let id = desktop.id.clone();
     let dragged = desktop.id.clone();
-    let head = GroupHead::new(key.clone(), format!("Open {}", desktop.title))
-        .mark(system::number_chip(
-            desktop.number,
-            desktop.current,
-            desktop.empty,
-            t,
-        ))
+    let surface = if desktop.current {
+        t.bg_elevated
+    } else {
+        t.bg_panel
+    };
+    let mut head = GroupHead::new(key.clone(), format!("Open {}", desktop.title))
+        .on(surface)
+        .current(desktop.current)
         .keys(keys.clone())
         .controls([
             rename_desktop_button(&key, desktop),
             close_desktop_button(&key, desktop),
         ]);
-    let head = if desktop.named {
-        head.name(desktop.title.clone())
+    if let Some(slot) = desktop.slot {
+        head = head.mark(system::number_chip(slot, desktop.current, desktop.empty, t));
+        if desktop.named {
+            head = head.name(desktop.title.clone());
+        }
     } else {
-        head
-    };
+        head = head.name(desktop.title.clone());
+    }
     let head = head
         .build(t)
         .a11y_value(match (desktop.current, desktop.empty) {
@@ -511,26 +634,61 @@ const EDGE_LINE: f32 = 2.0;
 /// characters of body text, enough to tell agents apart.
 const NAME_MIN_W: f32 = 64.0;
 
+/// Three-tier title hierarchy: active or needs-you in bold primary, working in regular primary,
+/// and idle/settled quieted to secondary inside the current desktop or tertiary outside it.
+pub(crate) fn title_style(agent: &AgentRow, in_current: bool, t: &Tokens) -> (Type, rune::Color) {
+    let needs_you = matches!(
+        agent.state,
+        AgentState::WaitingInput | AgentState::PendingApproval
+    ) || agent.asks > 0;
+    if agent.selected || needs_you {
+        (Type::Name, t.text_primary)
+    } else if agent.state == AgentState::Working {
+        (Type::Body, t.text_primary)
+    } else if in_current {
+        (Type::Body, t.text_secondary)
+    } else {
+        (Type::Body, t.text_tertiary)
+    }
+}
+
 /// An agent's row, its hover controls laid over its end.
+#[allow(clippy::too_many_arguments)]
 fn agent_row(
     state: &State,
     key: String,
     agent: &AgentRow,
+    in_current: bool,
     shown: Shown,
     logos: bool,
     controls: Vec<system::IconButton>,
     t: &Tokens,
 ) -> El {
     let id = agent.id.clone();
-    let name = flagged(&key, agent, t).shrink().min_w(NAME_MIN_W).child(
-        words(agent.name.clone(), Type::Body, t.text_primary)
-            .key(format!("{key}.name"))
-            .single_line()
-            .truncate()
-            .shrink(),
-    );
+    let surface = if in_current {
+        t.bg_elevated
+    } else {
+        t.bg_panel
+    };
+    let ground = if agent.selected {
+        if in_current {
+            t.bg_selected
+        } else {
+            t.bg_elevated
+        }
+    } else {
+        surface
+    };
+    let (title_kind, title_ink) = title_style(agent, in_current, t);
+    let name = words(agent.name.clone(), title_kind, title_ink)
+        .key(format!("{key}.name"))
+        .single_line()
+        .truncate()
+        .shrink()
+        .min_w(NAME_MIN_W);
     let mut row = ListRow::new(key.clone(), format!("Open {}", agent.name))
-        .lead(lead(state, &key, agent, logos, t))
+        .on(surface)
+        .lead(lead(state, &key, agent, logos, ground, t))
         .title_el(name)
         .in_view(agent.selected)
         .tint(row_tint(agent, shown, t))
@@ -551,24 +709,6 @@ fn agent_row(
         row = row.badge(
             words("recoverable", Type::Mono, t.text_tertiary).key(format!("{key}.recoverable")),
         );
-    }
-    if agent.chief {
-        row = row.badge(mark(
-            &key,
-            "chief",
-            &attn_ui::icon::CHIEF,
-            "Chief of staff",
-            t,
-        ));
-    }
-    if agent.delegated {
-        row = row.badge(mark(
-            &key,
-            "delegated",
-            "↳",
-            "Delegated from chief of staff",
-            t,
-        ));
     }
     let row = row
         .build(t)
@@ -628,19 +768,6 @@ fn rename_desktop_button(row_key: &str, desktop: &DesktopHeader) -> system::Icon
         attn_ui::glyph::PENCIL,
         move |state, tx| rename::desktop(state, &id, rename::Opener::Control(under.clone()), tx),
     )
-}
-
-fn mark(
-    row_key: &str,
-    name: &str,
-    glyph: impl Into<attn_ui::Glyph>,
-    label: &str,
-    t: &Tokens,
-) -> El {
-    system::mark_chip(glyph, t.accent, t)
-        .key(format!("{row_key}.{name}"))
-        .role("img")
-        .label(label)
 }
 
 fn settle_button(row_key: &str, agent: &AgentRow) -> system::IconButton {
@@ -793,7 +920,29 @@ pub(crate) fn logos(state: &State) -> bool {
     crate::setting::on(&state.facts.settings, HARNESS_LOGOS)
 }
 
-pub(crate) fn lead(state: &State, row_key: &str, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
+fn member_state(agent: &AgentRow) -> Option<MemberState> {
+    if crate::harness::catalog::normalize(&agent.agent) == crate::harness::catalog::TERMINAL {
+        return None;
+    }
+    match agent.state {
+        AgentState::Launching => None,
+        AgentState::Working => Some(MemberState::Working),
+        AgentState::WaitingInput => Some(MemberState::Waiting),
+        AgentState::PendingApproval => Some(MemberState::Approval),
+        AgentState::Scheduled => Some(MemberState::Scheduled),
+        AgentState::Idle | AgentState::Recoverable => Some(MemberState::Idle),
+        AgentState::Unknown => Some(MemberState::Unknown),
+    }
+}
+
+pub(crate) fn lead(
+    state: &State,
+    row_key: &str,
+    agent: &AgentRow,
+    logos: bool,
+    ground: rune::Color,
+    t: &Tokens,
+) -> El {
     if logos && agent.state == AgentState::Launching && !agent.offline {
         return rune::row()
             .key(format!("{row_key}.state"))
@@ -816,15 +965,18 @@ pub(crate) fn lead(state: &State, row_key: &str, agent: &AgentRow, logos: bool, 
             .center()
             .child(state_mark(row_key, agent, DotSize::Regular, t));
     }
-    system::icon(
-        crate::harness::logo::of(state, &agent.agent),
-        IconSize::Regular,
-        state_color(agent.state, t),
-    )
-    .key(format!("{row_key}.state"))
-    .role("img")
-    .label(agent.lead())
-    .a11y_value(agent.state.wire())
+    rune::row()
+        .key(format!("{row_key}.state"))
+        .role("img")
+        .label(agent.lead())
+        .a11y_value(agent.state.wire())
+        .center()
+        .child(blocks::state_mark(
+            crate::harness::logo::of(state, &agent.agent),
+            member_state(agent),
+            ground,
+            t,
+        ))
 }
 
 /// The dot in each agent's colour of state at `size`, or the struck-through ring of an agent
@@ -854,19 +1006,37 @@ pub(crate) fn state_color(state: AgentState, t: &Tokens) -> rune::Color {
     }
 }
 
-fn tile_row(key: String, tile: &TileRow, t: &Tokens) -> El {
+fn tile_row(key: String, tile: &TileRow, in_current: bool, t: &Tokens) -> El {
     let (desktop, leaf) = (tile.desktop.clone(), tile.id.clone());
+    let surface = if in_current {
+        t.bg_elevated
+    } else {
+        t.bg_panel
+    };
+    let (title_kind, title_ink) = if tile.selected {
+        (Type::Name, t.text_primary)
+    } else if in_current {
+        (Type::Body, t.text_secondary)
+    } else {
+        (Type::Body, t.text_tertiary)
+    };
     let controls = [move_tile_button(&key, tile)]
         .into_iter()
         .chain((tile.kind == crate::browser::KIND).then(|| reload_tile_button(&key, tile)))
         .chain([close_tile_button(&key, tile)]);
     ListRow::new(key.clone(), format!("Open {}", tile.title))
+        .on(surface)
         .lead(system::icon(
             tile.icon(),
             IconSize::Regular,
             t.text_tertiary,
         ))
-        .title(tile.title.clone())
+        .title_el(
+            words(tile.title.clone(), title_kind, title_ink)
+                .single_line()
+                .truncate()
+                .shrink(),
+        )
         .aside(system::tag(
             format!("{key}.kind"),
             tile.word(),
@@ -1019,20 +1189,38 @@ pub(crate) fn show_agent(state: &mut State, session: &str, tx: &mut Tx) {
 /// desktop it shows on.
 pub(crate) fn row_source_at(state: &State, path: &str) -> Option<crate::desktop::drag::Source> {
     let path = format!("/{path}/");
-    lines(state).into_iter().find_map(|line| {
-        if !path.contains(&format!("/{}/", line.key())) {
+    let all = lines(state);
+    let mut seen_sessions: std::collections::HashMap<&str, usize> =
+        std::collections::HashMap::new();
+    all.iter().find_map(|line| {
+        let occurrence = match line {
+            Line::Agent { row, .. } => {
+                let count = seen_sessions.entry(row.id.as_str()).or_insert(0);
+                let current = *count;
+                *count += 1;
+                current
+            }
+            _ => 0,
+        };
+        let key = line.key();
+        let unique = if occurrence == 0 {
+            key
+        } else {
+            format!("{key}#{}", occurrence + 1)
+        };
+        if !path.contains(&format!("/{unique}/")) {
             return None;
         }
         match line {
             Line::Agent { desktop, leaf, row } => Some(crate::desktop::drag::Source::Row {
-                desktop,
-                leaf,
-                label: row.name,
+                desktop: desktop.clone(),
+                leaf: leaf.clone(),
+                label: row.name.clone(),
             }),
             Line::Tile(tile) => Some(crate::desktop::drag::Source::Row {
-                desktop: tile.desktop,
-                leaf: tile.id,
-                label: tile.title,
+                desktop: tile.desktop.clone(),
+                leaf: tile.id.clone(),
+                label: tile.title.clone(),
             }),
             Line::Desktop(_) => None,
         }

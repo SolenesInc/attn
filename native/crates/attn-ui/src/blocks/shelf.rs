@@ -196,6 +196,14 @@ impl Ground {
         }
     }
 
+    fn hover_ink(&self, ink: Color, floor: f32, t: &Tokens) -> Ink {
+        let rest = legible(ink, self.rest, floor, t);
+        Ink {
+            rest,
+            lit: legible(rest, self.hovered, floor, t),
+        }
+    }
+
     pub(super) fn words(&self, said: String, kind: Type, ink: Color, t: &Tokens) -> El {
         let ink = self.ink(ink, READS, t);
         words(said, kind, ink.rest).group_color(ink.lit)
@@ -232,40 +240,80 @@ impl Ink {
     }
 }
 
-fn drawn(icon: &Glyph, points: f32, ink: Ink) -> El {
+enum MarkFace<'a> {
+    Glyph(&'a Glyph),
+    Source(rune::IconSource),
+}
+
+fn drawn(icon: MarkFace<'_>, points: f32, ink: Ink) -> El {
     ink.tint(match icon {
-        Glyph::Icon(icon) => door::icon_at(*icon, points),
-        Glyph::Text(letter) => door::font(rune::text(letter.clone()), Type::Control),
+        MarkFace::Glyph(Glyph::Icon(icon)) => door::icon_at(*icon, points),
+        MarkFace::Glyph(Glyph::Text(letter)) => {
+            door::font(rune::text(letter.clone()), Type::Control)
+        }
+        MarkFace::Source(source) => door::icon_at(source, points),
     })
+}
+
+fn draw_mark(
+    icon: MarkFace<'_>,
+    state: Option<MemberState>,
+    ink: Ink,
+    rest_ground: Color,
+    t: &Tokens,
+) -> El {
+    let square = || row().size(MARK, MARK).center().a11y_hidden();
+    let cut_out = |icon: MarkFace<'_>, corner: f32| {
+        let behind = Ink {
+            rest: rest_ground,
+            lit: rest_ground,
+        };
+        ink.fill(square(), corner)
+            .child(drawn(icon, CUT_ICON, behind))
+    };
+    match state {
+        Some(MemberState::Waiting) => cut_out(icon, MARK / 2.0),
+        Some(MemberState::Approval) => cut_out(icon, MARK_CORNER),
+        Some(MemberState::Working) => {
+            let wash = mix_srgb(rest_ground, ink.rest, WORKING_WASH);
+            let icon_ink = legible(ink.rest, wash, MARK_READS, t);
+            let icon_ink = Ink {
+                rest: icon_ink,
+                lit: icon_ink,
+            };
+            door::round(square(), MARK / 2.0)
+                .fill(wash)
+                .child(drawn(icon, CUT_ICON, icon_ink))
+        }
+        _ => square().child(drawn(icon, BARE_ICON, ink)),
+    }
+}
+
+/// An agent's mark drawn with the shelf's four-tier state language on `ground`: a filled circle
+/// while waiting, a filled rounded square while asking approval, a washed circle while working,
+/// and the bare icon otherwise. Hover contrast follows the hovered surface so quiet marks keep
+/// their rest separation from one another under the pointer.
+pub fn state_mark(
+    icon: impl Into<rune::IconSource>,
+    state: Option<MemberState>,
+    ground: Color,
+    t: &Tokens,
+) -> El {
+    let surface = Ground::of(ground, t);
+    let base = state.map_or(t.text_tertiary, |state| state.ink(t));
+    let ink = surface.hover_ink(base, MARK_READS, t);
+    draw_mark(MarkFace::Source(icon.into()), state, ink, surface.rest, t)
 }
 
 pub(super) fn mark(member: &ShelfMember, ground: &Ground, t: &Tokens) -> El {
     let ink = member.ink(ground, t);
-    let square = || row().size(MARK, MARK).center().a11y_hidden();
-    let cut_out = |corner: f32| {
-        let behind = Ink {
-            rest: ground.rest,
-            lit: ground.rest,
-        };
-        ink.fill(square(), corner)
-            .child(drawn(&member.icon, CUT_ICON, behind))
-    };
-    match member.state {
-        Some(MemberState::Waiting) => cut_out(MARK / 2.0),
-        Some(MemberState::Approval) => cut_out(MARK_CORNER),
-        Some(MemberState::Working) => {
-            let wash = mix_srgb(ground.rest, ink.rest, WORKING_WASH);
-            let icon = legible(ink.rest, wash, MARK_READS, t);
-            let icon = Ink {
-                rest: icon,
-                lit: icon,
-            };
-            door::round(square(), MARK / 2.0)
-                .fill(wash)
-                .child(drawn(&member.icon, CUT_ICON, icon))
-        }
-        _ => square().child(drawn(&member.icon, BARE_ICON, ink)),
-    }
+    draw_mark(
+        MarkFace::Glyph(&member.icon),
+        member.state,
+        ink,
+        ground.rest,
+        t,
+    )
 }
 
 impl ShelfEntry {

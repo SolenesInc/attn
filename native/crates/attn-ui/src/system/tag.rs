@@ -1,6 +1,6 @@
 use rune::{Color, El};
 
-use super::{Control, IconSize, Radius, Said, Size, Space, Type, door, glyph, words};
+use super::{Control, Radius, Said, Size, Space, Type, door, words};
 use crate::Tokens;
 
 /// How a tag reads.
@@ -42,16 +42,6 @@ pub fn tinted_pill(key: impl Into<String>, said: impl Into<Said>, ink: Color, t:
         .single_line()
         .fill(ground);
     door::corner(door::inset(pill, Space::S6, Space::S0), Radius::Round)
-}
-
-/// A mark that says what a thing is, such as an agent delegated from the Chief: its glyph in `ink`
-/// on that ink mixed into the panel, round, the size of a tag.
-pub fn mark_chip(mark: impl Into<crate::Glyph>, ink: Color, t: &Tokens) -> El {
-    let chip = rune::row()
-        .items_center()
-        .child(glyph(mark, IconSize::Small, ink))
-        .fill(crate::colors::mix_srgb(t.bg_panel, ink, PILL_WASH));
-    door::corner(door::inset(chip, Space::S4, Space::S2), Radius::Round)
 }
 
 pub(crate) const PILL_WASH: f32 = 0.14;

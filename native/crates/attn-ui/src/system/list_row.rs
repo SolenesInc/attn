@@ -220,6 +220,46 @@ impl ListRow {
         Space::S16.pt()
     }
 
+    /// The room between groups of rows in one section, such as desktops in the sidebar.
+    pub fn group_gap() -> f32 {
+        Space::S8.pt()
+    }
+
+    /// The room above and below a group's rows inside [`Self::well`].
+    pub fn well_pad_y() -> f32 {
+        Space::S4.pt()
+    }
+
+    /// One group of rows in a list, set off from the group above it when not `first`.
+    pub fn group(key: impl Into<String>, first: bool) -> El {
+        let group = col().key(key.into()).w_full();
+        if first {
+            group
+        } else {
+            door::above(group, Space::S8)
+        }
+    }
+
+    /// The current group of rows in a list, held in a quiet tonal well matching the shelf's
+    /// frame: elevated surface, hairline border, and room around its rows.
+    pub fn well(key: impl Into<String>, first: bool, t: &Tokens) -> El {
+        let well = door::corner(
+            door::inset(
+                door::hang(col().key(key.into()), Space::S2),
+                Space::S4,
+                Space::S4,
+            ),
+            Radius::Card,
+        )
+        .fill(t.bg_elevated)
+        .border(1.0, t.border);
+        if first {
+            well
+        } else {
+            door::above(well, Space::S8)
+        }
+    }
+
     /// How tall every list row of one line stands.
     pub fn height() -> f32 {
         Size::Regular.height()
@@ -593,21 +633,28 @@ impl ListRow {
         };
         let below = self.surface.unwrap_or(t.bg_panel);
         let lit = self.mark != Mark::None;
-        let (rest, fill) = match (self.tint, lit) {
+        let (rest, fill, edge) = match (self.tint, lit) {
             (Some(tint), lit) => {
                 let fill = tint.alpha(if lit { TINT.1 } else { TINT.0 });
-                (crate::colors::mix_srgb(below, tint, fill.a), fill)
+                (crate::colors::mix_srgb(below, tint, fill.a), fill, None)
             }
-            (None, true) if self.mark == Mark::Chosen => (t.bg_selected, t.bg_selected),
+            (None, true) if self.mark == Mark::Chosen => (t.bg_selected, t.bg_selected, None),
+            (None, true) if self.mark == Mark::InView => {
+                if below == t.bg_elevated {
+                    (t.bg_selected, t.bg_selected, Some(t.border_hover))
+                } else {
+                    (t.bg_elevated, t.bg_elevated, Some(t.border))
+                }
+            }
             (None, true) => {
                 let lit = if below == t.bg_elevated {
                     t.bg_selected
                 } else {
                     t.bg_elevated
                 };
-                (lit, lit)
+                (lit, lit, None)
             }
-            (None, false) => (below, Color::TRANSPARENT),
+            (None, false) => (below, Color::TRANSPARENT, None),
         };
         let row_key = self.key.clone();
         let part = move |e: El, name: &str| e.key(format!("{row_key}.{name}")).role("none");
@@ -936,7 +983,7 @@ impl ListRow {
         .child(part(band_line, "band"))
         .children(lower);
         let keyboards = self.cursor && self.mark == Mark::Selected;
-        let bar = (matches!(self.mark, Mark::InView | Mark::Chosen) || keyboards).then(|| {
+        let bar = (self.mark == Mark::Chosen || keyboards).then(|| {
             let top = (height - BAR.1) / 2.0;
             door::corner(
                 el().key(format!("{}.in-view", self.key))
@@ -976,6 +1023,10 @@ impl ListRow {
             .hover_group()
             .child(rows)
             .children(bar);
+        let line = match edge {
+            Some(edge) => line.border(1.0, edge),
+            None => line,
+        };
         let line = match self.expanded {
             Some(open) => line.expanded(open),
             None => line,

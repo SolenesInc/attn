@@ -532,6 +532,7 @@ fn header(state: &State, item: &Item<'_>, t: &Tokens) -> El {
                     false,
                 ),
                 crate::sidebar::logos(state),
+                t.bg_panel,
                 t,
             )
         }))

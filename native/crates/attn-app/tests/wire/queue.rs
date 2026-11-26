@@ -1099,16 +1099,42 @@ fn the_priority_key_puts_the_agent_on_screen_ahead_of_the_other_turns_and_back()
     let a = turn("a", 30);
     let mut world = World::start(Daemon::scripted().state(queue(one_desktop(vec![a.clone()]))));
     world.gesture(|app| app.click(Target::key("queue-turn.a")));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("queue-turn.a.priority"))
+            .is_none()
+    );
 
     world.gesture(|app| app.key(chord(Action::SessionPriority)));
     changes(
         &mut world,
         Session {
             priority: Some(true),
+            ..a.clone()
+        },
+    );
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::key("queue-turn.a.priority"))
+            .and_then(|n| n.name),
+        Some("Priority".into())
+    );
+    world.gesture(|app| app.key(chord(Action::SessionPriority)));
+    changes(
+        &mut world,
+        Session {
+            priority: Some(false),
             ..a
         },
     );
-    world.gesture(|app| app.key(chord(Action::SessionPriority)));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("queue-turn.a.priority"))
+            .is_none()
+    );
 
     let sent: Vec<_> = world
         .daemon

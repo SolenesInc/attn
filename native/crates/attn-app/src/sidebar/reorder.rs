@@ -1,4 +1,5 @@
 use attn_protocol::DesktopReorderMessage;
+use attn_ui::system::ListRow;
 
 use rune::Tx;
 
@@ -25,6 +26,13 @@ pub enum Seam {
     Below,
 }
 
+struct Span<'a> {
+    id: &'a str,
+    group_top: f32,
+    header_top: f32,
+    bottom: f32,
+}
+
 /// The line index of each desktop, in order.
 fn headers(lines: &[Line]) -> Vec<(usize, &str)> {
     lines
@@ -37,30 +45,64 @@ fn headers(lines: &[Line]) -> Vec<(usize, &str)> {
         .collect()
 }
 
-/// Where line `index` starts, points down the list; `lines.len()` gives where the list ends.
-fn top(lines: &[Line], index: usize) -> f32 {
-    lines[..index].iter().map(line_height).sum()
+/// Vertical layout of each desktop group in `lines`, matching `ListRow::group` and `ListRow::well`.
+fn spans(lines: &[Line]) -> Vec<Span<'_>> {
+    let mut out = Vec::new();
+    let mut y = 0.0;
+    let mut i = 0;
+    while i < lines.len() {
+        let Line::Desktop(desktop) = &lines[i] else {
+            i += 1;
+            continue;
+        };
+        if !out.is_empty() {
+            y += ListRow::group_gap();
+        }
+        let group_top = y;
+        let pad = if desktop.current {
+            ListRow::well_pad_y()
+        } else {
+            0.0
+        };
+        let header_top = group_top + pad;
+        let mut cursor = header_top + line_height(&lines[i]);
+        let mut next = i + 1;
+        while next < lines.len() && !matches!(lines[next], Line::Desktop(_)) {
+            cursor += line_height(&lines[next]);
+            next += 1;
+        }
+        let bottom = cursor + pad;
+        out.push(Span {
+            id: &desktop.id,
+            group_top,
+            header_top,
+            bottom,
+        });
+        y = bottom;
+        i = next;
+    }
+    out
 }
 
 /// The seam nearest `y` points down the list: one above each desktop, and one under the list.
-fn nearest(lines: &[Line], y: f32) -> usize {
-    let tops = headers(lines)
-        .into_iter()
-        .map(|(i, _)| top(lines, i))
-        .chain([top(lines, lines.len())]);
-    tops.enumerate()
+fn nearest(spans: &[Span<'_>], y: f32) -> usize {
+    let end = spans.last().map_or(0.0, |s| s.bottom);
+    spans
+        .iter()
+        .map(|s| s.group_top)
+        .chain([end])
+        .enumerate()
         .min_by(|(_, a), (_, b)| (a - y).abs().total_cmp(&(b - y).abs()))
         .map_or(0, |(seam, _)| seam)
 }
 
-/// The seam line `index` shows while a desktop is dragged, if any.
-pub fn seam_on(state: &State, lines: &[Line], index: usize) -> Option<Seam> {
+/// The single line index and edge where the drag seam shows while a desktop is dragged.
+pub fn seam_target(state: &State, lines: &[Line]) -> Option<(usize, Seam)> {
     let seam = state.window.reorder.as_ref()?.seam;
     let headers = headers(lines);
     match headers.get(seam) {
-        Some((line, _)) if *line == index => Some(Seam::Above),
-        None if index + 1 == lines.len() => Some(Seam::Below),
-        _ => None,
+        Some((line, _)) => Some((*line, Seam::Above)),
+        None => lines.len().checked_sub(1).map(|last| (last, Seam::Below)),
     }
 }
 
@@ -69,10 +111,8 @@ pub fn seam_on(state: &State, lines: &[Line], index: usize) -> Option<Seam> {
 pub(crate) fn drag(state: &mut State, desktop: &str, d: &rune::Drag, tx: &mut Tx) {
     let home = state.window.view == crate::shell::View::Home;
     let lines = super::model::desktop_lines(&state.facts, Some(&state.window.garden), home, &[]);
-    let Some(index) = headers(&lines)
-        .into_iter()
-        .find_map(|(line, id)| (id == desktop).then_some(line))
-    else {
+    let layout = spans(&lines);
+    let Some(span) = layout.iter().find(|s| s.id == desktop) else {
         return;
     };
     match d.phase {
@@ -81,10 +121,10 @@ pub(crate) fn drag(state: &mut State, desktop: &str, d: &rune::Drag, tx: &mut Tx
             if state.window.reorder.is_none() && d.dx.hypot(d.dy) < THRESHOLD {
                 return;
             }
-            let y = top(&lines, index) + d.start_y + d.dy;
+            let y = span.header_top + d.start_y + d.dy;
             state.window.reorder = Some(Reorder {
                 desktop: desktop.to_owned(),
-                seam: nearest(&lines, y),
+                seam: nearest(&layout, y),
             });
         }
         rune::Phase::Up => {
@@ -94,7 +134,7 @@ pub(crate) fn drag(state: &mut State, desktop: &str, d: &rune::Drag, tx: &mut Tx
             if d.cancelled() {
                 return;
             }
-            let order: Vec<&str> = headers(&lines).into_iter().map(|(_, id)| id).collect();
+            let order: Vec<&str> = layout.iter().map(|s| s.id).collect();
             if let Some((previous, next)) = placement(&order, &reorder.desktop, reorder.seam) {
                 state.act(
                     |request_id| DesktopReorderMessage {

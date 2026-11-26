@@ -74,7 +74,6 @@ pub struct AgentRow {
     pub asks: usize,
     pub pr: Option<crate::desktop::provenance::Badge>,
     pub chief: bool,
-    pub delegated: bool,
     pub unknown_because: Option<&'static str>,
     pub run: Option<crate::desktop::provenance::Run>,
     pub settle_run: bool,
@@ -125,7 +124,6 @@ impl AgentRow {
             asks: 0,
             pr: crate::desktop::provenance::badge(session),
             chief: session.chief_of_staff == Some(true),
-            delegated: session.delegated_from_chief == Some(true),
             run: crate::desktop::provenance::run(session),
             settle_run: session.automation.is_some() && session.turn_owed == Some(true),
             offline: crate::outpost::offline(session, outposts),
@@ -193,7 +191,8 @@ fn unknown_reason(reason: Option<&str>) -> Option<&'static str> {
 pub struct DesktopHeader {
     pub id: String,
     pub title: String,
-    pub number: i64,
+    /// The desktop's shortcut slot (1–9), when it has one.
+    pub slot: Option<i64>,
     pub current: bool,
     pub empty: bool,
     /// The desktop has a name of its own; the heading shows only its number otherwise.
@@ -620,7 +619,7 @@ pub fn desktop_lines(
         lines.push(Line::Desktop(DesktopHeader {
             id: desktop.id.clone(),
             title: desktop_title(desktop, desktops),
-            number: desktop_number(desktop, desktops),
+            slot: desktop.shortcut_slot.filter(|slot| *slot > 0),
             current: shown,
             empty: children.is_empty(),
             named: !desktop.name.trim().is_empty(),

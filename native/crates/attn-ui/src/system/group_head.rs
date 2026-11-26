@@ -1,4 +1,4 @@
-use rune::{El, Tx, el, row};
+use rune::{Color, El, Tx, el, row};
 use rune_kit::{Button as KitButton, ButtonVariant};
 
 use super::{
@@ -25,12 +25,15 @@ pub struct GroupHead {
     controls: Vec<IconButton>,
     open: Option<bool>,
     heading: bool,
+    current: bool,
+    surface: Option<Color>,
     disabled: bool,
 }
 
 struct Action {
     key: String,
     said: Said,
+    keys: Option<String>,
     button: KitButton,
 }
 
@@ -54,6 +57,8 @@ impl GroupHead {
             controls: Vec::new(),
             open: None,
             heading: false,
+            current: false,
+            surface: None,
             disabled: false,
         }
     }
@@ -116,8 +121,18 @@ impl GroupHead {
         self.action = Some(Action {
             key: key.into(),
             said: said.into(),
+            keys: None,
             button: KitButton::new(label).on_press_tx(press),
         });
+        self
+    }
+
+    /// The shortcut keys carried by the heading's action, shown beside its words and read as its
+    /// description.
+    pub fn action_keys(mut self, keys: Option<String>) -> Self {
+        if let Some(action) = &mut self.action {
+            action.keys = keys;
+        }
         self
     }
 
@@ -142,6 +157,18 @@ impl GroupHead {
         self
     }
 
+    /// The group is the current one: its name reads in primary ink and omits the divider rule.
+    pub fn current(mut self, current: bool) -> Self {
+        self.current = current;
+        self
+    }
+
+    /// The surface the heading lies on, when it is not the panel.
+    pub fn on(mut self, surface: Color) -> Self {
+        self.surface = Some(surface);
+        self
+    }
+
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
@@ -149,6 +176,7 @@ impl GroupHead {
 
     pub fn build(self, t: &Tokens) -> El {
         debug_assert!(self.controls.is_empty() || self.trailing.is_empty());
+        let ground = self.surface.unwrap_or(t.bg_panel);
         let keys_key = format!("{}.keys", self.key);
         let controls_width = self.controls.iter().map(IconButton::width).sum::<f32>();
         let hovering = !self.controls.is_empty();
@@ -170,10 +198,27 @@ impl GroupHead {
             super::glyph(glyph, IconSize::Small, t.text_tertiary)
         });
         let name = self.name.map(|name| match name {
-            Name::Small(name) => words(name, Type::Small, t.text_muted),
+            Name::Small(name) => words(
+                name,
+                if self.current {
+                    Type::Control
+                } else {
+                    Type::Small
+                },
+                if self.current {
+                    t.text_primary
+                } else {
+                    t.text_muted
+                },
+            ),
             Name::Section(name) => words(name, Type::Label, t.text_tertiary),
             Name::Built(name) => name,
         });
+        let rule = if self.current {
+            el().grow(1.0)
+        } else {
+            el().grow(1.0).h(1.0).fill(t.border_subtle)
+        };
         let content = row()
             .grow(1.0)
             .min_w(0.0)
@@ -188,7 +233,7 @@ impl GroupHead {
                     .grow_from(1.0, 0.0)
                     .h_full()
                     .items_center()
-                    .child(el().grow(1.0).h(1.0).fill(t.border_subtle))
+                    .child(rule)
                     .children(self.keys.map(|keys| {
                         words(keys, Type::Mono, t.text_dimmed)
                             .key(keys_key)
@@ -211,7 +256,7 @@ impl GroupHead {
             .h(Self::height())
             .items_center()
             .child(content)
-            .children(self.action.map(|action| action.build(t)))
+            .children(self.action.map(|action| action.build(ground, t)))
             .children(self.trailing)
             .hover_group()
             .children(controls);
@@ -225,7 +270,7 @@ impl GroupHead {
             Some(open) => head.expanded(open),
             None => head,
         };
-        let head = focus::ring_on_edge(layers::pressable(head, t.bg_panel, t), t);
+        let head = focus::ring_on_edge(layers::pressable(head, ground, t), t);
         if self.disabled {
             disabled::dim(head.disabled(true))
         } else {
@@ -235,19 +280,35 @@ impl GroupHead {
 }
 
 impl Action {
-    fn build(self, t: &Tokens) -> El {
+    fn build(self, ground: Color, t: &Tokens) -> El {
         let ink = t.text_tertiary;
+        let keys_ink = t.text_dimmed;
         let said = self.said;
+        let keys = self.keys;
+        let described = keys.clone();
         let button = self
             .button
             .variant(ButtonVariant::Ghost)
-            .label_with(move |_, _| words(said, Type::Body, ink).single_line())
+            .label_with(move |_, _| match keys {
+                Some(keys) => door::gap(row().items_center(), Space::S4)
+                    .child(words(said, Type::Small, ink).single_line())
+                    .child(
+                        words(keys, Type::Mono, keys_ink)
+                            .single_line()
+                            .a11y_hidden(),
+                    ),
+                None => words(said, Type::Small, ink).single_line(),
+            })
             .build(kit(t))
             .key(self.key)
             .h(Size::Small.height())
             .justify_center();
+        let button = match described {
+            Some(keys) => button.description(keys),
+            None => button,
+        };
         let button = door::inset(button, Space::S4, Space::S0);
-        let button = focus::ring(door::corner(button, Radius::Control), t);
-        layers::pressable(button, t.bg_panel, t)
+        let button = focus::ring_on_edge(door::corner(button, Radius::Control), t);
+        layers::pressable(button, ground, t)
     }
 }

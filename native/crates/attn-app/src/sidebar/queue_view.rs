@@ -867,8 +867,9 @@ fn queue_row(
     } else {
         a.snoozed_until.clone()
     };
+    let (title_kind, title_ink) = super::title_style(&a.agent, true, t);
     let name = super::flagged(&key, &a.agent, t).shrink().child(
-        words(a.agent.name.clone(), Type::Body, t.text_primary)
+        words(a.agent.name.clone(), title_kind, title_ink)
             .single_line()
             .truncate()
             .shrink(),
@@ -913,7 +914,7 @@ fn badged_lead(state: &State, key: &str, a: &QueueAgent, logos: bool, t: &Tokens
     };
     row()
         .center()
-        .child(lead(state, key, &a.agent, logos, t))
+        .child(lead(state, key, &a.agent, logos, ground, t))
         .children((!a.slot.is_empty()).then(|| {
             system::slot_badge(format!("{key}.slot"), a.slot.clone(), ground, t).pin(
                 None,

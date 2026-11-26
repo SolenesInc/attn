@@ -210,23 +210,13 @@ pub(crate) fn run_view(row_key: &str, run: &Run, t: &Tokens) -> El {
         .role("img")
         .label(run.said.clone())
         .a11y_value(run.shown())
-        .shrink()
-        .max_w(RUN_MAX_W)
         .child(words(attn_ui::glyph::BOLT, Type::Mono, t.text_tertiary))
-        .child(
-            words(run.definition.clone(), Type::Mono, t.text_tertiary)
-                .single_line()
-                .truncate()
-                .shrink(),
-        )
         .children(run.number.map(|n| {
             words(format!("#{n}"), Type::Mono, t.text_tertiary)
                 .key(format!("{row_key}.run.number"))
                 .single_line()
         }))
 }
-
-const RUN_MAX_W: f32 = 120.0;
 
 /// The pull request the header names: the best one, unless even that one is closed.
 pub(crate) fn pull_request(session: &Session) -> Option<&SessionPullRequest> {

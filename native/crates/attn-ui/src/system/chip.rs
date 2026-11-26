@@ -3,17 +3,17 @@ use rune::{Color, El, row};
 use super::{Radius, Said, Space, Type, door, words};
 use crate::Tokens;
 
-/// A number in a small frame: a desktop's, filled with the brand while it is the current one and
-/// dashed while it holds nothing.
+/// A number in a small frame: a desktop's, raised on the selected surface while it is the current
+/// one and dashed while it holds nothing.
 pub fn number_chip(number: i64, current: bool, empty: bool, t: &Tokens) -> El {
     let ink = if current {
-        crate::ink_on(t.brand, t)
+        t.text_primary
     } else {
         t.text_tertiary
     };
     let chip = chip_frame(words(number.to_string(), Type::Tag, ink));
     match (current, empty) {
-        (true, _) => chip.fill(t.brand).border(1.0, t.brand),
+        (true, _) => chip.fill(t.bg_selected).border(1.0, t.border_hover),
         (false, true) => chip
             .border(
                 1.0,

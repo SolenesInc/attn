@@ -837,7 +837,7 @@ fn a_desktop_heading_shows_its_keys_and_its_pencil_renames_it_showing_a_refusal_
 }
 
 #[test]
-fn an_agent_row_names_its_pull_request_and_marks_the_chief_and_what_the_chief_delegated() {
+fn an_agent_row_names_its_pull_request() {
     use attn_protocol::SessionPullRequest;
     let pr =
         |number: i64, state: &str, ci: Option<&str>, review: Option<&str>| SessionPullRequest {
@@ -895,41 +895,6 @@ fn an_agent_row_names_its_pull_request_and_marks_the_chief_and_what_the_chief_de
             );
         }
     }
-
-    let world = World::start(Daemon::scripted().state(state(
-        vec![
-            Session {
-                chief_of_staff: Some(true),
-                ..session("chief", "idle")
-            },
-            Session {
-                delegated_from_chief: Some(true),
-                ..session("s1", "idle")
-            },
-            session("s2", "idle"),
-        ],
-        vec![desktop(
-            "d1",
-            "a",
-            "Work",
-            vec![
-                pane("d1", "p1", "chief"),
-                pane("d1", "p2", "s1"),
-                pane("d1", "p3", "s2"),
-            ],
-        )],
-    )));
-    let label = |key: &str| world.screen().find(Target::key(key)).and_then(|n| n.name);
-    assert_eq!(
-        label("sidebar.session.chief.chief").as_deref(),
-        Some("Chief of staff")
-    );
-    assert_eq!(
-        label("sidebar.session.s1.delegated").as_deref(),
-        Some("Delegated from chief of staff")
-    );
-    assert_eq!(label("sidebar.session.s2.delegated"), None);
-    assert_eq!(label("sidebar.session.s2.chief"), None);
 }
 
 #[test]
@@ -1494,8 +1459,8 @@ fn rows_below_the_dock_scroll_into_view_by_the_wheel_and_by_an_automation_press(
 }
 
 #[test]
-fn an_agent_row_ends_its_marks_at_its_right_edge_and_flags_priority_ahead_of_its_name() {
-    use attn_protocol::SessionDelegationRole;
+fn an_agent_row_ends_its_marks_at_its_right_edge_and_omits_desktop_priority_and_delegation_pills() {
+    use attn_protocol::{SessionDelegationRole, SessionPullRequest};
     let agent = Session {
         priority: Some(true),
         delegated_from_chief: Some(true),
@@ -1504,6 +1469,13 @@ fn an_agent_row_ends_its_marks_at_its_right_edge_and_flags_priority_ahead_of_its
             name: "Builder".into(),
             ..SessionDelegationRole::default()
         }),
+        pull_requests: Some(vec![SessionPullRequest {
+            repository: "github.com/victorarias/attn".into(),
+            number: 812,
+            state: "open".into(),
+            created_at: "2026-08-30T12:00:00Z".into(),
+            ..SessionPullRequest::default()
+        }]),
         label: "Rework the ledger's sweep across every profile".into(),
         ..session("a", "idle")
     };
@@ -1520,40 +1492,43 @@ fn an_agent_row_ends_its_marks_at_its_right_edge_and_flags_priority_ahead_of_its
     let bounds = |key: &str| screen.bounds(Target::key(key)).expect(key);
     let [row_x, _, row_w, _] = bounds("sidebar.session.a");
     let [chain_x, _, chain_w, _] = bounds("sidebar.session.a.chain");
-    let [delegated_x, _, delegated_w, _] = bounds("sidebar.session.a.delegated");
+    let [pr_x, _, pr_w, _] = bounds("sidebar.session.a.pr");
     let [name_x, _, name_w, _] = bounds("sidebar.session.a.name");
-    let [flag_x, _, flag_w, _] = bounds("sidebar.session.a.priority");
     assert_eq!(
         chain_x + chain_w,
         row_x + row_w - 8.0,
         "the role, a control, ends at the row's padding, with nothing hidden after it"
     );
+    assert!(pr_x + pr_w <= chain_x, "the marks come before the role");
     assert!(
-        delegated_x + delegated_w <= chain_x,
-        "the marks come before the role"
+        name_x + name_w + 8.0 >= pr_x,
+        "a long name runs up to the marks: {name_x}+{name_w} against {pr_x}"
     );
-    assert!(
-        name_x + name_w + 8.0 >= delegated_x,
-        "a long name runs up to the marks: {name_x}+{name_w} against {delegated_x}"
+    let row_imgs: Vec<String> = {
+        let all = world.runtime().elements();
+        let parent = all
+            .iter()
+            .find(|e| e.key.as_deref() == Some("sidebar.session.a"))
+            .expect("agent row");
+        let prefix = format!("{}/", parent.path);
+        all.iter()
+            .filter(|e| e.path.starts_with(&prefix) && e.role == "img")
+            .filter_map(|e| e.label.clone())
+            .collect()
+    };
+    assert_eq!(
+        row_imgs,
+        vec![
+            "Claude Code · idle".to_owned(),
+            "github.com/victorarias/attn#812 · open".to_owned(),
+        ],
+        "desktop flow shows only the state mark and pull request badge, omitting priority and delegation pills"
     );
-    assert!(flag_x + flag_w <= name_x, "the flag leads the name");
     assert_eq!(
         screen
             .find(Target::key("sidebar.session.a.name"))
             .and_then(|n| n.name),
         Some("Rework the ledger's sweep across every profile".into()),
-        "the flag is not part of the name"
-    );
-    assert_eq!(
-        screen
-            .find(Target::key("sidebar.session.a.priority"))
-            .and_then(|n| n.name),
-        Some("Priority".into())
-    );
-    assert!(
-        screen
-            .find(Target::key("sidebar.session.b.priority"))
-            .is_none()
     );
 
     let mut world = world;
@@ -1696,4 +1671,123 @@ fn a_narrow_sidebar_at_large_text_keeps_an_automation_run_s_name_clear_of_its_pu
             );
         }
     }
+}
+
+#[test]
+fn the_current_desktop_sits_in_a_tonal_well_and_unslotted_desktops_omit_synthetic_numbers() {
+    let mut slotted = desktop(
+        "d1",
+        "a",
+        "Work",
+        vec![pane("d1", "p1", "s1"), pane("d1", "p2", "s2")],
+    );
+    slotted.shortcut_slot = Some(1);
+    let unslotted = desktop("d2", "b", "Review", vec![pane("d2", "p3", "s3")]);
+    let mut world = World::start(Daemon::scripted().state(state(
+        vec![
+            session("s1", "waiting_input"),
+            session("s2", "working"),
+            session("s3", "idle"),
+        ],
+        vec![slotted, unslotted],
+    )));
+    world.open_desktop();
+    let t = attn_ui::colors::scheme_for(None).colors(true).ui;
+    let surface_under = |world: &World, key: &str| {
+        let rt = world.runtime();
+        let scale = rt.env.scale;
+        let el = rt
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("no {key}"));
+        let probe = [
+            (el.rect[0] + el.rect[2] - 4.0) * scale,
+            (el.rect[1] + el.rect[3] / 2.0) * scale,
+        ];
+        let holds = |r: [f32; 4], [x, y]: [f32; 2]| {
+            r[0] <= x && x <= r[0] + r[2] && r[1] <= y && y <= r[1] + r[3]
+        };
+        let [r, g, b, _] = rt.clear_color();
+        let [r, g, b] = rt
+            .instances
+            .iter()
+            .filter(|p| {
+                let [x0, y0, x1, y1] = p.clip;
+                p.params[1] == rune::render::KIND_RECT
+                    && p.params[2] == 0.0
+                    && holds(p.rect, probe)
+                    && holds([x0, y0, x1 - x0, y1 - y0], probe)
+            })
+            .fold([r, g, b], |below, p| {
+                [0, 1, 2].map(|c| p.fill[c] + below[c] * (1.0 - p.fill[3]))
+            })
+            .map(rune::theme::srgb_decode);
+        rune::Color { r, g, b, a: 1.0 }
+    };
+    let close = |a: rune::Color, b: rune::Color| {
+        [a.r - b.r, a.g - b.g, a.b - b.b]
+            .iter()
+            .all(|d| d.abs() < 1e-2)
+    };
+    let active_row = surface_under(&world, "sidebar.session.s1");
+    let current_well_row = surface_under(&world, "sidebar.session.s2");
+    let other_desktop_row = surface_under(&world, "sidebar.session.s3");
+    assert!(
+        close(active_row, t.bg_selected),
+        "active row paints on bg_selected: {active_row:?} vs {:?}",
+        t.bg_selected
+    );
+    assert!(
+        close(current_well_row, t.bg_elevated),
+        "inactive row inside current desktop paints on bg_elevated well: {current_well_row:?} vs {:?}",
+        t.bg_elevated
+    );
+    assert!(
+        close(other_desktop_row, t.bg_panel),
+        "row outside current desktop paints on bg_panel: {other_desktop_row:?} vs {:?}",
+        t.bg_panel
+    );
+
+    let texts_of = |world: &World, key: &str| -> Vec<String> {
+        let all = world.runtime().elements();
+        let parent = all
+            .iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .expect("heading");
+        let prefix = format!("{}/", parent.path);
+        all.iter()
+            .filter(|e| e.path.starts_with(&prefix))
+            .filter_map(|e| e.text.clone())
+            .collect()
+    };
+    let d1_texts = texts_of(&world, "sidebar.desktop.d1");
+    assert!(
+        d1_texts.iter().any(|w| w == "1"),
+        "slotted desktop shows its shortcut slot: {d1_texts:?}"
+    );
+    let d2_texts = texts_of(&world, "sidebar.desktop.d2");
+    assert!(
+        d2_texts.iter().any(|w| w == "Review"),
+        "unslotted desktop shows its name: {d2_texts:?}"
+    );
+    assert!(
+        !d2_texts.iter().any(|w| w == "10"),
+        "unslotted named desktop omits synthetic number 10: {d2_texts:?}"
+    );
+
+    world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+        settings: Some(BTreeMap::from([(
+            "keybindings_config".to_owned(),
+            r#"{"version":1,"overrides":{"desktop.select1":{"key":"1","alt":true}}}"#.to_owned(),
+        )])),
+        ..attn_protocol::SettingsUpdatedMessage::new()
+    });
+    world.settle();
+    let d1_rebound = texts_of(&world, "sidebar.desktop.d1");
+    assert!(
+        d1_rebound.iter().any(|w| w.contains('1') && w != "1") && d1_rebound != d1_texts,
+        "rebinding desktop.select1 updates the heading keys: {d1_rebound:?} vs {d1_texts:?}"
+    );
+    assert!(world.runtime_is_at_rest());
 }
