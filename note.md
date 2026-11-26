@@ -1,0 +1,3 @@
+Every new terminal now starts in the shared PTY host. The **Shared terminal host** switch is gone from Settings → Agents and models, and a migration clears the stored `pty_shared_host_enabled` on homes and outposts. A machine without a usable host no longer falls back to a dedicated worker. A new terminal there fails with how to get the host: update an outpost from its home, or reinstall attn. Terminals an older build started in a worker keep running and move to the host when reloaded. Child C (`s-vdqq5w`) deletes the worker runtime.
+
+![Session defaults without the Shared terminal host row](https://land-feed.caketroll.cloud/m/SolenesInc/attn/10fd80349638d7aa1602235164b8ad1610a341f3998171d7d7ea111a860424dd.png)
