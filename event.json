@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Desktop migration can reap a deliberately named launch desktop",
+  "at": "2026-11-26T21:08:46.876Z",
+  "detail": "The old CLI allowed explicitly naming a desktop to match the automation name. Name equality alone classifies that previously saved desktop as ephemeral. Preserve ambiguous existing desks, using only provable default provenance.\nIndependently corroborated at cec7eaba2. Isolated regression receipts are attached to s-1hpv1w.\n"
+}
