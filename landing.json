@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "90dd08587830aa15e6c2158d10f006dfc325f5e4",
+  "head": "fb61846e450de2bfe9b2e2ad345441f7588f8f25",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 349.602,
+    "ranOn": "fb61846e450de2bfe9b2e2ad345441f7588f8f25"
+  },
+  "acknowledgedFlake": {
+    "test": "go ./internal/daemon TestSendingASeedToAChiefBetweenSessionsStartsIt",
+    "owner": "s-358y2h"
+  },
+  "recordings": []
+}
