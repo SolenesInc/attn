@@ -31,12 +31,7 @@ pub(super) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         return None;
     };
     let (facts, now_ms) = (&state.facts, state.window.now_ms);
-    let seed = facts
-        .garden
-        .of(&facts.profiles.selected)
-        .iter()
-        .find(|s| s.id == *id)
-        .or_else(|| state.terminals.resolved_seed(id))?;
+    let seed = crate::garden::preview_seed(state, id)?;
     let names = crate::garden::model::session_names(&facts.sessions, &facts.harnesses);
     let tender = crate::garden::model::tender_of(seed, &names);
     let updated = crate::garden::model::ago(&seed.updated_at, now_ms);

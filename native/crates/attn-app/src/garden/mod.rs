@@ -389,6 +389,16 @@ fn shown_seeds(state: &State) -> HashSet<String> {
         shown.extend(living_trail(state).pop());
     }
     shown.extend(crate::desktop::seed_chip::told(state));
+    if let Some(crate::terminal::Subject::Seed(id)) = state
+        .window
+        .desk
+        .header_pop
+        .marking()
+        .map(|mark| mark.target())
+        && !seeds(state).iter().any(|seed| seed.id == *id)
+    {
+        shown.insert(id.clone());
+    }
     shown
 }
 
@@ -1121,6 +1131,18 @@ pub(crate) fn shown_seed<'a>(
     document
         .map(|d| &d.seed)
         .or_else(|| seeds.iter().find(|s| s.id == id).map(|s| s.as_ref()))
+}
+
+pub(crate) fn preview_seed<'a>(state: &'a State, id: &str) -> Option<&'a Seed> {
+    seeds(state)
+        .iter()
+        .find(|seed| seed.id == id)
+        .map(Arc::as_ref)
+        .or_else(|| {
+            let found = state.terminals.resolved_seed(id)?;
+            let (document, _) = reading(&state.window.garden, id);
+            Some(document.map_or(found.as_ref(), |doc| &doc.seed))
+        })
 }
 
 pub(crate) fn reading<'a>(

@@ -371,11 +371,7 @@ fn label(state: &State, target: &Subject, keys: String) -> Option<Label> {
     let facts = &state.facts;
     let (id, name, said, ink, icon) = match target {
         Subject::Seed(id) => {
-            let seeds = facts.garden.of(&facts.profiles.selected);
-            let seed = seeds
-                .iter()
-                .find(|seed| seed.id == *id)
-                .or_else(|| state.terminals.resolved_seed(id))?;
+            let seed = crate::garden::preview_seed(state, id)?;
             (
                 id.trim_start_matches("s-").to_owned(),
                 seed.title.clone(),

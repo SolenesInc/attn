@@ -746,7 +746,7 @@ fn an_id_hint_with_the_garden_open_takes_its_key_before_the_app_shortcut() {
 }
 
 #[test]
-fn resolves_an_archived_closed_seed_in_markdown_via_lookup_and_shows_its_card() {
+fn resolves_an_archived_seed_in_markdown_and_keeps_its_preview_current() {
     let archived = Seed {
         profile_id: "work".into(),
         id: "s-arc777".into(),
@@ -756,6 +756,7 @@ fn resolves_an_archived_closed_seed_in_markdown_via_lookup_and_shows_its_card() 
         ..Seed::default()
     };
     let mut world = start_tile((vec![], vec![], vec![]), vec![], document());
+    let changed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let reply_seed = archived.clone();
     world.daemon.on("garden_seeds_lookup", move |r| {
         let ids: Vec<&str> = r["ids"]
@@ -776,6 +777,15 @@ fn resolves_an_archived_closed_seed_in_markdown_via_lookup_and_shows_its_card() 
             ..attn_protocol::GardenSeedsLookupResultMessage::new()
         })
     });
+    let updated = changed.clone();
+    world.daemon.on("seed_document_get", move |request| {
+        let mut seed = archived.clone();
+        if updated.load(std::sync::atomic::Ordering::SeqCst) {
+            seed.body = "Revised instructions in the seed body.".into();
+            seed.rev = 2;
+        }
+        document_reply(request, Some(seed))
+    });
     reads(&mut world, "See s-arc777 for the shipped design.");
 
     assert_eq!(linked(&world), [to("s-arc777", "attn-seed:s-arc777")]);
@@ -794,6 +804,24 @@ fn resolves_an_archived_closed_seed_in_markdown_via_lookup_and_shows_its_card() 
             .find(Target::key(format!("{SEED_CARD}.excerpt")))
             .and_then(|n| n.name)
             .is_some_and(|text| text.contains("Body returned by garden_seeds_lookup."))
+    );
+    changed.store(true, std::sync::atomic::Ordering::SeqCst);
+    world.daemon.emit(attn_protocol::GardenSeedsChangedMessage {
+        profile_id: "work".into(),
+        order: vec![],
+        seeds: vec![],
+        total: 1,
+        ..attn_protocol::GardenSeedsChangedMessage::new()
+    });
+    world.settle();
+    let excerpt = world
+        .screen()
+        .find(Target::key(format!("{SEED_CARD}.excerpt")))
+        .and_then(|node| node.name)
+        .expect("the archived card still shows its excerpt");
+    assert!(
+        excerpt.contains("Revised instructions"),
+        "card shows stale body: {excerpt}"
     );
     assert!(world.runtime_is_at_rest());
 }
