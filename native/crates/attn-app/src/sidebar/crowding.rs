@@ -247,7 +247,8 @@ impl Widths {
     /// taken: the part it removes and the gap before it, for the crumbs all of the pill's trail
     /// but its caret, and for gathering the desktops the runs chip and what the chips stand
     /// past their gathered width. Saying only the waiting number leaves something in the
-    /// pill's place, so what it frees is measured after.
+    /// pill's place, and a profile pill last laid out short says nothing of its whole name, so
+    /// what they free is measured after.
     fn freed_by(&self, step: GivenUp, contents: &Contents) -> Option<f32> {
         let gap = attn_ui::blocks::Inline::joined_gap();
         match step {
@@ -257,7 +258,8 @@ impl Widths {
                 Some(runs + (self.chips - self.gathered).max(0.0))
             }
             GivenUp::Strip => Some(self.strip + gap),
-            GivenUp::ProfileName => Some((self.profile - PROFILE_SHORT_W).max(0.0)),
+            GivenUp::ProfileName if self.profile <= PROFILE_SHORT_W => None,
+            GivenUp::ProfileName => Some(self.profile - PROFILE_SHORT_W),
             GivenUp::Chips => Some(self.chips + gap),
             GivenUp::Shelf => Some(self.shelf + gap),
             GivenUp::Nothing | GivenUp::PillWord => None,
@@ -287,4 +289,4 @@ pub(crate) fn part(content: rune::El, part: Part) -> rune::El {
 
 /// The profile pill's widest while the title bar is crowded: its caret and the room around it,
 /// with the name's first few letters.
-pub(crate) const PROFILE_SHORT_W: f32 = 72.0;
+pub(crate) const PROFILE_SHORT_W: f32 = 64.0;

@@ -188,8 +188,21 @@ pub(super) fn focused(world: &World) -> Option<String> {
     world.screen().focused().and_then(|n| n.key)
 }
 
+/// Clicks `key` as a person does: a control a scrolled panel cuts is scrolled into view first.
 pub(super) fn click(world: &mut World, key: &str) {
     let key = key.to_owned();
+    let cut = world
+        .runtime()
+        .elements()
+        .iter()
+        .find(|e| e.key.as_deref() == Some(key.as_str()))
+        .is_some_and(|e| e.rect[3] - e.visible[3] > 0.5);
+    if cut {
+        world.gesture(|app| {
+            app.runtime
+                .accessibility_action(&key, rune::accesskit::Action::ScrollIntoView, None);
+        });
+    }
     world.gesture(|app| app.click(Target::key(key)));
 }
 

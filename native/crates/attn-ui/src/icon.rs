@@ -56,8 +56,8 @@ outline!(
     "1.4",
     r#"<rect x="2" y="2" width="12" height="9" rx="1.5"/><path d="M8 11v3M5.5 14h5"/>"#
 );
-outline!(COLLAPSE, 16.0, "1.6", r#"<path d="M10 3 5 8l5 5"/>"#);
-outline!(EXPAND, 16.0, "1.6", r#"<path d="M6 3l5 5-5 5"/>"#);
+outline!(COLLAPSE, 16.0, "1.4", r#"<path d="M10 3 5 8l5 5"/>"#);
+outline!(EXPAND, 16.0, "1.4", r#"<path d="M6 3l5 5-5 5"/>"#);
 outline!(
     BELL,
     16.0,

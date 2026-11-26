@@ -576,19 +576,18 @@ fn a_write_error_far_down_a_long_note_in_an_editor_tile_keeps_the_caret_where_it
 
 /// In the smallest window at the largest text, each failure keeps its actions whole first, then
 /// three whole lines of the note in view, however long its sentence: one too long for its band
-/// scrolls inside it. The note gives up room only for the actions: a conflict in the fullscreen
-/// Notebook leaves it less than three lines' room, which still shows three whole lines where
-/// this note is scrolled.
-fn a_failed_save_keeps_its_actions_whole_then_three_lines_in_the_smallest_window<W>(
+/// scrolls inside it. The note gives up room only for the actions: a conflict, whose actions
+/// stand under its sentence, keeps two.
+fn a_failed_save_keeps_its_actions_whole_then_lines_of_the_note_in_the_smallest_window<W>(
     document: &str,
     world_of: fn(Window) -> W,
 ) where
     W: FnOnce(&Disk) -> World,
 {
-    for (failure, gives_way) in [
-        (Failure::Conflict, false),
-        (DISK_FULL, false),
-        (NESTED_PATH, true),
+    for (failure, gives_way, lines) in [
+        (Failure::Conflict, false, 2),
+        (DISK_FULL, false, 3),
+        (NESTED_PATH, true, 3),
     ] {
         let (disk, mut world, _) = typed_far_down(world_of(SMALLEST), document);
         let held = world.daemon.sent_of("fs_write").pop().unwrap();
@@ -607,7 +606,7 @@ fn a_failed_save_keeps_its_actions_whole_then_three_lines_in_the_smallest_window
         let whole = whole_lines_in_view(&world, document);
         let alert = alert(document, &failure);
         assert!(
-            whole >= 3,
+            whole >= lines,
             "{alert} leaves {whole} whole lines in a view {h} tall"
         );
         let [_, ay, _, ah] = screen.bounds(Target::key(&alert)).unwrap();
@@ -657,15 +656,15 @@ fn a_failed_save_keeps_its_actions_whole_then_three_lines_in_the_smallest_window
 }
 
 #[test]
-fn in_the_smallest_window_a_failed_save_keeps_its_actions_whole_then_the_note_three_lines() {
-    a_failed_save_keeps_its_actions_whole_then_three_lines_in_the_smallest_window(
+fn in_the_smallest_window_a_failed_save_keeps_its_actions_whole_then_lines_of_the_note() {
+    a_failed_save_keeps_its_actions_whole_then_lines_of_the_note_in_the_smallest_window(
         "notebook", fullscreen,
     );
 }
 
 #[test]
-fn in_the_smallest_window_a_failed_save_keeps_its_actions_whole_then_a_tiles_note_three_lines() {
-    a_failed_save_keeps_its_actions_whole_then_three_lines_in_the_smallest_window(
+fn in_the_smallest_window_a_failed_save_keeps_its_actions_whole_then_lines_of_a_tiles_note() {
+    a_failed_save_keeps_its_actions_whole_then_lines_of_the_note_in_the_smallest_window(
         "notebook.tile.n",
         tile,
     );
@@ -704,8 +703,7 @@ fn a_long_write_error_reads_to_its_end_from_the_keyboard<W>(
     world.settle();
     let editor = format!("{document}.editor");
     let note = Target::key(format!("{document}.scroll"));
-    let (top, scrolled, selection) = (
-        top_of(&world, &line),
+    let (scrolled, selection) = (
         world.screen().scrolled(note.clone()),
         world.screen().get(Target::key(&editor)).selection,
     );
@@ -721,6 +719,7 @@ fn a_long_write_error_reads_to_its_end_from_the_keyboard<W>(
         Some(sentence),
         "Shift-Tab from Find in note passes {path:?}"
     );
+    let top = top_of(&world, &line);
     world.gesture(|d| d.press("pagedown"));
     world.settle();
     let screen = world.screen();

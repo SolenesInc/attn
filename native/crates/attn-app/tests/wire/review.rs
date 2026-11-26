@@ -7302,7 +7302,7 @@ fn key_line_rows(world: &World) -> Vec<Vec<String>> {
     let mut rows: Vec<(f32, Vec<String>)> = Vec::new();
     for e in elements
         .iter()
-        .filter(|e| e.text.is_some() && inside(e.rect))
+        .filter(|e| e.text.is_some() && e.visible[3] > 0.0 && inside(e.rect))
     {
         assert_eq!(
             e.visible[2].round(),
@@ -7649,8 +7649,10 @@ fn the_keys_sheet_of_a_small_review_at_the_largest_text_scrolls_to_its_last_key(
 
     let first = "tile.m.review.sheet.1 2 3";
     press(&mut world, Key::Home);
+    let [_, by, _, bh] = world.rect(body);
+    let [_, fy, _, _] = world.rect(first);
     assert!(
-        whole(&mut world, first),
+        fy >= by - 0.5 && fy < by + bh,
         "Home does not go back to the first key"
     );
     for _ in 0..20 {

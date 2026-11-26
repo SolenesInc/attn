@@ -278,7 +278,6 @@ const PRESSABLE: &[(&str, &str)] = &[
     ("Library/Button", "button.plain.regular"),
     ("Library/Button", "button.quiet.regular"),
     ("Library/Button", "button.danger.regular"),
-    ("Library/Button", "button.brand.regular"),
     ("Library/Icon button", "icon-button.plain"),
     ("Library/Icon button", "icon-button.edged"),
     ("Library/Switch", "switch.off/control"),
@@ -1457,8 +1456,8 @@ fn a_long_link_elides_inside_its_bar_with_its_ring_whole_and_its_name_whole() {
 const READABLE: f32 = 250.0;
 
 /// The smallest window's height under its title bar at the largest text size, in the points it
-/// lays out in: 600 / 1.5 - 32.
-const SMALLEST_WORK_AREA: f32 = 368.0;
+/// lays out in: 600 / 1.5 - 40.
+const SMALLEST_WORK_AREA: f32 = 360.0;
 
 #[test]
 fn a_long_failure_keeps_its_sentence_readable_and_leaves_most_of_the_smallest_window() {

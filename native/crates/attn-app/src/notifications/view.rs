@@ -35,10 +35,10 @@ pub(crate) fn title_button(state: &State, t: &Tokens) -> El {
         t.brand
     });
     let bell = El::from(
-        icon_button(BELL, label, &icon::BELL, IconSize::Large)
+        icon_button(BELL, label, &icon::BELL, IconSize::Regular)
             .expanded(open)
+            .ink(crate::title_bar::tool_ink(open, t))
             .dot(unread)
-            .edged()
             .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
             .build(t),
     )

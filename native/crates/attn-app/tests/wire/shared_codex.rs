@@ -942,7 +942,7 @@ fn the_palette_retries_a_restart_while_the_installed_codex_refuses_to_start() {
 /// A worktree's basename, the name a Codex session started there goes by.
 const WORKTREE_BASENAME: &str =
     "attn--fix-native-terminal-focus-when-reopening-an-old-codex-session-in-another-desktop";
-const SMALLEST_WORK_AREA: f64 = 368.0;
+const SMALLEST_WORK_AREA: f64 = 360.0;
 /// How far a control's focus ring reaches past its edge.
 const RING_REACH: f64 = 4.0;
 

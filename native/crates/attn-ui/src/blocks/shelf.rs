@@ -99,22 +99,22 @@ struct Shape {
 }
 
 const FLAT: Shape = Shape {
-    height: 22.0,
+    height: 28.0,
     start: 8.0,
     end: 8.0,
-    corner: 6.0,
+    corner: 14.0,
 };
 const PILL: Shape = Shape {
-    height: 26.0,
-    start: 7.0,
-    end: 9.0,
-    corner: 7.0,
+    height: 28.0,
+    start: 9.0,
+    end: 10.0,
+    corner: 14.0,
 };
 
-const BAR: f32 = 32.0;
-const FRAME_TOP: f32 = 1.0;
-const FRAME: f32 = 30.0;
-const FRAME_CORNER: f32 = 9.0;
+const BAR: f32 = 40.0;
+const FRAME_TOP: f32 = 4.0;
+const FRAME: f32 = 32.0;
+const FRAME_CORNER: f32 = 16.0;
 const FRAME_SECONDS: f32 = 0.2;
 const MARK: f32 = 16.0;
 const MARK_CORNER: f32 = 4.5;
@@ -126,7 +126,7 @@ const PILL_WASH_OFF_SCREEN: f32 = 0.09;
 const DOT: f32 = 4.0;
 const DASH: f32 = 10.0;
 const DOT_GAP: f32 = 2.0;
-const DOTS_START: f32 = 8.0;
+const DOTS_START: f32 = PILL.corner;
 const ENTRY_GAP: Space = Space::S2;
 const NAME_GAP: Space = Space::S6;
 const COUNT_GAP: Space = Space::S4;
@@ -362,7 +362,7 @@ impl ShelfEntry {
     fn ground(&self, t: &Tokens) -> Color {
         let bar = self.place.bar(t);
         let wash = match self.place {
-            Place::Current => return t.text_primary,
+            Place::Current => return t.bg_selected,
             _ if !self.stacked() => return bar,
             Place::OnScreen => PILL_WASH_ON_SCREEN,
             Place::OffScreen => PILL_WASH_OFF_SCREEN,
@@ -373,7 +373,7 @@ impl ShelfEntry {
 
     fn slice(&self, member: &ShelfMember, name: f32, ground: &Ground, t: &Tokens) -> El {
         let (kind, ink) = match self.place {
-            Place::Current => (Type::Control, t.bg_panel),
+            Place::Current => (Type::Control, t.text_primary),
             Place::OnScreen => (Type::Small, t.text_primary),
             Place::OffScreen => (Type::Small, t.text_tertiary),
         };
@@ -494,10 +494,10 @@ impl ShelfEntry {
             .child(body)
             .children(dots);
         let entry = recolored_at_once(ground.pressable(entry, shape.corner));
-        let entry = if self.place == Place::Current || self.stacked() {
-            entry.fill(ground.rest)
-        } else {
-            entry
+        let entry = match self.place {
+            Place::Current => entry.fill(ground.rest).border(1.0, t.border_hover),
+            _ if self.stacked() => entry.fill(ground.rest),
+            _ => entry,
         };
         if self.stacked() {
             door::clip_round(entry, shape.corner)
@@ -611,7 +611,7 @@ fn framing(key: &str, x: f32, width: f32) -> El {
 
 impl Shelf {
     /// How far the frame runs past the first and the last entry on screen.
-    pub const FRAME_REACH: f32 = 3.0;
+    pub const FRAME_REACH: f32 = FRAME_CORNER - FLAT.corner;
     /// The room before the shelf's first entry and after its last.
     pub const START: f32 = Space::S4.pt();
     pub const END: f32 = Space::S4.pt();
@@ -639,9 +639,8 @@ impl Shelf {
 
     /// The edge of [`Shelf::frame`], drawn over the entry or the count beside it.
     pub fn frame_edge(x: f32, width: f32, t: &Tokens) -> El {
-        let edge = legible(t.text_tertiary, t.bg_panel, MARK_READS, t);
         framing("shelf.frame.edge", x, width)
-            .border(1.0, edge)
+            .border(1.0, t.border)
             .paint_order(1)
             .inert()
     }

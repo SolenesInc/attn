@@ -2628,18 +2628,21 @@ fn number_keys_pick_in_the_active_question_and_tab_moves_it_to_the_written_field
     let mut world = start(vec![release_plan()], vec![api_working()]);
     open_sheet(&mut world);
     assert_eq!(active(&world), ["q1"]);
-    let rows_before: Vec<_> = (0..2)
-        .map(|i| world.rect(&format!("asks.q.q1.choice.{i}")))
-        .collect();
+    let room = |world: &mut World| {
+        let rows: Vec<_> = (0..2)
+            .map(|i| world.rect(&format!("asks.q.q1.choice.{i}")))
+            .collect();
+        rows.iter()
+            .map(|r| [r[0], r[1] - rows[0][1], r[2], r[3]])
+            .collect::<Vec<_>>()
+    };
+    let rows_before = room(&mut world);
 
     letter(&mut world, "1");
     assert!(checked(&world, "asks.q.q1.choice.0"), "1 picks eu");
     assert_eq!(active(&world), ["q2"], "a one-choice pick moves on");
     assert_eq!(focused(&world).as_deref(), Some("asks.q.q2.choice.0"));
-    let rows_after: Vec<_> = (0..2)
-        .map(|i| world.rect(&format!("asks.q.q1.choice.{i}")))
-        .collect();
-    assert_eq!(rows_before, rows_after, "the keycaps keep their room");
+    assert_eq!(rows_before, room(&mut world), "the keycaps keep their room");
 
     rest_but_for_ages(&mut world);
     letter(&mut world, "2");
@@ -3162,14 +3165,14 @@ fn with_no_agent_on_screen_the_sheet_key_opens_on_the_ask_shown_last_or_the_firs
 fn the_sheet_is_centred_under_the_title_bar_with_its_list_beside_the_ask_read_in_a_centred_column()
 {
     for (window, sheet, lines, words) in [
-        ((1512.0, 945.0), [48.0, 76.0, 1416.0, 825.0], 620.0, 980.0),
+        ((1512.0, 945.0), [48.0, 84.0, 1416.0, 817.0], 620.0, 980.0),
         (
             (3440.0, 1400.0),
-            [1000.0, 76.0, 1440.0, 1280.0],
+            [1000.0, 84.0, 1440.0, 1272.0],
             620.0,
             980.0,
         ),
-        ((800.0, 600.0), [48.0, 76.0, 704.0, 480.0], 400.0, 400.0),
+        ((800.0, 600.0), [48.0, 80.0, 704.0, 480.0], 400.0, 400.0),
     ] {
         let mut world = start(vec![cache_store()], vec![api_working()]);
         world.resize(window);

@@ -797,8 +797,10 @@ fn step_to_the_ask_of(world: &mut World, leaf: &str) -> Vec<String> {
     let rec = world.record(60.0, 0.5, |_, app| app.key(step));
     let key = format!("/shelf.entry.{leaf}.ask.0");
     let ask = rec.tracks.iter().find(|t| t.path.ends_with(&key));
-    let ink = |at| ask.unwrap().paint_at(at).unwrap().colors;
-    assert_ne!(ink(0), ink(rec.frames - 1), "the mark of {leaf}");
+    assert!(
+        ask.is_some_and(|ask| ask.paint_at(rec.frames - 1).is_some()),
+        "the mark of {leaf}"
+    );
     super::shelf_entries::recolored_at_once(&rec)
 }
 

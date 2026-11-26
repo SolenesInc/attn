@@ -9,7 +9,7 @@ use attn_protocol::{
 use attn_ui::Tokens;
 use attn_ui::blocks::{Actions, Block, Field, Menu, Notice, Prose};
 use attn_ui::system::{
-    Button, FieldState, IconSize, ListRow, Look, Reveal, Trigger, TriggerLook, Type, glyph,
+    Button, FieldState, IconSize, ListRow, Look, Reveal, Size, Trigger, TriggerLook, Type, glyph,
     icon_button, keycaps, line_box, words,
 };
 use rune::{El, Key, KeyEvent, TextEdit, Tx};
@@ -389,7 +389,8 @@ pub(crate) fn pill(state: &State, t: &Tokens) -> El {
             .truncate()
             .shrink(),
     )
-    .look(TriggerLook::Field)
+    .size(Size::Compact)
+    .look(TriggerLook::Quiet)
     .open(is_open(state))
     .build(t, toggle);
     let pill = El::from(pill)

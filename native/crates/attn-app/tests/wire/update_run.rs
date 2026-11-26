@@ -421,13 +421,13 @@ fn could_not_stage(hosts: &[&str]) -> UpdateRun {
 }
 
 /// The smallest window at the largest text size, and its height under the title bar in the
-/// points it lays out in: 600 / 1.5 - 32.
+/// points it lays out in: 600 / 1.5 - 40.
 const SMALLEST: (f32, f32) = (800.0, 600.0);
 const SENTENCE_LINE: f64 = 16.25;
 /// How the bar sets its sentence, `Type::Name`, 13/600, stated apart from the library.
 #[allow(clippy::disallowed_methods)]
 const NAME: rune::TextStyle = rune::TextStyle::new(13.0, 600.0);
-const SMALLEST_WORK_AREA: f64 = 368.0;
+const SMALLEST_WORK_AREA: f64 = 360.0;
 
 fn inside(rect: [f64; 4], of: [f64; 4]) -> bool {
     rect[0] >= of[0] - 0.5

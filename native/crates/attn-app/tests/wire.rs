@@ -4,7 +4,7 @@ static ALLOCATOR: attn_testkit::allocations::Counting = attn_testkit::allocation
 mod wire {
     /// The title bar's leading points macOS's traffic lights take: what a run acting as Linux
     /// gives the title bar beyond a Mac's.
-    pub(crate) const MACOS_WINDOW_CONTROLS: f32 = 69.0;
+    pub(crate) const MACOS_WINDOW_CONTROLS: f32 = 74.0;
 
     pub(crate) fn mac() -> bool {
         attn_testkit::mac()

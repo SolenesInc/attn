@@ -17,11 +17,16 @@ impl WindowBar {
             .h(height)
             .items_center()
             .fill(t.bg_panel)
-            .border_sides([0.0, 0.0, 1.0, 0.0], t.border);
+            .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle);
         match lights {
             Some(start) => door::inset_start(door::sides(bar, Space::S0, INSET), start),
             None => door::sides(bar, INSET, INSET),
         }
+    }
+
+    /// A short upright line between groups of a bar's parts.
+    pub fn rule(t: &Tokens) -> El {
+        el().w(1.0).h(RULE).fill(t.border).a11y_hidden()
     }
 
     /// Where a bar's first part starts when the window shows no controls of its own, and where
@@ -32,6 +37,7 @@ impl WindowBar {
 }
 
 const INSET: Space = Space::S8;
+const RULE: f32 = 14.0;
 
 /// Where a short word about the whole window stands: at the window's foot, set in from its
 /// edges.

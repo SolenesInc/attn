@@ -618,7 +618,7 @@ fn runs_chip(state: &State, t: &Tokens) -> Option<El> {
         None => "click to walk them".into(),
     });
     let button = system::Button::new(format!("{} {runs}", attn_ui::glyph::STAR_OPEN))
-        .size(system::Size::Small)
+        .size(system::Size::Compact)
         .on_press_tx(|state: &mut State, tx: &mut Tx| {
             super::bar_peek::dismiss(state);
             crate::automations::runs::next_run(state, tx)
@@ -656,6 +656,7 @@ const CRITICAL_STRIP_MAX_W: f32 = 260.0;
 /// after its last chip, so the count never lies over the toolbar.
 const BADGE_OVERHANG: f32 = 6.0;
 
-/// How far the bar's waiting count rises above its chip: the room between the chip and the
-/// bar's top edge, so the count is never cut by the bar.
-const BADGE_RISE: f32 = (crate::shell::TITLE_BAR_HEIGHT - system::Size::Compact.height()) / 2.0;
+/// How far the bar's waiting count rises above its chip: hugging the chip's corner, and never
+/// past the bar's top edge.
+const BADGE_RISE: f32 =
+    ((crate::shell::TITLE_BAR_HEIGHT - system::Size::Compact.height()) / 2.0).min(4.0);

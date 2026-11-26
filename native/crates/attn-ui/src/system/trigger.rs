@@ -3,8 +3,6 @@ use rune::{Color, El, Tx, el, row};
 use super::{Control, IconSize, Radius, Size, Space, disabled, door, focus, kit, layers};
 use crate::Tokens;
 
-const EDGE_TO_CONTENT: Space = Space::S6;
-
 /// How a trigger sits on its page.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TriggerLook {
@@ -24,6 +22,7 @@ pub struct Trigger {
     value: Option<String>,
     content: El,
     look: TriggerLook,
+    size: Size,
     open: bool,
     unset: bool,
     disabled: bool,
@@ -38,6 +37,7 @@ impl Trigger {
             value: None,
             content,
             look: TriggerLook::Field,
+            size: Size::Regular,
             open: false,
             unset: false,
             disabled: false,
@@ -46,6 +46,11 @@ impl Trigger {
 
     pub fn look(mut self, look: TriggerLook) -> Self {
         self.look = look;
+        self
+    }
+
+    pub fn size(mut self, size: Size) -> Self {
+        self.size = size;
         self
     }
 
@@ -76,7 +81,7 @@ impl Trigger {
         t: &Tokens,
         press: impl Fn(&mut S, &mut Tx) + 'static,
     ) -> Control {
-        let size = Size::Regular;
+        let size = self.size;
         let open = self.open && !self.disabled;
         let unset = self.unset && !open && !self.disabled;
         let (fill, edge) = match (open, self.look) {
@@ -91,7 +96,7 @@ impl Trigger {
             kit(t).glyph.chevron_down
         };
         let chevron = el()
-            .h(size.height() - 2.0 * EDGE_TO_CONTENT.pt())
+            .h(size.height() - 2.0 * edge_to_content(size).pt())
             .self_start()
             .items_center()
             .child(door::icon(glyph, IconSize::Regular).color(t.text_tertiary))
@@ -116,7 +121,7 @@ impl Trigger {
             trigger = trigger.border_dash(4.0, 3.0);
         }
         let trigger = door::gap(
-            door::inset(trigger, size.inset(), EDGE_TO_CONTENT),
+            door::inset(trigger, size.inset(), edge_to_content(size)),
             Space::S8,
         );
         let trigger = door::corner(trigger, Radius::Control);
@@ -126,5 +131,14 @@ impl Trigger {
         let surface = if fill.a > 0.0 { fill } else { t.bg_panel };
         let trigger = layers::pressable(trigger, surface, t).on_press_tx(press);
         Control::new(focus::ring(trigger, t), size)
+    }
+}
+
+/// The room above and below what a trigger holds: as much as a line of words leaves it at its
+/// height.
+fn edge_to_content(size: Size) -> Space {
+    match size {
+        Size::Regular => Space::S6,
+        Size::Compact | Size::Small => Space::S4,
     }
 }

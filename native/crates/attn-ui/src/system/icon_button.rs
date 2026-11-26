@@ -7,7 +7,9 @@ use super::{
 use crate::{Glyph, Tokens};
 
 /// How much of the accent tints a counted button while what it opens is closed.
-const TINT: f32 = 0.22;
+const TINT: f32 = 0.13;
+/// How much of the accent draws a counted button's edge while what it opens is closed.
+const TINT_EDGE: f32 = 0.35;
 /// The widest a button's words stand before they elide: "renovate-bot" and "dependabot[bot]"
 /// whole in `Small`, the longest of the logins that ask for reviews most.
 const SAID_WIDEST: f32 = 96.0;
@@ -278,10 +280,14 @@ impl IconButton {
         } else {
             button
         };
-        let button = if self.edged {
-            button.border(1.0, t.border)
-        } else {
-            button
+        let edge = match (self.edged, counted && !self.open) {
+            (true, _) => Some(t.border),
+            (false, true) => Some(t.accent.alpha(TINT_EDGE)),
+            (false, false) => None,
+        };
+        let button = match edge {
+            Some(edge) => button.border(1.0, edge),
+            None => button,
         };
         let button = door::corner(door::inset(button, inset, Space::S0), corner);
         let button = focus::ring(button, t);

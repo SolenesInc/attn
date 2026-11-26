@@ -13,15 +13,16 @@ use crate::{State, connection};
 pub(crate) const LEADER_TIMEOUT: f64 = 0.6;
 /// How long a notice stays.
 const NOTICE_SECONDS: f64 = 6.0;
-pub(crate) const TITLE_BAR_HEIGHT: f32 = 32.0;
+pub(crate) const TITLE_BAR_HEIGHT: f32 = 40.0;
 /// The title bar's tools, which the notifications panel hangs under, starting past the traffic
 /// lights.
 pub(crate) const TITLE_BAR_LEFT: &str = "titlebar.left";
-/// Where the close button sits, in points from the window's top left.
-pub(crate) const TRAFFIC_LIGHTS: (f32, f32) = (9.0, 9.0);
-/// The window points between the traffic lights' 69 point edge and the title bar's first
-/// control, which starts at 78 at every text size.
-const TITLE_BAR_GAP_PAST_LIGHTS: f32 = 9.0;
+/// Where the close button sits, in points from the window's top left: its 14 point frame
+/// centred in the title bar.
+pub(crate) const TRAFFIC_LIGHTS: (f32, f32) = (14.0, 13.0);
+/// The window points between the traffic lights' 74 point edge and the title bar's first
+/// control, which starts at 86 at every text size.
+const TITLE_BAR_GAP_PAST_LIGHTS: f32 = 12.0;
 
 /// What one window shows and where its keyboard is. Desktops, the active tile and the current
 /// desktop are the daemon's; this is the window's own.
@@ -613,7 +614,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
 
 /// The least height the bands leave the work under them: a tile's header, 41, and four
 /// terminal rows of 21 at 14 points, an agent's composer box and the line above it. The bands
-/// never reach it closed: their worst real case at the smallest window leaves 245.
+/// never reach it closed: their worst real case at the smallest window leaves 237.
 const WORK_AREA_FLOOR: f32 = 125.0;
 
 /// The band the window drags by, over which the window's own controls sit; what it holds
@@ -664,6 +665,7 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
                 .into_iter()
                 .flatten(),
         )
+        .children(connected.then(|| attn_ui::blocks::WindowBar::rule(t)))
         .children(instance_marker(state, t))
         .children(connected.then(|| crate::profile_switcher::pill(state, t)));
     let parts = [left, middle, right];

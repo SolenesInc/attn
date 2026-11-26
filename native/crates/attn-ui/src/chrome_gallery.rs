@@ -206,7 +206,7 @@ fn window(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
     let t = tokens(cx);
     let lights = s.lit.then_some(78.0);
     let tool = icon_button("window.tool", "Rename", &icon::PENCIL, IconSize::Regular).build(&t);
-    let bar = crate::blocks::WindowBar::across(lights, 32.0, &t)
+    let bar = crate::blocks::WindowBar::across(lights, 40.0, &t)
         .key("window.bar")
         .child(tool.into());
     let said = crate::system::words("Ctrl+B then…", crate::system::Type::Body, t.text_primary);
@@ -217,7 +217,7 @@ fn window(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
         .child(col().w_full().child(bar))
         .child(crate::blocks::pointing_ring(
             "window.ring",
-            [lights.unwrap_or(8.0), 2.0, 28.0, 28.0],
+            [lights.unwrap_or(8.0), 6.0, 28.0, 28.0],
             &t,
         ))
         .child(crate::blocks::at_foot(

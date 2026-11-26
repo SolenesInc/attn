@@ -18,20 +18,6 @@ pub enum Look {
     Quiet,
     /// Removes something or turns it off.
     Danger,
-    /// The standing invitation in a window's chrome, such as New: the primary ink on a brand
-    /// tint inside a brand edge. Not a second primary: a surface's one main action is Primary.
-    Brand,
-}
-
-impl Look {
-    /// The role a button's words take: a control's, or for the brand look the quieter words of
-    /// what a row says, so the invitation stands in the chrome without outweighing it.
-    fn words(self) -> Type {
-        match self {
-            Look::Brand => Type::Small,
-            _ => Type::Control,
-        }
-    }
 }
 
 /// What a button shows: words, or one mark of [`crate::glyph`].
@@ -102,9 +88,7 @@ impl Button {
     /// each side and its edge, or its height when it shows a mark.
     pub(crate) fn natural_width(&self, size: Size) -> f32 {
         match &self.shown {
-            Shown::Words(words) => {
-                width_of(words, self.look.words()) + 2.0 * (size.inset().pt() + 1.0)
-            }
+            Shown::Words(words) => width_of(words, Type::Control) + 2.0 * (size.inset().pt() + 1.0),
             Shown::Mark(..) => size.height(),
         }
     }
@@ -221,7 +205,6 @@ impl Button {
             Look::Plain => (t.bg_button, t.border_hover, t.text_primary),
             Look::Quiet => (Color::TRANSPARENT, Color::TRANSPARENT, t.text_secondary),
             Look::Danger => (t.bg_button, t.error.alpha(0.45), t.error),
-            Look::Brand => (crate::brand_fill(t), crate::brand_edge(t), t.text_primary),
         };
         let square = matches!(self.shown, Shown::Mark(..));
         let face = Face {
@@ -247,7 +230,7 @@ impl Button {
         };
         let shown = self.shown;
         let (leading, trailing) = (self.leading, self.trailing);
-        let role = self.look.words();
+        let role = Type::Control;
         let whole = self.whole;
         let at_most = self.at_most;
         let most = move |e: El| match at_most {

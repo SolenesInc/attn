@@ -1963,7 +1963,7 @@ pub(crate) fn title_button(state: &State, t: &Tokens) -> Option<El> {
             "titlebar.asks",
             label,
             &attn_ui::icon::ASKS,
-            IconSize::Large,
+            IconSize::Regular,
         )
         .count((count > 0).then(|| count.to_string()))
         .selected(open)

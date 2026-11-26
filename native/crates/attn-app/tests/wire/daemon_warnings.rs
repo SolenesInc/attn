@@ -210,7 +210,7 @@ const EVERY_START_WARNING: [(&str, &str); 7] = [
     ),
 ];
 
-const SMALLEST_WORK_AREA: f64 = 368.0;
+const SMALLEST_WORK_AREA: f64 = 360.0;
 
 #[test]
 fn every_start_warning_at_once_leaves_the_smallest_window_usable_and_details_reads_them_whole() {

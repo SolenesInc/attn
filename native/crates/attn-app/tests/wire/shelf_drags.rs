@@ -17,10 +17,10 @@ use super::tile_header::edged_in_accent;
 /// for tiles.
 const BESIDE_TILES: f32 = 240.0;
 /// The title bar above the tile area, in points: a 900-point window
-/// has tiles 868 tall.
-const ABOVE_TILES: f32 = 32.0;
+/// has tiles 860 tall.
+const ABOVE_TILES: f32 = 40.0;
 
-/// A window whose tile area is `area` points wide and 868 tall. A terminal column is 9
+/// A window whose tile area is `area` points wide and 860 tall. A terminal column is 9
 /// points, so the narrowest width steps are 57 cols at 513px, 66 at 594, 76 at 684, 86 at
 /// 774, 100 at 900, 120 at 1080 and 150 at 1350.
 fn window(area: f32) -> (f32, f32) {

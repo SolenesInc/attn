@@ -76,12 +76,11 @@ pub struct Library {
 }
 
 /// The looks and sizes a button story draws, each keyed `button.{look}.{size}`.
-pub const BUTTONS: [(&str, Look); 5] = [
+pub const BUTTONS: [(&str, Look); 4] = [
     ("primary", Look::Primary),
     ("plain", Look::Plain),
     ("quiet", Look::Quiet),
     ("danger", Look::Danger),
-    ("brand", Look::Brand),
 ];
 pub const SIZES: [(&str, Size); 2] = [("regular", Size::Regular), ("compact", Size::Compact)];
 
@@ -350,12 +349,10 @@ pub fn button_board(s: &Library, t: &Tokens) -> El {
                 (Look::Plain, false) => "Browse",
                 (Look::Quiet, false) => "Undo",
                 (Look::Danger, false) => "Remove",
-                (Look::Brand, false) => "New",
                 (Look::Primary, true) => "Save and restart every agent",
                 (Look::Plain, true) => "Browse for a folder to watch",
                 (Look::Quiet, true) => "Undo the last three changes",
                 (Look::Danger, true) => "Remove this automation for good",
-                (Look::Brand, true) => "New agent in this folder",
             };
             let button = Action::new(shown)
                 .look(look)

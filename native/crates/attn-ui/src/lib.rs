@@ -199,29 +199,10 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     kit
 }
 
-/// A brand-tinted control: a `brand` edge at 50% over a 12% `brand` fill.
-pub fn brand_tinted(e: rune::El, t: &Tokens) -> rune::El {
-    e.fill(t.brand.alpha(BRAND_FILL)).border(1.0, brand_edge(t))
-}
-
-/// The fill of the window's standing invitation, such as New: `brand` at 12% mixed into the
-/// panel the chrome stands on, opaque so its hover and pressed layers step from what is drawn.
-pub fn brand_fill(t: &Tokens) -> Color {
-    colors::mix_srgb(t.bg_panel, t.brand, BRAND_FILL)
-}
-
-/// The edge of the window's standing invitation: `brand` at 50%.
-pub fn brand_edge(t: &Tokens) -> Color {
-    t.brand.alpha(BRAND_EDGE)
-}
-
 /// rune-kit's own steps over a submit fill, taken toward black under light ink so the ink keeps
 /// reading on it.
 const SUBMIT_HOVER: f32 = 0.12;
 const SUBMIT_PRESSED: f32 = 0.20;
-
-const BRAND_FILL: f32 = 0.12;
-const BRAND_EDGE: f32 = 0.5;
 
 /// The words on a solid status or brand `fill`: the first that reads there of the scheme's inks
 /// for a coloured fill and the fill's own shade 12% from black.

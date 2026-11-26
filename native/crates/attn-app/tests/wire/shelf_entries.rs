@@ -10,7 +10,7 @@ use attn_testkit::tree::{below, pane, row};
 use attn_testkit::{Daemon, Target, World};
 use serde_json::Value;
 
-const FRAME_REACH: f32 = 3.0;
+const FRAME_REACH: f32 = 2.0;
 const DOT: f32 = 4.0;
 const DASH: f32 = 10.0;
 

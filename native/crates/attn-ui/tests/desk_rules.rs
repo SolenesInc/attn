@@ -616,25 +616,6 @@ impl Board {
             if dot || self.cut_out.contains(&e.path) {
                 checks.push((e.path.clone(), shown_fill(i), ground, 3.0));
             }
-            if e.key.as_deref() == Some("shelf.frame.edge") {
-                let frame = e.rect.map(|v| v * SCALE);
-                let edge = self
-                    .rt
-                    .instances
-                    .iter()
-                    .find(|drawn| {
-                        drawn.border[3] > 0.0
-                            && drawn
-                                .rect
-                                .iter()
-                                .zip(frame)
-                                .all(|(a, b)| (a - b).abs() <= 1.0)
-                    })
-                    .expect("the frame's edge");
-                let [r, g, b] = [0, 1, 2].map(|c| rune::theme::srgb_decode(edge.border[c]));
-                let edge = rune::Color { r, g, b, a: 1.0 };
-                checks.push((e.path.clone(), edge, ground, 3.0));
-            }
         }
         self.seen += checks.len();
         for (what, ink, ground, floor) in checks {
