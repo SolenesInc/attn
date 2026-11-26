@@ -1,0 +1,1 @@
+attn_record's tool description now ends its example by filtering and mapping one seed's `relations`, so agents see they can cut a command's result down in the script before it reaches their context. The example stays scoped to one seed so it doesn't invite reading the whole garden.
