@@ -689,17 +689,14 @@ fn sync_pages(state: &mut State, tx: &mut Tx) {
             && (wanted.contains(k) || (keep_cached && b.asked_revision == revision))
     });
     for key in wanted {
-        let refresh = state
+        if state
             .window
             .garden
             .pages
             .get(&key)
-            .map_or(Some(PAGE_LIMIT), |bucket| {
-                (bucket.asked_revision != revision)
-                    .then(|| (bucket.seeds.len() as i64).clamp(PAGE_LIMIT, MAX_PAGE_LIMIT))
-            });
-        if let Some(limit) = refresh {
-            fetch_page(state, key, None, limit, tx);
+            .is_none_or(|bucket| !bucket.loading && bucket.asked_revision != revision)
+        {
+            refresh_page(state, key, tx);
         }
     }
 }
@@ -714,44 +711,113 @@ pub(super) fn load_more_page(state: &mut State, key: PageKey, tx: &mut Tx) -> bo
     let Some(cursor) = cursor else {
         return false;
     };
-    fetch_page(state, key, Some(cursor), PAGE_LIMIT, tx);
+    fetch_page(state, key, Page::More(cursor), tx);
     true
 }
 
 pub(super) fn retry_page(state: &mut State, key: PageKey, tx: &mut Tx) {
-    let (cursor, limit) = state
+    let cursor = state
         .window
         .garden
         .pages
         .get(&key)
-        .map(|bucket| {
-            let cursor = bucket.retry_before.clone();
-            let limit = if cursor.is_some() {
-                PAGE_LIMIT
-            } else {
-                (bucket.seeds.len() as i64).clamp(PAGE_LIMIT, MAX_PAGE_LIMIT)
-            };
-            (cursor, limit)
-        })
-        .unwrap_or((None, PAGE_LIMIT));
-    fetch_page(state, key, cursor, limit, tx);
+        .and_then(|bucket| bucket.retry_before.clone());
+    if let Some(cursor) = cursor {
+        fetch_page(state, key, Page::More(cursor), tx);
+    } else {
+        refresh_page(state, key, tx);
+    }
 }
 
-fn fetch_page(state: &mut State, key: PageKey, before: Option<String>, limit: i64, tx: &mut Tx) {
-    let request_id = state.next_request_id();
-    let append = before.is_some();
-    let failed_before = before.clone();
+struct PageRefresh {
+    before: Option<String>,
+    depth: usize,
+    through: Option<Arc<Seed>>,
+    seeds: Vec<Arc<Seed>>,
+}
+
+impl PageRefresh {
+    fn add(&mut self, mut seeds: Vec<Seed>) -> bool {
+        let mut take = self.depth.saturating_sub(self.seeds.len());
+        if let Some(boundary) = &self.through {
+            let reached = seeds
+                .iter()
+                .position(|seed| seed.id == boundary.id)
+                .or_else(|| {
+                    seeds
+                        .last()
+                        .filter(|last| older_archive_row(last, boundary))
+                        .and_then(|_| {
+                            seeds
+                                .iter()
+                                .position(|seed| older_archive_row(seed, boundary))
+                        })
+                });
+            let Some(at) = reached else {
+                self.seeds.extend(seeds.into_iter().map(Arc::new));
+                return false;
+            };
+            self.through = None;
+            take = take.max(at + 1);
+        }
+        let partial = self.before.is_some() && seeds.len() > take;
+        if partial {
+            seeds.truncate(take);
+        }
+        self.seeds.extend(seeds.into_iter().map(Arc::new));
+        partial
+    }
+
+    fn needs_more(&self) -> bool {
+        self.seeds.len() < self.depth || self.through.is_some()
+    }
+}
+
+fn older_archive_row(seed: &Seed, boundary: &Seed) -> bool {
+    use crate::sidebar::queue::epoch_ms;
+
+    if !seed.state_changed_at.is_empty() && seed.state_changed_at == boundary.state_changed_at {
+        return seed.id < boundary.id;
+    }
+    epoch_ms(&seed.state_changed_at)
+        .zip(epoch_ms(&boundary.state_changed_at))
+        .is_some_and(|(seen, boundary)| seen < boundary)
+}
+
+enum Page {
+    Refresh(PageRefresh),
+    More(String),
+}
+
+fn refresh_page(state: &mut State, key: PageKey, tx: &mut Tx) {
     let bucket = state.window.garden.pages.entry(key.clone()).or_default();
     bucket.asked_revision = state.facts.garden.revision;
+    let refresh = PageRefresh {
+        before: None,
+        depth: bucket.seeds.len(),
+        through: bucket.seeds.last().cloned(),
+        seeds: Vec::new(),
+    };
+    fetch_page(state, key, Page::Refresh(refresh), tx);
+}
+
+fn fetch_page(state: &mut State, key: PageKey, page: Page, tx: &mut Tx) {
+    let request_id = state.next_request_id();
+    let (before, limit, retry_before) = match &page {
+        Page::Refresh(refresh) => (
+            refresh.before.clone(),
+            (refresh.depth.saturating_sub(refresh.seeds.len()) as i64)
+                .clamp(PAGE_LIMIT, MAX_PAGE_LIMIT),
+            None,
+        ),
+        Page::More(cursor) => (Some(cursor.clone()), PAGE_LIMIT, Some(cursor.clone())),
+    };
+    let bucket = state.window.garden.pages.get_mut(&key).unwrap();
     bucket.request_id = Some(request_id.clone());
     bucket.error = None;
     bucket.retry_before = None;
-    if append {
-        bucket.loading_more = true;
-    } else {
-        bucket.loading = true;
-        bucket.loading_more = false;
-    }
+    bucket.loading_more = retry_before.is_some();
+    bucket.loading = !bucket.loading_more;
     let command = GardenSeedsPageMessage {
         request_id: request_id.clone(),
         bed: (!key.bed.is_empty()).then(|| key.bed.clone()),
@@ -764,7 +830,7 @@ fn fetch_page(state: &mut State, key: PageKey, before: Option<String>, limit: i6
     state.ask_as(
         request_id.clone(),
         &command,
-        move |state, answer, _| {
+        move |state, answer, tx| {
             let garden = &mut state.window.garden;
             let Some(bucket) = garden.pages.get_mut(&key) else {
                 return;
@@ -772,43 +838,57 @@ fn fetch_page(state: &mut State, key: PageKey, before: Option<String>, limit: i6
             if bucket.request_id.as_deref() != Some(request_id.as_str()) {
                 return;
             }
-            bucket.request_id = None;
-            bucket.loading = false;
-            bucket.loading_more = false;
             match answer.parse::<GardenSeedsPageResultMessage>() {
                 Some(reply) if reply.success => {
+                    let mut next = reply.next_before;
+                    match page {
+                        Page::Refresh(mut refresh) => {
+                            if refresh.add(reply.seeds) {
+                                next = refresh.before.clone();
+                            }
+                            if refresh.needs_more()
+                                && let Some(before) = next
+                            {
+                                refresh.before = Some(before);
+                                fetch_page(state, key, Page::Refresh(refresh), tx);
+                                return;
+                            }
+                            let mut seen = HashSet::new();
+                            refresh.seeds.retain(|seed| seen.insert(seed.id.clone()));
+                            bucket.seeds = refresh.seeds;
+                        }
+                        Page::More(_) => {
+                            let mut seen: HashSet<String> =
+                                bucket.seeds.iter().map(|s| s.id.clone()).collect();
+                            for seed in reply.seeds {
+                                if seen.insert(seed.id.clone()) {
+                                    bucket.seeds.push(Arc::new(seed));
+                                }
+                            }
+                        }
+                    }
                     bucket.answered = true;
                     bucket.harvested = reply.harvested;
                     bucket.withered = reply.withered;
-                    bucket.next_before = reply.next_before;
-                    bucket.error = None;
-                    bucket.retry_before = None;
-                    if append {
-                        let mut seen: HashSet<String> =
-                            bucket.seeds.iter().map(|s| s.id.clone()).collect();
-                        for seed in reply.seeds {
-                            if seen.insert(seed.id.clone()) {
-                                bucket.seeds.push(Arc::new(seed));
-                            }
-                        }
-                    } else {
-                        bucket.seeds = reply.seeds.into_iter().map(Arc::new).collect();
-                    }
+                    bucket.next_before = next;
                 }
-                Some(reply) => {
-                    bucket.retry_before = failed_before;
+                other => {
+                    bucket.retry_before = retry_before;
                     bucket.error = Some(
-                        reply
-                            .error
+                        other
+                            .and_then(|reply| reply.error)
                             .unwrap_or_else(|| "Could not load older seeds".to_owned()),
                     );
                 }
-                None => {
-                    bucket.retry_before = failed_before;
-                    bucket.error = Some("Could not load older seeds".to_owned());
-                }
             }
+            bucket.request_id = None;
+            bucket.loading = false;
+            bucket.loading_more = false;
+            let outdated = bucket.asked_revision != state.facts.garden.revision;
             garden.revision += 1;
+            if outdated {
+                sync_pages(state, tx);
+            }
         },
         tx,
     );

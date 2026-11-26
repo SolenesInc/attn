@@ -1170,3 +1170,132 @@ fn folded_closed_lane_counts_only_direct_children() {
     assert_eq!(column(&world, "Closed"), ["Smoke test"]);
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn refreshes_a_deep_archived_card_without_moving_the_reader() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicU8, Ordering},
+    };
+
+    let title = "Old release check";
+    let deepest = with(closed(seed("s-last01", title), "harvested"), |s| {
+        s.checks = Some(vec![attn_protocol::SeedCheck {
+            id: "C1".into(),
+            text: "Reviewed scope.".into(),
+            state: "open".into(),
+            ..Default::default()
+        }]);
+    });
+    let newest = seed("s-new001", "Latest release");
+    let archived: Vec<Seed> = std::iter::once(closed(newest.clone(), "harvested"))
+        .chain((0..349).map(|i| {
+            closed(
+                seed(&format!("s-old{i:04}"), &format!("Archived item {i:03}")),
+                "harvested",
+            )
+        }))
+        .chain(std::iter::once(deepest))
+        .collect();
+    let total = archived.len() as i64;
+    let tally = GardenClosedTally {
+        harvested: total - 1,
+        withered: 0,
+    };
+    let counts = GardenClosedCounts {
+        all: tally.clone(),
+        unassigned: tally,
+        ..Default::default()
+    };
+    let d = Daemon::scripted().state(InitialStateMessage {
+        garden_closed_counts: Some(counts.clone()),
+        seeds_total: Some(total),
+        ..initial(vec![newest.clone()], Vec::new())
+    });
+    let phase = Arc::new(AtomicU8::new(0));
+    let daemon_phase = phase.clone();
+    d.on("garden_seeds_page", move |r: &Request| {
+        let phase = daemon_phase.load(Ordering::SeqCst);
+        let archived = if phase < 2 { &archived[1..] } else { &archived };
+        let start = r["before"]
+            .as_str()
+            .and_then(|cursor| cursor.strip_prefix("cursor|"))
+            .and_then(|id| archived.iter().position(|s| s.id == id))
+            .map_or(0, |idx| idx + 1);
+        let end = (start + r["limit"].as_u64().unwrap() as usize).min(archived.len());
+        let mut seeds = archived[start..end].to_vec();
+        let next_before =
+            (end < archived.len()).then(|| format!("cursor|{}", seeds.last().unwrap().id));
+        if end == archived.len() && phase > 0 {
+            let last = seeds.last_mut().unwrap();
+            last.rev += 1;
+            last.checks.as_mut().unwrap()[0].state = "reported".into();
+        }
+        message(GardenSeedsPageResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            seeds,
+            next_before,
+            total: archived.len() as i64,
+            harvested: archived.len() as i64,
+            ..GardenSeedsPageResultMessage::new()
+        })
+    });
+    let mut world = open_board_with(d);
+    click(&mut world, "show");
+
+    let lane = || Target::key("garden.board.body.closed");
+    let [x, y, w, h] = world.screen().bounds(lane()).expect("closed lane");
+    for _ in 0..8 {
+        if world
+            .screen()
+            .find(Target::key("garden.board.card.s-last01"))
+            .is_some()
+        {
+            break;
+        }
+        world.gesture(|app| {
+            app.runtime
+                .wheel_event(rune::WheelEvent::new(0.0, -24_000.0).at(x + w / 2.0, y + h / 2.0))
+        });
+    }
+    assert!(card_says(&world, title, "✓0/1"));
+    let before = world
+        .screen()
+        .scrolled(lane())
+        .expect("closed lane scrolled");
+
+    phase.store(1, Ordering::SeqCst);
+    world.daemon.emit(GardenSeedsChangedMessage {
+        profile_id: PROFILE.into(),
+        order: vec![newest.id.clone()],
+        seeds: Vec::new(),
+        total,
+        closed_counts: Some(counts),
+        ..GardenSeedsChangedMessage::new()
+    });
+    world.settle();
+    assert!(card_says(&world, title, "✓0/1 · 1 to judge"));
+    assert_eq!(world.screen().scrolled(lane()), Some(before));
+
+    phase.store(2, Ordering::SeqCst);
+    let tally = GardenClosedTally {
+        harvested: total,
+        withered: 0,
+    };
+    world.daemon.emit(GardenSeedsChangedMessage {
+        profile_id: PROFILE.into(),
+        order: Vec::new(),
+        seeds: Vec::new(),
+        total,
+        closed_counts: Some(GardenClosedCounts {
+            all: tally.clone(),
+            unassigned: tally,
+            ..Default::default()
+        }),
+        ..GardenSeedsChangedMessage::new()
+    });
+    world.settle();
+    assert!(card_says(&world, title, "✓0/1 · 1 to judge"));
+    assert!(world.runtime_is_at_rest());
+}
