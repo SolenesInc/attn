@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Crew Planted can display stale seed rows",
+  "at": "2026-11-26T18:09:50.326Z",
+  "detail": "Crew Planted can show stale seed rows at 23b1ccf3a. Harvest another member's child and the selected planter's plot stays at 0/1 despite the daemon pushing 1/1. Its signature ignores derived row changes. Replant an already-loaded seed beyond the first 200 and a triggered refresh still shows Harvested because the old tail is retained. Use fresh live rows and reconcile affected cached page rows. Independently confirmed and reproduced via app wire in both input modes. Review s-xmzdax.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/crew/seeds.rs",
+    "line": 151
+  },
+  "culprit": "23b1ccf3af57b7e0b88e84cacd63ea3cd7fa081e"
+}
