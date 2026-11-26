@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Garden dock Vim overrides saved shortcuts",
+  "at": "2026-11-26T18:06:48.288Z",
+  "detail": "Saved bare shortcuts can be swallowed by Garden dock Vim at 23b1ccf3a. Save Keyboard Shortcuts as bare j, enable Vim, focus a seed open in the Garden dock, and press j. The dock scrolls rather than opening Keyboard Shortcuts. Its focused Rune handler runs before the window keymap (garden/view.rs:577), and Garden Vim consumes the key (garden/reading.rs:98–122). The culprit parent passed this through with Garden v2 off. Independently confirmed from source. Let applicable saved actions and chord leaders take precedence over Vim motions. This is the Garden route, separate from review-document bug 36495ce. Wire probe in progress on s-1m6qb3.\n"
+}
