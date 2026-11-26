@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: TestTerminalToolsAnswerWithoutWaitingOnTheShell left expecting the CLI inbox wording",
+  "at": "2026-11-26T06:06:36.469Z",
+  "repairs": "884db23f62c74fadc2e15ebc8448ad395cb163ed"
+}
