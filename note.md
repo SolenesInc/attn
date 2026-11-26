@@ -1,0 +1,1 @@
+The plugin SDK `@victorarias/attn-plugin` moves to 0.9.0, which adds `run.prompt` for reporting user prompts. The sample harness and server plugins now depend on 0.9.0, published to npm from this commit.
