@@ -5360,6 +5360,22 @@ fn asks_empty(dark: bool) {
     snap(&mut world, "asks-empty", dark);
 }
 
+/// The title bar's asks button while `count` asks wait and the sheet is closed: the accent pill
+/// with its count.
+fn asks_waiting(dark: bool, count: usize, name: &str) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    state.asks = Some(
+        (0..count)
+            .map(|i| Ask {
+                id: format!("a-{i}"),
+                ..cache_ask("s1")
+            })
+            .collect(),
+    );
+    let mut world = start(scripted().state(state));
+    snap(&mut world, name, dark);
+}
+
 /// The asks sheet on an ask with a question of choices: its context, a recommended choice
 /// with a description, Other and the note.
 fn asks_choices(dark: bool) {
@@ -9023,6 +9039,12 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("asks_reopened", || asks_reopened(dark));
         scene("asks_empty", || asks_empty(dark));
         scene("asks_choices", || asks_choices(dark));
+        scene("asks_waiting_one", || {
+            asks_waiting(dark, 1, "asks-waiting-one")
+        });
+        scene("asks_waiting_many", || {
+            asks_waiting(dark, 12, "asks-waiting-many")
+        });
         scene("asks_preview", || asks_preview(dark));
         scene("notebook", || notebook(dark));
         scene("notebook_tree", || notebook_tree(dark));
