@@ -2119,7 +2119,9 @@ fn the_seeds_tab_pages_planted_seeds_past_the_live_window_without_a_cap_banner()
 }
 
 #[test]
-fn planted_seeds_past_200_ignore_unrelated_pushes_and_preserve_tail_on_refresh() {
+fn loaded_planted_history_refreshes_old_rows_and_ignores_unrelated_pulses() {
+    use std::sync::{Arc, Mutex};
+
     let make_seed = |i: usize| Seed {
         status: "harvested".into(),
         ..planted_by(
@@ -2128,23 +2130,21 @@ fn planted_seeds_past_200_ignore_unrelated_pushes_and_preserve_tail_on_refresh()
         )
     };
     let base: Vec<Seed> = (0..260).map(make_seed).collect();
-    let new_head = planted_by(seed("s-pmnew1", "Brand new planted"), "keel");
+    let reopened = Seed {
+        status: "planted".into(),
+        rev: 2,
+        ..base[249].clone()
+    };
     let live_other = planted_by(seed("s-other1", "Alder open seed"), "alder");
     let d = daemon(
         vec![member("keel", 1)],
         vec![session("s1", "claude")],
         vec![live_other.clone()],
     );
-    let refreshed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let (all_base, head, flag) = (base.clone(), new_head.clone(), refreshed.clone());
+    let rows = Arc::new(Mutex::new(base));
+    let daemon_rows = rows.clone();
     d.on("garden_seeds_page", move |r: &Request| {
-        let items: Vec<Seed> = if flag.load(std::sync::atomic::Ordering::SeqCst) {
-            std::iter::once(head.clone())
-                .chain(all_base.iter().cloned())
-                .collect()
-        } else {
-            all_base.clone()
-        };
+        let items = daemon_rows.lock().unwrap();
         let start = r["before"]
             .as_str()
             .and_then(|c| c.strip_prefix("cursor|"))
@@ -2166,6 +2166,13 @@ fn planted_seeds_past_200_ignore_unrelated_pushes_and_preserve_tail_on_refresh()
         })
     });
     let mut world = World::start(d);
+    world.daemon.emit(attn_protocol::GardenSeedsUpdatedMessage {
+        profile_id: PROFILE.into(),
+        seeds: vec![live_other.clone()],
+        total: 261,
+        ..attn_protocol::GardenSeedsUpdatedMessage::new()
+    });
+    world.settle();
     open(&mut world);
     click(&mut world, "crew.tab.seeds");
     click(&mut world, "crew.seeds.planted");
@@ -2201,7 +2208,7 @@ fn planted_seeds_past_200_ignore_unrelated_pushes_and_preserve_tail_on_refresh()
             pulse: Some("Alder working".into()),
             ..live_other.clone()
         }],
-        total: 1,
+        total: 261,
         ..attn_protocol::GardenSeedsChangedMessage::new()
     });
     world.settle();
@@ -2211,26 +2218,22 @@ fn planted_seeds_past_200_ignore_unrelated_pushes_and_preserve_tail_on_refresh()
         "unrelated seed pulse must not refetch Planted"
     );
 
-    refreshed.store(true, std::sync::atomic::Ordering::SeqCst);
+    rows.lock().unwrap()[249] = reopened.clone();
     world.daemon.emit(attn_protocol::GardenSeedsChangedMessage {
         profile_id: PROFILE.into(),
-        order: vec![new_head.id.clone(), live_other.id.clone()],
-        seeds: vec![new_head.clone()],
-        total: 2,
+        order: vec![reopened.id.clone(), live_other.id.clone()],
+        seeds: vec![reopened.clone()],
+        total: 261,
         ..attn_protocol::GardenSeedsChangedMessage::new()
     });
     world.settle();
-    let pages = world.daemon.sent_of("garden_seeds_page");
-    assert_eq!(pages.len(), 6);
-    assert!(pages[5]["before"].is_null());
-    assert_eq!(pages[5]["limit"], 200);
     assert_eq!(
         named(&world, "crew.seeds.planted").as_deref(),
-        Some("Planted 261")
+        Some("Planted 260")
     );
 
     for _ in 0..80 {
-        if world.daemon.sent_of("garden_seeds_page").len() >= 7 {
+        if shows(&world, "crew.seed.s-pm0259") {
             break;
         }
         world.gesture(|app| {
@@ -2238,11 +2241,89 @@ fn planted_seeds_past_200_ignore_unrelated_pushes_and_preserve_tail_on_refresh()
                 .wheel_event(rune::WheelEvent::new(0.0, -500.0).at(center.0, center.1))
         });
     }
-    let pages = world.daemon.sent_of("garden_seeds_page");
-    assert_eq!(pages.len(), 7);
-    assert_eq!(pages[6]["before"], "cursor|s-pm0249");
+    assert!(shows(&world, "crew.seed.s-pm0259"));
+    let row =
+        named(&world, "crew.seed.s-pm0249").expect("replanted seed remains in the loaded history");
+    assert!(row.ends_with("Planted"), "{row}");
+
+    rows.lock().unwrap()[249] = Seed {
+        status: "withered".into(),
+        rev: 3,
+        ..reopened
+    };
+    world.daemon.emit(attn_protocol::GardenSeedsChangedMessage {
+        profile_id: PROFILE.into(),
+        order: vec![live_other.id.clone()],
+        total: 261,
+        ..attn_protocol::GardenSeedsChangedMessage::new()
+    });
+    world.settle();
+    let row =
+        named(&world, "crew.seed.s-pm0249").expect("withered seed remains in the loaded history");
+    assert!(row.ends_with("Withered"), "{row}");
+    assert!(shows(&world, "crew.seed.s-pm0259"));
+
+    let new_head = planted_by(seed("s-pmnew1", "Brand new planted"), "keel");
+    rows.lock().unwrap().insert(0, new_head.clone());
+    world.daemon.emit(attn_protocol::GardenSeedsChangedMessage {
+        profile_id: PROFILE.into(),
+        order: vec![new_head.id.clone(), live_other.id],
+        seeds: vec![new_head],
+        total: 262,
+        ..attn_protocol::GardenSeedsChangedMessage::new()
+    });
+    world.settle();
+    assert_eq!(
+        named(&world, "crew.seeds.planted").as_deref(),
+        Some("Planted 261")
+    );
     assert!(shows(&world, "crew.seed.s-pm0259"));
     assert!(!shows(&world, "crew.seeds.more"));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn planted_plot_updates_when_another_member_finishes_its_child() {
+    let mut crown = planted_by(seed("s-plot11", "Release"), "keel");
+    crown.rev = 1;
+    crown.status = "planted".into();
+    crown.plot_progress = Some(attn_protocol::SeedPlotProgress {
+        total: 1,
+        ..Default::default()
+    });
+    let mut child = planted_by(seed("s-child1", "Ship"), "alder");
+    child.status = "planted".into();
+    child.edges.push(attn_protocol::SeedEdge {
+        kind: "part-of".into(),
+        to: crown.id.clone(),
+    });
+    let mut done = crown.clone();
+    done.plot_progress.as_mut().unwrap().done = 1;
+    let d = daemon(vec![member("keel", 1)], vec![], vec![child, crown.clone()]);
+    let mut world = World::start(d);
+    open(&mut world);
+    click(&mut world, "crew.tab.seeds");
+    click(&mut world, "crew.seeds.planted");
+    assert!(
+        named(&world, "crew.seed.s-plot11")
+            .unwrap()
+            .ends_with("0/1")
+    );
+
+    answer_planted_pages(&world.daemon, vec![done.clone()]);
+    world.daemon.emit(attn_protocol::GardenSeedsChangedMessage {
+        profile_id: PROFILE.into(),
+        order: vec![crown.id],
+        seeds: vec![done],
+        total: 2,
+        ..attn_protocol::GardenSeedsChangedMessage::new()
+    });
+    world.settle();
+    let label = named(&world, "crew.seed.s-plot11").unwrap();
+    assert!(
+        label.ends_with("1/1"),
+        "plot displays stale progress: {label}"
+    );
     assert!(world.runtime_is_at_rest());
 }
 

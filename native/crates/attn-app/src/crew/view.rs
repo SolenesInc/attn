@@ -1157,7 +1157,7 @@ fn seeds_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<Block> {
                     rows.len(),
                     ListRow::two_line_height(),
                     move |_: &State, i| format!("crew.seed.{}", keys[i].id).into(),
-                    move |_: &State, i| seed_row(&rows[i], &by_id, &tokens),
+                    move |_: &State, i| seed_row(&by_id[&rows[i].id], &by_id, &tokens),
                 );
             section = section.push(Block::custom("crew.seeds.list.block", list_el));
             if planted.loading_more {

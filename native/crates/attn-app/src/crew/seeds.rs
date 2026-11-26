@@ -158,18 +158,16 @@ pub(crate) fn sync(state: &mut State, tx: &mut Tx) {
         planted.unfiltered_total = None;
         planted.unfiltered_scope = (key.profile.clone(), key.member.clone());
     }
-    let limit = if key_changed {
+    if key_changed {
         planted.seeds.clear();
         planted.total = 0;
         planted.next_before = None;
-        planted.retry_before = None;
         planted.answered = false;
-        planted.error = None;
-        PAGE_LIMIT
-    } else {
-        (planted.seeds.len() as i64).clamp(PAGE_LIMIT, MAX_PAGE_LIMIT)
-    };
-    fetch(state, key, garden_ptr, sig, None, limit, tx);
+    }
+    planted.key = key;
+    planted.garden_ptr = garden_ptr;
+    planted.asked_sig = sig;
+    refresh(state, tx);
 }
 
 pub(crate) fn load_more(state: &mut State, tx: &mut Tx) -> bool {
@@ -180,52 +178,58 @@ pub(crate) fn load_more(state: &mut State, tx: &mut Tx) -> bool {
     let Some(cursor) = planted.next_before.clone() else {
         return false;
     };
-    let (key, garden_ptr, sig) = (planted.key.clone(), planted.garden_ptr, planted.asked_sig);
-    fetch(state, key, garden_ptr, sig, Some(cursor), PAGE_LIMIT, tx);
+    fetch(state, Page::More(cursor), tx);
     true
 }
 
 pub(crate) fn retry(state: &mut State, tx: &mut Tx) {
-    let planted = &state.window.crew.planted;
-    let cursor = planted.retry_before.clone();
-    let limit = if cursor.is_some() {
-        PAGE_LIMIT
+    if let Some(cursor) = state.window.crew.planted.retry_before.clone() {
+        fetch(state, Page::More(cursor), tx);
     } else {
-        (planted.seeds.len() as i64).clamp(PAGE_LIMIT, MAX_PAGE_LIMIT)
-    };
-    let (key, garden_ptr, sig) = (planted.key.clone(), planted.garden_ptr, planted.asked_sig);
-    if key.profile.is_empty() || key.member.is_empty() {
-        sync(state, tx);
-        return;
+        refresh(state, tx);
     }
-    fetch(state, key, garden_ptr, sig, cursor, limit, tx);
 }
 
-fn fetch(
-    state: &mut State,
-    key: PlantedKey,
-    garden_ptr: usize,
-    sig: u64,
+fn refresh(state: &mut State, tx: &mut Tx) {
+    let rows = &state.window.crew.planted.seeds;
+    let refresh = Refresh {
+        before: None,
+        through: rows.last().map(|seed| seed.id.clone()),
+        target: rows.len() as i64,
+        rows: Vec::new(),
+    };
+    fetch(state, Page::Refresh(refresh), tx);
+}
+
+struct Refresh {
     before: Option<String>,
-    limit: i64,
-    tx: &mut Tx,
-) {
-    let append = before.is_some();
-    let failed_before = before.clone();
+    through: Option<String>,
+    target: i64,
+    rows: Vec<Arc<Seed>>,
+}
+
+enum Page {
+    Refresh(Refresh),
+    More(String),
+}
+
+fn fetch(state: &mut State, page: Page, tx: &mut Tx) {
+    let (before, limit, retry_before) = match &page {
+        Page::Refresh(refresh) => (
+            refresh.before.clone(),
+            (refresh.target - refresh.rows.len() as i64).clamp(PAGE_LIMIT, MAX_PAGE_LIMIT),
+            None,
+        ),
+        Page::More(cursor) => (Some(cursor.clone()), PAGE_LIMIT, Some(cursor.clone())),
+    };
     let planted = &mut state.window.crew.planted;
     planted.request += 1;
     let request = planted.request;
-    planted.key = key.clone();
-    planted.garden_ptr = garden_ptr;
-    planted.asked_sig = sig;
+    let key = planted.key.clone();
     planted.error = None;
     planted.retry_before = None;
-    if append {
-        planted.loading_more = true;
-    } else {
-        planted.loading = true;
-        planted.loading_more = false;
-    }
+    planted.loading_more = retry_before.is_some();
+    planted.loading = !planted.loading_more;
     let planter = member_ref(&key.member);
     let query = (!key.query.is_empty()).then(|| key.query.clone());
     state.ask(
@@ -238,7 +242,7 @@ fn fetch(
             limit: Some(limit),
             ..GardenSeedsPageMessage::new()
         },
-        move |state, answer, _| {
+        move |state, answer, tx| {
             let planted = &mut state.window.crew.planted;
             if planted.request != request {
                 return;
@@ -247,6 +251,32 @@ fn fetch(
             planted.loading_more = false;
             match answer.parse::<GardenSeedsPageResultMessage>() {
                 Some(reply) if reply.success => {
+                    let next = reply.next_before;
+                    match page {
+                        Page::Refresh(mut refresh) => {
+                            let reached = refresh
+                                .through
+                                .as_ref()
+                                .is_none_or(|id| reply.seeds.iter().any(|seed| seed.id == *id));
+                            refresh.rows.extend(reply.seeds.into_iter().map(Arc::new));
+                            if !reached && let Some(before) = next {
+                                refresh.before = Some(before);
+                                fetch(state, Page::Refresh(refresh), tx);
+                                return;
+                            }
+                            planted.seeds = refresh.rows;
+                        }
+                        Page::More(_) => {
+                            let mut seen: HashSet<String> =
+                                planted.seeds.iter().map(|s| s.id.clone()).collect();
+                            for seed in reply.seeds {
+                                if seen.insert(seed.id.clone()) {
+                                    planted.seeds.push(Arc::new(seed));
+                                }
+                            }
+                        }
+                    }
+                    planted.next_before = next;
                     planted.answered = true;
                     planted.total = reply.total;
                     if planted.key.query.is_empty() {
@@ -256,36 +286,9 @@ fn fetch(
                     }
                     planted.error = None;
                     planted.retry_before = None;
-                    if append {
-                        planted.next_before = reply.next_before;
-                        let mut seen: HashSet<String> =
-                            planted.seeds.iter().map(|s| s.id.clone()).collect();
-                        for seed in reply.seeds {
-                            if seen.insert(seed.id.clone()) {
-                                planted.seeds.push(Arc::new(seed));
-                            }
-                        }
-                    } else if planted.seeds.len() > MAX_PAGE_LIMIT as usize
-                        && reply.next_before.is_some()
-                    {
-                        let mut merged: Vec<Arc<Seed>> =
-                            reply.seeds.into_iter().map(Arc::new).collect();
-                        let seen: HashSet<&str> = merged.iter().map(|s| s.id.as_str()).collect();
-                        let tail: Vec<Arc<Seed>> = planted
-                            .seeds
-                            .iter()
-                            .filter(|s| !seen.contains(s.id.as_str()))
-                            .cloned()
-                            .collect();
-                        merged.extend(tail);
-                        planted.seeds = merged;
-                    } else {
-                        planted.next_before = reply.next_before;
-                        planted.seeds = reply.seeds.into_iter().map(Arc::new).collect();
-                    }
                 }
                 other => {
-                    planted.retry_before = failed_before;
+                    planted.retry_before = retry_before;
                     planted.error = Some(failed(&answer, other.and_then(|r| r.error)));
                 }
             }
