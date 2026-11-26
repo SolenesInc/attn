@@ -204,7 +204,7 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
 /// foot: past the window's own controls when it shows them.
 fn window(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
     let t = tokens(cx);
-    let lights = s.lit.then_some(78.0);
+    let lights = s.lit.then_some(86.0);
     let tool = icon_button("window.tool", "Rename", &icon::PENCIL, IconSize::Regular).build(&t);
     let bar = crate::blocks::WindowBar::across(lights, 40.0, &t)
         .key("window.bar")

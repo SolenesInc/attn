@@ -18,7 +18,7 @@ queue bar's contents too. The sidebar has no header.
 - `queue-bar`: the queue sidebar collapsed into a strip: the waiting pill and its peek, asks, runs and desktop chips. The strip is part of the title bar, without its own profile and tools or the asks chip, and the shelf sits inside it ([desktops.md](desktops.md)).
 - `agent-list`: every agent of the profile under the waiting card, with a filter.
 - `collapse`: hide the sidebar down to the rail or the bar, and bring it back.
-- `title-bar`: one 32px toolbar in the window's title bar. Left, beside the traffic lights: New, Commands, the flow switch, the sidebar toggle, notifications. Middle: the shelf, or in queue flow with the sidebar collapsed the queue bar's waiting pill, runs and desktop chips around it. Right: garden, notebook, ledger, automations, asks, the instance marker and the profile pill. The rail keeps Home and desktop chips.
+- `title-bar`: one 40px toolbar in the window's title bar. Left, beside the traffic lights: New, Commands, the flow switch, the sidebar toggle, notifications. Middle: the shelf, or in queue flow with the sidebar collapsed the queue bar's waiting pill, runs and desktop chips around it. Right: garden, notebook, ledger, automations, asks, the instance marker and the profile pill. The rail keeps Home and desktop chips.
 - `resize`: drag the open sidebar's right edge. The tile area keeps its width during the drag and fits once on release. A double-click clears the width.
 - `width-steps`: keys and palette commands move the open sidebar by 40px and name a limit they can't pass. The limits are 200px, 600px and the window less 480px for tiles.
 - `width-setting`: the width in Settings → Appearance and in `sidebar_width`, with a way back to the default of 240px.

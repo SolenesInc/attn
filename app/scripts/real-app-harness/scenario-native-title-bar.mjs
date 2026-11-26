@@ -10,7 +10,7 @@ import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const TILES = 5;
-const BAND_PX = 32;
+const BAND_PX = 40;
 const options = parseCommonArgs(process.argv.slice(2));
 const runner = createScenarioRunner(options, {
   scenarioId: 'NATIVE-TITLE-BAR', tier: 'tier1-local-shell', prefix: 'native-title-bar',
