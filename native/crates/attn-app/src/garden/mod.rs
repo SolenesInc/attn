@@ -1348,6 +1348,7 @@ pub(crate) fn open_tile_beside(state: &mut State, id: &str, session: Option<Stri
         return;
     }
     let before = tx.focused().map(str::to_owned);
+    let inputs_before = tx.inputs();
     state.act(
         |request_id| OpenSeedMessage {
             seed_id: id.to_owned(),
@@ -1365,7 +1366,8 @@ pub(crate) fn open_tile_beside(state: &mut State, id: &str, session: Option<Stri
             else {
                 return;
             };
-            let moved = tx.focused().is_some_and(|f| Some(f) != before.as_deref());
+            let moved = tx.inputs() != inputs_before
+                && tx.focused().is_some_and(|f| Some(f) != before.as_deref());
             crate::desktop::reveal_leaf(state, &desktop, &tile, !moved, tx);
         },
         tx,

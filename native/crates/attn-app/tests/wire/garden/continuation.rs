@@ -291,6 +291,80 @@ fn opens_a_seed_as_a_tile_beside_the_session_the_user_is_in_and_shows_it() {
 }
 
 #[test]
+fn a_stake_opened_from_the_palette_takes_the_keyboard_unless_the_user_moves_focus() {
+    let search = "garden.search.field";
+    for moves_focus in [false, true] {
+        let agent = Session {
+            seed_id: Some("s-cont11".into()),
+            ..session("s1", "Agent a")
+        };
+        let mut world = on_desktop(Vec::new(), "a", vec![agent]);
+        world.daemon.on("get_command_usage", |r: &Request| {
+            super::super::palette::history(r, Vec::new())
+        });
+        world.daemon.on("record_command_usage", |r: &Request| {
+            json!({
+                "event": "record_command_usage_result",
+                "request_id": r["request_id"],
+                "success": true,
+            })
+        });
+        let focus_search = |world: &mut World| {
+            world.gesture(|app| app.click(Target::key(search)));
+            assert_eq!(focused(world).and_then(|n| n.key).as_deref(), Some(search));
+        };
+        if moves_focus {
+            key(&mut world, Key::Escape);
+        } else {
+            focus_search(&mut world);
+        }
+        world.gesture(|app| {
+            app.key(super::super::sidebar::chord(Action::UiCommandPalette));
+            app.type_text("stake");
+        });
+        key(&mut world, Key::Enter);
+        let opened = world.daemon.sent_of("open_seed");
+        assert_eq!(opened.len(), 1);
+
+        if moves_focus {
+            world.gesture(|app| app.key(board()));
+            focus_search(&mut world);
+        }
+        world.daemon.emit(message(ProfileArrangementChangedMessage {
+            profile: profile(),
+            desktops: vec![Desktop {
+                revision: 2,
+                ..desktop(vec![seed_tile("s1")], "tile-seed")
+            }],
+            ..ProfileArrangementChangedMessage::new()
+        }));
+        world.daemon.reply_to(
+            &opened[0],
+            OpenSeedResultMessage {
+                request_id: opened[0]["request_id"].as_str().map(str::to_owned),
+                success: true,
+                seed_id: "s-cont11".into(),
+                desktop_id: Some(DESKTOP.into()),
+                tile_id: Some("tile-seed".into()),
+                ..OpenSeedResultMessage::new()
+            },
+        );
+        world.settle();
+
+        let shown = world.daemon.sent_of("desktop_show_leaf");
+        assert_eq!(shown.last().unwrap()["leaf_id"], "tile-seed");
+        let window = world.automate("state", json!({"of": "window"})).unwrap();
+        if moves_focus {
+            assert_eq!(focused(&world).and_then(|n| n.key).as_deref(), Some(search));
+            assert_eq!(window["keyboard"]["pane"], "a");
+        } else {
+            assert_eq!(window["keyboard"]["pane"], "tile-seed");
+        }
+        assert!(sleeps_once_its_timers_run(&mut world));
+    }
+}
+
+#[test]
 fn opening_a_seed_as_a_tile_from_home_shows_the_desktop_it_lands_on() {
     let world_daemon = Daemon::scripted().state(InitialStateMessage {
         profiles: Some(vec![profile()]),
