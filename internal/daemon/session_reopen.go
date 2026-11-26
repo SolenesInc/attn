@@ -500,6 +500,7 @@ type sessionReopenPlan struct {
 	Title           string
 	ProfileID       string
 	StartsLaunching bool
+	LaunchPlacement launchPlacement
 }
 
 type sessionRuntimeReopened struct {
@@ -599,7 +600,9 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	if _, placed, err := d.store.SessionPlacement(session.ID); err != nil {
 		return nil, err
 	} else if !placed {
-		if placed := d.placeLaunchedSession(session, &launchPlacement{reopen: true}); placed.err != nil {
+		placement := plan.LaunchPlacement
+		placement.reopen = true
+		if placed := d.placeLaunchedSession(session, &placement); placed.err != nil {
 			return nil, placed.err
 		}
 	}

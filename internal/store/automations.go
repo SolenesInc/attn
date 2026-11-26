@@ -806,18 +806,7 @@ func (s *Store) ReconcileAutomationReviewRequestHeads(definitionID int, host str
 	defer tx.Rollback()
 	observedRaw := observedAt.UTC().Format(sortableTimeFormat)
 	updatedRaw := formatStoredTime(observedAt)
-	var enableFenceRaw string
-	err = tx.QueryRow(`SELECT observed_at FROM automation_provider_cursors WHERE definition_id=? AND provider='github_review_requested' AND scope='*'`, definitionID).Scan(&enableFenceRaw)
-	if err == nil {
-		enableFence, parseErr := docstore.ParseTime(enableFenceRaw)
-		if parseErr != nil {
-			return nil, fmt.Errorf("parse automation enable fence: %w", parseErr)
-		}
-		if observedAt.Before(enableFence) {
-			return nil, nil
-		}
-	}
-	if err != nil && err != sql.ErrNoRows {
+	if stale, err := githubObservationBeforeFence(tx, definitionID, observedRaw); err != nil || stale {
 		return nil, err
 	}
 	var cursorRaw string
@@ -958,6 +947,15 @@ func (s *Store) ListWithdrawnGitHubReviewUndeliveredRuns(definitionID int, host 
 	return out, rows.Err()
 }
 
+func githubObservationBeforeFence(tx *sql.Tx, definitionID int, observedAt string) (bool, error) {
+	var stale bool
+	err := tx.QueryRow(`SELECT EXISTS (
+		SELECT 1 FROM automation_provider_cursors
+		WHERE definition_id = ? AND provider = 'github_review_requested' AND scope = '*' AND observed_at > ?
+	)`, definitionID, observedAt).Scan(&stale)
+	return stale, err
+}
+
 func (s *Store) ClaimGitHubReviewAutomationRun(definitionID int, subjectKey string, cycle, expectedRevision int, payloadJSON, snapshotJSON string, observedAt time.Time, reserved AutomationRunReservation) (*AutomationRun, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -969,6 +967,9 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID int, subjectKey stri
 		return nil, false, err
 	}
 	defer tx.Rollback()
+	if stale, err := githubObservationBeforeFence(tx, definitionID, observedAt.UTC().Format(sortableTimeFormat)); err != nil || stale {
+		return nil, false, err
+	}
 	var active, currentCycle, baselineCycle int
 	if err := tx.QueryRow(`SELECT active,cycle,baseline_cycle FROM automation_review_request_edges WHERE definition_id=? AND subject_key=?`, definitionID, subjectKey).Scan(&active, &currentCycle, &baselineCycle); err != nil {
 		return nil, false, err

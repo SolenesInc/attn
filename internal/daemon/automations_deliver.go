@@ -799,7 +799,8 @@ func (d *Daemon) reopenAutomationSession(req automation.WorkRequest, directory s
 	label := automationSessionLabel(req, directory)
 	_, err := d.reopenSessionRuntime(sessionReopenPlan{
 		SessionID: req.IDs.SessionID, Directory: directory, Title: label,
-		ProfileID: req.IDs.ProfileID,
+		ProfileID:       req.IDs.ProfileID,
+		LaunchPlacement: launchPlacement{kind: "automation", itemID: strconv.Itoa(req.DefinitionID)},
 	})
 	if err != nil {
 		return err

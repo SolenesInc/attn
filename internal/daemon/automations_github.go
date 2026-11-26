@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/github"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -146,6 +147,7 @@ func (d *Daemon) observeGitHubReviewRequests(host string, prs []*protocol.PR, ob
 }
 
 func (d *Daemon) deliverGitHubReviewRequests(host string, client *github.Client, definition store.AutomationDefinition, spec automation.DefinitionSpec, candidates []store.AutomationReviewRequestCandidate, bySubject map[string]*protocol.PR, observedAt time.Time) {
+	defer pausepoint.Done(pausepoint.AutomationReviewBatchSettled, nil)
 	for _, candidate := range candidates {
 		if d.stopping() {
 			return
@@ -161,14 +163,6 @@ func (d *Daemon) deliverGitHubReviewRequests(host string, client *github.Client,
 		}
 		if latest == nil || !latest.Enabled {
 			return
-		}
-		if latest.SpecJSON != definition.SpecJSON {
-			var parsed automation.DefinitionSpec
-			if err := json.Unmarshal([]byte(latest.SpecJSON), &parsed); err != nil {
-				d.logf("automation GitHub observation parse %d: %v", definition.ID, err)
-				return
-			}
-			spec = parsed
 		}
 		definition = *latest
 		run, err := d.claimReviewRequest(host, client, definition, spec, candidate, pr, observedAt)

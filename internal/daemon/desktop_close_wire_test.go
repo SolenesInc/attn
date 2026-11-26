@@ -285,5 +285,13 @@ func TestAutomationRunRecreatesItsClosedLaunchDesktop(t *testing.T) {
 	if crewDesktop.ID != desktop.ID || crewDesktop.Name != "Nightly check" {
 		t.Fatalf("second launch must share the first item's replacement: %+v", crewDesktop)
 	}
-
+	if protocol.Deref(crewDesktop.Ephemeral) {
+		t.Errorf("recreated shared launch desktop %s is ephemeral despite its two launch bindings", crewDesktop.ID)
+	}
+	renamedSpec := strings.Replace(spec, "name: Nightly check", "name: Different automation name", 1)
+	applyAutomation(t, cli, automationEditSpec(definition.ID, renamedSpec))
+	afterRename := viewProfile(t, w, profile).desktops[crewDesktop.ID]
+	if afterRename.Name != crewDesktop.Name {
+		t.Errorf("renaming the automation also renamed its shared desktop to %q", afterRename.Name)
+	}
 }

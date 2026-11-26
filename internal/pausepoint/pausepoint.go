@@ -141,6 +141,7 @@ const (
 	DatabaseBackupStarting         = "database-backup-starting"
 	DatabaseBackupCopied           = "database-backup-copied"
 	AutomationRunReserved          = "automation-run-reserved"
+	AutomationReviewBatchSettled   = "automation-review-batch-settled"
 	AutomationAgentStarted         = "automation-agent-started"
 	AutomationRunFinalizing        = "automation-run-finalizing"
 	RemoteRecentRecorded           = "remote-recent-recorded"

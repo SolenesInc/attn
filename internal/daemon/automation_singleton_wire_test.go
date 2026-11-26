@@ -123,6 +123,7 @@ func TestSingletonContractEditsSupersedeSessionsWithoutStoppingThem(t *testing.T
 }
 
 func TestAnUnresumableSingletonStartsFreshAndAClosedOneResumesItsConversation(t *testing.T) {
+	t.Setenv("ATTN_EMPTY_DESKTOP_GRACE", "0")
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	if err := os.MkdirAll(w.Path(""), 0o755); err != nil {
@@ -167,7 +168,15 @@ func TestAnUnresumableSingletonStartsFreshAndAClosedOneResumesItsConversation(t 
 	}
 
 	replacement.Reply("Swept. <!-- attn:state=idle -->")
-	closeFromApp(app, string(session))
+	profile := app.SelectedProfile()
+	firstDesktop, _ := viewProfile(t, w, profile).paneOf(t, string(session))
+	if closed := closeFromApp(app, string(lost)); !closed.Accepted {
+		t.Fatalf("close old session: %+v", closed)
+	}
+	if closed := closeFromApp(app, string(session)); !closed.Accepted {
+		t.Fatalf("close singleton: %+v", closed)
+	}
+	awaitDesktopRemoved(t, w, profile, firstDesktop.ID)
 	shown, err := cli.AutomationDefinition(id)
 	if err != nil || shown.Definition.LastRun.Automation == nil || protocol.Deref(shown.Definition.LastRun.Automation.Superseded) {
 		t.Fatalf("after its session closed, show reads the last run as %+v (%v), want it current", shown.Definition.LastRun, err)
@@ -177,6 +186,10 @@ func TestAnUnresumableSingletonStartsFreshAndAClosedOneResumesItsConversation(t 
 	resumed := w.Launched(string(session))
 	if protocol.Deref(reopened.SessionID) != session || protocol.Deref(reopened.SeedID) != protocol.Deref(fresh.SeedID) || !resumed.Resumed || resumed.ConversationID != replacement.ConversationID {
 		t.Fatalf("after closing its session the singleton ran on %s/%s as %+v, want session %s resumed on its conversation %s", protocol.Deref(reopened.SessionID), protocol.Deref(reopened.SeedID), resumed, session, replacement.ConversationID)
+	}
+	reopenedDesktop, _ := viewProfile(t, w, profile).paneOf(t, string(session))
+	if reopenedDesktop.Name != "Sweep" || !protocol.Deref(reopenedDesktop.Ephemeral) {
+		t.Fatalf("singleton resumed on %s (%q, ephemeral=%t), want the recreated Sweep desktop", reopenedDesktop.ID, reopenedDesktop.Name, protocol.Deref(reopenedDesktop.Ephemeral))
 	}
 	t.Logf("%s lost its transcript and the next run launched %s fresh; closing %s and running again resumed conversation %s", lost, session, session, replacement.ConversationID)
 }

@@ -293,6 +293,9 @@ func placeEveryProfilesRemainder(tx *sql.Tx, now string) error {
 }
 
 func launchItemDesktop(tx *sql.Tx, written *documentWrites, now string, profile profiles.Profile, kind, id string) (profiles.Desktop, error) {
+	if kind == "" {
+		return loadLaunchDesktop(tx, profile, "")
+	}
 	var desktopID string
 	if _, err := rowFound(tx.QueryRow(`SELECT desktop_id FROM launch_desktops WHERE kind = ? AND item_id = ?`, kind, id), &desktopID); err != nil {
 		return profiles.Desktop{}, err
@@ -332,9 +335,13 @@ func insertNamedLaunchDesktop(tx *sql.Tx, written *documentWrites, now, profileI
 	if err != nil {
 		return desktop, err
 	}
-	desktop.Ephemeral = true
-	if _, err := tx.Exec(`UPDATE desktops SET ephemeral = 1 WHERE id = ?`, desktop.ID); err != nil {
+	if err := tx.QueryRow(`SELECT COUNT(*) = 1 FROM launch_desktops WHERE desktop_id = ?`, missingDesktopID).Scan(&desktop.Ephemeral); err != nil {
 		return desktop, err
+	}
+	if desktop.Ephemeral {
+		if _, err := tx.Exec(`UPDATE desktops SET ephemeral = 1 WHERE id = ?`, desktop.ID); err != nil {
+			return desktop, err
+		}
 	}
 	return desktop, rebindLaunchDesktop(tx, written, missingDesktopID, desktop.ID)
 }
@@ -402,7 +409,7 @@ func (s *Store) PlaceBackgroundSession(sessionID protocol.SessionID, runtimeID p
 			}
 			desktop, _, err = loadOrCreateNumberedDesktop(tx, now, profile.ID, last)
 			if profiles.IsNotFound(err) || err == nil && desktop.ProfileID != profile.ID {
-				desktop, err = loadLaunchDesktop(tx, profile, "")
+				desktop, err = launchItemDesktop(tx, &s.writes.documents, now, profile, kind, id)
 			}
 		} else {
 			desktop, err = launchItemDesktop(tx, &s.writes.documents, now, profile, kind, id)

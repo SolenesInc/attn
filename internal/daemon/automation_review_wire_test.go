@@ -12,9 +12,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -76,6 +78,47 @@ func TestAMultiPRReviewBatchDeliversEveryRequestAfterLazyDesktopCreation(t *test
 	if !slices.Equal(numbers, []int{42, 43}) {
 		t.Fatalf("delivered PR numbers = %v, want [42 43]", numbers)
 	}
+}
+
+func TestReviewBatchKeepsTheRepositoryFilterAcrossAnEdit(t *testing.T) {
+	r := newAutomationReviewWorld(t, 41)
+	settled := r.w.PauseAt(pausepoint.AutomationReviewBatchSettled)
+	pause := make(chan struct{})
+	release := make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(release) })
+	defer unblock()
+	var once sync.Once
+	g := r.github
+	g.mu.Lock()
+	g.beforeDetail = func() {
+		once.Do(func() {
+			close(pause)
+			<-release
+		})
+	}
+	g.mu.Unlock()
+	r.github.request(42, r.head, false)
+	r.github.request(43, r.head, false)
+	r.refresh()
+	select {
+	case <-pause:
+	case <-time.After(fakeagent.HangGuard):
+		t.Fatal("candidate did not reach GitHub detail fetch")
+	}
+	spec := automationReviewSpec("review", "github_review_requested", automationReviewOverride(r.clone))
+	excluded := strings.Replace(spec, "trigger: {type: github_review_requested}", "trigger: {type: github_review_requested, repositories: {mode: all_accessible, exclude: [github.test/acme/shop]}}", 1)
+	applyAutomation(t, r.cli, automationEditSpec(1, excluded))
+	unblock()
+	settled.Await()
+	settled.Release()
+	if runs := automationRuns(t, r.cli, 1); len(runs) != 0 {
+		t.Fatalf("the batch started runs after excluding their repository: %+v", runs)
+	}
+	applyAutomation(t, r.cli, automationEditSpec(1, spec))
+	r.refresh()
+	r.awaitRuns(1, func(runs []protocol.AutomationRunSummary) bool {
+		return len(runs) == 2 && runs[0].State == "delivered" && runs[1].State == "delivered"
+	})
 }
 
 func TestAReviewWhoseCodeIsOutOfReachWaitsForItAcrossARestartOrFails(t *testing.T) {
@@ -605,10 +648,11 @@ type automationPull struct {
 }
 
 type automationGitHub struct {
-	mu        sync.Mutex
-	requested map[int]automationPull
-	approved  map[int]automationPull
-	url       string
+	mu           sync.Mutex
+	requested    map[int]automationPull
+	approved     map[int]automationPull
+	url          string
+	beforeDetail func()
 }
 
 func newAutomationGitHub(t *testing.T) *automationGitHub {
@@ -648,6 +692,13 @@ func (g *automationGitHub) pull(number int) automationPull {
 }
 
 func (g *automationGitHub) serve(rw http.ResponseWriter, r *http.Request) {
+	g.mu.Lock()
+	beforeDetail := g.beforeDetail
+	g.mu.Unlock()
+	var detailNumber int
+	if beforeDetail != nil && sscanfAutomationPull(r.URL.Path, &detailNumber) {
+		beforeDetail()
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	rw.Header().Set("Content-Type", "application/json")
