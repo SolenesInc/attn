@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Crew pill and session row disagree during route save",
+  "at": "2026-11-26T19:07:31.473Z",
+  "detail": "Two independent pill classifications hide the Chief session while saving its route. Save Harness and model for an in-session Chief on its unslotted launch desktop. While the response is pending, the crew pill shows busy setup and the desktop list still suppresses the session row using a separate classification. Derive row suppression from the same crew entry model as rendering. Independently source-confirmed on s-zy7kp3.\n"
+}
