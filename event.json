@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Claude resume uses the old conversation tool wording",
+  "at": "2026-11-26T02:07:04.581Z",
+  "detail": "At ab9a1d01c, a Claude process uses /resume to enter a closed conversation whose original launch had a different tool setting. Subsequent guidance follows the old conversation's tool intent instead of the receiving process: a process with MCP can receive CLI wording and a process without MCP can receive tool calls. internal/daemon/agent_credential.go:130 and internal/store/succession.go:173 trace the stale intent. Choose wording from the receiving process after the conversation moves. Both directions were observed in isolated functional wire checks and independently confirmed in source. Evidence is on s-w79x1p.\n"
+}
