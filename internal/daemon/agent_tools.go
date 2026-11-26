@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -201,8 +200,12 @@ func (d *Daemon) agentToolServer() *mcpserver.Server {
 }
 
 func (set *agentToolServers) notServed(tool string) string {
-	if slices.Contains(set.commandNames, tool) {
-		return fmt.Sprintf("attn's commands are functions of a script. Call attn_record with the script %[1]s({...}), or attn_do when a command in it acts; skill({command: %[1]q}) prints its arguments.", tool)
+	if command, ok := set.tools[tool]; ok {
+		runsIt := recordToolName
+		if command.def.Effect == catalog.EffectAct {
+			runsIt = doToolName
+		}
+		return fmt.Sprintf("attn's commands are functions of a script. Call %[1]s with the script %[2]s({...}); skill({command: %[2]q}) prints its arguments.", runsIt, tool)
 	}
 	return "attn serves attn_record, attn_do, ask and skill. attn_record and attn_do run a script of attn's commands; skill() prints what attn can do and skill({command: \"seed\"}) a family's functions."
 }

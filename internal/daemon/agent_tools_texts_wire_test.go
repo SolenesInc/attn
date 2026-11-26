@@ -152,19 +152,25 @@ func TestACallOfARetiredToolNameSaysHowToReachTheCommand(t *testing.T) {
 	setSetting(t, app, "agent_tools_enabled", "true")
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
-	for name, wants := range map[string][]string{
-		"seed_note":  {"attn_do", "seed_note({...})", "skill({command: \"seed_note\"})"},
-		"seed_prime": {"attn_do", "skill()"},
-		"frobnicate": {"attn_do", "skill()"},
+	for name, answer := range map[string]struct{ names, leavesOut []string }{
+		"seed_note":    {names: []string{"attn_record", "seed_note({...})", "skill({command: \"seed_note\"})"}, leavesOut: []string{"attn_do"}},
+		"seed_harvest": {names: []string{"attn_do", "seed_harvest({...})", "skill({command: \"seed_harvest\"})"}, leavesOut: []string{"attn_record"}},
+		"seed_prime":   {names: []string{"attn_record", "attn_do", "skill()"}},
+		"frobnicate":   {names: []string{"attn_record", "attn_do", "skill()"}},
 	} {
 		result, err := agent.tool(t, name, map[string]any{"seed": "s-example", "text": "Done."}, nil)
-		answer := fmt.Sprint(err)
+		got := fmt.Sprint(err)
 		if err == nil {
-			answer = resultText(result)
+			got = resultText(result)
 		}
-		for _, want := range wants {
-			if !strings.Contains(answer, want) {
-				t.Errorf("calling the tool %s answered %q; want it to name %s", name, answer, want)
+		for _, want := range answer.names {
+			if !strings.Contains(got, want) {
+				t.Errorf("calling the tool %s answered %q; want it to name %s", name, got, want)
+			}
+		}
+		for _, other := range answer.leavesOut {
+			if strings.Contains(got, other) {
+				t.Errorf("calling the tool %s answered %q; want it to name only the tool that runs it, not %s", name, got, other)
 			}
 		}
 	}
