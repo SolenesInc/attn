@@ -1,0 +1,13 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Plugin prompt-title wire tests report the prompt before the daemon records the typed Enter, so main goes red intermittently",
+  "at": "2026-11-26T16:53:01.047Z",
+  "severity": "p2",
+  "source": "agent",
+  "location": {
+    "path": "internal/daemon/plugin_title_wire_test.go",
+    "line": 105
+  },
+  "culprit": "ea33aa25920bfb630f0527549fa7922279aeae27"
+}
