@@ -1,0 +1,8 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "fix: plugin prompt-title wire test raced its typed input",
+  "at": "2026-11-26T17:03:46.348Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45858154718",
+  "repairs": "ea33aa259"
+}
