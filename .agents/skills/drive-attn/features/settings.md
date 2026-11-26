@@ -17,6 +17,7 @@ Appearance.
 - `home-and-machine`: home settings decided at the home, which an outpost reads from a copy and sets through the home, and machine settings per machine.
 - `experimental`: the switches for features still in development, off by default, generated from the declarations in `internal/setting`. Palette commands turn each one on and off, and `attn settings list --features` lists them.
 - `appearance`: theme, color scheme and custom colors, text size for the app and for the garden, the narrowest tile width, the sidebar width, whether holding the walk chord opens the overview (`hold_opens_overview_enabled`, [desktops.md](desktops.md)), whether markdown tiles read by vim keys (`vim_mode_enabled`, [markdown.md](markdown.md)) and how the labels on ids look while ⌘L is held (`id_labels`, [terminals.md](terminals.md)). `docs/guide/reference/colors.md` describes `color_scheme` and `color_overrides`.
+- `agents`: Settings → Agents, including under Asks how the title bar's asks button moves (`asks_button_motion`: off, arrival or remind) and, under remind, how often it reminds (`asks_button_remind_seconds`: 30, 60, 120 or 300); [asks.md](asks.md) says what each does.
 - `github-hosts`: the GitHub hosts attn found.
 
 ## How to get to it

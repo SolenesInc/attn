@@ -143,6 +143,13 @@ sheet close it. **Open agent** (`o`) and **Open in Garden** (`g`), icons at
 the top of the ask beside **Copy ask** (`c`) and **Snooze** (`s`), close the
 sheet and show the agent that asked, or the ask's seed.
 
+While asks are open, the asks button in the title bar is an accent pill with
+their count. It pops when a new ask arrives and, by default, again every minute
+while asks wait with the sheet closed. **Settings → Agents and models → Asks
+button motion** turns the reminders or all motion off
+(`asks_button_motion`), and **Remind every** sets how often it reminds
+(`asks_button_remind_seconds`).
+
 Attn types your answer into the agent's conversation as your message. When the ask is about a seed, the answer
 goes to whoever tends that seed when you answer, and Attn adds the answer to the
 seed as a note. The seed stays open until you answer, because Attn refuses an
