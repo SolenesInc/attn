@@ -31,6 +31,7 @@ const oneServer = `server:
   intro: Reach for attn to track work.
   do: {title: Run commands, script: the script, text: Runs a script.}
   read: {title: Read, script: the script, text: Runs a script that reads.}
+  record: {title: Record, script: the script, text: Runs a script that records.}
 `
 
 func TestTheGeneratorRefusesAToolDescriptionClaudeCodeWouldCut(t *testing.T) {

@@ -345,7 +345,7 @@ func TestALaunchedClaudeCallsTheToolsAsItsSessionWithACredentialOnlyItsEnvironme
 			var parsed struct {
 				Permissions struct{ Allow []string } `json:"permissions"`
 			}
-			want := []string{"mcp__attn__attn_read", "mcp__attn__skill", "mcp__attn__ask"}
+			want := []string{"mcp__attn__attn_read", "mcp__attn__attn_record", "mcp__attn__skill", "mcp__attn__ask"}
 			if err := json.Unmarshal([]byte(settings), &parsed); err != nil || !slices.Equal(parsed.Permissions.Allow, want) {
 				t.Errorf("claude launched with --settings allowing %v (%v), want %v", parsed.Permissions.Allow, err, want)
 			}
@@ -459,7 +459,7 @@ func TestTheIntentMapNamesEveryReferenceTheCLIMapNames(t *testing.T) {
 	}
 }
 
-func TestTheServerOffersExactlyFourToolsEachWholeInTheFirstRequest(t *testing.T) {
+func TestTheServerOffersExactlyFiveToolsEachWholeInTheFirstRequest(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	setSetting(t, app, "agent_tools_enabled", "true")
@@ -476,7 +476,7 @@ func TestTheServerOffersExactlyFourToolsEachWholeInTheFirstRequest(t *testing.T)
 	if kept := len([]rune(session.InitializeResult().Instructions)); kept == 0 || kept > claudeCodeKeeps {
 		t.Errorf("the server's instructions are %d characters; Claude Code keeps %d", kept, claudeCodeKeeps)
 	}
-	onlyReads := map[string]bool{"attn_do": false, "attn_read": true, "ask": false, "skill": true}
+	onlyReads := map[string]bool{"attn_do": false, "attn_read": true, "attn_record": false, "ask": false, "skill": true}
 	var names []string
 	for _, tool := range listed.Tools {
 		names = append(names, tool.Name)

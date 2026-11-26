@@ -1,8 +1,9 @@
 # The MCP server attn serves at /mcp. `description` is the one line a harness
 # shows before it reads the server's instructions. The instructions are the
 # intent map: `intro`, then a list of every group's `map.rows`, then each
-# group's `map.notes`. A group that offers tools needs a map. `do` and `read`
-# are the tools that run a script: `text` is the tool's description and
+# group's `map.notes`. A group that offers tools needs a map. `do`, `record`
+# and `read` are the tools that run a script, with commands of any effect, of
+# effect read or record, and of effect read: `text` is the tool's description and
 # `script` its argument's. `do.text` is followed by the signature of every
 # command marked `upfront`. Commands marked `tool` are served as tools of their
 # own. Claude Code cuts the instructions and each description at 4,096
@@ -11,7 +12,7 @@ server:
   name: attn
   description: attn's commands to track, report or hand off work, and to reach the user and other agents.
   intro: |
-    attn runs the commands below. Call them as functions in a script: `attn_do` runs any of them, `attn_read` those that only read. `ask` and `skill` are also tools of their own. Find a command by the words below. Call a command that `attn_do` shows a signature for. Before you first call any other, read its row's reference, named in parentheses, with `skill({reference: "…"})`, or its rules with `skill({command: "…"})`. For `guide X`, call `guide({topic: "X"})`.
+    attn runs the commands below. Call them as functions in a script: `attn_do` runs any of them, `attn_record` those that read or record your work, `attn_read` those that only read. `ask` and `skill` are also tools of their own. Find a command by the words below. Call a command that `attn_do` shows a signature for. Before you first call any other, read its row's reference, named in parentheses, with `skill({reference: "…"})`, or its rules with `skill({command: "…"})`. For `guide X`, call `guide({topic: "X"})`.
   do:
     title: Run attn commands
     script: the script, in JavaScript
@@ -34,9 +35,15 @@ server:
       - A refused command throws a Refusal with `code`, `message`, `fix` and `command`. When nothing catches it, the script ends there. A script is not a transaction: the commands before the refusal stand, so run only the rest again.
       - The answer ends with `changed:` and a line for each command that changed something: the arguments it sent, then `->` and what it answered, such as a new seed's id. Check that the arguments are what you meant, above all values the script cut out of other text. A script that only changes things needs no `return` or console.log.
       - One call runs at most 1,000 commands and 50 s.
+      - A script that only reads or records your work runs in attn_record, which needs no permission.
 
       The commands agents call most, with ? on an optional argument, are below. Call these without reading about them first: a refusal about arguments names them all. Every other attn command is a function too; read its rules with `skill({command: "seed_park"})`, or a family's signatures with `skill({command: "crew"})`, before you first call it.
 
+  record:
+    title: Record your work with attn commands
+    script: the script, in JavaScript
+    text: |
+      Runs a script as attn_do does, with the same functions, but only those that read or record your own work, such as notes, check reports, planted seeds and asks. It refuses a command that acts, such as a harvest or a close. It needs no permission, so record with it: `seed_note({seed: "s-7k3f9m", text: "Tests pass."})`.
   read:
     title: Read with attn commands
     script: the script, in JavaScript

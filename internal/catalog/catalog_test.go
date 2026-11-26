@@ -18,6 +18,7 @@ const goodServer = `server:
   intro: Reach for attn to track work.
   do: {title: Run commands, script: the script, text: Runs a script.}
   read: {title: Read, script: the script, text: Runs a script that reads.}
+  record: {title: Record, script: the script, text: Runs a script that records.}
 `
 
 const goodNotOffered = `commands:
@@ -118,6 +119,11 @@ func TestLoadRefusesWhatWouldBreakAHarnessOrAnUnmarkedCommand(t *testing.T) {
 			name:  "an attn_read description over Claude Code's cut",
 			files: map[string]string{ServerFile: strings.Replace(goodServer, "text: Runs a script that reads.}", "text: "+strings.Repeat("x", 4097)+"}", 1)},
 			want:  []string{"server.yaml", "the description of attn_read is 4097 characters, over the limit of 4096"},
+		},
+		{
+			name:  "an attn_record description over Claude Code's cut",
+			files: map[string]string{ServerFile: strings.Replace(goodServer, "text: Runs a script that records.}", "text: "+strings.Repeat("x", 4097)+"}", 1)},
+			want:  []string{"server.yaml", "the description of attn_record is 4097 characters, over the limit of 4096"},
 		},
 		{
 			name:  "an arg only a script can pass that the CLI would need",

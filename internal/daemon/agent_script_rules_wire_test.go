@@ -35,6 +35,50 @@ func (s sessionTools) notes(seed string) []string {
 	return bodies
 }
 
+func TestAttnRecordRunsEveryRecordAndRefusesEveryAct(t *testing.T) {
+	s := newSessionTools(t)
+	var record, act []string
+	for _, cmd := range builtinCatalog(t).Commands {
+		switch {
+		case !cmd.IsTool():
+		case cmd.Effect == catalog.EffectRecord:
+			record = append(record, cmd.ToolName())
+		case cmd.Effect == catalog.EffectAct:
+			act = append(act, cmd.ToolName())
+		}
+	}
+	if !slices.Contains(record, "seed_check_report") || !slices.Contains(act, "seed_harvest") {
+		t.Fatalf("record is %v and act %v, want seed_check_report a record and seed_harvest an act", record, act)
+	}
+	answer, failed := s.agent.script(t, "attn_record", fmt.Sprintf(`const refused = {};
+for (const name of %q.split(" ")) {
+	try { globalThis[name]({}); refused[name] = "ran" } catch (e) { refused[name] = e.code }
+}
+return refused`, strings.Join(append(slices.Clone(record), act...), " ")))
+	said, _ := scriptAnswer(t, answer)
+	var outcome map[string]string
+	if err := json.Unmarshal([]byte(said), &outcome); failed || err != nil {
+		t.Fatalf("the script answered %s (%v)", answer, err)
+	}
+	for _, name := range record {
+		if outcome[name] == "changes_something" {
+			t.Errorf("attn_record refused the record %s as changing something", name)
+		}
+	}
+	for _, name := range act {
+		if outcome[name] != "changes_something" {
+			t.Errorf("attn_record answered the act %s with %q, want changes_something", name, outcome[name])
+		}
+	}
+	seed := plantForTools(t, s.w)
+	if text, failed := s.agent.script(t, "attn_record", "seed_note({seed: '"+seed+"', text: 'Recorded.'});\nseed_harvest({seed: '"+seed+"', reason: 'Done'});"); !failed || !strings.Contains(text, "line 2") || !strings.Contains(text, "attn_do") {
+		t.Errorf("a note and a harvest through attn_record answered %q, want line 2 refused and attn_do named", text)
+	}
+	if notes := s.notes(seed); !slices.Equal(notes, []string{"Recorded."}) {
+		t.Errorf("attn_record left the notes %v, want the one it recorded", notes)
+	}
+}
+
 func TestAttnReadRefusesEveryCommandThatChangesSomething(t *testing.T) {
 	s := newSessionTools(t)
 	var changing []string
@@ -220,8 +264,8 @@ func TestATerminalThatShowsNoSessionCanListTheToolsAndCallNone(t *testing.T) {
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, string(nobodys.Terminal()))}
 	if session, err := agent.connect(t); err != nil {
 		t.Fatal(err)
-	} else if listed, err := session.ListTools(context.Background(), nil); err != nil || len(listed.Tools) != 4 {
-		t.Fatalf("a terminal that shows no session lists %+v, %v; want the four tools", listed, err)
+	} else if listed, err := session.ListTools(context.Background(), nil); err != nil || len(listed.Tools) != 5 {
+		t.Fatalf("a terminal that shows no session lists %+v, %v; want the five tools", listed, err)
 	}
 	for tool, args := range map[string]map[string]any{
 		"attn_read": {"script": "return presence()"},

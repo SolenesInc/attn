@@ -141,8 +141,8 @@ mark. A daemon released before logos ignores the field.
 
 ### Give the harness attn's tools
 
-attn serves four tools as an MCP server: `attn_do` and `attn_read` run a
-JavaScript script in which each attn command is a function, and `ask` and
+attn serves five tools as an MCP server: `attn_do`, `attn_record` and
+`attn_read` run a JavaScript script in which each attn command is a function, and `ask` and
 `skill` are commands themselves. With `agentTools: true`, from SDK 0.6.0,
 `spawn` and `resume` receive `agent_tools` while the user has attn's tools on
 (the experimental setting Agent tools, `agent_tools_enabled`). Without the

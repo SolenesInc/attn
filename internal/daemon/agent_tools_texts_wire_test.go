@@ -175,7 +175,7 @@ func TestSkillWithNoArgumentsOpensWithTheWayInOfItsCaller(t *testing.T) {
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
 	cliWayIn := "`attn <command> --help` shows a command's syntax."
-	toolsWayIn := "- Run attn's commands as functions in a script: `attn_read` runs those that only read, and `attn_do` runs any."
+	toolsWayIn := "- Run attn's commands as functions in a script: `attn_read` runs those that only read, `attn_record` those that read or record your work, and `attn_do` runs any."
 
 	called := resultText(agent.mustCall(t, "skill", map[string]any{}))
 	if !strings.Contains(called, toolsWayIn) || strings.Contains(called, cliWayIn) {

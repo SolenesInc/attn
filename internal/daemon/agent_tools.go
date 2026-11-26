@@ -43,8 +43,9 @@ type scriptToolDefinition struct {
 }
 
 const (
-	doToolName   = "attn_do"
-	readToolName = "attn_read"
+	doToolName     = "attn_do"
+	readToolName   = "attn_read"
+	recordToolName = "attn_record"
 )
 
 type agentCall struct {
@@ -170,6 +171,7 @@ type agentToolCatalog struct {
 	Instructions string                `json:"instructions"`
 	Do           scriptToolDefinition  `json:"do"`
 	Read         scriptToolDefinition  `json:"read"`
+	Record       scriptToolDefinition  `json:"record"`
 	Tools        []agentToolDefinition `json:"tools"`
 }
 
@@ -185,7 +187,7 @@ func (d *Daemon) agentToolServer() *mcpserver.Server {
 	set := &d.agentToolSet
 	set.once.Do(func() {
 		offered := agentToolsCatalog()
-		tools := []mcpserver.Tool{offered.Do.offered(doToolName, false), offered.Read.offered(readToolName, true)}
+		tools := []mcpserver.Tool{offered.Do.offered(doToolName, false), offered.Read.offered(readToolName, true), offered.Record.offered(recordToolName, false)}
 		set.tools = map[string]agentTool{}
 		for _, def := range offered.Tools {
 			set.tools[def.Name] = agentTool{def: def, input: def.parsedInput(), receipt: catalog.ReceiptOf(def.Receipt)}
@@ -202,9 +204,9 @@ func (d *Daemon) agentToolServer() *mcpserver.Server {
 
 func (set *agentToolServers) notServed(tool string) string {
 	if slices.Contains(set.commandNames, tool) {
-		return fmt.Sprintf("attn's commands are functions of a script. Call attn_do with the script %[1]s({...}), or attn_read when it only reads; skill({command: %[1]q}) prints its arguments.", tool)
+		return fmt.Sprintf("attn's commands are functions of a script. Call attn_do with the script %[1]s({...}), attn_record when it only reads or records, or attn_read when it only reads; skill({command: %[1]q}) prints its arguments.", tool)
 	}
-	return "attn serves attn_do, attn_read, ask and skill. attn_do runs a script of attn's commands; skill() prints what attn can do and skill({command: \"seed\"}) a family's functions."
+	return "attn serves attn_do, attn_read, attn_record, ask and skill. attn_do runs a script of attn's commands; skill() prints what attn can do and skill({command: \"seed\"}) a family's functions."
 }
 
 func parsedSchema(tool string, raw json.RawMessage) *mcpserver.Schema {
@@ -247,13 +249,13 @@ func (def agentToolDefinition) offered() mcpserver.Tool {
 func (d *Daemon) callAgentTool(ctx context.Context, call *agentCall, name string, arguments, meta json.RawMessage) mcpserver.Result {
 	refusal := d.refusesAgentCall(call, meta)
 	call.caller.ThroughTools = true
-	if refusal == nil && (name == doToolName || name == readToolName) {
+	if most, script := scriptToolEffects[name]; refusal == nil && script {
 		var in struct {
 			Script string `json:"script"`
 		}
 		if refusal = checkArguments(name, arguments, d.agentToolSet.script); refusal == nil {
 			if err := json.Unmarshal(arguments, &in); err == nil {
-				return d.runAgentScript(ctx, call, scriptTool{name: name, readsOnly: name == readToolName}, in.Script)
+				return d.runAgentScript(ctx, call, scriptTool{name: name, most: most}, in.Script)
 			}
 		}
 	}

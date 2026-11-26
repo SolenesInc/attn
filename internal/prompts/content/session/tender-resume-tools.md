@@ -3,8 +3,8 @@ attn resumed you because seed {{seed_id}} "{{seed_title}}" got mail while it was
 Your standby note:
 {{note}}
 
-The mail is below or in your inbox (`agent_inbox()`). Anything the user wrote, such as an answer to your ask, reaches you in a prompt of its own. End this turn in one of these ways, each a call in `attn_do` but the ask:
+The mail is below or in your inbox (`agent_inbox()`). Anything the user wrote, such as an answer to your ask, reaches you in a prompt of its own. End this turn in one of these ways, each a call in `attn_do` but the ask and the note:
 - Wait again: `seed_standby({seed: "{{seed_id}}", next: "<what to do next>"})`
 - Finish: `seed_harvest({seed: "{{seed_id}}", reason: "<what got done>"})`
 - Ask the user, when only they can decide: the `ask` tool, and end your turn with this session open
-- Report on the seed and stop: `seed_note({seed: "{{seed_id}}", text: "<what happened>"})`
+- Report on the seed and stop, in `attn_record`: `seed_note({seed: "{{seed_id}}", text: "<what happened>"})`

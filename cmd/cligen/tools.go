@@ -70,11 +70,12 @@ func writeTools(c *catalog.Catalog, goRoot string) error {
 	if err := g.fail(); err != nil {
 		return err
 	}
-	do, read := c.Server.Do, c.Server.Read
+	do, read, record := c.Server.Do, c.Server.Read, c.Server.Record
 	server, err := json.Marshal(map[string]any{
 		"name": c.Server.Name, "description": c.Server.Description, "instructions": c.Instructions(),
-		"do":   scriptTool{Title: do.Title, Description: c.DoDescription(), Script: do.Script},
-		"read": scriptTool{Title: read.Title, Description: strings.TrimSpace(read.Text), Script: read.Script},
+		"do":     scriptTool{Title: do.Title, Description: c.DoDescription(), Script: do.Script},
+		"read":   scriptTool{Title: read.Title, Description: strings.TrimSpace(read.Text), Script: read.Script},
+		"record": scriptTool{Title: record.Title, Description: strings.TrimSpace(record.Text), Script: record.Script},
 	})
 	if err != nil {
 		return err

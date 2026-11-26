@@ -47,9 +47,13 @@ const (
 var errScriptCallLimit = fmt.Errorf("one call runs at most %d s", int(scriptCallLimit.Seconds()))
 
 type scriptTool struct {
-	name      string
-	readsOnly bool
+	name string
+	most catalog.Effect
 }
+
+var scriptToolEffects = map[string]catalog.Effect{doToolName: catalog.EffectAct, recordToolName: catalog.EffectRecord, readToolName: catalog.EffectRead}
+
+var effectStrength = map[catalog.Effect]int{catalog.EffectRead: 0, catalog.EffectRecord: 1, catalog.EffectAct: 2}
 
 type scriptRun struct {
 	d           *Daemon
@@ -158,8 +162,11 @@ func (run *scriptRun) atLimit(tool agentTool) *command.Refusal {
 }
 
 func (run *scriptRun) refuses(tool agentTool, args json.RawMessage) *command.Refusal {
-	if run.tool.readsOnly && tool.changes() {
-		return &command.Refusal{Code: codeChangesSomething, Message: run.tool.name + " runs commands that only read, and " + tool.def.Name + " changes something", Fix: "Call it in a script for attn_do."}
+	if effectStrength[tool.def.Effect] > effectStrength[run.tool.most] {
+		if run.tool.most == catalog.EffectRead {
+			return &command.Refusal{Code: codeChangesSomething, Message: run.tool.name + " runs commands that only read, and " + tool.def.Name + " changes something", Fix: "Call it in a script for attn_do."}
+		}
+		return &command.Refusal{Code: codeChangesSomething, Message: run.tool.name + " runs commands that read or record, and " + tool.def.Name + " acts", Fix: "Call it in a script for attn_do."}
 	}
 	return tool.withRules(checkArguments(tool.def.Name, args, tool.input))
 }

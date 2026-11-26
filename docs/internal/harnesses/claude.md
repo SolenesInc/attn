@@ -163,10 +163,10 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
 - **Upfront texts `[2.1.332]`:** a tool in the first request
   (`_meta["anthropic/alwaysLoad"]`) has its description cut at 4,096 characters,
   and the server's `instructions` are cut at 4,096 too. Only a tool loaded
-  through tool search gets 16,384 (read from the binary). attn's four
-  descriptions (3,606 at most) and its 3,375 characters of instructions arrive
-  whole (measured). `OTEL_LOG_RAW_API_BODIES=file:<dir>` with
-  `CLAUDE_CODE_ENABLE_TELEMETRY=1` and `OTEL_LOGS_EXPORTER=otlp` writes each
+  through tool search gets 16,384 (read from the binary). attn's
+  descriptions (3,606 at most) and its instructions arrived whole at 3,375
+  characters (measured); the generator refuses any over 4,096.
+  `OTEL_LOG_RAW_API_BODIES=file:<dir>` with `CLAUDE_CODE_ENABLE_TELEMETRY=1` and `OTEL_LOGS_EXPORTER=otlp` writes each
   request's body to `<dir>`.
 - **Call timeout `[2.1.332, measured]`:** a server entry's `timeout` ends a
   call: at 60,000 ms the model read `MCP server "slow" tool "slow" timed out

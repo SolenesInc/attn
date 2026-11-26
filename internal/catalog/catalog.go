@@ -61,6 +61,7 @@ type Server struct {
 	Intro       string     `yaml:"intro"`
 	Do          ScriptTool `yaml:"do"`
 	Read        ScriptTool `yaml:"read"`
+	Record      ScriptTool `yaml:"record"`
 }
 
 type ScriptTool struct {
@@ -370,6 +371,7 @@ func (c *Catalog) check() []string {
 	for _, upfront := range []struct{ name, text, cut string }{
 		{"attn_do", c.DoDescription(), "cut do.text or a command's upfront: true"},
 		{"attn_read", c.Server.Read.Text, "cut read.text"},
+		{"attn_record", c.Server.Record.Text, "cut record.text"},
 	} {
 		if n := utf8.RuneCountInString(upfront.text); n > MaxUpfrontChars {
 			add("%s: the description of %s is %d characters, over the limit of %d that Claude Code keeps; %s", ServerFile, upfront.name, n, MaxUpfrontChars, upfront.cut)
@@ -378,7 +380,7 @@ func (c *Catalog) check() []string {
 	for _, tool := range []struct {
 		name string
 		ScriptTool
-	}{{"do", c.Server.Do}, {"read", c.Server.Read}} {
+	}{{"do", c.Server.Do}, {"read", c.Server.Read}, {"record", c.Server.Record}} {
 		if tool.Title == "" || strings.TrimSpace(tool.Text) == "" || tool.Script == "" {
 			add("%s: server %s needs a title, a text and a script", ServerFile, tool.name)
 		}
