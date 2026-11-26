@@ -729,6 +729,23 @@ fn the_card_key_gives_a_hovered_card_in_the_garden_over_the_window_the_keyboard(
 }
 
 #[test]
+fn an_id_hint_with_the_garden_open_takes_its_key_before_the_app_shortcut() {
+    let mut world = start("");
+    write(&mut world, 1, &format!("{BUILDER_SHORT} {SEED}"));
+    world.gesture(|app| app.key(super::sidebar::chord(attn_app::Action::BoardOpen)));
+    hold(&mut world);
+    assert_eq!(
+        labels(&world, "terminal.r1", "hints"),
+        [ON_BUILDER, "D Map the uploader, harvested"]
+    );
+
+    press(&mut world, 'd', false);
+    lets_go(&mut world);
+    assert!(shown(&world, "terminal.r1.seed-card"));
+    rests(&mut world);
+}
+
+#[test]
 fn resolves_an_archived_closed_seed_in_markdown_via_lookup_and_shows_its_card() {
     let archived = Seed {
         profile_id: "work".into(),

@@ -27,6 +27,8 @@ use attn_protocol::{
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col};
 
 use crate::State;
+use crate::action::Action;
+use crate::keymap::{Focus, Press};
 use crate::requests::Refused;
 use crate::shell::Drawer;
 
@@ -1392,21 +1394,19 @@ fn put_away_written(state: &mut State, tx: &mut Tx) -> bool {
     spot::Spot::put_away_written(state, ("garden", &here), BODY, tx)
 }
 
-/// The garden's keys while focus is inside it: the seed page it reads takes them first, as
+/// The garden's keys after app shortcuts: the seed page it reads takes them first, as
 /// [`reading::key`] says; then `/` or ⌘F goes to the search field, the arrows walk the rows of
 /// the place it stands in, → drills into the focused row in columns, ← climbs out, and Escape
 /// closes the garden.
 pub(crate) fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if !tx.in_text_field() && reading::key(state, ev, tx) {
+    let find = reading::finds(ev);
+    if !tx.in_text_field()
+        && (app_key(state, ev, find, tx) && crate::keys::on_key(state, ev, tx)
+            || reading::key(state, ev, tx))
+    {
         return true;
     }
-    let accel = if rune::Platform::current() == rune::Platform::Mac {
-        ev.mods.cmd
-    } else {
-        ev.mods.ctrl
-    };
     let slash = matches!(&ev.key, Key::Text(t) if t == "/");
-    let find = matches!(&ev.key, Key::Command(c) if c.eq_ignore_ascii_case(&'f')) && accel;
     if find || (slash && !tx.in_text_field()) {
         focus_search(state, tx);
         return true;
@@ -1452,6 +1452,30 @@ pub(crate) fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         },
         Key::Down | Key::Up => walk_rows(state, ev.key == Key::Down, tx),
         _ => false,
+    }
+}
+
+fn app_key(state: &State, ev: &KeyEvent, find: bool, tx: &Tx) -> bool {
+    if !matches!(state.window.hints, crate::hints::Hints::Off)
+        || state
+            .window
+            .leader
+            .as_ref()
+            .is_some_and(|leader| tx.clock() < leader.until)
+    {
+        return true;
+    }
+    if ev.key == Key::Escape {
+        return false;
+    }
+    let focus = Focus {
+        page: crate::browser::holds_keys(state),
+        ..Focus::default()
+    };
+    match state.keymap.press(ev, tx, focus) {
+        Press::Unbound => false,
+        Press::Action(Action::TerminalFind) => !find,
+        _ => true,
     }
 }
 

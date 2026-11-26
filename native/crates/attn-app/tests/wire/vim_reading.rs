@@ -852,3 +852,110 @@ fn escape_in_the_reader_of_a_seed_whose_row_left_the_list_goes_to_the_garden() {
     );
     rest(&mut world);
 }
+
+#[test]
+fn saved_shortcuts_take_precedence_over_garden_reading_keys() {
+    for (full, view) in [(false, STACKED), (true, READER)] {
+        for (binding, leader) in [
+            (json!({"key": "j"}), None),
+            (
+                json!({
+                    "leader": {"key": "y", "meta": true, "shift": true},
+                    "then": {"key": "j"}
+                }),
+                Some("mod+shift+y"),
+            ),
+        ] {
+            let mut world = open_garden(true, full);
+            open_row(&mut world, "s-loose1");
+            if full {
+                world.gesture(|app| app.click(Target::key("garden.head.title")));
+                world.settle();
+            }
+            bind_keyboard_shortcuts(&mut world, binding);
+
+            if let Some(leader) = leader {
+                world.gesture(|app| app.press(leader));
+            }
+            typed(&mut world, "j");
+            assert!(
+                world
+                    .screen()
+                    .find(Target::role("dialog").name("Keyboard Shortcuts"))
+                    .is_some(),
+                "saved shortcut should open Keyboard Shortcuts while reading in {view}, leader {leader:?}"
+            );
+            press(&mut world, Key::Escape, Mods::default());
+            assert_eq!(scrolled_in(&world, view), 0.0);
+            rest(&mut world);
+        }
+    }
+}
+
+#[test]
+fn a_saved_chord_takes_enter_before_the_focused_garden_row_does() {
+    let mut world = open_garden(true, true);
+    open_row(&mut world, "s-loose1");
+    for _ in 0..3 {
+        if row_focused(&world).as_deref() != Some("garden.row.s-loose1") {
+            typed(&mut world, "j");
+        }
+    }
+    assert_eq!(row_focused(&world).as_deref(), Some("garden.row.s-loose1"));
+    bind_keyboard_shortcuts(
+        &mut world,
+        json!({
+            "leader": {"key": "y", "meta": true, "shift": true},
+            "then": {"key": "Enter"}
+        }),
+    );
+
+    world.gesture(|app| app.press("mod+shift+y"));
+    press(&mut world, Key::Enter, Mods::default());
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Keyboard Shortcuts"))
+            .is_some()
+    );
+    rest(&mut world);
+}
+
+fn bind_keyboard_shortcuts(world: &mut World, binding: serde_json::Value) {
+    world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+        settings: Some(
+            [
+                ("vim_mode_enabled".into(), "true".into()),
+                (
+                    "keybindings_config".into(),
+                    json!({"version": 1, "overrides": {"ui.showShortcuts": binding}}).to_string(),
+                ),
+            ]
+            .into(),
+        ),
+        ..attn_protocol::SettingsUpdatedMessage::new()
+    });
+    world.settle();
+}
+
+#[test]
+fn escape_drops_a_saved_chord_before_leaving_the_garden_reader() {
+    let mut world = open_garden(true, true);
+    open_row(&mut world, "s-loose1");
+    world.gesture(|app| app.click(Target::key("garden.head.title")));
+    world.settle();
+    bind_keyboard_shortcuts(
+        &mut world,
+        json!({
+            "leader": {"key": "y", "meta": true, "shift": true},
+            "then": {"key": "j"}
+        }),
+    );
+
+    world.gesture(|app| app.press("mod+shift+y"));
+    press(&mut world, Key::Escape, Mods::default());
+    assert_eq!(focused(&world).as_deref(), Some(READER));
+    typed(&mut world, "j");
+    assert_eq!(scrolled_in(&world, READER), LINE);
+    rest(&mut world);
+}

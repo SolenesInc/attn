@@ -84,7 +84,7 @@ pub(super) fn find_bar(
     Some(find::bar(view, finding, count, source(id), t))
 }
 
-fn finds(ev: &KeyEvent) -> bool {
+pub(super) fn finds(ev: &KeyEvent) -> bool {
     let accel = if rune::Platform::current() == rune::Platform::Mac {
         ev.mods.cmd
     } else {
