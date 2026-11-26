@@ -60,6 +60,7 @@ pub mod tauri_settings;
 mod terminal;
 mod title_bar;
 mod update_run;
+mod vim;
 mod warnings;
 pub mod whats_new;
 pub mod window_host;

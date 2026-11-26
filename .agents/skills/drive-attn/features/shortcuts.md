@@ -10,7 +10,7 @@ restarts.
 
 ## Sub-features
 
-- `cheatsheet`: every shortcut by category, with its keys.
+- `cheatsheet`: every shortcut by category, with its keys, and the vim keys documents read by while `vim_mode_enabled` is on ([markdown.md](markdown.md)).
 - `shortcut-editor`: rebind by recording keys, reset one, unbind one, or restore every default.
 - `conflicts`: the editor asks to Reassign when another action holds the keys, and refuses keys that a required action holds.
 - `protected`: Settings, Keyboard shortcuts and Quit can be rebound but never unbound.

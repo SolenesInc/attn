@@ -398,6 +398,21 @@ fn hold_opens_overview(state: &State, t: &Tokens) -> Section {
         )
 }
 
+fn vim_mode(state: &State, t: &Tokens) -> Section {
+    const TITLE: &str = "Read documents with vim keys";
+    Section::new("settings.block.vim", "Vim keys")
+        .description("Keys for reading markdown documents.")
+        .push(
+            SettingRow::new(
+                "settings.row.vim-mode",
+                TITLE,
+                "j and k scroll, Ctrl-d and Ctrl-u move half a page, gg and G go to the ends, ]] and [[ step through headings, / finds and n and N step through the matches.",
+                setting_switch(state, crate::vim::SETTING, TITLE, t),
+            )
+            .build(t),
+        )
+}
+
 pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     vec![
         theme(state, t).build(t),
@@ -405,5 +420,6 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
         id_labels(state, t).build(t),
         layout(state, t).build(t),
         hold_opens_overview(state, t).build(t),
+        vim_mode(state, t).build(t),
     ]
 }

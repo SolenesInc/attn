@@ -11,14 +11,15 @@ use rune::{El, Platform};
 use crate::Action;
 use crate::keymap::{Binding, Keymap};
 
-/// What a combo on a row presses: an action's own keys, or an action's modifiers with a
-/// family of keys such as the digits.
+/// What a combo on a row presses: an action's own keys, an action's modifiers with a
+/// family of keys such as the digits, or keys no keymap binds, such as vim's.
 enum Keys {
     Of(Action),
     ModifiersOf(Action, &'static str),
+    Typed(&'static str, &'static [&'static str]),
 }
 
-use Keys::{ModifiersOf, Of};
+use Keys::{ModifiersOf, Of, Typed};
 
 struct Line {
     label: &'static str,
@@ -139,7 +140,7 @@ const SECTIONS: &[Section] = &[
         key: "Panes",
         title: "Panes & Terminals",
         lines: &[
-            line("Find in terminal", &[Of(Action::TerminalFind)]),
+            line("Find in terminal or document", &[Of(Action::TerminalFind)]),
             noted(
                 "Label the ids on screen",
                 &[Of(Action::TerminalLabelIds)],
@@ -217,6 +218,43 @@ const SECTIONS: &[Section] = &[
     },
 ];
 
+/// The keys documents read by with `vim_mode_enabled` on.
+const VIM: Section = Section {
+    key: "Vim",
+    title: "Vim keys in documents",
+    lines: &[
+        line(
+            "Scroll a line down / up",
+            &[Typed("vim.j", &["j"]), Typed("vim.k", &["k"])],
+        ),
+        line(
+            "Scroll half a page down / up",
+            &[
+                Typed("vim.ctrl-d", &["Ctrl", "D"]),
+                Typed("vim.ctrl-u", &["Ctrl", "U"]),
+            ],
+        ),
+        line(
+            "Go to the top / bottom",
+            &[Typed("vim.gg", &["g", "g"]), Typed("vim.G", &["G"])],
+        ),
+        line(
+            "Next / previous heading",
+            &[Typed("vim.]]", &["]", "]"]), Typed("vim.[[", &["[", "["])],
+        ),
+        noted("Find in document", &[Typed("vim./", &["/"])], |keymap| {
+            format!(
+                "{} finds too, with vim keys off.",
+                label(keymap, &Action::TerminalFind)
+            )
+        }),
+        line(
+            "Next / previous match",
+            &[Typed("vim.n", &["n"]), Typed("vim.N", &["N"])],
+        ),
+    ],
+};
+
 fn label(keymap: &Keymap, action: &Action) -> String {
     keymap
         .binding(action)
@@ -228,6 +266,7 @@ fn label(keymap: &Keymap, action: &Action) -> String {
 fn keycaps(keymap: &Keymap, keys: &Keys) -> Option<Vec<String>> {
     match keys {
         Of(action) => Some(keymap.keycaps(keymap.binding(action)?)),
+        Typed(_, caps) => Some(caps.iter().map(|cap| (*cap).to_owned()).collect()),
         ModifiersOf(action, family) => match keymap.binding(action)? {
             Binding::Chord(chord) => {
                 let mut caps = chord.keycaps_on(keymap.platform());
@@ -249,19 +288,21 @@ fn spoken(keymap: &Keymap, caps: &[String]) -> String {
 }
 
 /// The sheet's sections in two columns, as `.shortcuts-body { column-count: 2 }` balances
-/// them: the first column takes sections until it holds half the rows.
-pub(crate) fn columns(keymap: &Keymap, t: &Tokens) -> [Vec<Block>; 2] {
-    let rows: usize = SECTIONS.iter().map(|s| s.lines.len()).sum();
+/// them: the first column takes sections until it holds half the rows. The vim keys show while
+/// `vim` is on.
+pub(crate) fn columns(keymap: &Keymap, vim: bool, t: &Tokens) -> [Vec<Block>; 2] {
+    let sections: Vec<&Section> = SECTIONS.iter().chain(vim.then_some(&VIM)).collect();
+    let rows: usize = sections.iter().map(|s| s.lines.len()).sum();
     let mut first = 0;
     let mut split = 0;
-    for section in SECTIONS {
+    for section in &sections {
         if first * 2 >= rows {
             break;
         }
         first += section.lines.len();
         split += 1;
     }
-    let (left, right) = SECTIONS.split_at(split);
+    let (left, right) = sections.split_at(split);
     [left, right].map(|sections| {
         sections
             .iter()
@@ -285,6 +326,7 @@ fn row_of(keymap: &Keymap, line: &Line, t: &Tokens) -> El {
         .collect();
     let first = line.keys.first().map(|keys| match keys {
         Of(action) | ModifiersOf(action, _) => action.id(),
+        Typed(id, _) => id,
     });
     let said = combos
         .iter()

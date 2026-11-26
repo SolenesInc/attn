@@ -533,6 +533,7 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
     let crew_on = setting::on(settings, queue::QUEUE_CREW);
     let auto_settle_on = setting::on(settings, AUTO_SETTLE);
     let logos_on = setting::on(settings, crate::sidebar::HARNESS_LOGOS);
+    let vim_on = crate::vim::enabled(settings);
     commands.extend([
         Command::new(
             "toggle-queue-mode",
@@ -585,6 +586,17 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             set(crate::sidebar::HARNESS_LOGOS, !logos_on),
         )
         .describe("Each harness's mark beside its agent"),
+        Command::new(
+            "toggle-vim-mode",
+            if vim_on {
+                "Turn off vim keys for documents"
+            } else {
+                "Turn on vim keys for documents"
+            },
+            &["vim", "keys", "hjkl", "reading", "scroll", "markdown", "document"],
+            set(crate::vim::SETTING, !vim_on),
+        )
+        .describe("j and k scroll, gg and G go to the ends, / finds"),
     ]);
     let focus_style = FocusStyle::chosen();
     commands.extend(FocusStyle::ALL.map(|style| {

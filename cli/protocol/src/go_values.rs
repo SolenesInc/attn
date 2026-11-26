@@ -152,6 +152,7 @@ pub const SETTINGS: &[Setting] = &[
     Setting { key: "color_overrides", machine: false, default_on: false },
     Setting { key: "narrowest_tile_cols", machine: false, default_on: false },
     Setting { key: "hold_opens_overview_enabled", machine: false, default_on: false },
+    Setting { key: "vim_mode_enabled", machine: false, default_on: false },
     Setting { key: "sidebar_width", machine: false, default_on: false },
     Setting { key: "id_labels", machine: false, default_on: false },
     Setting { key: "auto_approve_enabled", machine: false, default_on: true },

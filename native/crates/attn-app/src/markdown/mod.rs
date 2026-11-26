@@ -4,6 +4,9 @@ mod anchoring;
 pub(crate) mod anchors;
 pub(crate) mod annotating;
 pub(crate) mod drafts;
+pub(crate) mod find;
+mod keys;
+pub(crate) use keys::{on_key as reading_key, open_find};
 mod front_matter;
 pub(crate) use front_matter::{Value as FrontMatterValue, entries as front_matter_entries};
 pub(crate) mod ids;
@@ -92,7 +95,13 @@ pub(crate) fn body(
         host: outpost.as_ref().map(|o| o.host.clone()),
     }
     .uri();
-    let marks = annotating::highlights(drafts.get(&uri), readings.tiles.get(tile), tile, t);
+    let mut marks = annotating::highlights(drafts.get(&uri), readings.tiles.get(tile), tile, t);
+    let finding = (content.review.is_none())
+        .then(|| find::finding(readings, &view))
+        .flatten();
+    let found = find::highlights(finding, &content.content, &view);
+    let matches = found.len();
+    marks.extend(found);
     let kept = readings.kept(&view);
     let (widest, measure) = if content.review.is_some() {
         (crate::review::CARD_MAX_WIDTH, PROSE_MEASURE)
@@ -208,7 +217,8 @@ pub(crate) fn body(
     });
     let seen = format!("tile.{tile}.document");
     let marking = annotating::in_document(readings, tile, (&root, &seen), padding, t);
-    scroll(card(reading).children(marking))
+    let bar = finding.map(|finding| find::bar(&view, finding, matches, keys::source(tile), t));
+    scroll(card(reading).children(marking)).children(bar)
 }
 
 /// The document `content` holds, read `width` points across as its tile reads it, with no marks and

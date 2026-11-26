@@ -97,6 +97,8 @@ pub struct Readings {
     copied: Option<(String, usize, f64)>,
     /// Each review tile's reading.
     pub(crate) reviews: crate::review::Reviews,
+    /// Each document's find bar, by the scroll view the document reads in.
+    pub(crate) finds: HashMap<String, super::find::Finding>,
     widths: HashMap<String, u32>,
     /// The ids every reading links.
     pub(crate) ids: crate::terminal::Known,

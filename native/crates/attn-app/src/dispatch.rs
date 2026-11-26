@@ -47,7 +47,7 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
             return Outcome::Ran;
         }
         if action == Action::TerminalFind {
-            return if crate::desktop::find_in_terminal(state, tx) {
+            return if crate::desktop::find_in_tile(state, tx) {
                 Outcome::Ran
             } else {
                 Outcome::Unavailable

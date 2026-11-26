@@ -76,8 +76,8 @@ pub(crate) const GROUPS: &[Group] = &[
             item(
                 Section::General,
                 "Appearance",
-                "Theme, color scheme, text size, id labels, layout widths and the overview, for the app and for the garden.",
-                "theme appearance dark light system color colour scheme catppuccin mocha frappe macchiato latte tokyo night custom colors overrides reset font size text scale zoom garden id labels hint lantern name in place layout narrowest tile width columns sidebar width overview hold keys walk",
+                "Theme, color scheme, text size, id labels, layout widths, the overview and vim keys, for the app and for the garden.",
+                "theme appearance dark light system color colour scheme catppuccin mocha frappe macchiato latte tokyo night custom colors overrides reset font size text scale zoom garden id labels hint lantern name in place layout narrowest tile width columns sidebar width overview hold keys walk vim keys reading scroll hjkl motion",
             ),
             item(
                 Section::Desktop,

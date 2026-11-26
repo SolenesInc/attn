@@ -42,7 +42,7 @@ use rune::Tx;
 use crate::State;
 
 pub(crate) use actions::{
-    activate, activate_started, escape, find as find_in_terminal, give_keyboard, move_to_desktop,
+    activate, activate_started, escape, find as find_in_tile, give_keyboard, move_to_desktop,
     remove_tile, reveal_leaf, run, show_leaf, show_unseen,
 };
 pub(crate) use close::{Closing, view as close_confirmation};

@@ -41,6 +41,19 @@ on Linux) opens a shell beside the tile you're looking at, and Cmd+Shift+D
 Drag a tile to rearrange it on the desktop. Drag it over a desktop in the
 sidebar to switch to that desktop and drop it there.
 
+In a markdown tile, Cmd+F (Ctrl+Shift+F on Linux) finds text in the document.
+Enter and Shift+Enter step to the next and previous match and give the keys back
+to the document, and Esc closes the find bar.
+
+To read markdown tiles with vim keys, turn on **Read documents with vim keys** in
+**Settings → Appearance**, or run "Turn on vim keys for documents" from the
+command palette, or `attn settings set vim_mode_enabled true`. It is off by
+default. Then, in the markdown tile that has the keyboard, j and k scroll a line,
+Ctrl+D and Ctrl+U scroll half a page, gg and G go to the top and the bottom, and
+]] and [[ go to the next and previous heading. / opens the find bar, and n and N
+step through its matches. The keys never reach a terminal, a text field or a
+browser page, and selecting text and typing still starts a comment.
+
 Cmd+Option+arrows (Ctrl+Shift+arrows on Linux) move between tiles. At the edge of
 a desktop, they move to the next desktop, and on an empty desktop they move
 straight on from its launcher. Cmd+[ and Cmd+] (Ctrl+Shift+[ and ] on Linux) move

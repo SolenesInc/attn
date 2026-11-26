@@ -43,6 +43,8 @@ pub struct Window {
     pub(crate) diagnostic_report: Option<crate::diagnostic_report::Draft>,
     pub notice: Option<Notice>,
     pub(crate) leader: Option<Leader>,
+    /// The first key of a vim sequence, waiting for its second.
+    pub(crate) vim_prefix: Option<crate::vim::Pending>,
     /// The tile that takes keys while nothing else in the window has focus. It is apart from
     /// the active tile: another window, or the daemon, can change the active tile without
     /// taking this window's keyboard.
@@ -507,25 +509,24 @@ impl Window {
                 return;
             }
         }
-        let kept = self.keyboard.as_ref().is_some_and(|holder| {
-            holder.desktop == desktop.id
-                && (desktop.panes.iter().any(|p| p.pane_id == holder.pane)
-                    || desktop
-                        .leaves()
-                        .iter()
-                        .any(|leaf| leaf.id == holder.pane && leaf.tile().is_some()))
-        });
+        let holds = |pane: &str| {
+            desktop.panes.iter().any(|p| p.pane_id == pane)
+                || desktop
+                    .leaves()
+                    .iter()
+                    .any(|leaf| leaf.id == pane && leaf.tile().is_some())
+        };
+        let kept = self
+            .keyboard
+            .as_ref()
+            .is_some_and(|holder| holder.desktop == desktop.id && holds(&holder.pane));
         if kept {
             return;
         }
-        self.keyboard = desktop
-            .panes
-            .iter()
-            .any(|p| p.pane_id == desktop.active_pane_id)
-            .then(|| Holder {
-                desktop: desktop.id.clone(),
-                pane: desktop.active_pane_id.clone(),
-            });
+        self.keyboard = holds(&desktop.active_pane_id).then(|| Holder {
+            desktop: desktop.id.clone(),
+            pane: desktop.active_pane_id.clone(),
+        });
     }
 
     /// The terminal the keyboard holder shows, by its runtime id.
@@ -547,6 +548,7 @@ pub(crate) fn expire(state: &mut State, _: f64, tx: &mut Tx) -> bool {
         .take_if(|n| !n.held && now >= n.until)
         .is_some();
     let leader = window.leader.take_if(|l| now >= l.until).is_some();
+    let vim = window.vim_prefix.take_if(|p| now >= p.until).is_some();
     let label = window
         .desk
         .width_label
@@ -557,7 +559,7 @@ pub(crate) fn expire(state: &mut State, _: f64, tx: &mut Tx) -> bool {
         .label_until
         .take_if(|until| now >= *until)
         .is_some();
-    switched || notice || leader || label || sidebar_label
+    switched || notice || leader || vim || label || sidebar_label
 }
 
 pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
@@ -964,7 +966,8 @@ fn close_layer(state: &mut State, tx: &mut Tx) {
 }
 
 fn shortcuts(state: &State, t: &Tokens, layers: &mut Vec<El>) {
-    let [left, right] = crate::cheat_sheet::columns(&state.keymap, t);
+    let [left, right] =
+        crate::cheat_sheet::columns(&state.keymap, crate::vim::enabled(&state.facts.settings), t);
     Dialog::new("shortcuts", "Keyboard Shortcuts")
         .size(DialogSize::Sheet)
         .body_key("shortcuts.list")

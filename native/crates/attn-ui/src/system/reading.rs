@@ -33,6 +33,11 @@ impl Reading {
         self.metrics().0
     }
 
+    /// How far apart the role's lines sit.
+    pub fn line_height(self) -> f32 {
+        self.metrics().2
+    }
+
     pub(crate) const fn metrics(self) -> (f32, f32, f32) {
         match self {
             Reading::Text => (15.0, 400.0, 24.0),

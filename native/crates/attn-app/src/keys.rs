@@ -85,6 +85,9 @@ fn route(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> bool
     if !field && crate::review::on_key(state, ev, tx) {
         return true;
     }
+    if !field && crate::markdown::reading_key(state, ev, tx) {
+        return true;
+    }
     if ev.key == Key::Escape
         && tx.focused().is_none()
         && crate::annotations::draft::escape(state, tx)

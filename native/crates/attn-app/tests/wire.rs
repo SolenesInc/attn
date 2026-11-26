@@ -227,5 +227,6 @@ mod wire {
     mod tile_overlays;
     mod title_bar;
     mod update_run;
+    mod vim_reading;
     mod whats_new;
 }
