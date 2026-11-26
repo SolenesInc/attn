@@ -1,0 +1,8 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "fix: stale attn_do long-text assertion in Daemon (4)",
+  "at": "2026-11-26T19:52:08.403Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45884814610",
+  "repairs": "9b7c54482"
+}
