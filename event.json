@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Recreated shared launch desktops become ephemeral",
+  "at": "2026-11-26T21:08:39.821Z",
+  "detail": "After a crew and automation share an unslotted launch desktop and it is manually closed, a new launch restores both bindings but marks the desktop ephemeral. Keep shared permanence when recreating it.\nIndependently corroborated at cec7eaba2. Isolated regression receipts are attached to s-1hpv1w.\n"
+}
