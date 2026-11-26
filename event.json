@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Uncapped Garden window widens stale archive tally case",
+  "at": "2026-11-26T18:10:27.899Z",
+  "detail": "New trigger for existing P1 bug 74ac6ac at 23b1ccf3a: report a check on the only seed in a one-seed closed archive. The page revision moves from 3 to 4 but the now-empty live window, total, and counters are unchanged, so the V1 Board keeps the old tally. Independently confirmed and wire-reproduced in both input modes. Route to the existing archive-refresh owner s-g82g06. Evidence is on s-xmzdax.\n"
+}
