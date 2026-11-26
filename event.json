@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: A live split shell is hidden as a finished run",
+  "at": "2026-11-26T23:42:35.343Z",
+  "detail": "A live split shell is hidden as a finished run\n\nnative/crates/attn-app/src/sidebar/model.rs:869\n\nSplit a shell beside an automation run or one of its delegates, then switch desktops. The shell's parent links it to the automation and the daemon reports the shell idle. The sidebar folds the shell behind Finished runs while the terminal remains open and usable. Keep live split shells visible in Automations without counting them as completed runs.\n\nReviewed at 90dd08587830aa15e6c2158d10f006dfc325f5e4. Independently confirmed by source trace. Review seed s-ncxe0p.\n"
+}
