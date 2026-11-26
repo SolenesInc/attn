@@ -59,7 +59,6 @@ type Server struct {
 	Name        string     `yaml:"name"`
 	Description string     `yaml:"description"`
 	Intro       string     `yaml:"intro"`
-	Split       string     `yaml:"split"`
 	Do          ScriptTool `yaml:"do"`
 	Read        ScriptTool `yaml:"read"`
 }
@@ -131,7 +130,6 @@ type Reference struct {
 type Command struct {
 	Name              string           `yaml:"name"`
 	Summary           string           `yaml:"summary"`
-	Core              bool             `yaml:"core"`
 	Tool              bool             `yaml:"tool"`
 	Upfront           bool             `yaml:"upfront"`
 	Runs              Runs             `yaml:"runs"`
@@ -631,18 +629,6 @@ func (c *Catalog) DoDescription() string {
 	return strings.Join(parts, "\n")
 }
 
-func (c *Catalog) CoreInstructions() string {
-	var core []string
-	for i := range c.Commands {
-		if c.Commands[i].Core {
-			core = append(core, c.Commands[i].ToolName())
-		}
-	}
-	slices.Sort(core)
-	split := strings.ReplaceAll(c.Server.Split, "{core}", strings.Join(core, ", "))
-	return c.instructions(strings.TrimSpace(c.Server.Intro) + "\n\n" + split)
-}
-
 func (c *Catalog) instructions(intro string) string {
 	var rows, notes []string
 	for _, top := range c.TopLevel() {
@@ -704,7 +690,6 @@ func (c *Catalog) mapProblems() []string {
 		if len(m.Rows) == 0 {
 			add("map has no rows")
 		}
-		mapped := map[string]bool{}
 		for _, row := range m.Rows {
 			if strings.TrimSpace(row.Need) == "" || strings.Contains(row.Need, "|") || strings.Contains(strings.TrimSpace(row.Need), "\n") {
 				add("a map row's need must be one line without |")
@@ -716,12 +701,6 @@ func (c *Catalog) mapProblems() []string {
 				if !tools[name] {
 					add("map row %q names %q, which is not a tool of this family", row.Need, name)
 				}
-				mapped[name] = true
-			}
-		}
-		for _, cmd := range c.Tools(top.Name) {
-			if cmd.Core && !mapped[cmd.ToolName()] {
-				add("core tool %q is in no map row; a core tool is always loaded, so the map must say when to call it", cmd.ToolName())
 			}
 		}
 	}

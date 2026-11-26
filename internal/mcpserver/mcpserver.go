@@ -16,13 +16,12 @@ const latestProtocolVersion = "2025-11-25"
 var protocolVersions = []string{latestProtocolVersion, "2025-06-18", "2025-03-26", "2024-11-05"}
 
 type Tool struct {
-	Name         string          `json:"name"`
-	Title        string          `json:"title,omitempty"`
-	Description  string          `json:"description,omitempty"`
-	InputSchema  json.RawMessage `json:"inputSchema"`
-	OutputSchema json.RawMessage `json:"outputSchema,omitempty"`
-	Annotations  *Annotations    `json:"annotations,omitempty"`
-	Meta         map[string]any  `json:"_meta,omitempty"`
+	Name        string          `json:"name"`
+	Title       string          `json:"title,omitempty"`
+	Description string          `json:"description,omitempty"`
+	InputSchema json.RawMessage `json:"inputSchema"`
+	Annotations *Annotations    `json:"annotations,omitempty"`
+	Meta        map[string]any  `json:"_meta,omitempty"`
 }
 
 type Annotations struct {
@@ -31,9 +30,8 @@ type Annotations struct {
 }
 
 type Result struct {
-	Content           []Content `json:"content"`
-	StructuredContent any       `json:"structuredContent,omitempty"`
-	IsError           bool      `json:"isError,omitempty"`
+	Content []Content `json:"content"`
+	IsError bool      `json:"isError,omitempty"`
 }
 
 type Content struct {

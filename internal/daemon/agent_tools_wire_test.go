@@ -485,9 +485,6 @@ func TestTheServerOffersExactlyFourToolsEachWholeInTheFirstRequest(t *testing.T)
 		if length := len([]rune(tool.Description)); length == 0 || length > claudeCodeKeeps {
 			t.Errorf("the description of %s is %d characters; Claude Code keeps %d", tool.Name, length, claudeCodeKeeps)
 		}
-		if tool.OutputSchema != nil {
-			t.Errorf("%s promises structured content, and its answer is text", tool.Name)
-		}
 		if tool.Annotations == nil || tool.Annotations.ReadOnlyHint != onlyReads[tool.Name] {
 			t.Errorf("%s is annotated %+v, want it to only read: %t", tool.Name, tool.Annotations, onlyReads[tool.Name])
 		}

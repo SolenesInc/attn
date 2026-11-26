@@ -43,10 +43,9 @@ type ServerMCPRegistration struct {
 
 // ServerToolResult is an MCP tools/call result as the server received it.
 type ServerToolResult struct {
-	IsError           bool                    `json:"isError"`
-	Content           []struct{ Text string } `json:"content"`
-	StructuredContent json.RawMessage         `json:"structuredContent"`
-	Refused           string                  `json:"refused,omitempty"`
+	IsError bool                    `json:"isError"`
+	Content []struct{ Text string } `json:"content"`
+	Refused string                  `json:"refused,omitempty"`
 }
 
 func (r ServerToolResult) Text() string {

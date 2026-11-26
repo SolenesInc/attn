@@ -145,11 +145,6 @@ func TestLoadRefusesWhatWouldBreakAHarnessOrAnUnmarkedCommand(t *testing.T) {
 			want:  []string{"list.yaml: family \"list\"", "offers tools but has no map"},
 		},
 		{
-			name:  "a core tool the map does not name",
-			files: map[string]string{"seed.yaml": goodFamily + "  - {name: seed notes, summary: the log, core: true, runs: home, grant: own, effect: read, doc: Reads the log.}\n"},
-			want:  []string{"seed.yaml: family \"seed\"", `core tool "seed_notes" is in no map row`},
-		},
-		{
 			name:  "a command without runs",
 			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "    runs: home\n", "", 1)},
 			want:  []string{"seed.yaml: seed show: runs is missing", "home or here"},

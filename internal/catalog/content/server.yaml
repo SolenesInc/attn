@@ -12,7 +12,6 @@ server:
   description: attn's commands to track, report or hand off work, and to reach the user and other agents.
   intro: |
     attn runs the commands below. Call them as functions in a script: `attn_do` runs any of them, `attn_read` those that only read. `ask` and `skill` are also tools of their own. Find a command by the words below. Call a command that `attn_do` shows a signature for. Before you first call any other, read its row's reference, named in parentheses, with `skill({reference: "…"})`, or its rules with `skill({command: "…"})`. For `guide X`, call `guide({topic: "X"})`.
-  split: "This server, attn-core, holds {core}. The server attn holds every other tool."
   do:
     title: Run attn commands
     script: the script, in JavaScript

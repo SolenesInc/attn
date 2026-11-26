@@ -15,17 +15,15 @@ import (
 )
 
 type toolDefinition struct {
-	Command      string         `json:"command"`
-	Name         string         `json:"name"`
-	Title        string         `json:"title"`
-	Description  string         `json:"description"`
-	Core         bool           `json:"core,omitempty"`
-	Tool         bool           `json:"tool,omitempty"`
-	Signature    string         `json:"signature"`
-	Effect       catalog.Effect `json:"effect"`
-	InputSchema  map[string]any `json:"inputSchema"`
-	OutputSchema map[string]any `json:"outputSchema,omitempty"`
-	Receipt      []string       `json:"receipt,omitempty"`
+	Command     string         `json:"command"`
+	Name        string         `json:"name"`
+	Title       string         `json:"title"`
+	Description string         `json:"description"`
+	Tool        bool           `json:"tool,omitempty"`
+	Signature   string         `json:"signature"`
+	Effect      catalog.Effect `json:"effect"`
+	InputSchema map[string]any `json:"inputSchema"`
+	Receipt     []string       `json:"receipt,omitempty"`
 }
 
 type scriptTool struct {
@@ -48,30 +46,24 @@ func writeTools(c *catalog.Catalog, goRoot string) error {
 			Name:        cmd.ToolName(),
 			Title:       g.toolText(where, cmd.Summary),
 			Description: strings.TrimSpace(g.toolText(where, cmd.Doc)),
-			Core:        cmd.Core,
 			Tool:        cmd.Tool,
 			Signature:   c.Signature(cmd),
 			Effect:      cmd.Effect,
 			InputSchema: g.inputSchema(cmd),
+			Receipt:     cmd.Receipt,
 		}
 		if n := utf8.RuneCountInString(tool.Description); cmd.Tool && n > catalog.MaxUpfrontChars {
 			g.problems = append(g.problems, fmt.Sprintf("%s: the description of %s is %d characters, over the limit of %d that Claude Code keeps", where, tool.Name, n, catalog.MaxUpfrontChars))
 		}
-		if cmd.Result != "" {
+		if len(cmd.Receipt) > 0 {
 			schema, err := bundledSchema(cmd.Result)
 			if err != nil {
 				return fmt.Errorf("%s: result %s: %w", where, cmd.Result, err)
 			}
-			if schema["type"] != "object" {
-				return fmt.Errorf("%s: result %s is not an object; an MCP outputSchema must be one", where, cmd.Result)
+			defs, _ := schema["$defs"].(map[string]any)
+			if err := checkReceipt(schema, defs, catalog.ReceiptOf(cmd.Receipt), ""); err != nil {
+				return fmt.Errorf("%s: receipt of %s: %w", where, cmd.Result, err)
 			}
-			if tool.Receipt = cmd.Receipt; len(tool.Receipt) > 0 {
-				schema, err = receiptSchema(schema, tool.Receipt)
-				if err != nil {
-					return fmt.Errorf("%s: receipt of %s: %w", where, cmd.Result, err)
-				}
-			}
-			tool.OutputSchema = schema
 		}
 		tools = append(tools, tool)
 	}
@@ -80,7 +72,7 @@ func writeTools(c *catalog.Catalog, goRoot string) error {
 	}
 	do, read := c.Server.Do, c.Server.Read
 	server, err := json.Marshal(map[string]any{
-		"name": c.Server.Name, "description": c.Server.Description, "instructions": c.Instructions(), "core_instructions": c.CoreInstructions(),
+		"name": c.Server.Name, "description": c.Server.Description, "instructions": c.Instructions(),
 		"do":   scriptTool{Title: do.Title, Description: c.DoDescription(), Script: do.Script},
 		"read": scriptTool{Title: read.Title, Description: strings.TrimSpace(read.Text), Script: read.Script},
 	})
@@ -185,80 +177,40 @@ func bundledSchema(model string) (map[string]any, error) {
 	return root, nil
 }
 
-func receiptSchema(model map[string]any, paths []string) (map[string]any, error) {
-	defs, _ := model["$defs"].(map[string]any)
-	cut, err := cutSchema(model, defs, catalog.ReceiptOf(paths), "")
-	if err != nil {
-		return nil, err
-	}
-	kept := map[string]any{}
-	var keep func(schema any)
-	keep = func(schema any) {
-		eachRef(schema, func(_ map[string]any, ref string) {
-			name := strings.TrimPrefix(ref, defsPrefix)
-			if _, done := kept[name]; !done {
-				kept[name] = defs[name]
-				keep(defs[name])
-			}
-		})
-	}
-	keep(cut)
-	if len(kept) > 0 {
-		cut["$defs"] = kept
-	}
-	return cut, nil
-}
-
-func cutSchema(schema, defs map[string]any, receipt catalog.Receipt, at string) (map[string]any, error) {
+func checkReceipt(schema, defs map[string]any, receipt catalog.Receipt, at string) error {
 	if receipt.Whole() {
-		return schema, nil
+		return nil
 	}
 	if ref, ok := schema["$ref"].(string); ok {
-		return cutSchema(defs[strings.TrimPrefix(ref, defsPrefix)].(map[string]any), defs, receipt, at)
+		return checkReceipt(defs[strings.TrimPrefix(ref, defsPrefix)].(map[string]any), defs, receipt, at)
 	}
 	if items, ok := schema["items"].(map[string]any); ok {
-		cut, err := cutSchema(items, defs, receipt, at)
-		return map[string]any{"type": "array", "items": cut}, err
+		return checkReceipt(items, defs, receipt, at)
 	}
-	properties, required := objectFields(schema, defs)
-	kept := map[string]any{}
-	var keptRequired []any
+	properties := objectProperties(schema, defs)
 	for _, name := range receipt.Names() {
 		path := strings.TrimPrefix(at+"."+name, ".")
 		property, ok := properties[name].(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("no field %q; fields here: %s", path, strings.Join(slices.Sorted(maps.Keys(properties)), ", "))
+			return fmt.Errorf("no field %q; fields here: %s", path, strings.Join(slices.Sorted(maps.Keys(properties)), ", "))
 		}
-		cut, err := cutSchema(property, defs, receipt[name], path)
-		if err != nil {
-			return nil, err
-		}
-		kept[name] = cut
-		if slices.Contains(required, any(name)) {
-			keptRequired = append(keptRequired, name)
+		if err := checkReceipt(property, defs, receipt[name], path); err != nil {
+			return err
 		}
 	}
-	cut := map[string]any{"type": "object", "properties": kept}
-	if len(keptRequired) > 0 {
-		cut["required"] = keptRequired
-	}
-	return cut, nil
+	return nil
 }
 
-func objectFields(schema, defs map[string]any) (map[string]any, []any) {
+func objectProperties(schema, defs map[string]any) map[string]any {
 	properties := map[string]any{}
-	var required []any
 	bases, _ := schema["allOf"].([]any)
 	for _, base := range bases {
 		ref := base.(map[string]any)["$ref"].(string)
-		inherited, inheritedRequired := objectFields(defs[strings.TrimPrefix(ref, defsPrefix)].(map[string]any), defs)
-		maps.Copy(properties, inherited)
-		required = append(required, inheritedRequired...)
+		maps.Copy(properties, objectProperties(defs[strings.TrimPrefix(ref, defsPrefix)].(map[string]any), defs))
 	}
 	own, _ := schema["properties"].(map[string]any)
 	maps.Copy(properties, own)
-	ownRequired, _ := schema["required"].([]any)
-	return properties, append(required, ownRequired...)
+	return properties
 }
 
 func readModelSchema(model string) (map[string]any, error) {
