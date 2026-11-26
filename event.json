@@ -1,0 +1,10 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "TestABodyWrittenAsTheUpfrontTextSaysIsStoredAsMeant fails on main",
+  "at": "2026-11-26T19:52:12.266Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45884814610",
+  "severity": "p1",
+  "source": "ci",
+  "culprit": "9b7c54482f8b8a5c9790538ece3a6e3657942d86"
+}
