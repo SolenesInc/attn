@@ -1,0 +1,1 @@
+A resumed automation returns to its launch desktop after cleanup, and a recreated shared desktop stays around. Upgrades preserve surviving legacy desktops, and a GitHub review batch honors repository exclusions saved while it is running.
