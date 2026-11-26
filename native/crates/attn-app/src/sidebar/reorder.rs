@@ -1,12 +1,10 @@
-use attn_protocol::DesktopReorderMessage;
 use attn_ui::system::ListRow;
 
 use rune::Tx;
 
 use super::line_height;
-use super::model::Line;
-use crate::State;
-use crate::requests::Refused;
+use super::model::{Line, ordered_desktops};
+use crate::{Action, State};
 
 /// Points the pointer travels before a press on a desktop becomes a drag.
 const THRESHOLD: f32 = 6.0;
@@ -129,10 +127,9 @@ pub fn seam_target(state: &State, lines: &[Line]) -> Option<(usize, Seam)> {
 /// The drag on desktop `desktop`'s row: past the threshold it follows the pointer from seam
 /// to seam, and the release moves the desktop there.
 pub(crate) fn drag(state: &mut State, desktop: &str, d: &rune::Drag, tx: &mut Tx) {
-    let home = state.window.view == crate::shell::View::Home;
-    let lines = super::model::desktop_lines(&state.facts, Some(&state.window.garden), home, &[]);
+    let lines = super::lines(state);
     let layout = spans(&lines);
-    let Some(span) = layout.iter().find(|s| s.id == desktop) else {
+    let Some(from) = layout.iter().position(|span| span.id == desktop) else {
         return;
     };
     match d.phase {
@@ -141,7 +138,7 @@ pub(crate) fn drag(state: &mut State, desktop: &str, d: &rune::Drag, tx: &mut Tx
             if state.window.reorder.is_none() && d.dx.hypot(d.dy) < THRESHOLD {
                 return;
             }
-            let y = span.header_top + d.start_y + d.dy;
+            let y = layout[from].header_top + d.start_y + d.dy;
             state.window.reorder = Some(Reorder {
                 desktop: desktop.to_owned(),
                 seam: nearest(&layout, y),
@@ -151,62 +148,28 @@ pub(crate) fn drag(state: &mut State, desktop: &str, d: &rune::Drag, tx: &mut Tx
             let Some(reorder) = state.window.reorder.take() else {
                 return;
             };
-            if d.cancelled() {
+            let seam = reorder.seam;
+            if d.cancelled() || seam == from || seam == from + 1 {
                 return;
             }
-            let order: Vec<&str> = layout.iter().map(|s| s.id).collect();
-            if let Some((previous, next)) = placement(&order, &reorder.desktop, reorder.seam) {
-                state.act(
-                    |request_id| DesktopReorderMessage {
-                        request_id,
-                        desktop_id: reorder.desktop,
-                        previous_desktop_id: previous,
-                        next_desktop_id: next,
-                        ..DesktopReorderMessage::new()
-                    },
-                    Refused::Bare,
-                    |_, _, _| {},
-                    tx,
-                );
-            }
+            let (anchor, after) = match layout.get(seam) {
+                Some(next) => (next.id, false),
+                None => (
+                    layout.last().expect("the dragged desktop has a span").id,
+                    true,
+                ),
+            };
+            let profile = state.facts.profiles.selected.clone();
+            let mut desktops: Vec<String> = ordered_desktops(&state.facts.desktops)
+                .into_iter()
+                .filter(|d| d.profile_id == profile && d.id != reorder.desktop)
+                .map(|d| d.id.clone())
+                .collect();
+            let Some(at) = desktops.iter().position(|id| id == anchor) else {
+                return;
+            };
+            desktops.insert(at + usize::from(after), reorder.desktop);
+            crate::desktop::run(state, &Action::SetDesktopOrder { profile, desktops }, tx);
         }
-    }
-}
-
-/// The desktops either side of where `desktop` lands at `seam`; none when it stays put.
-fn placement(
-    order: &[&str],
-    desktop: &str,
-    seam: usize,
-) -> Option<(Option<String>, Option<String>)> {
-    let from = order.iter().position(|id| *id == desktop)?;
-    if seam == from || seam == from + 1 {
-        return None;
-    }
-    let rest: Vec<&str> = order.iter().copied().filter(|id| *id != desktop).collect();
-    let at = if seam > from { seam - 1 } else { seam };
-    let previous = at
-        .checked_sub(1)
-        .and_then(|i| rest.get(i))
-        .map(|id| (*id).to_owned());
-    let next = rest.get(at).map(|id| (*id).to_owned());
-    Some((previous, next))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::placement;
-
-    #[test]
-    fn a_desktop_lands_between_the_desktops_either_side_of_its_seam_and_stays_put_beside_itself() {
-        let order = ["a", "b", "c"];
-        let some =
-            |p: Option<&str>, n: Option<&str>| Some((p.map(str::to_owned), n.map(str::to_owned)));
-        assert_eq!(placement(&order, "b", 1), None);
-        assert_eq!(placement(&order, "b", 2), None);
-        assert_eq!(placement(&order, "b", 0), some(None, Some("a")));
-        assert_eq!(placement(&order, "b", 3), some(Some("c"), None));
-        assert_eq!(placement(&order, "a", 2), some(Some("b"), Some("c")));
-        assert_eq!(placement(&order, "c", 1), some(Some("a"), Some("b")));
     }
 }

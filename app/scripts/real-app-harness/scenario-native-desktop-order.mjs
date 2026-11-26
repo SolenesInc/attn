@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -31,20 +32,23 @@ function sortedOrder(desktops) {
   }).map((d) => d.id);
 }
 
-function sidebarOrder(node, ids, found = []) {
-  const id = node?.key?.startsWith('sidebar.desktop.') ? node.key.slice('sidebar.desktop.'.length) : null;
-  if (id && ids.includes(id)) found.push(id);
-  for (const child of node?.children ?? []) sidebarOrder(child, ids, found);
+function sidebarOrder(node, ids, inStrip = false, found = []) {
+  const folded = inStrip || node.key === 'sidebar.empty_desktops';
+  const id = node.key?.startsWith('sidebar.desktop.') ? node.key.slice('sidebar.desktop.'.length) : null;
+  if (id && ids.includes(id)) found.push({ id, folded });
+  for (const child of node.children ?? []) sidebarOrder(child, ids, folded, found);
   return found;
 }
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-async function arrangedAs(ids, description) {
+async function arrangedAs(ids, emptyFixtures, description) {
   await observer.waitFor(() => same(observer.desktops.map((d) => d.id), ids), description);
   await driver.state('desktops', { expect: ids.map((id) => ({ id })) });
-  const shown = sidebarOrder(await driver.tree(), ids);
-  runner.assert(same(shown, ids), `the sidebar lists the desktops ${description}`, { shown, ids });
+  const expected = ids.filter((id) => emptyFixtures.includes(id)).map((id) => ({ id, folded: true }));
+  const shown = sidebarOrder(await driver.tree(), emptyFixtures);
+  runner.assert(same(shown, expected),
+    `the sidebar folds the scenario's empty desktops ${description}`, { shown, expected });
 }
 
 try {
@@ -52,8 +56,13 @@ try {
   const frontmostBefore = checksFocus ? await driver.frontmostBundleId() : null;
   await runner.step('launch_app', () => launchFreshAppAndConnect(client, observer));
 
+  await driver.run('session.goToDashboard');
+  await driver.state('window', { expect: { view: 'Home' } });
   let before;
   let sorted;
+  let emptyFixtures;
+  let six;
+  let nine;
   await runner.step('arrange_desktops_by_hand', async () => {
     const create = async (slot, name) => {
       const result = await observer.profileCommand('desktop_create', { profile_id: observer.profileId, shortcut_slot: slot, name });
@@ -64,17 +73,63 @@ try {
       });
       return id;
     };
-    const six = await create(6, 'Six');
-    const nine = await create(9, 'Nine');
+    six = await create(6, 'Six');
+    nine = await create(9, 'Nine');
     const named10 = await create(0, 'Review 10');
     const named2 = await create(0, 'review 2');
     const alpha = await create(0, 'Alpha');
-    const others = observer.desktops.map((d) => d.id).filter((id) => ![six, nine, named10, named2, alpha].includes(id));
+    emptyFixtures = [six, nine, named10, named2, alpha];
+    const others = observer.desktops.map((d) => d.id).filter((id) => !emptyFixtures.includes(id));
     before = [nine, named10, ...others, six, named2, alpha];
     await observer.profileCommand('desktop_set_order', { profile_id: observer.profileId, desktop_ids: before });
-    await arrangedAs(before, 'in the order set by hand');
+    await arrangedAs(before, emptyFixtures, 'in the order set by hand');
     sorted = sortedOrder(observer.desktops);
     runner.assert(!same(sorted, before), 'the hand order is not already sorted', { before, sorted });
+  });
+
+  await runner.step('drag_below_the_last_stacked_desktop', async () => {
+    const closeShell = async (id) => {
+      if (!observer.desktopOf(id)) return;
+      await observer.unregisterSession(id);
+      await observer.waitFor(() => !observer.desktopOf(id), `the shell ${id} left its desktop`);
+    };
+    const spawn = async (desktop, label) => {
+      const id = crypto.randomUUID();
+      const reply = observer.waitForMessage((message) =>
+        message.event === 'spawn_result' && message.id === id && message, `${label} shell spawned`);
+      observer.send({
+        cmd: 'spawn_session', id, agent: 'shell', cwd: runner.sessionDir,
+        profile_id: observer.profileId, placement: { desktop_id: desktop }, label, cols: 80, rows: 24,
+      });
+      const result = await reply;
+      runner.assert(result.success, `the shell opens on ${label}`, result);
+      runner.registerCleanup(`unregister_${label}`, () => closeShell(id));
+      await observer.waitForDesktopOf(id, (entry) => entry.id === desktop, `the shell on ${label}`);
+      return id;
+    };
+    const nineShell = await spawn(nine, 'Nine');
+    const sixShell = await spawn(six, 'Six');
+    await driver.run('session.goToDashboard');
+    await driver.state('window', { expect: { view: 'Home' } });
+    await driver.drag(
+      { key: `sidebar.desktop.${nine}` },
+      { target: { key: `sidebar.session.${sixShell}` }, at: [0.5, 0.9] },
+    );
+
+    const expected = before.filter((id) => id !== nine);
+    expected.splice(expected.indexOf(six) + 1, 0, nine);
+    await observer.waitFor(() => same(observer.desktops.map((d) => d.id), expected), 'the full order after the drag');
+    await driver.state('desktops', { expect: expected.map((id) => ({ id })) });
+    await driver.atRest();
+    const shown = sidebarOrder(await driver.tree(), emptyFixtures);
+    const folded = expected.filter((id) => emptyFixtures.includes(id) && id !== six && id !== nine);
+    const visible = [{ id: six, folded: false }, { id: nine, folded: false }, ...folded.map((id) => ({ id, folded: true }))];
+    runner.assert(same(shown, visible), 'the sidebar shows the new stacked order above the folded strip', { shown, visible });
+    await driver.screenshot(path.join(runner.runDir, 'dragged-below-stacked.png'));
+    await closeShell(nineShell);
+    await closeShell(sixShell);
+    await observer.profileCommand('desktop_set_order', { profile_id: observer.profileId, desktop_ids: before });
+    await arrangedAs(before, emptyFixtures, 'back in the order set by hand');
   });
 
   await runner.step('sort_from_palette', async () => {
@@ -84,7 +139,7 @@ try {
     await driver.waitFor({ key: 'palette.row.command:sort-desktops' });
     await driver.pressKey('Enter');
     await driver.waitFor({ key: 'palette' }, { gone: true });
-    await arrangedAs(sorted, 'numbered first, then by name');
+    await arrangedAs(sorted, emptyFixtures, 'numbered first, then by name');
     const offer = await driver.waitFor({ key: 'notice.offer' });
     await driver.hover({ key: 'notice.offer' });
     runner.assert(offer.name === 'Desktops sorted Undo', 'the notice offers Undo', offer);
@@ -93,7 +148,7 @@ try {
 
   await runner.step('undo_restores_order', async () => {
     await driver.click({ key: 'notice.offer' });
-    await arrangedAs(before, 'back in the order before the sort');
+    await arrangedAs(before, emptyFixtures, 'back in the order before the sort');
     const done = await driver.waitFor({ key: 'notice.offer' });
     runner.assert(done.name === 'Desktops sorted ✓ Done', 'the notice says Undo is done', done);
     await driver.screenshot(path.join(runner.runDir, 'undone.png'));

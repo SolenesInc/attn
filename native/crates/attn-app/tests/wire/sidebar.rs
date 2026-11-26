@@ -465,11 +465,12 @@ fn dragging_a_desktop_shows_where_it_lands_and_the_release_places_it_between_its
     );
     world.gesture(|app| app.runtime.pointer_up(x, below[1] - rect[1] + y - 8.0));
 
-    let moved = world.daemon.sent_of("desktop_reorder");
+    let moved = world.daemon.sent_of("desktop_set_order");
     assert_eq!(moved.len(), 1);
-    assert_eq!(moved[0]["desktop_id"], "d1");
-    assert_eq!(moved[0]["previous_desktop_id"], "d2");
-    assert_eq!(moved[0]["next_desktop_id"], "d3");
+    assert_eq!(
+        moved[0]["desktop_ids"],
+        serde_json::json!(["d2", "d1", "d3"])
+    );
     assert_eq!(
         world.daemon.sent_of("desktop_set_current").len(),
         opened,
@@ -491,14 +492,10 @@ fn dragging_a_desktop_shows_where_it_lands_and_the_release_places_it_between_its
         app.runtime.pointer_move(lx, rect[1] + 2.0);
         app.runtime.pointer_up(lx, rect[1] + 2.0);
     });
-    let moved = world.daemon.sent_of("desktop_reorder");
+    let moved = world.daemon.sent_of("desktop_set_order");
     assert_eq!(
-        (
-            moved[1]["desktop_id"].as_str(),
-            moved[1]["previous_desktop_id"].as_str(),
-            moved[1]["next_desktop_id"].as_str()
-        ),
-        (Some("d3"), None, Some("d1")),
+        moved[1]["desktop_ids"],
+        serde_json::json!(["d3", "d1", "d2"]),
         "dragged up to the top"
     );
     world.advance(std::time::Duration::from_secs(1));
@@ -530,7 +527,7 @@ fn a_desktop_dropped_beside_itself_or_with_escape_stays_put() {
     world.gesture(|app| app.key(super::queue::plain(rune::Key::Escape)));
     world.gesture(|app| app.runtime.pointer_up(x, y - 200.0));
 
-    assert!(world.daemon.sent_of("desktop_reorder").is_empty());
+    assert!(world.daemon.sent_of("desktop_set_order").is_empty());
 }
 
 #[test]
@@ -569,16 +566,9 @@ fn a_desktop_dragged_after_the_rows_above_it_changed_lands_where_the_pointer_sho
         app.runtime.pointer_up(x, first[1] + 2.0);
     });
 
-    let moved = world.daemon.sent_of("desktop_reorder");
+    let moved = world.daemon.sent_of("desktop_set_order");
     assert_eq!(moved.len(), 1, "{moved:?}");
-    assert_eq!(
-        (
-            moved[0]["desktop_id"].as_str(),
-            moved[0]["previous_desktop_id"].as_str(),
-            moved[0]["next_desktop_id"].as_str()
-        ),
-        (Some("d2"), None, Some("d1"))
-    );
+    assert_eq!(moved[0]["desktop_ids"], serde_json::json!(["d2", "d1"]));
 }
 
 fn keys_of(action: Action) -> String {
@@ -2104,7 +2094,7 @@ fn empty_non_current_desktops_fold_into_dashed_pills_that_open_and_accept_tile_d
 }
 
 #[test]
-fn dragging_a_stacked_desktop_skips_interleaved_and_trailing_folded_empty_desktops() {
+fn dragging_a_stacked_desktop_keeps_folded_desktops_in_the_saved_order() {
     let mut initial = three_desktops();
     let desktops = initial.desktops.as_mut().unwrap();
     desktops[1].order_key = "c".into();
@@ -2141,15 +2131,11 @@ fn dragging_a_stacked_desktop_skips_interleaved_and_trailing_folded_empty_deskto
         "bottom seam attaches to the last stacked desktop's row, not the trailing empty pill"
     );
     world.gesture(|app| app.runtime.pointer_up(x, bottom_y));
-    let moved = world.daemon.sent_of("desktop_reorder");
+    let moved = world.daemon.sent_of("desktop_set_order");
     assert_eq!(moved.len(), 1, "{moved:?}");
     assert_eq!(
-        (
-            moved[0]["desktop_id"].as_str(),
-            moved[0]["previous_desktop_id"].as_str(),
-            moved[0]["next_desktop_id"].as_str(),
-        ),
-        (Some("d1"), Some("d3"), None)
+        moved[0]["desktop_ids"],
+        serde_json::json!(["d-mid", "d2", "d3", "d1", "d-end"])
     );
 
     let (d3_rect, _) = world
@@ -2162,15 +2148,11 @@ fn dragging_a_stacked_desktop_skips_interleaved_and_trailing_folded_empty_deskto
         app.runtime.pointer_move(dx, d2_rect[1] + 2.0);
         app.runtime.pointer_up(dx, d2_rect[1] + 2.0);
     });
-    let moved = world.daemon.sent_of("desktop_reorder");
+    let moved = world.daemon.sent_of("desktop_set_order");
     assert_eq!(moved.len(), 2, "{moved:?}");
     assert_eq!(
-        (
-            moved[1]["desktop_id"].as_str(),
-            moved[1]["previous_desktop_id"].as_str(),
-            moved[1]["next_desktop_id"].as_str(),
-        ),
-        (Some("d3"), Some("d1"), Some("d2"))
+        moved[1]["desktop_ids"],
+        serde_json::json!(["d1", "d-mid", "d3", "d2", "d-end"])
     );
     world.advance(std::time::Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
