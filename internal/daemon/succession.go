@@ -17,12 +17,10 @@ import (
 // opened opens a session in terminal t for a conversation no session holds; it takes only the terminal,
 // and from closes into the ledger whole. The caller holds from's lifecycle lock.
 func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observation agentConversationObservation) error {
-	launch, _ := d.store.LaunchIntent(from.ID)
 	to := protocol.SessionID(uuid.NewString())
 	sc := store.Succession{
-		To:     to,
-		Launch: launch,
-		Close:  store.SessionClose{Reason: string("cleared; its terminal moved on to " + to)},
+		To:    to,
+		Close: store.SessionClose{Reason: string("cleared; its terminal moved on to " + to)},
 	}
 	if member, bound := d.crewMemberForSession(from.ID); bound && !d.othersRun(from.ID, t) {
 		sc.Member, sc.Label = member.ID, member.Name

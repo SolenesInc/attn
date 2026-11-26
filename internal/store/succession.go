@@ -2,7 +2,6 @@ package store
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -12,14 +11,13 @@ import (
 	"github.com/victorarias/attn/internal/who"
 )
 
-// Succession puts To in the terminal From showed: To takes From's place, process, driver run and
-// Conversation; everything else stays with From. A new To gets Label and Launch; an existing one keeps its own.
+// Succession puts To in the terminal From showed: To takes From's place, process, driver run, launch intent and
+// Conversation; everything else stays with From. A new To gets Label; an existing one keeps its own.
 // When Member's day is still From, the day moves to To.
 type Succession struct {
 	From, To     protocol.SessionID
 	Label        string
 	Conversation SessionConversation
-	Launch       LaunchIntent
 	Close        SessionClose
 	KeepFrom     bool
 	KeepTo       bool
@@ -151,31 +149,28 @@ func moveMemberDayTx(tx *sql.Tx, written *documentWrites, key string, from, to p
 }
 
 func openSuccessorTx(tx *sql.Tx, sc Succession, at string) error {
-	launch, err := json.Marshal(sc.Launch)
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec(`
+	_, err := tx.Exec(`
 		INSERT INTO sessions (id, user_label, agent, directory, profile_id, launched_at, context_window_cap,
-			resume_session_id, transcript_path, launch_intent, succeeds, priority, created_at, host)
+			resume_session_id, transcript_path, launch_intent, command_terminal, succeeds, priority, created_at, host)
 		SELECT ?, ?, agent, directory, profile_id, launched_at, context_window_cap,
-			?, ?, ?, id, priority, ?, host
+			?, ?, launch_intent, command_terminal, id, priority, ?, host
 		FROM sessions WHERE id = ?`,
 		sc.To, sc.Label,
-		sc.Conversation.NativeID, sc.Conversation.TranscriptPath, string(launch), at,
+		sc.Conversation.NativeID, sc.Conversation.TranscriptPath, at,
 		sc.From,
 	)
 	return err
 }
 
-// takeOverTx brings an existing To back as Reopen would, into From's terminal. Its launch counts
+// takeOverTx brings an existing To back into From's terminal, running From's process. Its launch counts
 // from now, so the lines its transcript already holds predate it.
 func takeOverTx(tx *sql.Tx, sc Succession, at string) error {
 	if _, err := tx.Exec(`
 		UPDATE sessions SET closed_at = '', closed_by = '', close_reason = '', launched_at = ?,
-			resume_session_id = ?, transcript_path = ?, succeeds = ?
+			resume_session_id = ?, transcript_path = ?, succeeds = ?,
+			(launch_intent, command_terminal) = (SELECT launch_intent, command_terminal FROM sessions WHERE id = ?)
 		WHERE id = ?`,
-		at, sc.Conversation.NativeID, sc.Conversation.TranscriptPath, sc.From, sc.To,
+		at, sc.Conversation.NativeID, sc.Conversation.TranscriptPath, sc.From, sc.From, sc.To,
 	); err != nil {
 		return err
 	}

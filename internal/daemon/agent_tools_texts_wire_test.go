@@ -275,6 +275,59 @@ func TestOnlyASessionLaunchedWithTheToolsIsToldToCallThem(t *testing.T) {
 	})
 }
 
+func TestAfterResumeTheToolWordingFollowsTheProcessThatReceivesIt(t *testing.T) {
+	for _, running := range []struct {
+		name  string
+		tools bool
+		want  string
+	}{{"a process launched without the tools", false, "Run attn agent inbox"}, {"a process launched with the tools", true, "agent_inbox()"}} {
+		t.Run(running.name, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Claude)
+			app, cli := w.App(), w.Client()
+			cwd := w.Path("shop")
+			setSetting(t, app, "agent_tools_enabled", strconv.FormatBool(!running.tools))
+			first := w.Spawn(app, fakeagent.Claude, cwd)
+			original := w.Launched(first)
+			app.TypeLine(first, "add a discount field")
+			original.Prompted()
+			added := "Added. <!-- attn:state=idle -->"
+			original.Reply(added)
+			awaitUsageTokens(app, first, claudeTokens(added))
+			conversation := original.ConversationID
+			clearClaude(app, original, first)
+			awaitClosed(app, first)
+
+			setSetting(t, app, "agent_tools_enabled", strconv.FormatBool(running.tools))
+			current := w.Spawn(app, fakeagent.Claude, cwd)
+			claude := w.Launched(current)
+			if slices.Contains(claude.Argv, "--mcp-config") != running.tools {
+				t.Fatalf("the running Claude was launched with %q; want --mcp-config only when it has the tools", claude.Argv)
+			}
+			app.TypeLine(current, "inspect the checkout")
+			claude.Prompted()
+			inspected := "Inspected. <!-- attn:state=idle -->"
+			claude.Reply(inspected)
+			awaitUsageTokens(app, current, claudeTokens(inspected))
+			setSetting(t, app, "agent_tools_enabled", "true")
+			resumeClaude(app, claude, current, conversation)
+			if back := awaitSuccessor(app, current); string(back.ID) != first {
+				t.Fatalf("/resume moved the terminal to %s, want the conversation's session %s", back.ID, first)
+			}
+
+			app.TypeLine(first, "continue")
+			claude.Prompted()
+			claude.Reply("Ready. <!-- attn:state=waiting_input -->")
+			testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+			seed := plantSeedAs(t, cli, "", "Review the checkout")
+			gardenNudgeWatch(t, cli, first, seed, false)
+			gardenNudgeNote(t, cli, "", seed, "Please look at this.", true)
+			if bell := claude.Prompted(); !strings.Contains(bell, running.want) {
+				t.Errorf("after /resume, %s was rung with %q; want %q", running.name, bell, running.want)
+			}
+		})
+	}
+}
+
 func TestAPeerTurnsReplyLineNamesACallOnlyForASessionWithTools(t *testing.T) {
 	for _, launch := range []struct {
 		name          string
