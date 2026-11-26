@@ -80,9 +80,11 @@ pub(crate) fn sync(state: &mut State, tx: &mut Tx) {
         .collect();
     let now = tx.clock();
     let motion = &mut state.window.asks.motion;
-    motion.sheet_open = sheet_open;
     if !connected {
         *motion = Motion::default();
+    }
+    motion.sheet_open = sheet_open;
+    if !connected {
         return;
     }
     let arrived = match &motion.seen {
