@@ -13,7 +13,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 const options = parseCommonArgs(process.argv.slice(2));
 const runner = createScenarioRunner(options, {
   scenarioId: 'NATIVE-MARKDOWN-ANNOTATIONS', tier: 'tier2-local-mock-agent', prefix: 'native-markdown-annotations',
-  metadata: { focus: 'A selection in a native markdown tile takes a quick label and a comment, and Send delivers both to the agent the tile is bound to, which answers' },
+  metadata: { focus: 'A selection in a native markdown tile, in a paragraph or a list item, takes a quick label or a comment, and Send delivers them to the agent the tile is bound to, which answers' },
 });
 const client = new UiAutomationClient({ appPath: options.appPath });
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -23,6 +23,7 @@ runner.registerCleanup('quit_app', () => client.quitApp());
 
 const MARKED = 'Cache the tile layout before the first paint.';
 const LABELLED = 'A second paragraph takes a quick label.';
+const LISTED = 'A list item takes a quick label too.';
 const COMMENT = 'Which layout does it cache?';
 const MOD = process.platform === 'darwin' ? 'mod' : 'ctrl';
 
@@ -72,7 +73,7 @@ try {
   const selectAll = (n) => driver.drag(block(n), { target: block(n), at: [0.995, 0.5] }, { at: [0.005, 0.5] });
 
   await runner.step('dock_a_document_bound_to_the_agent', async () => {
-    fs.writeFileSync(doc, `# Review me\n\n${MARKED}\n\n${LABELLED}\n`);
+    fs.writeFileSync(doc, `# Review me\n\n${MARKED}\n\n${LABELLED}\n\n- ${LISTED}\n`);
     await observer.profileCommand('desktop_dock_tile', { desktop_id: desktop.id, anchor_id: agent.pane, edge: 'right', tile_id: tile, tile_kind: 'markdown', tile_params: doc, tile_session_id: id });
     await driver.waitFor(block(1));
     await driver.waitFor(part('send.to'));
@@ -85,18 +86,32 @@ try {
     await driver.waitFor({ role: 'button', name: 'Notes 1' });
   });
 
+  await runner.step('a_quick_label_marks_a_list_item', async () => {
+    const item = { role: 'label', name: LISTED };
+    await driver.drag(item, { target: item, at: [0.995, 0.5] }, { at: [0.005, 0.5] });
+    await driver.click(part('toolbar.label.clarify-this'));
+    await driver.waitFor(part('toolbar'), { gone: true });
+    await driver.waitFor({ role: 'button', name: 'Notes 2' });
+    const onTheItem = (draft) => (draft.annotations ?? []).some((mark) => mark.anchor?.block_id?.endsWith('-list-item') && mark.anchor?.exact?.startsWith('A list item'));
+    let draft = await stored();
+    for (const deadline = Date.now() + 10_000; !onTheItem(draft) && Date.now() < deadline; draft = await stored()) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    runner.assert(onTheItem(draft), 'the saved mark anchors to the list item', draft);
+  });
+
   await runner.step('a_comment_typed_over_a_selection_marks_it', async () => {
     await selectAll(1);
     await driver.click(part('toolbar.comment'));
     await driver.typeInto(part('composer.field'), COMMENT);
     await driver.pressKey(`${MOD}+Enter`);
     await driver.waitFor(part('composer'), { gone: true });
-    await driver.waitFor({ role: 'button', name: 'Notes 2' });
+    await driver.waitFor({ role: 'button', name: 'Notes 3' });
     await driver.screenshot(path.join(runner.runDir, 'native-markdown-marks.png'));
   });
 
-  await runner.step('send_delivers_both_marks_to_the_bound_agent', async () => {
-    await driver.waitFor({ role: 'button', name: 'Send 2 to reader' });
+  await runner.step('send_delivers_the_marks_to_the_bound_agent', async () => {
+    await driver.waitFor({ role: 'button', name: 'Send 3 to reader' });
     await driver.click(part('send'));
     await driver.waitFor({ role: 'button', name: 'Sent ✓' });
     await driver.state(`terminal:${agent.runtimeId}`, { includes: COMMENT, timeoutMs: 30_000 });

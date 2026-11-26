@@ -225,7 +225,7 @@ export const scenarioCatalog = [
   {
     id: 'native-markdown-annotations',
     runnerId: 'NATIVE-MARKDOWN-ANNOTATIONS',
-    label: 'A selection in a native markdown tile takes a quick label and a comment, and Send delivers both to the bound agent',
+    label: 'A selection in a native markdown tile, in a paragraph or a list item, takes a quick label or a comment, and Send delivers them to the bound agent',
     command: ['node', 'scripts/real-app-harness/scenario-native-markdown-annotations.mjs'],
   },
   {

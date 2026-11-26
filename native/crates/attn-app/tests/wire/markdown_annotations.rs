@@ -1872,3 +1872,101 @@ fn the_quick_label_list_stays_inside_the_document_shows_three_labels_and_its_las
         assert_eq!(labels, [json!("ask-me-first")], "{tile}");
     }
 }
+
+const EVERY_BLOCK: &str = "# Plan\n\n## Section heading text\n\nPlain paragraph text here.\n\n- Bullet item text\n- Parent item text\n  - Nested item text\n\n1. Ordered item text\n\n- [ ] Task item text\n\n> Quoted paragraph text\n\n> - Quoted list item text\n\n> [!NOTE]\n> Alert body text here\n\n| Head cell text | Other |\n|---|---|\n| Body cell text | x |\n\n```rust\nfn code_line_text() {}\n```\n\n```diff\n-removed line text\n+added line text\n```\n\n<details open>\n<summary>Summary label text</summary>\n\nDetails body text\n\n</details>\n\nFootnoted text here[^1]\n\n[^1]: Footnote body text\n";
+
+/// Drags from the start of the text `from` to 60 points into the text `to`, scrolled into
+/// view, and lets go.
+fn drag_across(world: &mut World, from: &str, to: &str) {
+    let at = |world: &World, name: &str| {
+        let [x, y, _, _] = world
+            .screen()
+            .bounds(Target::role("label").name(name))
+            .or_else(|| world.screen().bounds(Target::role("heading").name(name)))
+            .unwrap_or_else(|| panic!("no text {name:?}:\n{}", world.screen()));
+        (x, y + 8.0)
+    };
+    for _ in 0..20 {
+        let (x, y) = at(world, to);
+        if y < 850.0 {
+            break;
+        }
+        world.gesture(|app| app.runtime.wheel(x + 4.0, 450.0, -120.0));
+        world.settle();
+    }
+    let ((x0, y0), (x1, y1)) = (at(world, from), at(world, to));
+    world.gesture(|app| {
+        app.drag_from((x0 + 2.0, y0), (x1 + 60.0, y1));
+        app.release((x1 + 60.0, y1));
+    });
+    world.settle();
+}
+
+/// Strikes a drag from `from` into `to` and answers the anchor the mark keeps.
+fn strike_across(world: &mut World, kept: &Shared, from: &str, to: &str) -> Value {
+    drag_across(world, from, to);
+    assert!(toolbar(world), "a drag across {from:?} opens the toolbar");
+    click(world, "toolbar.delete");
+    pause(world);
+    marks(kept).last().unwrap()["anchor"].clone()
+}
+
+#[test]
+fn a_passage_of_any_block_a_document_or_a_seed_shows_is_marked_in_its_own_block() {
+    let blocks = [
+        ("Section heading text", "b1-heading"),
+        ("Plain paragraph text here.", "b2-paragraph"),
+        ("Bullet item text", "b4-list-item"),
+        ("Nested item text", "b6-list-item"),
+        ("Ordered item text", "b8-list-item"),
+        ("Task item text", "b10-list-item"),
+        ("Quoted paragraph text", "b11-blockquote"),
+        ("Quoted list item text", "b13-list-item"),
+        ("Alert body text here", "b14-blockquote"),
+        ("Head cell text", "b15-table"),
+        ("Body cell text", "b15-table"),
+        ("fn code_line_text() {}", "b16-code"),
+        ("-removed line text", "b17-code"),
+        ("Summary label text", "b18-details"),
+        ("Details body text", "b18-details"),
+        ("Footnote body text", "b22-list-item"),
+    ];
+    for seed in [None, Some(None)] {
+        let (mut world, kept) = start_with(
+            EVERY_BLOCK,
+            Kept {
+                seed,
+                ..Kept::default()
+            },
+        );
+        let mut seen = Vec::new();
+        for (text, _) in blocks {
+            let anchor = strike_across(&mut world, &kept, text, text);
+            let exact = anchor["exact"].as_str().unwrap_or_default().to_owned();
+            assert!(
+                !exact.is_empty() && EVERY_BLOCK.contains(exact.as_str()),
+                "{text:?}: {anchor}"
+            );
+            seen.push((
+                text,
+                anchor["block_id"].as_str().unwrap_or_default().to_owned(),
+            ));
+        }
+        let want: Vec<_> = blocks.iter().map(|(t, b)| (*t, b.to_string())).collect();
+        assert_eq!(seen, want, "seed tile: {}", seed.is_some());
+
+        let anchor = strike_across(&mut world, &kept, "Parent item text", "Nested item text");
+        assert_eq!(
+            anchor["block_id"].as_str(),
+            Some("b5-list-item"),
+            "a drag from an item into its nested one keeps to the item: {anchor}"
+        );
+        let anchor = strike_across(&mut world, &kept, "Bullet item text", "Parent item text");
+        assert!(
+            anchor["exact"]
+                .as_str()
+                .is_some_and(|e| e.starts_with("Bullet") && !e.contains("Parent")),
+            "a drag across sibling items keeps to the first: {anchor}"
+        );
+    }
+}

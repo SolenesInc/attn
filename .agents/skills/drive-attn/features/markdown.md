@@ -108,7 +108,7 @@ Preconditions:
 - **Refusals.** `./attn open $A/missing.md` exits 1 with `open:` and the missing file's error. `./attn open` exits 1 with `usage: attn open <file.md|seed-id> [--json] (attn open --help)`.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `tree_json` after each open, the opener's rows from `bridge tree` on the empty query and on `secnd`, `./attn agent peek md-agent` after the agent opens a file, the `bridge shot` of the rendered document, and for the review a `bridge shot` of each frame and of the file view, the `bridge tree` with the send sheet open, and `./attn agent peek md-agent` after the question and the send. Name each file for its way in, such as `markdown-agent-open-list.json`.
 
-H5 and H6 draw as H4, `console` and `tsp` code blocks are plain, and footnotes are not rendered. A code block shows a Copy code button while the pointer is over it, which says Copied! for 2 s, and a diagram that cannot draw shows "Diagram failed to render" above its source.
+H5 and H6 draw as H4, and `console` and `tsp` code blocks are plain. Footnotes draw at the end of the document as a numbered list, and a reference is its number in superscript digits. A code block shows a Copy code button while the pointer is over it, which says Copied! for 2 s, and a diagram that cannot draw shows "Diagram failed to render" above its source.
 
 ## Contexts
 
