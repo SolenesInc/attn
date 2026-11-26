@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Opening an agent stake from the palette can leave focus in Garden search",
+  "at": "2026-11-26T21:10:32.985Z",
+  "detail": "Opening an agent's stake from the command palette can leave keyboard focus in Garden search. Focus that field, invoke the palette, and select Open <agent>'s stake. The seed tile appears but does not receive the keyboard because the opener mistakes modal focus restoration for later user movement. Independently source-confirmed and reproduced in both native input models at cec7eaba2. Preserve focus changes made while the daemon reply is pending while allowing the command to focus the opened tile after automatic palette restoration. Evidence on s-wn67rq.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/garden/mod.rs",
+    "line": 1368
+  },
+  "culprit": "cec7eaba2c7623b0470b839a5186c43acc89941c"
+}
