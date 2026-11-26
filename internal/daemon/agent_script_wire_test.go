@@ -44,7 +44,8 @@ func (c agentToolsCaller) callNaming(t *testing.T, command string, args map[stri
 		Returned any
 		Refused  string
 	}
-	if err := json.NewDecoder(strings.NewReader(resultText(result))).Decode(&answer); err != nil {
+	said, _ := scriptAnswer(t, resultText(result))
+	if err := json.NewDecoder(strings.NewReader(said)).Decode(&answer); err != nil {
 		t.Fatalf("a script calling %s answered %q: %v", command, resultText(result), err)
 	}
 	if answer.Refused != "" {
@@ -79,6 +80,21 @@ func (c agentToolsCaller) script(t *testing.T, tool, source string) (text string
 	return resultText(result), result.IsError
 }
 
+// scriptAnswer splits a script's answer into the text the script returned or logged, which attn fences,
+// and the lines attn writes after the fence.
+func scriptAnswer(t *testing.T, text string) (said, attn string) {
+	t.Helper()
+	fence, rest, fenced := strings.Cut(text, "\n")
+	if !fenced || !strings.HasPrefix(fence, "```") || strings.Trim(fence, "`") != "" {
+		return "", text
+	}
+	said, attn, closed := strings.Cut(rest, "\n"+fence)
+	if !closed || strings.Contains(said, fence) {
+		t.Fatalf("an answer opens the fence %s and does not close it once: %q", fence, text)
+	}
+	return said, strings.TrimLeft(attn, "\n")
+}
+
 func noteScript(seed, text string) map[string]any {
 	args, _ := json.Marshal(map[string]any{"seed": seed, "text": text})
 	return map[string]any{"script": "seed_note(" + string(args) + ")"}
@@ -89,8 +105,9 @@ type offeredTools map[string]bool
 func listOfferedTools(t *testing.T, agent agentToolsCaller) offeredTools {
 	t.Helper()
 	names, failed := agent.script(t, "attn_read", `return Object.keys(globalThis).filter(name => typeof globalThis[name] === "function" && name !== "Refusal")`)
+	said, _ := scriptAnswer(t, names)
 	var listed []string
-	if err := json.Unmarshal([]byte(names), &listed); failed || err != nil {
+	if err := json.Unmarshal([]byte(said), &listed); failed || err != nil {
 		t.Fatalf("a script listing its world's functions answered %q: %v", names, err)
 	}
 	offered := offeredTools{}

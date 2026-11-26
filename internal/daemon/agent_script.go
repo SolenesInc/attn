@@ -28,7 +28,7 @@ const (
 )
 
 const (
-	scriptLedgerChars  = 60_000 // 192 notes of 190 characters, each after a read, took 41,294.
+	scriptLedgerChars  = 58_000 // 192 notes of 190 characters, each after a read, took 41,294. With one more line and a failure, the answer stays within script.ResultText.
 	ledgerStringChars  = 120    // The notes a script cut out of other text wrongly were 44 to 60.
 	ledgerArgsChars    = 1_000  // The longest of 131 changing calls in the stored bench runs, a plot, wrote 719.
 	ledgerReceiptChars = 20_000 // A plot of 96 children answered 12,940.
@@ -37,6 +37,7 @@ const (
 const (
 	codeChangesSomething = "changes_something"
 	codeCommandLimit     = "command_limit"
+	codeChangeLimit      = "change_limit"
 	codeCallLimit        = "call_limit"
 	codeHomeLost         = "home_lost"
 )
@@ -49,15 +50,23 @@ type scriptTool struct {
 }
 
 type scriptRun struct {
-	d       *Daemon
-	call    *agentCall
-	tool    scriptTool
-	whole   context.Context
-	working context.Context
-	ran     int
-	limit   string
-	results []string
-	ledger  []string
+	d           *Daemon
+	call        *agentCall
+	tool        scriptTool
+	whole       context.Context
+	working     context.Context
+	ran         int
+	limit       string
+	limitStops  string
+	results     []string
+	ledger      []string
+	ledgerChars int
+	readOnce    []readOnce
+}
+
+type readOnce struct {
+	call   string
+	result string
 }
 
 func (d *Daemon) runAgentScript(ctx context.Context, call *agentCall, tool scriptTool, source string) mcpserver.Result {
@@ -74,31 +83,29 @@ func (d *Daemon) runAgentScript(ctx context.Context, call *agentCall, tool scrip
 	run := &scriptRun{d: d, call: call, tool: tool, whole: whole, working: working}
 	out := script.Run(whole, script.Job{Source: source, Functions: d.agentToolSet.commandNames, Limits: script.DefaultLimits}, run.command)
 	if context.Cause(working) == errScriptCallLimit {
-		run.limit = errScriptCallLimit.Error()
-	}
-	if run.limit != "" && !strings.Contains(out.Failed, run.limit) {
-		out.Failed = strings.TrimSpace(out.Failed + "\nThe call reached a limit: " + run.limit + ". The script went on, and no command after the limit ran.")
+		run.limit, run.limitStops = errScriptCallLimit.Error(), "no command after the limit ran"
 	}
 	ending := "ok"
-	if out.Failed != "" {
-		ending, _, _ = strings.Cut(out.Failed, "\n")
+	if failed := run.failure(out); failed != "" {
+		ending, _, _ = strings.Cut(failed, "\n")
 	}
-	d.logf("agent tools: %s by %s (session %s) ran %d commands, %d changed something, in %s: %s", tool.name, call.who, call.caller.Session, run.ran, len(run.ledger), time.Since(started).Round(time.Millisecond), ending)
+	d.logf("agent tools: %s by %s (session %s) ran %d commands, %d changed something, in %s: %s", tool.name, call.who, call.caller.Session, run.ran, len(run.ledger), time.Since(started).Round(time.Millisecond), cutEnd(ending, loggedTextChars))
 	return run.result(out)
 }
 
 func (run *scriptRun) command(name string, args json.RawMessage) script.Answer {
-	if refusal := run.atLimit(); refusal != nil {
+	tool := run.d.agentToolSet.tools[name]
+	if refusal := run.atLimit(tool); refusal != nil {
 		return refusedAnswer(name, refusal)
 	}
 	run.ran++
-	tool := run.d.agentToolSet.tools[name]
 	refusal := run.refuses(tool, args)
 	var result any
+	var shownOnce bool
 	if refusal == nil {
-		result, refusal = run.runInTime(tool, args)
+		result, shownOnce, refusal = run.runInTime(tool, args)
 		if refusal != nil && tool.changes() && mayHaveTakenEffect(refusal) {
-			run.ledger = append(run.ledger, ledgerCall(name, args)+" -> "+refusal.Code+": it may have taken effect")
+			run.record(ledgerCall(name, args) + " -> " + refusal.Code + ": it may have taken effect")
 		}
 	}
 	run.d.logAgentCommand(run.call, name, refusal)
@@ -113,7 +120,10 @@ func (run *scriptRun) command(name string, args json.RawMessage) script.Answer {
 			line += " -> " + ledgerValue(json.RawMessage(tool.json(tool.answer(result))), ledgerReceiptChars)
 			shown = ""
 		}
-		run.ledger = append(run.ledger, line)
+		run.record(line)
+	}
+	if shownOnce {
+		run.readOnce = append(run.readOnce, readOnce{call: ledgerCall(name, args), result: tool.json(result)})
 	}
 	if shown != "" && shown != "{}" {
 		run.results = append(run.results, shown)
@@ -125,10 +135,19 @@ func refusedAnswer(name string, refusal *command.Refusal) script.Answer {
 	return script.Answer{Refusal: &script.Refusal{Code: refusal.Code, Message: toolCatalog().ToolText(refusal.Message), Fix: toolCatalog().ToolText(refusal.Fix), Command: name}}
 }
 
-func (run *scriptRun) atLimit() *command.Refusal {
+func (run *scriptRun) record(line string) {
+	run.ledger = append(run.ledger, line)
+	run.ledgerChars += utf8.RuneCountInString(line) + 1
+}
+
+func (run *scriptRun) atLimit(tool agentTool) *command.Refusal {
 	if run.ran == scriptCommandLimit {
-		run.limit = fmt.Sprintf("one call runs at most %d commands", scriptCommandLimit)
+		run.limit, run.limitStops = fmt.Sprintf("one call runs at most %d commands", scriptCommandLimit), "no command after the limit ran"
 		return &command.Refusal{Code: codeCommandLimit, Message: run.limit, Fix: "Run the rest in another call."}
+	}
+	if tool.changes() && run.ledgerChars > scriptLedgerChars {
+		run.limit, run.limitStops = fmt.Sprintf("one call's answer shows at most %d characters of changes", scriptLedgerChars), "attn refused each change after the limit"
+		return &command.Refusal{Code: codeChangeLimit, Message: run.limit, Fix: "Run the rest in another call."}
 	}
 	if run.working.Err() != nil {
 		return &command.Refusal{Code: codeCallLimit, Message: errScriptCallLimit.Error() + ", and they have passed", Fix: "Run the rest in another call."}
@@ -143,20 +162,22 @@ func (run *scriptRun) refuses(tool agentTool, args json.RawMessage) *command.Ref
 	return tool.withRules(checkArguments(tool.def.Name, args, tool.input))
 }
 
-func (run *scriptRun) runInTime(tool agentTool, args json.RawMessage) (any, *command.Refusal) {
+func (run *scriptRun) runInTime(tool agentTool, args json.RawMessage) (any, bool, *command.Refusal) {
 	type outcome struct {
-		result  any
-		refusal *command.Refusal
+		result    any
+		shownOnce bool
+		refusal   *command.Refusal
 	}
 	answered := make(chan outcome)
 	var after func()
 	running := run.d.life.Go("agent command "+tool.def.Name, func() {
 		result, refusal := run.d.runAgentCommand(run.working, run.call.caller, tool.def.Command, args)
+		var shownOnce bool
 		if then, ok := result.(command.Then); ok {
-			result, after = then.Result, then.After
+			result, after, shownOnce = then.Result, then.After, then.ShownOnce
 		}
 		select {
-		case answered <- outcome{result, refusal}:
+		case answered <- outcome{result, shownOnce, refusal}:
 		case <-run.whole.Done():
 			if after != nil {
 				after()
@@ -164,7 +185,7 @@ func (run *scriptRun) runInTime(tool agentTool, args json.RawMessage) (any, *com
 		}
 	})
 	if !running {
-		return nil, &command.Refusal{Code: "stopping", Message: "attn's daemon is stopping", Fix: "Call it again once the daemon is back."}
+		return nil, false, &command.Refusal{Code: "stopping", Message: "attn's daemon is stopping", Fix: "Call it again once the daemon is back."}
 	}
 	select {
 	case got := <-answered:
@@ -172,11 +193,11 @@ func (run *scriptRun) runInTime(tool agentTool, args json.RawMessage) (any, *com
 			run.call.after = append(run.call.after, after)
 		}
 		if got.refusal != nil && run.working.Err() != nil {
-			return nil, run.cutOff(tool)
+			return nil, false, run.cutOff(tool)
 		}
-		return got.result, tool.withRules(got.refusal)
+		return got.result, got.shownOnce, tool.withRules(got.refusal)
 	case <-run.whole.Done():
-		return nil, run.cutOff(tool)
+		return nil, false, run.cutOff(tool)
 	}
 }
 
@@ -199,7 +220,6 @@ func scriptAnswer(tool agentTool, result any) script.Answer {
 }
 
 func (run *scriptRun) result(out script.Output) mcpserver.Result {
-	ledger := run.ledgerText()
 	body := out.Logs
 	switch {
 	case out.Has:
@@ -207,28 +227,71 @@ func (run *scriptRun) result(out script.Output) mcpserver.Result {
 	case len(out.Logs) == 0 && out.Failed == "":
 		body = run.results
 	}
-	var failure string
-	if out.Failed != "" {
-		failure = out.Failed + "\n" + run.whatStands(out)
+	said := strings.Join(body, "\n")
+	failed := run.failure(out) != ""
+	fence := fenceFor(said + out.Failed)
+	attnSays := run.attnLines(out, failed, run.unshownReads(said))
+	room := script.ResultText - utf8.RuneCountInString(attnSays) - utf8.RuneCountInString(out.Failed) - 2*len(fence) - len("\n\n")*4
+	if utf8.RuneCountInString(said)+out.Dropped > room {
+		attnSays = run.attnLines(out, failed, run.unshownReads(""))
+		room = script.ResultText - utf8.RuneCountInString(attnSays) - utf8.RuneCountInString(out.Failed) - 2*len(fence) - len("\n\n")*4
 	}
-	used := utf8.RuneCountInString(failure) + utf8.RuneCountInString(ledger)
-	var parts []string
-	for _, part := range []string{cutText(strings.Join(body, "\n"), out.Dropped, script.ResultText-used-len("\n\n")*2), failure, ledger} {
-		if part != "" {
-			parts = append(parts, part)
-		}
+	kept, cut := cutText(said, out.Dropped, room)
+	var scriptSays string
+	if output := joinParts([]string{kept, out.Failed}, "\n\n"); output != "" {
+		scriptSays = fence + "\n" + output + "\n" + fence + cut
 	}
-	text := strings.Join(parts, "\n\n")
+	text := joinParts([]string{scriptSays, attnSays}, "\n\n")
 	if text == "" {
 		text = "The script ran and returned nothing."
 	}
-	return mcpserver.Result{IsError: out.Failed != "", Content: []mcpserver.Content{mcpserver.Text(text)}}
+	return mcpserver.Result{IsError: failed, Content: []mcpserver.Content{mcpserver.Text(text)}}
+}
+
+func (run *scriptRun) attnLines(out script.Output, failed bool, reads string) string {
+	var lines []string
+	if failed {
+		lines = append(lines, run.limitPassed(out), run.whatStands(out))
+	}
+	return joinParts(append(lines, reads, run.ledgerText()), "\n\n")
+}
+
+func (run *scriptRun) failure(out script.Output) string {
+	return joinParts([]string{out.Failed, run.limitPassed(out)}, "\n")
+}
+
+func (run *scriptRun) limitPassed(out script.Output) string {
+	if run.limit == "" || strings.Contains(out.Failed, run.limit) {
+		return ""
+	}
+	return "The call reached a limit: " + run.limit + ". The script went on, and " + run.limitStops + "."
+}
+
+func fenceFor(text string) string {
+	fence := "```"
+	for strings.Contains(text, fence) {
+		fence += "`"
+	}
+	return fence
+}
+
+func joinParts(parts []string, separator string) string {
+	var kept []string
+	for _, part := range parts {
+		if part != "" {
+			kept = append(kept, part)
+		}
+	}
+	return strings.Join(kept, separator)
 }
 
 func (run *scriptRun) whatStands(out script.Output) string {
 	stands := "Nothing changed."
-	if len(run.ledger) > 0 {
+	switch {
+	case len(run.ledger) > 0:
 		stands = "The changes below stand, so do not run the script again."
+	case len(run.readOnce) > 0:
+		stands = "Nothing changed, but what the script read is marked read now."
 	}
 	if out.Line > 0 {
 		return fmt.Sprintf("Nothing after line %d ran. %s", out.Line, stands)
@@ -236,30 +299,34 @@ func (run *scriptRun) whatStands(out script.Output) string {
 	return stands
 }
 
+func (run *scriptRun) unshownReads(said string) string {
+	var lines []string
+	for _, read := range run.readOnce {
+		if !strings.Contains(said, read.result) {
+			lines = append(lines, read.call+" -> "+read.result)
+		}
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return "marked read:\n" + strings.Join(lines, "\n")
+}
+
 func (run *scriptRun) ledgerText() string {
 	if len(run.ledger) == 0 {
 		return ""
 	}
-	lines, used := []string{"changed:"}, 0
-	for i, line := range run.ledger {
-		used += utf8.RuneCountInString(line) + 1
-		if used > scriptLedgerChars {
-			lines = append(lines, fmt.Sprintf("…and %d more changes, which do not fit in the result", len(run.ledger)-i))
-			break
-		}
-		lines = append(lines, line)
-	}
-	return strings.Join(lines, "\n")
+	return "changed:\n" + strings.Join(run.ledger, "\n")
 }
 
-func cutText(text string, dropped, limit int) string {
+func cutText(text string, dropped, limit int) (string, string) {
 	total := utf8.RuneCountInString(text) + dropped
 	if total <= limit {
-		return text
+		return text, ""
 	}
-	const notice = "\n…attn left out the last %d of %d characters here. Return only the parts you need."
-	kept := min(total-dropped, limit-len(fmt.Sprintf(notice, total, total)))
-	return string([]rune(text)[:kept]) + fmt.Sprintf(notice, total-kept, total)
+	const notice = "\nattn left out the last %d of %d characters the script returned or logged. Return only the parts you need."
+	kept := max(0, min(total-dropped, limit-len(fmt.Sprintf(notice, total, total))))
+	return string([]rune(text)[:kept]), fmt.Sprintf(notice, total-kept, total)
 }
 
 func ledgerCall(name string, args json.RawMessage) string {

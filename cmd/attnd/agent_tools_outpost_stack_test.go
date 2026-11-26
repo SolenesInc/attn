@@ -188,6 +188,9 @@ func (e toolEndpoint) call(t *testing.T, command string, args map[string]any) to
 		Returned json.RawMessage
 		Refused  string
 	}
+	if fence, said, fenced := strings.Cut(text, "\n"); fenced && strings.Trim(fence, "`") == "" {
+		text = said
+	}
 	if err := json.NewDecoder(strings.NewReader(text)).Decode(&ran); err != nil {
 		t.Fatalf("a script calling %s at %s answered %q: %v", command, e.url, text, err)
 	}

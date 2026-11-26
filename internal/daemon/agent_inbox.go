@@ -34,20 +34,25 @@ func (d *Daemon) runAgentInbox(ctx context.Context, c command.Caller, a command.
 	if err != nil {
 		return nil, err
 	}
-	var result *protocol.AgentInboxBatchResult
-	var after func()
+	var read inboxRead
 	if messageID == "" {
-		result, after, err = d.agentInboxBatch(recipient.ID, limit)
+		read, err = d.agentInboxBatch(recipient.ID, limit)
 	} else {
-		result, after, err = d.agentInboxEntry(recipient, messageID)
+		read, err = d.agentInboxEntry(recipient, messageID)
 	}
 	if err != nil {
 		return nil, err
 	}
 	if a.Render {
-		result.Text = protocol.Ptr(agentInboxText(result))
+		read.result.Text = protocol.Ptr(agentInboxText(read.result))
 	}
-	return command.Then{Result: result, After: after}, nil
+	return command.Then{Result: read.result, After: read.after, ShownOnce: read.markedRead}, nil
+}
+
+type inboxRead struct {
+	result     *protocol.AgentInboxBatchResult
+	after      func()
+	markedRead bool
 }
 
 func (d *Daemon) mailboxSession(c command.Caller) (*protocol.Session, error) {
@@ -73,10 +78,10 @@ func peerMessageRefusal(d *Daemon, messageID string, err error) error {
 	}
 }
 
-func (d *Daemon) agentInboxEntry(recipient *protocol.Session, messageID string) (*protocol.AgentInboxBatchResult, func(), error) {
+func (d *Daemon) agentInboxEntry(recipient *protocol.Session, messageID string) (inboxRead, error) {
 	addresses, err := d.inboxAddressesOf(recipient.ID)
 	if err != nil {
-		return nil, nil, peerMessageRefusal(d, messageID, err)
+		return inboxRead{}, peerMessageRefusal(d, messageID, err)
 	}
 	asked := messageID
 	storedItem, found, err := d.store.InboxItem(store.QuickCaptureInboxID(recipient.ProfileID, messageID))
@@ -84,34 +89,34 @@ func (d *Daemon) agentInboxEntry(recipient *protocol.Session, messageID string) 
 		messageID = storedItem.ID
 	}
 	if err != nil {
-		return nil, nil, peerMessageRefusal(d, asked, err)
+		return inboxRead{}, peerMessageRefusal(d, asked, err)
 	}
 	result := &protocol.AgentInboxBatchResult{Items: []protocol.AgentInboxItem{}}
 	if found && storedItem.Kind == inbox.QuickCapture {
 		item, readNow, err := d.store.ReadInboxItem(messageID, string(recipient.ID), addresses, time.Now())
 		if err != nil {
-			return nil, nil, command.Refuse("message_not_found", "message %q was not found for this session", asked)
+			return inboxRead{}, command.Refuse("message_not_found", "message %q was not found for this session", asked)
 		}
 		quickCapture, err := d.store.QuickCapture(recipient.ProfileID, item.Source)
 		if err != nil {
-			return nil, nil, peerMessageRefusal(d, asked, err)
+			return inboxRead{}, peerMessageRefusal(d, asked, err)
 		}
 		result.Item = &protocol.AgentInboxItem{Address: item.To.String(), ItemID: item.Source, Kind: string(item.Kind), SourceID: protocol.Ptr(item.Source), Content: item.Text, CreatedAt: item.CreatedAt, NotifiedAt: item.NotifiedAt, ReadAt: item.ReadAt, Attachments: quickCapture.Attachments}
-		return result, func() {
+		return inboxRead{result: result, markedRead: readNow, after: func() {
 			if readNow {
 				d.publishQuickCaptureRead(recipient.ProfileID, quickCapture.ID, item.ReadAt)
 				d.kickInboxAfterCommit(item.To)
 			}
-		}, nil
+		}}, nil
 	}
 	stored, err := d.store.PeerMessageRecord(messageID)
 	if err != nil {
-		return nil, nil, peerMessageRefusal(d, asked, err)
+		return inboxRead{}, peerMessageRefusal(d, asked, err)
 	}
 	if _, seed := stored.To.TenderOf(); seed {
 		holder, _, err := d.inboxRecipient(stored.To)
 		if err != nil {
-			return nil, nil, peerMessageRefusal(d, asked, err)
+			return inboxRead{}, peerMessageRefusal(d, asked, err)
 		}
 		if holder != nil && holder.ID == recipient.ID {
 			addresses = append(addresses, stored.To)
@@ -119,17 +124,17 @@ func (d *Daemon) agentInboxEntry(recipient *protocol.Session, messageID string) 
 	}
 	record, readNow, err := d.store.ReadPeerMessage(messageID, recipient.ID, addresses, time.Now())
 	if err != nil {
-		return nil, nil, peerMessageRefusal(d, asked, err)
+		return inboxRead{}, peerMessageRefusal(d, asked, err)
 	}
 	result.Message = d.peerMessageResult(record)
 	if !readNow {
-		return result, nil, nil
+		return inboxRead{result: result}, nil
 	}
 	d.endStandbyOnceMailRead(record.To)
-	return result, func() { d.kickInboxAfterCommit(record.To) }, nil
+	return inboxRead{result: result, markedRead: true, after: func() { d.kickInboxAfterCommit(record.To) }}, nil
 }
 
-func (d *Daemon) agentInboxBatch(recipientSessionID protocol.SessionID, limit int) (*protocol.AgentInboxBatchResult, func(), error) {
+func (d *Daemon) agentInboxBatch(recipientSessionID protocol.SessionID, limit int) (inboxRead, error) {
 	d.lockGardenRoles()
 	addresses, err := d.inboxAddressesOf(recipientSessionID)
 	for _, address := range addresses {
@@ -145,7 +150,7 @@ func (d *Daemon) agentInboxBatch(recipientSessionID protocol.SessionID, limit in
 	d.unlockGardenRoles()
 	if err != nil {
 		d.logf("agent inbox batch: session=%s err=%v", recipientSessionID, err)
-		return nil, nil, errors.New("the agent inbox could not be read")
+		return inboxRead{}, errors.New("the agent inbox could not be read")
 	}
 	items := make([]protocol.AgentInboxItem, 0, len(deliveries))
 	parties := d.partiesNow()
@@ -183,7 +188,7 @@ func (d *Daemon) agentInboxBatch(recipientSessionID protocol.SessionID, limit in
 			result.PhoneStaysSilent = protocol.Ptr(true)
 		}
 	}
-	return result, after, nil
+	return inboxRead{result: result, after: after, markedRead: len(items) > 0}, nil
 }
 
 func mailboxItemContent(delivery store.InboxDelivery, tools bool) string {

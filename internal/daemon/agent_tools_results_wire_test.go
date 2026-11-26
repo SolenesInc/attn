@@ -116,8 +116,9 @@ for (const name of Object.keys(globalThis)) {
 	try { globalThis[name]({session: "someone-else"}) } catch (e) { refused[name] = {code: e.code, message: e.message, fix: e.fix} }
 }
 return refused`)
+	said, _ := scriptAnswer(t, text)
 	var refused map[string]struct{ Code, Message, Fix string }
-	if err := json.Unmarshal([]byte(text), &refused); failed || err != nil {
+	if err := json.Unmarshal([]byte(said), &refused); failed || err != nil {
 		t.Fatalf("a script calling every command with an argument none takes answered %q: %v", text, err)
 	}
 	for tool := range offered {

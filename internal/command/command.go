@@ -86,8 +86,9 @@ type Layer struct {
 }
 
 type Then struct {
-	Result any
-	After  func()
+	Result    any
+	After     func()
+	ShownOnce bool
 }
 
 func New(handlers map[string]Handler) (*Layer, error) {

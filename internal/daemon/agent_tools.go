@@ -305,9 +305,11 @@ func refusedResult(refusal *command.Refusal) mcpserver.Result {
 	return mcpserver.Result{IsError: true, Content: []mcpserver.Content{mcpserver.Text(refusalText(refusal))}}
 }
 
+const loggedTextChars = 1_000 // The longest of 364 refusals in the agent tools' wire tests was 357.
+
 func (d *Daemon) logAgentCommand(call *agentCall, name string, refusal *command.Refusal) {
 	if refusal != nil {
-		d.logf("agent tools: %s by %s (session %s): refused %s: %s", name, call.who, call.caller.Session, refusal.Code, refusal.Message)
+		d.logf("agent tools: %s by %s (session %s): refused %s: %s", name, call.who, call.caller.Session, refusal.Code, cutEnd(refusal.Message, loggedTextChars))
 		return
 	}
 	d.logf("agent tools: %s by %s (session %s): ok", name, call.who, call.caller.Session)
