@@ -132,9 +132,19 @@ func (d *Daemon) sessionCarriesAgentTools(id protocol.SessionID) bool {
 	return launched && intent.AgentTools && d.agentToolsServed()
 }
 
-func (d *Daemon) tenderCarriesAgentTools(tender who.Party) bool {
-	id, ok := tender.Address().Session()
-	return ok && d.sessionCarriesAgentTools(protocol.SessionID(id))
+func (d *Daemon) addressCarriesAgentTools(a who.Address) bool {
+	holder, memberID, err := d.inboxRecipient(a)
+	if err != nil {
+		return false
+	}
+	if holder != nil {
+		return d.sessionCarriesAgentTools(holder.ID)
+	}
+	if memberID == "" {
+		return false
+	}
+	member, _, err := d.crewMember(memberID)
+	return err == nil && d.carriesAgentTools(member.Harness())
 }
 
 func (d *Daemon) agentToolsFor(c agentCredential) *harness.AgentTools {

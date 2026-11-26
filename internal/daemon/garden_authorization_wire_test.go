@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -272,4 +273,64 @@ func typedAuthorizations(agent *bubbleClaude) []string {
 		}
 	}
 	return typed
+}
+
+func TestAnAuthorizationChangeNamesACallOnlyForAMemberWhoseSessionHasTheTools(t *testing.T) {
+	authorize := func(app *testworld.Peer, seed, words string) {
+		t.Helper()
+		message := protocol.SeedAuthorizationMessage{Cmd: protocol.CmdSeedAuthorization, RequestID: protocol.Ptr("authorize: " + words), SeedID: seed, Text: protocol.Ptr(words)}
+		if words == "" {
+			message.Text, message.Clear = nil, protocol.Ptr(true)
+		}
+		changed := testworld.Request(app, message, protocol.EventSeedAuthorizationResult, func(m protocol.SeedAuthorizationResultMessage) bool { return m.RequestID == "authorize: "+words })
+		if !changed.Success {
+			t.Fatalf("setting the authorization to %q: %+v", words, changed)
+		}
+	}
+	judge := func(t *testing.T, typed []string, wantCalls bool, what string) {
+		t.Helper()
+		if len(typed) == 0 {
+			t.Fatalf("%s: no authorization text reached the member", what)
+		}
+		for _, text := range typed {
+			if shownToolCall.MatchString(text) != wantCalls || !wantCalls && !strings.Contains(text, "attn ") {
+				t.Errorf("%s: the member was typed\n%s\nwant calls: %t", what, text, wantCalls)
+			}
+		}
+	}
+	for _, launch := range []struct {
+		name  string
+		tools bool
+	}{{"launched with the tools", true}, {"launched without the tools", false}} {
+		t.Run("a live member "+launch.name, func(t *testing.T) {
+			inBubbleWithAgents(t, func(t *testing.T, w *world) {
+				app, day := crewDayInBubble(t, w, map[string]string{"agent_tools_enabled": strconv.FormatBool(launch.tools), "crew.heartbeat_enabled": "false", "crew.away_close_enabled": "false"})
+				seed := memberTendsASeed(t, w, protocol.SessionID(day.id))
+				setSetting(t, app, "agent_tools_enabled", "true")
+				authorize(app, seed, "Ask before releasing.")
+				w.advance(0)
+				judge(t, typedAuthorizations(day), launch.tools, "set")
+				authorize(app, seed, "")
+				w.advance(0)
+				judge(t, typedAuthorizations(day)[1:], launch.tools, "cleared")
+			})
+		})
+	}
+	t.Run("a member the change starts", func(t *testing.T) {
+		inBubbleWithAgents(t, func(t *testing.T, w *world) {
+			app, day := crewDayInBubble(t, w, map[string]string{"agent_tools_enabled": "true", "crew.heartbeat_enabled": "false", "crew.away_close_enabled": "false"})
+			cli := w.Client()
+			seed := memberTendsASeed(t, w, protocol.SessionID(day.id))
+			crewHandoff(t, cli, day.id, "Asleep until the user writes.", false)
+			synctest.Wait()
+			authorize(app, seed, "Ask before releasing.")
+			synctest.Wait()
+			woken := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
+			if woken == "" || string(woken) == day.id {
+				t.Fatalf("the authorization woke %q, want a new session", woken)
+			}
+			w.terminal(string(woken)).WorkerReportsItsProcessRunning()
+			judge(t, typedAuthorizations(w.bootBubbleClaude(t, string(woken))), true, "set while asleep")
+		})
+	})
 }
