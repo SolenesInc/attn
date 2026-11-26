@@ -950,6 +950,18 @@ impl World {
         Screen::read(self.runtime.accessibility_json())
     }
 
+    /// No frame requested and no wake within `quiet`: an idle window that draws nothing for at
+    /// least that long, such as one whose only wake is an open ask's next reminder.
+    pub fn runtime_rests_for(&self, quiet: Duration) -> bool {
+        let now = self.now().as_secs_f64();
+        !self.runtime.animating
+            && self
+                .runtime
+                .wake_deadline()
+                .is_none_or(|at| at - now >= quiet.as_secs_f64())
+            && self.capture.at_rest()
+    }
+
     /// No frame requested and no wake deadline: an idle window that draws nothing.
     pub fn runtime_is_at_rest(&self) -> bool {
         !self.runtime.animating && self.runtime.wake_deadline().is_none() && self.capture.at_rest()

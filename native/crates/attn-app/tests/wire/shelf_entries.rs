@@ -344,7 +344,7 @@ fn a_new_column_in_use_changes_the_entries_colours_at_once_while_the_frame_and_t
         .collect();
     assert!(hovered.len() > 3, "the hover fades out");
     world.advance(Duration::from_secs(1));
-    assert!(world.runtime_is_at_rest());
+    assert!(world.runtime_rests_for(Duration::from_secs(30)));
 }
 
 const MANY: [&str; 24] = [

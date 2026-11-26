@@ -212,7 +212,7 @@ fn run_command(world: &mut World, query: &str) {
 
 fn rest(world: &mut World) {
     world.advance(Duration::from_secs(2));
-    assert!(world.runtime_is_at_rest());
+    assert!(world.runtime_rests_for(Duration::from_secs(30)));
 }
 
 #[test]
