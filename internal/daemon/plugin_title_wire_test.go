@@ -102,7 +102,7 @@ func TestAPluginPromptReportTitlesTheSessionAndLaterTitleOverridesUnlessUserPinn
 		}
 	}
 
-	app.TypeLine(session, "the login form rejects valid passwords")
+	app.Type(session, "the login form rejects valid passwords\r", userKeystroke)
 	if err := reportPrompt(driver, run.SessionID, run.RunID, "the login form rejects valid passwords"); err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +163,7 @@ func TestANotificationRingDoesNotTitleAPluginSessionThatReportsItsPrompt(t *test
 	}
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
-	app.TypeLine(session, "investigate the webhook timeout")
+	app.Type(session, "investigate the webhook timeout\r", userKeystroke)
 	if err := reportPrompt(driver, run.SessionID, run.RunID, "investigate the webhook timeout"); err != nil {
 		t.Fatal(err)
 	}

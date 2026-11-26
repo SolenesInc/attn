@@ -126,6 +126,7 @@ go ./internal/daemon TestAnEmptyGitDirectoryDoesNotMakeASessionsFolderARepositor
 go ./internal/daemon TestSeedMailResumesACrewMemberTenderOnStandbyWithItsNote
 go ./internal/daemon TestCodexResumeFromATerminalWithNoConversationYetReopensTheClosedSession
 go ./cmd/attnd TestAgentMessagesCarryTheSenderAndTheDaemonsVerdict
+go ./internal/daemon TestAPluginPromptReportTitlesTheSessionAndLaterTitleOverridesUnlessUserPinned
 
 group pty-host ^pty-host/|^internal/ptyhost/
 go ./internal/ptybackend TestSharedHost_ReapingAHostDuringASpawnStopsTheHostAndItsTerminal
