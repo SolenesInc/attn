@@ -155,6 +155,8 @@ pub const SETTINGS: &[Setting] = &[
     Setting { key: "vim_mode_enabled", machine: false, default_on: false },
     Setting { key: "sidebar_width", machine: false, default_on: false },
     Setting { key: "id_labels", machine: false, default_on: false },
+    Setting { key: "asks_button_motion", machine: false, default_on: false },
+    Setting { key: "asks_button_remind_seconds", machine: false, default_on: false },
     Setting { key: "auto_approve_enabled", machine: false, default_on: true },
     Setting { key: "queue_mode_enabled", machine: false, default_on: false },
     Setting { key: "queue_crew_enabled", machine: false, default_on: false },

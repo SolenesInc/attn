@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -599,6 +600,13 @@ func validateIDLabels(value string) error {
 		return fmt.Errorf("invalid id labels: %s (must be lantern or name)", value)
 	}
 	return nil
+}
+
+func validateChoice(name, value string, choices ...string) error {
+	if slices.Contains(choices, value) {
+		return nil
+	}
+	return fmt.Errorf("invalid %s: %s (must be %s)", name, value, strings.Join(choices, ", "))
 }
 
 func extractCommandBinary(command string) string {

@@ -65,6 +65,12 @@ var settingValidators = map[*setting.Setting]func(*Daemon, string, string) error
 	setting.IDLabels: func(d *Daemon, key, value string) error {
 		return validateIDLabels(value)
 	},
+	setting.AsksButtonMotion: func(d *Daemon, key, value string) error {
+		return validateChoice("asks button motion", value, "off", "arrival", "remind")
+	},
+	setting.AsksButtonRemindSeconds: func(d *Daemon, key, value string) error {
+		return validateChoice("asks button remind seconds", value, "30", "60", "120", "300")
+	},
 	setting.ColorScheme: func(d *Daemon, key, value string) error {
 		return keyedError(key, colors.CheckScheme(value))
 	},
