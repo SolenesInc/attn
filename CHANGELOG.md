@@ -6,6 +6,383 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
 
 ---
 
+## [2026-11-26]
+
+### Added
+- **Agents can use attn through tools instead of the shell (experimental).**
+  Turn on Agent tools in Settings → Experimental. Claude Code, Codex and plugin
+  harnesses that ask for them then get a few tools that run short scripts of
+  attn commands. The commands cover seeds, agents, sessions, pull requests,
+  terminals, the browser, reviews, asks, crew and automations. Scripts that
+  read, record notes and check reports, or ask you a question run without a
+  permission prompt. A script that acts, such as running a terminal or
+  closing an agent, is still judged first or asks you. A call acts as the
+  session that made it, also on an outpost, and a refusal tells the agent
+  what to call next. The delegate tool waits for the new agent to start, and
+  says if the agent is stuck at a folder-trust question.
+- **Sigma is built into attn (experimental).** Turn on Sigma in Settings →
+  Experimental and Sigma sessions run without the attn-sigma plugin. They
+  take messages while they work, compact on close, and run on outposts, as
+  crew members, as the Chief and in automations. They show their transcript,
+  last reply, title, usage, cost, recent files and pull requests. A Sigma
+  worker opens as its own tile beside its parent. Its edits, pull requests
+  and spend, like those of other subagents, count toward the parent session.
+  Sigma can also title sessions, classify stops and run the activity line,
+  the Garden advisor and dictation. With Auto-approve on, the default, a new
+  Sigma conversation approves every call, and Settings says so. Open Sigma
+  sessions keep working if you turn the setting off.
+- **Paired programs can ask a model through attn.** `attn model call` reads
+  a sender's token and one JSON request on stdin, and answers with one JSON
+  line holding the model's text. The call runs with no tools. attn keeps a
+  paused Claude process ready, so a call waits only for the model, and the
+  paused process uses no CPU. On Codex a call takes about 3 seconds when the
+  profile's shared Codex server is running. The `model_calls.agent` and
+  `model_calls.model` settings fill in whatever a request leaves out.
+- **`attn model log` lists the model calls your programs made.** Each row
+  says who called, which model answered, how long it took, and the tokens and
+  cost. It never records what was asked or answered. Rows are kept for 30
+  days, and deleting a profile deletes its log.
+- **Every agent has a short id like `ag-7yd2rk`.** The CLI, the inbox,
+  headers and cards show it instead of a long UUID. Every session command
+  accepts the short id, the full id or any unique prefix, and finds closed
+  sessions too. ⌘K, the Ledger and Conversations find an agent by its id.
+- **Agent and seed ids on screen are links.** In terminals, documents,
+  reviews, seed text, crew letters and asks, attn marks the ids it knows. A
+  live agent's id shows its role icon. Rest the pointer on an id to see its
+  card, and ⌘-click to open it: a live agent directly, a closed agent's card
+  with Resume, or a seed as a tile. Copying still gives you the plain text,
+  and ids inside code and commit hashes stay plain.
+- **Hold ⌘L to jump to any id on screen.** While you hold ⌘L (Ctrl+Shift+L
+  on Linux), every agent and seed id in view gets a letter. Type the letter
+  to open that id's card with the keyboard in it. Settings → Appearance → Id
+  Labels picks Lantern, which lights the ids up, or Name in place, which
+  writes each agent's name over its id.
+- **Tell an agent to message another by name.** Session commands accept a
+  live session's full name, ignoring case. If several sessions share it, the
+  command refuses and lists each one with its short id and state.
+- **Agents can steer or interrupt a working agent.** `attn agent msg
+  --steer` adds a message to the agent's current turn. `--interrupt` stops
+  the turn and makes the message the next prompt. `--as-user` sends the text
+  as your own words. `attn agent msg-status` reports how each message was
+  delivered.
+- **Agents can update, follow up on, set deadlines for and oversee asks.**
+  - `attn ask amend` adds to an open ask when the facts change. The ask
+    keeps its place and your half-written answer, and the sheet shows each
+    update.
+  - `attn ask --re` links a follow-up to the earlier ask and shows the answer
+    you gave before.
+  - A one-choice question can say `Default: <choice> after <duration>`, and
+    the sheet tells you when the agent will go with that choice.
+  - `attn ask list` shows an agent its delegates' asks too, and the Chief
+    sees every ask. `attn ask close <id> -m "<why>"` withdraws a delegate's
+    ask and mails the reason to the asker.
+- **Answers can carry files and conditions.** Paste files into an answer,
+  drop them on the sheet or use Attach file. A `:::question-file` question
+  asks you for a screenshot or file, and ⌘V attaches a copied image from
+  anywhere in the sheet. When you pick a choice you can add a condition,
+  such as "yes, but skip the VM step".
+- **You can follow up on an ask you already answered.** A replied ask shows
+  Follow up (`f`). ⌘↩ sends what you write to the agent that holds the ask
+  now, and a notice says who got it.
+- **A half-written answer survives restarts.** The daemon keeps your picks,
+  conditions, notes and files for each open ask, so quitting the app or
+  restarting the daemon no longer loses them.
+- **An answer no agent would get can go to the Chief.** If an ask's agent
+  has closed, or nobody tends its seed, the sheet and the phone say "No agent
+  will get this answer". With a Chief in the profile, Send becomes Send to
+  Chief.
+- **Asks show formatting, links and wide diagrams.** Subjects, questions and
+  choices show links, bold, italic and `code` on the desktop and the phone.
+  A wide Mermaid diagram has Focus diagram to zoom and pan, and wide tables
+  scroll sideways.
+- **A delegate on standby stays visible under its dispatcher.** In the
+  delegation chain and in `attn session list --tree`, it shows as a dormant
+  row with what it waits for, and its own delegates stay nested under it.
+  Its ask cards say that your answer will resume it.
+- **The terminal draws images placed with Unicode placeholders.** Neovim's
+  snacks.image and other tools that use kitty's placeholder cells now show
+  their images and diagrams inline instead of rows of boxes. Images sent as a
+  file path load too.
+- **Read markdown tiles with vim keys, and search them with ⌘F.** With vim
+  mode on, j/k, Ctrl-d/Ctrl-u and gg/G scroll, and ]] and [[ jump between
+  headings. ⌘F (or / in vim mode) opens Document Find, and n/N step through
+  matches.
+- **Move any tile to another desktop.** Drag an agent onto a desktop chip,
+  or drag a markdown, browser, seed or editor tile's row onto another
+  desktop or "+ New desktop". "Move to desktop…" picks the destination from
+  the keyboard.
+- **Browser back, forward and zoom keys work inside a page.** When a page
+  has the keyboard, ⌘[ and ⌘] go back and forward, and ⌘=, ⌘- and ⌘0 zoom
+  the page, also when you rebind them.
+- **New palette commands: cap an agent's context window, pop a tile out,
+  and pick how the active tile stands out.** "Cap <agent>'s context window"
+  makes a Claude or Codex agent compact at a token budget you choose. "Tile
+  focus" switches between dim, rail and spotlight. A popped-out tile works
+  as it does on a desktop: browser pages and annotations work there, and
+  your draft follows the tile back.
+- **⌘I gives the delegation chain and pull request popovers the keyboard.**
+  Hovering a popover no longer takes your arrow keys, so typing in the
+  terminal under it keeps working. ⌘I (Ctrl+Shift+I on Linux) opens or pins
+  the popover, Tab switches between the two, and Esc gives the keyboard
+  back.
+- **The shortcut editor manages the dock.** A Dock section reorders or
+  removes the dock's shortcuts, and a star pins any shortcut there.
+- **Plugins can be installed, reloaded and updated in place.** `attn plugin
+  install` takes a folder, a Git URL or a `.tgz`. `attn plugin reload` and
+  `update`, and the buttons on a plugin's Settings card, restart a plugin
+  without closing its sessions. If the new version doesn't connect, attn
+  puts the previous one back.
+- **Plugin harnesses can name sessions, report prompts and bring a logo.**
+  Their sessions get automatic titles and turn accounting like the built-in
+  harnesses, and the sidebar shows each harness by its registered name and
+  logo. A plugin can name its skill folders, and attn installs attn-workflow
+  there before an attn role launches. Plugin SDK 0.9.0 is published.
+- **`/rename` inside Claude Code renames the session in attn.**
+- **The Reviewer role reviews plans as well as changes.** Every finding
+  points at evidence: a place in the code, a spike's result, or two parts of
+  the plan that disagree. A doubt only building can settle comes back as a
+  question with the spike that would answer it.
+- **The app works with VoiceOver and the keyboard alone.** VoiceOver reads
+  the terminal you type into, its state and its screen line by line, and
+  speaks new output once it pauses. The notebook editor reads as an editable
+  text area, lists announce the highlighted row, and Tab reaches every
+  control in Quick Capture.
+- **Text boxes can be dragged taller.** Notes, charters, prompts, answers
+  and other multi-line fields have a resize grip in the corner.
+- **Analytics records how the app performs.** While usage analytics is on,
+  each sample holds the app's CPU time, frames drawn and frame times, and
+  Settings → Analytics shows them.
+- **Garden v2 (experimental).** Turn it on in Settings → Experimental to try
+  curated beds, routing seeds to a bed by repository, a one-line pulse agents
+  write about their work, and new List, Board and Dock views. While it's on,
+  an agent can't close itself while it still tends growing seeds.
+
+### Changed
+- **attn's app is now the native app.** The app was rebuilt from scratch,
+  and this release installs it in place of the old one. It has the same
+  bundle id, so your data, settings and macOS permissions stay. It launches
+  in about half a second instead of eight tenths and uses less CPU and
+  memory, and typed keys echo within a few milliseconds even under load. It
+  keeps attn's familiar look: outline icons, keycap shortcuts, framed
+  buttons and scroll bars that only take room when needed. Browser tiles
+  keep your sign-ins from the old app.
+- **attn has new colours and two more schemes.** The default `attn` scheme
+  takes its colours from the cat logo: quiet grays, magenta for an agent
+  waiting for you, cyan for one at work, and a violet focus ring that you
+  can tell apart from an error's red. The colours you had before are kept as
+  Classic. Tokyo Night and Catppuccin Macchiato are new. Every scheme has
+  clearer contrast for buttons, badges and idle agents. What's New walks you
+  through the new look and has a button that switches back to Classic.
+- **Sessions get full 24-bit color, and more of the app follows your
+  scheme.** Claude Code used to round its theme to 256 colors unless the
+  daemon happened to inherit `COLORTERM`. Code blocks, Mermaid diagrams,
+  Quick Capture and annotation labels now follow the scheme. The colors
+  guide explains how to match Claude Code to it. Contributed by Erika Saadi.
+- **An agent waiting for your answer stays open.** An agent can't close,
+  park or replant itself, or go on standby and close, while one of its asks
+  is open. It asks, ends its turn, and stays where you can answer it.
+- **Asks open in a centred sheet you can drive from the keyboard.** The side
+  drawer is gone. The sheet lists asks beside a reading column and reopens
+  on the ask you last had, or on the waiting ask of the agent on screen. The
+  text is set at the document reader's size, and the note field and key
+  list stay hidden until you press `n` or `?`.
+  - `1`–`9` pick a choice, and ↓ and ↑ reach every choice, condition, Other
+    and file, with Space to pick.
+  - `q` quotes the selected text into your note, and `c` copies the whole
+    ask as markdown.
+  - `o` and `g` jump to the agent or to its seed in the Garden.
+  - A condition is dropped when you pick another choice in a one-choice
+    question.
+- **The Asks button fills with the accent and pops when asks arrive or
+  wait.** Settings control its motion and how often it reminds you.
+- **Agents pick better visuals for their asks.** Agents are now taught to
+  show a diagram for a flow, a table for a trade-off, and a screenshot for a
+  layout. In measured runs they drew a diagram in 20 of 24 flow asks, up
+  from none. An ask with an image that won't display is refused, and the
+  error points the agent to a Mermaid block or a local image.
+- **Claude Code gets your mid-turn messages as yours.** Since Claude Code
+  2.1.326, a message added during a turn reached Claude as "not from the
+  user", and auto mode didn't count it as your consent. attn now holds Quick
+  Captures, ask answers and annotations until the turn ends, then sends them
+  as your own prompt. A document annotation sent during a mid-turn
+  permission question now reaches the agent, as terminal annotations did.
+- **A calmer title bar with a Notebook button.** The title bar is 40 points
+  tall with centred window buttons and frameless tool icons. Garden, ledger
+  and automations light up while their panel is open.
+- **The shelf names every column and shows which one you're in.** It lists
+  the row's columns by name, frames the ones on screen and fills the current
+  one. A stack shows as one pill, and a tile that needs you shows a dash. A
+  click goes to a column without rearranging anything. When space runs
+  short, columns fold into counts at the ends, and those that need you fold
+  last.
+- **⌘G shows your row of tiles in miniature.** The overview draws every tile
+  of the current row small, with its real content. Arrows move a highlight,
+  up and down past a column's end preview the desktops above and below, and
+  Return lands on the highlight.
+- **Home lists pull requests as dense rows, with the attention drawer's
+  actions.** Each pull request is one line with its role (yours, a review
+  request or a bot's), number, title and status. Its actions appear on the
+  row under the pointer or the keyboard. Rows name the GitHub host when a
+  repository spans more than one, and a band counts down while GitHub
+  rate-limits attn.
+- **The delegation chain and pull request popovers are simpler.** Both show
+  one line per item. The picked agent shows its details below the list, and
+  the picked pull request shows a verdict and only the checks that aren't
+  passing yet.
+- **Drawers and Settings open over the window instead of squeezing it.**
+  Home and your tiles stay put behind the garden and automations drawers.
+  The ledger, the notebook and the full garden fill the window below the
+  title bar. Settings opens as a full-window dialog, and Manage crew is a
+  page beside the sidebar that shows what each launch default resolves to.
+- **The sidebar and queue are easier to scan.** Desktops read as headings
+  with number chips, and the collapsed rail lists every desktop by number.
+  The row in view has an orange bar, and the queue's sections have room
+  between them.
+- **Documents read better on wide tiles.** Paragraphs, lists and headings
+  sit centred at a comfortable reading width. Tables, code, diagrams and
+  images use the tile's full width. The notebook sets notes in a serif font.
+- **The garden shows each seed's state at a glance.** Rows start with a
+  colored state dot, and seed pages have a clear title, a plot progress bar
+  and ruled sections.
+- **Banners stand out and stay short.** Update, shared-Codex and outpost
+  banners are tinted bars with a symbol for their kind, and only failures
+  are solid red. A banner shows at most three lines of notes, and Details
+  opens the full message, such as a failed outpost build's log.
+- **Text is never smaller than 12 points.**
+- **⌘P lists the files you're working on first and shows their machine.**
+  A file's rank fades with time, so a file an agent just edited ranks above
+  one edited often last week, and deleted files no longer appear. With
+  outposts on, each row has a machine tag, and ⇥ shows one machine at a
+  time. Each row says whether an agent edited the file or you opened it.
+- **attn no longer picks a harness for you.** The new-session dialog
+  preselects only the harness you last picked, and a bare `attn` starts it
+  or opens the picker. The handover form, code navigation setup and PR
+  worktrees ask you to choose, and `attn crew create` needs `--agent`.
+- **The projects folder defaults to `~/projects`, and the theme to dark.**
+  On a fresh home, Open PR clones into `~/projects` without asking first. An
+  empty value restores a setting's default. If `~/projects/<name>` holds a
+  different repository, opening a PR refuses and names it, instead of
+  starting an agent on the wrong code.
+- **Homes from before profiles finish their migration on their own.** At
+  start, each old workspace keeps its desktop and everything launches, with
+  no placement picker. A crew member with its own launch desktop no longer
+  makes the migration roll back on every start.
+- **Builders load the attn-workflow skill before they start.** Before this
+  change, 10% to 72% of Builders loaded it, depending on the task. After it,
+  the first 40 all did.
+- **Plugin app servers use the new `attn-app-server-v2` protocol.** Plugin
+  SDK 0.7.0 is a breaking release. attn refuses a server that still speaks
+  protocol 1 and names the process to stop.
+- **A pending automation run says why it hasn't been delivered.** Run lists
+  show the last failure that will be retried, such as a failed fetch, and
+  how many attempts failed.
+- **PR watches report a GitHub outage only after 10 minutes.** A short
+  network blip no longer wakes every watching agent.
+- **Refusals show where you can see them.** A failed save or rejected
+  setting scrolls into view at once. Leaving a field no longer scrolls you
+  back to it.
+
+### Fixed
+- **A Mac home no longer keeps macOS directory services busy.** attn looked
+  up outpost sessions' Linux paths on the Mac's own disk, which triggered the
+  `/home` automount so often that opendirectoryd sat near 70% CPU. Paths
+  from other machines now stay off the home's disk. A seed that is still
+  open also keeps its outpost worktree after its agent's session is cleaned
+  up.
+- **Finished agents no longer show as working for up to 30 minutes.** Any
+  running background task used to count as unfinished work. Now only work
+  that ends on its own counts.
+- **Claude Code's auto mode no longer refuses `attn agent list`.**
+- **A Codex agent stuck at its folder-trust question shows as waiting for
+  you,** not as an idle session.
+- **Seed mail resumes an agent on standby right away.** An agent resumed in
+  the last 5 minutes used to wait out the rest of them.
+- **A Quick Capture to a new session arrives, names it, and its reply stays
+  in the Queue.** A capture to a new Codex session used to wait unseen until
+  you typed. Captures now name the session the way a typed first prompt
+  does. Notifications that arrive after the reply no longer settle it before
+  you've seen it.
+- **Codex transcripts show your messages.** `attn session transcript`
+  showed no user messages for current Codex versions, and `--follow` now
+  keeps reading across a daemon restart.
+- **`attn codex update` reports the version it installed, and shared Codex
+  moves to it.**
+- **You can see and end a closed session's pull request watches.** `attn pr
+  ls`, `status`, `watch` and `unwatch --session` used to fail with "unknown
+  session".
+- **PR watches work on GitHub Enterprise.** Server hosts failed every
+  readiness refresh, and Cloud hosts (`*.ghe.com`) and hosts with a custom
+  `api_host` in `gh` now reach the right API.
+- **An approved pull request whose branch is behind is no longer "Ready to
+  merge".** The popover says "Approved" and that the branch is behind.
+- **A crashed app server's replacement is no longer killed by the old
+  server's exit.**
+- **Reloading an exited Sigma or shared Codex session no longer leaves it
+  stuck as idle.**
+- **A Claude Code reload during an update no longer stops the session.**
+- **New sessions write an activity line for their first turn on every
+  harness.**
+- **Plugin models whose id includes their provider launch correctly.**
+- **Browser tiles no longer steal the keyboard.** A page's autofocus or an
+  agent typing into a page used to pull you out of your terminal.
+- **Arrow keys and Tab keep what you're on in view.** In short windows, the
+  highlight in the picker, palettes, file opener and Notebook finder could
+  move below the list, and Enter opened a row you couldn't see.
+- **Small windows and large text lay out properly.** Segmented controls
+  stack instead of squeezing options to "…", notices keep their buttons side
+  by side, and popovers no longer cut their content short on the right.
+- **Terminals keep their size.** They no longer lose their right edge at
+  fractional display scales, hidden terminals keep their size when you
+  change displays, and a popped-out terminal resizes with its window.
+- **A terminal on another desktop is no longer blank after a color change.**
+- **A terminal can't be frozen by an image path a program prints.**
+- **Chief setup on a new profile opens when and where it should,** and keeps
+  the keyboard on the agent you pick.
+- **App shortcuts wait while the palette or another overlay is open.**
+- **Fields save when you leave them,** in Settings, the crew charter and the
+  delegation table.
+- **Undo in the notebook editor puts the cursor back where it was,** instead
+  of selecting the restored text.
+- **Clearing a note in an answer no longer swallows what you type next.**
+- **"+ Overall note" in the review notes saves your note.**
+- **Pressing `s` in a review again starts another setup agent** when the
+  first one didn't get navigation working.
+- **You can annotate text in list items, quotes, alerts, footnotes and
+  `<details>` summaries.**
+- **Screenshots and tables in lists and quotes are no longer squeezed.**
+- **A link to a note deleted or renamed on disk is marked missing.**
+- **A Notebook row says "in sync" only when it is.**
+- **Move to desktop… moves the tile of the row you used.**
+- **Open follow-ups under a completed plot stay in view in the Garden.**
+- **Garden search finds an automation seed by its exact id, and open seeds
+  never drop out of a garden with more than 1,000 seeds.**
+- **A check report can't overwrite another agent's file on a seed.**
+- **`attn terminal --timeout` covers the whole call again.**
+- **An outpost that can't reach its home says the command didn't run.**
+- **`--json` works for `attn vent`, `attn vent withdraw` and `attn
+  presence`.**
+- **Delegates whose names contain spaces keep their whole name in the
+  delegation chain.**
+- **An unavailable "Resume on …" button can be reached with the keyboard,**
+  so you can read why it is unavailable.
+- **Seed note excerpts no longer show a stray space after bold text.**
+
+### Removed
+- **The attention (PRs) drawer.** Home lists your pull requests with every
+  action the drawer had. ⌘⇧P is now unassigned.
+- **`attn refine`.** Attn Lens now refines dictation through `attn model
+  call`. A `dictation.refinement_agent` you had set carries over to
+  `model_calls.agent`.
+- **The CLI's release-mismatch warning.** The CLI warns only when its
+  protocol differs from the daemon's, and that warning also appears beside
+  any command the daemon refuses.
+- **Garden Review and Garden Advisor.** No one used them, and Garden v2
+  replaces them.
+
+<!-- changelog-commits: 8bf9587f6a0c01e2dd96cf840a36866775064cf9..639d8c06c18276edfce9bd712bd394f628f49a25 -->
+
+---
+
 ## [2026-11-17]
 
 ### Added
