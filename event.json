@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Folded desktops can acquire duplicate reorder ranks",
+  "at": "2026-11-26T19:07:14.142Z",
+  "detail": "Folded empty desktops are missing from reorder bounds. Drag the first occupied desktop below the last occupied one while a named empty desktop follows. The app sends last-occupied/none; the store can assign the folded desktop's rank to the moved desktop. Opening the folded desktop and dragging between the now-tied rows fails because the rank interval is empty. Independently confirmed; isolated store probe on s-zy7kp3. Map visible seams to full-order adjacent bounds and handle existing ties.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/sidebar/reorder.rs",
+    "line": 157
+  },
+  "culprit": "a0d2c0cd2b054b12d4eff15e639fdccd48947f52"
+}
