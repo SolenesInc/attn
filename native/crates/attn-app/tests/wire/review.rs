@@ -8363,3 +8363,40 @@ fn leaves_the_app_shortcuts_on_modified_arrows_to_the_app() {
         assert_eq!(cursor(&world).key, at, "{action:?} moved the review cursor");
     }
 }
+
+#[test]
+fn saved_shortcuts_take_precedence_over_review_vim_motions() {
+    let mut world = open();
+    type_key(&mut world, "l");
+    let at = cursor(&world).key;
+    world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+        settings: Some(
+            [
+                ("vim_mode_enabled".into(), "false".into()),
+                (
+                    "keybindings_config".into(),
+                    r#"{"version":1,"overrides":{"ui.showShortcuts":{"key":"j"}}}"#.into(),
+                ),
+            ]
+            .into(),
+        ),
+        ..attn_protocol::SettingsUpdatedMessage::new()
+    });
+    world.settle();
+
+    type_key(&mut world, "j");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("shortcuts-dialog"))
+            .is_some()
+    );
+    press(&mut world, Key::Escape);
+    assert_eq!(cursor(&world).key, at);
+
+    press(&mut world, Key::Down);
+    assert_ne!(cursor(&world).key, at);
+    type_key(&mut world, "k");
+    assert_eq!(cursor(&world).key, at);
+    assert!(world.runtime_is_at_rest());
+}

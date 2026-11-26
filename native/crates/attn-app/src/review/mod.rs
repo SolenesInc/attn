@@ -30,6 +30,7 @@ use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, memo, row};
 use rune_kit::ScrollBar;
 
 use crate::State;
+use crate::keymap::{Focus, Press};
 use crate::vim::{self, Command};
 use document::Part;
 use frames::{Frame, MapPlace, Side};
@@ -1350,6 +1351,13 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         .entry(tile.clone())
         .or_default();
     let reads_labels = review.sending.is_some() || review.nav.picking.is_some();
+    if !reads_labels
+        && review.nav.panel.is_none()
+        && ev.key != Key::Escape
+        && state.keymap.press(ev, tx, Focus::default()) != Press::Unbound
+    {
+        return false;
+    }
     let step = if reads_labels {
         vim::Step::None
     } else {
