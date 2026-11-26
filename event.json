@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Current automation desktops lose the Rename action",
+  "at": "2026-11-26T21:05:31.457Z",
+  "detail": "The desktop sidebar drops the heading for the current unslotted automation-only desktop at cec7eaba2. Start a run on its default desktop, then open desktop flow there. The model skips this desktop before checking whether it is current, making the heading pencil and in-app Rename action unavailable. Changing the automation destination affects future launches. The documented and landed lifecycle preserves user-renamed desktops. Restore Rename for the current desktop while preserving grouped run rows. Independently source-confirmed. Focused wire verification is in progress on s-h7d2nc.\n"
+}
