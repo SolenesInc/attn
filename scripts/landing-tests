@@ -145,7 +145,7 @@ go ./cmd/attnd TestAPlotPayloadPlacesItsPlotAndOrdersItsChildren
 go ./cmd/attnd TestHelpListsEveryCommandAndReferenceAndEachCommandExplainsItself
 
 group agent-tools ^internal/daemon/agent_(tools|script)
-go ./internal/daemon TestTheServerOffersExactlyFiveToolsEachWholeInTheFirstRequest
+go ./internal/daemon TestTheServerOffersExactlyFourToolsEachWholeInTheFirstRequest
 
 group cli-help ^cli/|^internal/prompttest/
 go ./cmd/attnd TestPRWaitReadyReportsEachActionableUpdateOnceAcrossInvocations

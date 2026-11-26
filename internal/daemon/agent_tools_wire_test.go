@@ -459,7 +459,7 @@ func TestTheIntentMapNamesEveryReferenceTheCLIMapNames(t *testing.T) {
 	}
 }
 
-func TestTheServerOffersExactlyFiveToolsEachWholeInTheFirstRequest(t *testing.T) {
+func TestTheServerOffersExactlyFourToolsEachWholeInTheFirstRequest(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	setSetting(t, app, "agent_tools_enabled", "true")

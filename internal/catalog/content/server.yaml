@@ -2,14 +2,13 @@
 # shows before it reads the server's instructions. The instructions are the
 # intent map: `intro`, then a list of every group's `map.rows`, then each
 # group's `map.notes`. A group that offers tools needs a map. `record` and
-# `do` are the tools that run a script: `record` with commands of effect read
-# or record, `do` with commands of any effect. `text` is the tool's
-# description and `script` its argument's. Each text is followed by the
-# signature of every command marked `upfront` that it runs and `do` alone
-# does not share: `record.text` by those that read or record, `do.text` by
-# those that act. `record.text` names every command of effect record. Commands
-# marked `tool` are served as tools of their own. Claude Code cuts the
-# instructions and each description at 4,096 characters, so the generator
+# `do` are the tools that run a script: `record` runs commands of effect read
+# or record, `do` runs commands of any effect. `text` is the tool's
+# description and `script` its argument's. A command marked `upfront` has its
+# signature after `record.text` when its effect is read or record, and after
+# `do.text` when it acts. `record.text` names every command of effect record.
+# Commands marked `tool` are served as tools of their own. Claude Code cuts
+# the instructions and each description at 4,096 characters, so the generator
 # refuses a longer one.
 server:
   name: attn
