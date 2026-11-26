@@ -8,7 +8,9 @@ use attn_ui::system::{Type, keys_hint, words};
 use rune::{El, Key, KeyEvent, Tx, col, row};
 use rune_kit::ScrollBar;
 
+use super::Motion;
 use crate::State;
+use crate::vim::{Command, Step};
 
 /// An answer slower than this, after the cursor moved, is offered instead of followed: a jump
 /// that lands after the user moved on loses their place.
@@ -24,11 +26,11 @@ pub(crate) enum Kind {
 }
 
 impl Kind {
-    pub(crate) fn of_key(key: &str) -> Option<Kind> {
-        match key {
-            "f" => Some(Kind::Definition),
-            "r" => Some(Kind::Uses),
-            "h" => Some(Kind::Type),
+    pub(super) fn of_step(step: Step) -> Option<Kind> {
+        match step {
+            Step::Command(Command::GoDefinition) => Some(Kind::Definition),
+            Step::Command(Command::GoReferences) => Some(Kind::Uses),
+            Step::Command(Command::Hover) => Some(Kind::Type),
             _ => None,
         }
     }
@@ -389,17 +391,28 @@ fn place_key(i: usize) -> String {
     format!("review.nav.place.{i}")
 }
 
-/// Keys while a list of places shows: ↑/↓ and the page keys pick and bring the pick into view,
-/// and Enter says to open the pick. Escape is left to the caller.
-pub(crate) fn panel_key(tile: &str, panel: &mut Answer, ev: &KeyEvent, tx: &mut Tx) -> bool {
+/// Keys while a list of places shows: j/k, Ctrl-d/Ctrl-u, gg/G and their arrow and page key
+/// aliases pick and bring the pick into view, and Enter says to open the pick. Escape is left to
+/// the caller.
+pub(super) fn panel_key(
+    tile: &str,
+    panel: &mut Answer,
+    motion: Option<Motion>,
+    ev: &KeyEvent,
+    tx: &mut Tx,
+) -> bool {
     let last = panel.locations.len().saturating_sub(1);
-    panel.cursor = match ev.key {
-        Key::Down => (panel.cursor + 1).min(last),
-        Key::Up => panel.cursor.saturating_sub(1),
-        Key::PageDown => (panel.cursor + panel.page).min(last),
-        Key::PageUp => panel.cursor.saturating_sub(panel.page),
-        Key::Enter => return true,
-        _ => return false,
+    let half = (panel.page / 2).max(1);
+    panel.cursor = match motion {
+        Some(Motion::Down) => (panel.cursor + 1).min(last),
+        Some(Motion::Up) => panel.cursor.saturating_sub(1),
+        Some(Motion::PageDown) => (panel.cursor + panel.page).min(last),
+        Some(Motion::PageUp) => panel.cursor.saturating_sub(panel.page),
+        Some(Motion::HalfPageDown) => (panel.cursor + half).min(last),
+        Some(Motion::HalfPageUp) => panel.cursor.saturating_sub(half),
+        Some(Motion::Top) => 0,
+        Some(Motion::Bottom) => last,
+        _ => return ev.key == Key::Enter,
     };
     tx.scroll_into_view_in(list_key(tile), place_key(panel.cursor));
     false

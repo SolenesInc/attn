@@ -520,12 +520,12 @@ fn shows_the_keys_in_a_key_line_and_a_sheet() {
         .into_iter()
         .filter_map(|n| n.name)
         .collect();
-    assert!(keys.iter().any(|k| k == "↑ ↓ line"), "{keys:?}");
+    assert!(keys.iter().any(|k| k == "j k line"), "{keys:?}");
     assert!(keys.iter().any(|k| k == "? all keys"), "{keys:?}");
-    assert!(keys.iter().any(|k| k == "← → stop"), "{keys:?}");
+    assert!(keys.iter().any(|k| k == "h l stop"), "{keys:?}");
     assert!(keys.iter().any(|k| k == "c note"), "{keys:?}");
     assert!(
-        keys.iter().any(|k| k == "f r h definition, uses, type"),
+        keys.iter().any(|k| k == "gd gr K definition, uses, type"),
         "{keys:?}"
     );
 
@@ -1865,9 +1865,16 @@ fn sideways(world: &World) -> f32 {
 }
 
 #[test]
-fn shift_left_and_right_scroll_a_long_line_sideways_by_half_the_view_in_the_file_view_and_the_walkthrough()
+fn h_and_l_shifted_and_shift_left_and_right_scroll_a_long_line_sideways_by_half_the_view_in_the_file_view_and_the_walkthrough()
  {
-    for frame in ["brief", "walkthrough"] {
+    let ways = [
+        (Stroke::Typed("L"), Stroke::Typed("H")),
+        (Stroke::Shifted("Right"), Stroke::Shifted("Left")),
+    ];
+    for ((right, left), frame) in ways
+        .into_iter()
+        .flat_map(|way| ["brief", "walkthrough"].map(|frame| (way, frame)))
+    {
         let mut world = open_with_calc(frame, || {
             Some(file_answer("calc.go", calc_with_a_long_line(), "h"))
         });
@@ -1880,13 +1887,13 @@ fn shift_left_and_right_scroll_a_long_line_sideways_by_half_the_view_in_the_file
         let half = world.screen().bounds(Target::key(FILE_BODY)).unwrap()[2] / 2.0;
         assert_eq!(sideways(&world), 0.0, "{frame}");
 
-        press_shifted(&mut world, Key::Right);
+        stroke(&mut world, right);
         assert!(
             (sideways(&world) - half).abs() < 1.0,
             "{frame}: {} for {half}",
             sideways(&world)
         );
-        press_shifted(&mut world, Key::Right);
+        stroke(&mut world, right);
         assert!((sideways(&world) - 2.0 * half).abs() < 1.0, "{frame}");
         assert_eq!(
             file_cursor(&world),
@@ -1897,10 +1904,10 @@ fn shift_left_and_right_scroll_a_long_line_sideways_by_half_the_view_in_the_file
             assert_eq!(stage_stop(&world).as_deref(), Some("calc.go"));
         }
 
-        press_shifted(&mut world, Key::Left);
+        stroke(&mut world, left);
         assert!((sideways(&world) - half).abs() < 1.0, "{frame}");
-        press_shifted(&mut world, Key::Left);
-        press_shifted(&mut world, Key::Left);
+        stroke(&mut world, left);
+        stroke(&mut world, left);
         assert_eq!(sideways(&world), 0.0, "{frame}");
         assert_eq!(file_cursor(&world), cursor, "{frame}");
         world.advance(std::time::Duration::from_secs(5));
@@ -5284,14 +5291,14 @@ fn to_return_sum(world: &mut World) {
 }
 
 #[test]
-fn labels_the_names_on_the_line_with_f_and_goes_to_the_definition_of_the_one_whose_label_is_typed()
+fn labels_the_names_on_the_line_with_gd_and_goes_to_the_definition_of_the_one_whose_label_is_typed()
 {
     let (mut world, _) = open_served(DOCUMENT, bundle());
     world.daemon.on("code_nav", |_| {
         nav_answer(vec![place("util.go", 2, 5, "func helper() {}")])
     });
     press(&mut world, Key::Right);
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     assert_eq!(labels_on(&world), ["a", "s", "d", "f", "g", "h"]);
     assert!(world.daemon.sent_of("code_nav").is_empty());
 
@@ -5348,7 +5355,7 @@ fn keeps_the_picked_place_in_view_as_the_keys_move_it_down_a_long_list_of_uses()
         }
     });
     press(&mut world, Key::Right);
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     type_key(&mut world, "s");
     let list = "tile.m.review.nav.list";
     assert!(!shows_inside(&world, list, "review.nav.place.59"));
@@ -5427,7 +5434,7 @@ fn a_list_opened_after_another_closed_pages_by_the_rows_it_shows() {
             .count()
     };
     press(&mut world, Key::Right);
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     type_key(&mut world, "s");
     let small = shown(&world);
     press(&mut world, Key::PageDown);
@@ -5435,7 +5442,7 @@ fn a_list_opened_after_another_closed_pages_by_the_rows_it_shows() {
     world.resize((1600.0, 900.0));
     world.settle();
 
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     type_key(&mut world, "s");
     let rows = shown(&world);
     assert!(
@@ -5473,7 +5480,7 @@ fn pages_through_every_use(mut world: World) {
         }
     });
     press(&mut world, Key::Right);
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     type_key(&mut world, "s");
     let list = "tile.m.review.nav.list";
     let shown = |world: &World| -> Vec<usize> {
@@ -5540,7 +5547,7 @@ fn place_where_widths(size: (f32, f32), scale: Option<&str>) -> Vec<(String, f32
         }
     });
     press(&mut world, Key::Right);
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     type_key(&mut world, "s");
     world.settle();
     let list = "tile.m.review.nav.list";
@@ -5562,7 +5569,7 @@ fn follows_an_answer_that_arrives_in_time_with_the_asked_line_marked_until_it_do
     let (mut world, _) = open_served(DOCUMENT, bundle());
     world.daemon.on("code_nav", |_| ());
     to_return_sum(&mut world);
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     type_key(&mut world, "s");
     assert_eq!(asked_rows(&world), 1);
     assert_eq!(
@@ -5589,7 +5596,7 @@ fn offers_an_answer_that_arrived_late_once_the_cursor_moved_and_enter_opens_it()
     let (mut world, _) = open_served(DOCUMENT, bundle());
     world.daemon.on("code_nav", |_| ());
     to_return_sum(&mut world);
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     type_key(&mut world, "s");
     press(&mut world, Key::Up);
     world.advance(std::time::Duration::from_secs(2));
@@ -5625,7 +5632,7 @@ fn drops_an_offer_on_escape_and_twenty_seconds_after_it_shows() {
     let (mut world, _) = open_served(DOCUMENT, bundle());
     world.daemon.on("code_nav", |_| ());
     let late = |world: &mut World| {
-        type_key(world, "f");
+        type_key(world, "gd");
         type_key(world, "s");
         press(world, Key::Up);
         world.advance(std::time::Duration::from_secs(2));
@@ -5654,9 +5661,9 @@ fn an_answer_to_an_older_question_leaves_the_newer_one_waiting() {
     let (mut world, _) = open_served(DOCUMENT, bundle());
     world.daemon.on("code_nav", |_| ());
     to_return_sum(&mut world);
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     type_key(&mut world, "s");
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     type_key(&mut world, "s");
     let asked = world.daemon.sent_of("code_nav");
     assert_eq!(asked.len(), 2);
@@ -5689,7 +5696,7 @@ fn a_click_takes_or_drops_an_offer_and_opens_or_closes_a_list_of_places() {
     let (mut world, _) = open_served(DOCUMENT, bundle());
     world.daemon.on("code_nav", |_| ());
     let late = |world: &mut World, answer: serde_json::Value| {
-        type_key(world, "f");
+        type_key(world, "gd");
         type_key(world, "s");
         press(world, Key::Up);
         world.advance(std::time::Duration::from_secs(2));
@@ -5730,7 +5737,7 @@ fn a_click_takes_or_drops_an_offer_and_opens_or_closes_a_list_of_places() {
 }
 
 #[test]
-fn shows_the_type_with_h_and_opens_a_definition_outside_the_repository_read_only() {
+fn shows_the_type_with_k_and_opens_a_definition_outside_the_repository_read_only() {
     let (mut world, _) = open_served(DOCUMENT, bundle());
     world.daemon.on("code_nav", |r| {
         if r["kind"] == "hover" {
@@ -5745,7 +5752,7 @@ fn shows_the_type_with_h_and_opens_a_definition_outside_the_repository_read_only
         }
     });
     to_return_sum(&mut world);
-    type_key(&mut world, "h");
+    type_key(&mut world, "K");
     type_key(&mut world, "s");
     let shown = world
         .screen()
@@ -5759,7 +5766,7 @@ fn shows_the_type_with_h_and_opens_a_definition_outside_the_repository_read_only
     assert!(said.iter().any(|t| t == "var sum int"), "{said:?}");
     press(&mut world, Key::Escape);
 
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     type_key(&mut world, "s");
     let view = file_view(&world).unwrap();
     assert!(
@@ -5784,14 +5791,14 @@ fn says_why_a_question_got_no_answer_and_asks_nothing_about_a_removed_line_or_pr
         |_| json!({"event": "code_nav_result", "success": true, "locations": []}),
     );
     press(&mut world, Key::Down);
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     assert_eq!(
         nav_note(&world).as_deref(),
         Some("Put the cursor on a line of code to ask about it.")
     );
     press(&mut world, Key::Right);
     press(&mut world, Key::Down);
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     assert_eq!(
         nav_note(&world).as_deref(),
         Some("This line was removed; ask about the code as it is now.")
@@ -5800,7 +5807,7 @@ fn says_why_a_question_got_no_answer_and_asks_nothing_about_a_removed_line_or_pr
 
     press(&mut world, Key::Down);
     press(&mut world, Key::Down);
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     type_key(&mut world, "s");
     assert_eq!(
         nav_note(&world).as_deref(),
@@ -5821,7 +5828,7 @@ fn labels_the_names_on_the_file_views_line_as_the_walkthrough_shows_it_and_asks_
         Some("added line 4: \tsum := a + b")
     );
 
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     assert_eq!(labels_on(&world), ["a", "s", "d"]);
     type_key(&mut world, "d");
     let asked = world.daemon.sent_of("code_nav");
@@ -5840,7 +5847,8 @@ fn labels_the_names_on_the_file_views_line_as_the_walkthrough_shows_it_and_asks_
 }
 
 #[test]
-fn lists_the_uses_of_a_name_with_f_on_its_own_definition_and_opens_the_one_picked_from_thousands() {
+fn lists_the_uses_of_a_name_with_gd_on_its_own_definition_and_opens_the_one_picked_from_thousands()
+{
     let (mut world, _) = open_served(DOCUMENT, bundle());
     world.daemon.on("code_nav", |r| {
         if r["kind"] == "definition" {
@@ -5854,7 +5862,7 @@ fn lists_the_uses_of_a_name_with_f_on_its_own_definition_and_opens_the_one_picke
         }
     });
     press(&mut world, Key::Right);
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     let built = attn_app::places_built();
     type_key(&mut world, "s");
     let list = world
@@ -5893,7 +5901,7 @@ fn marks_the_asked_line_in_the_file_view_while_its_question_waits() {
     let (mut world, _) = open_served(DOCUMENT, bundle());
     world.daemon.on("code_nav", |_| ());
     type_key(&mut world, "2");
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     type_key(&mut world, "d");
     let asked: Vec<String> = world
         .screen()
@@ -5913,7 +5921,7 @@ fn says_in_plain_words_that_a_question_asked_while_the_daemon_is_unreachable_was
     press(&mut world, Key::Right);
     world.daemon.disconnect();
     world.settle();
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     type_key(&mut world, "s");
     let note = world.screen().get(Target::key("review.nav.note"));
     assert_eq!(
@@ -5938,7 +5946,7 @@ fn opens_nothing_for_i_c_or_a_in_a_file_outside_the_repository_and_says_why() {
         )])
     });
     press(&mut world, Key::Right);
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     type_key(&mut world, "g");
     let view = file_view(&world).unwrap();
     assert!(
@@ -6786,7 +6794,7 @@ fn writes_a_note_on_a_whole_block() {
 fn says_a_document_block_is_not_code_when_asked_about_a_name() {
     let (mut world, _, _) = open_guide();
     to_block(&mut world, "line 3");
-    type_key(&mut world, "f");
+    type_key(&mut world, "gd");
     assert_eq!(
         nav_note(&world).as_deref(),
         Some("Put the cursor on a line of code to ask about it.")
@@ -7591,7 +7599,7 @@ fn the_list_of_places_keeps_its_close_and_its_list_above_the_key_line_in_the_sma
         )
     });
     press(&mut world, Key::Right);
-    type_key(&mut world, "r");
+    type_key(&mut world, "gr");
     type_key(&mut world, "s");
     world.settle();
     for key in ["review.nav.panel.close", "tile.m.review.nav.list"] {
@@ -8019,4 +8027,318 @@ fn in_the_smallest_window_at_large_text_the_chosen_frame_stays_whole_and_all_key
         chosen.visible[2],
         chosen.rect[2]
     );
+}
+
+/// Says `vim_mode_enabled` is `on`, as the daemon does when the user flips it.
+fn vim_mode(world: &mut World, on: bool) {
+    world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+        settings: Some([("vim_mode_enabled".to_owned(), on.to_string())].into()),
+        ..attn_protocol::SettingsUpdatedMessage::new()
+    });
+    world.settle();
+}
+
+fn ctrl(world: &mut World, c: char) {
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key: Key::Command(c),
+            mods: Mods {
+                ctrl: true,
+                ..Mods::default()
+            },
+        })
+    });
+}
+
+/// A key of a review, typed as vim keys or pressed as the arrow or page key it stands for.
+#[derive(Clone, Copy)]
+enum Stroke {
+    Typed(&'static str),
+    Ctrl(char),
+    Pressed(&'static str),
+    Shifted(&'static str),
+}
+
+fn stroke(world: &mut World, stroke: Stroke) {
+    let named = |name: &str| match name {
+        "Down" => Key::Down,
+        "Up" => Key::Up,
+        "Left" => Key::Left,
+        "Right" => Key::Right,
+        "Home" => Key::Home,
+        "End" => Key::End,
+        "PageDown" => Key::PageDown,
+        "PageUp" => Key::PageUp,
+        other => panic!("no key {other}"),
+    };
+    match stroke {
+        Stroke::Typed(text) => type_key(world, text),
+        Stroke::Ctrl(c) => ctrl(world, c),
+        Stroke::Pressed(name) => press(world, named(name)),
+        Stroke::Shifted(name) => press_shifted(world, named(name)),
+    }
+}
+
+#[test]
+fn vim_keys_walk_the_brief_by_line_stop_and_end_as_the_arrow_keys_do_whether_vim_mode_is_on_or_off()
+{
+    use Stroke::{Pressed, Typed};
+    let steps = [
+        (Typed("l"), Pressed("Right"), "part.4.row.0"),
+        (Typed("j"), Pressed("Down"), "part.4.row.1"),
+        (Typed("j"), Pressed("Down"), "part.4.row.2"),
+        (Typed("l"), Pressed("Right"), "part.6.row.0"),
+        (Typed("h"), Pressed("Left"), "part.4.row.0"),
+        (Typed("]]"), Pressed("Right"), "part.6.row.0"),
+        (Typed("[["), Pressed("Left"), "part.4.row.0"),
+        (Typed("G"), Pressed("End"), "part.8.entry.0"),
+        (Typed("gg"), Pressed("Home"), "part.0"),
+    ];
+    for vim in [false, true] {
+        for by_vim in [true, false] {
+            let mut world = open();
+            vim_mode(&mut world, vim);
+            for (typed, pressed, at) in steps {
+                stroke(&mut world, if by_vim { typed } else { pressed });
+                assert_eq!(
+                    cursor(&world).key,
+                    Some(format!("tile.m.review.{at}")),
+                    "vim mode {vim}, by vim keys {by_vim}"
+                );
+            }
+            world.advance(std::time::Duration::from_secs(5));
+            assert!(world.runtime_is_at_rest());
+        }
+    }
+}
+
+fn numbered_lines(count: i64) -> Vec<ReviewRow> {
+    (1..=count)
+        .map(|i| line(" ", Some(i), Some(i), &format!("// line {i}")))
+        .collect()
+}
+
+#[test]
+fn ctrl_d_and_ctrl_u_move_the_file_view_half_a_page_and_gg_and_g_go_to_its_ends_as_their_aliases_do()
+ {
+    use Stroke::{Ctrl, Pressed, Typed};
+    let steps = [
+        (Ctrl('d'), Ctrl('d'), 14),
+        (Ctrl('u'), Ctrl('u'), 4),
+        (Typed("G"), Pressed("End"), 40),
+        (Typed("gg"), Pressed("Home"), 1),
+        (Typed("j"), Pressed("Down"), 2),
+        (Typed("k"), Pressed("Up"), 1),
+        (Pressed("PageDown"), Pressed("PageDown"), 21),
+    ];
+    for frame in ["brief", "walkthrough"] {
+        for by_vim in [true, false] {
+            let mut world = open_with_calc(frame, || {
+                Some(file_answer("calc.go", numbered_lines(40), "h"))
+            });
+            assert_eq!(
+                file_cursor(&world).as_deref(),
+                Some("unchanged line 4: // line 4"),
+                "{frame}"
+            );
+            for (typed, pressed, at) in steps {
+                stroke(&mut world, if by_vim { typed } else { pressed });
+                assert_eq!(
+                    file_cursor(&world),
+                    Some(format!("unchanged line {at}: // line {at}")),
+                    "{frame}, by vim keys {by_vim}"
+                );
+            }
+            if frame == "walkthrough" {
+                assert_eq!(stage_stop(&world).as_deref(), Some("calc.go"));
+            }
+            world.advance(std::time::Duration::from_secs(5));
+            assert!(world.runtime_is_at_rest(), "{frame}");
+        }
+    }
+}
+
+#[test]
+fn ctrl_d_moves_the_brief_about_half_a_page_of_rows_and_ctrl_u_comes_back() {
+    let mut world = open();
+    type_key(&mut world, "gg");
+    let top = cursor(&world).key;
+    ctrl(&mut world, 'd');
+    let down = cursor(&world).key;
+    assert_eq!(down.as_deref(), Some("tile.m.review.part.6.row.0"));
+    ctrl(&mut world, 'u');
+    assert_eq!(cursor(&world).key, top);
+}
+
+#[test]
+fn h_and_l_step_the_walkthroughs_stops_and_the_maps_arrows() {
+    let (mut world, _) = open_served(
+        DOCUMENT,
+        ReviewBundle {
+            frame: "walkthrough".into(),
+            ..bundle()
+        },
+    );
+    type_key(&mut world, "j");
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 5: \treturn sum")
+    );
+    type_key(&mut world, "l");
+    assert_eq!(stage_stop(&world).as_deref(), Some("util.go"));
+    type_key(&mut world, "h");
+    assert_eq!(stage_stop(&world).as_deref(), Some("calc.go"));
+
+    let mut world = open_map(map_bundle("map"));
+    assert_eq!(map_current(&world).as_deref(), Some("Add(a, b)"));
+    type_key(&mut world, "l");
+    assert_eq!(map_current(&world).as_deref(), Some("helper()"));
+    type_key(&mut world, "h");
+    assert_eq!(map_current(&world).as_deref(), Some("Add(a, b)"));
+}
+
+#[test]
+fn v_selects_lines_from_the_cursor_that_the_moves_extend_and_a_note_covers_and_v_again_drops_it() {
+    let (mut world, kept, _) = open_marking(presented());
+    type_key(&mut world, "lj");
+    type_key(&mut world, "V");
+    type_key(&mut world, "j");
+    type_key(&mut world, "c");
+    write(&mut world, "Name it once");
+    {
+        let marks = kept.lock().unwrap();
+        let anchor = &marks[0]["anchor"];
+        assert_eq!(
+            (
+                anchor["file_start_line"].clone(),
+                anchor["file_end_line"].clone()
+            ),
+            (json!(4), json!(4))
+        );
+        assert_eq!(anchor["exact"], "-\treturn a + b\n+\tsum := a + b");
+    }
+
+    press(&mut world, Key::Enter);
+    assert!(file_view(&world).is_some());
+    type_key(&mut world, "Vj");
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 5: \treturn sum")
+    );
+    type_key(&mut world, "c");
+    write(&mut world, "Both lines");
+    type_key(&mut world, "Vj");
+    type_key(&mut world, "V");
+    type_key(&mut world, "j");
+    type_key(&mut world, "c");
+    write(&mut world, "One line");
+    let marks = kept.lock().unwrap().clone();
+    let lines: Vec<_> = marks
+        .iter()
+        .map(|m| {
+            (
+                m["anchor"]["file_start_line"].clone(),
+                m["anchor"]["file_end_line"].clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            (json!(4), json!(4)),
+            (json!(4), json!(5)),
+            (json!(7), json!(7))
+        ]
+    );
+}
+
+#[test]
+fn ctrl_d_g_and_gg_scroll_the_keys_sheet() {
+    let mut world = review_in(
+        row(vec![document_tile("m", DOC, None)]),
+        (800.0, 600.0),
+        Some("1.5"),
+    );
+    click(&mut world, Target::key("tile.m.review.keys"));
+    type_key(&mut world, "?");
+    let body = Target::key("tile.m.review.sheet.page");
+    let scrolled = |world: &World| world.screen().scrolled(body.clone()).unwrap_or(0.0);
+    assert_eq!(scrolled(&world), 0.0);
+    ctrl(&mut world, 'd');
+    let half = scrolled(&world);
+    assert!(half > 0.0);
+    type_key(&mut world, "G");
+    let bottom = scrolled(&world);
+    assert!(bottom > half, "{bottom} after {half}");
+    ctrl(&mut world, 'u');
+    assert!(scrolled(&world) < bottom);
+    type_key(&mut world, "gg");
+    assert_eq!(scrolled(&world), 0.0);
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Review keys"))
+            .is_some()
+    );
+}
+
+#[test]
+fn j_k_ctrl_d_ctrl_u_gg_and_g_pick_in_a_list_of_uses() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    world.daemon.on("code_nav", |r| {
+        if r["kind"] == "definition" {
+            nav_answer(vec![place("calc.go", 3, 5, "func Add(a, b int) int {")])
+        } else {
+            nav_answer(
+                (0..60)
+                    .map(|i| place(&format!("pkg{i}.go"), i + 1, 2, "\tAdd(1, 2)"))
+                    .collect(),
+            )
+        }
+    });
+    type_key(&mut world, "l");
+    type_key(&mut world, "gd");
+    type_key(&mut world, "s");
+    let list = "tile.m.review.nav.list";
+    for (keys, picked) in [
+        (Stroke::Typed("G"), 59),
+        (Stroke::Typed("gg"), 0),
+        (Stroke::Ctrl('d'), 9),
+        (Stroke::Typed("j"), 10),
+        (Stroke::Ctrl('d'), 19),
+        (Stroke::Ctrl('u'), 10),
+        (Stroke::Typed("k"), 9),
+        (Stroke::Typed("j"), 10),
+    ] {
+        stroke(&mut world, keys);
+        world.settle();
+        assert!(
+            shows_inside(&world, list, &format!("review.nav.place.{picked}")),
+            "place {picked}"
+        );
+    }
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        file_reads(&world).last().map(String::as_str),
+        Some("pkg10.go")
+    );
+}
+
+#[test]
+fn escape_after_g_drops_the_g_and_leaves_the_file_view_open() {
+    let mut world = open_with_calc("brief", || {
+        Some(file_answer("calc.go", numbered_lines(40), "h"))
+    });
+    type_key(&mut world, "g");
+    press(&mut world, Key::Escape);
+    assert!(file_view(&world).is_some());
+    type_key(&mut world, "g");
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("unchanged line 4: // line 4"),
+        "a g after Escape starts a new sequence"
+    );
+    press(&mut world, Key::Escape);
+    press(&mut world, Key::Escape);
+    assert!(file_view(&world).is_none());
 }

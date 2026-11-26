@@ -30,6 +30,7 @@ use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, memo, row};
 use rune_kit::ScrollBar;
 
 use crate::State;
+use crate::vim::{self, Command};
 use document::Part;
 use frames::{Frame, MapPlace, Side};
 
@@ -1266,16 +1267,71 @@ fn held(
     Some((holder.pane.clone(), content.message.clone()))
 }
 
-/// The review's keys while its tile holds the keyboard and nothing else has focus: ↑/↓ move
-/// by block and row, ←/→ by stop or, in the Map, by arrow, `1` to `3` switch frames, `b`
-/// switches the diagrams' side, Enter shows the changed files from the facts, `?` shows the
-/// keys and Escape closes them.
+/// A key that moves the cursor or the view, or starts a selection, read from its vim key or
+/// the arrow or page key that stands for it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Motion {
+    Down,
+    Up,
+    Left,
+    Right,
+    SidewaysLeft,
+    SidewaysRight,
+    HalfPageDown,
+    HalfPageUp,
+    PageDown,
+    PageUp,
+    Top,
+    Bottom,
+    VisualLine,
+}
+
+impl Motion {
+    fn of(ev: &KeyEvent, step: vim::Step) -> Option<Motion> {
+        if let vim::Step::Command(command) = step {
+            return Some(match command {
+                Command::LineDown => Motion::Down,
+                Command::LineUp => Motion::Up,
+                Command::Left | Command::PrevSection => Motion::Left,
+                Command::Right | Command::NextSection => Motion::Right,
+                Command::ShiftLeft => Motion::SidewaysLeft,
+                Command::ShiftRight => Motion::SidewaysRight,
+                Command::HalfPageDown => Motion::HalfPageDown,
+                Command::HalfPageUp => Motion::HalfPageUp,
+                Command::Top => Motion::Top,
+                Command::Bottom => Motion::Bottom,
+                Command::VisualLine => Motion::VisualLine,
+                _ => return None,
+            });
+        }
+        Some(match ev.key {
+            Key::Down => Motion::Down,
+            Key::Up => Motion::Up,
+            Key::Left if ev.mods.shift => Motion::SidewaysLeft,
+            Key::Right if ev.mods.shift => Motion::SidewaysRight,
+            Key::Left => Motion::Left,
+            Key::Right => Motion::Right,
+            Key::PageDown => Motion::PageDown,
+            Key::PageUp => Motion::PageUp,
+            Key::Home => Motion::Top,
+            Key::End => Motion::Bottom,
+            _ => return None,
+        })
+    }
+}
+
+/// Whether `ev` moves with ⇧ held to select, as ⇧↑ and ⇧↓ do.
+fn shift_selects(ev: &KeyEvent) -> bool {
+    ev.mods.shift && matches!(ev.key, Key::Up | Key::Down)
+}
+
+/// The review's keys while its tile holds the keyboard and nothing else has focus. They are
+/// vim keys whatever `vim_mode_enabled` says, with the arrow keys as aliases: j/k move by block
+/// and row, h/l by stop or, in the Map, by arrow, `1` to `3` switch frames, `b` switches the
+/// diagrams' side, Enter shows the changed files from the facts, `?` shows the keys and Escape
+/// closes them.
 pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    let back_key = matches!(ev.key, Key::Command(c) if c.eq_ignore_ascii_case(&'o'))
-        && ev.mods.ctrl
-        && !ev.mods.cmd
-        && !ev.mods.alt;
-    if tx.focused().is_some() || (!back_key && (ev.mods.cmd || ev.mods.ctrl || ev.mods.alt)) {
+    if tx.focused().is_some() {
         return false;
     }
     let Some((tile, message)) = held(state) else {
@@ -1290,6 +1346,24 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         .tiles
         .entry(tile.clone())
         .or_default();
+    let reads_labels = review.sending.is_some() || review.nav.picking.is_some();
+    let step = if reads_labels {
+        vim::Step::None
+    } else {
+        vim::step(&mut state.window.vim_prefix, ev, tx)
+    };
+    if step == vim::Step::Pending {
+        return true;
+    }
+    let back_key = matches!(ev.key, Key::Command(c) if c.eq_ignore_ascii_case(&'o'))
+        && ev.mods.ctrl
+        && !ev.mods.cmd
+        && !ev.mods.alt;
+    let chord = ev.mods.cmd || ev.mods.ctrl || ev.mods.alt;
+    let motion = Motion::of(ev, step);
+    if chord && !back_key && motion.is_none() {
+        return false;
+    }
     let reading = Reading::new(&tile, &message.content, bundle, review);
     let cursor = reading.cursor(review);
     let typed = match &ev.key {
@@ -1307,7 +1381,15 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         state.readings.revision += 1;
         return true;
     }
-    if let Some(done) = nav_key(state, &tile, &message, &reading, ev, typed, tx) {
+    if let Some(done) = nav_key(
+        state,
+        &tile,
+        &message,
+        &reading,
+        (ev, typed),
+        (step, motion),
+        tx,
+    ) {
         state.readings.revision += 1;
         return done;
     }
@@ -1324,10 +1406,10 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     }
     if reading.frame == Frame::Walkthrough && !review.help && typed != "?" {
         let stage = reading.stage.map(|(s, _)| s);
-        match &ev.key {
-            Key::Right | Key::Left if !ev.mods.shift => {
+        match (motion, &ev.key) {
+            (Some(Motion::Right | Motion::Left), _) => {
                 let Some(at) = stage else { return true };
-                let next = if ev.key == Key::Right {
+                let next = if motion == Some(Motion::Right) {
                     (at + 1).min(bundle.stops.len().saturating_sub(1))
                 } else {
                     at.saturating_sub(1)
@@ -1336,27 +1418,21 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
                 apply(state, &tile, &message, &reading.parts, None, to, tx);
                 return true;
             }
-            Key::Text(t) if t == "z" => {
+            (_, Key::Text(t)) if t == "z" => {
                 review.filled = !review.filled;
                 state.readings.revision += 1;
                 return true;
             }
-            Key::Escape if review.files.len() > 1 => {
+            (_, Key::Escape) if review.files.len() > 1 => {
                 review.files.truncate(1);
                 state.readings.revision += 1;
                 return true;
             }
-            Key::Escape if review.files.last().is_none_or(|f| f.select_from.is_none()) => {
+            (_, Key::Escape) if review.files.last().is_none_or(|f| f.select_from.is_none()) => {
                 return false;
             }
-            Key::Up
-            | Key::Down
-            | Key::PageUp
-            | Key::PageDown
-            | Key::Escape
-            | Key::Right
-            | Key::Left => {
-                let handled = file_key(review, &prefix(&tile), ev, tx);
+            (Some(_), _) | (_, Key::Escape) => {
+                let handled = file_key(review, &prefix(&tile), motion, ev, tx);
                 state.readings.revision += 1;
                 return handled;
             }
@@ -1364,10 +1440,11 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
     }
     let viewing = !review.files.is_empty() && reading.frame != Frame::Walkthrough;
-    if viewing && !review.help && typed != "?" && file_key(review, &prefix(&tile), ev, tx) {
+    if viewing && !review.help && typed != "?" && file_key(review, &prefix(&tile), motion, ev, tx) {
         state.readings.revision += 1;
         return true;
     }
+    let extends = shift_selects(ev) || review.select_from.is_some();
     let to = match (&ev.key, typed) {
         (_, "?") => {
             review.help = !review.help;
@@ -1377,12 +1454,19 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             review.help = false;
             None
         }
-        (Key::PageUp | Key::PageDown | Key::Home | Key::End, _) if review.help => {
-            keys::scroll_sheet(&prefix(&tile), &ev.key, tx);
+        _ if review.help && motion.is_some_and(keys::scrolls_sheet) => {
+            keys::scroll_sheet(&prefix(&tile), motion.unwrap_or(Motion::Top), tx);
             return true;
         }
         (Key::Escape, _) if review.select_from.is_some() => {
             review.select_from = None;
+            None
+        }
+        _ if motion == Some(Motion::VisualLine) => {
+            review.select_from = match review.select_from.take() {
+                Some(_) => None,
+                None => cursor.map(|i| reading.places[i].spot.clone()),
+            };
             None
         }
         (_, "1" | "2" | "3") => {
@@ -1395,14 +1479,14 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             switch_side(review, &reading, cursor);
             Some(Move::Shown)
         }
-        (Key::Down, _) => Some(Move::Line(cursor.map_or(0, |i| i + 1), ev.mods.shift)),
-        (Key::Up, _) => Some(Move::Line(
-            cursor.map_or(0, |i| i.saturating_sub(1)),
-            ev.mods.shift,
-        )),
-        (Key::Right | Key::Left, _) if reading.frame == Frame::Map => {
+        _ if let Some(line) = motion.and_then(|m| line_motion(&reading, cursor, m)) => {
+            Some(Move::Line(line, extends))
+        }
+        _ if matches!(motion, Some(Motion::Right | Motion::Left))
+            && reading.frame == Frame::Map =>
+        {
             let (index, count) = reading.map.unwrap_or((0, 0));
-            let next = if ev.key == Key::Right {
+            let next = if motion == Some(Motion::Right) {
                 (index + 1).min(count.saturating_sub(1))
             } else {
                 index.saturating_sub(1)
@@ -1412,8 +1496,8 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             review.cursor = None;
             Some(Move::Arrow)
         }
-        (Key::Right, _) => Some(Move::Stop(next_stop(&reading, cursor, true))),
-        (Key::Left, _) => Some(Move::Stop(next_stop(&reading, cursor, false))),
+        _ if motion == Some(Motion::Right) => Some(Move::Stop(next_stop(&reading, cursor, true))),
+        _ if motion == Some(Motion::Left) => Some(Move::Stop(next_stop(&reading, cursor, false))),
         (Key::Enter, _) if cursor.is_some_and(|i| reading.places[i].spot == Spot::Facts) => {
             cursor.and_then(|i| open_place(review, &reading, i, false))
         }
@@ -1475,6 +1559,47 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         tx,
     );
     true
+}
+
+/// The place `motion` puts the cursor on in the document, from place `cursor`; None for a
+/// motion that does not go by line.
+fn line_motion(reading: &Reading, cursor: Option<usize>, motion: Motion) -> Option<usize> {
+    let last = reading.places.len().saturating_sub(1);
+    Some(match motion {
+        Motion::Down => cursor.map_or(0, |i| i + 1),
+        Motion::Up => cursor.map_or(0, |i| i.saturating_sub(1)),
+        Motion::HalfPageDown => half_page(reading, cursor.unwrap_or(0), true),
+        Motion::HalfPageUp => half_page(reading, cursor.unwrap_or(0), false),
+        Motion::Top => 0,
+        Motion::Bottom => last,
+        _ => return None,
+    })
+}
+
+/// The place half a file view's page of rows on from place `at`, each place counting the rows
+/// it covers, so a page of prose blocks moves about as far down the screen as a page of code.
+fn half_page(reading: &Reading, at: usize, forward: bool) -> usize {
+    let mut rows_left = file::PAGE_ROWS / 2;
+    let mut i = at;
+    while rows_left > 0 {
+        let next = if forward { i + 1 } else { i.wrapping_sub(1) };
+        let Some(place) = reading.places.get(next) else {
+            break;
+        };
+        rows_left = rows_left.saturating_sub(place.rows.1.saturating_sub(place.rows.0) + 1);
+        i = next;
+    }
+    i
+}
+
+impl Review {
+    /// Drops the selection in the document and in the file on top, as a saved mark ends it.
+    fn end_selection(&mut self) {
+        self.select_from = None;
+        if let Some(open) = self.files.last_mut() {
+            open.select_from = None;
+        }
+    }
 }
 
 /// What Enter, or `z` with `fill`, does on place `at`: the facts show or hide the changed
@@ -2513,7 +2638,7 @@ enum Land {
 /// What the daemon needs to read a review's files: the machine and the document.
 /// The keys of code navigation, before the review's own: while labels show, a letter picks and
 /// any other key drops them; while a list of places shows, it takes the keys; Enter takes an
-/// offered answer and Escape drops it; Escape drops a question on its way; `f`, `r` and `h`
+/// offered answer and Escape drops it; Escape drops a question on its way; `gd`, `gr` and `K`
 /// ask about a name on the cursor's line. None when navigation leaves the key alone.
 fn nav_of<'a>(state: &'a mut State, tile: &str) -> Option<&'a mut nav::Nav> {
     state.readings.revision += 1;
@@ -2558,8 +2683,8 @@ fn nav_key(
     tile: &str,
     message: &std::sync::Arc<attn_protocol::DesktopTileContentMessage>,
     reading: &Reading,
-    ev: &KeyEvent,
-    typed: &str,
+    (ev, typed): (&KeyEvent, &str),
+    (step, motion): (vim::Step, Option<Motion>),
     tx: &mut Tx,
 ) -> Option<bool> {
     let source = source_of(message);
@@ -2585,7 +2710,7 @@ fn nav_key(
             close_panel(state, tile);
             return Some(true);
         }
-        if nav::panel_key(tile, panel, ev, tx) {
+        if nav::panel_key(tile, panel, motion, ev, tx) {
             let i = panel.cursor;
             open_answer_place(state, tile, i, tx);
         }
@@ -2623,7 +2748,7 @@ fn nav_key(
         return Some(true);
     }
     let review = state.readings.reviews.tiles.get_mut(tile)?;
-    let kind = nav::Kind::of_key(typed).filter(|_| printable)?;
+    let kind = nav::Kind::of_step(step)?;
     let line = nav_line(review, reading, tile);
     let review = state.readings.reviews.tiles.get_mut(tile)?;
     if let Some(asked) = nav::start(&mut review.nav, kind, line) {
@@ -3188,10 +3313,17 @@ fn target_of(reading: &Reading, at: usize) -> Option<file::Target> {
     }
 }
 
-/// The file view's keys: ↑/↓ by row, with ⇧ to select, PageUp/PageDown by a page, ←/→ by
-/// change, ⇧←/⇧→ sideways by half the view, `z` fills the tile, ⌃o goes back and Escape drops
-/// the selection, then closes.
-fn file_key(review: &mut Review, prefix: &str, ev: &KeyEvent, tx: &mut Tx) -> bool {
+/// The file view's keys: j/k by row, Ctrl-d/Ctrl-u by half a page, gg/G to the ends, h/l by
+/// change, H/L sideways by half the view, V to select from the cursor, `z` fills the tile and
+/// Escape drops the selection, then closes. The arrow and page keys work as their aliases, ⇧↑/⇧↓
+/// selecting.
+fn file_key(
+    review: &mut Review,
+    prefix: &str,
+    motion: Option<Motion>,
+    ev: &KeyEvent,
+    tx: &mut Tx,
+) -> bool {
     let Some(open) = review.files.last_mut() else {
         return false;
     };
@@ -3199,41 +3331,58 @@ fn file_key(review: &mut Review, prefix: &str, ev: &KeyEvent, tx: &mut Tx) -> bo
     let count = rows.as_ref().map_or(0, |r| r.len());
     let to = |n: isize| n.clamp(0, count.saturating_sub(1) as isize) as usize;
     let cursor = open.cursor as isize;
-    let next = match &ev.key {
-        Key::Right | Key::Left if ev.mods.shift => {
-            let half = review.sideways.half_view() * if ev.key == Key::Right { 1.0 } else { -1.0 };
+    let page = file::PAGE_ROWS as isize;
+    let next = match (motion, &ev.key) {
+        (Some(Motion::SidewaysLeft | Motion::SidewaysRight), _) => {
+            let toward = if motion == Some(Motion::SidewaysRight) {
+                1.0
+            } else {
+                -1.0
+            };
+            let half = review.sideways.half_view() * toward;
             tx.scroll_to_x(file::body_key(prefix), review.sideways.offset() + half);
             return true;
         }
-        Key::Down => Some(to(cursor + 1)),
-        Key::Up => Some(to(cursor - 1)),
-        Key::PageDown => Some(to(cursor + file::PAGE_ROWS as isize)),
-        Key::PageUp => Some(to(cursor - file::PAGE_ROWS as isize)),
-        Key::Right | Key::Left => {
+        (Some(Motion::VisualLine), _) => {
+            open.select_from = match open.select_from {
+                Some(_) => None,
+                None => Some(open.cursor),
+            };
+            return true;
+        }
+        (Some(Motion::Down), _) => Some(to(cursor + 1)),
+        (Some(Motion::Up), _) => Some(to(cursor - 1)),
+        (Some(Motion::PageDown), _) => Some(to(cursor + page)),
+        (Some(Motion::PageUp), _) => Some(to(cursor - page)),
+        (Some(Motion::HalfPageDown), _) => Some(to(cursor + page / 2)),
+        (Some(Motion::HalfPageUp), _) => Some(to(cursor - page / 2)),
+        (Some(Motion::Top), _) => Some(0),
+        (Some(Motion::Bottom), _) => Some(to(isize::MAX)),
+        (Some(Motion::Right | Motion::Left), _) => {
             let starts = rows.as_deref().map(file::change_starts).unwrap_or_default();
             let at = open.cursor;
-            Some(if ev.key == Key::Right {
+            Some(if motion == Some(Motion::Right) {
                 starts.iter().copied().find(|&s| s > at).unwrap_or(at)
             } else {
                 starts.iter().copied().rev().find(|&s| s < at).unwrap_or(at)
             })
         }
-        Key::Text(t) if t == "z" => {
+        (_, Key::Text(t)) if t == "z" => {
             review.filled = !review.filled;
             return true;
         }
-        Key::Escape if open.select_from.is_some() => {
+        (_, Key::Escape) if open.select_from.is_some() => {
             open.select_from = None;
             return true;
         }
-        Key::Escape => {
+        (_, Key::Escape) => {
             close_files(review);
             return true;
         }
         _ => return false,
     };
     if let Some(next) = next.filter(|_| count > 0) {
-        let selecting = ev.mods.shift && matches!(ev.key, Key::Up | Key::Down);
+        let selecting = shift_selects(ev) || open.select_from.is_some();
         open.put_cursor(next, selecting, prefix, tx);
     }
     true

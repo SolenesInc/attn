@@ -45,13 +45,17 @@ Enter on that line lists the changed files, and Enter on a file opens it.
 The review always shows the files as they are now. If you or the agent edit a
 file while you read, the stop follows its lines.
 
-Click the review, then move with the keyboard. The key line at the bottom of the
-tile lists the keys for what you are looking at, and `?` shows them all.
+Click the review, then move with the keyboard. A review takes vim keys whether
+or not vim keys are on for other documents, and the arrow keys still work. The
+key line at the bottom of the tile lists the keys for what you are looking at,
+and `?` shows them all.
 
 | Key | Does |
 |---|---|
-| ↑ ↓ | Move by line in code and by block in prose |
-| ← → | The previous or next stop, with the text that leads into it at the top |
+| `j` `k` or ↑ ↓ | Move by line in code and by block in prose |
+| ⌃D ⌃U | Move half a page down or up |
+| `gg` `G` | Go to the first or last line |
+| `h` `l`, `[[` `]]` or ← → | The previous or next stop, with the text that leads into it at the top |
 | Enter | Open the whole file at the cursor, with the stop's lines marked. On an arrow of a diagram, open its stop's file |
 | `e` | Show 10 more lines around the stop. The stop's label names the lines it shows |
 | `z` | Fill the tile with the file |
@@ -60,9 +64,9 @@ tile lists the keys for what you are looking at, and `?` shows them all.
 | Escape | Close the file view, the search or the key sheet |
 
 A long line wraps in a stop. The file view, which the Walkthrough also shows
-beside its explanation, keeps each line on one row: ⇧← and ⇧→ scroll it
-sideways by half its width. In the file view, ← and → move to the previous or
-next change. However you opened the file, the lines the agent's notes explain
+beside its explanation, keeps each line on one row: `H` and `L`, or ⇧← and ⇧→,
+scroll it sideways by half its width. In the file view, `h` and `l` move to the
+previous or next change. However you opened the file, the lines the agent's notes explain
 are marked, and the note on the cursor's line shows under the file, with your
 own notes on it. In a stop on a markdown file on this computer, `o`
 opens the file in an editor tile.
@@ -73,16 +77,16 @@ One review has three frames. The agent picks the one that suits the change, and
 `1`, `2` and `3` switch:
 
 - **Brief** (`1`) reads the document top to bottom. A sequence diagram the
-  reader can draw is drawn in place, and ↑ and ↓ stop on each of its arrows
+  reader can draw is drawn in place, and `j` and `k` stop on each of its arrows
   that has a stop: Enter opens that stop's file. When the review has a diagram
   before and after the change, the Brief shows one and `b` switches.
 - **Walkthrough** (`2`) fills the tile with the file and steps through the
   stops, with the agent's explanation beside it. Lines outside the stop are
-  dimmed. `z` hides the explanation, and ⇧← and ⇧→ scroll the file sideways.
+  dimmed. `z` hides the explanation, and `H` and `L` scroll the file sideways.
   The explanation's diagrams switch with `b`, as in the Brief.
 - **Map** (`3`) draws the change as a sequence diagram: the parts of the
   system, the calls between them with the agent's caption under each, and boxes
-  around a transaction, a loop or a branch. ← and → step through its arrows.
+  around a transaction, a loop or a branch. `h` and `l` step through its arrows.
   Beside the diagram is the step that explains the current arrow, with its
   stops, and under the diagram the files the review leaves out. In a narrow
   tile the diagram sits above the step. When the review has a diagram before
@@ -94,7 +98,9 @@ left out.
 
 ## Mark lines
 
-Put the cursor on a line, or select several lines with ⇧↑ and ⇧↓. Then:
+Put the cursor on a line, or select several lines: `V` starts a selection at
+the cursor and the moving keys extend it, and `V` again or Escape drops it. ⇧↑
+and ⇧↓ select too. Then:
 
 - `c` writes a note. Notes wait until you send the review.
 - `a` asks the agent a question. The question goes at once, and the answer
@@ -133,10 +139,10 @@ are on, your edits with the text before and after, and the verdict.
 
 On a line of code, in a stop or the file view:
 
-- `f` goes to the definition of a name on the line. When the line has several
-  names, each gets a label; type it. On a definition, `f` lists its uses.
-- `r` lists the uses of a name. ↑ and ↓ pick one, and Enter opens it.
-- `h` shows the type of a name.
+- `gd` goes to the definition of a name on the line. When the line has several
+  names, each gets a label; type it. On a definition, `gd` lists its uses.
+- `gr` lists the uses of a name. `j` and `k` pick one, and Enter opens it.
+- `K` shows the type of a name.
 
 While a question waits, its line is marked `…`. An answer that comes after you
 moved on, or while search, an edit box or a note is open, does not move you.

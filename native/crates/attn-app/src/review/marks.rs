@@ -249,7 +249,8 @@ fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     }
 }
 
-/// Saves the box's mark in the document's draft; a question also goes to the agent at once.
+/// Saves the box's mark in the document's draft and ends the selection it covers; a question
+/// also goes to the agent at once.
 fn save(state: &mut State, tx: &mut Tx) {
     let Some(composer) = state.readings.reviews.composer.take() else {
         return;
@@ -276,6 +277,9 @@ fn save(state: &mut State, tx: &mut Tx) {
     };
     draft.marks.push(mark);
     draft.changed(now);
+    if let Some(review) = state.readings.reviews.tiles.get_mut(&composer.tile) {
+        review.end_selection();
+    }
     if question && let Some(to) = composer.to {
         drafts::save_now(state, &composer.uri, tx);
         drafts::submit_review(

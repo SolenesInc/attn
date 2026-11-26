@@ -5737,7 +5737,7 @@ fn review_nav_uses(dark: bool) {
         }));
         json!({"event": "code_nav_result", "success": true, "language": "rust", "locations": places})
     });
-    world.gesture(|app| app.type_text("r"));
+    world.gesture(|app| app.type_text("gr"));
     world.gesture(|app| app.type_text("d"));
     snap(&mut world, "review-nav-uses", dark);
 }
@@ -5747,7 +5747,7 @@ fn review_nav_type(dark: bool) {
         json!({"event": "code_nav_result", "success": true, "language": "rust",
             "text": "pub fn sum_to(limit: u32) -> u32\n\nSums the numbers from one to `limit`, both ends included. Returns 0 when `limit` is 0."})
     });
-    world.gesture(|app| app.type_text("h"));
+    world.gesture(|app| app.type_text("K"));
     world.gesture(|app| app.type_text("d"));
     snap(&mut world, "review-nav-type", dark);
 }
@@ -5755,7 +5755,7 @@ fn review_nav_type(dark: bool) {
 /// The note line while the names on the line are labeled.
 fn review_nav_picking(dark: bool) {
     let mut world = review_on_sum_to(dark, |_: &Request| json!({}));
-    world.gesture(|app| app.type_text("f"));
+    world.gesture(|app| app.type_text("gd"));
     snap(&mut world, "review-nav-picking", dark);
 }
 
@@ -5765,7 +5765,7 @@ fn review_nav_failed(dark: bool) {
         json!({"event": "code_nav_result", "success": false,
             "error": "rust-analyzer stopped before it answered"})
     });
-    world.gesture(|app| app.type_text("f"));
+    world.gesture(|app| app.type_text("gd"));
     world.gesture(|app| app.type_text("d"));
     snap(&mut world, "review-nav-failed", dark);
 }
@@ -5773,7 +5773,7 @@ fn review_nav_failed(dark: bool) {
 /// The note line offering an answer that arrived after the cursor moved on.
 fn review_nav_offer(dark: bool) {
     let mut world = review_on_sum_to(dark, |_: &Request| ());
-    world.gesture(|app| app.type_text("f"));
+    world.gesture(|app| app.type_text("gd"));
     world.gesture(|app| app.type_text("d"));
     tap(&mut world, Key::Up);
     world.advance(std::time::Duration::from_secs(2));

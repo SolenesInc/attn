@@ -10,10 +10,10 @@ use attn_ui::blocks::{
     place,
 };
 use attn_ui::system::{Type, keycaps, keys_hint, keys_hint_width, words};
-use rune::{El, Key, Tx, row};
+use rune::{El, Tx, row};
 
 use super::frames::Frame;
-use super::{Review, Spot, frame_press, place_press, prefix};
+use super::{Motion, Review, Spot, frame_press, place_press, prefix};
 use crate::State;
 
 fn short(commit: &str) -> &str {
@@ -229,31 +229,31 @@ fn keys_for(
 ) -> Vec<(String, &'static str)> {
     let list: &[(&str, &'static str)] = match (file_open, frame) {
         (true, _) => &[
-            ("↑ ↓", "line"),
-            ("← →", "change"),
-            ("⇧← ⇧→", "sideways"),
+            ("j k", "line"),
+            ("h l", "change"),
+            ("H L", "sideways"),
             ("z", "fill the tile"),
             ("/", "search"),
             ("⌃o", "back"),
             ("esc", "close"),
         ],
         (false, Frame::Walkthrough) => &[
-            ("↑ ↓", "line"),
-            ("← →", "stop"),
-            ("⇧← ⇧→", "sideways"),
+            ("j k", "line"),
+            ("h l", "stop"),
+            ("H L", "sideways"),
             ("z", "hide the script"),
             ("/", "search"),
         ],
         (false, Frame::Map) => &[
-            ("↑ ↓", "line"),
-            ("← →", "arrow"),
+            ("j k", "line"),
+            ("h l", "arrow"),
             ("↵", "open the file"),
             ("e", "more lines"),
             ("/", "search"),
         ],
         (false, Frame::Brief) => &[
-            ("↑ ↓", "line"),
-            ("← →", "stop"),
+            ("j k", "line"),
+            ("h l", "stop"),
             ("↵", "open the file"),
             ("e", "more lines"),
             ("z", "fill the tile"),
@@ -273,7 +273,7 @@ fn keys_for(
         ("i".to_owned(), "edit"),
         (send_label(), "send"),
     ];
-    keys.insert(2, ("f r h".into(), "definition, uses, type"));
+    keys.insert(2, ("gd gr K".into(), "definition, uses, type"));
     if marking {
         keys.splice(2..2, marks);
     }
@@ -348,12 +348,20 @@ const ALL_KEYS: &[(&str, &str)] = &[
         "Brief: the document top to bottom. Walkthrough: the stops as a script beside the file. Map: the sequence diagram beside the step of the review that explains the current arrow. A frame the document cannot fill is left out.",
     ),
     (
-        "↑ ↓",
-        "Move by line in code, by block in prose, by arrow with a stop in a drawn diagram. In the file view, by line; PageUp and PageDown move a page.",
+        "j k",
+        "Move by line in code, by block in prose, by arrow with a stop in a drawn diagram. ↑ and ↓ do the same.",
     ),
     (
-        "⇧↑ ⇧↓",
-        "Select several lines of code, so a note or question covers them.",
+        "⌃d ⌃u",
+        "Move half a page down or up. PageDown and PageUp move a page.",
+    ),
+    (
+        "gg G",
+        "Go to the first or last line. Home and End do the same.",
+    ),
+    (
+        "V",
+        "Select lines from the cursor: j, k and the other moves extend the selection, so a note or question covers them; V again or esc drops it. ⇧↑ and ⇧↓ select too.",
     ),
     (
         "c",
@@ -376,12 +384,12 @@ const ALL_KEYS: &[(&str, &str)] = &[
         "Send the review: see the notes and edits it carries, pick a verdict (a approve, r request changes, c comment), then ↵.",
     ),
     (
-        "← →",
-        "The previous or next stop; in the Map, the previous or next arrow with a stop. In the file view opened from Brief or Map, the previous or next change.",
+        "h l",
+        "The previous or next stop; in the Map, the previous or next arrow with a stop. In the file view opened from Brief or Map, the previous or next change. [[ and ]], ← and → do the same.",
     ),
     (
-        "⇧← ⇧→",
-        "Scroll the file sideways by half its width, in the file view and in the Walkthrough, to read the rest of a long line. A long line wraps in a stop.",
+        "H L",
+        "Scroll the file sideways by half its width, in the file view and in the Walkthrough, to read the rest of a long line. A long line wraps in a stop. ⇧← and ⇧→ do the same.",
     ),
     (
         "b",
@@ -392,14 +400,14 @@ const ALL_KEYS: &[(&str, &str)] = &[
         "On a stop of a markdown file, open the file in the editor tile, rooted at the repository. Only for a review on this machine.",
     ),
     (
-        "f",
+        "gd",
         "Go to the definition of a name on the line: each name gets a label, type it. On a definition, list its uses. An answer that comes after you moved on is offered in one line above the keys: ↵ takes it, esc drops it, and every other key keeps working. The line asked about is marked … until the answer comes.",
     ),
     (
-        "r",
-        "List the uses of a name on the line; ↑↓ pick one, ↵ opens it.",
+        "gr",
+        "List the uses of a name on the line; j and k pick one, ↵ opens it.",
     ),
-    ("h", "Show the type of a name on the line."),
+    ("K", "Show the type of a name on the line."),
     (
         "s",
         "When a language of the review has no working server, start an agent on the review’s machine that sets one up. The review gains navigation once it works.",
@@ -434,7 +442,7 @@ const ALL_KEYS: &[(&str, &str)] = &[
     ),
     (
         "?",
-        "Show or hide this sheet. PageUp and PageDown scroll it, Home and End go to its ends.",
+        "Show or hide this sheet. ⌃d and ⌃u scroll it by half a page, PageUp and PageDown by a page, and gg and G go to its ends.",
     ),
 ];
 
@@ -496,13 +504,29 @@ pub(super) fn sheet_body(prefix: &str) -> String {
     format!("{prefix}.sheet.page")
 }
 
-/// Page Up and Page Down page the open keys sheet, Home and End take it to its ends.
-pub(super) fn scroll_sheet(prefix: &str, key: &Key, tx: &mut Tx) {
+/// Whether `motion` scrolls the open keys sheet.
+pub(super) fn scrolls_sheet(motion: Motion) -> bool {
+    matches!(
+        motion,
+        Motion::PageDown
+            | Motion::PageUp
+            | Motion::HalfPageDown
+            | Motion::HalfPageUp
+            | Motion::Top
+            | Motion::Bottom
+    )
+}
+
+/// Ctrl-d and Ctrl-u scroll the open keys sheet by half a page, Page Up and Page Down by a page,
+/// and gg, G, Home and End take it to its ends.
+pub(super) fn scroll_sheet(prefix: &str, motion: Motion, tx: &mut Tx) {
     let body = sheet_body(prefix);
-    match key {
-        Key::PageDown => tx.scroll_page(body, 1),
-        Key::PageUp => tx.scroll_page(body, -1),
-        Key::Home => tx.scroll_to_y(body, 0.0),
+    match motion {
+        Motion::PageDown => tx.scroll_page(body, 1),
+        Motion::PageUp => tx.scroll_page(body, -1),
+        Motion::HalfPageDown => tx.scroll_fraction(body, 0.5),
+        Motion::HalfPageUp => tx.scroll_fraction(body, -0.5),
+        Motion::Top => tx.scroll_to_y(body, 0.0),
         _ => tx.scroll_to_bottom_instant(body),
     }
 }
