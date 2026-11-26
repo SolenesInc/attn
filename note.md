@@ -1,0 +1,1 @@
+The agent bench gains six tasks built to test agents that call attn through scripts (`--tasks scripts`) and the thirteen-task `c6-final` group. It also now reads Codex's deferred MCP tools and `attn_record` calls correctly, so Codex runs with the tools are no longer judged as launched without them.
