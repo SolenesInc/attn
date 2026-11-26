@@ -1,0 +1,1 @@
+Plugin drivers can now report interactive user prompts via `session.report_prompt` (`DriverRun.prompt` in `@victorarias/attn-plugin` 0.8.0), letting plugin-driven sessions like Xirp Agent automatically generate session titles from the user's first prompt while preserving notification-ring exclusion and explicit user renames.
