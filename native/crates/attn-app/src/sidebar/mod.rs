@@ -554,7 +554,8 @@ pub(crate) fn next_automation_needing(state: &mut State, tx: &mut Tx) {
         let Some(session) = by_id.get(run.row.id.as_str()) else {
             continue;
         };
-        if crate::automations::runs::needs_you(session, now_ms) && seen.insert(run.row.id.as_str())
+        if crate::automations::runs::needs_you(session, &state.facts.outposts, now_ms)
+            && seen.insert(run.row.id.as_str())
         {
             batch.push(run.row.id.as_str());
         }

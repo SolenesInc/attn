@@ -125,7 +125,7 @@ impl AgentRow {
             pr: crate::desktop::provenance::badge(session),
             chief: session.chief_of_staff == Some(true),
             run: crate::desktop::provenance::run(session),
-            settle_run: session.automation.is_some() && session.turn_owed == Some(true),
+            settle_run: false,
             offline: crate::outpost::offline(session, outposts),
             chain: None,
             unknown_because: (session.state == "unknown")
@@ -777,7 +777,7 @@ fn agent_row_for(
     let mut row = AgentRow::of(session, &facts.harnesses, &facts.outposts, selected)
         .asking(facts, session)
         .chained(session, facts);
-    row.settle_run = is_automation_session(session, by_id) && session.turn_owed == Some(true);
+    row.settle_run = row.owed && !row.offline && is_automation_session(session, by_id);
     if on_screen.contains(&session.id) {
         row
     } else {
@@ -860,7 +860,7 @@ pub fn desktop_automations(
                 continue;
             }
             let row = agent_row_for(facts, &by_id, session, shown, active_session, on_screen);
-            let needs = crate::automations::runs::needs_you(session, now_ms);
+            let needs = crate::automations::runs::needs_you(session, &facts.outposts, now_ms);
             if needs {
                 needing += 1;
             }
@@ -873,6 +873,7 @@ pub fn desktop_automations(
                     | AgentState::Scheduled
                     | AgentState::Recoverable
             );
+            let keep_offline_row = row.offline && row.owed;
             let run = AutomationRunLine {
                 desktop: desktop.id.clone(),
                 leaf: leaf_id,
@@ -880,7 +881,7 @@ pub fn desktop_automations(
             };
             if wants_attention {
                 active.push((0, session.turn_opened_at.as_deref(), order, run));
-            } else if live {
+            } else if live || keep_offline_row {
                 active.push((1, None, order, run));
             } else if run.row.selected || on_screen.contains(&session.id) {
                 active.push((2, None, order, run));

@@ -544,3 +544,83 @@ fn an_unreachable_agent_leads_with_its_harness_logo_and_with_the_struck_ring_onc
     assert!(offline(&world, "queue-turn.remote"));
     assert_eq!(lead(&world), (8.0, 8.0), "the struck ring");
 }
+
+#[test]
+fn an_offline_automation_delegate_stays_grouped_without_offering_a_waiting_action() {
+    use attn_protocol::AutomationProvenance;
+    use attn_testkit::Daemon;
+
+    let automation = AutomationProvenance {
+        run_id: "review-run".into(),
+        definition_id: 10,
+        definition_name: "Review".into(),
+        ..AutomationProvenance::default()
+    };
+    let root = Session {
+        automation: Some(automation.clone()),
+        ..super::sidebar::session("root", "working")
+    };
+    let delegate = on_studio(Session {
+        dispatcher_session_id: Some("root".into()),
+        ..turn("delegate", 10)
+    });
+    let other_run = on_studio(Session {
+        automation: Some(automation),
+        ..turn("numbered-run", 11)
+    });
+    let mut work = desktop(
+        "work",
+        "a",
+        "Work",
+        vec![pane("work", "p-work", "numbered-run")],
+    );
+    work.shortcut_slot = Some(1);
+    let review = desktop(
+        "review",
+        "b",
+        "Review",
+        vec![
+            pane("review", "p-root", "root"),
+            pane("review", "p-delegate", "delegate"),
+        ],
+    );
+    let mut initial = state(vec![root, delegate, other_run], vec![work, review]);
+    initial.outposts = Some(vec![reachable()]);
+    let mut world = World::start(Daemon::scripted().state(initial));
+    world.open_desktop();
+    let waiting = "sidebar.automations.needing";
+    let delegate_settle = "sidebar.session.delegate.settle";
+    let rail = "rail.automations";
+    assert!(has(&world, waiting));
+    assert!(has(&world, delegate_settle));
+
+    outposts(&mut world, vec![lost()]);
+    assert!(offline(&world, "sidebar.session.delegate"));
+    assert!(!has(&world, "sidebar.desktop.review"));
+    assert!(!has(&world, waiting));
+    assert!(!has(&world, delegate_settle));
+    assert!(!has(&world, "sidebar.session.numbered-run.settle"));
+    press(&mut world, Action::SessionNextRun);
+    assert!(shown(&world).is_empty());
+
+    press(&mut world, Action::SessionToggleSidebar);
+    assert_eq!(name(&world, rail).as_deref(), Some("Automations · 2 runs"));
+    world.gesture(|app| app.click(Target::key(rail)));
+    assert!(has(&world, "automations"));
+    assert!(shown(&world).is_empty());
+    world.gesture(|app| app.click(Target::key("automations.close")));
+
+    outposts(&mut world, vec![reachable()]);
+    assert_eq!(
+        name(&world, rail).as_deref(),
+        Some("Automations · 2 runs, 1 needs you")
+    );
+    world.gesture(|app| app.click(Target::key(rail)));
+    assert_eq!(shown(&world), ["delegate"]);
+    press(&mut world, Action::SessionToggleSidebar);
+    assert!(has(&world, waiting));
+    world.gesture(|app| app.click(Target::key(delegate_settle)));
+    assert_eq!(sent_ids(&world, "settle_turn"), ["delegate"]);
+    world.advance(std::time::Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
