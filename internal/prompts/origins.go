@@ -30,10 +30,13 @@ var (
 		Bind("seed_id", Input(seedID)), Bind("seed_title", Quoted(seedTitle)), Bind("set_by", authorizationChangedBy),
 		Bind("authorization", Quoted(authorization)), Bind("rule", authorizationRule),
 		Bind("replaces", When(Present(previousAuthorization),
-			Exact(Use("delegation.authorization-replaces", "content/delegation/authorization-replaces.md", Bind("previous", Quoted(previousAuthorization)))))))
+			Exact(Use("delegation.authorization-replaces", "content/delegation/authorization-replaces.md", Bind("previous", Quoted(previousAuthorization)))))),
+		Bind("delegated", authorizationDelegated))
 	authorizationCleared = Use("delegation.authorization-cleared", "content/delegation/authorization-cleared.md",
 		Bind("seed_id", Input(seedID)), Bind("seed_title", Quoted(seedTitle)), Bind("set_by", authorizationChangedBy),
-		Bind("previous", Quoted(previousAuthorization)))
+		Bind("previous", Quoted(previousAuthorization)), Bind("delegated", authorizationDelegated))
+	authorizationDelegated = toolsOr(Use("delegation.authorization-delegated-tools", "content/delegation/authorization-delegated-tools.md"),
+		Use("delegation.authorization-delegated", "content/delegation/authorization-delegated.md"))
 	automationTarget = template("automation.target", "content/automation/target.md",
 		TextField("definition", "Quoted automation name."),
 		TextField("repository", "Repository identity."), TextField("number", "Pull request number."),

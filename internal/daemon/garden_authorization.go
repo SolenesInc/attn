@@ -3,6 +3,7 @@ package daemon
 import (
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -173,7 +174,8 @@ func (d *Daemon) wordsTenderLastReceived(tender who.Address, current *garden.Aut
 func (d *Daemon) authorizationUpdateText(seed garden.Seed, replaced, text string, setter who.Actor) string {
 	values := prompts.Values{
 		"seed_id": seed.ID, "seed_title": seed.Title, "previous": replaced,
-		"set_by": d.authorizationSetterName(garden.Authorization{SetBy: setter}),
+		"set_by":      d.authorizationSetterName(garden.Authorization{SetBy: setter}),
+		"agent_tools": strconv.FormatBool(d.tenderCarriesAgentTools(seed.Tender)),
 	}
 	if text == "" {
 		return prompts.RenderText("delegation", "authorization-cleared", values)

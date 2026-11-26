@@ -39,7 +39,7 @@ func TestEveryHarnessAnswersTheContractWithItsFake(t *testing.T) {
 	home := conformance.Home
 	conformance.Run(t, w.daemon.Harnesses(), []conformance.Row{
 		{
-			Facts: harness.Facts{ID: "claude", DisplayName: "Claude Code", Logo: adapterLogo(t, 1200, "../harness/internal/claude/logo.svg"), Options: terminalOptions, Executable: harness.Executable{Default: "claude", Env: "ATTN_CLAUDE_EXECUTABLE"}, CacheTTL: time.Hour, Tiers: map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "haiku"}, modeltiers.Standard: {Model: "sonnet"}, modeltiers.Deep: {Model: "opus"}}, CrewModel: "fable", ModelDiscovery: true, Activity: true, ConversationIsSession: true,
+			Facts: harness.Facts{ID: "claude", DisplayName: "Claude Code", Logo: adapterLogo(t, 1200, "../harness/internal/claude/logo.svg"), Options: terminalOptions, Executable: harness.Executable{Default: "claude", Env: "ATTN_CLAUDE_EXECUTABLE"}, CacheTTL: time.Hour, Tiers: map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "haiku"}, modeltiers.Standard: {Model: "sonnet"}, modeltiers.Deep: {Model: "opus"}}, CrewModel: "fable", ModelDiscovery: true, Activity: true, AgentTools: true, ConversationIsSession: true,
 				Signals: harness.Signals{TurnStarts: harness.TurnStartsReported, ReportsTools: true, Heartbeat: 1500 * time.Millisecond, Titles: harness.TitlesClaude, StopsReadable: true, StopsClassified: true}},
 			SkillDirs: []string{home + "/.claude/skills"},
 			Offered:   true,

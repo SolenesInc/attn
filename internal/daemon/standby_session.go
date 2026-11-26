@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,7 +21,8 @@ func (d *Daemon) handleStandbySession(msg *protocol.StandbySessionMessage) error
 		return fmt.Errorf("session %s: standby until %s is in the past; choose a future time", sessionID, msg.Until.Format(time.RFC3339))
 	}
 	request := prompts.RenderText("session", "standby-request", prompts.Values{
-		"until": msg.Until.Local().Format(time.RFC3339),
+		"until":       msg.Until.Local().Format(time.RFC3339),
+		"agent_tools": strconv.FormatBool(d.sessionCarriesAgentTools(sessionID)),
 	})
 	delivery := sessionmonitor.ComposedInput(uuid.NewString(), request)
 	delivery.ExpectedConversation = d.store.GetSessionConversation(sessionID).NativeID

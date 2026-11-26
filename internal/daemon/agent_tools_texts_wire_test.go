@@ -52,6 +52,9 @@ func TestEveryTextAttnTypesToASessionWithToolsWritesItsCommandsAsCalls(t *testin
 		"session/peer-message-steer":          prompts.RenderText("session", "peer-message-steer", peer),
 		"session/peer-message-interrupt":      prompts.RenderText("session", "peer-message-interrupt", peer),
 		"session/tender-resume":               prompts.RenderText("session", "tender-resume", seedValues(prompts.Values{"note": "Merge once approved."})),
+		"session/standby-request":             prompts.RenderText("session", "standby-request", prompts.Values{"until": "2026-11-26T09:00:00+01:00", "agent_tools": "true"}),
+		"delegation/authorization-update":     prompts.RenderText("delegation", "authorization-update", seedValues(prompts.Values{"authorization": "Push to main.", "previous": "Ask first."})),
+		"delegation/authorization-cleared":    prompts.RenderText("delegation", "authorization-cleared", seedValues(prompts.Values{"previous": "Push to main."})),
 	}
 	for read, text := range texts {
 		for _, match := range shownCommand.FindAllStringSubmatch(text, -1) {
@@ -59,7 +62,11 @@ func TestEveryTextAttnTypesToASessionWithToolsWritesItsCommandsAsCalls(t *testin
 				t.Errorf("%s teaches %q, which a script does with %s:\n%s", read, match[1]+match[2], offered, text)
 			}
 		}
-		if checkShownCalls(t, arguments, read, text) == 0 && !strings.Contains(text, "seed_check_report") {
+		named := false
+		for tool := range tools {
+			named = named || strings.Contains(text, "`"+tool+"`")
+		}
+		if checkShownCalls(t, arguments, read, text) == 0 && !named {
 			t.Errorf("%s shows no call:\n%s", read, text)
 		}
 	}

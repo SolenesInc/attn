@@ -1242,6 +1242,153 @@
           }
         },
         {
+          "id": "attn-map-tools",
+          "delivery": "cli_output",
+          "description": "skill with no arguments, called through attn's tools: what attn offers and where to learn more.",
+          "body": {
+            "kind": "trim",
+            "children": [
+              {
+                "kind": "join",
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map",
+                    "source": "content/session/attn-map.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.tools",
+                    "source": "content/session/attn-map/tools.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.skill",
+                    "source": "content/session/attn-map/skill.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.guide",
+                    "source": "content/session/attn-map/guide.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.ask-reference",
+                    "source": "content/session/attn-map/ask-reference.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.table",
+                    "source": "content/session/attn-map/table.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.seed-track",
+                    "source": "content/session/attn-map/seed-track.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.delegate",
+                    "source": "content/session/attn-map/delegate.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.seed-report",
+                    "source": "content/session/attn-map/seed-report.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.pr",
+                    "source": "content/session/attn-map/pr.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.agent",
+                    "source": "content/session/attn-map/agent.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.session",
+                    "source": "content/session/attn-map/session.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.seed-standby",
+                    "source": "content/session/attn-map/seed-standby.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.terminal",
+                    "source": "content/session/attn-map/terminal.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.open",
+                    "source": "content/session/attn-map/open.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.showing",
+                    "source": "content/session/attn-map/showing.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.browser",
+                    "source": "content/session/attn-map/browser.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.callout",
+                    "source": "content/session/attn-map/callout.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.journal",
+                    "source": "content/session/attn-map/journal.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.crew",
+                    "source": "content/session/attn-map/crew.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.automation",
+                    "source": "content/session/attn-map/automation.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.settings",
+                    "source": "content/session/attn-map/settings.md",
+                    "keep_final_newline": true
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
           "id": "seed-artifacts",
           "delivery": "cli_output",
           "description": "attn seed show, under a seed's artifacts.",
@@ -1739,9 +1886,27 @@
           "delivery": "user_message",
           "description": "Generic notification directing the recipient to the durable inbox.",
           "body": {
-            "kind": "text",
-            "id": "session.inbox-notification",
-            "source": "content/session/inbox-notification.md"
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "agent_tools",
+                "kind": "flag",
+                "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+              },
+              "test": "enabled"
+            },
+            "children": [
+              {
+                "kind": "text",
+                "id": "session.inbox-notification-tools",
+                "source": "content/session/inbox-notification-tools.md"
+              },
+              {
+                "kind": "text",
+                "id": "session.inbox-notification",
+                "source": "content/session/inbox-notification.md"
+              }
+            ]
           }
         },
         {
@@ -1825,42 +1990,95 @@
           "delivery": "user_message",
           "description": "Typed before the seed mail that resumed the closed session tending a seed on standby. Carries the standby note and the ways to end the turn.",
           "body": {
-            "kind": "text",
-            "id": "session.tender-resume",
-            "source": "content/session/tender-resume.md",
-            "bindings": [
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "agent_tools",
+                "kind": "flag",
+                "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+              },
+              "test": "enabled"
+            },
+            "children": [
               {
-                "name": "seed_id",
-                "node": {
-                  "kind": "input",
-                  "field": {
+                "kind": "text",
+                "id": "session.tender-resume-tools",
+                "source": "content/session/tender-resume-tools.md",
+                "bindings": [
+                  {
                     "name": "seed_id",
-                    "kind": "text",
-                    "description": "Seed id."
-                  }
-                }
-              },
-              {
-                "name": "seed_title",
-                "node": {
-                  "kind": "input",
-                  "field": {
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "seed_id",
+                        "kind": "text",
+                        "description": "Seed id."
+                      }
+                    }
+                  },
+                  {
                     "name": "seed_title",
-                    "kind": "text",
-                    "description": "Seed title."
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "seed_title",
+                        "kind": "text",
+                        "description": "Seed title."
+                      }
+                    }
+                  },
+                  {
+                    "name": "note",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "note",
+                        "kind": "text",
+                        "description": "The standby note."
+                      }
+                    }
                   }
-                }
+                ]
               },
               {
-                "name": "note",
-                "node": {
-                  "kind": "input",
-                  "field": {
+                "kind": "text",
+                "id": "session.tender-resume",
+                "source": "content/session/tender-resume.md",
+                "bindings": [
+                  {
+                    "name": "seed_id",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "seed_id",
+                        "kind": "text",
+                        "description": "Seed id."
+                      }
+                    }
+                  },
+                  {
+                    "name": "seed_title",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "seed_title",
+                        "kind": "text",
+                        "description": "Seed title."
+                      }
+                    }
+                  },
+                  {
                     "name": "note",
-                    "kind": "text",
-                    "description": "The standby note."
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "note",
+                        "kind": "text",
+                        "description": "The standby note."
+                      }
+                    }
                   }
-                }
+                ]
               }
             ]
           }
@@ -1870,20 +2088,51 @@
           "delivery": "user_message",
           "description": "Typed into a session when the user picks Standby until… for it in the app. Asks the agent to put the seed it tends on standby until that time.",
           "body": {
-            "kind": "text",
-            "id": "session.standby-request",
-            "source": "content/session/standby-request.md",
-            "bindings": [
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "agent_tools",
+                "kind": "flag",
+                "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+              },
+              "test": "enabled"
+            },
+            "children": [
               {
-                "name": "until",
-                "node": {
-                  "kind": "input",
-                  "field": {
+                "kind": "text",
+                "id": "session.standby-request-tools",
+                "source": "content/session/standby-request-tools.md",
+                "bindings": [
+                  {
                     "name": "until",
-                    "kind": "text",
-                    "description": "The RFC3339 time the user picked."
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "until",
+                        "kind": "text",
+                        "description": "The RFC3339 time the user picked."
+                      }
+                    }
                   }
-                }
+                ]
+              },
+              {
+                "kind": "text",
+                "id": "session.standby-request",
+                "source": "content/session/standby-request.md",
+                "bindings": [
+                  {
+                    "name": "until",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "until",
+                        "kind": "text",
+                        "description": "The RFC3339 time the user picked."
+                      }
+                    }
+                  }
+                ]
               }
             ]
           }
@@ -1966,14 +2215,24 @@
                 }
               },
               {
-                "name": "reply_to",
+                "name": "reply",
                 "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "reply_to",
-                    "kind": "text",
-                    "description": "Reply target."
-                  }
+                  "kind": "text",
+                  "id": "session.peer-reply",
+                  "source": "content/session/peer-reply.md",
+                  "bindings": [
+                    {
+                      "name": "reply_to",
+                      "node": {
+                        "kind": "input",
+                        "field": {
+                          "name": "reply_to",
+                          "kind": "text",
+                          "description": "Reply target."
+                        }
+                      }
+                    }
+                  ]
                 }
               }
             ]
@@ -2011,14 +2270,55 @@
                 }
               },
               {
-                "name": "reply_to",
+                "name": "reply",
                 "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "reply_to",
-                    "kind": "text",
-                    "description": "Reply target."
-                  }
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "agent_tools",
+                      "kind": "flag",
+                      "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "session.peer-reply-tools",
+                      "source": "content/session/peer-reply-tools.md",
+                      "bindings": [
+                        {
+                          "name": "reply_to",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "reply_to",
+                              "kind": "text",
+                              "description": "Reply target."
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "text",
+                      "id": "session.peer-reply",
+                      "source": "content/session/peer-reply.md",
+                      "bindings": [
+                        {
+                          "name": "reply_to",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "reply_to",
+                              "kind": "text",
+                              "description": "Reply target."
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
                 }
               }
             ]
@@ -2056,14 +2356,55 @@
                 }
               },
               {
-                "name": "reply_to",
+                "name": "reply",
                 "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "reply_to",
-                    "kind": "text",
-                    "description": "Reply target."
-                  }
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "agent_tools",
+                      "kind": "flag",
+                      "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "session.peer-reply-tools",
+                      "source": "content/session/peer-reply-tools.md",
+                      "bindings": [
+                        {
+                          "name": "reply_to",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "reply_to",
+                              "kind": "text",
+                              "description": "Reply target."
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "text",
+                      "id": "session.peer-reply",
+                      "source": "content/session/peer-reply.md",
+                      "bindings": [
+                        {
+                          "name": "reply_to",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "reply_to",
+                              "kind": "text",
+                              "description": "Reply target."
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
                 }
               }
             ]
@@ -2085,71 +2426,166 @@
             },
             "children": [
               {
-                "kind": "text",
-                "id": "session.garden-update",
-                "source": "content/session/garden-update.md",
-                "bindings": [
+                "kind": "choose",
+                "condition": {
+                  "field": {
+                    "name": "agent_tools",
+                    "kind": "flag",
+                    "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
                   {
-                    "name": "seed_id",
-                    "node": {
-                      "kind": "input",
-                      "field": {
+                    "kind": "text",
+                    "id": "session.garden-update-tools",
+                    "source": "content/session/garden-update-tools.md",
+                    "bindings": [
+                      {
                         "name": "seed_id",
-                        "kind": "text",
-                        "description": "The session's stake, if it has one."
-                      }
-                    }
-                  },
-                  {
-                    "name": "change",
-                    "node": {
-                      "kind": "input",
-                      "field": {
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "seed_id",
+                            "kind": "text",
+                            "description": "The session's stake, if it has one."
+                          }
+                        }
+                      },
+                      {
                         "name": "change",
-                        "kind": "text",
-                        "description": "What moved: the Garden event kind, or the check move a check note records, such as \"check C4 rejected by c9b177e1\"."
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "change",
+                            "kind": "text",
+                            "description": "What moved: the Garden event kind, or the check move a check note records, such as \"check C4 rejected by c9b177e1\"."
+                          }
+                        }
+                      },
+                      {
+                        "name": "after",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "after",
+                            "kind": "text",
+                            "description": "The save number just before the first event the bell covers; blank for a bell stored before bells kept one."
+                          }
+                        }
                       }
-                    }
+                    ]
                   },
                   {
-                    "name": "after",
-                    "node": {
-                      "kind": "input",
-                      "field": {
+                    "kind": "text",
+                    "id": "session.garden-update",
+                    "source": "content/session/garden-update.md",
+                    "bindings": [
+                      {
+                        "name": "seed_id",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "seed_id",
+                            "kind": "text",
+                            "description": "The session's stake, if it has one."
+                          }
+                        }
+                      },
+                      {
+                        "name": "change",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "change",
+                            "kind": "text",
+                            "description": "What moved: the Garden event kind, or the check move a check note records, such as \"check C4 rejected by c9b177e1\"."
+                          }
+                        }
+                      },
+                      {
                         "name": "after",
-                        "kind": "text",
-                        "description": "The save number just before the first event the bell covers; blank for a bell stored before bells kept one."
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "after",
+                            "kind": "text",
+                            "description": "The save number just before the first event the bell covers; blank for a bell stored before bells kept one."
+                          }
+                        }
                       }
-                    }
+                    ]
                   }
                 ]
               },
               {
-                "kind": "text",
-                "id": "session.garden-update-whole",
-                "source": "content/session/garden-update-whole.md",
-                "bindings": [
+                "kind": "choose",
+                "condition": {
+                  "field": {
+                    "name": "agent_tools",
+                    "kind": "flag",
+                    "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
                   {
-                    "name": "seed_id",
-                    "node": {
-                      "kind": "input",
-                      "field": {
+                    "kind": "text",
+                    "id": "session.garden-update-whole-tools",
+                    "source": "content/session/garden-update-whole-tools.md",
+                    "bindings": [
+                      {
                         "name": "seed_id",
-                        "kind": "text",
-                        "description": "The session's stake, if it has one."
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "seed_id",
+                            "kind": "text",
+                            "description": "The session's stake, if it has one."
+                          }
+                        }
+                      },
+                      {
+                        "name": "change",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "change",
+                            "kind": "text",
+                            "description": "What moved: the Garden event kind, or the check move a check note records, such as \"check C4 rejected by c9b177e1\"."
+                          }
+                        }
                       }
-                    }
+                    ]
                   },
                   {
-                    "name": "change",
-                    "node": {
-                      "kind": "input",
-                      "field": {
+                    "kind": "text",
+                    "id": "session.garden-update-whole",
+                    "source": "content/session/garden-update-whole.md",
+                    "bindings": [
+                      {
+                        "name": "seed_id",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "seed_id",
+                            "kind": "text",
+                            "description": "The session's stake, if it has one."
+                          }
+                        }
+                      },
+                      {
                         "name": "change",
-                        "kind": "text",
-                        "description": "What moved: the Garden event kind, or the check move a check note records, such as \"check C4 rejected by c9b177e1\"."
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "change",
+                            "kind": "text",
+                            "description": "What moved: the Garden event kind, or the check move a check note records, such as \"check C4 rejected by c9b177e1\"."
+                          }
+                        }
                       }
-                    }
+                    ]
                   }
                 ]
               }
@@ -3079,70 +3515,213 @@
                   "kind": "trim",
                   "children": [
                     {
-                      "kind": "text",
-                      "id": "delegation.seed",
-                      "source": "content/delegation/seed.md",
-                      "bindings": [
+                      "kind": "choose",
+                      "condition": {
+                        "field": {
+                          "name": "agent_tools",
+                          "kind": "flag",
+                          "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                        },
+                        "test": "enabled"
+                      },
+                      "children": [
                         {
-                          "name": "seed_id",
-                          "node": {
-                            "kind": "input",
-                            "field": {
+                          "kind": "text",
+                          "id": "delegation.seed-tools",
+                          "source": "content/delegation/seed-tools.md",
+                          "bindings": [
+                            {
                               "name": "seed_id",
-                              "kind": "text",
-                              "description": "The session's stake, if it has one."
-                            }
-                          }
-                        },
-                        {
-                          "name": "seed_title",
-                          "node": {
-                            "kind": "input",
-                            "field": {
-                              "name": "seed_title",
-                              "kind": "text",
-                              "description": "Title of the session's stake."
-                            }
-                          }
-                        },
-                        {
-                          "name": "completion",
-                          "node": {
-                            "kind": "choose",
-                            "condition": {
-                              "field": {
-                                "name": "check_ids",
-                                "kind": "text",
-                                "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
-                              },
-                              "test": "present"
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "seed_id",
+                                  "kind": "text",
+                                  "description": "The session's stake, if it has one."
+                                }
+                              }
                             },
-                            "children": [
-                              {
-                                "kind": "text",
-                                "id": "delegation.seed-checks",
-                                "source": "content/delegation/seed-checks.md",
-                                "bindings": [
-                                  {
+                            {
+                              "name": "seed_title",
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "seed_title",
+                                  "kind": "text",
+                                  "description": "Title of the session's stake."
+                                }
+                              }
+                            },
+                            {
+                              "name": "completion",
+                              "node": {
+                                "kind": "choose",
+                                "condition": {
+                                  "field": {
                                     "name": "check_ids",
-                                    "node": {
-                                      "kind": "input",
+                                    "kind": "text",
+                                    "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                  },
+                                  "test": "present"
+                                },
+                                "children": [
+                                  {
+                                    "kind": "choose",
+                                    "condition": {
                                       "field": {
-                                        "name": "check_ids",
+                                        "name": "agent_tools",
+                                        "kind": "flag",
+                                        "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                                      },
+                                      "test": "enabled"
+                                    },
+                                    "children": [
+                                      {
                                         "kind": "text",
-                                        "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                        "id": "delegation.seed-checks-tools",
+                                        "source": "content/delegation/seed-checks-tools.md",
+                                        "bindings": [
+                                          {
+                                            "name": "check_ids",
+                                            "node": {
+                                              "kind": "input",
+                                              "field": {
+                                                "name": "check_ids",
+                                                "kind": "text",
+                                                "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "kind": "text",
+                                        "id": "delegation.seed-checks",
+                                        "source": "content/delegation/seed-checks.md",
+                                        "bindings": [
+                                          {
+                                            "name": "check_ids",
+                                            "node": {
+                                              "kind": "input",
+                                              "field": {
+                                                "name": "check_ids",
+                                                "kind": "text",
+                                                "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                              }
+                                            }
+                                          }
+                                        ]
                                       }
-                                    }
+                                    ]
+                                  },
+                                  {
+                                    "kind": "text",
+                                    "id": "delegation.seed-no-checks",
+                                    "source": "content/delegation/seed-no-checks.md"
                                   }
                                 ]
-                              },
-                              {
-                                "kind": "text",
-                                "id": "delegation.seed-no-checks",
-                                "source": "content/delegation/seed-no-checks.md"
                               }
-                            ]
-                          }
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "text",
+                          "id": "delegation.seed",
+                          "source": "content/delegation/seed.md",
+                          "bindings": [
+                            {
+                              "name": "seed_id",
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "seed_id",
+                                  "kind": "text",
+                                  "description": "The session's stake, if it has one."
+                                }
+                              }
+                            },
+                            {
+                              "name": "seed_title",
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "seed_title",
+                                  "kind": "text",
+                                  "description": "Title of the session's stake."
+                                }
+                              }
+                            },
+                            {
+                              "name": "completion",
+                              "node": {
+                                "kind": "choose",
+                                "condition": {
+                                  "field": {
+                                    "name": "check_ids",
+                                    "kind": "text",
+                                    "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                  },
+                                  "test": "present"
+                                },
+                                "children": [
+                                  {
+                                    "kind": "choose",
+                                    "condition": {
+                                      "field": {
+                                        "name": "agent_tools",
+                                        "kind": "flag",
+                                        "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                                      },
+                                      "test": "enabled"
+                                    },
+                                    "children": [
+                                      {
+                                        "kind": "text",
+                                        "id": "delegation.seed-checks-tools",
+                                        "source": "content/delegation/seed-checks-tools.md",
+                                        "bindings": [
+                                          {
+                                            "name": "check_ids",
+                                            "node": {
+                                              "kind": "input",
+                                              "field": {
+                                                "name": "check_ids",
+                                                "kind": "text",
+                                                "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "kind": "text",
+                                        "id": "delegation.seed-checks",
+                                        "source": "content/delegation/seed-checks.md",
+                                        "bindings": [
+                                          {
+                                            "name": "check_ids",
+                                            "node": {
+                                              "kind": "input",
+                                              "field": {
+                                                "name": "check_ids",
+                                                "kind": "text",
+                                                "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "kind": "text",
+                                    "id": "delegation.seed-no-checks",
+                                    "source": "content/delegation/seed-no-checks.md"
+                                  }
+                                ]
+                              }
+                            }
+                          ]
                         }
                       ]
                     }
@@ -3157,70 +3736,213 @@
           "delivery": "message_fragment",
           "description": "Seed reference for a handover opening.",
           "body": {
-            "kind": "text",
-            "id": "delegation.seed",
-            "source": "content/delegation/seed.md",
-            "bindings": [
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "agent_tools",
+                "kind": "flag",
+                "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+              },
+              "test": "enabled"
+            },
+            "children": [
               {
-                "name": "seed_id",
-                "node": {
-                  "kind": "input",
-                  "field": {
+                "kind": "text",
+                "id": "delegation.seed-tools",
+                "source": "content/delegation/seed-tools.md",
+                "bindings": [
+                  {
                     "name": "seed_id",
-                    "kind": "text",
-                    "description": "The session's stake, if it has one."
-                  }
-                }
-              },
-              {
-                "name": "seed_title",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "seed_title",
-                    "kind": "text",
-                    "description": "Title of the session's stake."
-                  }
-                }
-              },
-              {
-                "name": "completion",
-                "node": {
-                  "kind": "choose",
-                  "condition": {
-                    "field": {
-                      "name": "check_ids",
-                      "kind": "text",
-                      "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
-                    },
-                    "test": "present"
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "seed_id",
+                        "kind": "text",
+                        "description": "The session's stake, if it has one."
+                      }
+                    }
                   },
-                  "children": [
-                    {
-                      "kind": "text",
-                      "id": "delegation.seed-checks",
-                      "source": "content/delegation/seed-checks.md",
-                      "bindings": [
-                        {
+                  {
+                    "name": "seed_title",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "seed_title",
+                        "kind": "text",
+                        "description": "Title of the session's stake."
+                      }
+                    }
+                  },
+                  {
+                    "name": "completion",
+                    "node": {
+                      "kind": "choose",
+                      "condition": {
+                        "field": {
                           "name": "check_ids",
-                          "node": {
-                            "kind": "input",
+                          "kind": "text",
+                          "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                        },
+                        "test": "present"
+                      },
+                      "children": [
+                        {
+                          "kind": "choose",
+                          "condition": {
                             "field": {
-                              "name": "check_ids",
+                              "name": "agent_tools",
+                              "kind": "flag",
+                              "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                            },
+                            "test": "enabled"
+                          },
+                          "children": [
+                            {
                               "kind": "text",
-                              "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                              "id": "delegation.seed-checks-tools",
+                              "source": "content/delegation/seed-checks-tools.md",
+                              "bindings": [
+                                {
+                                  "name": "check_ids",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "check_ids",
+                                      "kind": "text",
+                                      "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "kind": "text",
+                              "id": "delegation.seed-checks",
+                              "source": "content/delegation/seed-checks.md",
+                              "bindings": [
+                                {
+                                  "name": "check_ids",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "check_ids",
+                                      "kind": "text",
+                                      "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                    }
+                                  }
+                                }
+                              ]
                             }
-                          }
+                          ]
+                        },
+                        {
+                          "kind": "text",
+                          "id": "delegation.seed-no-checks",
+                          "source": "content/delegation/seed-no-checks.md"
                         }
                       ]
-                    },
-                    {
-                      "kind": "text",
-                      "id": "delegation.seed-no-checks",
-                      "source": "content/delegation/seed-no-checks.md"
                     }
-                  ]
-                }
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "id": "delegation.seed",
+                "source": "content/delegation/seed.md",
+                "bindings": [
+                  {
+                    "name": "seed_id",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "seed_id",
+                        "kind": "text",
+                        "description": "The session's stake, if it has one."
+                      }
+                    }
+                  },
+                  {
+                    "name": "seed_title",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "seed_title",
+                        "kind": "text",
+                        "description": "Title of the session's stake."
+                      }
+                    }
+                  },
+                  {
+                    "name": "completion",
+                    "node": {
+                      "kind": "choose",
+                      "condition": {
+                        "field": {
+                          "name": "check_ids",
+                          "kind": "text",
+                          "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                        },
+                        "test": "present"
+                      },
+                      "children": [
+                        {
+                          "kind": "choose",
+                          "condition": {
+                            "field": {
+                              "name": "agent_tools",
+                              "kind": "flag",
+                              "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                            },
+                            "test": "enabled"
+                          },
+                          "children": [
+                            {
+                              "kind": "text",
+                              "id": "delegation.seed-checks-tools",
+                              "source": "content/delegation/seed-checks-tools.md",
+                              "bindings": [
+                                {
+                                  "name": "check_ids",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "check_ids",
+                                      "kind": "text",
+                                      "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "kind": "text",
+                              "id": "delegation.seed-checks",
+                              "source": "content/delegation/seed-checks.md",
+                              "bindings": [
+                                {
+                                  "name": "check_ids",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "check_ids",
+                                      "kind": "text",
+                                      "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "text",
+                          "id": "delegation.seed-no-checks",
+                          "source": "content/delegation/seed-no-checks.md"
+                        }
+                      ]
+                    }
+                  }
+                ]
               }
             ]
           }
@@ -3248,70 +3970,213 @@
                   "kind": "trim",
                   "children": [
                     {
-                      "kind": "text",
-                      "id": "delegation.seed",
-                      "source": "content/delegation/seed.md",
-                      "bindings": [
+                      "kind": "choose",
+                      "condition": {
+                        "field": {
+                          "name": "agent_tools",
+                          "kind": "flag",
+                          "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                        },
+                        "test": "enabled"
+                      },
+                      "children": [
                         {
-                          "name": "seed_id",
-                          "node": {
-                            "kind": "input",
-                            "field": {
+                          "kind": "text",
+                          "id": "delegation.seed-tools",
+                          "source": "content/delegation/seed-tools.md",
+                          "bindings": [
+                            {
                               "name": "seed_id",
-                              "kind": "text",
-                              "description": "The session's stake, if it has one."
-                            }
-                          }
-                        },
-                        {
-                          "name": "seed_title",
-                          "node": {
-                            "kind": "input",
-                            "field": {
-                              "name": "seed_title",
-                              "kind": "text",
-                              "description": "Title of the session's stake."
-                            }
-                          }
-                        },
-                        {
-                          "name": "completion",
-                          "node": {
-                            "kind": "choose",
-                            "condition": {
-                              "field": {
-                                "name": "check_ids",
-                                "kind": "text",
-                                "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
-                              },
-                              "test": "present"
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "seed_id",
+                                  "kind": "text",
+                                  "description": "The session's stake, if it has one."
+                                }
+                              }
                             },
-                            "children": [
-                              {
-                                "kind": "text",
-                                "id": "delegation.seed-checks",
-                                "source": "content/delegation/seed-checks.md",
-                                "bindings": [
-                                  {
+                            {
+                              "name": "seed_title",
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "seed_title",
+                                  "kind": "text",
+                                  "description": "Title of the session's stake."
+                                }
+                              }
+                            },
+                            {
+                              "name": "completion",
+                              "node": {
+                                "kind": "choose",
+                                "condition": {
+                                  "field": {
                                     "name": "check_ids",
-                                    "node": {
-                                      "kind": "input",
+                                    "kind": "text",
+                                    "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                  },
+                                  "test": "present"
+                                },
+                                "children": [
+                                  {
+                                    "kind": "choose",
+                                    "condition": {
                                       "field": {
-                                        "name": "check_ids",
+                                        "name": "agent_tools",
+                                        "kind": "flag",
+                                        "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                                      },
+                                      "test": "enabled"
+                                    },
+                                    "children": [
+                                      {
                                         "kind": "text",
-                                        "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                        "id": "delegation.seed-checks-tools",
+                                        "source": "content/delegation/seed-checks-tools.md",
+                                        "bindings": [
+                                          {
+                                            "name": "check_ids",
+                                            "node": {
+                                              "kind": "input",
+                                              "field": {
+                                                "name": "check_ids",
+                                                "kind": "text",
+                                                "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "kind": "text",
+                                        "id": "delegation.seed-checks",
+                                        "source": "content/delegation/seed-checks.md",
+                                        "bindings": [
+                                          {
+                                            "name": "check_ids",
+                                            "node": {
+                                              "kind": "input",
+                                              "field": {
+                                                "name": "check_ids",
+                                                "kind": "text",
+                                                "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                              }
+                                            }
+                                          }
+                                        ]
                                       }
-                                    }
+                                    ]
+                                  },
+                                  {
+                                    "kind": "text",
+                                    "id": "delegation.seed-no-checks",
+                                    "source": "content/delegation/seed-no-checks.md"
                                   }
                                 ]
-                              },
-                              {
-                                "kind": "text",
-                                "id": "delegation.seed-no-checks",
-                                "source": "content/delegation/seed-no-checks.md"
                               }
-                            ]
-                          }
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "text",
+                          "id": "delegation.seed",
+                          "source": "content/delegation/seed.md",
+                          "bindings": [
+                            {
+                              "name": "seed_id",
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "seed_id",
+                                  "kind": "text",
+                                  "description": "The session's stake, if it has one."
+                                }
+                              }
+                            },
+                            {
+                              "name": "seed_title",
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "seed_title",
+                                  "kind": "text",
+                                  "description": "Title of the session's stake."
+                                }
+                              }
+                            },
+                            {
+                              "name": "completion",
+                              "node": {
+                                "kind": "choose",
+                                "condition": {
+                                  "field": {
+                                    "name": "check_ids",
+                                    "kind": "text",
+                                    "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                  },
+                                  "test": "present"
+                                },
+                                "children": [
+                                  {
+                                    "kind": "choose",
+                                    "condition": {
+                                      "field": {
+                                        "name": "agent_tools",
+                                        "kind": "flag",
+                                        "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                                      },
+                                      "test": "enabled"
+                                    },
+                                    "children": [
+                                      {
+                                        "kind": "text",
+                                        "id": "delegation.seed-checks-tools",
+                                        "source": "content/delegation/seed-checks-tools.md",
+                                        "bindings": [
+                                          {
+                                            "name": "check_ids",
+                                            "node": {
+                                              "kind": "input",
+                                              "field": {
+                                                "name": "check_ids",
+                                                "kind": "text",
+                                                "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "kind": "text",
+                                        "id": "delegation.seed-checks",
+                                        "source": "content/delegation/seed-checks.md",
+                                        "bindings": [
+                                          {
+                                            "name": "check_ids",
+                                            "node": {
+                                              "kind": "input",
+                                              "field": {
+                                                "name": "check_ids",
+                                                "kind": "text",
+                                                "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "kind": "text",
+                                    "id": "delegation.seed-no-checks",
+                                    "source": "content/delegation/seed-no-checks.md"
+                                  }
+                                ]
+                              }
+                            }
+                          ]
                         }
                       ]
                     }
@@ -3326,70 +4191,213 @@
           "delivery": "message_fragment",
           "description": "Seed reference for the delegated opening.",
           "body": {
-            "kind": "text",
-            "id": "delegation.seed",
-            "source": "content/delegation/seed.md",
-            "bindings": [
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "agent_tools",
+                "kind": "flag",
+                "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+              },
+              "test": "enabled"
+            },
+            "children": [
               {
-                "name": "seed_id",
-                "node": {
-                  "kind": "input",
-                  "field": {
+                "kind": "text",
+                "id": "delegation.seed-tools",
+                "source": "content/delegation/seed-tools.md",
+                "bindings": [
+                  {
                     "name": "seed_id",
-                    "kind": "text",
-                    "description": "The session's stake, if it has one."
-                  }
-                }
-              },
-              {
-                "name": "seed_title",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "seed_title",
-                    "kind": "text",
-                    "description": "Title of the session's stake."
-                  }
-                }
-              },
-              {
-                "name": "completion",
-                "node": {
-                  "kind": "choose",
-                  "condition": {
-                    "field": {
-                      "name": "check_ids",
-                      "kind": "text",
-                      "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
-                    },
-                    "test": "present"
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "seed_id",
+                        "kind": "text",
+                        "description": "The session's stake, if it has one."
+                      }
+                    }
                   },
-                  "children": [
-                    {
-                      "kind": "text",
-                      "id": "delegation.seed-checks",
-                      "source": "content/delegation/seed-checks.md",
-                      "bindings": [
-                        {
+                  {
+                    "name": "seed_title",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "seed_title",
+                        "kind": "text",
+                        "description": "Title of the session's stake."
+                      }
+                    }
+                  },
+                  {
+                    "name": "completion",
+                    "node": {
+                      "kind": "choose",
+                      "condition": {
+                        "field": {
                           "name": "check_ids",
-                          "node": {
-                            "kind": "input",
+                          "kind": "text",
+                          "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                        },
+                        "test": "present"
+                      },
+                      "children": [
+                        {
+                          "kind": "choose",
+                          "condition": {
                             "field": {
-                              "name": "check_ids",
+                              "name": "agent_tools",
+                              "kind": "flag",
+                              "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                            },
+                            "test": "enabled"
+                          },
+                          "children": [
+                            {
                               "kind": "text",
-                              "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                              "id": "delegation.seed-checks-tools",
+                              "source": "content/delegation/seed-checks-tools.md",
+                              "bindings": [
+                                {
+                                  "name": "check_ids",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "check_ids",
+                                      "kind": "text",
+                                      "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "kind": "text",
+                              "id": "delegation.seed-checks",
+                              "source": "content/delegation/seed-checks.md",
+                              "bindings": [
+                                {
+                                  "name": "check_ids",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "check_ids",
+                                      "kind": "text",
+                                      "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                    }
+                                  }
+                                }
+                              ]
                             }
-                          }
+                          ]
+                        },
+                        {
+                          "kind": "text",
+                          "id": "delegation.seed-no-checks",
+                          "source": "content/delegation/seed-no-checks.md"
                         }
                       ]
-                    },
-                    {
-                      "kind": "text",
-                      "id": "delegation.seed-no-checks",
-                      "source": "content/delegation/seed-no-checks.md"
                     }
-                  ]
-                }
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "id": "delegation.seed",
+                "source": "content/delegation/seed.md",
+                "bindings": [
+                  {
+                    "name": "seed_id",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "seed_id",
+                        "kind": "text",
+                        "description": "The session's stake, if it has one."
+                      }
+                    }
+                  },
+                  {
+                    "name": "seed_title",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "seed_title",
+                        "kind": "text",
+                        "description": "Title of the session's stake."
+                      }
+                    }
+                  },
+                  {
+                    "name": "completion",
+                    "node": {
+                      "kind": "choose",
+                      "condition": {
+                        "field": {
+                          "name": "check_ids",
+                          "kind": "text",
+                          "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                        },
+                        "test": "present"
+                      },
+                      "children": [
+                        {
+                          "kind": "choose",
+                          "condition": {
+                            "field": {
+                              "name": "agent_tools",
+                              "kind": "flag",
+                              "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                            },
+                            "test": "enabled"
+                          },
+                          "children": [
+                            {
+                              "kind": "text",
+                              "id": "delegation.seed-checks-tools",
+                              "source": "content/delegation/seed-checks-tools.md",
+                              "bindings": [
+                                {
+                                  "name": "check_ids",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "check_ids",
+                                      "kind": "text",
+                                      "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "kind": "text",
+                              "id": "delegation.seed-checks",
+                              "source": "content/delegation/seed-checks.md",
+                              "bindings": [
+                                {
+                                  "name": "check_ids",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "check_ids",
+                                      "kind": "text",
+                                      "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "text",
+                          "id": "delegation.seed-no-checks",
+                          "source": "content/delegation/seed-no-checks.md"
+                        }
+                      ]
+                    }
+                  }
+                ]
               }
             ]
           }
@@ -3671,6 +4679,32 @@
                     }
                   ]
                 }
+              },
+              {
+                "name": "delegated",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "agent_tools",
+                      "kind": "flag",
+                      "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "delegation.authorization-delegated-tools",
+                      "source": "content/delegation/authorization-delegated-tools.md"
+                    },
+                    {
+                      "kind": "text",
+                      "id": "delegation.authorization-delegated",
+                      "source": "content/delegation/authorization-delegated.md"
+                    }
+                  ]
+                }
               }
             ]
           }
@@ -3751,6 +4785,32 @@
                     "description": "The words the change replaces or removes."
                   },
                   "quote": true
+                }
+              },
+              {
+                "name": "delegated",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "agent_tools",
+                      "kind": "flag",
+                      "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "delegation.authorization-delegated-tools",
+                      "source": "content/delegation/authorization-delegated-tools.md"
+                    },
+                    {
+                      "kind": "text",
+                      "id": "delegation.authorization-delegated",
+                      "source": "content/delegation/authorization-delegated.md"
+                    }
+                  ]
                 }
               }
             ]
@@ -3838,70 +4898,213 @@
                               },
                               "children": [
                                 {
-                                  "kind": "text",
-                                  "id": "delegation.seed",
-                                  "source": "content/delegation/seed.md",
-                                  "bindings": [
+                                  "kind": "choose",
+                                  "condition": {
+                                    "field": {
+                                      "name": "agent_tools",
+                                      "kind": "flag",
+                                      "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                                    },
+                                    "test": "enabled"
+                                  },
+                                  "children": [
                                     {
-                                      "name": "seed_id",
-                                      "node": {
-                                        "kind": "input",
-                                        "field": {
+                                      "kind": "text",
+                                      "id": "delegation.seed-tools",
+                                      "source": "content/delegation/seed-tools.md",
+                                      "bindings": [
+                                        {
                                           "name": "seed_id",
-                                          "kind": "text",
-                                          "description": "The session's stake, if it has one."
-                                        }
-                                      }
-                                    },
-                                    {
-                                      "name": "seed_title",
-                                      "node": {
-                                        "kind": "input",
-                                        "field": {
-                                          "name": "seed_title",
-                                          "kind": "text",
-                                          "description": "Title of the session's stake."
-                                        }
-                                      }
-                                    },
-                                    {
-                                      "name": "completion",
-                                      "node": {
-                                        "kind": "choose",
-                                        "condition": {
-                                          "field": {
-                                            "name": "check_ids",
-                                            "kind": "text",
-                                            "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
-                                          },
-                                          "test": "present"
+                                          "node": {
+                                            "kind": "input",
+                                            "field": {
+                                              "name": "seed_id",
+                                              "kind": "text",
+                                              "description": "The session's stake, if it has one."
+                                            }
+                                          }
                                         },
-                                        "children": [
-                                          {
-                                            "kind": "text",
-                                            "id": "delegation.seed-checks",
-                                            "source": "content/delegation/seed-checks.md",
-                                            "bindings": [
-                                              {
+                                        {
+                                          "name": "seed_title",
+                                          "node": {
+                                            "kind": "input",
+                                            "field": {
+                                              "name": "seed_title",
+                                              "kind": "text",
+                                              "description": "Title of the session's stake."
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "name": "completion",
+                                          "node": {
+                                            "kind": "choose",
+                                            "condition": {
+                                              "field": {
                                                 "name": "check_ids",
-                                                "node": {
-                                                  "kind": "input",
+                                                "kind": "text",
+                                                "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                              },
+                                              "test": "present"
+                                            },
+                                            "children": [
+                                              {
+                                                "kind": "choose",
+                                                "condition": {
                                                   "field": {
-                                                    "name": "check_ids",
+                                                    "name": "agent_tools",
+                                                    "kind": "flag",
+                                                    "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                                                  },
+                                                  "test": "enabled"
+                                                },
+                                                "children": [
+                                                  {
                                                     "kind": "text",
-                                                    "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                                    "id": "delegation.seed-checks-tools",
+                                                    "source": "content/delegation/seed-checks-tools.md",
+                                                    "bindings": [
+                                                      {
+                                                        "name": "check_ids",
+                                                        "node": {
+                                                          "kind": "input",
+                                                          "field": {
+                                                            "name": "check_ids",
+                                                            "kind": "text",
+                                                            "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                                          }
+                                                        }
+                                                      }
+                                                    ]
+                                                  },
+                                                  {
+                                                    "kind": "text",
+                                                    "id": "delegation.seed-checks",
+                                                    "source": "content/delegation/seed-checks.md",
+                                                    "bindings": [
+                                                      {
+                                                        "name": "check_ids",
+                                                        "node": {
+                                                          "kind": "input",
+                                                          "field": {
+                                                            "name": "check_ids",
+                                                            "kind": "text",
+                                                            "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                                          }
+                                                        }
+                                                      }
+                                                    ]
                                                   }
-                                                }
+                                                ]
+                                              },
+                                              {
+                                                "kind": "text",
+                                                "id": "delegation.seed-no-checks",
+                                                "source": "content/delegation/seed-no-checks.md"
                                               }
                                             ]
-                                          },
-                                          {
-                                            "kind": "text",
-                                            "id": "delegation.seed-no-checks",
-                                            "source": "content/delegation/seed-no-checks.md"
                                           }
-                                        ]
-                                      }
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "kind": "text",
+                                      "id": "delegation.seed",
+                                      "source": "content/delegation/seed.md",
+                                      "bindings": [
+                                        {
+                                          "name": "seed_id",
+                                          "node": {
+                                            "kind": "input",
+                                            "field": {
+                                              "name": "seed_id",
+                                              "kind": "text",
+                                              "description": "The session's stake, if it has one."
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "name": "seed_title",
+                                          "node": {
+                                            "kind": "input",
+                                            "field": {
+                                              "name": "seed_title",
+                                              "kind": "text",
+                                              "description": "Title of the session's stake."
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "name": "completion",
+                                          "node": {
+                                            "kind": "choose",
+                                            "condition": {
+                                              "field": {
+                                                "name": "check_ids",
+                                                "kind": "text",
+                                                "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                              },
+                                              "test": "present"
+                                            },
+                                            "children": [
+                                              {
+                                                "kind": "choose",
+                                                "condition": {
+                                                  "field": {
+                                                    "name": "agent_tools",
+                                                    "kind": "flag",
+                                                    "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                                                  },
+                                                  "test": "enabled"
+                                                },
+                                                "children": [
+                                                  {
+                                                    "kind": "text",
+                                                    "id": "delegation.seed-checks-tools",
+                                                    "source": "content/delegation/seed-checks-tools.md",
+                                                    "bindings": [
+                                                      {
+                                                        "name": "check_ids",
+                                                        "node": {
+                                                          "kind": "input",
+                                                          "field": {
+                                                            "name": "check_ids",
+                                                            "kind": "text",
+                                                            "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                                          }
+                                                        }
+                                                      }
+                                                    ]
+                                                  },
+                                                  {
+                                                    "kind": "text",
+                                                    "id": "delegation.seed-checks",
+                                                    "source": "content/delegation/seed-checks.md",
+                                                    "bindings": [
+                                                      {
+                                                        "name": "check_ids",
+                                                        "node": {
+                                                          "kind": "input",
+                                                          "field": {
+                                                            "name": "check_ids",
+                                                            "kind": "text",
+                                                            "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                                          }
+                                                        }
+                                                      }
+                                                    ]
+                                                  }
+                                                ]
+                                              },
+                                              {
+                                                "kind": "text",
+                                                "id": "delegation.seed-no-checks",
+                                                "source": "content/delegation/seed-no-checks.md"
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      ]
                                     }
                                   ]
                                 }
@@ -8542,5 +9745,5 @@
       ]
     }
   ],
-  "definitions_hash": "7fb08416f5aca4b66f807ea0900ec5513a451dd4c87a4e3cd191dfbe5d726c7d"
+  "definitions_hash": "82b3198822d3adaa424efc76c5b8e06713f0b8dfa6e9af67342af00e3e6be71e"
 }

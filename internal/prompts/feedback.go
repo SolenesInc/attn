@@ -12,7 +12,7 @@ func feedbackEvents() []Event {
 		On("inbox-quiet", "cli_output", "After the items, when a notification started the reader's run and quiet notifications keep its stop out of the queue.", Use("session.inbox-quiet", "content/session/inbox-quiet.md")),
 		On("inbox-item", "cli_output", "An inbox item other than a peer message or maintenance prompt.", template("session.inbox-item", "content/session/inbox-item.md", TextField("content", "Rendered inbox item."))),
 		On("tender-resume", "user_message", "Typed before the seed mail that resumed the closed session tending a seed on standby. Carries the standby note and the ways to end the turn.", toolsOr(tenderResume("session.tender-resume-tools", "content/session/tender-resume-tools.md"), tenderResume("session.tender-resume", "content/session/tender-resume.md"))),
-		On("standby-request", "user_message", "Typed into a session when the user picks Standby until… for it in the app. Asks the agent to put the seed it tends on standby until that time.", template("session.standby-request", "content/session/standby-request.md", TextField("until", "The RFC3339 time the user picked."))),
+		On("standby-request", "user_message", "Typed into a session when the user picks Standby until… for it in the app. Asks the agent to put the seed it tends on standby until that time.", toolsOr(template("session.standby-request-tools", "content/session/standby-request-tools.md", standbyUntil), template("session.standby-request", "content/session/standby-request.md", standbyUntil))),
 		On("start-cause-message", "message_fragment", "inboxStartCause: an unread peer message that started the recipient's run. Names the sender, never the body.", template("session.start-cause-message", "content/session/start-cause-message.md", TextField("sender", "Sender name."))),
 		On("start-cause-more", "message_fragment", "inboxStartCause: the unread items past the listing's tripwire.", template("session.start-cause-more", "content/session/start-cause-more.md", TextField("count", "Items not listed."))),
 		On("peer-message", "cli_output", "Attributed peer message, including the trust boundary and reply command.",
@@ -25,6 +25,7 @@ func feedbackEvents() []Event {
 }
 
 var (
+	standbyUntil = TextField("until", "The RFC3339 time the user picked.")
 	peerReplyTo  = TextField("reply_to", "Reply target.")
 	peerReplyCLI = template("session.peer-reply", "content/session/peer-reply.md", peerReplyTo)
 	peerReply    = toolsOr(template("session.peer-reply-tools", "content/session/peer-reply-tools.md", peerReplyTo), peerReplyCLI)

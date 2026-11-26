@@ -147,7 +147,11 @@ JavaScript script in which each attn command is a function, and `ask` and
 `spawn` and `resume` receive `agent_tools` while the user has attn's tools on
 (the experimental setting Agent tools, `agent_tools_enabled`). Without the
 declaration, or with the setting off, the field is absent and the agent uses
-the attn CLI.
+the attn CLI. A terminal harness that declares `agentTools` also gets attn's
+messages to its agent, such as a delegation's brief or a seed update, with
+each command written as a call. A server harness's agents keep the CLI words
+in them, since a conversation gets the tools only once the server has
+registered them.
 
 A harness that runs in the terminal gets
 `{url, credential, description}`. Give it to the harness however the harness

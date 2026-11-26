@@ -39,7 +39,6 @@ func Facts() harness.Facts {
 		Recovery:       harness.ByServer,
 		ModelDiscovery: true,
 		Activity:       true,
-		AgentTools:     true,
 	})
 }
 

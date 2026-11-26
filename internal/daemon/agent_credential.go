@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const agentKeyFile = "agent-key"
@@ -129,6 +130,11 @@ func (d *Daemon) carriesAgentTools(agent string) bool {
 func (d *Daemon) sessionCarriesAgentTools(id protocol.SessionID) bool {
 	session := d.store.Get(id)
 	return session != nil && d.carriesAgentTools(string(session.Agent))
+}
+
+func (d *Daemon) tenderCarriesAgentTools(tender who.Party) bool {
+	id, ok := tender.Address().Session()
+	return ok && d.sessionCarriesAgentTools(protocol.SessionID(id))
 }
 
 func (d *Daemon) agentToolsFor(c agentCredential) *harness.AgentTools {

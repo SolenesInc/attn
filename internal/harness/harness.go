@@ -245,7 +245,7 @@ type Facts struct {
 	ModelDiscovery bool
 	// Activity is whether attn can read the harness's conversations to write activity lines.
 	Activity bool
-	// AgentTools is whether every launch hands the agent attn's tools while attn serves them, so attn's texts to the agent name commands as calls.
+	// AgentTools is whether every launch hands the agent attn's tools while attn serves them, so attn's texts to the agent name commands as calls. A launch through a harness's server gets the tools only once that server has registered them, so a server-bound harness leaves it false.
 	AgentTools bool
 	// ConversationIsSession: a launch that names no conversation starts one with the session's own id.
 	ConversationIsSession bool

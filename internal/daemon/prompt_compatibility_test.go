@@ -76,5 +76,8 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 	out["tender-resume"] = prompts.RenderText("session", "tender-resume", prompts.Values{"seed_id": "s-example", "seed_title": "Review the queue change", "note": "Merge once approved {{literal}}"})
 	out["delegation/brief"] = prompts.RenderText("delegation", "brief", prompts.Values{"seed_id": "s-example", "seed_title": "Review the queue change"})
 	out["delegation/brief/checks"] = prompts.RenderText("delegation", "brief", prompts.Values{"seed_id": "s-example", "seed_title": "Review the queue change", "check_ids": "C3 and the plot's shared C1"})
+	out["standby-request"] = prompts.RenderText("session", "standby-request", prompts.Values{"until": "2026-11-26T09:00:00+01:00"})
+	out["authorization-update"] = prompts.RenderText("delegation", "authorization-update", prompts.Values{"seed_id": "s-example", "seed_title": "Review the queue change", "authorization": "Push to main {{literal}}", "previous": "Ask first", "set_by": "Builder"})
+	out["authorization-cleared"] = prompts.RenderText("delegation", "authorization-cleared", prompts.Values{"seed_id": "s-example", "seed_title": "Review the queue change", "previous": "Push to main", "set_by": ""})
 	prompttest.Equal(t, "daemon", out)
 }
