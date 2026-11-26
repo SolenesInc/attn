@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Markdown Vim mode overrides saved shortcuts",
+  "at": "2026-11-26T16:39:18.281Z",
+  "detail": "Markdown Vim mode consumes a configured shortcut before user key binding dispatch. At ddce3c119 the probe for 95ab129a6 rebinds terminal.find to bare j and focuses a Markdown file. The key opens Find with Vim mode off and scrolls with Vim mode on. Honor the configured shortcut or surface and resolve the conflict. Independently confirmed in source and reproduced in both input modes on ai-sandbox. Review seed s-qx85b3 holds qx85b3-wire-probes.patch and qx85b3-wire-results.txt.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/keys.rs",
+    "line": 88
+  },
+  "culprit": "95ab129a619d67a00449f316f7ff2762cbe4bc88"
+}
