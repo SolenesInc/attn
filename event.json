@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Review-document Vim overrides saved shortcuts",
+  "at": "2026-11-26T17:35:21.558Z",
+  "detail": "Review-document Vim handling consumes applicable saved bare shortcuts before the keymap at ac8c5c19d. Save Keyboard Shortcuts as bare j, focus a Brief review, and press j. The review motion runs before the saved action even with plain Markdown Vim disabled. The editor allows and persists the binding, and the culprit parent let the keymap handle it. Independently confirmed from source at the pin. Preserve review Vim independently of the plain Markdown setting while honoring applicable saved shortcuts. The windowless probe is pending on reviewer seed s-wfcz9p.\n"
+}
