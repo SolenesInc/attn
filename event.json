@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Crew Planted can display stale seed rows",
+  "at": "2026-11-26T18:09:56.704Z",
+  "detail": "Crew Planted can show stale seed rows at 23b1ccf3a. Harvest another member's child and the selected planter's plot stays at 0/1 despite the daemon pushing 1/1. Its signature ignores derived row changes. Replant an already-loaded seed beyond the first 200 and a triggered refresh still shows Harvested because the old tail is retained. Use fresh live rows and reconcile affected cached page rows. Independently confirmed and reproduced via app wire in both input modes. Review s-xmzdax.\n"
+}
