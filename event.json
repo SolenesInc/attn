@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: App acceptance waits around DaemonObserver.terminalOf fail instead of waiting, turning native-codex-update red",
+  "at": "2026-11-26T18:17:05.638Z",
+  "fixesBug": "c15c891884a6288845c5a4529d00c57fa4854253"
+}
