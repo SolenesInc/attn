@@ -82,10 +82,19 @@ func TestACodexLaunchCarriesOneAttnServerAndLeavesTheCLITeachingToIt(t *testing.
 			}
 		}
 		slices.Sort(keys)
-		want := []string{"mcp_servers.attn." + auth, "mcp_servers.attn.default_tools_approval_mode", "mcp_servers.attn.url"}
+		want := []string{"mcp_servers.attn." + auth, "mcp_servers.attn.url"}
+		approved := []string{"attn_read", "attn_record", "skill", "ask"}
+		for _, tool := range approved {
+			want = append(want, "mcp_servers.attn.tools."+tool+".approval_mode")
+		}
 		slices.Sort(want)
-		if !slices.Equal(keys, want) || given["mcp_servers.attn.default_tools_approval_mode"] != "approve" || !strings.HasSuffix(given["mcp_servers.attn.url"], "/mcp") {
-			t.Errorf("Codex was configured with %v, want one attn server %v that approves its tools", given, want)
+		if !slices.Equal(keys, want) || !strings.HasSuffix(given["mcp_servers.attn.url"], "/mcp") {
+			t.Errorf("Codex was configured with %v, want one attn server %v that leaves attn_do to Codex's own approval", given, want)
+		}
+		for _, tool := range approved {
+			if mode := given["mcp_servers.attn.tools."+tool+".approval_mode"]; mode != "approve" {
+				t.Errorf("Codex was configured to approve %s with %q, want approve", tool, mode)
+			}
 		}
 	}
 	t.Run("shared", func(t *testing.T) {
@@ -234,5 +243,48 @@ func TestAHiddenSharedCodexConversationThatAttnWakesKeepsItsAttnTools(t *testing
 	noteThroughCodexConfig(t, w.CodexServer(), conversation, seed, "Woken by feedback.")
 	if author, _ := newestNoteAuthor(t, w, seed); author != checkout {
 		t.Errorf("seed_note from the woken conversation of %s is by %s", checkout, author)
+	}
+}
+
+func TestASharedCodexConversationAfterClearIsAddressedAsItsConversationWasStarted(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		spawnedWith   string
+		clearedWith   string
+		wantsTheTools bool
+	}{
+		{name: "spawned off, cleared on", spawnedWith: "false", clearedWith: "true", wantsTheTools: true},
+		{name: "spawned on, cleared off, then on", spawnedWith: "true", clearedWith: "false", wantsTheTools: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			app, cli := w.App(), w.Client()
+			setSetting(t, app, "agent_tools_enabled", tc.spawnedWith)
+			checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+			setSetting(t, app, "agent_tools_enabled", tc.clearedWith)
+			mark := len(app.Log())
+			moveOn(t, app, codex, terminal, "/clear", "add a discount field")
+			discount := awaitTerminalSessionChange(app, mark, terminal, checkout)
+			_, served := w.CodexServer().MemoryConfig(codex.ConversationID)["mcp_servers.attn.url"]
+			if served != tc.wantsTheTools {
+				t.Fatalf("the cleared conversation was started with attn's server %t, want %t", served, tc.wantsTheTools)
+			}
+			setSetting(t, app, "agent_tools_enabled", "true")
+
+			registerSessions(t, w, cli, "planter")
+			seed := plantSeedAs(t, cli, "planter", "discount field")
+			gardenNudgeWatch(t, cli, discount, seed, false)
+			gardenNudgeNote(t, cli, "planter", seed, "please look", true)
+			items := readInbox(t, cli, discount, 0).Items
+			call := "Read what changed with `seed_show({seed: \"" + seed + "\", since: "
+			command := "Read what changed with `attn seed show " + seed + " --since "
+			want := command
+			if tc.wantsTheTools {
+				want = call
+			}
+			if len(items) != 1 || !strings.Contains(items[0].Content, want) {
+				t.Errorf("the session after /clear holds %q; want the bell's read written as %q", inboxContents(items), want)
+			}
+		})
 	}
 }

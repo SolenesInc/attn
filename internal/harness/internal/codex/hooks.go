@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/prompts"
 )
 
@@ -41,11 +42,14 @@ func (s CodexSetting) Override() string {
 
 func CodexAgentToolServer(url string, auth CodexSetting) []CodexSetting {
 	const key = "mcp_servers.attn."
-	return []CodexSetting{
+	settings := []CodexSetting{
 		{key + "url", url},
 		{key + auth.Key, auth.Value},
-		{key + "default_tools_approval_mode", "approve"},
 	}
+	for _, tool := range harness.ApprovedAgentTools {
+		settings = append(settings, CodexSetting{key + "tools." + tool + ".approval_mode", "approve"})
+	}
+	return settings
 }
 
 func GenerateCodexServerConfigOverrides(wrapperPath, socketPath, profile string) []string {

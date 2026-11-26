@@ -19,6 +19,8 @@ const (
 	SharedAgentToolsEnv = "ATTN_SHARED_AGENT_TOOLS"
 )
 
+var ApprovedAgentTools = []string{"attn_read", "attn_record", "skill", "ask"}
+
 func (t *AgentTools) LauncherEnv() []string {
 	if t == nil {
 		return nil

@@ -157,9 +157,9 @@ Shared app-server and `--remote` TUI behavior. For plain Codex, see
 `[0.171.0]`
 
 - **Per-conversation MCP config:** pass `mcp_servers.<name>.{url,
-  http_headers.Authorization, default_tools_approval_mode="approve"}` on
-  `thread/start` (inherited by subagents; pass on `thread/fork` for `/side`),
-  optionally with `omit_tools_from=["deferred"]`. Kept for the conversation's
+  http_headers.Authorization, tools.<tool>.approval_mode}` (the per-tool key
+  measured on 0.167.0) on `thread/start` (inherited by subagents; pass on
+  `thread/fork` for `/side`), optionally with `omit_tools_from=["deferred"]`. Kept for the conversation's
   loaded lifetime (later subscribed `thread/resume` ignores `config`).
 - **`tools/call` caller identity:** `_meta.threadId` is the calling
   conversation (subagent's own id, or ephemeral `/side` id), matching

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/victorarias/attn/internal/crew"
@@ -23,6 +24,7 @@ type Succession struct {
 	KeepTo       bool
 	Live         map[string]bool
 	Member       string
+	AgentTools   *bool
 }
 
 type SuccessionOutcome struct {
@@ -153,13 +155,21 @@ func openSuccessorTx(tx *sql.Tx, sc Succession, at string) error {
 		INSERT INTO sessions (id, user_label, agent, directory, profile_id, launched_at, context_window_cap,
 			resume_session_id, transcript_path, launch_intent, command_terminal, succeeds, priority, created_at, host)
 		SELECT ?, ?, agent, directory, profile_id, launched_at, context_window_cap,
-			?, ?, launch_intent, command_terminal, id, priority, ?, host
+			?, ?, CASE WHEN ? IS NULL OR launch_intent = '' THEN launch_intent ELSE json_set(launch_intent, '$.agent_tools', json(?)) END,
+			command_terminal, id, priority, ?, host
 		FROM sessions WHERE id = ?`,
 		sc.To, sc.Label,
-		sc.Conversation.NativeID, sc.Conversation.TranscriptPath, at,
+		sc.Conversation.NativeID, sc.Conversation.TranscriptPath, agentToolsJSON(sc.AgentTools), agentToolsJSON(sc.AgentTools), at,
 		sc.From,
 	)
 	return err
+}
+
+func agentToolsJSON(carried *bool) any {
+	if carried == nil {
+		return nil
+	}
+	return strconv.FormatBool(*carried)
 }
 
 // takeOverTx brings an existing To back into From's terminal, running From's process. Its launch counts

@@ -22,6 +22,10 @@ func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observatio
 		To:    to,
 		Close: store.SessionClose{Reason: string("cleared; its terminal moved on to " + to)},
 	}
+	if d.lifetime(from.ID) == harness.InServer {
+		startedWithTools := d.carriesAgentTools(from.Agent)
+		sc.AgentTools = &startedWithTools
+	}
 	if member, bound := d.crewMemberForSession(from.ID); bound && !d.othersRun(from.ID, t) {
 		sc.Member, sc.Label = member.ID, member.Name
 	}

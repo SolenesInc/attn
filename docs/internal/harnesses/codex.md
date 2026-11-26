@@ -69,7 +69,21 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
   `startup_timeout_sec` (default 30 s) unless a cached catalog exists `[0.164]`.
 - `-c mcp_servers.<name>.bearer_token_env_var="ATTN_AGENT_CREDENTIAL"` sends
   `Authorization: Bearer <env>` without exposing the token in argv.
-  `default_tools_approval_mode = "approve"` approves direct and subagent calls.
+- **Tool approval `[0.167.0, read from the source and measured]`:**
+  `mcp_servers.<name>.tools.<tool>.approval_mode` (`auto`, `prompt`, `writes`,
+  `approve`) wins over the server's `default_tools_approval_mode`, which wins
+  over `auto`. Both `-c` and a `thread/start` or `thread/fork` `config` honour
+  the dotted per-tool key. `approve` skips the user and the auto-review reviewer
+  in every approval policy and sandbox, for direct and subagent calls. `auto`
+  asks unless the tool has `readOnlyHint` (or `destructiveHint` and
+  `openWorldHint` both false). Asking means the user under `on-request` (Allow,
+  Allow for this session, Always allow, Cancel),
+  the reviewer under `approvals_reviewer = "auto_review"` (its reviews are in a
+  `guardian` subagent rollout of the conversation), a failed call under `never` with a sandbox ("MCP tool
+  call requires approval, but approval policy is never"), and no ask under
+  `never` with full disk write (read from the source only). `prompt` asks on
+  every call and offers no remembering. MCP calls leave from the Codex process,
+  outside the sandbox.
 - **Tool results `[0.167.0, 0.171.0, read from the source]`:** a direct call
   gives the model `structuredContent` as JSON when there is one, else the content.
   A code-mode script gets the result without `_meta`, both `content` and

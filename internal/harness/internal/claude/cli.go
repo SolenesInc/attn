@@ -427,7 +427,7 @@ func prepareLaunch(opts harness.DirectLaunchOpts) error {
 func generateHooksConfig(opts harness.DirectLaunchOpts) string {
 	var allow []string
 	if opts.AgentTools != nil {
-		for _, tool := range []string{"attn_read", "attn_record", "skill", "ask"} {
+		for _, tool := range harness.ApprovedAgentTools {
 			allow = append(allow, "mcp__"+claudeAgentToolsServer+"__"+tool)
 		}
 	}
