@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Home move fails when the file manifest exceeds the bridge packet limit",
+  "at": "2026-11-27T11:10:12.860Z",
+  "detail": "A normal accumulated home can produce a file manifest bigger than the bridge channel-open packet. The reviewer measured a fixture that crosses the cap. Transfer the manifest through the stream used for the move rather than channel-open metadata.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/home_move.go",
+    "line": 639
+  },
+  "culprit": "2113370ce24975ca7209ee34edc6b3db99c96614"
+}
