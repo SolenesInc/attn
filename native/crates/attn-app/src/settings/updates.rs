@@ -101,9 +101,10 @@ fn machines(run: &UpdateRun, t: &Tokens) -> Vec<Block> {
             _ => row.name.clone(),
         };
         let build = row.build.as_deref().unwrap_or_default();
-        let status = match (&row.reason, &row.detail) {
+        let status = match (&row.reason, row.detail.as_deref().filter(|d| !d.is_empty())) {
             (Some(reason), Some(detail)) => format!("{}: {detail}", reason.replace('_', " ")),
             (Some(reason), None) => reason.replace('_', " "),
+            (None, Some(detail)) if row.state != "done" => detail.to_owned(),
             _ => build.split(" (").next().unwrap_or(build).to_owned(),
         };
         facts = facts.fact(

@@ -30,13 +30,19 @@ type appMachineWorld struct {
 	name         string
 }
 
-func newAppMachineWorld(t *testing.T, build string) *appMachineWorld {
+// newAppMachineWorld starts both machines on build; arm runs before they start, to arm their pause points.
+func newAppMachineWorld(t *testing.T, build string, arm ...func(*appMachineWorld)) *appMachineWorld {
 	t.Helper()
 	w := &appMachineWorld{t: t, ssh: testworld.NewSSH(t), home: testworld.NewStack(t), laptop: testworld.NewStack(t)}
 	for _, s := range []*testworld.Stack{w.home, w.laptop} {
 		s.RunFrom(build)
 		w.ssh.Use(s.World)
 		s.Vars = append(s.Vars, "SHELL=/bin/bash")
+	}
+	for _, armed := range arm {
+		armed(w)
+	}
+	for _, s := range []*testworld.Stack{w.home, w.laptop} {
 		s.Start()
 	}
 	w.ssh.Route("home", w.home)
@@ -86,6 +92,18 @@ func finishedRunOf(t *testing.T, s *testworld.Stack, finished <-chan struct{}) p
 		t.Fatal("attn update status on the app machine shows no run after one finished")
 	}
 	return *status.Run
+}
+
+// addBox starts an ssh outpost of the home on build and returns it with its row.
+func (w *appMachineWorld) addBox(build string) (*testworld.Stack, protocol.OutpostInfo) {
+	w.t.Helper()
+	box := testworld.NewStack(w.t)
+	box.RunFrom(build)
+	box.Vars = append(box.Vars, "SHELL=/bin/bash")
+	box.Start()
+	w.ssh.Route("box", box)
+	w.homeApp.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "box", Destination: "box"})
+	return box, outpostState(w.homeApp, "box", protocol.OutpostStateConnected)
 }
 
 type pidShell struct {
@@ -312,6 +330,57 @@ func TestAnAppMachineInstallingABuildWhileItsHomeRunsAnUnsharedBuildStartsNoUpda
 	t.Log(protocol.Deref(run.Outcome))
 }
 
+func TestAFleetRunCutByTheNextSwitchOfTheHomeDoesNotStandInForTheNextOne(t *testing.T) {
+	base := testworld.AttnBinary(t)
+	var fleetStarted *testworld.Pause
+	w := newAppMachineWorld(t, base, func(w *appMachineWorld) { fleetStarted = w.home.PauseAt(pausepoint.FleetUpdateStarted) })
+	box, _ := w.addBox(base)
+
+	w.installOnLaptop(testworld.AttnUpdateBinary(t, "2.0.0-first", "source", ""))
+	fleetStarted.Take()
+	w.home.AwaitDaemonReplaced()
+	recovery := w.home.PauseAt(pausepoint.DaemonStartupRecovery)
+	second := testworld.AttnUpdateBinary(t, "2.0.0-second", "source", "")
+	<-w.installOnLaptop(second)
+	recovery.Take()()
+	fleetStarted.Take()()
+	fleet := homeRunOf(t, w.home.App(), "fleet")
+	boxRow := machineRowOf(t, fleet, protocol.UpdateMachineRoleOutpost)
+	if fleet.Phase != protocol.UpdatePhaseDone || !strings.Contains(fleet.TargetBuild, "2.0.0-second") || boxRow.State != protocol.UpdateOutpostStateDone {
+		t.Fatalf("the home's run for its outposts after the second switch: %s %s %q, box %+v", fleet.Phase, fleet.TargetBuild, protocol.Deref(fleet.Outcome), boxRow)
+	}
+	requireSameFile(t, "the outpost's attn", w.ssh.InstallPath(box), second)
+	box.AwaitDaemonReplaced()
+}
+
+func TestAFleetUpdateWhoseSourceMachineLeftNamesItOnTheOutpostsRow(t *testing.T) {
+	base := testworld.AttnBinary(t)
+	var fleetStarted *testworld.Pause
+	w := newAppMachineWorld(t, base, func(w *appMachineWorld) { fleetStarted = w.home.PauseAt(pausepoint.FleetUpdateStarted) })
+	box, _ := w.addBox(base)
+	before := homeFileBytes(t, w.ssh.InstallPath(box))
+	boxBuild := updateStatusOf(t, box)
+
+	w.installOnLaptop(testworld.AttnUpdateBinary(t, "2.0.0-source-left", "source", ""))
+	resume := fleetStarted.Take()
+	w.home.AwaitDaemonReplaced()
+	w.laptop.Stop()
+	w.ssh.MachineCommand(box, "uname", "echo Linux aarch64")
+	resume()
+	fleet := homeRunOf(t, w.home.App(), "fleet")
+	row := machineRowOf(t, fleet, protocol.UpdateMachineRoleOutpost)
+	detail := protocol.Deref(row.Detail)
+	if row.State != protocol.UpdateOutpostStateFailed || protocol.Deref(row.Reason) != protocol.UpdateFailureReasonNoBuild || !strings.Contains(detail, w.name) || !strings.Contains(detail, "linux/arm64") || protocol.Deref(row.Action) != "Update outpost" || !strings.Contains(protocol.Deref(row.Build), boxBuild.Version) {
+		t.Fatalf("the outpost whose platform only the away source machine builds: %+v (%s)", row, detail)
+	}
+	status := w.home.Attn("update", "status")
+	requireStdout(t, status, "(no build)", w.name, "; Update outpost")
+	t.Log(strings.TrimSpace(status.Stdout))
+	if !bytes.Equal(homeFileBytes(t, w.ssh.InstallPath(box)), before) {
+		t.Fatal("the outpost got an install")
+	}
+}
+
 // releaseOf serves binary as the Linux assets of version, with a host that cannot run.
 func releaseOf(t *testing.T, version string, binary *string) string {
 	t.Helper()
@@ -348,13 +417,7 @@ func TestOneUpdateBringsTheHomeAndThenItsOutpostToTheAppMachinesBuild(t *testing
 			}
 			base := testworld.AttnBinary(t)
 			w := newAppMachineWorld(t, base)
-			box := testworld.NewStack(t)
-			box.RunFrom(base)
-			box.Vars = append(box.Vars, "SHELL=/bin/bash")
-			box.Start()
-			w.ssh.Route("box", box)
-			w.homeApp.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "box", Destination: "box"})
-			boxRow := outpostState(w.homeApp, "box", protocol.OutpostStateConnected)
+			box, boxRow := w.addBox(base)
 			homeShell := w.spawnShell(w.home, nil, "home-shell")
 			boxShell := w.spawnShell(box, &boxRow.ID, "box-shell")
 
@@ -447,6 +510,8 @@ type homeUpdateFailure struct {
 	arrange func(t *testing.T, w *appMachineWorld, next string) (sends string)
 	// fail runs while the update waits to stage, for faults the dial itself would hit.
 	fail func(t *testing.T, w *appMachineWorld)
+	// staged runs once the home holds the staged build, before it switches.
+	staged func(t *testing.T, w *appMachineWorld)
 }
 
 func TestEveryFailedHomeUpdateNamesItsReasonCauseAndActionOnTheRightRow(t *testing.T) {
@@ -472,6 +537,15 @@ func TestEveryFailedHomeUpdateNamesItsReasonCauseAndActionOnTheRightRow(t *testi
 				w.ssh.Fail("home", "ssh: connect to host home port 22: Connection refused")
 			}},
 		{name: "switched-not-back", role: protocol.UpdateMachineRoleHome, reason: protocol.UpdateFailureReasonNotBack, cause: "did not connect"},
+		{name: "staged-file-wrong-hash", role: protocol.UpdateMachineRoleHome, reason: protocol.UpdateFailureReasonRefused, cause: "sha256",
+			staged: func(t *testing.T, w *appMachineWorld) {
+				staged := filepath.Join(filepath.Dir(w.ssh.InstallPath(w.home)), ".attn-pty-host-install")
+				data := homeFileBytes(t, staged)
+				data[len(data)/2] ^= 0xff
+				if err := os.WriteFile(staged, data, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			driveHomeUpdateFailure(t, tc)
@@ -484,6 +558,7 @@ func driveHomeUpdateFailure(t *testing.T, tc homeUpdateFailure) {
 	w := newAppMachineWorld(t, base)
 	installed := w.ssh.InstallPath(w.home)
 	before := homeFileBytes(t, installed)
+	answering := updateStatusOf(t, w.home)
 	next := testworld.AttnUpdateBinary(t, "2.0.0-"+tc.name, "source", "")
 	switch tc.name {
 	case "release-download-failure":
@@ -496,9 +571,12 @@ func driveHomeUpdateFailure(t *testing.T, tc homeUpdateFailure) {
 	if tc.arrange != nil {
 		sends = tc.arrange(t, w, next)
 	}
-	var staging, switched *testworld.Pause
+	var staging, staged, switched *testworld.Pause
 	if tc.fail != nil {
 		staging = w.laptop.PauseAt(pausepoint.HomeUpdateStaging)
+	}
+	if tc.staged != nil {
+		staged = w.laptop.PauseAt(pausepoint.HomeUpdateStaged)
 	}
 	if tc.reason == protocol.UpdateFailureReasonNotBack {
 		switched = w.laptop.PauseAt(pausepoint.HomeUpdateSwitched)
@@ -513,6 +591,11 @@ func driveHomeUpdateFailure(t *testing.T, tc homeUpdateFailure) {
 	if staging != nil {
 		resume := staging.Take()
 		tc.fail(t, w)
+		resume()
+	}
+	if staged != nil {
+		resume := staged.Take()
+		tc.staged(t, w)
 		resume()
 	}
 	if switched != nil {
@@ -533,8 +616,13 @@ func driveHomeUpdateFailure(t *testing.T, tc homeUpdateFailure) {
 	status := w.laptop.Attn("update", "status")
 	requireStdout(t, status, "("+strings.ReplaceAll(string(tc.reason), "_", " ")+")", "; Update")
 	t.Logf("%s", strings.TrimSpace(status.Stdout))
-	if tc.reason != protocol.UpdateFailureReasonNotBack && !bytes.Equal(homeFileBytes(t, installed), before) {
-		t.Fatal("the failed update changed the home's attn")
+	if tc.reason != protocol.UpdateFailureReasonNotBack {
+		if !bytes.Equal(homeFileBytes(t, installed), before) {
+			t.Fatal("the failed update changed the home's attn")
+		}
+		if now := updateStatusOf(t, w.home); now.Version != answering.Version || now.Commit != answering.Commit {
+			t.Fatalf("the home answers on %s %s, not its old build %s %s", now.Version, now.Commit, answering.Version, answering.Commit)
+		}
 	}
 	if tc.reason == protocol.UpdateFailureReasonUnreachable {
 		w.home.Stop()

@@ -58,6 +58,9 @@ often asleep, can join the home by dialing it. Turn on the experimental setting
 1. Install attn on the machine yourself. The home never installs or updates it.
    The home's `attn` must be in its install folder or on the `PATH` of a
    non-interactive ssh login.
+   To have the machine update the home to each build you install on it, also
+   turn on `self_update_enabled` at the home; see
+   [Update the home from the machine that dials it](#update-the-home-from-the-machine-that-dials-it).
 2. Run `ssh <home-destination>` once and answer any prompts.
 3. On the machine, run `attn enrollment join <home-destination>`. It waits for
    the first dial and prints the result. Run it again to dial at once.
@@ -146,10 +149,11 @@ machine's own rows. A failed row names one reason with its cause:
 | unreachable | ssh could not reach the home. |
 | refused | The home rejected the build, for example because its database is newer or its platform is not Linux amd64 or arm64. |
 | not back | The home switched and did not connect again on the new build. |
-| behind | The home runs a newer build. Update this machine with the command the row shows. |
+| behind | The home runs a newer build. The row opens the home's release, copies the command that builds its commit, or, for a build from a changed worktree, says to build it there. |
 
 Every reason but not back leaves the home on its old build. A failed update
-does not try again, even when the machine reconnects. When the home runs a
+does not try again, even when the machine reconnects. An outpost the run left
+on its build keeps the build it runs and offers **Update outpost**. When the home runs a
 build the two never shared, nothing installs. `attn update status` on the
 machine answers while the home is unreachable.
 

@@ -3,7 +3,7 @@
 //! run that ends well closes on its own after a countdown that holds while the pointer is over
 //! the band; any other ended run stays until dismissed.
 
-use attn_protocol::{StartUpdateMessage, UpdateOutpostProgress, UpdateRun};
+use attn_protocol::{StartUpdateMessage, UpdateOutpostMessage, UpdateOutpostProgress, UpdateRun};
 use attn_ui::Tokens;
 use attn_ui::blocks::{self, BannerTone};
 use attn_ui::system::Button;
@@ -50,11 +50,31 @@ fn version(build: &str) -> &str {
     build.split(" (").next().unwrap_or(build)
 }
 
-/// What a row offers: Update starts one, anything else is a command the user runs.
+/// What a row offers: Update starts the home's update, UpdateOutpost updates that outpost, Open is the page to
+/// open, and Copy is a command the user runs.
 #[derive(Clone)]
 pub(crate) enum RowAction {
     Update,
+    UpdateOutpost(String),
+    Open(String),
     Copy(String),
+}
+
+impl RowAction {
+    fn of(row: &UpdateOutpostProgress) -> Option<RowAction> {
+        row.action.as_deref().map(|action| match action {
+            "Update" => RowAction::Update,
+            "Update outpost" => RowAction::UpdateOutpost(row.id.clone()),
+            url if url.starts_with("https://") || url.starts_with("http://") => {
+                RowAction::Open(url.to_owned())
+            }
+            command => RowAction::Copy(command.to_owned()),
+        })
+    }
+
+    fn needs_daemon(&self) -> bool {
+        matches!(self, RowAction::Update | RowAction::UpdateOutpost(_))
+    }
 }
 
 /// The words for a run this machine keeps for its home: its head, one note and one action.
@@ -73,12 +93,6 @@ pub(crate) fn home_says(run: &UpdateRun) -> Option<HomeSays> {
         let theirs = version(home.build.as_deref().unwrap_or_default());
         let ours = version(this.and_then(|r| r.build.as_deref()).unwrap_or_default());
         format!("{} {theirs} · this Mac {ours}", home.name)
-    };
-    let action = |row: &UpdateOutpostProgress| {
-        row.action.as_deref().map(|a| match a {
-            "Update" => RowAction::Update,
-            command => RowAction::Copy(command.to_owned()),
-        })
     };
     if is_open(run) {
         return Some(HomeSays {
@@ -107,7 +121,7 @@ pub(crate) fn home_says(run: &UpdateRun) -> Option<HomeSays> {
                     home.name, outpost.name
                 ),
                 note: outpost.detail.clone(),
-                action: None,
+                action: RowAction::of(outpost),
             },
         });
     }
@@ -121,7 +135,7 @@ pub(crate) fn home_says(run: &UpdateRun) -> Option<HomeSays> {
             tone: BannerTone::Warn,
             head,
             note: Some(builds()),
-            action: action(this),
+            action: RowAction::of(this),
         });
     }
     let failed = run.outposts.iter().find(|o| o.reason.is_some())?;
@@ -137,7 +151,7 @@ pub(crate) fn home_says(run: &UpdateRun) -> Option<HomeSays> {
                 .replace('_', " ")
         ),
         note: failed.detail.clone(),
-        action: action(failed),
+        action: RowAction::of(failed),
     })
 }
 
@@ -145,6 +159,17 @@ pub(crate) fn home_says(run: &UpdateRun) -> Option<HomeSays> {
 pub(crate) fn run_action(action: &RowAction, state: &mut State, tx: &mut Tx) {
     match action {
         RowAction::Update => start(state, None, tx),
+        RowAction::UpdateOutpost(id) => {
+            let _ = state.daemon.send(&UpdateOutpostMessage {
+                id: id.clone(),
+                ..UpdateOutpostMessage::new()
+            });
+        }
+        RowAction::Open(url) => {
+            if let Err(why) = tx.open_url(url) {
+                eprintln!("attn-app: could not open {url}: {why}");
+            }
+        }
         RowAction::Copy(command) => tx.copy(command.clone()),
     }
 }
@@ -152,6 +177,8 @@ pub(crate) fn run_action(action: &RowAction, state: &mut State, tx: &mut Tx) {
 pub(crate) fn action_button(action: &RowAction) -> Button {
     Button::new(match action {
         RowAction::Update => "Update",
+        RowAction::UpdateOutpost(_) => "Update outpost",
+        RowAction::Open(_) => "Open release",
         RowAction::Copy(_) => "Copy command",
     })
 }
@@ -361,8 +388,7 @@ fn home_banner(state: &State, run: &UpdateRun, home: HomeSays, connected: bool) 
         banner = banner.item().note("update-run.note", note);
     }
     if let Some(action) = home.action {
-        let button =
-            action_button(&action).disabled(matches!(action, RowAction::Update) && !connected);
+        let button = action_button(&action).disabled(action.needs_daemon() && !connected);
         banner = banner.action(
             "update-run.action",
             button,

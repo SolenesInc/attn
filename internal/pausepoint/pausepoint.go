@@ -130,6 +130,8 @@ const (
 	UpdateOutpostsStaged           = "update-outposts-staged"
 	HomeUpdateSwitched             = "home-update-switched"
 	HomeUpdateStaging              = "home-update-staging"
+	HomeUpdateStaged               = "home-update-staged"
+	FleetUpdateStarted             = "fleet-update-started"
 	UpdateRunFinished              = "update-run-finished"
 	OutpostRecoveryReported        = "outpost-recovery-reported"
 	OutpostRecoveryStarted         = "outpost-recovery-started"

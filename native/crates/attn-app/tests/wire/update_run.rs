@@ -892,7 +892,8 @@ fn an_outpost_the_home_could_not_update_keeps_the_app_machines_banner_open_and_n
     );
     box_row.role = Some("outpost".into());
     box_row.reason = Some("unreachable".into());
-    let world = showing(home_run(
+    box_row.action = Some("Update outpost".into());
+    let mut world = showing(home_run(
         "done",
         vec![
             machine("home", "done", "0.16.1", None, None, None),
@@ -909,4 +910,38 @@ fn an_outpost_the_home_could_not_update_keeps_the_app_machines_banner_open_and_n
         Some("Unreachable: ssh: Connection timed out")
     );
     assert!(!has(&world, "update-run.countdown"));
+    assert_eq!(
+        name(&world, "update-run.action").as_deref(),
+        Some("Update outpost")
+    );
+    click(&mut world, "update-run.action");
+    let sent = world.daemon.sent_of("update_outpost");
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0]["id"], "o1");
+}
+
+#[test]
+fn an_app_machine_on_a_release_behind_its_home_opens_the_homes_release() {
+    let page = "https://github.com/victorarias/attn/releases/tag/v0.16.2";
+    let mut world = showing(home_run(
+        "failed",
+        vec![
+            machine("home", "done", "0.16.2", None, None, None),
+            machine(
+                "app_machine",
+                "failed",
+                "0.16.1",
+                Some("behind"),
+                Some("oma runs a newer build"),
+                Some(page),
+            ),
+        ],
+    ));
+    assert_eq!(
+        name(&world, "update-run.action").as_deref(),
+        Some("Open release")
+    );
+    click(&mut world, "update-run.action");
+    assert_eq!(world.opened_links(), vec![page.to_owned()]);
+    assert!(world.clipboard.text().is_none());
 }

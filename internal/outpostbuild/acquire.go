@@ -140,6 +140,11 @@ func ReleaseURL(releaseSource, version string) string {
 	return strings.TrimRight(releaseSource, "/") + "/v" + strings.TrimPrefix(version, "v") + "/"
 }
 
+// ReleasePageURL is the page a person opens for version, where releaseSource names its downloads.
+func ReleasePageURL(releaseSource, version string) string {
+	return strings.TrimSuffix(strings.TrimRight(releaseSource, "/"), "/download") + "/tag/v" + strings.TrimPrefix(version, "v")
+}
+
 func DownloadRelease(ctx context.Context, releaseSource, version, arch string, staged Binaries) error {
 	release := ReleaseURL(releaseSource, version)
 	if err := Download(ctx, release+"attnd-linux-"+arch, staged.Attnd); err != nil {

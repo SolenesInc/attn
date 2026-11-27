@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -37,7 +38,11 @@ const rejoinOnNewBuild = time.Minute
 
 const HomeRejoinTimer stepclock.Name = "home-update-rejoin"
 
-const actionUpdate = "Update"
+const (
+	actionUpdate        = "Update"
+	actionUpdateOutpost = "Update outpost"
+	rebuildFromWorktree = "build it again from the changed worktree that built it"
+)
 
 // sharedBuild is the app machine's one record (plot D5): the build it ran when its bridge to its home last connected.
 type sharedBuild struct {
@@ -180,30 +185,32 @@ func (d *Daemon) homeRefusedByBuild(destination string, home bridge.Identity, re
 		}
 		return refusal
 	case shared && record.Build == self:
-		command := updateThisMachineCommand(home.Build)
+		action := catchUpAction(home.Build)
 		if updates {
-			d.recordHomeDifference(home, true, command)
+			d.recordHomeDifference(home, true, action)
 		}
-		return fmt.Errorf("%s runs build %s, newer than this machine's %s; update this machine: %s", home.Name, home.Build, self, command)
+		return fmt.Errorf("%s runs build %s, newer than this machine's %s; update this machine: %s", home.Name, home.Build, self, cmp.Or(action, rebuildFromWorktree))
 	case updates:
 		d.recordHomeDifference(home, false, "")
 	}
 	return refusal
 }
 
-// updateThisMachineCommand is the command that brings this machine to home's build.
-func updateThisMachineCommand(home bridge.Build) string {
+// catchUpAction brings this machine to home's build: the release's page, the command that builds a commit, or
+// none for a build from a changed worktree, which only that worktree makes again.
+func catchUpAction(home bridge.Build) string {
 	if buildinfo.Channel != "source" {
-		return fmt.Sprintf("install attn %s from %s", home.Version, outpostbuild.ReleaseURL(buildinfo.ReleaseSource, home.Version))
+		return outpostbuild.ReleasePageURL(buildinfo.ReleaseSource, home.Version)
 	}
-	if commit, ok := strings.CutPrefix(home.SourceFingerprint, "git:"); ok {
-		command := "git checkout " + commit + " && make install"
-		if buildinfo.RepositoryPath != "" {
-			command = "cd " + buildinfo.RepositoryPath + " && " + command
-		}
-		return command
+	commit, ok := strings.CutPrefix(home.SourceFingerprint, "git:")
+	if !ok {
+		return ""
 	}
-	return "make install from the worktree that built " + home.Version
+	command := "git checkout " + commit + " && make install"
+	if buildinfo.RepositoryPath != "" {
+		command = "cd " + buildinfo.RepositoryPath + " && " + command
+	}
+	return command
 }
 
 func (d *Daemon) homeRow(home bridge.Identity) store.UpdateRunOutpost {
@@ -242,6 +249,9 @@ func (d *Daemon) recordHomeDifference(home bridge.Identity, behind bool, command
 	if behind {
 		app.State, app.Reason, app.Action = store.UpdateOutpostFailed, string(protocol.UpdateFailureReasonBehind), command
 		app.Detail = home.Name + " runs a newer build"
+		if command == "" {
+			app.Detail += "; " + rebuildFromWorktree
+		}
 	} else {
 		app.Detail = home.Name + " runs another build"
 	}
@@ -324,6 +334,7 @@ func (d *Daemon) runHomeUpdate(run store.UpdateRun, destination string, row stor
 	}
 	remote, binaries, err := d.stageHome(staging, destination, step)
 	if err == nil {
+		pausepoint.At(pausepoint.HomeUpdateStaged)
 		d.setUpdatePhase(run, protocol.UpdatePhaseApplying)
 		row.State, row.Detail = store.UpdateOutpostSwitching, ""
 		d.setUpdateRow(run, row)
@@ -439,6 +450,7 @@ func (d *Daemon) updateFleet(ctx context.Context, _ protocol.UpdateFleetMessage)
 	d.setUpdateRow(run, store.UpdateRunOutpost{ID: origin.Host, Name: origin.Name, Role: store.UpdateRoleAppMachine, State: store.UpdateOutpostDone, Build: run.TargetBuild})
 	d.updateRuns.mu.Unlock()
 	d.life.Go("updateFleet", func() {
+		pausepoint.At(pausepoint.FleetUpdateStarted)
 		staging, cancel := context.WithTimeout(d.life.Context(), selfupdate.BuildTimeoutFromEnv())
 		defer cancel()
 		d.setUpdatePhase(run, protocol.UpdatePhaseStaging)

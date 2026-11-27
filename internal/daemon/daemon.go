@@ -651,6 +651,7 @@ func (d *Daemon) Start() error {
 	}
 	d.reapStrandedPluginRuntimes()
 	d.recoverInterruptedPluginSwaps()
+	d.failRunOfOtherMachines()
 	if err := d.startBridgeSocket(); err != nil {
 		return fmt.Errorf("start bridge socket: %w", err)
 	}

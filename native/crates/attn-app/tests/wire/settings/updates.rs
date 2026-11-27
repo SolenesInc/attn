@@ -185,6 +185,15 @@ fn an_app_machine_lists_its_home_and_itself_with_why_and_the_one_action() {
                     Some("Update"),
                 ),
                 row("app_machine", "0.16.1", None, None, None),
+                UpdateOutpostProgress {
+                    id: "box".into(),
+                    name: "box".into(),
+                    role: Some("outpost".into()),
+                    state: "skipped".into(),
+                    detail: Some("Left out of this update.".into()),
+                    action: Some("Update outpost".into()),
+                    ..UpdateOutpostProgress::default()
+                },
             ],
             ..run("failed")
         },
@@ -196,6 +205,7 @@ fn an_app_machine_lists_its_home_and_itself_with_why_and_the_one_action() {
         "oma · home unreachable: ssh: Connection timed out"
     );
     assert_eq!(fact(&world, "machine.app_machine"), "This Mac 0.16.1");
+    assert_eq!(fact(&world, "machine.box"), "box Left out of this update.");
     assert_eq!(action(&world), None);
     let button = world
         .screen()

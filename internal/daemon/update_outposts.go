@@ -29,8 +29,10 @@ func (d *Daemon) setUpdateOutpost(run store.UpdateRun, row store.Machine, state,
 	d.setUpdateRow(run, store.UpdateRunOutpost{ID: row.ID, Name: row.Name, Role: store.UpdateRoleOutpost, State: state, Detail: detail})
 }
 
-func (d *Daemon) failUpdateOutpost(run store.UpdateRun, row store.Machine, err error) {
-	d.setUpdateRow(run, failedRow(store.UpdateRunOutpost{ID: row.ID, Name: row.Name, Role: store.UpdateRoleOutpost}, err))
+func (d *Daemon) failUpdateOutpost(run store.UpdateRun, row store.Machine, build string, err error) {
+	failed := failedRow(store.UpdateRunOutpost{ID: row.ID, Name: row.Name, Role: store.UpdateRoleOutpost, Build: build}, err)
+	failed.Action = actionUpdateOutpost
+	d.setUpdateRow(run, failed)
 }
 
 // stageOutposts readies every outpost before the home switches and returns the
@@ -50,11 +52,11 @@ func (d *Daemon) stageOutposts(ctx context.Context, run store.UpdateRun, target 
 			continue
 		}
 		if slices.Contains(without, row.ID) {
-			d.setUpdateOutpost(run, row, store.UpdateOutpostSkipped, "Left out of this update.")
+			d.setUpdateRow(run, store.UpdateRunOutpost{ID: row.ID, Name: row.Name, Role: store.UpdateRoleOutpost, State: store.UpdateOutpostSkipped, Detail: "Left out of this update.", Action: actionUpdateOutpost})
 			continue
 		}
 		if row.HostKey == "" {
-			d.setUpdateOutpost(run, row, store.UpdateOutpostSkipped, "Not paired yet.")
+			d.setUpdateRow(run, store.UpdateRunOutpost{ID: row.ID, Name: row.Name, Role: store.UpdateRoleOutpost, State: store.UpdateOutpostSkipped, Detail: "Not paired yet.", Action: actionUpdateOutpost})
 			continue
 		}
 		if row.Reverse() {
@@ -62,12 +64,12 @@ func (d *Daemon) stageOutposts(ctx context.Context, run store.UpdateRun, target 
 			continue
 		}
 		d.setUpdateOutpost(run, row, store.UpdateOutpostStaging, "connecting")
-		skip, err := d.stageOutpost(ctx, run, row, target)
+		build, skip, err := d.stageOutpost(ctx, run, row, target)
 		switch {
 		case skip != nil:
-			d.setUpdateRow(run, store.UpdateRunOutpost{ID: row.ID, Name: row.Name, Role: store.UpdateRoleOutpost, State: store.UpdateOutpostSkipped, Detail: "Unreachable: " + skip.Error(), Reason: string(protocol.UpdateFailureReasonUnreachable), Action: actionUpdate})
+			d.setUpdateRow(run, store.UpdateRunOutpost{ID: row.ID, Name: row.Name, Role: store.UpdateRoleOutpost, State: store.UpdateOutpostSkipped, Detail: "Unreachable: " + skip.Error(), Reason: string(protocol.UpdateFailureReasonUnreachable), Action: actionUpdateOutpost})
 		case err != nil:
-			d.failUpdateOutpost(run, row, err)
+			d.failUpdateOutpost(run, row, build, err)
 			failed = append(failed, row.Name+": "+err.Error())
 		default:
 			d.setUpdateOutpost(run, row, store.UpdateOutpostStaged, "")
@@ -76,35 +78,44 @@ func (d *Daemon) stageOutposts(ctx context.Context, run store.UpdateRun, target 
 	return failed
 }
 
-// stageOutpost returns skip when the outpost cannot be reached, and err, with its reason, when it cannot be staged.
-func (d *Daemon) stageOutpost(ctx context.Context, run store.UpdateRun, row store.Machine, target bridge.Build) (skip, err error) {
+// stageOutpost returns the build the outpost runs once it answers, skip when it cannot be reached, and err, with
+// its reason, when it cannot be staged.
+func (d *Daemon) stageOutpost(ctx context.Context, run store.UpdateRun, row store.Machine, target bridge.Build) (build string, skip, err error) {
 	remote := d.outpostSSH(row)
 	if err := remote.EnsureMaster(ctx); err != nil {
-		return err, nil
+		return "", err, nil
 	}
 	probe, err := remote.Probe(ctx)
 	if err != nil {
 		var sshError *outpostssh.Error
 		if errors.As(err, &sshError) {
-			return err, nil
+			return "", err, nil
 		}
-		return nil, fault(string(protocol.UpdateFailureReasonRefused), err)
+		return "", nil, fault(string(protocol.UpdateFailureReasonRefused), err)
 	}
+	build = probedBuild(probe)
 	if err := probe.Enrollment.CheckHome(d.enrollmentHome()); err != nil {
-		return nil, fault(string(protocol.UpdateFailureReasonRefused), err)
+		return build, nil, fault(string(protocol.UpdateFailureReasonRefused), err)
 	}
 	if probe.Build != nil && *probe.Build == target && !probe.HostMissing {
-		return nil, nil
+		return build, nil, nil
 	}
 	phase := func(step string) { d.setUpdateOutpost(run, row, store.UpdateOutpostStaging, step) }
 	binaries, err := d.outpostBinaries(ctx, target, probe.Platform, phase)
 	if err != nil {
-		return nil, fault(string(protocol.UpdateFailureReasonNoBuild), err)
+		return build, nil, fault(string(protocol.UpdateFailureReasonNoBuild), err)
 	}
 	if err := remote.Stage(ctx, binaries, target, phase); err != nil {
-		return nil, sshFault(err)
+		return build, nil, sshFault(err)
 	}
-	return nil, nil
+	return build, nil, nil
+}
+
+func probedBuild(probe outpostssh.Probe) string {
+	if probe.Build == nil {
+		return ""
+	}
+	return probe.Build.String()
 }
 
 func (d *Daemon) noticeOutposts(ctx context.Context, run store.UpdateRun, target bridge.Build) {
@@ -198,8 +209,8 @@ func (d *Daemon) switchOutposts(run store.UpdateRun) string {
 		if !d.life.Go("switchOutpost:"+row.ID, func() {
 			defer wait.Done()
 			d.setUpdateOutpost(run, row, store.UpdateOutpostSwitching, "")
-			if err := d.switchOutpost(d.life.Context(), row); err != nil {
-				d.failUpdateOutpost(run, row, err)
+			if build, err := d.switchOutpost(d.life.Context(), row); err != nil {
+				d.failUpdateOutpost(run, row, build, err)
 				return
 			}
 			d.setUpdateRow(run, store.UpdateRunOutpost{ID: row.ID, Name: row.Name, Role: store.UpdateRoleOutpost, State: store.UpdateOutpostDone, Build: d.bridgeIdentity().Build.String()})
@@ -231,24 +242,27 @@ func (d *Daemon) switchOutposts(run store.UpdateRun) string {
 	return summary.String()
 }
 
-func (d *Daemon) switchOutpost(ctx context.Context, row store.Machine) error {
+// switchOutpost returns the build the outpost ran when it answered, and why it did not come back on this
+// daemon's build.
+func (d *Daemon) switchOutpost(ctx context.Context, row store.Machine) (string, error) {
 	remote := d.outpostSSH(row)
 	if err := remote.EnsureMaster(ctx); err != nil {
-		return fault(string(protocol.UpdateFailureReasonUnreachable), err)
+		return "", fault(string(protocol.UpdateFailureReasonUnreachable), err)
 	}
 	probe, err := remote.Probe(ctx)
 	if err != nil {
-		return sshFault(err)
+		return "", sshFault(err)
 	}
+	build := probedBuild(probe)
 	self := d.bridgeIdentity().Build
 	if probe.Build == nil || *probe.Build != self || probe.HostMissing {
 		binaries, err := d.outpostBinaries(ctx, self, probe.Platform, func(string) {})
 		if err != nil {
-			return fault(string(protocol.UpdateFailureReasonNoBuild), err)
+			return build, fault(string(protocol.UpdateFailureReasonNoBuild), err)
 		}
 		if err := remote.Switch(ctx, binaries, self, true, nil); err != nil {
-			return sshFault(err)
+			return build, sshFault(err)
 		}
 	}
-	return fault(string(protocol.UpdateFailureReasonNotBack), d.reconnectOutpostOnHomeBuild(ctx, row))
+	return build, fault(string(protocol.UpdateFailureReasonNotBack), d.reconnectOutpostOnHomeBuild(ctx, row))
 }

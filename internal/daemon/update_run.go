@@ -472,16 +472,20 @@ func (d *Daemon) startUpdateHelper(run store.UpdateRun, plan selfupdate.Plan, en
 	return nil
 }
 
+// failRunOfOtherMachines fails a home or fleet run that a restart cut, before a bridge can join it: its work
+// belongs to a machine on the other end, which starts it again.
+func (d *Daemon) failRunOfOtherMachines() {
+	if run := d.latestUpdateRun(); run != nil && run.Open() && (run.InstallKind == installKindHome || run.InstallKind == installKindFleet) {
+		d.finishUpdateRun(*run, protocol.UpdatePhaseFailed, "the update was interrupted: attn restarted before it finished")
+	}
+}
+
 // reconcileUpdateRun runs at every start. The run is the helper's only way to
 // hand back to a daemon: the build this daemon is decides how the run ended.
 func (d *Daemon) reconcileUpdateRun() {
 	_ = os.Remove(selfupdate.RestartMarkerPath(d.dataRoot))
 	run := d.latestUpdateRun()
 	if run == nil || !run.Open() || run.CreatedAt.After(d.startedAt) {
-		return
-	}
-	if run.InstallKind == installKindHome || run.InstallKind == installKindFleet {
-		d.finishUpdateRun(*run, protocol.UpdatePhaseFailed, "the update was interrupted: attn restarted before it finished")
 		return
 	}
 	running := d.bridgeIdentity().Build.String()
