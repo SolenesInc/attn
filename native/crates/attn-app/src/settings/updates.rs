@@ -123,6 +123,9 @@ fn machines(run: &UpdateRun, viewer: &str, t: &Tokens) -> Vec<Block> {
         };
         let status = match why {
             Some(why) if version.is_empty() => why,
+            Some(why) if row.reason.as_deref() == Some("not_back") => {
+                format!("{why} · switched to {version}, not confirmed")
+            }
             Some(why) => format!("{why} · on {version}"),
             None => version.to_owned(),
         };

@@ -223,12 +223,14 @@ func (d *Daemon) switchOutposts(run store.UpdateRun) string {
 	if final == nil {
 		return ""
 	}
-	var skipped, failed []string
+	var skipped, failed, notBack []string
 	for _, outpost := range final.Outposts {
-		switch outpost.State {
-		case store.UpdateOutpostSkipped:
+		switch {
+		case outpost.State == store.UpdateOutpostSkipped:
 			skipped = append(skipped, outpost.Name)
-		case store.UpdateOutpostFailed:
+		case outpost.State == store.UpdateOutpostFailed && outpost.Reason == string(protocol.UpdateFailureReasonNotBack):
+			notBack = append(notBack, outpost.Name+": "+outpost.Detail)
+		case outpost.State == store.UpdateOutpostFailed:
 			failed = append(failed, outpost.Name+": "+outpost.Detail)
 		}
 	}
@@ -238,6 +240,9 @@ func (d *Daemon) switchOutposts(run store.UpdateRun) string {
 	}
 	if len(failed) > 0 {
 		summary.WriteString(" Could not switch " + strings.Join(failed, "; ") + ".")
+	}
+	if len(notBack) > 0 {
+		summary.WriteString(" Switched and not connected again, so the build each runs is unconfirmed: " + strings.Join(notBack, "; ") + ".")
 	}
 	return summary.String()
 }

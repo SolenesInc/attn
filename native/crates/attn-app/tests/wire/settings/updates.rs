@@ -187,6 +187,16 @@ fn an_app_machine_lists_its_home_and_itself_with_why_and_the_one_action() {
                 ),
                 row("app_machine", "0.16.1", None, None, None),
                 UpdateOutpostProgress {
+                    id: "lost".into(),
+                    name: "lost".into(),
+                    role: Some("outpost".into()),
+                    state: "failed".into(),
+                    build: Some("0.16.1 (source git:0.16.1, protocol p)".into()),
+                    reason: Some("not_back".into()),
+                    detail: Some("did not connect on it".into()),
+                    action: Some("Update outpost".into()),
+                },
+                UpdateOutpostProgress {
                     id: "box".into(),
                     name: "box".into(),
                     role: Some("outpost".into()),
@@ -211,6 +221,10 @@ fn an_app_machine_lists_its_home_and_itself_with_why_and_the_one_action() {
         "an app on another machine does not call the machine that started the run This Mac"
     );
     assert_eq!(fact(&world, "machine.box"), "box Left out of this update.");
+    assert_eq!(
+        fact(&world, "machine.lost"),
+        "lost not back: did not connect on it · switched to 0.16.1, not confirmed"
+    );
     assert_eq!(action(&world), None);
     let button = world
         .screen()

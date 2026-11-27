@@ -978,3 +978,29 @@ fn a_home_update_cut_after_its_rows_finished_says_it_failed_and_why() {
     );
     assert!(!has(&world, "update-run.action"));
 }
+
+#[test]
+fn an_outpost_that_switched_and_did_not_come_back_is_named_so_and_its_build_unconfirmed() {
+    let mut box_row = outpost(
+        "o1",
+        "box",
+        "failed",
+        Some("switched to 0.16.1 and did not connect on it within 1m0s"),
+    );
+    box_row.role = Some("outpost".into());
+    box_row.reason = Some("not_back".into());
+    box_row.action = Some("Update outpost".into());
+    box_row.build = Some("0.16.1 (source git:0.16.1, protocol p)".into());
+    let world = showing(home_run(
+        "done",
+        vec![
+            machine("home", "done", "0.16.1", None, None, None),
+            machine("app_machine", "done", "0.16.1", None, None, None),
+            box_row,
+        ],
+    ));
+    assert_eq!(
+        name(&world, "update-run.text").as_deref(),
+        Some("Updated oma; box switched and did not connect again.")
+    );
+}

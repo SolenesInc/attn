@@ -120,10 +120,17 @@ pub(crate) fn home_says(run: &UpdateRun) -> Option<HomeSays> {
             },
             Some(outpost) => HomeSays {
                 tone: BannerTone::Warn,
-                head: format!(
-                    "Updated {}; {} stays on its build.",
-                    home.name, outpost.name
-                ),
+                head: if outpost.reason.as_deref() == Some("not_back") {
+                    format!(
+                        "Updated {}; {} switched and did not connect again.",
+                        home.name, outpost.name
+                    )
+                } else {
+                    format!(
+                        "Updated {}; {} stays on its build.",
+                        home.name, outpost.name
+                    )
+                },
                 note: outpost.detail.clone(),
                 action: RowAction::of(outpost),
             },
