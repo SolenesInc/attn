@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: A legacy outpost named home can break the reserved home address",
+  "at": "2026-11-27T16:06:03.142Z",
+  "detail": "A previously enrolled reverse outpost whose hostname is home can make the reserved home address ambiguous after upgrade. Explicit terminal and delegation placement and home-addressed beds then refuse. Resolve the reserved alias before considering legacy labels and check the launcher counterpart.\n"
+}
