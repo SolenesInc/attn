@@ -29,22 +29,28 @@ const (
 	RoleOutpost Role = "outpost"
 )
 
-// Record is enrollment.json. A record written before homes had ids holds only HomeDaemonID. A record keeps
-// HomeDaemonID beside HomeID until the state stored under that daemon id carries the home id.
+// Record is enrollment.json. A record written before homes had ids holds only HomeDaemonID, and the builds
+// before homes had ids read only HomeDaemonID: at the home it is the home's own daemon id, on an outpost the
+// daemon id of the home it bridged with last. This build reads it only from a record without a role.
+// ReplacedDaemonID is the daemon id the home id replaced, kept until the state stored under it carries the home id.
 type Record struct {
-	Role         Role   `json:"role,omitempty"`
-	HomeID       string `json:"home_id,omitempty"`
-	HomeName     string `json:"home_name,omitempty"`
-	HomeDaemonID string `json:"home_daemon_id,omitempty"`
-	RecordedAt   string `json:"recorded_at,omitempty"`
+	Role             Role   `json:"role,omitempty"`
+	HomeID           string `json:"home_id,omitempty"`
+	HomeName         string `json:"home_name,omitempty"`
+	HomeDaemonID     string `json:"home_daemon_id"`
+	ReplacedDaemonID string `json:"replaced_daemon_id,omitempty"`
+	RecordedAt       string `json:"recorded_at,omitempty"`
 }
 
+// Status is an enrollment as this build reads it. HomeDaemonID is set only on an outpost whose record names its
+// home by daemon id alone.
 type Status struct {
 	DaemonID     string `json:"daemon_id"`
 	Role         Role   `json:"role"`
 	HomeID       string `json:"home_id,omitempty"`
 	HomeName     string `json:"home_name,omitempty"`
 	HomeDaemonID string `json:"home_daemon_id,omitempty"`
+	Replaced     string `json:"replaced_daemon_id,omitempty"`
 }
 
 // UnmarshalJSON reads a status printed by any build, including one from before homes had ids.
@@ -53,11 +59,14 @@ func (s *Status) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, (*plain)(s)); err != nil {
 		return err
 	}
-	if s.Role == "" && s.HomeDaemonID != "" {
+	switch {
+	case s.Role == "" && s.HomeDaemonID != "":
 		s.Role = RoleOutpost
 		if s.HomeDaemonID == s.DaemonID {
 			s.Role, s.HomeDaemonID = RoleHome, ""
 		}
+	case s.HomeID != "":
+		s.HomeDaemonID = ""
 	}
 	return nil
 }
@@ -82,7 +91,7 @@ func (s Status) CopiedFrom() string {
 func (s Status) AwaitsHomeID() bool { return s.IsOutpost() && s.HomeID == "" }
 
 // Adopting says state may still be stored under the daemon id the home id replaced.
-func (s Status) Adopting() bool { return s.HomeID != "" && s.HomeDaemonID != "" }
+func (s Status) Adopting() bool { return s.HomeID != "" && s.Replaced != "" }
 
 func (s Status) homeLabel() string {
 	id := s.HomeID
@@ -187,18 +196,28 @@ func Ensure(dataRoot, daemonID string) (Status, error) {
 	if err != nil && !errors.Is(err, ErrNoRecord) {
 		return Status{}, err
 	}
-	if err == nil && (record.Role != RoleHome || record.HomeID != "") {
+	switch {
+	case err == nil && record.Role == RoleOutpost:
 		return record.status(daemonID), nil
+	case err == nil && record.HomeID != "":
+		if record.HomeDaemonID == daemonID {
+			return record.status(daemonID), nil
+		}
+		record.HomeDaemonID = daemonID
+	case err == nil:
+		homeID, err := newID("h-")
+		if err != nil {
+			return Status{}, err
+		}
+		record = Record{Role: RoleHome, HomeID: homeID, HomeDaemonID: daemonID, ReplacedDaemonID: daemonID}
+	default:
+		homeID, err := newID("h-")
+		if err != nil {
+			return Status{}, err
+		}
+		record = Record{Role: RoleHome, HomeID: homeID, HomeDaemonID: daemonID}
 	}
-	var replaced string
-	if err == nil {
-		replaced = daemonID
-	}
-	homeID, err := newID("h-")
-	if err != nil {
-		return Status{}, err
-	}
-	record = Record{Role: RoleHome, HomeID: homeID, HomeDaemonID: replaced, RecordedAt: nowStamp()}
+	record.RecordedAt = nowStamp()
 	if err := writeRecord(recordPath, record); err != nil {
 		return Status{}, err
 	}
@@ -206,7 +225,11 @@ func Ensure(dataRoot, daemonID string) (Status, error) {
 }
 
 func (r Record) status(daemonID string) Status {
-	return Status{DaemonID: daemonID, Role: r.Role, HomeID: r.HomeID, HomeName: r.HomeName, HomeDaemonID: r.HomeDaemonID}
+	s := Status{DaemonID: daemonID, Role: r.Role, HomeID: r.HomeID, HomeName: r.HomeName, Replaced: r.ReplacedDaemonID}
+	if r.Role == RoleOutpost && r.HomeID == "" {
+		s.HomeDaemonID = r.HomeDaemonID
+	}
+	return s
 }
 
 func Load(dataRoot string) (Status, error) {
@@ -222,11 +245,14 @@ func Load(dataRoot string) (Status, error) {
 }
 
 // RecordHome enrolls this data folder to home, whose daemon is bridging now. A record from before homes had ids
-// takes the home id when home's daemon is the one it names; the result then still carries that daemon id, until
-// FinishAdoption.
+// takes the home id when home's daemon is the one it names; the result then names that daemon id as replaced,
+// until FinishAdoption.
 func RecordHome(dataRoot string, home Home) (Status, error) {
 	if !ValidHomeID(home.ID) {
 		return Status{}, fmt.Errorf("home %s sent invalid home id %q", home.DaemonID, home.ID)
+	}
+	if !ValidDaemonID(home.DaemonID) {
+		return Status{}, fmt.Errorf("home %s sent invalid daemon id %q", home.ID, home.DaemonID)
 	}
 	daemonID, err := ReadDaemonID(dataRoot)
 	if err != nil {
@@ -248,12 +274,15 @@ func RecordHome(dataRoot string, home Home) (Status, error) {
 		if err := current.CheckHome(home); err != nil {
 			return Status{}, err
 		}
-		if current.AwaitsHomeID() || current.Adopting() {
+		switch {
+		case current.AwaitsHomeID():
 			replaced = current.HomeDaemonID
+		case current.Adopting():
+			replaced = current.Replaced
 		}
 	}
-	next := Record{Role: RoleOutpost, HomeID: home.ID, HomeName: home.Name, HomeDaemonID: replaced}
-	if err != nil || record.Role != next.Role || record.HomeID != next.HomeID || record.HomeName != next.HomeName || record.HomeDaemonID != next.HomeDaemonID {
+	next := Record{Role: RoleOutpost, HomeID: home.ID, HomeName: home.Name, HomeDaemonID: home.DaemonID, ReplacedDaemonID: replaced}
+	if err != nil || record.Role != next.Role || record.HomeID != next.HomeID || record.HomeName != next.HomeName || record.HomeDaemonID != next.HomeDaemonID || record.ReplacedDaemonID != next.ReplacedDaemonID {
 		next.RecordedAt = nowStamp()
 		if err := writeRecord(recordPath, next); err != nil {
 			return Status{}, err
@@ -279,7 +308,7 @@ func FinishAdoption(dataRoot string) (Status, error) {
 		return Status{}, err
 	}
 	if record.status(daemonID).Adopting() {
-		record.HomeDaemonID, record.RecordedAt = "", nowStamp()
+		record.ReplacedDaemonID, record.RecordedAt = "", nowStamp()
 		if err := writeRecord(recordPath, record); err != nil {
 			return Status{}, err
 		}
@@ -336,6 +365,9 @@ func readRecord(path, daemonID string) (Record, error) {
 	}
 	if record.HomeDaemonID != "" && !ValidDaemonID(record.HomeDaemonID) {
 		return Record{}, fmt.Errorf("enrollment record %s names an invalid home daemon id %q", path, record.HomeDaemonID)
+	}
+	if record.ReplacedDaemonID != "" && !ValidDaemonID(record.ReplacedDaemonID) {
+		return Record{}, fmt.Errorf("enrollment record %s names an invalid replaced daemon id %q", path, record.ReplacedDaemonID)
 	}
 	switch record.Role {
 	case "":

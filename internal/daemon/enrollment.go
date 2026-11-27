@@ -19,11 +19,11 @@ func (d *Daemon) ensureEnrollment() error {
 }
 
 func (d *Daemon) adoptHomeID(status enrollment.Status) error {
-	if err := d.store.AdoptCopySource(status.HomeDaemonID, status.HomeID); err != nil {
-		return fmt.Errorf("store the copies from home %s under its home id %s: %w", status.HomeDaemonID, status.HomeID, err)
+	if err := d.store.AdoptCopySource(status.Replaced, status.HomeID); err != nil {
+		return fmt.Errorf("store the copies from home %s under its home id %s: %w", status.Replaced, status.HomeID, err)
 	}
-	if err := d.adoptNotebookSyncHome(status.HomeDaemonID, status.HomeID); err != nil {
-		return fmt.Errorf("key the Notebook sync state of home %s on its home id %s: %w", status.HomeDaemonID, status.HomeID, err)
+	if err := d.adoptNotebookSyncHome(status.Replaced, status.HomeID); err != nil {
+		return fmt.Errorf("key the Notebook sync state of home %s on its home id %s: %w", status.Replaced, status.HomeID, err)
 	}
 	adopted, err := enrollment.FinishAdoption(d.dataRoot)
 	if err != nil {
@@ -32,7 +32,7 @@ func (d *Daemon) adoptHomeID(status enrollment.Status) error {
 	d.outpost.mu.Lock()
 	d.outpost.enrollment = adopted
 	d.outpost.mu.Unlock()
-	d.logf("enrollment: home %s is now %s", status.HomeDaemonID, status.HomeID)
+	d.logf("enrollment: home %s is now %s", status.Replaced, status.HomeID)
 	return nil
 }
 

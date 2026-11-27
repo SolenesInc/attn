@@ -17,7 +17,7 @@ type enrollmentJSON struct {
 	DaemonID string `json:"daemon_id"`
 	Role     string `json:"role"`
 	HomeID   string `json:"home_id"`
-	Replaced string `json:"home_daemon_id"`
+	Replaced string `json:"replaced_daemon_id"`
 	IsHome   bool   `json:"is_home"`
 	Message  string `json:"message"`
 }

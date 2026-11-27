@@ -129,8 +129,10 @@ struct Record {
     home_id: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     home_name: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[serde(default)]
     home_daemon_id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    replaced_daemon_id: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     recorded_at: String,
 }
@@ -203,6 +205,12 @@ fn read_record(path: &str, daemon_id: &str) -> Result<Record, LoadError> {
             quote(record.home_daemon_id.as_bytes())
         )));
     }
+    if !record.replaced_daemon_id.is_empty() && !valid_daemon_id(&record.replaced_daemon_id) {
+        return Err(LoadError::Other(format!(
+            "enrollment record {path} names an invalid replaced daemon id {}",
+            quote(record.replaced_daemon_id.as_bytes())
+        )));
+    }
     let invalid_home_id = || {
         LoadError::Other(format!(
             "enrollment record {path} names an invalid home id {}",
@@ -228,11 +236,13 @@ fn read_record(path: &str, daemon_id: &str) -> Result<Record, LoadError> {
             if !record.home_id.is_empty() && !valid_home_id(&record.home_id) {
                 return Err(invalid_home_id());
             }
+            record.home_daemon_id.clear();
         }
         ROLE_OUTPOST => {
             if !valid_home_id(&record.home_id) {
                 return Err(invalid_home_id());
             }
+            record.home_daemon_id.clear();
         }
         role => {
             return Err(LoadError::Other(format!(
@@ -272,6 +282,8 @@ struct StatusJson<'a> {
     home_name: &'a str,
     #[serde(skip_serializing_if = "str::is_empty")]
     home_daemon_id: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    replaced_daemon_id: &'a str,
     enrollment: String,
     is_home: bool,
 }
@@ -320,6 +332,7 @@ fn status(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
             home_id: &status.record.home_id,
             home_name: &status.record.home_name,
             home_daemon_id: &status.record.home_daemon_id,
+            replaced_daemon_id: &status.record.replaced_daemon_id,
             enrollment: status.describe(),
             is_home: status.is_home(),
         });
@@ -393,7 +406,7 @@ fn leave_record(root: &str, home: &str) -> Result<LeaveResult, LoadError> {
         });
     }
     let home_id = new_home_id().map_err(LoadError::Other)?;
-    write_record(&record_path, &home_id).map_err(LoadError::Other)?;
+    write_record(&record_path, &home_id, &daemon_id).map_err(LoadError::Other)?;
     Ok(LeaveResult {
         status: "left",
         home_id,
@@ -435,10 +448,11 @@ fn lock(path: &str) -> Result<File, String> {
     Ok(file)
 }
 
-fn write_record(path: &str, home_id: &str) -> Result<(), String> {
+fn write_record(path: &str, home_id: &str, daemon_id: &str) -> Result<(), String> {
     let record = Record {
         role: ROLE_HOME.to_string(),
         home_id: home_id.to_string(),
+        home_daemon_id: daemon_id.to_string(),
         recorded_at: Time::now_utc().format(RFC3339),
         ..Record::default()
     };
