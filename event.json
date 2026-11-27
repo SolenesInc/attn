@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Profile cycling from a tile window never selects the next profile",
+  "at": "2026-11-27T10:07:50.319Z",
+  "detail": "With a popped-out terminal tile focused, hold the profile shortcut modifiers, tap its key, and release. At  d6ac6618 the tile-window shortcut forwards only the action and dispatches it in the main window without the originating gesture. The switcher highlights the current profile and release does not advance it. Preserve the gesture and have the switcher receive completion when the modifiers are released.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/desktop/windows.rs",
+    "line": 394
+  },
+  "culprit": "af9372ea38a233cb1216667085e36d184dc9956c"
+}
