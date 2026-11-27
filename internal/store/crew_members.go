@@ -220,12 +220,12 @@ type CrewHomeMove struct {
 	To        string
 }
 
-const homeSessionsInDirectory = `host = '' AND (directory = ? OR substr(directory, 1, length(?) + 1) = ? || '/')`
+const homeSessionsInDirectory = `host = ? AND (directory = ? OR substr(directory, 1, length(?) + 1) = ? || '/')`
 
 func (s *Store) HomeSessionsInDirectory(dir string) ([]protocol.SessionID, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	rows, err := s.db.Query(`SELECT id FROM sessions WHERE `+homeSessionsInDirectory, dir, dir, dir)
+	rows, err := s.db.Query(`SELECT id FROM sessions WHERE `+homeSessionsInDirectory, s.MachineID(), dir, dir, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +242,7 @@ func (s *Store) HomeSessionsInDirectory(dir string) ([]protocol.SessionID, error
 }
 
 func (s *Store) MoveCrewHome(move CrewHomeMove, now time.Time) ([]DocumentWriteResult, error) {
-	results, _, err := s.commitDocumentWrites(move.Documents, nil, now, false, move.followSessions)
+	results, _, err := s.commitDocumentWrites(move.Documents, nil, now, false, move.followSessions(s.MachineID()))
 	return results, err
 }
 
@@ -260,15 +260,21 @@ func (s *Store) RenameCrewMemberMovingHome(key, name string, move CrewHomeMove, 
 		if written, _, err = commitDocumentWritesWith(tx, &s.writes.documents, move.Documents, tables, now); err != nil {
 			return err
 		}
-		_, err = move.followSessions(tx)
+		_, err = move.followSessionsOn(tx, s.MachineID())
 		return err
 	})
 	return previous, written, err
 }
 
-func (m CrewHomeMove) followSessions(tx *sql.Tx) (bool, error) {
+func (m CrewHomeMove) followSessions(machine string) func(*sql.Tx) (bool, error) {
+	return func(tx *sql.Tx) (bool, error) {
+		return m.followSessionsOn(tx, machine)
+	}
+}
+
+func (m CrewHomeMove) followSessionsOn(tx *sql.Tx, machine string) (bool, error) {
 	result, err := tx.Exec(`UPDATE sessions SET directory = ? || substr(directory, length(?) + 1) WHERE `+homeSessionsInDirectory,
-		m.To, m.From, m.From, m.From, m.From)
+		m.To, m.From, machine, m.From, m.From, m.From)
 	if err != nil {
 		return false, fmt.Errorf("move saved session directories from %s to %s: %w", m.From, m.To, err)
 	}

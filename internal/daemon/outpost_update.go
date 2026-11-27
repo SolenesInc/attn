@@ -66,7 +66,7 @@ func (d *Daemon) handleUpdateOutpost(client *wsClient, id string) {
 	d.startOutpostInstall(row)
 }
 
-func (d *Daemon) startOutpostInstall(row store.Outpost) {
+func (d *Daemon) startOutpostInstall(row store.Machine) {
 	r := &d.outposts
 	r.mu.Lock()
 	if r.pushes == nil {
@@ -117,7 +117,7 @@ func (d *Daemon) setOutpostUpdate(id string, push *outpostPush, phase string, fa
 	}
 }
 
-func (d *Daemon) beginOutpostAdd(row store.Outpost, cancel context.CancelFunc) *outpostPush {
+func (d *Daemon) beginOutpostAdd(row store.Machine, cancel context.CancelFunc) *outpostPush {
 	r := &d.outposts
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -149,7 +149,7 @@ func (d *Daemon) finishOutpostPush(id string, push *outpostPush, err error) {
 	close(push.done)
 }
 
-func (d *Daemon) prepareOutpost(ctx context.Context, row store.Outpost, push *outpostPush, force bool) (outpostRemote, error) {
+func (d *Daemon) prepareOutpost(ctx context.Context, row store.Machine, push *outpostPush, force bool) (outpostRemote, error) {
 	remote := d.outpostSSH(row)
 	if err := remote.EnsureMaster(ctx); err != nil {
 		return nil, err
@@ -206,7 +206,7 @@ func (d *Daemon) noteOutpostHostMissing(id string, missing bool) {
 	}
 }
 
-func (d *Daemon) pushOutpost(ctx context.Context, row store.Outpost, push *outpostPush) error {
+func (d *Daemon) pushOutpost(ctx context.Context, row store.Machine, push *outpostPush) error {
 	if _, err := d.prepareOutpost(ctx, row, push, true); err != nil {
 		if row.HostKey == "" && ctx.Err() == nil {
 			d.startOutpostDial(row)
@@ -219,7 +219,7 @@ func (d *Daemon) pushOutpost(ctx context.Context, row store.Outpost, push *outpo
 	return d.reconnectOutpostOnHomeBuild(ctx, row)
 }
 
-func (d *Daemon) reconnectOutpostOnHomeBuild(ctx context.Context, row store.Outpost) error {
+func (d *Daemon) reconnectOutpostOnHomeBuild(ctx context.Context, row store.Machine) error {
 	self := d.bridgeIdentity().Build
 	d.stopOutpostDial(row.ID)
 	d.startOutpostDial(row)

@@ -70,7 +70,7 @@ func (d *Daemon) applySetting(_ context.Context, msg protocol.SetSettingMessage)
 	if spec.Kind == setting.Bool && strings.TrimSpace(msg.Value) != "" {
 		msg.Value = strconv.FormatBool(setting.ParseBool(msg.Value))
 	}
-	if err := d.store.SetSettingChecked(msg.Key, msg.Value); err != nil {
+	if err := d.store.SetSettingChecked(d.storedSettingKey(msg.Key), msg.Value); err != nil {
 		return nil, err
 	}
 	d.settingChanged(msg.Key, msg.Value)
@@ -185,7 +185,7 @@ func (d *Daemon) projectSettingsUpdated(changedKey string) {
 			}
 			event := &protocol.SettingsUpdatedMessage{Event: protocol.EventSettingsUpdated, Settings: snapshot}
 			if strings.TrimSpace(changedKey) != "" {
-				event.ChangedKey = protocol.Ptr(changedKey)
+				event.ChangedKey = protocol.Ptr(d.wireSettingKey(changedKey))
 			}
 			d.sendToClient(client, event)
 		})

@@ -32,6 +32,10 @@ func TestOutpostPathHostsMigrationKeepsFileActivityAndDraftsOnTheHome(t *testing
 	}
 	defer upgraded.Close()
 
+	var self string
+	if err := upgraded.QueryRow(`SELECT id FROM machines WHERE transport='self'`).Scan(&self); err != nil {
+		t.Fatal(err)
+	}
 	type activity struct {
 		host, path, source, lastAt string
 		session                    *string
@@ -51,8 +55,8 @@ func TestOutpostPathHostsMigrationKeepsFileActivityAndDraftsOnTheHome(t *testing
 	}
 	rows.Close()
 	if len(activities) != 2 ||
-		activities[0] != (activity{path: "/work/plan.md", source: "edited", lastAt: "2026-11-09T11:00:00+01:00", count: 2}) ||
-		activities[1].host != "" || activities[1].source != "opened" || activities[1].session == nil || *activities[1].session != "s1" ||
+		activities[0] != (activity{host: self, path: "/work/plan.md", source: "edited", lastAt: "2026-11-09T11:00:00+01:00", count: 2}) ||
+		activities[1].host != self || activities[1].source != "opened" || activities[1].session == nil || *activities[1].session != "s1" ||
 		activities[1].lastAt != "2026-11-09T10:00:00+01:00" || activities[1].count != 4 {
 		t.Fatalf("migrated file activity = %+v; want both rows kept on the home", activities)
 	}
@@ -75,8 +79,8 @@ func TestOutpostPathHostsMigrationKeepsFileActivityAndDraftsOnTheHome(t *testing
 	}
 	draftRows.Close()
 	want := []draft{
-		{path: "/work/plan.md", annotations: `[{"id":"a1"}]`, generation: 3, tombstone: 1, updatedAt: "2026-11-09T12:00:00Z"},
-		{path: "attn://seed/s-1", annotations: "[]", generation: 1, tombstone: 2, updatedAt: "2026-11-09T13:00:00Z"},
+		{host: self, path: "/work/plan.md", annotations: `[{"id":"a1"}]`, generation: 3, tombstone: 1, updatedAt: "2026-11-09T12:00:00Z"},
+		{host: self, path: "attn://seed/s-1", annotations: "[]", generation: 1, tombstone: 2, updatedAt: "2026-11-09T13:00:00Z"},
 	}
 	if len(drafts) != 2 || drafts[0] != want[0] || drafts[1] != want[1] {
 		t.Fatalf("migrated drafts = %+v; want %+v", drafts, want)
@@ -84,7 +88,7 @@ func TestOutpostPathHostsMigrationKeepsFileActivityAndDraftsOnTheHome(t *testing
 
 	var host string
 	var useCount int
-	if err = upgraded.QueryRow(`SELECT host, use_count FROM recent_locations WHERE path='/work'`).Scan(&host, &useCount); err != nil || host != "" || useCount != 5 {
+	if err = upgraded.QueryRow(`SELECT host, use_count FROM recent_locations WHERE path='/work'`).Scan(&host, &useCount); err != nil || host != self || useCount != 5 {
 		t.Fatalf("recent location = host %q use_count %d err %v; want it kept on the home", host, useCount, err)
 	}
 

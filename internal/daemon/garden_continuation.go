@@ -93,7 +93,7 @@ func (d *Daemon) observedGardenExecution(session *protocol.Session, now time.Tim
 func (d *Daemon) observedGardenExecutionOn(session *protocol.Session, place machine, now time.Time) garden.Execution {
 	execution := snapshotGardenExecution(session, now)
 	if place.Known() {
-		execution.Machine = protocol.Ptr(place.Outpost())
+		execution.Machine = protocol.Ptr(place.ID())
 	}
 	if execution.Cwd == "" {
 		return execution
@@ -211,7 +211,7 @@ func (d *Daemon) updateGardenDispatch(
 		next.SessionID = sessionID
 		if next.Machine == nil {
 			if place := d.sessionPlace(sessionID); place.Known() {
-				next.Machine = protocol.Ptr(place.Outpost())
+				next.Machine = protocol.Ptr(place.ID())
 				changed = true
 			}
 		}
@@ -407,8 +407,8 @@ func (d *Daemon) normalizedSeedContinuation(seed garden.Seed) (garden.Execution,
 	return garden.Execution{}, "", false
 }
 
-func inspectContinuationDirectory(execution garden.Execution) string {
-	cwd, ok := executionPlace(execution).local(execution.Cwd)
+func (d *Daemon) inspectContinuationDirectory(execution garden.Execution) string {
+	cwd, ok := d.executionPlace(execution).local(execution.Cwd)
 	if !ok {
 		return directoryUnknown
 	}
@@ -425,8 +425,8 @@ func inspectContinuationDirectory(execution garden.Execution) string {
 	}
 }
 
-func savedWorktreeRoot(execution garden.Execution) (string, bool) {
-	place := executionPlace(execution)
+func (d *Daemon) savedWorktreeRoot(execution garden.Execution) (string, bool) {
+	place := d.executionPlace(execution)
 	if !place.IsLocal() {
 		return "", false
 	}
@@ -453,12 +453,12 @@ func savedWorktreeRoot(execution garden.Execution) (string, bool) {
 }
 
 func (d *Daemon) branchCanBeRecreated(execution garden.Execution) (string, bool, string) {
-	repo, ok := executionPlace(execution).local(execution.RepositoryRoot)
+	repo, ok := d.executionPlace(execution).local(execution.RepositoryRoot)
 	branch := strings.TrimSpace(execution.Branch)
 	if !ok || branch == "" {
 		return "", false, "the saved execution has no verified repository and branch"
 	}
-	target, ok := savedWorktreeRoot(execution)
+	target, ok := d.savedWorktreeRoot(execution)
 	if !ok {
 		return "", false, "the saved worktree location could not be reconstructed"
 	}
@@ -498,14 +498,16 @@ func (d *Daemon) branchCanBeRecreated(execution garden.Execution) (string, bool,
 
 func (d *Daemon) continuationForSeed(seed garden.Seed) *seedContinuation {
 	execution, _, _ := d.normalizedSeedContinuation(seed)
-	place := executionPlace(execution)
+	place := d.executionPlace(execution)
 	switch {
 	case place.IsRemote():
 		return d.continuationWithChecks(seed, d.uncheckedOutpost(place.Outpost()))
 	case place.IsLocal():
 		return d.continuationWithChecks(seed, continuationMachine{
-			inspectDirectory: func(execution garden.Execution) (string, error) { return inspectContinuationDirectory(execution), nil },
-			checkResume:      d.conversationResumable,
+			inspectDirectory: func(execution garden.Execution) (string, error) {
+				return d.inspectContinuationDirectory(execution), nil
+			},
+			checkResume: d.conversationResumable,
 		})
 	default:
 		return d.continuationWithChecks(seed, unknownContinuationMachine())
@@ -514,7 +516,7 @@ func (d *Daemon) continuationForSeed(seed garden.Seed) *seedContinuation {
 
 func (d *Daemon) continuationOnItsMachine(seed garden.Seed) *seedContinuation {
 	execution, _, _ := d.normalizedSeedContinuation(seed)
-	place := executionPlace(execution)
+	place := d.executionPlace(execution)
 	if !place.Known() {
 		return d.continuationWithChecks(seed, unknownContinuationMachine())
 	}

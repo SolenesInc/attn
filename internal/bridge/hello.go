@@ -11,6 +11,8 @@ type Identity struct {
 	Build    Build  `json:"build"`
 	Home     string `json:"home,omitempty"`
 	HomeID   string `json:"home_id,omitempty"`
+	// PeerMachineID is the id the sender's home knows the peer's machine by.
+	PeerMachineID string `json:"peer_machine_id,omitempty"`
 }
 
 type Build struct {

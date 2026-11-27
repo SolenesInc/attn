@@ -38,14 +38,14 @@ func (d *Daemon) settingValue(spec *setting.Setting, key string, computed map[st
 	}
 	if spec.Kind == setting.Bool {
 		concrete := *spec
-		concrete.Key = key
+		concrete.Key = d.storedSettingKey(key)
 		if value := d.setting(&concrete); strings.TrimSpace(value) != "" {
 			return strconv.FormatBool(setting.ParseBool(value))
 		}
 		return ""
 	}
 	concrete := *spec
-	concrete.Key = key
+	concrete.Key = d.storedSettingKey(key)
 	return d.setting(&concrete)
 }
 

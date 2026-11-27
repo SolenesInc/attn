@@ -75,7 +75,7 @@ func TestOpenBrowserDocksBesideTheTileOfAPanelessDesktop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !browserTileOn(updated.Tree) || !layouttree.HasTile(updated.Tree, markdownTileIDForPath(notes)) {
+	if !browserTileOn(updated.Tree) || !layouttree.HasTile(updated.Tree, d.markdownTileID(tileDocument{path: notes})) {
 		t.Fatalf("desktop tree = %+v, want the browser beside the notes tile", updated.Tree)
 	}
 }

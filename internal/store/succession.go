@@ -74,7 +74,7 @@ func (s *Store) CommitSuccession(sc Succession, terminal protocol.TerminalID) (S
 		if err := bindTerminalTx(tx, terminal, sc.To); err != nil {
 			return err
 		}
-		if err := routeThroughTerminalTx(tx, terminal, sc.From, sc.To); err != nil {
+		if err := routeThroughTerminalTx(tx, s.MachineID(), terminal, sc.From, sc.To); err != nil {
 			return err
 		}
 		if desktopID != "" {

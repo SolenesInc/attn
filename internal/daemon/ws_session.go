@@ -135,7 +135,7 @@ func (d *Daemon) forgetMissingFiles(host string, ranked []string, limit int) []s
 		paths := ranked[:min(batch, len(ranked))]
 		ranked = ranked[len(paths):]
 		gone := d.findMissingFiles(ctx, host, paths)
-		d.store.DeleteFileActivity(host, gone...)
+		d.store.DeleteFileActivity(d.machineFor(host).ID(), gone...)
 		missing = append(missing, gone...)
 		present += len(paths) - len(gone)
 	}

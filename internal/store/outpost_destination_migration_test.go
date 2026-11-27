@@ -24,7 +24,7 @@ func TestOutpostDestinationMigrationPreservesLegacyAddress(t *testing.T) {
 	}
 	defer upgraded.Close()
 	var destination string
-	if err = upgraded.QueryRow(`SELECT destination FROM outposts WHERE id='legacy'`).Scan(&destination); err != nil || destination != "example.com:7777" {
+	if err = upgraded.QueryRow(`SELECT destination FROM machines WHERE id='legacy'`).Scan(&destination); err != nil || destination != "example.com:7777" {
 		t.Fatalf("legacy destination %q: %v", destination, err)
 	}
 }

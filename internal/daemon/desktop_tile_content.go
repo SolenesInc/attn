@@ -71,7 +71,7 @@ func (d *Daemon) nudgeDesktopTileContent() {
 	}
 }
 
-func markdownTilesOnCurrentDesktop(profile profiles.Profile, desktops []profiles.Desktop) []desktopMarkdownTile {
+func (d *Daemon) markdownTilesOnCurrentDesktop(profile profiles.Profile, desktops []profiles.Desktop) []desktopMarkdownTile {
 	var tiles []desktopMarkdownTile
 	for _, desktop := range desktops {
 		if desktop.ID != profile.CurrentDesktopID {
@@ -81,7 +81,7 @@ func markdownTilesOnCurrentDesktop(profile profiles.Profile, desktops []profiles
 			if leaf.TileKind != string(layouttree.TileKindMarkdown) {
 				continue
 			}
-			if document, err := markdownTileDocument(leaf.TileParams); err == nil {
+			if document, err := d.markdownTileDocument(leaf.TileParams); err == nil {
 				tiles = append(tiles, desktopMarkdownTile{key: desktopTileKey{desktopID: desktop.ID, tileID: leaf.TileID}, document: document})
 			}
 		}
@@ -159,7 +159,7 @@ func desktopTileContentMessage(key desktopTileKey, document tileDocument, held *
 func (d *Daemon) annotationsChanged(key store.HostPath, generation int) {
 	delivery := &d.desktopTiles
 	delivery.mu.Lock()
-	if held := delivery.documents[tileDocument{host: key.Host, path: key.Path}]; held != nil && held.serial > 0 {
+	if held := delivery.documents[tileDocument{host: d.machineFor(key.Host).Outpost(), path: key.Path}]; held != nil && held.serial > 0 {
 		held.annotations = generation
 		held.serial++
 	}

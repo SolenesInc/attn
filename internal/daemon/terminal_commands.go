@@ -255,7 +255,7 @@ func (d *Daemon) runTerminalOpen(ctx context.Context, c command.Caller, a comman
 	if err != nil {
 		return nil, err
 	}
-	host, err := d.resolveCallerHost(caller.ID, nonEmptyHost(a.Host))
+	host, err := d.resolveCallerHost(caller.ID, nonEmptyText(a.Host))
 	if err != nil {
 		return nil, err
 	}
@@ -326,12 +326,12 @@ func (d *Daemon) runTerminalOpen(ctx context.Context, c command.Caller, a comman
 	cwd := a.Cwd
 	if cwd == "" {
 		cwd = caller.Directory
-		if host != protocol.Deref(caller.Host) {
+		if host != d.machineOnWire(caller.Host).ID() {
 			cwd = "~"
 		}
 	}
 	id := protocol.SessionID(uuid.NewString())
-	placed, rejection := d.runSpawnPipelineReporting(&protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: id, ProfileID: caller.ProfileID, Agent: protocol.AgentShellValue, Host: nonEmptyHost(host), Cwd: cwd, Cols: 80, Rows: 24}, internalSpawnPolicy{launchPlacement: &launchPlacement{desktopID: desktop.ID, anchorPaneID: anchor, direction: direction}, parentSessionID: caller.ID})
+	placed, rejection := d.runSpawnPipelineReporting(&protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: id, ProfileID: caller.ProfileID, Agent: protocol.AgentShellValue, Host: d.wireHost(host), Cwd: cwd, Cols: 80, Rows: 24}, internalSpawnPolicy{launchPlacement: &launchPlacement{desktopID: desktop.ID, anchorPaneID: anchor, direction: direction}, parentSessionID: caller.ID})
 	if rejection != nil {
 		return nil, rejection.reason()
 	}

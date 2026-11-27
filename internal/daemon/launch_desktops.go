@@ -51,7 +51,7 @@ func (d *Daemon) launchDesktopResult(action, requestID, kind, id string, setting
 				return result
 			}
 			for _, desktop := range desktops {
-				wire, encodeErr := protocolDesktop(desktop)
+				wire, encodeErr := d.protocolDesktop(desktop)
 				if encodeErr != nil {
 					result.Error = protocol.Ptr(encodeErr.Error())
 					return result
@@ -92,7 +92,7 @@ func (d *Daemon) launchDesktopResult(action, requestID, kind, id string, setting
 			result.Item = &wire
 			result.Desktops = []protocol.Desktop{}
 			for _, desktop := range desktops {
-				wire, encodeErr := protocolDesktop(desktop)
+				wire, encodeErr := d.protocolDesktop(desktop)
 				if encodeErr != nil {
 					err = encodeErr
 					break

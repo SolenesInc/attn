@@ -150,13 +150,13 @@ func (d *Daemon) bedsInProfile(profileID string) ([]garden.Bed, map[string]docst
 	return beds, docs, byID, nil
 }
 
-func bedToProtocol(bed garden.Bed, doc docstore.Document) protocol.GardenBed {
+func (d *Daemon) bedToProtocol(bed garden.Bed, doc docstore.Document) protocol.GardenBed {
 	out := protocol.GardenBed{
 		ID:        bed.ID,
 		ProfileID: bed.ProfileID,
 		Name:      bed.Name,
 		Slug:      bed.Slug,
-		Repos:     bedRepoAddresses(bed.BedRepositories),
+		Repos:     d.bedRepoAddresses(bed.BedRepositories),
 		CreatedAt: doc.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt: doc.UpdatedAt.UTC().Format(time.RFC3339),
 	}
@@ -177,7 +177,7 @@ func (d *Daemon) gardenBedsForBroadcast(profileID string) []protocol.GardenBed {
 	}
 	out := make([]protocol.GardenBed, 0, len(beds))
 	for _, bed := range beds {
-		out = append(out, bedToProtocol(bed, docs[bed.ID]))
+		out = append(out, d.bedToProtocol(bed, docs[bed.ID]))
 	}
 	return out
 }
@@ -216,15 +216,19 @@ func gardenV2OffRefusal() error {
 	return &command.Refusal{Code: "setting_off", Message: setting.GardenV2Enabled.Refusal().Error()}
 }
 
-func bedRepoAddress(path garden.RepoPath) string {
-	return cmp.Or(path.Machine, "home") + ":" + path.Path
+func (d *Daemon) bedRepoAddress(path garden.RepoPath) string {
+	machine := path.Machine
+	if d.machineFor(machine).IsLocal() {
+		machine = "home"
+	}
+	return machine + ":" + path.Path
 }
 
-func bedRepoAddresses(repos garden.BedRepositories) []string {
+func (d *Daemon) bedRepoAddresses(repos garden.BedRepositories) []string {
 	addresses := make([]string, 0, len(repos.Names)+len(repos.Paths))
 	addresses = append(addresses, repos.Names...)
 	for _, path := range repos.Paths {
-		addresses = append(addresses, bedRepoAddress(path))
+		addresses = append(addresses, d.bedRepoAddress(path))
 	}
 	return addresses
 }
@@ -236,7 +240,7 @@ func sameBedRepos(a, b garden.BedRepositories) bool {
 func (d *Daemon) resolveBedRepos(ctx context.Context, caller command.Caller, raw []string, current []garden.RepoPath) (garden.BedRepositories, error) {
 	previous := make(map[string]garden.RepoPath, len(current))
 	for _, path := range current {
-		previous[bedRepoAddress(path)] = path
+		previous[d.bedRepoAddress(path)] = path
 	}
 	names := make(map[string]bool, len(raw))
 	paths := make(map[garden.RepoPath]bool, len(raw))
@@ -276,13 +280,13 @@ func (d *Daemon) resolveBedRepoPath(ctx context.Context, caller command.Caller, 
 	if host, path, qualified := strings.Cut(repo, ":"); qualified && !strings.Contains(host, "/") &&
 		(filepath.IsAbs(path) || namesHome(path)) {
 		if strings.EqualFold(host, "home") {
-			place = localMachine()
+			place = d.here()
 		} else {
 			target, err := d.resolveOutpost(host)
 			if err != nil {
 				return garden.RepoPath{}, err
 			}
-			place = machineFor(target.ID)
+			place = d.machineFor(target.ID)
 		}
 		repo = path
 	}
@@ -308,14 +312,14 @@ func (d *Daemon) resolveBedRepoPath(ctx context.Context, caller command.Caller, 
 	default:
 		return garden.RepoPath{}, protocol.Refuse(protocol.RefusalInvalidInput, "choose a machine for repository path %q", repo)
 	}
-	return garden.RepoPath{Path: repo, Machine: place.Outpost()}, nil
+	return garden.RepoPath{Path: repo, Machine: place.ID()}, nil
 }
 
 func (d *Daemon) bedCallerPlace(ctx context.Context, caller command.Caller) machine {
 	if caller.Directory == "" && caller.Session != "" {
 		return d.sessionPlace(caller.Session)
 	}
-	return originPlace(ctx)
+	return d.originPlace(ctx)
 }
 
 func (d *Daemon) resolveBedInProfile(profileID, ref string) (garden.Bed, error) {
@@ -338,9 +342,9 @@ func (d *Daemon) resolveBedInProfile(profileID, ref string) (garden.Bed, error) 
 		"no bed %q exists in this profile; existing beds are %s ({attn seed bed ls})", strings.TrimSpace(ref), strings.Join(names, ", "))
 }
 
-func matchBedForRepo(beds []garden.Bed, repo normalizedPath) (garden.Bed, bool) {
+func (d *Daemon) matchBedForRepo(beds []garden.Bed, repo normalizedPath) (garden.Bed, bool) {
 	return garden.MatchBedForRepo(beds, repo.path, func(binding garden.RepoPath) bool {
-		owner := machineFor(binding.Machine)
+		owner := d.machineFor(binding.Machine)
 		if !repo.on.SameAs(owner) {
 			return false
 		}
@@ -354,7 +358,7 @@ func matchBedForRepo(beds []garden.Bed, repo normalizedPath) (garden.Bed, bool) 
 
 func (d *Daemon) callerRepoForBedRouting(ctx context.Context, sessionID protocol.SessionID, callerDir string) normalizedPath {
 	if callerDir = strings.TrimSpace(callerDir); callerDir != "" {
-		return d.bedRepoAt(ctx, originPlace(ctx), callerDir)
+		return d.bedRepoAt(ctx, d.originPlace(ctx), callerDir)
 	}
 	sessionID = protocol.TrimID(sessionID)
 	session := d.store.Get(sessionID)
@@ -391,7 +395,7 @@ func (d *Daemon) bedRepoAt(ctx context.Context, place machine, dir string) norma
 	return normalizedPath{on: place, path: cmp.Or(inspected.MainRepo, inspected.RepoRoot, inspected.Cwd)}
 }
 
-func validateBedUniqueness(existing []garden.Bed, selfID, name, slug string, repos garden.BedRepositories) error {
+func (d *Daemon) validateBedUniqueness(existing []garden.Bed, selfID, name, slug string, repos garden.BedRepositories) error {
 	for _, other := range existing {
 		if other.ID == selfID {
 			continue
@@ -411,7 +415,7 @@ func validateBedUniqueness(existing []garden.Bed, selfID, name, slug string, rep
 		}
 		for _, path := range repos.Paths {
 			if slices.Contains(other.Paths, path) {
-				return protocol.Refuse(protocol.RefusalConflict, "repo %q is already assigned to bed %q (%s); remove it there first", bedRepoAddress(path), other.Name, other.ID)
+				return protocol.Refuse(protocol.RefusalConflict, "repo %q is already assigned to bed %q (%s); remove it there first", d.bedRepoAddress(path), other.Name, other.ID)
 			}
 		}
 	}
@@ -442,7 +446,7 @@ func (d *Daemon) seedBedList(profileID string) (*protocol.SeedBedListResult, err
 	}
 	out := make([]protocol.SeedBedSummary, 0, len(beds))
 	for _, bed := range beds {
-		wire := bedToProtocol(bed, docs[bed.ID])
+		wire := d.bedToProtocol(bed, docs[bed.ID])
 		out = append(out, protocol.SeedBedSummary{
 			ID:        wire.ID,
 			ProfileID: wire.ProfileID,
@@ -483,7 +487,7 @@ func (d *Daemon) seedBedAdd(ctx context.Context, caller command.Caller, profileI
 	if err != nil {
 		return nil, err
 	}
-	if err := validateBedUniqueness(existing, "", name, slug, repos); err != nil {
+	if err := d.validateBedUniqueness(existing, "", name, slug, repos); err != nil {
 		return nil, err
 	}
 	schema, err := d.bedsCollection()
@@ -527,7 +531,7 @@ func (d *Daemon) seedBedAdd(ctx context.Context, caller command.Caller, profileI
 		if readErr != nil || !found {
 			doc = &docstore.Document{ID: bed.ID, Body: body, Rev: written.Rev, CreatedAt: now, UpdatedAt: now}
 		}
-		return &protocol.SeedBedResult{Bed: bedToProtocol(bed, *doc), Changed: protocol.Ptr(true)}, nil
+		return &protocol.SeedBedResult{Bed: d.bedToProtocol(bed, *doc), Changed: protocol.Ptr(true)}, nil
 	}
 	return nil, fmt.Errorf("minted %d bed ids and every one was taken: %w", mintAttempts, lastErr)
 }
@@ -551,7 +555,7 @@ func (d *Daemon) seedBedSet(ctx context.Context, caller command.Caller, profileI
 			return nil, err
 		}
 		ref = bed.ID
-		if slices.Equal(bedRepoAddresses(bed.BedRepositories), patch.repos) {
+		if slices.Equal(d.bedRepoAddresses(bed.BedRepositories), patch.repos) {
 			patch.setRepos = false
 		} else {
 			repos, err = d.resolveBedRepos(ctx, caller, patch.repos, bed.Paths)
@@ -593,13 +597,13 @@ func (d *Daemon) seedBedSet(ctx context.Context, caller command.Caller, profileI
 		next.BedRepositories = repos
 	}
 	if next.Name == current.Name && next.Slug == current.Slug && next.Note == current.Note && sameBedRepos(next.BedRepositories, current.BedRepositories) {
-		return &protocol.SeedBedResult{Bed: bedToProtocol(current, docs[current.ID]), Changed: protocol.Ptr(false)}, nil
+		return &protocol.SeedBedResult{Bed: d.bedToProtocol(current, docs[current.ID]), Changed: protocol.Ptr(false)}, nil
 	}
 	var changedRepos garden.BedRepositories
 	if !sameBedRepos(next.BedRepositories, current.BedRepositories) {
 		changedRepos = next.BedRepositories
 	}
-	if err := validateBedUniqueness(existing, current.ID, next.Name, next.Slug, changedRepos); err != nil {
+	if err := d.validateBedUniqueness(existing, current.ID, next.Name, next.Slug, changedRepos); err != nil {
 		return nil, err
 	}
 	schema, err := d.bedsCollection()
@@ -624,7 +628,7 @@ func (d *Daemon) seedBedSet(ctx context.Context, caller command.Caller, profileI
 	if readErr != nil || !found {
 		doc = &docstore.Document{ID: next.ID, Body: body, Rev: written.Rev, CreatedAt: docs[current.ID].CreatedAt, UpdatedAt: now}
 	}
-	return &protocol.SeedBedResult{Bed: bedToProtocol(next, *doc), Changed: protocol.Ptr(true)}, nil
+	return &protocol.SeedBedResult{Bed: d.bedToProtocol(next, *doc), Changed: protocol.Ptr(true)}, nil
 }
 
 func (d *Daemon) seedBedRemove(profileID, ref string) (*protocol.SeedBedDeleteResult, error) {
@@ -862,7 +866,7 @@ func (d *Daemon) resolveBedForPlanting(ctx context.Context, profileID, requested
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	if bed, ok := matchBedForRepo(beds, repo); ok {
+	if bed, ok := d.matchBedForRepo(beds, repo); ok {
 		return bed.ID, nil
 	}
 	return "", nil

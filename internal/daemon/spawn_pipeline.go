@@ -573,8 +573,8 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 }
 
 func (d *Daemon) recordRecentLocation(host, cwd string) {
-	if host == "" {
-		d.store.UpsertRecentLocation("", cwd, "")
+	if place := d.machineFor(host); place.IsLocal() {
+		d.store.UpsertRecentLocation(place.ID(), cwd, "")
 		return
 	}
 	d.life.Go("recordRemoteRecentLocation", func() {

@@ -302,7 +302,10 @@ func (d *Daemon) settingValues() map[string]string {
 }
 
 func (d *Daemon) storedSettingValues() map[string]string {
-	values := d.store.GetAllSettings()
+	values := map[string]string{}
+	for key, value := range d.store.GetAllSettings() {
+		values[d.wireSettingKey(key)] = value
+	}
 	status := d.enrollmentStatus()
 	if status.IsHome() {
 		return values

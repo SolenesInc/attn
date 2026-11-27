@@ -95,13 +95,13 @@ INSERT INTO sessions(id,user_label,directory,created_at,profile_id,host,copied_f
 		want    string
 		wantRev int64
 	}{
-		{"home-open", "", 2},
-		{"home-closed", "", 2},
+		{"home-open", upgraded.MachineID(), 3},
+		{"home-closed", upgraded.MachineID(), 3},
 		{"far-open", "outpost-far", 2},
 		{"far-closed", "outpost-far", 2},
-		{"copied-outpost", "", 2},
+		{"copied-outpost", upgraded.MachineID(), 3},
 		{"already-outpost", "outpost-kept", 1},
-		{"already-home", "", 1},
+		{"already-home", upgraded.MachineID(), 2},
 	} {
 		exec, rev := read(tc.id)
 		if exec.Machine == nil {

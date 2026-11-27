@@ -168,7 +168,7 @@ func (d *Daemon) activeSessionInCheckout(host, directory string, excluded ...str
 	request := protocol.CheckoutInspectMessage{Cmd: protocol.CmdCheckoutInspect, Host: host, Cwd: directory}
 	candidates := map[string][]string{}
 	for _, session := range d.store.List("") {
-		if skip[session.ID] || protocol.Deref(session.Host) != host || !d.sessionHasLiveWorker(session.ID) {
+		if skip[session.ID] || d.machineOnWire(session.Host).ID() != host || !d.sessionHasLiveWorker(session.ID) {
 			continue
 		}
 		if len(candidates[session.Directory]) == 0 {
@@ -238,7 +238,7 @@ func (d *Daemon) spawnDelegatedRuntimeProtected(protection foregroundCleanupProt
 		Cwd:           directory,
 		ProfileID:     profileID,
 		Agent:         agent,
-		Host:          nonEmptyHost(protocol.Deref(msg.Host)),
+		Host:          d.wireHost(protocol.Deref(msg.Host)),
 		Cols:          80,
 		Rows:          24,
 		Label:         protocol.Ptr(name),

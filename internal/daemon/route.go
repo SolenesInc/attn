@@ -119,7 +119,7 @@ func (r *Router) bridge(msg protocol.Placed) (*bridge.Conn, error) {
 		}
 		home = spec.Class == setting.Home
 	case protocol.LocatorMachine:
-		host = msg.Locate()
+		host = d.machineFor(msg.Locate()).Outpost()
 	case protocol.LocatorSession:
 		place := d.sessionPlace(protocol.SessionID(msg.Locate()))
 		host, home = place.Outpost(), !place.Known()
@@ -238,17 +238,17 @@ func (d *Daemon) localDirectory(session *protocol.Session) string {
 	return dir
 }
 
-func (d *Daemon) resolveOutpost(host string) (store.Outpost, error) {
+func (d *Daemon) resolveOutpost(host string) (store.Machine, error) {
 	rows, err := d.store.ListOutposts()
 	if err != nil {
-		return store.Outpost{}, err
+		return store.Machine{}, err
 	}
 	for _, row := range rows {
 		if row.ID == host || row.Name == host {
 			return row, nil
 		}
 	}
-	return store.Outpost{}, fmt.Errorf("outpost %q does not exist", host)
+	return store.Machine{}, fmt.Errorf("outpost %q does not exist", host)
 }
 
 func (d *Daemon) outpostConn(host string) (*bridge.Conn, string, error) {

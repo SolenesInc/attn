@@ -55,7 +55,7 @@ func (d *Daemon) withCodeNavSetups(host string, review *protocol.ReviewBundle) *
 	if review == nil || len(review.Navigation) == 0 {
 		return review
 	}
-	setups, err := d.store.CodeNavSetups(host, review.Repository)
+	setups, err := d.store.CodeNavSetups(d.machineFor(host).ID(), review.Repository)
 	if err != nil {
 		d.logf("code navigation setups of %s: %v", review.Repository, err)
 		return review
@@ -110,7 +110,7 @@ func (d *Daemon) startCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSet
 	}
 	session, err := d.launchCodeNavSetup(ctx, msg, desktop.ProfileID, by)
 	if err == nil {
-		err = d.store.RecordCodeNavSetup(host, msg.Repository, msg.Language, session)
+		err = d.store.RecordCodeNavSetup(d.machineFor(host).ID(), msg.Repository, msg.Language, session)
 	}
 	d.codeNavSetups.end(key)
 	if err != nil {

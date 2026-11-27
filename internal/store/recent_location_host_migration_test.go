@@ -22,13 +22,16 @@ func TestRecentLocationHostMigrationKeepsExistingRecentsOnTheHome(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer upgraded.Close()
-	var host, lastSeen string
+	var self, host, lastSeen string
+	if err = upgraded.QueryRow(`SELECT id FROM machines WHERE transport='self'`).Scan(&self); err != nil {
+		t.Fatal(err)
+	}
 	var useCount int
 	var repoRoot *string
 	if err = upgraded.QueryRow(`SELECT host, last_seen, use_count, repo_root FROM recent_locations WHERE path='/work/shop'`).Scan(&host, &lastSeen, &useCount, &repoRoot); err != nil {
 		t.Fatal(err)
 	}
-	if host != "" || lastSeen != "2026-10-30T00:00:00Z" || useCount != 3 || repoRoot != nil {
+	if host != self || lastSeen != "2026-10-30T00:00:00Z" || useCount != 3 || repoRoot != nil {
 		t.Fatalf("migrated recent = host %q last_seen %q use_count %d repo_root %v; want the row kept on the home", host, lastSeen, useCount, repoRoot)
 	}
 	if _, err = upgraded.Exec(`INSERT INTO recent_locations(host,path,last_seen,use_count) VALUES('outpost-1','/work/shop','2026-10-31T00:00:00Z',1)`); err != nil {

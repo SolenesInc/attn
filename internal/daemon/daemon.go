@@ -1306,7 +1306,7 @@ func (d *Daemon) recoverRecords(machine machineReport, sessions []protocol.Sessi
 	if rules.allowTombstoneCleanup {
 		for _, sessionID := range d.store.SessionTeardownIntentIDs() {
 			host, copied, _ := d.store.SessionHost(sessionID)
-			if host != rules.host || copied {
+			if d.machineFor(host).Outpost() != rules.host || copied {
 				continue
 			}
 			if _, live := machine.live[sessionID]; live {
@@ -2259,7 +2259,7 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 			lifecycle := d.sessionLifecycleLockFor(sessionID)
 			lifecycle.Lock()
 			defer lifecycle.Unlock()
-			if len(d.store.OpenSessionsHoldingOnHost(protocol.Deref(session.Host), released)) > 0 {
+			if len(d.store.OpenSessionsHoldingOnHost(d.machineOnWire(session.Host).ID(), released)) > 0 {
 				released = ""
 			}
 			if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "released", Agent: protocol.Ptr(session.Agent), Profile: protocol.Ptr(profile), Conversation: protocol.Ptr(released)}); err != nil {

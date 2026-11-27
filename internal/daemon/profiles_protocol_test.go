@@ -149,7 +149,7 @@ func (w *profilesTestDaemon) place(desktopID, sessionID, anchorPaneID string) (p
 	if err != nil {
 		w.t.Fatalf("place %s on %s: %v", sessionID, desktopID, err)
 	}
-	desktop, err := protocolDesktop(placed)
+	desktop, err := w.d.protocolDesktop(placed)
 	if err != nil {
 		w.t.Fatal(err)
 	}

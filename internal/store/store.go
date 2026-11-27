@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"log"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/victorarias/attn/internal/sessioncost"
@@ -27,6 +29,7 @@ type Store struct {
 	mu               sync.RWMutex
 	db               *sql.DB
 	dbPath           string
+	machineID        atomic.Pointer[string]
 
 	durable bool
 
@@ -116,11 +119,18 @@ func newDBStore(db *sql.DB, writes *tableWrites, dbPath string, durable bool) (*
 		db.Close()
 		return nil, err
 	}
-	return &Store{db: db, dbPath: dbPath, durable: durable, settings: settings, settingCopies: copies, writes: writes, copiedSessionSeq: make(map[string]int)}, nil
+	machineID, err := readSelfMachineID(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	s := &Store{db: db, dbPath: dbPath, durable: durable, settings: settings, settingCopies: copies, writes: writes, copiedSessionSeq: make(map[string]int)}
+	s.SetMachineID(machineID)
+	return s, nil
 }
 
 func newMapBackedStore() *Store {
-	return &Store{
+	s := &Store{
 		copiedSessionSeq: make(map[string]int),
 		sessions:         make(map[protocol.SessionID]*protocol.Session),
 		agentDriverRuns:  make(map[protocol.SessionID]AgentDriverReportCursor),
@@ -131,6 +141,8 @@ func newMapBackedStore() *Store {
 		agentMetadata:    make(map[protocol.SessionID]string),
 		recentLocations:  make(map[recentLocationKey]*protocol.RecentLocation),
 	}
+	s.SetMachineID(uuid.NewString())
+	return s
 }
 
 func cloneSession(session *protocol.Session) *protocol.Session {
@@ -334,7 +346,7 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 		protocol.Deref(session.ParentSessionID),
 		boolToInt(protocol.Deref(session.Priority)),
 		string(protocol.TimestampNow()),
-		protocol.Deref(session.Host),
+		s.StoredHost(session.Host),
 	)
 	if err != nil {
 		return fmt.Errorf("insert session %s: %w", session.ID, err)
@@ -456,9 +468,7 @@ func (s *Store) openSessionLocked(id protocol.SessionID) (*protocol.Session, boo
 	if succeeds != "" {
 		session.Succeeds = protocol.Ptr(protocol.SessionID(succeeds))
 	}
-	if host != "" {
-		session.Host = protocol.Ptr(host)
-	}
+	session.Host = s.WireHost(host)
 	applyActivity(&session, activity.String, activityAt.String)
 
 	if branch.Valid && branch.String != "" {
@@ -675,9 +685,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		if succeeds != "" {
 			session.Succeeds = protocol.Ptr(protocol.SessionID(succeeds))
 		}
-		if host != "" {
-			session.Host = protocol.Ptr(host)
-		}
+		session.Host = s.WireHost(host)
 		applyActivity(&session, activity.String, activityAt.String)
 
 		if branch.Valid && branch.String != "" {
@@ -2148,7 +2156,7 @@ func frecencyScore(useCount int, lastSeen string, now time.Time) float64 {
 type recentLocationKey struct{ host, path string }
 
 func (s *Store) UpsertRecentLocation(host, path, repoRoot string) {
-	if host == "" {
+	if host == s.MachineID() {
 		path, repoRoot = resolveRecentLocationPath(path), ""
 	}
 	key := recentLocationKey{host, path}
@@ -2168,7 +2176,7 @@ func (s *Store) UpsertRecentLocation(host, path, repoRoot string) {
 			return
 		}
 		s.recentLocations[key] = &protocol.RecentLocation{
-			Host:     nonEmptyPtr(host),
+			Host:     s.WireHost(host),
 			Path:     path,
 			RepoRoot: nonEmptyPtr(repoRoot),
 			LastSeen: now,
@@ -2204,7 +2212,7 @@ func (s *Store) GetRecentLocations(limit int, homeOnly bool) []*protocol.RecentL
 	if s.db == nil {
 		raw = make([]*protocol.RecentLocation, 0, len(s.recentLocations))
 		for key, loc := range s.recentLocations {
-			if homeOnly && key.host != "" {
+			if homeOnly && key.host != s.MachineID() {
 				continue
 			}
 			cloned := *loc
@@ -2214,7 +2222,7 @@ func (s *Store) GetRecentLocations(limit int, homeOnly bool) []*protocol.RecentL
 		rows, err := s.db.Query(`
 			SELECT host, path, COALESCE(repo_root, ''), last_seen, use_count
 			FROM recent_locations
-			WHERE host = '' OR NOT ?`, homeOnly)
+			WHERE host = ? OR NOT ?`, s.MachineID(), homeOnly)
 		if err != nil {
 			s.mu.RUnlock()
 			return nil
@@ -2225,7 +2233,7 @@ func (s *Store) GetRecentLocations(limit int, homeOnly bool) []*protocol.RecentL
 			if err := rows.Scan(&host, &loc.Path, &repoRoot, &loc.LastSeen, &loc.UseCount); err != nil {
 				continue
 			}
-			loc.Host, loc.RepoRoot = nonEmptyPtr(host), nonEmptyPtr(repoRoot)
+			loc.Host, loc.RepoRoot = s.WireHost(host), nonEmptyPtr(repoRoot)
 			raw = append(raw, &loc)
 		}
 		rows.Close()
@@ -2282,7 +2290,7 @@ func (s *Store) GetRecentLocations(limit int, homeOnly bool) []*protocol.RecentL
 			s.mu.Lock()
 			defer s.mu.Unlock()
 			for _, path := range missingHere {
-				s.execLog("DELETE FROM recent_locations WHERE host = '' AND path = ?", path)
+				s.execLog("DELETE FROM recent_locations WHERE host = ? AND path = ?", s.MachineID(), path)
 			}
 		}()
 	}

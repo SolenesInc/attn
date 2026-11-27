@@ -1480,7 +1480,7 @@ func (d *Daemon) observeGardenDispatchExecution(sessionID protocol.SessionID, cw
 	place := d.sessionPlace(sessionID)
 	if session == nil {
 		session = &protocol.Session{ID: sessionID, Directory: cwd, Agent: protocol.SessionAgent(agent)}
-		place = localMachine()
+		place = d.here()
 	}
 	return d.observedGardenExecutionOn(session, place, d.gardenTime())
 }

@@ -82,11 +82,11 @@ func TestAFocusedTileLeavesNoCurrentAgentAndOpensDockBesideIt(t *testing.T) {
 
 	tree := desktopTree(t, d, desktop.ID)
 	notebookColumn, _ := layouttree.ColumnOf(tree, "tile-notebook")
-	markdownColumn, ok := layouttree.ColumnOf(tree, markdownTileIDForPath(file))
+	markdownColumn, ok := layouttree.ColumnOf(tree, d.markdownTileID(tileDocument{path: file}))
 	if !ok || markdownColumn != notebookColumn+1 {
 		t.Fatalf("opening while the notebook is focused produced %+v, want the markdown tile in the column after the notebook's", tree)
 	}
-	if tile := desktopTile(t, d, desktop.ID, markdownTileIDForPath(file)); tile.TileSessionID != "" {
+	if tile := desktopTile(t, d, desktop.ID, d.markdownTileID(tileDocument{path: file})); tile.TileSessionID != "" {
 		t.Fatalf("a tile opened with no current agent is bound to %q", tile.TileSessionID)
 	}
 }

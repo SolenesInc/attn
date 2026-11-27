@@ -179,7 +179,7 @@ func (d *Daemon) recordEditedFiles(sessionID protocol.SessionID, paths []string)
 		return monitor.ReportEditedFiles(paths, now, d.awayFromHome(sessionID))
 	}
 	for _, path := range paths {
-		d.store.RecordFileActivity(store.FileActivity{Path: path, Source: store.FileActivitySourceEdited, SessionID: sessionID, At: now})
+		d.store.RecordFileActivity(store.FileActivity{Host: d.store.MachineID(), Path: path, Source: store.FileActivitySourceEdited, SessionID: sessionID, At: now})
 	}
 	return true
 }

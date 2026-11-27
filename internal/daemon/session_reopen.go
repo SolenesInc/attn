@@ -173,7 +173,7 @@ func (d *Daemon) decideMissingDirectory(
 	gone := "its directory no longer exists"
 	repo := strings.TrimSpace(verdict.Execution.RepositoryRoot)
 	branch := strings.TrimSpace(verdict.Execution.Branch)
-	target, targetOK := savedWorktreeRoot(verdict.Execution)
+	target, targetOK := d.savedWorktreeRoot(verdict.Execution)
 
 	if repo == "" || branch == "" || !targetOK {
 		verdict.Reason = gone + ", and it was not a worktree attn can put back"

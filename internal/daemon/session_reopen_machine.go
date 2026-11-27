@@ -9,17 +9,17 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func newMachineReopenVerdict(target protocol.ReopenTarget) sessionReopenVerdict {
+func (d *Daemon) newMachineReopenVerdict(target protocol.ReopenTarget) sessionReopenVerdict {
 	return sessionReopenVerdict{
 		SessionID:      target.SessionID,
-		Execution:      garden.Execution{Machine: protocol.Ptr(""), Cwd: target.Cwd, Agent: target.Agent, Branch: target.Branch, RepositoryRoot: target.Repository, RepositorySubdir: target.RepositorySubdir},
+		Execution:      garden.Execution{Machine: protocol.Ptr(d.store.MachineID()), Cwd: target.Cwd, Agent: target.Agent, Branch: target.Branch, RepositoryRoot: target.Repository, RepositorySubdir: target.RepositorySubdir},
 		Resume:         target.Conversation,
 		DirectoryState: directoryUnknown,
 	}
 }
 
 func (d *Daemon) inspectReopenHere(ctx context.Context, msg protocol.ReopenInspectMessage) (protocol.ReopenInspection, error) {
-	verdict := newMachineReopenVerdict(msg.Target)
+	verdict := d.newMachineReopenVerdict(msg.Target)
 	verdict.BranchMerged = msg.BranchMerged
 	if strings.TrimSpace(msg.Target.Cwd) != "" {
 		checkout, err := d.inspectCheckout(ctx, protocol.CheckoutInspectMessage{Cwd: msg.Target.Cwd})
@@ -45,7 +45,7 @@ func (d *Daemon) inspectReopenHere(ctx context.Context, msg protocol.ReopenInspe
 }
 
 func (d *Daemon) recreateReopenHere(ctx context.Context, msg protocol.ReopenWorktreeMessage) (protocol.ReopenWorktreeResult, error) {
-	verdict := newMachineReopenVerdict(msg.Target)
+	verdict := d.newMachineReopenVerdict(msg.Target)
 	verdict.RecreatePath = msg.RecreatePath
 	verdict.Inspection = branchInspection{Remote: msg.Remote, StaleRegistration: msg.StaleRegistration}
 	var result protocol.ReopenWorktreeResult

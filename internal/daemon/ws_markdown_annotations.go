@@ -76,7 +76,7 @@ func (d *Daemon) resolveAnnotationDocumentSource(documentURI, kind string, path,
 			return source, fmt.Errorf("path must be absolute for file source: %s", source.path)
 		}
 		source.path = filepath.Clean(source.path)
-		source.draftKey = store.HostPath{Host: source.host, Path: source.path}
+		source.draftKey = store.HostPath{Host: d.machineFor(source.host).ID(), Path: source.path}
 		if canonical := fileDocumentURI(source.host, source.path); source.documentURI != canonical {
 			return source, fmt.Errorf("document_uri does not match typed file source: want %s", canonical)
 		}
@@ -94,7 +94,7 @@ func (d *Daemon) resolveAnnotationDocumentSource(documentURI, kind string, path,
 		source.seedID = seed.ID
 		source.seedTitle = seed.Title
 		canonical := seedDocumentURI(seed.ID)
-		source.draftKey = store.HostPath{Path: canonical}
+		source.draftKey = store.HostPath{Host: d.store.MachineID(), Path: canonical}
 		if source.documentURI != canonical {
 			return source, fmt.Errorf("document_uri does not match typed seed source: want %s", canonical)
 		}
@@ -123,7 +123,7 @@ func (d *Daemon) handleMarkdownAnnotationsGet(client *wsClient, msg *protocol.Ma
 		sourceErr = d.requireSeedInProfile(source.seedID, client.selectedProfile(), false)
 	}
 	path, host, seedID := annotationSourcePointers(source)
-	handler := newAnnotationDraftHandler(d, client, markdownAnnotationDraftAccessors(d.store, source.host), "document source",
+	handler := newAnnotationDraftHandler(d, client, markdownAnnotationDraftAccessors(d.store, source.draftKey.Host), "document source",
 		func(result annotationDraftResult[protocol.MarkdownAnnotation]) protocol.MarkdownAnnotationsGetResultMessage {
 			if sourceErr != nil {
 				result.err = protocol.Ptr("markdown_annotations_get: " + sourceErr.Error())

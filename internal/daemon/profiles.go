@@ -72,10 +72,10 @@ func protocolProfile(profile profiles.Profile) protocol.Profile {
 	return out
 }
 
-func protocolDesktop(desktop profiles.Desktop) (protocol.Desktop, error) {
+func (d *Daemon) protocolDesktop(desktop profiles.Desktop) (protocol.Desktop, error) {
 	treeJSON := ""
 	if !layouttree.LayoutEmpty(desktop.Tree) {
-		encoded, err := layouttree.EncodeLayout(desktop.Tree)
+		encoded, err := layouttree.EncodeLayout(d.wireTree(desktop.Tree))
 		if err != nil {
 			return protocol.Desktop{}, err
 		}
@@ -115,10 +115,22 @@ func protocolDesktop(desktop profiles.Desktop) (protocol.Desktop, error) {
 	return out, nil
 }
 
-func protocolDesktops(desktops []profiles.Desktop) ([]protocol.Desktop, error) {
+func (d *Daemon) wireTree(tree layouttree.Node) layouttree.Node {
+	for _, leaf := range layouttree.TileLeaves(tree) {
+		if leaf.TileKind != string(layouttree.TileKindMarkdown) {
+			continue
+		}
+		if document, err := d.markdownTileDocument(leaf.TileParams); err == nil {
+			tree, _ = layouttree.UpdateTileParams(tree, leaf.TileID, d.wireTileParams(document))
+		}
+	}
+	return tree
+}
+
+func (d *Daemon) protocolDesktops(desktops []profiles.Desktop) ([]protocol.Desktop, error) {
 	out := make([]protocol.Desktop, 0, len(desktops))
 	for _, desktop := range desktops {
-		wire, err := protocolDesktop(desktop)
+		wire, err := d.protocolDesktop(desktop)
 		if err != nil {
 			return nil, err
 		}
@@ -197,7 +209,7 @@ func (d *Daemon) fillInitialProfileState(client *wsClient, event *protocol.Initi
 		client.selectProfile("")
 		return nil, 0
 	}
-	wire, err := protocolDesktops(desktops)
+	wire, err := d.protocolDesktops(desktops)
 	if err != nil {
 		d.logf("initial state: encoding the arrangement of profile %s: %v, so the client starts on no profile", selected, err)
 		client.selectProfile("")
@@ -205,7 +217,7 @@ func (d *Daemon) fillInitialProfileState(client *wsClient, event *protocol.Initi
 	}
 	event.SelectedProfileID = protocol.Ptr(selected)
 	event.Desktops = wire
-	return markdownTilesOnCurrentDesktop(profile, desktops), seq
+	return d.markdownTilesOnCurrentDesktop(profile, desktops), seq
 }
 
 func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, run func() (profileActionOutcome, error)) {
@@ -237,7 +249,7 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 			result.Profile = &wire
 		}
 		if err == nil {
-			result.Desktops, err = protocolDesktops(outcome.desktops)
+			result.Desktops, err = d.protocolDesktops(outcome.desktops)
 		}
 		if err != nil {
 			fail(err)
@@ -334,7 +346,7 @@ func (d *Daemon) arrangementMessage(profileID string, moved []protocol.LeafMoved
 		d.logf("arrangement: reading profile %s: %v", profileID, err)
 		return protocol.ProfileArrangementChangedMessage{}, nil, nil, false
 	}
-	wire, err := protocolDesktops(desktops)
+	wire, err := d.protocolDesktops(desktops)
 	if err != nil {
 		d.logf("arrangement: encoding profile %s: %v", profileID, err)
 		return protocol.ProfileArrangementChangedMessage{}, nil, nil, false
@@ -350,7 +362,7 @@ func (d *Daemon) arrangementMessage(profileID string, moved []protocol.LeafMoved
 		d.logf("arrangement: encoding profile %s: %v", profileID, err)
 		return protocol.ProfileArrangementChangedMessage{}, nil, nil, false
 	}
-	return message, data, &arrangementDelivery{shown: markdownTilesOnCurrentDesktop(profile, desktops), seq: seq, print: sha256.Sum256(data)}, true
+	return message, data, &arrangementDelivery{shown: d.markdownTilesOnCurrentDesktop(profile, desktops), seq: seq, print: sha256.Sum256(data)}, true
 }
 
 func (d *Daemon) publishArrangementChanged(profileID string) {

@@ -116,7 +116,7 @@ func (d *Daemon) decorateLedgerEntryHidden(entry *protocol.SessionLedgerEntry) {
 }
 
 func (d *Daemon) serverHolder(profile, host, conversation string) protocol.SessionID {
-	sessionID := d.store.OpenSessionHoldingOnHost(profile, host, conversation)
+	sessionID := d.store.OpenSessionHoldingOnHost(profile, d.machineFor(host).ID(), conversation)
 	if sessionID == "" || d.lifetime(sessionID) != harness.InServer {
 		return ""
 	}

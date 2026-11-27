@@ -46,7 +46,7 @@ func (s *Store) SessionClaims() ([]SessionClaim, error) {
 		}
 		claim.Open = true
 		claim.LaunchIntent = decodesLaunchIntent(intent)
-		if copied {
+		if copied || claim.Host == s.MachineID() {
 			claim.Host = ""
 		}
 		claim.Label = labels.shown(claim.ID, directory, agent)

@@ -151,10 +151,7 @@ func (d *Daemon) startDelegationForeground(ctx context.Context, msg *protocol.De
 			parentSeedID, _ = d.gardenDispatchCrown(sourceID)
 		}
 	}
-	callerHost := ""
-	if origin, remote := OriginOf(ctx); remote {
-		callerHost = origin.Host
-	}
+	callerHost := d.originPlace(ctx).ID()
 	cwd := msg.Cwd
 	if base := protocol.Deref(msg.CwdBase); base != "" && callerHost == host && !filepath.IsAbs(cwd) && !namesHome(cwd) {
 		cwd = base + string(filepath.Separator) + cwd
@@ -228,7 +225,7 @@ func (d *Daemon) runDelegationOperation(id string) {
 }
 
 func (d *Daemon) waitForDelegationHost(id, host string) error {
-	if host == "" {
+	if d.machineFor(host).IsLocal() {
 		return nil
 	}
 	name := host

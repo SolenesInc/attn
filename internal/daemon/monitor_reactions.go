@@ -106,7 +106,7 @@ func (d *Daemon) reactFileReports(session protocol.SessionID, previous, view ses
 		if previous.EditedFiles.Entries[path].Same(report) {
 			continue
 		}
-		activity := store.FileActivity{Host: host, Path: path, Source: store.FileActivitySourceEdited, SessionID: session, At: report.At}
+		activity := store.FileActivity{Host: d.machineFor(host).ID(), Path: path, Source: store.FileActivitySourceEdited, SessionID: session, At: report.At}
 		if report.AwayFromHome {
 			d.store.CatchUpFileActivity(activity)
 		} else {

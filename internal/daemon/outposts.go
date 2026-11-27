@@ -58,7 +58,7 @@ type outpostsRuntime struct {
 	dialers map[string]*outpostDial
 	pushes  map[string]*outpostPush
 	changed chan struct{}
-	remote  func(store.Outpost) outpostRemote
+	remote  func(store.Machine) outpostRemote
 }
 
 func (d *Daemon) outpostsEnabled() bool {
@@ -112,7 +112,7 @@ func (d *Daemon) configureOutposts() {
 	})
 }
 
-func (d *Daemon) startOutpostDial(row store.Outpost) {
+func (d *Daemon) startOutpostDial(row store.Machine) {
 	ctx, cancel := context.WithCancel(d.life.Context())
 	run := &outpostDial{cancel: cancel, done: make(chan struct{}), state: bridge.StateConnecting, since: time.Now().UTC().Format(time.RFC3339Nano)}
 	r := &d.outposts
@@ -225,7 +225,7 @@ func (d *Daemon) setOutpostConn(id string, run *outpostDial, conn *bridge.Conn) 
 	return true
 }
 
-func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpostDial) {
+func (d *Daemon) dialOutpost(ctx context.Context, row store.Machine, run *outpostDial) {
 	if run.commandExit != nil {
 		select {
 		case <-ctx.Done():
@@ -255,7 +255,9 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 		var seen *bridge.Pin
 		recorded := make(chan struct{})
 		if err == nil {
-			conn, seen, err = bridge.Dial(ctx, bridge.DialConfig{Conn: pipe, Pin: pin, Self: d.bridgeIdentity(), Handlers: d.homeHandlers(row.ID), HandlersAfter: recorded, CheckHostKey: func(key string) *bridge.Refusal { return d.outpostConflict(row.ID, key, "") }})
+			self := d.bridgeIdentity()
+			self.PeerMachineID = row.ID
+			conn, seen, err = bridge.Dial(ctx, bridge.DialConfig{Conn: pipe, Pin: pin, Self: self, Handlers: d.homeHandlers(row.ID), HandlersAfter: recorded, CheckHostKey: func(key string) *bridge.Refusal { return d.outpostConflict(row.ID, key, "") }})
 		}
 
 		if ctx.Err() != nil {
@@ -325,7 +327,7 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 	}
 }
 
-func (d *Daemon) learnOutpostHome(row *store.Outpost, home string) {
+func (d *Daemon) learnOutpostHome(row *store.Machine, home string) {
 	if home == "" || home == row.Home {
 		return
 	}
@@ -436,13 +438,13 @@ func (d *Daemon) outpostConflict(id, hostKey, daemonID string) *bridge.Refusal {
 	return nil
 }
 
-func (d *Daemon) outpostSSH(row store.Outpost) outpostRemote {
+func (d *Daemon) outpostSSH(row store.Machine) outpostRemote {
 	if d.outposts.remote != nil {
 		return d.outposts.remote(row)
 	}
 	return outpostssh.For(row.Destination, outpostssh.ControlPath(config.InstanceLabel(), row.ID), config.InstanceLabel())
 }
-func (d *Daemon) openOutpostPipe(ctx context.Context, row store.Outpost, push *outpostPush) (net.Conn, error) {
+func (d *Daemon) openOutpostPipe(ctx context.Context, row store.Machine, push *outpostPush) (net.Conn, error) {
 	remote, err := d.prepareOutpost(ctx, row, push, false)
 	if err != nil {
 		return nil, err

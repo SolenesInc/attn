@@ -25,7 +25,7 @@ type homeUpdateNotice struct {
 	target string
 }
 
-func (d *Daemon) setUpdateOutpost(run store.UpdateRun, row store.Outpost, state, detail string) {
+func (d *Daemon) setUpdateOutpost(run store.UpdateRun, row store.Machine, state, detail string) {
 	if err := d.store.SetUpdateRunOutpost(run.ID, store.UpdateRunOutpost{ID: row.ID, Name: row.Name, State: state, Detail: detail}); err != nil {
 		d.logf("update run %s: record outpost %s: %v", run.ID, row.Name, err)
 	}
@@ -67,7 +67,7 @@ func (d *Daemon) stageOutposts(ctx context.Context, run store.UpdateRun, target 
 	return failed
 }
 
-func (d *Daemon) stageOutpost(ctx context.Context, run store.UpdateRun, row store.Outpost, target bridge.Build) (skip string, err error) {
+func (d *Daemon) stageOutpost(ctx context.Context, run store.UpdateRun, row store.Machine, target bridge.Build) (skip string, err error) {
 	remote := d.outpostSSH(row)
 	if err := remote.EnsureMaster(ctx); err != nil {
 		return "Unreachable: " + err.Error(), nil
@@ -218,7 +218,7 @@ func (d *Daemon) switchOutposts(run store.UpdateRun) string {
 	return summary.String()
 }
 
-func (d *Daemon) switchOutpost(ctx context.Context, row store.Outpost) error {
+func (d *Daemon) switchOutpost(ctx context.Context, row store.Machine) error {
 	remote := d.outpostSSH(row)
 	if err := remote.EnsureMaster(ctx); err != nil {
 		return err

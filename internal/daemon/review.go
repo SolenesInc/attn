@@ -167,10 +167,7 @@ func (d *Daemon) runReviewAnswer(ctx context.Context, c command.Caller, a comman
 	if err != nil {
 		return nil, err
 	}
-	key := store.HostPath{Path: filepath.Clean(document)}
-	if origin, remote := OriginOf(ctx); remote {
-		key.Host = origin.Host
-	}
+	key := store.HostPath{Host: d.originPlace(ctx).ID(), Path: filepath.Clean(document)}
 	generation, err := d.store.AnswerMarkdownQuestion(key, a.Question, text, time.Now())
 	if errors.Is(err, store.ErrNoQuestion) {
 		return found.explain(nil, command.Refuse(command.CodeNoQuestion, "%s has no open question %s. The user may have removed it or sent the review", key.Path, a.Question))

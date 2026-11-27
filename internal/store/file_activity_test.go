@@ -20,7 +20,7 @@ func TestFileActivityCountsALateTouchAtItsOwnTimeAndKeepsLastAt(t *testing.T) {
 		{"/in-order.md", earlier}, {"/in-order.md", day},
 		{"/twice.md", day}, {"/twice.md", day},
 	} {
-		s.RecordFileActivity(FileActivity{Path: touch.path, Source: FileActivitySourceOpened, SessionID: "s1", At: touch.at})
+		s.RecordFileActivity(FileActivity{Host: s.MachineID(), Path: touch.path, Source: FileActivitySourceOpened, SessionID: "s1", At: touch.at})
 	}
 	files := s.GetRecentFiles()
 	var ranked []string

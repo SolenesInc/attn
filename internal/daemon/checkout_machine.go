@@ -16,19 +16,18 @@ import (
 )
 
 func (d *Daemon) resolveCallerHost(source protocol.SessionID, requested *string) (string, error) {
-	host := ""
+	place := d.here()
 	if requested != nil {
-		host = strings.TrimSpace(*requested)
-		if host == "home" {
-			return "", nil
+		if host := strings.TrimSpace(*requested); host != "home" {
+			place = d.machineFor(host)
 		}
 	} else if session := d.store.Get(source); session != nil {
-		host = protocol.Deref(session.Host)
+		place = d.machineOnWire(session.Host)
 	}
-	if host == "" {
-		return "", nil
+	if place.IsLocal() {
+		return place.ID(), nil
 	}
-	row, err := d.resolveOutpost(host)
+	row, err := d.resolveOutpost(place.ID())
 	if err != nil {
 		return "", err
 	}
@@ -38,11 +37,8 @@ func (d *Daemon) resolveCallerHost(source protocol.SessionID, requested *string)
 	return row.ID, nil
 }
 
-func nonEmptyHost(host string) *string {
-	if host == "" {
-		return nil
-	}
-	return protocol.Ptr(host)
+func (d *Daemon) wireHost(id string) *string {
+	return d.store.WireHost(id)
 }
 
 func canonicalCheckoutPath(path string) (string, error) {

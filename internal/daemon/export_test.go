@@ -91,7 +91,7 @@ func (w *WireDaemon) UseFileStat(stat func(string) (os.FileInfo, error)) {
 }
 
 func (w *WireDaemon) UseOutpostSSH(remote outpostRemote) {
-	w.d.outposts.remote = func(store.Outpost) outpostRemote { return remote }
+	w.d.outposts.remote = func(store.Machine) outpostRemote { return remote }
 }
 
 const BridgeCall = bridgeCall
@@ -106,7 +106,7 @@ const (
 )
 
 func (w *WireDaemon) UseBridgeDialer(dial func(ctx context.Context, network, address string) (net.Conn, error)) {
-	w.d.outposts.remote = func(row store.Outpost) outpostRemote {
+	w.d.outposts.remote = func(row store.Machine) outpostRemote {
 		return &wireOutpostSSH{Client: outpostssh.For(row.Destination, "", "default"), dial: dial, build: w.d.bridgeIdentity().Build}
 	}
 }

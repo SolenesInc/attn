@@ -32,7 +32,7 @@ func TestOpenMarkdownDocksBesideTheCurrentAgent(t *testing.T) {
 	if !resp.Ok {
 		t.Fatalf("open_markdown failed: %v", protocol.Deref(resp.Error))
 	}
-	if tile := desktopTile(t, d, desktop.ID, markdownTileIDForPath(file)); tile.TileParams != file || tile.TileSessionID != "session-1" {
+	if tile := desktopTile(t, d, desktop.ID, d.markdownTileID(tileDocument{path: file})); tile.TileParams != `{"host":"`+d.store.MachineID()+`","path":"`+file+`"}` || tile.TileSessionID != "session-1" {
 		t.Fatalf("markdown tile = %+v, want the file bound to the current agent", tile)
 	}
 }

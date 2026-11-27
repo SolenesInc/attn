@@ -144,6 +144,10 @@ func (d *Daemon) effectiveTileParams(tile layouttree.TileLeaf, requested string)
 		return tile.TileParams, nil
 	}
 	if tile.TileKind == string(layouttree.TileKindMarkdown) {
+		want, wantErr := d.markdownTileDocument(requested)
+		if shown, err := d.markdownTileDocument(tile.TileParams); wantErr == nil && err == nil && shown == want {
+			return d.storedTileParams(shown), nil
+		}
 		return "", profiles.Errorf(profiles.CodeInvalid, "markdown tile %s keeps its file %s; dock a new tile for another file", tile.TileID, tile.TileParams)
 	}
 	return d.validatedTileParams(tile.TileKind, requested)
@@ -169,10 +173,11 @@ func (d *Daemon) checkedTileSession(desktop profiles.Desktop, sessionID protocol
 func (d *Daemon) validatedNewTileParams(kind, params string) (string, error) {
 	switch layouttree.TileKind(kind) {
 	case layouttree.TileKindMarkdown:
-		if _, err := markdownTileDocument(params); err != nil {
+		document, err := d.markdownTileDocument(params)
+		if err != nil {
 			return "", profiles.Errorf(profiles.CodeInvalid, "%v", err)
 		}
-		return params, nil
+		return d.storedTileParams(document), nil
 	case layouttree.TileKindBrowser, layouttree.TileKindSeed, layouttree.TileKindNotebook:
 		return d.validatedTileParams(kind, params)
 	}

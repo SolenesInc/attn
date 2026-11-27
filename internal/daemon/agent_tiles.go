@@ -83,7 +83,7 @@ func (d *Daemon) openAgentTile(location agentLocation, tile agentTile, focus boo
 	if err != nil {
 		return desktop, "", err
 	}
-	tileID := openTileID(desktop, tile)
+	tileID := d.openTileID(desktop, tile)
 	edit, err := d.agentTileEdit(desktop, location.paneID, tile, tileID, focus)
 	if err != nil {
 		return desktop, "", err
@@ -96,12 +96,20 @@ func (d *Daemon) openAgentTile(location agentLocation, tile agentTile, focus boo
 	return updated, tileID, nil
 }
 
-func openTileID(desktop profiles.Desktop, tile agentTile) string {
-	if tile.tileKind == string(layouttree.TileKindMarkdown) {
-		for _, leaf := range layouttree.TileLeaves(desktop.Tree) {
-			if leaf.TileKind == tile.tileKind && leaf.TileParams == tile.params {
-				return leaf.TileID
-			}
+func (d *Daemon) openTileID(desktop profiles.Desktop, tile agentTile) string {
+	if tile.tileKind != string(layouttree.TileKindMarkdown) {
+		return tile.tileID
+	}
+	want, err := d.markdownTileDocument(tile.params)
+	if err != nil {
+		return tile.tileID
+	}
+	for _, leaf := range layouttree.TileLeaves(desktop.Tree) {
+		if leaf.TileKind != tile.tileKind {
+			continue
+		}
+		if shown, err := d.markdownTileDocument(leaf.TileParams); err == nil && shown == want {
+			return leaf.TileID
 		}
 	}
 	return tile.tileID

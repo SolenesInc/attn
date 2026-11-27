@@ -513,7 +513,7 @@ func (d *Daemon) seedOwnedWorktrees(ctx context.Context, repo string) (map[strin
 }
 
 func (d *Daemon) worktreeSeedOwnersHere(ctx context.Context, msg protocol.WorktreeSeedOwnersMessage) (protocol.WorktreeSeedOwners, error) {
-	target := originPlace(ctx)
+	target := d.originPlace(ctx)
 	mainRepo := target.normalize(msg.MainRepo)
 	type normalizedCheckout struct {
 		raw, branch string
@@ -583,7 +583,7 @@ func (d *Daemon) eachSeedExecutionOn(target machine, openOnly bool, visit func(g
 			d.logf("worktree sweep: seed %s has an unreadable execution: %v", seed.ID, err)
 			continue
 		}
-		place := executionPlace(dispatch)
+		place := d.executionPlace(dispatch)
 		if !place.CouldBe(target) {
 			continue
 		}

@@ -273,7 +273,7 @@ func (s *Store) SessionLedgerEntry(id protocol.SessionID) *protocol.SessionLedge
 	}
 
 	row := s.db.QueryRow(ledgerSelect+" FROM sessions_with_runtime AS sessions WHERE "+ledgerVisible+" AND id = ?", id)
-	entry, err := scanLedgerEntry(row)
+	entry, err := s.scanLedgerEntry(row)
 	if err != nil {
 		return nil
 	}
@@ -302,7 +302,7 @@ func (s *Store) ClosedSessionsNamed(ref, profileID string, limit int) ([]protoco
 	}
 	defer rows.Close()
 	for len(matches) < limit && rows.Next() {
-		entry, err := scanLedgerEntry(rows)
+		entry, err := s.scanLedgerEntry(rows)
 		if err != nil {
 			return nil, fmt.Errorf("read closed sessions matching %s: %w", ref, err)
 		}
@@ -423,7 +423,7 @@ func (s *Store) sessionLedgerDB(query SessionLedgerQuery, limit int) (SessionLed
 
 	page := SessionLedgerPage{}
 	for rows.Next() {
-		entry, err := scanLedgerEntry(rows)
+		entry, err := s.scanLedgerEntry(rows)
 		if err != nil {
 			return SessionLedgerPage{}, fmt.Errorf("read ledger row: %w", err)
 		}
@@ -699,7 +699,7 @@ type ledgerScanner interface {
 	Scan(dest ...any) error
 }
 
-func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
+func (s *Store) scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	var entry protocol.SessionLedgerEntry
 	var labels SessionLabels
 	var isWorktree, priority int
@@ -743,9 +743,7 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	if err != nil {
 		return protocol.SessionLedgerEntry{}, err
 	}
-	if host != "" {
-		entry.Host = protocol.Ptr(host)
-	}
+	entry.Host = s.WireHost(host)
 	entry.Label = labels.shown(entry.ID, entry.Directory, entry.Agent)
 	if memberKey != "" {
 		entry.MemberKey = protocol.Ptr(memberKey)

@@ -30,14 +30,13 @@ func sourceWeight(source string) float64 {
 	return 1
 }
 
-// HostPath is a path on the machine named by Host, empty for the home.
+// HostPath is a path on the machine whose id is Host.
 type HostPath struct {
 	Host string
 	Path string
 }
 
-// FileActivity is one open or edit of a file, on the machine named by Host
-// (empty for the home).
+// FileActivity is one open or edit of a file, on the machine whose id is Host.
 type FileActivity struct {
 	Host      string
 	Path      string
@@ -148,9 +147,7 @@ func (s *Store) GetRecentFiles() []protocol.FileActivity {
 		}
 		key.Path = entry.Path
 		entry.SessionID = session
-		if key.Host != "" {
-			entry.Host = protocol.Ptr(key.Host)
-		}
+		entry.Host = s.WireHost(key.Host)
 		at, err := time.Parse(time.RFC3339, entry.LastAt)
 		decayed := 0.0
 		if err == nil {

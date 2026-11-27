@@ -81,15 +81,15 @@ func (d *Daemon) retryOutpostCommand(msg *protocol.SpawnSessionMessage, policy i
 	return err
 }
 
-func (d *Daemon) outpostCommandTarget(id string) (store.Outpost, protocol.SessionID, bool, error) {
+func (d *Daemon) outpostCommandTarget(id string) (store.Machine, protocol.SessionID, bool, error) {
 	if !d.outpostsEnabled() {
-		return store.Outpost{}, "", false, fmt.Errorf("outposts_enabled is off; turn Outposts on before connecting in a terminal")
+		return store.Machine{}, "", false, fmt.Errorf("outposts_enabled is off; turn Outposts on before connecting in a terminal")
 	}
 	rows, err := d.store.ListOutposts()
 	if err != nil {
-		return store.Outpost{}, "", false, err
+		return store.Machine{}, "", false, err
 	}
-	var row store.Outpost
+	var row store.Machine
 	for _, saved := range rows {
 		if saved.ID == id {
 			row = saved
@@ -97,7 +97,7 @@ func (d *Daemon) outpostCommandTarget(id string) (store.Outpost, protocol.Sessio
 		}
 	}
 	if row.ID == "" {
-		return store.Outpost{}, "", false, fmt.Errorf("outpost %q does not exist", id)
+		return store.Machine{}, "", false, fmt.Errorf("outpost %q does not exist", id)
 	}
 	r := &d.outposts
 	r.mu.Lock()
@@ -109,7 +109,7 @@ func (d *Daemon) outpostCommandTarget(id string) (store.Outpost, protocol.Sessio
 	return row, run.commandSession, run.connectable, nil
 }
 
-func (d *Daemon) launchOutpostCommand(row store.Outpost, connectable bool, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, error) {
+func (d *Daemon) launchOutpostCommand(row store.Machine, connectable bool, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, error) {
 	if !connectable {
 		return placementOutcome{}, fmt.Errorf("outpost %s has no ssh refusal to answer in a terminal", row.Name)
 	}

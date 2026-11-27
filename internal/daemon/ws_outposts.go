@@ -45,7 +45,7 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 	if err != nil {
 		return err
 	}
-	var row *store.Outpost
+	var row *store.Machine
 	for i := range rows {
 		if rows[i].ID == id {
 			row = &rows[i]

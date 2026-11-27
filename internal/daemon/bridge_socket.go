@@ -64,9 +64,10 @@ func (d *Daemon) startBridgeSocket() error {
 		Admit: func(home bridge.Identity) *bridge.Refusal {
 			before := d.settingValues()
 			r.mu.Lock()
-			status, err := enrollment.RecordHome(d.dataRoot, enrollment.Home{ID: home.HomeID, DaemonID: home.DaemonID, Name: home.Name})
+			status, err := enrollment.RecordHome(d.dataRoot, enrollment.Home{ID: home.HomeID, DaemonID: home.DaemonID, Name: home.Name, MachineID: home.PeerMachineID})
 			if err == nil {
 				r.enrollment = status
+				d.takeEnrolledMachineID(status)
 			}
 			r.mu.Unlock()
 			if err == nil && status.Adopting() {

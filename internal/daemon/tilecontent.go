@@ -41,7 +41,7 @@ type locatedTileDocument struct {
 	Path string `json:"path"`
 }
 
-func markdownTileDocument(params string) (tileDocument, error) {
+func (d *Daemon) markdownTileDocument(params string) (tileDocument, error) {
 	params = strings.TrimSpace(params)
 	if params == "" {
 		return tileDocument{}, fmt.Errorf("a markdown tile needs the path of its file in tile_params")
@@ -53,22 +53,23 @@ func markdownTileDocument(params string) (tileDocument, error) {
 	if err := json.Unmarshal([]byte(params), &located); err != nil || located.Host == "" || located.Path == "" {
 		return tileDocument{}, fmt.Errorf("markdown tile_params %s are neither a path nor {\"host\", \"path\"}", params)
 	}
-	return tileDocument{host: located.Host, path: located.Path}, nil
+	return tileDocument{host: d.machineFor(located.Host).Outpost(), path: located.Path}, nil
 }
 
-func (document tileDocument) params() string {
-	if document.host == "" {
-		return document.path
-	}
-	encoded, _ := json.Marshal(locatedTileDocument{Host: document.host, Path: document.path})
+func (d *Daemon) storedTileParams(document tileDocument) string {
+	encoded, _ := json.Marshal(locatedTileDocument{Host: d.machineFor(document.host).ID(), Path: document.path})
 	return string(encoded)
 }
 
-func (document tileDocument) tileID() string {
+func (d *Daemon) wireTileParams(document tileDocument) string {
 	if document.host == "" {
-		return markdownTileIDForPath(document.path)
+		return document.path
 	}
-	return markdownTileIDForPath(document.host + "\x00" + document.path)
+	return d.storedTileParams(document)
+}
+
+func (d *Daemon) markdownTileID(document tileDocument) string {
+	return markdownTileIDForPath(d.machineFor(document.host).ID() + "\x00" + document.path)
 }
 
 func seedTileIDForID(seedID string) string {
@@ -163,6 +164,7 @@ func (d *Daemon) openMarkdownTile(host, path string, callerSessionID protocol.Se
 	if !filepath.IsAbs(path) {
 		return "", "", nil, fmt.Errorf("path must be absolute: %s", path)
 	}
+	host = d.machineFor(host).Outpost()
 	document := tileDocument{host: host, path: filepath.Clean(path)}
 	read := protocol.TileDocumentReadMessage{Cmd: protocol.CmdTileDocumentRead, Path: document.path}
 	if host != "" {
@@ -182,15 +184,15 @@ func (d *Daemon) openMarkdownTile(host, path string, callerSessionID protocol.Se
 	d.openTileMu.Lock()
 	defer d.openTileMu.Unlock()
 	desktop, tileID, err := d.openAgentTile(location, agentTile{
-		tileID:    document.tileID(),
+		tileID:    d.markdownTileID(document),
 		tileKind:  string(layouttree.TileKindMarkdown),
-		params:    document.params(),
+		params:    d.storedTileParams(document),
 		sessionID: location.sessionID,
 	}, focus)
 	if err != nil {
 		return "", "", nil, err
 	}
-	d.store.RecordFileActivity(store.FileActivity{Host: host, Path: document.path, Source: store.FileActivitySourceOpened, SessionID: location.sessionID, At: time.Now()})
+	d.store.RecordFileActivity(store.FileActivity{Host: d.machineFor(host).ID(), Path: document.path, Source: store.FileActivitySourceOpened, SessionID: location.sessionID, At: time.Now()})
 	return desktop.ID, tileID, problems, nil
 }
 
@@ -368,7 +370,7 @@ func (d *Daemon) sentFileActivity(sessionID protocol.SessionID, host, path strin
 	if location, err := d.currentAgent(sessionID); err == nil {
 		sessionID = location.sessionID
 	}
-	return store.FileActivity{Host: host, Path: path, Source: store.FileActivitySourceOpened, SessionID: sessionID, At: at}
+	return store.FileActivity{Host: d.machineFor(host).ID(), Path: path, Source: store.FileActivitySourceOpened, SessionID: sessionID, At: at}
 }
 
 func (d *Daemon) handleOpenMarkdownWS(client *wsClient, msg *protocol.OpenMarkdownMessage) {
