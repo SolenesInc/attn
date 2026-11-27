@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Live enrollment leave retains the former outpost machine ID",
+  "at": "2026-11-27T02:37:52.344Z",
+  "detail": "After leaving enrollment, standalone reads use the old outpost ID. An old saved setting is invisible until restart and a new preference saved after leave disappears after restart. Restore the standalone self ID as the role changes.\nAn isolated paired CLI probe passed on 4a8ca4b1f and failed on 49dde75e0. Independently confirmed. Evidence on s-mrfj5j.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/outpost_copy.go",
+    "line": 199
+  },
+  "culprit": "49dde75e0bae6418da195b5caac916164117329b"
+}
