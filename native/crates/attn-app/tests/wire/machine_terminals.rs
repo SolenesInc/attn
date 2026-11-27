@@ -954,3 +954,50 @@ fn before_the_home_answers_the_row_shows_only_the_terminals_of_the_profile_the_h
     );
     assert!(machine(&first).sent_of("attach_session").is_empty());
 }
+
+#[test]
+fn while_the_home_is_away_each_desktop_keeps_the_tile_made_active_there_through_this_machines_news()
+{
+    let (mut state, here) = three_here();
+    let mut desktops = state.desktops.take().unwrap();
+    let mut doc = tree::tile("doc", "markdown");
+    doc["tile_params"] = json!({"path": "/tmp/there/notes.md"}).to_string().into();
+    desktops.push(Desktop {
+        id: "d2".into(),
+        name: "d2".into(),
+        profile_id: "work".into(),
+        shortcut_slot: Some(2),
+        order_key: "2".into(),
+        active_pane_id: "doc".into(),
+        tree_json: tree::row([doc]).to_string(),
+        ..Desktop::default()
+    });
+    state.desktops = Some(desktops);
+    let (mut world, answering, _dir) = start_cold(state, here);
+    reconnect_home(&mut world, &answering, true);
+    world.open_desktop();
+    reconnect_home(&mut world, &answering, false);
+    focus_right_twice_and_type(&mut world);
+    assert_eq!(
+        typed(machine(&world)).last(),
+        Some(&("rc".to_owned(), "z".to_owned()))
+    );
+
+    world.gesture(|app| app.key(super::sidebar::chord(attn_app::Action::DesktopSelect2)));
+    machine(&world).emit(attn_protocol::SessionStateChangedMessage {
+        session: Session {
+            state: "working".into(),
+            ..shell("a", None)
+        },
+        ..attn_protocol::SessionStateChangedMessage::new()
+    });
+    world.settle();
+    world.gesture(|app| app.key(super::sidebar::chord(attn_app::Action::DesktopSelect1)));
+    world.gesture(|app| app.type_text("y"));
+
+    assert_eq!(
+        typed(machine(&world)).last(),
+        Some(&("rc".to_owned(), "y".to_owned())),
+        "d1 keeps the tile made active there"
+    );
+}

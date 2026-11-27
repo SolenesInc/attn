@@ -24,6 +24,14 @@ pub(crate) const TRAFFIC_LIGHTS: (f32, f32) = (14.0, 13.0);
 /// control, which starts at 86 at every text size.
 const TITLE_BAR_GAP_PAST_LIGHTS: f32 = 12.0;
 
+/// What the window shows in place of the home's choices while the home is away.
+#[derive(Clone, Default)]
+pub(crate) struct Away {
+    pub(crate) current: String,
+    /// The active tile of each desktop the person made one active on, by desktop id.
+    pub(crate) active: std::collections::BTreeMap<String, String>,
+}
+
 /// What one window shows and where its keyboard is. Desktops, the active tile and the current
 /// desktop are the daemon's; this is the window's own.
 #[derive(Default)]
@@ -68,10 +76,9 @@ pub struct Window {
     pub(crate) queue_turns: Vec<String>,
     /// Home follows the next turn to open, as it does after the last turn closed.
     pub follow_next_turn: bool,
-    /// The tile the person made active while the home was away, as (desktop, leaf): the active
-    /// tile is the home's, but until it answers it is this window's, and the home's wins again
-    /// once it does.
-    pub(crate) away_active: Option<(String, String)>,
+    /// The tiles the person made active while the home was away, and the desktop they last went
+    /// to; the home's win again once it answers.
+    pub(crate) away: Option<Away>,
     /// How many agents the window has asked the daemon to show, so only the latest refused show
     /// undoes what the window did ahead of it.
     pub(crate) shows_asked: u64,

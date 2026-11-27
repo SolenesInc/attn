@@ -576,7 +576,9 @@ pub(crate) fn show_here(state: &mut State, desktop: &str, leaf: &str, tx: &mut T
     if state.window.tile.is_some() {
         return true;
     }
-    state.window.away_active = Some((desktop.to_owned(), leaf.to_owned()));
+    let away = state.window.away.get_or_insert_with(Default::default);
+    away.current = desktop.to_owned();
+    away.active.insert(desktop.to_owned(), leaf.to_owned());
     keep_away_active(state);
     let facts = state.facts.clone();
     state.window.follow(&facts);
@@ -587,15 +589,15 @@ pub(crate) fn show_here(state: &mut State, desktop: &str, leaf: &str, tx: &mut T
     true
 }
 
-/// Shows the tile made active while the home was away over the facts, with its desktop the
-/// current one, until the home answers, and then gives the keyboard back to the home's active
-/// tile.
+/// Shows the tiles made active while the home was away over the facts, each on its desktop,
+/// with the desktop last gone to the current one, until the home answers, and then gives the
+/// keyboard back to the home's active tile.
 pub(crate) fn keep_away_active(state: &mut State) {
     if state.window.tile.is_some() {
         return;
     }
     if state.facts.connection == attn_client::Connection::Connected {
-        if state.window.away_active.take().is_some()
+        if state.window.away.take().is_some()
             && let Some(desktop) = state.facts.current_desktop()
         {
             let (desktop, leaf) = (desktop.id.clone(), desktop.active_pane_id.clone());
@@ -603,22 +605,33 @@ pub(crate) fn keep_away_active(state: &mut State) {
         }
         return;
     }
-    let Some((desktop, leaf)) = state.window.away_active.clone() else {
+    let Some(away) = state.window.away.clone() else {
         return;
     };
     let facts = &mut state.facts;
-    let Some(at) = facts.desktops.iter().position(|d| {
-        d.id == desktop && (leaf.is_empty() || d.leaves().iter().any(|l| l.id == leaf))
-    }) else {
-        return;
-    };
-    if !leaf.is_empty() && facts.desktops[at].active_pane_id != leaf {
-        let mut desktops = (*facts.desktops).clone();
-        desktops[at] = attn_client::Desktop::from(attn_protocol::Desktop {
-            active_pane_id: leaf,
-            ..(*desktops[at]).clone()
-        });
+    let mut changed: Option<Vec<attn_client::Desktop>> = None;
+    for (at, desktop) in facts.desktops.iter().enumerate() {
+        let Some(leaf) = away.active.get(&desktop.id) else {
+            continue;
+        };
+        if leaf.is_empty()
+            || desktop.active_pane_id == *leaf
+            || !desktop.leaves().iter().any(|l| l.id == *leaf)
+        {
+            continue;
+        }
+        changed.get_or_insert_with(|| (*facts.desktops).clone())[at] =
+            attn_client::Desktop::from(attn_protocol::Desktop {
+                active_pane_id: leaf.clone(),
+                ..(**desktop).clone()
+            });
+    }
+    if let Some(desktops) = changed {
         facts.desktops = std::sync::Arc::new(desktops);
+    }
+    let desktop = away.current;
+    if !facts.desktops.iter().any(|d| d.id == desktop) {
+        return;
     }
     let selected = facts.profiles.selected.clone();
     if facts
