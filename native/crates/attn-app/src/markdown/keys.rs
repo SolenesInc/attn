@@ -58,8 +58,15 @@ fn held(state: &State) -> Option<Doc> {
     }
 }
 
-/// Forgets the find bars of document tiles that closed.
+/// Forgets the find bars of document tiles that closed, and what the views they showed
+/// remembered.
 pub(crate) fn follow(state: &mut State) {
+    let markdown: std::collections::HashSet<String> = (state.facts.desktops.iter())
+        .flat_map(|d| d.leaves())
+        .filter(|leaf| leaf.tile().is_some_and(|(kind, _)| kind == "markdown"))
+        .map(|leaf| leaf.id.clone())
+        .collect();
+    state.views.keep_only(&markdown);
     let shown: std::collections::HashSet<String> = (state.facts.desktops.iter())
         .flat_map(|d| d.leaves())
         .filter_map(|leaf| match leaf.tile()? {

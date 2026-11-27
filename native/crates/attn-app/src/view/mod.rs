@@ -1,0 +1,353 @@
+//! A view drawn in its markdown tile: the parts the daemon checked, each by its draw function,
+//! from the values of the view's sources.
+
+mod draw;
+mod keys;
+mod values;
+
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::rc::Rc;
+
+use attn_protocol::{ViewCommandCall, ViewDocument, ViewPart, ViewParts};
+use attn_ui::Tokens;
+use attn_ui::blocks::{Block, Notice, Reader, Surface};
+use rune::{El, Image, ScrollSpec, col, memo};
+use rune_kit::ScrollBar;
+
+use crate::State;
+use crate::markdown::Document;
+
+pub(crate) use keys::on_key;
+pub(crate) use values::{Data, Scope};
+
+/// Each view tile's tile state, by tile, for as long as the window lives.
+#[derive(Default)]
+pub struct Tiles {
+    /// Rises with every change, so the tiles a view draws in build again.
+    pub(crate) revision: u64,
+    tiles: HashMap<String, TileState>,
+}
+
+impl Tiles {
+    fn of(&self, tile: &str) -> TileState {
+        self.tiles.get(tile).cloned().unwrap_or_default()
+    }
+
+    fn change(&mut self, tile: &str, change: impl FnOnce(&mut TileState)) {
+        change(self.tiles.entry(tile.to_owned()).or_default());
+        self.revision += 1;
+    }
+
+    /// Forgets the tile state of tiles that closed.
+    pub(crate) fn keep_only(&mut self, shown: &std::collections::HashSet<String>) {
+        self.tiles.retain(|tile, _| shown.contains(tile));
+    }
+}
+
+/// What a tile remembers about the view it shows: the highlight, the folded lists and the place
+/// in each `one-by-one`, each by the key of what it is on.
+#[derive(Clone, Default, Hash, PartialEq)]
+pub(crate) struct TileState {
+    highlight: Option<String>,
+    folded: BTreeSet<String>,
+    steps: BTreeMap<String, Steps>,
+}
+
+/// How far the user is in a `one-by-one`, and which items they kept and skipped.
+#[derive(Clone, Default, Hash, PartialEq)]
+pub(crate) struct Steps {
+    at: usize,
+    kept: BTreeSet<usize>,
+    skipped: BTreeSet<usize>,
+}
+
+/// A part's way to draw itself: from its five doors and nothing else.
+type Draw = fn(&ViewPart, &Doors<'_>) -> Block;
+
+/// The one table from part to draw function. A part the catalog gains has no field here until
+/// it has a draw function, so the app does not build without one.
+const DRAWN: ViewParts<Draw> = ViewParts {
+    markdown: draw::markdown,
+    media: draw::media,
+    tasks: draw::tasks,
+    question: draw::question,
+    question_multi: draw::question,
+    question_text: draw::question,
+    question_file: draw::question,
+    compare: draw::compare,
+    data: draw::data,
+    status: draw::status,
+    facts: draw::facts,
+    list: draw::list,
+    table: draw::table,
+    chart: draw::chart,
+    each: draw::each,
+    one_by_one: draw::one_by_one,
+    entry: draw::entry,
+    controls: draw::controls,
+    commands: draw::commands,
+};
+
+/// Everything a part reaches the rest of attn through.
+pub(crate) struct Doors<'a> {
+    /// Values in: the view's data around the part, and how each source stands.
+    pub(crate) values: Scope<'a>,
+    /// View commands: which run, and the calls out.
+    pub(crate) commands: Commands,
+    /// Answers: what the user answered, and the drafts out.
+    pub(crate) answers: Answers,
+    /// Tile state: what the tile remembers about the part, and its changes.
+    pub(crate) tile: TileDoor<'a>,
+    /// Its box: where it stands, the theme, and what it draws pictures and links with.
+    pub(crate) room: Room<'a>,
+}
+
+/// The view commands a part may offer. None runs yet: attn's own and a view's own commands
+/// come with the children of the plot that build them.
+pub(crate) struct Commands;
+
+impl Commands {
+    pub(crate) fn runs(&self, _: &ViewCommandCall) -> bool {
+        false
+    }
+}
+
+/// The answers a part holds. None is kept yet: answers come with the child that sends them.
+pub(crate) struct Answers;
+
+impl Answers {
+    pub(crate) fn taken(&self) -> bool {
+        false
+    }
+}
+
+/// A part's tile state, and the handlers that change it.
+pub(crate) struct TileDoor<'a> {
+    tile: &'a str,
+    state: &'a TileState,
+}
+
+impl TileDoor<'_> {
+    pub(crate) fn highlighted(&self, key: &str) -> bool {
+        self.state.highlight.as_deref() == Some(key)
+    }
+
+    pub(crate) fn folded(&self, key: &str) -> bool {
+        self.state.folded.contains(key)
+    }
+
+    pub(crate) fn steps(&self, key: &str) -> Steps {
+        self.state.steps.get(key).cloned().unwrap_or_default()
+    }
+
+    /// Folds the list keyed `key`, or unfolds it, and puts the highlight on its heading.
+    pub(crate) fn fold(&self, key: &str) -> impl Fn(&mut State) + 'static {
+        let (tile, key) = (self.tile.to_owned(), key.to_owned());
+        move |state: &mut State| keys::toggle_fold(state, &tile, &key)
+    }
+}
+
+/// Where a part stands and how it draws.
+pub(crate) struct Room<'a> {
+    /// The part's key: unique in the window, and the same each time the view draws.
+    pub(crate) key: String,
+    /// The heading the view wrote just above a list, which the list draws as its own.
+    pub(crate) heading: Option<String>,
+    pub(crate) t: &'a Tokens,
+    pub(crate) document: &'a Document,
+    pub(crate) pictures: &'a Rc<HashMap<String, Option<Image>>>,
+}
+
+impl<'a> Doors<'a> {
+    /// The doors of the part `n` inside this one, reading inside `scope`.
+    fn inner(
+        &self,
+        n: impl std::fmt::Display,
+        scope: Scope<'a>,
+        heading: Option<String>,
+    ) -> Doors<'a> {
+        Doors {
+            values: scope,
+            commands: Commands,
+            answers: Answers,
+            tile: TileDoor { ..self.tile },
+            room: Room {
+                key: format!("{}.{n}", self.room.key),
+                heading,
+                ..self.room
+            },
+        }
+    }
+}
+
+/// `part`, drawn by its draw function, or its problem in its place.
+fn part(part: &ViewPart, doors: &Doors<'_>) -> Block {
+    if let Some(problem) = &part.problem {
+        return draw::problem(&doors.room.key, problem, doors.room.t);
+    }
+    match DRAWN.get(&part.name) {
+        Some(draw) => draw(part, doors),
+        None => draw::notice(
+            &doors.room.key,
+            &format!("attn cannot draw \"{}\" yet", part.name),
+            doors.room.t,
+        ),
+    }
+}
+
+/// `parts`, one under another, each keyed by its place. A heading written just above a list
+/// moves into the list, which folds and counts under it and hides with it.
+fn parts(parts: &[ViewPart], doors: &Doors<'_>) -> Vec<Block> {
+    let mut drawn = Vec::new();
+    let mut heading = None;
+    for (i, shown) in parts.iter().enumerate() {
+        let next_is_list = parts
+            .get(i + 1)
+            .is_some_and(|p| p.list.is_some() && p.problem.is_none());
+        let inner = doors.inner(i, doors.values.clone(), heading.take());
+        if let (true, Some(prose)) = (next_is_list, shown.markdown.as_ref()) {
+            let text = inner.values.text(&prose.text);
+            if let Some((above, last)) = draw::last_heading(&text) {
+                heading = Some(last);
+                if !above.trim().is_empty() {
+                    drawn.push(draw::prose(&above, &inner));
+                }
+                continue;
+            }
+        }
+        drawn.push(part(shown, &inner));
+    }
+    drawn
+}
+
+/// The problems of the view that no part shows, such as a language line attn cannot read.
+fn unplaced(view: &ViewDocument) -> Vec<&attn_protocol::ViewProblem> {
+    let mut placed = Vec::new();
+    keys::each_part(&view.parts, &mut |part| {
+        placed.extend(part.problem.as_ref().map(|p| p.line))
+    });
+    view.problems
+        .iter()
+        .filter(|p| !placed.contains(&p.line))
+        .collect()
+}
+
+/// The minute the views shown draw their ages at: none when no view draws an age.
+pub(crate) fn ticks(contents: &attn_client::TileContents, now_ms: i64) -> Option<i64> {
+    let ages = (contents.tiles.values()).any(|c| {
+        c.message
+            .view
+            .as_ref()
+            .is_some_and(|v| keys::ages(&v.parts))
+    });
+    ages.then_some(now_ms / 60_000)
+}
+
+/// The body of the markdown tile `tile` showing the view `view`, which `content` carries.
+pub(crate) fn body(
+    (tile, held, title): (&str, bool, &str),
+    session: Option<&str>,
+    (content, view): (&attn_client::TileContent, &ViewDocument),
+    machines: crate::machine::Machines,
+    (tiles, pictures): (&Tiles, &crate::markdown::Pictures),
+    now_ms: i64,
+    t: &Tokens,
+) -> El {
+    let scroll_key = crate::markdown::keys::view(tile);
+    let host = content.message.host.as_deref().filter(|h| !h.is_empty());
+    let away = crate::markdown::Away::of(&machines, host);
+    let document = Document {
+        path: content.message.path.clone(),
+        session: session.map(str::to_owned),
+        away: away.clone(),
+        view: scroll_key.clone(),
+        opens_seed: None,
+        seed: None,
+        part: None,
+        ids: Default::default(),
+        placed: Vec::new(),
+    };
+    let state = tiles.of(tile);
+    let highlight = state.highlight.clone();
+    let ticks = keys::ages(&view.parts).then_some(now_ms / 60_000);
+    let version = (
+        content.revision,
+        away,
+        state.clone(),
+        pictures.revision,
+        ticks,
+        *t,
+    );
+    let pictures = pictures.of(host);
+    let drawn = memo(format!("{scroll_key}.view"), version, || {
+        let data = Data::of(view);
+        let doors = Doors {
+            values: data.scope(now_ms),
+            commands: Commands,
+            answers: Answers,
+            tile: TileDoor {
+                tile,
+                state: &state,
+            },
+            room: Room {
+                key: format!("tile.{tile}.view"),
+                heading: None,
+                t,
+                document: &document,
+                pictures: &pictures,
+            },
+        };
+        let problems = unplaced(view)
+            .into_iter()
+            .map(|p| draw::problem(&format!("tile.{tile}.view.problem.{}", p.line), p, t));
+        col()
+            .key(format!("tile.{tile}.view"))
+            .role("group")
+            .label(title.to_owned())
+            .w_full()
+            .child(
+                Reader::new()
+                    .push_all(problems)
+                    .push_all(parts(&view.parts, &doors))
+                    .bare(t),
+            )
+    });
+    let (padding, _) = crate::markdown::card_fit(None, f32::INFINITY);
+    let document = col()
+        .key(scroll_key)
+        .role("document")
+        .label(title)
+        .holds_keys(held);
+    let document = match highlight {
+        Some(key) => document.active_descendant(key),
+        None => document,
+    };
+    let document = document
+        .w_full()
+        .grow(1.0)
+        .min_h(0.0)
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
+        .items_center()
+        .child(crate::markdown::card(padding, drawn, t))
+        .scroll_bar_styled(attn_ui::document_scroll_bar(t));
+    Surface::gutter(col().w_full().grow(1.0).min_h(0.0)).child(document)
+}
+
+/// The markdown a view shows, its prose and pictures with their values in place, so the
+/// pictures it names load as a document's do.
+pub(crate) fn shown_markdown(view: &ViewDocument) -> String {
+    let data = Data::of(view);
+    let mut shown = String::new();
+    keys::each_text(&view.parts, &data.scope(0), &mut |text| {
+        shown.push_str(&text);
+        shown.push_str("\n\n");
+    });
+    shown
+}
+
+/// A notice that says `what` is not available yet.
+pub(crate) fn not_yet(key: &str, what: &str, t: &Tokens) -> Block {
+    Notice::info(key.to_owned(), format!("{what} is not available yet")).build(t)
+}

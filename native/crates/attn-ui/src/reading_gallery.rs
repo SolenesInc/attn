@@ -5,9 +5,9 @@ use rune::{Cx, El, Playground, Story, Tx, col, el, row};
 
 use crate::Tokens;
 use crate::blocks::{
-    Bar, Block, Byline, Card, Entry, Figure, Head, Hints, Inline, KeyFit, KeyLine, Lane, Pane,
-    Prose, Reader, Remark, Room, Section, Stack, Standing, Surface, Toolbar, Trail, Tray, Voice,
-    board, entries, key_hint, key_tab, lanes, place, rail,
+    Bar, Block, Byline, Card, Chart, DataTable, Entry, Figure, Head, Hints, Inline, KeyFit,
+    KeyLine, Lane, Pane, Prose, Reader, Remark, Room, Section, Stack, Standing, Surface, Toolbar,
+    Trail, Tray, Voice, board, entries, key_hint, key_tab, lanes, place, rail,
 };
 use crate::colors::scheme_for;
 use crate::system::{
@@ -76,6 +76,8 @@ pub const READING_SUBJECTS: &[(&str, &[&str], &[&str])] = &[
     ("Blocks/Toolbar", &["toolbar"], &[]),
     ("Blocks/Split", &["split"], &["Disabled", "Disabled menu"]),
     ("Blocks/Tray", &["tray"], &[]),
+    ("Blocks/Data table", &["table"], &["Lit"]),
+    ("Blocks/Chart", &["chart"], &[]),
 ];
 
 const LONG_TITLE: &str = "Move the reading surfaces onto blocks so the garden, the review reader and the markdown reader share one system";
@@ -116,6 +118,8 @@ fn view_of(name: &str) -> View {
         "Blocks/Toolbar" => toolbar_story,
         "Blocks/Split" => split_story,
         "Blocks/Tray" => tray_story,
+        "Blocks/Data table" => table_story,
+        "Blocks/Chart" => chart_story,
         _ => board_story,
     }
 }
@@ -761,4 +765,58 @@ fn split_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
         ))
         .child(line("split.done", vec![sent]));
     stage(s, cx, &t, content)
+}
+
+fn table_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
+    let t = tokens(cx);
+    let rows = [
+        ("views", said(s, "Draw a view"), "Passed", "1h 4m"),
+        ("home", "Make home a desktop", "Failed", "12m 05s"),
+        ("sidebar", "Fold the sidebar", "Passed", "41s"),
+    ];
+    let table = rows.iter().enumerate().fold(
+        DataTable::new(
+            "table",
+            "Landings",
+            ["Session", "Change", "Gate", "Took"]
+                .map(String::from)
+                .to_vec(),
+        ),
+        |table, (i, (session, change, gate, took))| {
+            let cells = [*session, *change, *gate, *took].map(String::from).to_vec();
+            table.row(format!("table.row.{i}"), cells, s.lit && i == 1)
+        },
+    );
+    stage(
+        s,
+        cx,
+        &t,
+        Reader::new()
+            .push(table.build(&t))
+            .build("table.page", Room::Narrow, &t),
+    )
+}
+
+fn chart_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
+    let t = tokens(cx);
+    let hours = [
+        ("09", 3.0),
+        ("10", 5.0),
+        ("11", 4.0),
+        ("12", 7.5),
+        ("13", 6.0),
+        ("14", -1.0),
+    ];
+    let chart = hours.iter().fold(
+        Chart::new("chart", said(s, "Temperature by hour")),
+        |chart, (hour, temp)| chart.point(*hour, format!("{temp}°"), *temp),
+    );
+    stage(
+        s,
+        cx,
+        &t,
+        Reader::new()
+            .push(Block::custom("chart.slot", chart.el(&t)))
+            .build("chart.page", Room::Narrow, &t),
+    )
 }

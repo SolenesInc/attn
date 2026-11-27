@@ -199,7 +199,9 @@ fn route(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> bool
                 || send_to_terminal(state, terminal, ev, trace, tx)
         }
         Press::Unbound => {
-            (ev.key != Key::Escape && crate::markdown::reading_key(state, ev, tx))
+            (ev.key != Key::Escape
+                && (crate::view::on_key(state, ev, tx)
+                    || crate::markdown::reading_key(state, ev, tx)))
                 || send_to_terminal(state, terminal, ev, trace, tx)
         }
         Press::Leader { chord, sequences } => {

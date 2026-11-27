@@ -434,9 +434,11 @@ pub(crate) fn harvest_when(seed: &Seed) -> Option<(String, String)> {
 
 /// How long ago `iso` was, as a row says it.
 pub(crate) fn ago(iso: &str, now_ms: i64) -> String {
-    let Some(at) = crate::sidebar::queue::epoch_ms(iso) else {
-        return String::new();
-    };
+    crate::sidebar::queue::epoch_ms(iso).map_or_else(String::new, |at| ago_ms(at, now_ms))
+}
+
+/// How long ago the instant `at`, in milliseconds since 1970, was, as a row says it.
+pub(crate) fn ago_ms(at: i64, now_ms: i64) -> String {
     let seconds = ((now_ms - at) as f64 / 1000.0).round() as i64;
     if seconds < 60 {
         "just now".into()

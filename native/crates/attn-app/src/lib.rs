@@ -63,6 +63,7 @@ pub mod tauri_settings;
 mod terminal;
 mod title_bar;
 mod update_run;
+mod view;
 mod vim;
 mod warnings;
 pub mod whats_new;
@@ -139,6 +140,7 @@ pub struct State {
     pub logos: harness::logo::Logos,
     pub drafts: markdown::Drafts,
     pub readings: markdown::Readings,
+    pub(crate) views: view::Tiles,
     pub opener: opener::Opener,
     pub notebook: notebook::Notebook,
     pub(crate) browser: browser::Browsers,

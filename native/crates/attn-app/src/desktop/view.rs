@@ -162,6 +162,10 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
             (
                 state.drafts.revision,
                 state.readings.revision,
+                (
+                    state.views.revision,
+                    crate::view::ticks(&facts.tile_contents, state.window.now_ms),
+                ),
                 desk.header_pop.mark_anchor(),
                 state.window.hints.shown().cloned(),
             ),
@@ -189,7 +193,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                     &crate::garden::TileReads::of(state),
                     (&state.drafts, &state.readings),
                     &state.browser,
-                    state.window.hints.shown(),
+                    (state.window.hints.shown(), &state.views),
                 ),
                 (t, scale, state.window.now_ms, focus_style, &|view| {
                     crate::home::tile(view, state, t)
@@ -563,6 +567,7 @@ pub(super) fn lone(
         contents: &state.facts.tile_contents,
         outposts: &state.facts.outposts,
         pictures: &state.pictures,
+        view_tiles: &state.views,
         notebook: &state.notebook,
         acting: &leaf.id,
         facts: &state.facts,
@@ -596,21 +601,24 @@ type HeaderReads<'a> = (
     &'a [(String, Subline)],
 );
 
+/// What the window holds that a screen's tiles draw from.
+type Stores<'a> = (
+    &'a Terminals,
+    &'a crate::markdown::Pictures,
+    &'a crate::notebook::Notebook,
+    &'a crate::garden::TileReads<'a>,
+    (&'a crate::markdown::Drafts, &'a crate::markdown::Readings),
+    &'a crate::browser::Browsers,
+    (Option<&'a crate::hints::Shown>, &'a crate::view::Tiles),
+);
+
 fn screen(
     desktop: Option<&Desktop>,
     desk: &super::Desk,
     facts: &attn_client::Facts,
     (settles, keys, sublines): HeaderReads,
     holder: Option<&Holder>,
-    (terminals, pictures, notebook, seeds, marks, browsers, hints): (
-        &Terminals,
-        &crate::markdown::Pictures,
-        &crate::notebook::Notebook,
-        &crate::garden::TileReads,
-        (&crate::markdown::Drafts, &crate::markdown::Readings),
-        &crate::browser::Browsers,
-        Option<&crate::hints::Shown>,
-    ),
+    (terminals, pictures, notebook, seeds, marks, browsers, (hints, view_tiles)): Stores,
     (t, scale, now_ms, focus_style, views): (
         &Tokens,
         f32,
@@ -670,6 +678,7 @@ fn screen(
                     contents: &facts.tile_contents,
                     outposts: &facts.outposts,
                     pictures,
+                    view_tiles,
                     notebook,
                     acting: &acting,
                     facts,
@@ -772,6 +781,8 @@ struct TileCx<'a> {
     contents: &'a attn_client::TileContents,
     outposts: &'a [attn_protocol::OutpostInfo],
     pictures: &'a crate::markdown::Pictures,
+    /// What each view tile remembers: its highlight, folds and places.
+    view_tiles: &'a crate::view::Tiles,
     notebook: &'a crate::notebook::Notebook,
     /// The leaf this window acts on.
     acting: &'a str,
@@ -1084,23 +1095,37 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 desktop: desktop.id.clone(),
                 tile: leaf.id.clone(),
             };
-            crate::markdown::body(
-                (&leaf.id, held),
-                &title,
-                session.as_deref(),
-                cx.contents.get(&key),
-                (
-                    crate::machine::Machines::of(cx.facts),
-                    crate::review::setup::Servers {
-                        sessions: &cx.facts.sessions,
-                        settings: &cx.facts.settings,
-                        harnesses: &cx.facts.harnesses,
-                        now_ms: cx.now_ms,
-                    },
+            let machines = crate::machine::Machines::of(cx.facts);
+            match cx.contents.get(&key) {
+                Some(content) if let Some(view) = content.message.view.as_ref() => {
+                    crate::view::body(
+                        (&leaf.id, held, &title),
+                        session.as_deref(),
+                        (content, view),
+                        machines,
+                        (cx.view_tiles, cx.pictures),
+                        cx.now_ms,
+                        t,
+                    )
+                }
+                content => crate::markdown::body(
+                    (&leaf.id, held),
+                    &title,
+                    session.as_deref(),
+                    content,
+                    (
+                        machines,
+                        crate::review::setup::Servers {
+                            sessions: &cx.facts.sessions,
+                            settings: &cx.facts.settings,
+                            harnesses: &cx.facts.harnesses,
+                            now_ms: cx.now_ms,
+                        },
+                    ),
+                    (cx.pictures, cx.marks.0, cx.marks.1),
+                    t,
                 ),
-                (cx.pictures, cx.marks.0, cx.marks.1),
-                t,
-            )
+            }
         }
         (LeafKind::Tile { kind, params, .. }, _) if kind == "seed" => crate::garden::tile_body(
             &desktop.id,

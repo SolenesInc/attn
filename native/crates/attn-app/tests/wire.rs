@@ -232,6 +232,7 @@ mod wire {
     mod title_bar;
     mod update_run;
     mod view_tiles;
+    mod views;
     mod vim_reading;
     mod whats_new;
 }

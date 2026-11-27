@@ -439,3 +439,34 @@ fn a_slim_bars_key_hints_stay_beside_its_path_on_one_line_and_its_path_gives_way
         }
     }
 }
+
+#[test]
+fn a_data_tables_cells_line_up_under_their_headers_at_every_width() {
+    for variant in WIDTHS {
+        let rt = story("Blocks/Data table", variant);
+        let all = rt.elements();
+        let starts = |line: &str| -> Vec<f32> {
+            let line = element(&rt, line);
+            let mut cells: Vec<f32> = (all.iter())
+                .filter(|e| e.parent.is_some_and(|p| all[p].path == line.path))
+                .map(|e| e.rect[0])
+                .collect();
+            cells.sort_by(f32::total_cmp);
+            cells
+        };
+        let head = starts("table.head");
+        assert_eq!(head.len(), 4, "{variant}: {head:?}");
+        for row in 0..3 {
+            let cells = starts(&format!("table.row.{row}"));
+            let apart = head
+                .iter()
+                .zip(&cells)
+                .map(|(h, c)| (h - c).abs())
+                .fold(0.0, f32::max);
+            assert!(
+                apart <= 0.5,
+                "{variant}: row {row} starts {cells:?}, its head {head:?}"
+            );
+        }
+    }
+}

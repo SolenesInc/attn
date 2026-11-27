@@ -1,0 +1,398 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "line": 1,
+      "markdown": {
+        "text": [
+          {
+            "text": "# Release 4.2"
+          }
+        ]
+      },
+      "name": "markdown"
+    },
+    {
+      "data": {
+        "file": "release.json"
+      },
+      "line": 3,
+      "name": "data"
+    },
+    {
+      "line": 6,
+      "name": "status",
+      "status": {
+        "field": [
+          "ci",
+          "state"
+        ]
+      }
+    },
+    {
+      "facts": {
+        "facts": [
+          {
+            "label": "Head",
+            "value": [
+              {
+                "text": "`"
+              },
+              {
+                "field": [
+                  "head",
+                  "sha"
+                ]
+              },
+              {
+                "text": "` "
+              },
+              {
+                "field": [
+                  "head",
+                  "subject"
+                ]
+              },
+              {
+                "text": " · "
+              },
+              {
+                "field": [
+                  "head",
+                  "at"
+                ],
+                "format": "ago"
+              }
+            ]
+          },
+          {
+            "label": "Landed today",
+            "value": [
+              {
+                "field": [
+                  "landed"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "line": 9,
+      "name": "facts"
+    },
+    {
+      "controls": {
+        "controls": [
+          {
+            "args": [],
+            "command": "refresh"
+          }
+        ]
+      },
+      "line": 14,
+      "name": "controls"
+    },
+    {
+      "line": 18,
+      "name": "tasks",
+      "tasks": {
+        "tasks": [
+          {
+            "checked": true,
+            "text": [
+              {
+                "text": "Write the notes"
+              }
+            ]
+          },
+          {
+            "checked": false,
+            "text": [
+              {
+                "text": "Tag the build"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "line": 21,
+      "media": {
+        "file": [
+          {
+            "text": "icon.png"
+          }
+        ],
+        "label": [
+          {
+            "text": "The new icon"
+          }
+        ]
+      },
+      "name": "media"
+    },
+    {
+      "line": 23,
+      "markdown": {
+        "text": [
+          {
+            "text": "## CI on main"
+          }
+        ]
+      },
+      "name": "markdown"
+    },
+    {
+      "line": 25,
+      "list": {
+        "count": true,
+        "foldable": true,
+        "items": {
+          "field": [
+            "ci",
+            "jobs"
+          ]
+        },
+        "slots": {
+          "aside": [
+            {
+              "field": [
+                "seconds"
+              ],
+              "format": "duration"
+            }
+          ],
+          "empty": "No jobs ran.",
+          "lead": [
+            {
+              "field": [
+                "conclusion"
+              ]
+            }
+          ],
+          "press": {
+            "args": [],
+            "command": "open"
+          },
+          "title": [
+            {
+              "field": [
+                "name"
+              ]
+            }
+          ]
+        }
+      },
+      "name": "list"
+    },
+    {
+      "line": 33,
+      "name": "table",
+      "table": {
+        "columns": [
+          {
+            "cell": [
+              {
+                "field": [
+                  "session"
+                ]
+              }
+            ],
+            "header": "Session"
+          },
+          {
+            "cell": [
+              {
+                "field": [
+                  "subject"
+                ]
+              }
+            ],
+            "header": "Change"
+          },
+          {
+            "cell": [
+              {
+                "field": [
+                  "seconds"
+                ],
+                "format": "duration"
+              }
+            ],
+            "header": "Took"
+          }
+        ],
+        "items": {
+          "field": [
+            "landings"
+          ]
+        }
+      }
+    },
+    {
+      "chart": {
+        "items": {
+          "field": [
+            "hours"
+          ]
+        },
+        "x": [
+          "hour"
+        ],
+        "y": [
+          "temp"
+        ]
+      },
+      "line": 39,
+      "name": "chart"
+    },
+    {
+      "compare": {
+        "media": [
+          {
+            "file": [
+              {
+                "text": "before.png"
+              }
+            ],
+            "label": [
+              {
+                "text": "Before"
+              }
+            ]
+          },
+          {
+            "file": [
+              {
+                "text": "after.png"
+              }
+            ],
+            "label": [
+              {
+                "text": "After"
+              }
+            ]
+          }
+        ]
+      },
+      "line": 42,
+      "name": "compare"
+    },
+    {
+      "each": {
+        "blocks": [
+          {
+            "line": 48,
+            "markdown": {
+              "text": [
+                {
+                  "text": "## "
+                },
+                {
+                  "field": [
+                    "name"
+                  ]
+                }
+              ]
+            },
+            "name": "markdown"
+          },
+          {
+            "line": 50,
+            "list": {
+              "items": {
+                "field": [
+                  "pulls"
+                ]
+              },
+              "slots": {
+                "aside": [
+                  {
+                    "field": [
+                      "checks"
+                    ]
+                  }
+                ],
+                "title": [
+                  {
+                    "field": [
+                      "title"
+                    ]
+                  }
+                ]
+              }
+            },
+            "name": "list"
+          }
+        ],
+        "items": {
+          "field": [
+            "repositories"
+          ]
+        }
+      },
+      "line": 47,
+      "name": "each"
+    },
+    {
+      "line": 56,
+      "name": "one-by-one",
+      "one_by_one": {
+        "blocks": [
+          {
+            "line": 57,
+            "media": {
+              "file": [
+                {
+                  "field": [
+                    "file"
+                  ]
+                }
+              ],
+              "label": [
+                {
+                  "field": [
+                    "name"
+                  ]
+                }
+              ]
+            },
+            "name": "media"
+          },
+          {
+            "line": 59,
+            "markdown": {
+              "text": [
+                {
+                  "text": "Take "
+                },
+                {
+                  "field": [
+                    "name"
+                  ]
+                },
+                {
+                  "text": " runs "
+                },
+                {
+                  "field": [
+                    "seconds"
+                  ],
+                  "format": "duration"
+                },
+                {
+                  "text": "."
+                }
+              ]
+            },
+            "name": "markdown"
+          }
+        ],
+        "items": {
+          "file": "takes.jsonl"
+        }
+      }
+    }
+  ]
+}
