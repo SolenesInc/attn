@@ -1,0 +1,1 @@
+An outpost now takes the machine id its home gave it for good. Sessions, recent places, settings and markdown tiles move to that id in one step, and `attn enrollment leave` keeps it. Shells started on a machine before a home added it now stay on that machine after an outpost restart. Before, the outpost refused to attach them ("outpost … does not exist").
