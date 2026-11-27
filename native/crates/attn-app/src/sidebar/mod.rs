@@ -65,19 +65,19 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
 
 /// What the title bar's middle holds around the tile shelf: the queue bar, in queue flow with
 /// the sidebar collapsed, or only the shelf.
-pub(crate) fn title_middle(state: &State, shelf: El, t: &Tokens) -> El {
+pub(crate) fn title_middle(state: &State, shelf: El, t: &Tokens) -> (El, crowding::GivenUp) {
     if actions::queue_flow(state) && state.window.sidebar_hidden {
         let bands = queue::bands(&state.facts, state.window.now_ms);
         chips::queue_bar(state, &bands, shelf, t)
     } else {
-        let shown = crowding::given_up(state) < crowding::GivenUp::Shelf;
-        crowding::filled(
-            state,
-            rune::row()
-                .items_center()
-                .h_full()
-                .children(shown.then(|| crowding::part(shelf, crowding::Part::Shelf))),
-        )
+        let held = crowding::Contents::new(state, None);
+        let given_up = crowding::given_up(state, &held);
+        let shown = given_up < crowding::GivenUp::Shelf;
+        let middle = rune::row()
+            .items_center()
+            .h_full()
+            .children(shown.then(|| crowding::part(shelf, crowding::Part::Shelf)));
+        (crowding::filled(middle, held, given_up), given_up)
     }
 }
 

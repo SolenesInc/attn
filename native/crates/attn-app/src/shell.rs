@@ -647,6 +647,11 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
                 .flatten(),
         );
     let shelf = crate::desktop::shelf_slot(state, t);
+    let (middle, given_up) = if connected {
+        crate::sidebar::title_middle(state, shelf, t)
+    } else {
+        (shelf, crate::sidebar::crowding::GivenUp::Nothing)
+    };
     let middle = row()
         .key("titlebar.middle")
         .grow(1.0)
@@ -654,11 +659,8 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         .h_full()
         .items_center()
         .on_measure(crate::sidebar::crowding::middle_laid_out)
-        .child(if connected {
-            crate::sidebar::title_middle(state, shelf, t)
-        } else {
-            shelf
-        });
+        .child(middle);
+    let short_profile = given_up >= crate::sidebar::crowding::GivenUp::ProfileName;
     let right = attn_ui::blocks::Inline::joined()
         .key("titlebar.right")
         .children(
@@ -669,7 +671,7 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         )
         .children(connected.then(|| attn_ui::blocks::WindowBar::rule(t)))
         .children(instance_marker(state, t))
-        .children(connected.then(|| crate::profile_switcher::pill(state, t)));
+        .children(connected.then(|| crate::profile_switcher::pill(state, short_profile, t)));
     let parts = [left, middle, right];
     let covered = title_bar_covered(state);
     attn_ui::blocks::WindowBar::across(lights, TITLE_BAR_HEIGHT, t)

@@ -370,7 +370,7 @@ fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 }
 
 /// The pill that names the profile the window shows and opens the switcher.
-pub(crate) fn pill(state: &State, t: &Tokens) -> El {
+pub(crate) fn pill(state: &State, short: bool, t: &Tokens) -> El {
     let facts = &state.facts;
     let name = name_of(state, &facts.profiles.selected).unwrap_or_else(|| "Profile".into());
     let keys = state
@@ -397,15 +397,11 @@ pub(crate) fn pill(state: &State, t: &Tokens) -> El {
         .role("button")
         .description(help.clone())
         .help(help)
-        .max_w(
-            if crate::sidebar::crowding::given_up(state)
-                >= crate::sidebar::crowding::GivenUp::ProfileName
-            {
-                crate::sidebar::crowding::PROFILE_SHORT_W
-            } else {
-                PILL_MAX_W
-            },
-        );
+        .max_w(if short {
+            crate::sidebar::crowding::PROFILE_SHORT_W
+        } else {
+            PILL_MAX_W
+        });
     crate::sidebar::crowding::part(
         crate::shell::title_bar_slot(PILL_SLOT, pill),
         crate::sidebar::crowding::Part::Profile,

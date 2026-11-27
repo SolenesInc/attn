@@ -10,6 +10,8 @@ use super::model::{desktop_number, desktop_title, ordered_desktops};
 use super::open_desktop;
 use super::queue::Bands;
 use crate::State;
+
+use super::crowding::{Contents, DesktopWidths, GivenUp, Part};
 use crate::desktop::DesktopMark;
 use crate::shell::View;
 
@@ -121,9 +123,9 @@ fn visible_user_chips<'a>(
 /// The chips of the desktops that have a shortcut slot, in slot order, and the desktops
 /// that have none, as the queue's chips show them. A crowded bar slots only the selected
 /// desktop.
-fn slotted(chips: Vec<Chip>, crowded: bool) -> (Vec<Chip>, Extras) {
-    let (mut slotted, rest): (Vec<Chip>, Vec<Chip>) = chips
-        .into_iter()
+fn slotted(chips: &[Chip], crowded: bool) -> (Vec<&Chip>, Extras) {
+    let (mut slotted, rest): (Vec<&Chip>, Vec<&Chip>) = chips
+        .iter()
         .partition(|c| c.slot.is_some() && (!crowded || c.selected));
     slotted.sort_by_key(|c| c.slot);
     let extras = Extras {
@@ -340,7 +342,8 @@ pub(crate) fn desktop_strip(state: &State, bands: &Bands<'_>, t: &Tokens) -> El 
         .current_desktop()
         .map(|d| desktop_title(d, &state.facts.desktops))
         .unwrap_or_default();
-    let (chips, extras) = slotted(visible_user_chips(state, turns_on(bands)), false);
+    let user_chips = visible_user_chips(state, turns_on(bands));
+    let (chips, extras) = slotted(&user_chips, false);
     let overview_keys = crate::palette::label_of(state, &crate::Action::DesktopOverview);
     let has_chips = !chips.is_empty() || extras.count > 0;
     ListRow::column()
@@ -555,7 +558,7 @@ fn rail_chip(chip: &Chip, t: &Tokens) -> El {
 /// Queue flow with the sidebar collapsed: the title bar's middle as the queue bar, with the
 /// waiting pill, the critical notification, the tile shelf, the runs chip and the desktop chips.
 /// The pill holds a dot, the count, then the agents whose turns wait.
-pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens) -> El {
+pub(super) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens) -> (El, GivenUp) {
     let owed = bands.owed();
     let crumbs: Vec<String> = bands
         .turns
@@ -564,8 +567,13 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
         .map(|r| super::model::display_name(r.session, &state.facts.harnesses))
         .collect();
     let more = bands.turns.len().saturating_sub(crumbs.len());
-    use super::crowding::{GivenUp, Part};
-    let given_up = super::crowding::given_up(state);
+    let user_chips = visible_user_chips(state, turns_on(bands));
+    let (full_chips, full_extras) = slotted(&user_chips, false);
+    let (gathered_chips, gathered_extras) = slotted(&user_chips, true);
+    let full = desktops_width(&full_chips, &full_extras);
+    let gathered = desktops_width(&gathered_chips, &gathered_extras);
+    let held = Contents::new(state, Some(DesktopWidths { full, gathered }));
+    let given_up = super::crowding::given_up(state, &held);
     let count = super::queue_view::owed_label(owed).unwrap_or_else(|| "Nothing owed".into());
     let mut said = count.clone();
     if !crumbs.is_empty() {
@@ -665,21 +673,24 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
                 .map(|runs| super::crowding::part(runs, Part::Runs)),
         )
         .children((given_up < GivenUp::Chips).then(|| {
-            let gathered = gathered_width(state, bands);
-            super::crowding::part(desktops(state, bands, crowded, t), Part::Chips { gathered })
+            let (chips, extras) = if crowded {
+                (gathered_chips, gathered_extras)
+            } else {
+                (full_chips, full_extras)
+            };
+            super::crowding::part(desktops(state, chips, extras, t), Part::Chips)
         }));
-    super::crowding::filled(state, bar)
+    (super::crowding::filled(bar, held, given_up), given_up)
 }
 
 /// The queue bar's desktop chips.
-fn desktops(state: &State, bands: &Bands<'_>, crowded: bool, t: &Tokens) -> El {
-    let (chips, extras) = slotted(visible_user_chips(state, turns_on(bands)), crowded);
+fn desktops(state: &State, chips: Vec<&Chip>, extras: Extras, t: &Tokens) -> El {
     Inline::joined()
         .key("queue-bar.desktops")
         .role("group")
         .label("Desktops")
         .h_full()
-        .children(chips.iter().map(|c| {
+        .children(chips.into_iter().map(|c| {
             let drop = drop_on(state, &c.desktop);
             chip("queue-bar.desktop", c, Look::Bar, drop, t)
         }))
@@ -692,17 +703,15 @@ fn desktops(state: &State, bands: &Bands<'_>, crowded: bool, t: &Tokens) -> El {
         .child(rune::el().w(BADGE_OVERHANG))
 }
 
-/// How wide the queue bar's desktop chips stand once a crowded bar gathers them.
-fn gathered_width(state: &State, bands: &Bands<'_>) -> f32 {
-    let (kept, extras) = slotted(visible_user_chips(state, turns_on(bands)), true);
+fn desktops_width(chips: &[&Chip], extras: &Extras) -> f32 {
     let size = system::Size::Compact;
-    let widths: Vec<f32> = kept
+    let total: f32 = chips
         .iter()
         .map(|c| system::chip_width(&c.slot.unwrap_or_default().to_string(), size))
         .chain((extras.count > 0).then(|| system::chip_width(&format!("+{}", extras.count), size)))
-        .chain([BADGE_OVERHANG])
-        .collect();
-    widths.iter().sum::<f32>() + Inline::joined_gap() * (widths.len() - 1) as f32
+        .sum();
+    let gaps = chips.len() + usize::from(extras.count > 0);
+    total + BADGE_OVERHANG + Inline::joined_gap() * gaps as f32
 }
 
 /// The queue bar's count of automation runs and of those that need the user; pressing it walks

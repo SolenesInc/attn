@@ -41,12 +41,17 @@ const STEPS: [GivenUp; 7] = [
     GivenUp::PillWord,
 ];
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct DesktopWidths {
+    pub(super) full: f32,
+    pub(super) gathered: f32,
+}
+
 /// What the title bar holds that changes the room its parts need, and which steps free any.
 #[derive(Clone, Debug, PartialEq)]
-struct Contents {
-    queue_bar: bool,
+pub(super) struct Contents {
     desktop: Option<String>,
-    desktops: usize,
+    desktop_widths: Option<DesktopWidths>,
     runs: bool,
     critical: bool,
     shelf: Option<(String, [usize; 3])>,
@@ -55,31 +60,35 @@ struct Contents {
     sidebar: u32,
 }
 
-fn contents(state: &State) -> Contents {
-    let facts = &state.facts;
-    let runs = crate::automations::runs::on_desktops(facts, state.window.now_ms)
-        .iter()
-        .any(|g| !g.runs.is_empty() || !g.needing_you.is_empty());
-    Contents {
-        queue_bar: super::actions::queue_flow(state) && state.window.sidebar_hidden,
-        desktop: facts.current_desktop().map(|d| d.id.clone()),
-        desktops: facts.desktops.len(),
-        runs,
-        critical: facts.notifications.unread_critical > 0,
-        shelf: crate::desktop::shelf_columns(state),
-        profile: facts.profiles.selected.clone(),
-        scale: (crate::settings::text_scale(&facts.settings) * 100.0).round() as u32,
-        sidebar: super::width::of(state).round() as u32,
-    }
-}
-
 impl Contents {
+    pub(super) fn new(state: &State, desktop_widths: Option<DesktopWidths>) -> Self {
+        let facts = &state.facts;
+        let runs = desktop_widths.is_some()
+            && !crate::automations::runs::on_desktops(facts, state.window.now_ms).is_empty();
+        Self {
+            desktop: facts.current_desktop().map(|d| d.id.clone()),
+            desktop_widths,
+            runs,
+            critical: facts.notifications.unread_critical > 0,
+            shelf: crate::desktop::shelf_columns(state),
+            profile: facts.profiles.selected.clone(),
+            scale: (crate::settings::text_scale(&facts.settings) * 100.0).round() as u32,
+            sidebar: super::width::of(state).round() as u32,
+        }
+    }
+
     fn frees_room(&self, step: GivenUp) -> bool {
+        let queue_bar = self.desktop_widths.is_some();
         match step {
             GivenUp::Nothing | GivenUp::ProfileName | GivenUp::Shelf => true,
-            GivenUp::Strip => self.queue_bar && self.critical,
-            GivenUp::Desktops => self.queue_bar && (self.desktops > 1 || self.runs),
-            GivenUp::Crumbs | GivenUp::Chips | GivenUp::PillWord => self.queue_bar,
+            GivenUp::Strip => queue_bar && self.critical,
+            GivenUp::Desktops => {
+                self.runs
+                    || self
+                        .desktop_widths
+                        .is_some_and(|widths| widths.full > widths.gathered)
+            }
+            GivenUp::Crumbs | GivenUp::Chips | GivenUp::PillWord => queue_bar,
         }
     }
 }
@@ -105,10 +114,10 @@ pub(crate) struct Room {
 }
 
 /// The last step the title bar has taken.
-pub(crate) fn given_up(state: &State) -> GivenUp {
+pub(super) fn given_up(state: &State, held: &Contents) -> GivenUp {
     let room = &state.window.queue_bar_room;
     match &room.crowding {
-        Some(crowding) if crowding.contents == contents(state) => crowding
+        Some(crowding) if crowding.contents == *held => crowding
             .taken
             .last()
             .map_or(GivenUp::Nothing, |(step, _)| *step),
@@ -142,9 +151,7 @@ pub(crate) fn middle_laid_out(state: &mut State, rect: [f32; 4]) {
 /// element for each set of steps drawn, so a drawing reports where it ends even where the last
 /// one ended. A commit measures again only so many times, so while a step taken waits to be
 /// measured, the end's layout asks for one more commit.
-pub(crate) fn filled(state: &State, content: rune::El) -> rune::El {
-    let held = contents(state);
-    let drawn = given_up(state);
+pub(super) fn filled(content: rune::El, held: Contents, drawn: GivenUp) -> rune::El {
     content.grow(1.0).shrink().child(
         rune::el()
             .key(format!("titlebar.middle.end.{drawn:?}"))
@@ -221,7 +228,6 @@ pub(crate) struct Widths {
     strip: f32,
     profile: f32,
     chips: f32,
-    gathered: f32,
     runs: f32,
     shelf: f32,
 }
@@ -234,10 +240,7 @@ pub(crate) enum Part {
     Caret,
     Strip,
     Profile,
-    /// The desktop chips, with how wide they stand gathered.
-    Chips {
-        gathered: f32,
-    },
+    Chips,
     Runs,
     Shelf,
 }
@@ -255,7 +258,10 @@ impl Widths {
             GivenUp::Crumbs => Some((self.trail - self.caret).max(0.0)),
             GivenUp::Desktops => {
                 let runs = if contents.runs { self.runs + gap } else { 0.0 };
-                Some(runs + (self.chips - self.gathered).max(0.0))
+                let chips = contents
+                    .desktop_widths
+                    .map_or(0.0, |widths| (self.chips - widths.gathered).max(0.0));
+                Some(runs + chips)
             }
             GivenUp::Strip => Some(self.strip + gap),
             GivenUp::ProfileName if self.profile <= PROFILE_SHORT_W => None,
@@ -277,10 +283,7 @@ pub(crate) fn part(content: rune::El, part: Part) -> rune::El {
             Part::Caret => widths.caret = w,
             Part::Strip => widths.strip = w,
             Part::Profile => widths.profile = w,
-            Part::Chips { gathered } => {
-                widths.chips = w;
-                widths.gathered = gathered;
-            }
+            Part::Chips => widths.chips = w,
             Part::Runs => widths.runs = w,
             Part::Shelf => widths.shelf = w,
         }

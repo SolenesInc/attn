@@ -3101,3 +3101,80 @@ fn queue_flow_keeps_automation_delegates_in_queue_filters_desktop_extras_and_dis
     );
     assert_eq!(name(&world, "queue.waiting-head"), "Nothing owed");
 }
+
+#[test]
+fn a_queue_bar_restores_fitting_controls_when_a_desktop_becomes_automation_only() {
+    let desktops = |mixed: bool| {
+        let mut message = crowding_desktops(8);
+        for agent in message.sessions.as_mut().unwrap() {
+            if agent.automation.is_none() {
+                agent.turn_owed = Some(false);
+                agent.turn_opened_at = None;
+                agent.state = "working".into();
+            }
+        }
+        let main = vec![pane("d1", "p0", "t1")];
+        let mut automation = vec![pane("d-auto", "p-run", "r1")];
+        if mixed {
+            automation.push(pane("d-auto", "p-manual", "manual"));
+            message
+                .sessions
+                .as_mut()
+                .unwrap()
+                .push(session("manual", "working"));
+        }
+        let desktops = message.desktops.as_mut().unwrap();
+        desktops[0] = slotted(desktop("d1", "a", "", main), 1);
+        desktops.push(desktop("d-auto", "09", "Review", automation));
+        message
+    };
+    let collapsed = |message| {
+        let mut world = World::start(Daemon::scripted().state(message));
+        world.resize(ROOMY);
+        world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+        world
+    };
+    let mixed = desktops(true);
+    let solo = desktops(false);
+    let mut transitioning = collapsed(mixed);
+    let has_runs = |world: &World| world.screen().find(Target::key("queue-bar.runs")).is_some();
+    assert!(has_runs(&transitioning));
+    transitioning.resize(CROWDED_AT_HOME);
+    assert!(!has_runs(&transitioning));
+
+    let (mut crowded, mut roomy) = (CROWDED_AT_HOME.0 as u32, ROOMY.0 as u32);
+    while roomy - crowded > 1 {
+        let width = (crowded + roomy) / 2;
+        transitioning.resize(ROOMY);
+        transitioning.resize((width as f32, ROOMY.1));
+        if has_runs(&transitioning) {
+            roomy = width;
+        } else {
+            crowded = width;
+        }
+    }
+    let size = (crowded as f32, ROOMY.1);
+    transitioning.resize(ROOMY);
+    transitioning.resize(size);
+    assert!(!has_runs(&transitioning));
+    let mut fresh = collapsed(solo.clone());
+    fresh.resize(size);
+    assert!(
+        has_runs(&fresh),
+        "the runs chip fits without the extra desktop"
+    );
+    assert_eq!(bar_chips(&fresh), every_bar_chip(8));
+
+    let count = solo.desktops.as_ref().unwrap().len();
+    transitioning.daemon.emit(SessionUnregisteredMessage {
+        session: session("manual", "working"),
+        ..SessionUnregisteredMessage::new()
+    });
+    arranged_on(&mut transitioning, &solo, "d1", count);
+    assert!(
+        has_runs(&transitioning),
+        "at {crowded}px the runs chip fits after the unrelated agent closes"
+    );
+    assert_eq!(bar_chips(&transitioning), bar_chips(&fresh));
+    assert!(transitioning.runtime_is_at_rest());
+}
