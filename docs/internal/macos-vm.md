@@ -7,7 +7,10 @@ identity.
 ## When to use the VM vs the host
 
 - **Use the VM** for every Mac app window you open, drive through automation,
-  screenshot, or record (PR clips, guide footage, Attn Lens checks).
+  screenshot, or record (PR clips, guide footage, Attn Lens checks). An agent
+  on a Linux outpost reaches it too: the home is the Mac, so open a shell there
+  with `attn terminal open --host home` and run `scripts/vm` from a worktree
+  on the Mac.
 - **Stay on the host** for:
   - CLI, daemon and wire checks (no window opened);
   - speed, memory, CPU and frame-presentation budgets (VM numbers are not
