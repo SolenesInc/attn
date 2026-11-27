@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Reconnect during refused preflight leaves the move band stuck",
+  "at": "2026-11-27T15:05:38.020Z",
+  "detail": "An app reconnecting during a submitted preflight adopts checking. If preflight then fails normally, only the original socket receives the failure and the replacement client remains stuck on an undismissable Moving band. Reconcile the same move through terminal refusal without requiring an app or daemon restart.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/settings/machines.rs",
+    "line": 458
+  },
+  "culprit": "c0892b79d406093a7ebc281b5e285daee311ffac"
+}
