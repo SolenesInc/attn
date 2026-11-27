@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Home move check can commit an interrupted move",
+  "at": "2026-11-27T11:04:38.436Z",
+  "detail": "On the source after an interrupted move, a same-target retry with attn home move --check takes the resume/commit path before the check-only branch. A preflight must remain read-only and report recovery separately.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/home_move.go",
+    "line": 307
+  },
+  "culprit": "2113370ce24975ca7209ee34edc6b3db99c96614"
+}
