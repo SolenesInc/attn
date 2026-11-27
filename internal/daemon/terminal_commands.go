@@ -421,16 +421,13 @@ func (d *Daemon) typeFirstCommand(ctx context.Context, terminal protocol.Termina
 func (d *Daemon) typeAtFirstPrompt(id protocol.SessionID, text string) {
 	terminal := d.primaryTerminal(id)
 	d.life.Go("type the text of a typed shell", func() {
-		if err := d.pasteAtFirstPrompt(d.life.Context(), terminal, id, text); err != nil {
+		err := d.atFirstPrompt(d.life.Context(), terminal, id, func(ctx context.Context) error {
+			_, err := Call[struct{}](ctx, d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: terminal, Data: bracketedPaste(text), Source: "agent"})
+			return err
+		})
+		if err != nil {
 			d.logf("typed shell: text for %s not typed: %v", terminal, err)
 		}
-	})
-}
-
-func (d *Daemon) pasteAtFirstPrompt(ctx context.Context, terminal protocol.TerminalID, id protocol.SessionID, text string) error {
-	return d.atFirstPrompt(ctx, terminal, id, func(ctx context.Context) error {
-		_, err := Call[struct{}](ctx, d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: terminal, Data: bracketedPaste(text), Source: "agent"})
-		return err
 	})
 }
 

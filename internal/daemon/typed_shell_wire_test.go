@@ -13,11 +13,20 @@ import (
 
 const inputRecordingShell = `#!/bin/sh
 stty raw -echo
+dd bs=1 count=1 >/dev/null 2>&1
 printf '\033]133;A\007$ \033]133;B\007'
+received=''
 while :; do
   byte=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n')
   [ -n "$byte" ] || exit 0
-  printf '%s.' "$byte"
+  if [ -n "$pasted" ]; then
+    printf '%s.' "$byte"
+    continue
+  fi
+  received="$received$byte."
+  case "$received" in
+  *1b.5b.32.30.31.7e.) printf 'received %s' "$received"; pasted=1 ;;
+  esac
 done
 `
 
@@ -35,13 +44,16 @@ func TestATypedShellHoldsItsTextAtTheFirstPromptAsOnePasteThatNeverRuns(t *testi
 	app := w.App()
 
 	session := w.Spawn(app, shellHarness, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
-		m.Typed = protocol.Ptr("make deploy\n\x1b[201~rm -rf build\r")
+		m.Typed = protocol.Ptr("make x\n\x1b[201~rm\r")
 	})
+	app.Type(session, "G", "user")
+	paste := "received " + hexBytes("\x1b[200~make x[201~rm\x1b[201~")
+	app.AwaitScreen(session, paste)
 	app.Type(session, "Z", "user")
 
-	app.AwaitScreen(session, hexBytes("\x1b[200~make deploy[201~rm -rf build\x1b[201~Z"))
-	if received := string(app.Screen(session)); strings.Count(received, hexBytes("\x1b[200~")) != 1 || strings.Contains(received, "0d.") || strings.Contains(received, "0a.") {
-		t.Errorf("the shell received %s, want one paste with no newline or carriage return", received)
+	app.AwaitScreen(session, paste+hexBytes("Z"))
+	if received := string(app.Screen(session)); strings.Count(received, "received") != 1 {
+		t.Errorf("the shell received %s, want one paste", received)
 	}
 }
 
