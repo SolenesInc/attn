@@ -1870,7 +1870,7 @@ fn toggle_replied(state: &mut State, tx: &mut Tx) {
 /// The sheet's keys while it or a control in it holds focus: ⌘↩ sends from anywhere in it;
 /// the arrows and the letters act only outside a text field.
 fn sheet_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if super::panel::keys_terminal(state).is_some() {
+    if tx.focused() == Some(super::panel::TERMINAL) {
         return false;
     }
     let m = ev.mods;

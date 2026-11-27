@@ -371,8 +371,10 @@ fn let_go_shown(state: &mut State) -> Option<String> {
     };
     panel.tabs.remove(panel.shown);
     panel.shown = panel.shown.min(panel.tabs.len().saturating_sub(1));
+    panel.keys = false;
     panels.spawns.remove(&session);
     panels.let_go.insert(session.clone());
+    state.window.asks.take_keyboard = true;
     Some(session)
 }
 
@@ -382,6 +384,7 @@ pub(crate) fn move_to_desktop(state: &mut State, tx: &mut Tx) {
     let Some(session) = let_go_shown(state) else {
         return;
     };
+    super::follow(state, tx);
     let session_id = session.clone();
     state.ask(
         |request_id| DesktopShowSessionMessage {
@@ -472,6 +475,7 @@ pub(crate) fn step(state: &mut State, by: isize, tx: &mut Tx) -> bool {
 /// shell a terminal tab shows; false when it has none.
 pub(crate) fn close_tab(state: &mut State, tx: &mut Tx) -> bool {
     if let Some(session) = let_go_shown(state) {
+        super::follow(state, tx);
         if state
             .daemon
             .send(&UnregisterMessage {
