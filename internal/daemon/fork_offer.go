@@ -71,12 +71,6 @@ func (d *Daemon) handleForkOfferOpen(client *wsClient, msg *protocol.ForkOfferOp
 		if !offered {
 			return profileActionOutcome{}, nil
 		}
-		if profile, err := d.store.SessionProfileID(original); err != nil {
-			d.endForkOffer(forkID)
-			return profileActionOutcome{}, fmt.Errorf("open the original of %s: %w", forkID, errForkOriginalGone)
-		} else if profile != fork.ProfileID {
-			return profileActionOutcome{}, profiles.Errorf(profiles.CodeCrossProfile, "session %s, which %s was forked from, belongs to profile %q, not profile %q", original, forkID, profile, fork.ProfileID)
-		}
 		ended := func() { d.endForkOffer(forkID) }
 		beside := d.placementBeside(forkID)
 		if beside != nil {
