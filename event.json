@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Local machine-aware Markdown links open outside the app",
+  "at": "2026-11-27T16:35:35.795Z",
+  "detail": "A placed Markdown link on the app machine uses the system opener instead of its required Markdown tile. Route resolved Markdown references through the same in-app opening path for local and remote targets and keep the fallback for older asks.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/markdown/links.rs",
+    "line": 303
+  },
+  "culprit": "3978e814d7d4a45b87b0294cbbaa93d54ada71aa"
+}
