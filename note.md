@@ -1,0 +1,1 @@
+Test helper `fakeagent.WriteExecutable` now replaces a fake program by renaming a new file over it instead of rewriting it in place. A rewrite while another process ran the script failed with ETXTBSY. That turned main red in the fleet-update stack test, whose fake `uname` the home's outpost probe was running. FIFO hold releases now write the FIFO directly.
