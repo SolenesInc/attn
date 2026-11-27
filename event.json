@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Linux home move recovery can leave the boot unit disabled",
+  "at": "2026-11-27T14:02:13.594Z",
+  "detail": "Recovery after an interruption between unit installation and enablement checks only for the file. The moved home can resume now and still fail to start at the next boot. Reconcile enablement on recovery without starting a second daemon.\n"
+}
