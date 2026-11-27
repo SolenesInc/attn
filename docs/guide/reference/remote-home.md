@@ -61,7 +61,9 @@ then reaches the new home through its own daemon. The band then says **Home
 moved to** *machine*.
 
 If the new home doesn't start, the band says **Move failed:** *machine*'s home
-didn't start, and offers **Roll back**.
+didn't start, and offers **Roll back**. If the old home restarted while the
+move committed, the band says **Move to** *machine* **didn't finish**, and
+offers **Retry**, which finishes the move, and **Roll back**.
 
 ## Move from the CLI
 
@@ -128,7 +130,7 @@ new home; a move that rolls back here removes it too.
 
 - If a daemon stops before the move commits, both machines stay as they were.
 - If a daemon stops while the move commits, run `attn home move` with the same
-  machine again. It finishes the move.
+  machine again, or click **Retry** on the band. It finishes the move.
 - If the new home does not start, roll the move back on the old home. The app
   there shows **Can't reach** *machine* with **Roll back**, or run
   `attn home rollback`. The old home restarts as the home, and the other

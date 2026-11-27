@@ -142,7 +142,14 @@ fn turning_outposts_on_shows_the_empty_list_and_off_marks_the_page_again() {
     });
     world.settle();
     assert!(!shows(&world, "settings.nav-off.machines"));
-    assert_eq!(named(&world, HOME_ROW).as_deref(), Some("This Mac"));
+    assert_eq!(
+        named(&world, HOME_ROW).as_deref(),
+        Some(if attn_testkit::mac() {
+            "This Mac"
+        } else {
+            "This machine"
+        })
+    );
     assert_eq!(
         named(&world, &format!("{HOME_ROW}.home")).as_deref(),
         Some("home")
@@ -943,7 +950,7 @@ fn move_home_here_checks_the_machine_names_what_fails_and_moves_once_the_checks_
     for (begun, step) in [("copy", 2), ("build", 3)] {
         world
             .daemon
-            .emit(json!({"event": "home_move_progress", "request_id": request_id, "step": begun}));
+            .emit(json!({"event": "home_move_progress", "request_id": request_id, "id": "m-1", "step": begun}));
         world.settle();
         assert!(shown(&world, step).unwrap().starts_with('…'));
         assert!(shown(&world, step - 1).unwrap().starts_with('✓'));
@@ -1070,7 +1077,11 @@ fn a_move_whose_home_did_not_start_rolls_back_from_its_band() {
     redial(&mut world);
     assert_eq!(
         named(&world, "home-move.text").as_deref(),
-        Some("Rolled back. The home is on this Mac.")
+        Some(if attn_testkit::mac() {
+            "Rolled back. The home is on this Mac."
+        } else {
+            "Rolled back. The home is on this machine."
+        })
     );
 }
 
@@ -1097,4 +1108,71 @@ fn a_move_that_stopped_before_it_committed_says_so_once_the_window_has_the_home_
     );
     click(&mut world, &part("move.cancel"));
     assert!(shows(&world, &part("move")));
+}
+
+#[test]
+fn a_move_is_judged_by_its_own_record_even_when_the_one_before_it_was_never_read() {
+    let daemon = Daemon::scripted().state(remote_home_state(vec![studio()]));
+    daemon.on("home_move", |r| {
+        (r["check"] == true).then(|| {
+            move_result(json!({"step": "checked", "to": "studio", "checks": [{"name": "connected", "ok": true}], "remaps": []}))
+        })
+    });
+    let mut world = World::start(daemon);
+    on_studio(&mut world);
+    click(&mut world, &part("move"));
+    click(&mut world, &part("move.go"));
+    world.daemon.on("home_move_status", |_| {
+        move_result(json!({"id": "m-0", "side": "from", "step": "done", "to": "oma", "checks": [], "remaps": []}))
+    });
+    redial(&mut world);
+    assert_eq!(
+        named(&world, &part("move.failed")).as_deref(),
+        Some("Move failed: it stopped before it committed, so the home did not move")
+    );
+}
+
+#[test]
+fn a_move_held_after_its_home_restarted_as_it_committed_offers_retry_and_roll_back() {
+    let daemon = remote_home(vec![studio()]);
+    daemon.on("home_move", |r| {
+        (r["check"] == true).then(|| {
+            move_result(json!({"step": "checked", "to": "studio", "checks": [{"name": "connected", "ok": true}], "remaps": []}))
+        })
+    });
+    let mut world = World::start(daemon);
+    on_studio(&mut world);
+    click(&mut world, &part("move"));
+    click(&mut world, &part("move.go"));
+    let request_id = world.daemon.sent_of("home_move")[1]["request_id"].clone();
+    world
+        .daemon
+        .emit(json!({"event": "home_move_progress", "request_id": request_id, "id": "m-1", "step": "commit"}));
+    world.settle();
+    let committing = json!({"id": "m-1", "side": "from", "step": "committing", "to": "studio", "checks": [], "remaps": []});
+    world
+        .daemon
+        .on("home_move_status", move |_| move_result(committing.clone()));
+    redial(&mut world);
+    press(&mut world, Key::Escape);
+    assert_eq!(
+        named(&world, "home-move.text").as_deref(),
+        Some("Move to studio didn’t finish."),
+        "{}",
+        world.screen()
+    );
+    assert!(shows(&world, "home-move.roll-back"));
+
+    world.daemon.on("home_move", |_| {
+        move_result(json!({"id": "m-1", "side": "from", "step": "committed", "to": "studio", "checks": [], "remaps": []}))
+    });
+    click(&mut world, "home-move.retry");
+    let asked = sent(&world, "home_move");
+    assert_eq!(asked.len(), 3);
+    assert_eq!(asked[2]["machine"], "outpost-1");
+    assert_eq!(asked[2].get("check"), None);
+    assert_eq!(
+        named(&world, "home-move.step").as_deref(),
+        Some("5/6 Start home on studio")
+    );
 }

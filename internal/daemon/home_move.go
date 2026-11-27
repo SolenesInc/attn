@@ -279,7 +279,7 @@ func moveInfo(record homemove.Record) protocol.HomeMove {
 }
 
 func (d *Daemon) handleHomeMove(ctx context.Context, conn net.Conn, msg *protocol.HomeMoveMessage) {
-	move, exit, err := d.homeMoveCommand(ctx, msg, func(string) {})
+	move, exit, err := d.homeMoveCommand(ctx, msg, func(string, string) {})
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
@@ -345,7 +345,7 @@ func (d *Daemon) handleHomeMoveRollback(ctx context.Context, conn net.Conn) {
 	}
 }
 
-func (d *Daemon) homeMoveCommand(ctx context.Context, msg *protocol.HomeMoveMessage, began func(step string)) (protocol.HomeMove, bool, error) {
+func (d *Daemon) homeMoveCommand(ctx context.Context, msg *protocol.HomeMoveMessage, began func(id, step string)) (protocol.HomeMove, bool, error) {
 	if !d.on(setting.RemoteHomeEnabled) {
 		return protocol.HomeMove{}, false, protocol.Refuse(protocol.RefusalWrongState, "remote_home_enabled is off; run {attn settings set remote_home_enabled true} before you move the home")
 	}
@@ -477,7 +477,7 @@ func newMoveID() (string, error) {
 	return "m-" + hex.EncodeToString(buf), nil
 }
 
-func (d *Daemon) runHomeMove(ctx context.Context, plan homeMovePlan, info protocol.HomeMove, began func(step string)) (protocol.HomeMove, bool, error) {
+func (d *Daemon) runHomeMove(ctx context.Context, plan homeMovePlan, info protocol.HomeMove, began func(id, step string)) (protocol.HomeMove, bool, error) {
 	id, err := newMoveID()
 	if err != nil {
 		return info, false, err
@@ -493,7 +493,6 @@ func (d *Daemon) runHomeMove(ctx context.Context, plan homeMovePlan, info protoc
 		record.Enrollment.Dial = plan.dial
 	}
 	d.holdForMove()
-	began("fence")
 	fail := func(err error) (protocol.HomeMove, bool, error) {
 		_ = plan.conn.Call(context.WithoutCancel(ctx), homeMoveAbortChannel, homeMoveRequest{ID: id}, nil)
 		if abortErr := homemove.Abort(d.dataRoot, id); abortErr != nil {
@@ -507,6 +506,7 @@ func (d *Daemon) runHomeMove(ctx context.Context, plan homeMovePlan, info protoc
 	if err := homemove.Write(d.dataRoot, record); err != nil {
 		return fail(err)
 	}
+	began(id, "fence")
 	crashpoint.At("home-move-fenced")
 	snapshot := filepath.Join(homemove.Dir(d.dataRoot, id), "snapshot.db")
 	if err := d.store.Snapshot(snapshot); err != nil {
@@ -535,8 +535,8 @@ func (d *Daemon) runHomeMove(ctx context.Context, plan homeMovePlan, info protoc
 		stage.Record.Notebook = append(stage.Record.Notebook, homemove.Remap{From: remap.From, To: remap.To})
 	}
 	record.Notebook = stage.Record.Notebook
-	began("copy")
-	if err := d.sendHomeMoveStage(ctx, plan.conn, stage, snapshot, files, func() { began("build") }); err != nil {
+	began(id, "copy")
+	if err := d.sendHomeMoveStage(ctx, plan.conn, stage, snapshot, files, func() { began(id, "build") }); err != nil {
 		return fail(fmt.Errorf("stage the move on %s: %w", to.Name, err))
 	}
 	_ = os.Remove(snapshot)
@@ -546,7 +546,7 @@ func (d *Daemon) runHomeMove(ctx context.Context, plan homeMovePlan, info protoc
 		return fail(err)
 	}
 	d.logf("home move %s: staged on %s; committing", id, to.Name)
-	began("commit")
+	began(id, "commit")
 	return d.commitHomeMove(ctx, plan.conn, record)
 }
 

@@ -62,9 +62,8 @@ struct Move {
     id: String,
     name: String,
     step: MoveStep,
-    /// The id of this machine's latest move before this one started, so a record of that move is not read as
-    /// this one's outcome.
-    before: Option<String>,
+    /// The id the daemon gave this move once it began, so only its own record says how it ended.
+    move_id: Option<String>,
 }
 
 enum MoveStep {
@@ -161,14 +160,18 @@ pub(crate) fn progressed(state: &mut State, reply: &Reply) -> bool {
     if reply.event != "home_move_progress" {
         return false;
     }
-    let begun = reply
-        .parse::<HomeMoveProgressMessage>()
-        .and_then(|p| DAEMON_STEPS.iter().position(|s| *s == p.step))
+    let Some(progress) = reply.parse::<HomeMoveProgressMessage>() else {
+        return true;
+    };
+    let begun = DAEMON_STEPS
+        .iter()
+        .position(|s| *s == progress.step)
         .map(|i| i + 1);
     if let (Some(begun), Some(moving)) = (begun, panel(state).moving.as_mut())
         && let MoveStep::Moving(steps) = &mut moving.step
     {
         *steps = (*steps).max(begun);
+        moving.move_id = Some(progress.id);
     }
     true
 }
@@ -325,12 +328,11 @@ fn moving_to<'a>(state: &'a mut State, id: &str) -> Option<&'a mut Move> {
 fn check_move(state: &mut State, id: &str, name: &str, tx: &mut Tx) {
     let machines = panel(state);
     machines.told = None;
-    let before = machines.last_move.as_ref().and_then(|m| m.id.clone());
     machines.moving = Some(Move {
         id: id.to_owned(),
         name: name.to_owned(),
         step: MoveStep::Checking,
-        before,
+        move_id: None,
     });
     let machine = id.to_owned();
     let id = id.to_owned();
@@ -353,11 +355,11 @@ fn check_move(state: &mut State, id: &str, name: &str, tx: &mut Tx) {
     );
 }
 
-fn start_move(state: &mut State, id: &str, tx: &mut Tx) {
+fn start_move(state: &mut State, id: &str, begun: usize, tx: &mut Tx) {
     let Some(moving) = moving_to(state, id) else {
         return;
     };
-    moving.step = MoveStep::Moving(0);
+    moving.step = MoveStep::Moving(begun);
     let machine = id.to_owned();
     let id = id.to_owned();
     state.ask(
@@ -374,7 +376,10 @@ fn start_move(state: &mut State, id: &str, tx: &mut Tx) {
                 return;
             };
             moving.step = match move_answer(&answer) {
-                Ok(moved) if moved.step == "committed" => MoveStep::Moving(5),
+                Ok(moved) if moved.step == "committed" => {
+                    moving.move_id = moved.id.or(moving.move_id.take());
+                    MoveStep::Moving(5)
+                }
                 Ok(HomeMove { error, step, .. }) => MoveStep::Failed(error.unwrap_or(step)),
                 Err(why) => MoveStep::Failed(why),
             };
@@ -383,8 +388,8 @@ fn start_move(state: &mut State, id: &str, tx: &mut Tx) {
     );
 }
 
-/// Ends the move this window runs once this window has the home again: its record on this machine says how it
-/// ended, and a move with no record past the one before it stopped before it committed.
+/// Ends the move this window runs once this window has the home again: its own record on this machine says how
+/// it ended, a committing one shows as held, and a move with no record of its own stopped before it committed.
 fn settle_move(state: &mut State, latest: &HomeMove) {
     let back = connected(state);
     let machines = panel(state);
@@ -397,7 +402,7 @@ fn settle_move(state: &mut State, latest: &HomeMove) {
     else {
         return;
     };
-    let ours = latest.id.is_some() && latest.id != moving.before;
+    let ours = moving.move_id.is_some() && latest.id == moving.move_id;
     let why = match (ours, latest.step.as_str()) {
         (true, "committed" | "applied" | "done") => {
             machines.told = Some(Told::Moved(moving.name));
@@ -406,6 +411,7 @@ fn settle_move(state: &mut State, latest: &HomeMove) {
         (true, "aborted" | "rolled-back") => {
             latest.error.clone().unwrap_or_else(|| latest.step.clone())
         }
+        (true, "committing") => return,
         (true, _) => {
             machines.moving = Some(moving);
             return;
@@ -470,7 +476,11 @@ pub(crate) fn roll_back(state: &mut State, tx: &mut Tx) {
             Ok(latest) => {
                 let machines = panel(state);
                 machines.moving = None;
-                machines.told = Some(Told::RollingBack);
+                machines.told = Some(if latest.step == "aborted" {
+                    Told::RolledBack
+                } else {
+                    Told::RollingBack
+                });
                 machines.last_move = Some(latest);
             }
             Err(_) if matches!(answer, Answer::Dropped) => {}
@@ -478,6 +488,43 @@ pub(crate) fn roll_back(state: &mut State, tx: &mut Tx) {
         },
         tx,
     );
+}
+
+/// The machine a move from this one is committing to while this home holds it: the home
+/// restarted before the move finished, and waits to finish it or roll it back.
+fn held_move(state: &State) -> Option<&str> {
+    let latest = state.window.settings.machines.last_move.as_ref()?;
+    let held = latest.side.as_deref() == Some("from") && latest.step == "committing";
+    held.then_some(latest.to.as_deref()).flatten()
+}
+
+/// Runs the held move again, which finishes its commit.
+fn retry_move(state: &mut State, tx: &mut Tx) {
+    let Some(name) = held_move(state).map(str::to_owned) else {
+        return;
+    };
+    let id = state
+        .facts
+        .outposts
+        .iter()
+        .find(|o| o.name == name)
+        .map_or_else(|| name.clone(), |o| o.id.clone());
+    let move_id = state
+        .window
+        .settings
+        .machines
+        .last_move
+        .as_ref()
+        .and_then(|m| m.id.clone());
+    let machines = panel(state);
+    machines.told = None;
+    machines.moving = Some(Move {
+        id: id.clone(),
+        name,
+        step: MoveStep::Moving(4),
+        move_id,
+    });
+    start_move(state, &id, 4, tx);
 }
 
 /// The band of the move this window runs: its step while it runs, and how it ended.
@@ -501,6 +548,7 @@ pub(crate) fn identity(state: &State) -> Option<String> {
             }),
             _,
         ) => Some(format!("moving:{name}:{steps}")),
+        (None, _) if held_move(state).is_some() => held_move(state).map(|to| format!("held:{to}")),
         (_, Some(Told::Moved(to))) => Some(format!("moved:{to}")),
         (_, Some(Told::RollingBack)) => Some("rolling-back".to_owned()),
         (_, Some(Told::RolledBack)) => Some("rolled-back".to_owned()),
@@ -556,6 +604,14 @@ pub(crate) fn said(state: &State) -> Option<Banner> {
                     "home-move.step",
                     format!("{step}/{STEPS} {}", step_label(step, name)),
                 ),
+        );
+    }
+    if let Some(to) = held_move(state) {
+        return Some(
+            Banner::new("home-move", "Home move", BannerTone::Bad)
+                .says("home-move.text", format!("Move to {to} didn’t finish."))
+                .action("home-move.retry", Button::new("Retry"), retry_move)
+                .action("home-move.roll-back", Button::new("Roll back"), roll_back),
         );
     }
     Some(match machines.told.as_ref()? {
@@ -761,7 +817,7 @@ fn move_blocks(state: &State, row: &Row, t: &Tokens) -> Option<(Vec<Block>, Vec<
                 .look(Look::Primary)
                 .size(Size::Compact)
                 .disabled(!online || !ready)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| start_move(state, &id, tx))
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| start_move(state, &id, 0, tx))
                 .build(t)
                 .key(part("go"));
             (under, vec![go.into(), again(), cancel()])

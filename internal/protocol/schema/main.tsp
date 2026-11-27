@@ -2126,6 +2126,8 @@ model HomeMoveResultMessage {
 model HomeMoveProgressMessage {
   event: "home_move_progress";
   request_id: string;
+  // id names the move whose step began.
+  id: string;
   step: string;
 }
 

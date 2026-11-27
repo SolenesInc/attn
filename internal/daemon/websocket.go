@@ -1137,8 +1137,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdHomeMove:
 		m := msg.(*protocol.HomeMoveMessage)
 		requestID := protocol.Deref(m.RequestID)
-		began := func(step string) {
-			d.sendToClient(client, protocol.HomeMoveProgressMessage{Event: protocol.EventHomeMoveProgress, RequestID: requestID, Step: step})
+		began := func(id, step string) {
+			d.sendToClient(client, protocol.HomeMoveProgressMessage{Event: protocol.EventHomeMoveProgress, RequestID: requestID, ID: id, Step: step})
 		}
 		d.handleHomeMoveWS(client, requestID, func(ctx context.Context) (protocol.HomeMove, bool, error) { return d.homeMoveCommand(ctx, m, began) })
 	case protocol.CmdHomeMoveStatus:
