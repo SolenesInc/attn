@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "info",
+  "title": "Withdrawn: overlapping enrollment name conflict [67f2ce6]",
+  "at": "2026-11-27T16:21:54.036Z",
+  "detail": "Earlier P1 67f2ce6 withdrawn after the owning plot traced the join handshake. Rejecting at insert would strand a join already recorded by the joiner. Holding the shared action lock across the handshake would block unrelated operations. The rare duplicate outcome remains visible and recoverable by machine ID, under the existing shared-name behavior. No fix is claimed.\n"
+}
