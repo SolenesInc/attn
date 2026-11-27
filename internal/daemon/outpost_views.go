@@ -16,6 +16,10 @@ import (
 	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
+func (d *Daemon) runsHere(session *protocol.Session) bool {
+	return session.Host == nil && !d.copiedSession(session.ID)
+}
+
 func (d *Daemon) copiedSession(id protocol.SessionID) bool {
 	_, copied, _ := d.store.SessionHost(id)
 	return copied || d.store.SessionRuntimeRecords(id).HomeID != ""

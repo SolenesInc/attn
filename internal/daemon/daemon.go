@@ -862,7 +862,7 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[protocol.Sessio
 	removed := 0
 	recoverable := 0
 	for _, session := range sessions {
-		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun || session.Host != nil {
+		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun || !d.runsHere(session) {
 			continue
 		}
 		if _, ok := liveIDs[session.ID]; ok || d.hidden(session.ID) {
@@ -1175,7 +1175,7 @@ func (d *Daemon) recoverSessions(ctx context.Context, rules recoveryRules) worke
 	machine := d.recoverMachine(ctx)
 	var sessions []protocol.SessionID
 	for _, session := range d.store.List("") {
-		if session.Host == nil {
+		if d.runsHere(session) {
 			sessions = append(sessions, session.ID)
 		}
 	}

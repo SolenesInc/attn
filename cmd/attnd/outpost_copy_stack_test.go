@@ -390,3 +390,35 @@ func TestARemoteShellExitingAsItsHomeClosesItEndsOnlyOnItsOutpost(t *testing.T) 
 		t.Fatalf("the outpost ran the home part of %s's exit %d times, want none", id, exits)
 	}
 }
+
+func TestAnOutpostLeavesItsCopiedSessionsToTheHomeAcrossAReboot(t *testing.T) {
+	remote, home := testworld.NewStack(t), testworld.NewStack(t)
+	pair := testworld.PrepareOutpostPair(t, home, remote)
+	applied := remote.PauseEvery(pausepoint.CopyBatchApplied)
+	remote.Start()
+	home.Start()
+	pair.Connect()
+	app := pair.App
+	host := pair.Host
+	id := protocol.SessionID(home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host }))
+	for {
+		applied.Await()
+		_, copied := sessionsOn(t, remote, "")[id]
+		applied.Release()
+		if copied {
+			break
+		}
+	}
+	mark := len(app.Log())
+	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "false"))
+	outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
+	remote.Reboot()
+	remote.Start()
+	own := remote.App()
+	for _, warning := range own.Initial.Warnings {
+		t.Errorf("the outpost recovered a copy of the home's session itself: %s: %s", warning.Code, warning.Message)
+	}
+	if _, kept := sessionsOn(t, remote, "")[id]; !kept {
+		t.Errorf("the outpost dropped its copy of %s across a reboot", id)
+	}
+}
