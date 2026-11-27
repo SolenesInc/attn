@@ -60,6 +60,8 @@ type homeMoveRuntime struct {
 	yielded bool
 	// checking is the move whose checks run before it writes its record.
 	checking *protocol.HomeMove
+	// run is the move this machine runs now, or the last it ran since it started.
+	run *homeMoveRun
 }
 
 type homeMoveFolder struct {
@@ -109,6 +111,13 @@ var exitForMove = func() { _ = syscall.Kill(os.Getpid(), syscall.SIGTERM) }
 
 func (d *Daemon) runsHomeRole() bool {
 	return d.enrollmentStatus().IsHome() && d.homeMoveIdle() == ""
+}
+
+// homeMoveRun is one move command, and how it ended once ended closes.
+type homeMoveRun struct {
+	ended   chan struct{}
+	outcome protocol.HomeMove
+	err     error
 }
 
 // homeMoveIdle says why a move keeps this home from running its role, or is empty when none does.
@@ -327,6 +336,24 @@ func homeMoveResult(requestID string, move protocol.HomeMove, err error) protoco
 	return result
 }
 
+// homeMoveStatusOnceEnded answers with how the move this machine runs, or ran last, ended, as the move command
+// answered, so a window that lost the answer of the move it started still hears it. With no such move since this
+// daemon started, it answers the status.
+func (d *Daemon) homeMoveStatusOnceEnded(ctx context.Context) (protocol.HomeMove, error) {
+	d.homeMove.mu.Lock()
+	run := d.homeMove.run
+	d.homeMove.mu.Unlock()
+	if run == nil {
+		return d.homeMoveStatus()
+	}
+	select {
+	case <-run.ended:
+		return run.outcome, run.err
+	case <-ctx.Done():
+		return protocol.HomeMove{}, ctx.Err()
+	}
+}
+
 func (d *Daemon) homeMoveStatus() (protocol.HomeMove, error) {
 	record, found, err := homemove.Latest(d.dataRoot)
 	d.homeMove.mu.Lock()
@@ -368,7 +395,7 @@ func (d *Daemon) handleHomeMoveRollback(ctx context.Context, conn net.Conn) {
 	}
 }
 
-func (d *Daemon) homeMoveCommand(ctx context.Context, msg *protocol.HomeMoveMessage, began func(id, step string)) (protocol.HomeMove, bool, error) {
+func (d *Daemon) homeMoveCommand(ctx context.Context, msg *protocol.HomeMoveMessage, began func(id, step string)) (move protocol.HomeMove, exit bool, err error) {
 	if !d.on(setting.RemoteHomeEnabled) {
 		return protocol.HomeMove{}, false, protocol.Refuse(protocol.RefusalWrongState, "remote_home_enabled is off; run {attn settings set remote_home_enabled true} before you move the home")
 	}
@@ -405,15 +432,22 @@ func (d *Daemon) homeMoveCommand(ctx context.Context, msg *protocol.HomeMoveMess
 		if id, err = newMoveID(); err != nil {
 			return protocol.HomeMove{}, false, err
 		}
+		run := &homeMoveRun{ended: make(chan struct{})}
 		d.homeMove.mu.Lock()
+		d.homeMove.run = run
 		d.homeMove.checking = &protocol.HomeMove{ID: protocol.Ptr(id), Side: protocol.Ptr(string(homemove.SideFrom)), Step: stepChecking, From: protocol.Ptr(d.bridgeIdentity().Name), To: protocol.Ptr(target.Name), Checks: []protocol.HomeMoveCheck{}, Remaps: []protocol.HomeMoveRemap{}}
 		d.homeMove.mu.Unlock()
 		defer func() {
+			run.outcome, run.err = move, err
+			if run.outcome.ID == nil {
+				run.outcome.ID = protocol.Ptr(id)
+			}
 			d.homeMove.mu.Lock()
 			if d.homeMove.checking != nil && protocol.Deref(d.homeMove.checking.ID) == id {
 				d.homeMove.checking = nil
 			}
 			d.homeMove.mu.Unlock()
+			close(run.ended)
 		}()
 	}
 	if id != "" {

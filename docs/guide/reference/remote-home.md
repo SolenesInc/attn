@@ -60,8 +60,10 @@ new machine, and reconnect. Both daemons restart, and the app on the old home
 then reaches the new home through its own daemon. The band then says **Home
 moved to** *machine*.
 
-If the new home doesn't start, the band says **Move failed:** *machine*'s home
-didn't start, and offers **Roll back**. If the old home restarted while the
+If the move stops before it commits, the band says **Move to** *machine*
+**failed.** with the reason, and the home stays where it was. If the new home
+doesn't start, the band says **Move failed:** *machine*'s home didn't start,
+and offers **Roll back**. If the old home restarted while the
 move committed, the band says **Move to** *machine* **didn't finish**, and
 offers **Retry**, which finishes the move, and **Roll back**.
 

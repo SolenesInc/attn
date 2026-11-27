@@ -158,6 +158,7 @@ pub(crate) fn home_unreachable(
     run: Option<&UpdateRun>,
     notice: Option<&str>,
     moved_to: Option<&str>,
+    rollback_failed: Option<&str>,
 ) -> El {
     let title = format!("Can’t reach {}", away.home);
     let detail = match (away.dial.as_str(), away.reason.as_deref()) {
@@ -211,21 +212,28 @@ pub(crate) fn home_unreachable(
         }
     }
     if let Some(to) = moved_to {
-        screen = screen.child(
-            Stack::tight()
-                .key("connection.home-unreachable.move")
-                .child(words(rollback_said(to), Type::Body, t.text_secondary).wrap())
-                .child(El::from(
-                    Button::new(format!(
-                        "Roll back to {}",
-                        crate::settings::machines::this_machine()
-                    ))
-                    .size(Size::Compact)
-                    .on_press_tx(crate::settings::machines::roll_back)
-                    .build(t)
-                    .key("connection.home-unreachable.roll-back"),
-                )),
-        );
+        let mut moved = Stack::tight()
+            .key("connection.home-unreachable.move")
+            .child(words(rollback_said(to), Type::Body, t.text_secondary).wrap())
+            .child(El::from(
+                Button::new(format!(
+                    "Roll back to {}",
+                    crate::settings::machines::this_machine()
+                ))
+                .size(Size::Compact)
+                .on_press_tx(crate::settings::machines::roll_back)
+                .build(t)
+                .key("connection.home-unreachable.roll-back"),
+            ));
+        if let Some(why) = rollback_failed {
+            moved = moved.child(
+                words(why.to_owned(), Type::Body, t.error)
+                    .key("connection.home-unreachable.roll-back-failed")
+                    .wrap()
+                    .selectable(true),
+            );
+        }
+        screen = screen.child(moved);
     }
     if let Some(notice) = notice {
         screen = screen.child(

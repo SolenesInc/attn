@@ -614,6 +614,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
                 crate::update_run::current(state),
                 state.window.notice.as_ref().map(|n| n.text.as_str()),
                 crate::settings::machines::undoable_move(state),
+                crate::settings::machines::rollback_failure(state),
             ),
         ),
     };

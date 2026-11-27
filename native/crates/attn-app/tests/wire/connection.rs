@@ -822,6 +822,21 @@ fn a_home_that_did_not_start_after_a_move_offers_to_roll_the_move_back() {
 }
 
 #[test]
+fn a_roll_back_the_home_refuses_shows_why_beside_its_offer() {
+    let mut world = away_after_a_move("applied");
+    world.daemon.on("home_move_rollback", |_| {
+        serde_json::json!({"event": "home_move_result", "success": false, "error": "move m-1 is done; run attn home move to bring the home back"})
+    });
+    world.gesture(|app| app.click(Target::key("connection.home-unreachable.roll-back")));
+    assert_eq!(
+        named_key(&world, "connection.home-unreachable.roll-back-failed").as_deref(),
+        Some("move m-1 is done; run attn home move to bring the home back"),
+        "{}",
+        world.screen()
+    );
+}
+
+#[test]
 fn a_move_the_new_home_took_over_is_not_offered_for_rollback() {
     let world = away_after_a_move("done");
     assert!(home_unreachable(&world).is_some(), "{}", world.screen());

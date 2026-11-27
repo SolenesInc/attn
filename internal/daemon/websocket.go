@@ -1144,7 +1144,12 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		}
 		d.handleHomeMoveWS(client, requestID, func(ctx context.Context) (protocol.HomeMove, bool, error) { return d.homeMoveCommand(ctx, m, began) })
 	case protocol.CmdHomeMoveStatus:
-		d.handleHomeMoveWS(client, protocol.Deref(msg.(*protocol.HomeMoveStatusMessage).RequestID), func(context.Context) (protocol.HomeMove, bool, error) {
+		m := msg.(*protocol.HomeMoveStatusMessage)
+		d.handleHomeMoveWS(client, protocol.Deref(m.RequestID), func(ctx context.Context) (protocol.HomeMove, bool, error) {
+			if protocol.Deref(m.Wait) {
+				move, err := d.homeMoveStatusOnceEnded(ctx)
+				return move, false, err
+			}
 			move, err := d.homeMoveStatus()
 			return move, false, err
 		})

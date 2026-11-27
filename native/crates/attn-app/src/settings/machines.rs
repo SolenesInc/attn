@@ -55,6 +55,8 @@ pub(crate) struct Machines {
     last_move: Option<HomeMove>,
     /// How the last move from this window ended, until its band is dismissed.
     told: Option<Told>,
+    /// Why the last Roll back or Stop waiting from the band failed.
+    band_error: Option<String>,
 }
 
 /// A move of the home to one machine, from its checks until it ends.
@@ -64,6 +66,8 @@ struct Move {
     step: MoveStep,
     /// The id the daemon gave this move once it began, so only its own record says how it ended.
     move_id: Option<String>,
+    /// Whether this window waits on the daemon for the move's answer, after it lost the move command's own.
+    waited: bool,
 }
 
 enum MoveStep {
@@ -72,6 +76,8 @@ enum MoveStep {
     /// How many of the move's steps have begun.
     Moving(usize),
     Failed(String),
+    /// The move began, and ended without committing, for this reason.
+    Stopped(String),
 }
 
 enum Told {
@@ -331,11 +337,13 @@ fn moving_to<'a>(state: &'a mut State, id: &str) -> Option<&'a mut Move> {
 fn check_move(state: &mut State, id: &str, name: &str, tx: &mut Tx) {
     let machines = panel(state);
     machines.told = None;
+    machines.band_error = None;
     machines.moving = Some(Move {
         id: id.to_owned(),
         name: name.to_owned(),
         step: MoveStep::Checking,
         move_id: None,
+        waited: false,
     });
     let machine = id.to_owned();
     let id = id.to_owned();
@@ -375,25 +383,46 @@ fn start_move(state: &mut State, id: &str, begun: usize, tx: &mut Tx) {
             request_id: Some(request_id),
             ..HomeMoveMessage::new()
         },
-        move |state, answer, _| {
-            if matches!(answer, Answer::Dropped) {
-                return;
+        move |state, answer, tx| {
+            if !matches!(answer, Answer::Dropped) {
+                hear_move(state, &id, &answer, tx);
             }
-            let Some(moving) = moving_to(state, &id) else {
-                return;
-            };
-            moving.step = match move_answer(&answer) {
-                Ok(moved) if moved.step == "committed" => {
-                    moving.move_id = moved.id.or(moving.move_id.take());
-                    MoveStep::Moving(5)
-                }
-                Ok(HomeMove { error, step, .. }) => MoveStep::Failed(error.unwrap_or(step)),
-                Err(why) => MoveStep::Failed(why),
-            };
         },
         tx,
     );
 }
+
+/// Follows the move to the machine id from the move command's answer: a committed move goes on to start the home
+/// there, and any other answer stops it, and reads the latest move, which holds a move that stopped while it
+/// committed.
+fn hear_move(state: &mut State, id: &str, answer: &Answer, tx: &mut Tx) {
+    let Some(moving) = moving_to(state, id) else {
+        return;
+    };
+    let why = match move_answer(answer) {
+        Ok(moved) if moved.step == "committed" => {
+            moving.move_id = moved.id.or(moving.move_id.take());
+            moving.step = MoveStep::Moving(5);
+            return;
+        }
+        Ok(HomeMove { step, .. }) if matches!(step.as_str(), "checking" | "staged") => {
+            STOPPED_BEFORE_COMMIT.to_owned()
+        }
+        Ok(HomeMove {
+            error,
+            step,
+            checks,
+            ..
+        }) => error
+            .or_else(|| checks.into_iter().find(|c| !c.ok).and_then(|c| c.detail))
+            .unwrap_or(step),
+        Err(why) => why,
+    };
+    moving.step = MoveStep::Stopped(why);
+    read_last_move(state, tx);
+}
+
+const STOPPED_BEFORE_COMMIT: &str = "it stopped before it committed, so the home did not move";
 
 /// Ends the move this window runs once this window has the home again: its own record on this machine says how
 /// it ended, a committing one shows as held, and a move with no record of its own stopped before it committed.
@@ -430,10 +459,10 @@ fn settle_move(state: &mut State, latest: &HomeMove) {
             machines.moving = Some(moving);
             return;
         }
-        (false, _) => "it stopped before it committed, so the home did not move".to_owned(),
+        (false, _) => STOPPED_BEFORE_COMMIT.to_owned(),
     };
     machines.moving = Some(Move {
-        step: MoveStep::Failed(why),
+        step: MoveStep::Stopped(why),
         ..moving
     });
 }
@@ -461,10 +490,50 @@ fn read_last_move(state: &mut State, tx: &mut Tx) {
             request_id: Some(request_id),
             ..HomeMoveStatusMessage::new()
         },
-        |state, answer, _| {
-            if let Ok(latest) = move_answer(&answer) {
-                settle_move(state, &latest);
-                panel(state).last_move = Some(latest);
+        |state, answer, tx| {
+            let Ok(latest) = move_answer(&answer) else {
+                return;
+            };
+            settle_move(state, &latest);
+            let running = latest.side.as_deref() == Some("from")
+                && matches!(latest.step.as_str(), "checking" | "staged");
+            let machines = panel(state);
+            let same = |m: &HomeMove| m.id == latest.id && m.step == latest.step;
+            if !machines.last_move.as_ref().is_some_and(same) {
+                machines.band_error = None;
+            }
+            machines.last_move = Some(latest);
+            if running {
+                await_move(state, tx);
+            }
+        },
+        tx,
+    );
+}
+
+/// Asks the daemon for the answer of the move this window runs, once that move ends, for a window that lost the
+/// move command's own answer when it reconnected. One such request waits at a time.
+fn await_move(state: &mut State, tx: &mut Tx) {
+    let Some(moving) = panel(state)
+        .moving
+        .as_mut()
+        .filter(|m| !m.waited && matches!(m.step, MoveStep::Moving(_)))
+    else {
+        return;
+    };
+    moving.waited = true;
+    let id = moving.id.clone();
+    state.ask_here(
+        |request_id| HomeMoveStatusMessage {
+            request_id: Some(request_id),
+            wait: Some(true),
+            ..HomeMoveStatusMessage::new()
+        },
+        move |state, answer, tx| {
+            if !matches!(answer, Answer::Dropped) {
+                hear_move(state, &id, &answer, tx);
+            } else if let Some(moving) = moving_to(state, &id) {
+                moving.waited = false;
             }
         },
         tx,
@@ -481,6 +550,7 @@ pub(crate) fn undoable_move(state: &State) -> Option<&str> {
 }
 
 pub(crate) fn roll_back(state: &mut State, tx: &mut Tx) {
+    panel(state).band_error = None;
     state.ask_here(
         |request_id| HomeMoveRollbackMessage {
             request_id: Some(request_id),
@@ -500,7 +570,11 @@ pub(crate) fn roll_back(state: &mut State, tx: &mut Tx) {
                 machines.last_move = Some(latest);
             }
             Err(_) if matches!(answer, Answer::Dropped) => {}
-            Err(why) => panel(state).command_error = Some(why),
+            Err(why) => {
+                let machines = panel(state);
+                machines.command_error = Some(why.clone());
+                machines.band_error = Some(why);
+            }
         },
         tx,
     );
@@ -524,15 +598,48 @@ fn waiting_move(state: &State) -> Option<&str> {
     waiting.then_some(latest.to.as_deref()).flatten()
 }
 
-/// Why the last try of the move this window runs failed.
+/// Why the last try of the move this window runs failed, or the last Roll back or Stop waiting from the band.
 fn move_failure(state: &State) -> Option<&str> {
-    match &state.window.settings.machines.moving {
+    let machines = &state.window.settings.machines;
+    match &machines.moving {
+        _ if machines.band_error.is_some() => machines.band_error.as_deref(),
         Some(Move {
-            step: MoveStep::Failed(why),
+            step: MoveStep::Failed(why) | MoveStep::Stopped(why),
             ..
         }) => Some(why),
         _ => None,
     }
+}
+
+/// The move this window ran that stopped without committing, with why.
+fn stopped_move(state: &State) -> Option<(&str, &str)> {
+    match &state.window.settings.machines.moving {
+        Some(Move {
+            name,
+            step: MoveStep::Stopped(why),
+            ..
+        }) => Some((name, why)),
+        _ => None,
+    }
+}
+
+/// Why the last Roll back from this window failed.
+pub(crate) fn rollback_failure(state: &State) -> Option<&str> {
+    state.window.settings.machines.band_error.as_deref()
+}
+
+/// Why the held move did not finish: a failure this window saw, or the error its record names.
+fn held_failure(state: &State) -> Option<&str> {
+    move_failure(state).or_else(|| {
+        state
+            .window
+            .settings
+            .machines
+            .last_move
+            .as_ref()?
+            .error
+            .as_deref()
+    })
 }
 
 fn moving_step(state: &State) -> Option<(&str, usize)> {
@@ -566,11 +673,13 @@ fn retry_move(state: &mut State, tx: &mut Tx) {
         .and_then(|m| m.id.clone());
     let machines = panel(state);
     machines.told = None;
+    machines.band_error = None;
     machines.moving = Some(Move {
         id: id.clone(),
         name,
         step: MoveStep::Moving(4),
         move_id,
+        waited: false,
     });
     start_move(state, &id, 4, tx);
 }
@@ -584,16 +693,22 @@ pub(crate) fn banner(state: &State, t: &Tokens, cx: &Cx<State>) -> Option<El> {
 /// The message the band shows.
 pub(crate) fn identity(state: &State) -> Option<String> {
     if let Some(to) = failed_move(state) {
-        return Some(format!("failed:{to}"));
+        return Some(format!("failed:{to}:{}", move_failure(state).unwrap_or("")));
     }
     if let Some((name, steps)) = moving_step(state) {
         return Some(format!("moving:{name}:{steps}"));
     }
     if let Some(to) = held_move(state) {
-        return Some(format!("held:{to}:{}", move_failure(state).unwrap_or("")));
+        return Some(format!("held:{to}:{}", held_failure(state).unwrap_or("")));
     }
     if let Some(to) = waiting_move(state) {
-        return Some(format!("waiting:{to}"));
+        return Some(format!(
+            "waiting:{to}:{}",
+            move_failure(state).unwrap_or("")
+        ));
+    }
+    if let Some((name, why)) = stopped_move(state) {
+        return Some(format!("stopped:{name}:{why}"));
     }
     match state.window.settings.machines.told.as_ref()? {
         Told::Moved(to) => Some(format!("moved:{to}")),
@@ -626,7 +741,11 @@ pub(crate) fn said(state: &State) -> Option<Banner> {
                     "home-move.text",
                     format!("Move failed: {to}’s home didn’t start."),
                 )
-                .note("home-move.why", crate::connection::rollback_said(to))
+                .note(
+                    "home-move.why",
+                    move_failure(state)
+                        .map_or_else(|| crate::connection::rollback_said(to), str::to_owned),
+                )
                 .action("home-move.roll-back", Button::new("Roll back"), roll_back),
         );
     }
@@ -650,7 +769,7 @@ pub(crate) fn said(state: &State) -> Option<Banner> {
     if let Some(to) = held_move(state) {
         let banner = Banner::new("home-move", "Home move", BannerTone::Bad)
             .says("home-move.text", format!("Move to {to} didn’t finish."));
-        let banner = match move_failure(state) {
+        let banner = match held_failure(state) {
             Some(why) => banner.note("home-move.why", why.to_owned()),
             None => banner,
         };
@@ -669,13 +788,27 @@ pub(crate) fn said(state: &State) -> Option<Banner> {
                 )
                 .note(
                     "home-move.why",
-                    "Until then, this home runs no background jobs and no phone link.",
+                    move_failure(state)
+                        .unwrap_or(
+                            "Until then, this home runs no background jobs and no phone link.",
+                        )
+                        .to_owned(),
                 )
                 .action(
                     "home-move.stop-waiting",
                     Button::new("Stop waiting"),
                     roll_back,
                 ),
+        );
+    }
+    if let Some((name, why)) = stopped_move(state) {
+        return Some(
+            Banner::new("home-move", "Home move", BannerTone::Bad)
+                .says("home-move.text", format!("Move to {name} failed."))
+                .note("home-move.why", why.to_owned())
+                .dismiss("home-move.dismiss", "Dismiss", |state: &mut State| {
+                    panel(state).moving = None;
+                }),
         );
     }
     Some(match machines.told.as_ref()? {
@@ -688,7 +821,7 @@ pub(crate) fn said(state: &State) -> Option<Banner> {
         Told::RolledBack => dismiss(
             Banner::new("home-move", "Home move", BannerTone::Good).says(
                 "home-move.text",
-                format!("Rolled back. The home is on {}.", this_machine()),
+                format!("Rolled back. The home is on {}.", home_name(state)),
             ),
         ),
     })
@@ -857,7 +990,7 @@ fn move_blocks(state: &State, row: &Row, t: &Tokens) -> Option<(Vec<Block>, Vec<
             vec![cancel()],
         ),
         MoveStep::Moving(steps) => (vec![move_steps(&key, *steps, &name, t)], vec![]),
-        MoveStep::Failed(why) => (
+        MoveStep::Failed(why) | MoveStep::Stopped(why) => (
             vec![Notice::error(part("failed"), format!("Move failed: {why}")).build(t)],
             vec![again(), cancel()],
         ),
@@ -976,6 +1109,14 @@ fn machine_name(state: &State, outpost: &OutpostInfo) -> String {
         this_machine().to_owned()
     } else {
         outpost.name.clone()
+    }
+}
+
+/// The machine that runs the home, as this window names it.
+fn home_name(state: &State) -> String {
+    match &state.facts.machine.home {
+        Some(home) => home.clone(),
+        None => this_machine().to_owned(),
     }
 }
 
@@ -1131,7 +1272,7 @@ fn status_line(state: &State, row: &Row) -> Option<String> {
             MoveStep::Moving(steps) => {
                 step_label((*steps).clamp(1, STEPS), &moving.name).to_lowercase()
             }
-            MoveStep::Failed(_) => "move failed".to_owned(),
+            MoveStep::Failed(_) | MoveStep::Stopped(_) => "move failed".to_owned(),
         });
     }
     let version = |build: &str| build.split_whitespace().next().map(str::to_owned);

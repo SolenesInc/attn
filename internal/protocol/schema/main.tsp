@@ -2104,7 +2104,12 @@ model HomeMoveMessage { cmd: "home_move"; machine: string; via?: string; check?:
 // Sent by `attn home status` and by the app: this machine's latest move. The reply carries home_move; over the
 // WebSocket it is home_move_result, naming request_id.
 @extension("x-on", #{ here: true })
-model HomeMoveStatusMessage { cmd: "home_move_status"; request_id?: string; }
+model HomeMoveStatusMessage {
+  cmd: "home_move_status";
+  request_id?: string;
+  // wait answers with how the move this machine runs, or ran last since its daemon started, ended.
+  wait?: boolean;
+}
 
 // Sent by `attn home rollback` and by Roll back in the app: this machine undoes its side of its latest move,
 // restarting when the move had changed its database. The reply carries home_move; over the WebSocket it is

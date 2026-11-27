@@ -210,20 +210,39 @@ func TestHomeMoveKeepsTerminalsAndMovesBack(t *testing.T) {
 	}
 
 	awaitMachineNotebook(t, app, homeMachine, protocol.OutpostNotebookStateInSync)
-	app.Send(protocol.HomeMoveMessage{Cmd: protocol.CmdHomeMove, Machine: homeMachine, Via: protocol.Ptr("outpost"), RequestID: protocol.Ptr("back")})
+	app.Send(protocol.HomeMoveMessage{Cmd: protocol.CmdHomeMove, Machine: homeMachine, Via: protocol.Ptr("outpost"), RequestID: protocol.Ptr("cut")})
 	checking.Await()
 	started := homeMoveJSON(t, outpost, "status")
-	checking.Release()
 	if started.Step != "checking" || protocol.Deref(started.Side) != "from" || started.ID == nil {
 		t.Fatalf("status while the move back runs its checks: %s", describeMove(started))
 	}
-	result := testworld.Await(app, protocol.EventHomeMoveResult, func(r protocol.HomeMoveResultMessage) bool { return r.RequestID == "back" })
+	app.Send(protocol.HomeMoveStatusMessage{Cmd: protocol.CmdHomeMoveStatus, Wait: protocol.Ptr(true), RequestID: protocol.Ptr("waited")})
+	m.SSH.Fail("oldhome", "ssh: connect to host oldhome port 22: No route to host")
+	home.Stop()
+	checking.Release()
+	cut := testworld.Await(app, protocol.EventHomeMoveResult, func(r protocol.HomeMoveResultMessage) bool { return r.RequestID == "cut" })
+	waited := testworld.Await(app, protocol.EventHomeMoveResult, func(r protocol.HomeMoveResultMessage) bool { return r.RequestID == "waited" })
+	if cut.HomeMove == nil || cut.HomeMove.Step != "refused" || waited.HomeMove == nil || waited.HomeMove.Step != "refused" || protocol.Deref(waited.HomeMove.ID) != protocol.Deref(started.ID) {
+		t.Fatalf("a move that lost its target during its checks, and the status that waited for it: %+v, %+v", cut, waited)
+	}
+	connected := func(msg protocol.OutpostsUpdatedMessage) bool {
+		return slices.ContainsFunc(msg.Outposts, func(r protocol.OutpostInfo) bool {
+			return r.ID == homeMachine && r.State == protocol.OutpostStateConnected
+		})
+	}
+	home.Start()
+	redialed := len(app.Log())
+	redialOnce(outpost, func() { m.SSH.Restore("oldhome") })
+	testworld.AwaitSince(app, redialed, protocol.EventOutpostsUpdated, connected)
+	awaitMachineNotebook(t, app, homeMachine, protocol.OutpostNotebookStateInSync)
+	result := testworld.Request(app, protocol.HomeMoveMessage{Cmd: protocol.CmdHomeMove, Machine: homeMachine, Via: protocol.Ptr("outpost"), RequestID: protocol.Ptr("back")},
+		protocol.EventHomeMoveResult, func(r protocol.HomeMoveResultMessage) bool { return r.RequestID == "back" })
 	if !result.Success || result.HomeMove == nil || result.HomeMove.Step != "committed" || result.HomeMove.Error != nil {
-		t.Fatalf("move back from the app: %+v", result)
+		t.Fatalf("move back from the app: %+v %s", result, describeMove(*result.HomeMove))
 	}
 	for _, step := range []string{"fence", "copy", "build", "commit"} {
 		progress := testworld.Await(app, protocol.EventHomeMoveProgress, func(p protocol.HomeMoveProgressMessage) bool { return p.RequestID == "back" && p.Step == step })
-		if progress.ID != protocol.Deref(result.HomeMove.ID) || progress.ID != protocol.Deref(started.ID) {
+		if progress.ID != protocol.Deref(result.HomeMove.ID) {
 			t.Fatalf("step %s names move %q; the move is %q", step, progress.ID, protocol.Deref(result.HomeMove.ID))
 		}
 	}
@@ -345,8 +364,7 @@ func TestHomeMoveRollbackKeepsOneHomeAtATime(t *testing.T) {
 	}
 	home.AwaitStopped()
 	home.Start()
-	pair.SSH.Restore(pair.Destination)
-	redial(home)
+	redialOnce(home, func() { pair.SSH.Restore(pair.Destination) })
 	outpost.AwaitStopped()
 	outpost.Start()
 	defer home.FireTimers(bridge.RetryTimer)()
@@ -771,21 +789,28 @@ func (m *movingPair) restartAfterRollback() {
 	m.SSH.Fail("oldhome", "ssh: connect to host oldhome port 22: No route to host")
 	m.Outpost.Start()
 	m.Home.Start()
-	m.SSH.Restore("oldhome")
-	redial(m.Outpost)
+	redialOnce(m.Outpost, func() { m.SSH.Restore("oldhome") })
 	m.Outpost.AwaitStopped()
 	m.Outpost.Start()
 	m.SSH.Restore(m.Destination)
 }
 
-// redial fires the retry of the dial that s's daemon made while the other machine refused it, holding the home itself.
 func homeUnit(s *testworld.Stack) string {
 	return filepath.Join(s.Path("xdg-config"), "systemd", "user", "attn.service")
 }
 
+// redial fires the retry of the dial that s's daemon made while the other machine refused it, holding the home itself.
 func redial(s *testworld.Stack) {
 	s.T.Helper()
+	redialOnce(s, func() {})
+}
+
+// redialOnce restores a route with restore once s's daemon has armed its retry over the failed one, then fires the retry,
+// so the route is up for that dial alone.
+func redialOnce(s *testworld.Stack, restore func()) {
+	s.T.Helper()
 	s.AwaitTimer(bridge.RetryTimer)
+	restore()
 	s.FirePending(bridge.RetryTimer)
 }
 
@@ -861,13 +886,11 @@ func TestHomeMoveSurvivesAKillAtEachStep(t *testing.T) {
 				m.SSH.Fail("oldhome", "ssh: connect to host oldhome port 22: No route to host")
 				other.Start()
 				killed.Start()
-				m.SSH.Restore("oldhome")
-				redial(m.Outpost)
+				redialOnce(m.Outpost, func() { m.SSH.Restore("oldhome") })
 				m.Home.AwaitStopped()
 				m.SSH.Fail("oldhome", "ssh: connect to host oldhome port 22: No route to host")
 				m.Home.Start()
-				m.SSH.Restore("oldhome")
-				redial(m.Outpost)
+				redialOnce(m.Outpost, func() { m.SSH.Restore("oldhome") })
 				m.requireMoved(t, homeMachine, pidHome, pidOut)
 				return
 			}
@@ -1049,13 +1072,11 @@ func TestHomeMoveToAMachineThatDialsTheHome(t *testing.T) {
 		w.ssh.Fail("home", "ssh: connect to host home port 22: No route to host")
 		w.laptop.Start()
 		w.home.Start()
-		w.ssh.Restore("home")
-		redial(w.laptop)
+		redialOnce(w.laptop, func() { w.ssh.Restore("home") })
 		w.home.AwaitStopped()
 		w.ssh.Fail("home", "ssh: connect to host home port 22: No route to host")
 		w.home.Start()
-		w.ssh.Restore("home")
-		redial(w.laptop)
+		redialOnce(w.laptop, func() { w.ssh.Restore("home") })
 		if !role(t, w.laptop).IsHome() || role(t, w.home).IsHome() {
 			t.Fatalf("roles: old home %+v, target %+v; want the target home", role(t, w.home), role(t, w.laptop))
 		}
@@ -1104,8 +1125,10 @@ func TestHomeMoveToAMachineThatDialsTheHome(t *testing.T) {
 			t.Fatalf("rollback: %s", describeMove(back))
 		}
 		w.home.AwaitStopped()
+		w.ssh.Fail("home", "ssh: connect to host home port 22: No route to host")
 		w.home.Start()
-		w.laptop.StartUnprobed()
+		w.laptop.Start()
+		redialOnce(w.laptop, func() { w.ssh.Restore("home") })
 		w.laptop.AwaitStopped()
 		w.laptop.Start()
 		if !role(t, w.home).IsHome() || role(t, w.laptop).IsHome() {

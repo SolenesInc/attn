@@ -100,13 +100,6 @@ func (s *Stack) Start() {
 	s.start()
 }
 
-// StartUnprobed starts the daemon and waits for its ready signal without connecting an app, for a daemon that can
-// hand its role to another machine and exit before an app reaches it.
-func (s *Stack) StartUnprobed() {
-	s.T.Helper()
-	s.launch()
-}
-
 func (s *Stack) StartCrashingAt(point string) {
 	s.T.Helper()
 	s.start("ATTN_CRASH_AT=" + point)

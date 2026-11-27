@@ -6636,6 +6636,9 @@ type HomeMoveStatusMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Wait corresponds to the JSON schema field "wait".
+	Wait *bool `json:"wait,omitempty,omitzero"`
 }
 
 type HomeUnreachableMessage struct {
