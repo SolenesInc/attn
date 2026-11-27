@@ -48,6 +48,7 @@ const (
 type sharedBuild struct {
 	HomeID string       `json:"home_id"`
 	Build  bridge.Build `json:"build"`
+	At     time.Time    `json:"at"`
 }
 
 func (d *Daemon) sharedBuildPath() string { return filepath.Join(d.dataRoot, "home-shared-build.json") }
@@ -65,9 +66,6 @@ func (d *Daemon) readSharedBuild() (sharedBuild, bool) {
 }
 
 func (d *Daemon) recordSharedBuild(record sharedBuild) {
-	if current, ok := d.readSharedBuild(); ok && current == record {
-		return
-	}
 	data, err := json.Marshal(record)
 	if err == nil {
 		err = os.WriteFile(d.sharedBuildPath()+".tmp", data, 0o600)
@@ -142,7 +140,8 @@ func failedRow(row store.UpdateRunOutpost, err error) store.UpdateRunOutpost {
 // homeBridged runs when this machine's dial reaches its home: the builds are equal, so this is the build they share.
 func (d *Daemon) homeBridged() {
 	status := d.enrollmentStatus()
-	d.recordSharedBuild(sharedBuild{HomeID: status.HomeID, Build: d.bridgeIdentity().Build})
+	d.recordSharedBuild(sharedBuild{HomeID: status.HomeID, Build: d.bridgeIdentity().Build, At: time.Now()})
+	defer pausepoint.At(pausepoint.HomeBridged)
 	r := &d.outpost
 	r.mu.Lock()
 	r.refusedBy = nil
@@ -227,7 +226,7 @@ func (d *Daemon) appMachineRow() store.UpdateRunOutpost {
 func (d *Daemon) recordHomeDifference(home bridge.Identity, behind bool, command string) {
 	d.updateRuns.mu.Lock()
 	self := d.bridgeIdentity().Build.String()
-	if latest := d.latestUpdateRun(); latest != nil && (latest.Open() || latest.InstallKind == installKindHome && latest.TargetBuild == self && runShowsHomeOn(*latest, home.Build.String())) {
+	if latest := d.latestUpdateRun(); latest != nil && (latest.Open() || latest.InstallKind == installKindHome && latest.TargetBuild == self && runShowsHomeOn(*latest, home.Build.String()) && !d.homeRunSettled(*latest)) {
 		d.updateRuns.mu.Unlock()
 		return
 	}
@@ -257,6 +256,21 @@ func (d *Daemon) recordHomeDifference(home bridge.Identity, behind bool, command
 	}
 	d.setUpdateRow(run, app)
 	d.finishUpdateRun(run, protocol.UpdatePhaseFailed, outcome)
+}
+
+// homeRunSettled says whether a finished update of the home no longer tells how the two machines stand: a restart
+// of this machine cut it, or the home answered this machine after it ended.
+func (d *Daemon) homeRunSettled(run store.UpdateRun) bool {
+	if run.Open() {
+		return false
+	}
+	for _, row := range run.Outposts {
+		if row.Role == store.UpdateRoleHome && row.Reason == string(protocol.UpdateFailureReasonInterrupted) {
+			return true
+		}
+	}
+	shared, ok := d.readSharedBuild()
+	return ok && shared.At.After(run.FinishedAt)
 }
 
 func runShowsHomeOn(run store.UpdateRun, build string) bool {
@@ -342,8 +356,13 @@ func (d *Daemon) runHomeUpdate(run store.UpdateRun, destination string, row stor
 	}
 	if err != nil {
 		d.logf("update run %s: home %s failed (%s): %v", run.ID, row.Name, reasonOf(err), err)
+		outcome := fmt.Sprintf("%s stays on its build: %v", row.Name, err)
+		if reasonOf(err) == string(protocol.UpdateFailureReasonNotBack) {
+			row.Build = run.TargetBuild
+			outcome = fmt.Sprintf("%s switched to %s and did not connect again: %v", row.Name, run.TargetBuild, err)
+		}
 		d.setUpdateRow(run, failedRow(row, err))
-		d.finishUpdateRun(run, protocol.UpdatePhaseFailed, fmt.Sprintf("%s stays on its build: %v", row.Name, err))
+		d.finishUpdateRun(run, protocol.UpdatePhaseFailed, outcome)
 		return
 	}
 	d.logf("update run %s: home %s is back on %s", run.ID, row.Name, d.bridgeIdentity().Build)

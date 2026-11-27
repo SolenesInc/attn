@@ -141,16 +141,18 @@ update of that outpost fails, names that machine and installs nothing.
 
 Once the home is back, the app shows the home's run in the banner and
 **Settings → Updates**: a row for the home, one for the machine and one for each
-outpost. While the home refuses the machine's build, the app shows **Can't
-reach** with the reason, and `attn update status` on the machine prints the
-machine's own rows. A failed row names one reason with its cause:
+outpost, each with its own action. While the home refuses the machine's build,
+the app shows **Can't reach** with the reason, the machine's update of the home
+and its action, and `attn update status` on the machine prints the same rows.
+A failed row names one reason with its cause:
 
 | Reason | Meaning |
 | --- | --- |
 | no build | The build could not be made or downloaded. |
 | unreachable | ssh could not reach the home. |
 | refused | The home rejected the build, for example because its database is newer or its platform is not Linux amd64 or arm64. |
-| not back | The home switched and did not connect again on the new build. |
+| not back | The home switched to the new build and did not connect again. |
+| interrupted | attn on the machine restarted before the update finished. Once the home answers, the row shows what the home runs, with **Update** when the builds still differ. |
 | behind | The home runs a newer build. The row opens the home's release, copies the command that builds its commit, or, for a build from a changed worktree, says to build it there. |
 
 Every reason but not back leaves the home on its old build. A failed update

@@ -568,3 +568,209 @@ fn a_home_lost_on_a_desktop_with_tiles_leaves_no_shelf_to_click() {
         world.screen()
     );
 }
+
+/// The app on a machine whose home answers \`dial\` and refuses it, with this machine's daemon
+/// keeping a home update run in \`phase\` with \`rows\`, and a shell of its own when \`terminal\`.
+fn away_with(
+    dial: &str,
+    phase: &str,
+    rows: serde_json::Value,
+    terminal: bool,
+) -> (World, Option<tempfile::TempDir>) {
+    let home = Daemon::scripted();
+    let dial = dial.to_owned();
+    home.on("client_hello", move |_| {
+        serde_json::json!({"event": "home_unreachable", "home": "oma", "state": dial, "reason": "build differs"})
+    });
+    let mut initial: InitialStateMessage = serde_json::from_value(serde_json::json!({
+        "event": "initial_state",
+        "protocol_version": PROTOCOL_VERSION,
+        "daemon_instance_id": "laptop-daemon",
+        "update_run": {
+            "id": "h1", "install_kind": "home", "phase": phase, "log_path": "/tmp/h1.log",
+            "target_build": "0.16.1 (source git:0.16.1, protocol p)",
+            "requesters": [], "outposts": rows,
+        },
+    }))
+    .unwrap();
+    if terminal {
+        initial.sessions = Some(vec![attn_protocol::Session {
+            id: "here".into(),
+            label: "here".into(),
+            agent: "shell".into(),
+            state: "idle".into(),
+            directory: "/tmp/here".into(),
+            profile_id: "work".into(),
+            ..attn_protocol::Session::default()
+        }]);
+        initial.terminal_bindings = Some(vec![attn_protocol::TerminalBinding {
+            session_id: "here".into(),
+            terminal_id: "rl".into(),
+        }]);
+    }
+    let machine = Daemon::of_this_machine(&home).state(initial);
+    machine.on("start_update", |_| ());
+    let daemon = home.relaying_to("laptop-id", "oma");
+    if !terminal {
+        return (
+            World::start_relaying(daemon, machine, (1400.0, 900.0)),
+            None,
+        );
+    }
+    let dir = tempfile::tempdir().expect("a folder for the app's data");
+    drop(World::start_with_data_dir(
+        Daemon::scripted().state(InitialStateMessage {
+            protocol_version: Some(PROTOCOL_VERSION.into()),
+            selected_profile_id: Some("work".into()),
+            profiles: Some(vec![attn_protocol::Profile {
+                id: "work".into(),
+                name: "Work".into(),
+                ..attn_protocol::Profile::default()
+            }]),
+            ..InitialStateMessage::new()
+        }),
+        dir.path().to_path_buf(),
+    ));
+    let world =
+        World::start_relaying_in(daemon, machine, (1400.0, 900.0), dir.path().to_path_buf());
+    (world, Some(dir))
+}
+
+fn away_with_machine_run(rows: serde_json::Value) -> World {
+    away_with("refused", "failed", rows, false).0
+}
+
+fn unreachable_home_rows() -> serde_json::Value {
+    serde_json::json!([
+        {"id": "home", "name": "oma", "role": "home", "state": "failed", "build": "0.16.0 (source git:0.16.0, protocol p)",
+         "reason": "unreachable", "detail": "ssh: Connection timed out", "action": "Update"},
+        {"id": "laptop-id", "name": "laptop", "role": "app_machine", "state": "done", "build": "0.16.1 (source git:0.16.1, protocol p)"},
+    ])
+}
+
+fn named_key(world: &World, key: &str) -> Option<String> {
+    world.screen().find(Target::key(key)).and_then(|n| n.name)
+}
+
+#[test]
+fn an_app_machine_its_home_refuses_shows_its_failed_update_and_update_asks_its_own_daemon() {
+    let mut world = away_with_machine_run(serde_json::json!([
+        {"id": "home", "name": "oma", "role": "home", "state": "failed", "build": "0.16.0 (source git:0.16.0, protocol p)",
+         "reason": "unreachable", "detail": "ssh: Connection timed out", "action": "Update"},
+        {"id": "laptop-id", "name": "laptop", "role": "app_machine", "state": "done", "build": "0.16.1 (source git:0.16.1, protocol p)"},
+    ]));
+    assert!(home_unreachable(&world).is_some(), "{}", world.screen());
+    assert_eq!(
+        named_key(&world, "connection.home-unreachable.update").as_deref(),
+        Some("Update failed: oma: unreachable.")
+    );
+    assert_eq!(
+        named_key(&world, "connection.home-unreachable.update-note").as_deref(),
+        Some("ssh: Connection timed out")
+    );
+    world.gesture(|app| app.click(Target::key("connection.home-unreachable.update-action")));
+    let machine = world.machine.as_ref().expect("this machine's daemon");
+    assert_eq!(
+        machine.sent_of("start_update").len(),
+        1,
+        "Update goes to this machine's own daemon"
+    );
+    assert!(world.daemon.sent_of("start_update").is_empty());
+}
+
+#[test]
+fn an_app_machine_on_a_release_behind_its_home_opens_the_release_from_cant_reach() {
+    let page = "https://github.com/victorarias/attn/releases/tag/v0.16.2";
+    let mut world = away_with_machine_run(serde_json::json!([
+        {"id": "home", "name": "oma", "role": "home", "state": "done", "build": "0.16.2 (source git:0.16.2, protocol p)"},
+        {"id": "laptop-id", "name": "laptop", "role": "app_machine", "state": "failed", "build": "0.16.1 (source git:0.16.1, protocol p)",
+         "reason": "behind", "detail": "oma runs a newer build", "action": page},
+    ]));
+    assert_eq!(
+        named_key(&world, "connection.home-unreachable.update").as_deref(),
+        Some("This Mac is behind oma.")
+    );
+    assert_eq!(
+        named_key(&world, "connection.home-unreachable.update-action").as_deref(),
+        Some("Open release")
+    );
+    world.gesture(|app| app.click(Target::key("connection.home-unreachable.update-action")));
+    assert_eq!(world.opened_links(), vec![page.to_owned()]);
+}
+
+#[test]
+fn a_machine_showing_its_own_terminals_while_its_home_refuses_it_bands_its_failed_update() {
+    let (mut world, _data) = away_with("refused", "failed", unreachable_home_rows(), true);
+    assert!(home_unreachable(&world).is_none(), "{}", world.screen());
+    assert_eq!(
+        named_key(&world, "update-run.text").as_deref(),
+        Some("Update failed: oma: unreachable."),
+        "{}",
+        world.screen()
+    );
+    world.gesture(|app| app.click(Target::key("update-run.action")));
+    let machine = world.machine.as_ref().expect("this machine's daemon");
+    assert_eq!(machine.sent_of("start_update").len(), 1);
+}
+
+#[test]
+fn a_home_that_is_only_offline_shows_no_update_the_machine_finished_before() {
+    let (world, _) = away_with(
+        "dialing",
+        "done",
+        serde_json::json!([
+            {"id": "home", "name": "oma", "role": "home", "state": "done", "build": "0.16.1 (source git:0.16.1, protocol p)"},
+            {"id": "laptop-id", "name": "laptop", "role": "app_machine", "state": "done", "build": "0.16.1 (source git:0.16.1, protocol p)"},
+        ]),
+        false,
+    );
+    assert!(home_unreachable(&world).is_some(), "{}", world.screen());
+    assert_eq!(
+        named_key(&world, "connection.home-unreachable.update"),
+        None
+    );
+}
+
+#[test]
+fn update_the_machine_refuses_says_why() {
+    let mut world = away_with_machine_run(unreachable_home_rows());
+    world
+        .machine
+        .as_ref()
+        .expect("this machine's daemon")
+        .on("start_update", |_| {
+            attn_testkit::message(attn_protocol::StartUpdateResultMessage {
+                success: false,
+                error: Some(
+                    "this machine updates its home only after the home refused its build".into(),
+                ),
+                ..attn_protocol::StartUpdateResultMessage::new()
+            })
+        });
+    world.gesture(|app| app.click(Target::key("connection.home-unreachable.update-action")));
+    assert!(
+        world
+            .screen()
+            .to_string()
+            .contains("only after the home refused its build"),
+        "{}",
+        world.screen()
+    );
+}
+
+#[test]
+fn a_machine_behind_a_home_built_from_a_changed_worktree_says_to_build_it_there() {
+    let world = away_with_machine_run(serde_json::json!([
+        {"id": "home", "name": "oma", "role": "home", "state": "done", "build": "0.16.2 (source tree:abc, protocol p)"},
+        {"id": "laptop-id", "name": "laptop", "role": "app_machine", "state": "failed", "build": "0.16.1 (source git:0.16.1, protocol p)",
+         "reason": "behind", "detail": "oma runs a newer build; build it again from the changed worktree that built it"},
+    ]));
+    assert_eq!(
+        named_key(&world, "connection.home-unreachable.update-note").as_deref(),
+        Some("oma runs a newer build; build it again from the changed worktree that built it")
+    );
+    assert_eq!(
+        named_key(&world, "connection.home-unreachable.update-action"),
+        None
+    );
+}

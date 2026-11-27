@@ -15105,6 +15105,7 @@ type UpdateChangedMessage struct {
 type UpdateFailureReason string
 
 const UpdateFailureReasonBehind UpdateFailureReason = "behind"
+const UpdateFailureReasonInterrupted UpdateFailureReason = "interrupted"
 const UpdateFailureReasonNoBuild UpdateFailureReason = "no_build"
 const UpdateFailureReasonNotBack UpdateFailureReason = "not_back"
 const UpdateFailureReasonRefused UpdateFailureReason = "refused"

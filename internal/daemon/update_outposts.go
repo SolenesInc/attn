@@ -264,5 +264,8 @@ func (d *Daemon) switchOutpost(ctx context.Context, row store.Machine) (string, 
 			return build, sshFault(err)
 		}
 	}
-	return build, fault(string(protocol.UpdateFailureReasonNotBack), d.reconnectOutpostOnHomeBuild(ctx, row))
+	if err := d.reconnectOutpostOnHomeBuild(ctx, row); err != nil {
+		return self.String(), fault(string(protocol.UpdateFailureReasonNotBack), err)
+	}
+	return build, nil
 }

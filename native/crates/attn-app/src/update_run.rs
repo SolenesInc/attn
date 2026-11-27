@@ -61,7 +61,7 @@ pub(crate) enum RowAction {
 }
 
 impl RowAction {
-    fn of(row: &UpdateOutpostProgress) -> Option<RowAction> {
+    pub(crate) fn of(row: &UpdateOutpostProgress) -> Option<RowAction> {
         row.action.as_deref().map(|action| match action {
             "Update" => RowAction::Update,
             "Update outpost" => RowAction::UpdateOutpost(row.id.clone()),
@@ -103,10 +103,14 @@ pub(crate) fn home_says(run: &UpdateRun) -> Option<HomeSays> {
         });
     }
     if run.phase == "done" {
-        let left = run
+        let mut left_behind = run
             .outposts
             .iter()
-            .find(|o| is_outpost(o) && matches!(o.state.as_str(), "failed" | "skipped"));
+            .filter(|o| is_outpost(o) && matches!(o.state.as_str(), "failed" | "skipped"));
+        let left = left_behind
+            .clone()
+            .find(|o| RowAction::of(o).is_some())
+            .or_else(|| left_behind.next());
         return Some(match left {
             None => HomeSays {
                 tone: BannerTone::Good,
@@ -131,14 +135,26 @@ pub(crate) fn home_says(run: &UpdateRun) -> Option<HomeSays> {
         } else {
             format!("{} runs another build.", home.name)
         };
+        let action = RowAction::of(this);
+        let note = match (&action, this.detail.as_deref().filter(|d| !d.is_empty())) {
+            (None, Some(detail)) => detail.to_owned(),
+            _ => builds(),
+        };
         return Some(HomeSays {
             tone: BannerTone::Warn,
             head,
-            note: Some(builds()),
-            action: RowAction::of(this),
+            note: Some(note),
+            action,
         });
     }
-    let failed = run.outposts.iter().find(|o| o.reason.is_some())?;
+    let Some(failed) = run.outposts.iter().find(|o| o.reason.is_some()) else {
+        return Some(HomeSays {
+            tone: BannerTone::Bad,
+            head: "Update failed.".to_owned(),
+            note: run.outcome.clone().filter(|o| !o.is_empty()),
+            action: None,
+        });
+    };
     Some(HomeSays {
         tone: BannerTone::Bad,
         head: format!(
@@ -155,9 +171,47 @@ pub(crate) fn home_says(run: &UpdateRun) -> Option<HomeSays> {
     })
 }
 
-/// Runs `action`: Update starts the home's update, Copy puts the command on the clipboard.
+/// The run the app shows. While the home is away, that is this machine's own update of the home
+/// while it goes or after it failed; otherwise it is the home's run.
+pub(crate) fn current(state: &State) -> Option<&UpdateRun> {
+    match &state.facts.connection {
+        Connection::HomeUnreachable(_) => state
+            .facts
+            .machine
+            .update_run
+            .as_deref()
+            .filter(|run| run.install_kind == "home" && run.phase != "done"),
+        _ => state.facts.update_run.as_ref().as_ref(),
+    }
+}
+
+/// Whether the daemon that keeps the shown run answers now.
+fn reachable(state: &State) -> bool {
+    match state.facts.connection {
+        Connection::HomeUnreachable(_) => state.facts.machine.connected,
+        ref connection => *connection == Connection::Connected,
+    }
+}
+
+/// Runs `action`: Update starts the update on the daemon that keeps the shown run, Copy puts the
+/// command on the clipboard.
 pub(crate) fn run_action(action: &RowAction, state: &mut State, tx: &mut Tx) {
     match action {
+        RowAction::Update if matches!(state.facts.connection, Connection::HomeUnreachable(_)) => {
+            let id = state.next_request_id();
+            let command = StartUpdateMessage {
+                request_id: Some(id.clone()),
+                ..StartUpdateMessage::new()
+            };
+            state.act_on(
+                attn_client::Reach::Machine,
+                id,
+                &command,
+                Refused::Bare,
+                |_, _, _| {},
+                tx,
+            );
+        }
         RowAction::Update => start(state, None, tx),
         RowAction::UpdateOutpost(id) => {
             let _ = state.daemon.send(&UpdateOutpostMessage {
@@ -174,13 +228,17 @@ pub(crate) fn run_action(action: &RowAction, state: &mut State, tx: &mut Tx) {
     }
 }
 
-pub(crate) fn action_button(action: &RowAction) -> Button {
-    Button::new(match action {
+pub(crate) fn action_text(action: &RowAction) -> &'static str {
+    match action {
         RowAction::Update => "Update",
         RowAction::UpdateOutpost(_) => "Update outpost",
         RowAction::Open(_) => "Open release",
         RowAction::Copy(_) => "Copy command",
-    })
+    }
+}
+
+pub(crate) fn action_button(action: &RowAction) -> Button {
+    Button::new(action_text(action))
 }
 
 fn closes_by_itself(run: &UpdateRun) -> bool {
@@ -245,7 +303,7 @@ fn outpost_notes(outposts: &[UpdateOutpostProgress]) -> Vec<(&str, String)> {
 /// The run the band shows: the daemon's last, unless this window or the last launch
 /// dismissed it.
 fn shown(state: &State) -> Option<&UpdateRun> {
-    let run = state.facts.update_run.as_ref().as_ref()?;
+    let run = current(state)?;
     let closed = match &state.window.update_run.closed {
         Some(id) => Some(id.clone()),
         None => crate::frame::pref_string(CLOSED_PREF),
@@ -278,13 +336,13 @@ fn hold(state: &mut State, inside: bool, tx: &mut Tx) {
 }
 
 fn close(state: &mut State) {
-    let banner = &mut state.window.update_run;
-    let Some(run) = state.facts.update_run.as_ref().as_ref() else {
+    let Some(id) = current(state).map(|run| run.id.clone()) else {
         return;
     };
+    let banner = &mut state.window.update_run;
     banner.closing.stop();
-    banner.closed = Some(run.id.clone());
-    crate::frame::set_pref_string(CLOSED_PREF, &run.id);
+    crate::frame::set_pref_string(CLOSED_PREF, &id);
+    banner.closed = Some(id);
 }
 
 /// Asks the daemon to update attn, leaving out `without` outposts; a refusal shows as a
@@ -329,7 +387,7 @@ pub(crate) fn said(state: &State) -> Option<blocks::Banner> {
     let connected = state.facts.connection == Connection::Connected;
     let open = is_open(run);
     if let Some(home) = home_says(run) {
-        return Some(home_banner(state, run, home, connected));
+        return Some(home_banner(state, run, home, reachable(state)));
     }
     let says = if open {
         phase_text(&run.phase).to_owned()

@@ -1,11 +1,12 @@
 use attn_client::{Connection, Facts, HomeUnreachable, Refusal};
-use attn_protocol::RetryHomeMessage;
+use attn_protocol::{RetryHomeMessage, UpdateRun};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Banner, BannerTone, Stack};
 use attn_ui::system::{Button, Look, Part, Said, Size, Type, words};
-use rune::{Cx, El};
+use rune::{Cx, El, Tx};
 
 use crate::State;
+use crate::update_run;
 
 pub(crate) fn connecting(t: &Tokens) -> El {
     words("Connecting to the daemon", Type::Body, t.text_secondary)
@@ -151,7 +152,12 @@ pub(crate) fn shows_desktops(connection: &Connection) -> bool {
 /// What the app shows while the daemon on its port cannot reach the home it passes the app to:
 /// the home, why, and a way to dial it now. The link connects again by itself once the dial
 /// changes.
-pub(crate) fn home_unreachable(t: &Tokens, away: &HomeUnreachable) -> El {
+pub(crate) fn home_unreachable(
+    t: &Tokens,
+    away: &HomeUnreachable,
+    run: Option<&UpdateRun>,
+    notice: Option<&str>,
+) -> El {
     let title = format!("Can’t reach {}", away.home);
     let detail = match (away.dial.as_str(), away.reason.as_deref()) {
         ("refused", Some(reason)) => format!("{} refused this machine: {reason}", away.home),
@@ -165,7 +171,7 @@ pub(crate) fn home_unreachable(t: &Tokens, away: &HomeUnreachable) -> El {
         .on_press(retry_home)
         .build(t)
         .key("connection.home-unreachable.retry");
-    Stack::tight()
+    let mut screen = Stack::tight()
         .key("connection.home-unreachable")
         .role("alert")
         .label(format!("{title}. {detail}"))
@@ -176,7 +182,42 @@ pub(crate) fn home_unreachable(t: &Tokens, away: &HomeUnreachable) -> El {
                 .wrap()
                 .selectable(true),
         )
-        .child(El::from(retry))
+        .child(El::from(retry));
+    if let Some(says) = run.and_then(update_run::home_says) {
+        screen = screen.child(
+            words(says.head, Type::Body, t.text_primary)
+                .key("connection.home-unreachable.update")
+                .wrap(),
+        );
+        if let Some(note) = says.note {
+            screen = screen.child(
+                words(note, Type::Body, t.text_secondary)
+                    .key("connection.home-unreachable.update-note")
+                    .wrap()
+                    .selectable(true),
+            );
+        }
+        if let Some(action) = says.action {
+            screen = screen.child(El::from(
+                update_run::action_button(&action)
+                    .size(Size::Compact)
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                        update_run::run_action(&action, state, tx)
+                    })
+                    .build(t)
+                    .key("connection.home-unreachable.update-action"),
+            ));
+        }
+    }
+    if let Some(notice) = notice {
+        screen = screen.child(
+            words(notice.to_owned(), Type::Body, t.text_secondary)
+                .key("connection.home-unreachable.notice")
+                .wrap()
+                .selectable(true),
+        );
+    }
+    screen
 }
 
 /// Asks the daemon on the app's port to dial its home now; it closes the connection once it

@@ -87,26 +87,64 @@ fn start(state: &mut State, tx: &mut Tx) {
     );
 }
 
-/// The rows a run this app machine keeps for its home: the home and this Mac, each with its
-/// build or why it is not on the run's, and the one action the run offers.
-fn machines(run: &UpdateRun, t: &Tokens) -> Vec<Block> {
-    let Some(says) = update_run::home_says(run) else {
+/// The rows of a run that updates a home: each machine with its build or why it is not on the
+/// run's, naming as This Mac the row of `viewer`, the machine this app runs on, and, once the
+/// run ended, each row's own way to catch up.
+fn machines(run: &UpdateRun, viewer: &str, t: &Tokens) -> Vec<Block> {
+    if update_run::home_says(run).is_none() {
         return Vec::new();
-    };
+    }
+    let ended = matches!(run.phase.as_str(), "done" | "failed");
     let mut facts = Facts::new("settings.updates.machines");
+    let mut actions = Actions::new("settings.updates.machine-actions");
+    let mut any_action = false;
+    let home_name = run
+        .outposts
+        .iter()
+        .find(|row| row.role.as_deref() == Some("home"))
+        .map_or("the home", |row| row.name.as_str());
     for row in &run.outposts {
+        let name = if !viewer.is_empty() && row.id == viewer {
+            "This Mac"
+        } else {
+            row.name.as_str()
+        };
         let label = match row.role.as_deref() {
-            Some("app_machine") => "This Mac".to_owned(),
-            Some("home") => format!("{} · home", row.name),
-            _ => row.name.clone(),
+            Some("home") => format!("{name} · home"),
+            _ => name.to_owned(),
         };
         let build = row.build.as_deref().unwrap_or_default();
-        let status = match (&row.reason, row.detail.as_deref().filter(|d| !d.is_empty())) {
-            (Some(reason), Some(detail)) => format!("{}: {detail}", reason.replace('_', " ")),
-            (Some(reason), None) => reason.replace('_', " "),
-            (None, Some(detail)) if row.state != "done" => detail.to_owned(),
-            _ => build.split(" (").next().unwrap_or(build).to_owned(),
+        let version = build.split(" (").next().unwrap_or(build);
+        let why = match (&row.reason, row.detail.as_deref().filter(|d| !d.is_empty())) {
+            (Some(reason), Some(detail)) => Some(format!("{}: {detail}", reason.replace('_', " "))),
+            (Some(reason), None) => Some(reason.replace('_', " ")),
+            (None, Some(detail)) if row.state != "done" => Some(detail.to_owned()),
+            _ => None,
         };
+        let status = match why {
+            Some(why) if version.is_empty() => why,
+            Some(why) => format!("{why} · on {version}"),
+            None => version.to_owned(),
+        };
+        if let Some(action) = update_run::RowAction::of(row).filter(|_| ended) {
+            any_action = true;
+            let key = format!("settings.updates.machine-action.{}", row.id);
+            actions = actions.push(
+                Button::new(format!(
+                    "{} {}",
+                    update_run::action_text(&action),
+                    match action {
+                        update_run::RowAction::Update => home_name,
+                        _ => label.as_str(),
+                    }
+                ))
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    update_run::run_action(&action, state, tx)
+                })
+                .build(t)
+                .key(key),
+            );
+        }
         facts = facts.fact(
             format!("settings.updates.machine.{}", row.id),
             label,
@@ -114,19 +152,8 @@ fn machines(run: &UpdateRun, t: &Tokens) -> Vec<Block> {
         );
     }
     let mut blocks = vec![facts.build(t)];
-    if let Some(action) = says.action {
-        blocks.push(
-            Actions::new("settings.updates.machine-actions")
-                .push(
-                    update_run::action_button(&action)
-                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            update_run::run_action(&action, state, tx)
-                        })
-                        .build(t)
-                        .key("settings.updates.machine-action"),
-                )
-                .build(),
-        );
+    if any_action {
+        blocks.push(actions.build());
     }
     blocks
 }
@@ -155,8 +182,8 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
             )
             .build(t),
     ];
-    if let Some(run) = state.facts.update_run.as_ref().as_ref() {
-        page.extend(machines(run, t));
+    if let Some(run) = update_run::current(state) {
+        page.extend(machines(run, &state.facts.machine.id, t));
     }
     if updatable(settings) {
         let running = running(state);

@@ -1031,7 +1031,14 @@ impl Task {
                     state.sessions.unwrap_or_default(),
                     state.terminal_bindings.unwrap_or_default(),
                     state.settings.unwrap_or_default(),
+                    state.update_run,
                 );
+            }
+            "update_changed" => {
+                let Some(message) = parse::<UpdateChangedMessage>(&header.event, text) else {
+                    return;
+                };
+                self.store.set_machine_update_run(message.run);
             }
             "settings_updated" => {
                 if let Some(settings) =

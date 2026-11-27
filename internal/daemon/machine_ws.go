@@ -22,6 +22,7 @@ var machineLinkCommands = map[string]bool{
 	protocol.CmdTerminalReadText:        true,
 	protocol.CmdGetSettings:             true,
 	protocol.CmdSetSetting:              true,
+	protocol.CmdStartUpdate:             true,
 }
 
 func machineLinkRefusal(cmd string, msg any) error {

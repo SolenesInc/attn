@@ -587,7 +587,15 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
             centered(&t, crate::migration_failure::screen(state, marker, &t))
         }
         Connection::Refused(refusal) => centered(&t, connection::refused(&t, refusal)),
-        Connection::HomeUnreachable(away) => centered(&t, connection::home_unreachable(&t, away)),
+        Connection::HomeUnreachable(away) => centered(
+            &t,
+            connection::home_unreachable(
+                &t,
+                away,
+                crate::update_run::current(state),
+                state.window.notice.as_ref().map(|n| n.text.as_str()),
+            ),
+        ),
     };
     let banner = connection::banner(state, &t, cx);
     let bands = desk;

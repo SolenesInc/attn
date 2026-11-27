@@ -255,7 +255,21 @@ impl State {
         done: impl FnOnce(&mut State, Reply, &mut Tx) + 'static,
         tx: &mut Tx,
     ) {
-        self.ask_as(
+        self.act_on(attn_client::Reach::Home, id, command, refused, done, tx);
+    }
+
+    /// As `act_as`, on link `on`.
+    pub(crate) fn act_on(
+        &mut self,
+        on: attn_client::Reach,
+        id: String,
+        command: &impl Serialize,
+        refused: Refused,
+        done: impl FnOnce(&mut State, Reply, &mut Tx) + 'static,
+        tx: &mut Tx,
+    ) {
+        self.ask_on(
+            on,
             id,
             command,
             move |state, answer, tx| match answer.outcome() {

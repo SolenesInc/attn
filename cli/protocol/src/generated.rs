@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "31c2fadee64c";
+pub const PROTOCOL_VERSION: &str = "ccf464b729bf";
 
 pub trait ResponseField {
     const FIELD: &'static str;

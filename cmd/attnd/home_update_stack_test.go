@@ -256,7 +256,8 @@ func TestAFailedSwitchOfTheHomeStartsNoSecondUpdateAcrossReconnects(t *testing.T
 	}
 	before := homeFileBytes(t, installed)
 
-	run := finishedRunOf(t, w.laptop, w.installOnLaptop(testworld.AttnUpdateBinary(t, "2.0.0-switch-fails", "source", "")))
+	next := testworld.AttnUpdateBinary(t, "2.0.0-switch-fails", "source", "")
+	run := finishedRunOf(t, w.laptop, w.installOnLaptop(next))
 	home := machineRowOf(t, run, protocol.UpdateMachineRoleHome)
 	if run.Phase != protocol.UpdatePhaseFailed || home.State != protocol.UpdateOutpostStateFailed || protocol.Deref(home.Reason) != protocol.UpdateFailureReasonRefused || protocol.Deref(home.Action) != "Update" || !strings.Contains(protocol.Deref(home.Detail), ptyhost.BinaryName+".previous") {
 		t.Fatalf("a home whose switch fails: %+v %+v", run, home)
@@ -272,38 +273,89 @@ func TestAFailedSwitchOfTheHomeStartsNoSecondUpdateAcrossReconnects(t *testing.T
 		t.Fatal("a redial after the failed switch installed on the home")
 	}
 	requireStdout(t, w.laptop.Attn("update", "status"), "home        ", "(refused)", "; Update")
+
+	app := w.laptop.MachineApp()
+	if shown := app.Initial.UpdateRun; shown == nil || shown.ID != run.ID || protocol.Deref(machineRowOf(t, *shown, protocol.UpdateMachineRoleHome).Action) != "Update" {
+		t.Fatalf("the app reads %+v from the app machine, not the failed run %s with Update", shown, run.ID)
+	}
+	if err := os.RemoveAll(filepath.Dir(kept)); err != nil {
+		t.Fatal(err)
+	}
+	app.Send(protocol.StartUpdateMessage{Cmd: protocol.CmdStartUpdate, RequestID: protocol.Ptr("update")})
+	if started := testworld.Await(app, protocol.EventStartUpdateResult, func(protocol.StartUpdateResultMessage) bool { return true }); !started.Success {
+		t.Fatalf("Update from the app machine's own daemon: %+v", started)
+	}
+	w.home.AwaitDaemonReplaced()
+	if fleet := homeRunOf(t, w.home.App(), "fleet"); fleet.Phase != protocol.UpdatePhaseDone {
+		t.Fatalf("the home after Update: %+v", fleet)
+	}
+	requireSameFile(t, "the home's attn", installed, next)
 }
 
 func TestAnAppMachineWhoseBuildDidNotChangeStartsNoUpdateOfAHomeAhead(t *testing.T) {
-	base := testworld.AttnBinary(t)
-	w := newAppMachineWorld(t, base)
-	second := testworld.NewStack(t)
-	second.RunFrom(base)
-	w.ssh.Use(second.World)
-	secondFinished := second.PassesOf(pausepoint.UpdateRunFinished)
-	second.Start()
-	for _, key := range []string{"remote_home_enabled", "self_update_enabled"} {
-		requireStdout(t, second.Attn("settings", "set", key, "true"), "true")
-	}
-	requireStdout(t, second.Attn("enrollment", "join", "home"), "dial:       home (bridged)")
+	for _, tc := range []struct {
+		name   string
+		base   func(t *testing.T) string
+		next   func(t *testing.T) string
+		action func(next string) string
+		detail string
+	}{
+		{
+			name:   "release",
+			base:   func(t *testing.T) string { return testworld.AttnBinary(t) },
+			next:   func(t *testing.T) string { return testworld.AttnUpdateBinary(t, "2.0.0-ahead-release", "source", "") },
+			action: func(string) string { return "/releases/tag/v2.0.0-ahead-release" },
+		},
+		{
+			name:   "commit",
+			base:   func(t *testing.T) string { return testworld.AttnUpdateBinary(t, "1.0.0-behind-commit", "source", "") },
+			next:   func(t *testing.T) string { return testworld.AttnUpdateBinary(t, "2.0.0-ahead-commit", "source", "") },
+			action: func(string) string { return "git checkout 2.0.0-ahead-commit && make install" },
+		},
+		{
+			name:   "changed-worktree",
+			base:   func(t *testing.T) string { return testworld.AttnUpdateBinary(t, "1.0.0-behind-tree", "source", "") },
+			next:   func(t *testing.T) string { return testworld.AttnWorktreeBinary(t, "2.0.0-ahead-tree") },
+			detail: "build it again from the changed worktree that built it",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := tc.base(t)
+			w := newAppMachineWorld(t, base)
+			second := testworld.NewStack(t)
+			second.RunFrom(base)
+			w.ssh.Use(second.World)
+			secondFinished := second.PassesOf(pausepoint.UpdateRunFinished)
+			second.Start()
+			for _, key := range []string{"remote_home_enabled", "self_update_enabled"} {
+				requireStdout(t, second.Attn("settings", "set", key, "true"), "true")
+			}
+			requireStdout(t, second.Attn("enrollment", "join", "home"), "dial:       home (bridged)")
 
-	next := testworld.AttnUpdateBinary(t, "2.0.0-first-app-machine", "source", "")
-	w.installOnLaptop(next)
-	w.home.AwaitDaemonReplaced()
-	if fleet := homeRunOf(t, w.home.App(), "fleet"); fleet.Phase != protocol.UpdatePhaseDone {
-		t.Fatalf("the first app machine's update: %+v", fleet)
+			next := tc.next(t)
+			w.installOnLaptop(next)
+			w.home.AwaitDaemonReplaced()
+			if fleet := homeRunOf(t, w.home.App(), "fleet"); fleet.Phase != protocol.UpdatePhaseDone {
+				t.Fatalf("the first app machine's update: %+v", fleet)
+			}
+			stop := second.FireTimers(bridge.RetryTimer)
+			run := finishedRunOf(t, second, secondFinished)
+			stop()
+			app := machineRowOf(t, run, protocol.UpdateMachineRoleAppMachine)
+			action := protocol.Deref(app.Action)
+			if protocol.Deref(app.Reason) != protocol.UpdateFailureReasonBehind {
+				t.Fatalf("the second app machine, behind its home: %+v", app)
+			}
+			if tc.action == nil && action != "" || tc.action != nil && !strings.HasSuffix(action, tc.action(next)) {
+				t.Fatalf("the second app machine's way to catch up: %q", action)
+			}
+			if !strings.Contains(protocol.Deref(app.Detail), tc.detail) {
+				t.Fatalf("the second app machine's row says %q, not %q", protocol.Deref(app.Detail), tc.detail)
+			}
+			requireSameFile(t, "the home's attn", w.ssh.InstallPath(w.home), next)
+			requireStdout(t, second.Attn("update", "status"), "(behind)", action)
+		})
 	}
-	stop := second.FireTimers(bridge.RetryTimer)
-	run := finishedRunOf(t, second, secondFinished)
-	stop()
-	app := machineRowOf(t, run, protocol.UpdateMachineRoleAppMachine)
-	home := machineRowOf(t, run, protocol.UpdateMachineRoleHome)
-	if protocol.Deref(app.Reason) != protocol.UpdateFailureReasonBehind || protocol.Deref(app.Action) == "" || !strings.Contains(protocol.Deref(home.Build), "2.0.0-first-app-machine") {
-		t.Fatalf("the second app machine, behind its home: %+v %+v", app, home)
-	}
-	requireSameFile(t, "the home's attn", w.ssh.InstallPath(w.home), next)
-	requireStdout(t, second.Attn("update", "status"), "(behind)", protocol.Deref(app.Action))
-	t.Logf("behind: %s; %s", protocol.Deref(app.Detail), protocol.Deref(app.Action))
 }
 
 func TestAnAppMachineInstallingABuildWhileItsHomeRunsAnUnsharedBuildStartsNoUpdate(t *testing.T) {
@@ -607,6 +659,9 @@ func driveHomeUpdateFailure(t *testing.T, tc homeUpdateFailure) {
 	}
 	run := finishedRunOf(t, w.laptop, finished)
 	row := machineRowOf(t, run, tc.role)
+	if tc.reason == protocol.UpdateFailureReasonNotBack && !strings.Contains(protocol.Deref(row.Build), "2.0.0-"+tc.name) {
+		t.Fatalf("a home that switched and did not come back names build %q, not the one it installed", protocol.Deref(row.Build))
+	}
 	if run.Phase != protocol.UpdatePhaseFailed || protocol.Deref(row.Reason) != tc.reason || protocol.Deref(row.Action) != "Update" || !strings.Contains(protocol.Deref(row.Detail), tc.cause) {
 		for _, r := range run.Outposts {
 			t.Logf("row %s %s: %s (%s) %s", protocol.Deref(r.Role), r.State, protocol.Deref(r.Detail), protocol.Deref(r.Reason), protocol.Deref(r.Action))
@@ -651,4 +706,57 @@ func shellPid(t *testing.T, path string) string {
 		t.Fatal(err)
 	}
 	return strings.TrimSpace(string(data))
+}
+
+func TestAHomeUpdateCutByARestartOfTheAppMachineGivesWayToWhatTheHomeRunsWhenItAnswers(t *testing.T) {
+	cut := func(t *testing.T, at string) (*appMachineWorld, string, <-chan struct{}, <-chan struct{}) {
+		w := newAppMachineWorld(t, testworld.AttnBinary(t))
+		next := testworld.AttnUpdateBinary(t, "2.0.0-cut-at-"+at, "source", "")
+		w.laptop.Stop()
+		w.laptop.RunFrom(next)
+		w.laptop.InstallsOnOutposts(next, "")
+		pause := w.laptop.PauseAt(at)
+		w.laptop.Start()
+		resume := pause.Take()
+		w.laptop.Stop()
+		resume()
+		w.ssh.Fail("home", "ssh: connect to host home port 22: Connection refused")
+		finished := w.laptop.PassesOf(pausepoint.UpdateRunFinished)
+		bridged := w.laptop.PassesOf(pausepoint.HomeBridged)
+		w.laptop.Start()
+		run := finishedRunOf(t, w.laptop, finished)
+		home := machineRowOf(t, run, protocol.UpdateMachineRoleHome)
+		if run.Phase != protocol.UpdatePhaseFailed || protocol.Deref(home.Reason) != protocol.UpdateFailureReasonInterrupted || home.Action != nil {
+			t.Fatalf("the run a restart cut: %+v, home row %+v", run, home)
+		}
+		requireStdout(t, w.laptop.Attn("update", "status"), "(interrupted)", "once the home answers")
+		w.ssh.Restore("home")
+		return w, next, finished, bridged
+	}
+
+	t.Run("before-the-switch", func(t *testing.T) {
+		w, _, finished, _ := cut(t, pausepoint.HomeUpdateStaging)
+		stop := w.laptop.FireTimers(bridge.RetryTimer)
+		run := finishedRunOf(t, w.laptop, finished)
+		stop()
+		app := machineRowOf(t, run, protocol.UpdateMachineRoleAppMachine)
+		if home := machineRowOf(t, run, protocol.UpdateMachineRoleHome); home.Reason != nil || app.State != protocol.UpdateOutpostStateSkipped || protocol.Deref(app.Action) != "Update" {
+			t.Fatalf("the home's answer on its old build shows %+v %+v, not the build difference with Update", home, app)
+		}
+	})
+
+	t.Run("after-the-switch", func(t *testing.T) {
+		w, next, _, bridged := cut(t, pausepoint.HomeUpdateSwitched)
+		stop := w.laptop.FireTimers(bridge.RetryTimer)
+		w.home.AwaitDaemonReplaced()
+		<-bridged
+		stop()
+		if status := updateStatusOf(t, w.laptop); !strings.Contains(status.Version, "2.0.0-cut-at-") || status.Run != nil && status.Run.Phase == protocol.UpdatePhaseFailed {
+			t.Fatalf("attn update status on the app machine, with its home back on the new build: %+v", status)
+		}
+		if shown := w.laptop.MachineApp().Initial.UpdateRun; shown != nil {
+			t.Fatalf("the app reads the settled run %+v from the app machine while the home answers", shown)
+		}
+		requireSameFile(t, "the home's attn", w.ssh.InstallPath(w.home), next)
+	})
 }

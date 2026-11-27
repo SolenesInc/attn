@@ -433,6 +433,9 @@ pub struct AppMachine {
     pub terminals: Arc<Vec<TerminalBinding>>,
     /// This machine's settings, as its own daemon last listed them.
     pub settings: Arc<BTreeMap<String, String>>,
+    /// This machine's own latest update run, such as its update of its home, which the home
+    /// cannot show while it refuses this machine.
+    pub update_run: Option<Arc<UpdateRun>>,
 }
 
 impl PartialEq for AppMachine {
@@ -444,6 +447,11 @@ impl PartialEq for AppMachine {
             && Arc::ptr_eq(&self.sessions, &other.sessions)
             && Arc::ptr_eq(&self.terminals, &other.terminals)
             && Arc::ptr_eq(&self.settings, &other.settings)
+            && match (&self.update_run, &other.update_run) {
+                (Some(ours), Some(theirs)) => Arc::ptr_eq(ours, theirs),
+                (None, None) => true,
+                _ => false,
+            }
     }
 }
 
@@ -605,6 +613,7 @@ impl Store {
         sessions: Vec<Session>,
         terminals: Vec<TerminalBinding>,
         settings: BTreeMap<String, String>,
+        update_run: Option<UpdateRun>,
     ) {
         self.change_machine(|machine| {
             machine.connected = true;
@@ -612,11 +621,16 @@ impl Store {
             machine.sessions = Arc::new(sessions);
             machine.terminals = Arc::new(terminals);
             machine.settings = Arc::new(settings);
+            machine.update_run = update_run.map(Arc::new);
         });
     }
 
     pub(crate) fn set_machine_settings(&self, settings: BTreeMap<String, String>) {
         self.change_machine(|machine| machine.settings = Arc::new(settings));
+    }
+
+    pub(crate) fn set_machine_update_run(&self, run: UpdateRun) {
+        self.change_machine(|machine| machine.update_run = Some(Arc::new(run)));
     }
 
     pub(crate) fn set_machine_terminals(&self, terminals: Vec<TerminalBinding>) {
@@ -646,6 +660,7 @@ impl Store {
     pub(crate) fn apply_initial_state(&self, state: InitialStateMessage) {
         self.change(|facts| {
             facts.connection = Connection::Connected;
+            facts.machine.update_run = None;
             facts.daemon_instance = state.daemon_instance_id.unwrap_or_default();
             facts.sessions = Arc::new(state.sessions.unwrap_or_default());
             facts.shared_codex = Arc::new(Some(SharedCodex {

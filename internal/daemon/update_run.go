@@ -91,11 +91,19 @@ func (d *Daemon) latestUpdateRun() *store.UpdateRun {
 	return run
 }
 
+// latestUpdateRunForApp leaves out an update of the home that ended before the home last answered this machine,
+// since the home's own run tells the rest.
 func (d *Daemon) latestUpdateRunForApp() *protocol.UpdateRun {
 	if !d.on(setting.SelfUpdateEnabled) {
 		return nil
 	}
-	return updateRunToProtocol(d.latestUpdateRun())
+	run := d.latestUpdateRun()
+	if run != nil && run.InstallKind == installKindHome && !run.Open() {
+		if shared, ok := d.readSharedBuild(); ok && shared.At.After(run.FinishedAt) {
+			return nil
+		}
+	}
+	return updateRunToProtocol(run)
 }
 
 func (d *Daemon) projectUpdateRun() {
@@ -475,9 +483,26 @@ func (d *Daemon) startUpdateHelper(run store.UpdateRun, plan selfupdate.Plan, en
 // failRunOfOtherMachines fails a home or fleet run that a restart cut, before a bridge can join it: its work
 // belongs to a machine on the other end, which starts it again.
 func (d *Daemon) failRunOfOtherMachines() {
-	if run := d.latestUpdateRun(); run != nil && run.Open() && (run.InstallKind == installKindHome || run.InstallKind == installKindFleet) {
-		d.finishUpdateRun(*run, protocol.UpdatePhaseFailed, "the update was interrupted: attn restarted before it finished")
+	run := d.latestUpdateRun()
+	if run == nil || !run.Open() || (run.InstallKind != installKindHome && run.InstallKind != installKindFleet) {
+		return
 	}
+	interrupted := fault(string(protocol.UpdateFailureReasonInterrupted), errors.New("attn on this machine restarted before the update finished"))
+	for _, row := range run.Outposts {
+		if row.State == store.UpdateOutpostDone || row.State == store.UpdateOutpostFailed || row.State == store.UpdateOutpostSkipped {
+			continue
+		}
+		cut := failedRow(row, interrupted)
+		switch row.Role {
+		case string(protocol.UpdateMachineRoleOutpost):
+			cut.Action = actionUpdateOutpost
+		case string(protocol.UpdateMachineRoleHome):
+			cut.Action = ""
+			cut.Detail += "; it shows the home's build once the home answers"
+		}
+		d.setUpdateRow(*run, cut)
+	}
+	d.finishUpdateRun(*run, protocol.UpdatePhaseFailed, "the update was interrupted: attn restarted before it finished")
 }
 
 // reconcileUpdateRun runs at every start. The run is the helper's only way to

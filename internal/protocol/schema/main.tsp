@@ -830,14 +830,16 @@ enum UpdateMachineRole {
 // Why a machine is not on the run's build: it could not be built or
 // downloaded, or the machine holding the source is away (no_build); it could
 // not be reached (unreachable); it rejected the build (refused); it switched
-// and did not return (not_back); or it is the app machine and the user must
-// update it (behind).
+// and did not return (not_back); it is the app machine and the user must
+// update it (behind); or attn on the machine that ran the update restarted
+// before it finished (interrupted).
 enum UpdateFailureReason {
   no_build,
   unreachable,
   refused,
   not_back,
   behind,
+  interrupted,
 }
 
 // One machine of an update run. detail is the step while staging, or the

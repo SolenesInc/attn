@@ -898,12 +898,22 @@ fn an_outpost_the_home_could_not_update_keeps_the_app_machines_banner_open_and_n
         vec![
             machine("home", "done", "0.16.1", None, None, None),
             machine("app_machine", "done", "0.16.1", None, None, None),
+            UpdateOutpostProgress {
+                role: Some("outpost".into()),
+                ..outpost(
+                    "dialer",
+                    "dialer",
+                    "skipped",
+                    Some("It dials this home; update attn on that machine."),
+                )
+            },
             box_row,
         ],
     ));
     assert_eq!(
         name(&world, "update-run.text").as_deref(),
-        Some("Updated oma; box stays on its build.")
+        Some("Updated oma; box stays on its build."),
+        "the banner names the outpost it can update before one it cannot"
     );
     assert_eq!(
         name(&world, "update-run.note").as_deref(),
@@ -944,4 +954,27 @@ fn an_app_machine_on_a_release_behind_its_home_opens_the_homes_release() {
     click(&mut world, "update-run.action");
     assert_eq!(world.opened_links(), vec![page.to_owned()]);
     assert!(world.clipboard.text().is_none());
+}
+
+#[test]
+fn a_home_update_cut_after_its_rows_finished_says_it_failed_and_why() {
+    let world = showing(UpdateRun {
+        outcome: Some("the update was interrupted: attn restarted before it finished".into()),
+        ..home_run(
+            "failed",
+            vec![
+                machine("home", "done", "0.16.1", None, None, None),
+                machine("app_machine", "done", "0.16.1", None, None, None),
+            ],
+        )
+    });
+    assert_eq!(
+        name(&world, "update-run.text").as_deref(),
+        Some("Update failed.")
+    );
+    assert_eq!(
+        name(&world, "update-run.note").as_deref(),
+        Some("the update was interrupted: attn restarted before it finished")
+    );
+    assert!(!has(&world, "update-run.action"));
 }
