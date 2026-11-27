@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "ea1cb7e61aaf";
+pub const PROTOCOL_VERSION: &str = "d12e57f5c6db";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -7233,6 +7233,8 @@ impl MonitorCommandMessage {
 pub struct MonitorCommandResult {
     pub applied: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opened_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outcome: Option<AgentTurnOutcome>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -12725,6 +12727,8 @@ pub struct StateExplainResult {
     pub state: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state_since: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verdict: Option<SessionAttention>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StateMessage {

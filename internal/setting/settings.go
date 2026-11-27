@@ -103,6 +103,15 @@ var (
 		Since:   "2026-11-19",
 		Search:  "harness sigma pi server",
 	})
+	AttentionSupervisor = feature("attention_supervisor", "Let the attention supervisor open the turn of an agent that stopped quietly but still needs the user: true or false. Experimental; off by default.", Info{
+		Name:    "Attention supervisor",
+		Summary: "Open the turn of an agent that stopped quietly but holds a result or waits on something that will never come.",
+		Group:   Agents,
+		Applies: Now,
+		Stage:   Experimental,
+		Since:   "2026-11-28",
+		Search:  "attention supervisor verdict queue quiet stop open turn judge",
+	})
 	ViewsEnabled = feature("views_enabled", "Let a tile show one of attn's views, such as Sessions or Pull requests, on any desktop, and draw a markdown file written in the view language part by part: true or false. Experimental; off by default.", Info{
 		Name:    "Views",
 		Summary: "Show attn's brand line, Sessions or Pull requests as tiles on any desktop, from the command palette, and draw view files opened with attn open.",

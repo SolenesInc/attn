@@ -8,7 +8,7 @@ pub const GROUP_HELP: &str = "usage: attn state <command>\n\nReplay why a sessio
 #[rustfmt::skip]
 pub fn help(verb: &str) -> &'static str {
     match verb {
-        "explain" => "explain <id> [--json]\n      Replays the daemon's recorded state observations for one session: which\n      source claimed what, and whether the claim was applied, vetoed before the\n      store, discarded by it, or skipped by its own source. Identical\n      observations in a row fold into one with a count. Reading it changes\n      nothing.\n\n      Example: attn state explain 3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f\n\nflags:\n  --json                         print the result as JSON\n",
+        "explain" => "explain <id> [--json]\n      Replays the daemon's recorded state observations for one session: which\n      source claimed what, and whether the claim was applied, vetoed before the\n      store, discarded by it, or skipped by its own source. Identical\n      observations in a row fold into one with a count. It also prints the\n      attention supervisor's latest verdict on the session, whether or not attn\n      acted on it, and the facts the supervisor reads about it now. Reading it\n      changes nothing.\n\n      Example: attn state explain 3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f\n\nflags:\n  --json                         print the result as JSON\n",
         _ => panic!("unknown verb: {verb}"),
     }
 }

@@ -2,6 +2,7 @@ package sessionmonitor
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/victorarias/attn/internal/attention"
@@ -174,6 +175,32 @@ func (m *Monitor) AgentTurn(action protocol.AgentTurnAction, now time.Time) (pro
 	m.mu.Unlock()
 	m.publish(view)
 	return outcome, err
+}
+
+func (m *Monitor) Surface(now time.Time) (time.Time, error) {
+	m.mu.Lock()
+	opened, err := m.surfaceLocked(now)
+	view, state := m.viewLocked(), m.state.State
+	m.mu.Unlock()
+	if err != nil {
+		return time.Time{}, err
+	}
+	m.publish(view)
+	m.Trace(statetrace.Observation{Source: "supervisor", Claim: string(state), Cause: "surface", Outcome: statetrace.OutcomeApplied})
+	return opened, nil
+}
+
+func (m *Monitor) surfaceLocked(now time.Time) (time.Time, error) {
+	switch {
+	case m.turnOwedLocked():
+		return time.Time{}, fmt.Errorf("a turn is already owed: it opened at %s", m.turn.OpenedAt.Format(time.RFC3339Nano))
+	case m.turn.SnoozedUntil.After(now):
+		return time.Time{}, fmt.Errorf("the user snoozed the agent until %s", m.turn.SnoozedUntil.Format(time.RFC3339Nano))
+	case !attention.OpensTurn(m.state.State):
+		return time.Time{}, fmt.Errorf("the agent is %s", m.state.State)
+	}
+	m.turn.OpenedAt = now.UTC()
+	return m.turn.OpenedAt, nil
 }
 
 func (m *Monitor) traceWake(cause string) {

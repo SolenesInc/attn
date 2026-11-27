@@ -7964,6 +7964,7 @@ const MonitorCommandKindCancelCountdown MonitorCommandKind = "cancel_countdown"
 const MonitorCommandKindHandBack MonitorCommandKind = "hand_back"
 const MonitorCommandKindSettle MonitorCommandKind = "settle"
 const MonitorCommandKindSnooze MonitorCommandKind = "snooze"
+const MonitorCommandKindSurface MonitorCommandKind = "surface"
 const MonitorCommandKindWake MonitorCommandKind = "wake"
 
 type MonitorCommandMessage struct {
@@ -7989,6 +7990,9 @@ type MonitorCommandMessage struct {
 type MonitorCommandResult struct {
 	// Applied corresponds to the JSON schema field "applied".
 	Applied bool `json:"applied"`
+
+	// OpenedAt corresponds to the JSON schema field "opened_at".
+	OpenedAt *string `json:"opened_at,omitempty,omitzero"`
 
 	// Outcome corresponds to the JSON schema field "outcome".
 	Outcome *AgentTurnOutcome `json:"outcome,omitempty,omitzero"`
@@ -14458,6 +14462,9 @@ type StateExplainResult struct {
 
 	// StateSince corresponds to the JSON schema field "state_since".
 	StateSince *string `json:"state_since,omitempty,omitzero"`
+
+	// Verdict corresponds to the JSON schema field "verdict".
+	Verdict *SessionAttention `json:"verdict,omitempty,omitzero"`
 }
 
 type StateMessage struct {

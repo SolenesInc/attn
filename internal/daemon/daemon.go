@@ -3446,6 +3446,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	d.decorateSessionWithTitle(clone)
 	d.decorateSessionWithTerminalBuild(clone)
 	d.decorateSessionWithTurn(clone)
+	d.decorateSessionAttention(clone)
 	d.decorateSessionHidden(clone)
 	d.decorateSessionForkOffer(clone)
 	return clone

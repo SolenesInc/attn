@@ -11,6 +11,7 @@ const DecisionLogFile = "attention-decisions.jsonl"
 
 const (
 	LogVerdict  = "verdict"
+	LogSurfaced = "surfaced"
 	LogFollowUp = "follow_up"
 )
 
@@ -21,6 +22,7 @@ type LogEntry struct {
 	Checkpoint Checkpoint         `json:"checkpoint,omitempty"`
 	Subjects   []string           `json:"subjects,omitempty"`
 	Key        string             `json:"key,omitempty"`
+	Stop       time.Time          `json:"stop,omitzero"`
 	Verdict    Kind               `json:"verdict,omitempty"`
 	Decider    string             `json:"decider,omitempty"`
 	Label      Label              `json:"label,omitempty"`

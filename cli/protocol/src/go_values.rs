@@ -120,6 +120,7 @@ pub const SETTINGS: &[Setting] = &[
     Setting { key: "code_review_enabled", machine: false, default_on: false },
     Setting { key: "agent_tools_enabled", machine: false, default_on: false },
     Setting { key: "sigma_enabled", machine: false, default_on: false },
+    Setting { key: "attention_supervisor", machine: false, default_on: false },
     Setting { key: "views_enabled", machine: false, default_on: false },
     Setting { key: "notebook_sync_state", machine: true, default_on: false },
     Setting { key: "notebook_sync_last_error", machine: true, default_on: false },
@@ -217,6 +218,7 @@ pub const FEATURES: &[Feature] = &[
     Feature { key: "code_review_enabled", name: "Code review", summary: "Agents present a change as a review document that resolves against its repository.", note: "", group: "Agents", timing: "", stage: "experimental", applies: "Now", search: "review diff change walkthrough attn review" },
     Feature { key: "agent_tools_enabled", name: "Agent tools", summary: "Agents call attn through MCP tools instead of the attn CLI. Codex keeps the CLI.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", applies: "New agents", search: "mcp tools seed agent credential" },
     Feature { key: "sigma_enabled", name: "Sigma", summary: "Offer Sigma as a harness for new agents and delegations.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", applies: "New agents", search: "harness sigma pi server" },
+    Feature { key: "attention_supervisor", name: "Attention supervisor", summary: "Open the turn of an agent that stopped quietly but holds a result or waits on something that will never come.", note: "", group: "Agents", timing: "", stage: "experimental", applies: "Now", search: "attention supervisor verdict queue quiet stop open turn judge" },
     Feature { key: "views_enabled", name: "Views", summary: "Show attn's brand line, Sessions or Pull requests as tiles on any desktop, from the command palette, and draw view files opened with attn open.", note: "", group: "Interface", timing: "", stage: "experimental", applies: "Now", search: "views tiles sessions pull requests home dashboard" },
 ];
 

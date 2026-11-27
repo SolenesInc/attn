@@ -70,6 +70,18 @@ fn explain(result: &StateExplainResult) -> String {
     if let Some(request) = present(result.last_model_request_at.as_deref()) {
         let _ = writeln!(out, "model request: {}", clock(request));
     }
+    if let Some(verdict) = &result.verdict {
+        let label = present(verdict.label.as_deref())
+            .map_or_else(String::new, |label| format!(" ({label})"));
+        let _ = writeln!(
+            out,
+            "latest verdict: {}{label} by {} at {}: {}",
+            verdict.verdict,
+            verdict.decider,
+            clock(&verdict.at),
+            verdict.reason
+        );
+    }
     if let Some(facts) = &result.facts {
         let facts = serde_json::to_string_pretty(facts).unwrap_or_default();
         let _ = writeln!(out, "\nfacts the attention supervisor reads:\n{facts}");

@@ -18,7 +18,7 @@ commands:
     effect: read
     anyone: true
     doc: |
-      Replays the daemon's recorded state observations for one session: which source claimed what, and whether the claim was applied, vetoed before the store, discarded by it, or skipped by its own source. Identical observations in a row fold into one with a count. Reading it changes nothing.
+      Replays the daemon's recorded state observations for one session: which source claimed what, and whether the claim was applied, vetoed before the store, discarded by it, or skipped by its own source. Identical observations in a row fold into one with a count. It also prints the attention supervisor's latest verdict on the session, whether or not attn acted on it, and the facts the supervisor reads about it now. Reading it changes nothing.
     args:
       - {name: id, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the name, short id, full id or unique prefix of the live session to explain"}
     result: StateExplainResult

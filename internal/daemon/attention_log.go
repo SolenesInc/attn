@@ -59,6 +59,7 @@ func (d *Daemon) loadAttentionLog() {
 	}
 	defer file.Close()
 	judged := map[protocol.SessionID]judgedFacts{}
+	surfaced := map[protocol.SessionID]attention.LogEntry{}
 	type verdictID struct {
 		session protocol.SessionID
 		at      time.Time
@@ -73,8 +74,12 @@ func (d *Daemon) loadAttentionLog() {
 		}
 		switch entry.Kind {
 		case attention.LogVerdict:
-			judged[entry.Session] = judgedFacts{key: entry.Key, subjects: entry.Subjects}
+			judged[entry.Session] = judgedFrom(entry)
 			pending[verdictID{entry.Session, entry.At.UTC()}] = true
+		case attention.LogSurfaced:
+			if entry.VerdictAt != nil && d.store.Get(entry.Session) != nil {
+				surfaced[entry.Session] = entry
+			}
 		case attention.LogFollowUp:
 			if entry.VerdictAt != nil {
 				delete(pending, verdictID{entry.Session, entry.VerdictAt.UTC()})
@@ -87,6 +92,10 @@ func (d *Daemon) loadAttentionLog() {
 	d.attention.mu.Lock()
 	d.attention.judged = judged
 	d.attention.mu.Unlock()
+	for _, entry := range surfaced {
+		d.attention.surface(entry)
+		d.broadcastSessionStateChanged(entry.Session)
+	}
 	for verdict := range pending {
 		d.appendAttentionLog(attention.LogEntry{Kind: attention.LogFollowUp, At: d.clock.Now(), Session: verdict.session, VerdictAt: &verdict.at, FollowUp: followUpUnknown})
 	}

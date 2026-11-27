@@ -46,6 +46,14 @@ func (d *Daemon) runMonitorCommand(_ context.Context, msg protocol.MonitorComman
 		result.Applied, result.Outcome = err == nil, protocol.Ptr(outcome)
 		return result, err
 	}
+	if msg.Kind == "surface" {
+		opened, err := monitor.Surface(now)
+		if err != nil {
+			return result, fmt.Errorf("session %s: %w", msg.SessionID, err)
+		}
+		result.Applied, result.OpenedAt = true, protocol.Ptr(opened.Format(time.RFC3339Nano))
+		return result, nil
+	}
 	if msg.Kind == "cancel_countdown" {
 		result.Applied, _, _ = monitor.AnswerCountdown()
 		return result, nil

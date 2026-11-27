@@ -272,7 +272,7 @@ model Session {
   conversation_started?: boolean; // True once the session's agent has named the transcript of its conversation: the agent has started a conversation in the session's folder. The agent may name the transcript before it writes the file, so the transcript can still be unreadable. Absent until the agent names one.
   conversation_shared_with?: SessionID[]; // The other open sessions whose live process has this session's conversation open while this one's does too. Only for a harness that lets several processes write one conversation (Claude Code), where each process keeps its own history and the transcript splits. Derived at broadcast; absent while one process holds the conversation.
   host?: string;                // The id of the outpost this terminal runs on; absent when it runs on the home's machine. Set once at spawn and never changed.
-  attention?: SessionAttention; // The attention supervisor's latest verdict on whether the user is needed. Absent until the supervisor has a verdict on this session.
+  attention?: SessionAttention; // The attention supervisor's verdict while attn acts on it: an open verdict while the turn it opened is owed. Absent otherwise; attn state explain prints every session's latest verdict.
   last_seen: string;            // ISO timestamp, always set
 }
 
@@ -7792,6 +7792,7 @@ model StateExplainResult {
   last_model_request_at?: string;
   // facts is what the attention supervisor reads about this agent now, as JSON.
   facts?: unknown;
+  verdict?: SessionAttention;   // The attention supervisor's latest verdict on this agent, whether or not attn acted on it.
   observations: StateExplainEntry[];
   // capacity is the ring size, so a full ring can be reported as truncated
   // rather than read as the whole history.
@@ -9645,7 +9646,7 @@ model ConversationOutcome {
 
 enum ConversationOutcomeKind { Bound: "bound", Opened: "opened", Shows: "shows", InPlace: "in_place", Dropped: "dropped" }
 
-enum MonitorCommandKind { Settle: "settle", HandBack: "hand_back", Snooze: "snooze", Wake: "wake", CancelCountdown: "cancel_countdown", AgentTurn: "agent_turn" }
+enum MonitorCommandKind { Settle: "settle", HandBack: "hand_back", Snooze: "snooze", Wake: "wake", CancelCountdown: "cancel_countdown", AgentTurn: "agent_turn", Surface: "surface" }
 enum SessionPlacePhase { PromptReady: "prompt_ready", WorkingOrPromptReady: "working_or_prompt_ready", TurnBoundary: "turn_boundary" }
 enum SessionPlaceOrigin { Maintenance: "maintenance", UserConversation: "user_conversation" }
 enum SessionPlaceStage { Placed: "placed", Deferred: "deferred", Failed: "failed" }
@@ -9667,6 +9668,7 @@ model MonitorCommandMessage {
 model MonitorCommandResult {
   applied: boolean;
   outcome?: AgentTurnOutcome;
+  opened_at?: string;           // surface: when the turn it opened opened.
 }
 
 @extension("x-on", #{ session: "session_id" })

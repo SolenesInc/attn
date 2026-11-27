@@ -58,6 +58,7 @@ type attentionCheckpoints struct {
 	stops       map[protocol.SessionID]stepclock.Timer
 	elapsed     map[protocol.SessionID]elapsedCheckpoint
 	judged      map[protocol.SessionID]judgedFacts
+	surfaced    map[protocol.SessionID]surfacedTurn
 	followUps   map[protocol.SessionID][]*attentionFollowUp
 }
 
@@ -69,7 +70,17 @@ type elapsedCheckpoint struct {
 
 type judgedFacts struct {
 	key      string
+	stop     time.Time
 	subjects []string
+	verdict  protocol.SessionAttention
+}
+
+func judgedFrom(entry attention.LogEntry) judgedFacts {
+	return judgedFacts{key: entry.Key, stop: entry.Stop, subjects: entry.Subjects, verdict: sessionAttention(entry, entry.At)}
+}
+
+func (j judgedFacts) judgedStop(checkpoint attention.Checkpoint, view sessionmonitor.View) bool {
+	return checkpoint == attention.CheckpointDaemonStart && !j.stop.IsZero() && j.stop.Equal(view.LastModelRequestAt.V)
 }
 
 type attentionFollowUp struct {
@@ -241,6 +252,7 @@ func (d *Daemon) forgetAttention(session protocol.SessionID) {
 	delete(a.stops, session)
 	delete(a.elapsed, session)
 	delete(a.judged, session)
+	delete(a.surfaced, session)
 }
 
 func (d *Daemon) startAttentionCheckpoints() {
@@ -283,13 +295,13 @@ func (d *Daemon) attentionCheckpoint(session protocol.SessionID, checkpoint atte
 	view, _ := d.monitorViewFor(session)
 	key := attentionKey(facts, view)
 	a.mu.Lock()
-	seen := a.judged[session].key == key
+	judged := a.judged[session]
 	a.mu.Unlock()
-	if seen {
+	if judged.key == key || judged.judgedStop(checkpoint, view) {
 		return
 	}
 	verdict := d.attentionSupervisor(record.Agent).Judge(ctx, facts)
-	d.recordAttentionVerdict(session, now, facts, key, verdict)
+	d.actOnAttentionVerdict(d.recordAttentionVerdict(session, now, facts, key, view.LastModelRequestAt.V, verdict))
 }
 
 func attentionKey(facts attention.Facts, view sessionmonitor.View) string {
@@ -322,18 +334,18 @@ func attentionSubjects(facts attention.Facts) []string {
 	return subjects
 }
 
-func (d *Daemon) recordAttentionVerdict(session protocol.SessionID, at time.Time, facts attention.Facts, key string, verdict attention.Verdict) {
+func (d *Daemon) recordAttentionVerdict(session protocol.SessionID, at time.Time, facts attention.Facts, key string, stop time.Time, verdict attention.Verdict) attention.LogEntry {
+	encoded, _ := json.Marshal(facts)
+	entry := attention.LogEntry{Kind: attention.LogVerdict, At: at, Session: session, Checkpoint: facts.Checkpoint, Key: key, Stop: stop, Subjects: attentionSubjects(facts),
+		Verdict: verdict.Kind, Decider: verdict.Decider, Label: verdict.Label, Reason: verdict.Reason, Failure: verdict.Failure, LatencyMs: verdict.Latency.Milliseconds(), Facts: encoded}
 	a := &d.attention
 	a.mu.Lock()
 	if a.judged == nil {
 		a.judged = map[protocol.SessionID]judgedFacts{}
 	}
-	subjects := attentionSubjects(facts)
-	a.judged[session] = judgedFacts{key: key, subjects: subjects}
+	a.judged[session] = judgedFrom(entry)
 	a.mu.Unlock()
-	encoded, _ := json.Marshal(facts)
-	d.appendAttentionLog(attention.LogEntry{Kind: attention.LogVerdict, At: at, Session: session, Checkpoint: facts.Checkpoint, Key: key, Subjects: subjects,
-		Verdict: verdict.Kind, Decider: verdict.Decider, Label: verdict.Label, Reason: verdict.Reason, Failure: verdict.Failure, LatencyMs: verdict.Latency.Milliseconds(), Facts: encoded})
+	d.appendAttentionLog(entry)
 	d.logf("attention: session=%s checkpoint=%s %s", session, facts.Checkpoint, verdict)
 	followUp := &attentionFollowUp{verdictAt: at, checkpoint: facts.Checkpoint, verdict: verdict}
 	a.mu.Lock()
@@ -345,6 +357,7 @@ func (d *Daemon) recordAttentionVerdict(session protocol.SessionID, at time.Time
 	followUp.timer = d.clock.AfterFunc(AttentionFollowUpTimer, attentionFollowUpWindow, func() {
 		d.life.Do("attentionFollowUp", func() { d.resolveAttentionFollowUp(session, followUp, followUpNothing) })
 	})
+	return entry
 }
 
 func (d *Daemon) resolveAttentionFollowUps(session protocol.SessionID, outcome string) {

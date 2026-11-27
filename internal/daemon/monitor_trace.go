@@ -105,6 +105,7 @@ func (d *Daemon) stateExplainResult(ctx context.Context, session *protocol.Sessi
 		result.LastModelRequestAt = protocol.Ptr(protocol.Deref(session.LastModelRequestAt))
 	}
 	result.Facts = d.attentionFacts(ctx, session, time.Now())
+	result.Verdict = d.latestAttentionVerdict(session.ID)
 	return result, nil
 }
 
