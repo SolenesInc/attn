@@ -1,0 +1,5 @@
+line 7: the row has 1 cell and the header has 2 cells
+fix: Give the row one cell per header.
+
+data on line 1
+table on line 4 shows the problem of line 7

@@ -1,0 +1,4 @@
+line 1: :::question-multi needs choices
+fix: Write the question on the first line of the part, then one "- [ ] choice" per line.
+
+question-multi on line 1 shows the problem of line 1

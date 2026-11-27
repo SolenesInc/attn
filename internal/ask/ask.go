@@ -31,7 +31,7 @@ func parse(markdown string, openedAt time.Time, strict bool) ([]protocol.AskPart
 	if strings.TrimSpace(markdown) == "" {
 		return nil, fmt.Errorf("an ask needs markdown")
 	}
-	blocks, unreadable := document.Blocks(markdown)
+	blocks, unreadable := document.QuestionBlocks(markdown)
 	var parts []protocol.AskPart
 	questions := 0
 	defaultLine := 0

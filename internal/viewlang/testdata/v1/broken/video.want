@@ -1,0 +1,4 @@
+line 1: "demo.mp4" is a video, and a view does not play video
+fix: Show a picture or an audio clip instead.
+
+media on line 1 shows the problem of line 1

@@ -1,0 +1,48 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "line": 1,
+      "markdown": {
+        "text": [
+          {
+            "text": "# Before the release"
+          }
+        ]
+      },
+      "name": "markdown"
+    },
+    {
+      "line": 3,
+      "name": "tasks",
+      "tasks": {
+        "tasks": [
+          {
+            "checked": true,
+            "text": [
+              {
+                "text": "Write the notes"
+              }
+            ]
+          },
+          {
+            "checked": false,
+            "text": [
+              {
+                "text": "Tag the build"
+              }
+            ]
+          },
+          {
+            "checked": false,
+            "text": [
+              {
+                "text": "Tell the team"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

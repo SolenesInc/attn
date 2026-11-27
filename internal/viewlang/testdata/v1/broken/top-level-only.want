@@ -1,0 +1,5 @@
+line 2: ":::data" goes at the top level of a view
+fix: Move it out of the four-colon part, to the top level of the view.
+
+each on line 1
+  data on line 2 shows the problem of line 2

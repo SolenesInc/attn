@@ -1,0 +1,25 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "line": 1,
+      "name": "question-multi",
+      "question_multi": {
+        "name": "platforms",
+        "question": {
+          "choices": [
+            {
+              "label": "macOS"
+            },
+            {
+              "label": "Linux"
+            }
+          ],
+          "key": "platforms",
+          "kind": "any",
+          "prompt": "Which platforms does the release cover?"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+line 1: every="soon" is not a duration
+fix: Write a duration such as 30s, 10m or 1h.
+
+data on line 1 shows the problem of line 1

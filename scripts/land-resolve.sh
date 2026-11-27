@@ -16,6 +16,9 @@ protocol_outputs=(
   mobile/src/homeGateway/version.ts
   cli/protocol/src/generated.rs
   cli/protocol/src/go_values.rs
+  cli/protocol/src/view_parts.rs
+  internal/protocol/schema/view.tsp
+  internal/viewlang/reference.md
   cli/attn/src/commands/seed/help_generated.rs
   internal/prompts/content/skills/attn/references/garden.md
   internal/prompts/tool_families_generated.go

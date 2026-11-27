@@ -1,0 +1,4 @@
+line 1: ":::list" needs <items>
+fix: Write ":::list <items>", where <items> is the field that holds the items, or a .json or .jsonl file in the view's folder.
+
+list on line 1 shows the problem of line 1

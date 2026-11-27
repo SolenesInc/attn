@@ -1,0 +1,4 @@
+line 2: "text" is not a field
+fix: Write it as "name: type".
+
+data on line 1 shows the problem of line 2

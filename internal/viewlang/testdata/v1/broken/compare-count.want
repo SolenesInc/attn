@@ -1,0 +1,4 @@
+line 1: ":::compare" holds two media lines, and this one holds 1
+fix: Write two lines of the form ![label](file).
+
+compare on line 1 shows the problem of line 1

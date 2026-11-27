@@ -1,0 +1,5 @@
+line 4: "ci" already names the data of line 1
+fix: Give one of them another name with as=.
+
+data on line 1
+data on line 4 shows the problem of line 4

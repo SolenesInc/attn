@@ -1,0 +1,48 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "line": 1,
+      "markdown": {
+        "text": [
+          {
+            "text": "# Before and after"
+          }
+        ]
+      },
+      "name": "markdown"
+    },
+    {
+      "compare": {
+        "media": [
+          {
+            "file": [
+              {
+                "text": "before.png"
+              }
+            ],
+            "label": [
+              {
+                "text": "Before"
+              }
+            ]
+          },
+          {
+            "file": [
+              {
+                "text": "after.png"
+              }
+            ],
+            "label": [
+              {
+                "text": "After"
+              }
+            ]
+          }
+        ]
+      },
+      "line": 3,
+      "name": "compare"
+    }
+  ]
+}

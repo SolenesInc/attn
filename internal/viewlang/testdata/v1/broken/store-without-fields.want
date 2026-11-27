@@ -1,0 +1,4 @@
+line 1: the store "items" lists no fields
+fix: List each field as "name: type", such as "text: text".
+
+data on line 1 shows the problem of line 1

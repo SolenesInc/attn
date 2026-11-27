@@ -1,0 +1,16 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "line": 1,
+      "markdown": {
+        "text": [
+          {
+            "text": "# Release checklist\n\nRead the notes before you start. A **bold** word, a [link](https://example.com) and `code` draw as markdown.\n\n```sh\nattn open view.md\n```"
+          }
+        ]
+      },
+      "name": "markdown"
+    }
+  ]
+}

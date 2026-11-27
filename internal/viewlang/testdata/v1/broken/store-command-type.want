@@ -1,0 +1,5 @@
+line 7: "text" is text, and "toggle" switches a yes-no
+fix: Name a field of type yes-no.
+
+data on line 1
+list on line 6 shows the problem of line 7

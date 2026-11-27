@@ -1,0 +1,67 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "line": 1,
+      "markdown": {
+        "text": [
+          {
+            "text": "# Check 12 transcripts"
+          }
+        ]
+      },
+      "name": "markdown"
+    },
+    {
+      "line": 3,
+      "name": "one-by-one",
+      "one_by_one": {
+        "blocks": [
+          {
+            "line": 4,
+            "media": {
+              "file": [
+                {
+                  "field": [
+                    "file"
+                  ]
+                }
+              ],
+              "label": [
+                {
+                  "field": [
+                    "id"
+                  ]
+                }
+              ]
+            },
+            "name": "media"
+          },
+          {
+            "line": 6,
+            "name": "question-text",
+            "question_text": {
+              "name": "transcript",
+              "question": {
+                "choices": [],
+                "key": "transcript",
+                "kind": "text",
+                "prompt": "Is this what you said?"
+              },
+              "value": [
+                {
+                  "field": [
+                    "transcript"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "items": {
+          "file": "clips.jsonl"
+        }
+      }
+    }
+  ]
+}

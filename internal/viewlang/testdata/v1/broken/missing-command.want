@@ -1,0 +1,5 @@
+line 5: a command is missing
+fix: Name a command, such as "open".
+
+data on line 1
+list on line 4 shows the problem of line 5

@@ -1,0 +1,4 @@
+line 1: ":::facts" holds no facts
+fix: Add one "label | value" line per fact.
+
+facts on line 1 shows the problem of line 1

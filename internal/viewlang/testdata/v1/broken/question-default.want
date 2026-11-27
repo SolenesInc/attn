@@ -1,0 +1,4 @@
+line 1: Default: is for asks; a view waits for the user
+fix: Remove the Default: line.
+
+question on line 1 shows the problem of line 1

@@ -1,0 +1,6 @@
+line 7: "text" is not a list
+fix: Name a field that holds a list of items.
+
+data on line 1
+each on line 6
+  list on line 7 shows the problem of line 7

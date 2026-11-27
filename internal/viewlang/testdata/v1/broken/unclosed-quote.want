@@ -1,0 +1,4 @@
+line 1: the quote in "run=\"scripts/x.sh" is not closed
+fix: Close each quote, and put a space between arguments.
+
+data on line 1 shows the problem of line 1

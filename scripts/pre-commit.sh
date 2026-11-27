@@ -11,7 +11,7 @@ while IFS= read -r -d '' file; do
   case "$file" in
     *.go) go_files+=("$file") ;;
     pty-host/*.rs) pty_host_rust_files+=("$file") ;;
-    cli/protocol/src/generated.rs | cli/protocol/src/go_values.rs | cli/attn/src/commands/*/help_generated.rs) continue ;;
+    cli/protocol/src/generated.rs | cli/protocol/src/go_values.rs | cli/protocol/src/view_parts.rs | cli/attn/src/commands/*/help_generated.rs) continue ;;
     cli/*.rs) cli_rust_files+=("$file") ;;
     native/*.rs) native_rust_files+=("$file") ;;
     *) continue ;;

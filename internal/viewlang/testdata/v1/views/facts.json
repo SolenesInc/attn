@@ -1,0 +1,64 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "data": {
+        "every": "30s",
+        "run": "scripts/main-status.sh"
+      },
+      "line": 1,
+      "name": "data"
+    },
+    {
+      "facts": {
+        "facts": [
+          {
+            "label": "Head",
+            "value": [
+              {
+                "text": "`"
+              },
+              {
+                "field": [
+                  "head",
+                  "sha"
+                ]
+              },
+              {
+                "text": "` "
+              },
+              {
+                "field": [
+                  "head",
+                  "subject"
+                ]
+              },
+              {
+                "text": " · "
+              },
+              {
+                "field": [
+                  "head",
+                  "at"
+                ],
+                "format": "ago"
+              }
+            ]
+          },
+          {
+            "label": "Landed today",
+            "value": [
+              {
+                "field": [
+                  "landed"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "line": 4,
+      "name": "facts"
+    }
+  ]
+}

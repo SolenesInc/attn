@@ -1,0 +1,5 @@
+line 4: ":::table" holds a header, a line of dashes and one row
+fix: Write a markdown table of three lines: the headers, a line of dashes, and one row of fields such as "| {name} | {state} |".
+
+data on line 1
+table on line 4 shows the problem of line 4

@@ -1,0 +1,4 @@
+line 4: ":::status state" has no closing :::
+fix: Close it with a line that holds only :::.
+
+each on line 1 shows the problem of line 4

@@ -1,0 +1,85 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "line": 1,
+      "markdown": {
+        "text": [
+          {
+            "text": "# To do"
+          }
+        ]
+      },
+      "name": "markdown"
+    },
+    {
+      "data": {
+        "fields": [
+          {
+            "name": "text",
+            "type": "text"
+          },
+          {
+            "name": "done",
+            "type": "yes-no"
+          }
+        ],
+        "store": "items"
+      },
+      "line": 3,
+      "name": "data"
+    },
+    {
+      "entry": {
+        "command": {
+          "args": [
+            "text"
+          ],
+          "command": "add"
+        },
+        "text": "Add an item"
+      },
+      "line": 8,
+      "name": "entry"
+    },
+    {
+      "line": 12,
+      "list": {
+        "items": {
+          "field": [
+            "items"
+          ]
+        },
+        "slots": {
+          "controls": [
+            {
+              "args": [],
+              "command": "remove"
+            }
+          ],
+          "lead": [
+            {
+              "field": [
+                "done"
+              ]
+            }
+          ],
+          "press": {
+            "args": [
+              "done"
+            ],
+            "command": "toggle"
+          },
+          "title": [
+            {
+              "field": [
+                "text"
+              ]
+            }
+          ]
+        }
+      },
+      "name": "list"
+    }
+  ]
+}

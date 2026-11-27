@@ -1,0 +1,4 @@
+line 2: "rerun" names no program
+fix: Write the program after the colon, then its arguments.
+
+commands on line 1 shows the problem of line 2

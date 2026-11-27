@@ -1,0 +1,69 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "line": 1,
+      "markdown": {
+        "text": [
+          {
+            "text": "# main"
+          }
+        ]
+      },
+      "name": "markdown"
+    },
+    {
+      "data": {
+        "every": "30s",
+        "run": "scripts/main-status.sh"
+      },
+      "line": 3,
+      "name": "data"
+    },
+    {
+      "line": 6,
+      "name": "status",
+      "status": {
+        "field": [
+          "ci",
+          "state"
+        ]
+      }
+    },
+    {
+      "line": 9,
+      "list": {
+        "items": {
+          "field": [
+            "ci",
+            "jobs"
+          ]
+        },
+        "slots": {
+          "aside": [
+            {
+              "field": [
+                "seconds"
+              ]
+            }
+          ],
+          "lead": [
+            {
+              "field": [
+                "conclusion"
+              ]
+            }
+          ],
+          "title": [
+            {
+              "field": [
+                "name"
+              ]
+            }
+          ]
+        }
+      },
+      "name": "list"
+    }
+  ]
+}

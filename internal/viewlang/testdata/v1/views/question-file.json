@@ -1,0 +1,18 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "line": 1,
+      "name": "question-file",
+      "question_file": {
+        "name": "screenshot",
+        "question": {
+          "choices": [],
+          "key": "screenshot",
+          "kind": "file",
+          "prompt": "Which screenshot shows the problem?"
+        }
+      }
+    }
+  ]
+}

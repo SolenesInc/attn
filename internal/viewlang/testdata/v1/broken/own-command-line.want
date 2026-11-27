@@ -1,0 +1,4 @@
+line 2: "scripts/rerun.sh {id}" does not define a command
+fix: Write it as "name: program arguments", such as "rerun: scripts/rerun.sh {id}".
+
+commands on line 1 shows the problem of line 2

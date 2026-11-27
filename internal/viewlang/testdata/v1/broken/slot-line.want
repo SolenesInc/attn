@@ -1,0 +1,5 @@
+line 5: "{name}" is not a slot line
+fix: Write it as "slot: value". The slots are lead, title, sub, aside, press, controls, empty, group-aside, group-controls.
+
+data on line 1
+list on line 4 shows the problem of line 5

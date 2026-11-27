@@ -1,4 +1,5 @@
 import "@typespec/json-schema";
+import "./view.tsp";
 
 using TypeSpec.JsonSchema;
 

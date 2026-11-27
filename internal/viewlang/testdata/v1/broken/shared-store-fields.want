@@ -1,0 +1,4 @@
+line 2: "todo/items" is another view's store, so this view lists no fields
+fix: Remove the lines; the view that owns the store declares them.
+
+data on line 1 shows the problem of line 2

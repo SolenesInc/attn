@@ -1,0 +1,29 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "data": {
+        "attn": "sessions"
+      },
+      "line": 1,
+      "name": "data"
+    },
+    {
+      "data": {
+        "as": "weather",
+        "every": "10m",
+        "run": "scripts/weather.sh Stockholm"
+      },
+      "line": 4,
+      "name": "data"
+    },
+    {
+      "data": {
+        "as": "team",
+        "file": "team.json"
+      },
+      "line": 7,
+      "name": "data"
+    }
+  ]
+}

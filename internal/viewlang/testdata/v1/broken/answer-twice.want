@@ -1,0 +1,5 @@
+line 7: the question on line 1 already saves its answer as "size"
+fix: Give each question its own name.
+
+question on line 1
+question on line 7 shows the problem of line 7

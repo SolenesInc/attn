@@ -1,0 +1,4 @@
+line 3: Value: goes only in a ":::question-text"
+fix: Move the starting text to a ":::question-text", or remove the line.
+
+question on line 1 shows the problem of line 3

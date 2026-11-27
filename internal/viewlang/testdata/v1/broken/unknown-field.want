@@ -1,0 +1,5 @@
+line 7: "items" has no field "txt"
+fix: Did you mean "text"?
+
+data on line 1
+list on line 6 shows the problem of line 7

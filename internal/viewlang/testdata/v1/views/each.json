@@ -1,0 +1,78 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "data": {
+        "attn": "pull-requests"
+      },
+      "line": 1,
+      "name": "data"
+    },
+    {
+      "each": {
+        "blocks": [
+          {
+            "line": 5,
+            "markdown": {
+              "text": [
+                {
+                  "text": "## "
+                },
+                {
+                  "field": [
+                    "name"
+                  ]
+                }
+              ]
+            },
+            "name": "markdown"
+          },
+          {
+            "line": 7,
+            "list": {
+              "items": {
+                "field": [
+                  "pulls"
+                ]
+              },
+              "slots": {
+                "aside": [
+                  {
+                    "field": [
+                      "checks"
+                    ]
+                  }
+                ],
+                "controls": [
+                  {
+                    "args": [],
+                    "command": "approve"
+                  },
+                  {
+                    "args": [],
+                    "command": "merge"
+                  }
+                ],
+                "title": [
+                  {
+                    "field": [
+                      "title"
+                    ]
+                  }
+                ]
+              }
+            },
+            "name": "list"
+          }
+        ],
+        "items": {
+          "field": [
+            "repositories"
+          ]
+        }
+      },
+      "line": 4,
+      "name": "each"
+    }
+  ]
+}

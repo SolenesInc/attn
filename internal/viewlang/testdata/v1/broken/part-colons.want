@@ -1,0 +1,4 @@
+line 1: "status" opens with three colons
+fix: Open it with ":::status" and close it with ":::".
+
+status on line 1 shows the problem of line 1

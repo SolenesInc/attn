@@ -1,0 +1,5 @@
+line 7: "text" is text, so it has no field "size"
+fix: Use "text" itself.
+
+data on line 1
+list on line 6 shows the problem of line 7

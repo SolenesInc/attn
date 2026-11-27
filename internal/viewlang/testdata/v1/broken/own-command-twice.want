@@ -1,0 +1,4 @@
+line 3: the command "rerun" is already defined on line 2
+fix: Keep one of them.
+
+commands on line 1 shows the problem of line 3

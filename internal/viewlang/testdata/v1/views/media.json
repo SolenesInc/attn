@@ -1,0 +1,48 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "line": 1,
+      "markdown": {
+        "text": [
+          {
+            "text": "# The new icon"
+          }
+        ]
+      },
+      "name": "markdown"
+    },
+    {
+      "line": 3,
+      "media": {
+        "file": [
+          {
+            "text": "icon-64.png"
+          }
+        ],
+        "label": [
+          {
+            "text": "The icon at 64 px"
+          }
+        ]
+      },
+      "name": "media"
+    },
+    {
+      "line": 5,
+      "media": {
+        "file": [
+          {
+            "text": "name.wav"
+          }
+        ],
+        "label": [
+          {
+            "text": "How the name sounds"
+          }
+        ]
+      },
+      "name": "media"
+    }
+  ]
+}

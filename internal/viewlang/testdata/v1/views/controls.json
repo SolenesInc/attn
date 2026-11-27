@@ -1,0 +1,21 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "controls": {
+        "controls": [
+          {
+            "args": [],
+            "command": "refresh"
+          },
+          {
+            "args": [],
+            "command": "follow"
+          }
+        ]
+      },
+      "line": 1,
+      "name": "controls"
+    }
+  ]
+}

@@ -2,6 +2,9 @@
 mod generated;
 #[rustfmt::skip]
 pub mod go_values;
+#[rustfmt::skip]
+mod view_parts;
+pub use view_parts::ViewParts;
 pub mod session_id;
 
 pub use generated::*;

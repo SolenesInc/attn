@@ -1,0 +1,4 @@
+line 1: "script" is reserved for programs that draw, which are not available
+fix: Draw it with the parts a view has, such as ":::list" or ":::chart".
+
+script on line 1 shows the problem of line 1

@@ -1,0 +1,68 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "line": 1,
+      "markdown": {
+        "text": [
+          {
+            "text": "# Needs me"
+          }
+        ]
+      },
+      "name": "markdown"
+    },
+    {
+      "data": {
+        "attn": "sessions"
+      },
+      "line": 3,
+      "name": "data"
+    },
+    {
+      "line": 6,
+      "list": {
+        "items": {
+          "field": [
+            "turns"
+          ]
+        },
+        "slots": {
+          "aside": [
+            {
+              "field": [
+                "age"
+              ]
+            }
+          ],
+          "lead": [
+            {
+              "field": [
+                "state"
+              ]
+            }
+          ],
+          "press": {
+            "args": [],
+            "command": "open"
+          },
+          "sub": [
+            {
+              "field": [
+                "branch"
+              ]
+            }
+          ],
+          "title": [
+            {
+              "field": [
+                "name"
+              ]
+            }
+          ]
+        }
+      },
+      "name": "list"
+    }
+  ]
+}

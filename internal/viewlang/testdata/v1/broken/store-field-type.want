@@ -1,0 +1,4 @@
+line 2: "string" is not a field type
+fix: Use one of "text", "number", "yes-no".
+
+data on line 1 shows the problem of line 2

@@ -329,7 +329,10 @@ the generated files. This also writes the protocol schema hash into
 Never hand-edit `internal/protocol/generated.go`, `cli/protocol/src/generated.rs`,
 `cli/protocol/src/go_values.rs`, or `cli/testdata/`. The last two come from
 `cmd/cligen`, which reads Go constants, settings and prompts the CLI uses, so
-changing one of those also needs `make generate-types`.
+changing one of those also needs `make generate-types`. `cmd/viewgen` writes
+`internal/protocol/schema/view.tsp`, `cli/protocol/src/view_parts.rs` and
+`internal/viewlang/reference.md` from the view language's catalog
+(`internal/viewlang/AGENTS.md`); edit the catalog, not those files.
 
 The catalog in `internal/catalog/content/*.yaml` defines each command once, and
 every top-level CLI command is in it: the CLI refuses a name the catalog does

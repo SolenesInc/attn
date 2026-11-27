@@ -1,0 +1,3 @@
+line 1: "::::each items.jsonl" has no closing ::::
+fix: Close it with a line that holds only ::::, before the next four-colon part opens.
+

@@ -15673,6 +15673,361 @@ type VentsUpdatedMessage struct {
 	Vents []Vent `json:"vents"`
 }
 
+type ViewColumn struct {
+	// Cell corresponds to the JSON schema field "cell".
+	Cell []ViewTemplatePiece `json:"cell"`
+
+	// Header corresponds to the JSON schema field "header".
+	Header string `json:"header"`
+}
+
+type ViewCommandCall struct {
+	// Args corresponds to the JSON schema field "args".
+	Args []string `json:"args"`
+
+	// Command corresponds to the JSON schema field "command".
+	Command string `json:"command"`
+}
+
+type ViewFact struct {
+	// Label corresponds to the JSON schema field "label".
+	Label string `json:"label"`
+
+	// Value corresponds to the JSON schema field "value".
+	Value []ViewTemplatePiece `json:"value"`
+}
+
+type ViewFormat string
+
+const ViewFormatAgo ViewFormat = "ago"
+const ViewFormatDuration ViewFormat = "duration"
+
+type ViewItems struct {
+	// Field corresponds to the JSON schema field "field".
+	Field []string `json:"field,omitempty,omitzero"`
+
+	// File corresponds to the JSON schema field "file".
+	File *string `json:"file,omitempty,omitzero"`
+}
+
+type ViewMedia struct {
+	// File corresponds to the JSON schema field "file".
+	File []ViewTemplatePiece `json:"file"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label []ViewTemplatePiece `json:"label"`
+}
+
+type ViewOwnCommand struct {
+	// Args corresponds to the JSON schema field "args".
+	Args [][]ViewTemplatePiece `json:"args"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Program corresponds to the JSON schema field "program".
+	Program string `json:"program"`
+}
+
+type ViewPart struct {
+	// Chart corresponds to the JSON schema field "chart".
+	Chart *ViewPartChart `json:"chart,omitempty,omitzero"`
+
+	// Commands corresponds to the JSON schema field "commands".
+	Commands *ViewPartCommands `json:"commands,omitempty,omitzero"`
+
+	// Compare corresponds to the JSON schema field "compare".
+	Compare *ViewPartCompare `json:"compare,omitempty,omitzero"`
+
+	// Controls corresponds to the JSON schema field "controls".
+	Controls *ViewPartControls `json:"controls,omitempty,omitzero"`
+
+	// Data corresponds to the JSON schema field "data".
+	Data *ViewPartData `json:"data,omitempty,omitzero"`
+
+	// Each corresponds to the JSON schema field "each".
+	Each *ViewPartEach `json:"each,omitempty,omitzero"`
+
+	// Entry corresponds to the JSON schema field "entry".
+	Entry *ViewPartEntry `json:"entry,omitempty,omitzero"`
+
+	// Facts corresponds to the JSON schema field "facts".
+	Facts *ViewPartFacts `json:"facts,omitempty,omitzero"`
+
+	// Line corresponds to the JSON schema field "line".
+	Line int `json:"line"`
+
+	// List corresponds to the JSON schema field "list".
+	List *ViewPartList `json:"list,omitempty,omitzero"`
+
+	// Markdown corresponds to the JSON schema field "markdown".
+	Markdown *ViewPartMarkdown `json:"markdown,omitempty,omitzero"`
+
+	// Media corresponds to the JSON schema field "media".
+	Media *ViewPartMedia `json:"media,omitempty,omitzero"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// OneByOne corresponds to the JSON schema field "one_by_one".
+	OneByOne *ViewPartOneByOne `json:"one_by_one,omitempty,omitzero"`
+
+	// Problem corresponds to the JSON schema field "problem".
+	Problem *ViewProblem `json:"problem,omitempty,omitzero"`
+
+	// Question corresponds to the JSON schema field "question".
+	Question *ViewPartQuestion `json:"question,omitempty,omitzero"`
+
+	// QuestionFile corresponds to the JSON schema field "question_file".
+	QuestionFile *ViewPartQuestionFile `json:"question_file,omitempty,omitzero"`
+
+	// QuestionMulti corresponds to the JSON schema field "question_multi".
+	QuestionMulti *ViewPartQuestionMulti `json:"question_multi,omitempty,omitzero"`
+
+	// QuestionText corresponds to the JSON schema field "question_text".
+	QuestionText *ViewPartQuestionText `json:"question_text,omitempty,omitzero"`
+
+	// Status corresponds to the JSON schema field "status".
+	Status *ViewPartStatus `json:"status,omitempty,omitzero"`
+
+	// Table corresponds to the JSON schema field "table".
+	Table *ViewPartTable `json:"table,omitempty,omitzero"`
+
+	// Tasks corresponds to the JSON schema field "tasks".
+	Tasks *ViewPartTasks `json:"tasks,omitempty,omitzero"`
+}
+
+type ViewPartChart struct {
+	// Items corresponds to the JSON schema field "items".
+	Items ViewItems `json:"items"`
+
+	// X corresponds to the JSON schema field "x".
+	X []string `json:"x"`
+
+	// Y corresponds to the JSON schema field "y".
+	Y []string `json:"y"`
+}
+
+type ViewPartCommands struct {
+	// Commands corresponds to the JSON schema field "commands".
+	Commands []ViewOwnCommand `json:"commands"`
+}
+
+type ViewPartCompare struct {
+	// Media corresponds to the JSON schema field "media".
+	Media []ViewMedia `json:"media"`
+}
+
+type ViewPartControls struct {
+	// Controls corresponds to the JSON schema field "controls".
+	Controls []ViewCommandCall `json:"controls"`
+}
+
+type ViewPartData struct {
+	// As corresponds to the JSON schema field "as".
+	As *string `json:"as,omitempty,omitzero"`
+
+	// Attn corresponds to the JSON schema field "attn".
+	Attn *string `json:"attn,omitempty,omitzero"`
+
+	// Every corresponds to the JSON schema field "every".
+	Every *string `json:"every,omitempty,omitzero"`
+
+	// Fields corresponds to the JSON schema field "fields".
+	Fields []ViewStoreField `json:"fields,omitempty,omitzero"`
+
+	// File corresponds to the JSON schema field "file".
+	File *string `json:"file,omitempty,omitzero"`
+
+	// Run corresponds to the JSON schema field "run".
+	Run *string `json:"run,omitempty,omitzero"`
+
+	// Store corresponds to the JSON schema field "store".
+	Store *string `json:"store,omitempty,omitzero"`
+}
+
+type ViewPartEach struct {
+	// Blocks corresponds to the JSON schema field "blocks".
+	Blocks []ViewPart `json:"blocks"`
+
+	// Items corresponds to the JSON schema field "items".
+	Items ViewItems `json:"items"`
+}
+
+type ViewPartEntry struct {
+	// Command corresponds to the JSON schema field "command".
+	Command ViewCommandCall `json:"command"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text *string `json:"text,omitempty,omitzero"`
+}
+
+type ViewPartFacts struct {
+	// Facts corresponds to the JSON schema field "facts".
+	Facts []ViewFact `json:"facts"`
+}
+
+type ViewPartList struct {
+	// Count corresponds to the JSON schema field "count".
+	Count *bool `json:"count,omitempty,omitzero"`
+
+	// Foldable corresponds to the JSON schema field "foldable".
+	Foldable *bool `json:"foldable,omitempty,omitzero"`
+
+	// Items corresponds to the JSON schema field "items".
+	Items ViewItems `json:"items"`
+
+	// Slots corresponds to the JSON schema field "slots".
+	Slots ViewPartListSlots `json:"slots"`
+}
+
+type ViewPartListSlots struct {
+	// Aside corresponds to the JSON schema field "aside".
+	Aside []ViewTemplatePiece `json:"aside,omitempty,omitzero"`
+
+	// Controls corresponds to the JSON schema field "controls".
+	Controls []ViewCommandCall `json:"controls,omitempty,omitzero"`
+
+	// Empty corresponds to the JSON schema field "empty".
+	Empty *string `json:"empty,omitempty,omitzero"`
+
+	// GroupAside corresponds to the JSON schema field "group_aside".
+	GroupAside []ViewTemplatePiece `json:"group_aside,omitempty,omitzero"`
+
+	// GroupControls corresponds to the JSON schema field "group_controls".
+	GroupControls []ViewCommandCall `json:"group_controls,omitempty,omitzero"`
+
+	// Lead corresponds to the JSON schema field "lead".
+	Lead []ViewTemplatePiece `json:"lead,omitempty,omitzero"`
+
+	// Press corresponds to the JSON schema field "press".
+	Press *ViewCommandCall `json:"press,omitempty,omitzero"`
+
+	// Sub corresponds to the JSON schema field "sub".
+	Sub []ViewTemplatePiece `json:"sub,omitempty,omitzero"`
+
+	// Title corresponds to the JSON schema field "title".
+	Title []ViewTemplatePiece `json:"title,omitempty,omitzero"`
+}
+
+type ViewPartMarkdown struct {
+	// Text corresponds to the JSON schema field "text".
+	Text []ViewTemplatePiece `json:"text"`
+}
+
+type ViewPartMedia struct {
+	// File corresponds to the JSON schema field "file".
+	File []ViewTemplatePiece `json:"file"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label []ViewTemplatePiece `json:"label"`
+}
+
+type ViewPartOneByOne struct {
+	// Blocks corresponds to the JSON schema field "blocks".
+	Blocks []ViewPart `json:"blocks"`
+
+	// Items corresponds to the JSON schema field "items".
+	Items ViewItems `json:"items"`
+}
+
+type ViewPartQuestion struct {
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Question corresponds to the JSON schema field "question".
+	Question AskQuestion `json:"question"`
+}
+
+type ViewPartQuestionFile struct {
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Question corresponds to the JSON schema field "question".
+	Question AskQuestion `json:"question"`
+}
+
+type ViewPartQuestionMulti struct {
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Question corresponds to the JSON schema field "question".
+	Question AskQuestion `json:"question"`
+}
+
+type ViewPartQuestionText struct {
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Question corresponds to the JSON schema field "question".
+	Question AskQuestion `json:"question"`
+
+	// Value corresponds to the JSON schema field "value".
+	Value []ViewTemplatePiece `json:"value,omitempty,omitzero"`
+}
+
+type ViewPartStatus struct {
+	// Field corresponds to the JSON schema field "field".
+	Field []string `json:"field"`
+}
+
+type ViewPartTable struct {
+	// Columns corresponds to the JSON schema field "columns".
+	Columns []ViewColumn `json:"columns"`
+
+	// Items corresponds to the JSON schema field "items".
+	Items ViewItems `json:"items"`
+}
+
+type ViewPartTasks struct {
+	// Tasks corresponds to the JSON schema field "tasks".
+	Tasks []ViewTask `json:"tasks"`
+}
+
+type ViewProblem struct {
+	// Fix corresponds to the JSON schema field "fix".
+	Fix string `json:"fix"`
+
+	// Line corresponds to the JSON schema field "line".
+	Line int `json:"line"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type ViewStoreField struct {
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Type corresponds to the JSON schema field "type".
+	Type ViewStoreType `json:"type"`
+}
+
+type ViewStoreType string
+
+const ViewStoreTypeNumber ViewStoreType = "number"
+const ViewStoreTypeText ViewStoreType = "text"
+const ViewStoreTypeYesNo ViewStoreType = "yes-no"
+
+type ViewTask struct {
+	// Checked corresponds to the JSON schema field "checked".
+	Checked bool `json:"checked"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text []ViewTemplatePiece `json:"text"`
+}
+
+type ViewTemplatePiece struct {
+	// Field corresponds to the JSON schema field "field".
+	Field []string `json:"field,omitempty,omitzero"`
+
+	// Format corresponds to the JSON schema field "format".
+	Format *ViewFormat `json:"format,omitempty,omitzero"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text *string `json:"text,omitempty,omitzero"`
+}
+
 type WakeTurnMessage struct {
 	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
 	CallerSessionID *SessionID `json:"caller_session_id,omitempty,omitzero"`

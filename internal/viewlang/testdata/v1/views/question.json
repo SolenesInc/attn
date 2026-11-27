@@ -1,0 +1,27 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "line": 1,
+      "name": "question",
+      "question": {
+        "name": "size",
+        "question": {
+          "choices": [
+            {
+              "label": "48 px"
+            },
+            {
+              "description": "the size the dock uses",
+              "label": "64 px"
+            }
+          ],
+          "key": "size",
+          "kind": "one",
+          "prompt": "Which size should the icon be?",
+          "recommended": "64 px"
+        }
+      }
+    }
+  ]
+}

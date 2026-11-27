@@ -1,0 +1,4 @@
+line 2: "merge" is one of attn's commands, so the view cannot define it
+fix: Give the command another name.
+
+commands on line 1 shows the problem of line 2

@@ -1,0 +1,29 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "commands": {
+        "commands": [
+          {
+            "args": [],
+            "name": "note",
+            "program": "scripts/add-note.sh"
+          }
+        ]
+      },
+      "line": 1,
+      "name": "commands"
+    },
+    {
+      "entry": {
+        "command": {
+          "args": [],
+          "command": "note"
+        },
+        "text": "Write a note"
+      },
+      "line": 5,
+      "name": "entry"
+    }
+  ]
+}

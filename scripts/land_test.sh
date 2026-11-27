@@ -353,6 +353,11 @@ printf 'setting\n' >internal/setting/example.txt
 gate 'Settings declaration change'
 expect_checks 'check-types' sync
 
+mkdir -p internal/viewlang/catalog
+printf 'part\n' >internal/viewlang/catalog/example.txt
+gate 'View language catalog change'
+expect_checks 'check-types' sync
+
 printf 'Home Gateway\n' >internal/protocol/schema/home_gateway.tsp
 gate 'HomeGateway API change'
 expect_checks 'land --group old-phones --group native' 'check-types check-home-gateway-compat check-native NATIVE_CLIPPY=' "landing-tests $selected_units" sync

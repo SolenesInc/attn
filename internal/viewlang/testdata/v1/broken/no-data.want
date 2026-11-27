@@ -1,0 +1,4 @@
+line 1: this view has no data, so it has no field "state"
+fix: Add a ":::data" part that holds it.
+
+status on line 1 shows the problem of line 1

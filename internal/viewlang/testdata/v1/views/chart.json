@@ -1,0 +1,30 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "data": {
+        "every": "10m",
+        "run": "scripts/weather.sh Stockholm"
+      },
+      "line": 1,
+      "name": "data"
+    },
+    {
+      "chart": {
+        "items": {
+          "field": [
+            "hours"
+          ]
+        },
+        "x": [
+          "hour"
+        ],
+        "y": [
+          "temp"
+        ]
+      },
+      "line": 4,
+      "name": "chart"
+    }
+  ]
+}

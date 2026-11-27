@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "c3936b8baffb";
+pub const PROTOCOL_VERSION: &str = "fb51cb736e5b";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -13849,6 +13849,261 @@ impl VentsUpdatedMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewColumn {
+    #[serde(deserialize_with = "null_as_default")]
+    pub cell: Vec<ViewTemplatePiece>,
+    pub header: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewCommandCall {
+    #[serde(deserialize_with = "null_as_default")]
+    pub args: Vec<String>,
+    pub command: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewFact {
+    pub label: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub value: Vec<ViewTemplatePiece>,
+}
+pub type ViewFormat = String;
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewItems {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewMedia {
+    #[serde(deserialize_with = "null_as_default")]
+    pub file: Vec<ViewTemplatePiece>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub label: Vec<ViewTemplatePiece>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewOwnCommand {
+    #[serde(deserialize_with = "null_as_default")]
+    pub args: Vec<Vec<ViewTemplatePiece>>,
+    pub name: String,
+    pub program: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPart {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chart: Option<ViewPartChart>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commands: Option<ViewPartCommands>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compare: Option<ViewPartCompare>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub controls: Option<ViewPartControls>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<ViewPartData>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub each: Option<ViewPartEach>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry: Option<ViewPartEntry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facts: Option<ViewPartFacts>,
+    pub line: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub list: Option<ViewPartList>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub markdown: Option<ViewPartMarkdown>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media: Option<ViewPartMedia>,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub one_by_one: Option<ViewPartOneByOne>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub problem: Option<ViewProblem>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub question: Option<ViewPartQuestion>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub question_file: Option<ViewPartQuestionFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub question_multi: Option<ViewPartQuestionMulti>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub question_text: Option<ViewPartQuestionText>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<ViewPartStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table: Option<ViewPartTable>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tasks: Option<ViewPartTasks>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartChart {
+    pub items: ViewItems,
+    #[serde(deserialize_with = "null_as_default")]
+    pub x: Vec<String>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub y: Vec<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartCommands {
+    #[serde(deserialize_with = "null_as_default")]
+    pub commands: Vec<ViewOwnCommand>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartCompare {
+    #[serde(deserialize_with = "null_as_default")]
+    pub media: Vec<ViewMedia>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartControls {
+    #[serde(deserialize_with = "null_as_default")]
+    pub controls: Vec<ViewCommandCall>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartData {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub r#as: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attn: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub every: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fields: Option<Vec<ViewStoreField>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub store: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartEach {
+    #[serde(deserialize_with = "null_as_default")]
+    pub blocks: Vec<ViewPart>,
+    pub items: ViewItems,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartEntry {
+    pub command: ViewCommandCall,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartFacts {
+    #[serde(deserialize_with = "null_as_default")]
+    pub facts: Vec<ViewFact>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartList {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub count: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub foldable: Option<bool>,
+    pub items: ViewItems,
+    pub slots: ViewPartListSlots,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartListSlots {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aside: Option<Vec<ViewTemplatePiece>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub controls: Option<Vec<ViewCommandCall>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub empty: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group_aside: Option<Vec<ViewTemplatePiece>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group_controls: Option<Vec<ViewCommandCall>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead: Option<Vec<ViewTemplatePiece>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub press: Option<ViewCommandCall>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sub: Option<Vec<ViewTemplatePiece>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<Vec<ViewTemplatePiece>>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartMarkdown {
+    #[serde(deserialize_with = "null_as_default")]
+    pub text: Vec<ViewTemplatePiece>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartMedia {
+    #[serde(deserialize_with = "null_as_default")]
+    pub file: Vec<ViewTemplatePiece>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub label: Vec<ViewTemplatePiece>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartOneByOne {
+    #[serde(deserialize_with = "null_as_default")]
+    pub blocks: Vec<ViewPart>,
+    pub items: ViewItems,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartQuestion {
+    pub name: String,
+    pub question: AskQuestion,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartQuestionFile {
+    pub name: String,
+    pub question: AskQuestion,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartQuestionMulti {
+    pub name: String,
+    pub question: AskQuestion,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartQuestionText {
+    pub name: String,
+    pub question: AskQuestion,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<Vec<ViewTemplatePiece>>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartStatus {
+    #[serde(deserialize_with = "null_as_default")]
+    pub field: Vec<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartTable {
+    #[serde(deserialize_with = "null_as_default")]
+    pub columns: Vec<ViewColumn>,
+    pub items: ViewItems,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewPartTasks {
+    #[serde(deserialize_with = "null_as_default")]
+    pub tasks: Vec<ViewTask>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewProblem {
+    pub fix: String,
+    pub line: i64,
+    pub text: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewStoreField {
+    pub name: String,
+    pub r#type: ViewStoreType,
+}
+pub type ViewStoreType = String;
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewTask {
+    pub checked: bool,
+    #[serde(deserialize_with = "null_as_default")]
+    pub text: Vec<ViewTemplatePiece>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewTemplatePiece {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<ViewFormat>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WakeTurnMessage {

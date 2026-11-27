@@ -1,0 +1,61 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "data": {
+        "every": "30s",
+        "run": "scripts/main-status.sh"
+      },
+      "line": 1,
+      "name": "data"
+    },
+    {
+      "commands": {
+        "commands": [
+          {
+            "args": [
+              [
+                {
+                  "field": [
+                    "id"
+                  ]
+                }
+              ]
+            ],
+            "name": "rerun",
+            "program": "scripts/rerun.sh"
+          }
+        ]
+      },
+      "line": 4,
+      "name": "commands"
+    },
+    {
+      "line": 8,
+      "list": {
+        "items": {
+          "field": [
+            "ci",
+            "jobs"
+          ]
+        },
+        "slots": {
+          "controls": [
+            {
+              "args": [],
+              "command": "rerun"
+            }
+          ],
+          "title": [
+            {
+              "field": [
+                "name"
+              ]
+            }
+          ]
+        }
+      },
+      "name": "list"
+    }
+  ]
+}

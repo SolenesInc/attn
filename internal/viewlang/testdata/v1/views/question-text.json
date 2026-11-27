@@ -1,0 +1,23 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "line": 1,
+      "name": "question-text",
+      "question_text": {
+        "name": "title",
+        "question": {
+          "choices": [],
+          "key": "title",
+          "kind": "text",
+          "prompt": "What should the release be called?"
+        },
+        "value": [
+          {
+            "text": "Autumn release"
+          }
+        ]
+      }
+    }
+  ]
+}

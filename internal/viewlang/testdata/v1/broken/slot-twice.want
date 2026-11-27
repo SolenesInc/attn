@@ -1,0 +1,5 @@
+line 6: the slot "title" is already given on line 5
+fix: Keep one of them.
+
+data on line 1
+list on line 4 shows the problem of line 6

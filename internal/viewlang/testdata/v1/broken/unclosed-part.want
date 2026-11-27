@@ -1,0 +1,3 @@
+line 1: ":::status ci.state" has no closing :::
+fix: Close it with a line that holds only :::.
+

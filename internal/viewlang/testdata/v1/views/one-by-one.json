@@ -1,0 +1,67 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "line": 1,
+      "markdown": {
+        "text": [
+          {
+            "text": "# Pick the best take"
+          }
+        ]
+      },
+      "name": "markdown"
+    },
+    {
+      "line": 3,
+      "name": "one-by-one",
+      "one_by_one": {
+        "blocks": [
+          {
+            "line": 4,
+            "media": {
+              "file": [
+                {
+                  "field": [
+                    "file"
+                  ]
+                }
+              ],
+              "label": [
+                {
+                  "field": [
+                    "name"
+                  ]
+                }
+              ]
+            },
+            "name": "media"
+          },
+          {
+            "line": 6,
+            "name": "question",
+            "question": {
+              "name": "verdict",
+              "question": {
+                "choices": [
+                  {
+                    "label": "Keep"
+                  },
+                  {
+                    "label": "Redo"
+                  }
+                ],
+                "key": "verdict",
+                "kind": "one",
+                "prompt": "Is this take good enough?"
+              }
+            }
+          }
+        ],
+        "items": {
+          "file": "takes.jsonl"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+line 1: ":::controls" holds no controls
+fix: Write one command per line, such as "refresh".
+
+controls on line 1 shows the problem of line 1

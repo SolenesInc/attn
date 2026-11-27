@@ -1,0 +1,5 @@
+line 6: this view's data has no field "itms"
+fix: Did you mean "items"?
+
+data on line 1
+list on line 6 shows the problem of line 6

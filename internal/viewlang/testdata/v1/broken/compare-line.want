@@ -1,0 +1,4 @@
+line 3: "Before and after" is not a media line
+fix: Write two lines of the form ![label](file), and nothing else.
+
+compare on line 1 shows the problem of line 3

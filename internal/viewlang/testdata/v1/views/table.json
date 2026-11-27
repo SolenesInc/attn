@@ -1,0 +1,67 @@
+{
+  "language": 1,
+  "parts": [
+    {
+      "data": {
+        "every": "1m",
+        "run": "scripts/landings.sh"
+      },
+      "line": 1,
+      "name": "data"
+    },
+    {
+      "line": 4,
+      "name": "table",
+      "table": {
+        "columns": [
+          {
+            "cell": [
+              {
+                "field": [
+                  "session"
+                ]
+              }
+            ],
+            "header": "Session"
+          },
+          {
+            "cell": [
+              {
+                "field": [
+                  "subject"
+                ]
+              }
+            ],
+            "header": "Change"
+          },
+          {
+            "cell": [
+              {
+                "field": [
+                  "gate"
+                ]
+              }
+            ],
+            "header": "Gate"
+          },
+          {
+            "cell": [
+              {
+                "field": [
+                  "seconds"
+                ],
+                "format": "duration"
+              }
+            ],
+            "header": "Took"
+          }
+        ],
+        "items": {
+          "field": [
+            "landings"
+          ]
+        }
+      }
+    }
+  ]
+}

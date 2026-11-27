@@ -1,0 +1,4 @@
+line 2: "Head {head.sha}" is not a fact
+fix: Write it as "label | value".
+
+facts on line 1 shows the problem of line 2

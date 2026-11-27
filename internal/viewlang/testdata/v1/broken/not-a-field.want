@@ -1,0 +1,4 @@
+line 1: "ci..state" is not a field
+fix: Name a field, such as "state" or "ci.state".
+
+status on line 1 shows the problem of line 1

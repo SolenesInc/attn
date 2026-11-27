@@ -1,0 +1,4 @@
+line 3: the field "text" is listed twice
+fix: Keep one of them.
+
+data on line 1 shows the problem of line 3

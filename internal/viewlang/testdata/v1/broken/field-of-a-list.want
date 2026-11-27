@@ -1,0 +1,5 @@
+line 6: "items" is a list, so it has no field "text"
+fix: Show its items with ":::list items", or inside "::::each items".
+
+data on line 1
+markdown on line 6 shows the problem of line 6
