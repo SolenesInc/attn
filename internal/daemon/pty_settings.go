@@ -66,7 +66,17 @@ func (d *Daemon) validateSharedPTYHostAfterRecovery() {
 }
 
 func (d *Daemon) spawnTerminal(ctx context.Context, opts ptybackend.SpawnOptions) error {
-	err := d.ptyBackend.Spawn(ctx, opts)
+	return d.withSharedHostRemedy(d.ptyBackend.Spawn(ctx, opts))
+}
+
+func (d *Daemon) requireLaunchableHost(ctx context.Context) error {
+	if d.sharedPTYHost == nil {
+		return nil
+	}
+	return d.withSharedHostRemedy(d.sharedPTYHost.RequireLaunchableHost(ctx))
+}
+
+func (d *Daemon) withSharedHostRemedy(err error) error {
 	if errors.Is(err, ptybackend.ErrSharedHostUnavailable) {
 		return fmt.Errorf("%w. %s", err, d.sharedHostRemedy())
 	}

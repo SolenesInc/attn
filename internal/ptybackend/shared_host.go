@@ -573,10 +573,8 @@ func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) erro
 	if opts.Rows == 0 {
 		opts.Rows = 24
 	}
-	if !b.SharedArtifactReady() {
-		if err := b.ValidateSharedCandidate(ctx, false); err != nil {
-			return fmt.Errorf("%w: %w", ErrSharedHostUnavailable, err)
-		}
+	if err := b.RequireLaunchableHost(ctx); err != nil {
+		return err
 	}
 
 	prepared, err := pty.PrepareLaunch(opts.PTY(), b.cfg.Logf)
@@ -615,6 +613,16 @@ func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) erro
 		prepared.CleanupExcept(result.AttemptIndex)
 	}
 	return err
+}
+
+func (b *WorkerBackend) RequireLaunchableHost(ctx context.Context) error {
+	if b.SharedArtifactReady() {
+		return nil
+	}
+	if err := b.ValidateSharedCandidate(ctx, false); err != nil {
+		return fmt.Errorf("%w: %w", ErrSharedHostUnavailable, err)
+	}
+	return nil
 }
 
 func (b *WorkerBackend) spawnOnSharedHost(ctx context.Context, artifact *ptyhost.Artifact, params ptyhost.SpawnParams) (*ptyhost.SpawnResult, error) {

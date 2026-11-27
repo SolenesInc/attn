@@ -224,6 +224,9 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 	}
 	opts.LoginShellEnv = loginEnv
 	opts.HostName = protocol.Deref(msg.HostName)
+	if err := d.requireLaunchableHost(ctx); err != nil {
+		return struct{}{}, err
+	}
 	d.sessionMonitor(sessionID).FenceInput()
 	unlockEnds := d.replaceRuntime(sessionID, terminal)
 	opts = withLifecycleID(opts)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -222,6 +223,7 @@ func (d *Daemon) reloadSessionAgent(sessionID protocol.SessionID) {
 	if err != nil {
 		d.logf("reload: %v", err)
 	}
+	pausepoint.At(pausepoint.SessionAgentReloadAttempted)
 }
 
 func (d *Daemon) reloadSession(sessionID protocol.SessionID, cols, rows int) error {
