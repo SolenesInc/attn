@@ -694,6 +694,24 @@ func TestHomeMoveTakesTheWholeHomeAlong(t *testing.T) {
 			t.Fatal("the new home lists no crew member")
 		}
 	})
+	t.Run("a machine that joins the new home names its Notebook copy as one that joined before the move", func(t *testing.T) {
+		fourth := testworld.NewStack(t)
+		fourth.Vars = append(fourth.Vars, "SHELL=/bin/bash")
+		fourth.Start()
+		joining := &testworld.OutpostPair{Home: outpost, Outpost: fourth, SSH: pair.SSH, App: newHome}
+		fourthID := joining.Enroll("fourth", "fourth", fourth)
+		awaitMachineNotebook(t, newHome, fourthID, protocol.OutpostNotebookStateInSync)
+		copyNames := func(s *testworld.Stack) []string {
+			var names []string
+			for _, dir := range notebookDirs(t, s) {
+				names = append(names, filepath.Base(dir))
+			}
+			return names
+		}
+		if got, want := copyNames(fourth), copyNames(third); !slices.Equal(got, want) {
+			t.Fatalf("Notebook copies of the machine that joined after the move: %v; the one that joined before has %v", got, want)
+		}
+	})
 	t.Run("no machine changes its identity or renames a Notebook copy", func(t *testing.T) {
 		for s, want := range identities {
 			if got := identityFiles(t, s); !maps.Equal(got, want) {

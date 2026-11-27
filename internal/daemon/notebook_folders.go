@@ -66,7 +66,7 @@ func (d *Daemon) notebookFolders() ([]notebookFolder, error) {
 func (d *Daemon) notebookFolderKeys(roots ...string) (map[string]store.NotebookFolderKey, error) {
 	return d.store.NotebookFolderKeys(roots, func(root string) store.NotebookFolderKey {
 		key := notebook.FolderKey(root)
-		return store.NotebookFolderKey{ID: "notebook-" + d.daemonInstanceID + "-" + key, Key: key}
+		return store.NotebookFolderKey{ID: "notebook-" + d.daemonInstanceID + "-" + key, Key: key, CopyName: notebook.CopyName(root)}
 	})
 }
 
@@ -84,7 +84,7 @@ func notebookFoldersOf(keys map[string]store.NotebookFolderKey, notebooks []prof
 		folder := byPath[nb.path]
 		if folder == nil {
 			key := keys[nb.path]
-			folder = &notebookFolder{ID: key.ID, Key: key.Key, Name: notebook.CopyName(nb.path), HomePath: nb.path}
+			folder = &notebookFolder{ID: key.ID, Key: key.Key, Name: key.CopyName, HomePath: nb.path}
 			byPath[nb.path] = folder
 		}
 		folder.Profiles = append(folder.Profiles, nb.profileID)
