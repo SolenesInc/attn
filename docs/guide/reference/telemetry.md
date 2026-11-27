@@ -174,7 +174,8 @@ decides, Attn makes one call to the small model that judges your sessions'
 states, through the session's harness or, for a harness with no classifier,
 Claude Code, on your harness account. The call sends what Attn knows of the
 agent at that moment and at most 4,000 characters of its last message. Attn
-writes the record 30 minutes after the verdict, once it knows what you did next:
+writes the record once it knows what you did next: when you start a run of the
+agent, when its session closes, or 30 minutes after the verdict:
 
 - `checkpoint` is `stop`, `fact_change`, `elapsed_20m`, `elapsed_60m`,
   `elapsed_4h` or `daemon_start`.
