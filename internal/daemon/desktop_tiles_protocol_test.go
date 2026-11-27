@@ -38,7 +38,14 @@ func tileContentWorld(t *testing.T, test func(*testing.T, *desktopTilesWorld)) {
 	synctest.Test(t, func(t *testing.T) {
 		w := newDesktopTilesWorld(t)
 		w.d.rootWatch = func(*stepclock.Clock, string, func([]string)) (*notebook.Watcher, error) { return nil, nil }
-		w.d.outpost.enrollment = enrollment.Status{DaemonID: "d-home", HomeDaemonID: "d-home"}
+		daemonID, err := enrollment.EnsureDaemonID(w.d.dataRoot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.d.daemonInstanceID = daemonID
+		if err := w.d.ensureEnrollment(); err != nil {
+			t.Fatal(err)
+		}
 		ctx, cancel := context.WithCancel(context.Background())
 		watched := make(chan struct{})
 		go func() { defer close(watched); w.d.keepTileDocumentsWatched(ctx, "", nil) }()

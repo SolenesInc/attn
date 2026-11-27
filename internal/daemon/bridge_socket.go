@@ -23,14 +23,13 @@ type outpostListener struct {
 }
 
 type outpostRuntime struct {
-	mu                  sync.Mutex
-	enrollment          enrollment.Status
-	bridgedHomeDaemonID string
-	listener            *outpostListener
-	state               string
-	lastError           string
-	errorKind           string
-	listen              func(string, string) (net.Listener, error)
+	mu         sync.Mutex
+	enrollment enrollment.Status
+	listener   *outpostListener
+	state      string
+	lastError  string
+	errorKind  string
+	listen     func(string, string) (net.Listener, error)
 }
 
 func (d *Daemon) bridgeIdentity() bridge.Identity {
@@ -67,7 +66,7 @@ func (d *Daemon) startBridgeSocket() error {
 			r.mu.Lock()
 			status, err := enrollment.RecordHome(d.dataRoot, enrollment.Home{ID: home.HomeID, DaemonID: home.DaemonID, Name: home.Name})
 			if err == nil {
-				r.enrollment, r.bridgedHomeDaemonID = status, home.DaemonID
+				r.enrollment = status
 			}
 			r.mu.Unlock()
 			if err == nil && status.Adopting() {

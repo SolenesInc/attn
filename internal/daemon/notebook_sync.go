@@ -136,11 +136,8 @@ func (d *Daemon) notebookHomeDevice(status enrollment.Status) string {
 	if status.AwaitsHomeID() {
 		return status.HomeDaemonID
 	}
-	d.outpost.mu.Lock()
-	bridged := d.outpost.bridgedHomeDaemonID
-	d.outpost.mu.Unlock()
-	if bridged != "" {
-		return bridged
+	if conn := d.homeBridge(); conn != nil {
+		return conn.Peer().DaemonID
 	}
 	r := &d.notebookSync
 	r.mu.Lock()
@@ -211,7 +208,7 @@ func (d *Daemon) configureNotebookSyncLocked() (*notebookSyncRun, error) {
 	r := &d.notebookSync
 	home, isHome, peers, err := d.notebookSyncPeers()
 	var listed []notebookFolder
-	if isHome {
+	if isHome && err == nil {
 		listed, err = d.notebookFolders()
 	}
 	r.mu.Lock()
