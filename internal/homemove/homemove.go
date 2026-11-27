@@ -72,10 +72,12 @@ type Record struct {
 	Files      []File            `json:"files,omitempty"`
 	Displaced  []string          `json:"displaced"`
 	// Notebook names, on the target, where each of the home's Notebook roots is now.
-	Notebook  []Remap `json:"notebook,omitempty"`
-	Error     string  `json:"error,omitempty"`
-	StartedAt string  `json:"started_at"`
-	UpdatedAt string  `json:"updated_at"`
+	Notebook []Remap `json:"notebook,omitempty"`
+	// TargetReturned marks, on the old home, a rolled-back move whose target is an outpost again.
+	TargetReturned bool   `json:"target_returned,omitempty"`
+	Error          string `json:"error,omitempty"`
+	StartedAt      string `json:"started_at"`
+	UpdatedAt      string `json:"updated_at"`
 }
 
 type Remap struct {
@@ -91,9 +93,16 @@ func Dir(dataRoot, id string) string { return filepath.Join(dataRoot, DirName, i
 
 func StagedDatabase(dataRoot, id string) string { return filepath.Join(Dir(dataRoot, id), "attn.db") }
 
+func Snapshot(dataRoot, id string) string { return filepath.Join(Dir(dataRoot, id), "snapshot.db") }
+
 func StagedFiles(dataRoot, id string) string { return filepath.Join(Dir(dataRoot, id), "files") }
 
 func preMove(dataRoot, id string) string { return filepath.Join(Dir(dataRoot, id), "pre-move") }
+
+// PreMoveDatabase is where Apply keeps this machine's own database once it has moved it aside.
+func PreMoveDatabase(dataRoot, id string) string {
+	return filepath.Join(preMove(dataRoot, id), "attn.db")
+}
 
 func rolledBack(dataRoot, id string) string { return filepath.Join(Dir(dataRoot, id), "rolled-back") }
 
@@ -237,15 +246,12 @@ func Apply(dataRoot, dbPath string) (Record, bool, error) {
 	for _, root := range record.Roots {
 		live, kept := filepath.Join(dataRoot, root), filepath.Join(pre, "files", root)
 		incoming := filepath.Join(StagedFiles(dataRoot, record.ID), root)
-		if record.Side == SideTo && !exists(incoming) {
-			continue
-		}
 		if exists(live) && !exists(kept) {
 			if err := moveInto(live, kept); err != nil {
 				return record, false, err
 			}
 		}
-		if record.Side == SideTo {
+		if record.Side == SideTo && exists(incoming) {
 			if err := moveInto(incoming, live); err != nil {
 				return record, false, err
 			}
@@ -318,17 +324,6 @@ func Rollback(dataRoot, dbPath, id string) (Record, error) {
 	}
 	record.Step = StepRolledBack
 	return record, Write(dataRoot, record)
-}
-
-// RootsOf names the top-level entries of the data folder that move with the home.
-func RootsOf(dataRoot string) []string {
-	var roots []string
-	for _, root := range MovingRoots {
-		if exists(filepath.Join(dataRoot, root)) {
-			roots = append(roots, root)
-		}
-	}
-	return roots
 }
 
 // MovingRoots are the data folder's entries that belong to the home rather than the machine. The repository

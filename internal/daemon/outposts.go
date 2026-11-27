@@ -211,6 +211,7 @@ func (d *Daemon) updateOutpost(id string, run *outpostDial, state bridge.State, 
 	}
 	if connected {
 		d.kickOutpostInboxes(id)
+		d.homeReturned(id)
 	}
 	d.followRolledBackMove(id, err)
 }

@@ -29,9 +29,11 @@ commands:
   rollback [--json]
         undo the last move, on the machine the home moved from. A move that
         has not committed is dropped; a committed move restores both machines
-        as they were before it, once the other machine bridges again. On the
-        new home, or once the old home has bridged to the new home, rollback
-        refuses: move the home back instead.
+        as they were before it, once the other machine bridges again. Until
+        then this machine runs no background jobs or phone link; run rollback
+        again to run them without word from a machine that is gone for good.
+        On the new home, or once the old home has bridged to the new home,
+        rollback refuses: move the home back instead.
 ";
 
 pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {

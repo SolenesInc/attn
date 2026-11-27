@@ -25,6 +25,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/crashpoint"
@@ -52,6 +53,9 @@ type homeMoveRuntime struct {
 	mu   sync.Mutex
 	held bool
 	lift func()
+	// yielded is a home that rolled a move back and runs no home role until the target is its outpost again, so
+	// two machines never run the home at once.
+	yielded bool
 }
 
 type homeMoveFolder struct {
@@ -99,14 +103,11 @@ type homeMovePlan struct {
 // starts it again: the systemd unit, the app, or the bridge that dials it.
 var exitForMove = func() { _ = syscall.Kill(os.Getpid(), syscall.SIGTERM) }
 
-func (d *Daemon) homeMoveHeld() bool {
-	d.homeMove.mu.Lock()
-	defer d.homeMove.mu.Unlock()
-	return d.homeMove.held
-}
-
 func (d *Daemon) runsHomeRole() bool {
-	return d.enrollmentStatus().IsHome() && !d.homeMoveHeld()
+	d.homeMove.mu.Lock()
+	idle := d.homeMove.held || d.homeMove.yielded
+	d.homeMove.mu.Unlock()
+	return d.enrollmentStatus().IsHome() && !idle
 }
 
 // holdForMove fences this home until the move ends: its database refuses every write, so nothing is written after
@@ -148,11 +149,17 @@ func (d *Daemon) releaseMoveHold() {
 
 // settleHomeMoveAtStart runs before the store opens: a committed move is applied, a requested rollback is done.
 func (d *Daemon) settleHomeMoveAtStart() error {
+	if err := rebuildMovedHome(d.dataRoot); err != nil {
+		return err
+	}
 	record, applied, err := homemove.Apply(d.dataRoot, config.DBPath())
 	if err != nil {
 		return fmt.Errorf("apply move %s: %w", record.ID, err)
 	}
 	if applied {
+		if record.Side == homemove.SideTo {
+			_ = os.Remove(homemove.Snapshot(d.dataRoot, record.ID))
+		}
 		if record.Side == homemove.SideFrom {
 			if err := keepNotebookAsCopy(d.dataRoot); err != nil {
 				return fmt.Errorf("keep the Notebook in place after move %s: %w", record.ID, err)
@@ -169,6 +176,50 @@ func (d *Daemon) settleHomeMoveAtStart() error {
 	return nil
 }
 
+// rebuildMovedHome builds the new home's database again from the staged snapshot and this machine's database as it
+// is now, before a committed move swaps it in, so nothing this machine wrote after it staged the move is lost.
+func rebuildMovedHome(dataRoot string) error {
+	record, found, err := homemove.Latest(dataRoot)
+	if err != nil || !found || record.Side != homemove.SideTo || record.Step != homemove.StepCommitted {
+		return err
+	}
+	snapshot, staged := homemove.Snapshot(dataRoot, record.ID), homemove.StagedDatabase(dataRoot, record.ID)
+	if !fileExists(snapshot) || !fileExists(staged) {
+		return nil
+	}
+	moved, err := readMovedHome(dataRoot, record.ID)
+	if err != nil {
+		return err
+	}
+	own := config.DBPath()
+	if kept := homemove.PreMoveDatabase(dataRoot, record.ID); fileExists(kept) {
+		own = kept
+	}
+	rebuilt := staged + ".rebuilt"
+	if err := store.BuildMovedHome(context.Background(), moved, snapshot, own, rebuilt); err != nil {
+		return fmt.Errorf("build the new home's database for move %s: %w", record.ID, err)
+	}
+	return os.Rename(rebuilt, staged)
+}
+
+func movedHomePath(dataRoot, id string) string {
+	return filepath.Join(homemove.Dir(dataRoot, id), "moved-home.json")
+}
+
+func readMovedHome(dataRoot, id string) (store.MovedHome, error) {
+	var moved store.MovedHome
+	data, err := os.ReadFile(movedHomePath(dataRoot, id))
+	if err != nil {
+		return moved, err
+	}
+	return moved, json.Unmarshal(data, &moved)
+}
+
+func fileExists(path string) bool {
+	_, err := os.Lstat(path)
+	return err == nil
+}
+
 // resumeHomeMoveAtStart forgets a move this home staged but never began to commit, and holds a home whose move is
 // committing until the move is finished or rolled back. The target keeps what it staged: the home may still commit it.
 func (d *Daemon) resumeHomeMoveAtStart() {
@@ -177,15 +228,21 @@ func (d *Daemon) resumeHomeMoveAtStart() {
 		d.logf("home move: %v", err)
 		return
 	}
-	leftTheHome := record.Side == homemove.SideFrom && (record.Step == homemove.StepApplied || record.Step == homemove.StepDone) ||
-		record.Side == homemove.SideTo && record.Step == homemove.StepRolledBack
-	if found && leftTheHome {
+	switch {
+	case !found:
+	case record.Side == homemove.SideFrom && record.Step == homemove.StepDone, record.Side == homemove.SideTo && record.Step == homemove.StepRolledBack:
 		if err := d.removeHomeUnit(d.life.Context()); err != nil {
 			d.logf("home move %s: remove the systemd unit that started the home: %v", record.ID, err)
 		}
-	}
-	switch {
-	case !found:
+	case record.Side == homemove.SideTo && record.Step == homemove.StepApplied:
+		if err := d.keepHomeUnit(d.life.Context()); err != nil {
+			d.logf("home move %s: install the systemd unit that starts the home: %v", record.ID, err)
+		}
+	case record.Side == homemove.SideFrom && record.Step == homemove.StepRolledBack && !record.TargetReturned:
+		d.logf("home move %s: rolled back; running no home role until %s is an outpost again", record.ID, record.To.Name)
+		d.homeMove.mu.Lock()
+		d.homeMove.yielded = true
+		d.homeMove.mu.Unlock()
 	case record.Side == homemove.SideFrom && record.Step == homemove.StepStaged:
 		if err := homemove.Abort(d.dataRoot, record.ID); err != nil {
 			d.logf("home move %s: forget the staged move: %v", record.ID, err)
@@ -308,6 +365,9 @@ func (d *Daemon) homeMoveCommand(ctx context.Context, msg *protocol.HomeMoveMess
 		if record.To.ID != target.ID {
 			return protocol.HomeMove{}, false, protocol.Refuse(protocol.RefusalWrongState, "move %s to %s is committing; run {attn home move %s} to finish it, or {attn home rollback}", record.ID, record.To.Name, record.To.Name)
 		}
+		if protocol.Deref(msg.Check) {
+			return moveInfo(record), false, nil
+		}
 		return d.finishHomeMoveCommit(ctx, record)
 	}
 	plan := d.checkHomeMove(ctx, target, strings.TrimSpace(protocol.Deref(msg.Via)))
@@ -426,7 +486,7 @@ func (d *Daemon) runHomeMove(ctx context.Context, plan homeMovePlan, info protoc
 	peer := plan.conn.Peer()
 	from := homemove.Machine{ID: d.store.MachineID(), Name: self.Name, DaemonID: d.daemonInstanceID}
 	to := homemove.Machine{ID: plan.target.ID, Name: plan.target.Name, DaemonID: peer.DaemonID}
-	roots := homemove.RootsOf(d.dataRoot)
+	roots := homemove.MovingRoots
 	record := homemove.Record{ID: id, Side: homemove.SideFrom, HomeID: status.HomeID, From: from, To: to, Step: homemove.StepStaged, Roots: roots,
 		Enrollment: enrollment.Record{Role: enrollment.RoleOutpost, HomeID: status.HomeID, HomeName: plan.target.Name, HomeDaemonID: peer.DaemonID, MachineID: from.ID, HomeMachineID: to.ID}}
 	if plan.transport == store.TransportReverse {
@@ -572,6 +632,16 @@ func (d *Daemon) rollbackHomeMove(ctx context.Context) (protocol.HomeMove, bool,
 		d.releaseMoveHold()
 		record.Step = homemove.StepAborted
 		return moveInfo(record), false, nil
+	case homemove.StepRolledBack:
+		if record.Side == homemove.SideFrom && !record.TargetReturned {
+			record.TargetReturned = true
+			if err := homemove.Write(d.dataRoot, record); err != nil {
+				return moveInfo(record), false, err
+			}
+			d.logf("home move %s: running the home again without word from %s", record.ID, record.To.Name)
+			d.endHomeYield()
+		}
+		return moveInfo(record), false, nil
 	case homemove.StepDone:
 		return moveInfo(record), false, protocol.Refuse(protocol.RefusalWrongState, "move %s is done: %s runs the home and this machine has bridged to it; to bring the home back, run {attn home move %s} on %s", record.ID, record.To.Name, record.From.Name, record.To.Name)
 	case homemove.StepCommitted, homemove.StepApplied:
@@ -591,6 +661,9 @@ func listMovingFiles(dataRoot string, roots []string) ([]homemove.File, error) {
 	}
 	var files []homemove.File
 	for _, root := range roots {
+		if !fileExists(filepath.Join(dataRoot, root)) {
+			continue
+		}
 		err := filepath.WalkDir(filepath.Join(dataRoot, root), func(path string, entry fs.DirEntry, err error) error {
 			if err != nil || entry.IsDir() {
 				return err
@@ -644,13 +717,16 @@ func (d *Daemon) sendHomeMoveStage(ctx context.Context, conn *bridge.Conn, stage
 	if err != nil {
 		return err
 	}
-	channel, requests, err := conn.Open(ctx, homeMoveStageChannel, header)
+	channel, requests, err := conn.Open(ctx, homeMoveStageChannel, nil)
 	if err != nil {
 		return err
 	}
 	stream := conn.Bulk(ctx, channel, requests)
 	defer stream.Close()
 	writer := bufio.NewWriter(stream)
+	if _, err := writer.Write(append(header, '\n')); err != nil {
+		return err
+	}
 	archive := tar.NewWriter(writer)
 	if err := addToArchive(archive, "attn.db", snapshot, homemove.File{Mode: 0o600}); err != nil {
 		return err
@@ -820,18 +896,20 @@ func lingerOn(ctx context.Context, d *Daemon) error {
 }
 
 func (d *Daemon) receiveHomeMoveStage(conn *bridge.Conn, incoming ssh.NewChannel) {
-	var stage homeMoveStage
-	headerErr := json.Unmarshal(incoming.ExtraData(), &stage)
 	channel, requests, err := incoming.Accept()
 	if err != nil {
 		return
 	}
 	stream := conn.Bulk(d.life.Context(), channel, requests)
 	defer stream.Close()
-	if headerErr == nil {
-		err = d.stageMovedHome(stage, stream)
-	} else {
-		err = headerErr
+	var stage homeMoveStage
+	reader := bufio.NewReader(stream)
+	header, err := reader.ReadBytes('\n')
+	if err == nil {
+		err = json.Unmarshal(header, &stage)
+	}
+	if err == nil {
+		err = d.stageMovedHome(stage, reader)
 	}
 	reply := homeMoveStaged{}
 	if err != nil {
@@ -864,7 +942,7 @@ func (d *Daemon) stageMovedHome(stage homeMoveStage, stream io.Reader) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	snapshot := filepath.Join(dir, "snapshot.db")
+	snapshot := homemove.Snapshot(d.dataRoot, record.ID)
 	expected := map[string]homemove.File{}
 	for _, file := range record.Files {
 		expected["files/"+file.Path] = file
@@ -922,11 +1000,15 @@ func (d *Daemon) stageMovedHome(stage homeMoveStage, stream io.Reader) error {
 		}
 	}
 	moved := stage.Home
-	moved.Snapshot = snapshot
-	if err := d.store.BuildMovedHome(d.life.Context(), moved); err != nil {
+	moved.TargetStream = d.analyticsStreamAtHome()
+	if err := store.BuildMovedHome(d.life.Context(), moved, snapshot, config.DBPath(), homemove.StagedDatabase(d.dataRoot, record.ID)); err != nil {
 		return fmt.Errorf("build the new home's database: %w", err)
 	}
-	if err := os.Rename(snapshot, homemove.StagedDatabase(d.dataRoot, record.ID)); err != nil {
+	encoded, err := json.Marshal(moved)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(movedHomePath(d.dataRoot, record.ID), encoded, 0o600); err != nil {
 		return err
 	}
 	record.Step = homemove.StepStaged
@@ -995,18 +1077,17 @@ func (d *Daemon) commitStagedHome(id string) error {
 	}
 	switch record.Step {
 	case homemove.StepCommitted:
-		return nil
 	case homemove.StepStaged:
+		crashpoint.At("home-move-target-committing")
+		record.Step = homemove.StepCommitted
+		if err := homemove.Write(d.dataRoot, record); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("move %s is %s here", id, record.Step)
 	}
-	if err := d.installHomeUnit(context.Background()); err != nil {
+	if err := d.installHomeUnit(context.Background(), true); err != nil {
 		return fmt.Errorf("install the systemd unit that starts the home: %w", err)
-	}
-	crashpoint.At("home-move-target-committing")
-	record.Step = homemove.StepCommitted
-	if err := homemove.Write(d.dataRoot, record); err != nil {
-		return err
 	}
 	d.logf("home move %s: committed; restarting as the home", id)
 	return nil
@@ -1144,5 +1225,47 @@ func (d *Daemon) finishMoveOnBridge(home string) {
 	record.Step = homemove.StepDone
 	if err := homemove.Write(d.dataRoot, record); err != nil {
 		d.logf("home move %s: record it done: %v", record.ID, err)
+		return
 	}
+	if err := d.removeHomeUnit(d.life.Context()); err != nil {
+		d.logf("home move %s: remove the systemd unit that started the home: %v", record.ID, err)
+	}
+}
+
+// homeReturned ends the wait of a home that rolled a move back once the move's target bridges as its outpost again.
+func (d *Daemon) homeReturned(outpostID string) {
+	d.homeMove.mu.Lock()
+	yielded := d.homeMove.yielded
+	d.homeMove.mu.Unlock()
+	if !yielded {
+		return
+	}
+	record, found, err := homemove.Latest(d.dataRoot)
+	if err != nil || !found || record.Side != homemove.SideFrom || record.Step != homemove.StepRolledBack || record.To.ID != outpostID {
+		return
+	}
+	record.TargetReturned = true
+	if err := homemove.Write(d.dataRoot, record); err != nil {
+		d.logf("home move %s: record that %s gave the home back: %v", record.ID, record.To.Name, err)
+		return
+	}
+	d.logf("home move %s: %s is an outpost again; running the home", record.ID, record.To.Name)
+	d.endHomeYield()
+}
+
+func (d *Daemon) endHomeYield() {
+	d.homeMove.mu.Lock()
+	d.homeMove.yielded = false
+	d.homeMove.mu.Unlock()
+	d.configurePhoneAccess()
+	d.refreshJobQueueRole()
+}
+
+// analyticsStreamAtHome is the suffix this outpost's analytics streams carry at its home.
+func (d *Daemon) analyticsStreamAtHome() string {
+	secret, err := d.analyticsSecret()
+	if err != nil || len(secret) == 0 {
+		return ""
+	}
+	return string(analytics.Stream("").OnMachine(analytics.HashSubject(secret, d.enrollmentStatus().DaemonID)))
 }

@@ -14,7 +14,7 @@ import (
 
 // machineTables hold what a daemon knows about its own machine rather than its home, in insert order: a move
 // keeps each machine's rows on that machine.
-var machineTables = []string{"worktrees", "monitored_worktree_repositories", "forgotten_worktree_pins", "repo_integration_branches", "repo_merged_branches", "worktree_sweep_log", "plugin_server_owners", "analytics_builds", "analytics_sequences", "analytics_outbox"}
+var machineTables = []string{"worktrees", "monitored_worktree_repositories", "forgotten_worktree_pins", "repo_integration_branches", "repo_merged_branches", "worktree_sweep_log", "plugin_server_owners"}
 
 var ErrFenced = errors.New("the home is moving; this database takes no writes until the move ends")
 
@@ -47,26 +47,33 @@ type PathRemap struct {
 
 // MovedHome rewrites a snapshot of the home's database into the database the target runs as the new home.
 type MovedHome struct {
-	Snapshot      string
 	Home, Target  string
 	HomeTransport string
 	HomeDial      string
 	HomeHostKey   string
 	HomeDaemonID  string
 	Remaps        []PathRemap
+	// TargetStream is the suffix the target's analytics streams carry at the home, the same one its forwards carry;
+	// empty when analytics is off, which leaves nothing of the target's to forward.
+	TargetStream string
 }
 
-// BuildMovedHome turns m.Snapshot into the new home's database on this machine, the target: the two machines'
-// rows trade roles by id, this machine's own tables and machine settings replace the home's, and Notebook roots
-// move to their copies here. No other row changes, so every stored machine reference stays valid.
-func (s *Store) BuildMovedHome(ctx context.Context, m MovedHome) error {
+// BuildMovedHome writes, at out, the new home's database for this machine, the target, from a snapshot of the
+// home's and this machine's own database at machineDB: the two machines' rows trade roles by id, this machine's own
+// tables, session runtime and machine settings replace the home's, its unsent analytics join the home's as forwarded
+// records, and Notebook roots move to their copies here. No other row changes, so every stored machine reference
+// stays valid. The analytics stay the home's, as the analytics token that moves with the home names their sequences.
+func BuildMovedHome(ctx context.Context, m MovedHome, snapshot, machineDB, out string) error {
 	if m.HomeTransport != "ssh" && m.HomeTransport != TransportReverse {
 		return fmt.Errorf("the old home cannot be reached as %q", m.HomeTransport)
 	}
-	if err := schemaOfThisBuild(m.Snapshot); err != nil {
+	if err := schemaOfThisBuild(snapshot); err != nil {
 		return err
 	}
-	return rewriteAttached(ctx, m.Snapshot, s.dbPath, "machine", func(tx *sql.Tx) error {
+	if err := copySnapshot(snapshot, out); err != nil {
+		return err
+	}
+	return rewriteAttached(ctx, out, machineDB, "machine", func(tx *sql.Tx) error {
 		var self string
 		if err := tx.QueryRow(`SELECT id FROM main.machines WHERE transport = 'self'`).Scan(&self); err != nil {
 			return fmt.Errorf("the snapshot names no home machine: %w", err)
@@ -96,7 +103,7 @@ func (s *Store) BuildMovedHome(ctx context.Context, m MovedHome) error {
 			}
 		}
 		for _, statement := range []string{
-			`DELETE FROM main.session_runtime WHERE session_id IN (SELECT id FROM main.sessions WHERE host = ?1)`,
+			`DELETE FROM main.session_runtime WHERE session_id IN (SELECT session_id FROM machine.session_runtime WHERE session_id IN (SELECT id FROM main.sessions WHERE host = ?1))`,
 			`INSERT INTO main.session_runtime SELECT * FROM machine.session_runtime WHERE session_id IN (SELECT id FROM main.sessions WHERE host = ?1)`,
 			`UPDATE main.session_runtime SET home_id = '' WHERE session_id IN (SELECT id FROM main.sessions WHERE host = ?1)`,
 			`DELETE FROM main.settings WHERE NOT attn_home_setting(key)`,
@@ -105,6 +112,20 @@ func (s *Store) BuildMovedHome(ctx context.Context, m MovedHome) error {
 		} {
 			if _, err := tx.Exec(statement, m.Target); err != nil {
 				return fmt.Errorf("%s: %w", statement, err)
+			}
+		}
+		if m.TargetStream != "" {
+			for _, statement := range []string{
+				`INSERT INTO main.analytics_builds (build) SELECT build FROM machine.analytics_builds WHERE id IN (SELECT build_id FROM machine.analytics_outbox WHERE sent_at IS NULL) ON CONFLICT(build) DO NOTHING`,
+				`INSERT INTO main.analytics_outbox (stream, seq, at, record, build_id)
+					SELECT o.stream || ?1, o.seq, o.at, json_set(o.record, '$.stream', o.stream || ?1), (SELECT id FROM main.analytics_builds WHERE build = b.build)
+					FROM machine.analytics_outbox o LEFT JOIN machine.analytics_builds b ON b.id = o.build_id
+					WHERE o.sent_at IS NULL ORDER BY o.id
+					ON CONFLICT(stream, seq) DO NOTHING`,
+			} {
+				if _, err := tx.Exec(statement, m.TargetStream); err != nil {
+					return fmt.Errorf("forward this machine's unsent analytics: %w", err)
+				}
 			}
 		}
 		for _, remap := range m.Remaps {
@@ -160,6 +181,14 @@ func BuildMovedOutpost(ctx context.Context, snapshot, out, homeID, machineID str
 		}
 		return nil
 	})
+}
+
+func copySnapshot(from, to string) error {
+	data, err := os.ReadFile(from)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(to, data, 0o600)
 }
 
 func rewriteAttached(ctx context.Context, path, other, name string, rewrite func(*sql.Tx) error) error {

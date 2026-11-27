@@ -15,7 +15,7 @@ The machine you move to must already run Attn as an outpost of this home. See
   running through the move.
 - The Garden, profiles, settings, automations and unsent analytics move to the
   new home.
-- The new home keeps its own worktrees and machine settings.
+- The new home keeps its own worktrees, machine settings and unsent analytics.
 - Each machine keeps its daemon id, its agent key and its bridge host key.
 - The new home uses its own copy of each Notebook folder. Each profile's
   `notebook.root` points at that copy, and a crew member whose home was inside a
@@ -121,7 +121,8 @@ instance. The unit runs `attn daemon` with `ATTN_DATA_DIR`, `ATTN_INSTANCE`, `PA
 `SSH_AUTH_SOCK` from your login environment, and restarts the daemon when it
 stops. With linger on, the home starts at boot, without the app and without an
 outpost that dials it, and its automations run. When the home moves away again,
-or the move rolls back, attn disables the unit and removes it.
+attn disables the unit and removes it once this machine has connected to the
+new home; a move that rolls back here removes it too.
 
 ## When a move stops
 
@@ -131,9 +132,12 @@ or the move rolls back, attn disables the unit and removes it.
 - If the new home does not start, roll the move back on the old home. The app
   there shows **Can't reach** *machine* with **Roll back**, or run
   `attn home rollback`. The old home restarts as the home, and the other
-  machine rolls back its side when the two connect. If that machine did run as
-  the home meanwhile, what it recorded as the home stays in its
-  `home-move/<id>/rolled-back` folder.
+  machine rolls back its side when the two connect. Until that machine is an
+  outpost again, the old home runs no background jobs and no phone link, so two
+  machines never run the home at once. If that machine is gone for good, run
+  `attn home rollback` again to run the home without word from it. If that
+  machine did run as the home meanwhile, what it recorded as the home stays in
+  its `home-move/<id>/rolled-back` folder.
 
 Once the old home has connected to the new home, the move is done and
 `attn home rollback` refuses. On the new home, `attn home rollback` always

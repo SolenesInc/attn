@@ -24,7 +24,7 @@ func homeUnitName() string {
 // a home, so nothing else would start it. The unit carries the login PATH and ssh agent socket this daemon has, so
 // the home runs gh and reaches its outposts with the user's keys (F13). It restarts the daemon whenever it ends,
 // with no start limit, so the start that waits for this daemon to exit after the commit succeeds once it has.
-func (d *Daemon) installHomeUnit(ctx context.Context) error {
+func (d *Daemon) installHomeUnit(ctx context.Context, start bool) error {
 	if runtime.GOOS != "linux" {
 		return nil
 	}
@@ -58,12 +58,32 @@ func (d *Daemon) installHomeUnit(ctx context.Context) error {
 	if err := os.WriteFile(path, []byte(homeUnitText(executable, env)), 0o600); err != nil {
 		return err
 	}
-	for _, args := range [][]string{{"--user", "daemon-reload"}, {"--user", "enable", homeUnitName()}, {"--user", "start", "--no-block", homeUnitName()}} {
+	calls := [][]string{{"--user", "daemon-reload"}, {"--user", "enable", homeUnitName()}}
+	if start {
+		calls = append(calls, []string{"--user", "start", "--no-block", homeUnitName()})
+	}
+	for _, args := range calls {
 		if err := d.runOnThisMachine(ctx, "systemctl", args...); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// keepHomeUnit installs the unit of a home that lacks it, as one that stopped between its commit and the install
+// does, without starting it: this daemon already runs the home.
+func (d *Daemon) keepHomeUnit(ctx context.Context) error {
+	if runtime.GOOS != "linux" {
+		return nil
+	}
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return err
+	}
+	if fileExists(filepath.Join(dir, "systemd", "user", homeUnitName())) {
+		return nil
+	}
+	return d.installHomeUnit(ctx, false)
 }
 
 // removeHomeUnit stops systemd from starting this daemon at boot once this machine no longer holds the home. The

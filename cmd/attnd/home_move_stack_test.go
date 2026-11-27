@@ -189,6 +189,124 @@ func TestHomeMoveKeepsTerminalsAndMovesBack(t *testing.T) {
 	}
 }
 
+func TestHomeMoveBackKeepsTheClosedSessionsOfTheMachineItReturnsTo(t *testing.T) {
+	home, outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude)), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.SSH.Use(outpost.World)
+	pair.SSH.Route("oldhome", home)
+	healthyMachine(t, home)
+	healthyMachine(t, outpost)
+	pair.Start()
+	requireStdout(t, home.Attn("settings", "set", "remote_home_enabled", "true"))
+	homeMachine := role(t, home).MachineID
+	id := string(home.Spawn(pair.App, fakeagent.Claude, home.Path("work")))
+	run := home.Launched(id)
+	pair.App.TypeLine(id, "Remember this conversation")
+	run.Prompted()
+	run.Reply("done <!-- attn:state=waiting_input -->")
+	if closed := home.Attn("agent", "close", id, "-m", "finished", "--source-session", id); closed.Code != 0 {
+		t.Fatalf("close: %+v", closed)
+	}
+	before := closedUsage(t, home, id)
+	if before == "" {
+		t.Fatal("the closed session has no usage before any move")
+	}
+
+	awaitMachineNotebook(t, pair.App, pair.Host, protocol.OutpostNotebookStateInSync)
+	if move := homeMoveJSON(t, home, "move", "outpost", "--via", "oldhome"); move.Step != "committed" {
+		t.Fatalf("move: %s", describeMove(move))
+	}
+	home.AwaitStopped()
+	outpost.AwaitStopped()
+	home.Start()
+	outpost.Start()
+	app := outpost.App()
+	awaitConnected(t, app, homeMachine)
+	awaitMachineNotebook(t, app, homeMachine, protocol.OutpostNotebookStateInSync)
+	if back := homeMoveJSON(t, outpost, "move", homeMachine, "--via", "outpost"); back.Step != "committed" {
+		t.Fatalf("move back: %s", describeMove(back))
+	}
+	outpost.AwaitStopped()
+	home.AwaitStopped()
+	outpost.Start()
+	home.Start()
+	if after := closedUsage(t, home, id); after != before {
+		t.Fatalf("the closed session's usage on the machine the home came back to: %s, was %s", after, before)
+	}
+}
+
+// closedUsage is the usage the session ledger shows for a closed session, which its runtime row holds.
+func closedUsage(t *testing.T, s *testworld.Stack, id string) string {
+	t.Helper()
+	var ledger struct {
+		Entries []struct {
+			ID    string          `json:"id"`
+			Usage json.RawMessage `json:"usage"`
+		} `json:"entries"`
+	}
+	s.Attn("session", "list", "--closed", "--json").JSON(t, &ledger)
+	for _, entry := range ledger.Entries {
+		if entry.ID == id {
+			return string(entry.Usage)
+		}
+	}
+	t.Fatalf("the session ledger has no closed session %s", id)
+	return ""
+}
+
+func TestHomeMoveRollbackKeepsOneHomeAtATime(t *testing.T) {
+	cloud := testworld.StartCloud(t)
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	for _, s := range []*testworld.Stack{home, outpost} {
+		s.Vars = append(s.Vars, "SHELL=/bin/bash", "ATTN_CLOUD_URL="+cloud.HomeURL)
+	}
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.SSH.Use(outpost.World)
+	pair.SSH.Route("oldhome", home)
+	healthyMachine(t, home)
+	healthyMachine(t, outpost)
+	pair.Start()
+	requireStdout(t, home.Attn("settings", "set", "remote_home_enabled", "true"))
+	setPhoneAccess(t, pair.App, true)
+	testworld.Await(pair.App, protocol.EventPhonesUpdated, linkConnected)
+	awaitMachineNotebook(t, pair.App, pair.Host, protocol.OutpostNotebookStateInSync)
+	if move := homeMoveJSON(t, home, "move", "outpost", "--via", "oldhome"); move.Step != "committed" {
+		t.Fatalf("move: %s", describeMove(move))
+	}
+	home.AwaitStopped()
+	outpost.AwaitStopped()
+	pair.SSH.Fail("oldhome", "ssh: connect to host oldhome port 22: No route to host")
+	pair.SSH.Fail(pair.Destination, "ssh: connect to host outpost port 22: No route to host")
+	home.Start()
+	outpost.Start()
+	awaitLinked(outpost.App())
+	if back := homeMoveJSON(t, home, "rollback"); back.Step != "rolling-back" {
+		t.Fatalf("rollback: %s", describeMove(back))
+	}
+	home.AwaitStopped()
+	home.Start()
+	pair.SSH.Restore(pair.Destination)
+	redial(home)
+	outpost.AwaitStopped()
+	outpost.Start()
+	defer home.FireTimers(bridge.RetryTimer)()
+	awaitLinked(home.App())
+	if !role(t, home).IsHome() || role(t, outpost).IsHome() {
+		t.Fatalf("roles: old home %+v, target %+v; want the old home home", role(t, home), role(t, outpost))
+	}
+	if most := cloud.MostOpen(); most != 1 {
+		t.Fatalf("the Cloud Relay saw %d home sockets at once while the home rolled back", most)
+	}
+}
+
+// awaitLinked waits until the daemon behind app holds the home's Cloud Relay link.
+func awaitLinked(app *testworld.Peer) {
+	if shown := testworld.Request[protocol.PhonesUpdatedMessage](app, protocol.PhonesGetMessage{Cmd: protocol.CmdPhonesGet}, protocol.EventPhonesUpdated, nil); linkConnected(shown) {
+		return
+	}
+	testworld.Await(app, protocol.EventPhonesUpdated, linkConnected)
+}
+
 func describeMove(move protocol.HomeMove) string {
 	data, _ := json.Marshal(move)
 	return string(data)
@@ -227,6 +345,9 @@ func worktreeListed(t *testing.T, app *testworld.Peer, path, id string) bool {
 	}
 	return false
 }
+
+// manyPluginFiles names more files than fit in one ssh packet of 256 KiB, at about 130 bytes of manifest each.
+const manyPluginFiles = 3000
 
 func TestHomeMoveTakesTheWholeHomeAlong(t *testing.T) {
 	cloud := testworld.StartCloud(t)
@@ -302,6 +423,26 @@ func TestHomeMoveTakesTheWholeHomeAlong(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	homeAnalytics := analyticsRows(t, app)
+	many := filepath.Join(home.Dir, "plugins", "many")
+	if err := os.MkdirAll(many, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for i := range manyPluginFiles {
+		if err := os.WriteFile(filepath.Join(many, fmt.Sprintf("module-%04d.js", i)), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.RemoveAll(filepath.Join(home.Dir, "quick-captures")); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(outpost.Dir, "quick-captures", "from-its-own-home.md")
+	if err := os.MkdirAll(filepath.Dir(stale), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stale, []byte("stale"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	move := homeMoveJSON(t, home, "move", "outpost", "--via", "oldhome")
 	if move.Step != "committed" || move.Error != nil {
@@ -333,6 +474,16 @@ func TestHomeMoveTakesTheWholeHomeAlong(t *testing.T) {
 			t.Fatalf("the Cloud Relay saw %d home sockets at once", most)
 		}
 	})
+	t.Run("a home with more files than one ssh packet can name moves them all", func(t *testing.T) {
+		if _, err := os.Stat(filepath.Join(outpost.Dir, "plugins", "many", fmt.Sprintf("module-%04d.js", manyPluginFiles-1))); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("a root the home lacks leaves the target's own copy behind", func(t *testing.T) {
+		if _, err := os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("the target's own quick capture is in the new home: %v", err)
+		}
+	})
 	t.Run("files keep their mode and links, with the analytics keys and ask images", func(t *testing.T) {
 		if info, err := os.Stat(filepath.Join(outpost.Dir, "plugins", "tool", "run")); err != nil || info.Mode().Perm() != 0o755 {
 			t.Fatalf("an executable plugin file on the new home: %v %v", info, err)
@@ -355,8 +506,26 @@ func TestHomeMoveTakesTheWholeHomeAlong(t *testing.T) {
 		requireStdout(t, home.Attn("settings", "get", "worktree_sweep_enabled"), "true")
 		after := analyticsRows(t, newHome)
 		for _, row := range analyticsBefore {
+			if !slices.ContainsFunc(after, func(r analytics.Record) bool {
+				return strings.HasPrefix(string(r.Stream), string(row.Stream)+"_m") && r.Seq == row.Seq
+			}) {
+				t.Fatalf("the target's analytics record %s/%d is not at the new home under the target's stream", row.Stream, row.Seq)
+			}
+		}
+	})
+	t.Run("the home's unsent analytics move with its analytics token", func(t *testing.T) {
+		if len(homeAnalytics) == 0 {
+			t.Fatal("the home recorded no analytics before the move")
+		}
+		after := analyticsRows(t, outpost.App())
+		for _, row := range homeAnalytics {
 			if !slices.ContainsFunc(after, func(r analytics.Record) bool { return r.Stream == row.Stream && r.Seq == row.Seq }) {
-				t.Fatalf("analytics record %s/%d is gone after the move", row.Stream, row.Seq)
+				t.Fatalf("the home's analytics record %s/%d is gone after the move", row.Stream, row.Seq)
+			}
+		}
+		for _, row := range analyticsRows(t, home.App()) {
+			if slices.ContainsFunc(homeAnalytics, func(r analytics.Record) bool { return r.Stream == row.Stream && r.Seq == row.Seq && r.At.Equal(row.At) }) {
+				t.Fatalf("the old home keeps analytics record %s/%d, which the new home now ships", row.Stream, row.Seq)
 			}
 		}
 	})
@@ -507,6 +676,10 @@ func (m *movingPair) restartAfterRollback() {
 }
 
 // redial fires the retry of the dial that s's daemon made while the other machine refused it, holding the home itself.
+func homeUnit(s *testworld.Stack) string {
+	return filepath.Join(s.Path("xdg-config"), "systemd", "user", "attn.service")
+}
+
 func redial(s *testworld.Stack) {
 	s.T.Helper()
 	s.AwaitTimer(bridge.RetryTimer)
@@ -625,6 +798,13 @@ func TestHomeMoveSurvivesAKillAtEachStep(t *testing.T) {
 	t.Run("rollback after the new home failed to start", func(t *testing.T) {
 		m := newCrashingPair(t, "", "")
 		pidHome, pidOut := m.echo(m.App, "start")
+		unit := homeUnit(m.Home)
+		if err := os.MkdirAll(filepath.Dir(unit), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(unit, []byte("[Service]\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
 		if move := homeMoveJSON(t, m.Home, "move", "outpost", "--via", "oldhome"); move.Step != "committed" {
 			t.Fatalf("move: %s", describeMove(move))
 		}
@@ -641,6 +821,56 @@ func TestHomeMoveSurvivesAKillAtEachStep(t *testing.T) {
 		app := m.Home.App()
 		awaitConnected(t, app, m.Host)
 		m.requireShellsKept(t, app, "rolled-back", pidHome, pidOut)
+		if _, err := os.Stat(unit); err != nil {
+			t.Fatalf("the unit that starts the home is gone after the rollback: %v", err)
+		}
+	})
+	t.Run("a machine setting the target took after it staged survives the move", func(t *testing.T) {
+		m := newCrashingPair(t, "home-move-committing", "")
+		homeMachine := role(t, m.Home).MachineID
+		pidHome, pidOut := m.echo(m.App, "start")
+		_ = m.Home.Attn("home", "move", "outpost", "--via", "oldhome")
+		m.Home.AwaitCrash()
+		requireStdout(t, m.Outpost.Attn("settings", "set", "worktree_sweep_enabled", "false"), "false")
+		m.Home.Start()
+		awaitOutpost(t, m.Home.App(), m.Host, func(row protocol.OutpostInfo) bool { return row.State == protocol.OutpostStateConnected })
+		if move := homeMoveJSON(t, m.Home, "move", "outpost", "--via", "oldhome"); move.Step != "committed" {
+			t.Fatalf("finishing the move: %s", describeMove(move))
+		}
+		m.Home.AwaitStopped()
+		m.Outpost.AwaitStopped()
+		m.Home.Start()
+		m.Outpost.Start()
+		m.requireMoved(t, homeMachine, pidHome, pidOut)
+		requireStdout(t, m.Outpost.Attn("settings", "get", "worktree_sweep_enabled"), "false")
+	})
+	t.Run("a check while the move commits changes nothing", func(t *testing.T) {
+		m := newCrashingPair(t, "home-move-committing", "")
+		_ = m.Home.Attn("home", "move", "outpost", "--via", "oldhome")
+		m.Home.AwaitCrash()
+		m.Home.Start()
+		awaitOutpost(t, m.Home.App(), m.Host, func(row protocol.OutpostInfo) bool { return row.State == protocol.OutpostStateConnected })
+		if check := homeMoveJSON(t, m.Home, "move", "outpost", "--via", "oldhome", "--check"); check.Step != "committing" {
+			t.Fatalf("a check of the committing move: %s", describeMove(check))
+		}
+		if status := homeMoveJSON(t, m.Home, "status"); status.Step != "committing" {
+			t.Fatalf("the move after its check: %s", describeMove(status))
+		}
+		m.requireRoles(t, true)
+	})
+	t.Run("rollback after the target died as it committed leaves it no unit", func(t *testing.T) {
+		m := newCrashingPair(t, "", "home-move-target-committing")
+		_ = m.Home.Attn("home", "move", "outpost", "--via", "oldhome")
+		m.Outpost.AwaitCrash()
+		m.Outpost.Start()
+		awaitOutpost(t, m.Home.App(), m.Host, func(row protocol.OutpostInfo) bool { return row.State == protocol.OutpostStateConnected })
+		if back := homeMoveJSON(t, m.Home, "rollback"); back.Step != "aborted" {
+			t.Fatalf("rollback: %s", describeMove(back))
+		}
+		if _, err := os.Stat(homeUnit(m.Outpost)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("the target that never committed has a unit that starts it as the home: %v", err)
+		}
+		m.requireRoles(t, true)
 	})
 	t.Run("rollback from the app after the new home failed to start", func(t *testing.T) {
 		m := newCrashingPair(t, "", "")
