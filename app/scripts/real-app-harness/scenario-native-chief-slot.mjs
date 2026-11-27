@@ -31,7 +31,7 @@ const SETUP = 'chief-setup';
 const PRIMARY = 'chief-setup.primary';
 let profile;
 let home;
-let started;
+let chiefRow;
 
 function nodeWhere(node, test) {
   if (!node) return null;
@@ -111,10 +111,12 @@ try {
     const bound = observer.waitForMessage((m) => m.event === 'crew_updated'
       && m.members?.find((member) => member.chief && member.profile_id === profile.id && member.binding_session)?.binding_session, "the Chief's session", 30_000);
     await driver.pressKey('Enter');
-    started = await bound;
-    await driver.waitFor({ key: `queue-chief.${started}` }, { timeoutMs: 30_000 });
-    await driver.waitFor({ key: SETUP }, { gone: true });
+    const started = await bound;
     const configured = chiefOfRoster();
+    runner.assert(configured?.binding_session === started, 'the bound session matches the roster Chief', { started, configured });
+    chiefRow = `sidebar.crew.${configured.id}`;
+    await driver.waitFor({ key: chiefRow }, { timeoutMs: 30_000 });
+    await driver.waitFor({ key: SETUP }, { gone: true });
     runner.writeJson('first-start.json', { configured });
     runner.assert(configured?.agent === 'claude' && configured?.model === MOCK_AGENT_MODEL, 'setup saved the preselected harness and model', { configured });
     runner.assert(Boolean(configured?.binding_session), 'the Chief woke', { configured });
@@ -127,7 +129,7 @@ try {
   await runner.step('nothing_marks_a_session_chief', async () => {
     await driver.run('session.goToDashboard');
     await driver.waitFor({ key: 'home.new' });
-    await driver.waitFor({ key: `queue-chief.${started}` });
+    await driver.waitFor({ key: chiefRow });
     const onHome = names(await driver.tree());
     runner.assert(!onHome.some((name) => /chief of staff/i.test(name)), 'no Chief of Staff control on Home', onHome);
     await screenshot('04-home-without-a-chief-card');

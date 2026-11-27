@@ -97,14 +97,25 @@ fn the_queue() -> InitialStateMessage {
     ]))
 }
 
-/// The queue list's lines top to bottom, by key.
+/// The queue list's rows and headings top to bottom, by key (flattening the waiting well).
 fn lines(world: &World) -> Vec<String> {
-    world
-        .screen()
-        .children(Target::key("sidebar.queue"))
-        .into_iter()
-        .filter_map(|n| n.key)
-        .collect()
+    let mut out = Vec::new();
+    for node in world.screen().children(Target::key("sidebar.queue")) {
+        match node.key.as_deref() {
+            Some("queue.waiting-well") => {
+                out.extend(
+                    world
+                        .screen()
+                        .children(Target::key("queue.waiting-well"))
+                        .into_iter()
+                        .filter_map(|n| n.key),
+                );
+            }
+            Some(key) => out.push(key.to_owned()),
+            None => {}
+        }
+    }
+    out
 }
 
 fn keys_of(action: Action) -> String {
@@ -134,16 +145,25 @@ fn the_queue_sidebar_anchors_the_chief_above_the_owed_turns_oldest_first_and_kee
  {
     let world = World::start(Daemon::scripted().state(the_queue()));
 
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.crew.session.chief"))
+            .is_some()
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("queue.waiting-well"))
+            .is_some()
+    );
     assert_eq!(
         lines(&world),
         [
-            "queue.rule.crew",
-            "queue-chief.chief",
             "queue.waiting-head",
             "queue-turn.t-old",
             "queue-turn.t-new",
             "queue.agents-toggle",
-            "queue.agents-counts",
         ]
     );
     assert_eq!(name(&world, "queue.waiting-head"), "2 waiting");
@@ -151,7 +171,7 @@ fn the_queue_sidebar_anchors_the_chief_above_the_owed_turns_oldest_first_and_kee
     assert_eq!(name(&world, "queue-turn.t-new.age"), "5m");
     assert_eq!(name(&world, "queue-turn.t-old.slot"), "1");
     assert_eq!(name(&world, "queue.agents-toggle"), "2 more agents");
-    assert_eq!(name(&world, "queue.agents-counts"), "1 working  1 snoozed");
+    assert_eq!(name(&world, "queue.agents-counts"), "1 working · 1 snoozed");
 }
 
 #[test]
@@ -273,7 +293,7 @@ fn the_opened_list_shows_working_and_snoozed_agents_and_its_filter_narrows_them_
 
     world.gesture(|app| app.click(Target::key("queue.agents-toggle")));
     assert_eq!(
-        lines(&world)[5..],
+        lines(&world)[3..],
         [
             "queue.agents-toggle",
             "queue.filter",
@@ -289,7 +309,7 @@ fn the_opened_list_shows_working_and_snoozed_agents_and_its_filter_narrows_them_
 
     world.gesture(|app| app.type_text("s1"));
     assert_eq!(
-        lines(&world)[2..],
+        lines(&world),
         [
             "queue.waiting-head",
             "queue-turn.t-old",
@@ -840,7 +860,6 @@ fn the_desktop_strip_dots_each_chip_where_a_turn_waits_and_the_bar_counts_them()
             ),
             format!("Review ({})", keys_of(Action::DesktopSelect2)),
             "1 more desktop without a shortcut, has turns waiting".to_owned(),
-            format!("Desktop overview ({})", keys_of(Action::DesktopOverview)),
         ]
     );
     world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
@@ -883,21 +902,12 @@ fn the_desktop_strip_names_the_window_s_desktop_at_home_too_and_its_last_chip_op
     let mut world = World::start(Daemon::scripted().state(message));
     world.gesture(|app| app.key(chord(Action::SessionGoToDashboard)));
 
-    let current = std::iter::once(name(&world, "queue.desktop-current"))
-        .chain(
-            world
-                .screen()
-                .children(Target::key("queue.desktop-current"))
-                .into_iter()
-                .filter_map(|n| n.name),
-        )
-        .collect::<Vec<_>>();
+    assert_eq!(name(&world, "queue.desktop-current"), "Sidebar refinement");
+    let overview = world.screen().get(Target::key("queue.desktop-overview"));
+    assert_eq!(overview.name.as_deref(), Some("Desktop overview"));
     assert_eq!(
-        current,
-        [
-            "Sidebar refinement".to_owned(),
-            keys_of(Action::DesktopOverview)
-        ]
+        overview.description.as_deref(),
+        Some(keys_of(Action::DesktopOverview).as_str())
     );
 
     world.gesture(|app| app.click(Target::key("queue.desktop-overview")));
@@ -920,15 +930,15 @@ fn a_hidden_agent_owing_a_turn_queues_by_default_and_a_crew_member_or_another_pr
     ]);
     let world = World::start(Daemon::scripted().state(message));
 
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.crew.session.mate"))
+            .is_some()
+    );
     assert_eq!(
         lines(&world),
-        [
-            "queue.rule.crew",
-            "queue-crew.mate",
-            "queue.waiting-head",
-            "queue-turn.h1",
-            "queue.agents-toggle",
-        ]
+        ["queue.waiting-head", "queue-turn.h1", "queue.agents-toggle",]
     );
 }
 
@@ -1004,7 +1014,7 @@ fn a_row_settles_its_turn_and_unsnoozes_its_agent_without_opening_it() {
     assert!(
         world
             .screen()
-            .find(Target::key("queue-chief.chief.settle"))
+            .find(Target::key("sidebar.crew.session.chief.settle"))
             .is_none()
     );
 }
@@ -1496,7 +1506,7 @@ fn a_row_s_actions_menu_marks_priority_reloads_and_closes_the_agent() {
     let mut world = World::start(Daemon::scripted().state(the_queue()));
     world.gesture(|app| app.click(Target::key("queue.agents-toggle")));
     for row in [
-        "queue-chief.chief",
+        "sidebar.crew.session.chief",
         "queue-turn.t-old",
         "queue-settled.w1",
         "queue-snoozed.s1",
@@ -1639,7 +1649,7 @@ fn the_close_key_on_the_agent_on_screen_in_queue_flow_opens_the_next_turn() {
 fn a_crew_member_is_protected_from_closing_and_the_chief_offers_no_close() {
     let mut world = World::start(Daemon::scripted().state(the_queue()));
 
-    actions_for(&mut world, "queue-chief.chief");
+    actions_for(&mut world, "sidebar.crew.session.chief");
     assert!(
         world
             .screen()
@@ -1651,7 +1661,7 @@ fn a_crew_member_is_protected_from_closing_and_the_chief_offers_no_close() {
     let mut world = World::start(
         Daemon::scripted().state(queue(one_desktop(vec![crew("mate", "mate", false)]))),
     );
-    actions_for(&mut world, "queue-crew.mate");
+    actions_for(&mut world, "sidebar.crew.session.mate");
     world.gesture(|app| app.click(Target::key("session.menu.close")));
     assert!(world.daemon.sent_of("unregister").is_empty());
     assert_eq!(
@@ -1824,7 +1834,7 @@ fn reached(world: &World) -> Option<String> {
     }
     let shown = world
         .screen()
-        .children(Target::key("sidebar.queue"))
+        .descendants(Target::key("sidebar.queue"))
         .into_iter()
         .find(|n| n.is("selected"))
         .and_then(|n| n.key);
@@ -1845,16 +1855,15 @@ fn the_arrows_walk_every_row_from_the_filter_and_wrap_and_return_opens_the_row()
         reached(&world).unwrap_or_default()
     };
 
-    let down: Vec<String> = (0..6).map(|_| walk(rune::Key::Down)).collect();
+    let down: Vec<String> = (0..5).map(|_| walk(rune::Key::Down)).collect();
     assert_eq!(
         down,
         [
-            "queue-chief.chief",
             "queue-turn.t-old",
             "queue-turn.t-new",
             "queue-settled.w1",
             "queue-snoozed.s1",
-            "queue-chief.chief",
+            "queue-turn.t-old",
         ]
     );
     assert_eq!(walk(rune::Key::Up), "queue-snoozed.s1");
@@ -1883,7 +1892,7 @@ fn tab_from_the_filter_reaches_the_rows() {
     world.gesture(|app| app.key(chord(Action::SidebarAgentList)));
 
     world.gesture(|app| app.key(plain(rune::Key::Tab)));
-    assert_eq!(reached(&world).as_deref(), Some("queue-chief.chief"));
+    assert_eq!(reached(&world).as_deref(), Some("queue-turn.t-old"));
 }
 
 #[test]
@@ -2069,7 +2078,7 @@ fn an_arrow_held_with_a_modifier_is_left_to_the_shortcut_layer_on_the_filter_and
     assert_eq!(reached(&world).as_deref(), Some("queue.filter.field"));
     world.gesture(|app| app.key(plain(rune::Key::Down)));
     world.gesture(|app| app.key(alt_down()));
-    assert_eq!(reached(&world).as_deref(), Some("queue-chief.chief"));
+    assert_eq!(reached(&world).as_deref(), Some("queue-turn.t-old"));
 }
 
 #[test]
@@ -2382,9 +2391,9 @@ const ROOMY: (f32, f32) = (1400.0, 900.0);
 /// (they need a window 880 wide), and wide enough for the chips of three (730).
 const CROWDED_AT_HOME: (f32, f32) = (800.0, 900.0);
 /// On desktop 1 of a Mac, too narrow for the chips of eight desktops beside the waiting pill, the
-/// runs chip and its two tiles' shelf (they need a window 1020 wide), and wide enough for them
-/// beside desktop 3's single tile (880).
-const CROWDED_BESIDE_SHELF: (f32, f32) = (920.0, 900.0);
+/// runs chip and its two tiles' shelf (they need a window ~1066 wide), and wide enough for them
+/// beside desktop 3's single tile (~926) without shrinking the runs chip.
+const CROWDED_BESIDE_SHELF: (f32, f32) = (940.0, 900.0);
 
 /// [`CROWDED_BESIDE_SHELF`], less the room macOS's traffic lights take that this platform's title
 /// bar does not, so the queue bar has a Mac's room on either platform.
@@ -2715,7 +2724,9 @@ fn the_queue_sidebar_at_150_percent_text_stands_no_taller_than_it_did_before_the
         .insert("uiScale".to_owned(), "1.5".to_owned());
     let world = World::start_sized(Daemon::scripted().state(message), (800.0, 600.0));
     let screen = world.screen();
-    let lines: Vec<[f32; 4]> = lines(&world)
+    let mut keys = vec!["sidebar.crew.section".to_owned()];
+    keys.extend(lines(&world));
+    let lines: Vec<[f32; 4]> = keys
         .iter()
         .map(|key| screen.bounds(Target::key(key)).expect(key))
         .collect();
@@ -2951,4 +2962,142 @@ fn a_queue_bar_narrowed_to_the_smallest_window_keeps_off_the_toolbar_from_its_fi
             "{scale}: the middle's content runs past it toward the toolbar on frames {past:?}"
         );
     }
+}
+
+#[test]
+fn queue_flow_keeps_automation_delegates_in_queue_filters_desktop_extras_and_dissolves_empty_well()
+{
+    let direct_run = Session {
+        automation: Some(AutomationProvenance {
+            definition_id: 7,
+            definition_name: "Review main".into(),
+            run_id: "r-review".into(),
+            trigger_type: "manual".into(),
+            ..AutomationProvenance::default()
+        }),
+        ..turn("auto-root", 30)
+    };
+    let finished_run = Session {
+        automation: Some(AutomationProvenance {
+            definition_id: 7,
+            definition_name: "Review main".into(),
+            run_id: "r-old".into(),
+            trigger_type: "manual".into(),
+            ..AutomationProvenance::default()
+        }),
+        state_since: ago(60),
+        ..session("auto-done", "idle")
+    };
+    let delegate = Session {
+        dispatcher_session_id: Some("auto-root".into()),
+        ..turn("auto-delegate", 10)
+    };
+    let mut ephemeral = desktop("d-eph", "d", "Launch", vec![]);
+    ephemeral.ephemeral = Some(true);
+    let crew_home = desktop("d-crew", "e", "Chief", vec![]);
+    let extra_user = desktop("d-extra", "f", "Scratch", vec![]);
+    let auto_desk = desktop(
+        "d-auto",
+        "b",
+        "Review main",
+        vec![
+            pane("d-auto", "p-root", "auto-root"),
+            pane("d-auto", "p-done", "auto-done"),
+        ],
+    );
+    let mut message = queue(state(
+        vec![direct_run, finished_run, delegate],
+        vec![
+            slotted(
+                desktop(
+                    "d1",
+                    "a",
+                    "Work",
+                    vec![pane("d1", "p-del", "auto-delegate")],
+                ),
+                1,
+            ),
+            auto_desk,
+            ephemeral,
+            crew_home,
+            extra_user,
+        ],
+    ));
+    message.crew = Some(vec![attn_protocol::CrewMember {
+        id: "chief".into(),
+        name: "Chief".into(),
+        chief: Some(true),
+        profile_id: "work".into(),
+        revision: 1,
+        resolved_agent: "claude".into(),
+        launch_desktop: Some(attn_protocol::LaunchDesktopSetting {
+            desktop_id: Some("d-crew".into()),
+            ..attn_protocol::LaunchDesktopSetting::default()
+        }),
+        ..attn_protocol::CrewMember::default()
+    }]);
+
+    let mut world = World::start(Daemon::scripted().state(message));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("queue.waiting-well"))
+            .is_some(),
+        "owed turns sit inside the tonal waiting well"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("queue-turn.auto-delegate"))
+            .is_some(),
+        "automation delegates queue like regular agents"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("queue-run.auto-root"))
+            .is_some(),
+        "direct automation runs show flat under Automations"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("queue-run.auto-done"))
+            .is_none()
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.automations.finished"))
+            .is_some()
+    );
+    assert_eq!(
+        name(&world, "queue.desktop-extras"),
+        "1 more desktop without a shortcut",
+        "automation, empty ephemeral, and empty crew desktops stay out of +N"
+    );
+
+    world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+    assert_eq!(
+        name(&world, "queue-bar.desktop-extras"),
+        "1 more desktop without a shortcut"
+    );
+    world.gesture(|app| app.click(Target::role("button").name("Show sidebar")));
+
+    changes(
+        &mut world,
+        Session {
+            turn_owed: Some(false),
+            state: "working".into(),
+            ..turn("auto-delegate", 10)
+        },
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("queue.waiting-well"))
+            .is_none(),
+        "with nothing owed the waiting well dissolves"
+    );
+    assert_eq!(name(&world, "queue.waiting-head"), "Nothing owed");
 }

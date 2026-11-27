@@ -85,7 +85,7 @@ pub(super) fn hover(world: &mut World, key: &str) {
 }
 
 fn row(member: &str) -> String {
-    format!("queue-crew.member.{member}")
+    format!("sidebar.crew.{member}")
 }
 
 fn sun(member: &str) -> String {
@@ -125,10 +125,9 @@ fn notice(world: &World) -> Option<String> {
 fn crew_lines(world: &World) -> Vec<String> {
     world
         .screen()
-        .children(Target::key("sidebar.queue"))
+        .children(Target::key("sidebar.crew"))
         .into_iter()
         .filter_map(|n| n.key)
-        .filter(|k| k.starts_with("queue-crew."))
         .collect()
 }
 
@@ -138,9 +137,9 @@ fn the_crew_block_draws_every_member_by_name_in_session_or_not_under_a_manage_li
     assert_eq!(
         crew_lines(&world),
         [
-            "queue-crew.member.alder",
-            "queue-crew.sess-keel",
-            "queue-crew.member.trellis"
+            "sidebar.crew.alder",
+            "sidebar.crew.keel",
+            "sidebar.crew.trellis"
         ]
     );
     assert_eq!(
@@ -148,8 +147,8 @@ fn the_crew_block_draws_every_member_by_name_in_session_or_not_under_a_manage_li
         Some("Start Trellis")
     );
     assert!(!shows(&world, &sun("keel")));
-    assert!(shows(&world, "queue-crew.sess-keel.ask-close"));
-    click(&mut world, "queue.rule.crew.manage");
+    assert!(shows(&world, "sidebar.crew.keel.actions"));
+    click(&mut world, "sidebar.rule.crew.manage");
     assert!(shows(&world, "crew.page"));
 }
 
@@ -163,12 +162,12 @@ fn a_member_in_session_shows_once_on_its_own_row_while_its_turn_is_owed() {
     let world = start(in_queue(vec![session("s1", "idle"), owed], roster()));
     let keel: Vec<String> = world
         .screen()
-        .children(Target::key("sidebar.queue"))
+        .descendants(Target::key("sidebar"))
         .into_iter()
         .filter_map(|n| n.key)
-        .filter(|k| k.contains("keel"))
+        .filter(|k| k == "sidebar.crew.keel" || k == "queue-turn.sess-keel")
         .collect();
-    assert_eq!(keel, ["queue-crew.sess-keel"]);
+    assert_eq!(keel, ["sidebar.crew.keel"]);
 }
 
 #[test]
@@ -180,7 +179,8 @@ fn a_bound_member_whose_session_is_not_yet_in_the_queue_keeps_its_row() {
             ..member("keel")
         }],
     ));
-    assert_eq!(crew_lines(&world), ["queue-crew.member.keel"]);
+    assert_eq!(crew_lines(&world), ["sidebar.crew.keel"]);
+    assert!(shows(&world, &sun("keel")));
 }
 
 #[test]
@@ -189,7 +189,7 @@ fn a_day_whose_member_left_the_roster_still_has_its_row() {
         vec![session("s1", "idle"), crew("sess-ghost", "sable", false)],
         roster(),
     ));
-    assert!(crew_lines(&world).contains(&"queue-crew.sess-ghost".to_owned()));
+    assert!(crew_lines(&world).contains(&"sidebar.crew.session.sess-ghost".to_owned()));
 }
 
 #[test]
@@ -411,18 +411,19 @@ fn ask_to_close_asks_the_member_in_session_and_a_refusal_says_why() {
             })),
         ],
     );
+    click(&mut world, "sidebar.crew.keel.actions");
     assert_eq!(
-        named(&world, "queue-crew.sess-keel.ask-close").as_deref(),
+        named(&world, "session.menu.ask-close").as_deref(),
         Some("Ask Keel to close")
     );
-    hover(&mut world, "queue-crew.sess-keel");
-    click(&mut world, "queue-crew.sess-keel.ask-close");
+    click(&mut world, "session.menu.ask-close");
     assert_eq!(
         world.daemon.sent_of("crew_close")[0]["member"],
         "member:keel"
     );
     assert_eq!(notice(&world), None);
-    click(&mut world, "queue-crew.sess-keel.ask-close");
+    click(&mut world, "sidebar.crew.keel.actions");
+    click(&mut world, "session.menu.ask-close");
     assert_eq!(
         notice(&world).as_deref(),
         Some("session sess-keel cannot receive agent messages")
@@ -437,8 +438,7 @@ fn a_members_details_open_from_its_row_in_session_or_not() {
     click(&mut world, "crew-member-menu.details");
     assert_eq!(named(&world, "crew.heading").as_deref(), Some("Alder"));
     press(&mut world, Key::Escape);
-    hover(&mut world, "queue-crew.sess-keel");
-    click(&mut world, "queue-crew.sess-keel.actions");
+    click(&mut world, "sidebar.crew.keel.actions");
     click(&mut world, "session.menu.member-details");
     assert_eq!(named(&world, "crew.heading").as_deref(), Some("Keel"));
 }
@@ -446,7 +446,7 @@ fn a_members_details_open_from_its_row_in_session_or_not() {
 #[test]
 fn a_member_in_sessions_row_opens_its_day() {
     let mut world = start(in_queue(vec![session("s1", "idle"), keel_day()], roster()));
-    click(&mut world, "queue-crew.sess-keel");
+    click(&mut world, "sidebar.crew.keel");
     let shown: Vec<Value> = world
         .daemon
         .sent_of("desktop_show_session")
@@ -471,7 +471,7 @@ fn with_crew_in_the_queue_a_member_owing_a_turn_queues_and_every_crew_row_stays(
         .insert("queue_crew_enabled".into(), "true".into());
     let world = start(state);
     assert!(shows(&world, "queue-turn.sess-keel"));
-    assert!(crew_lines(&world).contains(&"queue-crew.member.alder".to_owned()));
+    assert!(crew_lines(&world).contains(&"sidebar.crew.alder".to_owned()));
 }
 
 fn focused(world: &World) -> Option<String> {

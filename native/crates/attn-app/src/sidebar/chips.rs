@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use attn_ui::Tokens;
 use attn_ui::blocks::{Inline, Rail};
-use attn_ui::system::{self, IconSize, ListRow, Type, words};
+use attn_ui::system::{self, GroupHead, IconSize, ListRow, Type, words};
 use rune::{El, Tx};
 use rune_kit::ScrollBar;
 
@@ -81,6 +81,39 @@ pub fn chips<'a>(state: &'a State, waiting_on: impl IntoIterator<Item = &'a str>
                         .is_some_and(|s| !crate::asks::of_session(facts, s).is_empty())
                 }),
             }
+        })
+        .collect()
+}
+
+/// The chips of user desktops that belong in compact strips and bars, omitting unslotted
+/// automation-only desktops, non-current empty ephemeral launch desktops, and non-current empty
+/// crew launch desktops.
+fn visible_user_chips<'a>(
+    state: &'a State,
+    waiting_on: impl IntoIterator<Item = &'a str>,
+) -> Vec<Chip> {
+    let facts = &state.facts;
+    let by_id: HashMap<&str, &attn_protocol::Session> =
+        facts.sessions.iter().map(|s| (s.id.as_str(), s)).collect();
+    let crew_launch = super::model::crew_launch_desktops(facts);
+    let desktop_by_id: HashMap<&str, &attn_client::Desktop> =
+        facts.desktops.iter().map(|d| (d.id.as_str(), d)).collect();
+    chips(state, waiting_on)
+        .into_iter()
+        .filter(|c| {
+            let Some(desktop) = desktop_by_id.get(c.desktop.as_str()) else {
+                return true;
+            };
+            if super::model::is_automation_desktop(desktop, &by_id) {
+                return false;
+            }
+            if !c.current
+                && (super::model::is_empty_ephemeral_desktop(desktop)
+                    || super::model::is_empty_crew_launch_desktop(desktop, &crew_launch))
+            {
+                return false;
+            }
+            true
         })
         .collect()
 }
@@ -217,7 +250,7 @@ fn extras_chip(key: &str, extras: Extras, look: Look, t: &Tokens) -> Option<El> 
                 if crowded { "" } else { " without a shortcut" },
                 waiting_words(waiting, look)
             ),
-            system::chip_edge(words(format!("+{count}"), Type::Tag, ink), t),
+            system::tonal_chip(words(format!("+{count}"), Type::Tag, ink), t),
             false,
             system::Size::Compact,
             t,
@@ -226,28 +259,6 @@ fn extras_chip(key: &str, extras: Extras, look: Look, t: &Tokens) -> Option<El> 
             crate::dispatch(state, crate::Action::DesktopOverview, tx);
         })
         .children(waiting_mark(key, waiting, look, t))
-    })
-}
-
-/// The strip's chip that opens the desktop overview.
-fn overview_chip(keys: Option<String>, t: &Tokens) -> El {
-    let label = match &keys {
-        Some(keys) => format!("Desktop overview ({keys})"),
-        None => "Desktop overview".to_owned(),
-    };
-    system::chip_button(
-        "queue.desktop-overview",
-        label,
-        system::chip_edge(
-            system::icon(&attn_ui::icon::OVERVIEW, IconSize::Small, t.text_dimmed),
-            t,
-        ),
-        false,
-        system::Size::Small,
-        t,
-    )
-    .on_press_tx(|state: &mut State, tx: &mut Tx| {
-        crate::dispatch(state, crate::Action::DesktopOverview, tx);
     })
 }
 
@@ -287,7 +298,7 @@ fn strip_extras(extras: Extras, t: &Tokens) -> Option<El> {
         } else {
             t.text_tertiary
         };
-        let face = system::chip_edge(words(format!("+{count}"), Type::Tag, ink), t)
+        let face = system::tonal_chip(words(format!("+{count}"), Type::Tag, ink), t)
             .children((waiting > 0).then(|| waiting_dot(t)));
         system::chip_button(
             "queue.desktop-extras",
@@ -321,17 +332,21 @@ fn waiting_dot(t: &Tokens) -> El {
 /// How far a desktop chip's waiting dot hangs past its corner: half the dot.
 const DOT_OVERHANG: f32 = system::RINGED_DOT / 2.0;
 
-/// The queue sidebar's foot: a chip per slotted desktop, the others as one, the overview's
-/// chip, and the window's desktop by name with the overview's keys.
+/// The queue sidebar's foot: a chip per slotted desktop, the extra user desktops as one tonal
+/// count, and the window's desktop name beside the Overview action and its keys.
 pub(crate) fn desktop_strip(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
-    let all = chips(state, turns_on(bands));
-    let current = all.iter().find(|c| c.selected).map(|c| c.title.clone());
-    let (chips, extras) = slotted(all, false);
+    let current = state
+        .facts
+        .current_desktop()
+        .map(|d| desktop_title(d, &state.facts.desktops))
+        .unwrap_or_default();
+    let (chips, extras) = slotted(visible_user_chips(state, turns_on(bands)), false);
     let overview_keys = crate::palette::label_of(state, &crate::Action::DesktopOverview);
+    let has_chips = !chips.is_empty() || extras.count > 0;
     ListRow::column()
         .key("queue.strip")
         .border_sides([1.0, 0.0, 0.0, 0.0], t.border)
-        .child(
+        .children(has_chips.then(|| {
             Inline::tight()
                 .key("queue.desktops")
                 .role("group")
@@ -343,18 +358,21 @@ pub(crate) fn desktop_strip(state: &State, bands: &Bands<'_>, t: &Tokens) -> El 
                         .map(|c| strip_chip(c, drop_on(state, &c.desktop), t)),
                 )
                 .children(strip_extras(extras, t))
-                .child(overview_chip(overview_keys.clone(), t)),
-        )
+        }))
         .child(
-            ListRow::note(
-                "queue.desktop-current",
-                current.unwrap_or_default(),
-                Type::Mono,
-                t.text_tertiary,
-                overview_keys,
-                t,
-            )
-            .role("note"),
+            GroupHead::new("queue.desktop-current", current.clone())
+                .heading()
+                .name(current)
+                .action(
+                    "queue.desktop-overview",
+                    "overview",
+                    "Desktop overview",
+                    |state: &mut State, tx: &mut Tx| {
+                        crate::dispatch(state, crate::Action::DesktopOverview, tx);
+                    },
+                )
+                .action_keys(overview_keys)
+                .build(t),
         )
 }
 
@@ -393,27 +411,7 @@ pub(crate) fn rail(state: &State, t: &Tokens) -> El {
     let facts = &state.facts;
     let by_id: HashMap<&str, &attn_protocol::Session> =
         facts.sessions.iter().map(|s| (s.id.as_str(), s)).collect();
-    let crew_launch = super::model::crew_launch_desktops(facts);
-    let desktop_by_id: HashMap<&str, &attn_client::Desktop> =
-        facts.desktops.iter().map(|d| (d.id.as_str(), d)).collect();
-    let chips: Vec<Chip> = chips(state, wanting_on(state))
-        .into_iter()
-        .filter(|c| {
-            let Some(desktop) = desktop_by_id.get(c.desktop.as_str()) else {
-                return true;
-            };
-            if super::model::is_automation_desktop(desktop, &by_id) {
-                return false;
-            }
-            if !c.current
-                && (super::model::is_empty_ephemeral_desktop(desktop)
-                    || super::model::is_empty_crew_launch_desktop(desktop, &crew_launch))
-            {
-                return false;
-            }
-            true
-        })
-        .collect();
+    let chips = visible_user_chips(state, wanting_on(state));
     let automations_chip = rail_automations_chip(state, &by_id, t);
     let home = state.window.view == View::Home;
     let home_button =
@@ -493,11 +491,12 @@ fn rail_automations_chip(
     } else {
         t.text_tertiary
     };
-    let face = system::chip_edge(words(attn_ui::glyph::BOLT, Type::Tag, ink), t);
     let face = if current {
-        face.fill(t.bg_selected).border(1.0, t.border_hover)
+        system::chip_edge(words(attn_ui::glyph::BOLT, Type::Tag, ink), t)
+            .fill(t.bg_selected)
+            .border(1.0, t.border_hover)
     } else {
-        face
+        system::tonal_chip(words(attn_ui::glyph::BOLT, Type::Tag, ink), t)
     }
     .children((needing > 0).then(|| waiting_dot(t)));
     let runs_word = if runs == 1 {
@@ -674,7 +673,7 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
 
 /// The queue bar's desktop chips.
 fn desktops(state: &State, bands: &Bands<'_>, crowded: bool, t: &Tokens) -> El {
-    let (chips, extras) = slotted(chips(state, turns_on(bands)), crowded);
+    let (chips, extras) = slotted(visible_user_chips(state, turns_on(bands)), crowded);
     Inline::joined()
         .key("queue-bar.desktops")
         .role("group")
@@ -695,7 +694,7 @@ fn desktops(state: &State, bands: &Bands<'_>, crowded: bool, t: &Tokens) -> El {
 
 /// How wide the queue bar's desktop chips stand once a crowded bar gathers them.
 fn gathered_width(state: &State, bands: &Bands<'_>) -> f32 {
-    let (kept, extras) = slotted(chips(state, turns_on(bands)), true);
+    let (kept, extras) = slotted(visible_user_chips(state, turns_on(bands)), true);
     let size = system::Size::Compact;
     let widths: Vec<f32> = kept
         .iter()
@@ -729,25 +728,60 @@ fn runs_chip(state: &State, t: &Tokens) -> Option<El> {
         Some(keys) => format!("click or {keys} to walk them"),
         None => "click to walk them".into(),
     });
-    let button = system::Button::new(format!("{} {runs}", attn_ui::glyph::STAR_OPEN))
-        .size(system::Size::Compact)
+    let chip = if needing > 0 {
+        let ground = attn_ui::colors::mix_srgb(t.bg_panel, t.warning, 0.14);
+        let ink = attn_ui::colors::moved_until_it_reads(
+            t.warning,
+            t.text_primary,
+            ground,
+            attn_ui::colors::READS,
+        );
+        let face = Inline::joined()
+            .child(
+                words(
+                    if runs > 0 {
+                        format!("{} {runs}", attn_ui::glyph::BOLT)
+                    } else {
+                        attn_ui::glyph::BOLT.to_owned()
+                    },
+                    Type::Small,
+                    t.text_secondary,
+                )
+                .single_line(),
+            )
+            .child(words(needing.to_string(), Type::Tag, ink).single_line());
+        system::pill_button(
+            super::bar_peek::RUNS,
+            format!("{runs} runs"),
+            face,
+            t.warning,
+            system::Size::Compact,
+            t,
+        )
         .on_press_tx(|state: &mut State, tx: &mut Tx| {
             super::bar_peek::dismiss(state);
             crate::automations::runs::next_run(state, tx)
-        });
-    let button = match needing {
-        0 => button,
-        n => button.trailing(words(n.to_string(), Type::Tag, t.warning)),
+        })
+    } else {
+        El::from(
+            system::Button::new(format!("{} {runs}", attn_ui::glyph::BOLT))
+                .size(system::Size::Compact)
+                .whole()
+                .on_press_tx(|state: &mut State, tx: &mut Tx| {
+                    super::bar_peek::dismiss(state);
+                    crate::automations::runs::next_run(state, tx)
+                })
+                .build(t),
+        )
+        .key(super::bar_peek::RUNS)
+        .label(format!("{runs} runs"))
     };
     Some(
-        El::from(button.build(t))
-            .key(super::bar_peek::RUNS)
-            .label(format!("{runs} runs"))
-            .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
-                super::bar_peek::anchor_hovered(state, super::bar_peek::Anchor::Runs, inside)
-            })
-            .a11y_value(format!("{runs} runs, {needing} need you"))
-            .description(says.join(" · ")),
+        chip.on_hover_change(|state: &mut State, inside, _: &mut Tx| {
+            super::bar_peek::anchor_hovered(state, super::bar_peek::Anchor::Runs, inside)
+        })
+        .a11y_value(format!("{runs} runs, {needing} need you"))
+        .description(says.join(" · ")),
     )
 }
 

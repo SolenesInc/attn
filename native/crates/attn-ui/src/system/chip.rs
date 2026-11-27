@@ -29,10 +29,16 @@ pub fn number_chip(number: i64, current: bool, empty: bool, t: &Tokens) -> El {
     }
 }
 
-/// `face` in a chip's small frame, edged as a number chip at rest, such as the count of the
-/// desktops without a number or the overview's mark.
+/// `face` in a chip's small frame, edged as a number chip at rest, such as a host or key mark.
 pub fn chip_edge(face: El, t: &Tokens) -> El {
     chip_frame(face).border(1.0, t.border)
+}
+
+/// `face` in a soft borderless tonal chip frame matching inactive [`number_chip`]s, such as the
+/// overflow desktop count (`+N`) or the rail's Automations chip at rest.
+pub fn tonal_chip(face: El, t: &Tokens) -> El {
+    let fill = crate::colors::mix_srgb(t.bg_panel, t.text_primary, 0.06);
+    chip_frame(face).fill(fill)
 }
 
 fn chip_frame(face: El) -> El {

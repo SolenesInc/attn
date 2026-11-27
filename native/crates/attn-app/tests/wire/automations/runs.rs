@@ -5,7 +5,7 @@ use attn_testkit::{Daemon, Target, World};
 use super::super::palette::{self, run_command};
 use super::super::queue::{ago, changes, daemon_shows, one_desktop, queue, sent_ids, turn};
 use super::super::sidebar::{chord, session};
-use super::{click, has, is};
+use super::{click, has};
 
 fn run(id: &str, run_id: &str, owed_minutes_ago: Option<i64>) -> Session {
     let base = match owed_minutes_ago {
@@ -43,62 +43,67 @@ fn next_run(world: &mut World) {
     world.gesture(|app| app.key(chord(Action::SessionNextRun)));
 }
 
-const GROUP: &str = "queue.runs.group.1";
-
 #[test]
-fn in_queue_flow_runs_group_under_their_automation_and_the_next_run_key_opens_the_group() {
+fn in_queue_flow_runs_show_flat_under_automations_and_finished_runs_fold() {
+    let finished = Session {
+        state: "idle".into(),
+        state_since: ago(15),
+        ..run("run-done", "r3", None)
+    };
     let mut world = World::start(Daemon::scripted().state(queue(one_desktop(vec![
         session("manual", "working"),
         run("run-a", "r1", Some(60)),
         run("run-b", "r2", Some(30)),
+        finished,
     ]))));
-    assert_eq!(value(&world, GROUP), "2");
-    assert!(!is(&world, GROUP, "expanded"));
-    assert!(!has(&world, "queue-run.run-a"));
+    assert!(has(&world, "queue-run.run-a"));
+    assert!(has(&world, "queue-run.run-b"));
     assert!(!has(&world, "queue-turn.run-a"));
+    assert!(!has(&world, "queue-run.run-done"));
+    assert!(has(&world, "sidebar.automations.finished"));
 
     next_run(&mut world);
     assert_eq!(sent_ids(&world, "desktop_show_session"), ["run-a"]);
-    assert!(is(&world, GROUP, "expanded"));
-    assert!(has(&world, "queue-run.run-a"));
 
     click(&mut world, "queue-run.run-b.settle");
     assert_eq!(sent_ids(&world, "settle_turn"), ["run-b"]);
 
-    click(&mut world, GROUP);
-    assert!(!is(&world, GROUP, "expanded"));
-    assert!(!has(&world, "queue-run.run-a"));
     click(&mut world, "queue.runs.needing");
-    assert!(is(&world, GROUP, "expanded"));
-    assert!(has(&world, "queue-run.run-a"));
+    assert_eq!(sent_ids(&world, "desktop_show_session"), ["run-a", "run-a"]);
+
+    click(&mut world, "sidebar.automations.finished");
+    assert!(has(&world, "queue-run.run-done"));
 }
 
 #[test]
-fn the_runs_that_need_you_take_their_own_line_under_the_automations_heading() {
+fn the_runs_that_need_you_show_as_a_waiting_pill_on_the_automations_heading_beside_all() {
     let mut world = World::start(Daemon::scripted().state(queue(one_desktop(vec![
         run("run-a", "r1", Some(60)),
         run("run-b", "r2", Some(30)),
     ]))));
-    let [hx, hy, hw, _] = world.rect("queue.runs");
-    let [x, y, w, _] = world.rect("queue.runs.needing");
-    assert_eq!((x, w), (hx, hw));
-    assert!(y > hy, "the button shares the heading's line");
+    let [hx, hy, hw, hh] = world.rect("queue.runs");
+    let [x, y, w, h] = world.rect("queue.runs.needing");
+    assert!(x >= hx && x + w <= hx + hw, "the pill stays in the heading");
+    assert!(
+        y >= hy && y + h <= hy + hh,
+        "the pill shares the heading's line"
+    );
 
     let heading = world.screen().get(Target::key("queue.runs"));
     assert_eq!(
         (
             heading.role.as_str(),
             heading.name.as_deref(),
-            heading.value.as_deref(),
             heading.description.as_deref()
         ),
         (
             "heading",
             Some("Automations"),
-            Some("2 runs"),
             Some("Automation runs never join the queue")
         )
     );
+    click(&mut world, "queue.runs.all");
+    assert!(has(&world, "automations.sheet"));
 }
 
 #[test]
@@ -116,8 +121,6 @@ fn only_the_current_singleton_counts_and_a_superseded_question_stays_reachable()
         older,
         run("current", "current", None),
     ]))));
-    assert_eq!(value(&world, GROUP), "1");
-    click(&mut world, GROUP);
     assert!(has(&world, "queue-run.current"));
     assert!(!has(&world, "queue-run.previous"));
     assert!(!has(&world, "queue-run.older"));
@@ -130,7 +133,6 @@ fn only_the_current_singleton_counts_and_a_superseded_question_stays_reachable()
             ..previous
         },
     );
-    assert_eq!(value(&world, GROUP), "1");
     assert!(has(&world, "queue.runs.needing"));
     next_run(&mut world);
     assert_eq!(sent_ids(&world, "desktop_show_session"), ["previous"]);

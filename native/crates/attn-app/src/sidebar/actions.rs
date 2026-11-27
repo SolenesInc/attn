@@ -41,7 +41,7 @@ pub(crate) fn jump_to_waiting(state: &mut State, tx: &mut Tx) {
 fn focus_filter(state: &mut State, tx: &mut Tx) {
     state.window.queue_cursor = None;
     state.window.agent_filter.focused = true;
-    tx.scroll_into_view_in(super::queue_view::LIST, "queue.filter");
+    tx.scroll_into_view_in("sidebar.scroll", "queue.filter");
     tx.focus(super::queue_view::FILTER_FIELD, false);
 }
 
@@ -130,17 +130,6 @@ fn cursor_row(state: &State) -> Option<super::queue_view::AgentLine> {
     Some(rows.swap_remove(at))
 }
 
-/// Gives the queue list the keyboard with its cursor on the row keyed `key`.
-pub(crate) fn focus_row(state: &mut State, key: &str, session: &str, tx: &mut Tx) {
-    state.window.agent_filter.focused = false;
-    tx.scroll_into_view_in(super::queue_view::LIST, key.to_owned());
-    tx.focus(super::queue_view::LIST, true);
-    state.window.queue_cursor = Some(super::queue_view::AgentLine {
-        key: key.to_owned(),
-        session: session.to_owned(),
-    });
-}
-
 /// Moves the cursor to the next or previous row, wrapping at both ends, starting from the top
 /// or the bottom when no row has it, and gives the list the keyboard with that row in view.
 fn walk(state: &mut State, down: bool, tx: &mut Tx) -> bool {
@@ -164,7 +153,7 @@ fn walk(state: &mut State, down: bool, tx: &mut Tx) -> bool {
     };
     let row = rows[next].clone();
     state.window.agent_filter.focused = false;
-    tx.scroll_into_view_in(super::queue_view::LIST, row.key.clone());
+    tx.scroll_into_view_in("sidebar.scroll", row.key.clone());
     tx.focus(super::queue_view::LIST, true);
     state.window.queue_cursor = Some(row);
     true

@@ -117,7 +117,7 @@ pub(crate) fn dispatch(state: &mut State, action: &crate::Action, tx: &mut Tx) -
 }
 
 pub(crate) use actions::{advance, closing, queue_flow, settle, step, toggle_priority, wake};
-pub(crate) use queue_view::{LIST as QUEUE_LIST, agent_rows as queue_rows};
+pub(crate) use queue_view::{agent_rows as queue_rows, automations as queue_automations};
 pub(crate) const DESKTOP_LIST: &str = "sidebar.desktops";
 pub(crate) const AUTOMATIONS_LIST: &str = "sidebar.automations";
 
@@ -142,11 +142,23 @@ pub(crate) fn next_change(state: &State, now_ms: i64) -> Option<i64> {
             .filter(|&at| at > now_ms)
             .min();
     }
-    queue::bands(&state.facts, now_ms)
+    let age = queue::bands(&state.facts, now_ms)
         .turns
         .iter()
         .filter_map(|row| queue::next_age_change(row.session.turn_opened_at.as_deref(), now_ms))
-        .min()
+        .min();
+    let run_snooze = state
+        .facts
+        .sessions
+        .iter()
+        .filter(|s| s.profile_id == state.facts.profiles.selected && s.automation.is_some())
+        .filter_map(|s| queue::epoch_ms(s.turn_snoozed_until.as_deref()?))
+        .filter(|&at| at > now_ms)
+        .min();
+    match (age, run_snooze) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    }
 }
 
 /// How many sidebar rows this thread has built, memo misses only: a row whose model did not
@@ -502,36 +514,49 @@ fn automations_rule(needing: usize, next_run_keys: Option<String>, t: &Tokens) -
             |state: &mut State, tx: &mut Tx| crate::automations::open(state, tx),
         );
     if needing > 0 {
-        let label = format!("{needing} waiting");
-        let help = match &next_run_keys {
-            Some(keys) => format!("Open the next automation run needing you ({keys})"),
-            None => "Open the next automation run needing you".to_owned(),
-        };
-        let ground = attn_ui::colors::mix_srgb(t.bg_panel, t.warning, 0.14);
-        let ink = attn_ui::colors::moved_until_it_reads(
-            t.warning,
-            t.text_primary,
-            ground,
-            attn_ui::colors::READS,
-        );
-        let face = Inline::joined()
-            .child(system::dot(ink, DotShape::Filled, DotSize::Small))
-            .child(words(label.clone(), Type::Small, ink).single_line());
-        let chip = system::pill_button(
-            "sidebar.automations.needing",
-            format!("{label} — open next"),
-            face,
-            t.warning,
-            system::Size::Small,
+        head = head.aside(automations_needing_pill(
+            "sidebar.automations.needing".into(),
+            needing,
+            next_run_keys,
+            next_automation_needing,
             t,
-        )
-        .help(help)
-        .on_press_tx(|state: &mut State, tx: &mut Tx| {
-            next_automation_needing(state, tx);
-        });
-        head = head.aside(chip);
+        ));
     }
     head.build(t)
+}
+
+pub(super) fn automations_needing_pill(
+    key: String,
+    needing: usize,
+    next_run_keys: Option<String>,
+    on_press: fn(&mut State, &mut Tx),
+    t: &Tokens,
+) -> El {
+    let label = format!("{needing} waiting");
+    let help = match &next_run_keys {
+        Some(keys) => format!("Open the next automation run needing you ({keys})"),
+        None => "Open the next automation run needing you".to_owned(),
+    };
+    let ground = attn_ui::colors::mix_srgb(t.bg_panel, t.warning, 0.14);
+    let ink = attn_ui::colors::moved_until_it_reads(
+        t.warning,
+        t.text_primary,
+        ground,
+        attn_ui::colors::READS,
+    );
+    let face = Inline::joined()
+        .child(system::dot(ink, DotShape::Filled, DotSize::Small))
+        .child(words(label.clone(), Type::Small, ink).single_line());
+    system::pill_button(
+        key,
+        format!("{label} — open next"),
+        face,
+        t.warning,
+        system::Size::Small,
+        t,
+    )
+    .help(help)
+    .on_press_tx(on_press)
 }
 
 /// Opens the next automation run or automation delegate needing the user in desktop flow:
@@ -582,7 +607,7 @@ pub(crate) fn next_automation_needing(state: &mut State, tx: &mut Tx) {
     open_agent(state, &next, tx);
 }
 
-fn finished_runs_toggle(count: usize, open: bool, t: &Tokens) -> El {
+pub(super) fn finished_runs_toggle(count: usize, open: bool, t: &Tokens) -> El {
     let label = if count == 1 {
         "1 finished run".to_owned()
     } else {
@@ -1493,15 +1518,6 @@ pub(crate) fn open_tile(state: &mut State, desktop: &str, tile: &str, tx: &mut T
 
 /// Shows the agent where it is and gives its terminal the keyboard.
 pub(crate) fn open_agent(state: &mut State, session: &str, tx: &mut Tx) {
-    if let Some(run) = state
-        .facts
-        .sessions
-        .iter()
-        .find(|s| s.id == session)
-        .and_then(|s| s.automation.as_ref())
-    {
-        state.window.run_groups_open.insert(run.definition_id);
-    }
     let tiled = pane_of(state, session);
     if let Some((desktop, leaf)) = &tiled {
         crate::desktop::give_keyboard(state, desktop, leaf, tx);

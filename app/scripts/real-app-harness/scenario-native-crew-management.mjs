@@ -104,8 +104,9 @@ async function closeSeedTile(seed) {
 }
 
 async function memberDetails(id) {
-  const session = member(id)?.binding_session;
-  const row = session ? `queue-crew.${session}` : `queue-crew.member.${id}`;
+  const m = member(id);
+  const session = m?.binding_session;
+  const row = !session && m?.chief ? 'chief-slot' : `sidebar.crew.${id}`;
   await driver.hover({ key: row });
   await driver.click({ key: `${row}.actions` });
   await driver.click({ key: session ? 'session.menu.member-details' : 'crew-member-menu.details' });

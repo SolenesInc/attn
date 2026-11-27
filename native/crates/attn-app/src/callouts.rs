@@ -89,13 +89,11 @@ fn step_keys(state: &State, step: &CalloutStep) -> Vec<String> {
                 .filter(|row| row.session == id)
                 .map(|row| row.key)
                 .collect();
-            if !crate::sidebar::queue_flow(state) {
-                for entry in crate::sidebar::crew::desktop_entries(state) {
-                    if let crate::sidebar::crew::DesktopEntry::Active(pill) = entry
-                        && pill.agent.id == id
-                    {
-                        keys.push(pill.key);
-                    }
+            for entry in crate::sidebar::crew::desktop_entries(state) {
+                if let crate::sidebar::crew::DesktopEntry::Active(pill) = entry
+                    && pill.agent.id == id
+                {
+                    keys.push(pill.key);
                 }
             }
             keys.push(format!("sidebar.session.{id}"));
@@ -241,18 +239,28 @@ fn reveal(state: &mut State, tx: &mut Tx) {
         return;
     }
     if crate::sidebar::queue_flow(state) {
-        if step.anchor == "agent"
-            && !step_keys(state, &step)
-                .iter()
-                .any(|k| k.starts_with("queue-"))
-        {
-            state.window.agent_list_open = true;
+        if step.anchor == "agent" {
+            if let Some(session) = step.session_id.as_deref()
+                && crate::sidebar::queue_automations(state)
+                    .finished
+                    .iter()
+                    .any(|r| r.agent.id == session)
+            {
+                state.window.automations_finished_open = true;
+            }
+            let keys = step_keys(state, &step);
+            let has_visible = keys.iter().any(|k| {
+                k.starts_with("queue-") || k.starts_with(crate::sidebar::crew::CLASSIC_ROW)
+            });
+            if !has_visible {
+                state.window.agent_list_open = true;
+            }
         }
         if let Some(key) = step_keys(state, &step)
             .into_iter()
-            .find(|k| k.starts_with("queue-"))
+            .find(|k| k.starts_with("queue-") || k.starts_with(crate::sidebar::crew::CLASSIC_ROW))
         {
-            tx.scroll_into_view_in(crate::sidebar::QUEUE_LIST, key);
+            tx.scroll_into_view_in("sidebar.scroll", key);
         }
     } else if let Some(key) = step_keys(state, &step)
         .into_iter()

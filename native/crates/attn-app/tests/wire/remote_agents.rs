@@ -140,9 +140,10 @@ fn shown(world: &World) -> Vec<String> {
 fn turns(world: &World) -> Vec<String> {
     world
         .screen()
-        .children(Target::key("sidebar.queue"))
+        .descendants(Target::key("sidebar.queue"))
         .into_iter()
         .filter_map(|n| n.key?.strip_prefix("queue-turn.").map(str::to_owned))
+        .filter(|id| !id.contains('.'))
         .collect()
 }
 

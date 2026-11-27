@@ -3,8 +3,7 @@
 
 use attn_protocol::CrewMember;
 use attn_ui::Tokens;
-use attn_ui::blocks::Inline;
-use attn_ui::system::{self, IconSize, ListRow, PillLook, Reveal, Type, words};
+use attn_ui::system::{self, IconSize, ListRow, PillLook, Type, words};
 use rune::{El, Tx};
 use rune_kit::{MenuItem, Placement};
 
@@ -60,34 +59,6 @@ pub(crate) struct Resting {
     pub(crate) phase: Option<Phase>,
     /// The Chief, whose start takes one click.
     pub(crate) chief: bool,
-    /// The harness it starts on, while the sidebar shows harness logos.
-    pub(crate) harness: Option<String>,
-}
-
-pub(crate) fn resting(state: &State, member: &str) -> Resting {
-    let found = crate::crew::members(state)
-        .into_iter()
-        .find(|m| m.id == member);
-    let name = found
-        .map(|m| m.name.clone())
-        .filter(|n| !n.is_empty())
-        .unwrap_or_else(|| crate::asks::crew_display_name(member));
-    let harness =
-        super::logos(state).then(|| found.map(|m| m.resolved_agent.clone()).unwrap_or_default());
-    let phase = state
-        .window
-        .crew_rows
-        .arm
-        .as_ref()
-        .filter(|arm| arm.member == member)
-        .map(|arm| arm.phase);
-    Resting {
-        member: member.to_owned(),
-        name,
-        phase,
-        chief: crate::chief::member(state).is_some_and(|c| c.id == member),
-        harness,
-    }
 }
 
 fn idle_lead(state: &State, harness: Option<&str>, t: &Tokens) -> El {
@@ -130,12 +101,7 @@ impl DesktopEntry {
     }
 }
 
-fn resting_of(
-    member: &CrewMember,
-    is_chief: bool,
-    logos_on: bool,
-    armed: Option<(&str, Phase)>,
-) -> Resting {
+fn resting_of(member: &CrewMember, is_chief: bool, armed: Option<(&str, Phase)>) -> Resting {
     let name = if member.name.is_empty() {
         crate::asks::crew_display_name(&member.id)
     } else {
@@ -149,7 +115,6 @@ fn resting_of(
         name,
         phase,
         chief: is_chief,
-        harness: logos_on.then(|| member.resolved_agent.clone()),
     }
 }
 
@@ -159,7 +124,6 @@ pub(crate) fn desktop_entries(state: &State) -> Vec<DesktopEntry> {
     let facts = &state.facts;
     let profile = &facts.profiles.selected;
     let on_screen = state.window.on_screen(facts);
-    let logos_on = super::logos(state);
     let armed = state
         .window
         .crew_rows
@@ -212,9 +176,7 @@ pub(crate) fn desktop_entries(state: &State) -> Vec<DesktopEntry> {
             }
             _ => {
                 if let Some(member) = crate::chief::member(state) {
-                    entries.push(DesktopEntry::Resting(resting_of(
-                        member, true, logos_on, armed,
-                    )));
+                    entries.push(DesktopEntry::Resting(resting_of(member, true, armed)));
                 }
             }
         }
@@ -231,7 +193,12 @@ pub(crate) fn desktop_entries(state: &State) -> Vec<DesktopEntry> {
             .binding_session
             .as_deref()
             .filter(|s| !s.is_empty())
-            .and_then(session_by_id);
+            .and_then(session_by_id)
+            .or_else(|| {
+                facts.sessions.iter().find(|s| {
+                    &s.profile_id == profile && s.crew_member.as_deref() == Some(member.id.as_str())
+                })
+            });
         match live {
             Some(session) => {
                 covered_sessions.insert(session.id.as_str());
@@ -243,9 +210,7 @@ pub(crate) fn desktop_entries(state: &State) -> Vec<DesktopEntry> {
                     session,
                 ));
             }
-            None => entries.push(DesktopEntry::Resting(resting_of(
-                member, false, logos_on, armed,
-            ))),
+            None => entries.push(DesktopEntry::Resting(resting_of(member, false, armed))),
         }
     }
 
@@ -466,6 +431,23 @@ fn resting_pill_view(m: &Resting, t: &Tokens) -> El {
             .build(t),
         )
     };
+    let actions = {
+        let (member, under) = (m.member.clone(), format!("{key}.actions"));
+        El::from(
+            system::icon_button(
+                under.clone(),
+                format!("Actions for {}", m.name),
+                "•••",
+                IconSize::Small,
+            )
+            .size(system::Size::Small)
+            .ink(t.text_dimmed)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                open_menu(state, &member, &under, tx)
+            })
+            .build(t),
+        )
+    };
     let (member, pressed, outside) = (m.member.clone(), key.clone(), m.member.clone());
     let mut pill = system::pill_surface(key.clone(), start_label, look, t)
         .role("listitem")
@@ -484,19 +466,24 @@ fn resting_pill_view(m: &Resting, t: &Tokens) -> El {
                 .single_line()
         }))
         .child(sun)
+        .child(actions)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| trigger(state, &pressed, &member, tx));
     if armed {
-        pill = pill.on_press_outside(move |state: &mut State, _: &mut Tx| {
-            if state
-                .window
-                .crew_rows
-                .arm
-                .as_ref()
-                .is_some_and(|a| a.member == outside)
-            {
-                disarm(state);
-            }
-        });
+        pill = pill
+            .on_key(|state: &mut State, ev: &rune::KeyEvent, _: &mut Tx| {
+                ev.key == rune::Key::Escape && disarm(state)
+            })
+            .on_press_outside(move |state: &mut State, _: &mut Tx| {
+                if state
+                    .window
+                    .crew_rows
+                    .arm
+                    .as_ref()
+                    .is_some_and(|a| a.member == outside)
+                {
+                    disarm(state);
+                }
+            });
     }
     pill
 }
@@ -576,162 +563,12 @@ pub(crate) fn poll(state: &mut State, now: f64, row_prefixes: &[String], tx: &Tx
     false
 }
 
-/// The keys of the rows a member's start sits in, before the member's key.
-pub(crate) fn row_prefixes() -> [String; 2] {
-    [format!("{QUEUE_ROW}."), format!("{CLASSIC_ROW}.")]
+/// The key of the crew pill prefix before a member's key.
+pub(crate) fn row_prefixes() -> [String; 1] {
+    [format!("{CLASSIC_ROW}.")]
 }
 
-pub(crate) const QUEUE_ROW: &str = "queue-crew.member";
 pub(crate) const CLASSIC_ROW: &str = "sidebar.crew";
-
-/// A member between sessions: pressing the row or its sun starts the member in two clicks.
-pub(crate) fn row_view(state: &State, key: String, m: &Resting, t: &Tokens) -> El {
-    let armed = m.phase == Some(Phase::Armed);
-    let start_label = if armed {
-        format!("Start {} — click again to confirm", m.name)
-    } else {
-        format!("Start {}", m.name)
-    };
-    let (member, pressed, outside) = (m.member.clone(), key.clone(), m.member.clone());
-    let sun = {
-        let (member, row_key) = (m.member.clone(), key.clone());
-        let sun = system::icon_button(
-            format!("{key}.start"),
-            start_label.clone(),
-            &attn_ui::icon::CREW_SUN,
-            IconSize::Small,
-        );
-        let sun = match m.phase {
-            None => sun.ink(t.text_dimmed),
-            Some(_) => sun.ink(t.warning).selected(true),
-        };
-        El::from(
-            sun.on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                trigger(state, &row_key, &member, tx)
-            })
-            .build(t),
-        )
-    };
-    let actions = {
-        let (member, under) = (m.member.clone(), format!("{key}.actions"));
-        super::queue_view::control(
-            &key,
-            "actions",
-            format!("Actions for {}", m.name),
-            "•••",
-            move |state, tx| open_menu(state, &member, &under, tx),
-        )
-    };
-    let ink = if m.chief {
-        t.text_primary
-    } else {
-        t.text_tertiary
-    };
-    let name = words(m.name.clone(), Type::Body, ink)
-        .key(format!("{key}.name"))
-        .single_line();
-    let between = m.chief.then(|| {
-        Inline::joined()
-            .grow(1.0)
-            .justify_end()
-            .child(
-                system::icon(&attn_ui::icon::CHIEF, IconSize::Small, t.text_tertiary)
-                    .key(format!("{key}.chief"))
-                    .help(m.name.clone()),
-            )
-            .child(
-                words("between sessions", Type::Mono, t.text_tertiary)
-                    .key(format!("{key}.age"))
-                    .single_line()
-                    .truncate()
-                    .shrink(),
-            )
-    });
-    let row = ListRow::new(key.clone(), start_label)
-        .role("listitem")
-        .unfocusable()
-        .lead(idle_lead(state, m.harness.as_deref(), t))
-        .title_el(
-            Inline::joined()
-                .grow(1.0)
-                .child(if m.chief {
-                    name.truncate()
-                } else {
-                    name.truncate().shrink()
-                })
-                .children(between),
-        );
-    let row = if armed {
-        let confirm = words("confirm", Type::Label, t.warning).key(format!("{key}.confirm"));
-        row.controls([confirm, actions.build(t).into(), sun], Reveal::Always)
-    } else {
-        row.hover_controls([actions])
-            .controls([sun], Reveal::Always)
-    };
-    let mut row = row
-        .build(t)
-        .a11y_value(if armed { "armed" } else { "between sessions" })
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| trigger(state, &pressed, &member, tx));
-    if armed {
-        row = row.on_press_outside(move |state: &mut State, _: &mut Tx| {
-            if state
-                .window
-                .crew_rows
-                .arm
-                .as_ref()
-                .is_some_and(|a| a.member == outside)
-            {
-                disarm(state);
-            }
-        });
-    }
-    row
-}
-
-/// The Chief's slot before it has a session: Set up opens its setup, and the slot says when
-/// the Chief is starting.
-pub(crate) fn chief_setup_row(
-    state: &State,
-    key: String,
-    chief: &crate::chief::View,
-    logos: bool,
-    t: &Tokens,
-) -> El {
-    use crate::chief::Phase;
-    let pill = if chief.phase == Phase::Unconfigured {
-        "Set up ⏎"
-    } else {
-        "starting…"
-    };
-    let phase = match chief.phase {
-        Phase::Unconfigured => "unconfigured",
-        Phase::Configuring => "configuring",
-        _ => "starting",
-    };
-    let row = ListRow::new(key.clone(), format!("Set up {}", chief.name))
-        .lead(idle_lead(
-            state,
-            logos.then_some(chief.agent.as_deref().unwrap_or_default()),
-            t,
-        ))
-        .title(chief.name.clone())
-        .aside(system::pill(format!("{key}.pill"), pill, t))
-        .disabled(chief.busy)
-        .build(t)
-        .a11y_value(phase);
-    if chief.busy {
-        return row;
-    }
-    row.on_press_tx(crate::chief::edit).on_key(
-        |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
-            if ev.key == rune::Key::Enter {
-                crate::chief::edit(state, tx);
-                return true;
-            }
-            false
-        },
-    )
-}
 
 fn open_menu(state: &mut State, member: &str, under: &str, tx: &mut Tx) {
     state.window.crew_rows.menu = Some(Menu {

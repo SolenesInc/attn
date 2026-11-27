@@ -194,8 +194,7 @@ pub(crate) fn dismiss(state: &mut State, return_focus: bool, tx: &mut Tx) {
     }
 }
 
-/// Puts the focus on the slot: in queue flow on a Chief in session, the queue list's cursor on
-/// its row, and on its Start between sessions.
+/// Puts the focus on the Chief's crew pill, or on its Start control between sessions.
 fn focus_row(state: &mut State, tx: &mut Tx) {
     let Some(row) = row_key(state) else { return };
     let Some(view) = view(state) else { return };
@@ -204,26 +203,19 @@ fn focus_row(state: &mut State, tx: &mut Tx) {
         Phase::Unconfigured | Phase::Configuring | Phase::Starting
     );
     match view.session {
-        Some(session) if row != SLOT && crate::sidebar::actions::queue_flow(state) => {
-            crate::sidebar::actions::focus_row(state, &row, &session, tx);
-        }
         _ if row == SLOT && !setting_up => tx.focus(format!("{SLOT}.start"), true),
         _ => tx.focus(row, true),
     }
 }
 
-/// The key of the slot's row as it is drawn now.
+/// The key of the slot's pill as it is drawn now.
 pub(crate) fn row_key(state: &State) -> Option<String> {
     let view = view(state)?;
     Some(match (&view.phase, &view.session) {
         (Phase::InSession | Phase::Closing, Some(session))
             if state.facts.sessions.iter().any(|s| &s.id == session) =>
         {
-            if crate::sidebar::actions::queue_flow(state) {
-                format!("queue-chief.{session}")
-            } else {
-                format!("{}.{}", crate::sidebar::crew::CLASSIC_ROW, view.key)
-            }
+            format!("{}.{}", crate::sidebar::crew::CLASSIC_ROW, view.key)
         }
         _ => SLOT.to_owned(),
     })

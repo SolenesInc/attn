@@ -24,7 +24,7 @@ Each time a trigger fires is an occurrence, and each occurrence gets one run.
 
 ## Create an automation
 
-Open the automations drawer with the Automations button in the title bar, **all** in the desktop sidebar's **Automations** heading, or "Show automations" in the command palette (Cmd+Shift+K,
+Open the automations drawer with the Automations button in the title bar, **all** in the sidebar's **Automations** heading, or "Show automations" in the command palette (Cmd+Shift+K,
 Ctrl+Alt+K on Linux). Click **New automation** and fill in:
 
 - **Name**, and the **Trigger** with its settings (below).
@@ -91,11 +91,12 @@ only. The agent reports on the seed and the session and does not post, approve,
 comment, or push on GitHub.
 
 In [queue flow](queue.md), runs never join the queue. The sidebar has an
-Automations group under the queue that lists each automation with its runs.
-A run that stopped and is owed a turn shows a count beside its automation,
-and the group's header offers "N runs need you". Click it, or press
+**Automations** section under the queue that lists active runs directly and
+folds finished off-screen runs behind a disclosure row. Runs that stopped and
+are owed a turn show in the waiting pill beside the heading. Click it, or press
 Cmd+Shift+J (Ctrl+Alt+J on Linux), to open the next run that needs you. Press
-the same keys again to open the run after that.
+the same keys again to open the run after that. Click **all** to open the
+automations drawer.
 
 In [desktop flow](desktops.md), when an unnumbered desktop holds only
 automation runs and agents delegated from them, those runs and delegates appear

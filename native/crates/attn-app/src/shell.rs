@@ -54,9 +54,7 @@ pub struct Window {
     pub(crate) words: crate::markdown::ids::Pointed,
     pub(crate) search: crate::palette::Search,
     pub agent_list_open: bool,
-    /// The automations whose runs the queue sidebar lists under their group, by definition id.
-    pub(crate) run_groups_open: std::collections::BTreeSet<i64>,
-    /// The desktop sidebar's Automations section shows finished off-screen runs too.
+    /// The sidebar's Automations section shows finished off-screen runs too.
     pub(crate) automations_finished_open: bool,
     pub(crate) agent_filter: rune::TextEdit,
     /// The queue row the arrows reached, by key: the settle, priority and snooze keys act on

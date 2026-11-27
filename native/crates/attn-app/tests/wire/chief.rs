@@ -315,7 +315,7 @@ fn a_first_setup_opens_on_its_own_and_saves_the_recommended_route_then_starts_th
     assert_eq!(sent(&world, "crew_start")[0]["member"], "member:chief-key");
     assert!(!shows(&world, SETUP));
     assert_eq!(
-        named(&world, "queue-chief.chief-day").as_deref(),
+        named(&world, "sidebar.crew.chief-key").as_deref(),
         Some("Open Captain")
     );
     assert_eq!(shown(&world).last(), Some(&json!("chief-day")));
@@ -620,11 +620,7 @@ fn the_chief_between_sessions_shows_its_whole_name_beside_between_sessions() {
         };
         initial.crew.as_mut().unwrap().push(namesake);
         let mut world = start(initial);
-        let namesake = if queue {
-            "queue-crew.member.namesake.name"
-        } else {
-            "sidebar.crew.namesake.name"
-        };
+        let namesake = "sidebar.crew.namesake.name";
         let width = |world: &mut World, key: &str| world.rect(key)[2];
         assert_eq!(
             width(&mut world, &format!("{SLOT}.name")),
@@ -660,11 +656,11 @@ fn the_chief_starts_with_one_click_closes_until_unbound_and_starts_again() {
     assert_eq!(sent(&world, "crew_start").len(), 1);
     assert_eq!(shown(&world).last(), Some(&json!("chief-day")));
     world.daemon.on("crew_close", |_| ());
-    super::crew_start::hover(&mut world, "queue-chief.chief-day");
-    click(&mut world, "queue-chief.chief-day.ask-close");
+    click(&mut world, "sidebar.crew.chief-key.actions");
+    click(&mut world, "session.menu.ask-close");
     assert_eq!(
-        named(&world, "queue-chief.chief-day.age").as_deref(),
-        Some("closing")
+        named(&world, "sidebar.crew.chief-key.closing").as_deref(),
+        Some("closing…")
     );
     let request = sent(&world, "crew_close")[0].clone();
     world.daemon.emit(CrewCloseResultMessage {
@@ -676,7 +672,7 @@ fn the_chief_starts_with_one_click_closes_until_unbound_and_starts_again() {
         ..CrewCloseResultMessage::new()
     });
     world.settle();
-    assert!(!shows(&world, "queue-chief.chief-day.age"));
+    assert!(!shows(&world, "sidebar.crew.chief-key.closing"));
     world.daemon.emit(CrewUpdatedMessage {
         members: vec![between],
         ..CrewUpdatedMessage::new()
@@ -729,8 +725,7 @@ fn the_chief_offers_its_own_actions_in_session_and_between_sessions() {
         bound(chief(true), "chief-day"),
         vec![chief_day()],
     ));
-    super::crew_start::hover(&mut world, "queue-chief.chief-day");
-    click(&mut world, "queue-chief.chief-day.actions");
+    click(&mut world, "sidebar.crew.chief-key.actions");
     let items: Vec<String> = world
         .screen()
         .all(Target::role("menu-item"))
@@ -761,8 +756,8 @@ fn the_chief_offers_its_own_actions_in_session_and_between_sessions() {
             ..CrewCloseResultMessage::new()
         })
     });
-    super::crew_start::hover(&mut world, "queue-chief.chief-day");
-    click(&mut world, "queue-chief.chief-day.ask-close");
+    click(&mut world, "sidebar.crew.chief-key.actions");
+    click(&mut world, "session.menu.ask-close");
     assert_eq!(sent(&world, "crew_close").len(), 1);
     world.daemon.emit(CrewUpdatedMessage {
         members: vec![chief(true)],
@@ -1022,8 +1017,8 @@ fn after_a_close_reply_while_still_bound_the_chief_can_be_asked_again_and_its_ro
         vec![chief_day()],
     ));
     world.daemon.on("crew_close", |_| ());
-    super::crew_start::hover(&mut world, "queue-chief.chief-day");
-    click(&mut world, "queue-chief.chief-day.ask-close");
+    click(&mut world, "sidebar.crew.chief-key.actions");
+    click(&mut world, "session.menu.ask-close");
     dispatch(&mut world, Action::OpenChiefSetup);
     assert_eq!(
         named(&world, PRIMARY).as_deref(),
@@ -1203,8 +1198,7 @@ fn reached(world: &World) -> Option<String> {
 
 fn open_route(world: &mut World, in_session: bool) {
     if in_session {
-        super::crew_start::hover(world, "queue-chief.chief-day");
-        click(world, "queue-chief.chief-day.actions");
+        click(world, "sidebar.crew.chief-key.actions");
         click(world, "session.menu.route");
     } else {
         super::crew_start::hover(world, SLOT);
@@ -1227,7 +1221,7 @@ fn escape_and_a_late_configured_save_both_hand_the_focus_back_to_the_chiefs_row(
         };
         let mut world = start(initial(true, member, sessions));
         let row = if in_session {
-            "queue-chief.chief-day"
+            "sidebar.crew.chief-key"
         } else {
             "chief-slot.start"
         };
@@ -1239,11 +1233,6 @@ fn escape_and_a_late_configured_save_both_hand_the_focus_back_to_the_chiefs_row(
             Some(row),
             "in session={in_session}"
         );
-        if in_session {
-            press(&mut world, Key::Down);
-            assert_ne!(reached(&world).as_deref(), Some(row));
-            assert_eq!(focused(&world).as_deref(), Some("sidebar.queue"));
-        }
 
         open_route(&mut world, in_session);
         world.daemon.on("crew_set", |_| ());
@@ -1458,8 +1447,8 @@ fn edit_charter_opens_the_chiefs_charter_and_closing_crew_returns_the_focus_to_i
         world.settle();
         let (row, trigger, item) = if in_session {
             (
-                "queue-chief.chief-day",
-                "queue-chief.chief-day.actions",
+                "sidebar.crew.chief-key",
+                "sidebar.crew.chief-key.actions",
                 "session.menu.member-details",
             )
         } else {

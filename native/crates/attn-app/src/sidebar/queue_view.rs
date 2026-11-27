@@ -1,13 +1,13 @@
-use std::rc::Rc;
+use std::collections::HashSet;
 
 use attn_ui::Tokens;
 use attn_ui::blocks::Inline;
 use attn_ui::system::{self, GroupHead, IconSize, ListRow, Type, words};
-use rune::{El, GrowthSpec, ScrollSpec, Tx, col, memo, row};
+use rune::{El, ScrollSpec, Tx, col, memo, row};
 use rune_kit::ScrollBar;
 use rune_kit::TextInput;
 
-use super::model::{AgentRow, display_name, ordered_desktops};
+use super::model::{AgentRow, AgentState, display_name, ordered_desktops};
 use super::queue::{self, Bands, QueueRow};
 use super::{ROWS_BUILT, home_row, lead, open_agent};
 use crate::State;
@@ -21,8 +21,6 @@ const RUNS: &str = "queue.runs";
 /// Where an agent's row sits in the queue sidebar, which sets the buttons it carries.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Band {
-    Chief,
-    Crew,
     Turn,
     Working,
     Snoozed,
@@ -32,8 +30,6 @@ pub enum Band {
 impl Band {
     fn prefix(self) -> &'static str {
         match self {
-            Band::Chief => "queue-chief",
-            Band::Crew => "queue-crew",
             Band::Turn => "queue-turn",
             Band::Working => "queue-settled",
             Band::Snoozed => "queue-snoozed",
@@ -55,73 +51,11 @@ pub struct QueueAgent {
     pub settle: bool,
     pub snooze: bool,
     pub unsnooze: bool,
-    /// The member a crew row's session belongs to, with its name, for Ask to close.
-    pub member: Option<(String, String)>,
-    /// The row is the Chief's slot: Ask to close goes through the Chief's own request.
-    pub chief: bool,
-    /// The Chief was asked to close and has not answered yet.
-    pub closing: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum QLine {
-    /// The space that sets a section apart from the one above it, before the line keyed `of`.
-    Gap(String),
-    Rule {
-        key: &'static str,
-        text: String,
-    },
-    WaitingHead {
-        waiting: usize,
-        unreachable: usize,
-    },
-    AgentsToggle {
-        open: bool,
-        more: usize,
-    },
-    Counts(String),
-    Filter,
-    Empty(&'static str),
-    Agent(Box<QueueAgent>),
-    CrewRule,
-    Member(super::crew::Resting),
-    ChiefSetup(crate::chief::View),
-    /// The automation runs' heading: how many current runs there are and how many need the user.
-    RunsHead {
-        runs: usize,
-        needing: usize,
-    },
-    RunGroup(RunGroup),
-}
-
-/// An automation's group of runs in the queue sidebar.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct RunGroup {
-    pub id: i64,
-    pub name: String,
-    pub runs: usize,
-    pub asking: usize,
-    pub open: bool,
-}
-
-impl QLine {
-    pub fn key(&self) -> String {
-        match self {
-            QLine::Gap(of) => format!("{of}.gap"),
-            QLine::Rule { key, .. } => format!("queue.rule.{key}"),
-            QLine::WaitingHead { .. } => "queue.waiting-head".into(),
-            QLine::AgentsToggle { .. } => "queue.agents-toggle".into(),
-            QLine::Counts(_) => "queue.agents-counts".into(),
-            QLine::Filter => "queue.filter".into(),
-            QLine::Empty(key) => format!("queue.empty.{key}"),
-            QLine::Agent(a) => format!("{}.{}", a.band.prefix(), a.agent.id),
-            QLine::CrewRule => "queue.rule.crew".into(),
-            QLine::Member(m) if m.chief => crate::chief::SLOT.into(),
-            QLine::Member(m) => format!("{}.{}", super::crew::QUEUE_ROW, m.member),
-            QLine::ChiefSetup(_) => crate::chief::SLOT.into(),
-            QLine::RunsHead { .. } => RUNS.into(),
-            QLine::RunGroup(group) => format!("{RUNS}.group.{}", group.id),
-        }
+impl QueueAgent {
+    pub(crate) fn key(&self) -> String {
+        format!("{}.{}", self.band.prefix(), self.agent.id)
     }
 }
 
@@ -132,23 +66,197 @@ pub(crate) struct AgentLine {
     pub session: String,
 }
 
+/// The flat Automations section in the queue sidebar: direct automation runs across desktops,
+/// split into active rows shown by default and finished off-screen runs folded behind a toggle.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub(crate) struct QueueAutomations {
+    pub active: Vec<QueueAgent>,
+    pub finished: Vec<QueueAgent>,
+    /// Direct runs currently needing the user (including superseded ones), matching ⌘⇧J.
+    pub needing: usize,
+}
+
+impl QueueAutomations {
+    fn is_empty(&self) -> bool {
+        self.active.is_empty() && self.finished.is_empty() && self.needing == 0
+    }
+}
+
+/// Direct automation runs on the selected profile's desktops, flattened into active and finished
+/// lists matching desktop flow's Automations section. Delegates stay in the main queue.
+pub(crate) fn automations(state: &State) -> QueueAutomations {
+    let on_screen = crate::desktop::on_screen_sessions(state);
+    queue_automations(state, &on_screen, state.window.now_ms)
+}
+
+fn queue_automations(state: &State, on_screen: &[String], now_ms: i64) -> QueueAutomations {
+    let groups = crate::automations::runs::on_desktops(&state.facts, now_ms);
+    if groups.is_empty() {
+        return QueueAutomations::default();
+    }
+    let places = queue::Places::of(&state.facts);
+    let needing: usize = groups.iter().map(|g| g.needing_you.len()).sum();
+    let mut seen: HashSet<&str> = HashSet::new();
+    let mut active: Vec<(u8, Option<&str>, usize, QueueAgent)> = Vec::new();
+    let mut finished: Vec<(&str, QueueAgent)> = Vec::new();
+    let mut order = 0usize;
+
+    for group in &groups {
+        for run in &group.runs {
+            if !seen.insert(run.id.as_str()) {
+                continue;
+            }
+            let desktop = places.desktop_of.get(run.id.as_str()).copied();
+            let qrow = QueueRow {
+                session: run,
+                desktop,
+                desktop_title: String::new(),
+                offline: crate::outpost::offline(run, &state.facts.outposts),
+            };
+            let qa = *agent(state, on_screen, Band::Run, &qrow, now_ms);
+            let needs = crate::automations::runs::needs_you(run, &state.facts.outposts, now_ms);
+            let snoozed = queue::is_snoozed(run.turn_snoozed_until.as_deref(), now_ms);
+            let wants_attention = needs || (!snoozed && qa.agent.asks > 0);
+            let live = matches!(
+                qa.agent.state,
+                AgentState::Launching
+                    | AgentState::Working
+                    | AgentState::Scheduled
+                    | AgentState::Recoverable
+            );
+            if wants_attention {
+                active.push((0, run.turn_opened_at.as_deref(), order, qa));
+            } else if live {
+                active.push((1, None, order, qa));
+            } else if qa.agent.selected || on_screen.contains(&run.id) {
+                active.push((2, None, order, qa));
+            } else {
+                finished.push((run.state_since.as_str(), qa));
+            }
+            order += 1;
+        }
+    }
+
+    active.sort_by(|a, b| {
+        a.0.cmp(&b.0)
+            .then_with(|| a.1.is_none().cmp(&b.1.is_none()))
+            .then_with(|| a.1.cmp(&b.1))
+            .then_with(|| a.2.cmp(&b.2))
+    });
+    finished.sort_by(|a, b| b.0.cmp(a.0).then_with(|| a.1.agent.id.cmp(&b.1.agent.id)));
+
+    QueueAutomations {
+        active: active.into_iter().map(|(_, _, _, qa)| qa).collect(),
+        finished: finished.into_iter().map(|(_, qa)| qa).collect(),
+        needing,
+    }
+}
+
+struct QueueSections {
+    waiting: usize,
+    unreachable: usize,
+    turns: Vec<QueueAgent>,
+    more: usize,
+    counts_summary: String,
+    working: Vec<QueueAgent>,
+    snoozed: Vec<QueueAgent>,
+    automations: QueueAutomations,
+}
+
+fn sections(state: &State, bands: &Bands<'_>) -> QueueSections {
+    let now_ms = state.window.now_ms;
+    let window = &state.window;
+    let on_screen = crate::desktop::on_screen_sessions(state);
+    let pinned: HashSet<&str> = bands.crew.iter().map(|r| r.session.id.as_str()).collect();
+    let (waiting, unreachable) = bands.owed();
+    let turns = bands
+        .turns
+        .iter()
+        .map(|row| *agent(state, &on_screen, Band::Turn, row, now_ms))
+        .collect();
+    let all_working: Vec<&QueueRow<'_>> = bands
+        .settled
+        .iter()
+        .filter(|r| !pinned.contains(r.session.id.as_str()))
+        .collect();
+    let all_snoozed: Vec<&QueueRow<'_>> = bands
+        .snoozed
+        .iter()
+        .filter(|r| !pinned.contains(r.session.id.as_str()))
+        .collect();
+    let more = all_working.len() + all_snoozed.len();
+    let counts_summary = [
+        (all_working.len(), "working"),
+        (all_snoozed.len(), "snoozed"),
+    ]
+    .into_iter()
+    .filter(|(n, _)| *n > 0)
+    .map(|(n, label)| format!("{n} {label}"))
+    .collect::<Vec<_>>()
+    .join(" · ");
+
+    let (working, snoozed) = if window.agent_list_open {
+        let filter = window.agent_filter.text.to_lowercase();
+        let matches = |r: &&QueueRow<'_>| {
+            filter.is_empty()
+                || display_name(r.session, &state.facts.harnesses)
+                    .to_lowercase()
+                    .contains(&filter)
+        };
+        let working = all_working
+            .into_iter()
+            .filter(matches)
+            .map(|row| *agent(state, &on_screen, Band::Working, row, now_ms))
+            .collect();
+        let snoozed = all_snoozed
+            .into_iter()
+            .filter(matches)
+            .map(|row| *agent(state, &on_screen, Band::Snoozed, row, now_ms))
+            .collect();
+        (working, snoozed)
+    } else {
+        (Vec::new(), Vec::new())
+    };
+
+    let automations = queue_automations(state, &on_screen, now_ms);
+    QueueSections {
+        waiting,
+        unreachable,
+        turns,
+        more,
+        counts_summary,
+        working,
+        snoozed,
+        automations,
+    }
+}
+
+fn section_agent_lines(sections: &QueueSections, finished_open: bool) -> Vec<AgentLine> {
+    let to_line = |a: &QueueAgent| AgentLine {
+        key: a.key(),
+        session: a.agent.id.clone(),
+    };
+    sections
+        .turns
+        .iter()
+        .chain(&sections.working)
+        .chain(&sections.snoozed)
+        .chain(&sections.automations.active)
+        .chain(
+            finished_open
+                .then_some(sections.automations.finished.iter())
+                .into_iter()
+                .flatten(),
+        )
+        .map(to_line)
+        .collect()
+}
+
 /// The agent rows of the queue sidebar, top to bottom, as the keyboard walks them.
 pub(crate) fn agent_rows(state: &State) -> Vec<AgentLine> {
     let bands = queue::bands(&state.facts, state.window.now_ms);
-    agent_lines(&lines(state, &bands))
-}
-
-fn agent_lines(lines: &[QLine]) -> Vec<AgentLine> {
-    lines
-        .iter()
-        .filter_map(|line| match line {
-            QLine::Agent(a) => Some(AgentLine {
-                key: line.key(),
-                session: a.agent.id.clone(),
-            }),
-            _ => None,
-        })
-        .collect()
+    let data = sections(state, &bands);
+    section_agent_lines(&data, state.window.automations_finished_open)
 }
 
 /// Where the row the arrows reached is now: the same row, or, once its agent moved to another
@@ -213,276 +321,48 @@ fn agent(
         settle: matches!(band, Band::Turn | Band::Run) && actions.settle,
         snooze: matches!(band, Band::Turn | Band::Working) && actions.snooze,
         unsnooze: band == Band::Snoozed && !row.offline,
-        member: (band == Band::Crew)
-            .then(|| session.crew_member.clone().filter(|m| !m.is_empty()))
-            .flatten()
-            .map(|m| {
-                let name = super::crew::resting(state, &m).name;
-                (m, name)
-            }),
-        chief: false,
-        closing: false,
     })
-}
-
-/// The Chief's slot: setup while it has none, its session's row while it has one, and a start
-/// between sessions.
-pub(super) fn chief_line(
-    state: &State,
-    on_screen: &[String],
-    bands: &Bands<'_>,
-    chief: crate::chief::View,
-) -> QLine {
-    use crate::chief::Phase;
-    let rows = bands
-        .chief
-        .iter()
-        .chain(&bands.crew)
-        .chain(&bands.turns)
-        .chain(&bands.settled)
-        .chain(&bands.snoozed);
-    let row = chief
-        .session
-        .as_deref()
-        .and_then(|id| rows.into_iter().find(|r| r.session.id == id));
-    match (chief.phase, row) {
-        (Phase::Unconfigured | Phase::Configuring | Phase::Starting, _) => QLine::ChiefSetup(chief),
-        (Phase::InSession | Phase::Closing, Some(row)) => {
-            let mut line = agent(state, on_screen, Band::Chief, row, state.window.now_ms);
-            line.agent.name.clone_from(&chief.name);
-            line.member = (!chief.busy).then(|| (chief.key.clone(), chief.name.clone()));
-            line.chief = true;
-            line.closing = chief.phase == Phase::Closing;
-            QLine::Agent(line)
-        }
-        _ => QLine::Member(super::crew::resting(state, &chief.key)),
-    }
-}
-
-/// Starts a section with `line`, the gap above it first.
-fn section(lines: &mut Vec<QLine>, line: QLine) {
-    lines.push(QLine::Gap(line.key()));
-    lines.push(line);
-}
-
-/// The queue sidebar's body, top to bottom: the crew, the waiting card and its turns, the
-/// agent list's toggle, and with the list open its filter, working and snoozed agents.
-pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
-    let now_ms = state.window.now_ms;
-    let window = &state.window;
-    let on_screen = crate::desktop::on_screen_sessions(state);
-    let mut lines = Vec::new();
-    let chief_slot = crate::chief::view(state);
-    let chief = bands.chief.as_ref().filter(|_| chief_slot.is_none());
-    let chief_member = match &chief_slot {
-        Some(slot) => Some(slot.key.clone()),
-        None => chief.and_then(|c| c.session.crew_member.clone()),
-    };
-    let mut members: Vec<(String, Option<&QueueRow<'_>>)> = Vec::new();
-    for row in &bands.crew {
-        let member = row.session.crew_member.clone().unwrap_or_default();
-        if !members.iter().any(|(m, _)| *m == member) {
-            members.push((member, Some(row)));
-        }
-    }
-    for resting in crate::crew::members(state) {
-        if !members.iter().any(|(m, _)| *m == resting.id) {
-            members.push((resting.id.clone(), None));
-        }
-    }
-    members.retain(|(m, _)| Some(m) != chief_member.as_ref());
-    members.sort_by(|a, b| a.0.cmp(&b.0));
-    if chief_slot.is_some() || chief.is_some() || !members.is_empty() {
-        section(&mut lines, QLine::CrewRule);
-        if let Some(slot) = chief_slot {
-            lines.push(chief_line(state, &on_screen, bands, slot));
-        } else if let Some(chief) = chief {
-            lines.push(QLine::Agent(agent(
-                state,
-                &on_screen,
-                Band::Chief,
-                chief,
-                now_ms,
-            )));
-        }
-        for (member, row) in members {
-            lines.push(match row {
-                Some(row) => QLine::Agent(agent(state, &on_screen, Band::Crew, row, now_ms)),
-                None => QLine::Member(super::crew::resting(state, &member)),
-            });
-        }
-    }
-    let pinned: std::collections::HashSet<&str> =
-        bands.crew.iter().map(|r| r.session.id.as_str()).collect();
-    let (waiting, unreachable) = bands.owed();
-    section(
-        &mut lines,
-        QLine::WaitingHead {
-            waiting,
-            unreachable,
-        },
-    );
-    for row in &bands.turns {
-        lines.push(QLine::Agent(agent(
-            state,
-            &on_screen,
-            Band::Turn,
-            row,
-            now_ms,
-        )));
-    }
-    let working: Vec<&QueueRow<'_>> = bands
-        .settled
-        .iter()
-        .filter(|r| !pinned.contains(r.session.id.as_str()))
-        .collect();
-    let snoozed: Vec<&QueueRow<'_>> = bands
-        .snoozed
-        .iter()
-        .filter(|r| !pinned.contains(r.session.id.as_str()))
-        .collect();
-    let more = working.len() + snoozed.len();
-    section(
-        &mut lines,
-        QLine::AgentsToggle {
-            open: window.agent_list_open,
-            more,
-        },
-    );
-    if !window.agent_list_open {
-        let parts: Vec<String> = [(working.len(), "working"), (snoozed.len(), "snoozed")]
-            .into_iter()
-            .filter(|(n, _)| *n > 0)
-            .map(|(n, label)| format!("{n} {label}"))
-            .collect();
-        if !parts.is_empty() {
-            lines.push(QLine::Counts(parts.join("  ")));
-        }
-    } else {
-        lines.push(QLine::Filter);
-        let filter = window.agent_filter.text.to_lowercase();
-        let matches = |r: &&QueueRow<'_>| {
-            filter.is_empty()
-                || display_name(r.session, &state.facts.harnesses)
-                    .to_lowercase()
-                    .contains(&filter)
-        };
-        let working: Vec<_> = working.into_iter().filter(matches).collect();
-        let snoozed: Vec<_> = snoozed.into_iter().filter(matches).collect();
-        section(
-            &mut lines,
-            QLine::Rule {
-                key: "working",
-                text: format!("Working {}", working.len()),
-            },
-        );
-        if working.is_empty() {
-            lines.push(QLine::Empty("working"));
-        }
-        for row in working {
-            lines.push(QLine::Agent(agent(
-                state,
-                &on_screen,
-                Band::Working,
-                row,
-                now_ms,
-            )));
-        }
-        if !snoozed.is_empty() {
-            section(
-                &mut lines,
-                QLine::Rule {
-                    key: "snoozed",
-                    text: format!("Snoozed {}", snoozed.len()),
-                },
-            );
-            for row in snoozed {
-                lines.push(QLine::Agent(agent(
-                    state,
-                    &on_screen,
-                    Band::Snoozed,
-                    row,
-                    now_ms,
-                )));
-            }
-        }
-    }
-    runs(state, &on_screen, &mut lines);
-    lines
-}
-
-/// The automation runs on the desktops, which never join the queue: a heading, then each
-/// automation's group, its current runs listed while the group is open.
-fn runs(state: &State, on_screen: &[String], lines: &mut Vec<QLine>) {
-    let now_ms = state.window.now_ms;
-    let groups = crate::automations::runs::on_desktops(&state.facts, now_ms);
-    if groups.is_empty() {
-        return;
-    }
-    let places = queue::Places::of(&state.facts);
-    section(
-        lines,
-        QLine::RunsHead {
-            runs: groups.iter().map(|g| g.runs.len()).sum(),
-            needing: groups.iter().map(|g| g.needing_you.len()).sum(),
-        },
-    );
-    for group in &groups {
-        let open = state.window.run_groups_open.contains(&group.id);
-        lines.push(QLine::RunGroup(RunGroup {
-            id: group.id,
-            name: group.name.clone(),
-            runs: group.runs.len(),
-            asking: group.needing_you.len(),
-            open,
-        }));
-        if !open {
-            continue;
-        }
-        for run in &group.runs {
-            let desktop = places.desktop_of.get(run.id.as_str()).copied();
-            let row = QueueRow {
-                session: run,
-                desktop,
-                desktop_title: String::new(),
-                offline: crate::outpost::offline(run, &state.facts.outposts),
-            };
-            lines.push(QLine::Agent(agent(
-                state,
-                on_screen,
-                Band::Run,
-                &row,
-                now_ms,
-            )));
-        }
-    }
 }
 
 pub(crate) fn view(state: &State, t: &Tokens) -> El {
     let facts = &state.facts;
     let window = &state.window;
     let marked = Marked::of(state);
+    let logos_on = super::logos(state);
+    let mut countdowns: Vec<(String, String)> = window
+        .countdowns
+        .iter()
+        .map(|(id, c)| (id.clone(), c.fires_at.clone()))
+        .collect();
+    countdowns.sort();
     let reads = (
-        std::sync::Arc::as_ptr(&facts.sessions) as usize,
-        std::sync::Arc::as_ptr(&facts.desktops) as usize,
-        std::sync::Arc::as_ptr(&facts.profiles) as usize,
         (
+            std::sync::Arc::as_ptr(&facts.sessions) as usize,
+            std::sync::Arc::as_ptr(&facts.desktops) as usize,
+            std::sync::Arc::as_ptr(&facts.profiles) as usize,
             std::sync::Arc::as_ptr(&facts.settings) as usize,
             std::sync::Arc::as_ptr(&facts.asks) as usize,
+        ),
+        (
             std::sync::Arc::as_ptr(&facts.garden) as usize,
             std::sync::Arc::as_ptr(&facts.outposts) as usize,
             std::sync::Arc::as_ptr(&facts.crew) as usize,
             std::sync::Arc::as_ptr(&facts.harnesses) as usize,
+            std::sync::Arc::as_ptr(&state.keymap) as usize,
+            logos_on,
             state.logos.revision(),
             window.crew_rows.armed(),
             crate::chief::view(state),
         ),
-        window.view,
-        window.agent_list_open,
         (
-            window.agent_filter.text.to_owned(),
+            window.view,
+            window.agent_list_open,
+            window.automations_finished_open,
+        ),
+        (
+            &window.agent_filter,
             window.queue_cursor.clone(),
-            window.run_groups_open.clone(),
+            countdowns,
         ),
         window.now_ms,
         (crate::desktop::on_screen_sessions(state), marked.clone()),
@@ -495,36 +375,129 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         ),
     );
     memo("sidebar", reads, || {
+        let crew_entries = super::crew::desktop_entries(state);
+        let has_crew = !crew_entries.is_empty();
         let bands = queue::bands(facts, window.now_ms);
-        let lines: Rc<[QLine]> = lines(state, &bands).into();
-        let keys = lines.clone();
-        let rows = agent_lines(&lines);
+        let data = sections(state, &bands);
+        let rows = section_agent_lines(&data, window.automations_finished_open);
         let cursor: Option<String> = window
             .queue_cursor
             .as_ref()
             .and_then(|cursor| reached(&rows, cursor))
             .map(|at| rows[at].key.clone());
+        let jump_keys = keys_of(state, &Action::SessionJumpToWaiting);
+        let list_keys = keys_of(state, &Action::SidebarAgentList);
+        let next_run_keys = keys_of(state, &Action::SessionNextRun);
+        let logo_rev = if logos_on { state.logos.revision() } else { 0 };
         let t = *t;
-        let reached_row = cursor.clone();
+
+        let row_el = |qa: &QueueAgent, in_well: bool| {
+            memo_queue_row(
+                state,
+                qa,
+                in_well,
+                cursor.as_deref() == Some(qa.key().as_str()),
+                marked.shown(&qa.agent.id),
+                logos_on,
+                logo_rev,
+                &t,
+            )
+        };
+
+        let has_owed = data.waiting > 0 || data.unreachable > 0;
+        let waiting_block = if has_owed {
+            ListRow::well("queue.waiting-well", true, &t)
+                .child(waiting_head(
+                    "queue.waiting-head".into(),
+                    (data.waiting, data.unreachable),
+                    jump_keys,
+                    true,
+                    &t,
+                ))
+                .children(data.turns.iter().map(|qa| row_el(qa, true)))
+        } else {
+            waiting_head("queue.waiting-head".into(), (0, 0), jump_keys, false, &t)
+        };
+
+        let mut queue_children: Vec<El> = vec![waiting_block];
+        queue_children.push(gap("queue.agents-toggle.gap"));
+        queue_children.push(agents_toggle(
+            "queue.agents-toggle".into(),
+            window.agent_list_open,
+            data.more,
+            &data.counts_summary,
+            list_keys,
+            &t,
+        ));
+        if window.agent_list_open {
+            queue_children.push(
+                rune::el()
+                    .key("queue.filter.gap")
+                    .w_full()
+                    .h(ListRow::well_pad_y())
+                    .a11y_hidden(),
+            );
+            queue_children.push(filter(state, "queue.filter".into(), &t));
+            queue_children.push(gap("queue.rule.working.gap"));
+            queue_children.push(rule(
+                "queue.rule.working".into(),
+                &format!("Working {}", data.working.len()),
+                &t,
+            ));
+            if data.working.is_empty() {
+                queue_children.push(ListRow::note(
+                    "queue.empty.working",
+                    "Nobody else.",
+                    Type::Small,
+                    t.text_muted,
+                    None,
+                    &t,
+                ));
+            } else {
+                queue_children.extend(data.working.iter().map(|qa| row_el(qa, false)));
+            }
+            if !data.snoozed.is_empty() {
+                queue_children.push(gap("queue.rule.snoozed.gap"));
+                queue_children.push(rule(
+                    "queue.rule.snoozed".into(),
+                    &format!("Snoozed {}", data.snoozed.len()),
+                    &t,
+                ));
+                queue_children.extend(data.snoozed.iter().map(|qa| row_el(qa, false)));
+            }
+        }
+        if !data.automations.is_empty() {
+            let finished_count = data.automations.finished.len();
+            let finished_open = window.automations_finished_open;
+            queue_children.push(gap("queue.runs.gap"));
+            queue_children.push(runs_head(
+                RUNS.into(),
+                data.automations.needing,
+                next_run_keys,
+                &t,
+            ));
+            queue_children.extend(data.automations.active.iter().map(|qa| row_el(qa, false)));
+            if finished_count > 0 {
+                queue_children.push(super::finished_runs_toggle(
+                    finished_count,
+                    finished_open,
+                    &t,
+                ));
+            }
+            if finished_open {
+                queue_children.extend(data.automations.finished.iter().map(|qa| row_el(qa, false)));
+            }
+        }
+
         let list = col()
             .key(LIST)
             .role("list")
             .label("Queue")
             .w_full()
-            .growth(GrowthSpec::default())
-            .virtual_rows(
-                lines.len(),
-                ListRow::height(),
-                move |_: &State, i| keys[i].key().into(),
-                move |state: &State, i| {
-                    let line_key = lines[i].key();
-                    let reached = cursor.as_deref() == Some(line_key.as_str());
-                    line(state, &lines[i], reached, &marked, &t)
-                },
-            )
             .focusable(true)
-            .on_key(super::actions::list_key);
-        let list = match reached_row {
+            .on_key(super::actions::list_key)
+            .children(queue_children);
+        let list = match cursor {
             Some(key) => list.active_descendant(key),
             None => list,
         };
@@ -553,6 +526,14 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                     .scroll(ScrollSpec {
                         stick_bottom: false,
                     })
+                    .children(has_crew.then(|| {
+                        col()
+                            .key("sidebar.crew.section")
+                            .w_full()
+                            .child(crew_rule("sidebar.rule.crew".into(), &t))
+                            .child(super::crew::pill_bar(state, &crew_entries, logos_on, &t))
+                    }))
+                    .children(has_crew.then(|| gap("sidebar.rule.queue.gap")))
                     .child(list)
                     .scroll_bar_styled(attn_ui::scroll_bar(&t)),
             )
@@ -560,72 +541,34 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
     })
 }
 
-fn line(state: &State, line: &QLine, cursor: bool, marked: &Marked, t: &Tokens) -> El {
-    let key = line.key();
-    let shown = match line {
-        QLine::Agent(a) => marked.shown(&a.agent.id),
-        _ => Shown::default(),
-    };
-    if let QLine::Filter = line {
-        return filter(state, key, t);
-    }
-    let draining = match line {
-        QLine::Agent(a) => state.window.countdowns.contains_key(&a.agent.id),
-        _ => false,
-    };
-    let keys = match line {
-        QLine::WaitingHead { .. } => keys_of(state, &Action::SessionJumpToWaiting),
-        QLine::AgentsToggle { .. } => keys_of(state, &Action::SidebarAgentList),
-        QLine::RunsHead { .. } => keys_of(state, &Action::SessionNextRun),
-        _ => None,
-    };
-    let logos = super::logos(state);
-    let logo_rev = if logos { state.logos.revision() } else { 0 };
+fn gap(key: &str) -> El {
+    rune::el()
+        .key(key)
+        .w_full()
+        .h(ListRow::section_gap())
+        .a11y_hidden()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn memo_queue_row(
+    state: &State,
+    a: &QueueAgent,
+    in_well: bool,
+    cursor: bool,
+    shown: Shown,
+    logos: bool,
+    logo_rev: u64,
+    t: &Tokens,
+) -> El {
+    let key = a.key();
+    let draining = state.window.countdowns.contains_key(&a.agent.id);
     memo(
         key.clone(),
-        (
-            line,
-            draining,
-            cursor,
-            shown,
-            keys.clone(),
-            logos,
-            logo_rev,
-            *t,
-        ),
+        (a, in_well, draining, cursor, shown, logos, logo_rev, *t),
         || {
             ROWS_BUILT.with(|n| n.set(n.get() + 1));
-            match line {
-                QLine::Gap(_) => rune::el()
-                    .key(key)
-                    .w_full()
-                    .h(ListRow::section_gap())
-                    .a11y_hidden(),
-                QLine::Rule { text: label, .. } => rule(key, label, t),
-                QLine::WaitingHead {
-                    waiting,
-                    unreachable,
-                } => waiting_head(key, (*waiting, *unreachable), keys, t),
-                QLine::AgentsToggle { open, more } => agents_toggle(key, *open, *more, keys, t),
-                QLine::Counts(counts) => {
-                    ListRow::note(key, counts.clone(), Type::Mono, t.text_tertiary, None, t)
-                }
-                QLine::Empty(_) => {
-                    ListRow::note(key, "Nobody else.", Type::Small, t.text_muted, None, t)
-                }
-                QLine::Agent(agent) => {
-                    let bar = super::settling_bar(state, &key, &agent.agent, t);
-                    queue_row(state, key, agent, cursor, shown, logos, t).children(bar)
-                }
-                QLine::CrewRule => crew_rule(key, t),
-                QLine::Member(member) => super::crew::row_view(state, key, member, t),
-                QLine::ChiefSetup(chief) => {
-                    super::crew::chief_setup_row(state, key, chief, logos, t)
-                }
-                QLine::RunsHead { runs, needing } => runs_head(key, *runs, *needing, keys, t),
-                QLine::RunGroup(group) => run_group(key, group, t),
-                QLine::Filter => unreachable!("the filter is built above"),
-            }
+            let bar = super::settling_bar(state, &key, &a.agent, t);
+            queue_row(state, key.clone(), a, in_well, cursor, shown, logos, t).children(bar)
         },
     )
 }
@@ -680,11 +623,18 @@ fn waiting_head(
     key: String,
     (waiting, unreachable): (usize, usize),
     keys: Option<String>,
+    in_well: bool,
     t: &Tokens,
 ) -> El {
     let label = owed_label((waiting, unreachable)).unwrap_or_else(|| "Nothing owed".into());
     let description = says("Open the oldest turn", keys.as_ref());
+    let surface = if in_well {
+        ListRow::well_surface(t)
+    } else {
+        t.bg_panel
+    };
     GroupHead::new(key, label)
+        .on(surface)
         .name_el(owed_words((waiting, unreachable), t))
         .keys(keys)
         .disabled(waiting == 0)
@@ -717,101 +667,66 @@ fn owed_words((waiting, unreachable): (usize, usize), t: &Tokens) -> El {
     Inline::joined().children(parts)
 }
 
-fn agents_toggle(key: String, open: bool, more: usize, keys: Option<String>, t: &Tokens) -> El {
+fn agents_toggle(
+    key: String,
+    open: bool,
+    more: usize,
+    counts_summary: &str,
+    keys: Option<String>,
+    t: &Tokens,
+) -> El {
     let label = match more {
         0 => "No more agents".to_owned(),
         1 => "1 more agent".to_owned(),
         n => format!("{n} more agents"),
     };
+    let section = if more == 0 {
+        "No more agents".to_owned()
+    } else {
+        format!("{more} more")
+    };
     let description = says("Show every agent in this profile", keys.as_ref());
-    GroupHead::new(key, label.clone())
+    let mut head = GroupHead::new(key, label)
         .open(open)
-        .section(label)
-        .keys(keys)
-        .build(t)
+        .section(section)
+        .keys(keys);
+    if !open && !counts_summary.is_empty() {
+        head = head.aside(
+            words(counts_summary.to_owned(), Type::Small, t.text_tertiary)
+                .key("queue.agents-counts")
+                .single_line()
+                .truncate()
+                .shrink()
+                .min_w(0.0),
+        );
+    }
+    head.build(t)
         .description(description)
         .on_press_tx(|state: &mut State, tx: &mut Tx| super::actions::toggle_agent_list(state, tx))
 }
 
-fn plural(n: usize, noun: &str) -> String {
-    if n == 1 {
-        format!("1 {noun}")
-    } else {
-        format!("{n} {noun}s")
-    }
-}
-
-/// The automations' heading, and while runs stopped with a question, the row that walks them.
-fn runs_head(key: String, runs: usize, needing: usize, keys: Option<String>, t: &Tokens) -> El {
-    let walk = (needing > 0).then(|| {
-        let label = format!(
-            "{} {} you",
-            plural(needing, "run"),
-            if needing == 1 { "needs" } else { "need" }
+/// The Automations section heading in queue flow: matches desktop flow's header with an inline
+/// waiting pill (`⌘⇧J`) and `all` action to open the Automations drawer.
+fn runs_head(key: String, needing: usize, keys: Option<String>, t: &Tokens) -> El {
+    let mut head = GroupHead::new(key, "Automations")
+        .heading()
+        .section("Automations")
+        .action(
+            format!("{RUNS}.all"),
+            "all",
+            "Open Automations",
+            |state: &mut State, tx: &mut Tx| crate::automations::open(state, tx),
         );
-        ListRow::new(format!("{key}.needing"), label.clone())
-            .title_el(
-                words(label, Type::Body, t.warning)
-                    .single_line()
-                    .truncate()
-                    .shrink(),
-            )
-            .keys(keys, t)
-            .build(t)
-            .description("Open the next run needing you; press again for the one after")
-            .on_press_tx(|state: &mut State, tx: &mut Tx| {
-                crate::automations::runs::next_run(state, tx)
-            })
-    });
-    col()
-        .key(key.clone())
-        .role("heading")
-        .label("Automations")
-        .a11y_value(plural(runs, "run"))
-        .help("Automation runs never join the queue")
-        .w_full()
-        .child(
-            GroupHead::new(format!("{key}.head"), "Automations")
-                .heading()
-                .section("Automations")
-                .aside(words(plural(runs, "run"), Type::Small, t.text_muted))
-                .build(t)
-                .a11y_hidden(),
-        )
-        .children(walk)
-}
-
-/// An automation's group row, which lists or hides its runs.
-fn run_group(key: String, group: &RunGroup, t: &Tokens) -> El {
-    let id = group.id;
-    let (runs, asking, open) = (group.runs, group.asking, group.open);
-    let mut says = vec![group.name.clone(), plural(runs, "run")];
-    if asking > 0 {
-        says.push(format!("{asking} stopped with a question"));
+    if needing > 0 {
+        head = head.aside(super::automations_needing_pill(
+            format!("{RUNS}.needing"),
+            needing,
+            keys,
+            crate::automations::runs::next_run,
+            t,
+        ));
     }
-    says.push("runs stay out of the queue".into());
-    let caret = if open {
-        attn_ui::glyph::CARET_DOWN
-    } else {
-        attn_ui::glyph::CARET_RIGHT
-    };
-    let mut row = ListRow::new(key, group.name.clone())
-        .lead(system::glyph(caret, IconSize::Small, t.text_tertiary))
-        .title(group.name.clone());
-    if asking > 0 {
-        row = row.aside(words(asking.to_string(), Type::Mono, t.warning));
-    }
-    row.aside(words(runs.to_string(), Type::Mono, t.text_tertiary))
-        .build(t)
-        .expanded(open)
-        .a11y_value(runs.to_string())
-        .description(says.join(" · "))
-        .on_press(move |state: &mut State| {
-            let open = &mut state.window.run_groups_open;
-            if !open.remove(&id) {
-                open.insert(id);
-            }
-        })
+    head.build(t).help("Automation runs never join the queue")
 }
 
 /// The field that narrows the agent list as it is typed into.
@@ -830,24 +745,50 @@ fn filter(state: &State, key: String, t: &Tokens) -> El {
         .child(El::from(system::search_field(input, t)))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn queue_row(
     state: &State,
     key: String,
     a: &QueueAgent,
+    in_well: bool,
     cursor: bool,
     shown: Shown,
     logos: bool,
     t: &Tokens,
 ) -> El {
     let id = a.agent.id.clone();
-    let trailing = if a.closing {
-        "closing".to_owned()
-    } else if !a.age.is_empty() {
+    let surface = if in_well {
+        ListRow::well_surface(t)
+    } else {
+        t.bg_panel
+    };
+    let ground = if a.agent.selected {
+        if in_well {
+            t.bg_selected
+        } else {
+            t.bg_elevated
+        }
+    } else {
+        surface
+    };
+    let trailing = if !a.age.is_empty() {
         a.age.clone()
     } else {
         a.snoozed_until.clone()
     };
-    let (title_kind, title_ink) = super::title_style(&a.agent, true, t);
+    let (title_kind, title_ink) = if a.band == Band::Turn {
+        let needs_you = matches!(
+            a.agent.state,
+            AgentState::WaitingInput | AgentState::PendingApproval
+        ) || a.agent.asks > 0;
+        if a.agent.selected || needs_you {
+            (Type::Name, t.text_primary)
+        } else {
+            (Type::Body, t.text_primary)
+        }
+    } else {
+        super::title_style(&a.agent, false, t)
+    };
     let name = super::flagged(&key, &a.agent, t).shrink().child(
         words(a.agent.name.clone(), title_kind, title_ink)
             .single_line()
@@ -855,16 +796,22 @@ fn queue_row(
             .shrink(),
     );
     let mut row = ListRow::new(key.clone(), format!("Open {}", a.agent.name))
+        .on(surface)
         .role("listitem")
         .unfocusable()
         .cursor(cursor)
-        .lead(badged_lead(state, &key, a, logos, t))
+        .lead(badged_lead(state, &key, a, logos, ground, t))
         .title_el(name)
         .in_view(a.agent.selected)
         .tint(super::row_tint(&a.agent, shown, t))
         .hover_controls(row_controls(&key, a));
     if let Some(chain) = &a.agent.chain {
         row = crate::desktop::chain::on_row(row, &key, &a.agent.id, chain, t);
+    }
+    if a.band == Band::Run
+        && let Some(run) = &a.agent.run
+    {
+        row = row.badge(crate::desktop::provenance::run_view(&key, run, t));
     }
     if let Some(asks) = crate::asks::marker(&key, a.agent.asks, t) {
         row = row.aside(asks);
@@ -886,16 +833,18 @@ fn queue_row(
 
 /// A queue row's lead with its desktop's slot tucked under its lower right corner: it takes no
 /// room in the row.
-fn badged_lead(state: &State, key: &str, a: &QueueAgent, logos: bool, t: &Tokens) -> El {
-    let ground = if a.agent.selected {
-        t.bg_elevated
-    } else {
-        t.bg_panel
-    };
+fn badged_lead(
+    state: &State,
+    key: &str,
+    a: &QueueAgent,
+    logos: bool,
+    ground: rune::Color,
+    t: &Tokens,
+) -> El {
     row()
         .center()
         .child(lead(state, key, &a.agent, logos, ground, t))
-        .children((!a.slot.is_empty()).then(|| {
+        .children((!a.slot.is_empty() && a.band != Band::Run).then(|| {
             system::slot_badge(format!("{key}.slot"), a.slot.clone(), ground, t).pin(
                 None,
                 None,
@@ -942,26 +891,8 @@ fn row_controls(key: &str, a: &QueueAgent) -> Vec<system::IconButton> {
             move |state, tx| super::snooze::open(state, &id, name.clone(), Some(under.clone()), tx),
         )
     });
-    let chief = a.chief;
-    let ask_close = a.member.as_ref().map(|(member, name)| {
-        let member = member.clone();
-        control(
-            key,
-            "ask-close",
-            format!("Ask {name} to close"),
-            attn_ui::glyph::MOON,
-            move |state, tx| {
-                if chief {
-                    crate::chief::close(state, tx);
-                } else {
-                    crate::crew::ask_to_close(state, &member, tx);
-                }
-            },
-        )
-    });
-    ask_close
+    unsnooze
         .into_iter()
-        .chain(unsnooze)
         .chain(snooze)
         .chain([super::actions_button(key, &a.agent, None)])
         .chain(settle)

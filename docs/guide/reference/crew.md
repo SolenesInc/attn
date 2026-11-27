@@ -77,18 +77,16 @@ named instance, `~/.attn-<instance>/crew/<key>/`) and run
 
 ## The Crew section
 
-The sidebar has a **Crew** section. In [queue flow](queue.md), it lists every
-non-retired member as a row, whether the member is in session or between
-sessions. In [desktop flow](desktops.md), it shows every non-retired member as a
-compact pill above your desktops, and omits a member's solo unnumbered launch
-desktop from the desktop list so active members are not duplicated.
+The sidebar has a **Crew** section. In both [queue flow](queue.md) and
+[desktop flow](desktops.md), it shows every non-retired member as a compact pill
+above the main list. In desktop flow, it also omits a member's solo unnumbered
+launch desktop from the desktop list so active members are not duplicated.
 
-- A member between sessions shows a sun. Click it once to arm it and again to
-  start a session.
+- A member between sessions shows a sun and ••• for its member menu. Click the
+  pill or sun once to arm it and again to start a session, or press Esc to
+  disarm it.
 - A member in session shows its state mark, any open ask count, and ••• for its
   session menu, which includes **Ask \<member\> to close** and **Member details**.
-  In queue flow, its row also shows a ☾ button to ask the member to file its
-  letter and close.
 - **manage** in the section header, or "Manage crew" in the command palette
   (Cmd+Shift+K, Ctrl+Alt+K on Linux), opens **Manage crew**.
 
@@ -147,7 +145,7 @@ sessions.
 
 ## Closing a session
 
-**Ask \<member\> to close** in the member's sidebar menu (or ☾ on its row in queue flow), the close button in Manage crew, and
+**Ask \<member\> to close** in the member's sidebar menu, the close button in Manage crew, and
 `attn crew close <member>` all ask the member to finish its current work, write its letter and
 file it. The member ends its own session, and nothing stops the member mid-sentence.
 
@@ -218,7 +216,7 @@ running harness again, or ask the member to close, Attn cancels the switch.
 <details>
 <summary>Do crew members wait in my queue?</summary>
 
-Not by default. Members keep their rows in the Crew section and stay out of the queue's waiting list. Turn on "Put the crew in the queue" in Settings → Attention queue, or run it from the command palette, to make a member that is owed a turn wait in the queue too. The member's row stays in the Crew section. Turning the switch off, or running "Take the crew out of the queue", turns the setting off. The setting applies to every profile. In queue flow, the [Chief](chief.md) has its own row at the top of the Crew section. The Chief is a crew member, so the same switch puts it in the queue, and it keeps that row.
+Not by default. Members keep their pills in the Crew section and stay out of the queue's waiting list. Turn on "Put the crew in the queue" in Settings → Attention queue, or run it from the command palette, to make a member that is owed a turn wait in the queue too. The member's pill stays in the Crew section. Turning the switch off, or running "Take the crew out of the queue", turns the setting off. The setting applies to every profile. The [Chief](chief.md) sits first in the Crew section. The Chief is a crew member, so the same switch puts it in the queue, and it keeps that pill.
 </details>
 
 <details>

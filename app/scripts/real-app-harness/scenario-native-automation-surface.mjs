@@ -242,9 +242,9 @@ try {
     await showsAgentAfterHome('session.nextRun', manualSessionID, 'desktop flow');
 
     await setQueueMode(true);
-    const group = `queue.runs.group.${manualID}`;
+    await driver.waitFor({ key: 'queue.runs' });
+    await driver.waitFor({ key: 'queue.runs.needing' });
     await driver.waitFor({ key: `queue-run.${manualSessionID}` });
-    runner.assert(await valueOf(group) === '1', 'the queue sidebar groups the run under its automation', { value: await valueOf(group) });
     runner.assert(!(await has(`queue-turn.${manualSessionID}`)) && !(await has(`queue-settled.${manualSessionID}`)), 'the run stays out of the queue bands');
     await driver.screenshot(path.join(runner.runDir, 'run-queue-sidebar.png')).catch(() => {});
 

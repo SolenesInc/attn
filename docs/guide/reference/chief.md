@@ -12,8 +12,8 @@ start and close like any member's.
 
 ## Set up the Chief
 
-The Chief sits first in the sidebar's Crew section, as a pill in desktop flow
-and as a row in queue flow. A new Chief has no harness, so it stays between
+The Chief sits first in the sidebar's Crew section as a compact pill in both
+flows. A new Chief has no harness, so it stays between
 sessions and keeps its mail. Until you set it up, clicking it opens the setup:
 pick Claude Code, Codex or, in the native app while [Sigma](using-sigma.md) is
 on, Sigma, the model and effort, and the profile's Notebook folder, then press
@@ -43,8 +43,8 @@ check that path before you open a folder under `crew/` yourself.
 The charter is the place for how you want to be supported, how you make
 decisions and how you want delegations proposed. The Chief writes the charter
 with you on its first day. To edit it anytime, open **Manage crew** and switch
-to the Chief's **Charter** tab, or choose **Edit charter** from the Chief's
-menu while it is in session (or on its row in queue flow).
+to the Chief's **Charter** tab, or choose **Edit charter** from the Chief's •••
+menu.
 
 A new Chief works in its home. A Chief that [took over from a
 session](#if-a-session-was-your-chief) keeps its home in the Notebook and works
@@ -65,14 +65,14 @@ The Chief follows it, with these differences:
   close its session without a letter or retire it, and Attn never sends it
   heartbeats or asks it to close on its own. Deleting a profile needs its Chief
   between sessions, and retires the Chief.
-- The Chief's menu (while in session in desktop flow, and in either state in
-  queue flow) offers **Harness and model…** to change what it runs on for its
-  next session, **Edit charter**, and **Ask Chief to close** in place of Close.
-  One click starts a Chief session. The command palette offers the same
+- The Chief's ••• menu offers **Harness and model…** to change what it runs on
+  for its next session and **Edit charter** in either state, plus **Ask Chief to
+  close** in place of Close while in session and **Start Chief** between
+  sessions. One click starts a Chief session. The command palette offers the same
   actions, and **Manage crew** reaches the Chief's settings and charter in
   either state.
 - With "Put the crew in the queue" on in Settings → Attention queue, a Chief
-  that is owed a turn waits in the queue and keeps its row, and you settle or
+  that is owed a turn waits in the queue and keeps its pill, and you settle or
   snooze it like any agent. When a delegate reports, the Chief asks you for a
   decision only you can make, opens its turn for a result you should read, and
   otherwise only records the report. Answering its ask takes it out of the

@@ -6973,7 +6973,6 @@ fn queue_runs(dark: bool, open: bool, name: &str) {
     let mut world = World::start_sized(scripted().state(state), window());
     press(&mut world, Action::SessionGoToDashboard);
     if open {
-        click(&mut world, Target::key("queue.runs.group.1"));
         world.gesture(|app| {
             let run = app.runtime.find("queue-run.s1").expect("the run is listed");
             app.move_to(run);
