@@ -695,3 +695,87 @@ fn with_the_home_on_another_machine_the_editor_is_this_machines_and_saves_on_its
     );
     rest(&mut world);
 }
+
+#[test]
+fn with_the_home_on_another_machine_the_folder_chooser_asks_only_the_home_even_for_a_folder_it_lacks()
+ {
+    let (daemon, _) = accepting(&[
+        ("projects_directory", "/home/me/old"),
+        ("outposts_enabled", "true"),
+    ]);
+    let daemon = daemon.relaying_to("mac", "oma");
+    daemon.on("get_recent_locations", |_| {
+        message(RecentLocationsResultMessage {
+            success: true,
+            home_path: Some("/home/me".into()),
+            ..RecentLocationsResultMessage::new()
+        })
+    });
+    daemon.on("browse_directory", |r| {
+        let input = r["input_path"].as_str().unwrap();
+        let found = input.starts_with('~');
+        message(BrowseDirectoryResultMessage {
+            success: found,
+            error: (!found).then(|| "no such directory".into()),
+            input_path: input.into(),
+            home_path: Some("/home/me".into()),
+            directory: if found {
+                "/home/me".into()
+            } else {
+                input.trim_end_matches('/').into()
+            },
+            ..BrowseDirectoryResultMessage::new()
+        })
+    });
+    daemon.on("inspect_path", |r| {
+        serde_json::json!({
+            "event": "inspect_path_result",
+            "request_id": r["request_id"],
+            "success": true,
+            "inspection": {"path": r["path"], "exists": false, "is_dir": false},
+        })
+    });
+    let mut world = World::start(daemon);
+    world.daemon.emit(attn_protocol::OutpostsUpdatedMessage {
+        outposts: vec![attn_protocol::OutpostInfo {
+            id: "box".into(),
+            name: "box".into(),
+            destination: "box:2200".into(),
+            state: "connected".into(),
+            reach: "reachable".into(),
+            state_since: "2026-05-16T16:00:00Z".into(),
+            ..attn_protocol::OutpostInfo::default()
+        }],
+        ..attn_protocol::OutpostsUpdatedMessage::new()
+    });
+    world.settle();
+    on_desktop(&mut world);
+
+    click(&mut world, "settings.browse.projects_directory");
+    retype(&mut world, "new-session.path.field", "/srv/absent/");
+    world.settle();
+
+    let elsewhere: Vec<_> = [
+        "browse_directory",
+        "inspect_path",
+        "agent_catalog",
+        "get_recent_locations",
+    ]
+    .into_iter()
+    .flat_map(|cmd| world.daemon.sent_of(cmd))
+    .filter(|r| !r["host"].is_null())
+    .map(|r| (r["cmd"].clone(), r["host"].clone()))
+    .collect();
+    assert_eq!(
+        elsewhere,
+        Vec::<(serde_json::Value, serde_json::Value)>::new()
+    );
+    assert!(
+        world
+            .daemon
+            .sent_of("browse_directory")
+            .iter()
+            .any(|r| r["input_path"] == "/srv/absent/")
+    );
+    rest(&mut world);
+}

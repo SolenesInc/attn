@@ -1301,6 +1301,15 @@ fn fetch_wanted(state: &mut State, which: Which, tx: &mut Tx) {
     }
     let launcher = state.window.launching.launcher(which).expect("open");
     let opening = launcher.opening;
+    if launcher.choosing.is_some() {
+        if let Address::Browse { path, machine, .. } = launcher.address(state)
+            && machine.host.is_none()
+        {
+            let (dir, _) = split_browse(&path);
+            request_listing(state, which, opening, None, &dir, tx);
+        }
+        return;
+    }
     let reachable_hosts: Vec<String> = outposts
         .iter()
         .filter(|o| o.reach == "reachable")
