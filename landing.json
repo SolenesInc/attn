@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "3978e814d7d4a45b87b0294cbbaa93d54ada71aa",
+  "head": "f478e55e9306899b7c58c223a42c352075de9733",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 189.585,
+    "ranOn": "f478e55e9306899b7c58c223a42c352075de9733"
+  },
+  "acknowledgedFlake": {
+    "test": "go ./internal/daemon TestAForkOfferSurvivesAnAppReconnectAndEndsWithADaemonRestart",
+    "owner": "s-j41pjd"
+  },
+  "recordings": []
+}
