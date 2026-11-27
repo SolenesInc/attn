@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "4a491de8447d94d2ac10b3ba3c1cd556bbe29355",
+  "head": "998420e5d69b0c3e0b853a18d4e0d3c029a092ee",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 89.327,
+    "ranOn": "446ba603ef4b3266e390209f893cda0c42214734"
+  },
+  "noMediaReason": "Hover and click behavior, covered by wire tests; the only screen change is a missing underline",
+  "recordings": []
+}

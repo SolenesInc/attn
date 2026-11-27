@@ -1,0 +1,1 @@
+In a terminal on another machine, hovering no longer underlines ordinary words as paths, such as yes/no, v1.2 or example.com, since this Mac can't see that machine's files. A Cmd-click names the innermost path the word holds, like /srv/app/AGENTS.md in Read(/srv/app/AGENTS.md), with ~ kept as written. A seed or agent id inside such a path still opens on a click.
