@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Home folder chooser browses unrelated outposts",
+  "at": "2026-11-27T07:07:35.630Z",
+  "detail": "The home folder chooser issues directory listing requests to reachable outposts when the typed directory does not exist on the home. These results cannot populate the chooser, which only accepts home listings. At 54d9c6647, the reviewer and independent verifier traced the ordinary chooser input through launcher/mod.rs:1336 and the named bridges in daemon/route.go. Use only the home listing in folder-choice mode and skip generic cross-machine and fallback fetches.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/launcher/mod.rs",
+    "line": 1336
+  },
+  "culprit": "d142a29f5a7cd803c837802a63cf6897fb1cfdb2"
+}
