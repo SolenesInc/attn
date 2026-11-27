@@ -27,6 +27,7 @@ func sharedCodexForkedBesideAnotherTile(t *testing.T) forkedCodex {
 	app := w.App()
 	original, codex, terminal := sharedCodexWaiting(t, w, app)
 	tax := w.Spawn(app, fakeagent.Codex, w.Path("tax"))
+	w.Launched(tax)
 	profileID := app.SelectedProfile()
 	desktop, _ := viewProfile(t, w, profileID).paneOf(t, original)
 	f := forkedCodex{w: w, app: app, codex: codex, terminal: terminal, original: original, tax: tax,
