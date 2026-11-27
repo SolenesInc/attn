@@ -135,12 +135,13 @@ func (ps *Pauses) Close() {
 	}
 }
 
-// FailUnreached fails each test whose armed point no process reached over the arm's lifetime, restarts included.
+// FailUnreached fails each test whose armed hold no process reached over the arm's lifetime, restarts included. A
+// point armed with ArmPasses holds nothing: a test that needs a pass waits for it.
 func (ps *Pauses) FailUnreached() {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 	for name, p := range ps.points {
-		if ps.arrivals[name] == 0 {
+		if p.passes == nil && ps.arrivals[name] == 0 {
 			p.t.Errorf("pause point %q was armed and never reached: the step it holds did not run or no longer passes through it", name)
 		}
 	}
