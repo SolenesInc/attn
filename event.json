@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Fork palette in a popped-out tile can dismiss the wrong offer",
+  "at": "2026-11-27T14:37:51.771Z",
+  "detail": "With a popped-out fork focused, the palette shortcut dispatches in the main window without the originating tile. The new Open and Dismiss commands resolve the main window's active session. The independent wire probe expected to dismiss the popped tile and observed dismissal sent for the main tile. Preserve the originating tile's context for both actions.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/palette/commands.rs",
+    "line": 751
+  },
+  "culprit": "c20b841b0baff8217af93cfc0ecf9c5db8b87258"
+}
