@@ -699,7 +699,7 @@ func TestHomeMoveToAMachineThatDialsTheHome(t *testing.T) {
 		w.home.AwaitCrash()
 		w.laptop.AwaitStopped()
 		w.laptop.Start()
-		w.home.Start()
+		w.home.StartUnprobed()
 		redial(w.laptop)
 		w.home.AwaitStopped()
 		w.home.Start()
@@ -752,7 +752,7 @@ func TestHomeMoveToAMachineThatDialsTheHome(t *testing.T) {
 		}
 		w.home.AwaitStopped()
 		w.home.Start()
-		w.laptop.Start()
+		w.laptop.StartUnprobed()
 		w.laptop.AwaitStopped()
 		w.laptop.Start()
 		if !role(t, w.home).IsHome() || role(t, w.laptop).IsHome() {
