@@ -1159,11 +1159,26 @@ func (d *Daemon) openNotebookSync(conn *bridge.Conn, run *notebookSyncRun) error
 	if err == nil {
 		err = run.engine.ServeConn(ctx, conn.Bulk(ctx, channel, requests), notebookDevice(peer))
 	}
-	if err == nil || ctx.Err() != nil {
-		return nil
+	if err != nil && ctx.Err() == nil {
+		d.notebookStreamError(run, peer, id, err)
+	} else {
+		err = nil
 	}
-	d.notebookStreamError(run, peer, id, err)
+	d.forgetNotebookReportOfEndedStream(run, peer, id)
 	return err
+}
+
+func (d *Daemon) forgetNotebookReportOfEndedStream(run *notebookSyncRun, peer string, id uint64) {
+	d.notebookSync.mu.Lock()
+	current := run.streams[peer].id == id
+	if current {
+		delete(run.remote, peer)
+		d.notebookSyncChangedLocked()
+	}
+	d.notebookSync.mu.Unlock()
+	if current {
+		d.refreshNotebookRows()
+	}
 }
 
 func (d *Daemon) beginNotebookStreamLocked(run *notebookSyncRun, peer string) uint64 {

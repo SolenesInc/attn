@@ -60,12 +60,13 @@ func awaitNotebookState(t *testing.T, pair *testworld.OutpostPair, state protoco
 
 func awaitMachineNotebook(t *testing.T, app *testworld.Peer, machine string, state protocol.OutpostNotebookState) protocol.OutpostNotebook {
 	t.Helper()
-	for _, row := range outpostsShownAt(app, len(app.Log())) {
+	mark := len(app.Log())
+	for _, row := range outpostsShownAt(app, mark) {
 		if row.ID == machine && row.Notebook != nil && row.Notebook.State == state {
 			return *row.Notebook
 		}
 	}
-	message := testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+	message := testworld.AwaitSince(app, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
 		for _, row := range m.Outposts {
 			if row.ID == machine && row.Notebook != nil && row.Notebook.State == state {
 				return true
