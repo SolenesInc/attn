@@ -248,8 +248,9 @@ const askCommand: Task = {
   check: (w) =>
     judge(w, (asks) => {
       const problems: string[] = []
+      const inBody = (a: Opened) => a.ask.parts.some((p) => p.markdown !== undefined && shown(p.markdown).fences.some((f) => SHELL_FENCES.has(f.lang)))
       const addressed = asks.flatMap((a) =>
-        a.fences.filter((f) => SHELL_FENCES.has(f.lang)).length === 0
+        !inBody(a)
           ? []
           : ((a.ask as Ask & { references?: { kind: string; text: string }[] }).references ?? []).filter(
               (r) => r.kind === "command" && r.text.toLowerCase().startsWith(`${COMMAND_MACHINE}:`),
