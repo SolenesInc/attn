@@ -13,6 +13,8 @@
 # <goos>_<goarch>; the source identity `key` (sha256 of the pin) is shared
 # across platforms because the same source produces every target.
 
+source "$(dirname "${BASH_SOURCE[0]}")/sha256.sh"
+
 # This file lives at <repo>/scripts/lib/libghostty-vt.sh; repo root is two up.
 vt_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 vt_repo_dir="$(cd "$vt_lib_dir/../.." && pwd)"
@@ -121,8 +123,8 @@ vt_artifact_digest() {
       find lib include -type f
       if [[ -f LICENSE ]]; then printf '%s\n' LICENSE; fi
     } | LC_ALL=C sort | while IFS= read -r path; do
-      shasum -a 256 "$path"
-    done | shasum -a 256 | awk '{ print $1 }'
+      sha256 "$path"
+    done | sha256 | awk '{ print $1 }'
   )
 }
 
@@ -146,7 +148,7 @@ vt_key() {
   {
     vt_commit
     printf '\n'
-  } | shasum -a 256 | cut -d' ' -f1
+  } | sha256 | cut -d' ' -f1
 }
 
 # Asset filename for a platform: libghostty-vt-<key>-<goos>_<goarch>.tar.gz.
@@ -182,8 +184,8 @@ vt_source_key() {
     "$zig" version
     if [[ "$platform" == darwin_* ]]; then xcrun --show-sdk-version; fi
     cd "$vt_repo_dir" || exit
-    shasum -a 256 scripts/build-libghostty-vt.sh scripts/lib/libghostty-vt.sh .tool-versions
-  } | shasum -a 256 | awk '{ print $1 }'
+    sha256 scripts/build-libghostty-vt.sh scripts/lib/libghostty-vt.sh .tool-versions
+  } | sha256 | awk '{ print $1 }'
 }
 
 # Build the archive + headers for one platform from pinned source into its

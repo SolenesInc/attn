@@ -42,7 +42,7 @@ for platform in "${VT_PLATFORMS[@]}"; do
   asset="$(vt_asset_name_for "$platform")"
   echo "==> packing $asset"
   vt_pack "$tmp/$asset" "$platform"
-  sha="$(shasum -a 256 "$tmp/$asset" | cut -d' ' -f1)"
+  sha="$(sha256 "$tmp/$asset" | cut -d' ' -f1)"
 
   echo "==> uploading $asset to $VT_RELEASE_TAG"
   gh release upload "$VT_RELEASE_TAG" "$tmp/$asset" --repo "$VT_REPO" --clobber

@@ -9,7 +9,7 @@ store="$XDG_CACHE_HOME/attn/rust-builds"
 
 mkdir -p "$work/bin" "$work/repo/scripts/lib" "$work/repo/cli/attn/src"
 cp "$root/scripts/rust-cli.sh" "$work/repo/scripts/"
-cp "$root/scripts/lib/rust-build-store.sh" "$root/scripts/lib/libghostty-vt.sh" "$work/repo/scripts/lib/"
+cp "$root/scripts/lib/rust-build-store.sh" "$root/scripts/lib/libghostty-vt.sh" "$root/scripts/lib/sha256.sh" "$work/repo/scripts/lib/"
 cp "$root/rust-toolchain.toml" "$work/repo/"
 printf '[workspace]\nmembers = ["attn"]\nresolver = "2"\n' > "$work/repo/cli/Cargo.toml"
 printf '[package]\nname = "attn"\nversion = "0.0.0"\nedition = "2021"\n' > "$work/repo/cli/attn/Cargo.toml"

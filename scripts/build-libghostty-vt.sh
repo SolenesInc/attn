@@ -16,7 +16,7 @@ build_from_source() {
   fi
   vt_build_from_source "$platform"
   echo "==> done (source build): $output_dir"
-  shasum -a 256 "$(vt_lib_for "$platform")"
+  sha256 "$(vt_lib_for "$platform")"
 }
 
 if [[ "${ATTN_VT_FROM_SOURCE:-}" == "1" ]]; then
@@ -60,7 +60,7 @@ if ! release_asset_download "$VT_REPO" "$VT_RELEASE_TAG" "$asset" "$tmp/$asset";
   exit 0
 fi
 
-if ! echo "${lock_sha}  $tmp/$asset" | shasum -a 256 -c - >/dev/null 2>&1; then
+if ! echo "${lock_sha}  $tmp/$asset" | sha256 -c - >/dev/null 2>&1; then
   echo "warning: sha256 mismatch for $asset (expected $lock_sha); falling back to source build" >&2
   build_from_source
   exit 0
@@ -70,4 +70,4 @@ tar -xzf "$tmp/$asset" -C "$tmp"
 cached="$(vt_cache_artifact "$platform" "$lock_sha" "$tmp/ghostty-vt/$platform")"
 vt_use_artifact "$platform" "$cached"
 echo "==> done (prebuilt): $cached"
-shasum -a 256 "$(vt_lib_for "$platform")"
+sha256 "$(vt_lib_for "$platform")"

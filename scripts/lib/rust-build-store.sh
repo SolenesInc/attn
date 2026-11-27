@@ -85,6 +85,8 @@ recipe_key() {
   for root in "${roots[@]}"; do
     [[ -e "$repo/$root" ]] || die "$recipe's input root $root is missing"
   done
+  local -a sum
+  read -ra sum <<<"$(sha256_command)"
   (
     cd "$repo"
     printf '%s\n' "$recipe" "$triple" "$profile" ${cargo_args[@]+"${cargo_args[@]}"}
@@ -94,8 +96,8 @@ recipe_key() {
       printf '%s\n' "$link_target"
       cat scripts/rust-zig-linker.sh scripts/rust-zig-ar.sh
     fi
-    find -L "${roots[@]}" -path "$workspace/target" -prune -o -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256
-  ) | shasum -a 256 | cut -d' ' -f1
+    find -L "${roots[@]}" -path "$workspace/target" -prune -o -type f -print0 | LC_ALL=C sort -z | xargs -0 "${sum[@]}"
+  ) | sha256 | cut -d' ' -f1
 }
 
 ensure_toolchain() {
@@ -314,7 +316,7 @@ provide_variants() {
     keys+="$name $(basename "$(dirname "$provided")")"$'\n'
   done 3< "$list"
   [[ ${#names[@]} -gt 0 ]] || die "$list lists no variants"
-  set_dir="$store/variant-sets/$(printf '%s' "$keys" | shasum -a 256 | cut -d' ' -f1)"
+  set_dir="$store/variant-sets/$(printf '%s' "$keys" | sha256 | cut -d' ' -f1)"
   local i
   for i in "${!names[@]}"; do
     if [[ ! -f "$set_dir/${names[$i]}/$binary" ]]; then
