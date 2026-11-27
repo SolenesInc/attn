@@ -551,3 +551,57 @@ fn while_the_home_is_away_the_keyboard_moves_between_this_machines_terminals_her
         );
     }
 }
+
+#[test]
+fn a_popped_out_terminal_on_this_machine_stays_out_while_the_home_is_lost_and_the_homes_hides() {
+    let answering = Arc::new(AtomicBool::new(true));
+    let popped = |mut leaf: serde_json::Value, x: f64| {
+        leaf["window"] = json!({"x": x, "y": 20.0, "width": 500.0, "height": 400.0});
+        leaf
+    };
+    let mut state = home_state();
+    let mut desktops = state.desktops.take().unwrap();
+    desktops[0].tree_json = tree::row([
+        popped(tree::pane("t-here"), 10.0),
+        popped(tree::pane("t-home"), 600.0),
+    ])
+    .to_string();
+    state.desktops = Some(desktops);
+    let home = Daemon::scripted();
+    let answers = answering.clone();
+    home.on("client_hello", move |_| {
+        if answers.load(Ordering::SeqCst) {
+            message(state.clone())
+        } else {
+            json!({"event": "home_unreachable", "home": "oma", "state": "dialing"})
+        }
+    });
+    let laptop = this_machine(&home);
+    let mut world =
+        World::start_relaying(home.relaying_to(HERE, "oma"), laptop, WIDE_ENOUGH_FOR_BOTH);
+    let shown = |world: &World| {
+        let mut xs: Vec<f64> = world
+            .tile_windows()
+            .iter()
+            .filter(|w| w.shown)
+            .map(|w| w.frame.x)
+            .collect();
+        xs.sort_by(f64::total_cmp);
+        xs
+    };
+    assert_eq!(shown(&world), [10.0, 600.0]);
+
+    reconnect_home(&mut world, &answering, false);
+    assert_eq!(
+        shown(&world),
+        [10.0],
+        "this machine's terminal keeps its window, and the home's hides"
+    );
+    reconnect_home(&mut world, &answering, true);
+    assert_eq!(shown(&world), [10.0, 600.0]);
+    assert_eq!(
+        ids(machine(&world), "attach_session"),
+        ["rl"],
+        "the terminal on this machine stayed attached through the outage"
+    );
+}

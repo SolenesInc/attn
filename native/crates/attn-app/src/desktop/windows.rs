@@ -249,8 +249,9 @@ struct Held {
 }
 
 /// Keeps a window on each popped-out leaf of the profile's desktops, where the daemon says
-/// it is, while the main window shows the desktops; hides the windows of leaves that came back
-/// to use them again, and shows the main window it hid once no tile window shows.
+/// it is, while the main window shows the desktops and the leaf's terminal can be used: while
+/// the home is away, only those that run on this machine. Hides the windows of leaves that came
+/// back to use them again, and shows the main window it hid once no tile window shows.
 pub(crate) fn follow(state: &mut State) {
     if state.window.tile.is_some() {
         return;
@@ -261,16 +262,26 @@ pub(crate) fn follow(state: &mut State) {
     let (Some(opener), Some(main)) = (pool.opener.clone(), pool.main.clone()) else {
         return;
     };
-    let shown = crate::connection::shows_desktops(&state.facts.connection);
-    let wanted: Vec<Held> = state
-        .facts
+    let desk = crate::connection::shows_desk(&state.facts);
+    let home = crate::connection::shows_desktops(&state.facts.connection);
+    let facts = &state.facts;
+    let runs_here = |desktop: &attn_client::Desktop, leaf: &str| {
+        desktop
+            .panes
+            .iter()
+            .find(|p| p.pane_id == leaf)
+            .and_then(|p| facts.sessions.iter().find(|s| s.id == p.session_id))
+            .is_some_and(|s| facts.machine.runs(s.host.as_deref()))
+    };
+    let wanted: Vec<Held> = facts
         .desktops
         .iter()
-        .filter(|d| shown && d.profile_id == state.facts.profiles.selected)
+        .filter(|d| desk && d.profile_id == facts.profiles.selected)
         .filter_map(|d| Some((d, d.tree()?)))
         .flat_map(|(d, tree)| {
             tree.popped()
                 .into_iter()
+                .filter(|leaf| home || runs_here(d, &leaf.id))
                 .filter_map(|leaf| {
                     Some(Held {
                         desktop: d.id.clone(),

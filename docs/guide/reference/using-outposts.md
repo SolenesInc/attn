@@ -106,8 +106,9 @@ they echo at local speed.
 
 While the machine can't reach the home, its own terminals keep working. If the
 app lost the home after showing it, it keeps the desk under a **Lost** band with
-the home's name. The machine's terminals still take typing, and the home's
-tiles keep their last screen and say typing is not sent. If the app starts
+the home's name. The machine's terminals still take typing, and you can move
+between them; a popped-out one keeps its window. The home's tiles keep their
+last screen and say typing is not sent, and the home's popped-out tiles hide. If the app starts
 while the home is unreachable, it shows **Can't reach** with the home's name and
 the reason. When the machine has terminals of its own, they show live in one
 row, and the sidebar says what waits for the home. Until the home answers you
