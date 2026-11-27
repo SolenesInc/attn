@@ -269,6 +269,7 @@ pub fn bind(
             let moved = (&state.facts.machine.id, &state.facts.machine.home)
                 != (&facts.machine.id, &facts.machine.home);
             state.facts = facts;
+            desktop::keep_away_active(state);
             if moved {
                 tx.invalidate_memos_by_prefix("");
             }

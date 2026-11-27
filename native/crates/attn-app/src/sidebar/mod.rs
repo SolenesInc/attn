@@ -1556,6 +1556,11 @@ pub(crate) fn show_agent(state: &mut State, session: &str, tx: &mut Tx) {
     let this_show = state.window.shows_asked;
     state.window.show_desktop(tx);
     state.window.follow_next_turn = false;
+    if let Some((desktop, leaf)) = &shown
+        && crate::desktop::show_here(state, desktop, leaf)
+    {
+        return;
+    }
     let awaited = crate::desktop::arrival::Shown::Session(session.to_owned());
     crate::desktop::arrival::expect(state, awaited.clone(), true, tx);
     let session_id = session.to_owned();

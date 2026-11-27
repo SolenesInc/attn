@@ -457,3 +457,97 @@ fn every_command_for_a_terminal_on_this_machine_goes_to_its_own_daemon() {
     }
     assert!(ids(machine(&world), "get_screen_snapshot").contains(&"r2".to_owned()));
 }
+
+/// The home's state with three of this machine's shells side by side on d1, and this
+/// machine's daemon, which runs them.
+fn three_here() -> (InitialStateMessage, InitialStateMessage) {
+    let ids = ["a", "b", "c"];
+    let home = InitialStateMessage {
+        sessions: Some(ids.map(|id| shell(id, Some(HERE))).into()),
+        desktops: Some(vec![Desktop {
+            id: "d1".into(),
+            name: "d1".into(),
+            profile_id: "work".into(),
+            shortcut_slot: Some(1),
+            order_key: "1".into(),
+            active_pane_id: "t-a".into(),
+            tree_json: tree::row(ids.map(|id| tree::pane(&format!("t-{id}")))).to_string(),
+            panes: ids
+                .map(|id| pane(&format!("t-{id}"), &format!("r{id}"), id))
+                .into(),
+            ..Desktop::default()
+        }]),
+        ..home_state()
+    };
+    let here = InitialStateMessage {
+        protocol_version: Some(PROTOCOL_VERSION.into()),
+        daemon_instance_id: Some("laptop-daemon".into()),
+        sessions: Some(ids.map(|id| shell(id, None)).into()),
+        terminal_bindings: Some(
+            ids.map(|id| TerminalBinding {
+                session_id: id.into(),
+                terminal_id: format!("r{id}"),
+            })
+            .into(),
+        ),
+        ..InitialStateMessage::new()
+    };
+    (home, here)
+}
+
+fn focus_right_twice_and_type(world: &mut World) {
+    for _ in 0..2 {
+        world.gesture(|app| app.key(super::sidebar::chord(attn_app::Action::TerminalFocusRight)));
+    }
+    world.gesture(|app| app.type_text("z"));
+}
+
+#[test]
+fn while_the_home_is_away_the_keyboard_moves_between_this_machines_terminals_here() {
+    for mid_session in [false, true] {
+        let answering = Arc::new(AtomicBool::new(mid_session));
+        let (state, here) = three_here();
+        let home = Daemon::scripted();
+        let answers = answering.clone();
+        home.on("client_hello", move |_| {
+            if answers.load(Ordering::SeqCst) {
+                message(state.clone())
+            } else {
+                json!({"event": "home_unreachable", "home": "oma", "state": "dialing"})
+            }
+        });
+        let laptop = Daemon::of_this_machine(&home).state(here);
+        let mut world =
+            World::start_relaying(home.relaying_to(HERE, "oma"), laptop, WIDE_ENOUGH_FOR_BOTH);
+        if mid_session {
+            world.open_desktop();
+            reconnect_home(&mut world, &answering, false);
+        }
+
+        focus_right_twice_and_type(&mut world);
+
+        assert_eq!(
+            typed(machine(&world)).last(),
+            Some(&("rc".to_owned(), "z".to_owned())),
+            "mid-session {mid_session}: the keyboard reached the third terminal"
+        );
+        assert!(
+            world.daemon.sent_of("desktop_show_leaf").is_empty()
+                && world.daemon.sent_of("desktop_show_session").is_empty(),
+            "mid-session {mid_session}: nothing goes to the away home"
+        );
+        assert!(
+            world.screen().find(Target::key("notice.text")).is_none(),
+            "mid-session {mid_session}: no notice says the show failed:\n{}",
+            world.screen()
+        );
+
+        reconnect_home(&mut world, &answering, true);
+        world.gesture(|app| app.type_text("h"));
+        assert_eq!(
+            typed(machine(&world)).last(),
+            Some(&("ra".to_owned(), "h".to_owned())),
+            "mid-session {mid_session}: once the home answers, its active tile has the keyboard"
+        );
+    }
+}

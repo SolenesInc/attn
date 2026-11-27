@@ -68,6 +68,10 @@ pub struct Window {
     pub(crate) queue_turns: Vec<String>,
     /// Home follows the next turn to open, as it does after the last turn closed.
     pub follow_next_turn: bool,
+    /// The tile the person made active while the home was away, as (desktop, leaf): the active
+    /// tile is the home's, but until it answers it is this window's, and the home's wins again
+    /// once it does.
+    pub(crate) away_active: Option<(String, String)>,
     /// How many agents the window has asked the daemon to show, so only the latest refused show
     /// undoes what the window did ahead of it.
     pub(crate) shows_asked: u64,

@@ -496,6 +496,9 @@ fn show_leaf_only(state: &mut State, desktop: &str, leaf: &str, announced: bool,
     if state.window.desk.pick(desktop, leaf) {
         tx.instant();
     }
+    if show_here(state, desktop, leaf) {
+        return;
+    }
     let awaited = arrival::Shown::Leaf {
         desktop: desktop.to_owned(),
         leaf: leaf.to_owned(),
@@ -549,6 +552,45 @@ pub(crate) fn activate_pressed(state: &mut State, desktop: &str, leaf: &str, tx:
     if !is_active(state, desktop, leaf) {
         show_leaf_only(state, desktop, leaf, true, tx);
     }
+}
+
+/// Makes `leaf` the active tile here, sending nothing, while the home is away to send it to.
+pub(crate) fn show_here(state: &mut State, desktop: &str, leaf: &str) -> bool {
+    if state.facts.connection == attn_client::Connection::Connected {
+        return false;
+    }
+    state.window.away_active = Some((desktop.to_owned(), leaf.to_owned()));
+    keep_away_active(state);
+    let keyboard = state.window.keyboard_terminal(&state.facts);
+    state.terminals.focus(keyboard);
+    true
+}
+
+/// Shows the tile made active while the home was away over the facts, until the home answers,
+/// and then gives the keyboard back to the home's active tile.
+pub(crate) fn keep_away_active(state: &mut State) {
+    if state.facts.connection == attn_client::Connection::Connected {
+        if state.window.away_active.take().is_some()
+            && let Some(desktop) = state.facts.current_desktop()
+        {
+            let (desktop, leaf) = (desktop.id.clone(), desktop.active_pane_id.clone());
+            hold_keyboard(state, &desktop, &leaf);
+        }
+        return;
+    }
+    let Some((desktop, leaf)) = &state.window.away_active else {
+        return;
+    };
+    let Some(at) = state.facts.desktops.iter().position(|d| {
+        d.id == *desktop && d.active_pane_id != *leaf && d.panes.iter().any(|p| p.pane_id == *leaf)
+    }) else {
+        return;
+    };
+    let desktops = std::sync::Arc::make_mut(&mut state.facts.desktops);
+    desktops[at] = attn_client::Desktop::from(attn_protocol::Desktop {
+        active_pane_id: leaf.clone(),
+        ..(*desktops[at]).clone()
+    });
 }
 
 fn is_active(state: &State, desktop: &str, leaf: &str) -> bool {
