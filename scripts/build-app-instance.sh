@@ -3,7 +3,8 @@
 # Build the packaged attn app (native/crates/attn-app) for a single instance.
 # Bundle metadata (productName, bundle id, deep-link scheme) comes from
 # `attn instance resolve`, and the ws port from `attn instance claim-port`,
-# which keeps it in the instance's data dir. The app's identity names its own
+# which keeps it in the instance's data dir and in the app's build-identity.json
+# for a copy of the app installed on another machine. The app's identity names its own
 # source (`scripts/source-fingerprint.sh --app native`), which covers native/;
 # the sidecars keep the SOURCE_FINGERPRINT they were built with.
 #
@@ -47,8 +48,8 @@ source_fingerprint="$(bash ./scripts/source-fingerprint.sh --app native --field 
 source_dirty_paths_base64="$(bash ./scripts/source-fingerprint.sh --app native --field dirty_paths_base64)"
 
 write_build_identity() {
-  printf '{\n  "version": "%s",\n  "sourceFingerprint": "%s",\n  "gitCommit": "%s",\n  "buildTime": "%s"\n}\n' \
-    "$VERSION" "$source_fingerprint" "$GIT_COMMIT" "$BUILD_TIME" > "$1"
+  printf '{\n  "version": "%s",\n  "sourceFingerprint": "%s",\n  "gitCommit": "%s",\n  "buildTime": "%s",\n  "wsPort": "%s"\n}\n' \
+    "$VERSION" "$source_fingerprint" "$GIT_COMMIT" "$BUILD_TIME" "$ws_port" > "$1"
 }
 
 codesign_identity() {

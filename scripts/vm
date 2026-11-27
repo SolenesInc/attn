@@ -73,6 +73,7 @@ owner_link="vm-instance-owners/$instance"
 export MACVM_LABEL="scripts/vm $instance"
 
 bundle_fingerprint() { jq -r .sourceFingerprint "$bundle/Contents/Resources/build-identity.json" 2>/dev/null || true; }
+bundle_port() { jq -r '.wsPort // empty' "$bundle/Contents/Resources/build-identity.json" 2>/dev/null || true; }
 guest_fingerprint() {
     macvm exec cat "$guest_app/Contents/Resources/build-identity.json" 2>/dev/null | jq -r .sourceFingerprint 2>/dev/null || true
 }
@@ -130,9 +131,13 @@ wait_ready() {
     echo "scripts/vm: $app ready after $((SECONDS - started))s" >&2
 }
 
+keep_guest_port() {
+    macvm exec /bin/sh -c 'mkdir -p -m 700 "$1" && printf "%s\n" "$2" >"$1/ws-port"' sh ".attn-$instance" "$(bundle_port)"
+}
+
 cmd_up() {
     [ -e app/node_modules/ws ] || pnpm --dir app install --frozen-lockfile
-    if [ "$(bundle_fingerprint)" != "$(bash scripts/source-fingerprint.sh --app native --field fingerprint)" ]; then
+    if [ "$(bundle_fingerprint)" != "$(bash scripts/source-fingerprint.sh --app native --field fingerprint)" ] || [ -z "$(bundle_port)" ]; then
         make build-app INSTANCE="$instance"
     fi
     local vm
@@ -142,6 +147,7 @@ cmd_up() {
         macvm exec osascript -e "quit app \"$app\"" 2>/dev/null || true
         macvm install-app "$bundle"
     fi
+    keep_guest_port
     macvm exec /bin/rm -rf "$harness"
     macvm push "$harness/app/scripts" app/scripts/real-app-harness
     macvm push "$harness/app/node_modules" "$(readlink -f app/node_modules/ws)"

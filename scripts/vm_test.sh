@@ -53,7 +53,7 @@ for arg in "$@"; do
 done
 resources="native/target/staged/attn-$instance.app/Contents/Resources"
 mkdir -p "$resources"
-printf '{"sourceFingerprint":"%s"}\n' "$(bash scripts/source-fingerprint.sh --app native)" >"$resources/build-identity.json"
+printf '{"sourceFingerprint":"%s","wsPort":"%s"}\n' "$(bash scripts/source-fingerprint.sh --app native)" "${FAKE_BUILD_PORT:-9001}" >"$resources/build-identity.json"
 echo "$instance" >>"$FAKE_BUILDS"
 FAKE
 
@@ -210,6 +210,20 @@ as attn-a up --instance rebuild >/dev/null
 expect "a change under native/ rebuilds the app" same "$(builds_of rebuild)" 2
 expect "a change under native/ reinstalls the app" differ "$(guest_source rebuild)" "$before"
 as attn-a down --instance rebuild >/dev/null
+
+# The guest daemon serves the port the build claimed and baked into the app, not the
+# instance's derived port, which another instance on the host may hold.
+FAKE_BUILD_PORT=28748 as attn-a up --instance claimed >/dev/null
+expect "the guest instance keeps the port its app was built with" same "$(cat "$guest/.attn-claimed/ws-port")" 28748
+as attn-a down --instance claimed >/dev/null
+
+# An app built before the build recorded its port is rebuilt, so the guest learns the port.
+mkdir -p "$checkout/native/target/staged/attn-older.app/Contents/Resources"
+printf '{"sourceFingerprint":"%s"}\n' "$(cd "$checkout" && bash scripts/source-fingerprint.sh --app native)" >"$checkout/native/target/staged/attn-older.app/Contents/Resources/build-identity.json"
+as attn-a up --instance older >/dev/null
+expect "an app with no recorded port is rebuilt" same "$(builds_of older)" 1
+expect "the rebuilt app's port reaches the guest" same "$(cat "$guest/.attn-older/ws-port")" 9001
+as attn-a down --instance older >/dev/null
 
 echo "vm_test: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
