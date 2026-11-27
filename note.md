@@ -1,0 +1,1 @@
+The release that removes dedicated PTY workers tells users to close worker-backed terminals before updating. Users on v0.15.0 can also enable the shared terminal host, confirm it is active, and reload an agent onto it before updating.
