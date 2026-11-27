@@ -178,7 +178,7 @@ func (d *Daemon) sendLocalAppsToHome() {
 func (d *Daemon) homeUnreachableMessage(refused error) protocol.HomeUnreachableMessage {
 	state, _, lastError := d.outpostSettings()
 	if refused != nil {
-		lastError = refused.Error()
+		state, lastError = "refused", refused.Error()
 		var rejected *bridge.CallRejected
 		if errors.As(refused, &rejected) {
 			lastError = rejected.Reason

@@ -114,6 +114,13 @@ func TestAnAppOnAMachineThatDialsItsHomeWorksAgainstTheHome(t *testing.T) {
 		t.Fatalf("the home's agent credential on the laptop's /mcp answered %d %s, want the laptop's own refusal", status, reply)
 	}
 	t.Log("(3) /health, the CLI and /mcp on the laptop are answered by the laptop: the home's agent credential does not verify there")
+
+	requireStdout(t, w.home.Attn("settings", "set", "remote_home_enabled", "false"), "false")
+	told := lastHomeUnreachable(t, awaitHomeDial(t, w.laptop, "refused"))
+	if !strings.Contains(protocol.Deref(told.Reason), "does not serve apps on other machines") {
+		t.Fatalf("an app the home refuses while the machine is bridged: %+v, want refused with the home's reason", told)
+	}
+	t.Log("a home that stops serving other machines' apps refuses the relay, and the app is told so while the bridge stays up")
 }
 
 func TestAnAppTheHomeDropsIsClosedOnTheMachineThatRelaysIt(t *testing.T) {
