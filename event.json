@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Failed fleet update rows omit build and recovery",
+  "at": "2026-11-27T06:36:52.979Z",
+  "detail": "Partial fleet processing loses build information on failed or skipped outposts. The banner mentions only the first unsuccessful row and Settings lacks per-row recovery. Preserve build information and surface a usable recovery path consistent with D12. This overlaps the existing implementation follow-up.\nIndependently source-confirmed at pinned 309da596f. Review s-tset6s.\n"
+}
