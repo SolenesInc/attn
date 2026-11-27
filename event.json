@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "App relay channel refusal misreports and misses recovery",
+  "at": "2026-11-27T05:37:15.897Z",
+  "detail": "A refused app channel on a healthy bridge is shown as dialing. When the home accepts apps again, the app is not woken to reconnect. Distinguish channel refusal and recover when the setting permits it. The implementation follow-up already owns state and wording.\nIndependently source-confirmed at dc932349a. Evidence on s-s3sc2q.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/app_relay.go",
+    "line": 178
+  },
+  "culprit": "dc932349a3898fde1b3a6ff0025e86dbfffbb967"
+}
