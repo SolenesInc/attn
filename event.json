@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Nested shell blocks in Asks lose command actions",
+  "at": "2026-11-27T20:03:56.647Z",
+  "detail": "At 97d960ac, a shell-language Markdown fence nested in a list item or blockquote lacks Open in terminal and its machine/folder label, and t skips it. The depth-zero condition in native/crates/attn-app/src/asks/commands.rs:34 excludes these fences. Plot s-0bje74 D2 applies to every shell-language block. Preserve the Markdown context and document order when rendering and recognizing commands. Two reviewers confirmed the code trace. Existing live evidence covers top-level fences.\n"
+}
