@@ -1,0 +1,1 @@
+A reload, including the one a context-window cap change starts, no longer ends a live terminal when no shared terminal host can start. The daemon now checks that the host can start before it touches the running terminal, and it refuses the reload with the usual "Reinstall attn" remedy (or the outpost one), so the agent keeps running. Fixes bug bcca6bd.
