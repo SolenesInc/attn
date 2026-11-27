@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Fleet update labels another app machine This Mac",
+  "at": "2026-11-27T06:36:37.256Z",
+  "detail": "The shared fleet update run names the initiating machine, but Settings labels it This Mac for every viewer. A second Mac on the target build can connect and see the initiating Mac labeled as itself. Compare the row machine with the viewer's own machine ID.\nIndependently source-confirmed at pinned 309da596f. Review s-tset6s.\n"
+}
