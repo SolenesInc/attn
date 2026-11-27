@@ -160,13 +160,13 @@ A shell command in an ask, a code block in `sh`, `bash`, `zsh`, `fish` or
 for the first) under it. The agent writes the place's
 [machine path](using-outposts.md#start-on-an-outpost-from-the-launcher) after
 the block's language, as in ```` ```sh studio:~/shop ````; a block that names
-none runs where the agent works. The shell opens in a tab of the panel with the command typed and not run,
-and takes the keyboard: Enter runs the command, and Cmd+Shift+R (Ctrl+Alt+R on
-Linux) gives the keyboard back to the question. A command of several lines
-keeps its lines in a shell that has bracketed paste on, as zsh, fish and bash 5.1
-or later do by default. In any other shell its line breaks are removed and the
-lines run together, so read the command before you press Enter. While a command still runs,
-**Send** reads **Send and stop**, because the shell ends with the answer, as
+none runs where the agent works. The shell opens in a tab of the panel with the
+command typed and not run, and takes the keyboard: Enter runs the command, and
+Cmd+Shift+R (Ctrl+Alt+R on Linux) gives the keyboard back to the question. A
+command of several lines keeps its lines in a shell that has bracketed paste on,
+as zsh, fish and bash 5.1 or later do by default. In any other shell its line
+breaks are removed and the lines run together, so read the command before you
+press Enter. While a command still runs, **Send** reads **Send and stop**, because the shell ends with the answer, as
 it does when you close its tab.
 **Move to desktop** keeps the shell: it moves to a tile beside the agent that
 asked, or onto the desktop you are on, and stays after you answer. The phone
