@@ -1,0 +1,1 @@
+While the home is away, the app shows no desktop shelf above "Can't reach <home>", so it sends nothing to a socket that can't act on it. The title bar dims only for a layer it actually shows. When the home rejects the app's channel while the bridge is up (`remote_home_enabled` turned off there), the app is told it was refused and why, instead of "Dialing again".

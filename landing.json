@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "dc932349a3898fde1b3a6ff0025e86dbfffbb967",
+  "head": "0c9e573292003ab1060ca30fc942428a664c51ec",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 87.36,
+    "ranOn": "0c9e573292003ab1060ca30fc942428a664c51ec"
+  },
+  "acknowledgedFlake": {
+    "test": "TestAShellIsWorkingOnlyWhileACommandRunsWhateverItsRuntimeClaims",
+    "owner": "s-79cgnv"
+  },
+  "noMediaReason": "removes the shelf from the Can't reach screen, proven by the wire test a_home_lost_on_a_desktop_with_tiles_leaves_no_shelf_to_click; the Mac recording for C5(6) follows this landing",
+  "recordings": []
+}
