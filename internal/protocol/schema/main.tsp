@@ -6782,6 +6782,9 @@ model SeedArtifactTransferMessage {
   // Bring into seed: remove this current association only after transfer
   // completion. Other references remain untouched.
   "legacy_reference"?: SeedArtifactReference;
+  // The machine whose disk source_path or destination_path is on, such as the
+  // app's machine for a file its dialog chose; absent for the home's machine.
+  "host"?: string;
 }
 
 @extension("x-on", #{ machine: "host" })

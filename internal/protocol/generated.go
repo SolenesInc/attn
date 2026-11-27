@@ -10737,6 +10737,9 @@ type SeedArtifactTransferMessage struct {
 	// Filename corresponds to the JSON schema field "filename".
 	Filename *string `json:"filename,omitempty,omitzero"`
 
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
 	// LegacyReference corresponds to the JSON schema field "legacy_reference".
 	LegacyReference *SeedArtifactReference `json:"legacy_reference,omitempty,omitzero"`
 

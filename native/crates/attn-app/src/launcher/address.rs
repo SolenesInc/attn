@@ -3,7 +3,9 @@
 
 use attn_protocol::OutpostInfo;
 
-/// A machine a start can go to: this one, or an outpost.
+use crate::machine::Machines;
+
+/// A machine a start can go to: the home's, or an outpost.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Machine {
     pub(crate) host: Option<String>,
@@ -13,10 +15,11 @@ pub(crate) struct Machine {
     pub(crate) label: String,
 }
 
-pub(crate) fn this_mac() -> Machine {
+/// The home's machine, which `home:` names wherever it runs.
+pub(crate) fn home(machines: &Machines) -> Machine {
     Machine {
         host: None,
-        name: "This Mac".into(),
+        name: machines.name(None),
         label: "home".into(),
     }
 }
@@ -59,15 +62,16 @@ fn is_browse_path(text: &str) -> bool {
 }
 
 /// The machines the longest `<label>:` at the start of `query` names, and that prefix.
-fn named(query: &str, outposts: &[OutpostInfo]) -> Option<(Vec<Machine>, String)> {
+fn named(query: &str, machines: &Machines) -> Option<(Vec<Machine>, String)> {
     let lower = query.to_lowercase();
+    let outposts = machines.outposts;
     let labels = outposts
         .iter()
         .flat_map(|o| {
             let machine = machine_for(o, outposts);
             [o.name.clone(), o.id.clone()].map(|label| (label, machine.clone()))
         })
-        .chain(std::iter::once(("home".to_owned(), this_mac())));
+        .chain(std::iter::once(("home".to_owned(), home(machines))));
     let matches: Vec<(String, Machine)> = labels
         .filter(|(label, _)| lower.starts_with(&format!("{}:", label.to_lowercase())))
         .collect();
@@ -84,12 +88,12 @@ fn named(query: &str, outposts: &[OutpostInfo]) -> Option<(Vec<Machine>, String)
 
 /// The `<machine>:` that starts `query`, which the field shows in the accent colour: empty
 /// when the text names no machine.
-pub(crate) fn machine_prefix<'a>(query: &'a str, outposts: &[OutpostInfo]) -> &'a str {
-    named(query, outposts).map_or("", |(_, prefix)| &query[..prefix.len()])
+pub(crate) fn machine_prefix<'a>(query: &'a str, machines: &Machines) -> &'a str {
+    named(query, machines).map_or("", |(_, prefix)| &query[..prefix.len()])
 }
 
-pub(crate) fn parse(query: &str, outposts: &[OutpostInfo]) -> Address {
-    let addressed = named(query, outposts);
+pub(crate) fn parse(query: &str, machines: &Machines) -> Address {
+    let addressed = named(query, machines);
     if let Some((machines, prefix)) = &addressed
         && machines.len() > 1
     {
@@ -106,7 +110,7 @@ pub(crate) fn parse(query: &str, outposts: &[OutpostInfo]) -> Address {
     if is_browse_path(rest) {
         return Address::Browse {
             path: rest.trim().to_owned(),
-            machine: machine.unwrap_or_else(this_mac),
+            machine: machine.unwrap_or_else(|| home(machines)),
         };
     }
     Address::Search {

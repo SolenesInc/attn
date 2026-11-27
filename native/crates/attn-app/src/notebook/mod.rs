@@ -708,7 +708,14 @@ pub(crate) fn follow_link(state: &mut State, key: &str, href: &str, tx: &mut Tx)
         }
         links::NoteLink::Note { .. } => {}
         links::NoteLink::External(url) if !url.is_empty() => {
-            let _ = tx.open_uri(&url);
+            let machines = crate::machine::Machines::of(&state.facts);
+            match url
+                .strip_prefix("file://")
+                .and_then(|path| machines.refuse_open(path, None))
+            {
+                Some(refusal) => state.window.notify(refusal, tx),
+                None => drop(tx.open_uri(&url)),
+            }
         }
         links::NoteLink::External(_) => {}
     }

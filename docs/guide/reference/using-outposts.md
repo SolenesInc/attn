@@ -82,6 +82,14 @@ the home, the app shows **Can't reach** with the home's name and the reason, and
 connects by itself when the home answers. Press **R** or click **Retry** to dial
 at once. `attn` on the machine still talks to its own daemon.
 
+That app names the home's machine where it would name This Mac: on tiles, in the
+launcher and in the file opener, and `home:` names it. Files on the home don't
+open on this machine. **Open in editor**, Cmd-clicked paths in a home shell, and
+**Open** and **Reveal** on a seed's files name the home and open nothing here; a
+markdown link opens in a tile from the home. **Move out** on a seed's file, and
+**Move in** or **Copy in** with a file you choose, move the file between the
+seed and this machine's disk.
+
 The home doesn't start terminals on a machine that dials it yet. The launcher
 leaves the machine out, and `attn terminal open --host` and
 `attn delegate --host` refuse and name it.
@@ -313,8 +321,8 @@ Recent projects from every machine share one list. Each row shows its machine,
 This Mac included. **Enter** and **Tab** on a row act on the row's machine.
 
 An address names a machine and a place on it, as ssh writes it:
-`<machine>:<rest>`. Text without a machine means This Mac, and `home:` names
-This Mac too. Machine names match whole and ignore case, so names that contain
+`<machine>:<rest>`. Text without a machine means the home's machine, and `home:`
+names it too: This Mac, unless the home runs on another machine. Machine names match whole and ignore case, so names that contain
 `@` or `:`, such as `user@host`, work as typed. An outpost's id works too. When
 two outposts share a name, the launcher lists both under that name, and the launcher puts the id of the one
 you pick into the input.

@@ -10,7 +10,7 @@ use rune_kit::TextInput;
 
 use super::{
     Address, Kind, Launcher, Listing, Memory, Row, WhereRow, address_of, completion, machine_name,
-    machine_of, machine_prefix, memory, outpost, outposts, reachable, split_browse,
+    machine_of, machine_prefix, memory, offered, outpost, outposts, reachable, split_browse,
 };
 use crate::State;
 use crate::picker::{
@@ -99,7 +99,10 @@ fn controls(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> E
 fn progress(state: &State, launcher: &Launcher, t: &Tokens) -> Block {
     let host = launcher.starting.as_ref().and_then(|s| s.host.as_deref());
     let mut message = match host {
-        Some(_) => format!("Starting on {}…", machine_name(&outposts(state), host)),
+        Some(_) => format!(
+            "Starting on {}…",
+            machine_name(&offered(state, &outposts(state)), host)
+        ),
         None => "Starting…".to_owned(),
     };
     let stalled = launcher.stalled(state);
@@ -151,7 +154,7 @@ fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> El 
     });
     let prefix = match launcher.place {
         Some(_) => "",
-        None => machine_prefix(&launcher.query.text, &outposts),
+        None => machine_prefix(&launcher.query.text, &offered(state, &outposts)),
     };
     let accent = (!prefix.is_empty()).then(|| vec![Span::new(0, prefix.len()).color(t.accent)]);
     let mut input = finder::query_field(
@@ -301,10 +304,12 @@ fn locations(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> 
             ),
         ]
         .into_iter()
-        .chain(
-            (!outposts.is_empty())
-                .then(|| (format!("on {}", machine_name(&outposts, host)), false)),
-        )
+        .chain((!outposts.is_empty()).then(|| {
+            (
+                format!("on {}", machine_name(&offered(state, &outposts), host)),
+                false,
+            )
+        }))
         .collect(),
         _ => vec![("Folders".to_owned(), false)],
     };
@@ -346,17 +351,19 @@ fn locations(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> 
 /// A machine's dot and name, keyed `key`, read as its name and how the home reaches it.
 pub(crate) fn machine_tag(
     key: String,
-    outposts: &[attn_protocol::OutpostInfo],
+    machines: &crate::machine::Machines,
     host: Option<&str>,
     t: &Tokens,
 ) -> El {
+    let outposts = machines.outposts;
     let reach_word = match host {
-        None => "local".to_owned(),
+        None if machines.on_app_machine(None) => "local".to_owned(),
+        None => "reachable".to_owned(),
         Some(h) => {
             outpost(outposts, h).map_or_else(|| "unreachable".to_owned(), |o| o.reach.clone())
         }
     };
-    let name = machine_name(outposts, host);
+    let name = machine_name(machines, host);
     let shown = host.map(|h| outpost(outposts, h).map_or("lost", |o| o.state.as_str()));
     Inline::joined()
         .key(key)
@@ -407,12 +414,15 @@ fn location_row(
                     .map(|o| o.state.clone())
                     .unwrap_or_default()
             )),
-            Part::Code(address_of(&machine_of(&outposts, host), "~/")),
+            Part::Code(address_of(
+                &machine_of(&offered(state, &outposts), host),
+                "~/",
+            )),
         ])),
         Kind::Elsewhere => Some(Said::parts([
             Part::Text("Enter browses ".to_owned()),
             Part::Code(address_of(
-                &machine_of(&outposts, host),
+                &machine_of(&offered(state, &outposts), host),
                 &format!("{}/", r.path),
             )),
         ])),
@@ -430,8 +440,15 @@ fn location_row(
         }
     });
     let reach = host.map(|h| outpost(&outposts, h).map(|o| o.reach.clone()));
-    let machine = (matches!(r.kind, Kind::Recent | Kind::Elsewhere) && !outposts.is_empty())
-        .then(|| machine_tag(format!("{w}.row.{i}.machine"), &outposts, host, t));
+    let machine =
+        (matches!(r.kind, Kind::Recent | Kind::Elsewhere) && !outposts.is_empty()).then(|| {
+            machine_tag(
+                format!("{w}.row.{i}.machine"),
+                &offered(state, &outposts),
+                host,
+                t,
+            )
+        });
     let unreachable = r.kind != Kind::Machine
         && reach
             .as_ref()

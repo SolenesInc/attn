@@ -79,6 +79,8 @@ pub struct Facts {
     pub harnesses_loaded: bool,
     /// The machines that host remote sessions, by the id a session's `host` names.
     pub outposts: Arc<Vec<OutpostInfo>>,
+    /// The machine this app runs on, as its own daemon's `/health` last said.
+    pub machine: AppMachine,
     /// The build the home daemon runs, which an outpost on another build is offered.
     pub home_build: String,
     /// The Codex app server a profile's Codex tiles share, by the profile the daemon last said
@@ -413,6 +415,14 @@ impl MigrationMarker {
     }
 }
 
+/// The machine this app runs on: the id its home knows it by, and the home's name when the home
+/// runs on another machine.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AppMachine {
+    pub id: String,
+    pub home: Option<String>,
+}
+
 /// Which slices of `Facts` a change touched, and which a window reads.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Slices(u32);
@@ -669,6 +679,16 @@ impl Store {
             facts.harnesses = Arc::new(harnesses);
             facts.harnesses_loaded = true;
             Slices::HARNESSES
+        });
+    }
+
+    pub(crate) fn set_machine(&self, machine: AppMachine) {
+        self.change(|facts| {
+            if facts.machine == machine {
+                return Slices::NONE;
+            }
+            facts.machine = machine;
+            Slices::CONNECTION | Slices::OUTPOSTS
         });
     }
 

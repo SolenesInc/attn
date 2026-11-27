@@ -1,13 +1,20 @@
 use attn_protocol::{OutpostInfo, Session};
+
+use crate::machine::Machines;
 use attn_ui::Tokens;
 use attn_ui::blocks::HeaderPiece;
 use rune::{Color, El};
 
 use super::fit::{Level, Widths, host_mark};
 
-/// The machine a remote session runs on, by its outpost's name, or by the id its host names
-/// when no outpost row has it.
-pub(crate) fn name(session: &Session, outposts: &[OutpostInfo]) -> Option<String> {
+/// The machine a session runs on, when it is not this app's.
+pub(crate) fn name(session: &Session, machines: &Machines) -> Option<String> {
+    machines.away(session.host.as_deref())
+}
+
+/// The outpost a session runs on, by its name, or by the id its host names when no outpost row
+/// has it.
+pub(crate) fn outpost_of(session: &Session, outposts: &[OutpostInfo]) -> Option<String> {
     let host = session.host.as_deref().filter(|h| !h.is_empty())?;
     Some(outpost_name(host, outposts))
 }

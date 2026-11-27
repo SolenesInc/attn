@@ -383,6 +383,7 @@ struct Prose<'a> {
     pictures: Rc<HashMap<String, Option<Image>>>,
     widths: &'a HashMap<String, u32>,
     document: String,
+    away: Option<links::Away>,
     t: &'a Tokens,
 }
 
@@ -395,6 +396,7 @@ impl<'a> Prose<'a> {
             pictures: state.pictures.of_ask(&ask.id),
             widths: &state.window.asks.widths,
             document: images::ask_document(ask),
+            away: links::Away::of(&crate::machine::Machines::of(&state.facts), None),
             t,
         }
     }
@@ -403,7 +405,7 @@ impl<'a> Prose<'a> {
         links::Document {
             path: self.document.clone(),
             session: None,
-            outpost: None,
+            away: self.away.clone(),
             view: "asks.ask".into(),
             opens_seed: None,
             seed: None,

@@ -903,7 +903,10 @@ fn handoffs_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<Block> {
                 crate::markdown::Document {
                     path: String::new(),
                     session: None,
-                    outpost: None,
+                    away: crate::markdown::Away::of(
+                        &crate::machine::Machines::of(&state.facts),
+                        None,
+                    ),
                     view: view.clone(),
                     opens_seed: Some(super::open_seed),
                     seed: None,

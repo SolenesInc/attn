@@ -46,11 +46,10 @@ pub(crate) fn open_session(state: &mut State, session: &str, tx: &mut Tx) {
     }
     let session = session.expect("unavailable without a session");
     let folder = session.directory.trim().to_owned();
-    let opened = match session.host.as_deref().filter(|h| !h.is_empty()) {
-        Some(host) => Err(format!(
-            "{folder} is on {}; opening files on an outpost isn't supported yet",
-            crate::desktop::outpost_name(host, &state.facts.outposts)
-        )),
+    let refused =
+        crate::machine::Machines::of(&state.facts).refuse_open(&folder, session.host.as_deref());
+    let opened = match refused {
+        Some(refusal) => Err(refusal),
         None => launch(
             state
                 .facts

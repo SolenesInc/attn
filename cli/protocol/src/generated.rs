@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "999053ac8fd2";
+pub const PROTOCOL_VERSION: &str = "1a96fc5482f6";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -9679,6 +9679,8 @@ pub struct SeedArtifactTransferMessage {
     pub destination_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filename: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub legacy_reference: Option<SeedArtifactReference>,
     pub operation: String,

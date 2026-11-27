@@ -272,7 +272,7 @@ pub(crate) fn rows(state: &State) -> (Vec<Row>, String) {
     let empty = match &opener.scope {
         Scope::Machine(host) if query.trim().is_empty() => format!(
             "No recent files on {}.",
-            crate::launcher::machine_name(&crate::launcher::outposts(state), host.as_deref())
+            crate::launcher::machine_name(&crate::launcher::offered(state, &crate::launcher::outposts(state)), host.as_deref())
         ),
         _ if opener.indexing => "Loading files…".to_owned(),
         _ if query.trim().is_empty() => {
@@ -467,7 +467,10 @@ fn pick(state: &mut State, row: Row, tx: &mut Tx) {
     }
     let outposts = crate::launcher::outposts(state);
     if crate::outpost::reach(row.host.as_deref(), &outposts).offline() {
-        let machine = crate::launcher::machine_name(&outposts, row.host.as_deref());
+        let machine = crate::launcher::machine_name(
+            &crate::launcher::offered(state, &outposts),
+            row.host.as_deref(),
+        );
         state.window.notify(
             format!("Could not open {}: {machine} is offline", row.title),
             tx,
@@ -479,8 +482,8 @@ fn pick(state: &mut State, row: Row, tx: &mut Tx) {
     open_markdown(state, row.target, row.host, session, tx);
 }
 
-/// Shows the markdown file at `path`, on outpost `host`, in a tile opened for `session`; the
-/// system's opener opens a local file the daemon could not.
+/// Shows the markdown file at `path`, on the machine `host` names, in a tile opened for
+/// `session`; the system's opener opens a file on this app's machine the daemon could not.
 pub(crate) fn open_markdown(
     state: &mut State,
     path: String,
@@ -501,17 +504,18 @@ pub(crate) fn open_markdown(
             let opened = answer
                 .outcome()
                 .map(|reply| reply.parse::<OpenMarkdownResultMessage>());
-            match (opened, host) {
+            let here = crate::machine::Machines::of(&state.facts).on_app_machine(host.as_deref());
+            match (opened, here) {
                 (Ok(Some(result)), _) => {
                     if let (Some(desktop), Some(tile)) = (result.desktop_id, result.tile_id) {
                         crate::dispatch(state, crate::Action::OpenTile { desktop, tile }, tx);
                     }
                 }
                 (Ok(None), _) => {}
-                (Err(why), Some(_)) => state
+                (Err(why), false) => state
                     .window
                     .notify(format!("Could not open {path}: {why}"), tx),
-                (Err(_), None) => {
+                (Err(_), true) => {
                     if let Err(why) = tx.open_uri(&attn_term::links::file_url(&path)) {
                         state
                             .window

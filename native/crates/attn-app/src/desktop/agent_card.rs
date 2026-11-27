@@ -353,7 +353,7 @@ pub(super) fn who(key: Option<&str>, card: &Card<'_>, state: &State, t: &Tokens)
             let about = [
                 role.map(|r| r.name.clone()),
                 Some(harness_label(&facts.harnesses, &session.agent)),
-                super::host::name(session, &facts.outposts),
+                super::host::name(session, &crate::machine::Machines::of(facts)),
             ]
             .into_iter()
             .flatten()
@@ -396,11 +396,7 @@ pub(super) fn who(key: Option<&str>, card: &Card<'_>, state: &State, t: &Tokens)
             let about = [
                 Some(harness_label(&facts.harnesses, &entry.agent)),
                 Some(short(&entry.id).into_owned()),
-                entry
-                    .host
-                    .as_deref()
-                    .filter(|h| !h.is_empty())
-                    .map(|h| super::host::outpost_name(h, &facts.outposts)),
+                crate::machine::Machines::of(facts).away(entry.host.as_deref()),
             ]
             .into_iter()
             .flatten()

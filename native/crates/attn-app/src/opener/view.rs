@@ -32,7 +32,12 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
     let scope = match &state.opener.scope {
         Scope::Every => None,
         Scope::Machine(host) => Some(chip_edge(
-            machine_tag(SCOPE.to_owned(), &outposts, host.as_deref(), t),
+            machine_tag(
+                SCOPE.to_owned(),
+                &crate::launcher::offered(state, &outposts),
+                host.as_deref(),
+                t,
+            ),
             t,
         )),
     };
@@ -106,7 +111,7 @@ fn option(state: &State, r: &Row, highlighted: bool, tagged: bool, t: &Tokens) -
     if tagged {
         line = line.aside(machine_tag(
             format!("{key}.machine"),
-            &outposts,
+            &crate::launcher::offered(state, &outposts),
             r.host.as_deref(),
             t,
         ));

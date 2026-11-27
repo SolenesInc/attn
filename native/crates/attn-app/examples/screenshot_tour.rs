@@ -2592,6 +2592,32 @@ fn home_unreachable(dark: bool) {
     snap(&mut world, "home-unreachable", dark);
 }
 
+/// The app on a machine whose home runs on oma: the terminal's tile names oma, and Open in
+/// editor says the folder is there instead of opening one here.
+fn remote_home_desktop(dark: bool) {
+    let daemon = scripted().relaying_to("mac", "oma").state(initial(
+        dark,
+        document_tile("m", "/repo/plan.md"),
+        seeds(),
+    ));
+    daemon.on("get_command_usage", |r: &Request| {
+        message(GetCommandUsageResultMessage {
+            request_id: r["request_id"].as_str().unwrap_or_default().into(),
+            profile_id: r["profile_id"].as_str().unwrap_or_default().into(),
+            success: true,
+            ..GetCommandUsageResultMessage::new()
+        })
+    });
+    let mut world = start(daemon);
+    deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
+    press(&mut world, Action::UiCommandPalette);
+    world.gesture(|app| app.type_text("open in editor"));
+    world.settle();
+    tap(&mut world, Key::Enter);
+    world.settle();
+    snap(&mut world, "remote-home-desktop", dark);
+}
+
 /// A command that failed: the notice at the window's foot, at its end.
 fn notice_failed(dark: bool) {
     let mut world = with_document_and(dark, |daemon| {
@@ -2995,6 +3021,16 @@ fn shown(name: &str) -> String {
 /// both and on this machine, in its dialog or, when `inline`, on an empty desktop. With `typed`,
 /// browsing that folder on ai-sandbox.
 fn launcher_outposts(dark: bool, inline: bool, typed: Option<&str>) {
+    launcher_outposts_from(dark, inline, typed, false);
+}
+
+/// [`launcher_outposts`] in its dialog on a machine whose home runs on oma: the home's recents
+/// name oma where they would name This Mac.
+fn remote_home_launcher(dark: bool) {
+    launcher_outposts_from(dark, false, None, true);
+}
+
+fn launcher_outposts_from(dark: bool, inline: bool, typed: Option<&str>, relaying: bool) {
     let outpost = |id: &str, name: &str, state: &str, reach: &str| OutpostInfo {
         id: id.into(),
         name: name.into(),
@@ -3013,6 +3049,11 @@ fn launcher_outposts(dark: bool, inline: bool, typed: Option<&str>) {
         settings.insert("outposts_enabled".into(), "true".into());
     }
     let daemon = launcher_serving(state);
+    let daemon = if relaying {
+        daemon.relaying_to("mac", "oma")
+    } else {
+        daemon
+    };
     daemon
         .on("get_recent_locations", |_: &Request| {
             let recent = |host: Option<&str>, path: &str, repo: bool| RecentLocation {
@@ -3065,6 +3106,7 @@ fn launcher_outposts(dark: bool, inline: bool, typed: Option<&str>) {
             world.advance(std::time::Duration::from_millis(200));
             "launcher-outposts-browse"
         }
+        None if relaying => "remote-home-launcher",
         None if inline => "launcher-outposts-inline",
         None => "launcher-outposts",
     };
@@ -9223,6 +9265,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         });
         scene("daemon_refused", || daemon_refused(dark));
         scene("home_unreachable", || home_unreachable(dark));
+        scene("remote_home_desktop", || remote_home_desktop(dark));
+        scene("remote_home_launcher", || remote_home_launcher(dark));
         scene("notice_failed", || notice_failed(dark));
         scene("leader", || leader(dark));
         scene("callout", || callout(dark));

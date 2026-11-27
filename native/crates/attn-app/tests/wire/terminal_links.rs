@@ -367,7 +367,40 @@ fn a_file_link_on_an_outpost_stays_shut_and_says_why() {
         .and_then(|n| n.name);
     assert_eq!(
         notice.as_deref(),
-        Some("/etc/passwd is on box; opening files on an outpost isn't supported yet")
+        Some("/etc/passwd is on box; opening files on another machine isn't supported yet")
+    );
+    world.advance(Duration::from_secs(6));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_path_in_a_terminal_of_a_home_on_another_machine_is_not_looked_up_here_and_its_file_link_says_why()
+ {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("notes.txt"), "on this machine").unwrap();
+    let mut world =
+        World::start(in_directory(dir.path().to_str().unwrap(), None).relaying_to("mac", "oma"));
+    world.open_desktop();
+    output(
+        &world,
+        1,
+        b"notes.txt \x1b]8;;file:///etc/hosts\x1b\\hosts\x1b]8;;\x1b\\\r\n",
+    );
+    world.settle();
+
+    hover(&mut world, 2, 0);
+    assert_eq!(underlines(&mut world), []);
+    accelerator(&mut world, true);
+    click(&mut world, 11, 0);
+    accelerator(&mut world, false);
+    assert_eq!(opened(&mut world), Vec::<String>::new());
+    let notice = world
+        .screen()
+        .find(Target::key("notice.text"))
+        .and_then(|n| n.name);
+    assert_eq!(
+        notice.as_deref(),
+        Some("/etc/hosts is on oma; opening files on another machine isn't supported yet")
     );
     world.advance(Duration::from_secs(6));
     assert!(world.runtime_is_at_rest());

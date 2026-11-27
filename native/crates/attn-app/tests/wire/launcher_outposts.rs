@@ -246,6 +246,8 @@ struct Setup {
     sandbox_harnesses: Vec<&'static str>,
     current: &'static str,
     window: Option<(f32, f32)>,
+    /// The app's machine and the home it relays to, when the home runs elsewhere.
+    relaying: Option<(&'static str, &'static str)>,
 }
 
 impl Default for Setup {
@@ -257,6 +259,7 @@ impl Default for Setup {
             sandbox_harnesses: vec!["claude", "codex"],
             current: "d1",
             window: None,
+            relaying: None,
         }
     }
 }
@@ -294,7 +297,11 @@ fn world(setup: Setup) -> World {
     let installed = setup.sandbox_harnesses;
     let disks = Arc::new(disks());
     let (browse_disks, inspect_disks) = (disks.clone(), disks);
-    let daemon = Daemon::scripted().state(state);
+    let daemon = match setup.relaying {
+        Some((machine, home)) => Daemon::scripted().relaying_to(machine, home),
+        None => Daemon::scripted(),
+    }
+    .state(state);
     if let Some(local) = setup.local_harnesses {
         daemon.set_harnesses(local);
     }
@@ -1960,4 +1967,21 @@ fn two_recent_checkouts_that_differ_only_at_the_end_both_show_their_whole_names(
         }
         rest(&mut world);
     }
+}
+
+#[test]
+fn with_the_home_on_another_machine_the_launcher_names_it_where_it_named_this_mac() {
+    let mut world = open(Setup {
+        relaying: Some(("mac", "oma")),
+        ..Setup::default()
+    });
+    type_path(&mut world, "ai-sandbox:~/notes/");
+    assert_eq!(
+        rows(&world),
+        named(&[("~/notes/ is on oma", Some("oma"), false)])
+    );
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Tab);
+    assert_eq!(field(&world), "~/notes/");
+    rest(&mut world);
 }

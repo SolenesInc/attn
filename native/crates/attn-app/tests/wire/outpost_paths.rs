@@ -13,15 +13,26 @@ use serde_json::{Value, json};
 
 const DESKTOP: &str = "work/desktop_1";
 const NOTEBOOK: &str = "/notebook";
-const REFUSAL: &str = "is on Studio; opening files on an outpost isn't supported yet";
+const REFUSAL: &str = "is on Studio; opening files on another machine isn't supported yet";
 
 /// An agent `s1` in `directory`, on the outpost Studio when `remote`, alone on the desktop
 /// beside the tiles of `tiles`, with leaf `active` active.
 fn start(directory: &str, remote: bool, tiles: Vec<Value>, active: &str) -> World {
+    start_on(Daemon::scripted(), directory, remote, tiles, active)
+}
+
+/// As `start`, over `daemon`.
+fn start_on(
+    daemon: Daemon,
+    directory: &str,
+    remote: bool,
+    tiles: Vec<Value>,
+    active: &str,
+) -> World {
     let mut settings = BTreeMap::new();
     settings.insert("notebook.root.effective".to_owned(), NOTEBOOK.to_owned());
     settings.insert("editor_executable".to_owned(), "zed".to_owned());
-    let daemon = Daemon::scripted().state(InitialStateMessage {
+    let daemon = daemon.state(InitialStateMessage {
         selected_profile_id: Some("work".into()),
         profiles: Some(vec![Profile {
             id: "work".into(),
@@ -220,4 +231,44 @@ fn the_editor_root_picker_offers_a_local_agents_folder_but_not_an_outpost_agents
             "on an outpost: {remote}"
         );
     }
+}
+
+#[test]
+fn with_the_home_on_another_machine_its_agents_tile_names_it_and_open_in_editor_opens_nothing_here()
+{
+    let folder = tempfile::tempdir().unwrap();
+    let directory = folder.path().to_str().unwrap();
+    let mut world = start_on(
+        Daemon::scripted().relaying_to("mac", "oma"),
+        directory,
+        false,
+        Vec::new(),
+        "p1",
+    );
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::key("tile.p1.host"))
+            .and_then(|n| n.name)
+            .as_deref(),
+        Some("oma")
+    );
+
+    run_command(&mut world, "Open in editor", "open-in-editor");
+
+    assert_eq!(world.editor_launches(), Vec::<EditorLaunch>::new());
+    assert_eq!(
+        notice(&world),
+        Some(format!(
+            "{directory} is on oma; opening files on another machine isn't supported yet"
+        ))
+    );
+    world.advance(Duration::from_secs(6));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn with_the_home_on_this_machine_its_agents_tile_names_no_machine() {
+    let world = start("/tmp", false, Vec::new(), "p1");
+    assert!(world.screen().find(Target::key("tile.p1.host")).is_none());
 }

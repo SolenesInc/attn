@@ -446,6 +446,9 @@ fn target_of(
 }
 
 fn show(state: &mut State, path: &str, how: Show, tx: &mut Tx) {
+    if let Some(refusal) = crate::machine::Machines::of(&state.facts).refuse_open(path, None) {
+        return state.window.notify(refusal, tx);
+    }
     let shown = match how {
         Show::Open => tx.open_uri(&attn_term::links::file_url(path)),
         Show::Reveal => tx.reveal_path(path),
@@ -476,6 +479,7 @@ fn move_out(spot: &Spot, filename: &str, tx: &mut Tx) {
             }
         };
         let seed_id = spot.seed().to_owned();
+        let host = crate::machine::Machines::of(&state.facts).app_host();
         spot.send(
             state,
             |request_id| SeedArtifactTransferMessage {
@@ -483,6 +487,7 @@ fn move_out(spot: &Spot, filename: &str, tx: &mut Tx) {
                 operation: "detach".into(),
                 filename: Some(filename),
                 destination_path: Some(destination.to_string_lossy().into_owned()),
+                host,
                 request_id: Some(request_id),
                 ..SeedArtifactTransferMessage::new()
             },
@@ -503,7 +508,7 @@ fn bring_in(
 ) {
     let path = reference.path.clone().unwrap_or_default();
     if path.starts_with('/') {
-        return transfer(spot, state, reference.clone(), operation, path, tx);
+        return transfer(spot, state, reference.clone(), operation, (path, None), tx);
     }
     let options = FileDialogOptions {
         title: "Choose the linked file to bring into this seed".into(),
@@ -513,7 +518,8 @@ fn bring_in(
     tx.open_file(options, move |state: &mut State, chosen, tx| match chosen {
         Ok(Some(source)) => {
             let source = source.to_string_lossy().into_owned();
-            transfer(&spot, state, reference, operation, source, tx)
+            let here = crate::machine::Machines::of(&state.facts).app_host();
+            transfer(&spot, state, reference, operation, (source, here), tx)
         }
         Ok(None) => {}
         Err(why) => state
@@ -527,7 +533,7 @@ fn transfer(
     state: &mut State,
     reference: SeedArtifactReference,
     operation: &str,
-    source: String,
+    (source, host): (String, Option<String>),
     tx: &mut Tx,
 ) {
     let seed_id = spot.seed().to_owned();
@@ -544,6 +550,7 @@ fn transfer(
             operation,
             source_path: Some(source),
             legacy_reference: Some(reference),
+            host,
             request_id: Some(request_id),
             ..SeedArtifactTransferMessage::new()
         },

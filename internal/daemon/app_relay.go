@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -46,6 +47,11 @@ func appRelayFrom(ctx context.Context) *appRelay {
 func (d *Daemon) relaysApps() bool {
 	status := d.enrollmentStatus()
 	return status.IsOutpost() && status.Dial != ""
+}
+
+func (d *Daemon) relayedHomeName() string {
+	status := d.enrollmentStatus()
+	return cmp.Or(status.HomeName, status.CopiedFrom())
 }
 
 func (d *Daemon) relayAppToHome(w http.ResponseWriter, r *http.Request) {
@@ -184,11 +190,7 @@ func (d *Daemon) homeUnreachableMessage(refused error) protocol.HomeUnreachableM
 			lastError = rejected.Reason
 		}
 	}
-	status := d.enrollmentStatus()
-	message := protocol.HomeUnreachableMessage{Event: protocol.EventHomeUnreachable, Home: status.HomeName, State: state}
-	if message.Home == "" {
-		message.Home = status.CopiedFrom()
-	}
+	message := protocol.HomeUnreachableMessage{Event: protocol.EventHomeUnreachable, Home: d.relayedHomeName(), State: state}
 	if lastError != "" {
 		message.Reason = protocol.Ptr(lastError)
 	}

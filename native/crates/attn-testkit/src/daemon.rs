@@ -89,6 +89,8 @@ struct Script {
     initial_state: InitialStateMessage,
     harnesses: Option<Vec<Harness>>,
     instance: String,
+    machine_id: String,
+    home: Option<String>,
     client_token: String,
     refusing: bool,
     stopped: bool,
@@ -143,6 +145,8 @@ impl Daemon {
                 initial_state: InitialStateMessage::new(),
                 harnesses: Some(built_in_harnesses()),
                 instance: INSTANCE.into(),
+                machine_id: String::new(),
+                home: None,
                 client_token: CLIENT_TOKEN.into(),
                 refusing: false,
                 stopped: false,
@@ -244,6 +248,17 @@ impl Daemon {
     /// The instance `/health` reports. The world's app belongs to `INSTANCE`.
     pub fn instance(self, instance: &str) -> Daemon {
         instance.clone_into(&mut self.shared.script.lock().unwrap().instance);
+        self
+    }
+
+    /// Says on `/health` that the app's machine is the outpost `machine_id`, which dials the
+    /// home named `home` and relays the app to it, as a machine that joined a home does.
+    pub fn relaying_to(self, machine_id: &str, home: &str) -> Daemon {
+        {
+            let mut script = self.shared.script.lock().unwrap();
+            machine_id.clone_into(&mut script.machine_id);
+            script.home = Some(home.into());
+        }
         self
     }
 
@@ -504,9 +519,13 @@ async fn connection(shared: Arc<Shared>, mut stream: TcpStream) {
     let Some(head) = read_head(&mut stream).await else {
         return;
     };
-    let (instance, refusing) = {
+    let (health, refusing) = {
         let script = shared.script.lock().unwrap();
-        (script.instance.clone(), script.refusing || script.stopped)
+        let mut health = json!({ "instance": script.instance, "machine_id": script.machine_id });
+        if let Some(home) = &script.home {
+            health["home"] = json!(home);
+        }
+        (health, script.refusing || script.stopped)
     };
     if head.starts_with(b"GET /health ") {
         if refusing {
@@ -518,7 +537,7 @@ async fn connection(shared: Arc<Shared>, mut stream: TcpStream) {
                 .await;
             return;
         }
-        let body = json!({ "instance": instance }).to_string();
+        let body = health.to_string();
         let response = format!(
             "HTTP/1.0 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
             body.len()

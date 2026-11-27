@@ -350,7 +350,7 @@ fn sublines(
                     &crate::sidebar::display_name(s, &facts.harnesses),
                 ),
                 role: super::chain::trigger(s, facts),
-                host: super::host::name(s, &facts.outposts),
+                host: super::host::name(s, &crate::machine::Machines::of(facts)),
                 usage: super::usage::badge(s),
                 usage_open: desk.header_pop.open.as_ref().is_some_and(|pop| {
                     pop.on(
@@ -1052,7 +1052,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 session.as_deref(),
                 cx.contents.get(&key),
                 (
-                    cx.outposts,
+                    crate::machine::Machines::of(cx.facts),
                     crate::review::setup::Servers {
                         sessions: &cx.facts.sessions,
                         settings: &cx.facts.settings,
@@ -1238,7 +1238,7 @@ fn slides(kind: &LeafKind) -> bool {
 fn unreachable_host(cx: &TileCx, pane: &DesktopPane) -> Option<String> {
     let session = cx.sessions.iter().find(|s| s.id == pane.session_id)?;
     crate::outpost::offline(session, cx.outposts)
-        .then(|| super::host::name(session, cx.outposts))
+        .then(|| super::host::outpost_of(session, cx.outposts))
         .flatten()
 }
 
@@ -1252,7 +1252,7 @@ fn reach_strip(cx: &TileCx, pane: &DesktopPane) -> (Option<String>, Option<Strin
     let unseen = crate::outpost::offline(session, cx.outposts)
         && cx.terminals.away(&pane.runtime_id) == Some(false);
     let screen_on = unseen
-        .then(|| super::host::name(session, cx.outposts))
+        .then(|| super::host::outpost_of(session, cx.outposts))
         .flatten();
     (notice, screen_on)
 }

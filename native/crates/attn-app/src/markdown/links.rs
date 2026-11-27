@@ -1,6 +1,6 @@
 //! Where a document's links go, and which of them the reader may follow: a fragment scrolls the
 //! document, a web or mail link opens in its handler, a local file opens with the system's
-//! opener when its kind is safe, and a file on an outpost opens in a tile when it is markdown.
+//! opener when its kind is safe, and a file on another machine opens in a tile when it is markdown.
 
 use std::path::Path;
 
@@ -75,9 +75,9 @@ pub(crate) struct Verdict {
     pub(crate) follows: bool,
 }
 
-/// How the reader treats `target` in a document on `outpost` (named `outpost_name`), or on this
+/// How the reader treats `target` in a document on the machine named `away`, or on this app's
 /// machine when `None`.
-pub(crate) fn verdict(target: Option<&Target>, outpost: Option<&str>) -> Verdict {
+pub(crate) fn verdict(target: Option<&Target>, away: Option<&str>) -> Verdict {
     let follows = |help: Option<String>| Verdict {
         help,
         follows: true,
@@ -86,7 +86,7 @@ pub(crate) fn verdict(target: Option<&Target>, outpost: Option<&str>) -> Verdict
         help,
         follows: false,
     };
-    match (target, outpost) {
+    match (target, away) {
         (None, _) => shown(None),
         (Some(Target::Fragment(_) | Target::External(_)), _) => follows(None),
         (Some(Target::Local(path)), None) if is_safe_local(path) => follows(Some(path.clone())),
@@ -100,13 +100,13 @@ pub(crate) fn verdict(target: Option<&Target>, outpost: Option<&str>) -> Verdict
     }
 }
 
-/// The document a link belongs to: its file, the session its tile was opened for, the outpost
-/// it is on, and the scroll view whose headings a fragment names.
+/// The document a link belongs to: its file, the session its tile was opened for, the machine
+/// it is on when that is not this app's, and the scroll view whose headings a fragment names.
 #[derive(Clone)]
 pub(crate) struct Document {
     pub(crate) path: String,
     pub(crate) session: Option<String>,
-    pub(crate) outpost: Option<Outpost>,
+    pub(crate) away: Option<Away>,
     pub(crate) view: String,
     pub(crate) opens_seed: Option<fn(&mut State, &str, &mut Tx)>,
     /// The seed whose files the document's bare file names name, as a seed's body names them.
@@ -117,10 +117,22 @@ pub(crate) struct Document {
     pub(crate) ids: crate::terminal::Known,
 }
 
-#[derive(Clone)]
-pub(crate) struct Outpost {
-    pub(crate) host: String,
+/// The machine a document is on when it is not this app's: the `host` the wire names it by,
+/// absent for the home's machine, and its name.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct Away {
+    pub(crate) host: Option<String>,
     pub(crate) name: String,
+}
+
+impl Away {
+    pub(crate) fn of(machines: &crate::machine::Machines, host: Option<&str>) -> Option<Away> {
+        let name = machines.away(host)?;
+        Some(Away {
+            host: host.filter(|h| !h.is_empty()).map(str::to_owned),
+            name,
+        })
+    }
 }
 
 impl Document {
@@ -154,7 +166,7 @@ impl Document {
         }
         verdict(
             resolve(&self.path, href).as_ref(),
-            self.outpost.as_ref().map(|o| o.name.as_str()),
+            self.away.as_ref().map(|o| o.name.as_str()),
         )
     }
 
@@ -243,8 +255,17 @@ pub(crate) fn follow(state: &mut State, document: &Document, href: &str, tx: &mu
                             .ok_or_else(|| "the daemon named no file".to_owned())
                     })
                     .and_then(|path| {
-                        tx.open_uri(&attn_term::links::file_url(&path))
-                            .map_err(|why| format!("{path}: {why}"))
+                        let machines = crate::machine::Machines::of(&state.facts);
+                        match machines.refuse_open(&path, None) {
+                            None => tx
+                                .open_uri(&attn_term::links::file_url(&path))
+                                .map_err(|why| format!("{path}: {why}")),
+                            Some(_) if is_markdown(&path) => {
+                                crate::opener::open_markdown(state, path, None, None, tx);
+                                Ok(())
+                            }
+                            Some(refusal) => Err(refusal),
+                        }
                     });
                 if let Err(why) = opened {
                     state
@@ -256,8 +277,7 @@ pub(crate) fn follow(state: &mut State, document: &Document, href: &str, tx: &mu
         );
     }
     let target = resolve(&document.path, href);
-    let outpost = document.outpost.as_ref();
-    match (target, outpost) {
+    match (target, document.away.as_ref()) {
         (Some(Target::Fragment(fragment)), _) => {
             let id = decoded(&fragment);
             tx.scroll_key_to(format!("{}/{id}", document.view), 0.0);
@@ -280,14 +300,14 @@ pub(crate) fn follow(state: &mut State, document: &Document, href: &str, tx: &mu
                     .notify(format!("Could not open {path}: {why}"), tx);
             }
         }
-        (Some(Target::Local(path)), Some(outpost)) => {
-            let Outpost { host, name } = outpost.clone();
+        (Some(Target::Local(path)), Some(away)) => {
+            let Away { host, name } = away.clone();
             let asked = path.clone();
             let session = document.session.clone();
             state.ask(
                 |id| OpenMarkdownMessage {
                     path: asked,
-                    host: Some(host),
+                    host,
                     session_id: session,
                     request_id: Some(id),
                     ..OpenMarkdownMessage::new()

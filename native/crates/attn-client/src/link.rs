@@ -29,8 +29,8 @@ use tokio_tungstenite::tungstenite::Message;
 use crate::frame::Frame;
 use crate::presence::Presence;
 use crate::{
-    CLIENT_KIND, Clock, Connection, HomeUnreachable, MigrationMarker, Performance, Pulse, Refusal,
-    Sight, Store, WallClock, setting,
+    AppMachine, CLIENT_KIND, Clock, Connection, HomeUnreachable, MigrationMarker, Performance,
+    Pulse, Refusal, Sight, Store, WallClock, setting,
 };
 
 const FIRST_RETRY: Duration = Duration::from_secs(1);
@@ -510,12 +510,16 @@ impl Task {
     }
 
     async fn session(&self) -> Ended {
-        if let Ok(daemon) = self.health_instance().await
-            && daemon != self.config.instance
-        {
-            return Ended::Refused(Refusal::InstanceMismatch {
-                app: self.config.instance.clone(),
-                daemon,
+        if let Ok(health) = self.health().await {
+            if health.instance != self.config.instance {
+                return Ended::Refused(Refusal::InstanceMismatch {
+                    app: self.config.instance.clone(),
+                    daemon: health.instance,
+                });
+            }
+            self.store.set_machine(AppMachine {
+                id: health.machine_id,
+                home: health.home,
             });
         }
         let url = format!("ws://{}/ws", self.config.daemon);
@@ -955,14 +959,9 @@ impl Task {
         }
     }
 
-    /// The instance the daemon on our port says it serves. An unreachable `/health` is not a
-    /// mismatch: the WebSocket connect that follows fails the same way and retries.
-    async fn health_instance(&self) -> Result<String, ()> {
-        #[derive(Deserialize)]
-        struct Health {
-            #[serde(default)]
-            instance: String,
-        }
+    /// What the daemon on our port says of itself. An unreachable `/health` is not a mismatch:
+    /// the WebSocket connect that follows fails the same way and retries.
+    async fn health(&self) -> Result<Health, ()> {
         let mut stream = TcpStream::connect(&self.config.daemon)
             .await
             .map_err(drop)?;
@@ -986,13 +985,21 @@ impl Task {
         if head.code != Some(200) {
             return Err(());
         }
-        let health: Health = serde_json::from_slice(&response[body..]).map_err(drop)?;
-        Ok(if health.instance.is_empty() {
-            "default".into()
-        } else {
-            health.instance
-        })
+        let mut health: Health = serde_json::from_slice(&response[body..]).map_err(drop)?;
+        if health.instance.is_empty() {
+            health.instance = "default".into();
+        }
+        Ok(health)
     }
+}
+
+#[derive(Deserialize)]
+struct Health {
+    #[serde(default)]
+    instance: String,
+    #[serde(default)]
+    machine_id: String,
+    home: Option<String>,
 }
 
 fn parse<T: serde::de::DeserializeOwned>(event: &str, text: &str) -> Option<T> {

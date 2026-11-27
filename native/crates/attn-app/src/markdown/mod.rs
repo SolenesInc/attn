@@ -35,7 +35,7 @@ pub use annotating::Readings;
 pub use drafts::Drafts;
 pub use images::Pictures;
 pub(crate) use images::{follow as follow_images, over as with_image_preview};
-pub(crate) use links::Document;
+pub(crate) use links::{Away, Document};
 
 /// How far a code block's Copy button sits in from the block's top right corner.
 const COPY_INSET: f32 = 8.0;
@@ -61,13 +61,13 @@ fn card_fit(area: Option<u32>, widest: f32) -> (f32, Option<f32>) {
 }
 
 /// The body of the document tile `tile`, opened for `session`, from what the daemon last sent
-/// for it. `outposts` names the outpost a document is on.
+/// for it. `machines` names the machine a document is on.
 pub(crate) fn body(
     (tile, held): (&str, bool),
     title: &str,
     session: Option<&str>,
     content: Option<&attn_client::TileContent>,
-    (outposts, servers): (&[attn_protocol::OutpostInfo], crate::review::setup::Servers),
+    (machines, servers): (crate::machine::Machines, crate::review::setup::Servers),
     (pictures, drafts, readings): (&Pictures, &Drafts, &Readings),
     t: &Tokens,
 ) -> El {
@@ -86,13 +86,11 @@ pub(crate) fn body(
     }
     let view = format!("tile.{tile}.document");
     let gutter = format!("{view}.gutter");
-    let outpost = (content.host.as_deref().filter(|h| !h.is_empty())).map(|host| links::Outpost {
-        host: host.to_owned(),
-        name: crate::desktop::outpost_name(host, outposts),
-    });
+    let host = content.host.as_deref().filter(|h| !h.is_empty());
+    let away = links::Away::of(&machines, host);
     let uri = drafts::Source::File {
         path: content.path.clone(),
-        host: outpost.as_ref().map(|o| o.host.clone()),
+        host: host.map(str::to_owned),
     }
     .uri();
     let mut marks = annotating::highlights(drafts.get(&uri), readings.tiles.get(tile), tile, t);
@@ -113,7 +111,7 @@ pub(crate) fn body(
         *revision,
         title,
         session,
-        outpost.as_ref().map(|o| o.name.clone()),
+        away.clone(),
         pictures.revision,
         (marks.clone(), kept.clone()),
         *t,
@@ -146,7 +144,7 @@ pub(crate) fn body(
     let document = links::Document {
         path: content.path.clone(),
         session: session.map(str::to_owned),
-        outpost: outpost.clone(),
+        away: away.clone(),
         view: view.clone(),
         opens_seed: None,
         seed: None,
@@ -154,7 +152,7 @@ pub(crate) fn body(
         ids: kept.ids.clone(),
     };
     let read_source = |source: &str, part: Option<usize>, marking: Marking| {
-        let pictures = pictures.of(outpost.as_ref().map(|o| o.host.as_str()));
+        let pictures = pictures.of(host);
         reader(
             source,
             links::Document {
@@ -186,11 +184,7 @@ pub(crate) fn body(
             (tile, &view, title, padding, held),
             (&content.content, bundle, *revision),
             readings,
-            (
-                &document,
-                &pictures.of(outpost.as_ref().map(|o| o.host.as_str())),
-                pictures.revision,
-            ),
+            (&document, &pictures.of(host), pictures.revision),
             (&read_part, {
                 let mut h = std::hash::DefaultHasher::new();
                 std::hash::Hash::hash(&(session, &version.3, version.4, &kept, &marks), &mut h);
@@ -255,7 +249,7 @@ pub(crate) fn still(
             links::Document {
                 path: message.path.clone(),
                 session: None,
-                outpost: None,
+                away: None,
                 view: view.clone(),
                 opens_seed: None,
                 seed: None,

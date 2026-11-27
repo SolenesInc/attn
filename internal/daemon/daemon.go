@@ -4195,6 +4195,9 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if routingPathError != "" {
 		health["routing_path_error"] = routingPathError
 	}
+	if d.relaysApps() {
+		health["home"] = d.relayedHomeName()
+	}
 
 	setNoStoreHeaders(w.Header())
 	w.Header().Set("Content-Type", "application/json")

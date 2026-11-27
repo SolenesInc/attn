@@ -408,6 +408,7 @@ impl Terminals {
     ) {
         self.follow_connection(facts, daemon);
         self.undrawn = true;
+        let machines = crate::machine::Machines::of(facts);
         let drawn: Vec<(String, Option<String>, bool, links::Place, bool)> = panes
             .iter()
             .filter(|pane| !pane.runtime_id.is_empty())
@@ -419,13 +420,14 @@ impl Terminals {
                     cwd: session
                         .map(|s| s.directory.clone())
                         .filter(|d| !d.is_empty()),
-                    outpost: session
+                    host: session
                         .and_then(|s| s.host.clone())
                         .filter(|h| !h.is_empty()),
+                    away: machines.away(session.and_then(|s| s.host.as_deref())),
                 };
                 let agent = (pane.kind == "agent").then(|| pane.session_id.clone());
                 let streams =
-                    crate::outpost::reach(place.outpost.as_deref(), &facts.outposts).streams();
+                    crate::outpost::reach(place.host.as_deref(), &facts.outposts).streams();
                 (pane.runtime_id.clone(), agent, recoverable, place, streams)
             })
             .collect();

@@ -42,8 +42,19 @@ fn opened(
     missing: &'static [&'static str],
     refusal: Option<&'static str>,
 ) -> World {
+    opened_on(|daemon| daemon, artifacts, references, missing, refusal)
+}
+
+/// As `opened`, over the daemon `on` makes of the garden's.
+fn opened_on(
+    on: impl FnOnce(attn_testkit::Daemon) -> attn_testkit::Daemon,
+    artifacts: Vec<SeedArtifact>,
+    references: Vec<SeedArtifactReference>,
+    missing: &'static [&'static str],
+    refusal: Option<&'static str>,
+) -> World {
     let held = seed("s-ship11", SEED);
-    let daemon = daemon(vec![held.clone()], Vec::new());
+    let daemon = on(daemon(vec![held.clone()], Vec::new()));
     daemon.on("seed_document_get", move |r: &Request| {
         message(SeedDocumentGetResultMessage {
             request_id: r["request_id"].as_str().unwrap().into(),
@@ -343,4 +354,63 @@ fn lists_linked_files_notebook_documents_and_pages_and_opens_each_where_it_belon
         vec!["https://github.com/acme/app/pull/736".to_owned()]
     );
     assert!(sleeps_once_its_timers_run(&mut world));
+}
+
+#[test]
+fn with_the_home_on_another_machine_files_move_in_and_out_from_this_one_and_none_opens_here() {
+    let mut world = opened_on(
+        |daemon| daemon.relaying_to("mac", "oma"),
+        vec![kept("report.pdf", 1234)],
+        vec![file("docs/legacy.md"), file("/srv/notes.md")],
+        &[],
+        None,
+    );
+
+    press(&mut world, "artifact.report.pdf", "open");
+    press(&mut world, "artifact.report.pdf", "reveal");
+    assert!(world.opened_links().is_empty());
+    assert!(world.revealed_paths().is_empty());
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::key("notice.text"))
+            .and_then(|n| n.name)
+            .as_deref(),
+        Some(
+            "/notebook/seeds/s-ship11/report.pdf is on oma; opening files on another machine isn't supported yet"
+        )
+    );
+
+    press(&mut world, "artifact.report.pdf", "move-out");
+    world.answer_file_dialog(Some("/Users/me/report.pdf"));
+    press(&mut world, "reference.0", "move-in");
+    world.answer_file_dialog(Some("/Users/me/legacy.md"));
+    press(&mut world, "reference.1", "copy-in");
+    assert_eq!(
+        transfers(&world),
+        vec![
+            json!({
+                "seed_id": "s-ship11",
+                "operation": "detach",
+                "filename": "report.pdf",
+                "destination_path": "/Users/me/report.pdf",
+                "host": "mac",
+            }),
+            json!({
+                "seed_id": "s-ship11",
+                "operation": "move",
+                "source_path": "/Users/me/legacy.md",
+                "legacy_reference": {"kind": "markdown_file", "path": "docs/legacy.md"},
+                "host": "mac",
+            }),
+            json!({
+                "seed_id": "s-ship11",
+                "operation": "copy",
+                "source_path": "/srv/notes.md",
+                "legacy_reference": {"kind": "markdown_file", "path": "/srv/notes.md"},
+            }),
+        ]
+    );
+    world.advance(std::time::Duration::from_secs(6));
+    assert!(world.runtime_is_at_rest());
 }

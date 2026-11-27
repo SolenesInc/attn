@@ -19,13 +19,12 @@ use attn_protocol::{
 use rune::{Chord, Key, KeyEvent, Platform, TextEdit, Tx};
 
 use crate::State;
+use crate::machine::Machines;
 use crate::picker::{
     Agents, Choice, Direction, Memory, Offer, Spawn, TERMINAL, Which, agent_key, agents, close,
     paths, remember, remembered, spawn_then, worktree_name,
 };
-pub(crate) use address::{
-    Address, Machine, address_of, machine_for, machine_prefix, parse, this_mac,
-};
+pub(crate) use address::{Address, Machine, address_of, home, machine_for, machine_prefix, parse};
 pub(crate) use view::{age, age_column, framed, machine_tag, quiet};
 
 const OUTPOSTS_ENABLED: &str = "outposts_enabled";
@@ -260,16 +259,22 @@ pub(crate) fn outpost<'a>(outposts: &'a [OutpostInfo], host: &str) -> Option<&'a
     outposts.iter().find(|o| o.id == host)
 }
 
-pub(crate) fn machine_name(outposts: &[OutpostInfo], host: Option<&str>) -> String {
-    match host {
-        None => this_mac().name,
-        Some(host) => outpost(outposts, host).map_or_else(|| host.to_owned(), |o| o.name.clone()),
+/// The outposts a launcher offers, and the app's machine its home is named from.
+pub(crate) fn offered<'a>(state: &'a State, outposts: &'a [OutpostInfo]) -> Machines<'a> {
+    Machines {
+        outposts,
+        app: &state.facts.machine,
     }
 }
 
-pub(crate) fn machine_of(outposts: &[OutpostInfo], host: Option<&str>) -> Machine {
+pub(crate) fn machine_name(machines: &Machines, host: Option<&str>) -> String {
+    machines.name(host)
+}
+
+pub(crate) fn machine_of(machines: &Machines, host: Option<&str>) -> Machine {
+    let outposts = machines.outposts;
     match host {
-        None => this_mac(),
+        None => home(machines),
         Some(host) => outpost(outposts, host).map_or_else(
             || Machine {
                 host: Some(host.to_owned()),
@@ -365,7 +370,7 @@ impl Launcher {
     }
 
     pub(crate) fn address(&self, state: &State) -> Address {
-        parse(&self.query.text, &outposts(state))
+        parse(&self.query.text, &offered(state, &outposts(state)))
     }
 
     /// The home folder of `host`, or of this machine: empty until it said.
@@ -489,7 +494,10 @@ impl Launcher {
                     .filter(|id| *id != TERMINAL && !installed.contains(*id))
                     .cloned()
                     .collect();
-                (machine_name(&outposts(state), target.as_deref()), lacking)
+                (
+                    machine_name(&offered(state, &outposts(state)), target.as_deref()),
+                    lacking,
+                )
             });
         Offer {
             agents,
@@ -501,7 +509,7 @@ impl Launcher {
     /// Why a start of `agent` on `host` cannot go now, if it cannot.
     fn refusal(&self, state: &State, host: Option<&str>, agent: &str) -> Option<Problem> {
         let outposts = outposts(state);
-        let name = machine_name(&outposts, host);
+        let name = machine_name(&offered(state, &outposts), host);
         if let Some(host) = host
             && !reachable(&outposts, Some(host))
         {
@@ -586,7 +594,10 @@ impl Launcher {
                     rows.extend(elsewhere.into_iter().map(|(_, h)| Row {
                         kind: Kind::Elsewhere,
                         path: dir.clone(),
-                        name: format!("{dir}/ is on {}", machine_name(&outposts, h.as_deref())),
+                        name: format!(
+                            "{dir}/ is on {}",
+                            machine_name(&offered(state, &outposts), h.as_deref())
+                        ),
                         host: h,
                         repo_root: None,
                         last_seen: None,
@@ -670,7 +681,11 @@ impl Launcher {
                             .filter(|r| {
                                 let shown = match host_of(r) {
                                     Some(h) => {
-                                        format!("{}:{}", machine_name(&outposts, Some(&h)), r.path)
+                                        format!(
+                                            "{}:{}",
+                                            machine_name(&offered(state, &outposts), Some(&h)),
+                                            r.path
+                                        )
                                     }
                                     None => r.path.clone(),
                                 };
@@ -1639,7 +1654,7 @@ pub(crate) fn completion(launcher: &Launcher, state: &State, row: &Row) -> Strin
         Kind::Recent | Kind::Folder => launcher.display(state, &row.path, row.host.as_deref()),
     };
     address_of(
-        &machine_of(&outposts(state), row.host.as_deref()),
+        &machine_of(&offered(state, &outposts(state)), row.host.as_deref()),
         &format!("{}/", path.trim_end_matches('/')),
     )
 }
@@ -2072,7 +2087,7 @@ fn begin(
 /// A start that did not get through: the launcher stays as it was, saying why. A start the
 /// user left to finish in the background says why in a notice.
 fn failed(state: &mut State, start: &Start, error: String, tx: &mut Tx) {
-    let machine = machine_name(&outposts(state), start.host.as_deref());
+    let machine = machine_name(&offered(state, &outposts(state)), start.host.as_deref());
     match this(state, start.which, start.opening) {
         Some(launcher) => {
             launcher.busy = false;

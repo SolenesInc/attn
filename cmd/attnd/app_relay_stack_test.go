@@ -206,3 +206,51 @@ func TestAnAppWhoseHomeIsUnreachableIsToldWhyAndConnectsWhenItReturns(t *testing
 	}
 	t.Log("(5) the laptop told its app the home was unreachable and why, closed it when the home returned, and relayed the next connection")
 }
+
+func TestAnAppOnAMachineThatDialsItsHomeMovesSeedFilesInAndOutOfItsOwnDisk(t *testing.T) {
+	w := newReverseWorld(t)
+	row := w.join()
+	if health := healthOf(t, w.laptop); health["home"] == nil || health["home"] == "" || health["machine_id"] != row.ID {
+		t.Fatalf("/health on the laptop: %v; want the name of the home it dials and its machine id %s", health, row.ID)
+	}
+	if health := healthOf(t, w.home); health["home"] != nil {
+		t.Fatalf("/health on the home names a home elsewhere: %v", health["home"])
+	}
+	relayed := w.laptop.TrustedApp()
+	seed := plant(t, w.home, "Laptop files", "-m", "Files the laptop's app brings in and takes out")
+	transfer := func(msg protocol.SeedArtifactTransferMessage) protocol.SeedArtifactTransferResultMessage {
+		t.Helper()
+		id := uuid.NewString()
+		msg.Cmd, msg.RequestID, msg.SeedID, msg.Host = protocol.CmdSeedArtifactTransfer, &id, seed.ID, &row.ID
+		answer := testworld.Request(relayed, msg, protocol.EventSeedArtifactTransferResult, func(r protocol.SeedArtifactTransferResultMessage) bool { return r.RequestID == id })
+		if !answer.Success {
+			t.Fatalf("%s from the relayed app on the laptop's disk: %s", msg.Operation, protocol.Deref(answer.Error))
+		}
+		return answer
+	}
+	source := filepath.Join(w.laptop.Dir, "from-laptop.md")
+	writeFileAt(t, source, "written on the laptop")
+	copied := transfer(protocol.SeedArtifactTransferMessage{Operation: "copy", SourcePath: &source})
+	if into := copied.Result.DestinationPath; !strings.HasPrefix(into, w.laptop.Dir+string(filepath.Separator)) {
+		t.Fatalf("the copy ran into %s, want the laptop's copy of the Notebook under %s", into, w.laptop.Dir)
+	}
+	kept := notebookPath(w.home, "seeds", seed.ID, "from-laptop.md")
+	if data, err := os.ReadFile(kept); err != nil || string(data) != "written on the laptop" {
+		t.Fatalf("the home's seed folder after the copy returned: %q, %v", data, err)
+	}
+	out := filepath.Join(w.laptop.Dir, "out", "from-laptop.md")
+	if err := os.MkdirAll(filepath.Dir(out), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	detached := transfer(protocol.SeedArtifactTransferMessage{Operation: "detach", Filename: protocol.Ptr("from-laptop.md"), DestinationPath: &out})
+	if from := detached.Result.SourcePath; !strings.HasPrefix(from, w.laptop.Dir+string(filepath.Separator)) {
+		t.Fatalf("the detach ran from %s, want the laptop's copy of the Notebook under %s", from, w.laptop.Dir)
+	}
+	if data, err := os.ReadFile(out); err != nil || string(data) != "written on the laptop" {
+		t.Fatalf("the laptop's file after the detach returned: %q, %v", data, err)
+	}
+	if _, err := os.Stat(kept); !os.IsNotExist(err) {
+		t.Fatalf("the home still keeps %s after the detach returned: %v", kept, err)
+	}
+	t.Logf("copy read %s on the laptop into %s at the home; detach wrote %s on the laptop and left the home's seed without it", source, kept, out)
+}

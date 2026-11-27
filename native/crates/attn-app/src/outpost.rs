@@ -53,7 +53,7 @@ pub(crate) fn offline(session: &Session, outposts: &[OutpostInfo]) -> bool {
 
 /// What a remote session's tile says about its machine while it is not plainly reachable.
 pub(crate) fn notice(session: &Session, outposts: &[OutpostInfo]) -> Option<String> {
-    let name = crate::desktop::host::name(session, outposts)?;
+    let name = crate::desktop::host::outpost_of(session, outposts)?;
     match of(session, outposts) {
         Reach::Unreachable => Some(format!("{name} unreachable · typing is not sent")),
         Reach::Connecting => Some(format!("Connecting to {name} · typing is not sent")),
@@ -69,7 +69,7 @@ pub(crate) fn unreachable(state: &State, session: &str) -> Option<String> {
     if !offline(session, &state.facts.outposts) {
         return None;
     }
-    let name = crate::desktop::host::name(session, &state.facts.outposts)?;
+    let name = crate::desktop::host::outpost_of(session, &state.facts.outposts)?;
     Some(format!("{name} is unreachable; this needs it now"))
 }
 

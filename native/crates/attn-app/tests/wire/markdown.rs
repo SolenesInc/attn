@@ -29,7 +29,11 @@ fn start_with(tree: serde_json::Value) -> World {
 }
 
 fn start_with_state(tree: serde_json::Value, extra: InitialStateMessage) -> World {
-    let daemon = Daemon::scripted().state(InitialStateMessage {
+    start_from(Daemon::scripted(), tree, extra)
+}
+
+fn start_from(daemon: Daemon, tree: serde_json::Value, extra: InitialStateMessage) -> World {
+    let daemon = daemon.state(InitialStateMessage {
         selected_profile_id: Some("work".into()),
         profiles: Some(vec![Profile {
             id: "work".into(),
@@ -397,6 +401,53 @@ fn a_link_in_a_document_on_an_outpost_opens_its_markdown_there_and_says_why_it_c
     assert_eq!(
         notice(&world).as_deref(),
         Some("Could not open /far/next.md from far: far is unreachable; this needs it now")
+    );
+    assert!(world.opened_links().is_empty());
+    rest(&mut world);
+}
+
+#[test]
+fn a_link_in_a_document_of_a_home_on_another_machine_opens_its_markdown_there_not_the_file_here() {
+    let here = tempfile::tempdir().unwrap();
+    let next = here.path().join("next.md");
+    std::fs::write(&next, "# on this machine").unwrap();
+    let next = next.to_str().unwrap().to_owned();
+    let mut world = start_from(
+        Daemon::scripted().relaying_to("mac", "oma"),
+        row(vec![pane("a"), document_tile("m", "/notes.md")]),
+        InitialStateMessage {
+            outposts: Some(vec![OutpostInfo {
+                id: "mac".into(),
+                name: "mac".into(),
+                destination: "mac".into(),
+                dials_home: Some(true),
+                ..OutpostInfo::default()
+            }]),
+            ..InitialStateMessage::new()
+        },
+    );
+    world.daemon.on("open_markdown", |r| {
+        serde_json::to_value(OpenMarkdownResultMessage {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            path: r["path"].as_str().unwrap_or_default().into(),
+            success: true,
+            ..OpenMarkdownResultMessage::new()
+        })
+        .unwrap()
+    });
+    world.daemon.emit(DesktopTileContentMessage {
+        path: "/notes.md".into(),
+        ..content(&format!("[next]({next})"))
+    });
+    world.settle();
+
+    world.gesture(|app| app.click(Target::key(next.as_str())));
+    let sent = world.daemon.sent_of("open_markdown");
+    assert_eq!(
+        sent.iter()
+            .map(|s| (s["path"].clone(), s["host"].clone()))
+            .collect::<Vec<_>>(),
+        [(json!(next), serde_json::Value::Null)]
     );
     assert!(world.opened_links().is_empty());
     rest(&mut world);

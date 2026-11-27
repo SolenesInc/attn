@@ -299,22 +299,28 @@ impl Sheet<'_> {
             .label(sentence)
     }
 
+    /// The home's machine, which holds a seed's words, when it is not this app's.
+    fn home_away(&self) -> Option<crate::markdown::Away> {
+        crate::markdown::Away::of(&crate::machine::Machines::of(self.facts), None)
+    }
+
     /// A log entry's words, read as markdown as the plan is.
     fn log_body(&self, id: &str, body: &str) -> El {
         let view = format!("{}/log.{id}", self.view);
         let kept = self.readings.kept(&view);
         let t = *self.t;
         let body = line_breaks(body);
+        let away = self.home_away();
         memo(
             self.key(&format!("log.{id}.body")),
-            (body.clone(), view.clone(), kept.clone(), t),
+            (body.clone(), view.clone(), kept.clone(), away.clone(), t),
             move || {
                 crate::markdown::reader(
                     &body,
                     crate::markdown::Document {
                         path: String::new(),
                         session: None,
-                        outpost: None,
+                        away: away.clone(),
                         view,
                         opens_seed: None,
                         seed: None,
@@ -365,6 +371,7 @@ impl Sheet<'_> {
         let pictured = self.pictures.revision;
         let finding = crate::markdown::find::finding(self.readings, &view);
         let found = crate::markdown::find::highlights(finding, &body, &view);
+        let away = self.home_away();
         let read = {
             let (body, view, kept, seed) =
                 (body.clone(), view.clone(), kept.clone(), here.id.clone());
@@ -374,7 +381,7 @@ impl Sheet<'_> {
                     crate::markdown::Document {
                         path: String::new(),
                         session: None,
-                        outpost: None,
+                        away: away.clone(),
                         view,
                         opens_seed: None,
                         seed: Some(seed.clone()),

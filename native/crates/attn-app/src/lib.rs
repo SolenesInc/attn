@@ -34,6 +34,7 @@ pub mod launch;
 mod launch_desktop;
 mod launcher;
 mod ledger;
+mod machine;
 mod markdown;
 mod migration_failure;
 mod notebook;

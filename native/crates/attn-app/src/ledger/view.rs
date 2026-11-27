@@ -408,11 +408,8 @@ fn meta(state: &State, r: &Row<'_>) -> Vec<(String, bool)> {
         meta.push(("priority".into(), false));
     }
     meta.push((entry.agent.clone(), false));
-    if let Some(host) = entry.host.as_deref().filter(|h| !h.is_empty()) {
-        meta.push((
-            crate::desktop::outpost_name(host, &state.facts.outposts),
-            false,
-        ));
+    if let Some(machine) = crate::machine::Machines::of(&state.facts).away(entry.host.as_deref()) {
+        meta.push((machine, false));
     }
     let profile = profile_text(entry);
     if !profile.is_empty() {
@@ -517,8 +514,8 @@ fn inspector(state: &State, selected: Option<&Row<'_>>, t: &Tokens) -> El {
         kicker.push("hidden".into());
     }
     kicker.push(entry.agent.clone());
-    if let Some(host) = entry.host.as_deref().filter(|h| !h.is_empty()) {
-        kicker.push(crate::desktop::outpost_name(host, &state.facts.outposts));
+    if let Some(machine) = crate::machine::Machines::of(&state.facts).away(entry.host.as_deref()) {
+        kicker.push(machine);
     }
     let profile = profile_text(entry);
     let at_ms = crate::sidebar::queue::epoch_ms(query::instant(entry)).unwrap_or_default();

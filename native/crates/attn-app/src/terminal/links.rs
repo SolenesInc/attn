@@ -18,7 +18,9 @@ pub(crate) fn accelerator(mods: Mods) -> bool {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct Place {
     pub cwd: Option<String>,
-    pub outpost: Option<String>,
+    pub host: Option<String>,
+    /// The machine the terminal runs on, when it is not this app's.
+    pub away: Option<String>,
 }
 
 /// Where the pointer rests, the cell under it as a screen row and column, and the link over
@@ -102,8 +104,8 @@ impl Terminals {
     }
 
     /// A ⌘- or Ctrl-click at `at` in terminal `id` ended: the link under it opens, except a
-    /// markdown file, which comes back for the app to show. A file on an outpost stays shut,
-    /// and the refusal is what to tell the person.
+    /// markdown file, which comes back for the app to show. A file on another machine stays
+    /// shut, and the refusal is what to tell the person.
     pub(crate) fn open_link_at(
         &mut self,
         id: &str,
@@ -113,10 +115,10 @@ impl Terminals {
         let Some(target) = self.link_at(id, at) else {
             return Ok(None);
         };
-        let outpost = self.panes.get(id).and_then(|t| t.place.outpost.as_deref());
-        match (target.open(), outpost) {
-            (Open::Path(path) | Open::Markdown(path), Some(host)) => Err(format!(
-                "{path} is on {host}; opening files on an outpost isn't supported yet"
+        let away = self.panes.get(id).and_then(|t| t.place.away.as_deref());
+        match (target.open(), away) {
+            (Open::Path(path) | Open::Markdown(path), Some(machine)) => Err(format!(
+                "{path} is on {machine}; opening files on another machine isn't supported yet"
             )),
             (Open::Markdown(path), None) => Ok(Some(path)),
             (opening, _) => {
@@ -229,7 +231,7 @@ fn find(term: &mut Term, (row, col): (u32, u16), home: Option<&str>) -> Option<F
     if let Some(link) = links::hyperlink_at(&line, index).or_else(|| links::url_at(&line, index)) {
         return Some(found(link));
     }
-    if term.place.outpost.is_some() {
+    if term.place.away.is_some() {
         return None;
     }
     let fragment = links::fragment_at(&line, index)?;

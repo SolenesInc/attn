@@ -408,6 +408,13 @@ func (d *Daemon) carrySeedArtifact(ctx context.Context, msg *protocol.SeedArtifa
 	if remote && msg.SourceSessionID != nil && d.sessionHost(*msg.SourceSessionID) != origin.Host {
 		return nil, fmt.Errorf("session %s does not run on %s", *msg.SourceSessionID, origin.Name)
 	}
+	if host := protocol.Deref(msg.Host); !remote && host != "" && host != d.store.MachineID() {
+		conn, name, err := d.outpostConn(host)
+		if err != nil {
+			return nil, err
+		}
+		origin, remote = Origin{Host: host, Name: name, bridge: conn}, true
+	}
 	here := protocol.SeedArtifactTransferHereMessage{Cmd: protocol.CmdSeedArtifactTransferHere, Transfer: *msg, HeldHash: heldHash}
 	if remote {
 		folder, _, err := d.seedNotebookFolder(seedID)

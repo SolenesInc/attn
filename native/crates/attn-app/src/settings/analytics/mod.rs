@@ -541,6 +541,9 @@ fn open_seed(state: &mut State, seed: &str, tx: &mut Tx) {
 }
 
 fn open_transcript(state: &mut State, path: &str, tx: &mut Tx) {
+    if let Some(refusal) = crate::machine::Machines::of(&state.facts).refuse_open(path, None) {
+        return fail(state, refusal);
+    }
     if let Err(why) = tx.open_uri(&attn_term::links::file_url(path)) {
         fail(state, format!("Could not open {path}: {why}"));
     }
