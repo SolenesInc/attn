@@ -15,6 +15,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --jq) jq_filter="$2"; shift 2 ;;
     --event) event="$2"; shift 2 ;;
+    --status) status="$2"; shift 2 ;;
     --workflow) workflow="$2"; shift 2 ;;
     view) run="$2"; shift 2 ;;
     */actions/runs/*/attempts/*/jobs\?*)
@@ -27,8 +28,17 @@ while [ "$#" -gt 0 ]; do
 done
 if [ -n "${run:-}" ]; then
   jq -r "$jq_filter" "$FAKE_RUNS/$run.json"
-elif [ -f "$FAKE_RUNS/$workflow-${event:-all}.json" ]; then
-  jq -r "$jq_filter" "$FAKE_RUNS/$workflow-${event:-all}.json"
+else
+  listing="$FAKE_RUNS/$workflow-${event:-all}.json"
+  [ -f "$listing" ] || listing="$FAKE_RUNS/$workflow-all.json"
+  [ -n "${status:-}" ] && [ -f "$FAKE_RUNS/$workflow-${event:-all}-$status.json" ] &&
+    listing="$FAKE_RUNS/$workflow-${event:-all}-$status.json"
+  if [ -f "$listing" ]; then cat "$listing"; else echo '[]'; fi |
+    jq --arg event "${event:-}" --arg status "${status:-}" '
+      map(.event //= $event | .status //= "completed"
+        | select($event == "" or .event == $event)
+        | select($status == "" or .status == $status))' |
+    jq -r "${jq_filter:-.}"
 fi
 EOF
 chmod +x "$work/bin/gh"
@@ -92,6 +102,29 @@ fixture red-macos-push-beside-green-linux \
   21 '{"attempt":1,"conclusion":"success","jobs":[]}' \
   22 '{"attempt":1,"conclusion":"failure","jobs":[{"conclusion":"failure"}]}'
 expect red-macos-push-beside-green-linux 0 "22 1
+window 2026-11-23T22:00Z"
+
+fixture failures-a-status-filter-omits \
+  ci-macos.yml-push '[
+    {"databaseId":43,"status":"in_progress","attempt":1,"conclusion":""},
+    {"databaseId":42,"status":"completed","attempt":1,"conclusion":"failure"},
+    {"databaseId":41,"status":"completed","attempt":1,"conclusion":"success"}
+  ]' \
+  ci-macos.yml-push-completed '[{"databaseId":41,"status":"completed","attempt":1,"conclusion":"success"}]' \
+  ci.yml-all '[
+    {"databaseId":53,"event":"schedule","status":"queued","attempt":1,"conclusion":""},
+    {"databaseId":52,"event":"push","status":"completed","attempt":1,"conclusion":"success"},
+    {"databaseId":51,"event":"workflow_dispatch","status":"completed","attempt":1,"conclusion":"failure"},
+    {"databaseId":50,"event":"schedule","status":"completed","attempt":1,"conclusion":"success"}
+  ]' \
+  ci.yml-all-completed '[
+    {"databaseId":52,"event":"push","status":"completed","attempt":1,"conclusion":"success"},
+    {"databaseId":50,"event":"schedule","status":"completed","attempt":1,"conclusion":"success"}
+  ]' \
+  42 '{"attempt":1,"conclusion":"failure","jobs":[{"conclusion":"failure"}]}' \
+  51 '{"attempt":1,"conclusion":"failure","jobs":[{"conclusion":"failure"}]}'
+expect failures-a-status-filter-omits 0 "51 1
+42 1
 window 2026-11-23T22:00Z"
 
 fixture red-nightly-behind-green-pushes \

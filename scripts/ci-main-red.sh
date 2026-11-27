@@ -2,26 +2,31 @@
 set -euo pipefail
 
 run_limit=20
+# Receipt 2026-11-27: at most 4 runs of one workflow and event were in flight at once over main's last 1000 runs of ci.yml and of ci-macos.yml.
+listing_limit=50
 sheriff_takeover_minutes=30
 found_red=""
 
 report_failures() {
   local workflow="$1" kind="$2" runs run attempt conclusion failed_jobs
-  local fields=databaseId,attempt,conclusion
+  local fields=databaseId,attempt,status,conclusion events event listing
   local row='[.databaseId, .attempt, .conclusion] | @tsv'
   local current="" passed_after=""
   if [ "$kind" = push ]; then
-    runs="$(
-      gh run list --workflow "$workflow" --branch main --event push --status completed \
-        --limit "$run_limit" --json "$fields" --jq ".[] | $row"
-    )"
+    events=(push)
   else
-    runs="$(
-      gh run list --workflow "$workflow" --branch main --status completed \
-        --limit 100 --json "$fields,event" \
-        --jq "[.[] | select(.event | IN(\"schedule\", \"workflow_dispatch\"))][:$run_limit][] | $row"
-    )"
+    events=(schedule workflow_dispatch)
   fi
+  listing="$(
+    for event in "${events[@]}"; do
+      gh run list --workflow "$workflow" --branch main --event "$event" \
+        --limit "$listing_limit" --json "$fields" || exit
+    done
+  )"
+  runs="$(
+    jq -rs "[add[] | select(.status == \"completed\")] | sort_by(-.databaseId)[:$run_limit][] | $row" \
+      <<<"$listing"
+  )"
   [ -n "$runs" ] || return 0
   while IFS=$'\t' read -r run attempt conclusion; do
     case "$conclusion" in
