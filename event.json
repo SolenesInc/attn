@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Fleet update can accept a stale run after restart",
+  "at": "2026-11-27T06:38:12.048Z",
+  "detail": "The first fleet handoff after restart can return an open run ID before reconciliation and start no outpost work. Reconcile stale runs before admitting the handoff, preserving legitimate resumed work. Already in the implementation follow-up.\nIndependently source-confirmed at 309da596f. See the rolling review s-wbc0br for evidence.\n"
+}
