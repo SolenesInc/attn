@@ -5,8 +5,9 @@ use attn::go::json;
 use attn::go::quote::quote;
 use attn_protocol::{HomeMove, HomeMoveMessage, HomeMoveRollbackMessage, HomeMoveStatusMessage};
 use serde::Serialize;
+use std::fmt::Write;
 
-const HELP: &str = r#"usage: attn home <command>
+const HELP: &str = r"usage: attn home <command>
 
 The home is the machine whose daemon owns the sessions, the Garden and the
 settings. A move gives that role to a connected outpost and makes this machine
@@ -31,7 +32,7 @@ commands:
         as they were before it, once the other machine bridges again. On the
         new home, or once the old home has bridged to the new home, rollback
         refuses: move the home back instead.
-"#;
+";
 
 pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     let Some(verb) = args.first().map(String::as_str) else {
@@ -152,26 +153,26 @@ fn describe(answer: &HomeMove) -> String {
     let mut out = String::new();
     let from = answer.from.as_deref().unwrap_or("");
     let to = answer.to.as_deref().unwrap_or("");
-    match answer.id.as_deref() {
-        Some(id) => out.push_str(&format!("move {id} from {from} to {to}: {}\n", answer.step)),
-        None if answer.step == "none" => out.push_str("no move on this machine\n"),
-        None => out.push_str(&format!("move from {from} to {to}: {}\n", answer.step)),
-    }
+    let _ = match answer.id.as_deref() {
+        Some(id) => writeln!(out, "move {id} from {from} to {to}: {}", answer.step),
+        None if answer.step == "none" => writeln!(out, "no move on this machine"),
+        None => writeln!(out, "move from {from} to {to}: {}", answer.step),
+    };
     for check in &answer.checks {
         let mark = if check.ok { "ok" } else { "refused" };
-        match check.detail.as_deref() {
-            Some(detail) => out.push_str(&format!("  {mark:<8}{}: {detail}\n", check.name)),
-            None => out.push_str(&format!("  {mark:<8}{}\n", check.name)),
-        }
+        let _ = match check.detail.as_deref() {
+            Some(detail) => writeln!(out, "  {mark:<8}{}: {detail}", check.name),
+            None => writeln!(out, "  {mark:<8}{}", check.name),
+        };
     }
     for remap in &answer.remaps {
-        out.push_str(&format!("  path    {} -> {}\n", remap.from, remap.to));
+        let _ = writeln!(out, "  path    {} -> {}", remap.from, remap.to);
     }
     if answer.sleeps == Some(true) {
-        out.push_str(&format!("  note    while {to} sleeps, the home is down\n"));
+        let _ = writeln!(out, "  note    while {to} sleeps, the home is down");
     }
     if let Some(error) = answer.error.as_deref() {
-        out.push_str(&format!("error: {error}\n"));
+        let _ = writeln!(out, "error: {error}");
     }
     out
 }
