@@ -52,12 +52,32 @@ function titleFor(events) {
   $("description").textContent = descriptions[kind](id) ?? "";
 }
 
-function draw(drawn, scroll) {
+function draw(render, scroll) {
+  const typing = focusedFragment();
+  files.destroyFragments();
+  const drawn = render();
   rows = drawn.rows;
   documentRoot.replaceChildren(...drawn.sections);
   documentRoot.setAttribute("aria-busy", "false");
   marks();
+  if (typing) focusFragment(typing);
   window.scrollTo(0, scroll);
+}
+
+function focusedFragment() {
+  const at = rows.findIndex((row) => row.view.contentDOM === document.activeElement);
+  if (at < 0) return null;
+  const { path, view } = rows[at];
+  const { anchor, head } = view.state.selection.main;
+  return { path, place: rows.slice(0, at).filter((row) => row.path === path).length, anchor, head };
+}
+
+function focusFragment({ path, place, anchor, head }) {
+  const view = rows.filter((row) => row.path === path)[place]?.view;
+  if (!view) return;
+  const length = view.state.doc.length;
+  view.focus();
+  view.dispatch({ selection: { anchor: Math.min(anchor, length), head: Math.min(head, length) } });
 }
 
 function showEmpty(...content) {
@@ -72,10 +92,9 @@ async function loadFile(path) {
   if (!sources[path]) throw Object.assign(new Error(`${path} is not a registered source`), { stale });
   const scroll = window.scrollY;
   files.take({ [path]: sources[path] });
-  files.destroyFragments();
   showStale(stale);
   $("base-commit").textContent = "";
-  draw(renderFile(path, { files, navigation }), scroll);
+  draw(() => renderFile(path, { files, navigation }), scroll);
   titleFor();
 }
 
@@ -85,9 +104,8 @@ async function load() {
   showStale(page.stale);
   const scroll = window.scrollY;
   files.take(page.sources);
-  files.destroyFragments();
   $("base-commit").textContent = page.base_commit ? page.base_commit.slice(0, 10) : "";
-  draw(renderPage(page, { files, flips, flip, navigation, expanded: marks, base: diff ? page.base ?? {} : undefined }), scroll);
+  draw(() => renderPage(page, { files, flips, flip, navigation, expanded: marks, base: diff ? page.base ?? {} : undefined }), scroll);
   titleFor(page.events.length);
 }
 

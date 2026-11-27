@@ -103,7 +103,7 @@ function textRow(node, trace, into, scope, depth, untaken) {
     replaceText(view, text);
     if (text !== base) unfold();
   });
-  scope.rows.push({ path, node, unsaved, twice, conflict, disk });
+  scope.rows.push({ path, node, view, unsaved, twice, conflict, disk });
   for (const { binding, childTrace, producer } of nested) {
     const block = nestedBlock(binding.name, producer ? `rendered by ${producer.event}` : `fills ${short(path)}`, into, depth);
     if (producer) walk(producer.definition.body, producer.trace, block, eventScope(scope, producer), depth + 1, untaken);
