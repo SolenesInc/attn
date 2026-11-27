@@ -489,6 +489,23 @@ func newCrashingPair(t *testing.T, homeCrash, targetCrash string) *movingPair {
 	return m
 }
 
+// restartAfterRollback starts both machines after the old home rolled back a move whose target crashed while it
+// applied, and lets the target learn of the rollback from its own dial to the old home. An ssh dial starts the
+// dialed machine's daemon, so both routes stay failed while the test starts each daemon itself.
+func (m *movingPair) restartAfterRollback() {
+	m.t.Helper()
+	m.Home.AwaitStopped()
+	m.SSH.Fail(m.Destination, "ssh: connect to host outpost port 22: No route to host")
+	m.SSH.Fail("oldhome", "ssh: connect to host oldhome port 22: No route to host")
+	m.Outpost.Start()
+	m.Home.Start()
+	m.SSH.Restore("oldhome")
+	redial(m.Outpost)
+	m.Outpost.AwaitStopped()
+	m.Outpost.Start()
+	m.SSH.Restore(m.Destination)
+}
+
 // redial fires the retry of the dial that s's daemon made while the other machine refused it, holding the home itself.
 func redial(s *testworld.Stack) {
 	s.T.Helper()
@@ -618,11 +635,7 @@ func TestHomeMoveSurvivesAKillAtEachStep(t *testing.T) {
 		if back := homeMoveJSON(t, m.Home, "rollback"); back.Step != "rolling-back" {
 			t.Fatalf("rollback: %s", describeMove(back))
 		}
-		m.Home.AwaitStopped()
-		m.Outpost.Start()
-		m.Home.Start()
-		m.Outpost.AwaitStopped()
-		m.Outpost.Start()
+		m.restartAfterRollback()
 		defer m.Home.FireTimers(bridge.RetryTimer)()
 		m.requireRoles(t, true)
 		app := m.Home.App()
@@ -654,16 +667,7 @@ func TestHomeMoveSurvivesAKillAtEachStep(t *testing.T) {
 		if back := ask("rollback", protocol.HomeMoveRollbackMessage{Cmd: protocol.CmdHomeMoveRollback, RequestID: protocol.Ptr("rollback")}); back.Step != "rolling-back" {
 			t.Fatalf("rollback from the app: %s", describeMove(back))
 		}
-		m.Home.AwaitStopped()
-		m.SSH.Fail(m.Destination, "ssh: connect to host outpost port 22: No route to host")
-		m.SSH.Fail("oldhome", "ssh: connect to host oldhome port 22: No route to host")
-		m.Outpost.Start()
-		m.Home.Start()
-		m.SSH.Restore("oldhome")
-		redial(m.Outpost)
-		m.Outpost.AwaitStopped()
-		m.Outpost.Start()
-		m.SSH.Restore(m.Destination)
+		m.restartAfterRollback()
 		defer m.Home.FireTimers(bridge.RetryTimer)()
 		m.requireRoles(t, true)
 		app = m.Home.App()
