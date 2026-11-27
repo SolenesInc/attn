@@ -1,0 +1,1 @@
+The hint-mode action now reads "Label ids, links and commands on screen" in the palette and the cheat sheet. Holding the chord labels an ask's links, files and commands, not only ids. Its id, `terminal.labelIds`, is unchanged, so saved keymaps keep working. The labels test now also covers a command inside a list item.
