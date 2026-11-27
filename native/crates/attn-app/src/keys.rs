@@ -46,6 +46,9 @@ fn heard_key(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> 
     if matches!(ev.key, Key::Modifier { .. }) {
         return false;
     }
+    if crate::profile_switcher::cancel_from_tile(state, ev) {
+        return true;
+    }
     if matches!(
         state.facts.connection,
         attn_client::Connection::HomeUnreachable(_)

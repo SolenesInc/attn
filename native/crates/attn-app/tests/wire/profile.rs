@@ -6,7 +6,7 @@ use attn_protocol::{
     Desktop, GetCommandUsageResultMessage, InitialStateMessage, Profile,
     ProfileActionResultMessage, ProfileArrangementChangedMessage, ProfilesChangedMessage,
 };
-use attn_testkit::{Daemon, Request, Target, World, key_event, message};
+use attn_testkit::{Daemon, Driver, Request, Target, World, key_event, message};
 use rune::{Key, KeyEvent, Mods};
 use serde_json::{Value, json};
 
@@ -338,6 +338,22 @@ fn hold(world: &mut World, mods: Mods) {
     world.gesture(|app| app.hold(mods));
 }
 
+fn escape_holding(app: &mut Driver, mods: Mods) {
+    app.runtime.physical_key_input(
+        rune::PhysicalInput::Key {
+            key: rune::PhysicalKeyCode::Escape,
+            mods,
+            pressed: true,
+            repeat: false,
+        },
+        KeyEvent {
+            key: Key::Escape,
+            mods,
+        },
+        None,
+    );
+}
+
 fn highlighted(world: &World) -> Option<String> {
     world.screen().active_option().and_then(|n| n.name)
 }
@@ -396,11 +412,12 @@ fn letting_go_of_one_modifier_of_the_held_chord_switches() {
 #[test]
 fn escape_while_the_chord_is_held_cancels_and_letting_go_switches_nothing() {
     let mut world = three("work");
-    hold(&mut world, chord_mods());
+    let chord = chord_mods();
+    hold(&mut world, chord);
     open_switcher(&mut world);
     press_action(&mut world, &Action::ProfileSwitch);
 
-    press(&mut world, Key::Escape);
+    world.gesture(|app| escape_holding(app, chord));
     assert!(!switcher_open(&world));
     hold(&mut world, Mods::default());
 
@@ -847,4 +864,90 @@ fn the_profile_in_use_reads_as_current_in_the_switcher() {
     };
     assert_eq!(value("work"), "current");
     assert_eq!(value("home"), "");
+}
+
+#[test]
+fn the_chord_held_in_a_popped_out_tile_cycles_and_switches_when_let_go() {
+    let (mut world, tile, event) = popped_out_tile();
+    let tap = |world: &mut World| {
+        world.tile_gesture(&tile, |app| {
+            app.hold(event.mods);
+            app.key(event.clone());
+        })
+    };
+
+    tap(&mut world);
+    assert_eq!(highlighted(&world).as_deref(), Some("home"));
+    tap(&mut world);
+    assert_eq!(highlighted(&world).as_deref(), Some("side"));
+    assert!(selects(&world).is_empty());
+
+    world.tile_gesture(&tile, |app| app.hold(Mods::default()));
+
+    assert!(!switcher_open(&world));
+    assert_eq!(selects(&world), ["side"]);
+    rest(&mut world);
+}
+
+#[test]
+fn escape_in_a_popped_out_tile_while_the_chord_is_held_cancels_the_cycle() {
+    let (mut world, tile, event) = popped_out_tile();
+    world.tile_gesture(&tile, |app| {
+        app.hold(event.mods);
+        app.key(event.clone());
+    });
+    assert_eq!(highlighted(&world).as_deref(), Some("home"));
+
+    world.tile_gesture(&tile, |app| escape_holding(app, event.mods));
+    assert!(!switcher_open(&world));
+    world.tile_gesture(&tile, |app| app.hold(Mods::default()));
+
+    assert!(selects(&world).is_empty());
+    assert_eq!(selected(&mut world), "work");
+    rest(&mut world);
+}
+
+#[test]
+fn the_chord_pressed_in_a_popped_out_tile_without_held_modifiers_opens_the_list_on_the_current_profile()
+ {
+    let (mut world, tile, event) = popped_out_tile();
+    world.tile_gesture(&tile, |app| app.key(event.clone()));
+
+    assert!(switcher_open(&world));
+    assert_eq!(highlighted(&world).as_deref(), Some("work"));
+
+    world.tile_gesture(&tile, |app| app.key(event.clone()));
+
+    assert!(!switcher_open(&world));
+    assert!(selects(&world).is_empty());
+    rest(&mut world);
+}
+
+fn popped_out_tile() -> (World, String, KeyEvent) {
+    let mut tile = attn_testkit::tree::tile("note", "markdown");
+    tile["tile_params"] = json!("{\"path\":\"/work/note.md\"}");
+    tile["window"] = json!({"x": 10, "y": 20, "width": 500, "height": 400});
+    let desktop = Desktop {
+        tree_json: tile.to_string(),
+        ..desktop_of("work")
+    };
+    let profiles = vec![work(), home(), side()];
+    let daemon = keeping(profiles.clone(), "work", &[]).state(InitialStateMessage {
+        profiles: Some(profiles),
+        selected_profile_id: Some("work".into()),
+        desktops: Some(vec![desktop]),
+        ..InitialStateMessage::new()
+    });
+    let mut world = World::start(daemon);
+    world.open_desktop();
+    let tile = world
+        .tile_windows()
+        .into_iter()
+        .find(|tile| tile.shown)
+        .unwrap();
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
+    let Some(Binding::Chord(chord)) = keymap.binding(&Action::ProfileSwitch) else {
+        panic!("profile.switch has no chord");
+    };
+    (world, tile.key, key_event(&chord))
 }

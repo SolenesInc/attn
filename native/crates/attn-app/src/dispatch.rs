@@ -57,6 +57,10 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
             crate::desktop::header_pop::take_keyboard(state, tx);
             return Outcome::Ran;
         }
+        if action == Action::ProfileSwitch {
+            crate::profile_switcher::cycle_from_tile(state, tx);
+            return Outcome::Ran;
+        }
         if matches!(
             action,
             Action::TerminalSendAnnotations | Action::MarkdownSendAnnotations
