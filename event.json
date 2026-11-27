@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Concurrent enrollment can persist duplicate machine names",
+  "at": "2026-11-27T16:06:10.219Z",
+  "detail": "Overlapping normal machine joins can both pass name recognition and later persist the same label. Name-addressed operations then remain ambiguous across restarts. Revalidate the name in the existing serialized write path and preserve the actionable refusal.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/reverse_bridge.go",
+    "line": 194
+  },
+  "culprit": "6bcb33621a71fc71da8422d1c30cefef5e03e61f"
+}
