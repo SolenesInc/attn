@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Answering an ask can leave its disconnected outpost shell open",
+  "at": "2026-11-27T15:06:27.258Z",
+  "detail": "Answering an ask while its outpost is disconnected does not preserve the request to close its shell. The shell remains open after reconnect. Record the lifecycle intent before attempting outpost I/O, and reconcile it when the outpost returns.\n"
+}
