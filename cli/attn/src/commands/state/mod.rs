@@ -72,7 +72,7 @@ fn explain(result: &StateExplainResult) -> String {
     }
     if let Some(facts) = &result.facts {
         let facts = serde_json::to_string_pretty(facts).unwrap_or_default();
-        let _ = writeln!(out, "\nfacts the attention judge reads:\n{facts}");
+        let _ = writeln!(out, "\nfacts the attention supervisor reads:\n{facts}");
     }
     if result.observations.is_empty() {
         out.push_str("\nNo state observations recorded. The daemon has seen no state evidence\n");

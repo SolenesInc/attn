@@ -271,11 +271,11 @@ model Session {
   conversation_started?: boolean; // True once the session's agent has named the transcript of its conversation: the agent has started a conversation in the session's folder. The agent may name the transcript before it writes the file, so the transcript can still be unreadable. Absent until the agent names one.
   conversation_shared_with?: SessionID[]; // The other open sessions whose live process has this session's conversation open while this one's does too. Only for a harness that lets several processes write one conversation (Claude Code), where each process keeps its own history and the transcript splits. Derived at broadcast; absent while one process holds the conversation.
   host?: string;                // The id of the outpost this terminal runs on; absent when it runs on the home's machine. Set once at spawn and never changed.
-  attention?: SessionAttention; // The attention judge's latest verdict on whether the user is needed. Absent until the judge has judged this session.
+  attention?: SessionAttention; // The attention supervisor's latest verdict on whether the user is needed. Absent until the supervisor has a verdict on this session.
   last_seen: string;            // ISO timestamp, always set
 }
 
-// The attention judge's answer for one agent at one moment: open (the user is
+// The attention supervisor's verdict on one agent at one moment: open (the user is
 // needed now), quiet (something registered will move the agent) or finished
 // (nothing is left for anyone). decider names what produced it, such as
 // "rule:<name>" or "headless/<model>"; reason is one line for the user.
@@ -1164,7 +1164,7 @@ model QuickCaptureUnreadMessage {
 // what they mean, with the chief-of-staff role the hook does not know.
 //
 // background_tasks holds each piece of work still running, as the harness
-// reports it, so a stop judged non-terminal names what held it.
+// reports it, so a non-terminal stop names what held it.
 // scheduled_work counts the scheduled wakeups still pending. Absent, the turn
 // left nothing.
 @extension("x-on", #{ here: true })
@@ -7740,7 +7740,7 @@ model StateExplainResult {
   state: string;
   state_since?: string;
   last_model_request_at?: string;
-  // facts is what the attention judge reads about this agent now, as JSON.
+  // facts is what the attention supervisor reads about this agent now, as JSON.
   facts?: unknown;
   observations: StateExplainEntry[];
   // capacity is the ring size, so a full ring can be reported as truncated

@@ -69,7 +69,7 @@ func TestTheHomeExplainsAnOutpostAgentWithWhatItsMonitorHolds(t *testing.T) {
 	}
 
 	text := home.Attn("state", "explain", session).Stdout
-	if !strings.Contains(text, "facts the attention judge reads:") || !strings.Contains(text, `"command": "./deploy.sh staging"`) {
+	if !strings.Contains(text, "facts the attention supervisor reads:") || !strings.Contains(text, `"command": "./deploy.sh staging"`) {
 		t.Errorf("state explain does not print the facts:\n%s", text)
 	}
 }
