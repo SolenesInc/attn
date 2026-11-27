@@ -246,7 +246,7 @@ func Apply(dataRoot, dbPath string) (Record, bool, error) {
 	for _, root := range record.Roots {
 		live, kept := filepath.Join(dataRoot, root), filepath.Join(pre, "files", root)
 		incoming := filepath.Join(StagedFiles(dataRoot, record.ID), root)
-		if exists(live) && !exists(kept) {
+		if slices.Contains(record.Displaced, root) && exists(live) && !exists(kept) {
 			if err := moveInto(live, kept); err != nil {
 				return record, false, err
 			}
@@ -257,6 +257,7 @@ func Apply(dataRoot, dbPath string) (Record, bool, error) {
 			}
 		}
 	}
+	crashpoint.At("home-move-apply-roots")
 	record.Step = StepApplied
 	return record, true, Write(dataRoot, record)
 }
