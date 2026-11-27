@@ -1,6 +1,7 @@
 package testworld
 
 import (
+	"bufio"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -107,17 +108,39 @@ func (c *Cloud) MostOpen() int {
 	return c.proxy.most
 }
 
+// Connections lists every home connection the proxy carried, one line each: when it opened and closed, and the
+// request it began with.
+func (c *Cloud) Connections() string {
+	c.proxy.mu.Lock()
+	defer c.proxy.mu.Unlock()
+	var lines []string
+	for _, conn := range c.proxy.history {
+		closed := "open"
+		if !conn.closed.IsZero() {
+			closed = conn.closed.Format("15:04:05.000000")
+		}
+		lines = append(lines, conn.opened.Format("15:04:05.000000")+" to "+closed+" "+conn.request)
+	}
+	return strings.Join(lines, "\n")
+}
+
 func (c *Cloud) Closed() <-chan struct{} { return c.proxy.closed }
 
 type cutProxy struct {
-	addr   string
-	target string
-	dials  chan struct{}
-	closed chan struct{}
-	mu     sync.Mutex
-	down   bool
-	conns  map[net.Conn]net.Conn
-	most   int
+	addr    string
+	target  string
+	dials   chan struct{}
+	closed  chan struct{}
+	mu      sync.Mutex
+	down    bool
+	conns   map[net.Conn]net.Conn
+	most    int
+	history []*proxiedConn
+}
+
+type proxiedConn struct {
+	request        string
+	opened, closed time.Time
 }
 
 func startCutProxy(t *testing.T, target string) *cutProxy {
@@ -150,18 +173,31 @@ func (p *cutProxy) serve(home net.Conn) {
 		home.Close()
 		return
 	}
+	fromHome := bufio.NewReader(home)
+	request, err := fromHome.ReadString('\n')
+	if err != nil {
+		home.Close()
+		return
+	}
 	cloud, err := net.Dial("tcp", p.target)
 	if err != nil {
 		home.Close()
 		return
 	}
+	if _, err := io.WriteString(cloud, request); err != nil {
+		home.Close()
+		cloud.Close()
+		return
+	}
+	carried := &proxiedConn{request: strings.TrimSpace(request), opened: time.Now()}
 	p.mu.Lock()
 	p.conns[home] = cloud
 	p.most = max(p.most, len(p.conns))
+	p.history = append(p.history, carried)
 	p.mu.Unlock()
 	p.dials <- struct{}{}
 	done := make(chan struct{}, 2)
-	go func() { io.Copy(cloud, home); done <- struct{}{} }()
+	go func() { io.Copy(cloud, fromHome); done <- struct{}{} }()
 	go func() { io.Copy(home, cloud); done <- struct{}{} }()
 	<-done
 	home.Close()
@@ -169,6 +205,7 @@ func (p *cutProxy) serve(home net.Conn) {
 	p.mu.Lock()
 	_, tracked := p.conns[home]
 	delete(p.conns, home)
+	carried.closed = time.Now()
 	p.mu.Unlock()
 	if tracked {
 		p.closed <- struct{}{}

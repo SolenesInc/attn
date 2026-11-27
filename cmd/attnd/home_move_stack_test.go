@@ -167,7 +167,10 @@ func TestHomeMoveKeepsTerminalsAndMovesBack(t *testing.T) {
 		t.Fatalf("move back from the app: %+v", result)
 	}
 	for _, step := range []string{"fence", "copy", "build", "commit"} {
-		testworld.Await(app, protocol.EventHomeMoveProgress, func(p protocol.HomeMoveProgressMessage) bool { return p.RequestID == "back" && p.Step == step })
+		progress := testworld.Await(app, protocol.EventHomeMoveProgress, func(p protocol.HomeMoveProgressMessage) bool { return p.RequestID == "back" && p.Step == step })
+		if progress.ID != protocol.Deref(result.HomeMove.ID) {
+			t.Fatalf("step %s names move %q; the move is %q", step, progress.ID, protocol.Deref(result.HomeMove.ID))
+		}
 	}
 	outpost.AwaitStopped()
 	home.AwaitStopped()
@@ -295,7 +298,7 @@ func TestHomeMoveRollbackKeepsOneHomeAtATime(t *testing.T) {
 		t.Fatalf("roles: old home %+v, target %+v; want the old home home", role(t, home), role(t, outpost))
 	}
 	if most := cloud.MostOpen(); most != 1 {
-		t.Fatalf("the Cloud Relay saw %d home sockets at once while the home rolled back", most)
+		t.Fatalf("the Cloud Relay saw %d home sockets at once while the home rolled back:\n%s", most, cloud.Connections())
 	}
 }
 
@@ -471,7 +474,7 @@ func TestHomeMoveTakesTheWholeHomeAlong(t *testing.T) {
 			t.Fatalf("welcome from the new home: %+v", welcome)
 		}
 		if most := cloud.MostOpen(); most != 1 {
-			t.Fatalf("the Cloud Relay saw %d home sockets at once", most)
+			t.Fatalf("the Cloud Relay saw %d home sockets at once:\n%s", most, cloud.Connections())
 		}
 	})
 	t.Run("a home with more files than one ssh packet can name moves them all", func(t *testing.T) {
@@ -754,11 +757,15 @@ func TestHomeMoveSurvivesAKillAtEachStep(t *testing.T) {
 			killed.AwaitCrash()
 			if kill.name == "the home after the target committed" {
 				other.AwaitStopped()
+				m.SSH.Fail("oldhome", "ssh: connect to host oldhome port 22: No route to host")
 				other.Start()
-				killed.StartUnprobed()
+				killed.Start()
+				m.SSH.Restore("oldhome")
 				redial(m.Outpost)
 				m.Home.AwaitStopped()
+				m.SSH.Fail("oldhome", "ssh: connect to host oldhome port 22: No route to host")
 				m.Home.Start()
+				m.SSH.Restore("oldhome")
 				m.Outpost.FirePending(bridge.RetryTimer)
 				m.requireMoved(t, homeMachine, pidHome, pidOut)
 				return
@@ -928,11 +935,16 @@ func TestHomeMoveToAMachineThatDialsTheHome(t *testing.T) {
 		_ = w.home.Attn("home", "move", w.name, "--via", "home")
 		w.home.AwaitCrash()
 		w.laptop.AwaitStopped()
+		w.ssh.Fail("home", "ssh: connect to host home port 22: No route to host")
 		w.laptop.Start()
-		w.home.StartUnprobed()
+		w.home.Start()
+		w.ssh.Restore("home")
 		redial(w.laptop)
 		w.home.AwaitStopped()
+		w.ssh.Fail("home", "ssh: connect to host home port 22: No route to host")
 		w.home.Start()
+		w.ssh.Restore("home")
+		redial(w.laptop)
 		if !role(t, w.laptop).IsHome() || role(t, w.home).IsHome() {
 			t.Fatalf("roles: old home %+v, target %+v; want the target home", role(t, w.home), role(t, w.laptop))
 		}
