@@ -728,11 +728,18 @@ fn with_the_home_on_another_machine_the_folder_chooser_asks_only_the_home_even_f
         })
     });
     daemon.on("inspect_path", |r| {
-        serde_json::json!({
-            "event": "inspect_path_result",
-            "request_id": r["request_id"],
-            "success": true,
-            "inspection": {"path": r["path"], "exists": false, "is_dir": false},
+        let path = r["path"].as_str().unwrap();
+        message(attn_protocol::InspectPathResultMessage {
+            success: true,
+            inspection: Some(attn_protocol::PathInspection {
+                input_path: path.into(),
+                resolved_path: path.into(),
+                home_path: Some("/home/me".into()),
+                exists: false,
+                is_directory: false,
+                repo_root: None,
+            }),
+            ..attn_protocol::InspectPathResultMessage::new()
         })
     });
     let mut world = World::start(daemon);
@@ -754,6 +761,13 @@ fn with_the_home_on_another_machine_the_folder_chooser_asks_only_the_home_even_f
     click(&mut world, "settings.browse.projects_directory");
     retype(&mut world, "new-session.path.field", "/srv/absent/");
     world.settle();
+    assert!(
+        world
+            .daemon
+            .sent_of("inspect_path")
+            .iter()
+            .any(|r| r["path"] == "/srv/absent" && r["host"].is_null())
+    );
 
     let elsewhere: Vec<_> = [
         "browse_directory",
