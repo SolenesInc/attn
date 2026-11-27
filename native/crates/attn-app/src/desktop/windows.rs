@@ -567,8 +567,8 @@ pub fn on_close(state: &mut State, _: &mut Tx) {
     }
     let (key, desktop, leaf) = (tile.key.clone(), tile.desktop.clone(), tile.leaf.clone());
     (tile.main)(Box::new(move |state: &mut State, tx: &mut Tx| {
+        forget(state, &key);
         bring_back_or_reopen(state, &desktop, &leaf, &key, tx);
-        forget(state, &key)
     }));
 }
 

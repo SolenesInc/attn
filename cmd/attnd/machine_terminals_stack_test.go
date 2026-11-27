@@ -59,6 +59,11 @@ func TestTheAppMachinesTerminalsStayUsableWhileTheHomeIsAway(t *testing.T) {
 	}
 	machine.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "echo away-$((2+2))\r"})
 	machine.AwaitTerminalScreen(terminal, "away-4")
+	readID := "read-away"
+	read := testworld.Request(machine, protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: protocol.TerminalID(terminal), Mode: protocol.TerminalReadModeScreen, RequestID: protocol.Ptr(readID)}, protocol.EventTerminalReadTextResult, func(r protocol.TerminalReadTextResultMessage) bool { return r.RequestID == readID })
+	if !read.Success || !strings.Contains(protocol.Deref(read.Text), "away-4") {
+		t.Fatalf("the laptop's own daemon read its terminal's screen as %+v, want it to show away-4", read)
+	}
 	for _, refused := range []any{
 		protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: "s-offline", Agent: protocol.AgentShellValue, Cwd: w.laptop.Path("on-laptop"), Cols: 80, Rows: 24},
 		protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "remote_home_enabled", Value: "false"},
@@ -68,7 +73,7 @@ func TestTheAppMachinesTerminalsStayUsableWhileTheHomeIsAway(t *testing.T) {
 			t.Fatalf("the laptop's own daemon answered %+v to %+v, want it sent to the home", got, refused)
 		}
 	}
-	t.Log("(2) with the home stopped, the relayed app is told the home is unreachable, the laptop's own daemon still shows and types into its terminal, and refuses what the home owns")
+	t.Log("(2) with the home stopped, the relayed app is told the home is unreachable, the laptop's own daemon still shows, reads and types into its terminal, and refuses what the home owns")
 
 	w.home.Start()
 	w.app = w.home.App()

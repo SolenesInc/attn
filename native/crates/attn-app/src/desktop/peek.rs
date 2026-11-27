@@ -322,15 +322,19 @@ fn start_read(state: &mut State, runtime: String, tx: &mut Tx) {
     if let Some(open) = &mut state.window.desk.peeks.open {
         open.next_read = None;
     }
-    let terminal = runtime.clone();
-    state.ask(
-        move |id| TerminalReadTextMessage {
-            request_id: Some(id),
-            terminal_id: terminal,
-            mode: "screen".to_owned(),
-            lines: 0,
-            ..TerminalReadTextMessage::new()
-        },
+    let id = state.next_request_id();
+    let read = TerminalReadTextMessage {
+        request_id: Some(id.clone()),
+        terminal_id: runtime.clone(),
+        mode: "screen".to_owned(),
+        lines: 0,
+        ..TerminalReadTextMessage::new()
+    };
+    let via = crate::terminal::rides_runtime(&state.facts, &runtime);
+    state.ask_on(
+        via,
+        id,
+        &read,
         move |state: &mut State, answer: Answer, tx: &mut Tx| {
             let Some(open) = state
                 .window
@@ -592,15 +596,19 @@ fn write(
     tx: &mut Tx,
     then: impl FnOnce(&mut State, Option<String>, &mut Tx) + 'static,
 ) {
-    let runtime = runtime.to_owned();
-    state.ask(
-        move |probe| PtyInputMessage {
-            id: runtime,
-            data,
-            source: Some("user".to_owned()),
-            probe_id: Some(probe),
-            ..PtyInputMessage::new()
-        },
+    let probe = state.next_request_id();
+    let input = PtyInputMessage {
+        id: runtime.to_owned(),
+        data,
+        source: Some("user".to_owned()),
+        probe_id: Some(probe.clone()),
+        ..PtyInputMessage::new()
+    };
+    let via = crate::terminal::rides_runtime(&state.facts, runtime);
+    state.ask_on(
+        via,
+        probe,
+        &input,
         move |state: &mut State, answer: Answer, tx: &mut Tx| {
             let failure = match answer.parse::<PtyInputProbeResultMessage>() {
                 Some(result) if result.success => None,

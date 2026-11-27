@@ -581,6 +581,10 @@ fn a_popped_out_terminal_on_this_machine_stays_out_while_the_home_is_lost_and_th
         popped(tree::pane("t-home"), 600.0),
     ])
     .to_string();
+    let mut brought_back = desktops[0].clone();
+    brought_back.tree_json =
+        tree::row([tree::pane("t-here"), popped(tree::pane("t-home"), 600.0)]).to_string();
+    let profile = state.profiles.clone().unwrap().remove(0);
     state.desktops = Some(desktops);
     let home = Daemon::scripted();
     let answers = answering.clone();
@@ -638,6 +642,20 @@ fn a_popped_out_terminal_on_this_machine_stays_out_while_the_home_is_lost_and_th
         ids(machine(&world), "attach_session"),
         ["rl"],
         "the terminal on this machine stayed attached through the outage"
+    );
+
+    world
+        .daemon
+        .emit(attn_protocol::ProfileArrangementChangedMessage {
+            profile,
+            desktops: vec![brought_back],
+            ..attn_protocol::ProfileArrangementChangedMessage::new()
+        });
+    world.settle();
+    assert_eq!(
+        shown(&world),
+        [600.0],
+        "the window that showed again hides once its tile comes back"
     );
 }
 
@@ -708,5 +726,109 @@ fn while_the_home_is_away_a_desktop_switch_reaches_this_machines_terminal_there(
         world.screen().find(Target::key("notice.text")).is_none(),
         "{}",
         world.screen()
+    );
+}
+
+#[test]
+fn a_peek_at_this_machines_shelved_agent_reads_and_replies_on_its_own_daemon() {
+    let leaves = ["a", "b", "c", "d"];
+    let agent = |id: &str| Session {
+        agent: "claude".into(),
+        state: "waiting_input".into(),
+        ..shell(id, Some(HERE))
+    };
+    let state = InitialStateMessage {
+        sessions: Some(leaves.iter().map(|id| agent(id)).collect()),
+        desktops: Some(vec![Desktop {
+            id: "d1".into(),
+            name: "d1".into(),
+            profile_id: "work".into(),
+            shortcut_slot: Some(1),
+            order_key: "1".into(),
+            active_pane_id: "a".into(),
+            tree_json: tree::row(leaves.map(tree::pane)).to_string(),
+            panes: leaves
+                .iter()
+                .map(|id| DesktopPane {
+                    kind: "agent".into(),
+                    ..pane(id, &format!("r-{id}"), id)
+                })
+                .collect(),
+            ..Desktop::default()
+        }]),
+        ..home_state()
+    };
+    let home = Daemon::scripted().state(state);
+    let laptop = Daemon::of_this_machine(&home).state(InitialStateMessage {
+        protocol_version: Some(PROTOCOL_VERSION.into()),
+        daemon_instance_id: Some("laptop-daemon".into()),
+        sessions: Some(leaves.iter().map(|id| agent(id)).collect()),
+        terminal_bindings: Some(
+            leaves
+                .iter()
+                .map(|id| TerminalBinding {
+                    session_id: (*id).into(),
+                    terminal_id: format!("r-{id}"),
+                })
+                .collect(),
+        ),
+        ..InitialStateMessage::new()
+    });
+    laptop.on("terminal_read_text", |request| {
+        message(attn_protocol::TerminalReadTextResultMessage {
+            success: true,
+            text: Some(format!(
+                "screen of {}",
+                request["terminal_id"].as_str().unwrap()
+            )),
+            ..attn_protocol::TerminalReadTextResultMessage::new()
+        })
+    });
+    laptop.on("pty_input", |request| {
+        let probe = request["probe_id"].as_str()?;
+        Some(message(attn_protocol::PtyInputProbeResultMessage {
+            id: request["id"].as_str().unwrap().into(),
+            probe_id: probe.into(),
+            success: true,
+            ..attn_protocol::PtyInputProbeResultMessage::new()
+        }))
+    });
+    let mut world = World::start_relaying(home.relaying_to(HERE, "oma"), laptop, (1600.0, 900.0));
+    world.open_desktop();
+
+    let [x, y, w, h] = world
+        .runtime()
+        .presented("shelf.entry.c")
+        .unwrap_or_else(|| panic!("c waits on the shelf: {}", world.screen()))
+        .0;
+    world.gesture(|app| app.move_to((x + w / 2.0, y + h / 2.0)));
+    world.advance(Duration::from_millis(200));
+    let screen = world.screen().children(Target::key("shelf.peek.screen"))[0]
+        .name
+        .clone()
+        .unwrap_or_default();
+    assert_eq!(screen, "screen of r-c");
+    world.gesture(|app| {
+        app.click(Target::key("shelf.peek.c.field"));
+        app.type_text("ship it");
+    });
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Enter,
+            mods: rune::Mods::default(),
+        })
+    });
+
+    assert!(
+        typed(machine(&world))
+            .iter()
+            .any(|(id, data)| id == "r-c" && data.contains("ship it")),
+        "{:?}",
+        typed(machine(&world))
+    );
+    assert!(
+        world.daemon.sent_of("pty_input").is_empty()
+            && world.daemon.sent_of("terminal_read_text").is_empty(),
+        "nothing for this machine's terminal goes through the home"
     );
 }

@@ -354,7 +354,7 @@ fn rides(facts: &Facts, host: Option<&str>, recoverable: bool) -> Reach {
 }
 
 /// The link terminal `runtime` rides, by its session in the facts.
-fn rides_runtime(facts: &Facts, runtime: &str) -> Reach {
+pub(crate) fn rides_runtime(facts: &Facts, runtime: &str) -> Reach {
     let session = facts
         .desktops
         .iter()

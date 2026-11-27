@@ -19,6 +19,7 @@ var machineLinkCommands = map[string]bool{
 	protocol.CmdTerminalPointerActivity: true,
 	protocol.CmdGetScreenSnapshot:       true,
 	protocol.CmdGetKittyImage:           true,
+	protocol.CmdTerminalReadText:        true,
 	protocol.CmdGetSettings:             true,
 	protocol.CmdSetSetting:              true,
 }
