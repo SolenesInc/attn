@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Release app mismatch offers no usable install action",
+  "at": "2026-11-27T06:36:59.680Z",
+  "detail": "The guide tells users to run the row's command, but a release mismatch screen presents Retry and an incomplete release download URL in the reason. Supply usable release recovery and verify the actual mismatch screen. This overlaps the existing install-action follow-up.\nIndependently source-confirmed at pinned 309da596f. Review s-tset6s.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "docs/guide/reference/using-outposts.md",
+    "line": 131
+  },
+  "culprit": "e3919191708af2e1728b73e370b6c4cd4d6bd989"
+}
