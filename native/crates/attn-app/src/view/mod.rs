@@ -309,7 +309,9 @@ pub(crate) fn body(
                 Reader::new()
                     .push_all(problems)
                     .push_all(parts(&view.parts, &doors))
-                    .bare(t),
+                    .bare(t)
+                    .max_w(crate::markdown::PROSE_MEASURE)
+                    .self_center(),
             )
     });
     let (padding, _) = crate::markdown::card_fit(None, f32::INFINITY);

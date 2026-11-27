@@ -4,8 +4,7 @@ use attn_protocol::{ViewCommandCall, ViewPart, ViewProblem, ViewTemplatePiece};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Block, Card, Chart, DataTable, Facts, Inline, Notice, Reader, Standing};
 use attn_ui::system::{
-    DotShape, DotSize, GroupHead, IconSize, ListRow, Reveal, Size, Tone, Type, dot, icon_button,
-    tag, words,
+    Button, DotShape, DotSize, GroupHead, ListRow, Look, Reveal, Size, Tone, Type, dot, tag, words,
 };
 use rune::{El, col, row};
 use serde_json::Value;
@@ -199,29 +198,54 @@ pub(crate) fn facts(part: &ViewPart, doors: &Doors<'_>) -> Block {
     (part.facts.iter().flat_map(|f| &f.facts))
         .enumerate()
         .fold(Facts::new(key.clone()), |facts, (i, fact)| {
-            facts.fact(
-                format!("{key}.{i}"),
-                fact.label.clone(),
-                doors.values.text(&fact.value),
-            )
+            let (key, said) = (format!("{key}.{i}"), doors.values.text(&fact.value));
+            match said.contains('`') {
+                true => facts.item(key, fact.label.clone(), with_code(&said, doors.room.t)),
+                false => facts.fact(key, fact.label.clone(), said),
+            }
         })
         .build(doors.room.t)
 }
 
-/// A command a part offers, drawn as a button that does nothing until its command runs.
-fn control(key: &str, call: &ViewCommandCall, doors: &Doors<'_>) -> attn_ui::system::IconButton {
+/// A command a part offers, drawn as a button that stays off until its command runs.
+fn control(key: &str, call: &ViewCommandCall, doors: &Doors<'_>) -> El {
     let runs = doors.commands.runs(call);
-    icon_button(
-        format!("{key}.{}", call.command),
-        format!("{} (not available yet)", call.command),
-        call.command
-            .chars()
-            .next()
-            .map_or("·".to_owned(), |c| c.to_string()),
-        IconSize::Regular,
-    )
-    .size(Size::Small)
-    .disabled(!runs)
+    let shown: String = (call.command.chars().enumerate())
+        .map(|(i, c)| match (i, c) {
+            (0, c) => c.to_ascii_uppercase(),
+            (_, '-' | '_') => ' ',
+            (_, c) => c,
+        })
+        .collect();
+    let button = Button::new(shown)
+        .look(Look::Quiet)
+        .size(Size::Compact)
+        .disabled(!runs)
+        .help(format!("{} is not available yet", call.command))
+        .build(doors.room.t);
+    El::from(button).key(format!("{key}.{}", call.command))
+}
+
+fn controls_of<'a>(
+    key: &'a str,
+    calls: &'a [ViewCommandCall],
+    doors: &'a Doors<'_>,
+) -> impl Iterator<Item = El> + 'a {
+    calls.iter().map(move |call| control(key, call, doors))
+}
+
+/// `text` in words, its `code` spans set in Mono.
+fn with_code(text: &str, t: &Tokens) -> El {
+    let pieces = (text.split('`').enumerate())
+        .filter(|(_, piece)| !piece.trim().is_empty())
+        .map(|(i, piece)| {
+            let kind = if i % 2 == 1 { Type::Mono } else { Type::Body };
+            words(piece.trim().to_owned(), kind, t.text_primary)
+        });
+    Inline::tight()
+        .flex_wrap()
+        .children(pieces)
+        .a11y_value(text.replace('`', ""))
 }
 
 /// What a row's lead shows: a state's mark for a word, the words otherwise.
@@ -263,7 +287,7 @@ pub(crate) fn list(part: &ViewPart, doors: &Doors<'_>) -> Block {
             ));
         }
         if let Some(calls) = &slots.group_controls {
-            head = head.controls(calls.iter().map(|call| control(&head_key, call, doors)));
+            head = head.aside(Inline::tight().children(controls_of(&head_key, calls, doors)));
         }
         let head = if foldable { head.open(!folded) } else { head };
         let head = head.build(t);
@@ -294,12 +318,7 @@ pub(crate) fn list(part: &ViewPart, doors: &Doors<'_>) -> Block {
                 row = row.aside(words(scope.text(s), Type::Mono, t.text_tertiary));
             }
             if let Some(calls) = &slots.controls {
-                row = row.controls(
-                    calls
-                        .iter()
-                        .map(|call| control(&row_key, call, doors).build(t).into()),
-                    Reveal::Quiet,
-                );
+                row = row.controls(controls_of(&row_key, calls, doors), Reveal::Quiet);
             }
             row.disabled(
                 slots
@@ -496,8 +515,11 @@ pub(crate) fn entry(_: &ViewPart, doors: &Doors<'_>) -> Block {
 
 pub(crate) fn controls(part: &ViewPart, doors: &Doors<'_>) -> Block {
     let key = &doors.room.key;
-    let buttons = (part.controls.iter().flat_map(|c| &c.controls))
-        .map(|call| El::from(control(key, call, doors).build(doors.room.t)));
+    let calls = part
+        .controls
+        .as_ref()
+        .map_or(&[][..], |c| c.controls.as_slice());
+    let buttons = controls_of(key, calls, doors);
     Block::custom(
         format!("{key}.slot"),
         Inline::tight().key(key.clone()).children(buttons),
