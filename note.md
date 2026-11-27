@@ -1,0 +1,3 @@
+A multi-line `sh` block in an ask now opens in its terminal as its lines, typed and unrun, when the shell has bracketed paste on (bash 5.1+, zsh, fish). Before, the lines were glued into one.
+
+attn's bash and zsh integration prints the prompt mark before the line editor turns mode 2004 on (measured 0.05–44 ms later, starship included). So the daemon waits, through a new `terminal_wait_block` condition `until: bracketed_paste`, for up to 2 s after the first prompt. When the mode never turns on, the wait times out, errors (an older host refuses the condition) or the shell exits, and the text is stripped as before, so a line never runs before Enter.

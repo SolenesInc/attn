@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "adcfedb1ece616625b1996f7ae33d191cda3b748",
+  "head": "ae14efe1d0bce1e3b2c88614f43db44a2cfc1573",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 512.039,
+    "ranOn": "ae14efe1d0bce1e3b2c88614f43db44a2cfc1573"
+  },
+  "noMediaReason": "daemon and PTY host change; the terminal evidence is text (run.log on the seed)",
+  "recordings": []
+}
