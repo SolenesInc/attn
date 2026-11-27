@@ -1,0 +1,3 @@
+The daemon can now start a shell with text waiting at its first prompt that it never runs: `spawn_session` takes `typed` for agent "shell". After the first OSC 133 prompt, the daemon pastes the text as one bracketed paste with every control character stripped, newlines included, and never sends Enter. It reuses `terminal open`'s first-prompt wait. When no prompt comes, nothing is typed, the terminal stays open and the daemon logs it.
+
+Nothing sends `typed` yet. The terminals an ask holds (plot s-20581r) will use it to open a command from an ask. `wsctl add-session --typed` drives it by hand.
