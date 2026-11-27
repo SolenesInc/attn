@@ -51,9 +51,7 @@ pub(crate) fn open_session(state: &mut State, session: &str, tx: &mut Tx) {
     let opened = match refused {
         Some(refusal) => Err(refusal),
         None => launch(
-            state
-                .facts
-                .settings
+            crate::machine::settings(&state.facts)
                 .get(crate::settings::EDITOR)
                 .map(String::as_str),
             folder,

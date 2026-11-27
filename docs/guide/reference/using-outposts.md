@@ -171,9 +171,11 @@ only at the home. On an outpost, `attn settings get notebook.root` refuses and
 points there, and `notebook.root.effective` names this machine's copy.
 
 Machine settings describe one computer: harness executables, the terminal
-backend and worktree sweep. A switch for an attn feature is never a machine
-setting: the home decides it. Changing a machine setting on an outpost changes only that
-outpost. Computed machine values, such as harness
+backend, worktree sweep, the editor command and the Quick Capture shortcut. A
+switch for an attn feature is never a machine setting: the home decides it.
+Changing a machine setting on an outpost changes only that outpost. On a machine
+that dials its home, the app reads and saves the editor and the Quick Capture
+shortcut on this machine's own daemon. Computed machine values, such as harness
 availability and connection status, also describe the computer where you read
 them.
 

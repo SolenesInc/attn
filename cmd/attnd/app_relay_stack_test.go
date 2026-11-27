@@ -305,3 +305,31 @@ func TestTheHomeSamplesNoProcessForTheAppOnAMachineThatDialsIt(t *testing.T) {
 		t.Fatalf("the home's last sample counts app processes %+v, want only the app on its own machine, pid %d, not the relayed app's pid %d", apps, os.Getpid(), elsewhere.Process.Pid)
 	}
 }
+
+func TestTheMachineThatDialsItsHomeKeepsItsOwnEditorAndCaptureShortcut(t *testing.T) {
+	w := newReverseWorld(t)
+	w.join()
+	setSetting(t, w.app, "editor_executable", "sh -c home")
+	setSetting(t, w.app, "capture.shortcut", "Control+Alt+KeyH")
+
+	machine := w.laptop.MachineApp()
+	ours := func(p *testworld.Peer) [2]any {
+		return [2]any{p.Initial.Settings["editor_executable"], p.Initial.Settings["capture.shortcut"]}
+	}
+	for _, key := range []string{"editor_executable", "capture.shortcut"} {
+		if got, _ := machine.Initial.Settings[key].(string); got != "" {
+			t.Fatalf("the laptop's own daemon gives %s = %q, the home's value; want none of its own yet", key, got)
+		}
+	}
+	setSetting(t, machine, "editor_executable", "sh -c laptop")
+	setSetting(t, machine, "capture.shortcut", "Control+Alt+KeyL")
+
+	again := w.laptop.MachineApp()
+	if got := ours(again); got != [2]any{"sh -c laptop", "Control+Alt+KeyL"} {
+		t.Fatalf("the laptop's own daemon keeps %q, want the editor and shortcut set on it", got)
+	}
+	home := w.home.TrustedApp()
+	if got := ours(home); got != [2]any{"sh -c home", "Control+Alt+KeyH"} {
+		t.Fatalf("the home keeps %q after the laptop set its own, want the home's values", got)
+	}
+}

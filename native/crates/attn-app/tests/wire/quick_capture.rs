@@ -2564,3 +2564,47 @@ fn return_picks_the_highlighted_mailbox_when_an_assistive_client_focuses_recent_
     );
     rest(&mut world);
 }
+
+#[test]
+fn with_the_home_on_another_machine_binds_and_records_this_machines_shortcut() {
+    let (daemon, _) = home();
+    let daemon = daemon
+        .state(InitialStateMessage {
+            settings: Some([("capture.shortcut".to_owned(), binding("ctrl+alt+q"))].into()),
+            ..state(PROFILE)
+        })
+        .relaying_to("mac", "oma");
+    keeping_settings(&daemon, &[]);
+    let machine = Daemon::of_this_machine(&daemon).state(InitialStateMessage {
+        protocol_version: Some(attn_protocol::PROTOCOL_VERSION.into()),
+        daemon_instance_id: Some("mac-daemon".into()),
+        settings: Some([("capture.shortcut".to_owned(), binding("ctrl+alt+m"))].into()),
+        ..InitialStateMessage::new()
+    });
+    keeping_settings(&machine, &[]);
+    let mut world = World::start_relaying(daemon, machine, attn_testkit::VIEWPORT);
+    assert_eq!(world.capture_shortcut().as_deref(), Some("ctrl+alt+m"));
+
+    world.gesture(|d| {
+        d.update(|state, tx| {
+            attn_app::dispatch(state, Action::OpenShortcutEditor, tx);
+        });
+    });
+    record_capture(&mut world, &binding("ctrl+alt+b"));
+
+    assert_eq!(shortcut_writes(&world), Vec::<String>::new());
+    let on_machine: Vec<_> = world
+        .machine
+        .as_ref()
+        .unwrap()
+        .sent_of("set_setting")
+        .iter()
+        .map(|r| (r["key"].clone(), r["value"].clone()))
+        .collect();
+    assert_eq!(
+        on_machine,
+        [(json!("capture.shortcut"), json!(binding("ctrl+alt+b")))]
+    );
+    assert_eq!(world.capture_shortcut().as_deref(), Some("ctrl+alt+b"));
+    rest(&mut world);
+}

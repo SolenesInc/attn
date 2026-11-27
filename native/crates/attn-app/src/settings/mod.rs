@@ -169,7 +169,7 @@ fn ensure_page_fields(state: &mut State) -> bool {
     for (key, codec) in page_fields(state) {
         let fields = &mut state.window.settings.autosave;
         added |= fields.field(&key).is_none();
-        fields.ensure(&key, &state.facts.settings, codec);
+        fields.ensure(&key, &crate::machine::settings(&state.facts), codec);
     }
     added
 }
@@ -214,7 +214,7 @@ pub(crate) fn toggle(state: &mut State, tx: &mut Tx) {
 pub(crate) fn open(state: &mut State, section: Section, tx: &mut Tx) {
     crate::chief::dismiss(state, false, tx);
     state.window.settings.section = section;
-    let settings = state.facts.settings.clone();
+    let settings = crate::machine::settings(&state.facts).into_owned();
     for (key, trim) in TEXT_FIELDS {
         let codec = if *trim {
             autosave::TRIMMED
@@ -327,7 +327,7 @@ pub(crate) fn follow(state: &mut State, changed: Slices, tx: &mut Tx) {
     if changed.intersects(Slices::HARNESSES) {
         harnesses::follow_catalog(state);
     }
-    let settings = state.facts.settings.clone();
+    let settings = crate::machine::settings(&state.facts);
     state.window.settings.autosave.sync(&settings);
     catalogs::follow(state);
     tasks::follow(state, tx);

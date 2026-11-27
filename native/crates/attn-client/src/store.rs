@@ -431,6 +431,8 @@ pub struct AppMachine {
     pub sessions: Arc<Vec<Session>>,
     /// The terminal each of those sessions runs in.
     pub terminals: Arc<Vec<TerminalBinding>>,
+    /// This machine's settings, as its own daemon last listed them.
+    pub settings: Arc<BTreeMap<String, String>>,
 }
 
 impl PartialEq for AppMachine {
@@ -441,6 +443,7 @@ impl PartialEq for AppMachine {
             && self.daemon_instance == other.daemon_instance
             && Arc::ptr_eq(&self.sessions, &other.sessions)
             && Arc::ptr_eq(&self.terminals, &other.terminals)
+            && Arc::ptr_eq(&self.settings, &other.settings)
     }
 }
 
@@ -601,13 +604,19 @@ impl Store {
         daemon_instance: String,
         sessions: Vec<Session>,
         terminals: Vec<TerminalBinding>,
+        settings: BTreeMap<String, String>,
     ) {
         self.change_machine(|machine| {
             machine.connected = true;
             machine.daemon_instance = daemon_instance;
             machine.sessions = Arc::new(sessions);
             machine.terminals = Arc::new(terminals);
+            machine.settings = Arc::new(settings);
         });
+    }
+
+    pub(crate) fn set_machine_settings(&self, settings: BTreeMap<String, String>) {
+        self.change_machine(|machine| machine.settings = Arc::new(settings));
     }
 
     pub(crate) fn set_machine_terminals(&self, terminals: Vec<TerminalBinding>) {

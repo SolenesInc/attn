@@ -184,7 +184,7 @@ fn autosave(state: &mut State) -> &mut Autosave {
 
 /// Sets `key` to `value` and saves it: a switch or a choice the user clicked.
 pub(crate) fn apply(state: &mut State, key: &str, value: &str, tx: &mut Tx) {
-    let settings = state.facts.settings.clone();
+    let settings = crate::machine::settings(&state.facts).into_owned();
     let fields = autosave(state);
     fields.ensure(key, &settings, PLAIN);
     let field = fields.fields.get_mut(key).expect("ensured");
@@ -271,14 +271,17 @@ fn send(state: &mut State, key: &str, cause: Cause, tx: &mut Tx) {
     tx.instant();
     field.pending = true;
     let key = key.to_owned();
-    let sent = key.clone();
-    state.ask(
-        move |id| SetSettingMessage {
-            key: sent,
-            value,
-            request_id: Some(id),
-            ..SetSettingMessage::new()
-        },
+    let id = state.next_request_id();
+    let command = SetSettingMessage {
+        key: key.clone(),
+        value,
+        request_id: Some(id.clone()),
+        ..SetSettingMessage::new()
+    };
+    state.ask_on(
+        crate::machine::reach(&state.facts, &key),
+        id,
+        &command,
         move |state, answer, tx| {
             let outcome = answer.outcome().map(|_| ());
             landed(state, &key, draft, outcome, cause, tx);

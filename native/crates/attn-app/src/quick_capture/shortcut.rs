@@ -131,12 +131,10 @@ pub(crate) fn follow(state: &mut State) {
     let Some(window) = state.capture.clone() else {
         return;
     };
-    if !state.capture_shortcut.running
-        || state.facts.connection != attn_client::Connection::Connected
-    {
+    if !state.capture_shortcut.running || !crate::machine::heard(&state.facts, SETTING) {
         return;
     }
-    let wanted = match state.facts.settings.get(SETTING) {
+    let wanted = match crate::machine::settings(&state.facts).get(SETTING) {
         Some(set) if set.is_empty() => None,
         Some(set) => Some(set.clone()),
         None => state.capture_shortcut.cached(state.instance == "default"),
@@ -180,11 +178,15 @@ pub(crate) fn choose(state: &mut State, next: Option<String>) -> Result<(), Stri
     };
     let previous = state.capture_shortcut.active.clone();
     let result = bind(&*window, previous.as_deref(), next.as_deref()).and_then(|()| {
-        let sent = state.daemon.send(&SetSettingMessage {
-            key: SETTING.into(),
-            value: next.clone().unwrap_or_default(),
-            ..SetSettingMessage::new()
-        });
+        let sent = crate::machine::send_setting(
+            state,
+            SETTING,
+            &SetSettingMessage {
+                key: SETTING.into(),
+                value: next.clone().unwrap_or_default(),
+                ..SetSettingMessage::new()
+            },
+        );
         if let Err(why) = sent {
             let _ = bind(&*window, next.as_deref(), previous.as_deref());
             return Err(why.to_string());

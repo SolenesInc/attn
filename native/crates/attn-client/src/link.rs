@@ -1030,7 +1030,15 @@ impl Task {
                     state.daemon_instance_id.unwrap_or_default(),
                     state.sessions.unwrap_or_default(),
                     state.terminal_bindings.unwrap_or_default(),
+                    state.settings.unwrap_or_default(),
                 );
+            }
+            "settings_updated" => {
+                if let Some(settings) =
+                    parse::<SettingsUpdatedMessage>(&header.event, text).and_then(|m| m.settings)
+                {
+                    self.store.set_machine_settings(settings);
+                }
             }
             "session_registered" | "session_state_changed" => {
                 let Some(message) = parse::<SessionRegisteredMessage>(&header.event, text) else {

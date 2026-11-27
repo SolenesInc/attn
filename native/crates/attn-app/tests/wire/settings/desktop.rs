@@ -652,3 +652,46 @@ fn with_the_home_on_another_machine_escape_leaves_the_folder_chooser_for_setting
     );
     rest(&mut world);
 }
+
+#[test]
+fn with_the_home_on_another_machine_the_editor_is_this_machines_and_saves_on_its_own_daemon() {
+    let (daemon, _) = accepting(&[("editor_executable", "home-editor")]);
+    let daemon = daemon.relaying_to("mac", "oma");
+    let mine: super::Settings = std::sync::Arc::new(std::sync::Mutex::new(
+        [("editor_executable".to_owned(), "zed".to_owned())].into(),
+    ));
+    let machine =
+        attn_testkit::Daemon::of_this_machine(&daemon).state(attn_protocol::InitialStateMessage {
+            protocol_version: Some(attn_protocol::PROTOCOL_VERSION.into()),
+            daemon_instance_id: Some("mac-daemon".into()),
+            settings: Some(mine.lock().unwrap().clone()),
+            ..attn_protocol::InitialStateMessage::new()
+        });
+    let kept = mine.clone();
+    machine.on("set_setting", move |r| {
+        super::write(&kept, &|_: &str, _: &str| None, r)
+    });
+    let mut world = World::start_relaying(daemon, machine, attn_testkit::VIEWPORT);
+    on_desktop(&mut world);
+    let editor = field("editor_executable");
+    assert_eq!(value(&world, &editor), "zed");
+
+    retype(&mut world, &editor, "zed --wait");
+    press(&mut world, Key::Enter);
+
+    assert_eq!(writes(&world), []);
+    assert_eq!(
+        mine.lock()
+            .unwrap()
+            .get("editor_executable")
+            .map(String::as_str),
+        Some("zed --wait")
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("settings.saved.editor_executable"))
+            .is_some()
+    );
+    rest(&mut world);
+}
