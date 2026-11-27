@@ -14,6 +14,9 @@ type HomeGatewayAsk struct {
 	// CrewMember corresponds to the JSON schema field "crew_member".
 	CrewMember *string `json:"crew_member,omitempty,omitzero"`
 
+	// Files corresponds to the JSON schema field "files".
+	Files []HomeGatewayAskFile `json:"files,omitempty,omitzero"`
+
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 
@@ -124,6 +127,17 @@ type HomeGatewayAskEvent struct {
 
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
+}
+
+type HomeGatewayAskFile struct {
+	// Machine corresponds to the JSON schema field "machine".
+	Machine string `json:"machine"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
 }
 
 type HomeGatewayAskImage struct {

@@ -4565,6 +4565,23 @@ model AskPart {
   amended_at?: utcDateTime;
 }
 
+enum AskReferenceKind {
+  file,
+  command,
+}
+
+// A place an ask's markdown names: a link's file, or the folder written after a
+// code block's language. text is the link destination or the address as
+// written; host is the machine, absent for this daemon's own; path is
+// absolute; line is the line of the markdown, or of its amendment, it is on.
+model AskReference {
+  kind: AskReferenceKind;
+  text: string;
+  host?: string;
+  path: string;
+  line: int32;
+}
+
 // An ask is about a seed its agent tends: the agent's stake, or the seed it
 // named. It is addressed to the seed's tender, so whoever tends the seed next
 // holds it, and harvest or wither closes it. The answer is a note on the seed.
@@ -4586,6 +4603,10 @@ model Ask {
   // daemon's own, and its folder.
   host?: string;
   cwd?: string;
+  // The files its links name and the folders its code blocks name, resolved
+  // when the ask opened or was amended. Clients follow these and never read an
+  // address in the markdown.
+  references?: AskReference[];
   created_at: string;
   re?: AskThread;
   reply?: AskReply;

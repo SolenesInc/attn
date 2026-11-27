@@ -11,6 +11,12 @@
       "crew_member": {
         "type": "string"
       },
+      "files": {
+        "items": {
+          "$ref": "HomeGatewayAskFile.json"
+        },
+        "type": "array"
+      },
       "id": {
         "type": "string"
       },
@@ -193,6 +199,25 @@
     "required": [
       "event",
       "ask"
+    ],
+    "type": "object"
+  },
+  "HomeGatewayAskFile": {
+    "properties": {
+      "machine": {
+        "type": "string"
+      },
+      "path": {
+        "type": "string"
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "text",
+      "machine",
+      "path"
     ],
     "type": "object"
   },

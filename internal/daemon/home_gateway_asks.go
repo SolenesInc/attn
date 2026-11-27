@@ -21,11 +21,12 @@ const homeGatewayImageChunkBytes = 40 << 10
 func (d *Daemon) homeGatewaySendAsks(conn *homeGatewayConn) error {
 	ids := []string{}
 	frames := map[string][]byte{}
+	names := d.machineNamesByHost()
 	for _, shown := range d.asks() {
 		if !askShownIn(conn.phone.ProfileID, shown.profileID) {
 			continue
 		}
-		frame, err := homeGatewayAskFrame(shown.wire)
+		frame, err := homeGatewayAskFrame(shown.wire, names)
 		if err != nil {
 			return err
 		}
@@ -52,8 +53,8 @@ func (d *Daemon) homeGatewaySendAsks(conn *homeGatewayConn) error {
 	return nil
 }
 
-func homeGatewayAskFrame(wire protocol.Ask) ([]byte, error) {
-	out := homeGatewayAsk(wire)
+func homeGatewayAskFrame(wire protocol.Ask, machines map[string]string) ([]byte, error) {
+	out := homeGatewayAsk(wire, machines)
 	frame, err := homeGatewayMarshal(homegateway.HomeGatewayAskEvent{Event: "ask", Ask: out})
 	if err != nil || len(frame) <= cloudlink.MaxMessageBytes {
 		return frame, err
@@ -88,7 +89,8 @@ func tooLargeAsk(full homegateway.HomeGatewayAsk, size int) homegateway.HomeGate
 	return out
 }
 
-func homeGatewayAsk(wire protocol.Ask) homegateway.HomeGatewayAsk {
+// homeGatewayAsk is wire as a phone reads it; machines names each machine by its wire host, "" for this daemon's own.
+func homeGatewayAsk(wire protocol.Ask, machines map[string]string) homegateway.HomeGatewayAsk {
 	out := homegateway.HomeGatewayAsk{
 		ID:         wire.ID,
 		SessionID:  string(wire.SessionID),
@@ -104,6 +106,11 @@ func homeGatewayAsk(wire protocol.Ask) homegateway.HomeGatewayAsk {
 		out.Re = &homegateway.HomeGatewayAskThread{AskID: wire.Re.AskID, Subject: wire.Re.Subject, Answer: wire.Re.Answer}
 		if wire.Re.AnsweredAt != nil {
 			out.Re.AnsweredAt = protocol.Ptr(parseAskTime(*wire.Re.AnsweredAt))
+		}
+	}
+	for _, reference := range wire.References {
+		if reference.Kind == protocol.AskReferenceKindFile {
+			out.Files = append(out.Files, homegateway.HomeGatewayAskFile{Text: reference.Text, Machine: machines[protocol.Deref(reference.Host)], Path: reference.Path})
 		}
 	}
 	for _, part := range wire.Parts {

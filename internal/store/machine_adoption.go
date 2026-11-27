@@ -54,6 +54,9 @@ func moveMachineReferences(tx *sql.Tx, from, to string) error {
 	if _, err := tx.Exec(`UPDATE asks SET host = ? WHERE host = ?`, to, from); err != nil {
 		return fmt.Errorf("asks: %w", err)
 	}
+	if _, err := tx.Exec(`UPDATE ask_references SET host = ? WHERE host = ?`, to, from); err != nil {
+		return fmt.Errorf("ask references: %w", err)
+	}
 	for _, table := range machineHostTables {
 		if _, err := tx.Exec(`UPDATE OR IGNORE `+table+` SET host = ? WHERE host = ?`, to, from); err != nil {
 			return fmt.Errorf("%s: %w", table, err)

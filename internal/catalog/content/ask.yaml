@@ -42,7 +42,7 @@ commands:
       - {name: subject, type: text, cli: "--subject", doc: "the ask's subject (defaults to its first question)"}
       - {name: seed, type: seed, cli: "--seed", doc: "a seed you tend that the ask is about (defaults to the seed your delegation assigned you)"}
       - {name: re, type: text, cli: "--re", placeholder: "<id>", doc: "the earlier ask this one follows up; the user sees its question and their answer above this one"}
-      - {name: base_dir, type: path, cli: internal, doc: "the folder the markdown's image paths resolve against: the working directory, or beside the file"}
+      - {name: base_dir, type: path, cli: internal, doc: "the folder the markdown's relative image paths and file links resolve against: the working directory, or beside the file"}
     result: Ask
     receipt: [id, subject, seed_id, seed_slug]
 
@@ -75,11 +75,11 @@ commands:
     doc: |
       Adds markdown to the end of an open ask you hold or oversee, when something it says has changed. The user sees the addition as an update with its time, and keeps the ask's place in their queue and the answer they have started. Closing the ask and asking again would throw both away.
 
-      An amendment renders markdown as the ask does, diagrams, tables and local images included, and carries no question blocks, so the ask's questions stay as they are; to ask something new, open another ask. Images resolve as they do when you open an ask, against the folder the ask was opened from; from another folder, name each image by its absolute path. An ask's images never change once saved: save a new picture under a new name, because attn refuses an amendment that names a saved image's path with different bytes. attn refuses an amendment to an ask the user already answered.
+      An amendment renders markdown as the ask does, diagrams, tables and local images included, and carries no question blocks, so the ask's questions stay as they are; to ask something new, open another ask. Images and file links resolve as they do when you open an ask, against the folder the ask was opened from; from another folder, name each image and linked file by its absolute path. An ask's images never change once saved: save a new picture under a new name, because attn refuses an amendment that names a saved image's path with different bytes. attn refuses an amendment to an ask the user already answered.
     args:
       - {name: ask, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the ask's id"}
       - {name: markdown, type: markdown, required: true, piped: true, cli: "--file", placeholder: "<path>", doc: "the markdown to add, required"}
-      - {name: base_dir, type: path, cli: internal, doc: "the folder the markdown's image paths resolve against: the working directory, or beside the file"}
+      - {name: base_dir, type: path, cli: internal, doc: "the folder the markdown's relative image paths and file links resolve against: the working directory, or beside the file"}
     result: Ask
     receipt: [id, subject, seed_id, seed_slug]
 

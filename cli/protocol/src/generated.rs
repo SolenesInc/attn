@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "d5e8d2473da2";
+pub const PROTOCOL_VERSION: &str = "42cf476cbf27";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -446,6 +446,8 @@ pub struct Ask {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub re: Option<AskThread>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub references: Option<Vec<AskReference>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reply: Option<AskReply>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed_id: Option<String>,
@@ -745,6 +747,16 @@ pub struct AskQuestion {
     pub recommended: Option<String>,
 }
 pub type AskQuestionKind = String;
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AskReference {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    pub kind: AskReferenceKind,
+    pub line: i64,
+    pub path: String,
+    pub text: String,
+}
+pub type AskReferenceKind = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AskReply {
     pub answered_at: String,

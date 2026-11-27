@@ -108,6 +108,7 @@ const ask = (
   re: null,
   reply: null,
   tooLarge: null,
+  files: [],
 })
 
 const diagram = 'graph TD\n  A-->B'
@@ -172,6 +173,29 @@ describe('asks on the phone', () => {
         Message.LoadedMentions({ pairingId: personal.id, askId: linked.id, version: 3, mentions: [] }),
       ),
       Scene.expect(Scene.role('button', { name: 'old-work' })).not.toExist(),
+    )
+  })
+  it('shows a link to a file as the machine and the path the home placed it at, not as a link', () => {
+    const planned = {
+      ...ask('a-plan', 1, [
+        {
+          markdown: 'Read [the plan](notes/plan.md) first, then [the guide](https://example.com/guide).',
+          question: null,
+        },
+        { markdown: null, question: choiceQuestion },
+      ]),
+      files: [{ text: 'notes/plan.md', machine: 'far', path: '/far/shop/notes/plan.md' }],
+    }
+    Scene.scene(
+      { update, view },
+      Scene.given(online(personal)),
+      arrive(personal, [planned]),
+      Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
+      Scene.tap((simulation) => {
+        expect(entries('ask-file', simulation.html)).toEqual(['the plan far · /far/shop/notes/plan.md'])
+      }),
+      Scene.expect(Scene.role('link', { name: 'the plan' })).not.toExist(),
+      Scene.expect(Scene.role('link', { name: 'the guide' })).toHaveAttr('href', 'https://example.com/guide'),
     )
   })
   it('shows the inline markdown of a subject, a prompt and its choices, and a link opens without picking', () => {

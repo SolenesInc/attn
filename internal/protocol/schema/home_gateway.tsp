@@ -238,6 +238,15 @@ model HomeGatewayAsk {
   // Since api 10: no agent takes the answer, as the desktop's ask says. An
   // answer with to_chief goes to the profile's Chief instead.
   stranded?: boolean;
+  // The files the ask's links name, by the link destination as written. A
+  // phone shows each as its machine and path, because it opens no file.
+  files?: HomeGatewayAskFile[];
+}
+
+model HomeGatewayAskFile {
+  text: string;
+  machine: string;
+  path: string;
 }
 
 // Answers an ask through the same path as the desktop. The home answers with

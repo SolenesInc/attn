@@ -608,6 +608,9 @@ type Ask struct {
 	// Re corresponds to the JSON schema field "re".
 	Re *AskThread `json:"re,omitempty,omitzero"`
 
+	// References corresponds to the JSON schema field "references".
+	References []AskReference `json:"references,omitempty,omitzero"`
+
 	// Reply corresponds to the JSON schema field "reply".
 	Reply *AskReply `json:"reply,omitempty,omitzero"`
 
@@ -946,6 +949,28 @@ const AskQuestionKindAny AskQuestionKind = "any"
 const AskQuestionKindFile AskQuestionKind = "file"
 const AskQuestionKindOne AskQuestionKind = "one"
 const AskQuestionKindText AskQuestionKind = "text"
+
+type AskReference struct {
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind AskReferenceKind `json:"kind"`
+
+	// Line corresponds to the JSON schema field "line".
+	Line int `json:"line"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type AskReferenceKind string
+
+const AskReferenceKindCommand AskReferenceKind = "command"
+const AskReferenceKindFile AskReferenceKind = "file"
 
 type AskReply struct {
 	// AnsweredAt corresponds to the JSON schema field "answered_at".

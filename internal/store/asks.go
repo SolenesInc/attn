@@ -41,13 +41,16 @@ type Ask struct {
 	CreatedAt  string
 	Re         *protocol.AskThread
 	Amendments []AskAmendment
+	// References are the ask's own, with each host a machine id; an amendment keeps its own.
+	References []protocol.AskReference
 	Reply      *protocol.AskReply
 	Draft      *protocol.AskDraft
 }
 
 type AskAmendment struct {
-	Markdown  string
-	AmendedAt time.Time
+	Markdown   string
+	AmendedAt  time.Time
+	References []protocol.AskReference
 }
 
 const (
@@ -85,7 +88,12 @@ func (s *Store) AddAsk(a Ask, defaultDueAt time.Time) error {
 		query += " AND EXISTS (SELECT 1 FROM " + seeds + " WHERE id = ? AND json_extract(body, '$.status') IN (?, ?, ?))"
 		args = append(args, seedID, garden.StatusPlanted, garden.StatusGrowing, garden.StatusParked)
 	}
-	result, err := s.db.Exec(query, args...)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.Exec(query, args...)
 	if err != nil {
 		return err
 	}
@@ -94,10 +102,13 @@ func (s *Store) AddAsk(a Ask, defaultDueAt time.Time) error {
 		return err
 	}
 	if n > 0 {
-		return nil
+		if err := addAskReferences(tx, a.ID, 0, a.References); err != nil {
+			return err
+		}
+		return tx.Commit()
 	}
 	var live int
-	if err := s.db.QueryRow("SELECT count(*) FROM sessions WHERE id = ? AND closed_at = ''", a.SessionID).Scan(&live); err != nil {
+	if err := tx.QueryRow("SELECT count(*) FROM sessions WHERE id = ? AND closed_at = ''", a.SessionID).Scan(&live); err != nil {
 		return err
 	}
 	if live == 0 {
@@ -156,15 +167,57 @@ func (s *Store) queryAsks(query string, args ...any) ([]Ask, error) {
 		return nil, err
 	}
 	for i := range asks {
-		if asks[i].Amendments, err = amendmentsOf(s.db, asks[i].ID); err != nil {
+		if err := readAskAfterward(s.db, &asks[i]); err != nil {
 			return nil, err
 		}
 	}
 	return asks, nil
 }
 
-func amendmentsOf(db rowsQuerier, askID string) ([]AskAmendment, error) {
-	rows, err := db.Query("SELECT markdown, amended_at FROM ask_amendments WHERE ask_id = ? ORDER BY seq", askID)
+// readAskAfterward reads what an ask holds beside its row: its references and its amendments with theirs.
+func readAskAfterward(db rowsQuerier, a *Ask) error {
+	references, err := referencesOf(db, a.ID)
+	if err != nil {
+		return err
+	}
+	a.References = references[0]
+	a.Amendments, err = amendmentsOf(db, a.ID, references)
+	return err
+}
+
+func addAskReferences(tx *sql.Tx, askID string, amendment int, references []protocol.AskReference) error {
+	for i, r := range references {
+		if _, err := tx.Exec("INSERT INTO ask_references (ask_id, amendment, seq, kind, text, host, path, line) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+			askID, amendment, i, string(r.Kind), r.Text, protocol.Deref(r.Host), r.Path, r.Line); err != nil {
+			return fmt.Errorf("ask %s reference %q: %w", askID, r.Text, err)
+		}
+	}
+	return nil
+}
+
+// referencesOf are the ask's references by the amendment that holds them, 0 for the ask's own.
+func referencesOf(db rowsQuerier, askID string) (map[int][]protocol.AskReference, error) {
+	rows, err := db.Query("SELECT amendment, kind, text, host, path, line FROM ask_references WHERE ask_id = ? ORDER BY amendment, seq", askID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	references := map[int][]protocol.AskReference{}
+	for rows.Next() {
+		var amendment int
+		var r protocol.AskReference
+		var kind, host string
+		if err := rows.Scan(&amendment, &kind, &r.Text, &host, &r.Path, &r.Line); err != nil {
+			return nil, err
+		}
+		r.Kind, r.Host = protocol.AskReferenceKind(kind), protocol.Ptr(host)
+		references[amendment] = append(references[amendment], r)
+	}
+	return references, rows.Err()
+}
+
+func amendmentsOf(db rowsQuerier, askID string, references map[int][]protocol.AskReference) ([]AskAmendment, error) {
+	rows, err := db.Query("SELECT seq, markdown, amended_at FROM ask_amendments WHERE ask_id = ? ORDER BY seq", askID)
 	if err != nil {
 		return nil, err
 	}
@@ -172,10 +225,12 @@ func amendmentsOf(db rowsQuerier, askID string) ([]AskAmendment, error) {
 	var amendments []AskAmendment
 	for rows.Next() {
 		var amendment AskAmendment
+		var seq int
 		var at string
-		if err := rows.Scan(&amendment.Markdown, &at); err != nil {
+		if err := rows.Scan(&seq, &amendment.Markdown, &at); err != nil {
 			return nil, err
 		}
+		amendment.References = references[seq]
 		if amendment.AmendedAt, err = time.Parse(sortableTimeFormat, at); err != nil {
 			return nil, fmt.Errorf("ask %s amendment time: %w", askID, err)
 		}
@@ -184,14 +239,30 @@ func amendmentsOf(db rowsQuerier, askID string) ([]AskAmendment, error) {
 	return amendments, rows.Err()
 }
 
-func (s *Store) AmendAsk(id, markdown string, at time.Time) error {
+func (s *Store) AmendAsk(id string, amendment AskAmendment) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
 		return ErrAskNotOpen
 	}
-	return expectOpenAsk(s.db.Exec("INSERT INTO ask_amendments (ask_id, seq, markdown, amended_at) SELECT id, (SELECT count(*) FROM ask_amendments WHERE ask_id = asks.id) + 1, ?, ? FROM asks WHERE id = ? AND "+openAsk,
-		markdown, at.UTC().Format(sortableTimeFormat), id))
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var seq int
+	err = tx.QueryRow("INSERT INTO ask_amendments (ask_id, seq, markdown, amended_at) SELECT id, (SELECT count(*) FROM ask_amendments WHERE ask_id = asks.id) + 1, ?, ? FROM asks WHERE id = ? AND "+openAsk+" RETURNING seq",
+		amendment.Markdown, amendment.AmendedAt.UTC().Format(sortableTimeFormat), id).Scan(&seq)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrAskNotOpen
+	}
+	if err != nil {
+		return err
+	}
+	if err := addAskReferences(tx, id, seq, amendment.References); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) SaveAskDraft(id string, draft protocol.AskDraft, at time.Time) error {
@@ -256,8 +327,7 @@ func (s *Store) getAsk(id, condition string) (Ask, error) {
 	if err != nil {
 		return Ask{}, err
 	}
-	a.Amendments, err = amendmentsOf(s.db, a.ID)
-	return a, err
+	return a, readAskAfterward(s.db, &a)
 }
 
 func (s *Store) CloseAsk(id string) error {

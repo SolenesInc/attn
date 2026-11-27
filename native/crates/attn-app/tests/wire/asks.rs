@@ -4,8 +4,9 @@ use std::time::Duration;
 use attn_app::Action;
 use attn_protocol::{
     Ask, AskAnswer, AskAnswerResultMessage, AskChoice, AskDefault, AskFollowUpResultMessage,
-    AskPart, AskQuestion, AskReply, AskThread, AsksUpdatedMessage, CrewMember, InitialStateMessage,
-    Session, SessionStateChangedMessage,
+    AskPart, AskQuestion, AskReference, AskReply, AskThread, AsksUpdatedMessage, CrewMember,
+    InitialStateMessage, OpenMarkdownResultMessage, OutpostInfo, Session,
+    SessionStateChangedMessage,
 };
 use attn_protocol::{
     GardenSeedsUpdatedMessage, PartyView, Seed, SeedDocument, SeedDocumentGetResultMessage,
@@ -2507,6 +2508,59 @@ fn an_image_in_a_subject_prompt_or_choice_reads_as_its_alt_text_and_only_the_con
         sent_answers(&world).is_empty(),
         "a click on the choice picks it and sends nothing"
     );
+}
+
+#[test]
+fn a_file_link_in_an_ask_from_an_outpost_opens_the_file_from_that_machine() {
+    let mut state = one_desktop(vec![Session {
+        host: Some("host-1".into()),
+        ..api_working()
+    }]);
+    state.outposts = Some(vec![OutpostInfo {
+        id: "host-1".into(),
+        name: "far".into(),
+        destination: "far".into(),
+        ..OutpostInfo::default()
+    }]);
+    let mut asked = ask(
+        "a-far",
+        "api",
+        "Plan",
+        5,
+        vec![prose("Read [the plan](notes/plan.md) first.")],
+    );
+    asked.base_dir = "/far/shop".into();
+    asked.host = Some("host-1".into());
+    asked.references = Some(vec![AskReference {
+        kind: "file".into(),
+        text: "notes/plan.md".into(),
+        host: Some("host-1".into()),
+        path: "/far/shop/notes/plan.md".into(),
+        line: 1,
+    }]);
+    let mut world = start_on(state, vec![asked], &[]);
+    world.daemon.on("open_markdown", |r| {
+        message(OpenMarkdownResultMessage {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            path: r["path"].as_str().unwrap_or_default().into(),
+            success: true,
+            ..OpenMarkdownResultMessage::new()
+        })
+    });
+    open_sheet(&mut world);
+
+    world.gesture(|app| app.click(Target::key("notes/plan.md")));
+    let sent = world.daemon.sent_of("open_markdown");
+    assert_eq!(
+        sent.iter()
+            .map(|s| (s["path"].clone(), s["host"].clone()))
+            .collect::<Vec<_>>(),
+        [(
+            serde_json::json!("/far/shop/notes/plan.md"),
+            serde_json::json!("host-1")
+        )]
+    );
+    assert!(world.opened_links().is_empty());
 }
 
 const NOTES: &str = "https://example.com/notes";

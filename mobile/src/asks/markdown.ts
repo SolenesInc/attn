@@ -108,6 +108,7 @@ export type MarkdownContext<Message> = {
   readonly seedMentions?: SeedMentionIndex | null
   readonly openMention?: (seedId: string) => Message
   readonly followLink?: Message
+  readonly files?: ReadonlyMap<string, { readonly machine: string; readonly path: string }>
 }
 
 export const mentionText = <Message>(
@@ -209,6 +210,16 @@ const renderer = <Message>(
     ...(context.followLink ? [h.OnClick(context.followLink, { propagation: 'Stop' })] : []),
   ]
 
+  const link = (href: string, node: Nodes): Html => {
+    const file = context.files?.get(href)
+    return file
+      ? h.span(
+          [h.Class('md-file'), h.DataAttribute('testid', 'ask-file')],
+          [...children(node, true), ' ', h.code([], [`${file.machine} · ${file.path}`])],
+        )
+      : h.a(linkAttributes(href), children(node, true))
+  }
+
   const render = (node: RootContent, inLink = false): Html | string => {
     switch (node.type) {
       case 'text':
@@ -252,7 +263,7 @@ const renderer = <Message>(
               ],
         )
       case 'link':
-        return h.a(linkAttributes(node.url), children(node, true))
+        return link(node.url, node)
       case 'image':
         return image(node.url, node.alt ?? '')
       case 'imageReference': {
@@ -261,7 +272,7 @@ const renderer = <Message>(
       }
       case 'linkReference': {
         const href = definitions.get(node.identifier)
-        return href ? h.a(linkAttributes(href), children(node, true)) : textOf(node)
+        return href ? link(href, node) : textOf(node)
       }
       case 'definition':
         return ''

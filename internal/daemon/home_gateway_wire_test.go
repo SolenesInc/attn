@@ -709,6 +709,27 @@ func TestHomeGatewayShowsAnAmendmentAsAPartWithItsTime(t *testing.T) {
 	}
 }
 
+func TestHomeGatewayNamesTheMachineAndPathOfEachFileAnAskLinks(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "phone_access_enabled", "true")
+	setSetting(t, app, "asks_enabled", "true")
+	connectFarOutpost(t, w, app, answerTheFarHome)
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(asker)
+	phone := connectPhone(t, w, "phone", app.SelectedProfile())
+	phone.welcomed()
+	if _, err := cli.AskOpen(protocol.SessionID(asker), "", "Read [the plan](notes/plan.md) and [its twin](far:/srv/plan.md).\n\n"+cacheAsk, "", w.Path("shop")); err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+	files := phone.showsAsks(func(asks []homegateway.HomeGatewayAsk) bool { return len(asks) == 1 })[0].Files
+	if len(files) != 2 || files[0].Text != "notes/plan.md" || files[0].Path != w.Path("shop")+"/notes/plan.md" || files[0].Machine == "" ||
+		files[1] != (homegateway.HomeGatewayAskFile{Text: "far:/srv/plan.md", Machine: "far", Path: "/srv/plan.md"}) {
+		t.Fatalf("the phone shows the files %+v, want the plan on the home's machine and its twin on far", files)
+	}
+	t.Logf("the phone shows the files %+v", files)
+}
+
 func TestHomeGatewayShowsTheAskAFollowUpFollows(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()

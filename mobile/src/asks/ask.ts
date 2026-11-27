@@ -64,6 +64,7 @@ export const PhoneAsk = Schema.Struct({
     }),
   ),
   tooLarge: Schema.NullOr(Schema.Struct({ bytes: Schema.Finite, limit: Schema.Finite })),
+  files: Schema.Array(Schema.Struct({ text: Schema.String, machine: Schema.String, path: Schema.String })),
 })
 export type PhoneAsk = typeof PhoneAsk.Type
 
@@ -126,6 +127,7 @@ export const fromHomeGatewayAsk = (ask: HomeGatewayAsk): PhoneAsk => ({
     ask.too_large_bytes !== undefined
       ? { bytes: ask.too_large_bytes, limit: ask.max_frame_bytes ?? 0 }
       : null,
+  files: (ask.files ?? []).map(({ text, machine, path }) => ({ text, machine, path })),
 })
 
 export const questionsOf = (ask: PhoneAsk): ReadonlyArray<Question> =>

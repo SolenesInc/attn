@@ -912,6 +912,7 @@ fn handoffs_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<Block> {
                     seed: None,
                     part: None,
                     ids: state.readings.ids.clone(),
+                    placed: Vec::new(),
                 },
                 std::rc::Rc::default(),
                 state.readings.kept(&view),

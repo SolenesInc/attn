@@ -115,6 +115,17 @@ pub(crate) struct Document {
     pub(crate) part: Option<usize>,
     /// The ids its words link.
     pub(crate) ids: crate::terminal::Known,
+    /// The links whose file the daemon already placed on a machine.
+    pub(crate) placed: Vec<Placed>,
+}
+
+/// A link whose file the daemon placed: the link as written, its absolute path, and the machine
+/// it is on when that is not this app's.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Placed {
+    pub(crate) href: String,
+    pub(crate) path: String,
+    pub(crate) away: Option<Away>,
 }
 
 /// The machine a document is on when it is not this app's: the `host` the wire names it by,
@@ -164,10 +175,20 @@ impl Document {
                 }
             };
         }
+        if let Some(placed) = self.placed(href) {
+            return verdict(
+                Some(&Target::Local(placed.path.clone())),
+                placed.away.as_ref().map(|o| o.name.as_str()),
+            );
+        }
         verdict(
             resolve(&self.path, href).as_ref(),
             self.away.as_ref().map(|o| o.name.as_str()),
         )
+    }
+
+    fn placed(&self, href: &str) -> Option<&Placed> {
+        self.placed.iter().find(|p| p.href == href)
     }
 
     /// The picture an image's `src` shows, by the path the document's pictures are read by.
@@ -279,6 +300,17 @@ pub(crate) fn follow(state: &mut State, document: &Document, href: &str, tx: &mu
             tx,
         );
     }
+    if let Some(placed) = document.placed(href) {
+        let placed = placed.clone();
+        open_file(
+            state,
+            placed.path,
+            placed.away.as_ref(),
+            document.session.clone(),
+            tx,
+        );
+        return;
+    }
     let target = resolve(&document.path, href);
     match (target, document.away.as_ref()) {
         (Some(Target::Fragment(fragment)), _) => {
@@ -292,41 +324,52 @@ pub(crate) fn follow(state: &mut State, document: &Document, href: &str, tx: &mu
                     .notify(format!("Could not open {url}: {why}"), tx);
             }
         }
-        (Some(Target::Local(path)), None) => {
-            let opened = safe_file(&path).and_then(|file| {
-                tx.open_uri(&attn_term::links::file_url(&file.to_string_lossy()))
-                    .map_err(|why| why.to_string())
-            });
-            if let Err(why) = opened {
-                state
-                    .window
-                    .notify(format!("Could not open {path}: {why}"), tx);
-            }
-        }
-        (Some(Target::Local(path)), Some(away)) => {
-            let Away { host, name } = away.clone();
-            let asked = path.clone();
-            let session = document.session.clone();
-            state.ask(
-                |id| OpenMarkdownMessage {
-                    path: asked,
-                    host,
-                    session_id: session,
-                    request_id: Some(id),
-                    ..OpenMarkdownMessage::new()
-                },
-                move |state, answer: Answer, tx| {
-                    if let Err(why) = answer.outcome() {
-                        state
-                            .window
-                            .notify(format!("Could not open {path} from {name}: {why}"), tx);
-                    }
-                },
-                tx,
-            );
+        (Some(Target::Local(path)), away) => {
+            open_file(state, path, away, document.session.clone(), tx)
         }
         (None, _) => {}
     }
+}
+
+/// Opens the file at `path`: here with the system's opener, or in a tile from the machine `away`
+/// names, for the session the document's tile was opened for.
+fn open_file(
+    state: &mut State,
+    path: String,
+    away: Option<&Away>,
+    session: Option<String>,
+    tx: &mut Tx,
+) {
+    let Some(Away { host, name }) = away.cloned() else {
+        let opened = safe_file(&path).and_then(|file| {
+            tx.open_uri(&attn_term::links::file_url(&file.to_string_lossy()))
+                .map_err(|why| why.to_string())
+        });
+        if let Err(why) = opened {
+            state
+                .window
+                .notify(format!("Could not open {path}: {why}"), tx);
+        }
+        return;
+    };
+    let asked = path.clone();
+    state.ask(
+        |id| OpenMarkdownMessage {
+            path: asked,
+            host,
+            session_id: session,
+            request_id: Some(id),
+            ..OpenMarkdownMessage::new()
+        },
+        move |state, answer: Answer, tx| {
+            if let Err(why) = answer.outcome() {
+                state
+                    .window
+                    .notify(format!("Could not open {path} from {name}: {why}"), tx);
+            }
+        },
+        tx,
+    );
 }
 
 /// The file at `path` as the system's opener may open it: a regular file reached through no

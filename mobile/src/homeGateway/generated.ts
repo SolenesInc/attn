@@ -1,6 +1,6 @@
 // To parse this data:
 //
-//   import { Convert, HomeGatewayAsk, HomeGatewayAskAnswer, HomeGatewayAskAnswerCommand, HomeGatewayAskAnswerResult, HomeGatewayAskChoice, HomeGatewayAskDefault, HomeGatewayAskEvent, HomeGatewayAskImage, HomeGatewayAskImageChunk, HomeGatewayAskImageError, HomeGatewayAskPart, HomeGatewayAskQuestion, HomeGatewayAskQuestionKind, HomeGatewayAskReply, HomeGatewayAskSeedMentions, HomeGatewayAskSeedMentionsResult, HomeGatewayAskThread, HomeGatewayAsks, HomeGatewayCheckState, HomeGatewayCheckTally, HomeGatewayCrewMemberBetweenSessions, HomeGatewayCrewStart, HomeGatewayCrewStartResult, HomeGatewayGarden, HomeGatewayGardenSeeds, HomeGatewayHello, HomeGatewayPing, HomeGatewayPlotProgress, HomeGatewayPong, HomeGatewayProfile, HomeGatewayRefused, HomeGatewaySeed, HomeGatewaySeedChanged, HomeGatewaySeedCheck, HomeGatewaySeedDetail, HomeGatewaySeedError, HomeGatewaySeedGet, HomeGatewaySeedLogEntry, HomeGatewaySeedMention, HomeGatewaySeedMove, HomeGatewaySeedNoteCommand, HomeGatewaySeedResult, HomeGatewaySeedStatus, HomeGatewaySeedVerb, HomeGatewaySession, HomeGatewaySessionState, HomeGatewaySessions, HomeGatewayWelcome, SubmitPrompt, SubmitResult, TerminalAttach, TerminalCredit, TerminalDetach, TerminalEnded, TerminalError, TerminalFocus, TerminalInput, TerminalResize, TerminalResized, TerminalScreen } from "./generated";
+//   import { Convert, HomeGatewayAsk, HomeGatewayAskAnswer, HomeGatewayAskAnswerCommand, HomeGatewayAskAnswerResult, HomeGatewayAskChoice, HomeGatewayAskDefault, HomeGatewayAskEvent, HomeGatewayAskFile, HomeGatewayAskImage, HomeGatewayAskImageChunk, HomeGatewayAskImageError, HomeGatewayAskPart, HomeGatewayAskQuestion, HomeGatewayAskQuestionKind, HomeGatewayAskReply, HomeGatewayAskSeedMentions, HomeGatewayAskSeedMentionsResult, HomeGatewayAskThread, HomeGatewayAsks, HomeGatewayCheckState, HomeGatewayCheckTally, HomeGatewayCrewMemberBetweenSessions, HomeGatewayCrewStart, HomeGatewayCrewStartResult, HomeGatewayGarden, HomeGatewayGardenSeeds, HomeGatewayHello, HomeGatewayPing, HomeGatewayPlotProgress, HomeGatewayPong, HomeGatewayProfile, HomeGatewayRefused, HomeGatewaySeed, HomeGatewaySeedChanged, HomeGatewaySeedCheck, HomeGatewaySeedDetail, HomeGatewaySeedError, HomeGatewaySeedGet, HomeGatewaySeedLogEntry, HomeGatewaySeedMention, HomeGatewaySeedMove, HomeGatewaySeedNoteCommand, HomeGatewaySeedResult, HomeGatewaySeedStatus, HomeGatewaySeedVerb, HomeGatewaySession, HomeGatewaySessionState, HomeGatewaySessions, HomeGatewayWelcome, SubmitPrompt, SubmitResult, TerminalAttach, TerminalCredit, TerminalDetach, TerminalEnded, TerminalError, TerminalFocus, TerminalInput, TerminalResize, TerminalResized, TerminalScreen } from "./generated";
 //
 //   const homeGatewayAsk = Convert.toHomeGatewayAsk(json);
 //   const homeGatewayAskAnswer = Convert.toHomeGatewayAskAnswer(json);
@@ -9,6 +9,7 @@
 //   const homeGatewayAskChoice = Convert.toHomeGatewayAskChoice(json);
 //   const homeGatewayAskDefault = Convert.toHomeGatewayAskDefault(json);
 //   const homeGatewayAskEvent = Convert.toHomeGatewayAskEvent(json);
+//   const homeGatewayAskFile = Convert.toHomeGatewayAskFile(json);
 //   const homeGatewayAskImage = Convert.toHomeGatewayAskImage(json);
 //   const homeGatewayAskImageChunk = Convert.toHomeGatewayAskImageChunk(json);
 //   const homeGatewayAskImageError = Convert.toHomeGatewayAskImageError(json);
@@ -70,6 +71,7 @@ export interface HomeGatewayAsk {
     chief?:           boolean;
     created_at:       Date;
     crew_member?:     string;
+    files?:           FileElement[];
     id:               string;
     max_frame_bytes?: number;
     parts:            PartElement[];
@@ -81,6 +83,13 @@ export interface HomeGatewayAsk {
     stranded?:        boolean;
     subject:          string;
     too_large_bytes?: number;
+    [property: string]: any;
+}
+
+export interface FileElement {
+    machine: string;
+    path:    string;
+    text:    string;
     [property: string]: any;
 }
 
@@ -206,6 +215,7 @@ export interface Ask {
     chief?:           boolean;
     created_at:       Date;
     crew_member?:     string;
+    files?:           FileElement[];
     id:               string;
     max_frame_bytes?: number;
     parts:            PartElement[];
@@ -222,6 +232,13 @@ export interface Ask {
 
 export enum HomeGatewayAskEventEvent {
     Ask = "ask",
+}
+
+export interface HomeGatewayAskFile {
+    machine: string;
+    path:    string;
+    text:    string;
+    [property: string]: any;
 }
 
 export interface HomeGatewayAskImage {
@@ -924,6 +941,14 @@ export class Convert {
         return JSON.stringify(uncast(value, r("HomeGatewayAskEvent")), null, 2);
     }
 
+    public static toHomeGatewayAskFile(json: string): HomeGatewayAskFile {
+        return cast(JSON.parse(json), r("HomeGatewayAskFile"));
+    }
+
+    public static homeGatewayAskFileToJson(value: HomeGatewayAskFile): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAskFile")), null, 2);
+    }
+
     public static toHomeGatewayAskImage(json: string): HomeGatewayAskImage {
         return cast(JSON.parse(json), r("HomeGatewayAskImage"));
     }
@@ -1502,6 +1527,7 @@ const typeMap: any = {
         { json: "chief", js: "chief", typ: u(undefined, true) },
         { json: "created_at", js: "created_at", typ: Date },
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
+        { json: "files", js: "files", typ: u(undefined, a(r("FileElement"))) },
         { json: "id", js: "id", typ: "" },
         { json: "max_frame_bytes", js: "max_frame_bytes", typ: u(undefined, 0) },
         { json: "parts", js: "parts", typ: a(r("PartElement")) },
@@ -1513,6 +1539,11 @@ const typeMap: any = {
         { json: "stranded", js: "stranded", typ: u(undefined, true) },
         { json: "subject", js: "subject", typ: "" },
         { json: "too_large_bytes", js: "too_large_bytes", typ: u(undefined, 0) },
+    ], "any"),
+    "FileElement": o([
+        { json: "machine", js: "machine", typ: "" },
+        { json: "path", js: "path", typ: "" },
+        { json: "text", js: "text", typ: "" },
     ], "any"),
     "PartElement": o([
         { json: "amended_at", js: "amended_at", typ: u(undefined, Date) },
@@ -1594,6 +1625,7 @@ const typeMap: any = {
         { json: "chief", js: "chief", typ: u(undefined, true) },
         { json: "created_at", js: "created_at", typ: Date },
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
+        { json: "files", js: "files", typ: u(undefined, a(r("FileElement"))) },
         { json: "id", js: "id", typ: "" },
         { json: "max_frame_bytes", js: "max_frame_bytes", typ: u(undefined, 0) },
         { json: "parts", js: "parts", typ: a(r("PartElement")) },
@@ -1605,6 +1637,11 @@ const typeMap: any = {
         { json: "stranded", js: "stranded", typ: u(undefined, true) },
         { json: "subject", js: "subject", typ: "" },
         { json: "too_large_bytes", js: "too_large_bytes", typ: u(undefined, 0) },
+    ], "any"),
+    "HomeGatewayAskFile": o([
+        { json: "machine", js: "machine", typ: "" },
+        { json: "path", js: "path", typ: "" },
+        { json: "text", js: "text", typ: "" },
     ], "any"),
     "HomeGatewayAskImage": o([
         { json: "ask_id", js: "ask_id", typ: "" },

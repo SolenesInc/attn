@@ -384,11 +384,13 @@ struct Prose<'a> {
     widths: &'a HashMap<String, u32>,
     document: String,
     away: Option<links::Away>,
+    placed: Vec<links::Placed>,
     t: &'a Tokens,
 }
 
 impl<'a> Prose<'a> {
     fn of(state: &'a State, ask: &Ask, measure: Option<f32>, t: &'a Tokens) -> Prose<'a> {
+        let machines = crate::machine::Machines::of(&state.facts);
         Prose {
             names: mentions::of(state, &ask.id),
             ids: &state.readings.ids,
@@ -396,7 +398,8 @@ impl<'a> Prose<'a> {
             pictures: state.pictures.of_ask(&ask.id),
             widths: &state.window.asks.widths,
             document: images::ask_document(ask),
-            away: links::Away::of(&crate::machine::Machines::of(&state.facts), None),
+            away: links::Away::of(&machines, None),
+            placed: placed_files(&machines, ask),
             t,
         }
     }
@@ -411,6 +414,7 @@ impl<'a> Prose<'a> {
             seed: None,
             part: None,
             ids: self.ids.clone(),
+            placed: self.placed.clone(),
         }
     }
 
@@ -471,6 +475,20 @@ impl<'a> Prose<'a> {
             })
             .child(read)
     }
+}
+
+/// The files the ask's links name, on the machines the daemon placed them on.
+fn placed_files(machines: &crate::machine::Machines, ask: &Ask) -> Vec<links::Placed> {
+    ask.references
+        .iter()
+        .flatten()
+        .filter(|r| r.kind == "file")
+        .map(|r| links::Placed {
+            href: r.text.clone(),
+            path: r.path.clone(),
+            away: links::Away::of(machines, r.host.as_deref()),
+        })
+        .collect()
 }
 
 fn follow_link(state: &mut State, document: &links::Document, href: &str, tx: &mut Tx) {

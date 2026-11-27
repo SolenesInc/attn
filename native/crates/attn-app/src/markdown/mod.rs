@@ -150,6 +150,7 @@ pub(crate) fn body(
         seed: None,
         part: None,
         ids: kept.ids.clone(),
+        placed: Vec::new(),
     };
     let read_source = |source: &str, part: Option<usize>, marking: Marking| {
         let pictures = pictures.of(host);
@@ -255,6 +256,7 @@ pub(crate) fn still(
                 seed: None,
                 part: None,
                 ids: ids.clone(),
+                placed: Vec::new(),
             },
             pictures.of(host),
             annotating::Kept::default(),

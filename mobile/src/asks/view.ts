@@ -297,6 +297,7 @@ export const askScreen = <Message>(
     ...actions,
     seedMentions: createSeedMentionIndex(open.mentions),
     openMention: (id: string) => actions.openSeed(row.pairing.id, id),
+    files: new Map(ask.files.map((file) => [file.text, file])),
   }
   let index = 0
   const body = ask.tooLarge

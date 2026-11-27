@@ -57,6 +57,7 @@ CREATE TABLE analytics_outbox ( id INTEGER PRIMARY KEY, stream TEXT NOT NULL, se
 CREATE TABLE analytics_sequences ( stream TEXT PRIMARY KEY, seq INTEGER NOT NULL );
 CREATE TABLE ask_amendments ( ask_id TEXT NOT NULL, seq INTEGER NOT NULL, markdown TEXT NOT NULL, amended_at TEXT NOT NULL, PRIMARY KEY (ask_id, seq) );
 CREATE TABLE ask_drafts ( ask_id TEXT NOT NULL PRIMARY KEY, generation INTEGER NOT NULL, draft TEXT NOT NULL, updated_at TEXT NOT NULL );
+CREATE TABLE ask_references ( ask_id TEXT NOT NULL, amendment INTEGER NOT NULL, seq INTEGER NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL, host TEXT NOT NULL, path TEXT NOT NULL, line INTEGER NOT NULL, PRIMARY KEY (ask_id, amendment, seq) );
 CREATE TABLE asks ( id TEXT PRIMARY KEY, session_id TEXT NOT NULL, address TEXT NOT NULL, subject TEXT NOT NULL, markdown TEXT NOT NULL, base_dir TEXT NOT NULL, created_at TEXT NOT NULL , answered_at TEXT NOT NULL DEFAULT '', answers TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', default_due_at TEXT NOT NULL DEFAULT '', re_ask_id TEXT NOT NULL DEFAULT '', re_subject TEXT NOT NULL DEFAULT '', re_answer TEXT NOT NULL DEFAULT '', re_answered_at TEXT NOT NULL DEFAULT '', host TEXT NOT NULL DEFAULT '', cwd TEXT NOT NULL DEFAULT '');
 CREATE TABLE attachments ( attachment_id TEXT NOT NULL PRIMARY KEY, profile_id TEXT NOT NULL, owner_kind TEXT NOT NULL, owner_id TEXT NOT NULL, name TEXT NOT NULL, media_type TEXT NOT NULL DEFAULT '', byte_count INTEGER NOT NULL DEFAULT 0, state TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0 );
 CREATE TABLE authors ( author TEXT PRIMARY KEY, muted INTEGER NOT NULL DEFAULT 0 );
@@ -144,6 +145,7 @@ CREATE TABLE worktrees ( path TEXT PRIMARY KEY, branch TEXT NOT NULL, main_repo 
 CREATE TRIGGER ask_amendments_die_with_their_ask AFTER DELETE ON asks BEGIN DELETE FROM ask_amendments WHERE ask_id = OLD.id; END;
 CREATE TRIGGER ask_drafts_die_with_their_ask AFTER DELETE ON asks BEGIN DELETE FROM ask_drafts WHERE ask_id = OLD.id; END;
 CREATE TRIGGER ask_files_die_with_their_ask AFTER DELETE ON asks BEGIN UPDATE attachments SET state = 'discarded' WHERE owner_kind = 'ask' AND owner_id = OLD.id AND state IN ('staged', 'ready'); END;
+CREATE TRIGGER ask_references_die_with_their_ask AFTER DELETE ON asks BEGIN DELETE FROM ask_references WHERE ask_id = OLD.id; END;
 CREATE TRIGGER launch_automation_deleted AFTER UPDATE OF deleted_at ON automation_definitions WHEN NEW.deleted_at != '' BEGIN DELETE FROM launch_desktops WHERE kind = 'automation' AND item_id = NEW.id; END;
 CREATE TRIGGER launch_review_crew_insert AFTER INSERT ON crew_members BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
 CREATE TRIGGER launch_review_crew_update AFTER UPDATE ON crew_members WHEN OLD.profile_id != NEW.profile_id OR OLD.name != NEW.name BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
@@ -152,6 +154,8 @@ CREATE TRIGGER launch_review_definition_update AFTER UPDATE OF name, profile_id,
 CREATE TRIGGER launch_review_setting_delete AFTER DELETE ON launch_desktops BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
 CREATE TRIGGER launch_review_setting_insert AFTER INSERT ON launch_desktops BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
 CREATE TRIGGER launch_review_setting_update AFTER UPDATE ON launch_desktops BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
+CREATE TRIGGER machine_required_ask_references_insert BEFORE INSERT ON ask_references WHEN NEW.host = '' BEGIN SELECT RAISE(ABORT, 'ask_references.host must name a machine'); END;
+CREATE TRIGGER machine_required_ask_references_update BEFORE UPDATE ON ask_references WHEN NEW.host = '' BEGIN SELECT RAISE(ABORT, 'ask_references.host must name a machine'); END;
 CREATE TRIGGER machine_required_asks_insert BEFORE INSERT ON asks WHEN NEW.host = '' BEGIN SELECT RAISE(ABORT, 'asks.host must name a machine'); END;
 CREATE TRIGGER machine_required_asks_update BEFORE UPDATE ON asks WHEN NEW.host = '' BEGIN SELECT RAISE(ABORT, 'asks.host must name a machine'); END;
 CREATE TRIGGER machine_required_code_nav_setups_insert BEFORE INSERT ON code_nav_setups WHEN NEW.host = '' BEGIN SELECT RAISE(ABORT, 'code_nav_setups.host must name a machine'); END;

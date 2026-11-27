@@ -72,21 +72,27 @@ func (d *Daemon) askOpen(msg *protocol.AskOpenMessage) (protocol.Ask, error) {
 	if err != nil {
 		return protocol.Ask{}, err
 	}
+	host := d.store.StoredHost(session.Host)
+	references, err := d.askReferences(msg.Markdown, ask.Place{Host: host, BaseDir: msg.BaseDir}, msg.BaseDir, "")
+	if err != nil {
+		return protocol.Ask{}, err
+	}
 	id, err := ask.NewID()
 	if err != nil {
 		return protocol.Ask{}, err
 	}
 	stored := store.Ask{
-		Re:        re,
-		ID:        id,
-		SessionID: session.ID,
-		To:        to,
-		Subject:   ask.Subject(protocol.Deref(msg.Subject), parts),
-		Markdown:  msg.Markdown,
-		BaseDir:   msg.BaseDir,
-		Host:      d.store.StoredHost(session.Host),
-		Cwd:       session.Directory,
-		CreatedAt: openedAt.UTC().Format(time.RFC3339Nano),
+		Re:         re,
+		ID:         id,
+		SessionID:  session.ID,
+		To:         to,
+		Subject:    ask.Subject(protocol.Deref(msg.Subject), parts),
+		Markdown:   msg.Markdown,
+		BaseDir:    msg.BaseDir,
+		Host:       host,
+		Cwd:        session.Directory,
+		References: references,
+		CreatedAt:  openedAt.UTC().Format(time.RFC3339Nano),
 	}
 	opened, err := d.describeAsk(stored, parts)
 	if err != nil {
@@ -176,6 +182,10 @@ func (d *Daemon) askAmend(msg *protocol.AskAmendMessage) (protocol.Ask, error) {
 		return protocol.Ask{}, protocol.Refuse(protocol.RefusalInvalidInput, "an ask holds at most %d KiB of markdown, its amendments included; %s holds %d bytes, and this amendment adds %d. Close it and open another ask",
 			ask.MaxMarkdownBytes>>10, shown.stored.ID, held, len(msg.Markdown))
 	}
+	references, err := d.askReferences(msg.Markdown, ask.Place{Host: shown.stored.Host, BaseDir: shown.stored.BaseDir}, msg.BaseDir, shown.stored.ID)
+	if err != nil {
+		return protocol.Ask{}, err
+	}
 	images, err := parseAskImages(msg.Images)
 	if err != nil {
 		return protocol.Ask{}, err
@@ -191,7 +201,7 @@ func (d *Daemon) askAmend(msg *protocol.AskAmendMessage) (protocol.Ask, error) {
 			return protocol.Ask{}, fmt.Errorf("keep the amendment's images: %v", err)
 		}
 	}
-	err = d.store.AmendAsk(shown.stored.ID, msg.Markdown, d.clock.Now())
+	err = d.store.AmendAsk(shown.stored.ID, store.AskAmendment{Markdown: msg.Markdown, AmendedAt: d.clock.Now(), References: references})
 	if errors.Is(err, store.ErrAskNotOpen) {
 		d.forgetAskImages([]string{shown.stored.ID})
 		return protocol.Ask{}, errAskGone
@@ -992,19 +1002,21 @@ func (d *Daemon) readAsk(a store.Ask) (shownAsk, error) {
 
 func (d *Daemon) describeAsk(a store.Ask, parts []protocol.AskPart) (shownAsk, error) {
 	shown := shownAsk{stored: a, wire: protocol.Ask{
-		ID:        a.ID,
-		SessionID: a.SessionID,
-		Subject:   a.Subject,
-		Parts:     parts,
-		BaseDir:   a.BaseDir,
-		Host:      d.store.WireHost(a.Host),
-		Cwd:       optionalText(a.Cwd),
-		CreatedAt: a.CreatedAt,
-		Re:        a.Re,
-		Reply:     a.Reply,
+		ID:         a.ID,
+		SessionID:  a.SessionID,
+		Subject:    a.Subject,
+		Parts:      parts,
+		BaseDir:    a.BaseDir,
+		Host:       d.store.WireHost(a.Host),
+		Cwd:        optionalText(a.Cwd),
+		References: d.wireReferences(a.References),
+		CreatedAt:  a.CreatedAt,
+		Re:         a.Re,
+		Reply:      a.Reply,
 	}}
 	for _, amendment := range a.Amendments {
 		shown.wire.Parts = append(shown.wire.Parts, protocol.AskPart{Markdown: protocol.Ptr(amendment.Markdown), AmendedAt: protocol.Ptr(amendment.AmendedAt)})
+		shown.wire.References = append(shown.wire.References, d.wireReferences(amendment.References)...)
 	}
 	if d.askStranded(a, "") {
 		shown.wire.Stranded = protocol.Ptr(true)
