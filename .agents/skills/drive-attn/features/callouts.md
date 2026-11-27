@@ -29,7 +29,7 @@ ends the callout with Esc. Callouts are always on.
 
 ## Driving it
 
-The card takes the keyboard when it shows. When it ends, nothing has focus, so keys go to the window and the terminal holding it. Tiles and the card draw in one window, so only a browser tile's page, a native view over the window, hides while a callout shows ([browser.md](browser.md)). The ring, `callout.ring`, is drawn but is not in the accessibility tree, so `bridge tree` does not list it. See it in a `bridge shot`.
+The card takes the keyboard when it shows. When it ends, nothing has focus, so keys go to the window and the terminal holding it. Tiles and the card draw in one window, so only the native web views over the window, a browser tile's page and the Asks panel's page, hide while a callout shows ([browser.md](browser.md), [asks.md](asks.md)). The ring, `callout.ring`, is drawn but is not in the accessibility tree, so `bridge tree` does not list it. See it in a `bridge shot`.
 
 Preconditions:
 
@@ -69,7 +69,7 @@ Preconditions:
 - **Durability across restarts**: a showing callout ends when the app relaunches, and attn does not tell the agent.
 - **Linux**: `attn callout` works the same where the daemon and CLI run on Linux. It needs an app showing the profile, wherever that app runs.
 - **Profiles**: a callout reaches only an app showing the caller's profile. `agent:` and `desktop:` resolve only in that profile, so another profile's agent is refused as `is not an agent in your profile`. A profile switch ends the callout.
-- **Performance and idle cost**: an open card runs no animations once placed. A browser tile's page hides while a callout shows and returns when the callout ends.
+- **Performance and idle cost**: an open card runs no animations once placed. A browser tile's page and the Asks panel's page hide while a callout shows and return when the callout ends.
 - **Harnesses**: every harness points with the same `attn callout` verbs and reads the same reference.
 - **Keyboard and native input**: Enter, → and Esc drive the card, and any shortcut that opens another overlay ends a one-step callout and hides a longer one until the overlay closes. When the card ends, the app leaves nothing focused, so typing reaches the terminal that holds the keyboard.
 - **Flow**: which fixed anchors are on screen follows the sidebar's shape. `queue` is there only in queue flow. With the queue bar or the collapsed sidebar, `sidebar` and `desktops` point at the strip, and an agent step reveals the agent list when it can.

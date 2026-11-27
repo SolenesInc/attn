@@ -941,13 +941,23 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
     layers
 }
 
-/// Whether the window draws something over its tiles, under which a browser tile's page hides:
-/// a dialog, the palette, a menu, a popover, a callout or a drag. A notice and a sequence's
-/// hint sit at the window's foot and leave the page showing.
-pub(crate) fn covers_tiles(state: &State) -> bool {
-    state.window.callout.is_some()
-        || state.window.layer == Some(Layer::Overview)
-        || !over_tiles(state, &crate::color_scheme(&state.facts.settings).dark.ui).is_empty()
+/// What the window draws over its tiles, under which a page hides: a dialog, the palette, a
+/// menu, a popover, a callout or a drag covers a browser tile's page, and any of them but the
+/// open Asks sheet itself covers the Asks panel's page. A notice and a sequence's hint sit at the
+/// window's foot and leave both showing.
+pub(crate) struct Covered {
+    pub(crate) tiles: bool,
+    pub(crate) asks: bool,
+}
+
+pub(crate) fn covered(state: &State) -> Covered {
+    let layers = over_tiles(state, &crate::color_scheme(&state.facts.settings).dark.ui).len();
+    let callout = state.window.callout.is_some();
+    let asks_sheet = usize::from(crate::asks::is_open(state));
+    Covered {
+        tiles: callout || state.window.layer == Some(Layer::Overview) || layers > 0,
+        asks: callout || layers > asks_sheet,
+    }
 }
 
 fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {

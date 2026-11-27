@@ -87,8 +87,8 @@ fn heard_key(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> 
 fn route(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> bool {
     if let Some(second) = follow_leader(&mut state.window.leader, &state.keymap, ev, tx) {
         if let Some(action) = second
-            && !held(state, &action)
             && !crate::browser::press_page_key(state, &action, tx)
+            && !held(state, &action)
         {
             run_shortcut(state, action, tx);
         }
@@ -156,8 +156,8 @@ fn route(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> bool
     match state.keymap.press(ev, tx, focus) {
         Press::Action(action) => {
             state.window.vim_prefix = None;
-            held(state, &action)
-                || crate::browser::press_page_key(state, &action, tx)
+            crate::browser::press_page_key(state, &action, tx)
+                || held(state, &action)
                 || run_chord(state, action, tx)
                 || send_to_terminal(state, terminal, ev, trace, tx)
         }

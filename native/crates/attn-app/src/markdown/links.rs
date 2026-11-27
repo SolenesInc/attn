@@ -231,6 +231,11 @@ pub(crate) fn seed_file(target: &str) -> Option<String> {
         .then(|| target.to_owned())
 }
 
+fn is_web(url: &str) -> bool {
+    url.split_once("://")
+        .is_some_and(|(scheme, _)| matches!(scheme.to_ascii_lowercase().as_str(), "http" | "https"))
+}
+
 fn is_seed_id(text: &str) -> bool {
     text.strip_prefix("s-").is_some_and(|body| {
         body.len() == 6
@@ -329,6 +334,11 @@ pub(crate) fn follow(state: &mut State, document: &Document, href: &str, tx: &mu
         (Some(Target::Fragment(fragment)), _) => {
             let id = decoded(&fragment);
             tx.scroll_key_to(format!("{}/{id}", document.view), 0.0);
+        }
+        (Some(Target::External(url)), _)
+            if is_web(&url) && crate::asks::panel::shows_web(state) =>
+        {
+            crate::asks::panel::open(state, crate::asks::panel::Reference::Web(url), tx)
         }
         (Some(Target::External(url)), _) => {
             if let Err(why) = tx.open_url(&url) {

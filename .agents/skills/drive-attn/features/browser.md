@@ -43,6 +43,8 @@ While the page holds the keyboard, the keys split as a browser splits them, by a
 
 On Linux the page area says "Browser tiles are not available in this app on this platform yet.", the app does not offer itself as the browser host, and every verb but `open` fails with `no in-app browser host is connected`. The tile's sidebar row, `sidebar.tile.<desktop>.tile-browser`, holds `sidebar.tile.<desktop>.tile-browser.reload`, named "Reload <title>", and `sidebar.tile.<desktop>.tile-browser.close`, named "Close <title>".
 
+An ask's web link, followed in Asks on macOS, loads in a page of the Asks panel's own and never moves the browser tile's page ([asks.md](asks.md), `ask-panel`).
+
 A browser tile popped out into its own window shows its page there, with its address field and Reload in the window's header, and the agent verbs act on it as on the desktop. The page stays loaded while its tile is out, whichever desktop is current. Bringing the tile back moves the same page to its desktop, with its history, without loading it again.
 
 Preconditions:

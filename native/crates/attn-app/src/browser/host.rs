@@ -1,5 +1,5 @@
-//! The seam between browser tiles and the web engine that runs their pages: `WKWebView` in the
-//! macOS app, a scripted engine in wire tests, none on Linux.
+//! The seam between the pages of browser tiles and the Asks panel and the web engine that runs
+//! them: `WKWebView` in the macOS app, a scripted engine in wire tests, none on Linux.
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -8,27 +8,34 @@ use attn_client::TileKey;
 use rune::{Chord, Key, KeyEvent, Platform};
 use serde_json::{Map, Value};
 
-/// A web engine that holds one page per browser tile, as native views over the window that
+/// Which page: a browser tile's, or the one the Asks panel shows an ask's web pages in.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum PageId {
+    Tile(TileKey),
+    Asks,
+}
+
+/// A web engine that holds one page per browser tile, and one for the Asks panel, as native views over the window that
 /// shows the tile: the main window, or the tile window it popped out into.
 pub trait BrowserHost {
     /// Makes the page for `page`, hidden, and loads `url` in it.
-    fn open(&mut self, page: &TileKey, url: &str);
-    fn navigate(&mut self, page: &TileKey, url: &str);
-    fn reload(&mut self, page: &TileKey);
+    fn open(&mut self, page: &PageId, url: &str);
+    fn navigate(&mut self, page: &PageId, url: &str);
+    fn reload(&mut self, page: &PageId);
     /// Goes back one page in the page's history, if it has one.
-    fn back(&mut self, page: &TileKey);
-    fn forward(&mut self, page: &TileKey);
-    fn zoom(&mut self, page: &TileKey, toward: crate::keymap::Zoom);
+    fn back(&mut self, page: &PageId);
+    fn forward(&mut self, page: &PageId);
+    fn zoom(&mut self, page: &PageId, toward: crate::keymap::Zoom);
     /// Frees the page, so its web content process ends.
-    fn close(&mut self, page: &TileKey);
+    fn close(&mut self, page: &PageId);
     /// Shows the page over `at` in `at`'s window, clipped to `at`'s visible part, or hides it.
     /// A page moves between windows with its history and state intact.
-    fn place(&mut self, page: &TileKey, at: Option<Placement>);
+    fn place(&mut self, page: &PageId, at: Option<Placement>);
     /// Hands the keyboard to the page, or takes it back for the window.
-    fn focus(&mut self, page: &TileKey, focused: bool);
+    fn focus(&mut self, page: &PageId, focused: bool);
     /// Runs an agent's action on the page. The answer comes back through [`hear`] as
     /// [`Heard::Answered`].
-    fn control(&mut self, page: &TileKey, request: Control);
+    fn control(&mut self, page: &PageId, request: Control);
     /// The app quits: before the process ends, the engine keeps what the pages carry to the
     /// next launch.
     fn quit(&mut self) {}
@@ -56,9 +63,9 @@ pub struct Control {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Heard {
     /// The page is at `url` now, by a link, a redirect, history or the page's own script.
-    Located { page: TileKey, url: String },
+    Located { page: PageId, url: String },
     /// A click or a key gave the page the keyboard.
-    Focused { page: TileKey },
+    Focused { page: PageId },
     /// The answer to the [`Control`] with this id: its JSON data, or why it failed.
     Answered {
         request_id: String,
@@ -66,7 +73,7 @@ pub enum Heard {
     },
     /// The page opened a dialog while agents' actions ran on it: those actions end, and the
     /// agent answers the dialog.
-    Alerted { page: TileKey },
+    Alerted { page: PageId },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -96,7 +103,7 @@ struct Acting {
 thread_local! {
     static HOST: RefCell<Option<Box<dyn BrowserHost>>> = const { RefCell::new(None) };
     static HEARD: RefCell<Vec<Heard>> = const { RefCell::new(Vec::new()) };
-    static ACTING: RefCell<HashMap<TileKey, Acting>> = RefCell::new(HashMap::new());
+    static ACTING: RefCell<HashMap<PageId, Acting>> = RefCell::new(HashMap::new());
     static CLAIMED: RefCell<Vec<Chord>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -134,7 +141,7 @@ pub(super) fn take_heard() -> Vec<Heard> {
 
 /// A page's script opened `alert`. While an agent's action runs on the page the agent answers
 /// it and this keeps it; otherwise it comes back for the host to show the person.
-pub fn page_alert(page: &TileKey, alert: Alert) -> Option<Alert> {
+pub fn page_alert(page: &PageId, alert: Alert) -> Option<Alert> {
     let acting =
         ACTING.with_borrow(|acting| acting.get(page).is_some_and(|a| !a.running.is_empty()));
     if !acting {
@@ -198,7 +205,7 @@ pub(super) fn claim_keys(chords: Vec<Chord>) {
 }
 
 /// Runs an agent's action on the page; its dialogs are the agent's until it is answered.
-pub(super) fn run(page: &TileKey, request: Control) {
+pub(super) fn run(page: &PageId, request: Control) {
     ACTING.with_borrow_mut(|acting| {
         acting
             .entry(page.clone())
@@ -215,7 +222,7 @@ pub(super) fn settle(request_id: &str) -> bool {
 }
 
 /// Ends every action running on `page`, by their ids.
-pub(super) fn interrupt(page: &TileKey) -> Vec<String> {
+pub(super) fn interrupt(page: &PageId) -> Vec<String> {
     ACTING.with_borrow_mut(|acting| {
         acting
             .get_mut(page)
@@ -224,12 +231,12 @@ pub(super) fn interrupt(page: &TileKey) -> Vec<String> {
     })
 }
 
-pub(super) fn alert_text(page: &TileKey) -> Option<String> {
+pub(super) fn alert_text(page: &PageId) -> Option<String> {
     ACTING.with_borrow(|acting| Some(acting.get(page)?.alert.as_ref()?.message.clone()))
 }
 
 /// Types `text` into the page's open prompt; false when no prompt is open.
-pub(super) fn type_alert(page: &TileKey, text: &str) -> bool {
+pub(super) fn type_alert(page: &PageId, text: &str) -> bool {
     ACTING.with_borrow_mut(|acting| {
         let Some(on_page) = acting.get_mut(page) else {
             return false;
@@ -246,7 +253,7 @@ pub(super) fn type_alert(page: &TileKey, text: &str) -> bool {
 }
 
 /// Accepts or dismisses the page's open dialog; false when none is open.
-pub(super) fn close_alert(page: &TileKey, accept: bool) -> bool {
+pub(super) fn close_alert(page: &PageId, accept: bool) -> bool {
     let taken = ACTING.with_borrow_mut(|acting| {
         let on_page = acting.get_mut(page)?;
         let alert = on_page.alert.take()?;
@@ -262,7 +269,7 @@ pub(super) fn close_alert(page: &TileKey, accept: bool) -> bool {
 }
 
 /// The page is gone: its open dialog is dismissed and what ran on it is forgotten.
-pub(super) fn forget(page: &TileKey) {
+pub(super) fn forget(page: &PageId) {
     let gone = ACTING.with_borrow_mut(|acting| acting.remove(page));
     if let Some(alert) = gone.and_then(|a| a.alert) {
         (alert.close)(None);

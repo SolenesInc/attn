@@ -32,17 +32,22 @@ pub(crate) fn address_input(browsers: &super::Browsers, page: &TileKey, stored: 
         })
 }
 
-/// Where the tile's page shows. The page is a native view the host places over this area, in
-/// the main window or the tile window the tile popped out into; where no engine runs pages, the
-/// area says so.
-pub(crate) fn page_area(page: &TileKey, t: &Tokens) -> El {
-    let area = col()
-        .key(page_key(page))
+/// Where a page shows: the host places the page's native view over this area.
+pub(crate) fn page_slot(key: String) -> El {
+    col()
+        .key(key)
         .w_full()
         .grow(1.0)
         .min_h(0.0)
         .on_layout_tx(|_: &mut State, _, tx: &mut Tx| tx.live_only())
-        .on_drawn_layout_tx(|_: &mut State, _, tx: &mut Tx| tx.live_only());
+        .on_drawn_layout_tx(|_: &mut State, _, tx: &mut Tx| tx.live_only())
+}
+
+/// Where the tile's page shows. The page is a native view the host places over this area, in
+/// the main window or the tile window the tile popped out into; where no engine runs pages, the
+/// area says so.
+pub(crate) fn page_area(page: &TileKey, t: &Tokens) -> El {
+    let area = page_slot(page_key(page));
     if super::hosts_pages() {
         return area;
     }

@@ -8,7 +8,6 @@ use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::rc::Rc;
 
-use attn_client::TileKey;
 use base64::Engine;
 use block2::RcBlock;
 use objc2::rc::Retained;
@@ -34,7 +33,7 @@ use objc2_web_kit::{
 use rune::{Key, KeyEvent, Mods};
 use serde_json::{Map, Value, json};
 
-use super::{Alert, AlertKind, BrowserHost, Control, Heard, Placement};
+use super::{Alert, AlertKind, BrowserHost, Control, Heard, PageId, Placement};
 use crate::keymap::Zoom;
 
 mod session_cookies;
@@ -177,7 +176,7 @@ struct WebKitHost {
     content: Retained<NSView>,
     config: Retained<WKWebViewConfiguration>,
     world: Retained<WKContentWorld>,
-    pages: HashMap<TileKey, Shown>,
+    pages: HashMap<PageId, Shown>,
     unoccluded: bool,
 }
 
@@ -271,7 +270,7 @@ impl WebKitHost {
         }
     }
 
-    fn web(&self, page: &TileKey) -> Option<Retained<PageView>> {
+    fn web(&self, page: &PageId) -> Option<Retained<PageView>> {
         self.pages.get(page).map(|shown| shown.web.clone())
     }
 }
@@ -296,7 +295,7 @@ impl BrowserHost for WebKitHost {
         session_cookies::save_before_quit();
     }
 
-    fn open(&mut self, page: &TileKey, url: &str) {
+    fn open(&mut self, page: &PageId, url: &str) {
         let mtm = self.mtm;
         let none = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(0.0, 0.0));
         let clip = PageClip::new(mtm, none);
@@ -332,37 +331,37 @@ impl BrowserHost for WebKitHost {
         );
     }
 
-    fn navigate(&mut self, page: &TileKey, url: &str) {
+    fn navigate(&mut self, page: &PageId, url: &str) {
         if let Some(web) = self.web(page) {
             load(&web, url);
         }
     }
 
-    fn reload(&mut self, page: &TileKey) {
+    fn reload(&mut self, page: &PageId) {
         if let Some(web) = self.web(page) {
             unsafe { web.reload() };
         }
     }
 
-    fn back(&mut self, page: &TileKey) {
+    fn back(&mut self, page: &PageId) {
         if let Some(web) = self.web(page) {
             unsafe { web.goBack() };
         }
     }
 
-    fn forward(&mut self, page: &TileKey) {
+    fn forward(&mut self, page: &PageId) {
         if let Some(web) = self.web(page) {
             unsafe { web.goForward() };
         }
     }
 
-    fn zoom(&mut self, page: &TileKey, toward: Zoom) {
+    fn zoom(&mut self, page: &PageId, toward: Zoom) {
         if let Some(web) = self.web(page) {
             unsafe { web.setPageZoom(next_zoom(web.pageZoom(), toward)) };
         }
     }
 
-    fn close(&mut self, page: &TileKey) {
+    fn close(&mut self, page: &PageId) {
         let Some(shown) = self.pages.remove(page) else {
             return;
         };
@@ -378,7 +377,7 @@ impl BrowserHost for WebKitHost {
         shown.clip.removeFromSuperview();
     }
 
-    fn place(&mut self, page: &TileKey, at: Option<Placement>) {
+    fn place(&mut self, page: &PageId, at: Option<Placement>) {
         let Some(shown) = self.pages.get(page) else {
             return;
         };
@@ -406,7 +405,7 @@ impl BrowserHost for WebKitHost {
         shown.clip.setHidden(false);
     }
 
-    fn focus(&mut self, page: &TileKey, focused: bool) {
+    fn focus(&mut self, page: &PageId, focused: bool) {
         let Some(shown) = self.pages.get(page) else {
             return;
         };
@@ -427,7 +426,7 @@ impl BrowserHost for WebKitHost {
         }
     }
 
-    fn control(&mut self, page: &TileKey, request: Control) {
+    fn control(&mut self, page: &PageId, request: Control) {
         let Some(web) = self.web(page) else {
             return reply(
                 request.request_id,
@@ -978,7 +977,7 @@ define_class!(
     #[unsafe(super(WKWebView))]
     #[thread_kind = MainThreadOnly]
     #[name = "AttnBrowserPageView"]
-    #[ivars = TileKey]
+    #[ivars = PageId]
     struct PageView;
 
     impl PageView {
@@ -1124,7 +1123,7 @@ impl PageView {
 
     fn new(
         mtm: MainThreadMarker,
-        page: TileKey,
+        page: PageId,
         frame: NSRect,
         config: &WKWebViewConfiguration,
     ) -> Retained<Self> {
@@ -1137,7 +1136,7 @@ define_class!(
     #[unsafe(super(NSObject))]
     #[thread_kind = MainThreadOnly]
     #[name = "AttnBrowserLocationWatch"]
-    #[ivars = TileKey]
+    #[ivars = PageId]
     struct LocationWatch;
 
     impl LocationWatch {
@@ -1165,7 +1164,7 @@ define_class!(
 );
 
 impl LocationWatch {
-    fn new(mtm: MainThreadMarker, page: TileKey) -> Retained<Self> {
+    fn new(mtm: MainThreadMarker, page: PageId) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(page);
         unsafe { msg_send![super(this), init] }
     }
@@ -1175,7 +1174,7 @@ define_class!(
     #[unsafe(super(NSObject))]
     #[thread_kind = MainThreadOnly]
     #[name = "AttnBrowserPageDialogs"]
-    #[ivars = TileKey]
+    #[ivars = PageId]
     struct PageDialogs;
 
     unsafe impl NSObjectProtocol for PageDialogs {}
@@ -1261,7 +1260,7 @@ define_class!(
 
 /// An agent's action ended in `alert`, which waits for the agent, and the window wakes to tell
 /// it; with no action running the person answers it.
-fn answer_or_show(mtm: MainThreadMarker, page: &TileKey, alert: Alert) {
+fn answer_or_show(mtm: MainThreadMarker, page: &PageId, alert: Alert) {
     match super::page_alert(page, alert) {
         None => wake(),
         Some(alert) => show(mtm, alert),
@@ -1269,7 +1268,7 @@ fn answer_or_show(mtm: MainThreadMarker, page: &TileKey, alert: Alert) {
 }
 
 impl PageDialogs {
-    fn new(mtm: MainThreadMarker, page: TileKey) -> Retained<Self> {
+    fn new(mtm: MainThreadMarker, page: PageId) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(page);
         unsafe { msg_send![super(this), init] }
     }

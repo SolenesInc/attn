@@ -2,12 +2,12 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use attn_app::browser::{self, Alert, AlertKind, BrowserHost, Control, Heard, Placement};
+use attn_app::browser::{self, Alert, AlertKind, BrowserHost, Control, Heard, PageId, Placement};
 use attn_app::{Action, Binding, Keymap, Zoom};
 use attn_client::TileKey;
 use attn_protocol::{
-    BrowserControlRequestMessage, CalloutShowRequestMessage, CalloutStep, Desktop, DesktopPane,
-    InitialStateMessage, Profile, ProfileArrangementChangedMessage, Session,
+    AsksUpdatedMessage, BrowserControlRequestMessage, CalloutShowRequestMessage, CalloutStep,
+    Desktop, DesktopPane, InitialStateMessage, Profile, ProfileArrangementChangedMessage, Session,
 };
 use attn_testkit::tree::{pane, row, tile};
 use attn_testkit::{Daemon, Target, World, key_event};
@@ -35,32 +35,51 @@ enum Asked {
     Control(Control),
 }
 
+/// What the window asked of the web engine, by page, in order.
 #[derive(Clone, Default)]
-struct Engine(Rc<RefCell<Vec<Asked>>>);
+struct Engine(Rc<RefCell<Vec<(PageId, Asked)>>>);
 
 impl Engine {
+    /// What the window asked of the browser tile's page since the last call.
     fn take(&self) -> Vec<Asked> {
-        std::mem::take(&mut self.0.borrow_mut())
+        let mut all = self.0.borrow_mut();
+        let (tile, asks) = std::mem::take(&mut *all)
+            .into_iter()
+            .partition(|(page, _)| *page == page_id());
+        *all = asks;
+        tile.into_iter().map(|(_, asked)| asked).collect()
     }
 
     fn asked(&self) -> Vec<Asked> {
-        self.0.borrow().clone()
+        self.of(&page_id())
     }
 
-    /// The last place the window showed the page, or `None` while it is hidden.
+    fn of(&self, page: &PageId) -> Vec<Asked> {
+        (self.0.borrow().iter())
+            .filter(|(on, _)| on == page)
+            .map(|(_, asked)| asked.clone())
+            .collect()
+    }
+
+    /// The last place the window showed the browser tile's page, or `None` while it is hidden.
     fn shown(&self) -> Option<Placement> {
-        self.0.borrow().iter().rev().find_map(|asked| match asked {
-            Asked::Place(at) => Some(at.clone()),
-            _ => None,
-        })?
+        self.shown_of(&page_id())
+    }
+
+    fn shown_of(&self, page: &PageId) -> Option<Placement> {
+        self.of(page)
+            .into_iter()
+            .rev()
+            .find_map(|asked| match asked {
+                Asked::Place(at) => Some(at),
+                _ => None,
+            })?
     }
 
     fn controls(&self) -> Vec<Control> {
-        self.0
-            .borrow()
-            .iter()
+        (self.asked().into_iter())
             .filter_map(|asked| match asked {
-                Asked::Control(control) => Some(control.clone()),
+                Asked::Control(control) => Some(control),
                 _ => None,
             })
             .collect()
@@ -69,45 +88,51 @@ impl Engine {
 
 struct Scripted(Engine);
 
-impl BrowserHost for Scripted {
-    fn open(&mut self, page: &TileKey, url: &str) {
-        assert_eq!(page.tile, TILE);
-        self.0.0.borrow_mut().push(Asked::Open(url.into()));
-    }
-    fn navigate(&mut self, _: &TileKey, url: &str) {
-        self.0.0.borrow_mut().push(Asked::Navigate(url.into()));
-    }
-    fn reload(&mut self, _: &TileKey) {
-        self.0.0.borrow_mut().push(Asked::Reload);
-    }
-    fn back(&mut self, _: &TileKey) {
-        self.0.0.borrow_mut().push(Asked::Back);
-    }
-    fn forward(&mut self, _: &TileKey) {
-        self.0.0.borrow_mut().push(Asked::Forward);
-    }
-    fn zoom(&mut self, _: &TileKey, toward: Zoom) {
-        self.0.0.borrow_mut().push(Asked::Zoom(toward));
-    }
-    fn close(&mut self, _: &TileKey) {
-        self.0.0.borrow_mut().push(Asked::Close);
-    }
-    fn place(&mut self, _: &TileKey, at: Option<Placement>) {
-        self.0.0.borrow_mut().push(Asked::Place(at));
-    }
-    fn focus(&mut self, _: &TileKey, focused: bool) {
-        self.0.0.borrow_mut().push(Asked::Focus(focused));
-    }
-    fn control(&mut self, _: &TileKey, request: Control) {
-        self.0.0.borrow_mut().push(Asked::Control(request));
+impl Scripted {
+    fn note(&self, page: &PageId, asked: Asked) {
+        self.0.0.borrow_mut().push((page.clone(), asked));
     }
 }
 
-fn page() -> TileKey {
-    TileKey {
+impl BrowserHost for Scripted {
+    fn open(&mut self, page: &PageId, url: &str) {
+        assert!(matches!(page, PageId::Asks) || *page == page_id());
+        self.note(page, Asked::Open(url.into()));
+    }
+    fn navigate(&mut self, page: &PageId, url: &str) {
+        self.note(page, Asked::Navigate(url.into()));
+    }
+    fn reload(&mut self, page: &PageId) {
+        self.note(page, Asked::Reload);
+    }
+    fn back(&mut self, page: &PageId) {
+        self.note(page, Asked::Back);
+    }
+    fn forward(&mut self, page: &PageId) {
+        self.note(page, Asked::Forward);
+    }
+    fn zoom(&mut self, page: &PageId, toward: Zoom) {
+        self.note(page, Asked::Zoom(toward));
+    }
+    fn close(&mut self, page: &PageId) {
+        self.note(page, Asked::Close);
+    }
+    fn place(&mut self, page: &PageId, at: Option<Placement>) {
+        self.note(page, Asked::Place(at));
+    }
+    fn focus(&mut self, page: &PageId, focused: bool) {
+        self.note(page, Asked::Focus(focused));
+    }
+    fn control(&mut self, page: &PageId, request: Control) {
+        self.note(page, Asked::Control(request));
+    }
+}
+
+fn page_id() -> PageId {
+    PageId::Tile(TileKey {
         desktop: DESKTOP.into(),
         tile: TILE.into(),
-    }
+    })
 }
 
 fn browser_at(url: &str) -> Value {
@@ -367,7 +392,7 @@ fn a_page_that_browses_elsewhere_stores_its_address_and_loads_nothing_when_the_d
     page_says(
         &mut world,
         Heard::Located {
-            page: page(),
+            page: page_id(),
             url: dashboard.into(),
         },
     );
@@ -395,7 +420,7 @@ fn a_page_that_moves_twice_before_the_daemon_stores_either_stays_where_it_went()
         page_says(
             &mut world,
             Heard::Located {
-                page: page(),
+                page: page_id(),
                 url: url.into(),
             },
         );
@@ -431,7 +456,7 @@ fn the_tile_stores_its_location_again_after_the_daemon_refused_to_store_it() {
         page_says(
             &mut world,
             Heard::Located {
-                page: page(),
+                page: page_id(),
                 url: url.into(),
             },
         );
@@ -439,7 +464,7 @@ fn the_tile_stores_its_location_again_after_the_daemon_refused_to_store_it() {
     page_says(
         &mut world,
         Heard::Located {
-            page: page(),
+            page: page_id(),
             url: "https://second.example/".into(),
         },
     );
@@ -465,14 +490,14 @@ fn the_tile_stores_its_location_once_while_the_daemon_has_not_answered_and_again
     page_says(
         &mut world,
         Heard::Located {
-            page: page(),
+            page: page_id(),
             url: url.into(),
         },
     );
     page_says(
         &mut world,
         Heard::Located {
-            page: page(),
+            page: page_id(),
             url: url.into(),
         },
     );
@@ -483,7 +508,7 @@ fn the_tile_stores_its_location_once_while_the_daemon_has_not_answered_and_again
     page_says(
         &mut world,
         Heard::Located {
-            page: page(),
+            page: page_id(),
             url: url.into(),
         },
     );
@@ -739,14 +764,14 @@ fn a_dialog_the_page_opens_during_an_agents_action_is_the_agents_to_read_type_in
     };
 
     assert!(
-        browser::page_alert(&page(), prompt(&closed)).is_some(),
+        browser::page_alert(&page_id(), prompt(&closed)).is_some(),
         "with no action running the person answers"
     );
 
     ask(&mut world, "click-1", "click", json!({"selector": "#ask"}));
     let click = engine.controls().pop().unwrap();
     assert!(
-        browser::page_alert(&page(), prompt(&closed)).is_none(),
+        browser::page_alert(&page_id(), prompt(&closed)).is_none(),
         "the agent answers it"
     );
     world.gesture(|app| app.update(|_, _| {}));
@@ -923,7 +948,7 @@ fn a_click_in_the_page_gives_it_the_keyboard_and_the_window_takes_back_only_the_
     let (mut world, engine) = start(START);
     engine.take();
 
-    page_says(&mut world, Heard::Focused { page: page() });
+    page_says(&mut world, Heard::Focused { page: page_id() });
     assert!(
         !engine.take().contains(&Asked::Focus(false)),
         "the page keeps the keyboard it took"
@@ -952,7 +977,7 @@ fn a_click_in_the_page_gives_it_the_keyboard_and_the_window_takes_back_only_the_
 fn the_browser_keys_reload_zoom_and_walk_the_history_of_the_focused_page_instead_of_their_attn_actions()
  {
     let (mut world, engine) = start(START);
-    page_says(&mut world, Heard::Focused { page: page() });
+    page_says(&mut world, Heard::Focused { page: page_id() });
     engine.take();
 
     for (action, asked) in [
@@ -983,7 +1008,7 @@ fn the_browser_keys_reload_zoom_and_walk_the_history_of_the_focused_page_instead
 #[test]
 fn a_key_the_page_keeps_runs_nothing_of_attn_when_the_page_passes_it_on() {
     let (mut world, _engine) = start(START);
-    page_says(&mut world, Heard::Focused { page: page() });
+    page_says(&mut world, Heard::Focused { page: page_id() });
 
     for action in [
         Action::TerminalFind,
@@ -1007,7 +1032,7 @@ fn a_leader_sequence_reaches_attn_from_a_focused_page_even_for_a_key_the_page_ke
         with_browser(START),
         &[("keybindings_config", rebound)],
     ));
-    page_says(&mut world, Heard::Focused { page: page() });
+    page_says(&mut world, Heard::Focused { page: page_id() });
 
     let leader = key_event(&rune::Chord::parse("mod+shift+y").unwrap());
     assert!(browser::claims_key(&leader), "the window takes the leader");
@@ -1027,7 +1052,7 @@ fn a_browser_key_rebound_to_a_leader_sequence_acts_on_the_focused_page() {
         with_browser(START),
         &[("keybindings_config", rebound)],
     ));
-    page_says(&mut world, Heard::Focused { page: page() });
+    page_says(&mut world, Heard::Focused { page: page_id() });
     engine.take();
 
     let leader = key_event(&rune::Chord::parse("mod+shift+y").unwrap());
@@ -1044,7 +1069,7 @@ fn a_browser_key_rebound_to_a_leader_sequence_acts_on_the_focused_page() {
 #[test]
 fn close_from_a_focused_page_closes_the_browser_tile_it_targets() {
     let (mut world, _engine) = start(START);
-    page_says(&mut world, Heard::Focused { page: page() });
+    page_says(&mut world, Heard::Focused { page: page_id() });
     let shown = world.daemon.sent_of("desktop_show_leaf");
     assert_eq!(
         shown.last().map(|s| s["leaf_id"].clone()),
@@ -1239,7 +1264,7 @@ fn a_popped_out_browser_tile_shows_its_page_in_its_window_where_agents_act_on_it
     page_says(
         &mut world,
         Heard::Located {
-            page: page(),
+            page: page_id(),
             url: "https://link.example/".into(),
         },
     );
@@ -1277,7 +1302,7 @@ fn the_address_field_reload_and_browser_keys_of_a_popped_out_tile_act_on_its_pag
     });
     assert!(engine.take().contains(&Asked::Reload));
 
-    page_says(&mut world, Heard::Focused { page: page() });
+    page_says(&mut world, Heard::Focused { page: page_id() });
     engine.take();
     let back = chord_of(Action::SessionHistoryBack);
     world.tile_gesture(&window, |app| app.key(back));
@@ -1293,7 +1318,7 @@ fn a_browser_tile_brought_back_from_its_window_shows_the_same_page_on_its_deskto
     page_says(
         &mut world,
         Heard::Located {
-            page: page(),
+            page: page_id(),
             url: "https://link.example/".into(),
         },
     );
@@ -1315,7 +1340,7 @@ fn a_browser_tile_brought_back_from_its_window_shows_the_same_page_on_its_deskto
     page_says(
         &mut world,
         Heard::Located {
-            page: page(),
+            page: page_id(),
             url: "https://two.example/".into(),
         },
     );
@@ -1406,4 +1431,115 @@ fn a_click_anywhere_in_the_address_fields_box_edits_the_address() {
             "a click {dy} points from the field's middle edits the address"
         );
     }
+}
+
+const NOTES: &str = "https://example.com/notes";
+
+/// The app with a scripted web engine and a browser tile at `START`, with Asks open on an ask
+/// that links to `NOTES`.
+fn start_on_an_ask_with_a_web_link() -> (World, Engine) {
+    let (mut world, engine) = start(START);
+    world.daemon.emit(AsksUpdatedMessage {
+        profile_id: "work".into(),
+        asks: vec![super::asks::ask(
+            "a-notes",
+            "s-a",
+            "Notes",
+            5,
+            vec![super::asks::prose(&format!(
+                "Read [the notes]({NOTES}) first."
+            ))],
+        )],
+        ..AsksUpdatedMessage::new()
+    });
+    world.settle();
+    super::asks::open_sheet(&mut world);
+    (world, engine)
+}
+
+#[test]
+fn a_web_link_in_an_ask_opens_in_the_panels_own_page_and_the_browser_tile_keeps_its_page() {
+    let (mut world, engine) = start_on_an_ask_with_a_web_link();
+    assert_eq!(engine.shown(), None, "Asks covers the browser tile's page");
+    engine.take();
+
+    world.gesture(|app| app.click(Target::key(NOTES)));
+    world.settle();
+
+    assert!(world.opened_links().is_empty(), "no system browser");
+    assert_eq!(engine.of(&PageId::Asks)[0], Asked::Open(NOTES.into()));
+    let shown = engine
+        .shown_of(&PageId::Asks)
+        .expect("the panel's page shows");
+    let [x, y, w, h] = world.rect("asks.panel.page").map(|v| v as f32);
+    assert_eq!(shown.frame, [x, y, w, h], "over the panel's page area");
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::key("asks.panel.tab.0"))
+            .and_then(|tab| tab.name)
+            .as_deref(),
+        Some("example.com")
+    );
+    assert_eq!(engine.take(), [], "the tile's page is not asked anything");
+    world.advance(Duration::from_secs(2));
+    assert!(
+        !world.runtime().animating,
+        "the shown page paints nothing of the window's"
+    );
+
+    page_says(
+        &mut world,
+        Heard::Located {
+            page: PageId::Asks,
+            url: "https://example.com/notes/next".into(),
+        },
+    );
+    page_says(&mut world, Heard::Focused { page: PageId::Asks });
+    assert!(
+        !engine.of(&PageId::Asks).contains(&Asked::Focus(false)),
+        "the page keeps the keyboard it took though the sheet holds focus"
+    );
+    press(&mut world, Action::SessionRefreshPrs);
+    assert_eq!(engine.of(&PageId::Asks).last(), Some(&Asked::Reload));
+    world.gesture(|app| app.press("tab"));
+    assert_eq!(
+        engine.of(&PageId::Asks).last(),
+        Some(&Asked::Focus(false)),
+        "moving the sheet's focus takes the keyboard back"
+    );
+
+    let let_go = |engine: &Engine| {
+        (engine.of(&PageId::Asks).iter())
+            .filter(|asked| **asked == Asked::Focus(false))
+            .count()
+    };
+    world.gesture(|app| app.click(Target::key("asks.note.field")));
+    page_says(&mut world, Heard::Focused { page: PageId::Asks });
+    let before = let_go(&engine);
+    world.gesture(|app| app.click(Target::key("asks.note.field")));
+    assert_eq!(
+        let_go(&engine),
+        before + 1,
+        "a click on the sheet's focused control takes the keyboard back"
+    );
+
+    press(&mut world, Action::DockAsks);
+    world.settle();
+    assert_eq!(engine.of(&PageId::Asks).last(), Some(&Asked::Close));
+    assert!(
+        stored(&world).is_empty(),
+        "the tile stores nothing the panel browsed"
+    );
+    let tile = engine.take();
+    assert!(
+        !tile
+            .iter()
+            .any(|asked| matches!(asked, Asked::Navigate(_) | Asked::Open(_))),
+        "the tile's page stays where it was: {tile:?}"
+    );
+    assert!(
+        matches!(tile.last(), Some(Asked::Place(Some(_)))),
+        "and shows again once Asks closes: {tile:?}"
+    );
 }

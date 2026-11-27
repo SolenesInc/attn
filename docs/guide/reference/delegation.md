@@ -150,8 +150,10 @@ the Garden. A link to a markdown file shows the file read from the machine the
 agent named, this one included; another kind of file opens in its app on this
 machine. Each one you open gets a tab: Cmd+Shift+] and Cmd+Shift+[
 (Ctrl+Shift+] and Ctrl+Shift+[ on Linux) move between the tabs, and Cmd+W
-(Ctrl+Shift+W on Linux) or the tab bar's × closes the one shown. An agent's id
-still opens its card, and a web page opens in your browser.
+(Ctrl+Shift+W on Linux) or the tab bar's × closes the one shown. On macOS a
+web page opens in a tab too, on a page of its own, so the browser tile on your
+desktop stays where it was; on Linux a web page opens in your browser. An
+agent's id still opens its card.
 
 While asks are open, the asks button in the title bar is an accent pill with
 their count. It pops when a new ask arrives and, by default, again every minute

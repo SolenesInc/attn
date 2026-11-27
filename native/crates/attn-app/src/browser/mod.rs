@@ -22,10 +22,10 @@ use rune::{TextEdit, Tx};
 use serde_json::{Map, Value};
 
 pub use host::{
-    Alert, AlertKind, BrowserHost, Control, Heard, PageEdit, Placement, claims_key, hear,
+    Alert, AlertKind, BrowserHost, Control, Heard, PageEdit, PageId, Placement, claims_key, hear,
     hosts_pages, page_alert, page_edit, quit, use_host,
 };
-pub(crate) use view::{address_input, page_area};
+pub(crate) use view::{address_input, page_area, page_slot};
 
 use crate::State;
 use crate::desktop::layout::{LeafKind, Node};
@@ -49,7 +49,8 @@ pub struct Browsers {
     /// What each tile's address field holds.
     addresses: HashMap<TileKey, TextEdit>,
     /// The page that holds the keyboard, until a click or a key gives it back to the window.
-    focused: Option<TileKey>,
+    focused: Option<PageId>,
+    asks: Option<AsksPage>,
     /// In a tile window, its browser tile's page and where the window shows it.
     out: Option<Out>,
     waits: HashMap<String, Wait>,
@@ -80,6 +81,17 @@ struct Page {
     /// The locations this page asked the daemon to store, oldest first, until the daemon's
     /// copy of the tile shows each: the daemon storing one of these is the page's own echo.
     sent: Vec<String>,
+}
+
+/// The page the Asks panel shows its web tabs in, while the ask on screen has one: its own
+/// page, so no browser tile's page goes elsewhere under the person.
+struct AsksPage {
+    /// The address of the web tab the page last loaded.
+    url: String,
+    shown: Option<Placement>,
+    /// The control of the Asks sheet that had focus when a click gave the page the keyboard:
+    /// the sheet always holds focus, so the page keeps the keyboard until that focus moves.
+    keys_beside: Option<String>,
 }
 
 struct Out {
@@ -185,6 +197,7 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) -> bool {
         return follow_out(state, tx);
     }
     let mut changed = keep_pages(state);
+    changed |= keep_asks_page(state);
     changed |= heard(state, tx);
     changed |= probe_waits(state, tx);
     place_pages(state, tx);
@@ -209,18 +222,19 @@ fn keep_pages(state: &mut State) -> bool {
         .cloned()
         .collect();
     for key in gone {
-        host::with_host(|h| h.close(&key));
-        host::forget(&key);
+        let page = PageId::Tile(key.clone());
+        host::with_host(|h| h.close(&page));
+        host::forget(&page);
         browsers.pages.remove(&key);
         browsers.addresses.remove(&key);
         browsers.revision += 1;
-        browsers.focused.take_if(|f| *f == key);
+        browsers.focused.take_if(|f| *f == page);
         changed = true;
     }
     for (key, url) in wanted {
         match browsers.pages.get_mut(&key) {
             None => {
-                host::with_host(|h| h.open(&key, &url));
+                host::with_host(|h| h.open(&PageId::Tile(key.clone()), &url));
                 browsers.pages.insert(
                     key.clone(),
                     Page {
@@ -242,7 +256,7 @@ fn keep_pages(state: &mut State) -> bool {
                     None => page.sent.clear(),
                 }
                 if echo.is_none() && page.url != url {
-                    host::with_host(|h| h.navigate(&key, &url));
+                    host::with_host(|h| h.navigate(&PageId::Tile(key.clone()), &url));
                     page.url = url.clone();
                     addressed.push((key, url));
                     changed = true;
@@ -255,6 +269,38 @@ fn keep_pages(state: &mut State) -> bool {
         show_address(state, &page, &url);
     }
     changed
+}
+
+/// Opens, points and frees the Asks panel's page to match the web tabs of the ask on screen:
+/// it lives while that ask's panel has one, and loads the one the panel shows.
+fn keep_asks_page(state: &mut State) -> bool {
+    let kept = crate::asks::panel::has_web(state);
+    let shown = crate::asks::panel::shown_web(state);
+    let browsers = &mut state.browser;
+    match (browsers.asks.as_mut(), kept, shown) {
+        (Some(_), false, _) => {
+            host::with_host(|h| h.close(&PageId::Asks));
+            host::forget(&PageId::Asks);
+            browsers.asks = None;
+            browsers.focused.take_if(|f| *f == PageId::Asks);
+            true
+        }
+        (None, true, Some(url)) => {
+            host::with_host(|h| h.open(&PageId::Asks, &url));
+            browsers.asks = Some(AsksPage {
+                url,
+                shown: None,
+                keys_beside: None,
+            });
+            true
+        }
+        (Some(page), true, Some(url)) if page.url != url => {
+            host::with_host(|h| h.navigate(&PageId::Asks, &url));
+            page.url = url;
+            true
+        }
+        _ => false,
+    }
 }
 
 /// The page's address field shows `url`, in the tile window the tile popped out into too.
@@ -275,8 +321,23 @@ fn heard(state: &mut State, tx: &mut Tx) -> bool {
     let mut changed = false;
     for heard in host::take_heard() {
         match heard {
-            Heard::Located { page, url } => changed |= located(state, page, url, tx),
-            Heard::Focused { page } => changed |= page_focused(state, page, tx),
+            Heard::Located {
+                page: PageId::Tile(page),
+                url,
+            } => changed |= located(state, page, url, tx),
+            Heard::Located {
+                page: PageId::Asks, ..
+            } => {}
+            Heard::Focused {
+                page: PageId::Tile(page),
+            } => changed |= page_focused(state, page, tx),
+            Heard::Focused { page: PageId::Asks } => {
+                if let Some(page) = state.browser.asks.as_mut() {
+                    page.keys_beside = tx.focused().map(str::to_owned);
+                    state.browser.focused = Some(PageId::Asks);
+                    changed = true;
+                }
+            }
             Heard::Answered { request_id, result } => answered(state, request_id, result, tx),
             Heard::Alerted { page } => alerted(state, &page),
         }
@@ -359,13 +420,13 @@ fn page_focused(state: &mut State, page: TileKey, tx: &mut Tx) -> bool {
             &page.desktop,
             &page.tile,
             Box::new(move |state: &mut State, tx: &mut Tx| {
-                state.browser.focused = Some(to);
+                state.browser.focused = Some(PageId::Tile(to));
                 tx.blur();
             }),
         );
         return false;
     }
-    state.browser.focused = Some(page.clone());
+    state.browser.focused = Some(PageId::Tile(page.clone()));
     tx.blur();
     crate::desktop::activate(state, &page.desktop, &page.tile, tx);
     true
@@ -391,8 +452,11 @@ fn hand_keys(state: &mut State, tx: &Tx) {
 }
 
 /// Whether `page` is this window's to show: in a tile window its own page, in the main window
-/// any page not popped out into a tile window.
-fn shows_here(state: &State, page: &TileKey) -> bool {
+/// the Asks panel's and any page not popped out into a tile window.
+fn shows_here(state: &State, page: &PageId) -> bool {
+    let PageId::Tile(page) = page else {
+        return state.window.tile.is_none();
+    };
     if state.window.tile.is_some() {
         return state
             .browser
@@ -414,18 +478,18 @@ fn place_pages(state: &mut State, tx: &mut Tx) {
         let at = state.browser.pages[&key].reported.clone();
         show(state, &key, at);
     }
-    if keys.is_empty() {
+    let asks = state.browser.asks.is_some();
+    if keys.is_empty() && !asks {
         return;
     }
-    let elements = keys.iter().map(view::page_key).collect();
-    tx.find_elements(elements, move |state: &mut State, found, tx| {
-        let covered = crate::shell::covers_tiles(state);
+    let mut elements: Vec<String> = keys.iter().map(view::page_key).collect();
+    elements.extend(asks.then(|| crate::asks::panel::PAGE.to_owned()));
+    tx.find_elements(elements, move |state: &mut State, mut found, tx| {
+        let asks_at = if asks { found.pop().flatten() } else { None };
         let dock_left = state.window.width.window - crate::shell::dock_width(state);
         let zoom = crate::settings::text_scale(&state.facts.settings);
-        let mut moved = false;
-        for (key, info) in keys.into_iter().zip(found) {
-            let at = info
-                .filter(|e| !covered && !e.inert && !e.exiting && e.opacity > 0.0)
+        let place = |info: Option<rune::ElementInfo>, covered: bool| {
+            info.filter(|e| !covered && !e.inert && !e.exiting && e.opacity > 0.0)
                 .map(|mut e| {
                     e.visible[2] = e.visible[2].min(dock_left - e.visible[0]);
                     e
@@ -435,8 +499,15 @@ fn place_pages(state: &mut State, tx: &mut Tx) {
                     window: None,
                     frame: e.rect.map(|v| v * zoom),
                     visible: e.visible.map(|v| v * zoom),
-                });
-            moved |= show(state, &key, at);
+                })
+        };
+        let covered = crate::shell::covered(state);
+        let mut moved = false;
+        for (key, info) in keys.into_iter().zip(found) {
+            moved |= show(state, &key, place(info, covered.tiles));
+        }
+        if asks {
+            moved |= show_asks(state, place(asks_at, covered.asks));
         }
         if moved {
             hand_keys(state, tx);
@@ -454,11 +525,25 @@ fn show(state: &mut State, key: &TileKey, at: Option<Placement>) -> bool {
     if page.shown == at {
         return false;
     }
+    let id = PageId::Tile(key.clone());
     if at.as_ref().is_some_and(|at| at.window.is_some()) {
-        state.browser.focused.take_if(|f| f == key);
+        state.browser.focused.take_if(|f| *f == id);
     }
     page.shown = at.clone();
-    host::with_host(|h| h.place(key, at));
+    host::with_host(|h| h.place(&id, at));
+    true
+}
+
+/// Shows the Asks panel's page over `at`, or hides it; false when it already showed there.
+fn show_asks(state: &mut State, at: Option<Placement>) -> bool {
+    let Some(page) = state.browser.asks.as_mut() else {
+        return false;
+    };
+    if page.shown == at {
+        return false;
+    }
+    page.shown = at.clone();
+    host::with_host(|h| h.place(&PageId::Asks, at));
     true
 }
 
@@ -592,6 +677,7 @@ fn control(state: &mut State, request: BrowserControlRequestMessage, tx: &mut Tx
         desktop: request.desktop_id.clone(),
         tile: request.tile_id.clone(),
     };
+    let on = PageId::Tile(page.clone());
     let id = request.request_id.clone();
     let params = match params(&request) {
         Ok(params) => params,
@@ -615,24 +701,24 @@ fn control(state: &mut State, request: BrowserControlRequestMessage, tx: &mut Tx
             };
             if known.url != url {
                 known.url = url.clone();
-                host::with_host(|h| h.navigate(&page, &url));
+                host::with_host(|h| h.navigate(&on, &url));
                 show_address(state, &page, &url);
             }
             answer(state, id, Ok(r#"{"success":true}"#.into()));
         }
         "reload" => {
-            host::with_host(|h| h.reload(&page));
+            host::with_host(|h| h.reload(&on));
             answer(state, id, Ok(r#"{"success":true}"#.into()));
         }
         "get_alert_text" => {
-            let text = host::alert_text(&page)
+            let text = host::alert_text(&on)
                 .map(|text| Value::String(text).to_string())
                 .ok_or_else(|| "no such alert".to_owned());
             answer(state, id, text);
         }
         "send_alert_text" => {
             let typed = match params.get("text").and_then(Value::as_str) {
-                Some(text) if !text.is_empty() => host::type_alert(&page, text),
+                Some(text) if !text.is_empty() => host::type_alert(&on, text),
                 _ => return answer(state, id, Err("text must be a non-empty string".into())),
             };
             let result = typed
@@ -641,7 +727,7 @@ fn control(state: &mut State, request: BrowserControlRequestMessage, tx: &mut Tx
             answer(state, id, result);
         }
         "accept_alert" | "dismiss_alert" => {
-            let closed = host::close_alert(&page, request.action == "accept_alert");
+            let closed = host::close_alert(&on, request.action == "accept_alert");
             let result = closed
                 .then(|| "null".to_owned())
                 .ok_or_else(|| "no such alert".to_owned());
@@ -674,7 +760,7 @@ fn control(state: &mut State, request: BrowserControlRequestMessage, tx: &mut Tx
                 action: action.to_owned(),
                 params,
             };
-            host::run(&page, request);
+            host::run(&on, request);
         }
     }
 }
@@ -752,7 +838,7 @@ fn probe(state: &mut State, wait_id: &str) {
         action: "wait_for".into(),
         params: wait.params.clone(),
     };
-    host::run(&wait.page.clone(), request);
+    host::run(&PageId::Tile(wait.page.clone()), request);
 }
 
 fn answered(state: &mut State, request_id: String, result: Result<String, String>, tx: &mut Tx) {
@@ -818,7 +904,7 @@ fn answered(state: &mut State, request_id: String, result: Result<String, String
 
 /// A dialog ended the agents' actions on `page`: each answers null, as WebDriver's do, and the
 /// agent goes on to read or close the dialog.
-fn alerted(state: &mut State, page: &TileKey) {
+fn alerted(state: &mut State, page: &PageId) {
     for request_id in host::interrupt(page) {
         state.browser.waits.remove(&request_id);
         answer(state, request_id, Ok("null".into()));
@@ -846,9 +932,27 @@ pub(crate) fn claim_keys(keymap: &crate::keymap::Keymap) {
     host::claim_keys(keymap.claimed_from_pages().collect());
 }
 
-/// The shown page whose tile holds the window's keyboard while no control of the window's has
-/// focus: the page the browser keys act on, also while a sequence waits for its second key.
-fn keyboard_page(state: &State, tx: &Tx) -> Option<TileKey> {
+/// A press on the Asks sheet lands outside the panel's page, which draws over its own area, so
+/// the page gives the keyboard back.
+pub(crate) fn asks_page_lets_go(state: &mut State) {
+    if let Some(page) = state.browser.asks.as_mut() {
+        page.keys_beside = None;
+    }
+}
+
+/// The shown page that holds the window's keyboard: the Asks panel's page from a click in it
+/// until the sheet's focus moves or the sheet is pressed, else, while no control of the window's has focus, the page of
+/// the tile that holds it. The browser keys act on it, also while a sequence waits for its
+/// second key.
+fn keyboard_page(state: &State, tx: &Tx) -> Option<PageId> {
+    let asks_keeps = (state.browser.asks.as_ref())
+        .is_some_and(|page| page.shown.is_some() && page.keys_beside.as_deref() == tx.focused());
+    if asks_keeps && state.browser.focused == Some(PageId::Asks) {
+        return Some(PageId::Asks);
+    }
+    if tx.focused().is_some() {
+        return None;
+    }
     let holder = state.window.keyboard.as_ref()?;
     let page = TileKey {
         desktop: holder.desktop.clone(),
@@ -863,7 +967,7 @@ fn keyboard_page(state: &State, tx: &Tx) -> Option<TileKey> {
             .and_then(|p| p.shown.as_ref())
             .is_some_and(|at| at.window.is_none()),
     };
-    (tx.focused().is_none() && shown).then_some(page)
+    shown.then_some(PageId::Tile(page))
 }
 
 /// Whether a page holds the window's keyboard.
@@ -937,14 +1041,14 @@ pub(crate) fn go_to_address(state: &mut State, page: &TileKey) {
 fn navigate_to(state: &mut State, page: &TileKey, url: &str) {
     if let Some(known) = state.browser.pages.get_mut(page) {
         known.url = url.to_owned();
-        host::with_host(|h| h.navigate(page, url));
+        host::with_host(|h| h.navigate(&PageId::Tile(page.clone()), url));
     }
     show_address(state, page, url);
 }
 
 /// The person pressed the tile's Reload button.
 pub(crate) fn reload(page: &TileKey) {
-    host::with_host(|h| h.reload(page));
+    host::with_host(|h| h.reload(&PageId::Tile(page.clone())));
 }
 
 /// What the address field navigates to for `typed`: as typed when it names a scheme, else

@@ -182,6 +182,7 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
         .role("dialog")
         .label("Asks")
         .modal_tx(true, super::close)
+        .on_press_within(|state: &mut State, _: &mut Tx| crate::browser::asks_page_lets_go(state))
         .on_paste_content(super::paste_on_sheet)
         .w_full()
         .h_full();

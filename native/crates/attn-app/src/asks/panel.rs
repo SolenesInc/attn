@@ -1,5 +1,5 @@
-//! The panel beside the question in the full-screen Asks: the seeds and markdown files an ask
-//! names, each in a tab, read without leaving the ask.
+//! The panel beside the question in the full-screen Asks: the seeds, markdown files and, on
+//! macOS, web pages an ask names, each in a tab, read without leaving the ask.
 
 use std::collections::HashMap;
 
@@ -22,6 +22,8 @@ pub(crate) enum Reference {
         host: Option<String>,
         path: String,
     },
+    /// An http or https page, shown in the panel's own web page.
+    Web(String),
 }
 
 /// One ask's panel: its tabs in the order they opened, and the one it shows.
@@ -62,7 +64,7 @@ impl Panels {
             .flat_map(|p| p.tabs.iter())
             .filter_map(|tab| match tab {
                 Reference::Markdown { host, path } => Some((host.clone(), path.clone())),
-                Reference::Seed(_) => None,
+                Reference::Seed(_) | Reference::Web(_) => None,
             })
             .collect();
         self.reads.retain(|file, _| read.contains(file));
@@ -86,7 +88,34 @@ pub(crate) fn shown_seed(state: &State) -> Option<String> {
     let panels = &state.window.asks.panels;
     match panels.of(&shown_ask(state)?)?.shown()? {
         Reference::Seed(id) => Some(id.clone()),
-        Reference::Markdown { .. } => None,
+        Reference::Markdown { .. } | Reference::Web(_) => None,
+    }
+}
+
+/// Whether a web page opens in the panel: while Asks is open, where the app runs pages.
+pub(crate) fn shows_web(state: &State) -> bool {
+    shown_ask(state).is_some() && crate::browser::hosts_pages()
+}
+
+/// Whether the panel of the ask on screen has a web tab, which keeps the panel's page.
+pub(crate) fn has_web(state: &State) -> bool {
+    let Some(ask) = shown_ask(state) else {
+        return false;
+    };
+    (state.window.asks.panels.of(&ask)).is_some_and(|panel| {
+        panel
+            .tabs
+            .iter()
+            .any(|tab| matches!(tab, Reference::Web(_)))
+    })
+}
+
+/// The address of the web tab the panel of the ask on screen shows.
+pub(crate) fn shown_web(state: &State) -> Option<String> {
+    let panels = &state.window.asks.panels;
+    match panels.of(&shown_ask(state)?)?.shown()? {
+        Reference::Web(url) => Some(url.clone()),
+        Reference::Seed(_) | Reference::Markdown { .. } => None,
     }
 }
 
@@ -119,6 +148,7 @@ pub(crate) fn open(state: &mut State, reference: Reference, tx: &mut Tx) {
     match reference {
         Reference::Markdown { host, path } => read(state, host, path, tx),
         Reference::Seed(_) => crate::garden::follow(state, tx),
+        Reference::Web(_) => {}
     }
 }
 
@@ -207,6 +237,8 @@ pub(crate) fn close_tab(state: &mut State, tx: &mut Tx) -> bool {
 }
 
 pub(crate) const PANEL: &str = "asks.panel";
+/// Where the panel's web page shows.
+pub(crate) const PAGE: &str = "asks.panel.page";
 
 fn tab_key(at: usize) -> String {
     format!("asks.panel.tab.{at}")
@@ -278,6 +310,12 @@ pub(crate) fn view(state: &State, ask: &str, t: &Tokens) -> Option<El> {
                 }
             }
         }
+        Reference::Web(_) => sheet.fill(
+            col()
+                .w_full()
+                .min_h(0.0)
+                .child(crate::browser::page_slot(PAGE.to_owned())),
+        ),
     };
     Some(
         sheet
@@ -317,6 +355,13 @@ fn tab_name(state: &State, machines: &crate::machine::Machines, tab: &Reference)
                 Some(machine) => format!("{name} · {machine}"),
                 None => name,
             }
+        }
+        Reference::Web(url) => {
+            let rest = url.split_once("://").map_or(url.as_str(), |(_, rest)| rest);
+            rest.split(['/', '?', '#'])
+                .next()
+                .unwrap_or(rest)
+                .to_owned()
         }
     }
 }
