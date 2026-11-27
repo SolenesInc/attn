@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Home move rollback can temporarily activate two homes",
+  "at": "2026-11-27T11:04:48.296Z",
+  "detail": "Rollback on the old home can restore its active role while the new home is still running and has not received the rollback. Background jobs and relay ownership can overlap. Preserve a single active home through rollback, including while the target is unreachable.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/home_move.go",
+    "line": 574
+  },
+  "culprit": "2113370ce24975ca7209ee34edc6b3db99c96614"
+}
