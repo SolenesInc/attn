@@ -449,10 +449,12 @@ try {
   const refreshKept = "session/garden-ready.md";
   await goPage.locator(`.row[data-path="content/${refreshKept}"] .cm-content`).click();
   await goPage.keyboard.press("ControlOrMeta+Home");
-  await goPage.keyboard.type("Unsaved across refresh. ");
+  await goPage.keyboard.type("Unsaved across ");
   await describe("Renamed in Go once.", "Renamed in Go twice.");
   await expect(stale).toBeVisible();
   await expect(wakeDescription).toHaveText("Renamed in Go once.");
+  await goPage.keyboard.type("refresh. ");
+  await expect(goPage.locator(`.row[data-path="content/${refreshKept}"] .cm-content`)).toContainText("Unsaved across refresh. ");
   await goPage.keyboard.press("ControlOrMeta+s");
   await expect(goPage.locator("#notice")).toContainText("Save failed: composition declarations changed in Go");
   await refresh();
