@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "4de696011866373c0d5e7e31fc5dc9ebd638de9d",
+  "head": "97818c6d3c07d2c9f18ea6d9709f13050beddcdc",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 177.048,
+    "ranOn": "97818c6d3c07d2c9f18ea6d9709f13050beddcdc"
+  },
+  "fixesBugs": [
+    "b61b64b",
+    "ee316af",
+    "c0add52"
+  ],
+  "noMediaReason": "daemon, test and band wording changes; the band is covered by wire tests and no screenshot changed",
+  "recordings": []
+}
