@@ -61,7 +61,11 @@ fn far_state() -> InitialStateMessage {
 }
 
 fn start(state: InitialStateMessage) -> World {
-    let world = start_on(state, vec![asked()], &[]);
+    start_with(state, vec![asked()])
+}
+
+fn start_with(state: InitialStateMessage, asks: Vec<Ask>) -> World {
+    let world = start_on(state, asks, &[]);
     world.daemon.on("attach_session", |r| {
         message(AttachResultMessage {
             id: r["id"].as_str().unwrap().into(),
@@ -294,4 +298,74 @@ fn a_restarted_app_shows_the_terminals_an_ask_holds_in_its_panel() {
     open_sheet(&mut world);
     assert!(has(&world, "asks.panel.tab.0"), "{}", world.screen());
     assert_eq!(slots(&world, "rt-9"), 1, "{}", world.screen());
+    assert!(
+        world
+            .daemon
+            .sent_of("attach_session")
+            .iter()
+            .any(|r| r["id"] == "rt-9"),
+        "the shell attaches as Asks opens"
+    );
+}
+
+#[test]
+fn only_the_shells_of_the_ask_on_screen_stream_to_the_app() {
+    let mut state = far_state();
+    let later = Ask {
+        id: "a-later".into(),
+        subject: "Check the later shop".into(),
+        created_at: super::queue::ago(1),
+        ..asked()
+    };
+    let sessions = state.sessions.get_or_insert_default();
+    sessions.push(shell("held", "/srv/shop"));
+    sessions.push(shell("other", "/srv/shop"));
+    state.terminal_bindings = Some(vec![
+        held("held", "rt-a"),
+        TerminalBinding {
+            ask_id: Some("a-later".into()),
+            ..held("other", "rt-b")
+        },
+    ]);
+    let mut world = start_with(state, vec![asked(), later]);
+    let attached = |world: &World| -> Vec<String> {
+        (world.daemon.sent_of("attach_session").iter())
+            .map(|r| r["id"].as_str().unwrap_or_default().to_owned())
+            .collect()
+    };
+    let detached = |world: &World| -> Vec<String> {
+        (world.daemon.sent_of("detach_session").iter())
+            .map(|r| r["id"].as_str().unwrap_or_default().to_owned())
+            .collect()
+    };
+    open_sheet(&mut world);
+    let (first, second, other) = match name(&world, "asks.ask").as_str() {
+        "Check the shop" => ("rt-a", "rt-b", "a-later"),
+        _ => ("rt-b", "rt-a", ASK),
+    };
+    assert_eq!(
+        attached(&world),
+        [first],
+        "the shown ask's shell attaches as Asks opens"
+    );
+
+    click(&mut world, &format!("asks.row.{other}"));
+    assert_eq!(
+        attached(&world),
+        [first, second],
+        "showing the other ask attaches its shell"
+    );
+    assert_eq!(
+        detached(&world),
+        [first],
+        "and lets go of the shell no longer on screen"
+    );
+
+    world.gesture(|app| app.key(chord(Action::DockAsks)));
+    world.settle();
+    assert_eq!(
+        detached(&world),
+        [first, second],
+        "closing Asks lets go of the last one"
+    );
 }

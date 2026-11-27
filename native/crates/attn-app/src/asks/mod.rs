@@ -1065,6 +1065,7 @@ pub(crate) fn close(state: &mut State, tx: &mut Tx) {
         state.window.layer = None;
     }
     state.window.asks.focused_on = None;
+    panel::follow_drawn(state, tx);
     tx.blur();
     crate::picker::refocus_inline(state, tx);
 }
@@ -1090,6 +1091,7 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
     state.window.asks.panels.keep(&listed, &held);
     saving::restore(state);
     motion::sync(state, tx);
+    panel::follow_drawn(state, tx);
     if !is_open(state) {
         return;
     }

@@ -66,6 +66,7 @@ pub(crate) struct Panels {
     spawns: HashMap<String, Spawn>,
     /// The shells closed or moved out of their ask's panel, until no ask holds them.
     let_go: HashSet<String>,
+    drawing: Option<String>,
 }
 
 impl Panels {
@@ -324,15 +325,26 @@ pub(crate) fn hand_back(state: &mut State, tx: &mut Tx) -> bool {
     true
 }
 
-/// The terminals every listed ask holds, which the window keeps attached while Asks is open.
+/// Attaches the shells of the ask Asks now shows and lets go of the ones it showed before,
+/// once the shown ask changes or Asks opens or closes.
+pub(crate) fn follow_drawn(state: &mut State, tx: &mut Tx) {
+    let shown = shown_ask(state);
+    if state.window.asks.panels.drawing != shown {
+        state.window.asks.panels.drawing = shown;
+        crate::follow_terminals(state, tx);
+    }
+}
+
+/// The terminals the ask on screen holds, which the window keeps attached while Asks shows it.
 pub(crate) fn drawn_terminals<'f>(
     state: &State,
     facts: &'f Facts,
 ) -> Vec<crate::terminal::Drawn<'f>> {
-    if !super::is_open(state) {
+    let Some(shown) = shown_ask(state) else {
         return Vec::new();
-    }
+    };
     (facts.ask_terminals.iter())
+        .filter(|b| b.ask_id.as_deref() == Some(shown.as_str()))
         .map(|b| crate::terminal::Drawn {
             runtime: &b.terminal_id,
             session: &b.session_id,
