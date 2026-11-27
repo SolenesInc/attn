@@ -1,0 +1,4 @@
+A shell block in an ask is now a command wherever it sits: inside a numbered list item or a block quote it gets **Open in terminal** and its `<machine> · <folder>` line, just as a top-level one does. `t` and the hint labels reach these commands in reading order. Each prose part now draws as one reading, so a list keeps its numbering and a quote keeps its rule around the command. The command bar hangs off the reader's code frame. Its block is matched by the reader's own count of code blocks: every code block except diff and patch fences.
+
+![Commands at the top level, in a list item and in a quote (dark)](https://land-feed.caketroll.cloud/m/SolenesInc/attn/05abd3e4d01f15771afce0b04492de20465f3387f06fd9a24c4a06b0ab9676a8.png)
+![The same ask in light](https://land-feed.caketroll.cloud/m/SolenesInc/attn/5bc5ab285001bc72335295f2365be38d6a5d2d6095713907e2e8764c5b8982e4.png)
