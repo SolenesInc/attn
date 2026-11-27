@@ -128,16 +128,28 @@ func (d *Daemon) stateReason(sessionID protocol.SessionID) string {
 	return ""
 }
 
+func (d *Daemon) stateWithReason(session *protocol.Session) (protocol.SessionState, string) {
+	if view, ok := d.monitorViewFor(session.ID); ok {
+		return view.State.V.State, view.State.V.Reason
+	}
+	return session.State, ""
+}
+
 func (d *Daemon) decorateSessionWithStateReason(clone *protocol.Session) {
 	if clone == nil {
 		return
 	}
 	clone.StateReason = nil
-	if !sessionmonitor.ResolverOwnedStates[clone.State] {
+	view, ok := d.monitorViewFor(clone.ID)
+	if !ok {
 		return
 	}
-	if reason := d.stateReason(clone.ID); reason != "" {
-		clone.StateReason = protocol.Ptr(reason)
+	state := view.State.V
+	clone.State = state.State
+	clone.StateSince = string(protocol.NewTimestamp(state.Since))
+	clone.StateUpdatedAt = string(protocol.NewTimestamp(state.Updated))
+	if sessionmonitor.ResolverOwnedStates[state.State] && state.Reason != "" {
+		clone.StateReason = protocol.Ptr(state.Reason)
 	}
 }
 
