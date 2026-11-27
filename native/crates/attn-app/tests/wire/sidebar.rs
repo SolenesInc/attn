@@ -3013,3 +3013,31 @@ fn automation_delegates_on_launch_desktop_stay_unified_until_manual_or_orphaned(
     world.advance(std::time::Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_session_changing_on_this_machines_daemon_keeps_the_rows_the_home_drew() {
+    let daemon = Daemon::scripted()
+        .state(two_desktops())
+        .relaying_to("mac", "oma");
+    let machine = Daemon::of_this_machine(&daemon).state(InitialStateMessage {
+        protocol_version: Some(attn_protocol::PROTOCOL_VERSION.into()),
+        daemon_instance_id: Some("mac-daemon".into()),
+        sessions: Some(vec![session("on-mac", "working")]),
+        ..InitialStateMessage::new()
+    });
+    let mut world = World::start_relaying(daemon, machine, attn_testkit::VIEWPORT);
+    let before = attn_app::sidebar::rows_built();
+
+    world
+        .machine
+        .as_ref()
+        .unwrap()
+        .emit(SessionStateChangedMessage {
+            session: session("on-mac", "waiting_input"),
+            ..SessionStateChangedMessage::new()
+        });
+    world.settle();
+
+    assert_eq!(attn_app::sidebar::rows_built() - before, 0);
+    assert!(world.runtime_is_at_rest());
+}
