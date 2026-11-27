@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Home move separates vent sequence state from its identity",
+  "at": "2026-11-27T11:10:26.226Z",
+  "detail": "Promotion can move the vent identity separately from its queue and sequence state. The next vent may reuse an already-ingested sequence and appear sent without being ingested. Keep its canonical identity, queue and sequence together across the move.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/store/home_move.go",
+    "line": 88
+  },
+  "culprit": "2113370ce24975ca7209ee34edc6b3db99c96614"
+}
