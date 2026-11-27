@@ -34,6 +34,7 @@ func HomeUnitPath() (string, error) {
 
 // HomeUnitText runs this binary's daemon for the data folder in env, restarting it whenever it ends. The daemon it
 // starts waits for any other daemon of the folder to exit instead of failing, so the unit never restarts in a loop.
+// systemd stops only the daemon, so the PTY host it started, and every shell, outlives a restart.
 func HomeUnitText(executable string, env map[string]string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[Unit]\nDescription=attn home\nStartLimitIntervalSec=0\n\n[Service]\nExecStart=%s daemon\n", systemdQuote(executable))
@@ -43,7 +44,7 @@ func HomeUnitText(executable string, env map[string]string) string {
 			fmt.Fprintf(&b, "Environment=%s\n", systemdQuote(key+"="+value))
 		}
 	}
-	b.WriteString("Restart=always\nRestartSec=2\n\n[Install]\nWantedBy=default.target\n")
+	b.WriteString("Restart=always\nRestartSec=2\nKillMode=process\n\n[Install]\nWantedBy=default.target\n")
 	return b.String()
 }
 

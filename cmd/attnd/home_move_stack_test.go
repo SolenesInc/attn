@@ -1222,7 +1222,7 @@ func TestTheNewHomesUnitStartsItAloneAndItsAutomationsRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	unit := string(data)
-	for _, want := range []string{" daemon\n", "Restart=always\n", "WantedBy=default.target\n"} {
+	for _, want := range []string{" daemon\n", "Restart=always\n", "KillMode=process\n", "WantedBy=default.target\n"} {
 		if !strings.Contains(unit, want) {
 			t.Fatalf("unit lacks %q:\n%s", want, unit)
 		}
