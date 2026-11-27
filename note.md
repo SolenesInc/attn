@@ -1,0 +1,3 @@
+An automation can now message a crew member instead of starting an agent: give the definition `member: <name>` and no `launch` or `location`. Each run puts one message in the member's mailbox. That rings the member in session, or starts a session for a member between sessions as any mail does, within `crew.mail_start_limit`. The run has no seed or session of its own, so the sidebar's Automations section never shows it. `attn automation runs` and `show` name the member.
+
+Manual and scheduled triggers only. A guard, launch, location or continuity is refused for now. The app's form does not offer a member yet: that is follow-up seed s-x8422t. Replacing the Vesta check-in relay is s-qb9j0w.
