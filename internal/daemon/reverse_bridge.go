@@ -389,6 +389,7 @@ func (d *Daemon) runHomeDial(ctx context.Context, dial *homeDial, run *outpostLi
 	retryDelay := bridge.ReconnectInterval
 	d.setOutpostListenerState(run, "dialing", nil)
 	for ctx.Err() == nil {
+		dialed := stepclock.Process().Now()
 		err := d.dialHomeOnce(ctx, dial, run)
 		if ctx.Err() != nil {
 			dial.report(ctx.Err())
@@ -402,6 +403,8 @@ func (d *Daemon) runHomeDial(ctx context.Context, dial *homeDial, run *outpostLi
 		}
 		state, delay := "dialing", retryDelay
 		switch {
+		case err == nil && stepclock.Process().Now().Sub(dialed) >= bridge.ReconnectInterval:
+			delay, retryDelay = 0, bridge.ReconnectInterval
 		case err == nil:
 			delay, retryDelay = bridge.ReconnectInterval, bridge.ReconnectInterval
 		case refusal != nil, errors.As(err, &sshError) && sshError.Connectable():
@@ -415,6 +418,9 @@ func (d *Daemon) runHomeDial(ctx context.Context, dial *homeDial, run *outpostLi
 			d.logf("home dial %s %s: %v; redialing in %s", dial.destination, state, err, delay)
 		}
 		d.setOutpostListenerState(run, state, err)
+		if delay == 0 {
+			continue
+		}
 		woke, ok := waitHomeRedial(ctx, dial, delay)
 		if !ok {
 			return

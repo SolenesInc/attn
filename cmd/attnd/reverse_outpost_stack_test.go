@@ -280,6 +280,15 @@ func TestAReverseOutpostDialsItsHomeAndRedialsAfterEitherRestarts(t *testing.T) 
 	w.app.TypeLine(boxShell, "echo box-still-$((5+5))")
 	w.app.AwaitScreen(boxShell, "box-still-10")
 	t.Log("the machine dialed again when its own daemon restarted, with its shell alive; the ssh outpost stayed bridged")
+
+	w.laptop.Advance(bridge.ReconnectInterval)
+	mark = w.app.EventCount()
+	w.ssh.ExitMaster(w.laptop, protocol.Deref(row.DaemonID))
+	outpostStateSince(w.app, w.name, protocol.OutpostStateConnected, mark)
+	w.app = w.home.App()
+	w.app.TypeLine(shell, "echo relinked-$((6+6))")
+	w.app.AwaitScreen(shell, "relinked-12")
+	t.Log("a link that had been up redials as soon as it drops, without waiting out a retry")
 }
 
 func TestAReverseOutpostShowsItsDialAndBothWaysOutEndIt(t *testing.T) {
