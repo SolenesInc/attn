@@ -1,0 +1,3 @@
+scripts/vm now gives the guest's instance the WebSocket port its app was built with. Before, an instance whose hashed port another host instance held got a different claimed port baked into its app. The guest's daemon derived the hashed port instead and refused to route, so the app never got a daemon. The build now records the claimed port in `build-identity.json`, and `scripts/vm up` writes it to the guest's `ws-port` file.
+
+![vm-wsp67: hashed 24311 is taken on the host; the claimed 24312 reaches the guest and the app connects](https://land-feed.caketroll.cloud/m/SolenesInc/attn/ec5c5618b3d0f88fe70d729013846c24c1943942205c191c4e668764aa3b6925.png)
