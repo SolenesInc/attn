@@ -338,7 +338,9 @@ impl Panel {
             Message::Download(m) => self.daemon.send(m),
         };
         match sent {
-            Ok(()) => self.requests.wait(id, &message, Box::new(then)),
+            Ok(()) => self
+                .requests
+                .wait(id, &message, attn_client::Reach::Home, Box::new(then)),
             Err(_) => then(self, Answer::NotSent, tx),
         }
     }
@@ -496,7 +498,7 @@ fn follow(panel: &mut Panel, tx: &mut Tx) {
     }
     if !panel.connected() {
         attach::disconnected(panel);
-        for then in panel.requests.unanswerable() {
+        for then in panel.requests.unanswerable(attn_client::Reach::Home) {
             then(panel, Answer::Dropped, tx);
         }
     }
@@ -509,7 +511,7 @@ fn follow(panel: &mut Panel, tx: &mut Tx) {
 /// the daemon is forgotten: its draft waits on disk, and a send whose answer it misses is
 /// resolved by id when the person returns to it.
 fn restore(panel: &mut Panel, profile: &str, tx: &mut Tx) {
-    drop(panel.requests.unanswerable());
+    drop(panel.requests.unanswerable(attn_client::Reach::Home));
     panel.busy = Busy::Idle;
     panel.after_staging = None;
     panel.replace_draft(Draft::fresh(profile));

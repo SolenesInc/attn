@@ -671,6 +671,9 @@ impl Terminals {
         if up.machine && !was.machine {
             self.focused = None;
         }
+        if up.machine != was.machine {
+            self.snapshots.clear();
+        }
         if up.home == was.home {
             return;
         }

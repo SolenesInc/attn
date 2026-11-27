@@ -713,6 +713,14 @@ fn while_the_home_is_away_a_desktop_switch_reaches_this_machines_terminal_there(
         Some("rl"),
         "an agent opened on another desktop tells this machine's daemon it has the keyboard"
     );
+
+    world.gesture(|app| app.key(super::sidebar::chord(attn_app::Action::DesktopSelect1)));
+    world.gesture(|app| app.type_text("p"));
+    assert_eq!(
+        typed(machine(&world)).last(),
+        Some(&("r2".to_owned(), "p".to_owned())),
+        "the current desktop's own digit goes back to the desktop shown before it"
+    );
     assert_eq!(
         world.daemon.sent()[before..]
             .iter()
@@ -786,6 +794,9 @@ fn a_peek_at_this_machines_shelved_agent_reads_and_replies_on_its_own_daemon() {
     });
     laptop.on("pty_input", |request| {
         let probe = request["probe_id"].as_str()?;
+        if request["data"] == "held" {
+            return None;
+        }
         Some(message(attn_protocol::PtyInputProbeResultMessage {
             id: request["id"].as_str().unwrap().into(),
             probe_id: probe.into(),
@@ -830,5 +841,26 @@ fn a_peek_at_this_machines_shelved_agent_reads_and_replies_on_its_own_daemon() {
         world.daemon.sent_of("pty_input").is_empty()
             && world.daemon.sent_of("terminal_read_text").is_empty(),
         "nothing for this machine's terminal goes through the home"
+    );
+
+    let [x, y, w, h] = world.runtime().presented("tile.b").unwrap().0;
+    world.gesture(|app| app.move_to((x + w / 2.0, y + h / 2.0)));
+    let [x, y, w, h] = world.runtime().presented("shelf.entry.c").unwrap().0;
+    world.gesture(|app| app.move_to((x + w / 2.0, y + h / 2.0)));
+    world.advance(Duration::from_millis(200));
+    world.gesture(|app| {
+        app.click(Target::key("shelf.peek.c.field"));
+        app.type_text("held");
+        app.key(rune::KeyEvent {
+            key: rune::Key::Enter,
+            mods: rune::Mods::default(),
+        });
+    });
+    machine(&world).disconnect();
+    world.settle();
+    assert!(
+        world.screen().to_string().contains("may not have arrived"),
+        "a reply this machine's dropped link never answered says so:\n{}",
+        world.screen()
     );
 }

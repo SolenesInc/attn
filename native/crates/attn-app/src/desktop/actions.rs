@@ -578,6 +578,9 @@ pub(crate) fn show_here(state: &mut State, desktop: &str, leaf: &str, tx: &mut T
     }
     state.window.away_active = Some((desktop.to_owned(), leaf.to_owned()));
     keep_away_active(state);
+    let facts = state.facts.clone();
+    state.window.follow(&facts);
+    super::settle(state, tx);
     crate::follow_terminals(state, tx);
     let keyboard = state.window.keyboard_terminal(&state.facts);
     state.terminals.focus(keyboard);

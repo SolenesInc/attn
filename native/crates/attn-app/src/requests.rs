@@ -113,16 +113,24 @@ impl<S> Default for Requests<S> {
 struct Waiting<S> {
     command: serde_json::Value,
     sent: u64,
+    on: attn_client::Reach,
     then: Then<S>,
 }
 
 impl<S> Requests<S> {
-    /// Waits for the answer to `command`, sent under `id`.
-    pub(crate) fn wait(&mut self, id: String, command: &impl Serialize, then: Then<S>) {
+    /// Waits for the answer to `command`, sent under `id` on link `on`.
+    pub(crate) fn wait(
+        &mut self,
+        id: String,
+        command: &impl Serialize,
+        on: attn_client::Reach,
+        then: Then<S>,
+    ) {
         self.sent += 1;
         let waiting = Waiting {
             command: serde_json::to_value(command).unwrap_or_default(),
             sent: self.sent,
+            on,
             then,
         };
         self.waiting.insert(id, waiting);
@@ -144,11 +152,17 @@ impl<S> Requests<S> {
         id.and_then(|id| self.waiting.remove(&id)).map(|w| w.then)
     }
 
-    /// Every request still waiting, which a connection that ended will never answer.
-    pub(crate) fn unanswerable(&mut self) -> Vec<Then<S>> {
-        self.waiting
-            .drain()
-            .map(|(_, waiting)| waiting.then)
+    /// Every request still waiting on link `on`, which that link, ended, will never answer.
+    pub(crate) fn unanswerable(&mut self, on: attn_client::Reach) -> Vec<Then<S>> {
+        let ids: Vec<String> = self
+            .waiting
+            .iter()
+            .filter(|(_, waiting)| waiting.on == on)
+            .map(|(id, _)| id.clone())
+            .collect();
+        ids.into_iter()
+            .filter_map(|id| self.waiting.remove(&id))
+            .map(|waiting| waiting.then)
             .collect()
     }
 }
@@ -197,7 +211,7 @@ impl State {
         tx: &mut Tx,
     ) -> bool {
         let sent = match on {
-            attn_client::Reach::Machine => self.terminals.links.machine.send(command),
+            attn_client::Reach::Machine => self.terminals.links.to(on).send(command),
             attn_client::Reach::Home
                 if self.facts.connection != attn_client::Connection::Connected =>
             {
@@ -207,7 +221,7 @@ impl State {
         };
         match sent {
             Ok(()) => {
-                self.requests.wait(id, command, Box::new(then));
+                self.requests.wait(id, command, on, Box::new(then));
                 true
             }
             Err(_) => {
@@ -333,8 +347,8 @@ fn unasked_refusal(reply: &Reply) -> Option<String> {
 
 /// A connection that ends takes its requests' replies with it: each request is answered with
 /// nothing.
-pub(crate) fn forget(state: &mut State, tx: &mut Tx) {
-    for then in state.requests.unanswerable() {
+pub(crate) fn forget(state: &mut State, on: attn_client::Reach, tx: &mut Tx) {
+    for then in state.requests.unanswerable(on) {
         then(state, Answer::Dropped, tx);
     }
 }

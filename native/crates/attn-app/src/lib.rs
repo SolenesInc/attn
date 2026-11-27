@@ -268,6 +268,7 @@ pub fn bind(
             let on_screen = desktop::arrival::on_screen(state);
             let moved = (&state.facts.machine.id, &state.facts.machine.home)
                 != (&facts.machine.id, &facts.machine.home);
+            let machine_lost = state.facts.machine.connected && !facts.machine.connected;
             state.facts = facts;
             desktop::keep_away_active(state);
             if moved {
@@ -277,9 +278,12 @@ pub fn bind(
                 state.window.view = shell::View::Desktop;
             }
             if was && !is {
-                requests::forget(state, tx);
+                requests::forget(state, attn_client::Reach::Home, tx);
                 harness::logo::disconnected(state);
                 settings::disconnected(state);
+            }
+            if machine_lost {
+                requests::forget(state, attn_client::Reach::Machine, tx);
             }
             if !was && is {
                 warnings::connected(state);
