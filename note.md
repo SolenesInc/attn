@@ -1,0 +1,3 @@
+Stored data now names machines by id instead of using an empty host for "this machine". A machines table replaces outposts and holds this daemon's own row. A migration moves every reference to it: sessions, recents, file activity, annotation drafts, code navigation, delegation requests, garden dispatches and beds, markdown tiles (ids, active tile and focus history kept), and the `*_local` settings. Moving the home later rewrites two rows instead of every reference.
+
+Clients see no change. The store, the settings boundary and the desktop tree translate the id to an absent host and `local`. On an enrolled outpost, "this machine" is the id its home knows it by, from the home's hello, so its copies read as local (plot s-anfr6p, D2).
