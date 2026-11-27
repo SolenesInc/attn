@@ -262,6 +262,9 @@ func (r *codexShared) restart(s *codexServer, now bool) {
 	r.mu.Unlock()
 	defer r.restarted(s, installed)
 	binary, err := r.binary("")
+	if err == nil {
+		err = r.terminals.RequireStartable(r.host.Life().Context())
+	}
 	var version string
 	if err == nil {
 		version, err = r.preflight(s, binary)

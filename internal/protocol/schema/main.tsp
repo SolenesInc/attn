@@ -4849,9 +4849,9 @@ model VentsUpdatedMessage {
 // conversation.
 // restarting: attn is moving the app-server to the installed Codex. Terminals
 // reconnect once it answers.
-// failed: the installed Codex refused to start, so the app-server keeps
-// running the Codex it ran. Installing another Codex, or
-// restart_shared_codex, tries again.
+// failed: the installed Codex refused to start, or no terminal could start
+// it, so the app-server keeps running the Codex it ran. Installing another
+// Codex, or restart_shared_codex, tries again.
 enum SharedCodexRestart {
   none,
   pending,
@@ -4893,7 +4893,8 @@ model SharedCodexState {
   // attn stops the app-server and the turns with it.
   force_at?: string;
   // failed: why the installed Codex refused to start: the last line it
-  // printed, or how it failed when it printed nothing.
+  // printed, or how it failed when it printed nothing, or why no terminal
+  // could start it.
   error?: string;
   // Sessions shown in terminals whose Codex is older than the app-server.
   stale_sessions?: SessionID[];

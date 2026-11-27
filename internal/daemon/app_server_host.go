@@ -330,6 +330,10 @@ func (h hostTerminals) Start(ctx context.Context, spec harness.TerminalSpec) err
 	})
 }
 
+func (h hostTerminals) RequireStartable(ctx context.Context) error {
+	return h.d.requireLaunchableHost(ctx)
+}
+
 func (h hostTerminals) Adopt(ctx context.Context, t harness.TerminalID) {
 	h.d.adoptAdapterTerminal(ctx, h.owner, t)
 }

@@ -153,6 +153,8 @@ type HostTerminals interface {
 	LocalLive(ctx context.Context) map[TerminalID]struct{}
 	// Start runs spec in a terminal of the adapter's, with the login-shell environment and without the caller's identity.
 	Start(ctx context.Context, spec TerminalSpec) error
+	// RequireStartable answers why Start cannot run a terminal now, before the caller ends the one it would replace.
+	RequireStartable(ctx context.Context) error
 	// Adopt records a running terminal as the adapter's.
 	Adopt(ctx context.Context, t TerminalID)
 	Owned(t TerminalID) bool
