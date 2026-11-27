@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "e0503965f3163e2e8d6d58c6286d606a7e423de2",
+  "head": "6bcb33621a71fc71da8422d1c30cefef5e03e61f",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 245.41,
+    "ranOn": "9276df0fbebca1270f1fc9edbf02cf5962b171dd"
+  },
+  "noMediaReason": "CLI, daemon and launcher parsing; no visual change",
+  "recordings": []
+}
