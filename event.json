@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Rollback confirmation names the wrong home on a relayed app",
+  "at": "2026-11-27T15:05:17.941Z",
+  "detail": "A connected outpost app can roll back a move on its remote home. The confirmation says the home is on this machine even though it was restored on the remote source. Render the returned move source in Roll back and Stop waiting confirmations.\n"
+}
