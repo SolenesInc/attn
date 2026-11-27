@@ -1,0 +1,1 @@
+`home` now always names the home, even beside an outpost an earlier Attn let take that name, so `--host home` and `home:` bed paths work again; the Go resolver and the launcher share the case. When the home shares a name with an outpost (after a home move between legacy same-named outposts), the launcher lists both and completes the outpost by its id and the home by `home:`.
