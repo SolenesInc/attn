@@ -6530,6 +6530,17 @@ type HomeMoveMessage struct {
 	Via *string `json:"via,omitempty,omitzero"`
 }
 
+type HomeMoveProgressMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Step corresponds to the JSON schema field "step".
+	Step string `json:"step"`
+}
+
 type HomeMoveRemap struct {
 	// From corresponds to the JSON schema field "from".
 	From string `json:"from"`

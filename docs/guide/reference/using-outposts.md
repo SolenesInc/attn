@@ -36,15 +36,15 @@ To add an outpost:
 
 1. Run `ssh <destination>` in your terminal and answer any authentication or
    host-key prompts. Attn's background commands never prompt.
-2. On the home, open **Settings → Outposts** and turn on **Outposts**.
-3. Enter the **ssh destination** and click **Add outpost**. Name is optional and defaults to the destination. The name `home`
+2. On the home, open **Settings → Machines** and turn on **Outposts**.
+3. Under **Add a machine**, enter the **ssh destination** and click **Add**. Name is optional and defaults to the destination. The name `home`
    is reserved.
 
 Attn starts the daemon over ssh and keeps it running when ssh disconnects.
 The machine must have logind's `KillUserProcesses` off, or Attn refuses and
 names the setting. No systemd service or root access is needed.
 
-Adding an outpost finishes when the two daemons pair for the first time. After ssh authentication succeeds, Attn finishes the installation on the next connection attempt. If a home restart interrupts the Add, the Add continues when the home starts again. If the installation fails, the row shows the reason, and Attn waits for you to choose **Update to home build** or **Re-pair** before it tries another install.
+Adding an outpost finishes when the two daemons pair for the first time. After ssh authentication succeeds, Attn finishes the installation on the next connection attempt. If a home restart interrupts the Add, the Add continues when the home starts again. If the installation fails, the row shows the reason, and Attn waits for you to choose **Update** or **Re-pair** on the outpost's row before it tries another install.
 
 The first connection pairs the daemons. The home remembers the outpost's
 identity, and the outpost accepts only that home until you release it.
@@ -122,8 +122,7 @@ row, with each terminal once. Press **R** or click **Retry** to dial at once.
 
 Attn never installs, updates or re-pairs a machine that dials the home, and
 can't connect to it in a terminal. Update attn on that machine. On its row,
-**Update to home build**, **Re-pair** and **Connect in a terminal** refuse and
-say so.
+**Update**, **Re-pair** and **Connect in a terminal** refuse and say so.
 
 ## Update the home from the machine that dials it
 
@@ -191,8 +190,8 @@ when the home is reachable.
 
 ## Update outposts
 
-When an outpost runs another build, choose **Update to home build** on its
-row or **Update outposts** in the banner. Update also retries a failed first
+When an outpost runs another build, choose its row and **Update**, or press U,
+or choose **Update outposts** in the banner. Update also retries a failed first
 install when nothing is installed yet. The banner and the row show each step
 from the moment you choose Update until the outpost runs the home build or the
 update fails with its reason. While an update runs, choosing Update again joins
@@ -416,12 +415,12 @@ new profile starts there. It refuses whether or not an outpost is paired. The
 refusal names both folders and the profile involved, and the folder stays as it
 was.
 
-**Settings → Outposts** shows one Notebook state per outpost: first sync,
-syncing with the bytes and items left, in sync, or the error and its reason. The
-row shows the state of the folder furthest from in sync, with an error first.
+In **Settings → Machines**, an outpost's **Details** show its Notebook state:
+first sync, syncing with the bytes and items left, in sync, or the error and its
+reason. They show the state of the folder furthest from in sync, with an error first.
 The counts add up every folder that syncs, and each error starts with its folder's path at
 the home. Byte and item counts appear
-once the remaining work is known. The row also shows a count of conflict copies.
+once the remaining work is known. The details also show a count of conflict copies.
 Sync keeps both versions of concurrent edits, as the original and a
 `*.sync-conflict-*` copy. For each new conflict copy, attn sends a notification
 at the home to every profile that uses the folder. The notification names the
@@ -527,7 +526,7 @@ outpost, `attn settings list --all` shows its side: `outpost_state`,
 | Refused because | What to do |
 | --- | --- |
 | the home and the outpost use different instance names | Start an outpost with the same instance name as the home. |
-| the home and the outpost run different builds | Choose **Update to home build** on the row or **Update outposts** in the banner. |
+| the home and the outpost run different builds | Choose **Update** on the outpost's row or **Update outposts** in the banner. |
 | the outpost changed host key or daemon id | Someone reinstalled the outpost or replaced its data folder. If you expect that change, choose **Re-pair**. |
 | the outpost is paired to another home | This home installs nothing there, even when the outpost's build differs. Run `attn enrollment leave` on the outpost. This home pairs on its next try. |
 | ssh needs a host-key answer, passphrase, password, 2FA, or security-key touch | Choose **Connect in a terminal** and answer ssh there. When it succeeds, the outpost connects automatically. Close the terminal with Cmd+W. |

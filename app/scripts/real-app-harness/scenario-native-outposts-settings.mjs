@@ -45,7 +45,12 @@ const named = async (target) => (await driver.find(target))?.name ?? '';
 const flat = (value) => value.replace(/\s+/g, ' ').trim();
 const studio = (rows) => rows.find((row) => row.name === 'Studio');
 let studioId = '';
-const row = (part, id = studioId) => ({ key: `settings.outpost.${id}${part ? `.${part}` : ''}` });
+const row = (part, id = studioId) => ({ key: `settings.machine.${id}${part ? `.${part}` : ''}` });
+/** Chooses the machine's row, so its actions show, and with `details` opens its details. */
+async function choose(id = studioId, details = false) {
+  await driver.click(row('', id));
+  if (details && !(await driver.find(row('details', id)))) await driver.click(row('details-toggle', id));
+}
 
 async function removeScenarioOutposts() {
   const rows = observer.outposts.filter((item) => ['Studio', 'Studio alias'].includes(item.name) && item.destination.startsWith('scenario-outpost'));
@@ -75,17 +80,17 @@ function start(command, args, childEnv, stdio) {
 async function openOutposts() {
   if (!(await driver.find({ key: 'settings-dialog' }))) await driver.pressKey(OPEN_SETTINGS);
   await driver.waitFor({ key: 'settings-dialog' });
-  await driver.click({ key: 'settings.nav.outposts' });
-  await driver.state('settings', { expect: { activeSection: 'outposts' } });
+  await driver.click({ key: 'settings.nav.machines' });
+  await driver.state('settings', { expect: { activeSection: 'machines' } });
 }
 async function closeSettings() {
   await driver.pressKey('Escape');
   await driver.waitFor({ key: 'settings-dialog' }, { gone: true });
 }
 async function add(name, address) {
-  await driver.typeInto({ key: 'settings.outposts.name' }, name);
-  await driver.typeInto({ key: 'settings.outposts.destination' }, address);
-  await driver.click({ key: 'settings.outposts.submit' });
+  await driver.typeInto({ key: 'settings.machines.name' }, name);
+  await driver.typeInto({ key: 'settings.machines.destination' }, address);
+  await driver.click({ key: 'settings.machines.submit' });
 }
 /** The pane `session` holds, once a desktop holds it with its terminal. */
 const paneOf = (session) => observer.waitFor(() => {
@@ -203,16 +208,17 @@ try {
 
   await runner.step('keyboard_opt_in_and_add', async () => {
     await driver.pressKey(OPEN_SETTINGS);
-    await driver.waitFor({ key: 'settings.nav-off.outposts' });
+    await driver.waitFor({ key: 'settings.nav-off.machines' });
     await driver.click({ key: 'settings.nav.experimental' });
     await driver.click({ key: 'settings.feature.outposts_enabled' });
-    await driver.waitFor({ key: 'settings.nav-off.outposts' }, { gone: true });
+    await driver.waitFor({ key: 'settings.nav-off.machines' }, { gone: true });
     await shot('00-experimental');
     await openOutposts();
     const refused = receive((rows) => rows.some((item) => item.name === 'Studio' && item.state === 'refused' && item.connectable));
     await add('Studio', address);
     const refusal = studio(await refused);
     studioId = refusal.id;
+    await choose(studioId, true);
     runner.assert(flat(await named(row('error.text'))) === flat(refusal.last_error), 'ssh stderr is shown whole', refusal);
     const registered = observer.waitForMessage((event) => event.event === 'session_registered' && event.session.command_terminal && event.session, 'connection terminal', observer.connectTimeoutMs);
     const connected = receive((rows) => rows.some((item) => item.name === 'Studio' && item.state === 'connected'));
@@ -241,6 +247,7 @@ try {
     await openOutposts();
     await driver.state('outposts', { expect: { $some: { id: studioId, state: 'connected' } } });
     runner.assert((await named(row('state'))) === 'connected', 'the row reads connected');
+    await choose(studioId, true);
     runner.assert((await named(row('host-key'))).includes(studioRow.host_key_fingerprint), 'the row shows the pinned host key');
     await shot('01-connected');
     await closeSettings();
@@ -431,6 +438,7 @@ try {
     const connecting = receive((rows) => rows.some((item) => item.name === 'Studio' && item.state === 'connecting'));
     const releaseRequests = ssh.holdRequests(address);
     runner.registerCleanup('release_connecting_requests', releaseRequests);
+    await choose();
     await driver.click(row('repair'));
     await connecting;
     await closeSettings();
@@ -461,6 +469,7 @@ try {
     const refused = (await refusal).find((item) => item.name === 'Studio alias');
     await driver.state('outposts', { expect: { $some: { id: refused.id, state: 'refused' } } });
     runner.assert((await named(row('state', refused.id))) === 'refused', 'the alias reads refused');
+    await choose(refused.id, true);
     runner.assert(flat(await named(row('error.text', refused.id))) === flat(refused.last_error), 'the refusal is shown whole', refused);
     await shot('05-refused');
     const removed = receive((rows) => !rows.some((item) => item.name === 'Studio alias'));
@@ -469,6 +478,7 @@ try {
     await driver.waitFor(row('', refused.id), { gone: true });
     const before = studio(observer.outposts).state_since;
     const repaired = receive((rows) => rows.some((item) => item.name === 'Studio' && item.state === 'connected' && item.state_since !== before));
+    await choose();
     await driver.click(row('repair'));
     await repaired;
     const empty = receive((rows) => rows.length === 0);
@@ -481,7 +491,7 @@ try {
     await driver.waitFor(row(''), { gone: true });
     await driver.click({ key: 'settings.nav.experimental' });
     await driver.click({ key: 'settings.feature.outposts_enabled' });
-    await driver.waitFor({ key: 'settings.nav-off.outposts' });
+    await driver.waitFor({ key: 'settings.nav-off.machines' });
     await closeSettings();
   });
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));

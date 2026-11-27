@@ -190,6 +190,7 @@ pub enum Layer {
 /// The banners over the window's work.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Band {
+    HomeMove,
     UpdateRun,
     OutpostUpdates,
     Connection,
@@ -215,6 +216,7 @@ pub(crate) fn close_details(state: &mut State) {
 fn message(state: &State, band: Band) -> Option<u64> {
     use std::hash::{Hash, Hasher};
     let identity = match band {
+        Band::HomeMove => crate::settings::machines::identity(state),
         Band::UpdateRun => crate::update_run::identity(state),
         Band::OutpostUpdates => crate::outpost_updates::identity(state),
         Band::SharedCodex => crate::harness::codex::identity(state),
@@ -244,6 +246,7 @@ fn banner_details(state: &State, band: Band, shown: u64, t: &Tokens, layers: &mu
         return;
     }
     let banner = match band {
+        Band::HomeMove => crate::settings::machines::said(state),
         Band::UpdateRun => crate::update_run::said(state),
         Band::OutpostUpdates => crate::outpost_updates::said(state),
         Band::SharedCodex => crate::harness::codex::said(state),
@@ -594,7 +597,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
                 away,
                 crate::update_run::current(state),
                 state.window.notice.as_ref().map(|n| n.text.as_str()),
-                crate::settings::outposts::undoable_move(state),
+                crate::settings::machines::undoable_move(state),
             ),
         ),
     };
@@ -605,6 +608,9 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         .flatten();
     let update_run = bands
         .then(|| crate::update_run::banner(state, &t, cx))
+        .flatten();
+    let home_move = bands
+        .then(|| crate::settings::machines::banner(state, &t, cx))
         .flatten();
     let outpost_updates = bands
         .then(|| crate::outpost_updates::banner(state, &t, cx))
@@ -621,9 +627,16 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         .on_paste_content(crate::keys::on_paste)
         .child(title_bar(state, cx, &t))
         .children(
-            [banner, warnings, outpost_updates, update_run, shared_codex]
-                .into_iter()
-                .flatten(),
+            [
+                banner,
+                home_move,
+                warnings,
+                outpost_updates,
+                update_run,
+                shared_codex,
+            ]
+            .into_iter()
+            .flatten(),
         )
         .children(
             bands

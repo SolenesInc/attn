@@ -13,7 +13,7 @@ pub(crate) enum Section {
     Delegation,
     #[default]
     Connectivity,
-    Outposts,
+    Machines,
     Phones,
     Senders,
     Plugins,
@@ -132,10 +132,10 @@ pub(crate) const GROUPS: &[Group] = &[
                 "github hosts",
             ),
             feature_item(
-                Section::Outposts,
-                "Outposts",
+                Section::Machines,
+                "Machines",
                 "outposts_enabled",
-                "outposts bridge host machine address pair re-pair remove connection build fingerprint connect other computers",
+                "machines outposts this mac home move make home bridge host machine address pair re-pair remove connection build fingerprint connect other computers",
             ),
             feature_item(
                 Section::Phones,
@@ -209,7 +209,7 @@ impl Section {
             Section::BackgroundAgents => "backgroundAgents",
             Section::Delegation => "delegation",
             Section::Connectivity => "connectivity",
-            Section::Outposts => "outposts",
+            Section::Machines => "machines",
             Section::Phones => "phones",
             Section::Senders => "senders",
             Section::Plugins => "plugins",

@@ -324,10 +324,14 @@ pub(crate) fn drain(state: &mut State, tx: &mut Tx) -> bool {
             answered = true;
             continue;
         }
+        if crate::settings::machines::progressed(state, &reply) {
+            answered = true;
+            continue;
+        }
         if let Some(then) = state.requests.answered_by(&reply) {
             then(state, Answer::Reply(reply), tx);
             answered = true;
-        } else if crate::settings::outposts::refused(state, &reply)
+        } else if crate::settings::machines::refused(state, &reply)
             || crate::desktop::refusal::receive(state, &reply, tx)
         {
             answered = true;

@@ -199,6 +199,7 @@ const (
 	CmdHomeMoveStatus             = "home_move_status"
 	CmdHomeMoveRollback           = "home_move_rollback"
 	EventHomeMoveResult           = "home_move_result"
+	EventHomeMoveProgress         = "home_move_progress"
 	CmdHomeDialStatus             = "home_dial_status"
 	CmdRetryHome                  = "retry_home"
 	CmdListPlugins                = "list_plugins"

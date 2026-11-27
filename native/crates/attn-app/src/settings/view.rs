@@ -7,7 +7,7 @@ use rune_kit::{ScrollBar, TextInput};
 use super::sections::{self, Section};
 use super::{
     agents, analytics, appearance, background, bus, controls, delegation, desktop, experimental,
-    github, hygiene, models, outposts, phones, plugins, route, senders, tasks, updates,
+    github, hygiene, machines, models, phones, plugins, route, senders, tasks, updates,
 };
 use crate::State;
 use crate::setting;
@@ -205,7 +205,7 @@ fn page(state: &State, section: Section, t: &Tokens) -> Vec<Block> {
         Section::Desktop => desktop::page(state, t),
         Section::Hygiene => hygiene::page(state, t),
         Section::Plugins => plugins::page(state, t),
-        Section::Outposts => outposts::page(state, t),
+        Section::Machines => machines::page(state, t),
         Section::Phones => phones::page(state, t),
         Section::Senders => senders::page(state, t),
     }

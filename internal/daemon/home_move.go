@@ -222,7 +222,7 @@ func moveInfo(record homemove.Record) protocol.HomeMove {
 }
 
 func (d *Daemon) handleHomeMove(ctx context.Context, conn net.Conn, msg *protocol.HomeMoveMessage) {
-	move, exit, err := d.homeMoveCommand(ctx, msg)
+	move, exit, err := d.homeMoveCommand(ctx, msg, func(string) {})
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
@@ -288,7 +288,7 @@ func (d *Daemon) handleHomeMoveRollback(ctx context.Context, conn net.Conn) {
 	}
 }
 
-func (d *Daemon) homeMoveCommand(ctx context.Context, msg *protocol.HomeMoveMessage) (protocol.HomeMove, bool, error) {
+func (d *Daemon) homeMoveCommand(ctx context.Context, msg *protocol.HomeMoveMessage, began func(step string)) (protocol.HomeMove, bool, error) {
 	if !d.on(setting.RemoteHomeEnabled) {
 		return protocol.HomeMove{}, false, protocol.Refuse(protocol.RefusalWrongState, "remote_home_enabled is off; run {attn settings set remote_home_enabled true} before you move the home")
 	}
@@ -325,7 +325,7 @@ func (d *Daemon) homeMoveCommand(ctx context.Context, msg *protocol.HomeMoveMess
 	if protocol.Deref(msg.Check) {
 		return info, false, nil
 	}
-	return d.runHomeMove(ctx, plan, info)
+	return d.runHomeMove(ctx, plan, info, began)
 }
 
 func check(name string, err error) protocol.HomeMoveCheck {
@@ -417,7 +417,7 @@ func newMoveID() (string, error) {
 	return "m-" + hex.EncodeToString(buf), nil
 }
 
-func (d *Daemon) runHomeMove(ctx context.Context, plan homeMovePlan, info protocol.HomeMove) (protocol.HomeMove, bool, error) {
+func (d *Daemon) runHomeMove(ctx context.Context, plan homeMovePlan, info protocol.HomeMove, began func(step string)) (protocol.HomeMove, bool, error) {
 	id, err := newMoveID()
 	if err != nil {
 		return info, false, err
@@ -433,6 +433,7 @@ func (d *Daemon) runHomeMove(ctx context.Context, plan homeMovePlan, info protoc
 		record.Enrollment.Dial = plan.dial
 	}
 	d.holdForMove()
+	began("fence")
 	fail := func(err error) (protocol.HomeMove, bool, error) {
 		_ = plan.conn.Call(context.WithoutCancel(ctx), homeMoveAbortChannel, homeMoveRequest{ID: id}, nil)
 		if abortErr := homemove.Abort(d.dataRoot, id); abortErr != nil {
@@ -474,7 +475,8 @@ func (d *Daemon) runHomeMove(ctx context.Context, plan homeMovePlan, info protoc
 		stage.Record.Notebook = append(stage.Record.Notebook, homemove.Remap{From: remap.From, To: remap.To})
 	}
 	record.Notebook = stage.Record.Notebook
-	if err := d.sendHomeMoveStage(ctx, plan.conn, stage, snapshot, files); err != nil {
+	began("copy")
+	if err := d.sendHomeMoveStage(ctx, plan.conn, stage, snapshot, files, func() { began("build") }); err != nil {
 		return fail(fmt.Errorf("stage the move on %s: %w", to.Name, err))
 	}
 	_ = os.Remove(snapshot)
@@ -484,6 +486,7 @@ func (d *Daemon) runHomeMove(ctx context.Context, plan homeMovePlan, info protoc
 		return fail(err)
 	}
 	d.logf("home move %s: staged on %s; committing", id, to.Name)
+	began("commit")
 	return d.commitHomeMove(ctx, plan.conn, record)
 }
 
@@ -636,7 +639,7 @@ func hashFile(path string) (string, int64, error) {
 	return hex.EncodeToString(h.Sum(nil)), n, err
 }
 
-func (d *Daemon) sendHomeMoveStage(ctx context.Context, conn *bridge.Conn, stage homeMoveStage, snapshot string, files []homemove.File) error {
+func (d *Daemon) sendHomeMoveStage(ctx context.Context, conn *bridge.Conn, stage homeMoveStage, snapshot string, files []homemove.File, sent func()) error {
 	header, err := json.Marshal(stage)
 	if err != nil {
 		return err
@@ -663,6 +666,7 @@ func (d *Daemon) sendHomeMoveStage(ctx context.Context, conn *bridge.Conn, stage
 	if err := writer.Flush(); err != nil {
 		return err
 	}
+	sent()
 	var staged homeMoveStaged
 	if err := json.NewDecoder(stream).Decode(&staged); err != nil {
 		return fmt.Errorf("read the outcome: %w", err)

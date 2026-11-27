@@ -3477,6 +3477,69 @@ fn settings_section(
     snap(&mut world, &format!("settings-{section}"), dark);
 }
 
+/// Settings → Machines with studio chosen and its move checked, then the band of the move once
+/// it copies to studio.
+fn settings_machines_move(dark: bool) {
+    let build = "0.13.0 (source git:home, protocol current)";
+    let mut world = settings_world(
+        dark,
+        "machines",
+        "machines",
+        &[
+            ("outposts_enabled", "true"),
+            ("remote_home_enabled", "true"),
+        ],
+        |state| {
+            state.home_build = Some(build.into());
+            state.outposts = Some(vec![OutpostInfo {
+                id: "studio".into(),
+                name: "studio".into(),
+                destination: "me@studio".into(),
+                state: "connected".into(),
+                reach: "reachable".into(),
+                state_since: "2026-10-18T18:00:00Z".into(),
+                build: Some(build.into()),
+                ..OutpostInfo::default()
+            }]);
+        },
+        |daemon| {
+            daemon.on("home_move_status", |_: &Request| {
+                json!({"event": "home_move_result", "success": true, "home_move": {"step": "none", "checks": [], "remaps": []}})
+            });
+            daemon.on("home_move", |r: &Request| {
+                (r["check"] == true).then(|| {
+                    json!({"event": "home_move_result", "success": true, "home_move": {
+                        "step": "checked", "to": "studio", "sleeps": true,
+                        "checks": [
+                            {"name": "connected", "ok": true}, {"name": "build", "ok": true},
+                            {"name": "gh", "ok": true}, {"name": "disk", "ok": true},
+                        ],
+                        "remaps": [{"from": "/Users/me/attn-notebook", "to": "/home/me/attn-notebook"}],
+                    }})
+                })
+            });
+        },
+    );
+    click(&mut world, Target::key("settings.machine.studio"));
+    click(&mut world, Target::key("settings.machine.studio.move"));
+    snap(&mut world, "settings-machines-move", dark);
+    click(&mut world, Target::key("settings.machine.studio.move.go"));
+    let request_id = world.daemon.sent_of("home_move")[1]["request_id"].clone();
+    world
+        .daemon
+        .emit(json!({"event": "home_move_progress", "request_id": request_id, "step": "copy"}));
+    world.settle();
+    snap(&mut world, "settings-machines-moving", dark);
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Escape,
+            mods: rune::Mods::default(),
+        })
+    });
+    world.settle();
+    snap(&mut world, "home-move-band", dark);
+}
+
 /// The Settings dialog on `section`, its state changed by `change` and the daemon answering as
 /// `answer` scripts it.
 fn settings_world(
@@ -4995,8 +5058,8 @@ fn settings_missing_states(dark: bool) {
 
     let mut world = settings_world(
         dark,
-        "outposts",
-        "outposts",
+        "machines",
+        "machines",
         SWITCHED_ON,
         |_| {},
         |daemon| {
@@ -5005,12 +5068,12 @@ fn settings_missing_states(dark: bool) {
             });
         },
     );
-    click(&mut world, Target::key("settings.outposts.name"));
+    click(&mut world, Target::key("settings.machines.name"));
     world.gesture(|app| app.type_text("studio"));
-    click(&mut world, Target::key("settings.outposts.destination"));
+    click(&mut world, Target::key("settings.machines.destination"));
     world.gesture(|app| app.type_text("studio:2200"));
-    click(&mut world, Target::key("settings.outposts.submit"));
-    snap(&mut world, "settings-outposts-refused", dark);
+    click(&mut world, Target::key("settings.machines.submit"));
+    snap(&mut world, "settings-machines-refused", dark);
 
     let mut world = settings_world(
         dark,
@@ -5091,8 +5154,8 @@ fn settings_smallest_pages(dark: bool) {
     );
     settings_smallest_page(
         dark,
-        "outposts",
-        "outposts",
+        "machines",
+        "machines",
         SWITCHED_ON,
         |state| {
             state.outposts = Some(vec![attn_protocol::OutpostInfo {
@@ -9473,8 +9536,9 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
             settings_bottom(dark, "general", "appearance", &[])
         });
         scene("settings_section", || {
-            settings_section(dark, "outposts", "outposts", SWITCHED_ON, |_| {})
+            settings_section(dark, "machines", "machines", SWITCHED_ON, |_| {})
         });
+        scene("settings_machines_move", || settings_machines_move(dark));
         scene("settings_section", || {
             settings_section(dark, "experimental", "experimental", SWITCHED_ON, |_| {})
         });

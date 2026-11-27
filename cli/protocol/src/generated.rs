@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "95696bb8eb66";
+pub const PROTOCOL_VERSION: &str = "a16b1d621567";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -5892,6 +5892,22 @@ impl HomeMoveMessage {
     pub fn new() -> Self {
         Self {
             cmd: "home_move".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HomeMoveProgressMessage {
+    pub event: String,
+    pub request_id: String,
+    pub step: String,
+}
+
+impl HomeMoveProgressMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "home_move_progress".to_string(),
             ..Self::default()
         }
     }

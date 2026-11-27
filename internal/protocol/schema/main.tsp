@@ -2119,6 +2119,14 @@ model HomeMoveResultMessage {
   home_move?: HomeMove;
 }
 
+// A step the home began of the move that request_id asked for. step is fence (changes stop), copy (the home goes to
+// the target), build (the target builds its database) or commit (the two machines switch roles).
+model HomeMoveProgressMessage {
+  event: "home_move_progress";
+  request_id: string;
+  step: string;
+}
+
 // One machine's side of a move of the home. step is none, refused, staged, committing, committed, applied,
 // rolling-back, rolled-back or aborted; side is from on the machine that was the home and to on the target.
 model HomeMove {
@@ -9256,6 +9264,7 @@ alias DaemonEvent =
   | SessionsUpdatedMessage
   | ProfileActionResultMessage
   | HomeMoveResultMessage
+  | HomeMoveProgressMessage
   | ProfilesChangedMessage
   | ProfileArrangementChangedMessage
   | DesktopTileContentMessage

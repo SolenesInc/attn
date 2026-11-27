@@ -275,7 +275,7 @@ func TestOutpostsChangedIdentityRequiresRepair(t *testing.T) {
 			stopRetries := home.FireTimers(bridge.RetryTimer)
 			refused := outpostState(p, "replaced", protocol.OutpostStateRefused)
 			stopRetries()
-			words := []string{address, protocol.Deref(first.DaemonID), "re-pair it in Settings → Outposts"}
+			words := []string{address, protocol.Deref(first.DaemonID), "re-pair it in Settings → Machines"}
 			if sameKey {
 				words = append(words, protocol.Deref(remote.Initial.DaemonInstanceID))
 			} else {

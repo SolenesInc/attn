@@ -100,7 +100,7 @@ func handshake(handshakeCtx context.Context, cfg *DialConfig) (*authenticatedPee
 			}
 		}
 		if cfg.Pin != nil && seen.HostKey != cfg.Pin.HostKey {
-			pinErr = &Refusal{Reason: "identity", Detail: fmt.Sprintf("outpost %s (%s) changed host key: pinned %s, received %s; if you expect that, re-pair it in Settings → Outposts", cfg.Pin.DaemonID, cfg.Conn.RemoteAddr().String(), cfg.Pin.Fingerprint(), seen.Fingerprint())}
+			pinErr = &Refusal{Reason: "identity", Detail: fmt.Sprintf("outpost %s (%s) changed host key: pinned %s, received %s; if you expect that, re-pair it in Settings → Machines", cfg.Pin.DaemonID, cfg.Conn.RemoteAddr().String(), cfg.Pin.Fingerprint(), seen.Fingerprint())}
 			return pinErr
 		}
 		return nil
@@ -140,7 +140,7 @@ func handshake(handshakeCtx context.Context, cfg *DialConfig) (*authenticatedPee
 	var answer hello
 	err = decoder.Decode(&answer)
 	if errors.Is(err, io.EOF) {
-		err = fmt.Errorf("outpost at %s closed before its bridge hello; if it runs an older build, choose Update in Settings → Outposts at the home: %w", cfg.Conn.RemoteAddr().String(), err)
+		err = fmt.Errorf("outpost at %s closed before its bridge hello; if it runs an older build, choose Update in Settings → Machines at the home: %w", cfg.Conn.RemoteAddr().String(), err)
 	}
 	if err == nil {
 		err = answer.check()
@@ -148,7 +148,7 @@ func handshake(handshakeCtx context.Context, cfg *DialConfig) (*authenticatedPee
 	if err == nil {
 		seen.DaemonID = answer.DaemonID
 		if cfg.Pin != nil && cfg.Pin.DaemonID != seen.DaemonID {
-			err = &Refusal{Reason: "identity", Detail: fmt.Sprintf("outpost at %s changed daemon id: pinned %s, received %s; if you expect that, re-pair it in Settings → Outposts", cfg.Conn.RemoteAddr().String(), cfg.Pin.DaemonID, seen.DaemonID)}
+			err = &Refusal{Reason: "identity", Detail: fmt.Sprintf("outpost at %s changed daemon id: pinned %s, received %s; if you expect that, re-pair it in Settings → Machines", cfg.Conn.RemoteAddr().String(), cfg.Pin.DaemonID, seen.DaemonID)}
 		} else if answer.Refused != nil {
 			answer.Refused.Peer = &answer.Identity
 			err = answer.Refused

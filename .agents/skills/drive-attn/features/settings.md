@@ -104,7 +104,7 @@ Preconditions:
 ## Gotchas
 
 - The dialog first opens on GitHub hosts (`connectivity`), not Appearance, and keeps the last section and the last search while the app runs. A search that leaves a section out hides its nav button: when `bridge state '{"of":"settings"}'` shows a `search`, clear it before pressing a `settings.nav.<section>` button.
-- The Outposts, Phones and Analytics sections are always in the nav. While `outposts_enabled`, `phone_access_enabled` or `analytics.enabled` is off, `settings.nav-off.<section>` marks the section and the page below its head is dimmed. The feature's switch, `settings.feature.<key>`, sits in the page head beside the title.
+- The Machines, Phones and Analytics sections are always in the nav. While `outposts_enabled`, `phone_access_enabled` or `analytics.enabled` is off, `settings.nav-off.<section>` marks the section and the page below its head is dimmed. The feature's switch, `settings.feature.<key>`, sits in the page head beside the title.
 - `""` restores the default of a true or false setting, and of another key where its description says so. `attn settings set theme ""` is refused as an invalid theme.
 - `attn settings list` prints `profile <name>` as the scope of `notebook.root` and `notebook.root.effective` (under `--all`), and `home` or `this machine` for the rest. On an outpost, a home setting adds `set at the home`.
 - The home and machine step needs a paired outpost, which the baseline lacks. `cmd/attnd/settings_outpost_stack_test.go` covers it.

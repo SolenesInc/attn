@@ -17,8 +17,8 @@ pub(crate) use plugins::source_chosen as plugin_source_chosen;
 mod controls;
 pub(crate) mod harnesses;
 mod hygiene;
+pub(crate) mod machines;
 mod models;
-pub(crate) mod outposts;
 pub(crate) mod phones;
 mod plugins;
 pub(crate) mod route;
@@ -122,7 +122,7 @@ pub(crate) struct Dialog {
     harnesses: harnesses::Harnesses,
     catalogs: catalogs::Catalogs,
     delegation: delegation::Delegation,
-    outposts: outposts::Outposts,
+    machines: machines::Machines,
     phones: phones::Phones,
     senders: senders::Senders,
     route_picker: Option<route::Picker>,
@@ -242,7 +242,7 @@ fn arrive(state: &mut State, tx: &mut Tx) {
     analytics::arrive(state, tx);
     updates::arrive(state);
     delegation::arrive(state, tx);
-    outposts::arrive(state);
+    machines::arrive(state);
     phones::arrive(state);
     senders::arrive(state);
 }
@@ -331,7 +331,7 @@ pub(crate) fn follow(state: &mut State, changed: Slices, tx: &mut Tx) {
     state.window.settings.autosave.sync(&settings);
     catalogs::follow(state);
     tasks::follow(state, tx);
-    outposts::follow(state, changed, tx);
+    machines::follow(state, changed, tx);
     phones::follow(state, changed);
 }
 

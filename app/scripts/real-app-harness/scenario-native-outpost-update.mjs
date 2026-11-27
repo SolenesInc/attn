@@ -19,7 +19,7 @@ const instance = currentHarnessInstance();
 if (!instance) throw new Error('Outpost update verification requires a named instance');
 const runner = createScenarioRunner(options, {
   scenarioId: 'NATIVE-OUTPOST-UPDATE', tier: 'local', prefix: 'native-outpost-update', allowRealAgents: false,
-  metadata: { focus: 'A failed first Add offers the update in the native Outpost updates band, which installs the home build and closes after its countdown; a missing build offers the row\'s Update to home build' },
+  metadata: { focus: 'A failed first Add offers the update in the native Outpost updates band, which installs the home build and closes after its countdown; a missing build offers the chosen row\'s Update' },
 });
 const root = fs.mkdtempSync(path.join(os.platform() === 'darwin' ? '/private/tmp' : os.tmpdir(), 'attn-update-'));
 const binary = appCliInTree(options.appPath);
@@ -41,7 +41,7 @@ const receive = (predicate) => observer.waitForMessage((m) => m.event === 'outpo
 const shot = (name) => driver.screenshot(path.join(runner.runDir, `${name}.png`));
 let remoteEnv, target, outpostId;
 const phases = [];
-const row = (part) => ({ key: `settings.outpost.${outpostId}.${part}` });
+const row = (part) => ({ key: `settings.machine.${outpostId}${part ? `.${part}` : ''}` });
 /** What the element `key` reads once the app's outpost agrees with `outpost`. */
 async function reads(key, outpost) {
   await driver.state('outposts', { expect: { $some: { id: outpostId, ...outpost } } });
@@ -58,8 +58,8 @@ async function update(press, name) {
 async function openOutposts() {
   await driver.pressKey(OPEN_SETTINGS);
   await driver.waitFor({ key: 'settings-dialog' });
-  await driver.click({ key: 'settings.nav.outposts' });
-  await driver.state('settings', { expect: { activeSection: 'outposts' } });
+  await driver.click({ key: 'settings.nav.machines' });
+  await driver.state('settings', { expect: { activeSection: 'machines' } });
 }
 runner.registerCleanup('remove_scratch', () => fs.rmSync(root, { recursive: true, force: true }));
 runner.registerCleanup('close_ssh', () => ssh.close());
@@ -107,9 +107,9 @@ try {
   await openOutposts();
   await runner.step('failed_add_offers_banner_update', async () => {
     const refused = receive((r) => r.name === 'Update studio' && r.state === 'refused' && r.update?.phase === 'failed');
-    await driver.typeInto({ key: 'settings.outposts.name' }, 'Update studio');
-    await driver.typeInto({ key: 'settings.outposts.destination' }, 'scenario-outpost');
-    await driver.click({ key: 'settings.outposts.submit' });
+    await driver.typeInto({ key: 'settings.machines.name' }, 'Update studio');
+    await driver.typeInto({ key: 'settings.machines.destination' }, 'scenario-outpost');
+    await driver.click({ key: 'settings.machines.submit' });
     const added = await refused;
     outpostId = added.id;
     runner.assert(!fs.existsSync(target), 'failed first install leaves no binary', added);
@@ -132,8 +132,9 @@ try {
     await run(binary, ['settings', 'set', 'outposts_enabled', 'true'], homeEnv);
     await refused;
     await openOutposts();
-    const offered = await reads(`settings.outpost.${outpostId}.update-build`, { state: 'refused', build: 'nothing installed' });
-    runner.assert(offered === 'Update to home build', 'the row offers the home build', offered);
+    await driver.click(row(''));
+    const offered = await reads(`settings.machine.${outpostId}.update-build`, { state: 'refused', build: 'nothing installed' });
+    runner.assert(offered === 'Update', 'the chosen row offers the update', offered);
     const said = await reads('outpost-updates.text', { state: 'refused', build: 'nothing installed' });
     runner.assert(said === 'Update studio runs a different build than home.', 'the band names the outpost on another build', said);
     await shot('02-missing-build');

@@ -144,7 +144,7 @@ fn update_all(state: &mut State, _: &mut Tx) {
         .map(|o| o.id.clone())
         .collect();
     for id in ids {
-        crate::settings::outposts::update(state, &id);
+        crate::settings::machines::update(state, &id);
     }
 }
 
@@ -275,7 +275,7 @@ pub(crate) fn said(state: &State) -> Option<blocks::Banner> {
             };
         }
     }
-    if let Some(error) = crate::settings::outposts::command_error(state) {
+    if let Some(error) = crate::settings::machines::command_error(state) {
         banner = banner
             .item()
             .note("outpost-updates.error", error.to_owned());

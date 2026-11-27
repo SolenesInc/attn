@@ -49,19 +49,23 @@ let row = '';
 const receive = (predicate) => observer.waitForMessage(message => message.event === 'outposts_updated' && message.outposts.find(item => item.name === 'Studio' && predicate(item.notebook)), 'Notebook state', observer.connectTimeoutMs);
 async function showOutposts() {
   await driver.waitFor({ key: 'settings-dialog' });
-  await driver.click({ key: 'settings.nav.outposts' });
-  await driver.state('settings', { expect: { activeSection: 'outposts' } });
+  await driver.click({ key: 'settings.nav.machines' });
+  await driver.state('settings', { expect: { activeSection: 'machines' } });
 }
-/** Reads the row's Notebook line `part` once Studio's Notebook agrees with `notebook`, or,
- * with none, once the line shows. */
+/** Reads the Notebook line `part` in the row's details once Studio's Notebook agrees with
+ * `notebook`, or, with none, once the line shows. */
 async function shows(part, says, notebook) {
   const key = `${row}.notebook.${part}`;
+  if (!(await driver.find({ key: `${row}.details` }))) {
+    await driver.click({ key: row });
+    await driver.click({ key: `${row}.details-toggle` });
+  }
   if (notebook) await driver.state('outposts', { expect: { $some: { name: 'Studio', notebook } } });
   else await driver.waitFor({ key });
   const shown = await driver.find({ key });
   runner.assert(shown?.name?.includes(says), `the row's Notebook ${part} says ${says}`, shown);
 }
-const off = (gone) => driver.waitFor({ key: 'settings.nav-off.outposts' }, { gone });
+const off = (gone) => driver.waitFor({ key: 'settings.nav-off.machines' }, { gone });
 const shot = (name) => driver.screenshot(path.join(runner.runDir, `${name}.png`));
 function start(command, args, childEnv, stdio) {
   const child = spawn(command, args, { env: childEnv, stdio });
@@ -127,7 +131,7 @@ try {
     const first = receive(notebook => notebook?.state === 'first_sync' && notebook.need_items > 0 && notebook.previous_root).then(found => { outpost.kill('SIGSTOP'); return found; });
     observer.send({ cmd: 'add_outpost', name: 'Studio', destination });
     const studio = await first;
-    row = `settings.outpost.${studio.id}`;
+    row = `settings.machine.${studio.id}`;
     await shows('state', 'Notebook: first sync', { state: 'first_sync' });
     runner.assert(studio.notebook.need_bytes > 0, 'first sync names what is left', studio);
     await shows('previous', 'Previous folder saved at');

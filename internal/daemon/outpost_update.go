@@ -188,9 +188,9 @@ func (d *Daemon) prepareOutpost(ctx context.Context, row store.Machine, push *ou
 		d.setOutpostUpdate(row.ID, push, "restarting", nil)
 	} else if different {
 		if probe.Build == nil {
-			return nil, &bridge.Refusal{Reason: "build", Detail: "nothing installed; choose Update in Settings → Outposts at the home to install at " + remote.InstallPath()}
+			return nil, &bridge.Refusal{Reason: "build", Detail: "nothing installed; choose Update in Settings → Machines at the home to install at " + remote.InstallPath()}
 		}
-		return nil, &bridge.Refusal{Peer: &bridge.Identity{Build: *probe.Build}, Reason: "build", Detail: fmt.Sprintf("outpost runs build %s; home runs %s; choose Update in Settings → Outposts at the home", *probe.Build, d.bridgeIdentity().Build)}
+		return nil, &bridge.Refusal{Peer: &bridge.Identity{Build: *probe.Build}, Reason: "build", Detail: fmt.Sprintf("outpost runs build %s; home runs %s; choose Update in Settings → Machines at the home", *probe.Build, d.bridgeIdentity().Build)}
 	}
 	return remote, nil
 }

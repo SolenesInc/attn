@@ -48,14 +48,20 @@ they say that the home is down while that Mac sleeps.
 
 ## Move from the app
 
-1. Open **Settings → Outposts** at the home.
-2. On the row of the machine, click **Move home here**.
-3. Read the checks. If one fails, fix its cause and click **Check again**.
+1. Open **Settings → Machines** at the home.
+2. Choose the machine's row and click **Make home**, or press M.
+3. Read the checks and the paths that change. If a check fails, fix its cause
+   and click **Check again**.
 4. Click **Move home to** *machine*.
 
-Both daemons restart. The page says **The home moved to** *machine* once the
-move commits. The app on the old home then reaches the new home through its own
-daemon.
+The row lists the move's six steps, and a band over the window counts them:
+stop changes, copy, build the database, switch roles, start the home on the
+new machine, and reconnect. Both daemons restart, and the app on the old home
+then reaches the new home through its own daemon. The band then says **Home
+moved to** *machine*.
+
+If the new home doesn't start, the band says **Move failed:** *machine*'s home
+didn't start, and offers **Roll back**.
 
 ## Move from the CLI
 
@@ -141,5 +147,6 @@ Run the move on the machine that is the home now, and name the old home:
 attn home move laptop
 ```
 
-In the app on the old home, click **Move home here** on that machine's row. The
-button that starts the move then reads **Move home to this Mac**.
+In the app on the old home, open **Settings → Machines**, choose the **This
+Mac** row and click **Make home**. The button that starts the move then reads
+**Move home to this Mac**.

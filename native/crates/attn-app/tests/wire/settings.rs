@@ -20,8 +20,8 @@ mod desktop;
 pub(crate) mod harness_catalogs;
 mod harnesses;
 mod hygiene;
+mod machines;
 mod models;
-mod outposts;
 mod phones;
 mod plugins;
 mod senders;
@@ -378,7 +378,7 @@ fn search_leaves_the_sections_whose_words_match_and_says_when_none_do() {
             "Background agents",
             "Delegation",
             "GitHub hosts",
-            "Outposts",
+            "Machines",
             "Phones",
             "Paired senders",
             "Plugins",
@@ -1146,11 +1146,11 @@ fn a_feature_page_carries_its_switch_and_is_dimmed_while_the_feature_is_off() {
     assert!(
         world
             .screen()
-            .find(Target::key("settings.nav-off.outposts"))
+            .find(Target::key("settings.nav-off.machines"))
             .is_some()
     );
 
-    click(&mut world, "settings.nav.outposts");
+    click(&mut world, "settings.nav.machines");
     let switch = world
         .screen()
         .get(Target::key("settings.feature.outposts_enabled"));
@@ -1164,7 +1164,7 @@ fn a_feature_page_carries_its_switch_and_is_dimmed_while_the_feature_is_off() {
     assert!(
         world
             .screen()
-            .find(Target::key("settings.nav-off.outposts"))
+            .find(Target::key("settings.nav-off.machines"))
             .is_none()
     );
 

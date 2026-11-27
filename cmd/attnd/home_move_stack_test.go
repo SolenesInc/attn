@@ -161,9 +161,13 @@ func TestHomeMoveKeepsTerminalsAndMovesBack(t *testing.T) {
 	}
 
 	awaitMachineNotebook(t, app, homeMachine, protocol.OutpostNotebookStateInSync)
-	back := homeMoveJSON(t, outpost, "move", homeMachine, "--via", "outpost")
-	if back.Step != "committed" || back.Error != nil {
-		t.Fatalf("move back: %s", describeMove(back))
+	result := testworld.Request(app, protocol.HomeMoveMessage{Cmd: protocol.CmdHomeMove, Machine: homeMachine, Via: protocol.Ptr("outpost"), RequestID: protocol.Ptr("back")},
+		protocol.EventHomeMoveResult, func(r protocol.HomeMoveResultMessage) bool { return r.RequestID == "back" })
+	if !result.Success || result.HomeMove == nil || result.HomeMove.Step != "committed" || result.HomeMove.Error != nil {
+		t.Fatalf("move back from the app: %+v", result)
+	}
+	for _, step := range []string{"fence", "copy", "build", "commit"} {
+		testworld.Await(app, protocol.EventHomeMoveProgress, func(p protocol.HomeMoveProgressMessage) bool { return p.RequestID == "back" && p.Step == step })
 	}
 	outpost.AwaitStopped()
 	home.AwaitStopped()

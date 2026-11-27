@@ -10,11 +10,12 @@ use serde_json::{Value, json};
 use super::{click, named, open, press, value};
 use crate::wire::sidebar::{desktop, pane};
 
-const NAME: &str = "settings.outposts.name";
-const DESTINATION: &str = "settings.outposts.destination";
-const SUBMIT: &str = "settings.outposts.submit";
-const ERROR: &str = "settings.outposts.error";
-const ROW: &str = "settings.outpost.outpost-1";
+const NAME: &str = "settings.machines.name";
+const DESTINATION: &str = "settings.machines.destination";
+const SUBMIT: &str = "settings.machines.submit";
+const ERROR: &str = "settings.machines.error";
+const ROW: &str = "settings.machine.outpost-1";
+const HOME_ROW: &str = "settings.machine.home";
 const HOME_BUILD: &str = "0.13.0 (source git:home, protocol current)";
 
 fn studio() -> OutpostInfo {
@@ -68,9 +69,19 @@ fn home(outposts: Vec<OutpostInfo>) -> Daemon {
     daemon
 }
 
-fn on_outposts(world: &mut World) {
+fn on_machines(world: &mut World) {
     open(world);
-    click(world, "settings.nav.outposts");
+    click(world, "settings.nav.machines");
+}
+
+/// Opens the page with studio's row chosen, so its actions show.
+fn on_studio(world: &mut World) {
+    on_machines(world);
+    click(world, ROW);
+}
+
+fn show_details(world: &mut World) {
+    click(world, &part("details-toggle"));
 }
 
 fn list(world: &mut World, outposts: Vec<OutpostInfo>) {
@@ -122,18 +133,19 @@ fn turning_outposts_on_shows_the_empty_list_and_off_marks_the_page_again() {
         ..initial(vec![])
     });
     let mut world = World::start(daemon);
-    on_outposts(&mut world);
-    assert!(shows(&world, "settings.nav-off.outposts"));
+    on_machines(&mut world);
+    assert!(shows(&world, "settings.nav-off.machines"));
 
     world.daemon.emit(SettingsUpdatedMessage {
         settings: Some([("outposts_enabled".into(), "true".into())].into()),
         ..SettingsUpdatedMessage::new()
     });
     world.settle();
-    assert!(!shows(&world, "settings.nav-off.outposts"));
+    assert!(!shows(&world, "settings.nav-off.machines"));
+    assert_eq!(named(&world, HOME_ROW).as_deref(), Some("This Mac"));
     assert_eq!(
-        named(&world, "settings.outposts.empty").as_deref(),
-        Some("No outposts added.")
+        named(&world, &format!("{HOME_ROW}.home")).as_deref(),
+        Some("home")
     );
 
     world.daemon.emit(SettingsUpdatedMessage {
@@ -141,7 +153,7 @@ fn turning_outposts_on_shows_the_empty_list_and_off_marks_the_page_again() {
         ..SettingsUpdatedMessage::new()
     });
     world.settle();
-    assert!(shows(&world, "settings.nav-off.outposts"));
+    assert!(shows(&world, "settings.nav-off.machines"));
     assert!(
         !world
             .screen()
@@ -151,14 +163,14 @@ fn turning_outposts_on_shows_the_empty_list_and_off_marks_the_page_again() {
 }
 
 #[test]
-fn the_add_fields_and_button_sit_in_a_form_named_add_an_outpost() {
+fn the_add_fields_and_button_sit_in_a_form_named_add_a_machine() {
     let mut world = World::start(home(vec![]));
-    on_outposts(&mut world);
+    on_machines(&mut world);
     let screen = world.screen();
-    let form = screen.get(Target::role("form").name("Add an outpost"));
-    assert_eq!(form.key.as_deref(), Some("settings.outposts.add"));
+    let form = screen.get(Target::role("form").name("Add a machine"));
+    assert_eq!(form.key.as_deref(), Some("settings.machines.add"));
     let inside: Vec<Option<String>> = screen
-        .descendants(Target::key("settings.outposts.add"))
+        .descendants(Target::key("settings.machines.add"))
         .into_iter()
         .map(|node| node.key)
         .collect();
@@ -173,7 +185,7 @@ fn the_add_fields_and_button_sit_in_a_form_named_add_an_outpost() {
 #[test]
 fn adds_by_name_and_ssh_destination_and_keeps_the_draft_until_a_list_holds_it() {
     let mut world = World::start(home(vec![]));
-    on_outposts(&mut world);
+    on_machines(&mut world);
     assert!(disabled(&world, SUBMIT));
     type_into(&mut world, NAME, " studio ");
     type_into(&mut world, DESTINATION, " studio:2200 ");
@@ -182,14 +194,39 @@ fn adds_by_name_and_ssh_destination_and_keeps_the_draft_until_a_list_holds_it() 
         sent(&world, "add_outpost"),
         [json!({"name": "studio", "destination": "studio:2200"})]
     );
-    assert_eq!(value(&world, NAME), " studio ");
+    assert_eq!(value(&world, DESTINATION), " studio:2200 ");
     let commands = world.daemon.sent().len();
 
     list(&mut world, vec![studio()]);
     assert_eq!(value(&world, NAME), "");
     assert_eq!(value(&world, DESTINATION), "");
+
+    type_into(&mut world, NAME, "laptop");
+    type_into(&mut world, DESTINATION, "laptop:2200");
+    click(&mut world, SUBMIT);
+    type_into(&mut world, NAME, "the laptop");
+    let laptop = OutpostInfo {
+        id: "outpost-2".into(),
+        name: "laptop".into(),
+        destination: "laptop:2200".into(),
+        ..studio()
+    };
+    list(&mut world, vec![studio(), laptop]);
+    assert_eq!(
+        value(&world, NAME),
+        "the laptop",
+        "a name typed after Add stays"
+    );
+    let commands = commands + 1;
     assert_eq!(named(&world, ROW).as_deref(), Some("studio"));
     assert_eq!(named(&world, &part("state")).as_deref(), Some("connected"));
+    assert_eq!(named(&world, &part("status")).as_deref(), Some("0.13.0"));
+    click(&mut world, ROW);
+    show_details(&mut world);
+    assert_eq!(
+        named(&world, &part("destination")).as_deref(),
+        Some("ssh destination studio:2200")
+    );
     assert_eq!(
         named(&world, &part("build")),
         Some(format!("Build {HOME_BUILD}"))
@@ -213,7 +250,7 @@ fn adds_by_name_and_ssh_destination_and_keeps_the_draft_until_a_list_holds_it() 
 #[test]
 fn return_in_the_destination_adds_with_the_destination_as_its_name() {
     let mut world = World::start(home(vec![]));
-    on_outposts(&mut world);
+    on_machines(&mut world);
     type_into(&mut world, DESTINATION, " user@host ");
     press(&mut world, Key::Enter);
     assert_eq!(
@@ -229,12 +266,11 @@ fn a_refused_add_keeps_its_draft_and_its_reason_until_the_next_command() {
         json!({"event": "command_error", "cmd": "add_outpost", "success": false, "error": "Address studio:2200 is already paired"})
     });
     let mut world = World::start(daemon);
-    on_outposts(&mut world);
+    on_machines(&mut world);
     list(&mut world, vec![studio()]);
-    type_into(&mut world, NAME, "studio");
     type_into(&mut world, DESTINATION, "studio:2200");
     click(&mut world, SUBMIT);
-    assert_eq!(value(&world, NAME), "studio");
+    assert_eq!(value(&world, DESTINATION), "studio:2200");
     let error = world.screen().get(Target::key(ERROR));
     assert_eq!(error.role, "alert");
     assert_eq!(
@@ -249,10 +285,8 @@ fn a_refused_add_keeps_its_draft_and_its_reason_until_the_next_command() {
     assert_eq!(value(&world, DESTINATION), "studio:2200");
 
     world.daemon.on("add_outpost", |_| ());
-    type_into(&mut world, NAME, "laptop");
     type_into(&mut world, DESTINATION, "laptop:2200");
     click(&mut world, SUBMIT);
-    type_into(&mut world, NAME, "next machine");
     type_into(&mut world, DESTINATION, "next:2200");
     let laptop = OutpostInfo {
         id: "laptop".into(),
@@ -261,7 +295,6 @@ fn a_refused_add_keeps_its_draft_and_its_reason_until_the_next_command() {
         ..studio()
     };
     list(&mut world, vec![studio(), laptop]);
-    assert_eq!(value(&world, NAME), "next machine");
     assert_eq!(value(&world, DESTINATION), "next:2200");
     assert!(!shows(&world, ERROR));
 }
@@ -269,7 +302,7 @@ fn a_refused_add_keeps_its_draft_and_its_reason_until_the_next_command() {
 #[test]
 fn re_pair_and_remove_name_the_row_and_the_row_stays_until_the_daemon_drops_it() {
     let mut world = World::start(home(vec![studio()]));
-    on_outposts(&mut world);
+    on_studio(&mut world);
     click(&mut world, &part("repair"));
     assert_eq!(sent(&world, "repair_outpost"), [json!({"id": "outpost-1"})]);
     click(&mut world, &part("remove"));
@@ -295,7 +328,7 @@ fn remove_asks_to_confirm_closing_the_outposts_terminals_and_cancel_keeps_it() {
     });
     daemon.on("remove_outpost", |_| ());
     let mut world = World::start(daemon);
-    on_outposts(&mut world);
+    on_studio(&mut world);
     click(&mut world, &part("remove"));
     assert!(world.daemon.sent_of("remove_outpost").is_empty());
     assert_eq!(
@@ -341,7 +374,7 @@ fn remove_counts_the_outposts_terminals_in_every_profile_and_keeps_the_keyboard_
     });
     daemon.on("remove_outpost", |_| ());
     let mut world = World::start(daemon);
-    on_outposts(&mut world);
+    on_studio(&mut world);
     let focused = |world: &World| world.screen().focused().and_then(|n| n.key);
     let tab_and_press = |world: &mut World, key: String| {
         let mut seen = Vec::new();
@@ -350,7 +383,7 @@ fn remove_counts_the_outposts_terminals_in_every_profile_and_keeps_the_keyboard_
             seen.push(focused(world));
             press(world, Key::Tab);
         }
-        click(world, &key);
+        press(world, Key::Text(" ".into()));
     };
 
     tab_and_press(&mut world, part("remove"));
@@ -388,7 +421,7 @@ fn update_without_it_leaves_out_only_that_failed_outpost() {
         |_| json!({"event": "start_update_result", "success": true}),
     );
     let mut world = World::start(daemon);
-    on_outposts(&mut world);
+    on_studio(&mut world);
     let failed = |id: &str, name: &str| UpdateOutpostProgress {
         id: id.into(),
         name: name.into(),
@@ -409,7 +442,7 @@ fn update_without_it_leaves_out_only_that_failed_outpost() {
         ..UpdateChangedMessage::new()
     });
     world.settle();
-    assert_eq!(named(&world, &part("run")).as_deref(), Some("denied"));
+    assert_eq!(named(&world, &part("status")).as_deref(), Some("denied"));
     click(&mut world, &part("without"));
     let without: Vec<_> = world
         .daemon
@@ -438,7 +471,8 @@ fn an_ssh_refusal_offers_a_terminal_and_a_failed_open_shows_in_the_dialog() {
         })
     });
     let mut world = World::start(daemon);
-    on_outposts(&mut world);
+    on_studio(&mut world);
+    show_details(&mut world);
     assert_eq!(named(&world, &part("error.text")).as_deref(), Some(error));
     let connect = world.screen().get(Target::key(part("connect")));
     assert_eq!(connect.name.as_deref(), Some("Connect in a terminal"));
@@ -501,7 +535,7 @@ fn an_opened_connection_terminal_shows_in_place_of_the_dialog() {
         json!({"event": "desktop_show_leaf_result", "request_id": r["request_id"], "success": true})
     });
     let mut world = World::start(daemon);
-    on_outposts(&mut world);
+    on_studio(&mut world);
     click(&mut world, &part("connect"));
     assert_eq!(super::state(&mut world)["open"], false);
     let shown: Vec<_> = world
@@ -516,13 +550,16 @@ fn an_opened_connection_terminal_shows_in_place_of_the_dialog() {
 #[test]
 fn the_last_error_shows_whole_through_reconnecting_until_connected() {
     let mut world = World::start(home(vec![]));
-    on_outposts(&mut world);
+    on_machines(&mut world);
     let error = "studio:2200 changed host key: home pinned studio-daemon SHA256:old-key; outpost offered SHA256:new-key. Re-pair this outpost to accept its new identity.\nBoth identities must be checked before reconnecting.";
     let row = OutpostInfo {
         last_error: Some(error.into()),
         last_error_at: Some("2026-10-18T18:01:00Z".into()),
         ..refused()
     };
+    list(&mut world, vec![row.clone()]);
+    click(&mut world, ROW);
+    show_details(&mut world);
     for state in ["refused", "connecting", "stalled", "lost"] {
         list(
             &mut world,
@@ -545,7 +582,7 @@ fn a_lost_connection_disables_changes_and_a_recovering_daemon_says_so() {
         json!({"event": "command_error", "cmd": "repair_outpost", "success": false, "error": "daemon_recovering"})
     });
     let mut world = World::start(daemon);
-    on_outposts(&mut world);
+    on_studio(&mut world);
     click(&mut world, &part("repair"));
     assert_eq!(
         named(&world, ERROR).as_deref(),
@@ -559,29 +596,30 @@ fn a_lost_connection_disables_changes_and_a_recovering_daemon_says_so() {
     assert!(disabled(&world, &part("repair")));
     assert!(disabled(&world, &part("remove")));
     assert_eq!(
-        named(&world, "settings.outposts.offline").as_deref(),
-        Some("Connect to the home daemon to change outposts.")
+        named(&world, "settings.machines.offline").as_deref(),
+        Some("Connect to the home daemon to change machines.")
     );
     let _refused = world.automate("press", json!({"target": {"key": part("repair")}}));
     assert_eq!(world.daemon.sent_of("repair_outpost").len(), 1);
 }
 
 #[test]
-fn opening_the_page_shows_the_outposts_already_listed_without_asking_for_them() {
+fn opening_the_page_shows_the_machines_already_listed_without_asking_for_them() {
     let daemon = home(vec![]);
     let mut world = World::start(daemon);
     list(&mut world, vec![studio()]);
     open(&mut world);
     let commands = world.daemon.sent().len();
-    click(&mut world, "settings.nav.outposts");
+    click(&mut world, "settings.nav.machines");
     assert!(shows(&world, ROW));
     assert_eq!(world.daemon.sent().len(), commands);
 }
 
 #[test]
 fn notebook_sync_shows_its_state_what_is_left_its_conflicts_and_the_saved_folder() {
-    let mut world = World::start(home(vec![]));
-    on_outposts(&mut world);
+    let mut world = World::start(home(vec![studio()]));
+    on_studio(&mut world);
+    show_details(&mut world);
     let with = |notebook: OutpostNotebook| OutpostInfo {
         notebook: Some(notebook),
         ..studio()
@@ -653,12 +691,9 @@ fn a_row_updates_to_the_home_build_and_is_disabled_while_it_pushes() {
         ..refused()
     };
     let mut world = World::start(home(vec![old.clone()]));
-    on_outposts(&mut world);
+    on_studio(&mut world);
     let update = part("update-build");
-    assert_eq!(
-        named(&world, &update).as_deref(),
-        Some("Update to home build")
-    );
+    assert_eq!(named(&world, &update).as_deref(), Some("Update"));
     click(&mut world, &update);
     assert_eq!(sent(&world, "update_outpost"), [json!({"id": "outpost-1"})]);
 
@@ -672,7 +707,7 @@ fn a_row_updates_to_the_home_build_and_is_disabled_while_it_pushes() {
     };
     list(&mut world, vec![phase("downloading", None)]);
     assert_eq!(
-        named(&world, &part("update")).as_deref(),
+        named(&world, &part("status")).as_deref(),
         Some("Downloading attn for Linux.")
     );
     assert_eq!(named(&world, &update).as_deref(), Some("Updating…"));
@@ -686,7 +721,7 @@ fn a_row_updates_to_the_home_build_and_is_disabled_while_it_pushes() {
         )],
     );
     assert_eq!(
-        named(&world, &part("update")).as_deref(),
+        named(&world, &part("status")).as_deref(),
         Some("Outpost database needs a newer build.")
     );
     assert!(!disabled(&world, &update));
@@ -700,7 +735,8 @@ fn an_outpost_on_the_home_build_without_the_shared_host_offers_to_install_it() {
         ..studio()
     };
     let mut world = World::start(home(vec![lacking]));
-    on_outposts(&mut world);
+    on_studio(&mut world);
+    show_details(&mut world);
     assert_eq!(
         named(&world, &part("host")).as_deref(),
         Some("Shared terminal host Not installed")
@@ -726,7 +762,8 @@ fn a_first_install_that_failed_with_no_known_build_still_offers_the_update() {
         ..refused()
     };
     let mut world = World::start(home(vec![missing]));
-    on_outposts(&mut world);
+    on_studio(&mut world);
+    show_details(&mut world);
     assert_eq!(
         named(&world, &part("build")).as_deref(),
         Some("Build Not yet known")
@@ -738,7 +775,7 @@ fn a_first_install_that_failed_with_no_known_build_still_offers_the_update() {
 #[test]
 fn a_home_that_comes_back_with_outposts_off_drops_the_old_rows_for_its_own() {
     let mut world = World::start(home(vec![]));
-    on_outposts(&mut world);
+    on_machines(&mut world);
     list(&mut world, vec![studio()]);
     world.daemon.answer_hello_with(InitialStateMessage {
         settings: Some([("outposts_enabled".into(), "false".into())].into()),
@@ -747,17 +784,14 @@ fn a_home_that_comes_back_with_outposts_off_drops_the_old_rows_for_its_own() {
     });
     world.reconnect();
     world.settle();
-    assert!(shows(&world, "settings.nav-off.outposts"));
+    assert!(shows(&world, "settings.nav-off.machines"));
 
     world.daemon.emit(SettingsUpdatedMessage {
         settings: Some([("outposts_enabled".into(), "true".into())].into()),
         ..SettingsUpdatedMessage::new()
     });
     world.settle();
-    assert_eq!(
-        named(&world, "settings.outposts.empty").as_deref(),
-        Some("No outposts added.")
-    );
+    assert!(!shows(&world, ROW));
     list(
         &mut world,
         vec![OutpostInfo {
@@ -809,7 +843,17 @@ fn a_connection_terminal_stays_out_of_the_queue_and_home_in_either_flow() {
 }
 
 fn remote_home(outposts: Vec<OutpostInfo>) -> Daemon {
-    let daemon = Daemon::scripted().state(InitialStateMessage {
+    let daemon = Daemon::scripted().state(remote_home_state(outposts));
+    daemon.on("home_move_status", |_| {
+        json!({"event": "home_move_result", "success": true, "home_move": {"step": "none", "checks": [], "remaps": []}})
+    });
+    daemon
+}
+
+/// A home with remote_home_enabled on, whose daemon keeps the desk while it dials its home.
+fn remote_home_state(outposts: Vec<OutpostInfo>) -> InitialStateMessage {
+    InitialStateMessage {
+        daemon_instance_id: Some("laptop-daemon".into()),
         settings: Some(
             [
                 ("outposts_enabled".into(), "true".into()),
@@ -818,11 +862,7 @@ fn remote_home(outposts: Vec<OutpostInfo>) -> Daemon {
             .into(),
         ),
         ..initial(outposts)
-    });
-    daemon.on("home_move_status", |_| {
-        json!({"event": "home_move_result", "success": true, "home_move": {"step": "none", "checks": [], "remaps": []}})
-    });
-    daemon
+    }
 }
 
 fn move_result(home_move: Value) -> Value {
@@ -841,7 +881,7 @@ fn move_home_here_checks_the_machine_names_what_fails_and_moves_once_the_checks_
         )
     });
     let mut world = World::start(daemon);
-    on_outposts(&mut world);
+    on_studio(&mut world);
     click(&mut world, &part("move"));
     let asked = sent(&world, "home_move");
     assert_eq!(asked.len(), 1);
@@ -858,13 +898,11 @@ fn move_home_here_checks_the_machine_names_what_fails_and_moves_once_the_checks_
     assert!(disabled(&world, &part("move.go")));
 
     world.daemon.on("home_move", |r| {
-        if r["check"] == true {
+        (r["check"] == true).then(|| {
             move_result(json!({"step": "checked", "to": "studio", "sleeps": true,
                 "checks": [{"name": "connected", "ok": true}, {"name": "gh", "ok": true}],
                 "remaps": [{"from": "/Users/me/attn-notebook", "to": "/home/me/attn-notebook"}]}))
-        } else {
-            move_result(json!({"id": "m-1", "side": "from", "step": "committed", "to": "studio", "checks": [], "remaps": []}))
-        }
+        })
     });
     click(&mut world, &part("move.again"));
     assert_eq!(
@@ -895,21 +933,68 @@ fn move_home_here_checks_the_machine_names_what_fails_and_moves_once_the_checks_
         None,
         "the move itself is not a check"
     );
+    let request_id = world.daemon.sent_of("home_move")[2]["request_id"].clone();
+    let shown = |world: &World, step: usize| named(world, &part(&format!("move.step.{step}")));
+    assert_eq!(shown(&world, 1).as_deref(), Some("… Stop changes"));
     assert_eq!(
-        named(&world, "settings.outposts.moved").as_deref(),
-        Some("The home moved to studio.")
+        named(&world, &part("status")).as_deref(),
+        Some("stop changes")
     );
-    assert!(!shows(&world, &part("move.go")));
+    for (begun, step) in [("copy", 2), ("build", 3)] {
+        world
+            .daemon
+            .emit(json!({"event": "home_move_progress", "request_id": request_id, "step": begun}));
+        world.settle();
+        assert!(shown(&world, step).unwrap().starts_with('…'));
+        assert!(shown(&world, step - 1).unwrap().starts_with('✓'));
+    }
+    assert_eq!(shown(&world, 3).as_deref(), Some("… Build database"));
+    assert_eq!(shown(&world, 6).as_deref(), Some("○ Reconnect"));
+
+    press(&mut world, Key::Escape);
+    assert_eq!(
+        named(&world, "home-move.text").as_deref(),
+        Some("Moving home to studio")
+    );
+    let step = |world: &World| named(world, "home-move.step");
+    assert_eq!(step(&world).as_deref(), Some("3/6 Build database"));
+    let committed = json!({"id": "m-1", "side": "from", "step": "committed", "to": "studio", "checks": [], "remaps": []});
+    let mut answer = move_result(committed.clone());
+    answer["request_id"] = request_id;
+    world.daemon.emit(answer);
+    world.settle();
+    assert_eq!(step(&world).as_deref(), Some("5/6 Start home on studio"));
+
+    world.daemon.on(
+        "client_hello",
+        |_| json!({"event": "home_unreachable", "home": "studio", "state": "dialing"}),
+    );
+    redial(&mut world);
+    assert_eq!(step(&world).as_deref(), Some("6/6 Reconnect"));
+
+    world
+        .daemon
+        .on("home_move_status", move |_| move_result(committed.clone()));
+    world.daemon.on("client_hello", |_| {
+        message(remote_home_state(vec![studio()]))
+    });
+    redial(&mut world);
+    assert_eq!(
+        named(&world, "home-move.text").as_deref(),
+        Some("Home moved to studio.")
+    );
+    click(&mut world, "home-move.dismiss");
+    assert!(!shows(&world, "home-move.text"));
 }
 
 #[test]
 fn move_home_here_shows_only_while_remote_home_is_on_and_the_machine_is_connected() {
     let mut world = World::start(home(vec![studio()]));
-    on_outposts(&mut world);
+    on_studio(&mut world);
     assert!(!shows(&world, &part("move")), "remote_home_enabled is off");
 
     let mut world = World::start(remote_home(vec![refused()]));
-    on_outposts(&mut world);
+    on_studio(&mut world);
     assert!(
         !shows(&world, &part("move")),
         "a machine that is not connected cannot take the home"
@@ -929,7 +1014,7 @@ fn a_failed_move_says_why_and_cancel_returns_to_the_row() {
         }
     });
     let mut world = World::start(daemon);
-    on_outposts(&mut world);
+    on_studio(&mut world);
     click(&mut world, &part("move"));
     click(&mut world, &part("move.go"));
     assert_eq!(
@@ -938,5 +1023,78 @@ fn a_failed_move_says_why_and_cancel_returns_to_the_row() {
     );
     click(&mut world, &part("move.cancel"));
     assert!(!shows(&world, &part("move.failed")));
+    assert!(shows(&world, &part("move")));
+}
+
+fn redial(world: &mut World) {
+    world.daemon.disconnect();
+    world.settle();
+    world.advance(std::time::Duration::from_secs(1));
+    world.settle();
+}
+
+#[test]
+fn a_move_whose_home_did_not_start_rolls_back_from_its_band() {
+    let daemon = remote_home(vec![studio()]);
+    let moved = |step: &str| {
+        move_result(
+            json!({"id": "m-1", "side": "from", "step": step, "to": "studio", "checks": [], "remaps": []}),
+        )
+    };
+    daemon.on("home_move_status", move |_| moved("applied"));
+    daemon.on("home_move_rollback", move |_| moved("rolling-back"));
+    let mut world = World::start(daemon);
+    world.daemon.on("client_hello", |_| {
+        json!({"event": "home_unreachable", "home": "studio", "state": "dialing", "reason": "connection refused"})
+    });
+    redial(&mut world);
+    assert_eq!(
+        named(&world, "home-move.text").as_deref(),
+        Some("Move failed: studio’s home didn’t start."),
+        "{}",
+        world.screen()
+    );
+    click(&mut world, "home-move.roll-back");
+    assert_eq!(world.daemon.sent_of("home_move_rollback").len(), 1);
+    assert_eq!(
+        named(&world, "home-move.text").as_deref(),
+        Some("Rolling back")
+    );
+
+    world
+        .daemon
+        .on("home_move_status", move |_| moved("rolled-back"));
+    world.daemon.on("client_hello", |_| {
+        message(remote_home_state(vec![studio()]))
+    });
+    redial(&mut world);
+    assert_eq!(
+        named(&world, "home-move.text").as_deref(),
+        Some("Rolled back. The home is on this Mac.")
+    );
+}
+
+#[test]
+fn a_move_that_stopped_before_it_committed_says_so_once_the_window_has_the_home_again() {
+    let daemon = remote_home(vec![studio()]);
+    daemon.on("home_move_status", |_| {
+        move_result(json!({"id": "m-1", "side": "from", "step": "done", "to": "oma", "checks": [], "remaps": []}))
+    });
+    daemon.on("home_move", |r| {
+        (r["check"] == true).then(|| {
+            move_result(json!({"step": "checked", "to": "studio", "checks": [{"name": "connected", "ok": true}], "remaps": []}))
+        })
+    });
+    let mut world = World::start(daemon);
+    on_studio(&mut world);
+    click(&mut world, &part("move"));
+    click(&mut world, &part("move.go"));
+    redial(&mut world);
+    assert_eq!(
+        named(&world, &part("move.failed")).as_deref(),
+        Some("Move failed: it stopped before it committed, so the home did not move"),
+        "the record of the move before this one is not this move's outcome"
+    );
+    click(&mut world, &part("move.cancel"));
     assert!(shows(&world, &part("move")));
 }
