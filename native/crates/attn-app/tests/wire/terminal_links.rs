@@ -446,3 +446,36 @@ fn automation_holds_the_accelerator_for_a_press_that_opens_a_link_and_lets_it_go
     );
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn with_the_home_on_another_machine_a_markdown_link_in_a_terminal_on_this_one_opens_from_this_one()
+{
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("plan.md"), "").unwrap();
+    let root = dir.path().to_str().unwrap().to_owned();
+    let daemon = in_directory(&root, Some("mac")).relaying_to("mac", "oma");
+    daemon.on("open_markdown", |r| {
+        json!({
+            "event": "open_markdown_result",
+            "request_id": r["request_id"],
+            "success": false,
+            "path": r["path"],
+            "error": "no desktop to show it on",
+        })
+    });
+    let mut world = World::start(daemon);
+    world.open_desktop();
+    output(&world, 1, b"plan.md\r\n");
+    world.settle();
+
+    accelerator(&mut world, true);
+    click(&mut world, 2, 0);
+    accelerator(&mut world, false);
+    let asked = &world.daemon.sent_of("open_markdown")[0];
+    assert_eq!(
+        (&asked["path"], &asked["host"]),
+        (&json!(format!("{root}/plan.md")), &json!("mac"))
+    );
+    assert_eq!(opened(&mut world), [format!("file://{root}/plan.md")]);
+    assert!(world.runtime_is_at_rest());
+}

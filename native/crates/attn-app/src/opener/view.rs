@@ -41,7 +41,8 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
             t,
         )),
     };
-    let tagged = state.opener.scope == Scope::Every && !outposts.is_empty();
+    let tagged =
+        state.opener.scope == Scope::Every && crate::launcher::offered(state, &outposts).several();
     let list = finder::list(
         LIST,
         rows.iter()
@@ -94,10 +95,9 @@ pub(super) fn row_key(r: &Row) -> String {
 fn option(state: &State, r: &Row, highlighted: bool, tagged: bool, t: &Tokens) -> El {
     let outposts = crate::launcher::outposts(state);
     let key = row_key(r);
-    let on = r
-        .host
-        .as_deref()
-        .map(|host| format!(" on {}", crate::desktop::outpost_name(host, &outposts)))
+    let on = crate::launcher::offered(state, &outposts)
+        .away(r.host.as_deref())
+        .map(|name| format!(" on {name}"))
         .unwrap_or_default();
     let offline = crate::outpost::reach(r.host.as_deref(), &outposts).offline();
     let mut line = ListRow::new(key.clone(), format!("{} {}{on}", r.title, r.detail))

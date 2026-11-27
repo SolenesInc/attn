@@ -1985,3 +1985,23 @@ fn with_the_home_on_another_machine_the_launcher_names_it_where_it_named_this_ma
     assert_eq!(field(&world), "~/notes/");
     rest(&mut world);
 }
+
+#[test]
+fn with_the_home_on_another_machine_and_no_outposts_the_launcher_still_names_the_homes_machine() {
+    let mut world = open(Setup {
+        outposts: Vec::new(),
+        relaying: Some(("mac", "oma")),
+        ..Setup::default()
+    });
+    let machines: Vec<Option<String>> = rows(&world).into_iter().map(|r| r.1).collect();
+    assert!(machines.iter().all(Option::is_some), "{machines:?}");
+    assert_eq!(
+        machines
+            .iter()
+            .filter(|m| m.as_deref() == Some("oma"))
+            .count(),
+        2,
+        "{machines:?}"
+    );
+    rest(&mut world);
+}

@@ -304,7 +304,7 @@ fn locations(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> 
             ),
         ]
         .into_iter()
-        .chain((!outposts.is_empty()).then(|| {
+        .chain(offered(state, &outposts).several().then(|| {
             (
                 format!("on {}", machine_name(&offered(state, &outposts), host)),
                 false,
@@ -440,15 +440,16 @@ fn location_row(
         }
     });
     let reach = host.map(|h| outpost(&outposts, h).map(|o| o.reach.clone()));
-    let machine =
-        (matches!(r.kind, Kind::Recent | Kind::Elsewhere) && !outposts.is_empty()).then(|| {
-            machine_tag(
-                format!("{w}.row.{i}.machine"),
-                &offered(state, &outposts),
-                host,
-                t,
-            )
-        });
+    let machine = (matches!(r.kind, Kind::Recent | Kind::Elsewhere)
+        && offered(state, &outposts).several())
+    .then(|| {
+        machine_tag(
+            format!("{w}.row.{i}.machine"),
+            &offered(state, &outposts),
+            host,
+            t,
+        )
+    });
     let unreachable = r.kind != Kind::Machine
         && reach
             .as_ref()

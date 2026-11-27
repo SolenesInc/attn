@@ -40,14 +40,23 @@ pub(crate) fn settle(state: &mut State, tx: &mut Tx) {
 
 fn follow(state: &mut State, link: &Link, tx: &mut Tx) -> bool {
     let profile = &state.facts.profiles.selected;
+    let machines = crate::machine::Machines::of(&state.facts);
     let working = state
         .facts
         .sessions
         .iter()
-        .find(|s| s.directory == link.cwd && &s.profile_id == profile)
+        .find(|s| {
+            s.directory == link.cwd
+                && &s.profile_id == profile
+                && machines.on_app_machine(s.host.as_deref())
+        })
         .map(|s| s.id.clone());
     if let Some(session) = working {
         crate::sidebar::open_agent(state, &session, tx);
+        return true;
+    }
+    if let Some(refusal) = machines.refuse_start_here(&link.cwd) {
+        state.window.notify(refusal, tx);
         return true;
     }
     if !state.facts.harnesses_loaded {

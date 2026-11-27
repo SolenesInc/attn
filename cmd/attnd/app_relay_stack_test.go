@@ -6,15 +6,18 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"nhooyr.io/websocket"
 
 	"github.com/victorarias/attn/internal/bridge"
+	"github.com/victorarias/attn/internal/diag"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -253,4 +256,41 @@ func TestAnAppOnAMachineThatDialsItsHomeMovesSeedFilesInAndOutOfItsOwnDisk(t *te
 		t.Fatalf("the home still keeps %s after the detach returned: %v", kept, err)
 	}
 	t.Logf("copy read %s on the laptop into %s at the home; detach wrote %s on the laptop and left the home's seed without it", source, kept, out)
+}
+
+func TestTheHomeSamplesNoProcessForTheAppOnAMachineThatDialsIt(t *testing.T) {
+	w := newReverseWorld(t)
+	w.join()
+	enableAnalytics(w.app)
+	elsewhere := exec.Command("sleep", "600")
+	if err := elsewhere.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = elsewhere.Process.Kill(); _ = elsewhere.Wait() })
+	relayed := w.laptop.TrustedAppSaying(func(hello *protocol.ClientHelloMessage) { hello.AppPid = protocol.Ptr(elsewhere.Process.Pid) })
+	local := w.home.TrustedAppSaying(func(hello *protocol.ClientHelloMessage) { hello.AppPid = protocol.Ptr(os.Getpid()) })
+	defer local.Close()
+
+	for passed := time.Duration(0); passed <= 20*time.Minute; passed += bridge.LostAfter - time.Second {
+		w.home.Advance(bridge.LostAfter - time.Second)
+		w.home.AwaitTimer(bridge.LostTimer)
+	}
+	w.home.AwaitJobsSettled()
+
+	var apps []diag.RoleMemory
+	for _, record := range sampleRecords(t, relayed) {
+		if record.Name != "process" {
+			continue
+		}
+		var props struct {
+			Processes []diag.RoleMemory `json:"processes"`
+		}
+		if err := json.Unmarshal(record.Props, &props); err != nil {
+			t.Fatal(err)
+		}
+		apps = slices.DeleteFunc(props.Processes, func(p diag.RoleMemory) bool { return p.Role != "app" })
+	}
+	if len(apps) != 1 || apps[0].Count != 1 {
+		t.Fatalf("the home's last sample counts app processes %+v, want only the app on its own machine, pid %d, not the relayed app's pid %d", apps, os.Getpid(), elsewhere.Process.Pid)
+	}
 }

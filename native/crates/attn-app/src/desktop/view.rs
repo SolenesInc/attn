@@ -1929,8 +1929,14 @@ fn terminal_slot(
                                         .iter()
                                         .find(|desktop| desktop.id == tile.desktop)
                                         .and_then(|desktop| session_of_leaf(desktop, &tile.pane));
+                                    let host = session
+                                        .as_ref()
+                                        .and_then(|id| {
+                                            state.facts.sessions.iter().find(|s| &s.id == id)
+                                        })
+                                        .and_then(|s| s.host.clone());
                                     crate::opener::open_markdown(
-                                        state, markdown, None, session, tx,
+                                        state, markdown, host, session, tx,
                                     );
                                 }
                                 Ok(None) => {}

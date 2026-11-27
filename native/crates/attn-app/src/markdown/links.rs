@@ -349,6 +349,12 @@ fn scheme(href: &str) -> Option<&str> {
     .then_some(scheme)
 }
 
+/// The local path a `file:` URL names, in any letter case; `None` for another scheme or host.
+pub(crate) fn file_url(url: &str) -> Option<String> {
+    let scheme = scheme(url).filter(|s| s.eq_ignore_ascii_case("file"))?;
+    file_url_path(&url[scheme.len() + 1..])
+}
+
 /// The local path of a `file:` URL's remainder `rest`; `None` when it names another host.
 fn file_url_path(rest: &str) -> Option<String> {
     let path = match rest.strip_prefix("//") {

@@ -89,6 +89,12 @@ func awaitResult[R any](p *Peer, msg any, event string) (*R, error) {
 
 func (w *World) TrustedApp(profileID ...string) *Peer {
 	w.T.Helper()
+	return w.TrustedAppSaying(func(*protocol.ClientHelloMessage) {}, profileID...)
+}
+
+// TrustedAppSaying is TrustedApp with its hello changed by say first, such as to send the app's pid.
+func (w *World) TrustedAppSaying(say func(*protocol.ClientHelloMessage), profileID ...string) *Peer {
+	w.T.Helper()
 	path := filepath.Join(w.Dir, "browser-host-token")
 	token, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
@@ -106,6 +112,7 @@ func (w *World) TrustedApp(profileID ...string) *Peer {
 	if len(profileID) != 0 {
 		hello.ProfileID = protocol.Ptr(profileID[0])
 	}
+	say(&hello)
 	p := w.Connect(hello, nil)
 	p.Initial = Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
 	return p

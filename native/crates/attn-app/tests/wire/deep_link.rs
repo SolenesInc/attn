@@ -55,8 +55,17 @@ fn world_with(current: &str, sessions: Vec<Session>) -> World {
 }
 
 fn world_picked(current: &str, sessions: Vec<Session>, settings: &[(&str, &str)]) -> World {
+    world_on(Daemon::scripted(), current, sessions, settings)
+}
+
+fn world_on(
+    daemon: Daemon,
+    current: &str,
+    sessions: Vec<Session>,
+    settings: &[(&str, &str)],
+) -> World {
     World::start(
-        Daemon::scripted().state(InitialStateMessage {
+        daemon.state(InitialStateMessage {
             selected_profile_id: Some("work".into()),
             profiles: Some(vec![profile(current)]),
             desktops: Some(vec![desktop()]),
@@ -261,5 +270,28 @@ fn a_link_that_asks_for_anything_but_a_spawn_with_a_folder_does_nothing() {
 
     assert!(world.daemon.sent_of("spawn_session").is_empty());
     assert!(shown(&world).is_empty());
+    rest(&mut world);
+}
+
+#[test]
+fn with_the_home_on_another_machine_a_spawn_link_starts_nothing_there_and_says_why() {
+    let mut world = world_on(
+        Daemon::scripted().relaying_to("mac", "oma"),
+        "d1",
+        vec![session("on-oma", "/repo/plan", "work")],
+        &[LAST_PICK],
+    );
+    open(&mut world, PLAN);
+
+    assert!(shown(&world).is_empty());
+    assert!(world.daemon.sent_of("spawn_session").is_empty());
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::key("notice.text"))
+            .and_then(|n| n.name)
+            .as_deref(),
+        Some("/repo/plan is on This Mac; oma can't start agents on this machine yet")
+    );
     rest(&mut world);
 }
