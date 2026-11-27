@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P0: Moving the home back can lose closed Ledger session runtime",
+  "at": "2026-11-27T11:09:00.399Z",
+  "detail": "The exact-pin store probe moved the home from A to B and back and observed a closed Ledger session's conversation ID before return and missing afterward. Preserve the closed session's runtime metadata across both moves.\n"
+}
