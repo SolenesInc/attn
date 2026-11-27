@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "5ae7488dfe191d92689cb1ea8a8299c6dfa4d955",
+  "head": "cb30ec600d503ec09247e4f5e0dd2ef011eecd2a",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 216.25,
+    "ranOn": "cb30ec600d503ec09247e4f5e0dd2ef011eecd2a"
+  },
+  "fixesBugs": [
+    "1983e81",
+    "cb75a92",
+    "00fd456"
+  ],
+  "noMediaReason": "Band and Settings changes are covered by wire tests on the band's named parts; the daemon wait is covered by the move stack test",
+  "recordings": []
+}
