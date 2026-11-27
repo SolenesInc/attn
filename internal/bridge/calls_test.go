@@ -320,3 +320,32 @@ func TestBridgeCallCancellationEndsItsHandler(t *testing.T) {
 		<-ended
 	})
 }
+
+func TestABridgeThatEndsBeforeItsHandlersAreRecordedRunsNoHandler(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w := pair(t)
+		w.start()
+		ran := make(chan struct{}, 1)
+		never := make(chan struct{})
+		client, _, err := w.dialConfig(bridge.DialConfig{Self: home, HandlersAfter: never, Handlers: bridge.Handlers{"echo": func(_ *bridge.Conn, incoming ssh.NewChannel) {
+			ran <- struct{}{}
+			_ = incoming.Reject(ssh.Prohibited, "ran")
+		}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		server := <-w.server
+		called := make(chan error, 1)
+		go func() { called <- server.Call(w.ctx, "echo", echo{N: 1}, nil) }()
+		synctest.Wait()
+		_ = client.Close()
+		if err := <-called; err == nil {
+			t.Fatal("a call before the handlers were recorded succeeded")
+		}
+		select {
+		case <-ran:
+			t.Fatal("a handler ran on a bridge that ended before its handlers were recorded")
+		default:
+		}
+	})
+}

@@ -34,6 +34,10 @@ func (c *Conn) dispatch(channels <-chan ssh.NewChannel, handlers Handlers, handl
 		select {
 		case <-handlersAfter:
 		case <-c.ctx.Done():
+			for incoming := range channels {
+				_ = incoming.Reject(ssh.ConnectionFailed, fmt.Sprintf("the bridge to daemon %s ended before its handlers were ready", c.peer.DaemonID))
+			}
+			return
 		}
 	}
 	for incoming := range channels {

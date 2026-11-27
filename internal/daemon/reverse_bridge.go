@@ -6,12 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"golang.org/x/crypto/ssh"
 	"io"
-	"maps"
 	"net"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -96,15 +97,13 @@ func (d *Daemon) acceptReverseBridge(raw net.Conn) {
 			row, known = *found, true
 			return bridge.Recognized{Pin: &bridge.Pin{HostKey: row.HostKey, DaemonID: row.DaemonID}, MachineID: row.ID, Handlers: d.homeHandlers(row.ID)}, nil
 		default:
-			joined = bridge.Handlers{}
+			joined = d.joiningHomeHandlers()
 			return bridge.Recognized{Handlers: joined}, nil
 		}
 	}})
 	arrival := reverseArrival{conn: conn, seen: seen, err: err, recorded: recorded}
 	if peer, joining := joiningPeer(conn, err); !known && joined != nil && seen != nil && joining {
-		id := cmp.Or(peer.MachineID, uuid.NewString())
-		maps.Copy(joined, d.homeHandlers(id))
-		row, err = d.addReverseMachine(id, header.Join, *seen)
+		row, err = d.addReverseMachine(cmp.Or(peer.MachineID, uuid.NewString()), header.Join, *seen)
 		known = err == nil
 	}
 	if !known {
@@ -113,6 +112,20 @@ func (d *Daemon) acceptReverseBridge(raw net.Conn) {
 		return
 	}
 	d.deliverReverseArrival(row.ID, arrival)
+}
+
+func (d *Daemon) joiningHomeHandlers() bridge.Handlers {
+	var once sync.Once
+	var handlers bridge.Handlers
+	forPeer := func(conn *bridge.Conn) bridge.Handlers {
+		once.Do(func() { handlers = d.homeHandlers(conn.Peer().MachineID) })
+		return handlers
+	}
+	joined := bridge.Handlers{}
+	for kind := range d.homeHandlers("") {
+		joined[kind] = func(conn *bridge.Conn, incoming ssh.NewChannel) { forPeer(conn)[kind](conn, incoming) }
+	}
+	return joined
 }
 
 func joiningPeer(conn *bridge.Conn, err error) (bridge.Identity, bool) {
@@ -433,12 +446,16 @@ func (d *Daemon) dialHomeOnce(ctx context.Context, dial *homeDial, run *outpostL
 		_ = pipe.Close()
 		return err
 	}
-	return bridge.ServeConn(ctx, pipe, d.outpostServerConfig(dial.destination), func(conn *bridge.Conn) {
+	err = bridge.ServeConn(ctx, pipe, d.outpostServerConfig(dial.destination), func(conn *bridge.Conn) {
 		dial.joining = false
 		dial.report(nil)
 		d.acceptOutpostBridge(run, conn)
 		d.homeBridged()
 	})
+	if refusal := (*bridge.Refusal)(nil); errors.As(err, &refusal) && refusal.Reason == "build" {
+		dial.joining = false
+	}
+	return err
 }
 
 func waitHomeRedial(ctx context.Context, dial *homeDial, delay time.Duration) (woke, ok bool) {

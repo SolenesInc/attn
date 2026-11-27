@@ -25,8 +25,16 @@ type reverseWorld struct {
 
 func newReverseWorld(t *testing.T, opts ...testworld.StackOption) *reverseWorld {
 	t.Helper()
+	return newReverseWorldWith(t, nil, opts...)
+}
+
+func newReverseWorldWith(t *testing.T, prepareHome func(*testworld.Stack), opts ...testworld.StackOption) *reverseWorld {
+	t.Helper()
 	w := &reverseWorld{t: t, ssh: testworld.NewSSH(t), home: testworld.NewStack(t, opts...), laptop: testworld.NewStack(t, opts...)}
 	w.copied = w.laptop.PassesOf(pausepoint.CopyBatchApplied)
+	if prepareHome != nil {
+		prepareHome(w.home)
+	}
 	for _, s := range []*testworld.Stack{w.home, w.laptop} {
 		w.ssh.Use(s.World)
 		s.Vars = append(s.Vars, "SHELL=/bin/bash")
@@ -361,4 +369,31 @@ func TestJoinRefusesWhileTheMachineHasOpenSessionsAndLeaveBringsItsOwnHomeBack(t
 	requireStdout(t, seedAfter, "The laptop's own seed")
 	requireStdout(t, w.laptop.Attn("settings", "get", "garden_v2_enabled"), "true")
 	t.Log("after leave, the machine's own closed session, seed and setting read as they did before the join")
+}
+
+func TestAJoinRefusedForItsBuildLeavesOnceTheHomeRemovesIt(t *testing.T) {
+	w := newReverseWorldWith(t, func(home *testworld.Stack) { home.RunFrom(testworld.AttnUpdateBinary(t, "home-build", "source", "")) })
+	lp := w.laptop.App()
+	refused := w.laptop.Attn("enrollment", "join", "home")
+	if refused.Code == 0 || !strings.Contains(refused.Stderr, "build") {
+		t.Fatalf("a join across builds: exit %d, %s%s", refused.Code, refused.Stdout, refused.Stderr)
+	}
+	row := outpostState(w.app, w.name, protocol.OutpostStateRefused)
+	requireLines(t, "status after a join refused for its build", w.status(), "dial:       home (refused)", "enrolled to ")
+	t.Logf("join refused for its build: %s", strings.TrimSpace(refused.Stderr))
+
+	w.app.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: row.ID})
+	testworld.Await(w.app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
+	stopRetries := w.laptop.FireTimers(bridge.RetryTimer)
+	testworld.Await(lp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["outpost_state"] == "off" && m.Settings["outpost_home"] == ""
+	})
+	stopRetries()
+	if rows := w.home.App().Initial.Outposts; len(rows) != 0 {
+		t.Fatalf("the machine joined again after the home removed it: %+v", rows)
+	}
+	if left := w.status(); strings.Contains(left, "dial:") {
+		t.Fatalf("the machine still dials after the home removed it:\n%s", left)
+	}
+	t.Log("after the home removed the machine its first join recorded, the machine's next dial was a redial, and it left")
 }
