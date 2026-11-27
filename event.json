@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Popped-out terminals hide the home outage",
+  "at": "2026-11-27T05:36:59.475Z",
+  "detail": "A popped-out home terminal can be the only visible macOS window. It keeps painting cached contents while keyboard input is dropped during HomeUnreachable. Show the outage and input state there or make the outage screen visible.\nIndependently source-confirmed at dc932349a. Evidence on s-s3sc2q.\n"
+}
