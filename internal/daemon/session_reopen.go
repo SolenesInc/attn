@@ -268,13 +268,13 @@ type sessionReopenOutcome struct {
 }
 
 func (d *Daemon) reopenSession(
-	sessionID protocol.SessionID, action protocol.SessionReopenAction,
+	sessionID protocol.SessionID, action protocol.SessionReopenAction, beside *launchPlacement,
 ) (*sessionReopenOutcome, error) {
 	var outcome *sessionReopenOutcome
 	err := d.resumeAsMember(protocol.TrimID(sessionID), func() error {
 		return d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 			var reopenErr error
-			outcome, reopenErr = d.reopenSessionProtected(protection, sessionID, action)
+			outcome, reopenErr = d.reopenSessionProtected(protection, sessionID, action, beside)
 			return reopenErr
 		})
 	})
@@ -285,7 +285,7 @@ func (d *Daemon) reopenSession(
 }
 
 func (d *Daemon) reopenSessionProtected(
-	protection foregroundCleanupProtection, sessionID protocol.SessionID, action protocol.SessionReopenAction,
+	protection foregroundCleanupProtection, sessionID protocol.SessionID, action protocol.SessionReopenAction, beside *launchPlacement,
 ) (*sessionReopenOutcome, error) {
 	sessionID = protocol.TrimID(sessionID)
 	if sessionID == "" {
@@ -320,7 +320,7 @@ func (d *Daemon) reopenSessionProtected(
 	if !verdict.offers(action) {
 		return nil, &reopenRefusedError{verdict: &verdict, action: action}
 	}
-	return d.performReopenLocked(protection, &verdict, action)
+	return d.performReopenLocked(protection, &verdict, action, beside)
 }
 
 type reopenRefusedError struct {
@@ -348,6 +348,7 @@ func (d *Daemon) performReopenLocked(
 	protection foregroundCleanupProtection,
 	verdict *sessionReopenVerdict,
 	action protocol.SessionReopenAction,
+	beside *launchPlacement,
 ) (*sessionReopenOutcome, error) {
 	profileID := verdict.ProfileID
 	if _, err := d.liveLaunchProfile(profileID); err != nil {
@@ -358,6 +359,7 @@ func (d *Daemon) performReopenLocked(
 		Directory: verdict.Execution.Cwd,
 		Title:     verdict.Entry.Label,
 		ProfileID: profileID,
+		Beside:    beside,
 	}
 	created := ""
 
@@ -501,6 +503,7 @@ type sessionReopenPlan struct {
 	ProfileID       string
 	StartsLaunching bool
 	LaunchPlacement launchPlacement
+	Beside          *launchPlacement
 }
 
 type sessionRuntimeReopened struct {
@@ -602,6 +605,9 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	} else if !placed {
 		placement := plan.LaunchPlacement
 		placement.reopen = true
+		if plan.Beside != nil {
+			placement = *plan.Beside
+		}
 		if placed := d.placeLaunchedSession(session, &placement); placed.err != nil {
 			return nil, placed.err
 		}
@@ -628,7 +634,7 @@ func (d *Daemon) handleSessionReopen(conn net.Conn, msg *protocol.SessionReopenM
 	if msg.Action != nil {
 		action = *msg.Action
 	}
-	outcome, err := d.reopenSession(msg.SessionID, action)
+	outcome, err := d.reopenSession(msg.SessionID, action, nil)
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return

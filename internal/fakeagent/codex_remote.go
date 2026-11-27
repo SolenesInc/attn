@@ -453,6 +453,12 @@ func (c *codexRemote) submit(prompt string) error {
 		c.mu.Unlock()
 		c.showPending()
 		return nil
+	case command == "/fork":
+		var forked codexRemoteThread
+		if err := c.request("thread/fork", map[string]any{"threadId": c.current()}, &forked); err != nil {
+			return err
+		}
+		return c.moveTo(forked.Thread.ID)
 	case command == "/side":
 		var side codexRemoteThread
 		if err := c.request("thread/fork", map[string]any{"threadId": c.current(), "ephemeral": true}, &side); err != nil {

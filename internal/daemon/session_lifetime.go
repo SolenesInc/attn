@@ -137,10 +137,13 @@ func (d *Daemon) spawnShowing(sessionID protocol.SessionID, cols, rows int) (*pr
 	return spawn, policy, nil
 }
 
-func (d *Daemon) showHidden(sessionID protocol.SessionID) error {
+func (d *Daemon) showHidden(sessionID protocol.SessionID, beside *launchPlacement) error {
 	spawn, policy, err := d.spawnShowing(sessionID, 80, 24)
 	if err != nil {
 		return err
+	}
+	if beside != nil {
+		policy.launchPlacement = beside
 	}
 	policy.onlyIfHidden = true
 	return d.resumeAsMember(sessionID, func() error {

@@ -107,6 +107,7 @@ type Move struct {
 	Path            string
 	Run             string
 	ServerConfirmed bool
+	Forked          bool
 }
 
 type Adoption struct {

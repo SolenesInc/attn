@@ -344,6 +344,7 @@ type Daemon struct {
 	homeCrons            []homeCron
 	taskFailureRenderers map[string]taskFailureRenderer
 
+	forkOffers            forkOffers
 	sessionActivityRunsMu sync.Mutex
 	sessionActivityRuns   map[protocol.SessionID]sessionActivityRun
 }
@@ -2313,6 +2314,7 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, closing *proto
 		d.logf("close session %s: %v", sessionID, err)
 		return store.SessionClosure{}, err
 	}
+	d.forkOffers.end(sessionID)
 	unregistered := d.sessionForBroadcast(closing)
 	if _, pending := d.sessionMonitor(sessionID).PendingConversation(); !pending {
 		d.forgetMonitor(sessionID)
@@ -2347,6 +2349,7 @@ func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 	}
 	d.kickInboxAfterCommit(who.ToSession(sessionID))
 	d.clearSnoozeState(sessionID)
+	d.forkOffers.end(sessionID)
 	d.sessionMonitor(sessionID).FenceInput()
 	closedAsks := d.store.Remove(sessionID)
 	for _, terminal := range terminals {
@@ -3415,6 +3418,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	d.decorateSessionWithTerminalBuild(clone)
 	d.decorateSessionWithTurn(clone)
 	d.decorateSessionHidden(clone)
+	d.decorateSessionForkOffer(clone)
 	return clone
 }
 

@@ -18,6 +18,7 @@ type agentConversationObservation struct {
 	NativeID       string             `json:"-"`
 	TranscriptPath string             `json:"transcript_path,omitempty"`
 	Run            string             `json:"-"`
+	Forked         bool               `json:"-"`
 }
 
 func (d *Daemon) handleObserveAgentConversation(ctx context.Context, conn net.Conn, msg *protocol.SetSessionResumeIDMessage) {
@@ -51,7 +52,7 @@ func refused(err error) func(context.Context) error {
 }
 
 func (d *Daemon) conversationMoved(terminal protocol.TerminalID, m harness.Move) func(context.Context) error {
-	observation := agentConversationObservation{NativeID: m.Conversation, TranscriptPath: m.Path, Run: m.Run}
+	observation := agentConversationObservation{NativeID: m.Conversation, TranscriptPath: m.Path, Run: m.Run, Forked: m.Forked}
 	if m.ServerConfirmed {
 		d.conversationIn(terminal, observation)
 		return nil
@@ -189,11 +190,11 @@ func (d *Daemon) consumeQueuedAgentConversation(sessionID protocol.SessionID) (a
 	if !ok {
 		return agentConversationObservation{}, false
 	}
-	return agentConversationObservation{SessionID: sessionID, NativeID: observation.NativeID, TranscriptPath: observation.TranscriptPath}, true
+	return agentConversationObservation{SessionID: sessionID, NativeID: observation.NativeID, TranscriptPath: observation.TranscriptPath, Forked: observation.Forked}, true
 }
 
 func (o agentConversationObservation) monitored() sessionmonitor.ConversationObservation {
-	return sessionmonitor.ConversationObservation{NativeID: o.NativeID, TranscriptPath: o.TranscriptPath}
+	return sessionmonitor.ConversationObservation{NativeID: o.NativeID, TranscriptPath: o.TranscriptPath, Forked: o.Forked}
 }
 
 func (d *Daemon) proposeMonitorConversation(observation agentConversationObservation, proposal sessionmonitor.ConversationProposal, terminal harness.TerminalID) (*sessionmonitor.ConversationReceipt, bool) {

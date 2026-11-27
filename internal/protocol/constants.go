@@ -308,6 +308,8 @@ const (
 	CmdTerminalTheme        = "terminal_theme"
 	CmdTerminalShell        = "terminal_shell"
 	CmdDesktopShowLeaf      = "desktop_show_leaf"
+	CmdForkOfferOpen        = "fork_offer_open"
+	CmdForkOfferDismiss     = "fork_offer_dismiss"
 	CmdDesktopMoveLeaf      = "desktop_move_leaf"
 	CmdDesktopRemoveLeaf    = "desktop_remove_leaf"
 	CmdDesktopCloseTile     = "desktop_close_tile"

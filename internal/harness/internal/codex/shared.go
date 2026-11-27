@@ -826,6 +826,10 @@ func (r *codexShared) prepare(connection context.Context, v *codexView, m *codex
 	m.Params = raw
 	opened := method != "thread/resume"
 	firstOfItsSession := opened && r.conversation(sessionID) == ""
+	forkedFrom, _ := params["threadId"].(string)
+	if method != "thread/fork" {
+		forkedFrom = ""
+	}
 	return func(reply *codexshared.Message) func() {
 		opening := false
 		settle := func() {
@@ -869,9 +873,10 @@ func (r *codexShared) prepare(connection context.Context, v *codexView, m *codex
 		case thread.Parent != "":
 			r.adopt(v.profile, thread.ID, thread.Parent)
 		default:
+			forked := forkedFrom != "" && forkedFrom == r.shownThread(v)
 			r.show(v, thread.ID, opened)
 			if !firstOfItsSession {
-				r.host.Events().Moved(harness.FromTerminal(v.terminal), harness.Move{Conversation: thread.ID, Path: thread.Path, ServerConfirmed: true})
+				r.host.Events().Moved(harness.FromTerminal(v.terminal), harness.Move{Conversation: thread.ID, Path: thread.Path, ServerConfirmed: true, Forked: forked})
 			}
 		}
 		return func() {
@@ -1049,6 +1054,12 @@ func (r *codexShared) show(v *codexView, conversation string, opened bool) {
 		}
 		v.unprompted[conversation] = true
 	}
+}
+
+func (r *codexShared) shownThread(v *codexView) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return v.thread
 }
 
 func (r *codexShared) terminalShowing(profile, conversation string) (harness.TerminalID, bool) {

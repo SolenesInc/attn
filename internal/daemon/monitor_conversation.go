@@ -13,7 +13,7 @@ func (d *Daemon) resolveMonitorConversation(session protocol.SessionID, proposed
 		return sessionmonitor.ConversationOutcome{}
 	}
 	outcome := sessionmonitor.ConversationOutcome{Conversation: proposed.NativeID, Kind: sessionmonitor.OutcomeDropped, Reason: "conversation move was refused"}
-	observation := agentConversationObservation{SessionID: session, NativeID: proposed.NativeID, TranscriptPath: proposed.TranscriptPath}
+	observation := agentConversationObservation{SessionID: session, NativeID: proposed.NativeID, TranscriptPath: proposed.TranscriptPath, Forked: proposed.Forked}
 	before := session
 	if proposed.Terminal != "" {
 		before, _ = d.shownIn(proposed.Terminal)

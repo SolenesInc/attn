@@ -347,7 +347,7 @@ func (d *Daemon) runSessionReopen(ctx context.Context, c command.Caller, a comma
 	if err != nil {
 		return nil, err
 	}
-	outcome, err := d.reopenSession(entry.ID, action)
+	outcome, err := d.reopenSession(entry.ID, action, nil)
 	if err != nil {
 		return nil, err
 	}

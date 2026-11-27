@@ -416,7 +416,10 @@ func (s *codexAppServer) handle(conn *codexServerConn, m codexshared.Message) (a
 	case "thread/resume":
 		return s.resume(conn, p)
 	case "thread/fork":
-		return s.forkSide(conn, p)
+		if p.Ephemeral {
+			return s.forkSide(conn, p)
+		}
+		return s.fork(conn, p)
 	case "thread/unsubscribe":
 		s.mu.Lock()
 		t := s.threads[p.ThreadID]
@@ -611,10 +614,30 @@ func (s *codexAppServer) start(conn *codexServerConn, p codexServerParams) (any,
 
 const codexShellEnvPrefix = "shell_environment_policy.set."
 
-func (s *codexAppServer) forkSide(conn *codexServerConn, p codexServerParams) (any, func(), error) {
-	if !p.Ephemeral {
-		return nil, nil, fmt.Errorf("the fake app-server forks only ephemeral threads")
+func (s *codexAppServer) fork(conn *codexServerConn, p codexServerParams) (any, func(), error) {
+	parent, err := s.loaded(p.ThreadID)
+	if err != nil {
+		return nil, nil, err
 	}
+	id, err := uuid.NewV7()
+	if err != nil {
+		return nil, nil, err
+	}
+	started := time.Now().UTC()
+	t := s.newThread(id.String(), parent.c.cwd, parent.c.model, codexRolloutPath(filepath.Join(s.cfg.CodexHome, "sessions"), id.String(), started), "fork", started, conn)
+	t.instructions, t.compactLimit, t.workspaceRoots, t.c.approvals = p.DevInstruction, p.compactLimit(), p.WorkspaceRoots, p.CodexPermissions
+	t.config = p.Config
+	s.mu.Lock()
+	s.threads[t.c.conversation] = t
+	s.mu.Unlock()
+	thread := s.metadata(t)
+	thread["forkedFromId"] = p.ThreadID
+	return map[string]any{"thread": thread}, func() {
+		s.broadcast("thread/started", map[string]any{"thread": thread})
+	}, nil
+}
+
+func (s *codexAppServer) forkSide(conn *codexServerConn, p codexServerParams) (any, func(), error) {
 	parent, err := s.loaded(p.ThreadID)
 	if err != nil {
 		return nil, nil, err

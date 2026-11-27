@@ -5191,6 +5191,25 @@ type ForgetAnalyticsInstallResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type ForkOfferDismissMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type ForkOfferOpenMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
 type ForwardAnalyticsMessage struct {
 	// Build corresponds to the JSON schema field "build".
 	Build AnalyticsBuild `json:"build"`
@@ -12641,6 +12660,9 @@ type Session struct {
 	// "dispatcher_session_id".
 	DispatcherSessionID *SessionID `json:"dispatcher_session_id,omitempty,omitzero"`
 
+	// ForkOffer corresponds to the JSON schema field "fork_offer".
+	ForkOffer *SessionID `json:"fork_offer,omitempty,omitzero"`
+
 	// Hidden corresponds to the JSON schema field "hidden".
 	Hidden *bool `json:"hidden,omitempty,omitzero"`
 
@@ -13814,6 +13836,9 @@ type SetSessionResumeIDMessage struct {
 
 	// ResumeSessionID corresponds to the JSON schema field "resume_session_id".
 	ResumeSessionID string `json:"resume_session_id"`
+
+	// Source corresponds to the JSON schema field "source".
+	Source *string `json:"source,omitempty,omitzero"`
 
 	// TranscriptPath corresponds to the JSON schema field "transcript_path".
 	TranscriptPath *string `json:"transcript_path,omitempty,omitzero"`

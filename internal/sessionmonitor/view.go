@@ -78,6 +78,7 @@ type RunRecord struct {
 type ConversationObservation struct {
 	NativeID       string
 	TranscriptPath string
+	Forked         bool `json:",omitempty"`
 }
 
 type ConversationProposal int

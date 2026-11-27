@@ -267,6 +267,7 @@ model Session {
   terminal_exit?: TerminalExit; // How the agent last exited while the session keeps its final screen; absent while it runs and after Resume. Joined at broadcast from the session_exit_screens table.
   succeeds?: SessionID;            // The session this one replaced in its terminal, when the harness there moved to another conversation; that session closed into the ledger, unless it is a shared Codex session, which stays open. Durable: it stays set after the predecessor is reopened.
   hidden?: boolean;             // True while this open shared Codex session has no terminal tile: its terminal moved to another conversation. It keeps its state and takes input; desktop_show_session gives it a tile again. Derived at broadcast; absent otherwise.
+  fork_offer?: SessionID;       // The session this one was forked from, while attn offers to open it beside this one. Derived at broadcast from the daemon's memory; absent after fork_offer_open, fork_offer_dismiss, this session's close or a daemon restart.
   conversation_started?: boolean; // True once the session's agent has named the transcript of its conversation: the agent has started a conversation in the session's folder. The agent may name the transcript before it writes the file, so the transcript can still be unreadable. Absent until the agent names one.
   conversation_shared_with?: SessionID[]; // The other open sessions whose live process has this session's conversation open while this one's does too. Only for a harness that lets several processes write one conversation (Claude Code), where each process keeps its own history and the transcript splits. Derived at broadcast; absent while one process holds the conversation.
   host?: string;                // The id of the outpost this terminal runs on; absent when it runs on the home's machine. Set once at spawn and never changed.
@@ -734,6 +735,7 @@ model SetSessionResumeIDMessage {
   resume_session_id: string;
   transcript_path?: string;
   lifecycle_id?: string; // The run whose hook reports this, from ATTN_RUNTIME_LIFECYCLE
+  source?: string; // SessionStart's source as the harness reports it: startup, resume, clear, compact or fork
 }
 
 // Reads the session ledger: the durable record of every session that ran.
@@ -3401,6 +3403,24 @@ model DesktopSetActivePaneMessage {
 model DesktopShowSessionMessage {
   cmd: "desktop_show_session";
   request_id: string;
+  session_id: SessionID;
+}
+
+// Opens the session that session_id was forked from beside it: in the column
+// right after session_id's newest tile, on that tile's desktop, focused. A hidden
+// original gets a new terminal tile, a closed one is reopened, and one a tile
+// already shows is focused. The offer ends when the open succeeds. Answers with
+// profile_action_result; an offer that is already gone answers success.
+model ForkOfferOpenMessage {
+  cmd: "fork_offer_open";
+  request_id: string;
+  session_id: SessionID;
+}
+
+// Ends the fork offer of session_id in every window. Dismissing an offer that is
+// already gone changes nothing.
+model ForkOfferDismissMessage {
+  cmd: "fork_offer_dismiss";
   session_id: SessionID;
 }
 

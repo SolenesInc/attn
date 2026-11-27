@@ -29,7 +29,11 @@ func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observatio
 	if member, bound := d.crewMemberForSession(from.ID); bound && !d.othersRun(from.ID, t) {
 		sc.Member, sc.Label = member.ID, member.Name
 	}
-	return d.succeed(t, from, sc, observation)
+	forkOf := protocol.SessionID("")
+	if observation.Forked {
+		forkOf = from.ID
+	}
+	return d.succeed(t, from, sc, observation, forkOf)
 }
 
 // shows puts owner, which holds the conversation t reports and runs in no live terminal, in t: a closed
@@ -39,10 +43,10 @@ func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner proto
 		To:     owner,
 		Close:  store.SessionClose{Reason: string("resumed; its terminal moved on to " + owner)},
 		KeepTo: d.store.Get(owner) != nil && d.lifetime(owner) == harness.InServer,
-	}, observation)
+	}, observation, "")
 }
 
-func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation) error {
+func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation, forkOf protocol.SessionID) error {
 	live := d.liveTerminals(context.Background())
 	sc.KeepFrom = d.othersRun(from.ID, t) || d.keepsWhenLeft(from.ID)
 	sc.Live = make(map[string]bool, len(live))
@@ -67,6 +71,9 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 		return err
 	}
 	crashpoint.At(crashAfterSuccessionCommitted)
+	if forkOf != "" {
+		d.forkOffers.offer(sc.To, forkOf)
+	}
 	if outcome.MemberDay.Changed {
 		d.announceCommittedWrite(documentChangedFact(crew.Namespace, crew.CollectionMembers, sc.Member, false), outcome.MemberDay.Seq)
 		d.publishFact(FactCrewUpdated, sc.Member, nil)

@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "a16b1d621567";
+pub const PROTOCOL_VERSION: &str = "29beafa83a5b";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -4564,6 +4564,37 @@ impl ForgetAnalyticsInstallResultMessage {
     pub fn new() -> Self {
         Self {
             event: "forget_analytics_install_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ForkOfferDismissMessage {
+    pub cmd: String,
+    pub session_id: SessionID,
+}
+
+impl ForkOfferDismissMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "fork_offer_dismiss".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ForkOfferOpenMessage {
+    pub cmd: String,
+    pub request_id: String,
+    pub session_id: SessionID,
+}
+
+impl ForkOfferOpenMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "fork_offer_open".to_string(),
             ..Self::default()
         }
     }
@@ -11154,6 +11185,8 @@ pub struct Session {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dispatcher_session_id: Option<SessionID>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fork_offer: Option<SessionID>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hidden: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
@@ -12130,6 +12163,8 @@ pub struct SetSessionResumeIDMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lifecycle_id: Option<String>,
     pub resume_session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transcript_path: Option<String>,
 }

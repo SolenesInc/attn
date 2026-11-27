@@ -828,6 +828,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleDesktopShowSession(client, msg.(*protocol.DesktopShowSessionMessage))
 	case protocol.CmdDesktopShowLeaf:
 		d.handleDesktopShowLeaf(client, msg.(*protocol.DesktopShowLeafMessage))
+	case protocol.CmdForkOfferOpen:
+		d.handleForkOfferOpen(client, msg.(*protocol.ForkOfferOpenMessage))
+	case protocol.CmdForkOfferDismiss:
+		d.handleForkOfferDismiss(msg.(*protocol.ForkOfferDismissMessage))
 	case protocol.CmdDesktopMoveLeaf:
 		d.handleDesktopMoveLeaf(client, msg.(*protocol.DesktopMoveLeafMessage))
 	case protocol.CmdDesktopRemoveLeaf:
