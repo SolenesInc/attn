@@ -41,6 +41,7 @@ type Record struct {
 	MachineID     string `json:"machine_id,omitempty"`
 	HomeMachineID string `json:"home_machine_id,omitempty"`
 	Dial          string `json:"dial,omitempty"`
+	OwnHomeID     string `json:"own_home_id,omitempty"`
 	RecordedAt    string `json:"recorded_at,omitempty"`
 }
 
@@ -267,8 +268,11 @@ func RecordHome(dataRoot string, home Home, dial string) (Status, error) {
 			return Status{}, err
 		}
 	}
-	next := Record{Role: RoleOutpost, HomeID: home.ID, HomeName: home.Name, HomeDaemonID: home.DaemonID, MachineID: cmp.Or(home.PeerMachineID, record.MachineID), HomeMachineID: cmp.Or(home.MachineID, record.HomeMachineID), Dial: dial}
-	if err != nil || record.Role != next.Role || record.HomeID != next.HomeID || record.HomeName != next.HomeName || record.HomeDaemonID != next.HomeDaemonID || record.MachineID != next.MachineID || record.HomeMachineID != next.HomeMachineID || record.Dial != next.Dial {
+	next := Record{Role: RoleOutpost, HomeID: home.ID, HomeName: home.Name, HomeDaemonID: home.DaemonID, MachineID: cmp.Or(home.PeerMachineID, record.MachineID), HomeMachineID: cmp.Or(home.MachineID, record.HomeMachineID), Dial: dial, OwnHomeID: record.OwnHomeID}
+	if err == nil && record.Role == RoleHome {
+		next.OwnHomeID = record.HomeID
+	}
+	if err != nil || record.Role != next.Role || record.HomeID != next.HomeID || record.HomeName != next.HomeName || record.HomeDaemonID != next.HomeDaemonID || record.MachineID != next.MachineID || record.HomeMachineID != next.HomeMachineID || record.Dial != next.Dial || record.OwnHomeID != next.OwnHomeID {
 		next.RecordedAt = nowStamp()
 		if err := writeRecord(recordPath, next); err != nil {
 			return Status{}, err
@@ -277,8 +281,9 @@ func RecordHome(dataRoot string, home Home, dial string) (Status, error) {
 	return next.status(daemonID), nil
 }
 
-// Leave makes this data folder its own home again, under a new home id, when it is enrolled to homeID. It writes
-// what attn enrollment leave writes.
+// Leave makes this data folder its own home again when it is enrolled to homeID, under the home id it had before it
+// enrolled, so its own outposts know it again, or a new one when the record does not name it. It writes what attn
+// enrollment leave writes.
 func Leave(dataRoot, homeID string) (Status, error) {
 	daemonID, err := ReadDaemonID(dataRoot)
 	if err != nil {
@@ -297,9 +302,11 @@ func Leave(dataRoot, homeID string) (Status, error) {
 	if record.Role != RoleOutpost || record.HomeID != homeID {
 		return record.status(daemonID), nil
 	}
-	ownHome, err := newID("h-")
-	if err != nil {
-		return Status{}, err
+	ownHome := record.OwnHomeID
+	if !ValidHomeID(ownHome) {
+		if ownHome, err = newID("h-"); err != nil {
+			return Status{}, err
+		}
 	}
 	record = Record{Role: RoleHome, HomeID: ownHome, HomeDaemonID: daemonID, RecordedAt: nowStamp()}
 	if err := writeRecord(recordPath, record); err != nil {

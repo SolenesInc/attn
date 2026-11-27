@@ -63,7 +63,7 @@ type outpostsRuntime struct {
 }
 
 func (d *Daemon) outpostsEnabled() bool {
-	return d.on(setting.OutpostsEnabled)
+	return d.enrollmentStatus().IsHome() && d.on(setting.OutpostsEnabled)
 }
 
 func (d *Daemon) configureOutposts() {

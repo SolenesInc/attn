@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -349,6 +350,17 @@ func (s *SSH) RequireAgent(socket string) {
 
 func (s *SSH) MasterAttempts() int {
 	s.t.Helper()
+	return s.masterAttempts("")
+}
+
+// MasterAttemptsTo counts the ssh masters any daemon started for destination.
+func (s *SSH) MasterAttemptsTo(destination string) int {
+	s.t.Helper()
+	return s.masterAttempts(destination)
+}
+
+func (s *SSH) masterAttempts(destination string) int {
+	s.t.Helper()
 	data, err := os.ReadFile(filepath.Join(s.Dir, "calls.jsonl"))
 	if err != nil && !os.IsNotExist(err) {
 		s.t.Fatal(err)
@@ -364,7 +376,7 @@ func (s *SSH) MasterAttempts() int {
 			master = master || arg == "ControlMaster=yes"
 			batch = batch || arg == "BatchMode=yes"
 		}
-		if master && batch {
+		if master && batch && (destination == "" || slices.Contains(args, destination)) {
 			count++
 		}
 	}

@@ -72,8 +72,9 @@ there, while it already has the machine as an outpost it dials, and after you
 removed the machine.
 
 A machine that is its own home and has open sessions refuses to join, and names
-them. Close them first. After `attn enrollment leave`, its sessions, Garden
-and settings read as they did before it joined.
+them. Close them first. While it is enrolled, its own outposts wait. After
+`attn enrollment leave`, its sessions, Garden and settings read as they did
+before it joined, and it connects to its own outposts again.
 
 The app on that machine connects to its own daemon, which passes it to the
 home. The app shows the home's desktops, queue and Garden, and you use the

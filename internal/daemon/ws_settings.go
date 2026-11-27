@@ -278,7 +278,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	settings[setting.CrewMailStartLimit.Key] = strconv.Itoa(crewStarts.Limit)
 	settings[setting.CrewMailStartWindowSeconds.Key] = strconv.Itoa(int(crewStarts.Window / time.Second))
 
-	settings[setting.OutpostsEnabled.Key] = strconv.FormatBool(d.outpostsEnabled())
+	settings[setting.OutpostsEnabled.Key] = strconv.FormatBool(d.on(setting.OutpostsEnabled))
 	state, home, lastError := d.outpostSettings()
 	settings[setting.OutpostState.Key] = state
 	settings[setting.OutpostHome.Key] = home

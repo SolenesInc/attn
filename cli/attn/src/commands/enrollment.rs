@@ -151,6 +151,8 @@ struct Record {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     dial: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
+    own_home_id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     recorded_at: String,
 }
 
@@ -420,7 +422,11 @@ fn leave_record(root: &str, home: &str) -> Result<LeaveResult, LoadError> {
             previous_home_id: String::new(),
         });
     }
-    let home_id = new_home_id().map_err(LoadError::Other)?;
+    let home_id = if valid_home_id(&current.record.own_home_id) {
+        current.record.own_home_id.clone()
+    } else {
+        new_home_id().map_err(LoadError::Other)?
+    };
     write_record(&record_path, &home_id, &daemon_id).map_err(LoadError::Other)?;
     Ok(LeaveResult {
         status: "left",

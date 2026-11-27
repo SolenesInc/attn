@@ -25,16 +25,13 @@ type reverseWorld struct {
 
 func newReverseWorld(t *testing.T, opts ...testworld.StackOption) *reverseWorld {
 	t.Helper()
-	return newReverseWorldWith(t, nil, opts...)
+	return newReverseWorldWith(t, func(w *reverseWorld) { w.copied = w.laptop.PassesOf(pausepoint.CopyBatchApplied) }, opts...)
 }
 
-func newReverseWorldWith(t *testing.T, prepareHome func(*testworld.Stack), opts ...testworld.StackOption) *reverseWorld {
+func newReverseWorldWith(t *testing.T, prepare func(*reverseWorld), opts ...testworld.StackOption) *reverseWorld {
 	t.Helper()
 	w := &reverseWorld{t: t, ssh: testworld.NewSSH(t), home: testworld.NewStack(t, opts...), laptop: testworld.NewStack(t, opts...)}
-	w.copied = w.laptop.PassesOf(pausepoint.CopyBatchApplied)
-	if prepareHome != nil {
-		prepareHome(w.home)
-	}
+	prepare(w)
 	for _, s := range []*testworld.Stack{w.home, w.laptop} {
 		w.ssh.Use(s.World)
 		s.Vars = append(s.Vars, "SHELL=/bin/bash")
@@ -324,7 +321,12 @@ func TestAReverseOutpostShowsItsDialAndBothWaysOutEndIt(t *testing.T) {
 
 func TestJoinRefusesWhileTheMachineHasOpenSessionsAndLeaveBringsItsOwnHomeBack(t *testing.T) {
 	w := newReverseWorld(t)
-	lp := w.laptop.App()
+	box := testworld.NewStack(t)
+	box.Start()
+	w.ssh.Route("box", box)
+	lp := enableOutposts(t, w.laptop)
+	lp.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "box", Destination: "box"})
+	outpostState(lp, "box", protocol.OutpostStateConnected)
 	var seed struct {
 		ID string `json:"id"`
 	}
@@ -356,9 +358,37 @@ func TestJoinRefusesWhileTheMachineHasOpenSessionsAndLeaveBringsItsOwnHomeBack(t
 	requireStdout(t, seedBefore, "The laptop's own seed")
 	requireStdout(t, w.laptop.Attn("settings", "get", "garden_v2_enabled"), "true")
 
+	var ownHome enrollmentJSON
+	w.laptop.Attn("enrollment", "status", "--json").JSON(t, &ownHome)
+	boxApp := box.App()
+	mark := boxApp.EventCount()
+	if boxApp.Initial.Settings["outpost_state"] != "bridged" {
+		mark = awaitOutpostSettingSince(boxApp, mark, "bridged")
+	}
 	w.join()
 	t.Log("after its session closed, the machine joined the home")
+	w.awaitCopiedSetting("outposts_enabled", "true")
+	awaitOutpostSettingSince(boxApp, mark, "off")
+	dialed := w.ssh.MasterAttemptsTo("box")
+	t.Log("while enrolled, the machine stops bridging its own outpost, though it reads the home's outposts_enabled=true")
+	homeMark := w.app.EventCount()
+	w.laptop.Stop()
+	w.laptop.Start()
+	outpostStateSince(w.app, w.name, protocol.OutpostStateConnected, homeMark)
+	if again := w.ssh.MasterAttemptsTo("box"); again != dialed {
+		t.Fatalf("the enrolled machine dialed its own outpost %d more times, after the home's copy of outposts_enabled or its restart", again-dialed)
+	}
+	left := boxApp.EventCount()
 	requireStdout(t, w.laptop.Attn("enrollment", "leave"), "no longer enrolled")
+	var back enrollmentJSON
+	w.laptop.Attn("enrollment", "status", "--json").JSON(t, &back)
+	if !back.IsHome || back.HomeID != ownHome.HomeID {
+		t.Fatalf("after leave the machine is %+v, want its own home %s again", back, ownHome.HomeID)
+	}
+	stopRetries := w.laptop.FireTimers(bridge.RetryTimer)
+	awaitOutpostSettingSince(boxApp, left, "bridged")
+	stopRetries()
+	t.Log("after leave, the machine bridges its own outpost again")
 
 	closedAfter := w.laptop.Attn("session", "list", "--closed")
 	requireStdout(t, closedAfter, shortID(own))
@@ -372,8 +402,10 @@ func TestJoinRefusesWhileTheMachineHasOpenSessionsAndLeaveBringsItsOwnHomeBack(t
 }
 
 func TestAJoinRefusedForItsBuildLeavesOnceTheHomeRemovesIt(t *testing.T) {
-	w := newReverseWorldWith(t, func(home *testworld.Stack) { home.RunFrom(testworld.AttnUpdateBinary(t, "home-build", "source", "")) })
+	w := newReverseWorldWith(t, func(w *reverseWorld) { w.home.RunFrom(testworld.AttnUpdateBinary(t, "home-build", "source", "")) })
 	lp := w.laptop.App()
+	var ownHome enrollmentJSON
+	w.laptop.Attn("enrollment", "status", "--json").JSON(t, &ownHome)
 	refused := w.laptop.Attn("enrollment", "join", "home")
 	if refused.Code == 0 || !strings.Contains(refused.Stderr, "build") {
 		t.Fatalf("a join across builds: exit %d, %s%s", refused.Code, refused.Stdout, refused.Stderr)
@@ -395,5 +427,20 @@ func TestAJoinRefusedForItsBuildLeavesOnceTheHomeRemovesIt(t *testing.T) {
 	if left := w.status(); strings.Contains(left, "dial:") {
 		t.Fatalf("the machine still dials after the home removed it:\n%s", left)
 	}
+	var back enrollmentJSON
+	w.laptop.Attn("enrollment", "status", "--json").JSON(t, &back)
+	if !back.IsHome || back.HomeID != ownHome.HomeID {
+		t.Fatalf("after it left on the removal the machine is %+v, want its own home %s again", back, ownHome.HomeID)
+	}
 	t.Log("after the home removed the machine its first join recorded, the machine's next dial was a redial, and it left")
+}
+
+// awaitOutpostSettingSince waits until the app on an outpost reads its home bridge as state, from event mark on, and
+// returns the event count after that read.
+func awaitOutpostSettingSince(p *testworld.Peer, mark int, state string) int {
+	p.T.Helper()
+	testworld.AwaitSince(p, mark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["outpost_state"] == state
+	})
+	return p.EventCount()
 }

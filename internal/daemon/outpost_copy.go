@@ -206,6 +206,7 @@ func (d *Daemon) dropStaleCopy() error {
 	}
 	before := d.settingValues()
 	d.outpost.mu.Lock()
+	wasOutpost := d.outpost.enrollment.IsOutpost()
 	status, err := enrollment.Load(d.dataRoot)
 	if err == nil {
 		d.installEnrollmentLocked(status)
@@ -231,6 +232,9 @@ func (d *Daemon) dropStaleCopy() error {
 		return err
 	}
 	d.refreshChangedSettings(before)
+	if wasOutpost && status.IsHome() {
+		d.configureOutposts()
+	}
 	d.configurePhoneAccess()
 	d.refreshJobQueueRole()
 	d.pruneRuntimesWithoutSession(d.life.Context())
