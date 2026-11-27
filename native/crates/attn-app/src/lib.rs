@@ -84,6 +84,7 @@ pub use deep_link::open_link;
 pub use dispatch::dispatch;
 pub use editor::{EditorLaunch, record_editor_launches, take_editor_launches};
 pub use frame::{Folders, use_folders, use_prefs};
+pub use home::BuiltInView;
 pub use home::pull_requests::Role as PullRequestRole;
 pub use keymap::{Binding, Keymap, PageKey, Zoom, page_key};
 pub use requests::ReplyInbox;

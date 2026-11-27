@@ -203,11 +203,16 @@ pub struct TileRow {
     pub title: String,
     /// The tile holds the focus of the desktop in view.
     pub selected: bool,
+    /// The tile shows one of attn's views.
+    pub view: bool,
 }
 
 impl TileRow {
     /// The word the row shows after the title.
     pub fn word(&self) -> &'static str {
+        if self.view {
+            return "VIEW";
+        }
         match self.kind.as_str() {
             "seed" => "SEED",
             "markdown" => "DOC",
@@ -219,6 +224,9 @@ impl TileRow {
 
     /// The icon the row leads with.
     pub fn icon(&self) -> &'static rune::Icon {
+        if self.view {
+            return &attn_ui::icon::BOARD;
+        }
         tile_icon(&self.kind)
     }
 }
@@ -243,6 +251,9 @@ pub fn tile_title(
     seeds: &[std::sync::Arc<attn_protocol::Seed>],
     garden: Option<&crate::garden::Garden>,
 ) -> String {
+    if let Some(view) = crate::BuiltInView::shown_by(kind, Some(params)) {
+        return view.title().to_owned();
+    }
     let readable = content.filter(|c| c.error.as_deref().is_none_or(str::is_empty));
     if kind == "markdown"
         && let Some(title) = readable.and_then(|c| document_title(&c.content))
@@ -289,6 +300,9 @@ pub fn tile_title(
 
 /// What a review document's tab names it: its file's name, or for a seed its id.
 pub fn document_tab(kind: &str, params: &str) -> String {
+    if let Some(view) = crate::BuiltInView::shown_by(kind, Some(params)) {
+        return view.title().to_owned();
+    }
     let path = if kind == "markdown" {
         path_in(params)
     } else {
@@ -696,6 +710,7 @@ pub fn desktop_lines(
                     selected: shown && leaf.id == desktop.active_pane_id,
                     id: leaf.id.clone(),
                     kind: kind.to_owned(),
+                    view: crate::BuiltInView::shown_by(kind, Some(params)).is_some(),
                 })),
                 None => {
                     let Some(session) = session_of

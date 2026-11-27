@@ -166,6 +166,9 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                 state.window.hints.shown().cloned(),
             ),
             (state.notebook.revision, state.browser.revision()),
+            desktop.and_then(|d| {
+                crate::home::tiles_read(state, crate::home::shown_on(d).map(|(_, view)| view))
+            }),
         ),
     );
     let launcher = desktop
@@ -188,7 +191,9 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                     &state.browser,
                     state.window.hints.shown(),
                 ),
-                (t, scale, state.window.now_ms, focus_style),
+                (t, scale, state.window.now_ms, focus_style, &|view| {
+                    crate::home::tile(view, state, t)
+                }),
             ))
         })
     });
@@ -578,6 +583,7 @@ pub(super) fn lone(
         scale,
         now_ms: state.window.now_ms,
         chrome_leading,
+        views: &|view| crate::home::tile(view, state, t),
     };
     tile(leaf, &cx).w_full().h_full()
 }
@@ -605,7 +611,13 @@ fn screen(
         &crate::browser::Browsers,
         Option<&crate::hints::Shown>,
     ),
-    (t, scale, now_ms, focus_style): (&Tokens, f32, i64, super::FocusStyle),
+    (t, scale, now_ms, focus_style, views): (
+        &Tokens,
+        f32,
+        i64,
+        super::FocusStyle,
+        &dyn Fn(crate::BuiltInView) -> El,
+    ),
 ) -> El {
     match desktop {
         None => empty(t, "No desktop"),
@@ -670,6 +682,7 @@ fn screen(
                     scale,
                     now_ms,
                     chrome_leading: 0.0,
+                    views,
                 };
                 let placed = desk.placement(&rendered);
                 let held = desk.held_divider(&placed);
@@ -776,6 +789,8 @@ struct TileCx<'a> {
     scale: f32,
     /// Where the tile header starts, clear of the window's own controls.
     chrome_leading: f32,
+    /// Draws one of attn's views in a tile's box.
+    views: &'a dyn Fn(crate::BuiltInView) -> El,
 }
 
 /// The screen's tiles and dividers as siblings pinned where `placed` lays them, so a tile that
@@ -1059,6 +1074,11 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
             }
         }
         (LeafKind::Pane, _) => empty(t, "Starting…"),
+        (LeafKind::Tile { kind, params, .. }, _)
+            if let Some(view) = crate::BuiltInView::shown_by(kind, params.as_deref()) =>
+        {
+            (cx.views)(view)
+        }
         (LeafKind::Tile { kind, session, .. }, _) if kind == "markdown" => {
             let key = attn_client::TileKey {
                 desktop: desktop.id.clone(),

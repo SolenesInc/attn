@@ -358,6 +358,17 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         .describe("Dock an editor beside your terminals, opened on any folder")
         .shortcut(Some(Action::NotebookOpenTile)),
     );
+    if setting::on(&facts.settings, "views_enabled") && facts.current_desktop().is_some() {
+        commands.extend(crate::BuiltInView::ALL.map(|view| {
+            Command::new(
+                &format!("view-{}", view.name()),
+                &format!("Show {} in a tile", view.title()),
+                &["view", "tile", "dock", "home", "dashboard", view.name()],
+                Action::ShowView { view },
+            )
+            .describe("Put it in a tile on this desktop, or go to the tile that shows it")
+        }));
+    }
     commands.push(
         Command::new(
             "sessions",

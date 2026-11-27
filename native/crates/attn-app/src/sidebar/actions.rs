@@ -350,10 +350,11 @@ pub(crate) fn advance(state: &mut State, tx: &mut Tx) {
     let bands = queue::bands(&state.facts, state.window.now_ms);
     let turns = bands.turns.iter().map(|r| r.session.id.clone()).collect();
     let previous = std::mem::replace(&mut state.window.queue_turns, turns);
+    let following = state.window.follow_next_turn
+        && (state.window.view == View::Home
+            || crate::home::shows_sessions(state.facts.current_desktop()));
     let (reason, to) = match state.window.view {
-        View::Home if state.window.follow_next_turn => {
-            ("follow", bands.head().map(|h| Some(h.id.clone())))
-        }
+        _ if following => ("follow", bands.head().map(|h| Some(h.id.clone()))),
         View::Desktop => (
             "turn_closed",
             bands.advance_after_turn_closed(&previous, on_screen.as_deref()),

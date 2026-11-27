@@ -75,6 +75,8 @@ macro_rules! actions {
             SetTileFocus { style: crate::desktop::FocusStyle },
             /// Forget every column width dragged on a desktop.
             ClearDraggedWidths { desktop: String },
+            /// Show one of attn's views in a tile on the current desktop.
+            ShowView { view: crate::home::BuiltInView },
             /// Order a profile's desktops by number, then by name.
             SortDesktops { profile: String },
             /// Put a profile's desktops in this order, as Undo after a sort does.
@@ -149,6 +151,7 @@ macro_rules! actions {
                     Action::SetSetting { .. } => "setting.set",
                     Action::SetTileFocus { .. } => "tileFocus.set",
                     Action::ClearDraggedWidths { .. } => "shelf.clearDraggedWidths",
+                    Action::ShowView { .. } => "view.show",
                     Action::SortDesktops { .. } => "desktop.sort",
                     Action::SetDesktopOrder { .. } => "desktop.setOrder",
                     Action::CloseDesktop { .. } => "desktop.close",
@@ -199,6 +202,7 @@ macro_rules! actions {
                     Action::SetSetting { .. } => "Change a setting",
                     Action::SetTileFocus { .. } => "Change the tile focus style",
                     Action::ClearDraggedWidths { .. } => "Clear dragged widths",
+                    Action::ShowView { .. } => "Show a view",
                     Action::SortDesktops { .. } => "Sort desktops",
                     Action::SetDesktopOrder { .. } => "Restore an order of desktops",
                     Action::CloseDesktop { .. } => "Close desktop",

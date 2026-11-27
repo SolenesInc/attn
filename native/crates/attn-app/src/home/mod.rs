@@ -1,6 +1,8 @@
 mod model;
 pub(crate) mod pull_requests;
 
+use std::hash::{Hash, Hasher};
+
 use attn_ui::Tokens;
 use attn_ui::blocks::{Block, Board, BoardCard, Card, Inline, Prose, Stack};
 use attn_ui::system::{
@@ -24,10 +26,201 @@ const LOGO_SIDE: f32 = 64.0;
 /// with nothing in it.
 pub(crate) const CARD_LEAST: (f32, f32) = (300.0, 200.0);
 
+/// One of attn's own views, which Home draws and a tile can show on any desktop: a markdown
+/// tile whose params are `{"view": name}`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum BuiltInView {
+    Attn,
+    Sessions,
+    PullRequests,
+}
+
+impl BuiltInView {
+    pub const ALL: [BuiltInView; 3] = [
+        BuiltInView::Attn,
+        BuiltInView::Sessions,
+        BuiltInView::PullRequests,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            BuiltInView::Attn => "attn",
+            BuiltInView::Sessions => "sessions",
+            BuiltInView::PullRequests => "pull-requests",
+        }
+    }
+
+    pub fn title(self) -> &'static str {
+        match self {
+            BuiltInView::Attn => "attn",
+            BuiltInView::Sessions => "Sessions",
+            BuiltInView::PullRequests => "Pull requests",
+        }
+    }
+
+    pub fn params(self) -> String {
+        serde_json::json!({ "view": self.name() }).to_string()
+    }
+
+    /// The view a markdown tile's params name, when they name one.
+    pub fn named_by(params: &str) -> Option<BuiltInView> {
+        let named: serde_json::Value = serde_json::from_str(params).ok()?;
+        let name = named.get("view")?.as_str()?;
+        BuiltInView::ALL
+            .into_iter()
+            .find(|view| view.name() == name)
+    }
+
+    /// The view a tile of `kind` with `params` shows, when it shows one.
+    pub(crate) fn shown_by(kind: &str, params: Option<&str>) -> Option<BuiltInView> {
+        (kind == "markdown")
+            .then_some(params)
+            .flatten()
+            .and_then(BuiltInView::named_by)
+    }
+
+    /// The id of the tile that shows this view on a desktop.
+    pub(crate) fn tile_id(self) -> String {
+        format!("tile-view-{}", self.name())
+    }
+
+    fn onto(self, board: Board, state: &State, t: &Tokens) -> Board {
+        match self {
+            BuiltInView::Attn => {
+                let board = board.brand(
+                    logo(state.pictures.logo()),
+                    "attn",
+                    "attention hub",
+                    settings(t),
+                );
+                match crate::whats_new::banner(state, t) {
+                    Some(banner) => board.top(banner),
+                    None => board,
+                }
+            }
+            BuiltInView::Sessions => sessions(board, state, t),
+            BuiltInView::PullRequests => {
+                let board = match pull_requests::rate_limit_notice(state, t) {
+                    Some(limited) => board.top(limited),
+                    None => board,
+                };
+                board.card(pull_requests::home_card(state, t))
+            }
+        }
+    }
+
+    /// What drawing this view reads, as one number that changes when the drawing may.
+    fn reads(self, state: &State) -> u64 {
+        let mut hasher = std::hash::DefaultHasher::new();
+        match self {
+            BuiltInView::Attn => (
+                state.window.whats_new.banner_dismissed(),
+                state.pictures.logo().map(Image::id),
+            )
+                .hash(&mut hasher),
+            BuiltInView::Sessions => sessions_reads(state).hash(&mut hasher),
+            BuiltInView::PullRequests => (
+                pull_requests::reads(state),
+                pull_requests::rate_limit_left_ms(&state.facts, state.window.now_ms)
+                    .map(|left| left / 1000),
+            )
+                .hash(&mut hasher),
+        }
+        hasher.finish()
+    }
+}
+
 pub(crate) fn view(state: &State, t: &Tokens) -> El {
+    BuiltInView::ALL
+        .into_iter()
+        .fold(Board::new("home", "Home"), |board, view| {
+            view.onto(board, state, t)
+        })
+        .build(t)
+}
+
+/// `view` drawn in a tile's box, as Home draws it.
+pub(crate) fn tile(view: BuiltInView, state: &State, t: &Tokens) -> El {
+    view.onto(
+        Board::new(format!("view.{}", view.name()), view.title()),
+        state,
+        t,
+    )
+    .build(t)
+    .role("region")
+}
+
+/// What drawing the views among `shown` reads; none when no view is among them.
+pub(crate) fn tiles_read(
+    state: &State,
+    shown: impl IntoIterator<Item = BuiltInView>,
+) -> Option<Vec<(BuiltInView, u64)>> {
+    let mut views: Vec<BuiltInView> = shown.into_iter().collect();
+    views.sort();
+    views.dedup();
+    (!views.is_empty()).then(|| {
+        views
+            .into_iter()
+            .map(|view| (view, view.reads(state)))
+            .collect()
+    })
+}
+
+/// Shows `view` on the current desktop: the tile that already shows it there, or a new one
+/// docked beside the active tile.
+pub(crate) fn show_tile(state: &mut State, view: BuiltInView, tx: &mut Tx) {
+    let Some(desktop) = state.facts.current_desktop() else {
+        return;
+    };
+    let shown = shown_on(desktop).find(|(_, shown)| *shown == view);
+    let desktop = desktop.id.clone();
+    if let Some((tile, _)) = shown {
+        state.window.show_desktop(tx);
+        crate::desktop::show_leaf(state, &desktop, &tile, tx);
+        return;
+    }
+    let tile_id = view.tile_id();
+    let docked = (desktop.clone(), tile_id.clone());
+    state.act(
+        move |request_id| attn_protocol::DesktopDockTileMessage {
+            request_id,
+            desktop_id: desktop,
+            tile_id,
+            tile_kind: "markdown".into(),
+            tile_params: Some(view.params()),
+            edge: "right".into(),
+            ..attn_protocol::DesktopDockTileMessage::new()
+        },
+        crate::requests::Refused::Prefixed("Could not show the view"),
+        move |state, _, tx| {
+            let (desktop, tile) = docked;
+            state.window.show_desktop(tx);
+            crate::desktop::show_leaf(state, &desktop, &tile, tx);
+        },
+        tx,
+    );
+}
+
+/// Whether `desktop` shows the Sessions view, whose "All settled" offers to follow the next
+/// turn from there as from Home.
+pub(crate) fn shows_sessions(desktop: Option<&attn_client::Desktop>) -> bool {
+    desktop.is_some_and(|desktop| shown_on(desktop).any(|(_, view)| view == BuiltInView::Sessions))
+}
+
+/// Each tile on `desktop` that shows a view, with the view.
+pub(crate) fn shown_on(
+    desktop: &attn_client::Desktop,
+) -> impl Iterator<Item = (String, BuiltInView)> + '_ {
+    desktop.leaves().into_iter().filter_map(|leaf| {
+        let (kind, params) = leaf.tile()?;
+        Some((leaf.id.clone(), BuiltInView::shown_by(kind, Some(params))?))
+    })
+}
+
+fn sessions_reads(state: &State) -> impl Hash + '_ {
     let facts = &state.facts;
     let window = &state.window;
-    let reads = (
+    (
         std::sync::Arc::as_ptr(&facts.sessions) as usize,
         std::sync::Arc::as_ptr(&facts.desktops) as usize,
         std::sync::Arc::as_ptr(&facts.profiles) as usize,
@@ -41,37 +234,25 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         window.now_ms,
         window.follow_next_turn,
         window.home_snoozed_open,
-        window.whats_new.banner_dismissed(),
-        state.pictures.logo().map(Image::id),
-        *t,
-    );
+    )
+}
+
+/// Sessions' notice that nothing is owed, above its card, and the card.
+fn sessions(board: Board, state: &State, t: &Tokens) -> Board {
+    let (facts, window) = (&state.facts, &state.window);
     let home = model::home(facts, window.now_ms);
-    let mut board = Board::new("home", "Home").brand(
-        logo(state.pictures.logo()),
-        "attn",
-        "attention hub",
-        settings(t),
-    );
-    if let Some(banner) = crate::whats_new::banner(state, t) {
-        board = board.top(banner);
-    }
-    if let Some(running) = &home.all_settled {
-        board = board.top(Block::custom(
+    let board = match &home.all_settled {
+        Some(running) => board.top(Block::custom(
             "home.all-settled.slot",
             all_settled(running, window.follow_next_turn, t),
-        ));
-    }
-    if let Some(limited) = pull_requests::rate_limit_notice(state, t) {
-        board = board.top(limited);
-    }
-    let sessions = memo("home.sessions", reads, || {
+        )),
+        None => board,
+    };
+    let reads = (sessions_reads(state), *t);
+    board.card(memo("home.sessions", reads, || {
         let asks = crate::asks::Lists::of(facts, window.now_ms).live;
         sessions_card(&home, &asks, window.home_snoozed_open, t)
-    });
-    board
-        .card(sessions)
-        .card(pull_requests::home_card(state, t))
-        .build(t)
+    }))
 }
 
 fn logo(logo: Option<&Image>) -> Option<El> {

@@ -581,9 +581,8 @@ fn fold_repo(state: &mut State, repo: &str) {
     }
 }
 
-/// Home's Pull Requests card: the user's own pull requests, then the review requests by
-/// repository, each repository folding away or muted from its header.
-pub(crate) fn home_card(state: &State, t: &Tokens) -> El {
+/// What the pull requests card reads, as one number that changes when the card may.
+pub(crate) fn reads(state: &State) -> u64 {
     let tracked = &state.window.pull_requests;
     let mut acts: Vec<(Act, String, Option<u64>)> = tracked
         .acts
@@ -611,9 +610,16 @@ pub(crate) fn home_card(state: &State, t: &Tokens) -> El {
         (muting, merged),
         folded,
         &tracked.refresh,
-        *t,
     );
-    memo("home.prs", reads, || pr_card(state, t))
+    let mut hasher = std::hash::DefaultHasher::new();
+    std::hash::Hash::hash(&reads, &mut hasher);
+    std::hash::Hasher::finish(&hasher)
+}
+
+/// Home's Pull Requests card: the user's own pull requests, then the review requests by
+/// repository, each repository folding away or muted from its header.
+pub(crate) fn home_card(state: &State, t: &Tokens) -> El {
+    memo("home.prs", (reads(state), *t), || pr_card(state, t))
 }
 
 fn pr_card(state: &State, t: &Tokens) -> El {
@@ -744,7 +750,7 @@ pub(crate) fn rate_limit_notice(state: &State, t: &Tokens) -> Option<Block> {
     )
 }
 
-fn rate_limit_left_ms(facts: &Facts, now_ms: i64) -> Option<i64> {
+pub(crate) fn rate_limit_left_ms(facts: &Facts, now_ms: i64) -> Option<i64> {
     let until = facts.pull_requests.rate_limited_until.as_deref()?;
     let left = crate::sidebar::queue::epoch_ms(until)? - now_ms;
     (left > 0).then_some(left)
