@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Local terminal pop-outs disappear during a home outage",
+  "at": "2026-11-27T07:11:54.559Z",
+  "detail": "When the home drops after a local terminal has been popped out, the app hides its window and drops the window binding. The main window also excludes popped tiles. Preserve live local terminal windows using cached placement. The source plot already assigned this follow-up, and the rolling review independently confirmed it at 54d9c6647.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/desktop/windows.rs",
+    "line": 264
+  },
+  "culprit": "dcd581bef5023ea40d013be45bc5febf5685ebc1"
+}
