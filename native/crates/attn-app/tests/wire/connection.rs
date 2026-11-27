@@ -434,3 +434,130 @@ fn an_unresponsive_daemon_s_reason_and_restart_commands_read_whole_at_the_smalle
     );
     assert!(world.runtime_is_at_rest());
 }
+
+fn home_unreachable(world: &World) -> Option<String> {
+    world
+        .screen()
+        .find(Target::key("connection.home-unreachable"))
+        .map(|alert| alert.name.unwrap_or_default())
+}
+
+#[test]
+fn a_home_the_daemon_cannot_reach_is_named_with_its_reason_until_it_answers() {
+    let away = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let daemon = Daemon::scripted();
+    let answering = away.clone();
+    daemon.on("client_hello", move |_| {
+        if answering.load(std::sync::atomic::Ordering::SeqCst) {
+            serde_json::json!({
+                "event": "home_unreachable", "home": "oma", "state": "dialing",
+                "reason": "ssh: connect to host oma port 22: No route to host",
+            })
+        } else {
+            attn_testkit::message(InitialStateMessage {
+                protocol_version: Some(PROTOCOL_VERSION.into()),
+                ..InitialStateMessage::new()
+            })
+        }
+    });
+    let mut world = World::start(daemon);
+
+    let alert = home_unreachable(&world).expect("the window says the home is unreachable");
+    assert!(
+        alert.contains("Can\u{2019}t reach oma")
+            && alert.contains("ssh: connect to host oma port 22: No route to host"),
+        "{alert}"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::role("main").name("Home"))
+            .is_none(),
+        "no shell while the home is unreachable:\n{}",
+        world.screen()
+    );
+
+    world.gesture(|app| app.press("r"));
+    assert_eq!(
+        world.daemon.sent_of("retry_home").len(),
+        1,
+        "R asks the daemon to dial its home now"
+    );
+    world.gesture(|app| app.click(Target::key("connection.home-unreachable.retry")));
+    assert_eq!(
+        world.daemon.sent_of("retry_home").len(),
+        2,
+        "Retry asks the same"
+    );
+
+    world.daemon.disconnect();
+    world.settle();
+    assert!(
+        home_unreachable(&world).is_some()
+            && world
+                .screen()
+                .find(Target::key("connection.reconnecting"))
+                .is_none(),
+        "the screen stays while the app connects again:\n{}",
+        world.screen()
+    );
+    world.advance(ms(1000));
+    assert_eq!(
+        world.daemon.sent_of("client_hello").len(),
+        2,
+        "the app connects again a second after the daemon closes"
+    );
+
+    away.store(false, std::sync::atomic::Ordering::SeqCst);
+    world.daemon.disconnect();
+    world.settle();
+    world.advance(ms(1000));
+    assert_eq!(home_unreachable(&world), None, "{}", world.screen());
+    assert!(
+        world
+            .screen()
+            .find(Target::role("main").name("Home"))
+            .is_some(),
+        "{}",
+        world.screen()
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_home_lost_while_a_dialog_is_open_shows_its_screen_uncovered() {
+    let away = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let daemon = Daemon::scripted();
+    let answering = away.clone();
+    daemon.on("client_hello", move |_| {
+        if answering.load(std::sync::atomic::Ordering::SeqCst) {
+            serde_json::json!({"event": "home_unreachable", "home": "oma", "state": "dialing"})
+        } else {
+            attn_testkit::message(InitialStateMessage {
+                protocol_version: Some(PROTOCOL_VERSION.into()),
+                ..InitialStateMessage::new()
+            })
+        }
+    });
+    let mut world = World::start(daemon);
+    world.gesture(|app| app.key(super::sidebar::chord(attn_app::Action::UiCommandPalette)));
+    assert!(
+        world.screen().find(Target::role("dialog")).is_some(),
+        "the palette opens:\n{}",
+        world.screen()
+    );
+
+    away.store(true, std::sync::atomic::Ordering::SeqCst);
+    world.daemon.disconnect();
+    world.settle();
+    world.advance(ms(1000));
+
+    assert!(home_unreachable(&world).is_some(), "{}", world.screen());
+    assert!(
+        world.screen().find(Target::role("dialog")).is_none(),
+        "no dialog covers the screen:\n{}",
+        world.screen()
+    );
+    world.gesture(|app| app.press("r"));
+    assert_eq!(world.daemon.sent_of("retry_home").len(), 1);
+}

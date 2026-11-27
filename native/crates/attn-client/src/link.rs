@@ -8,15 +8,15 @@ use attn_protocol::{
     ClientHelloMessage, CommandErrorMessage, CrewUpdatedMessage, FsChangedMessage,
     GardenBedsUpdatedMessage, GardenSeedsChangedMessage, GardenSeedsUpdatedMessage,
     GetScreenSnapshotResultMessage, GitHubHostsUpdatedMessage, GitOperationStartedMessage,
-    HarnessCatalogMessage, InitialStateMessage, InstallCodexUpdateResultMessage,
-    KittyImageResultMessage, KittyPlacementsMessage, NotificationListResultMessage,
-    NotificationsUpdatedMessage, OutpostsUpdatedMessage, PROTOCOL_VERSION, PRsUpdatedMessage,
-    PluginsUpdatedMessage, ProfileArrangementChangedMessage, ProfilesChangedMessage,
-    PtyDesyncMessage, PtyResizedMessage, QuickCaptureReadMessage, QuickCaptureUnreadMessage,
-    RateLimitedMessage, ReposUpdatedMessage, RuntimeRespawnedMessage, SessionClosedMessage,
-    SessionExitedMessage, SessionMessagesChangedMessage, SessionRegisteredMessage,
-    SessionUnregisteredMessage, SessionsUpdatedMessage, SettingsUpdatedMessage,
-    SharedCodexChangedMessage, UpdateChangedMessage, VentsUpdatedMessage,
+    HarnessCatalogMessage, HomeUnreachableMessage, InitialStateMessage,
+    InstallCodexUpdateResultMessage, KittyImageResultMessage, KittyPlacementsMessage,
+    NotificationListResultMessage, NotificationsUpdatedMessage, OutpostsUpdatedMessage,
+    PROTOCOL_VERSION, PRsUpdatedMessage, PluginsUpdatedMessage, ProfileArrangementChangedMessage,
+    ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage, QuickCaptureReadMessage,
+    QuickCaptureUnreadMessage, RateLimitedMessage, ReposUpdatedMessage, RuntimeRespawnedMessage,
+    SessionClosedMessage, SessionExitedMessage, SessionMessagesChangedMessage,
+    SessionRegisteredMessage, SessionUnregisteredMessage, SessionsUpdatedMessage,
+    SettingsUpdatedMessage, SharedCodexChangedMessage, UpdateChangedMessage, VentsUpdatedMessage,
     WorktreeStateChangedEvent, WorktreeSweptEvent, go_values,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -29,8 +29,8 @@ use tokio_tungstenite::tungstenite::Message;
 use crate::frame::Frame;
 use crate::presence::Presence;
 use crate::{
-    CLIENT_KIND, Clock, Connection, MigrationMarker, Performance, Pulse, Refusal, Sight, Store,
-    WallClock, setting,
+    CLIENT_KIND, Clock, Connection, HomeUnreachable, MigrationMarker, Performance, Pulse, Refusal,
+    Sight, Store, WallClock, setting,
 };
 
 const FIRST_RETRY: Duration = Duration::from_secs(1);
@@ -331,7 +331,11 @@ struct Task {
 }
 
 enum Ended {
-    Lost { greeted: bool },
+    Lost {
+        greeted: bool,
+    },
+    /// The daemon said its home is unreachable, then closed the connection as its dial changed.
+    Away,
     Refused(Refusal),
     Stopped,
 }
@@ -427,6 +431,7 @@ impl Task {
                     .refuse(Refusal::MigrationFailed(marker), &mut stopped)
                     .await;
             }
+            let mut away = false;
             if start_failed.is_none() {
                 let ended = tokio::select! {
                     ended = self.session() => ended,
@@ -439,6 +444,10 @@ impl Task {
                 match ended {
                     Ended::Stopped => return,
                     Ended::Refused(refusal) => return self.refuse(refusal, &mut stopped).await,
+                    Ended::Away => {
+                        away = true;
+                        retry = FIRST_RETRY;
+                    }
                     Ended::Lost { greeted } => {
                         if greeted {
                             retry = FIRST_RETRY;
@@ -446,8 +455,10 @@ impl Task {
                     }
                 }
             }
-            self.store
-                .set_connection(Connection::Reconnecting { start_failed });
+            if !away {
+                self.store
+                    .set_connection(Connection::Reconnecting { start_failed });
+            }
             let at = self.config.clock.now() + retry;
             self.park(Parked::Until(at));
             tokio::select! {
@@ -518,6 +529,14 @@ impl Task {
         let hello = serde_json::to_string(&self.hello()).expect("client_hello serializes");
         self.shared.open(outbox, hello);
         let mut greeted = false;
+        let mut away = false;
+        let lost = |greeted: bool, away: bool| {
+            if away {
+                Ended::Away
+            } else {
+                Ended::Lost { greeted }
+            }
+        };
         loop {
             let heartbeat = self.shared.presence_due();
             self.park(Parked::Reading(heartbeat));
@@ -531,7 +550,7 @@ impl Task {
                 message = read.next() => {
                     self.park(Parked::Busy);
                     let refusal = match message {
-                        Some(Ok(Message::Text(text))) => self.apply(text.as_str(), &mut greeted),
+                        Some(Ok(Message::Text(text))) => self.apply(text.as_str(), &mut greeted, &mut away),
                         Some(Ok(Message::Binary(bytes))) => {
                             match Frame::decode(&bytes) {
                                 Ok(frame) => (self.config.terminals)(TerminalEvent::Frame(frame)),
@@ -542,7 +561,7 @@ impl Task {
                         Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_))) => continue,
                         Some(Ok(Message::Close(_)) | Err(_)) | None => {
                             self.shared.count(|t| t.received += 1);
-                            return Ended::Lost { greeted };
+                            return lost(greeted, away);
                         }
                     };
                     self.shared.count(|t| t.received += 1);
@@ -553,7 +572,7 @@ impl Task {
                 }
                 Some(command) = commands.recv() => {
                     if write.send(Message::text(command)).await.is_err() {
-                        return Ended::Lost { greeted };
+                        return lost(greeted, away);
                     }
                 }
             }
@@ -592,7 +611,7 @@ impl Task {
         }
     }
 
-    fn apply(&self, text: &str, greeted: &mut bool) -> Option<Refusal> {
+    fn apply(&self, text: &str, greeted: &mut bool, away: &mut bool) -> Option<Refusal> {
         let Ok(header) = serde_json::from_str::<Header>(text) else {
             eprintln!("attn-app: dropped a daemon message that is not a JSON object");
             return None;
@@ -914,6 +933,17 @@ impl Task {
             }
             "session_exited" => {
                 (self.config.terminals)(TerminalEvent::Exited(parse(&header.event, text)?));
+                None
+            }
+            "home_unreachable" => {
+                let told: HomeUnreachableMessage = parse(&header.event, text)?;
+                *away = true;
+                self.store
+                    .set_connection(Connection::HomeUnreachable(HomeUnreachable {
+                        home: told.home,
+                        dial: told.state,
+                        reason: told.reason,
+                    }));
                 None
             }
             "command_error" => {

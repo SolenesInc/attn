@@ -2579,6 +2579,19 @@ fn daemon_refused(dark: bool) {
     snap(&mut world, "daemon-refused", dark);
 }
 
+/// The daemon on the app's port cannot reach the home it passes the app to.
+fn home_unreachable(dark: bool) {
+    let daemon = scripted();
+    daemon.on("client_hello", |_| {
+        json!({
+            "event": "home_unreachable", "home": "oma", "state": "dialing",
+            "reason": "ssh: connect to host oma port 22: No route to host",
+        })
+    });
+    let mut world = World::start_sized(daemon, window());
+    snap(&mut world, "home-unreachable", dark);
+}
+
 /// A command that failed: the notice at the window's foot, at its end.
 fn notice_failed(dark: bool) {
     let mut world = with_document_and(dark, |daemon| {
@@ -9205,6 +9218,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
             daemon_unresponsive_details(dark)
         });
         scene("daemon_refused", || daemon_refused(dark));
+        scene("home_unreachable", || home_unreachable(dark));
         scene("notice_failed", || notice_failed(dark));
         scene("leader", || leader(dark));
         scene("callout", || callout(dark));

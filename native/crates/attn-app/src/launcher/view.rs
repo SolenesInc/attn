@@ -99,7 +99,7 @@ fn controls(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> E
 fn progress(state: &State, launcher: &Launcher, t: &Tokens) -> Block {
     let host = launcher.starting.as_ref().and_then(|s| s.host.as_deref());
     let mut message = match host {
-        Some(_) => format!("Starting on {}…", machine_name(outposts(state), host)),
+        Some(_) => format!("Starting on {}…", machine_name(&outposts(state), host)),
         None => "Starting…".to_owned(),
     };
     let stalled = launcher.stalled(state);
@@ -151,7 +151,7 @@ fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> El 
     });
     let prefix = match launcher.place {
         Some(_) => "",
-        None => machine_prefix(&launcher.query.text, outposts),
+        None => machine_prefix(&launcher.query.text, &outposts),
     };
     let accent = (!prefix.is_empty()).then(|| vec![Span::new(0, prefix.len()).color(t.accent)]);
     let mut input = finder::query_field(
@@ -302,7 +302,8 @@ fn locations(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> 
         ]
         .into_iter()
         .chain(
-            (!outposts.is_empty()).then(|| (format!("on {}", machine_name(outposts, host)), false)),
+            (!outposts.is_empty())
+                .then(|| (format!("on {}", machine_name(&outposts, host)), false)),
         )
         .collect(),
         _ => vec![("Folders".to_owned(), false)],
@@ -332,7 +333,7 @@ fn locations(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> 
         let empty = match browsed {
             None => Some("No recent project matches. Type ~/ to browse folders."),
             Some((listing, host)) => (matches!(listing, Some(Listing::Listed { .. }))
-                || !reachable(outposts, host))
+                || !reachable(&outposts, host))
             .then_some("No folders match. Enter uses the path as typed."),
         };
         children.extend(empty.map(|message| finder::empty(t, format!("{w}.empty"), message)));
@@ -402,16 +403,16 @@ fn location_row(
         Kind::Machine => Some(Said::parts([
             Part::Text(format!(
                 "{} · Tab browses ",
-                host.and_then(|h| outpost(outposts, h))
+                host.and_then(|h| outpost(&outposts, h))
                     .map(|o| o.state.clone())
                     .unwrap_or_default()
             )),
-            Part::Code(address_of(&machine_of(outposts, host), "~/")),
+            Part::Code(address_of(&machine_of(&outposts, host), "~/")),
         ])),
         Kind::Elsewhere => Some(Said::parts([
             Part::Text("Enter browses ".to_owned()),
             Part::Code(address_of(
-                &machine_of(outposts, host),
+                &machine_of(&outposts, host),
                 &format!("{}/", r.path),
             )),
         ])),
@@ -428,9 +429,9 @@ fn location_row(
             (r.kind == Kind::Folder).then(|| quiet("repo".to_owned(), t).key(badge_key.clone()))
         }
     });
-    let reach = host.map(|h| outpost(outposts, h).map(|o| o.reach.clone()));
+    let reach = host.map(|h| outpost(&outposts, h).map(|o| o.reach.clone()));
     let machine = (matches!(r.kind, Kind::Recent | Kind::Elsewhere) && !outposts.is_empty())
-        .then(|| machine_tag(format!("{w}.row.{i}.machine"), outposts, host, t));
+        .then(|| machine_tag(format!("{w}.row.{i}.machine"), &outposts, host, t));
     let unreachable = r.kind != Kind::Machine
         && reach
             .as_ref()
@@ -727,7 +728,7 @@ fn status_line(state: &State, launcher: &Launcher, address: &Address) -> Option<
             let (dir, _) = split_browse(path);
             let name = &machine.name;
             let listing = launcher.listing(state, host, &dir);
-            if !reachable(outposts, host) {
+            if !reachable(&outposts, host) {
                 return Some((
                     match listing {
                         Some(Listing::Listed { at_ms, .. }) => format!(

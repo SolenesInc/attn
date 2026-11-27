@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "8d69dfdf7a2c";
+pub const PROTOCOL_VERSION: &str = "191944d77e49";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -5849,6 +5849,24 @@ impl HomeDialStatusMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HomeUnreachableMessage {
+    pub event: String,
+    pub home: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    pub state: String,
+}
+
+impl HomeUnreachableMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "home_unreachable".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct HomeUpdateNoticeMessage {
     pub cmd: String,
     pub host: String,
@@ -7449,6 +7467,8 @@ pub struct OutpostInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub daemon_id: Option<String>,
     pub destination: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dials_home: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub home: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -9089,6 +9109,20 @@ impl RestartSharedCodexResultMessage {
     pub fn new() -> Self {
         Self {
             event: "restart_shared_codex_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RetryHomeMessage {
+    pub cmd: String,
+}
+
+impl RetryHomeMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "retry_home".to_string(),
             ..Self::default()
         }
     }

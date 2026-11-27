@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/stepclock"
+	"github.com/victorarias/attn/internal/store"
 )
 
 func (d *Daemon) resolveCallerHost(source protocol.SessionID, requested *string) (string, error) {
@@ -31,10 +32,21 @@ func (d *Daemon) resolveCallerHost(source protocol.SessionID, requested *string)
 	if err != nil {
 		return "", err
 	}
+	if err := startsTerminals(row); err != nil {
+		return "", err
+	}
 	if _, _, err := d.outpostConn(row.ID); err != nil {
 		return "", err
 	}
 	return row.ID, nil
+}
+
+// startsTerminals refuses a machine that dials this home: it starts no terminals until it serves its own.
+func startsTerminals(row store.Machine) error {
+	if row.Reverse() {
+		return protocol.Refuse(protocol.RefusalWrongState, "%s dials this home, so it starts no terminals yet; they come once %s serves its own terminals", row.Name, row.Name)
+	}
+	return nil
 }
 
 func (d *Daemon) wireHost(id string) *string {

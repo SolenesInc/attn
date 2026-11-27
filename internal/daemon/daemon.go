@@ -4180,6 +4180,7 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"source_fingerprint": buildinfo.SourceFingerprint,
 		"git_commit":         buildinfo.GitCommit,
 		"daemon_instance_id": d.daemonInstanceID,
+		"machine_id":         d.store.MachineID(),
 		"sessions":           len(sessions),
 		"prs":                len(prs),
 		"ws_clients":         d.wsHub.ClientCount(),

@@ -438,6 +438,8 @@ model NotebookFoldersMessage {
 
 model OutpostInfo {
   connectable?: boolean;
+  // The machine dials this home (attn enrollment join). It starts no terminals until it serves its own.
+  dials_home?: boolean;
   id: string;
   name: string;
   destination: string;
@@ -2042,6 +2044,11 @@ model JoinHomeMessage { cmd: "join_home"; destination: string; }
 // Sent by `attn enrollment status` on a machine that dials its home. The reply carries home_dial.
 @extension("x-on", #{ here: true })
 model HomeDialStatusMessage { cmd: "home_dial_status"; }
+
+// Sent by the app on a connection that home_unreachable answered: the outpost dials its home at once, then closes
+// the connection.
+@extension("x-on", #{ here: true })
+model RetryHomeMessage { cmd: "retry_home"; }
 
 // The dial from this machine to its home. state is dialing, bridged, refused or off.
 model HomeDial {
@@ -5116,6 +5123,12 @@ model GitHubHostsUpdatedMessage {
 }
 
 model OutpostsUpdatedMessage { event: "outposts_updated"; outposts: OutpostInfo[]; }
+
+// What an outpost answers an app's client_hello with, instead of relaying the app to its home, while it cannot reach
+// the home. home is the home's name; state is this machine's dial: dialing, refused or off when the home dials it.
+// The outpost keeps the connection open and closes it once that state or its reason changes, or after retry_home,
+// so the app connects again.
+model HomeUnreachableMessage { event: "home_unreachable"; home: string; state: string; reason?: string; }
 
 model PluginsUpdatedMessage {
   event: "plugins_updated";
@@ -9201,6 +9214,7 @@ alias DaemonEvent =
   | GitHubHostsUpdatedMessage
   | PluginsUpdatedMessage
   | OutpostsUpdatedMessage
+  | HomeUnreachableMessage
   | PluginActionResultMessage
   | RecentLocationsResultMessage
   | EnsureRepoResultMessage

@@ -1,13 +1,15 @@
 package main_test
 
 import (
-	"fmt"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -18,11 +20,13 @@ type reverseWorld struct {
 	home, laptop *testworld.Stack
 	app          *testworld.Peer
 	name         string
+	copied       <-chan struct{}
 }
 
-func newReverseWorld(t *testing.T) *reverseWorld {
+func newReverseWorld(t *testing.T, opts ...testworld.StackOption) *reverseWorld {
 	t.Helper()
-	w := &reverseWorld{t: t, ssh: testworld.NewSSH(t), home: testworld.NewStack(t), laptop: testworld.NewStack(t)}
+	w := &reverseWorld{t: t, ssh: testworld.NewSSH(t), home: testworld.NewStack(t, opts...), laptop: testworld.NewStack(t, opts...)}
+	w.copied = w.laptop.PassesOf(pausepoint.CopyBatchApplied)
 	for _, s := range []*testworld.Stack{w.home, w.laptop} {
 		w.ssh.Use(s.World)
 		s.Vars = append(s.Vars, "SHELL=/bin/bash")
@@ -55,6 +59,19 @@ func (w *reverseWorld) join() protocol.OutpostInfo {
 	return outpostStateSince(w.app, w.name, protocol.OutpostStateConnected, mark)
 }
 
+// awaitCopiedSetting waits until the laptop's copy of the home's setting key reads value, reading it again after
+// each copy batch the laptop applies.
+func (w *reverseWorld) awaitCopiedSetting(key, value string) {
+	w.t.Helper()
+	for strings.TrimSpace(w.laptop.Attn("settings", "get", key).Stdout) != value {
+		select {
+		case <-w.copied:
+		case <-time.After(fakeagent.HangGuard):
+			w.t.Fatalf("the laptop's copy of %s did not read %q within %s", key, value, fakeagent.HangGuard)
+		}
+	}
+}
+
 func (w *reverseWorld) status() string {
 	w.t.Helper()
 	result := w.laptop.Attn("enrollment", "status")
@@ -64,24 +81,65 @@ func (w *reverseWorld) status() string {
 	return result.Stdout
 }
 
-func awaitHomeDial(t *testing.T, p *testworld.Peer, state string) {
+// awaitHomeUnreachable waits until an app on s is told the home is unreachable in a way match accepts, connecting
+// again each time s closes the connection at a change.
+func awaitHomeUnreachable(t *testing.T, s *testworld.Stack, match func(protocol.HomeUnreachableMessage) bool) {
 	t.Helper()
-	testworld.Await(p, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-		return m.Settings["outpost_state"] == state
-	})
+	for {
+		p := s.ConnectApp()
+		first := testworld.AwaitEvent(p, "initial_state or home_unreachable", func(e protocol.WebSocketEvent) bool {
+			return e.Event == protocol.EventInitialState || e.Event == protocol.EventHomeUnreachable
+		})
+		if first.Event == protocol.EventHomeUnreachable && match(lastHomeUnreachable(t, p)) {
+			p.Close()
+			return
+		}
+		p.Closed()
+		p.Close()
+	}
 }
 
-func pidOf(t *testing.T, path string) string {
+func lastHomeUnreachable(t *testing.T, p *testworld.Peer) protocol.HomeUnreachableMessage {
 	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
+	log := p.Log()
+	for i := len(log) - 1; i >= 0; i-- {
+		var told protocol.HomeUnreachableMessage
+		if json.Unmarshal(log[i], &told) == nil && told.Event == protocol.EventHomeUnreachable {
+			return told
+		}
 	}
-	return strings.TrimSpace(string(data))
+	t.Fatal("the app has no home_unreachable")
+	return protocol.HomeUnreachableMessage{}
+}
+
+// awaitHomeDial waits, as an app on s sees it, until s's dial to its home reads state. While s cannot reach its home
+// it answers the app with home_unreachable and closes the connection at the next change, so the app connects again;
+// once s is its own home again, the app reads s's own settings.
+func awaitHomeDial(t *testing.T, s *testworld.Stack, state string) *testworld.Peer {
+	t.Helper()
+	for {
+		p := s.ConnectApp()
+		first := testworld.AwaitEvent(p, "initial_state or home_unreachable", func(e protocol.WebSocketEvent) bool {
+			return e.Event == protocol.EventInitialState || e.Event == protocol.EventHomeUnreachable
+		})
+		if first.Event == protocol.EventInitialState {
+			if first.Settings["outpost_state"] != state {
+				testworld.Await(p, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+					return m.Settings["outpost_state"] == state
+				})
+			}
+			return p
+		}
+		if told := lastHomeUnreachable(t, p); told.State == state {
+			return p
+		}
+		p.Closed()
+		p.Close()
+	}
 }
 
 func TestAReverseOutpostDialsItsHomeAndRedialsAfterEitherRestarts(t *testing.T) {
-	w := newReverseWorld(t)
+	w := newReverseWorld(t, testworld.WithAgents(fakeagent.Claude))
 	box := testworld.NewStack(t)
 	box.Vars = append(box.Vars, "SHELL=/bin/bash")
 	box.Start()
@@ -142,15 +200,25 @@ func TestAReverseOutpostDialsItsHomeAndRedialsAfterEitherRestarts(t *testing.T) 
 		t.Fatalf("connect in a terminal to a machine that dials the home: %+v", connect)
 	}
 
-	shell := w.home.Spawn(w.app, fakeagent.Harness(protocol.SessionAgentShell), w.laptop.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &row.ID })
-	boxShell := w.home.Spawn(w.app, fakeagent.Harness(protocol.SessionAgentShell), box.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &boxRow.ID })
-	pidPath, boxPidPath := w.laptop.Path("shell.pid"), box.Path("shell.pid")
-	w.app.TypeLine(shell, "echo $$ > "+pidPath+"; echo laptop-$((1+1))")
+	shell := fakeagent.Harness(protocol.SessionAgentShell)
+	refused, _, _ := w.home.RequestSpawn(w.app, shell, w.laptop.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &row.ID })
+	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), w.name+" dials this home, so it starts no terminals yet") {
+		t.Fatalf("a shell on the machine that dials the home: %+v, want it refused by name", refused)
+	}
+	caller := w.home.Spawn(w.app, fakeagent.Claude, w.home.Path("caller"))
+	for _, args := range [][]string{
+		{"terminal", "open", "--host", w.name},
+		{"delegate", "--brief", "Work on the laptop", "--model", "opus", "--cwd", "~", "--host", w.name},
+	} {
+		if got := w.home.Run(testworld.Invocation{Session: caller, Args: args}); got.Code == 0 || !strings.Contains(got.Stderr, w.name+" dials this home, so it starts no terminals yet") {
+			t.Fatalf("attn %s: exited %d, stdout %q, stderr %q; want it refused by name", strings.Join(args, " "), got.Code, got.Stdout, got.Stderr)
+		}
+	}
+	boxShell := w.home.Spawn(w.app, shell, box.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &boxRow.ID })
+	boxPidPath := box.Path("shell.pid")
 	w.app.TypeLine(boxShell, "echo $$ > "+boxPidPath+"; echo box-$((2+2))")
-	w.app.AwaitScreen(shell, "laptop-2")
 	w.app.AwaitScreen(boxShell, "box-4")
-	before := pidOf(t, pidPath)
-	t.Logf("the home bridges the machine that dialed it (%s) and the outpost it dials (%s) at once", row.ID, boxRow.ID)
+	t.Logf("the home bridges the machine that dialed it (%s) and the outpost it dials (%s) at once, and starts terminals only on the second", row.ID, boxRow.ID)
 	requireLines(t, "status while bridged", w.status(), "dial:       home (bridged)")
 
 	w.home.Stop()
@@ -165,12 +233,8 @@ func TestAReverseOutpostDialsItsHomeAndRedialsAfterEitherRestarts(t *testing.T) 
 	stopRetries := w.laptop.FireTimers(bridge.RetryTimer)
 	outpostStateSince(w.app, w.name, protocol.OutpostStateConnected, mark)
 	stopRetries()
-	w.app.TypeLine(shell, "echo $$ > "+pidPath+"; echo after-home-$((3+3))")
-	w.app.AwaitScreen(shell, "after-home-6")
-	if got := pidOf(t, pidPath); got != before {
-		t.Fatalf("the shell changed pid across the home's restart: %s -> %s", before, got)
-	}
-	t.Log("the machine redialed after the home restarted, with its shell alive")
+	requireLines(t, "status after the home restarted", w.status(), "dial:       home (bridged)")
+	t.Log("the machine redialed after the home restarted")
 
 	mark = w.app.EventCount()
 	w.laptop.Stop()
@@ -179,43 +243,35 @@ func TestAReverseOutpostDialsItsHomeAndRedialsAfterEitherRestarts(t *testing.T) 
 	w.laptop.Start()
 	outpostStateSince(w.app, w.name, protocol.OutpostStateConnected, mark)
 	w.app = w.home.App()
-	w.app.TypeLine(shell, "echo $$ > "+pidPath+"; echo after-laptop-$((4+4))")
-	w.app.AwaitScreen(shell, "after-laptop-8")
-	if got := pidOf(t, pidPath); got != before {
-		t.Fatalf("the shell changed pid across the machine's own restart: %s -> %s", before, got)
-	}
 	w.app.TypeLine(boxShell, "echo box-still-$((5+5))")
 	w.app.AwaitScreen(boxShell, "box-still-10")
-	t.Log("the machine dialed again when its own daemon restarted, with its shell alive; the ssh outpost stayed bridged")
+	t.Log("the machine dialed again when its own daemon restarted; the ssh outpost stayed bridged")
 }
 
 func TestAReverseOutpostShowsItsDialAndBothWaysOutEndIt(t *testing.T) {
 	w := newReverseWorld(t)
-	lp := w.laptop.App()
 	row := w.join()
 	requireLines(t, "status while bridged", w.status(), "dial:       home (bridged)", "enrolled to ")
 
 	requireStdout(t, w.home.Attn("settings", "set", "remote_home_enabled", "false"), "false")
-	testworld.Await(lp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-		return m.Settings["remote_home_enabled"] == "false"
-	})
+	w.awaitCopiedSetting("remote_home_enabled", "false")
 	w.ssh.Fail("home", "ssh: connect to host home port 22: No route to host")
 	w.ssh.ExitMaster(w.laptop, protocol.Deref(row.DaemonID))
-	awaitHomeDial(t, lp, "dialing")
+	awaitHomeDial(t, w.laptop, "dialing")
 	unreachable := w.status()
 	requireLines(t, "status while the home is unreachable", unreachable, "dial:       home (dialing)", "last error: ")
 	t.Logf("unreachable home:\n%s", unreachable)
 
 	w.ssh.Fail("home", "victor@home: Permission denied (publickey).")
 	stopRetries := w.laptop.FireTimers(bridge.RetryTimer)
-	awaitHomeDial(t, lp, "refused")
+	awaitHomeDial(t, w.laptop, "refused")
 	stopRetries()
 	requireLines(t, "status while ssh refuses", w.status(), "dial:       home (refused)", "Permission denied")
 
 	w.ssh.Restore("home")
 	stopRetries = w.laptop.FireTimers(bridge.RetryTimer)
-	testworld.Await(lp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-		return strings.Contains(fmt.Sprint(m.Settings["outpost_last_error"]), "does not take machines that dial it")
+	awaitHomeUnreachable(t, w.laptop, func(told protocol.HomeUnreachableMessage) bool {
+		return strings.Contains(protocol.Deref(told.Reason), "does not take machines that dial it")
 	})
 	stopRetries()
 	refused := w.status()
@@ -245,13 +301,10 @@ func TestAReverseOutpostShowsItsDialAndBothWaysOutEndIt(t *testing.T) {
 	t.Log("leave on the machine ended the bridge and the dialing")
 
 	row = w.join()
-	lp = w.laptop.App()
 	w.app.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: row.ID})
 	testworld.Await(w.app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
 	stopRetries = w.laptop.FireTimers(bridge.RetryTimer)
-	testworld.Await(lp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-		return m.Settings["outpost_state"] == "off" && m.Settings["outpost_home"] == ""
-	})
+	awaitHomeDial(t, w.laptop, "off")
 	stopRetries()
 	removed := w.status()
 	requireLines(t, "status after remove at the home", removed, "enrollment: home")

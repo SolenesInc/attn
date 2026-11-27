@@ -22,6 +22,7 @@ import (
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/plugins"
 	"github.com/victorarias/attn/internal/procreap"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyworker"
 )
@@ -158,10 +159,15 @@ func (s *Stack) start(vars ...string) {
 	s.checkStarted()
 }
 
+// checkStarted connects an app the way the attn app does. A machine that dials its home answers it with the home's
+// initial_state, or with home_unreachable until it reaches the home; either says this daemon is up.
 func (s *Stack) checkStarted() {
 	s.T.Helper()
-	probe := s.AppOfAnotherBuild()
-	for _, warning := range probe.Initial.Warnings {
+	probe := s.Connect(s.appHello(), nil)
+	first := AwaitEvent(probe, "initial_state or home_unreachable", func(e protocol.WebSocketEvent) bool {
+		return e.Event == protocol.EventInitialState || e.Event == protocol.EventHomeUnreachable
+	})
+	for _, warning := range first.Warnings {
 		if strings.HasPrefix(warning.Code, "pty_backend_") {
 			s.T.Fatalf("the daemon started on a fallback PTY backend: %s: %s", warning.Code, warning.Message)
 		}

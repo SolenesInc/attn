@@ -155,6 +155,9 @@ func (d *Daemon) outpostsUpdatedMessage() *protocol.OutpostsUpdatedMessage {
 		if row.Home != "" {
 			info.Home = protocol.Ptr(row.Home)
 		}
+		if row.Reverse() {
+			info.DialsHome = protocol.Ptr(true)
+		}
 		if row.DaemonID != "" {
 			info.DaemonID = protocol.Ptr(row.DaemonID)
 			info.HostKeyFingerprint = protocol.Ptr((bridge.Pin{HostKey: row.HostKey}).Fingerprint())

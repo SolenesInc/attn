@@ -141,6 +141,7 @@ var Placements = map[string][]Placement{
 	"reopen_worktree":                {Placement{LocatorMachine, "host"}},
 	"resolve_sessions":               {Placement{LocatorHome, ""}},
 	"restart_shared_codex":           {Placement{LocatorHere, ""}},
+	"retry_home":                     {Placement{LocatorHere, ""}},
 	"review_edit":                    {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"review_file":                    {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"review_search":                  {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
@@ -1649,6 +1650,18 @@ func (m RestartSharedCodexMessage) Placement() Placement {
 }
 
 func (m RestartSharedCodexMessage) Locate() string {
+	return ""
+}
+
+func (RetryHomeMessage) CommandName() string {
+	return "retry_home"
+}
+
+func (m RetryHomeMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m RetryHomeMessage) Locate() string {
 	return ""
 }
 

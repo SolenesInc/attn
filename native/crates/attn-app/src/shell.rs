@@ -574,6 +574,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
             centered(&t, crate::migration_failure::screen(state, marker, &t))
         }
         Connection::Refused(refusal) => centered(&t, connection::refused(&t, refusal)),
+        Connection::HomeUnreachable(away) => centered(&t, connection::home_unreachable(&t, away)),
     };
     let banner = connection::banner(state, &t, cx);
     let bands = matches!(
@@ -605,8 +606,15 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
                 .into_iter()
                 .flatten(),
         )
-        .children(crate::desktop::header_pop::words_anchor(state))
+        .children(
+            bands
+                .then(|| crate::desktop::header_pop::words_anchor(state))
+                .flatten(),
+        )
         .child(body.min_h(WORK_AREA_FLOOR));
+    if !bands {
+        return root;
+    }
     crate::markdown::with_image_preview(root, layers(state, &t), state, cx.is_reduced_motion(), &t)
         .children(crate::hints::words_layers(state, &t))
         .children(crate::markdown::annotating::layers(state, cx, &t))

@@ -26,7 +26,7 @@ func (d *Daemon) copiedSession(id protocol.SessionID) bool {
 }
 
 func (d *Daemon) homeHandlers(host string) bridge.Handlers {
-	return bridge.Handlers{bridgeCall: d.callBridgeHandler(host, &terminalOrder{}), bridgeForward: d.forwardBridgeHandler(host)}
+	return bridge.Handlers{bridgeCall: d.callBridgeHandler(host, &terminalOrder{}), bridgeForward: d.forwardBridgeHandler(host), appRelayChannel: d.appRelayHandler(host)}
 }
 
 func (d *Daemon) applyMonitorView(ctx context.Context, msg protocol.ApplyMonitorViewMessage) (protocol.ApplyMonitorViewResult, error) {

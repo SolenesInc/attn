@@ -46,6 +46,21 @@ fn heard_key(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> 
     if matches!(ev.key, Key::Modifier { .. }) {
         return false;
     }
+    if matches!(
+        state.facts.connection,
+        attn_client::Connection::HomeUnreachable(_)
+    ) {
+        let retry = ev.mods == Mods::default()
+            && match &ev.key {
+                Key::Enter => true,
+                Key::Text(text) => text.eq_ignore_ascii_case("r"),
+                _ => false,
+            };
+        if retry {
+            crate::connection::retry_home(state);
+        }
+        return retry;
+    }
     if crate::hints::on_key(state, ev, tx) {
         return true;
     }

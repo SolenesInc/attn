@@ -32,6 +32,18 @@ type outpostRuntime struct {
 	errorKind  string
 	listen     func(string, string) (net.Listener, error)
 	dial       *homeDial
+	changed    chan struct{}
+}
+
+// homeStateChanges is closed at the next change of this machine's bridge to its home, or of the reason it gives.
+func (d *Daemon) homeStateChanges() <-chan struct{} {
+	r := &d.outpost
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.changed == nil {
+		r.changed = make(chan struct{})
+	}
+	return r.changed
 }
 
 func (d *Daemon) bridgeIdentity() bridge.Identity {
@@ -136,7 +148,7 @@ func (d *Daemon) updateOutpostListenerState(run *outpostListener, conn *bridge.C
 			state = r.state
 		}
 	}
-	errorChanged := false
+	errorChanged, before := false, r.lastError
 	if state == "bridged" {
 		errorChanged = r.lastError != ""
 		r.lastError, r.errorKind = "", ""
@@ -148,6 +160,10 @@ func (d *Daemon) updateOutpostListenerState(run *outpostListener, conn *bridge.C
 	}
 	stateChanged := r.state != state
 	r.state = state
+	if (stateChanged || errorChanged || err != nil && r.lastError != before) && r.changed != nil {
+		close(r.changed)
+		r.changed = nil
+	}
 	r.mu.Unlock()
 	d.coalesceSnapshots(func() {
 		if stateChanged {
@@ -192,6 +208,9 @@ func (d *Daemon) acceptOutpostBridge(run *outpostListener, conn *bridge.Conn) {
 			switch state {
 			case bridge.StateConnected:
 				d.updateOutpostListenerState(run, conn, "bridged", nil)
+				if d.relaysApps() {
+					d.sendLocalAppsToHome()
+				}
 				d.clearHomeUpdateNotice()
 				d.queueAnalyticsForward()
 				d.retryPendingAdoptions()

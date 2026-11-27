@@ -6473,6 +6473,20 @@ type HomeDialStatusMessage struct {
 	Cmd string `json:"cmd"`
 }
 
+type HomeUnreachableMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Home corresponds to the JSON schema field "home".
+	Home string `json:"home"`
+
+	// Reason corresponds to the JSON schema field "reason".
+	Reason *string `json:"reason,omitempty,omitzero"`
+
+	// State corresponds to the JSON schema field "state".
+	State string `json:"state"`
+}
+
 type HomeUpdateNoticeMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -8188,6 +8202,9 @@ type OutpostInfo struct {
 
 	// Destination corresponds to the JSON schema field "destination".
 	Destination string `json:"destination"`
+
+	// DialsHome corresponds to the JSON schema field "dials_home".
+	DialsHome *bool `json:"dials_home,omitempty,omitzero"`
 
 	// Home corresponds to the JSON schema field "home".
 	Home *string `json:"home,omitempty,omitzero"`
@@ -9967,6 +9984,11 @@ type RestartSharedCodexResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+}
+
+type RetryHomeMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
 }
 
 type ReviewAnswerResult struct {

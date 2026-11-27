@@ -40,6 +40,7 @@ type wsClient struct {
 	closeReason  string
 	connectedAt  time.Time
 
+	relay                    *appRelay
 	webOrigin                string
 	browserHostAuthenticated bool
 	caller                   who.Actor
@@ -89,6 +90,13 @@ func (c *wsClient) setBrowserHostAuthenticated(authenticated bool) {
 	c.identityMu.Lock()
 	defer c.identityMu.Unlock()
 	c.browserHostAuthenticated = authenticated
+}
+
+func (c *wsClient) relayedFrom() string {
+	if c.relay == nil {
+		return ""
+	}
+	return c.relay.machine
 }
 
 func (c *wsClient) isTrustedAppClient() bool {
@@ -489,6 +497,11 @@ func normalizeWSHost(value string) string {
 }
 
 func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
+	relay := appRelayFrom(r.Context())
+	if relay == nil && d.relaysApps() {
+		d.relayAppToHome(w, r)
+		return
+	}
 	origin := r.Header.Get("Origin")
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		OriginPatterns: localOriginPatterns,
@@ -508,6 +521,7 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		recv:            make(chan []byte, 256),
 		gone:            make(chan struct{}),
 		connectedAt:     time.Now(),
+		relay:           relay,
 		webOrigin:       origin,
 		caller:          appCaller(),
 		attachedStreams: make(map[protocol.TerminalID]ptybackend.Stream),

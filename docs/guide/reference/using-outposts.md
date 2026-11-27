@@ -75,6 +75,17 @@ A machine that is its own home and has open sessions refuses to join, and names
 them. Close them first. After `attn enrollment leave`, its sessions, Garden
 and settings read as they did before it joined.
 
+The app on that machine connects to its own daemon, which passes it to the
+home. The app shows the home's desktops, queue and Garden, and you use the
+home's terminals and its other outposts from it. While the machine can't reach
+the home, the app shows **Can't reach** with the home's name and the reason, and
+connects by itself when the home answers. Press **R** or click **Retry** to dial
+at once. `attn` on the machine still talks to its own daemon.
+
+The home doesn't start terminals on a machine that dials it yet. The launcher
+leaves the machine out, and `attn terminal open --host` and
+`attn delegate --host` refuse and name it.
+
 Attn never installs, updates or re-pairs a machine that dials the home, and
 can't connect to it in a terminal. Update attn on that machine. On its row,
 **Update to home build**, **Re-pair** and **Connect in a terminal** refuse and

@@ -22,6 +22,7 @@ type Pause struct {
 	every  bool
 	held   chan arrival
 	paused *arrival
+	passes chan struct{}
 }
 
 type arrival struct {
@@ -59,6 +60,16 @@ func (ps *Pauses) Arm(t testing.TB, name string, every bool) *Pause {
 	return p
 }
 
+// ArmPasses arms name to hold no process: each arrival goes on at once and is told on the returned channel, which
+// keeps at most one arrival the test has not read.
+func (ps *Pauses) ArmPasses(t testing.TB, name string) <-chan struct{} {
+	p := ps.Arm(t, name, true)
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	p.passes = make(chan struct{}, 1)
+	return p.passes
+}
+
 func (ps *Pauses) Armed() []string {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
@@ -79,6 +90,15 @@ func (ps *Pauses) arrive(name string, pid int, failed error, oneShot bool, resum
 	p := ps.points[name]
 	if p != nil {
 		ps.arrivals[name]++
+	}
+	if p != nil && p.passes != nil {
+		ps.mu.Unlock()
+		resume()
+		select {
+		case p.passes <- struct{}{}:
+		default:
+		}
+		return nil
 	}
 	if ps.closed || p == nil || (oneShot && !p.every && ps.consumed[name]) {
 		ps.mu.Unlock()
@@ -154,6 +174,15 @@ func (s *Stack) PauseAt(name string) *Pause {
 func (s *Stack) PauseEvery(name string) *Pause {
 	s.T.Helper()
 	return s.arm(name, true)
+}
+
+// PassesOf tells the test each time a process passes name, without holding it there.
+func (s *Stack) PassesOf(name string) <-chan struct{} {
+	s.T.Helper()
+	if s.daemon != nil {
+		s.T.Fatalf("PassesOf(%q): arm pause points before Start; the daemon and its workers read them once", name)
+	}
+	return s.pauses.ArmPasses(s.T, name)
 }
 
 func (s *Stack) arm(name string, every bool) *Pause {

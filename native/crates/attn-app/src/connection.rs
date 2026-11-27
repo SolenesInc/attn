@@ -1,7 +1,8 @@
-use attn_client::{Connection, Refusal};
+use attn_client::{Connection, HomeUnreachable, Refusal};
+use attn_protocol::RetryHomeMessage;
 use attn_ui::Tokens;
 use attn_ui::blocks::{Banner, BannerTone, Stack};
-use attn_ui::system::{Part, Said, Type, words};
+use attn_ui::system::{Button, Look, Part, Said, Size, Type, words};
 use rune::{Cx, El};
 
 use crate::State;
@@ -90,4 +91,41 @@ fn explain(refusal: &Refusal) -> (&'static str, String) {
             ),
         ),
     }
+}
+
+/// What the app shows while the daemon on its port cannot reach the home it passes the app to:
+/// the home, why, and a way to dial it now. The link connects again by itself once the dial
+/// changes.
+pub(crate) fn home_unreachable(t: &Tokens, away: &HomeUnreachable) -> El {
+    let title = format!("Can’t reach {}", away.home);
+    let detail = match (away.dial.as_str(), away.reason.as_deref()) {
+        ("refused", Some(reason)) => format!("{} refused this machine: {reason}", away.home),
+        (_, Some(reason)) => format!("{reason}. Dialing again."),
+        ("refused", None) => format!("{} refused this machine.", away.home),
+        (_, None) => "Dialing again.".to_owned(),
+    };
+    let retry = Button::new("Retry")
+        .look(Look::Primary)
+        .size(Size::Compact)
+        .on_press(retry_home)
+        .build(t)
+        .key("connection.home-unreachable.retry");
+    Stack::tight()
+        .key("connection.home-unreachable")
+        .role("alert")
+        .label(format!("{title}. {detail}"))
+        .max_w(520.0)
+        .child(words(title, Type::Heading, t.text_primary))
+        .child(
+            words(detail, Type::Body, t.text_secondary)
+                .wrap()
+                .selectable(true),
+        )
+        .child(El::from(retry))
+}
+
+/// Asks the daemon on the app's port to dial its home now; it closes the connection once it
+/// has, and the link connects again.
+pub(crate) fn retry_home(state: &mut State) {
+    let _ = state.daemon.send(&RetryHomeMessage::new());
 }

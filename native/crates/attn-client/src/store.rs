@@ -361,6 +361,18 @@ pub enum Connection {
     },
     /// The link stopped and will not retry: the user has to act.
     Refused(Refusal),
+    /// The daemon on the app's port passes the app to its home, and cannot reach it now. That
+    /// daemon closes the connection once its dial to the home changes, and the link connects
+    /// again; the screen stays until the home answers.
+    HomeUnreachable(HomeUnreachable),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct HomeUnreachable {
+    pub home: String,
+    /// How the daemon's dial to the home stands: `dialing`, `refused`, or `off`.
+    pub dial: String,
+    pub reason: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

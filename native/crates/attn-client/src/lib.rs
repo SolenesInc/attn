@@ -20,9 +20,10 @@ pub use performance::Performance;
 pub use presence::Sight;
 pub use pulse::Pulse;
 pub use store::{
-    CLOSES_KEPT, Closes, Connection, Desktop, Facts, Garden, GitHub, MigrationMarker,
-    Notifications, Plugins, Profiles, PullRequests, Refusal, SWEEPS_KEPT, SharedCodex, Slices,
-    Store, Subscription, TileContent, TileContents, TileKey, WorktreePush, WorktreePushes,
+    CLOSES_KEPT, Closes, Connection, Desktop, Facts, Garden, GitHub, HomeUnreachable,
+    MigrationMarker, Notifications, Plugins, Profiles, PullRequests, Refusal, SWEEPS_KEPT,
+    SharedCodex, Slices, Store, Subscription, TileContent, TileContents, TileKey, WorktreePush,
+    WorktreePushes,
 };
 pub use wall::WallClock;
 
