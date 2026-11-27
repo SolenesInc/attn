@@ -5734,6 +5734,41 @@ fn asks(dark: bool) {
     snap(&mut world, "asks", dark);
 }
 
+/// The asks sheet on an ask that offers commands at the top level, in a numbered list's item and
+/// in a block quote, each with Open in terminal and the place it runs in.
+fn asks_commands(dark: bool) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    state.asks = Some(vec![Ask {
+        id: "a-shop".into(),
+        session_id: "s1".into(),
+        subject: "Check the shop".into(),
+        base_dir: "/repo".into(),
+        created_at: "2026-11-17T09:00:00Z".into(),
+        parts: vec![
+            AskPart {
+                markdown: Some(
+                    "Run the checks:\n\n```sh\nmake check\n```\n\n1. Look at the failing test:\n\n   ```bash\n   go test ./shop -run TestCart\n   ```\n\n2. Then tell me what you see.\n\n> If it is the cache again:\n>\n> ```sh\n> make clean-cache\n> ```\n"
+                        .into(),
+                ),
+                ..AskPart::default()
+            },
+            AskPart {
+                question: Some(AskQuestion {
+                    key: "q1".into(),
+                    kind: "text".into(),
+                    prompt: "What failed?".into(),
+                    ..AskQuestion::default()
+                }),
+                ..AskPart::default()
+            },
+        ],
+        ..Ask::default()
+    }]);
+    let mut world = start(scripted().state(state));
+    press(&mut world, Action::DockAsks);
+    snap(&mut world, "asks-commands", dark);
+}
+
 /// The asks sheet reopened on a written draft after the window shrank to the smallest at the
 /// largest text: the answer that takes the keyboard shows with its ring.
 fn asks_reopened(dark: bool) {
@@ -9475,6 +9510,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         });
         scene("ledger", || ledger(dark));
         scene("asks", || asks(dark));
+        scene("asks_commands", || asks_commands(dark));
         scene("asks_reopened", || asks_reopened(dark));
         scene("asks_empty", || asks_empty(dark));
         scene("asks_choices", || asks_choices(dark));

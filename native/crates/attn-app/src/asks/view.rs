@@ -13,7 +13,6 @@ use attn_ui::{Frame, Tokens, glyph};
 use rune::{El, Image, Key, KeyEvent, Side, SurfaceFit, Tx, col, row};
 use rune_kit::{Markdown, TextArea, TextInput};
 
-use super::commands::Piece;
 use super::inline::Line;
 use super::{Chip, Item, Kind, Lists, Stop, attach, mentions, questions};
 use crate::State;
@@ -443,13 +442,18 @@ impl<'a> Prose<'a> {
     /// `source` read as the ask's markdown at `place`, which names its scroll boxes apart from
     /// the ask's other markdown.
     fn markdown(&self, place: &str, source: &str) -> El {
+        self.reading(place, source, |read| read)
+    }
+
+    /// `source` read at `place` as `markdown` reads it, with `framed` adding its own frames.
+    fn reading(&self, place: &str, source: &str, framed: impl FnOnce(Markdown) -> Markdown) -> El {
         let document = self.document();
         let bars = format!("{place}.");
         let read = Markdown::new(source)
             .id(bars.clone())
             .selectable(true)
             .scroll_wide(true);
-        let read = markdown::diagrams(read, bars, self.t);
+        let read = framed(markdown::diagrams(read, bars, self.t));
         let style = attn_ui::system::read_alone_style(self.t.text_secondary, self.measure, self.t);
         let style = match self.widths.get(place) {
             Some(&width) => style.text_width(width as f32),
@@ -482,42 +486,47 @@ impl<'a> Prose<'a> {
 }
 
 /// Part `at` of `ask`, its markdown `source`, with each command it offers drawn above the way
-/// to open it and the machine and folder it runs in; `commands` counts the ask's commands so far.
-fn pieces(
+/// to open it and the machine and folder it runs in, inside the list item or quote that holds it;
+/// `commands` counts the ask's commands so far.
+fn part_reading(
     state: &State,
     ask: &Ask,
     at: usize,
     source: &str,
     prose: &Prose<'_>,
     commands: &mut usize,
-) -> Vec<El> {
+) -> El {
     let machines = crate::machine::Machines::of(&state.facts);
-    let t = prose.t;
-    let place = |i: usize| match i {
-        0 => format!("asks.part.{at}"),
-        i => format!("asks.part.{at}.{i}"),
-    };
-    (super::commands::pieces(ask, source).into_iter().enumerate())
-        .map(|(i, piece)| match piece {
-            Piece::Prose(text) => prose.markdown(&place(i), text),
-            Piece::Command(command, block) => {
-                let n = *commands;
-                *commands += 1;
-                let bar = command_bar(ask, n, &command, &machines, t);
-                let bar = match prose.measure {
-                    Some(points) => bar.w_full().max_w(points).self_center(),
-                    None => bar,
-                };
-                col()
-                    .key(command_key(n))
-                    .role("group")
-                    .label("Command")
-                    .w_full()
-                    .child(prose.markdown(&place(i), block))
-                    .child(bar)
+    let bars: Vec<(usize, usize, String)> = super::commands::of_part(ask, source)
+        .into_iter()
+        .map(|command| {
+            let n = *commands;
+            *commands += 1;
+            let place = format!(
+                "{} · {}",
+                machines.name(command.host.as_deref()),
+                command.cwd
+            );
+            (command.block, n, place)
+        })
+        .collect();
+    let (id, open, t) = (ask.id.clone(), ask.reply.is_none(), *prose.t);
+    prose.reading(&format!("asks.part.{at}"), source, move |read| {
+        read.code_frame(move |card, frame| {
+            match bars.iter().find(|(block, _, _)| *block == frame.index) {
+                Some((_, n, place)) => col().w_full().child(
+                    col()
+                        .key(command_key(*n))
+                        .role("group")
+                        .label("Command")
+                        .w_full()
+                        .child(card)
+                        .child(command_bar(&id, open, *n, place, &t)),
+                ),
+                None => card,
             }
         })
-        .collect()
+    })
 }
 
 pub(crate) fn command_key(n: usize) -> String {
@@ -528,21 +537,11 @@ pub(crate) fn open_command_key(n: usize) -> String {
     format!("asks.command.{n}.open")
 }
 
-/// Under command `n` of `ask`: Open in terminal while the ask is open, and where it runs.
-fn command_bar(
-    ask: &Ask,
-    n: usize,
-    command: &super::commands::Command,
-    machines: &crate::machine::Machines<'_>,
-    t: &Tokens,
-) -> El {
-    let place = format!(
-        "{} · {}",
-        machines.name(command.host.as_deref()),
-        command.cwd
-    );
-    let open = ask.reply.is_none().then(|| {
-        let id = ask.id.clone();
+/// Under command `n` of ask `id`: Open in terminal while the ask is `open`, and the `place`
+/// it runs in.
+fn command_bar(id: &str, open: bool, n: usize, place: &str, t: &Tokens) -> El {
+    let open = open.then(|| {
+        let id = id.to_owned();
         let button = Button::new("Open in terminal")
             .size(Size::Compact)
             .look(Look::Quiet)
@@ -559,9 +558,9 @@ fn command_bar(
         .key(format!("asks.command.{n}.bar"))
         .children(open)
         .child(
-            words(place.clone(), Type::Mono, t.text_tertiary)
+            words(place.to_owned(), Type::Mono, t.text_tertiary)
                 .key(format!("asks.command.{n}.place"))
-                .label(place)
+                .label(place.to_owned())
                 .min_w(0.0)
                 .shrink()
                 .truncate(),
@@ -815,7 +814,7 @@ fn article(state: &State, item: &Item<'_>, measure: Option<f32>, t: &Tokens) -> 
                             None => said,
                         }
                     }))
-                    .children(pieces(
+                    .child(part_reading(
                         state,
                         ask,
                         at,

@@ -20,6 +20,10 @@ use super::terminal_view::{copied, copy_command_key, copy_key};
 
 const ASK: &str = "a-far";
 
+fn command_key(n: usize) -> String {
+    format!("asks.command.{n}")
+}
+
 /// An ask from an agent on outpost far: one command addressed to a folder there, one at the
 /// ask's own place.
 fn asked() -> Ask {
@@ -437,4 +441,95 @@ fn a_command_whose_shell_the_home_refused_opens_a_new_one_when_pressed_again() {
         "the refused tab gives way to the new one\n{}",
         world.screen()
     );
+}
+
+/// An ask whose commands sit in a numbered list's first item, in a block quote and at the top
+/// level, in that order, after a code block that is not a command.
+fn nested() -> Ask {
+    let mut asked = asked();
+    asked.parts[1] = prose(
+        "Read this first:\n\n```text\nnot a command\n```\n\n```Diff\n-old\n+new\n```\n\n1. Check the shop:\n\n   ```sh far:/srv/shop\n   make check\n   ```\n\n2. Then look around.\n\n> Or from the agent's folder:\n>\n> ```zsh\n> git status\n> ```\n\nThen list it:\n\n```bash\nls -la\n```\n",
+    );
+    asked
+}
+
+#[test]
+fn commands_in_a_list_item_and_a_quote_open_in_terminals_the_ask_holds_like_one_at_the_top_level() {
+    let mut world = start_with(far_state(), vec![nested()]);
+    world.resize((1400.0, 1800.0));
+    open_sheet(&mut world);
+    let places: Vec<String> = (0..3)
+        .map(|n| name(&world, &format!("asks.command.{n}.place")))
+        .collect();
+    assert_eq!(
+        places,
+        ["far · /srv/shop", "far · /far/agent", "far · /far/agent"],
+        "{}",
+        world.screen()
+    );
+    assert!(!has(&world, "asks.command.3"), "a text block is no command");
+    let [list, quote, top] = [0, 1, 2].map(|n| world.rect(&command_key(n)));
+    assert!(
+        list[1] < quote[1] && quote[1] < top[1],
+        "in document order: {list:?} {quote:?} {top:?}"
+    );
+    let screen = world.screen();
+    let holds = |role: &str, n: usize| {
+        (screen.descendants(Target::role(role)).iter())
+            .any(|node| node.key.as_deref() == Some(command_key(n).as_str()))
+    };
+    assert_eq!(
+        (
+            screen.all(Target::role("list")).len(),
+            screen.all(Target::role("list-item")).len()
+        ),
+        (1, 2),
+        "the list keeps both its items around the command\n{screen}"
+    );
+    assert!(
+        holds("list-item", 0),
+        "the first command is in its list item\n{screen}"
+    );
+    assert!(
+        holds("blockquote", 1),
+        "the second is in its quote\n{screen}"
+    );
+    assert!(!holds("list-item", 2) && !holds("blockquote", 2));
+
+    letter(&mut world, "t");
+    let sent = spawns(&world);
+    assert_eq!(sent.len(), 1, "t opens the first command, in the list item");
+    assert_eq!(sent[0]["cwd"], "/srv/shop");
+    assert_eq!(sent[0]["typed"], "make check");
+    assert_eq!(sent[0]["placement"]["ask_id"], ASK);
+    let session = sent[0]["id"].as_str().unwrap().to_owned();
+    bound(&mut world, &session, "/srv/shop", "rt-1");
+    assert_eq!(slots(&world, "rt-1"), 1, "{}", world.screen());
+
+    world.gesture(|app| app.key(chord(Action::DockAsks)));
+    world.settle();
+    click(&mut world, "asks.command.1.open");
+    click(&mut world, "asks.command.2.open");
+    let sent = spawns(&world);
+    assert_eq!(sent.len(), 3);
+    assert_eq!(
+        [&sent[1]["typed"], &sent[2]["typed"]],
+        ["git status", "ls -la"]
+    );
+    assert!(sent.iter().all(|s| s["placement"]["ask_id"] == ASK));
+    assert!(has(&world, "asks.panel.tab.2"), "{}", world.screen());
+}
+
+#[test]
+fn t_opens_a_command_in_a_quote_when_it_is_the_ask_s_first() {
+    let mut asked = asked();
+    asked.parts[1] = prose("> Run it here:\n>\n> ```sh\n> git status\n> ```\n");
+    let mut world = start_with(far_state(), vec![asked]);
+    open_sheet(&mut world);
+    assert_eq!(name(&world, "asks.command.0.place"), "far · /far/agent");
+    letter(&mut world, "t");
+    let sent = spawns(&world);
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0]["typed"], "git status");
+    assert_eq!(sent[0]["cwd"], "/far/agent");
 }

@@ -1,96 +1,95 @@
-//! The commands an ask offers: each of its shell-language code blocks, with the machine and
-//! folder it runs in.
+//! The commands an ask offers: each of its shell-language code blocks, wherever it sits in the
+//! markdown, with the machine and folder it runs in.
 
 use attn_protocol::Ask;
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
 const SHELLS: [&str; 5] = ["sh", "bash", "zsh", "fish", "shell"];
 
+/// Fences the reader draws as a diff, which it leaves out of its count of code blocks; it reads
+/// a fence's first word, up to a space or a comma, in any case.
+const DIFFS: [&str; 2] = ["diff", "patch"];
+
 /// A command and where it runs: `host` is the machine, absent for the home's own, and `cwd`
-/// the folder.
+/// the folder. `block` is its code block's place among its part's code blocks, as the reader
+/// counts them for `CodeFrame::index`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Command {
     pub(crate) text: String,
     pub(crate) host: Option<String>,
     pub(crate) cwd: String,
+    pub(crate) block: usize,
 }
 
-/// A stretch of a part's markdown: prose, or one command with the fenced block that holds it.
-pub(crate) enum Piece<'s> {
-    Prose(&'s str),
-    Command(Command, &'s str),
-}
-
-/// `source`, a part of `ask`, cut at the commands written at its top level. A command whose
-/// block names an address runs where the ask's reference to that address resolved; any other
-/// runs at the ask's default place.
-pub(crate) fn pieces<'s>(ask: &Ask, source: &'s str) -> Vec<Piece<'s>> {
-    let mut pieces = Vec::new();
-    let mut from = 0;
-    let mut depth = 0usize;
+/// The commands `source`, a part of `ask`, offers, in reading order. A command whose block
+/// names an address runs where the ask's reference to that address resolved; any other runs at
+/// the ask's default place.
+pub(crate) fn of_part(ask: &Ask, source: &str) -> Vec<Command> {
+    let options = Options::ENABLE_STRIKETHROUGH
+        | Options::ENABLE_TABLES
+        | Options::ENABLE_TASKLISTS
+        | Options::ENABLE_GFM
+        | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS
+        | Options::ENABLE_FOOTNOTES;
+    let mut commands = Vec::new();
+    let mut blocks = 0;
     let mut open: Option<(usize, Option<String>, String)> = None;
-    for (event, range) in Parser::new_ext(source, Options::empty()).into_offset_iter() {
+    for event in Parser::new_ext(source, options) {
         match event {
-            Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(info))) if depth == 0 => {
-                let mut fields = info.split_whitespace();
-                if fields
-                    .next()
-                    .is_some_and(|language| SHELLS.contains(&language))
-                {
-                    open = Some((range.start, fields.next().map(str::to_owned), String::new()));
+            Event::Start(Tag::CodeBlock(kind)) => {
+                let info = match &kind {
+                    CodeBlockKind::Fenced(info) => info.as_ref(),
+                    CodeBlockKind::Indented => "",
+                };
+                let word = info.split(|c: char| c.is_whitespace() || c == ',').next();
+                if word.is_some_and(|w| DIFFS.contains(&w.to_ascii_lowercase().as_str())) {
+                    continue;
                 }
-                depth += 1;
+                let mut fields = info.split_whitespace();
+                let language = fields.next();
+                if language.is_some_and(|l| SHELLS.contains(&l)) {
+                    open = Some((blocks, fields.next().map(str::to_owned), String::new()));
+                }
+                blocks += 1;
             }
-            Event::Text(text) if open.is_some() => {
+            Event::Text(text) => {
                 if let Some((_, _, body)) = open.as_mut() {
                     body.push_str(&text);
                 }
             }
-            Event::End(TagEnd::CodeBlock) if depth == 1 => {
-                depth -= 1;
-                let Some((start, address, body)) = open.take() else {
-                    continue;
-                };
-                if start > from {
-                    pieces.push(Piece::Prose(&source[from..start]));
+            Event::End(TagEnd::CodeBlock) => {
+                if let Some((block, address, body)) = open.take() {
+                    let (host, cwd) = place(ask, address.as_deref());
+                    commands.push(Command {
+                        text: body.trim_end_matches('\n').to_owned(),
+                        host,
+                        cwd,
+                        block,
+                    });
                 }
-                let command = Command {
-                    text: body.trim_end_matches('\n').to_owned(),
-                    ..place(ask, address.as_deref())
-                };
-                pieces.push(Piece::Command(command, &source[start..range.end]));
-                from = range.end;
             }
-            Event::Start(_) => depth += 1,
-            Event::End(_) => depth = depth.saturating_sub(1),
             _ => {}
         }
     }
-    if from < source.len() {
-        pieces.push(Piece::Prose(&source[from..]));
-    }
-    pieces
+    commands
 }
 
-fn place(ask: &Ask, address: Option<&str>) -> Command {
+/// The machine and folder a block that names `address` runs in.
+fn place(ask: &Ask, address: Option<&str>) -> (Option<String>, String) {
     let addressed = address.and_then(|address| {
         ask.references
             .iter()
             .flatten()
             .find(|r| r.kind == "command" && r.text == address)
     });
-    match addressed {
-        Some(reference) => Command {
-            text: String::new(),
-            host: reference.host.clone().filter(|h| !h.is_empty()),
-            cwd: reference.path.clone(),
-        },
-        None => Command {
-            text: String::new(),
-            host: ask.host.clone().filter(|h| !h.is_empty()),
-            cwd: ask.cwd.clone().unwrap_or_else(|| ask.base_dir.clone()),
-        },
-    }
+    let (host, cwd) = match addressed {
+        Some(reference) => (reference.host.clone(), reference.path.clone()),
+        None => (
+            ask.host.clone(),
+            ask.cwd.clone().unwrap_or_else(|| ask.base_dir.clone()),
+        ),
+    };
+    (host.filter(|h| !h.is_empty()), cwd)
 }
 
 /// Every command `ask` offers, in reading order.
@@ -98,13 +97,6 @@ pub(crate) fn of(ask: &Ask) -> Vec<Command> {
     ask.parts
         .iter()
         .filter_map(|part| part.markdown.as_deref())
-        .flat_map(|source| {
-            pieces(ask, source)
-                .into_iter()
-                .filter_map(|piece| match piece {
-                    Piece::Command(command, _) => Some(command),
-                    Piece::Prose(_) => None,
-                })
-        })
+        .flat_map(|source| of_part(ask, source))
         .collect()
 }
