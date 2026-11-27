@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Concurrent enrollment can persist duplicate machine names",
+  "at": "2026-11-27T16:06:14.296Z",
+  "detail": "Overlapping normal machine joins can both pass name recognition and later persist the same label. Name-addressed operations then remain ambiguous across restarts. Revalidate the name in the existing serialized write path and preserve the actionable refusal.\n"
+}
