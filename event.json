@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Rollback confirmation names the wrong home on a relayed app",
+  "at": "2026-11-27T15:05:13.587Z",
+  "detail": "A connected outpost app can roll back a move on its remote home. The confirmation says the home is on this machine even though it was restored on the remote source. Render the returned move source in Roll back and Stop waiting confirmations.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/settings/machines.rs",
+    "line": 688
+  },
+  "culprit": "ba747087a04e25a55285282fb32a567c64ff43a4"
+}
