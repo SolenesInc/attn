@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Home move can discard acknowledged target machine settings",
+  "at": "2026-11-27T11:05:01.735Z",
+  "detail": "A target machine setting accepted after staging and before restart can be replaced by the earlier saved rows when the move applies. Preserve acknowledged machine-local changes or explicitly fence such writes during the transition.\n"
+}
