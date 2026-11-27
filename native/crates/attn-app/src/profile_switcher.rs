@@ -12,7 +12,7 @@ use attn_ui::system::{
     Button, FieldState, IconSize, ListRow, Look, Reveal, Size, Trigger, TriggerLook, Type, glyph,
     icon_button, keycaps, line_box, words,
 };
-use rune::{El, Key, KeyEvent, TextEdit, Tx};
+use rune::{El, Key, KeyEvent, Mods, TextEdit, Tx};
 use rune_kit::{Placement, TextInput, popover};
 
 use crate::requests::{Answer, Refused};
@@ -25,11 +25,12 @@ const PILL_SLOT: &str = "titlebar.profile.slot";
 const NAME_FIELD: &str = "profile-switcher.name";
 const CHOOSE: &str = "profile-switcher.choose.";
 
-/// The switcher's highlighted profile, what it is doing and what the daemon last refused. They
-/// start over each time it opens.
+/// The switcher's highlighted profile, the chord still held from the key that opened it, what
+/// it is doing and what the daemon last refused. They start over each time it opens.
 #[derive(Default)]
 pub(crate) struct Switcher {
     highlighted: Option<String>,
+    held: Option<Mods>,
     mode: Mode,
     refusal: Option<String>,
     busy: bool,
@@ -53,18 +54,45 @@ fn is_open(state: &State) -> bool {
     state.window.layer == Some(Layer::ProfileSwitcher)
 }
 
-/// Opens the switcher on the current profile, or closes it.
+/// Opens the switcher on the current profile, or closes it. A chord with modifiers opens it on
+/// the next profile instead and keeps it while they stay held: each press moves to the next,
+/// and letting go switches to the highlighted one.
 pub(crate) fn toggle(state: &mut State, tx: &mut Tx) {
+    let chord = tx.mods();
+    let holds = tx.by_keys() && chord != Mods::default();
     if is_open(state) {
-        close(state, tx);
+        if holds && state.window.profile_switcher.held.is_some() {
+            step(state, 1);
+        } else {
+            close(state, tx);
+        }
         return;
     }
     state.window.profile_switcher = Switcher {
         highlighted: Some(state.facts.profiles.selected.clone()),
+        held: holds.then_some(chord),
         ..Switcher::default()
     };
+    if holds {
+        step(state, 1);
+    }
     state.window.layer = Some(Layer::ProfileSwitcher);
     tx.focus(MENU, false);
+}
+
+/// Letting go of the chord that opened the list switches to the highlighted profile.
+pub(crate) fn on_modifiers(state: &mut State, mods: Mods, tx: &mut Tx) -> bool {
+    let held = state.window.profile_switcher.held;
+    if !is_open(state) || held.is_none_or(|chord| crate::keys::covers(mods, chord)) {
+        return false;
+    }
+    state.window.profile_switcher.held = None;
+    let listing = matches!(state.window.profile_switcher.mode, Mode::List);
+    let Some(profile) = highlighted(state).filter(|_| listing).map(|p| p.id.clone()) else {
+        return false;
+    };
+    choose(state, &profile, tx);
+    true
 }
 
 fn close(state: &mut State, tx: &mut Tx) {

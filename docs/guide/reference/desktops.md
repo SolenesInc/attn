@@ -210,8 +210,13 @@ other's notes. Attn refuses a folder inside or around another profile's folder o
 folder. A new crew member's home lives in its profile's Notebook folder, under
 `crew/`.
 
-Cmd+Shift+U (Ctrl+Alt+U on Linux) opens your profiles. Pick one to switch to it.
-From the same list, N creates a profile and switches to it, R renames the
+Cmd+Shift+U (Ctrl+Alt+U on Linux) switches profiles the way Cmd+Tab switches
+apps. Keep Cmd+Shift held and the list stays open with the next profile
+highlighted. Each further U moves to the next one, wrapping after the last, and
+letting go switches to the highlighted profile. Escape cancels.
+
+The profile pill in the title bar opens the same list and keeps it open. Pick a
+profile to switch to it. N creates a profile and switches to it, R renames the
 highlighted one, and Delete or Backspace deletes it after you confirm. You can
 delete only an empty profile.
 

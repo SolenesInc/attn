@@ -326,6 +326,82 @@ fn the_highlighted_profile_switches_even_after_another_client_reorders_the_list(
     rest(&mut world);
 }
 
+fn chord_mods() -> Mods {
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
+    match keymap.binding(&Action::ProfileSwitch) {
+        Some(Binding::Chord(chord)) => key_event(&chord).mods,
+        _ => panic!("profile.switch has no chord"),
+    }
+}
+
+fn hold(world: &mut World, mods: Mods) {
+    world.gesture(|app| app.hold(mods));
+}
+
+fn highlighted(world: &World) -> Option<String> {
+    world.screen().active_option().and_then(|n| n.name)
+}
+
+#[test]
+fn holding_the_chord_cycles_the_profiles_wraps_and_switches_on_release() {
+    let mut world = three("work");
+    hold(&mut world, chord_mods());
+    open_switcher(&mut world);
+    assert_eq!(rows(&world), ["work", "home", "side"]);
+    assert_eq!(highlighted(&world).as_deref(), Some("home"));
+
+    press_action(&mut world, &Action::ProfileSwitch);
+    assert_eq!(highlighted(&world).as_deref(), Some("side"));
+    press_action(&mut world, &Action::ProfileSwitch);
+    assert_eq!(highlighted(&world).as_deref(), Some("work"));
+    press_action(&mut world, &Action::ProfileSwitch);
+    assert_eq!(highlighted(&world).as_deref(), Some("home"));
+    assert!(selects(&world).is_empty());
+
+    hold(&mut world, Mods::default());
+
+    assert!(!switcher_open(&world));
+    assert_eq!(selects(&world), ["home"]);
+    assert_eq!(selected(&mut world), "home");
+    rest(&mut world);
+}
+
+#[test]
+fn letting_go_of_one_modifier_of_the_held_chord_switches() {
+    let mut world = three("work");
+    let chord = chord_mods();
+    hold(&mut world, chord);
+    open_switcher(&mut world);
+
+    hold(
+        &mut world,
+        Mods {
+            shift: false,
+            ..chord
+        },
+    );
+
+    assert!(!switcher_open(&world));
+    assert_eq!(selects(&world), ["home"]);
+    rest(&mut world);
+}
+
+#[test]
+fn escape_while_the_chord_is_held_cancels_and_letting_go_switches_nothing() {
+    let mut world = three("work");
+    hold(&mut world, chord_mods());
+    open_switcher(&mut world);
+    press_action(&mut world, &Action::ProfileSwitch);
+
+    press(&mut world, Key::Escape);
+    assert!(!switcher_open(&world));
+    hold(&mut world, Mods::default());
+
+    assert!(selects(&world).is_empty());
+    assert_eq!(selected(&mut world), "work");
+    rest(&mut world);
+}
+
 #[test]
 fn return_on_a_row_tab_reached_switches_to_that_row() {
     let mut world = three("work");

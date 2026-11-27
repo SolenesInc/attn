@@ -97,7 +97,10 @@ const SECTIONS: &[Section] = &[
             noted("Desktop overview", &[Of(Action::DesktopOverview)], |_| {
                 "Arrows step through tiles and desktops, Return goes there.".into()
             }),
-            line("Switch profile", &[Of(Action::ProfileSwitch)]),
+            noted("Switch profile", &[Of(Action::ProfileSwitch)], |_| {
+                "Keep the modifiers held and press it again for the next profile; let go to switch."
+                    .into()
+            }),
             line(
                 "Go to dashboard (home)",
                 &[Of(Action::SessionGoToDashboard)],

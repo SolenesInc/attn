@@ -360,7 +360,8 @@ pub(crate) fn chord_of(mods: Mods, key: ChordKey) -> Chord {
 
 pub(crate) fn on_modifiers(state: &mut State, mods: Mods, tx: &mut Tx) {
     let unlabelled = crate::hints::on_modifiers(state, mods);
-    let landed = crate::desktop::overview_modifiers(state, mods, tx);
+    let landed = crate::desktop::overview_modifiers(state, mods, tx)
+        || crate::profile_switcher::on_modifiers(state, mods, tx);
     let pointed = state
         .terminals
         .accelerator(crate::terminal::accelerator(mods));
