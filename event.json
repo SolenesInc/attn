@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: TestJoinRefuses: copy-batch-applied armed and never reached",
+  "at": "2026-11-27T06:10:23.809Z",
+  "fixesBug": "b8bbea213ed3d44ca837cdd985ed8a854f00fe42"
+}
