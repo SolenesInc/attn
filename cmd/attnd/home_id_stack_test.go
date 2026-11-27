@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/victorarias/attn/internal/bridge"
@@ -358,19 +360,39 @@ func TestAHomeAndItsOutpostRollBackToTheBuildBeforeHomeIDsAndUpgradeAgain(t *tes
 		home.Stop()
 		requireStdout(t, remote.Attn("daemon", "stop"))
 	}
-	upgrade := func(label string) {
+	shellAlive := func(label string) {
+		t.Helper()
+		pidNumber, err := strconv.Atoi(strings.TrimSpace(string(pid)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := syscall.Kill(pidNumber, 0); err != nil {
+			t.Fatalf("%s: the outpost's shell (pid %d) is gone: %v", label, pidNumber, err)
+		}
+	}
+	upgrade := func(label string, outpostFirst bool) {
 		t.Helper()
 		stopBoth()
+		aside := copiesMovedAside(t, copied)
+		if outpostFirst {
+			ssh.InstallBinary(remote, current)
+			remote.Start()
+			remote.App()
+			shellAlive(label + ", the outpost started before its home")
+		}
 		home.RunFrom(current)
 		home.InstallsOnOutposts(current, "")
 		home.Start()
 		app = home.App()
-		outpostStateOnConnect(app, "outpost", protocol.OutpostStateRefused)
-		app.Send(protocol.UpdateOutpostMessage{Cmd: protocol.CmdUpdateOutpost, ID: host})
-		if row := awaitOutpostInstall(app); row.Update.Phase != protocol.OutpostUpdatePhaseDone || row.State != protocol.OutpostStateConnected {
-			t.Fatalf("%s: Update to the build with home ids: %+v %+v", label, row, row.Update)
+		if outpostFirst {
+			outpostStateOnConnect(app, "outpost", protocol.OutpostStateConnected)
+		} else {
+			outpostStateOnConnect(app, "outpost", protocol.OutpostStateRefused)
+			app.Send(protocol.UpdateOutpostMessage{Cmd: protocol.CmdUpdateOutpost, ID: host})
+			if row := awaitOutpostInstall(app); row.Update.Phase != protocol.OutpostUpdatePhaseDone || row.State != protocol.OutpostStateConnected {
+				t.Fatalf("%s: Update to the build with home ids: %+v %+v", label, row, row.Update)
+			}
 		}
-		aside := copiesMovedAside(t, copied)
 		keptEverything(label, remote.App())
 		if after := copiesMovedAside(t, copied); !slices.Equal(after, aside) {
 			t.Fatalf("%s moved the outpost's Notebook copy aside: %v, before %v", label, after, aside)
@@ -406,10 +428,10 @@ func TestAHomeAndItsOutpostRollBackToTheBuildBeforeHomeIDsAndUpgradeAgain(t *tes
 		keptEverything(label, remote.ReleaseApp())
 	}
 
-	upgrade("the first upgrade")
+	upgrade("the first upgrade", false)
 	id := homeID(t, home)
 	rollBack("the rollback")
-	upgrade("the second upgrade")
+	upgrade("the second upgrade", true)
 	if again := homeID(t, home); again != id {
 		t.Fatalf("the home took home id %s at the second upgrade, want %s", again, id)
 	}

@@ -89,12 +89,16 @@ func (d *Daemon) outpostServerConfig(dial string) bridge.ServerConfig {
 			r.mu.Lock()
 			tookHomeID := r.enrollment.AwaitsHomeID()
 			status, err := enrollment.RecordHome(d.dataRoot, enrollment.Home{ID: home.HomeID, DaemonID: home.DaemonID, Name: home.Name, MachineID: home.MachineID, PeerMachineID: home.PeerMachineID}, dial)
-			if err == nil {
+			if err == nil && !tookHomeID {
 				d.installEnrollmentLocked(status)
 			}
 			r.mu.Unlock()
 			if err == nil && tookHomeID {
-				err = d.adoptHomeID(status)
+				if err = d.adoptHomeID(status); err == nil {
+					r.mu.Lock()
+					d.installEnrollmentLocked(status)
+					r.mu.Unlock()
+				}
 			}
 			if err != nil {
 				return &bridge.Refusal{Reason: "home", Detail: err.Error()}
