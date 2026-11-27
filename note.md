@@ -1,0 +1,3 @@
+After `/fork` in a shared Codex terminal, the daemon now offers to open the conversation the fork came from beside it. The fork's session carries `fork_offer` (the original's id) until the user opens or dismisses it, or the fork closes. `fork_offer_open` shows a hidden original, reopens a closed one, or focuses one already on screen, always in the column right after the fork's tile. The app's notice, Sigma and Claude build on this in later slices of plot s-01cg7v. `SetSessionResumeIDMessage.source` is in the schema for the Claude slice; nothing reads it yet.
+
+Offers live in memory only, so a daemon restart drops them (plot D3).

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "e2f68cbf2686a5c5f4748386901b6412361bb28d",
+  "head": "12598ffe5209dbff15191700a2c499412ad0295b",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 157.817,
+    "ranOn": "12598ffe5209dbff15191700a2c499412ad0295b"
+  },
+  "acknowledgedFlake": {
+    "test": "go ./cmd/attnd TestHomeMoveToAMachineThatDialsTheHome",
+    "owner": "s-brnryw"
+  },
+  "noMediaReason": "Daemon and wire only; the app's notice lands in a later slice. The live arrangement is on seed s-1g613r (C39)",
+  "recordings": []
+}
