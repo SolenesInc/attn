@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Moving the home back can lose closed Ledger session runtime",
+  "at": "2026-11-27T11:08:56.656Z",
+  "detail": "The exact-pin store probe moved the home from A to B and back and observed a closed Ledger session's conversation ID before return and missing afterward. Preserve the closed session's runtime metadata across both moves.\n",
+  "severity": "p0",
+  "source": "review",
+  "location": {
+    "path": "internal/store/home_move.go",
+    "line": 99
+  },
+  "culprit": "2113370ce24975ca7209ee34edc6b3db99c96614"
+}
