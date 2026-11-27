@@ -455,9 +455,9 @@ func (d *Daemon) dialHomeOnce(ctx context.Context, dial *homeDial, run *outpostL
 	}
 	err = bridge.ServeConn(ctx, pipe, d.outpostServerConfig(dial.destination), func(conn *bridge.Conn) {
 		dial.joining = false
-		dial.report(nil)
 		d.acceptOutpostBridge(run, conn)
 		d.homeBridged()
+		dial.report(nil)
 	})
 	if refusal := (*bridge.Refusal)(nil); errors.As(err, &refusal) && refusal.Reason == "build" {
 		dial.joining = false

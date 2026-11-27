@@ -13,6 +13,7 @@ import (
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/outpostssh"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -268,6 +269,7 @@ func (d *Daemon) switchOutpost(ctx context.Context, row store.Machine) (string, 
 		if err := remote.Switch(ctx, binaries, self, true, nil); err != nil {
 			return build, sshFault(err)
 		}
+		pausepoint.At(pausepoint.OutpostUpdateSwitched)
 	}
 	if err := d.reconnectOutpostOnHomeBuild(ctx, row); err != nil {
 		return self.String(), fault(string(protocol.UpdateFailureReasonNotBack), err)

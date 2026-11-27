@@ -38,6 +38,8 @@ const rejoinOnNewBuild = time.Minute
 
 const HomeRejoinTimer stepclock.Name = "home-update-rejoin"
 
+const OutpostRejoinTimer stepclock.Name = "outpost-update-rejoin"
+
 const (
 	actionUpdate        = "Update"
 	actionUpdateOutpost = "Update outpost"
@@ -179,7 +181,7 @@ func (d *Daemon) homeRefusedByBuild(destination string, home bridge.Identity, re
 	switch {
 	case shared && record.Build == home.Build && record.Build != self && updates:
 		d.forgetSharedBuild()
-		if _, err := d.startHomeUpdate(destination, home); err != nil {
+		if _, err := d.startHomeUpdate(destination, d.homeRow(home)); err != nil {
 			d.logf("update home %s: %v", home.Name, err)
 		}
 		return refusal
@@ -297,20 +299,54 @@ func (d *Daemon) createUpdateRun(kind string) (store.UpdateRun, error) {
 }
 
 // startManualHomeUpdate is Update on an app machine whose home refuses its build.
+// startManualHomeUpdate pushes this machine's build to its home: the home that refused it, or the home of the failed
+// update that offers Update, which a restart of this machine leaves as the only record of it.
 func (d *Daemon) startManualHomeUpdate() (*store.UpdateRun, error) {
+	if run := d.latestUpdateRun(); run != nil && run.Open() {
+		return run, nil
+	}
 	status := d.enrollmentStatus()
 	r := &d.outpost
 	r.mu.Lock()
-	home := r.refusedBy
+	refusedBy := r.refusedBy
 	r.mu.Unlock()
-	if home == nil {
+	var home store.UpdateRunOutpost
+	if refusedBy != nil {
+		home = d.homeRow(*refusedBy)
+	} else if shown := d.homeOfRunOfferingUpdate(); shown != nil {
+		home = store.UpdateRunOutpost{ID: shown.ID, Name: shown.Name, Role: store.UpdateRoleHome}
+		if shown.Reason != string(protocol.UpdateFailureReasonNotBack) {
+			home.Build = shown.Build
+		}
+	} else {
 		return nil, protocol.Refuse(protocol.RefusalWrongState, "this machine is not refused by its home's build, so there is nothing to push; outposts update from the home")
 	}
 	d.forgetSharedBuild()
-	return d.startHomeUpdate(status.Dial, *home)
+	return d.startHomeUpdate(status.Dial, home)
 }
 
-func (d *Daemon) startHomeUpdate(destination string, home bridge.Identity) (*store.UpdateRun, error) {
+// homeOfRunOfferingUpdate is the home row of the finished home run that offers Update and still tells how the two
+// machines stand.
+func (d *Daemon) homeOfRunOfferingUpdate() *store.UpdateRunOutpost {
+	run := d.latestUpdateRun()
+	if run == nil || run.InstallKind != installKindHome || d.homeRunSettled(*run) {
+		return nil
+	}
+	var home *store.UpdateRunOutpost
+	offers := false
+	for _, row := range run.Outposts {
+		if row.Role == store.UpdateRoleHome {
+			home = &row
+		}
+		offers = offers || (row.Role == store.UpdateRoleHome || row.Role == store.UpdateRoleAppMachine) && row.Action == actionUpdate
+	}
+	if !offers {
+		return nil
+	}
+	return home
+}
+
+func (d *Daemon) startHomeUpdate(destination string, homeRow store.UpdateRunOutpost) (*store.UpdateRun, error) {
 	d.updateRuns.mu.Lock()
 	defer d.updateRuns.mu.Unlock()
 	if run := d.latestUpdateRun(); run != nil && run.Open() {
@@ -328,7 +364,6 @@ func (d *Daemon) startHomeUpdate(destination string, home bridge.Identity) (*sto
 	app := d.appMachineRow()
 	app.State = store.UpdateOutpostDone
 	d.setUpdateRow(run, app)
-	homeRow := d.homeRow(home)
 	homeRow.State, homeRow.Detail = store.UpdateOutpostStaging, "connecting"
 	d.setUpdateRow(run, homeRow)
 	d.life.Go("updateHome", func() { d.runHomeUpdate(run, destination, homeRow) })
@@ -408,6 +443,9 @@ func (d *Daemon) stageHome(ctx context.Context, destination string, step func(st
 func (d *Daemon) switchHome(ctx context.Context, remote *outpostssh.Client, binaries outpostbuild.Binaries) error {
 	self := d.bridgeIdentity()
 	bridged := d.homeBridgedSignal()
+	if conn := d.homeBridge(); conn != nil && conn.Peer().Build == self.Build {
+		return nil
+	}
 	if err := remote.Switch(ctx, binaries, self.Build, true, &outpostssh.Pusher{MachineID: d.store.MachineID(), Name: self.Name}); err != nil {
 		return sshFault(err)
 	}

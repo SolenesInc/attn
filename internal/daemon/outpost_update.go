@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/outpostbuild"
 	"github.com/victorarias/attn/internal/outpostssh"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -226,8 +227,8 @@ func (d *Daemon) reconnectOutpostOnHomeBuild(ctx context.Context, row store.Mach
 	self := d.bridgeIdentity().Build
 	d.stopOutpostDial(row.ID)
 	d.startOutpostDial(row)
-	deadline, cancel := context.WithTimeout(ctx, time.Minute)
-	defer cancel()
+	wait := stepclock.NewTimer(OutpostRejoinTimer, rejoinOnNewBuild)
+	defer wait.Stop()
 	for {
 		r := &d.outposts
 		r.mu.Lock()
@@ -243,8 +244,10 @@ func (d *Daemon) reconnectOutpostOnHomeBuild(ctx context.Context, row store.Mach
 		}
 		select {
 		case <-changed:
-		case <-deadline.Done():
-			return fmt.Errorf("outpost did not reconnect on home build %s within 60 s: %w", self, deadline.Err())
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-wait.C():
+			return fmt.Errorf("outpost did not reconnect on home build %s within %s", self, rejoinOnNewBuild)
 		}
 	}
 }

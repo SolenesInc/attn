@@ -59,6 +59,9 @@ func newAppMachineWorld(t *testing.T, build string, arm ...func(*appMachineWorld
 	w.name = name
 	mark := w.homeApp.EventCount()
 	requireStdout(t, w.laptop.Attn("enrollment", "join", "home"), "dial:       home (bridged)")
+	if machine := w.laptop.MachineApp(); machine.Initial.Settings["self_update_enabled"] != "true" {
+		testworld.Await(machine, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["self_update_enabled"] == "true" })
+	}
 	w.row = outpostStateSince(w.homeApp, w.name, protocol.OutpostStateConnected, mark)
 	t.Cleanup(func() {
 		if t.Failed() {
@@ -759,4 +762,68 @@ func TestAHomeUpdateCutByARestartOfTheAppMachineGivesWayToWhatTheHomeRunsWhenItA
 		}
 		requireSameFile(t, "the home's attn", w.ssh.InstallPath(w.home), next)
 	})
+}
+
+func TestUpdateFromAnAppMachineThatRestartedAfterItsHomeDidNotComeBackMovesTheHome(t *testing.T) {
+	w := newAppMachineWorld(t, testworld.AttnBinary(t))
+	next := testworld.AttnUpdateBinary(t, "2.0.0-update-after-restart", "source", "")
+	w.laptop.Stop()
+	w.laptop.RunFrom(next)
+	w.laptop.InstallsOnOutposts(next, "")
+	switched := w.laptop.PauseAt(pausepoint.HomeUpdateSwitched)
+	finished := w.laptop.PassesOf(pausepoint.UpdateRunFinished)
+	w.laptop.Start()
+	resume := switched.Take()
+	w.ssh.Fail("home", "ssh: connect to host home port 22: Connection refused")
+	resume()
+	w.laptop.AwaitTimer(daemon.HomeRejoinTimer)
+	w.laptop.FirePending(daemon.HomeRejoinTimer)
+	if home := machineRowOf(t, finishedRunOf(t, w.laptop, finished), protocol.UpdateMachineRoleHome); protocol.Deref(home.Reason) != protocol.UpdateFailureReasonNotBack || protocol.Deref(home.Action) != "Update" {
+		t.Fatalf("the home that did not come back: %+v", home)
+	}
+
+	w.laptop.Stop()
+	w.laptop.Start()
+	w.laptop.AwaitTimer(bridge.RetryTimer)
+	app := w.laptop.MachineApp()
+	if shown := app.Initial.UpdateRun; shown == nil || protocol.Deref(machineRowOf(t, *shown, protocol.UpdateMachineRoleHome).Reason) != protocol.UpdateFailureReasonNotBack {
+		t.Fatalf("after its restart the app machine shows %+v, not the home that did not come back", shown)
+	}
+	w.ssh.Restore("home")
+	app.Send(protocol.StartUpdateMessage{Cmd: protocol.CmdStartUpdate, RequestID: protocol.Ptr("update")})
+	if started := testworld.Await(app, protocol.EventStartUpdateResult, func(protocol.StartUpdateResultMessage) bool { return true }); !started.Success {
+		t.Fatalf("Update after the restart: %+v", started)
+	}
+	switched.Take()()
+	stop := w.laptop.FireTimers(bridge.RetryTimer)
+	w.home.AwaitDaemonReplaced()
+	fleet := homeRunOf(t, w.home.App(), "fleet")
+	stop()
+	if home := machineRowOf(t, fleet, protocol.UpdateMachineRoleHome); fleet.Phase != protocol.UpdatePhaseDone || !strings.Contains(protocol.Deref(home.Build), "2.0.0-update-after-restart") {
+		t.Fatalf("the home after Update from the restarted app machine: %s %s, home %+v", fleet.Phase, protocol.Deref(fleet.Outcome), home)
+	}
+	requireSameFile(t, "the home's attn", w.ssh.InstallPath(w.home), next)
+}
+
+func TestAnOutpostThatSwitchedAndDidNotComeBackNamesTheBuildItSwitchedToAsUnconfirmed(t *testing.T) {
+	base := testworld.AttnBinary(t)
+	var switched *testworld.Pause
+	w := newAppMachineWorld(t, base, func(w *appMachineWorld) { switched = w.home.PauseAt(pausepoint.OutpostUpdateSwitched) })
+	w.addBox(base)
+	next := testworld.AttnUpdateBinary(t, "2.0.0-outpost-not-back", "source", "")
+	w.installOnLaptop(next)
+	resume := switched.Take()
+	w.home.AwaitDaemonReplaced()
+	w.ssh.Fail("box", "ssh: connect to host box port 22: Connection refused")
+	resume()
+	w.home.AwaitTimer(daemon.OutpostRejoinTimer)
+	w.home.FirePending(daemon.OutpostRejoinTimer)
+	fleet := homeRunOf(t, w.home.App(), "fleet")
+	row := machineRowOf(t, fleet, protocol.UpdateMachineRoleOutpost)
+	if row.State != protocol.UpdateOutpostStateFailed || protocol.Deref(row.Reason) != protocol.UpdateFailureReasonNotBack || !strings.Contains(protocol.Deref(row.Build), "2.0.0-outpost-not-back") || protocol.Deref(row.Action) != "Update outpost" {
+		t.Fatalf("the outpost that switched and did not come back: %+v (%s)", row, protocol.Deref(row.Detail))
+	}
+	status := w.home.Attn("update", "status")
+	requireStdout(t, status, "(not back)", "unconfirmed", "; Update outpost")
+	t.Log(strings.TrimSpace(status.Stdout))
 }
