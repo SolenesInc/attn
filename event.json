@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Local session changes discard all app view memos",
+  "at": "2026-11-27T07:09:39.065Z",
+  "detail": "When a local agent on a reverse outpost emits an ordinary state change, the updated AppMachine session Arc is included in equality at native/crates/attn-app/src/lib.rs:268. The app treats it like a machine identity change and discards all view memos. The independent reviewer observed five sidebar row builds after one machine-link state-only event in a scratch wire probe. Limit full invalidation to a change of the app machine ID or home, and keep ordinary local facts on the existing memo-version paths.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/lib.rs",
+    "line": 268
+  },
+  "culprit": "54d9c664799a27b7d9a02deb0ee2ee7a06875568"
+}
