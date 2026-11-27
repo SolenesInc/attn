@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Queue Automations waiting pill ignores visible run order",
+  "at": "2026-11-27T00:38:03.467Z",
+  "detail": "Flat queue Automations lists reachable owed turns by age across definitions, but the waiting pill still uses the prior definition-name order. With Alpha, Beta and Zulu runs from youngest to oldest, the visible list is Zulu, Beta, Alpha, while Home opens Alpha and advancing from Zulu skips Beta. The grouped predecessor used one order for list and traversal. Share one order across rows, navigation and the collapsed peek next marker, retaining reachable superseded turns and excluding offline turns. Independently source-confirmed at b6978240b; native wire probe pending on s-ekxze6.\n"
+}
