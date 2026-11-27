@@ -1,0 +1,1 @@
+Follow-up to a0f6958be from its review: an outpost's Notebook sync takes the home's device from the accepted bridge instead of whichever daemon last dialed, and a home whose outpost list fails to load keeps that error visible.
