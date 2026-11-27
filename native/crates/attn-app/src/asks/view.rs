@@ -1632,6 +1632,9 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> Block {
     if ask.reply.is_none() {
         hints.push((&["q"], "quote"));
     }
+    if ask.reply.is_none() && !super::commands::of(ask).is_empty() {
+        hints.push((&["t"], "open command"));
+    }
     if snoozable.is_some() {
         hints.push((&["s"], if snoozed { "wake" } else { "snooze" }));
     }

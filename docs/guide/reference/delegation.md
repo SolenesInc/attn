@@ -155,6 +155,19 @@ web page opens in a tab too, on a page of its own, so the browser tile on your
 desktop stays where it was; on Linux a web page opens in your browser. An
 agent's id still opens its card.
 
+A shell command in an ask, a code block in `sh`, `bash`, `zsh`, `fish` or
+`shell`, shows the machine and folder it runs in, and **Open in terminal** (`t`
+for the first) under it. The agent names the place after the block's language,
+as in ``` ```sh studio:~/shop ```; a block that names none runs where the agent
+works. The shell opens in a tab of the panel with the command typed and not run,
+and takes the keyboard: Enter runs the command, and Cmd+Shift+R (Ctrl+Alt+R on
+Linux) gives the keyboard back to the question. While a command still runs,
+**Send** reads **Send and stop**, because the shell ends with the answer, as
+it does when you close its tab.
+**Move to desktop** keeps the shell: it moves to a tile beside the agent that
+asked, or onto the desktop you are on, and stays after you answer. The phone
+shows each command with **Copy** and the machine and folder it runs in.
+
 While asks are open, the asks button in the title bar is an accent pill with
 their count. It pops when a new ask arrives and, by default, again every minute
 while asks wait with the sheet closed. **Settings → Agents and models → Asks
