@@ -1,0 +1,10 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "TestRefusalsNameCommandsByMention",
+  "at": "2026-11-27T06:29:27.261Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45950421637",
+  "severity": "p1",
+  "source": "ci",
+  "culprit": "71fd9530ecadf7ec3d2eb99a7247e835d6adaaa4"
+}
