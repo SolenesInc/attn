@@ -146,10 +146,13 @@ func TestASharedCodexAppServerThatExitsBeforeAnsweringIsNotStartedAgainOnEveryCo
 func TestAQuietRestartWaitsUntilATerminalHasItsConversationReply(t *testing.T) {
 	w, app, _, _ := sharedCodexOn(t, "0.162.1")
 
-	w.SetCodexVersion("0.163.0")
 	boot := w.HoldNextBoot()
 	cart := w.Spawn(app, fakeagent.Codex, w.Path("cart"))
 	boot.Await()
+	w.SetCodexVersion("0.163.0")
+	if result := restartSharedCodex(t, app, false); !result.Success {
+		t.Fatalf("restart: %s", protocol.Deref(result.Error))
+	}
 	blockedByCartAlone := func(s *protocol.SharedCodexState) bool {
 		return restartState(s, "0.162.1", "0.163.0", protocol.SharedCodexRestartPending) &&
 			slices.Equal(s.Blockers, blockedBy(cart, protocol.SharedCodexBlockerReasonStarting))
