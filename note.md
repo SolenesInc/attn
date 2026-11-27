@@ -1,0 +1,1 @@
+The Forks section of the guide now names Claude Code's `/branch` and Sigma's `/fork` beside shared Codex's `/fork`, the Sigma guide links to it, and the drive-attn feature map lists both as ways into the fork offer.
