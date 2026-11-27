@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Directional navigation leaves the active local tile stale during an outage",
+  "at": "2026-11-27T07:12:05.258Z",
+  "detail": "With several local tiles and the home away, keyboard focus can reach an already-visible neighbor but repeated navigation uses the same saved active tile and cannot reveal an offscreen terminal. Keep temporary window-local selection for local tiles. The source plot already assigned this follow-up, and the rolling review independently confirmed it at 54d9c6647.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/desktop/actions.rs",
+    "line": 576
+  },
+  "culprit": "dcd581bef5023ea40d013be45bc5febf5685ebc1"
+}
