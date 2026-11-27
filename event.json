@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Home move check can commit an interrupted move",
+  "at": "2026-11-27T11:04:42.181Z",
+  "detail": "On the source after an interrupted move, a same-target retry with attn home move --check takes the resume/commit path before the check-only branch. A preflight must remain read-only and report recovery separately.\n"
+}
