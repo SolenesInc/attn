@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Directional navigation leaves the active local tile stale during an outage",
+  "at": "2026-11-27T07:12:08.975Z",
+  "detail": "With several local tiles and the home away, keyboard focus can reach an already-visible neighbor but repeated navigation uses the same saved active tile and cannot reveal an offscreen terminal. Keep temporary window-local selection for local tiles. The source plot already assigned this follow-up, and the rolling review independently confirmed it at 54d9c6647.\n"
+}
