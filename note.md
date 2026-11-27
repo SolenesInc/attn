@@ -1,0 +1,1 @@
+Repairs a red on main (run 45952576248): TestAnAppWhoseHomeIsUnreachableIsToldWhyAndConnectsWhenItReturns failed when a copy batch from the home woke apps waiting on the dial before the bridge was recorded. Only apps the home refused now wait for that copy.
