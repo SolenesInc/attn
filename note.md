@@ -1,0 +1,3 @@
+Agents now offer a command in an ask as a `sh` block in its body, with the machine path where it must run after the language (```` ```sh studio:~/shop ````), so the Asks panel opens it in a terminal there, typed but not run; one block may hold a short sequence. One paragraph in `ask/visuals.md` reaches the launch text with and without attn's tools, `attn ask --help` and the ask skill reference.
+
+The new agent-bench case `ask-command` (run with `--outpost orders=<ssh>`) names another machine to the agent: before the paragraph 0 of 12 runs (Claude Code and Codex, tools on and off) wrote an addressed block, after it 12 of 12. The glossary's asks sheet becomes the asks view and its panel.
