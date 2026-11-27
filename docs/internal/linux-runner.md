@@ -18,6 +18,11 @@ pnpm --dir app real-app:linux soak --provider ssh --target attn-linux --scenario
   `soak` copy HEAD plus working-tree changes into
   `~/.local/share/attn-linux-runner/<checkout>/source`. Always edit on the
   host; ignored build caches survive sync.
+- **Sync evicts idle checkouts:** each sync first removes the other checkout
+  folders on the guest whose lock, turn file and folder have gone 7 days
+  without use, unless a run holds the checkout or a process works inside it.
+  A checkout that comes back after that starts from a fresh clone and cold
+  build caches.
 - **Keep diagnostic runs off the landing runner:** send repeat runs, soaks and
   reproductions to `attn-linux` (`--provider ssh --target attn-linux`), never
   to the primary landing runner, which landings queue for.

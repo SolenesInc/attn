@@ -112,7 +112,8 @@ Actions:
   status      Inspect VM or SSH machine
   stop        Stop managed VM; preserves disk and caches
   connection  Print provider/SSH connection as JSON
-  sync        Copy HEAD plus staged, unstaged and non-ignored new files
+  sync        Copy HEAD plus staged, unstaged and non-ignored new files; remove other
+              guest checkouts unused for 7 days
   provision   Sync and install Ubuntu runner toolchains and sandbox
   run         Run a command in the synced Linux checkout; preserve its exit code
   build       Sync and install the packaged app in the named guest instance
