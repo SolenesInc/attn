@@ -100,7 +100,7 @@ fn main() -> ExitCode {
             state.cache_logos_in(logo_cache_dir);
         },
     ));
-    let (link, _window) = attn_app::connect(
+    let (links, _window) = attn_app::connect(
         &store,
         |terminals, replies| launch.link_config(terminals, replies, performance),
         frames,
@@ -109,7 +109,7 @@ fn main() -> ExitCode {
     );
     let opener = Arc::new(attn_app::window_host::NativeOpener {
         store: store.clone(),
-        daemon: link.commands(),
+        links: links.commands(),
         wall,
         debug_dir: attn_app::instance::debug_dir(&launch.instance.bundle_id),
     });
@@ -120,7 +120,7 @@ fn main() -> ExitCode {
     #[cfg(target_os = "macos")]
     let capture = (
         store.clone(),
-        link.commands(),
+        links.home.commands(),
         launch.instance.data_dir.clone(),
         automation
             .then(|| attn_app::automation::capture_manifest_path(&launch.instance.bundle_id))

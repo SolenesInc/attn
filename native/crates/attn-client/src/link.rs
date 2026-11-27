@@ -16,8 +16,9 @@ use attn_protocol::{
     QuickCaptureUnreadMessage, RateLimitedMessage, ReposUpdatedMessage, RuntimeRespawnedMessage,
     SessionClosedMessage, SessionExitedMessage, SessionMessagesChangedMessage,
     SessionRegisteredMessage, SessionUnregisteredMessage, SessionsUpdatedMessage,
-    SettingsUpdatedMessage, SharedCodexChangedMessage, UpdateChangedMessage, VentsUpdatedMessage,
-    WorktreeStateChangedEvent, WorktreeSweptEvent, go_values,
+    SettingsUpdatedMessage, SharedCodexChangedMessage, TerminalBindingsUpdatedMessage,
+    UpdateChangedMessage, VentsUpdatedMessage, WorktreeStateChangedEvent, WorktreeSweptEvent,
+    go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -29,8 +30,8 @@ use tokio_tungstenite::tungstenite::Message;
 use crate::frame::Frame;
 use crate::presence::Presence;
 use crate::{
-    AppMachine, CLIENT_KIND, Clock, Connection, HomeUnreachable, MigrationMarker, Performance,
-    Pulse, Refusal, Sight, Store, WallClock, setting,
+    CLIENT_KIND, Clock, Connection, HomeUnreachable, MigrationMarker, Performance, Pulse, Refusal,
+    Sight, Slices, Store, WallClock, setting,
 };
 
 const FIRST_RETRY: Duration = Duration::from_secs(1);
@@ -45,9 +46,58 @@ pub type ReplySink = Box<dyn Fn(Reply) + Send + Sync>;
 /// not start.
 pub type StartDaemon = Arc<dyn Fn() -> Result<(), String> + Send + Sync>;
 
+/// Which of the daemon's connections a link holds.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Reach {
+    /// `/ws`: the app's whole state, from the daemon, or from the home it relays the app to.
+    /// This link reads from `/health` whether the daemon relays, and this machine's id.
+    #[default]
+    Home,
+    /// `/ws/machine`: the terminals that run on this machine, from its own daemon, while that
+    /// daemon relays the app to a home elsewhere. It writes only `Facts::machine` and hands on
+    /// terminal events and replies.
+    Machine,
+}
+
+impl LinkConfig {
+    /// The link to this machine's own daemon beside this one, which reaches the home: the same
+    /// daemon, credentials and clocks, its own sinks, and no daemon of its own to start.
+    pub fn for_machine(&self, terminals: TerminalSink, replies: ReplySink) -> LinkConfig {
+        LinkConfig {
+            daemon: self.daemon.clone(),
+            reach: Reach::Machine,
+            client_token: self.client_token.clone(),
+            host_token: self.host_token.clone(),
+            instance: self.instance.clone(),
+            browser_host: false,
+            profile_id: self.profile_id.clone(),
+            client_id: format!("{}-machine", self.client_id),
+            app_pid: self.app_pid,
+            clock: self.clock.clone(),
+            wall: self.wall.clone(),
+            pulse: self.pulse.clone(),
+            terminals,
+            replies,
+            start_daemon: None,
+            migration_marker: None,
+            performance: Performance::default(),
+        }
+    }
+}
+
+impl Reach {
+    fn path(self) -> &'static str {
+        match self {
+            Reach::Home => "/ws",
+            Reach::Machine => "/ws/machine",
+        }
+    }
+}
+
 pub struct LinkConfig {
     /// The daemon's `host:port`; the link speaks WebSocket on `/ws` and reads `/health`.
     pub daemon: String,
+    pub reach: Reach,
     pub client_token: String,
     /// The app's own credential, `<data-dir>/browser-host-token`: with it, and no web origin,
     /// the daemon trusts this client as the attn app.
@@ -438,11 +488,19 @@ impl Task {
                     _ = stopped.wait_for(|stop| *stop) => Ended::Stopped,
                 };
                 self.shared.close();
+                if self.config.reach == Reach::Machine {
+                    self.store.set_machine_connected(false);
+                }
                 self.config
                     .performance
                     .record(false, self.config.clock.now());
                 match ended {
                     Ended::Stopped => return,
+                    Ended::Refused(_) if self.config.reach == Reach::Machine => {
+                        self.park(Parked::Stopped);
+                        let _ = stopped.wait_for(|stop| *stop).await;
+                        return;
+                    }
                     Ended::Refused(refusal) => return self.refuse(refusal, &mut stopped).await,
                     Ended::Away => {
                         away = true;
@@ -455,7 +513,7 @@ impl Task {
                     }
                 }
             }
-            if !away {
+            if !away && self.config.reach == Reach::Home {
                 self.store
                     .set_connection(Connection::Reconnecting { start_failed });
             }
@@ -510,6 +568,10 @@ impl Task {
     }
 
     async fn session(&self) -> Ended {
+        let (_watching, mut relays) = self.relays();
+        if self.config.reach == Reach::Machine && relays.wait_for(|relays| *relays).await.is_err() {
+            return Ended::Stopped;
+        }
         if let Ok(health) = self.health().await {
             if health.instance != self.config.instance {
                 return Ended::Refused(Refusal::InstanceMismatch {
@@ -517,12 +579,11 @@ impl Task {
                     daemon: health.instance,
                 });
             }
-            self.store.set_machine(AppMachine {
-                id: health.machine_id,
-                home: health.home,
-            });
+            if self.config.reach == Reach::Home {
+                self.store.set_machine(health.machine_id, health.home);
+            }
         }
-        let url = format!("ws://{}/ws", self.config.daemon);
+        let url = format!("ws://{}{}", self.config.daemon, self.config.reach.path());
         let Ok((socket, _)) =
             tokio_tungstenite::connect_async_with_config(url, Some(socket_config()), false).await
         else {
@@ -545,6 +606,12 @@ impl Task {
             let heartbeat = self.shared.presence_due();
             self.park(Parked::Reading(heartbeat));
             tokio::select! {
+                Ok(()) = relays.changed(), if self.config.reach == Reach::Machine => {
+                    if !*relays.borrow_and_update() {
+                        let _ = write.close().await;
+                        return lost(greeted, away);
+                    }
+                }
                 () = self.sleep_until(heartbeat) => {
                     self.park(Parked::Busy);
                     self.shared.report_presence(|presence, _, now| {
@@ -581,6 +648,16 @@ impl Task {
                 }
             }
         }
+    }
+
+    /// Whether the daemon on the app's port relays the app to its home, as the home link last
+    /// read it, kept current for as long as the receiver lives.
+    fn relays(&self) -> (crate::Subscription, watch::Receiver<bool>) {
+        let (tell, relays) = watch::channel(false);
+        let watching = self.store.subscribe(Slices::MACHINE, move |facts, _| {
+            tell.send_replace(facts.machine.home.is_some());
+        });
+        (watching, relays)
     }
 
     fn hello(&self) -> ClientHelloMessage {
@@ -620,6 +697,10 @@ impl Task {
             eprintln!("attn-app: dropped a daemon message that is not a JSON object");
             return None;
         };
+        if self.config.reach == Reach::Machine {
+            self.apply_machine(&header, text, greeted);
+            return None;
+        }
         if header.event == "app_performance_request" {
             if let Some(performance) = self.config.performance.take(self.config.clock.now()) {
                 let _ = self.shared.send(
@@ -899,46 +980,6 @@ impl Task {
                     .set_sessions(message.sessions.unwrap_or_default());
                 None
             }
-            "attach_result" => {
-                let message = parse(&header.event, text)?;
-                (self.config.terminals)(TerminalEvent::Attached(Box::new(message)));
-                None
-            }
-            "pty_resized" => {
-                (self.config.terminals)(TerminalEvent::Resized(parse(&header.event, text)?));
-                None
-            }
-            "kitty_placements" => {
-                (self.config.terminals)(TerminalEvent::Placements(parse(&header.event, text)?));
-                None
-            }
-            "kitty_image_result" => {
-                (self.config.terminals)(TerminalEvent::ImageResult(parse(&header.event, text)?));
-                None
-            }
-            "get_screen_snapshot_result" => {
-                (self.config.terminals)(TerminalEvent::Snapshot(parse(&header.event, text)?));
-                None
-            }
-            "pty_desync" => {
-                (self.config.terminals)(TerminalEvent::Desync(parse(&header.event, text)?));
-                None
-            }
-            "runtime_respawned" => {
-                (self.config.terminals)(TerminalEvent::Respawned(parse(&header.event, text)?));
-                None
-            }
-            "session_messages_changed" => {
-                (self.config.terminals)(TerminalEvent::MessagesChanged(parse(
-                    &header.event,
-                    text,
-                )?));
-                None
-            }
-            "session_exited" => {
-                (self.config.terminals)(TerminalEvent::Exited(parse(&header.event, text)?));
-                None
-            }
             "home_unreachable" => {
                 let told: HomeUnreachableMessage = parse(&header.event, text)?;
                 *away = true;
@@ -955,7 +996,79 @@ impl Task {
                 (error.error_code.as_deref() == Some(go_values::ERROR_CODE_UNAUTHORIZED_CLIENT))
                     .then_some(Refusal::Unauthorized(error.error))
             }
-            _ => None,
+            event => {
+                self.hand_on_terminal_event(event, text);
+                None
+            }
+        }
+    }
+
+    fn hand_on_terminal_event(&self, event: &str, text: &str) {
+        if let Some(event) = terminal_event(event, text) {
+            (self.config.terminals)(event);
+        }
+    }
+
+    fn apply_machine(&self, header: &Header, text: &str, greeted: &mut bool) {
+        let request_id = header.answers().filter(|id| !id.is_empty());
+        if (request_id.is_some() || header.event == "command_error")
+            && let Ok(body) = serde_json::from_str(text)
+        {
+            (self.config.replies)(Reply {
+                request_id: request_id.unwrap_or_default(),
+                event: header.event.clone(),
+                body,
+            });
+        }
+        match header.event.as_str() {
+            "initial_state" => {
+                let Some(state) = parse::<InitialStateMessage>(&header.event, text) else {
+                    return;
+                };
+                *greeted = true;
+                self.store.machine_greeted(
+                    state.daemon_instance_id.unwrap_or_default(),
+                    state.sessions.unwrap_or_default(),
+                    state.terminal_bindings.unwrap_or_default(),
+                );
+            }
+            "session_registered" | "session_state_changed" => {
+                let Some(message) = parse::<SessionRegisteredMessage>(&header.event, text) else {
+                    return;
+                };
+                self.store.change_machine_sessions(|sessions| {
+                    match sessions.iter_mut().find(|s| s.id == message.session.id) {
+                        Some(known) => *known = message.session,
+                        None => sessions.push(message.session),
+                    }
+                });
+            }
+            "session_unregistered" => {
+                let Some(message) = parse::<SessionUnregisteredMessage>(&header.event, text) else {
+                    return;
+                };
+                self.store.change_machine_sessions(|sessions| {
+                    sessions.retain(|s| s.id != message.session.id)
+                });
+            }
+            "sessions_updated" => {
+                let Some(message) = parse::<SessionsUpdatedMessage>(&header.event, text) else {
+                    return;
+                };
+                self.store.change_machine_sessions(|sessions| {
+                    *sessions = message.sessions.unwrap_or_default();
+                });
+            }
+            "terminal_bindings_updated" => {
+                let Some(message) = parse::<TerminalBindingsUpdatedMessage>(&header.event, text)
+                else {
+                    return;
+                };
+                self.store.set_machine_terminals(message.terminal_bindings);
+            }
+            event => {
+                self.hand_on_terminal_event(event, text);
+            }
         }
     }
 
@@ -999,7 +1112,23 @@ struct Health {
     instance: String,
     #[serde(default)]
     machine_id: String,
+    /// The home's name, while the daemon passes its apps to a home that runs elsewhere.
     home: Option<String>,
+}
+
+fn terminal_event(event: &str, text: &str) -> Option<TerminalEvent> {
+    Some(match event {
+        "attach_result" => TerminalEvent::Attached(Box::new(parse(event, text)?)),
+        "pty_resized" => TerminalEvent::Resized(parse(event, text)?),
+        "kitty_placements" => TerminalEvent::Placements(parse(event, text)?),
+        "kitty_image_result" => TerminalEvent::ImageResult(parse(event, text)?),
+        "get_screen_snapshot_result" => TerminalEvent::Snapshot(parse(event, text)?),
+        "pty_desync" => TerminalEvent::Desync(parse(event, text)?),
+        "runtime_respawned" => TerminalEvent::Respawned(parse(event, text)?),
+        "session_messages_changed" => TerminalEvent::MessagesChanged(parse(event, text)?),
+        "session_exited" => TerminalEvent::Exited(parse(event, text)?),
+        _ => return None,
+    })
 }
 
 fn parse<T: serde::de::DeserializeOwned>(event: &str, text: &str) -> Option<T> {

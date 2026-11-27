@@ -567,8 +567,10 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
     let t = crate::colors(&state.facts.settings, cx.system_dark()).ui;
     cx.zoom(crate::settings::text_scale(&state.facts.settings));
     let connection = &state.facts.connection;
+    let desk = connection::shows_desk(&state.facts);
     let body = match connection {
         Connection::Connected | Connection::Reconnecting { .. } => shell(state, &t, cx.env().scale),
+        Connection::HomeUnreachable(_) if desk => shell(state, &t, cx.env().scale),
         Connection::Connecting => centered(&t, connection::connecting(&t)),
         Connection::Refused(Refusal::MigrationFailed(marker)) => {
             centered(&t, crate::migration_failure::screen(state, marker, &t))
@@ -577,7 +579,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         Connection::HomeUnreachable(away) => centered(&t, connection::home_unreachable(&t, away)),
     };
     let banner = connection::banner(state, &t, cx);
-    let bands = connection::shows_desktops(connection);
+    let bands = desk;
     let warnings = bands
         .then(|| crate::warnings::banner(state, &t, cx))
         .flatten();

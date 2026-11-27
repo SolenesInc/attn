@@ -6,8 +6,8 @@ use attn_protocol::{
     Ask, AuthorState, CrewMember, DaemonWarning, DesktopTileContentMessage, GardenBed,
     GardenClosedCounts, GitOperation, Harness, InitialStateMessage, OutpostInfo, PR, PairedSender,
     PhonesUpdatedMessage, PluginInfo, PluginIssue, Profile, RepoState, Seed, SenderPairingRequest,
-    SendersUpdatedMessage, Session, SessionLedgerEntry, SharedCodexState, UpdateRun, Vent,
-    Worktree, WorktreeSweepEntry,
+    SendersUpdatedMessage, Session, SessionLedgerEntry, SharedCodexState, TerminalBinding,
+    UpdateRun, Vent, Worktree, WorktreeSweepEntry,
 };
 
 /// A desktop as the daemon sent it, with its layout tree read once on arrival.
@@ -416,11 +416,40 @@ impl MigrationMarker {
 }
 
 /// The machine this app runs on: the id its home knows it by, and the home's name when the home
-/// runs on another machine.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// runs on another machine. The terminals that run here then go over the app's own link to this
+/// machine's daemon, so they keep echoing at local speed, and keep working while the home is
+/// away.
+#[derive(Clone, Debug, Default)]
 pub struct AppMachine {
     pub id: String,
     pub home: Option<String>,
+    /// Whether the link to this machine's own daemon has its state.
+    pub connected: bool,
+    /// The daemon process that link reached; a new one starts its terminals' streams over.
+    pub daemon_instance: String,
+    /// The sessions that run here, as this machine's daemon last listed them.
+    pub sessions: Arc<Vec<Session>>,
+    /// The terminal each of those sessions runs in.
+    pub terminals: Arc<Vec<TerminalBinding>>,
+}
+
+impl PartialEq for AppMachine {
+    fn eq(&self, other: &AppMachine) -> bool {
+        self.id == other.id
+            && self.home == other.home
+            && self.connected == other.connected
+            && self.daemon_instance == other.daemon_instance
+            && Arc::ptr_eq(&self.sessions, &other.sessions)
+            && Arc::ptr_eq(&self.terminals, &other.terminals)
+    }
+}
+
+impl AppMachine {
+    /// Whether the session `host` names runs on this machine while its home runs on another,
+    /// so this machine's own daemon serves it.
+    pub fn runs(&self, host: Option<&str>) -> bool {
+        self.home.is_some() && !self.id.is_empty() && host == Some(self.id.as_str())
+    }
 }
 
 /// Which slices of `Facts` a change touched, and which a window reads.
@@ -458,7 +487,8 @@ impl Slices {
     pub const CAPTURE_READS: Slices = Slices(1 << 26);
     pub const SHARED_CODEX: Slices = Slices(1 << 27);
     pub const AUTOMATIONS: Slices = Slices(1 << 28);
-    pub const ALL: Slices = Slices((1 << 29) - 1);
+    pub const MACHINE: Slices = Slices(1 << 29);
+    pub const ALL: Slices = Slices((1 << 30) - 1);
 
     pub const fn union(self, other: Slices) -> Slices {
         Slices(self.0 | other.0)
@@ -559,6 +589,48 @@ impl Store {
             }
             facts.connection = connection;
             Slices::CONNECTION
+        });
+    }
+
+    pub(crate) fn set_machine_connected(&self, connected: bool) {
+        self.change_machine(|machine| machine.connected = connected);
+    }
+
+    pub(crate) fn machine_greeted(
+        &self,
+        daemon_instance: String,
+        sessions: Vec<Session>,
+        terminals: Vec<TerminalBinding>,
+    ) {
+        self.change_machine(|machine| {
+            machine.connected = true;
+            machine.daemon_instance = daemon_instance;
+            machine.sessions = Arc::new(sessions);
+            machine.terminals = Arc::new(terminals);
+        });
+    }
+
+    pub(crate) fn set_machine_terminals(&self, terminals: Vec<TerminalBinding>) {
+        self.change_machine(|machine| machine.terminals = Arc::new(terminals));
+    }
+
+    pub(crate) fn change_machine_sessions(&self, change: impl FnOnce(&mut Vec<Session>)) {
+        self.change_machine(|machine| {
+            let mut sessions = (*machine.sessions).clone();
+            change(&mut sessions);
+            machine.sessions = Arc::new(sessions);
+        });
+    }
+
+    fn change_machine(&self, change: impl FnOnce(&mut AppMachine)) {
+        self.change(|facts| {
+            let mut machine = facts.machine.clone();
+            change(&mut machine);
+            if machine == facts.machine {
+                return Slices::NONE;
+            }
+            facts.machine = machine;
+            Slices::MACHINE
         });
     }
 
@@ -682,13 +754,23 @@ impl Store {
         });
     }
 
-    pub(crate) fn set_machine(&self, machine: AppMachine) {
+    pub(crate) fn set_machine(&self, id: String, home: Option<String>) {
         self.change(|facts| {
-            if facts.machine == machine {
+            if facts.machine.id == id && facts.machine.home == home {
                 return Slices::NONE;
             }
-            facts.machine = machine;
-            Slices::CONNECTION | Slices::OUTPOSTS
+            facts.machine = match home {
+                Some(_) if facts.machine.id == id => AppMachine {
+                    home,
+                    ..facts.machine.clone()
+                },
+                _ => AppMachine {
+                    id,
+                    home,
+                    ..AppMachine::default()
+                },
+            };
+            Slices::CONNECTION | Slices::OUTPOSTS | Slices::MACHINE
         });
     }
 

@@ -180,6 +180,7 @@ mod wire {
     mod launcher;
     mod launcher_outposts;
     mod ledger;
+    mod machine_terminals;
     mod markdown;
     mod markdown_annotations;
     mod markdown_ids;

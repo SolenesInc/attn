@@ -46,7 +46,7 @@ impl Terminals {
         daemon: &Commands,
     ) {
         for id in ids.filter(|id| !id.is_empty()) {
-            if !self.connected || self.live_grid(id).is_some() {
+            if !self.up.home || self.live_grid(id).is_some() {
                 continue;
             }
             let Entry::Vacant(unasked) = self.snapshots.entry(id.to_owned()) else {

@@ -3,7 +3,7 @@ use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use attn_client::{Commands, Connection, Facts, Frame, Pulse, TerminalEvent, TerminalSink};
+use attn_client::{Commands, Connection, Facts, Frame, Pulse, Reach, TerminalEvent, TerminalSink};
 use attn_protocol::DesktopPane;
 use attn_protocol::{
     AttachResultMessage, AttachSessionMessage, DetachSessionMessage, PtyInputMessage,
@@ -82,16 +82,16 @@ impl Default for TerminalInbox {
 
 #[derive(Default)]
 struct Queue {
-    events: Mutex<Vec<(Instant, TerminalEvent)>>,
+    events: Mutex<Vec<(Instant, Reach, TerminalEvent)>>,
     wake: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
 impl Queue {
-    fn push(&self, event: TerminalEvent) {
+    fn push(&self, from: Reach, event: TerminalEvent) {
         self.events
             .lock()
             .unwrap()
-            .push((input_trace::hop_time(), event));
+            .push((input_trace::hop_time(), from, event));
         let wake = self.wake.lock().unwrap().clone();
         if let Some(wake) = wake {
             wake();
@@ -112,11 +112,21 @@ impl TerminalInbox {
     /// that window's wake, `wake` for this main window, so the window takes it.
     pub fn sink(&self, wake: impl Fn() + Send + Sync + 'static) -> TerminalSink {
         *self.main.wake.lock().unwrap() = Some(Arc::new(wake));
+        self.sink_from(Reach::Home)
+    }
+
+    /// The sink of the link to this machine's own daemon, which wakes the windows as `sink`'s
+    /// does.
+    pub fn machine_sink(&self) -> TerminalSink {
+        self.sink_from(Reach::Machine)
+    }
+
+    fn sink_from(&self, from: Reach) -> TerminalSink {
         let (main, owners) = (self.main.clone(), self.owners.clone());
         Box::new(move |event| match terminal_of(&event) {
             Some(id) => {
                 let owner = owners.lock().unwrap().get(id).cloned();
-                owner.unwrap_or_else(|| main.clone()).push(event);
+                owner.unwrap_or_else(|| main.clone()).push(from, event);
             }
             None => {
                 let mut queues: Vec<Arc<Queue>> = vec![main.clone()];
@@ -126,7 +136,7 @@ impl TerminalInbox {
                     }
                 }
                 for queue in queues {
-                    queue.push(event.clone());
+                    queue.push(from, event.clone());
                 }
             }
         })
@@ -156,7 +166,7 @@ impl TerminalInbox {
         Arc::ptr_eq(&self.own, &self.main)
     }
 
-    fn take(&self) -> Vec<(Instant, TerminalEvent)> {
+    fn take(&self) -> Vec<(Instant, Reach, TerminalEvent)> {
         std::mem::take(&mut *self.own.events.lock().unwrap())
     }
 
@@ -216,8 +226,12 @@ pub struct Terminals {
     /// shown again draws it until its attach brings the current one.
     hidden_screens: HashMap<String, Grid>,
     snapshots: HashMap<String, snapshots::Snapshot>,
-    connected: bool,
+    up: Up,
     daemon_instance: String,
+    /// The link to this machine's own daemon, which the terminals that run here ride while the
+    /// daemon on the app's port relays the app to its home.
+    pub(crate) machine: Commands,
+    machine_instance: String,
     focused: Option<String>,
     metrics: Option<Metrics>,
     theme: TerminalColors,
@@ -254,6 +268,8 @@ struct Term {
     holding_hidden_screen: bool,
     stream: Stream,
     phase: Phase,
+    /// The link the terminal attaches on, and hears its stream from.
+    via: Reach,
     agent: bool,
     place: links::Place,
     /// The daemon still has the session's process to bring back, so an attach revives it.
@@ -312,6 +328,40 @@ impl Default for Pointer {
     }
 }
 
+/// Which links have their daemon's state.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct Up {
+    home: bool,
+    machine: bool,
+}
+
+impl Up {
+    fn of(self, via: Reach) -> bool {
+        match via {
+            Reach::Home => self.home,
+            Reach::Machine => self.machine,
+        }
+    }
+}
+
+/// The link a terminal of the session on `host` rides: this machine's own, for a session
+/// that runs here, but the home's to revive one, which starts it again.
+fn rides(facts: &Facts, host: Option<&str>, recoverable: bool) -> Reach {
+    if facts.machine.runs(host) && !recoverable {
+        Reach::Machine
+    } else {
+        Reach::Home
+    }
+}
+
+/// The commands of the link `via` names.
+fn link<'a>(via: Reach, home: &'a Commands, machine: &'a Commands) -> &'a Commands {
+    match via {
+        Reach::Home => home,
+        Reach::Machine => machine,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Tile {
     size: (u16, u16),
@@ -354,6 +404,7 @@ impl Term {
             holding_hidden_screen: false,
             stream: Stream::Attaching(Default::default()),
             phase: Phase::Waiting,
+            via: Reach::Home,
             agent,
             place: links::Place::default(),
             recoverable: false,
@@ -409,7 +460,7 @@ impl Terminals {
         self.follow_connection(facts, daemon);
         self.undrawn = true;
         let machines = crate::machine::Machines::of(facts);
-        let drawn: Vec<(String, Option<String>, bool, links::Place, bool)> = panes
+        let drawn: Vec<(String, Option<String>, bool, links::Place, Reach, bool)> = panes
             .iter()
             .filter(|pane| !pane.runtime_id.is_empty())
             .map(|pane| {
@@ -426,9 +477,23 @@ impl Terminals {
                     away: machines.away(session.and_then(|s| s.host.as_deref())),
                 };
                 let agent = (pane.kind == "agent").then(|| pane.session_id.clone());
-                let streams =
-                    crate::outpost::reach(place.host.as_deref(), &facts.outposts).streams();
-                (pane.runtime_id.clone(), agent, recoverable, place, streams)
+                let via = rides(facts, place.host.as_deref(), recoverable);
+                let streams = match via {
+                    Reach::Machine => true,
+                    Reach::Home => {
+                        !matches!(facts.connection, Connection::HomeUnreachable(_))
+                            && crate::outpost::reach(place.host.as_deref(), &facts.outposts)
+                                .streams()
+                    }
+                };
+                (
+                    pane.runtime_id.clone(),
+                    agent,
+                    recoverable,
+                    place,
+                    via,
+                    streams,
+                )
             })
             .collect();
         let gone: Vec<String> = self
@@ -445,18 +510,19 @@ impl Terminals {
             self.latency.forget(&id);
             self.trace.lock().unwrap().forget(&id);
             save_leaving_note(term.marking.as_ref(), daemon);
-            release(&id, &mut term, None, 0, daemon);
+            let rides = link(term.via, daemon, &self.machine);
+            release(&id, &mut term, None, 0, rides);
             let mut screen = std::mem::take(&mut term.grid);
             screen.set_images(Vec::new(), 0);
             self.hidden_screens.insert(id.clone(), screen);
             if self.inbox.release(&id)
-                && self.connected
+                && self.up.of(term.via)
                 && matches!(
                     term.phase,
                     Phase::Attaching(_) | Phase::Retrying { .. } | Phase::Live
                 )
             {
-                let _ = daemon.send(&DetachSessionMessage {
+                let _ = link(term.via, daemon, &self.machine).send(&DetachSessionMessage {
                     id,
                     ..DetachSessionMessage::new()
                 });
@@ -468,7 +534,7 @@ impl Terminals {
                 .iter()
                 .any(|desktop| desktop.panes.iter().any(|pane| pane.runtime_id == *id))
         });
-        for (id, agent, recoverable, place, streams) in drawn {
+        for (id, agent, recoverable, place, via, streams) in drawn {
             let hidden_screens = &mut self.hidden_screens;
             let theme = &self.theme;
             let term = self.panes.entry(id.clone()).or_insert_with_key(|id| {
@@ -480,12 +546,31 @@ impl Terminals {
                 term
             });
             term.recoverable = recoverable;
+            if term.via != via {
+                let attached = matches!(
+                    term.phase,
+                    Phase::Attaching(_) | Phase::Retrying { .. } | Phase::Live
+                );
+                if attached && self.up.of(term.via) {
+                    let _ = link(term.via, daemon, &self.machine).send(&DetachSessionMessage {
+                        id: id.clone(),
+                        ..DetachSessionMessage::new()
+                    });
+                }
+                if attached {
+                    term.phase = Phase::Waiting;
+                    term.stream = Stream::Attaching(Default::default());
+                    term.sent_size = None;
+                }
+                term.watermark = None;
+                term.via = via;
+            }
             term.reached |= streams;
             match (streams, term.phase) {
                 (true, Phase::Away) => term.phase = Phase::Waiting,
                 (false, Phase::Attaching(_) | Phase::Retrying { .. } | Phase::Live) => {
-                    if self.connected {
-                        let _ = daemon.send(&DetachSessionMessage {
+                    if self.up.of(term.via) {
+                        let _ = link(term.via, daemon, &self.machine).send(&DetachSessionMessage {
                             id,
                             ..DetachSessionMessage::new()
                         });
@@ -509,17 +594,34 @@ impl Terminals {
     /// Streams start over on a new connection, from the start when the daemon itself is new.
     /// Following the facts keeps a connection's change in order with the state it brought.
     fn follow_connection(&mut self, facts: &Facts, daemon: &Commands) {
-        let connected = facts.connection == Connection::Connected;
-        if connected == self.connected {
+        let up = Up {
+            home: facts.connection == Connection::Connected,
+            machine: facts.machine.connected,
+        };
+        if up.machine && facts.machine.daemon_instance != self.machine_instance {
+            self.machine_instance
+                .clone_from(&facts.machine.daemon_instance);
+            for term in self.panes.values_mut().filter(|t| t.via == Reach::Machine) {
+                term.watermark = None;
+            }
+        }
+        let was = std::mem::replace(&mut self.up, up);
+        for via in [Reach::Home, Reach::Machine] {
+            if was.of(via) && !up.of(via) {
+                for term in self.panes.values_mut().filter(|t| t.via == via) {
+                    term.phase = Phase::Waiting;
+                    term.sent_size = None;
+                }
+            }
+        }
+        if up.machine && !was.machine {
+            self.focused = None;
+        }
+        if up.home == was.home {
             return;
         }
-        self.connected = connected;
         self.snapshots.clear();
-        if !connected {
-            for term in self.panes.values_mut() {
-                term.phase = Phase::Waiting;
-                term.sent_size = None;
-            }
+        if !up.home {
             return;
         }
         self.refetch_markings();
@@ -543,9 +645,14 @@ impl Terminals {
             return;
         }
         self.focused = keyboard.clone();
-        let Some(id) = keyboard.filter(|_| self.connected) else {
+        let Some(id) = keyboard else {
             return;
         };
+        let via = self.panes.get(&id).map_or(Reach::Home, |t| t.via);
+        if !self.up.of(via) {
+            return;
+        }
+        let daemon = link(via, daemon, &self.machine);
         let _ = daemon.send(&TerminalFocusMessage {
             id: id.clone(),
             ..TerminalFocusMessage::new()
@@ -607,6 +714,7 @@ impl Terminals {
             Phase::Live => {
                 let due = term.sent_at + RESIZE_INTERVAL;
                 if now >= due {
+                    let daemon = link(term.via, daemon, &self.machine);
                     send_resize(id, term, now, Pixels::Sent, daemon);
                 } else {
                     term.resize_due = Some(due);
@@ -652,7 +760,13 @@ impl Terminals {
                 Phase::Live => {
                     term.sent_size = None;
                     let at = term.sent_at;
-                    send_resize(id, term, at, Pixels::Sent, daemon);
+                    send_resize(
+                        id,
+                        term,
+                        at,
+                        Pixels::Sent,
+                        link(term.via, daemon, &self.machine),
+                    );
                 }
                 Phase::Attaching(attaching) | Phase::Retrying { attaching, .. } => {
                     attaching.relaid = true;
@@ -662,14 +776,12 @@ impl Terminals {
         }
     }
 
-    fn attach_waiting(&mut self, now: f64, daemon: &Commands) {
-        if !self.connected {
-            return;
-        }
+    fn attach_waiting(&mut self, now: f64, home: &Commands) {
         for (id, term) in &mut self.panes {
-            if term.phase != Phase::Waiting || term.tile.is_none() {
+            if term.phase != Phase::Waiting || term.tile.is_none() || !self.up.of(term.via) {
                 continue;
             }
+            let daemon = link(term.via, home, &self.machine);
             let tile = term.tile.expect("checked above");
             let policy = if term.recoverable {
                 Policy::Revive
@@ -743,7 +855,10 @@ impl Terminals {
         let events = self.inbox.take();
         let heard = !events.is_empty();
         let mut pictured = false;
-        for (received, event) in events {
+        for (received, from, event) in events {
+            if !self.hears(from, &event) {
+                continue;
+            }
             pictured |= matches!(event, TerminalEvent::Snapshot(_));
             self.apply(event, received, tx, daemon);
             self.undrawn = true;
@@ -764,6 +879,7 @@ impl Terminals {
             }
         }
         for (id, term) in &mut self.panes {
+            let daemon = link(term.via, daemon, &self.machine);
             match term.phase {
                 Phase::Live if term.resize_due.is_some_and(|due| now >= due) => {
                     send_resize(id, term, now, Pixels::Sent, daemon);
@@ -778,7 +894,21 @@ impl Terminals {
         recounted | pictured
     }
 
-    fn apply(&mut self, event: TerminalEvent, received: Instant, tx: &mut Tx, daemon: &Commands) {
+    /// Whether the window takes `event`, which came from link `from`: a terminal's stream comes
+    /// only from the link it attached on, and what concerns its session only from the home.
+    fn hears(&self, from: Reach, event: &TerminalEvent) -> bool {
+        match terminal_of(event).and_then(|id| self.panes.get(id)) {
+            Some(term) => term.via == from,
+            None => from == Reach::Home || terminal_of(event).is_some(),
+        }
+    }
+
+    fn apply(&mut self, event: TerminalEvent, received: Instant, tx: &mut Tx, home: &Commands) {
+        let machine = self.machine.clone();
+        let via = terminal_of(&event)
+            .and_then(|id| self.panes.get(id))
+            .map_or(Reach::Home, |t| t.via);
+        let daemon = link(via, home, &machine);
         match event {
             TerminalEvent::Frame(Frame::PtyOutput {
                 terminal,
@@ -891,7 +1021,7 @@ impl Terminals {
         Terminals::forget_screen(term);
         term.watermark = None;
         term.stream = Stream::Attaching(Default::default());
-        if !self.connected {
+        if !self.up.of(term.via) {
             term.phase = Phase::Waiting;
             return;
         }
@@ -1032,7 +1162,7 @@ impl Terminals {
             let write = Write {
                 left,
                 socket_open,
-                connected: self.connected,
+                connected: self.up.of(term.via),
                 probe: None,
             };
             self.trace
@@ -1076,6 +1206,8 @@ impl Terminals {
                 .decide(trace, id, Decision::NoTarget, now);
             return Typed::Nowhere;
         };
+        let via = term.via;
+        let daemon = link(via, daemon, &self.machine);
         let outcome = match term.phase {
             Phase::Live => Decision::Sent,
             Phase::Waiting | Phase::Attaching(_) | Phase::Retrying { .. } => {
@@ -1093,7 +1225,7 @@ impl Terminals {
                 let write = Write {
                     left,
                     socket_open,
-                    connected: self.connected,
+                    connected: self.up.of(via),
                     probe: None,
                 };
                 self.trace.lock().unwrap().sent(trace, id, write, now);
@@ -1105,7 +1237,12 @@ impl Terminals {
     }
 
     pub(crate) fn connected(&self) -> bool {
-        self.connected
+        self.up.home
+    }
+
+    /// The link terminal `id` attaches on.
+    pub(crate) fn rides(&self, id: &str) -> Reach {
+        self.panes.get(id).map_or(Reach::Home, |t| t.via)
     }
 
     pub(crate) fn live(&self, id: &str) -> bool {
@@ -1141,8 +1278,7 @@ impl Terminals {
         if term.pointer.at.replace(at) == Some(at) {
             return pointing;
         }
-        if term.agent && self.connected && now - term.pointer.active_at >= POINTER_ACTIVITY_INTERVAL
-        {
+        if term.agent && self.up.home && now - term.pointer.active_at >= POINTER_ACTIVITY_INTERVAL {
             term.pointer.active_at = now;
             let _ = daemon.send(&TerminalPointerActivityMessage {
                 id: id.into(),
@@ -1157,7 +1293,13 @@ impl Terminals {
             return pointing;
         }
         let report = mouse::report(Action::Move, term.pointer.reported, cell, modes.sgr, mods);
-        send_input(id, report.as_bytes(), "pointer", None, daemon);
+        send_input(
+            id,
+            report.as_bytes(),
+            "pointer",
+            None,
+            link(term.via, daemon, &self.machine),
+        );
         term.pointer.cell = Some(cell);
         pointing
     }
@@ -1193,7 +1335,13 @@ impl Terminals {
             return false;
         };
         let report = mouse::report(Action::Press, Some(button), cell, modes.sgr, mods);
-        send_input(id, report.as_bytes(), "pointer", None, daemon);
+        send_input(
+            id,
+            report.as_bytes(),
+            "pointer",
+            None,
+            link(term.via, daemon, &self.machine),
+        );
         term.pointer.reported = Some(button);
         term.pointer.cell = Some(cell);
         true
@@ -1213,7 +1361,7 @@ impl Terminals {
             return;
         };
         let cell = at.and_then(|at| cell_at(term, &metrics, at));
-        release(id, term, cell, mods, daemon);
+        release(id, term, cell, mods, link(term.via, daemon, &self.machine));
     }
 
     /// The wheel turned `dy` points over `at`: true when the terminal took it, reporting it to
@@ -1244,7 +1392,7 @@ impl Terminals {
                 mouse::wheel(lines, cell, modes).as_bytes(),
                 source,
                 None,
-                daemon,
+                link(term.via, daemon, &self.machine),
             );
         }
         true
@@ -1357,7 +1505,7 @@ impl Terminals {
         for term in self.panes.values_mut() {
             term.vt.set_theme(&theme);
         }
-        if self.connected && self.inbox.is_main() {
+        if self.up.home && self.inbox.is_main() {
             send_theme(&theme, daemon);
         }
     }

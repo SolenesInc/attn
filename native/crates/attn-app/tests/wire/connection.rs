@@ -525,44 +525,6 @@ fn a_home_the_daemon_cannot_reach_is_named_with_its_reason_until_it_answers() {
 }
 
 #[test]
-fn a_home_lost_while_a_dialog_is_open_shows_its_screen_uncovered() {
-    let away = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let daemon = Daemon::scripted();
-    let answering = away.clone();
-    daemon.on("client_hello", move |_| {
-        if answering.load(std::sync::atomic::Ordering::SeqCst) {
-            serde_json::json!({"event": "home_unreachable", "home": "oma", "state": "dialing"})
-        } else {
-            attn_testkit::message(InitialStateMessage {
-                protocol_version: Some(PROTOCOL_VERSION.into()),
-                ..InitialStateMessage::new()
-            })
-        }
-    });
-    let mut world = World::start(daemon);
-    world.gesture(|app| app.key(super::sidebar::chord(attn_app::Action::UiCommandPalette)));
-    assert!(
-        world.screen().find(Target::role("dialog")).is_some(),
-        "the palette opens:\n{}",
-        world.screen()
-    );
-
-    away.store(true, std::sync::atomic::Ordering::SeqCst);
-    world.daemon.disconnect();
-    world.settle();
-    world.advance(ms(1000));
-
-    assert!(home_unreachable(&world).is_some(), "{}", world.screen());
-    assert!(
-        world.screen().find(Target::role("dialog")).is_none(),
-        "no dialog covers the screen:\n{}",
-        world.screen()
-    );
-    world.gesture(|app| app.press("r"));
-    assert_eq!(world.daemon.sent_of("retry_home").len(), 1);
-}
-
-#[test]
 fn a_home_lost_on_a_desktop_with_tiles_leaves_no_shelf_to_click() {
     use super::sidebar::{desktop, pane, session, state};
     let away = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));

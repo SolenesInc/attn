@@ -55,16 +55,17 @@ fn follow(state: &mut State, link: &Link, tx: &mut Tx) -> bool {
         crate::sidebar::open_agent(state, &session, tx);
         return true;
     }
-    if let Some(refusal) = machines.refuse_start_here(&link.cwd) {
-        state.window.notify(refusal, tx);
-        return true;
-    }
+    let here = machines.app_host();
+    let address = crate::launcher::address_of(
+        &crate::launcher::machine_of(&machines, here.as_deref()),
+        &link.cwd,
+    );
     if !state.facts.harnesses_loaded {
         return false;
     }
     let picked = picker::Choice::new(None, &state.facts.settings).agent(state);
     if picked.is_empty() || picked == picker::TERMINAL {
-        picker::new_session_at(state, &link.cwd, tx);
+        picker::new_session_at(state, &address, tx);
     } else {
         picker::spawn(
             state,
@@ -76,7 +77,7 @@ fn follow(state: &mut State, link: &Link, tx: &mut Tx) -> bool {
                 anchor: None,
                 direction: Direction::Vertical,
                 label: link.label.clone(),
-                host: None,
+                host: here,
             },
             tx,
         );

@@ -78,10 +78,8 @@ before it joined, and it connects to its own outposts again.
 
 The app on that machine connects to its own daemon, which passes it to the
 home. The app shows the home's desktops, queue and Garden, and you use the
-home's terminals and its other outposts from it. While the machine can't reach
-the home, the app shows **Can't reach** with the home's name and the reason, and
-connects by itself when the home answers. Press **R** or click **Retry** to dial
-at once. `attn` on the machine still talks to its own daemon.
+home's terminals and its other outposts from it. `attn` on the machine still
+talks to its own daemon.
 
 That app names the home's machine where it would name This Mac: on tiles, in the
 launcher and in the file opener, and `home:` names it. Files on the home don't
@@ -95,9 +93,22 @@ automation's folder or the editor tile's root, lists the home's folders in place
 of this machine's dialog: **Enter** chooses the highlighted folder, **Tab** opens
 it, and the first row is the folder typed.
 
-The home doesn't start terminals on a machine that dials it yet. The launcher
-leaves the machine out, and `attn terminal open --host` and
-`attn delegate --host` refuse and name it.
+Terminals start on the machine as on any outpost: name it in the launcher, or
+pass `--host` to `attn terminal open` or `attn delegate`. The app reaches the
+machine's own terminals through the machine's daemon, not through the home, so
+they echo at local speed.
+
+While the machine can't reach the home, its own terminals keep working. If the
+app lost the home after showing it, it keeps the desk under a **Lost** band with
+the home's name. The machine's terminals still take typing, and the home's
+tiles keep their last screen and say typing is not sent. If the app starts
+while the home is unreachable, it shows **Can't reach** with the home's name and
+the reason. When the machine has terminals of its own, they show live in one
+row, and the sidebar says what waits for the home. Until the home answers you
+can type in that row, but you can't split, move or close its tiles. Without
+terminals of its own, the app shows only **Can't reach**. Either way, the app
+connects by itself when the home answers, and the home's desktops replace the
+row, with each terminal once. Press **R** or click **Retry** to dial at once.
 
 Attn never installs, updates or re-pairs a machine that dials the home, and
 can't connect to it in a terminal. Update attn on that machine. On its row,

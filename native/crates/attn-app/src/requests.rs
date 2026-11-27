@@ -183,7 +183,27 @@ impl State {
         then: impl FnOnce(&mut State, Answer, &mut Tx) + 'static,
         tx: &mut Tx,
     ) -> bool {
-        match self.daemon.send(command) {
+        self.ask_on(attn_client::Reach::Home, id, command, then, tx)
+    }
+
+    /// As `ask_as`, on link `on`: this machine's own daemon answers for the terminals that run
+    /// here.
+    pub(crate) fn ask_on(
+        &mut self,
+        on: attn_client::Reach,
+        id: String,
+        command: &impl Serialize,
+        then: impl FnOnce(&mut State, Answer, &mut Tx) + 'static,
+        tx: &mut Tx,
+    ) -> bool {
+        let sent = match on {
+            attn_client::Reach::Machine => self.terminals.machine.send(command),
+            attn_client::Reach::Home if crate::cold::shows(&self.facts) => {
+                Err(attn_client::NotConnected)
+            }
+            attn_client::Reach::Home => self.daemon.send(command),
+        };
+        match sent {
             Ok(()) => {
                 self.requests.wait(id, command, Box::new(then));
                 true

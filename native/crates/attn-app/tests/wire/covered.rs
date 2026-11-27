@@ -6,7 +6,7 @@ use std::time::Duration;
 use attn_app::automation::AppHooks;
 use attn_app::{State, Update};
 use attn_automation::{Host, Inspection, Server};
-use attn_client::{Clock, Link, LinkConfig, Performance, Pulse, Store, Subscription};
+use attn_client::{Clock, LinkConfig, Performance, Pulse, Store, Subscription};
 use attn_protocol::{
     Desktop, DesktopPane, InitialStateMessage, Profile, ProfileArrangementChangedMessage,
 };
@@ -45,7 +45,7 @@ struct App {
     host: Arc<Covered>,
     port: u16,
     token: String,
-    _link: Link,
+    _link: attn_app::Links,
     _window: Subscription,
 }
 
@@ -87,6 +87,7 @@ impl App {
             &Store::default(),
             |terminals, replies| LinkConfig {
                 daemon: address,
+                reach: attn_client::Reach::Home,
                 client_token: CLIENT_TOKEN.into(),
                 host_token: None,
                 instance: INSTANCE.into(),

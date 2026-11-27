@@ -294,6 +294,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
         .map(|(id, c)| (id.clone(), c.fires_at.clone()))
         .collect();
     countdowns.sort();
+    let waiting = crate::cold::waiting(facts);
     let reads = (
         (
             std::sync::Arc::as_ptr(&facts.sessions) as usize,
@@ -337,6 +338,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
             *t,
             facts.notifications.unread_critical,
             facts.notifications.critical_title.clone(),
+            waiting.clone(),
         ),
     );
     memo("sidebar", reads, || {
@@ -403,6 +405,16 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                             .w_full()
                             .children(desktop_groups(state, &lines, &marked, logos_on, &t)),
                     )
+                    .children(waiting.clone().map(|waiting| {
+                        ListRow::note(
+                            "sidebar.waiting-for-home",
+                            waiting,
+                            attn_ui::system::Type::Small,
+                            t.text_secondary,
+                            None,
+                            &t,
+                        )
+                    }))
                     .children(has_automations.then(|| {
                         automations_section(
                             state,

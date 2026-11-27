@@ -294,7 +294,8 @@ pub(crate) fn type_into(
     let runtime = terminal.to_owned();
     let answering = probe.clone();
     let left = input_trace::hop_time();
-    let socket_open = state.ask_as(
+    let socket_open = state.ask_on(
+        state.terminals.rides(terminal),
         probe.clone(),
         &input,
         move |state: &mut State, answer: Answer, tx: &mut Tx| {

@@ -272,7 +272,7 @@ pub(crate) fn rows(state: &State) -> (Vec<Row>, String) {
     let empty = match &opener.scope {
         Scope::Machine(host) if query.trim().is_empty() => format!(
             "No recent files on {}.",
-            crate::launcher::machine_name(&crate::launcher::offered(state, &crate::launcher::outposts(state)), host.as_deref())
+            crate::launcher::machine_name(&crate::launcher::offered(state, crate::launcher::outposts(state)), host.as_deref())
         ),
         _ if opener.indexing => "Loading files…".to_owned(),
         _ if query.trim().is_empty() => {
@@ -466,9 +466,9 @@ fn pick(state: &mut State, row: Row, tx: &mut Tx) {
         return;
     }
     let outposts = crate::launcher::outposts(state);
-    if crate::outpost::reach(row.host.as_deref(), &outposts).offline() {
+    if crate::outpost::reach(row.host.as_deref(), outposts).offline() {
         let machine = crate::launcher::machine_name(
-            &crate::launcher::offered(state, &outposts),
+            &crate::launcher::offered(state, outposts),
             row.host.as_deref(),
         );
         state.window.notify(

@@ -1,4 +1,4 @@
-use attn_client::{Connection, HomeUnreachable, Refusal};
+use attn_client::{Connection, Facts, HomeUnreachable, Refusal};
 use attn_protocol::RetryHomeMessage;
 use attn_ui::Tokens;
 use attn_ui::blocks::{Banner, BannerTone, Stack};
@@ -13,6 +13,18 @@ pub(crate) fn connecting(t: &Tokens) -> El {
         .role("status")
 }
 
+/// Whether the window shows the desk: while connected, and while the daemon or the home is
+/// away after the window had the home's state, which it keeps showing.
+pub(crate) fn shows_desk(facts: &Facts) -> bool {
+    match facts.connection {
+        Connection::Connected | Connection::Reconnecting { .. } => true,
+        Connection::HomeUnreachable(_) | Connection::Connecting => {
+            !facts.daemon_instance.is_empty() || crate::cold::shows(facts)
+        }
+        Connection::Refused(_) => false,
+    }
+}
+
 pub(crate) fn banner(state: &State, t: &Tokens, cx: &Cx<State>) -> Option<El> {
     let banner = said(state)?.details(crate::shell::opens_details(crate::shell::Band::Connection));
     Some(banner.build(t, cx))
@@ -20,7 +32,17 @@ pub(crate) fn banner(state: &State, t: &Tokens, cx: &Cx<State>) -> Option<El> {
 
 /// The message the banner shows: why the daemon is not answering.
 pub(crate) fn identity(state: &State) -> Option<String> {
+    if let Some(away) = lost_home(state) {
+        return Some(format!("{}|{}|{:?}", away.home, away.dial, away.reason));
+    }
     start_failed(state).map(|why| why.unwrap_or_default().to_owned())
+}
+
+fn lost_home(state: &State) -> Option<&HomeUnreachable> {
+    match &state.facts.connection {
+        Connection::HomeUnreachable(away) if shows_desk(&state.facts) => Some(away),
+        _ => None,
+    }
 }
 
 fn start_failed(state: &State) -> Option<Option<&str>> {
@@ -31,6 +53,30 @@ fn start_failed(state: &State) -> Option<Option<&str>> {
 }
 
 pub(crate) fn said(state: &State) -> Option<Banner> {
+    if let Some(away) = lost_home(state) {
+        let status = match away.reason.as_deref() {
+            Some(reason) if away.dial == "refused" => {
+                format!("{} refused this machine: {reason}", away.home)
+            }
+            Some(reason) if crate::cold::shows(&state.facts) => {
+                format!("Can’t reach {}: {reason}. Dialing again.", away.home)
+            }
+            None if crate::cold::shows(&state.facts) => {
+                format!("Can’t reach {}. Dialing again.", away.home)
+            }
+            Some(reason) => format!("Lost {}: {reason}. Reconnecting.", away.home),
+            None => format!("Lost {}. Reconnecting.", away.home),
+        };
+        return Some(
+            Banner::new("connection", "Home connection", BannerTone::Warn)
+                .announces("connection.home-lost", status)
+                .action(
+                    "connection.home-lost.retry",
+                    Button::new("Retry"),
+                    |state: &mut State, _: &mut rune::Tx| retry_home(state),
+                ),
+        );
+    }
     let start_failed = start_failed(state)?;
     let tone = if start_failed.is_some() {
         BannerTone::Bad
@@ -93,10 +139,8 @@ fn explain(refusal: &Refusal) -> (&'static str, String) {
     }
 }
 
-/// What the app shows while the daemon on its port cannot reach the home it passes the app to:
-/// the home, why, and a way to dial it now. The link connects again by itself once the dial
-/// changes.
-/// Whether the main window shows the desktops, rather than a screen about the connection.
+/// Whether the app has the home's live state, so the home's popped-out tiles and title bar
+/// controls show.
 pub(crate) fn shows_desktops(connection: &Connection) -> bool {
     matches!(
         connection,
@@ -104,6 +148,9 @@ pub(crate) fn shows_desktops(connection: &Connection) -> bool {
     )
 }
 
+/// What the app shows while the daemon on its port cannot reach the home it passes the app to:
+/// the home, why, and a way to dial it now. The link connects again by itself once the dial
+/// changes.
 pub(crate) fn home_unreachable(t: &Tokens, away: &HomeUnreachable) -> El {
     let title = format!("Can’t reach {}", away.home);
     let detail = match (away.dial.as_str(), away.reason.as_deref()) {

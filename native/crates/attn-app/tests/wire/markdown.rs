@@ -420,7 +420,6 @@ fn a_link_in_a_document_of_a_home_on_another_machine_opens_its_markdown_there_no
                 id: "mac".into(),
                 name: "mac".into(),
                 destination: "mac".into(),
-                dials_home: Some(true),
                 ..OutpostInfo::default()
             }]),
             ..InitialStateMessage::new()

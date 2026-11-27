@@ -418,7 +418,7 @@ impl Launcher {
     }
 
     pub(crate) fn address(&self, state: &State) -> Address {
-        parse(&self.query.text, &offered(state, &outposts(state)))
+        parse(&self.query.text, &offered(state, outposts(state)))
     }
 
     /// The home folder of `host`, or of this machine: empty until it said.
@@ -580,7 +580,7 @@ impl Launcher {
                     .cloned()
                     .collect();
                 (
-                    machine_name(&offered(state, &outposts(state)), target.as_deref()),
+                    machine_name(&offered(state, outposts(state)), target.as_deref()),
                     lacking,
                 )
             });
@@ -594,7 +594,7 @@ impl Launcher {
     /// Why a start of `agent` on `host` cannot go now, if it cannot.
     fn refusal(&self, state: &State, host: Option<&str>, agent: &str) -> Option<Problem> {
         let outposts = outposts(state);
-        let name = machine_name(&offered(state, &outposts), host);
+        let name = machine_name(&offered(state, outposts), host);
         if let Some(host) = host
             && !reachable(outposts, Some(host))
         {
@@ -684,7 +684,7 @@ impl Launcher {
                         path: dir.clone(),
                         name: format!(
                             "{dir}/ is on {}",
-                            machine_name(&offered(state, &outposts), h.as_deref())
+                            machine_name(&offered(state, outposts), h.as_deref())
                         ),
                         host: h,
                         repo_root: None,
@@ -771,7 +771,7 @@ impl Launcher {
                                     Some(h) => {
                                         format!(
                                             "{}:{}",
-                                            machine_name(&offered(state, &outposts), Some(&h)),
+                                            machine_name(&offered(state, outposts), Some(&h)),
                                             r.path
                                         )
                                     }
@@ -1735,7 +1735,7 @@ pub(crate) fn completion(launcher: &Launcher, state: &State, row: &Row) -> Strin
         Kind::Recent | Kind::Folder => launcher.display(state, &row.path, row.host.as_deref()),
     };
     address_of(
-        &machine_of(&offered(state, &outposts(state)), row.host.as_deref()),
+        &machine_of(&offered(state, outposts(state)), row.host.as_deref()),
         &format!("{}/", path.trim_end_matches('/')),
     )
 }
@@ -2172,7 +2172,7 @@ fn begin(
 /// A start that did not get through: the launcher stays as it was, saying why. A start the
 /// user left to finish in the background says why in a notice.
 fn failed(state: &mut State, start: &Start, error: String, tx: &mut Tx) {
-    let machine = machine_name(&offered(state, &outposts(state)), start.host.as_deref());
+    let machine = machine_name(&offered(state, outposts(state)), start.host.as_deref());
     match this(state, start.which, start.opening) {
         Some(launcher) => {
             launcher.busy = false;

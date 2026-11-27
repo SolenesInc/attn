@@ -10,6 +10,7 @@ mod callouts;
 mod cheat_sheet;
 mod chief;
 mod closing;
+mod cold;
 mod connection;
 mod context_cap;
 mod crew;
@@ -224,7 +225,7 @@ pub(crate) const PICTURE_SCALE: f32 = 2.0;
 /// `replies`.
 pub fn bind(
     store: &Store,
-    daemon: Commands,
+    (daemon, machine): (Commands, Commands),
     terminals: TerminalInbox,
     replies: ReplyInbox,
     wall: WallClock,
@@ -246,11 +247,12 @@ pub fn bind(
         state.wall = wall;
         state.instance = instance;
         state.daemon = daemon;
+        state.terminals.machine = machine;
         state.terminals.inbox = terminals;
         state.requests.inbox = replies;
     }));
     store.subscribe(READS, move |facts, changed| {
-        let facts = facts.clone();
+        let facts = cold::view(facts.clone());
         let keymap = changed.intersects(Slices::SETTINGS).then(|| {
             let setting = facts.settings.get(keymap::SETTING).map(String::as_str);
             Arc::new(Keymap::from_setting(setting, Platform::current()))
@@ -264,6 +266,9 @@ pub fn bind(
             let alone = desktop::shown_alone(state);
             let on_screen = desktop::arrival::on_screen(state);
             state.facts = facts;
+            if cold::shows(&state.facts) {
+                state.window.view = shell::View::Desktop;
+            }
             if was && !is {
                 requests::forget(state, tx);
                 harness::logo::disconnected(state);
@@ -346,20 +351,27 @@ pub fn connect(
     changed: Pulse,
     wake: impl Fn() + Send + Sync + 'static,
     deliver: impl Fn(Update) + Send + Sync + 'static,
-) -> (Link, Subscription) {
+) -> (Links, Subscription) {
     let terminals = TerminalInbox::beating(changed.clone());
     let replies = ReplyInbox::default();
     let wake = Arc::new(wake);
-    let (woken, replied) = (wake.clone(), wake);
+    let (woken, replied, replied_here) = (wake.clone(), wake.clone(), wake);
     let config = config(
         terminals.sink(move || woken()),
         replies.sink(move || replied()),
     );
     let (instance, wall) = (config.instance.clone(), config.wall.clone());
-    let link = Link::start(config, store.clone());
+    let machine = config.for_machine(
+        terminals.machine_sink(),
+        replies.sink(move || replied_here()),
+    );
+    let links = Links {
+        home: Link::start(config, store.clone()),
+        machine: Link::start(machine, store.clone()),
+    };
     let window = bind(
         store,
-        link.commands(),
+        links.commands(),
         terminals,
         replies.clone(),
         wall,
@@ -372,7 +384,20 @@ pub fn connect(
             }));
         },
     );
-    (link, window)
+    (links, window)
+}
+
+/// The app's links: to the daemon on its port, and, while that daemon relays the app to a home
+/// elsewhere, to the same daemon for the terminals that run on this machine.
+pub struct Links {
+    pub home: Link,
+    pub machine: Link,
+}
+
+impl Links {
+    pub fn commands(&self) -> (Commands, Commands) {
+        (self.home.commands(), self.machine.commands())
+    }
 }
 
 fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {

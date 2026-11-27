@@ -25,7 +25,7 @@ const STUCK: Duration = Duration::from_secs(10);
 /// answers the layout it reports, or text draws its masks a frame after it lands. The wire suite
 /// needs 3 at most (measured). A loop or a playing video never lands, and stops landing here.
 pub(crate) const LANDING_SETTLES: usize = 8;
-const VIEWPORT: (f32, f32) = (960.0, 640.0);
+pub const VIEWPORT: (f32, f32) = (960.0, 640.0);
 const FRAME: f64 = 1.0 / 60.0;
 
 /// The wall clock when every world starts: 2026-11-12T09:00:00Z.
@@ -40,6 +40,9 @@ fn wall_clock(ms: &Arc<AtomicI64>) -> attn_app::WallClock {
 /// loopback. Time moves only when the test calls `advance`.
 pub struct World {
     pub daemon: Daemon,
+    /// The daemon of the machine the app runs on, when `daemon` relays the app to a home
+    /// elsewhere (`World::start_relaying`).
+    pub machine: Option<Daemon>,
     /// The clipboard the app copies to and pastes from, in place of the system's.
     pub clipboard: rune::clipboard::MemoryClipboard,
     /// What the app's link answers the daemon's performance requests with.
@@ -52,6 +55,9 @@ pub struct World {
     terminal_frames: usize,
     window_frames: usize,
     link: Option<Link>,
+    /// The link to the daemon of the machine the app runs on, which connects only while the
+    /// daemon on the app's port relays the app to a home elsewhere.
+    machine_link: Link,
     _window: Subscription,
     inbox: Arc<Mutex<Vec<attn_app::Update>>>,
     frames: Arc<Mutex<Vec<Frame>>>,
@@ -222,6 +228,15 @@ pub struct Heard {
 impl World {
     /// Starts the app against `daemon` and returns once both are quiet: after the handshake,
     /// or after the app gave up on the daemon.
+    /// The app on a machine whose daemon, `daemon`, relays it to a home elsewhere
+    /// (`Daemon::relaying_to`), with `machine` serving the terminals that run on this machine.
+    pub fn start_relaying(daemon: Daemon, machine: Daemon, size: (f32, f32)) -> World {
+        let mut world = World::start_sized(daemon.serving_machine(&machine), size);
+        world.machine = Some(machine);
+        world.settle();
+        world
+    }
+
     pub fn start(daemon: Daemon) -> World {
         World::start_sized(daemon, VIEWPORT)
     }
@@ -310,37 +325,52 @@ impl World {
             replies.sink(move || pulse.beat())
         };
         let performance = Performance::default();
-        let link = Link::start(
-            LinkConfig {
-                daemon: daemon.address().to_string(),
-                client_token: CLIENT_TOKEN.into(),
-                host_token: None,
-                instance: instance.into(),
-                browser_host: false,
-                profile_id: None,
-                client_id: "wire-client".into(),
-                app_pid: std::process::id(),
-                clock: Clock::Manual(clock.clone()),
-                wall: wall_clock(&wall_ms),
-                pulse: pulse.clone(),
-                terminals: Box::new(move |event| {
-                    if let TerminalEvent::Frame(frame) = &event {
-                        received.lock().unwrap().push(frame.clone());
-                    }
-                    to_app(event);
-                }),
-                replies: answers,
-                start_daemon: Some(daemon.starter()),
-                migration_marker: Some(daemon.migration_marker()),
-                performance: performance.clone(),
-            },
-            store.clone(),
+        let to_app_here = terminals.machine_sink();
+        let received_here = frames.clone();
+        let answers_here = {
+            let pulse = pulse.clone();
+            replies.sink(move || pulse.beat())
+        };
+        let config = LinkConfig {
+            daemon: daemon.address().to_string(),
+            reach: attn_client::Reach::Home,
+            client_token: CLIENT_TOKEN.into(),
+            host_token: None,
+            instance: instance.into(),
+            browser_host: false,
+            profile_id: None,
+            client_id: "wire-client".into(),
+            app_pid: std::process::id(),
+            clock: Clock::Manual(clock.clone()),
+            wall: wall_clock(&wall_ms),
+            pulse: pulse.clone(),
+            terminals: Box::new(move |event| {
+                if let TerminalEvent::Frame(frame) = &event {
+                    received.lock().unwrap().push(frame.clone());
+                }
+                to_app(event);
+            }),
+            replies: answers,
+            start_daemon: Some(daemon.starter()),
+            migration_marker: Some(daemon.migration_marker()),
+            performance: performance.clone(),
+        };
+        let machine_config = config.for_machine(
+            Box::new(move |event| {
+                if let TerminalEvent::Frame(frame) = &event {
+                    received_here.lock().unwrap().push(frame.clone());
+                }
+                to_app_here(event);
+            }),
+            answers_here,
         );
+        let link = Link::start(config, store.clone());
+        let machine_link = Link::start(machine_config, store.clone());
         let window = {
             let (inbox, pulse) = (inbox.clone(), pulse.clone());
             attn_app::bind(
                 &store,
-                link.commands(),
+                (link.commands(), machine_link.commands()),
                 terminals.clone(),
                 replies.clone(),
                 wall_clock(&wall_ms),
@@ -396,6 +426,7 @@ impl World {
             performance,
             files,
             daemon,
+            machine: None,
             clipboard,
             runtime,
             screens: Screens::default(),
@@ -403,6 +434,7 @@ impl World {
             terminal_frames: 0,
             window_frames: 0,
             link: Some(link),
+            machine_link,
             _window: window,
             inbox,
             frames,
@@ -717,7 +749,7 @@ impl World {
         for order in orders {
             match order {
                 crate::tiles::Order::Open { key, frame, setup } => {
-                    let daemon = self.link().commands();
+                    let daemon = (self.link().commands(), self.machine_link.commands());
                     let tile = crate::tiles::TileRuntime::open(
                         key.clone(),
                         frame,
@@ -1236,8 +1268,14 @@ impl World {
     /// Messages in flight on a connection that has ended are lost with it, so the counts are
     /// compared only while the link reads the daemon's newest connection.
     fn quiet(&self) -> bool {
-        let link = self.link().traffic();
-        let daemon = self.daemon.traffic();
+        let machine_quiet = self
+            .machine
+            .as_ref()
+            .is_none_or(|machine| self.caught_up(self.machine_link.traffic(), machine.traffic()));
+        machine_quiet && self.caught_up(self.link().traffic(), self.daemon.traffic())
+    }
+
+    fn caught_up(&self, link: attn_client::Traffic, daemon: crate::daemon::Traffic) -> bool {
         match link.parked {
             Parked::Reading(heartbeat) => {
                 link.connection == daemon.connection as u64
@@ -1255,7 +1293,8 @@ impl World {
 impl Drop for World {
     fn drop(&mut self) {
         self.link.take();
-        let violations = self.daemon.violations();
+        let mut violations = self.daemon.violations();
+        violations.extend(self.machine.iter().flat_map(Daemon::violations));
         if !violations.is_empty() && !std::thread::panicking() {
             panic!(
                 "the app broke the daemon's script:\n{}",

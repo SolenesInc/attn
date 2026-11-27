@@ -158,7 +158,8 @@ fn capture(window: u64, path: &str) -> Command {
 /// store, sending on its link and hearing its terminals' events.
 pub struct NativeOpener {
     pub store: attn_client::Store,
-    pub daemon: attn_client::Commands,
+    /// The commands of the app's links, the home's and this machine's.
+    pub links: (attn_client::Commands, attn_client::Commands),
     pub wall: crate::WallClock,
     /// The app's debug folder, where each window logs its terminals' input.
     pub debug_dir: Option<std::path::PathBuf>,
@@ -206,7 +207,7 @@ impl crate::desktop::Opener for NativeOpener {
         handle.update(setup.into_update(Box::new(move || content_frame(&placed))));
         let bound = crate::bind(
             &self.store,
-            self.daemon.clone(),
+            self.links.clone(),
             terminals,
             crate::ReplyInbox::default(),
             self.wall.clone(),

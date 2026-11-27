@@ -69,6 +69,7 @@ fn link_config() -> Result<impl FnOnce(TerminalSink, ReplySink) -> LinkConfig, S
     );
     Ok(move |terminals, replies| LinkConfig {
         daemon: format!("127.0.0.1:{port}"),
+        reach: attn_client::Reach::Home,
         client_token,
         host_token: Some(host_token),
         instance: instance.unwrap_or_else(|| "default".into()),

@@ -13,7 +13,7 @@ pub use clock::{Clock, ManualClock};
 pub use frame::{Frame, KittyFormat};
 pub use link::{
     Commands, FETCH_PR_DETAILS_ID, LIST_PLUGINS, Link, LinkConfig, NotConnected, Parked,
-    REFRESH_PRS_ID, Reply, ReplySink, StartDaemon, TerminalEvent, TerminalSink, Traffic,
+    REFRESH_PRS_ID, Reach, Reply, ReplySink, StartDaemon, TerminalEvent, TerminalSink, Traffic,
     context_cap_id, plugin_action, pr_action_id,
 };
 pub use performance::Performance;

@@ -128,7 +128,7 @@ impl TileRuntime {
         frame: Frame,
         setup: Setup,
         store: &Store,
-        daemon: attn_client::Commands,
+        daemon: (attn_client::Commands, attn_client::Commands),
         pulse: &Pulse,
         wall: attn_app::WallClock,
     ) -> TileRuntime {

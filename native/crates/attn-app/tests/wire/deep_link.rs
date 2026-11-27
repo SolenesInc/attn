@@ -274,7 +274,7 @@ fn a_link_that_asks_for_anything_but_a_spawn_with_a_folder_does_nothing() {
 }
 
 #[test]
-fn with_the_home_on_another_machine_a_spawn_link_starts_nothing_there_and_says_why() {
+fn with_the_home_on_another_machine_a_spawn_link_starts_its_agent_on_this_one_not_the_homes() {
     let mut world = world_on(
         Daemon::scripted().relaying_to("mac", "oma"),
         "d1",
@@ -284,14 +284,17 @@ fn with_the_home_on_another_machine_a_spawn_link_starts_nothing_there_and_says_w
     open(&mut world, PLAN);
 
     assert!(shown(&world).is_empty());
-    assert!(world.daemon.sent_of("spawn_session").is_empty());
+    let spawns = world.daemon.sent_of("spawn_session");
     assert_eq!(
-        world
-            .screen()
-            .find(Target::key("notice.text"))
-            .and_then(|n| n.name)
-            .as_deref(),
-        Some("/repo/plan is on This Mac; oma can't start agents on this machine yet")
+        spawns
+            .iter()
+            .map(|s| (s["cwd"].clone(), s["host"].clone(), s["agent"].clone()))
+            .collect::<Vec<_>>(),
+        [(
+            serde_json::json!("/repo/plan"),
+            serde_json::json!("mac"),
+            serde_json::json!("claude")
+        )]
     );
     rest(&mut world);
 }

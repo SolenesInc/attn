@@ -106,7 +106,7 @@ fn progress(state: &State, launcher: &Launcher, t: &Tokens) -> Block {
     let mut message = match host {
         Some(_) => format!(
             "Starting on {}…",
-            machine_name(&offered(state, &outposts(state)), host)
+            machine_name(&offered(state, outposts(state)), host)
         ),
         None => "Starting…".to_owned(),
     };
@@ -165,7 +165,7 @@ fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> El 
     });
     let prefix = match launcher.place {
         Some(_) => "",
-        None => machine_prefix(&launcher.query.text, &offered(state, &outposts)),
+        None => machine_prefix(&launcher.query.text, &offered(state, outposts)),
     };
     let accent = (!prefix.is_empty()).then(|| vec![Span::new(0, prefix.len()).color(t.accent)]);
     let mut input = finder::query_field(
@@ -315,9 +315,9 @@ fn locations(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> 
             ),
         ]
         .into_iter()
-        .chain(offered(state, &outposts).several().then(|| {
+        .chain(offered(state, outposts).several().then(|| {
             (
-                format!("on {}", machine_name(&offered(state, &outposts), host)),
+                format!("on {}", machine_name(&offered(state, outposts), host)),
                 false,
             )
         }))
@@ -426,14 +426,14 @@ fn location_row(
                     .unwrap_or_default()
             )),
             Part::Code(address_of(
-                &machine_of(&offered(state, &outposts), host),
+                &machine_of(&offered(state, outposts), host),
                 "~/",
             )),
         ])),
         Kind::Elsewhere => Some(Said::parts([
             Part::Text("Enter browses ".to_owned()),
             Part::Code(address_of(
-                &machine_of(&offered(state, &outposts), host),
+                &machine_of(&offered(state, outposts), host),
                 &format!("{}/", r.path),
             )),
         ])),
@@ -450,13 +450,13 @@ fn location_row(
             (r.kind == Kind::Folder).then(|| quiet("repo".to_owned(), t).key(badge_key.clone()))
         }
     });
-    let reach = host.map(|h| outpost(&outposts, h).map(|o| o.reach.clone()));
+    let reach = host.map(|h| outpost(outposts, h).map(|o| o.reach.clone()));
     let machine = (matches!(r.kind, Kind::Recent | Kind::Elsewhere)
-        && offered(state, &outposts).several())
+        && offered(state, outposts).several())
     .then(|| {
         machine_tag(
             format!("{w}.row.{i}.machine"),
-            &offered(state, &outposts),
+            &offered(state, outposts),
             host,
             t,
         )

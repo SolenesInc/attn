@@ -49,7 +49,8 @@ fn heard_key(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> 
     if matches!(
         state.facts.connection,
         attn_client::Connection::HomeUnreachable(_)
-    ) {
+    ) && !crate::connection::shows_desk(&state.facts)
+    {
         let retry = ev.mods == Mods::default()
             && match &ev.key {
                 Key::Enter => true,

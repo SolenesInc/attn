@@ -1248,7 +1248,7 @@ fn reach_strip(cx: &TileCx, pane: &DesktopPane) -> (Option<String>, Option<Strin
     let Some(session) = cx.sessions.iter().find(|s| s.id == pane.session_id) else {
         return (None, None);
     };
-    let notice = crate::outpost::notice(session, cx.outposts);
+    let notice = crate::outpost::tile_notice(session, cx.facts);
     let unseen = crate::outpost::offline(session, cx.outposts)
         && cx.terminals.away(&pane.runtime_id) == Some(false);
     let screen_on = unseen
@@ -1268,10 +1268,13 @@ fn reaches(
         .flat_map(|d| &d.panes)
         .filter_map(|p| {
             let s = facts.sessions.iter().find(|s| s.id == p.session_id)?;
-            s.host.as_ref()?;
+            let notice = crate::outpost::tile_notice(s, facts);
+            if notice.is_none() {
+                s.host.as_ref()?;
+            }
             Some((
                 p.runtime_id.clone(),
-                crate::outpost::notice(s, &facts.outposts),
+                notice,
                 state.terminals.away(&p.runtime_id),
             ))
         })

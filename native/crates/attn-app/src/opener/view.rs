@@ -34,7 +34,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         Scope::Machine(host) => Some(chip_edge(
             machine_tag(
                 SCOPE.to_owned(),
-                &crate::launcher::offered(state, &outposts),
+                &crate::launcher::offered(state, outposts),
                 host.as_deref(),
                 t,
             ),
@@ -42,7 +42,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         )),
     };
     let tagged =
-        state.opener.scope == Scope::Every && crate::launcher::offered(state, &outposts).several();
+        state.opener.scope == Scope::Every && crate::launcher::offered(state, outposts).several();
     let list = finder::list(
         LIST,
         rows.iter()
@@ -95,7 +95,7 @@ pub(super) fn row_key(r: &Row) -> String {
 fn option(state: &State, r: &Row, highlighted: bool, tagged: bool, t: &Tokens) -> El {
     let outposts = crate::launcher::outposts(state);
     let key = row_key(r);
-    let on = crate::launcher::offered(state, &outposts)
+    let on = crate::launcher::offered(state, outposts)
         .away(r.host.as_deref())
         .map(|name| format!(" on {name}"))
         .unwrap_or_default();
@@ -111,7 +111,7 @@ fn option(state: &State, r: &Row, highlighted: bool, tagged: bool, t: &Tokens) -
     if tagged {
         line = line.aside(machine_tag(
             format!("{key}.machine"),
-            &crate::launcher::offered(state, &outposts),
+            &crate::launcher::offered(state, outposts),
             r.host.as_deref(),
             t,
         ));

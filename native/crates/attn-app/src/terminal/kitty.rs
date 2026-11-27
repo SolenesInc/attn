@@ -146,6 +146,7 @@ impl Terminals {
         let Some(term) = self.panes.get(id) else {
             return;
         };
+        let daemon = super::link(term.via, daemon, &self.machine);
         for (image, generation) in term.placements.images() {
             let key = (id.to_owned(), image, generation);
             let asked = (id.to_owned(), image);

@@ -59,13 +59,6 @@ impl<'a> Machines<'a> {
         !self.outposts.is_empty() || self.app.home.is_some()
     }
 
-    /// Why an agent cannot start in `path` on this machine, when its home runs on another.
-    pub(crate) fn refuse_start_here(&self, path: &str) -> Option<String> {
-        self.app.home.as_ref().map(|home| {
-            format!("{path} is on {THIS_MAC}; {home} can't start agents on this machine yet")
-        })
-    }
-
     /// Why a path on `host` cannot be opened on this machine, when it cannot.
     pub(crate) fn refuse_open(&self, path: &str, host: Option<&str>) -> Option<String> {
         self.away(host).map(|name| {

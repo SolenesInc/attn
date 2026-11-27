@@ -59,6 +59,7 @@ impl Launch {
             .finish();
         LinkConfig {
             daemon: format!("127.0.0.1:{}", self.instance.ws_port),
+            reach: attn_client::Reach::Home,
             client_token: self.client_token.clone(),
             host_token: Some(self.host_token.clone()),
             instance: self.instance.label().to_string(),

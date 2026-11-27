@@ -1,5 +1,6 @@
 //! How far the home reaches the machine a session runs on, and what each surface makes of it.
 
+use attn_client::{Connection, Facts};
 use attn_protocol::{OutpostInfo, Session};
 use rune::Tx;
 
@@ -60,6 +61,19 @@ pub(crate) fn notice(session: &Session, outposts: &[OutpostInfo]) -> Option<Stri
         Reach::Stalled => Some(format!("{name} not responding")),
         Reach::Reachable => None,
     }
+}
+
+/// What a session's tile says of where it runs while that is not plainly reachable: the home,
+/// while the daemon on the app's port cannot reach it, serves every session that does not run
+/// on this machine; this machine's own daemon serves the rest.
+pub(crate) fn tile_notice(session: &Session, facts: &Facts) -> Option<String> {
+    if facts.machine.runs(session.host.as_deref()) {
+        return None;
+    }
+    if let Connection::HomeUnreachable(away) = &facts.connection {
+        return Some(format!("Lost {} · typing is not sent", away.home));
+    }
+    notice(session, &facts.outposts)
 }
 
 /// Why an action on `session` that needs its machine cannot run now: its machine is

@@ -463,9 +463,18 @@ fn with_the_home_on_another_machine_a_markdown_link_in_a_terminal_on_this_one_op
             "error": "no desktop to show it on",
         })
     });
-    let mut world = World::start(daemon);
+    let machine = Daemon::of_this_machine(&daemon).state(attn_protocol::InitialStateMessage {
+        protocol_version: Some(attn_protocol::PROTOCOL_VERSION.into()),
+        daemon_instance_id: Some("mac-daemon".into()),
+        ..attn_protocol::InitialStateMessage::new()
+    });
+    let mut world = World::start_relaying(daemon, machine, attn_testkit::VIEWPORT);
     world.open_desktop();
-    output(&world, 1, b"plan.md\r\n");
+    world
+        .machine
+        .as_ref()
+        .unwrap()
+        .emit_frame(super::terminal::output_frame(1, b"plan.md\r\n"));
     world.settle();
 
     accelerator(&mut world, true);

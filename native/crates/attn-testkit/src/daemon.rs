@@ -97,6 +97,9 @@ struct Script {
     start_fails: Option<String>,
     handlers: HashMap<String, Handler>,
     in_turn: HashMap<String, VecDeque<Answer>>,
+    /// The daemon `/ws/machine` reaches: the app's machine's own, beside this one that relays the
+    /// app to a home elsewhere.
+    machine_daemon: Option<SocketAddr>,
 }
 
 #[derive(Default)]
@@ -139,6 +142,18 @@ impl Daemon {
     /// A daemon that answers the handshake and attaches every terminal with an empty screen at
     /// the size the app last asked for, until a test scripts `attach_session` itself.
     pub fn scripted() -> Daemon {
+        Daemon::beating(Pulse::default())
+    }
+
+    /// The daemon of the machine the app runs on, beside `home`, the daemon on the app's port,
+    /// which relays the app to its home and passes `/ws/machine` here once `serving_machine`
+    /// says so.
+    /// It beats `home`'s pulse, which the world waits on.
+    pub fn of_this_machine(home: &Daemon) -> Daemon {
+        Daemon::beating(home.pulse())
+    }
+
+    fn beating(pulse: Pulse) -> Daemon {
         crate::machine::settle();
         let shared = Arc::new(Shared {
             script: Mutex::new(Script {
@@ -153,9 +168,10 @@ impl Daemon {
                 start_fails: None,
                 handlers: HashMap::new(),
                 in_turn: HashMap::new(),
+                machine_daemon: None,
             }),
             log: Mutex::new(Log::default()),
-            pulse: Pulse::default(),
+            pulse,
             rewrite: Mutex::new(None),
         });
         let listener = std::net::TcpListener::bind("127.0.0.1:0")
@@ -242,6 +258,13 @@ impl Daemon {
     /// differs, such as one whose names are all long, would send it.
     pub fn rewriting(self, rewrite: impl Fn(&mut Value) + Send + Sync + 'static) -> Daemon {
         *self.shared.rewrite.lock().unwrap() = Some(Arc::new(rewrite));
+        self
+    }
+
+    /// Passes `/ws/machine` to `machine`, the app's machine's own daemon, as a daemon that
+    /// relays the app to a home elsewhere (`relaying_to`) does.
+    pub fn serving_machine(self, machine: &Daemon) -> Daemon {
+        self.shared.script.lock().unwrap().machine_daemon = Some(machine.address());
         self
     }
 
@@ -519,14 +542,35 @@ async fn connection(shared: Arc<Shared>, mut stream: TcpStream) {
     let Some(head) = read_head(&mut stream).await else {
         return;
     };
-    let (health, refusing) = {
+    let (health, refusing, relays, machine_daemon) = {
         let script = shared.script.lock().unwrap();
         let mut health = json!({ "instance": script.instance, "machine_id": script.machine_id });
         if let Some(home) = &script.home {
             health["home"] = json!(home);
         }
-        (health, script.refusing || script.stopped)
+        (
+            health,
+            script.refusing || script.stopped,
+            script.home.is_some(),
+            script.machine_daemon,
+        )
     };
+    if relays && head.starts_with(b"GET /ws/machine ") {
+        let there = match machine_daemon {
+            Some(machine) => TcpStream::connect(machine).await.ok(),
+            None => None,
+        };
+        let Some(mut there) = there else {
+            let _ = stream
+                .write_all(b"HTTP/1.0 404 Not Found\r\nContent-Length: 0\r\n\r\n")
+                .await;
+            return;
+        };
+        if there.write_all(&head).await.is_ok() {
+            let _ = tokio::io::copy_bidirectional(&mut stream, &mut there).await;
+        }
+        return;
+    }
     if head.starts_with(b"GET /health ") {
         if refusing {
             return;
