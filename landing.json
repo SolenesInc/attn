@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "1bfff0f48e46603c51ebb07b3a37e4bdac203cbc",
+  "head": "ef270db61eb87d104c2ab97d6c594a11d2ddc6c2",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 336.2,
+    "ranOn": "ef270db61eb87d104c2ab97d6c594a11d2ddc6c2"
+  },
+  "noMediaReason": "a perf script and a dial-timing fix; the numbers are the evidence",
+  "recordings": []
+}
