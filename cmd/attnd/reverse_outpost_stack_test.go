@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -106,6 +107,23 @@ func TestAReverseOutpostDialsItsHomeAndRedialsAfterEitherRestarts(t *testing.T) 
 		return false
 	})
 	t.Log("a second machine joined the same home by dialing it")
+	third := testworld.NewStack(t)
+	w.ssh.Use(third.World)
+	third.Start()
+	requireStdout(t, third.Attn("settings", "set", "remote_home_enabled", "true"), "true")
+	requireStdout(t, box.Attn("settings", "get", "remote_home_enabled"), "true")
+	intoOutpost := third.Attn("enrollment", "join", "box")
+	if intoOutpost.Code == 0 || !strings.Contains(intoOutpost.Stderr, "is an outpost of another home") {
+		t.Fatalf("join into an outpost: exit %d, %s%s", intoOutpost.Code, intoOutpost.Stdout, intoOutpost.Stderr)
+	}
+	w.ssh.Route("third", third)
+	requireStdout(t, third.Attn("settings", "set", "outposts_enabled", "true"), "true")
+	intoItself := third.Attn("enrollment", "join", "third")
+	if intoItself.Code == 0 || !strings.Contains(intoItself.Stderr, "this machine's own daemon") {
+		t.Fatalf("join into itself: exit %d, %s%s", intoItself.Code, intoItself.Stdout, intoItself.Stderr)
+	}
+	requireLines(t, "status after a refused self-join", third.Attn("enrollment", "status").Stdout, "enrollment: home")
+	t.Log("an outpost refuses a machine that dials it, and a machine refuses to join itself")
 	for _, refused := range []struct {
 		action  string
 		command any
@@ -177,6 +195,10 @@ func TestAReverseOutpostShowsItsDialAndBothWaysOutEndIt(t *testing.T) {
 	row := w.join()
 	requireLines(t, "status while bridged", w.status(), "dial:       home (bridged)", "enrolled to ")
 
+	requireStdout(t, w.home.Attn("settings", "set", "remote_home_enabled", "false"), "false")
+	testworld.Await(lp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["remote_home_enabled"] == "false"
+	})
 	w.ssh.Fail("home", "ssh: connect to host home port 22: No route to host")
 	w.ssh.ExitMaster(w.laptop, protocol.Deref(row.DaemonID))
 	awaitHomeDial(t, lp, "dialing")
@@ -184,10 +206,17 @@ func TestAReverseOutpostShowsItsDialAndBothWaysOutEndIt(t *testing.T) {
 	requireLines(t, "status while the home is unreachable", unreachable, "dial:       home (dialing)", "last error: ")
 	t.Logf("unreachable home:\n%s", unreachable)
 
-	requireStdout(t, w.home.Attn("settings", "set", "remote_home_enabled", "false"), "false")
-	w.ssh.Restore("home")
+	w.ssh.Fail("home", "victor@home: Permission denied (publickey).")
 	stopRetries := w.laptop.FireTimers(bridge.RetryTimer)
 	awaitHomeDial(t, lp, "refused")
+	stopRetries()
+	requireLines(t, "status while ssh refuses", w.status(), "dial:       home (refused)", "Permission denied")
+
+	w.ssh.Restore("home")
+	stopRetries = w.laptop.FireTimers(bridge.RetryTimer)
+	testworld.Await(lp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return strings.Contains(fmt.Sprint(m.Settings["outpost_last_error"]), "does not take machines that dial it")
+	})
 	stopRetries()
 	refused := w.status()
 	requireLines(t, "status while the home refuses", refused, "dial:       home (refused)", "does not take machines that dial it", "remote_home_enabled true")

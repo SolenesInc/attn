@@ -10,6 +10,7 @@ import (
 	"maps"
 	"net"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -148,6 +149,9 @@ func readReverseHeader(raw net.Conn) (reverseHeader, error) {
 
 func (d *Daemon) recognizeReverseMachine(hostKey string, joining bool) (*store.Machine, *bridge.Refusal) {
 	home := d.bridgeIdentity().Name
+	if !d.enrollmentStatus().IsHome() {
+		return nil, &bridge.Refusal{Reason: "disabled", Detail: fmt.Sprintf("%s is an outpost of another home, so no machine can join it; join that home instead", home)}
+	}
 	if !d.on(setting.RemoteHomeEnabled) {
 		return nil, &bridge.Refusal{Reason: "disabled", Detail: fmt.Sprintf("home %s does not take machines that dial it; run attn settings set remote_home_enabled true there", home)}
 	}
@@ -205,6 +209,13 @@ func (r *outpostsRuntime) arrivalsLocked(id string) chan reverseArrival {
 
 func (d *Daemon) deliverReverseArrival(id string, arrival reverseArrival) {
 	r := &d.outposts
+	r.actions.Lock()
+	defer r.actions.Unlock()
+	rows, err := d.store.ListOutposts()
+	if err != nil || !slices.ContainsFunc(rows, func(row store.Machine) bool { return row.ID == id }) || !d.outpostsEnabled() || !d.on(setting.RemoteHomeEnabled) {
+		arrival.close()
+		return
+	}
 	r.mu.Lock()
 	arrivals := r.arrivalsLocked(id)
 	var current *bridge.Conn
@@ -370,6 +381,7 @@ func (d *Daemon) runHomeDial(ctx context.Context, dial *homeDial, run *outpostLi
 		}
 		dial.report(err)
 		var refusal *bridge.Refusal
+		var sshError *outpostssh.Error
 		if errors.As(err, &refusal) && refusal.Reason == "removed" && d.leaveRemovedHome(refusal) {
 			return
 		}
@@ -377,7 +389,7 @@ func (d *Daemon) runHomeDial(ctx context.Context, dial *homeDial, run *outpostLi
 		switch {
 		case err == nil:
 			delay, retryDelay = bridge.ReconnectInterval, bridge.ReconnectInterval
-		case refusal != nil:
+		case refusal != nil, errors.As(err, &sshError) && sshError.Connectable():
 			state, delay = "refused", max(retryDelay, bridge.RefusedRetryInterval)
 		}
 		if err != nil {
@@ -483,9 +495,6 @@ func (d *Daemon) ownSessionsRefusal(home bridge.Identity) *bridge.Refusal {
 }
 
 func (d *Daemon) joinHome(ctx context.Context, destination string) (protocol.HomeDial, error) {
-	if !d.on(setting.RemoteHomeEnabled) {
-		return protocol.HomeDial{}, protocol.Refuse(protocol.RefusalWrongState, "remote_home_enabled is off; run {attn settings set remote_home_enabled true} before you join a home")
-	}
 	if err := validateOutpostDestination(destination); err != nil {
 		return protocol.HomeDial{}, err
 	}
@@ -500,6 +509,8 @@ func (d *Daemon) joinHome(ctx context.Context, destination string) (protocol.Hom
 		return d.homeDialState(), nil
 	case status.IsOutpost():
 		return protocol.HomeDial{}, protocol.Refuse(protocol.RefusalWrongState, "this machine is enrolled to home %s; run {attn enrollment leave} before it joins another", status.HomeID)
+	case !d.on(setting.RemoteHomeEnabled):
+		return protocol.HomeDial{}, protocol.Refuse(protocol.RefusalWrongState, "remote_home_enabled is off; run {attn settings set remote_home_enabled true} before you join a home")
 	}
 	if names := d.openSessionNames(); len(names) > 0 {
 		return protocol.HomeDial{}, protocol.Refuse(protocol.RefusalWrongState, "this machine is its own home and has %d open session(s): %s; close them before it joins a home", len(names), strings.Join(names, ", "))

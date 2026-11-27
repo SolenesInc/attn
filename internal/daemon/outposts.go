@@ -105,7 +105,9 @@ func (d *Daemon) configureOutposts() {
 		for _, row := range rows {
 			if enabled {
 				d.startOutpostDial(row)
-			} else if !row.Reverse() {
+			} else if row.Reverse() {
+				d.forgetReverseArrivals(row.ID)
+			} else {
 				if err := d.outpostSSH(row).ExitMaster(d.life.Context()); err != nil {
 					d.logf("stop outpost master %s: %v", row.Name, err)
 				}

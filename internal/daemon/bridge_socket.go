@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -82,6 +83,9 @@ func (d *Daemon) outpostServerConfig(dial string) bridge.ServerConfig {
 		Logf:     d.logf,
 		Handlers: d.outpostHandlers(),
 		Admit: func(home bridge.Identity) *bridge.Refusal {
+			if dial != "" && home.DaemonID == d.daemonInstanceID {
+				return &bridge.Refusal{Reason: "self", Detail: fmt.Sprintf("%s is this machine's own daemon; join a home on another machine", dial)}
+			}
 			if refusal := d.ownSessionsRefusal(home); dial != "" && refusal != nil {
 				return refusal
 			}
