@@ -51,12 +51,56 @@ func machineTools(t *testing.T, s *testworld.Stack, tools map[string]string) {
 	s.Vars = append(s.Vars, "PATH="+bin+":"+path)
 }
 
+// systemctlFake logs each call to log, and answers is-enabled from the last enable or disable it logged for that
+// unit, as systemd keeps that state across daemon restarts.
+func systemctlFake(log string) string {
+	return `echo "$@" >> '` + log + `'
+if [ "$1 $2 $3" = "--user is-enabled --quiet" ]; then
+	last=$(grep -E -- "^--user (enable|disable) $4$" '` + log + `' | tail -n 1)
+	[ "$last" = "--user enable $4" ]
+fi`
+}
+
+// forgetEnabled has systemd on s forget that attn.service is enabled, as an install stopped between writing the unit
+// and enabling it leaves it.
+func forgetEnabled(t *testing.T, s *testworld.Stack) {
+	t.Helper()
+	log, err := os.OpenFile(filepath.Join(s.Dir, "systemctl.log"), os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer log.Close()
+	if _, err := log.WriteString("--user disable attn.service\n"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// requireUnitEnabled fails unless the last systemctl call on s that enabled or disabled attn.service enabled it.
+func requireUnitEnabled(t *testing.T, s *testworld.Stack) {
+	t.Helper()
+	if last, calls := lastEnablement(s); last != "enable" {
+		t.Fatalf("the new home's unit is not enabled; systemctl calls:\n%s", calls)
+	}
+}
+
+// lastEnablement is enable or disable, whichever the last systemctl call on s for attn.service was, with every call.
+func lastEnablement(s *testworld.Stack) (string, string) {
+	calls, _ := os.ReadFile(filepath.Join(s.Dir, "systemctl.log"))
+	last := ""
+	for _, line := range strings.Split(string(calls), "\n") {
+		if verb, ok := strings.CutSuffix(strings.TrimPrefix(line, "--user "), " attn.service"); ok && (verb == "enable" || verb == "disable") {
+			last = verb
+		}
+	}
+	return last, string(calls)
+}
+
 func healthyMachine(t *testing.T, s *testworld.Stack) {
 	s.Vars = append(s.Vars, "XDG_CONFIG_HOME="+s.Path("xdg-config"))
 	machineTools(t, s, map[string]string{
 		"gh":        "exit 0",
 		"loginctl":  "echo yes",
-		"systemctl": "echo \"$@\" >> " + filepath.Join(s.Dir, "systemctl.log"),
+		"systemctl": systemctlFake(filepath.Join(s.Dir, "systemctl.log")),
 	})
 }
 
@@ -142,6 +186,10 @@ func TestHomeMoveKeepsTerminalsAndMovesBack(t *testing.T) {
 	if !role(t, outpost).IsHome() || role(t, home).IsHome() {
 		t.Fatalf("roles after the move: home %+v, outpost %+v", role(t, home), role(t, outpost))
 	}
+	forgetEnabled(t, outpost)
+	outpost.Stop()
+	outpost.Start()
+	requireUnitEnabled(t, outpost)
 	app := outpost.App()
 	awaitConnected(t, app, homeMachine)
 	if a, b := m.echo(app, "moved"); a != beforeH || b != beforeO {
@@ -196,8 +244,8 @@ func TestHomeMoveKeepsTerminalsAndMovesBack(t *testing.T) {
 	if _, err := os.Stat(unit); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("the unit that started the home is still installed once the home moved back: %v", err)
 	}
-	if log, _ := os.ReadFile(filepath.Join(outpost.Dir, "systemctl.log")); !strings.Contains(string(log), "--user disable attn.service") {
-		t.Fatalf("systemctl calls on the machine the home left:\n%s", log)
+	if last, calls := lastEnablement(outpost); last != "disable" {
+		t.Fatalf("systemctl calls on the machine the home left:\n%s", calls)
 	}
 }
 
@@ -758,6 +806,7 @@ func (m *movingPair) requireShellsKept(t *testing.T, app *testworld.Peer, tag, p
 func (m *movingPair) requireMoved(t *testing.T, homeMachine, pidHome, pidOut string) {
 	t.Helper()
 	m.requireRoles(t, false)
+	requireUnitEnabled(t, m.Outpost)
 	app := m.Outpost.App()
 	awaitConnected(t, app, homeMachine)
 	m.requireShellsKept(t, app, "moved", pidHome, pidOut)

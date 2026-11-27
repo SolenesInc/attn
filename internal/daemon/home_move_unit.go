@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -70,17 +71,14 @@ func (d *Daemon) installHomeUnit(ctx context.Context, start bool) error {
 	return nil
 }
 
-// keepHomeUnit installs the unit of a home that lacks it, as one that stopped between its commit and the install
-// does, without starting it: this daemon already runs the home.
+// keepHomeUnit installs the unit of a home that systemd does not start at boot, as one that stopped between its
+// commit and the end of the install does, without starting it: this daemon already runs the home. It asks systemd
+// with this daemon's own environment, so a start does not wait for the login shell.
 func (d *Daemon) keepHomeUnit(ctx context.Context) error {
 	if runtime.GOOS != "linux" {
 		return nil
 	}
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return err
-	}
-	if fileExists(filepath.Join(dir, "systemd", "user", homeUnitName())) {
+	if exec.CommandContext(ctx, "systemctl", "--user", "is-enabled", "--quiet", homeUnitName()).Run() == nil {
 		return nil
 	}
 	return d.installHomeUnit(ctx, false)
