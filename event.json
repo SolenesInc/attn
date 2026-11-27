@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Offline desktop switch can return keyboard focus to the wrong terminal",
+  "at": "2026-11-27T08:40:19.224Z",
+  "detail": "At 2af20d8e, while the home is away, select a local terminal on desktop A, switch to B, let a machine-link setting or session update arrive, and switch back. The app restores A's previous home-selected terminal as the keyboard target. An independent scratch wire probe reproduced the loss of input to the selected terminal after one settings event. Keep each desktop's local selection through machine updates until the home answers.\n"
+}
