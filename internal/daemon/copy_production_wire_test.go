@@ -76,7 +76,7 @@ func copyProductionAndMoveWorldIntoIt(t *testing.T, w *world) {
 	sourceDB := filepath.Join(w.Dir, "attn.db")
 	dest := filepath.Join(w.Dir, "copy")
 	resolver := filepath.Join(w.Dir, "copy-resolver")
-	if err := os.WriteFile(resolver, []byte("#!/bin/sh\nprintf '%s\\n' \"$COPY_DEST\"\n"), 0o700); err != nil {
+	if err := fakeagent.WriteExecutable(resolver, []byte("#!/bin/sh\nprintf '%s\\n' \"$COPY_DEST\"\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	script, err := os.ReadFile("../../scripts/gardenpushperf/copy-production.sh")

@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -16,7 +17,7 @@ func TestAReloadedPluginAgentKeepsTheEnvironmentTheDaemonCaptured(t *testing.T) 
 	broken := filepath.Join(w.Dir, "login-shell-broken")
 	shell := filepath.Join(w.Dir, "login-shell")
 	script := "#!/bin/sh\nif [ \"$3\" = 'env -0' ]; then\n  [ -e '" + broken + "' ] && exit 23\n  export ATTN_TEST_CAPTURED=present\nfi\nexec /bin/sh \"$@\"\n"
-	if err := os.WriteFile(shell, []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(shell, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("SHELL", shell)
@@ -25,7 +26,7 @@ func TestAReloadedPluginAgentKeepsTheEnvironmentTheDaemonCaptured(t *testing.T) 
 		t.Fatal(err)
 	}
 	agent := filepath.Join(w.Dir, "reloaded-agent")
-	if err := os.WriteFile(agent, []byte("#!/bin/sh\nprintf '%s' \"$ATTN_TEST_CAPTURED\" > '"+report+"'\nexec cat\n"), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(agent, []byte("#!/bin/sh\nprintf '%s' \"$ATTN_TEST_CAPTURED\" > '"+report+"'\nexec cat\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	w.start()
@@ -59,7 +60,7 @@ func TestAPluginStartsWithTheLoginEnvironment(t *testing.T) {
 	w := &world{World: prepareWorld(t)}
 	shell := filepath.Join(w.Dir, "login-shell")
 	script := "#!/bin/sh\nexport PATH=/login/bin:$PATH ATTN_TEST_LOGIN_ONLY=present\nexec /bin/sh \"$@\"\n"
-	if err := os.WriteFile(shell, []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(shell, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("SHELL", shell)

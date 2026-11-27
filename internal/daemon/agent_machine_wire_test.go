@@ -20,7 +20,7 @@ func TestAgentLaunchUsesTheMachineExecutableSettingAndReloadReadsItAgain(t *test
 	executable := func(name string) string {
 		path := filepath.Join(w.Dir, name)
 		body := fmt.Sprintf("#!/bin/sh\nexport LAUNCHED_BY=%s\nexec %s/bin/claude \"$@\"\n", name, w.Dir)
-		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+		if err := fakeagent.WriteExecutable(path, []byte(body), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		return path

@@ -542,7 +542,7 @@ func TestEveryFailedHomeUpdateNamesItsReasonCauseAndActionOnTheRightRow(t *testi
 				staged := filepath.Join(filepath.Dir(w.ssh.InstallPath(w.home)), ".attn-pty-host-install")
 				data := homeFileBytes(t, staged)
 				data[len(data)/2] ^= 0xff
-				if err := os.WriteFile(staged, data, 0o755); err != nil {
+				if err := fakeagent.WriteExecutable(staged, data, 0o755); err != nil {
 					t.Fatal(err)
 				}
 			}},

@@ -23,7 +23,7 @@ func TestDirectLaunchReadsTheCurrentProfileEvenWhenEnvironmentCaptureFails(t *te
 				script += "if [ \"$3\" = 'env -0' ]; then exit 23; fi\n"
 			}
 			script += "exec /bin/sh \"$@\"\n"
-			if err := os.WriteFile(shell, []byte(script), 0o755); err != nil {
+			if err := fakeagent.WriteExecutable(shell, []byte(script), 0o755); err != nil {
 				t.Fatal(err)
 			}
 			t.Setenv("SHELL", shell)
@@ -44,7 +44,7 @@ func TestDirectLaunchReadsTheCurrentProfileEvenWhenEnvironmentCaptureFails(t *te
 					executable := filepath.Join(w.Dir, string(h)+"="+phase)
 					native := filepath.Join(w.Dir, "bin", string(h))
 					shim := fmt.Sprintf("#!/bin/sh\nexport ATTN_TEST_EXECUTABLE=%s\nexec '%s' \"$@\"\n", phase, native)
-					if err := os.WriteFile(executable, []byte(shim), 0o755); err != nil {
+					if err := fakeagent.WriteExecutable(executable, []byte(shim), 0o755); err != nil {
 						t.Fatal(err)
 					}
 					fmt.Fprintf(&content, "export %s='%s'\n", key, executable)

@@ -3,11 +3,11 @@ package daemon_test
 import (
 	"encoding/base64"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/ghosttyvt"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -26,7 +26,7 @@ func TestEveryAttachDuringABlockBurstGetsBlocksThatPointAtTheirOwnPrompts(t *tes
 	result, _, _ := w.RequestSpawn(app, shellHarness, w.Path("shop"))
 	shell := result.ID
 	burst := filepath.Join(w.Dir, "burst.sh")
-	if err := os.WriteFile(burst, []byte(blockBurst), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(burst, []byte(blockBurst), 0o755); err != nil {
 		t.Fatal(err)
 	}
 

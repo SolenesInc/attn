@@ -21,12 +21,12 @@ func TestTheAgentCatalogListsBuiltInAgentsAndThoseAConnectedPluginOffers(t *test
 	if err := os.MkdirAll(w.Path("tools"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(nightly, []byte("#!/bin/sh\n"), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(nightly, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	setSetting(t, app, "codex_executable", nightly)
 	gone := w.Path("tools", "claude-gone")
-	if err := os.WriteFile(gone, []byte("#!/bin/sh\n"), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(gone, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	setSetting(t, app, "claude_executable", gone)

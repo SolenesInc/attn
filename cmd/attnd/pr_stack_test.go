@@ -45,7 +45,7 @@ func installFakeGitHub(t *testing.T) fakeGitHub {
 	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "bin", "gh"), []byte(fmt.Sprintf(fakeGHScript, dir)), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(dir, "bin", "gh"), []byte(fmt.Sprintf(fakeGHScript, dir)), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {

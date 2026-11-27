@@ -25,7 +25,7 @@ func TestAStrandedPluginThatIgnoresSIGTERMIsKilledWithItsChildrenWhenAttnStartsA
 		t.Fatal(err)
 	}
 	script := fmt.Sprintf("#!/bin/sh\nif [ ! -e %[1]q.started ]; then : > %[1]q.started; exec 3>%[1]q; trap '' TERM; sleep 600 & fi\nexec sleep 600\n", fifo)
-	if err := os.WriteFile(filepath.Join(checkout, "bin", "run"), []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(checkout, "bin", "run"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 

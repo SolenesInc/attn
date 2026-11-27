@@ -198,7 +198,7 @@ func TestAServerOnThePathThatNoTestInstalledIsMissingToAReview(t *testing.T) {
 	w := newWorld(t)
 	onPath := t.TempDir()
 	started := filepath.Join(onPath, "started")
-	if err := os.WriteFile(filepath.Join(onPath, "gopls"), []byte("#!/bin/sh\ntouch "+started+"\nexec sleep 3600\n"), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(onPath, "gopls"), []byte("#!/bin/sh\ntouch "+started+"\nexec sleep 3600\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", onPath+string(os.PathListSeparator)+os.Getenv("PATH"))

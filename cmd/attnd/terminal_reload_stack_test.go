@@ -45,7 +45,7 @@ func TestTerminalRunWaitsForTheFirstPromptAfterReload(t *testing.T) {
 			}
 			t.Cleanup(func() { _, _ = unblock.WriteString("go\n"); _ = unblock.Close() })
 			script := fmt.Sprintf("#!/bin/sh\ncase \" $* \" in *\" -c \"*) ;; *) if [ -f %q ]; then printf ready >%q; read hold <%q; fi ;; esac\nexec %q \"$@\"\n", gate, ready, release, realBash)
-			if err := os.WriteFile(shell, []byte(script), 0o700); err != nil {
+			if err := fakeagent.WriteExecutable(shell, []byte(script), 0o700); err != nil {
 				t.Fatal(err)
 			}
 			machine.Vars = append(machine.Vars, "SHELL="+shell)

@@ -38,7 +38,7 @@ func writePluginSource(t *testing.T, dir, name string) {
 	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "bin", "run"), []byte("#!/bin/sh\nexec sleep 600\n"), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(dir, "bin", "run"), []byte("#!/bin/sh\nexec sleep 600\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	manifest := fmt.Sprintf("name = %q\nversion = \"0.1.0\"\nattn_api_version = %d\n\n[plugin]\nkind = \"executable\"\npath = \"bin/run\"\n", name, plugins.APIVersion)
@@ -215,7 +215,7 @@ func TestDaemonRestartRestoresThePreviousPluginWhenReplacementHasNotConnected(t 
 		t.Fatal(err)
 	}
 	script := fmt.Sprintf("#!/bin/sh\nexec 3>%q\n%s", ready, strings.TrimPrefix(string(idle), "#!/bin/sh\n"))
-	if err := os.WriteFile(entrypoint, []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(entrypoint, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	install := s.Launch(testworld.Invocation{Args: []string{"plugin", "install", replacement}})

@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/testworld"
@@ -70,7 +71,7 @@ func inMacAppBundle(t *testing.T, binary string) string {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, name), bytes, 0o755); err != nil {
+		if err := fakeagent.WriteExecutable(filepath.Join(dir, name), bytes, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}

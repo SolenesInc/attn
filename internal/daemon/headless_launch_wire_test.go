@@ -241,7 +241,7 @@ func TestAgentsFindTheActiveAttnFirstOnTheirPath(t *testing.T) {
 	if err := os.MkdirAll(stale, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(stale, "attn"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(stale, "attn"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", stale+string(os.PathListSeparator)+os.Getenv("PATH"))

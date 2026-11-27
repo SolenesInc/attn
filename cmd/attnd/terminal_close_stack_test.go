@@ -34,7 +34,7 @@ func TestTerminalCloseStopsEveryShellPromptly(t *testing.T) {
 					t.Fatal(err)
 				}
 				script := fmt.Sprintf("#!/bin/sh\ncase \" $* \" in *\" -c \"*) ;; *) exec 3>%q; trap '' HUP ;; esac\nexec %q \"$@\"\n", fifo, realShell)
-				if err := os.WriteFile(shell, []byte(script), 0o700); err != nil {
+				if err := fakeagent.WriteExecutable(shell, []byte(script), 0o700); err != nil {
 					t.Fatal(err)
 				}
 				machine.Vars = append(machine.Vars, "SHELL="+shell)

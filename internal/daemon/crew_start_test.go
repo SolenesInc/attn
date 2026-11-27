@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/protocol"
@@ -27,7 +28,7 @@ func newStartableDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, func() string
 		if agent == "claude" {
 			script = "#!/bin/sh\nread request\nprintf '%s\\n' '{\"type\":\"control_response\",\"response\":{\"subtype\":\"success\",\"request_id\":\"attn-model-discovery\",\"response\":{\"models\":[{\"value\":\"fixture-model\",\"supportsEffort\":true}]}}}'\ncat >/dev/null\n"
 		}
-		if err := os.WriteFile(filepath.Join(binDir, agent), []byte(script), 0o755); err != nil {
+		if err := fakeagent.WriteExecutable(filepath.Join(binDir, agent), []byte(script), 0o755); err != nil {
 			t.Fatalf("write fake %s executable: %v", agent, err)
 		}
 	}

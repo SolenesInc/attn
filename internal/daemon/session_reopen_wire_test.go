@@ -370,7 +370,7 @@ func TestReopenTellsAGitFailureFromARefusal(t *testing.T) {
 	}
 
 	broken := t.TempDir()
-	if err := os.WriteFile(filepath.Join(broken, "git"), []byte("#!/bin/sh\necho 'fatal: git is broken' >&2\nexit 128\n"), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(broken, "git"), []byte("#!/bin/sh\necho 'fatal: git is broken' >&2\nexit 128\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", broken+string(os.PathListSeparator)+os.Getenv("PATH"))

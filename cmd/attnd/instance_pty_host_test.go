@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -37,7 +38,7 @@ func TestInstanceCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
 		t.Fatal(err)
 	}
 	nextBinary := filepath.Join(root, "next-host")
-	if err := os.WriteFile(nextBinary, append(contents, 0), 0o700); err != nil {
+	if err := fakeagent.WriteExecutable(nextBinary, append(contents, 0), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	pids := make(map[int]bool)

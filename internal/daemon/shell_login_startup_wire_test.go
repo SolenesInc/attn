@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/victorarias/attn/internal/fakeagent"
 )
 
 const posixStartupThatPrependsOnATerminal = `if [ -t 0 ]; then PATH="$HOME/bin:$PATH"; export PATH; fi
@@ -145,7 +147,7 @@ func shellWithAccountHome(t *testing.T, dir, binary, accountHome string) string 
 		t.Fatal(err)
 	}
 	script := "#!/bin/sh\nif [ \"$HOME\" = " + shellQuoteForTest(os.Getenv("HOME")) + " ]; then\n  HOME=" + shellQuoteForTest(accountHome) + "\n  export HOME\nfi\nexec " + shellQuoteForTest(binary) + " \"$@\"\n"
-	if err := os.WriteFile(launcher, []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(launcher, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return launcher

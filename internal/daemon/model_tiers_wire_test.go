@@ -101,7 +101,7 @@ func TestActivityUsesTheLightTierWhenModelDiscoveryFails(t *testing.T) {
 	t.Setenv("ATTN_CLAUDE_EXECUTABLE", "")
 	executable := filepath.Join(t.TempDir(), "failing-discovery")
 	script := fmt.Sprintf("#!/bin/sh\nfor arg do\nif [ \"$arg\" = --input-format ]; then exit 1; fi\ndone\nexec '%s' \"$@\"\n", filepath.Join(w.Dir, "bin", "claude"))
-	if err := os.WriteFile(executable, []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(executable, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	setSetting(t, app, "claude_executable", executable)

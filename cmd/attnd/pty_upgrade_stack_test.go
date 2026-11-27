@@ -55,16 +55,16 @@ while IFS= read -r line; do
   printf '__ACK_%s_%s_%s__\n' "$terminal_id" "$line" "$$"
 done
 `
-	if err := os.WriteFile(fixture, []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(fixture, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Mkdir(filepath.Join(root, "bin"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "bin", "gh"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(root, "bin", "gh"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "bin", "dscl"), []byte("#!/bin/sh\nprintf 'UserShell: /bin/sh\\n'\n"), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(root, "bin", "dscl"), []byte("#!/bin/sh\nprintf 'UserShell: /bin/sh\\n'\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return fixture
@@ -136,7 +136,7 @@ func TestSessionsSurviveDaemonRestartsAndSharedHostGenerations(t *testing.T) {
 	current.stop()
 
 	nextHost := filepath.Join(root, "next-pty-host")
-	if err := os.WriteFile(nextHost, []byte("#!/bin/sh\nexec '"+strings.ReplaceAll(hostBinary, "'", "'\\''")+"' \"$@\"\n"), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(nextHost, []byte("#!/bin/sh\nexec '"+strings.ReplaceAll(hostBinary, "'", "'\\''")+"' \"$@\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	current = start(newBinary, nextHost)
@@ -155,7 +155,7 @@ func TestSessionsSurviveDaemonRestartsAndSharedHostGenerations(t *testing.T) {
 	current.stop()
 
 	brokenHost := filepath.Join(root, "broken-pty-host")
-	if err := os.WriteFile(brokenHost, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(brokenHost, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	current = start(newBinary, brokenHost)
@@ -342,7 +342,7 @@ func TestAnUpdateFromTheReleaseWhoseNewHostFailsItsCheckShowsTheNoticeAndRefuses
 	sharedHostOf(t, u.Dir, app.Terminal(shell.session))
 
 	broken := filepath.Join(u.Dir, "broken-host")
-	if err := os.WriteFile(broken, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(broken, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	u.InstallBuild(testworld.AttnBinaryWithSnapshotFormat(t, upgradeMovedSnapshotFormat), broken)
@@ -491,7 +491,7 @@ func TestAHostThatCannotRunRefusesNewTerminalsWithOneNotification(t *testing.T) 
 		t.Fatalf("attn daemon stop: %+v", got)
 	}
 	broken := filepath.Join(u.Dir, "broken-host")
-	if err := os.WriteFile(broken, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(broken, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	u.InstallBuild(u.currentAttn, broken)
@@ -541,7 +541,7 @@ func TestDirectLaunchStartsAgentsThroughTheUsersLoginShell(t *testing.T) {
 	loginShell := func(t *testing.T, s *testworld.Stack, body string) string {
 		t.Helper()
 		path := filepath.Join(s.Dir, "login-shell.sh")
-		if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body+"\n[ \"$1\" = -l ] && shift\nexec /bin/sh \"$@\"\n"), 0o755); err != nil {
+		if err := fakeagent.WriteExecutable(path, []byte("#!/bin/sh\n"+body+"\n[ \"$1\" = -l ] && shift\nexec /bin/sh \"$@\"\n"), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		return path
@@ -620,7 +620,7 @@ func TestDirectLaunchStartsAgentsThroughTheUsersLoginShell(t *testing.T) {
 		const name = "claude-cannot-run"
 		u := startDirectLaunch(t, func(s *testworld.Stack) string {
 			path := filepath.Join(s.Dir, name)
-			if err := os.WriteFile(path, []byte("#!/no/such/interpreter\n"), 0o755); err != nil {
+			if err := fakeagent.WriteExecutable(path, []byte("#!/no/such/interpreter\n"), 0o755); err != nil {
 				t.Fatal(err)
 			}
 			s.Vars = append(s.Vars, "ATTN_CLAUDE_EXECUTABLE="+path)
@@ -755,7 +755,7 @@ func TestAnOutpostOnTheReleaseKeepsItsTerminalsWhenTheHomeAddsAndUpdatesIt(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(ssh.HostPath(remote), releaseHostBytes, 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(ssh.HostPath(remote), releaseHostBytes, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	remote.RunFrom(ssh.InstallPath(remote))

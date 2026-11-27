@@ -187,7 +187,7 @@ func TestAReviewCheckoutStopsAfterDiskFullUntilAnotherReviewIsRequested(t *testi
 	attempts := filepath.Join(filterDir, "attempts")
 	filter := filepath.Join(filterDir, "smudge")
 	script := fmt.Sprintf("#!/bin/sh\nprintf 'attempt\\n' >> %q\necho 'error: unable to write file change.go: No space left on device' >&2\nexit 1\n", attempts)
-	if err := os.WriteFile(filter, []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filter, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	runGit(t, r.clone, "config", "filter.storage.clean", "cat")
@@ -510,7 +510,7 @@ func newAutomationStoreReviewWorld(t *testing.T) (*automationReviewWorld, string
 	runGit(t, forge, "clone", "--bare", source, served)
 	runGit(t, served, "update-ref", "refs/pull/42/head", head)
 	sshServer := filepath.Join(t.TempDir(), "forge-ssh")
-	if err := os.WriteFile(sshServer, []byte("#!/bin/sh\nfor command; do :; done\ncd \""+forge+"\" && exec sh -c \"$command\"\n"), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(sshServer, []byte("#!/bin/sh\nfor command; do :; done\ncd \""+forge+"\" && exec sh -c \"$command\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("GIT_SSH_COMMAND", sshServer)

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -32,7 +33,7 @@ func TestAClientAttachingMidFloodContinuesFromItsSnapshotWithoutAGapOrARepeat(t 
 	shell := w.Spawn(app, shellHarness, w.Path("shop"))
 	terminal := w.Terminal(shell)
 	flood := filepath.Join(w.Dir, "flood.sh")
-	if err := os.WriteFile(flood, []byte(lineFlood), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(flood, []byte(lineFlood), 0o755); err != nil {
 		t.Fatal(err)
 	}
 

@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -26,7 +26,7 @@ func TestAReviewCheckoutRetriesUntilItsFailureSaves(t *testing.T) {
 	defer server.Close()
 	filter := filepath.Join(t.TempDir(), "filter")
 	script := fmt.Sprintf("#!/bin/sh\ncurl -s %q >/dev/null\nprintf 'database or disk is full\\n' >&2\nexit 1\n", server.URL)
-	if err := os.WriteFile(filter, []byte(script), 0700); err != nil {
+	if err := fakeagent.WriteExecutable(filter, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
 	runGit(t, r.clone, "config", "filter.storage.clean", "cat")

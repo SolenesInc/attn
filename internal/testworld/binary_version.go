@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyhost"
 )
@@ -139,7 +140,7 @@ func (s *Stack) InstallsOnOutposts(attn, host string) {
 	s.T.Helper()
 	if host == "" {
 		host = filepath.Join(s.Dir, "outpost-host-that-cannot-run")
-		if err := os.WriteFile(host, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		if err := fakeagent.WriteExecutable(host, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
 			s.T.Fatal(err)
 		}
 	}

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/fakeagent"
 )
 
 func TestCleanPlan(t *testing.T) {
@@ -133,7 +134,7 @@ func TestSameExecutableAcceptsASymlinkedInstallRoot(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(running), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(running, []byte("#!/bin/sh\n"), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(running, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 

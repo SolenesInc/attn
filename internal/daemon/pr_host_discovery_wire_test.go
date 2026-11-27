@@ -42,7 +42,7 @@ case "$1 $2" in
   "auth token") [ -e "$FAKE_GH_DIR/no-token-$4" ] && exit 1; echo 'test-token' ;;
 esac
 `
-	if err := os.WriteFile(filepath.Join(gh.dir, "gh"), []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(gh.dir, "gh"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	gh.reportHosts(map[string]string{hostA: "success", hostB: "success"})
@@ -442,7 +442,7 @@ case "$1 $2" in
     ;;
 esac
 `
-	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(dir, "gh"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("FAKE_GH_DIR", dir)

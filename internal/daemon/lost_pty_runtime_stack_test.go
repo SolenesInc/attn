@@ -165,7 +165,7 @@ func nextSharedHostBuild(t *testing.T) string {
 		t.Fatal(err)
 	}
 	next := filepath.Join(t.TempDir(), "attn-pty-host")
-	if err := os.WriteFile(next, append(current, 0), 0o700); err != nil {
+	if err := fakeagent.WriteExecutable(next, append(current, 0), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	return next

@@ -158,7 +158,7 @@ func (s *SSH) Use(w *World) {
 		w.T.Fatal(err)
 	}
 	script := "#!/bin/sh\nATTN_TESTWORLD_SSH=client exec \"" + binary + "\" \"$@\"\n"
-	if err := os.WriteFile(filepath.Join(bin, "ssh"), []byte(script), 0700); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(bin, "ssh"), []byte(script), 0700); err != nil {
 		w.T.Fatal(err)
 	}
 	path := os.Getenv("PATH")
@@ -184,7 +184,7 @@ func (s *SSH) Route(destination string, remote *Stack) {
 		s.t.Fatal(err)
 	}
 	s.InstallBinary(remote, remote.binary)
-	if err := os.WriteFile(s.HostPath(remote), []byte("#!/bin/sh\nexit 1\n"), 0o700); err != nil {
+	if err := fakeagent.WriteExecutable(s.HostPath(remote), []byte("#!/bin/sh\nexit 1\n"), 0o700); err != nil {
 		s.t.Fatal(err)
 	}
 	bin := filepath.Join(remote.Dir, "machine-bin")
@@ -192,7 +192,7 @@ func (s *SSH) Route(destination string, remote *Stack) {
 		s.t.Fatal(err)
 	}
 	for name, body := range map[string]string{"uname": "echo Linux x86_64", "busctl": "echo b false"} {
-		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+body+"\n"), 0700); err != nil {
+		if err := fakeagent.WriteExecutable(filepath.Join(bin, name), []byte("#!/bin/sh\n"+body+"\n"), 0700); err != nil {
 			s.t.Fatal(err)
 		}
 	}
@@ -433,7 +433,7 @@ func isFile(path string) bool {
 
 func (s *SSH) MachineCommand(remote *Stack, name, body string) {
 	s.t.Helper()
-	if err := os.WriteFile(filepath.Join(remote.Dir, "machine-bin", name), []byte("#!/bin/sh\n"+body+"\n"), 0700); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(remote.Dir, "machine-bin", name), []byte("#!/bin/sh\n"+body+"\n"), 0700); err != nil {
 		s.t.Fatal(err)
 	}
 }

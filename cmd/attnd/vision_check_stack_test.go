@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -25,7 +26,7 @@ func installVisionClaude(t *testing.T, dir string) visionClaude {
 		t.Fatal(err)
 	}
 	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' \"$@\" > %[1]q/argv\ncat > %[1]q/stdin\ncat %[1]q/reply\n", dir)
-	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return visionClaude{t: t, dir: dir}

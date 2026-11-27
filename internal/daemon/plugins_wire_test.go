@@ -155,7 +155,7 @@ func pluginsCheckout(t *testing.T, dir, name, version, script string) string {
 	if err := os.WriteFile(filepath.Join(dir, "attn-plugin.toml"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "run"), []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(dir, "run"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"`+name+`","private":true}`), 0o644); err != nil {

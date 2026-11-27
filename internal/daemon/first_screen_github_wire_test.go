@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -24,7 +25,7 @@ case "$1 $2" in
   "auth token") echo 'test-token' ;;
 esac
 `
-	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(bin, "gh"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("ATTN_MOCK_GH_URL", "")
@@ -46,7 +47,7 @@ func awaitBothGitHubHosts(app *testworld.Peer) []string {
 func TestTheFirstScreenCarriesTheWarningOfASlowGHCheck(t *testing.T) {
 	bin := t.TempDir()
 	script := "#!/bin/sh\nsleep 0.5\necho 'gh version 2.0.0 (2020-01-01)'\n"
-	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(bin, "gh"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("ATTN_MOCK_GH_URL", "")

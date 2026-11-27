@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	attngithub "github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -60,7 +61,7 @@ func ghWarningPath(t *testing.T, ghVersion string) string {
 	if ghVersion != "" {
 		bin := t.TempDir()
 		script := "#!/bin/sh\necho '" + ghVersion + "'\n"
-		if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(script), 0o755); err != nil {
+		if err := fakeagent.WriteExecutable(filepath.Join(bin, "gh"), []byte(script), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		dirs = append(dirs, bin)

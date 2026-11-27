@@ -43,7 +43,7 @@ if [ "$3" = 'env -0' ]; then
 fi
 exec /bin/sh "$@"
 `, shell.captures, shell.gate, shell.gate)
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("SHELL", path)
@@ -290,7 +290,7 @@ func TestStoppingDuringTheCaptureDoesNotWaitForAChildHoldingTheShellsOutput(t *t
 	gate := filepath.Join(w.Dir, "child-gate")
 	path := filepath.Join(w.Dir, "login-shell")
 	script := fmt.Sprintf("#!/bin/sh\nif [ \"$3\" = 'env -0' ] && [ -p '%s' ]; then\n  cat '%s' &\n  wait\nfi\nexec /bin/sh \"$@\"\n", gate, gate)
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("SHELL", path)
@@ -316,7 +316,7 @@ func TestALoginShellThatLeavesAChildHoldingItsOutputStillGivesItsEnvironment(t *
 	t.Cleanup(child.release)
 	path := filepath.Join(w.Dir, "login-shell")
 	script := fmt.Sprintf("#!/bin/sh\nif [ \"$3\" = 'env -0' ]; then\n  export ATTN_TEST_LOGIN_ONLY=present\n  cat '%s' &\nfi\nexec /bin/sh \"$@\"\n", gate)
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("SHELL", path)
@@ -589,7 +589,7 @@ if [ "$3" = 'env -0' ]; then
 fi
 exec /bin/sh "$@"
 `, shell.captures, shell.gate, shell.gate, shell.captures, failures, failures, filepath.Join(w.Dir, ".local", "bin"))
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("SHELL", path)

@@ -377,7 +377,7 @@ func TestAPluginServerKeepsTheConfiguredExecutableOnLaunchAndReload(t *testing.T
 			app := w.App()
 			executable := filepath.Join(w.Dir, "selected-sample-server")
 			script := "#!/bin/sh\nexport ATTN_TEST_EXECUTABLE=selected\nexec '" + filepath.Join(w.Dir, "bin", "sample-server") + "' \"$@\"\n"
-			if err := os.WriteFile(executable, []byte(script), 0755); err != nil {
+			if err := fakeagent.WriteExecutable(executable, []byte(script), 0755); err != nil {
 				t.Fatal(err)
 			}
 			t.Setenv("ATTN_TEST_SERVER_EXECUTABLE", "/not-the-selected-executable")

@@ -85,7 +85,7 @@ func newMaintenanceGitGate(t *testing.T, command string) *maintenanceGitGate {
 		"  read ignored < '" + gate.released + "'\n" +
 		"fi\n" +
 		"exec '" + realGit + "' \"$@\"\n"
-	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(bin, "git"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))

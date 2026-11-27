@@ -27,7 +27,7 @@ func giveTheHomeItsOwnCheckoutAt(t *testing.T, home *testworld.Stack, pattern, c
 		t.Fatal(err)
 	}
 	wrapper := fmt.Sprintf("#!/bin/sh\ncase \"$PWD\" in %s) cd %q ;; esac\nexec %q \"$@\"\n", pattern, checkout, real)
-	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(wrapper), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(bin, "git"), []byte(wrapper), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	path := os.Getenv("PATH")

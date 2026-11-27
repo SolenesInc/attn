@@ -499,11 +499,11 @@ func TestSSHStagedInstallRefusalsKeepTheInstalledBinary(t *testing.T) {
 			if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(target, []byte("preserve default"), 0700); err != nil {
+			if err := fakeagent.WriteExecutable(target, []byte("preserve default"), 0700); err != nil {
 				t.Fatal(err)
 			}
 			staged := filepath.Join(filepath.Dir(target), ".attn-install-test")
-			if err := os.WriteFile(staged, data, 0700); err != nil {
+			if err := fakeagent.WriteExecutable(staged, data, 0700); err != nil {
 				t.Fatal(err)
 			}
 			build := s.Run(testworld.Invocation{Args: []string{"--build-info-json"}})
@@ -518,13 +518,13 @@ func TestSSHStagedInstallRefusalsKeepTheInstalledBinary(t *testing.T) {
 			home := bridge.Build{Version: info.Version, SourceFingerprint: info.Fingerprint, ProtocolVersion: info.Protocol}
 			env := []string{"ATTN_HARNESS_OUTPOST_INSTALL_ROOT=" + root}
 			stagedCLI := filepath.Join(filepath.Dir(target), ".attn-cli-install")
-			if err := os.WriteFile(stagedCLI, cliBytes, 0o700); err != nil {
+			if err := fakeagent.WriteExecutable(stagedCLI, cliBytes, 0o700); err != nil {
 				t.Fatal(err)
 			}
 			stagedHost := filepath.Join(filepath.Dir(target), ".attn-pty-host-install")
 			hostBytes := []byte("the host of this build")
 			hostDigest := sha256.Sum256(hostBytes)
-			if err := os.WriteFile(stagedHost, hostBytes, 0o700); err != nil {
+			if err := fakeagent.WriteExecutable(stagedHost, hostBytes, 0o700); err != nil {
 				t.Fatal(err)
 			}
 			switch tc.name {

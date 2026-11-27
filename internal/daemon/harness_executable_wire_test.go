@@ -28,7 +28,7 @@ func TestHarnessesOnTheLoginPathServeLaunchAndHeadlessWork(t *testing.T) {
 			}
 			shell := filepath.Join(w.Dir, "login-shell")
 			script := fmt.Sprintf("#!/bin/sh\nexport PATH='%s:%s:/usr/bin:/bin'\nshift\nexec /bin/sh \"$@\"\n", localBin, bin)
-			if err := os.WriteFile(shell, []byte(script), 0o755); err != nil {
+			if err := fakeagent.WriteExecutable(shell, []byte(script), 0o755); err != nil {
 				t.Fatal(err)
 			}
 			t.Setenv("SHELL", shell)

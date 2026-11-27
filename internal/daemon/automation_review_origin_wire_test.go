@@ -48,7 +48,7 @@ func TestAReviewFetchHandsGitTheGitHubTokenOnlyThroughItsEnvironment(t *testing.
 		"{ printf 'argv:'; printf ' %s' \"$@\"; printf '\\n'; env | grep '^GIT_CONFIG_' | sed 's/^/env:/'; } >> '" + calls + "'\n" +
 		"if [ \"$1\" = fetch ]; then echo 'fatal: github.test is unreachable' >&2; exit 128; fi\n" +
 		"exec '" + realGit + "' \"$@\"\n"
-	if err := os.WriteFile(filepath.Join(shims, "git"), []byte(shim), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(shims, "git"), []byte(shim), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", shims+string(os.PathListSeparator)+os.Getenv("PATH"))

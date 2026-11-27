@@ -7,9 +7,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -24,9 +24,7 @@ func TestTheCLINamesThePathItSearchedWhenAttndIsMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	alone := filepath.Join(dir, "attn")
-	syscall.ForkLock.RLock()
-	err = os.WriteFile(alone, contents, 0o755)
-	syscall.ForkLock.RUnlock()
+	err = fakeagent.WriteExecutable(alone, contents, 0o755)
 	if err != nil {
 		t.Fatal(err)
 	}

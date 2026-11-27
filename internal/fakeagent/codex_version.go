@@ -220,7 +220,7 @@ func (k *Kit) copyBinary(path string) {
 	if err != nil {
 		k.t.Fatal(err)
 	}
-	if err := os.WriteFile(path, data, 0o755); err != nil {
+	if err := WriteExecutable(path, data, 0o755); err != nil {
 		k.t.Fatal(err)
 	}
 }

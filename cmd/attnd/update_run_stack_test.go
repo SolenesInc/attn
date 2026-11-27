@@ -58,7 +58,7 @@ func runGit(t *testing.T, dir string, args ...string) string {
 
 func writeFixtureFile(t *testing.T, path, content string, mode os.FileMode) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(content), mode); err != nil {
+	if err := fakeagent.WriteExecutable(path, []byte(content), mode); err != nil {
 		t.Fatal(err)
 	}
 }

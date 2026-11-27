@@ -70,7 +70,7 @@ for arg do
 done
 exec %[1]s --debug-file %[4]s "$@"
 `, claude, s.WSAddr, proxy.URL, fifo)
-	if err := os.WriteFile(launcher, []byte(script), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(launcher, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	s.Vars = append(s.Vars,

@@ -15,7 +15,7 @@ func TestAgentsAndShellPanesGetAttnFirstOnPathAndGhosttysTerminalIdentity(t *tes
 	if err := os.MkdirAll(stale, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(stale, "attn"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(stale, "attn"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	active := filepath.Join(w.Dir, "bin")

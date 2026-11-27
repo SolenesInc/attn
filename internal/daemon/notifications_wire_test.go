@@ -87,7 +87,7 @@ func installCrashingPlugin(t *testing.T, w *world, name string) {
 	if err := os.WriteFile(filepath.Join(dir, "attn-plugin.toml"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "run"), []byte("#!/bin/sh\nexit 3\n"), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(dir, "run"), []byte("#!/bin/sh\nexit 3\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/review"
 
 	"github.com/google/uuid"
@@ -245,7 +246,7 @@ func TestSearchFindsLinesWithAGitThatPredatesGrepMaxCount(t *testing.T) {
 	}
 	shim := t.TempDir()
 	gitBefore238 := "#!/bin/sh\nif [ \"$1\" = grep ]; then for a; do if [ \"$a\" = -m ]; then echo \"error: unknown switch \\`m'\" >&2; exit 129; fi; done; fi\nexec " + realGit + " \"$@\"\n"
-	if err := os.WriteFile(filepath.Join(shim, "git"), []byte(gitBefore238), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(shim, "git"), []byte(gitBefore238), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", shim+string(os.PathListSeparator)+os.Getenv("PATH"))

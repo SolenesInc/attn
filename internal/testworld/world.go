@@ -114,7 +114,7 @@ func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness,
 	}
 	// macOS asks dscl for the login shell before $SHELL; this dscl answers $SHELL
 	// so a world runs the shell its test chose, never the developer's own.
-	if err := os.WriteFile(filepath.Join(dir, "bin", "dscl"), []byte("#!/bin/sh\nprintf 'UserShell: %s\\n' \"$SHELL\"\n"), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(filepath.Join(dir, "bin", "dscl"), []byte("#!/bin/sh\nprintf 'UserShell: %s\\n' \"$SHELL\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	w.Vars = []string{

@@ -52,7 +52,7 @@ func recordingLoginShell(t *testing.T, s *testworld.Stack) loginShellRecord {
 	record := loginShellRecord(filepath.Join(dir, "launches"))
 	shell := filepath.Join(dir, "recording-shell")
 	script := "#!/bin/sh\nprintf '%s\\001' \"$@\" >> '" + string(record) + "'\nprintf '\\002' >> '" + string(record) + "'\nexec /bin/sh \"$@\"\n"
-	if err := os.WriteFile(shell, []byte(script), 0o700); err != nil {
+	if err := fakeagent.WriteExecutable(shell, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	s.Vars = append(s.Vars, "SHELL="+shell)

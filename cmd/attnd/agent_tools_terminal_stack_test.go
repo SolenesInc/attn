@@ -195,7 +195,7 @@ if [ -n "${ATTN_SHELL_INIT_DIR-}" ]; then
 fi
 exec /bin/bash "$@"
 `
-	if err := os.WriteFile(bash, []byte(heldUntilEnter), 0o755); err != nil {
+	if err := fakeagent.WriteExecutable(bash, []byte(heldUntilEnter), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	s.Vars = append(s.Vars, "SHELL="+bash)
