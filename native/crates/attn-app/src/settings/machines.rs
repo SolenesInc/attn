@@ -1431,7 +1431,7 @@ fn actions(state: &State, row: &Row, t: &Tokens) -> Vec<El> {
                 (true, true) => format!("Remove and close {count} {noun}"),
                 (true, false) => format!("Remove and forget {count} {noun}"),
             };
-            {
+            if outpost.dials_home != Some(true) {
                 let id = id.clone();
                 actions.push(action(
                     part("repair"),
@@ -1509,16 +1509,18 @@ fn machine_row(state: &State, row: &Row, chosen: bool, t: &Tokens) -> (ListRow, 
         .outpost
         .filter(|o| page.removing.as_deref() == Some(o.id.as_str()) && o.reach != "reachable")
     {
-        under.push(
-            Notice::info(
-                part("remove-note"),
-                format!(
-                    "{} isn't connected. If ssh cannot stop it, its daemon and shells keep running there. Run this instance's attn enrollment leave and attn daemon stop commands there.",
-                    outpost.name
-                ),
+        let note = if outpost.dials_home == Some(true) {
+            format!(
+                "{0} isn't connected. Its daemon and shells keep running there until it next dials this home, then it learns it was removed, stops this home's shells and becomes its own home again. To end that sooner, run this instance's attn enrollment leave on {0}.",
+                outpost.name
             )
-            .build(t),
-        );
+        } else {
+            format!(
+                "{} isn't connected. If ssh cannot stop it, its daemon and shells keep running there. Run this instance's attn enrollment leave and attn daemon stop commands there.",
+                outpost.name
+            )
+        };
+        under.push(Notice::info(part("remove-note"), note).build(t));
     }
     let row_state = row_state(state, row);
     let tags = Inline::tight()

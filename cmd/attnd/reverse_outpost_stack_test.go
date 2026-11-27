@@ -3,13 +3,16 @@ package main_test
 import (
 	"encoding/json"
 	"os"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
+	"github.com/victorarias/attn/internal/procwait"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -311,6 +314,9 @@ func TestAReverseOutpostDialsItsHomeAndRedialsAfterEitherRestarts(t *testing.T) 
 func TestAReverseOutpostShowsItsDialAndBothWaysOutEndIt(t *testing.T) {
 	w := newReverseWorld(t)
 	row := w.join()
+	if !protocol.Deref(row.DialsHome) {
+		t.Fatalf("the row of a machine that dials the home does not say so: %+v", row)
+	}
 	requireLines(t, "status while bridged", w.status(), "dial:       home (bridged)", "enrolled to ")
 
 	requireStdout(t, w.home.Attn("settings", "set", "remote_home_enabled", "false"), "false")
@@ -372,6 +378,40 @@ func TestAReverseOutpostShowsItsDialAndBothWaysOutEndIt(t *testing.T) {
 		t.Fatalf("the machine still dials after the home removed it:\n%s", removed)
 	}
 	t.Log("remove at the home ended the bridge, and the machine stopped dialing and left on the refusal")
+}
+
+func TestAMachineRemovedWhileOutOfReachKeepsItsShellUntilItDialsAgainThenLeavesAndStopsIt(t *testing.T) {
+	w := newReverseWorld(t)
+	row := w.join()
+	shell := w.home.Spawn(w.app, fakeagent.Harness(protocol.SessionAgentShell), w.laptop.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &row.ID })
+	pidPath := w.laptop.Path("shell.pid")
+	w.app.TypeLine(shell, "echo $$ > "+pidPath+"; echo up-$((1+1))")
+	w.app.AwaitScreen(shell, "up-2")
+	pid, err := strconv.Atoi(pidOf(t, pidPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mark := w.app.EventCount()
+	w.ssh.Fail("home", "ssh: connect to host home port 22: No route to host")
+	w.ssh.ExitMaster(w.laptop, protocol.Deref(row.DaemonID))
+	outpostStateSince(w.app, w.name, protocol.OutpostStateLost, mark)
+	w.app.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: row.ID})
+	testworld.Await(w.app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
+	if err := syscall.Kill(pid, 0); err != nil {
+		t.Fatalf("the shell on the machine stopped while the home could not reach it: %v", err)
+	}
+	t.Log("the home removed the machine it could not reach, and the machine's shell kept running")
+
+	w.ssh.Restore("home")
+	stopRetries := w.laptop.FireTimers(bridge.RetryTimer)
+	awaitHomeDial(t, w.laptop, "off")
+	stopRetries()
+	if exited, err := procwait.Exited(pid, fakeagent.HangGuard); err != nil || !exited {
+		t.Fatalf("the shell %d the home started on the machine still runs after the machine left on its next dial: exited=%v err=%v", pid, exited, err)
+	}
+	requireLines(t, "status after it left on the refusal", w.status(), "enrollment: home")
+	t.Log("the machine's next dial was refused, and it left the home and stopped the shell the home had started there")
 }
 
 func TestJoinRefusesWhileTheMachineHasOpenSessionsAndLeaveBringsItsOwnHomeBack(t *testing.T) {

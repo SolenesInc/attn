@@ -3605,6 +3605,41 @@ fn settings_machines_move(dark: bool) {
 
 /// The Settings dialog on `section`, its state changed by `change` and the daemon answering as
 /// `answer` scripts it.
+/// Settings → Machines removing laptop, a machine that dials the home and is out of reach, with
+/// one of its terminals open, so the remove waits on its confirm and its note.
+fn settings_machines_remove_dial_in(dark: bool) {
+    let mut world = settings_world(
+        dark,
+        "machines",
+        "machines",
+        SWITCHED_ON,
+        |state| {
+            state.outposts = Some(vec![OutpostInfo {
+                id: "laptop".into(),
+                name: "laptop".into(),
+                state: "refused".into(),
+                reach: "unreachable".into(),
+                state_since: "2026-10-18T18:00:00Z".into(),
+                dials_home: Some(true),
+                ..OutpostInfo::default()
+            }]);
+            state.sessions.get_or_insert_with(Vec::new).push(Session {
+                id: "laptop-shell".into(),
+                label: "laptop shell".into(),
+                agent: "shell".into(),
+                state: "idle".into(),
+                profile_id: "work".into(),
+                host: Some("laptop".into()),
+                ..Session::default()
+            });
+        },
+        |_| {},
+    );
+    click(&mut world, Target::key("settings.machine.laptop"));
+    click(&mut world, Target::key("settings.machine.laptop.remove"));
+    snap(&mut world, "settings-machines-remove-dial-in", dark);
+}
+
 fn settings_world(
     dark: bool,
     section: &str,
@@ -9692,6 +9727,9 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
             settings_section(dark, "machines", "machines", SWITCHED_ON, |_| {})
         });
         scene("settings_machines_move", || settings_machines_move(dark));
+        scene("settings_machines_remove_dial_in", || {
+            settings_machines_remove_dial_in(dark)
+        });
         scene("settings_section", || {
             settings_section(dark, "experimental", "experimental", SWITCHED_ON, |_| {})
         });

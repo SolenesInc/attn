@@ -124,8 +124,8 @@ connects by itself when the home answers, and the home's desktops replace the
 row, with each terminal once. Press **R** or click **Retry** to dial at once.
 
 Attn never installs, updates or re-pairs a machine that dials the home, and
-can't connect to it in a terminal. Update attn on that machine. On its row,
-**Update**, **Re-pair** and **Connect in a terminal** refuse and say so.
+can't connect to it in a terminal. Update attn on that machine. Its row offers
+no **Re-pair**, and **Update** and **Connect in a terminal** refuse and say so.
 
 ## Update the home from the machine that dials it
 
@@ -560,10 +560,12 @@ binaries, their `.previous` copies, the data folder, and the Notebook folder on
 the outpost.
 
 For a machine that joined by dialing, **Remove** closes its terminals and its
-bridge and removes the row, without running ssh to it. The machine's next dial
-is refused, and it leaves the home on its own, which may be when it wakes. To
-stop dialing from the machine first, run `attn enrollment leave` there. The row
-stays at the home as lost until you remove it.
+bridge and removes the row, without running ssh to it. When the machine isn't
+connected, its daemon and the shells this home started there keep running. Its
+next dial is refused, and then it leaves the home on its own, stops those shells
+and becomes its own home again, which may be when it wakes. To stop dialing from
+the machine first, run `attn enrollment leave` there. The row stays at the home
+as lost until you remove it.
 
 With terminals, the row offers **Remove and close N terminals** or **Cancel**.
 With none, Attn removes the outpost immediately. If ssh cannot reach the

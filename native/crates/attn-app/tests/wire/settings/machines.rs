@@ -342,10 +342,11 @@ fn remove_asks_to_confirm_closing_the_outposts_terminals_and_cancel_keeps_it() {
         named(&world, &part("remove")).as_deref(),
         Some("Remove and forget 1 terminal")
     );
-    assert!(
-        named(&world, &part("remove-note"))
-            .unwrap()
-            .starts_with("studio isn't connected.")
+    assert_eq!(
+        named(&world, &part("remove-note")).as_deref(),
+        Some(
+            "studio isn't connected. If ssh cannot stop it, its daemon and shells keep running there. Run this instance's attn enrollment leave and attn daemon stop commands there."
+        )
     );
 
     click(&mut world, &part("cancel"));
@@ -355,6 +356,41 @@ fn remove_asks_to_confirm_closing_the_outposts_terminals_and_cancel_keeps_it() {
     click(&mut world, &part("remove"));
     click(&mut world, &part("remove"));
     assert_eq!(sent(&world, "remove_outpost"), [json!({"id": "outpost-1"})]);
+}
+
+#[test]
+fn a_dial_in_machine_offers_no_re_pair_and_its_remove_says_it_leaves_on_its_next_dial() {
+    let laptop = OutpostInfo {
+        name: "laptop".into(),
+        destination: String::new(),
+        dials_home: Some(true),
+        ..refused()
+    };
+    let daemon = Daemon::scripted().state(InitialStateMessage {
+        sessions: Some(vec![Session {
+            id: "remote".into(),
+            label: "remote".into(),
+            agent: "shell".into(),
+            state: "idle".into(),
+            profile_id: "work".into(),
+            host: Some("outpost-1".into()),
+            ..Session::default()
+        }]),
+        ..initial(vec![laptop])
+    });
+    let mut world = World::start(daemon);
+    on_studio(&mut world);
+    assert!(
+        !shows(&world, &part("repair")),
+        "the home cannot re-pair a machine that dials it"
+    );
+    click(&mut world, &part("remove"));
+    assert_eq!(
+        named(&world, &part("remove-note")).as_deref(),
+        Some(
+            "laptop isn't connected. Its daemon and shells keep running there until it next dials this home, then it learns it was removed, stops this home's shells and becomes its own home again. To end that sooner, run this instance's attn enrollment leave on laptop."
+        )
+    );
 }
 
 #[test]

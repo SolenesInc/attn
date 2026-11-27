@@ -445,6 +445,7 @@ model NotebookSyncVerdictMessage {
 
 model OutpostInfo {
   connectable?: boolean;
+  dials_home?: boolean; // The machine dials this home (attn enrollment join), so the home never reaches it by ssh
   id: string;
   name: string;
   destination: string;
