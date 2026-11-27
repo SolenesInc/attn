@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Linux source can lose its boot unit after home move rollback",
+  "at": "2026-11-27T11:09:16.351Z",
+  "detail": "The old Linux home removes its service unit during apply. A subsequent rollback can restore the home role without restoring its service, so it may not restart or come back at boot. Reconcile unit lifecycle with the recovered role and move state.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/home_move.go",
+    "line": 180
+  },
+  "culprit": "2113370ce24975ca7209ee34edc6b3db99c96614"
+}
