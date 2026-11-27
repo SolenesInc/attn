@@ -7,7 +7,6 @@ use crate::State;
 use crate::machine::Machines;
 
 /// What a chosen folder becomes.
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum FolderFor {
     /// A setting, saved as typing it and leaving its field would.
     Setting {
@@ -15,7 +14,10 @@ pub(crate) enum FolderFor {
         title: &'static str,
     },
     PluginSource,
-    ChiefNotebook,
+    /// The Chief's setup, its draft set aside while the launcher covers it.
+    ChiefNotebook {
+        draft: Option<Box<crate::chief::setup::Draft>>,
+    },
     AutomationDirectory,
     EditorRoot {
         tile: String,
@@ -27,7 +29,7 @@ impl FolderFor {
         match self {
             FolderFor::Setting { title, .. } => title,
             FolderFor::PluginSource => "Select Plugin Directory",
-            FolderFor::ChiefNotebook => "Choose the Notebook folder",
+            FolderFor::ChiefNotebook { .. } => "Choose the Notebook folder",
             FolderFor::AutomationDirectory => "Choose a folder",
             FolderFor::EditorRoot { .. } => "Choose editor root",
         }
@@ -43,28 +45,49 @@ pub(crate) fn choose(state: &mut State, purpose: FolderFor, start: Option<String
             ..FileDialogOptions::default()
         };
         tx.open_folder(options, move |state: &mut State, folder, tx| match folder {
-            Ok(Some(folder)) => chosen(state, purpose, folder.to_string_lossy().into_owned(), tx),
+            Ok(Some(folder)) => {
+                answered(
+                    state,
+                    purpose,
+                    Some(folder.to_string_lossy().into_owned()),
+                    tx,
+                );
+            }
             Ok(None) => {}
             Err(why) => state
                 .window
                 .notify(format!("Could not ask for a folder: {why}"), tx),
         });
     } else {
+        let purpose = match purpose {
+            FolderFor::ChiefNotebook { .. } => FolderFor::ChiefNotebook {
+                draft: crate::chief::setup::set_aside(state),
+            },
+            other => other,
+        };
         crate::launcher::choose_folder(state, purpose, start, tx);
     }
 }
 
-/// Gives `folder`, on the home's machine, to what asked for it.
-pub(crate) fn chosen(state: &mut State, purpose: FolderFor, folder: String, tx: &mut Tx) {
+/// Answers what asked for a folder: with the folder on the home's machine, or with none when
+/// the chooser closed without one.
+pub(crate) fn answered(state: &mut State, purpose: FolderFor, folder: Option<String>, tx: &mut Tx) {
+    if let FolderFor::ChiefNotebook { draft } = purpose {
+        crate::chief::setup::notebook_chosen(state, draft, folder, tx);
+        return;
+    }
+    let Some(folder) = folder else {
+        return;
+    };
     match purpose {
         FolderFor::Setting { key, .. } => crate::settings::autosave::apply(state, key, &folder, tx),
         FolderFor::PluginSource => crate::settings::plugin_source_chosen(state, folder),
-        FolderFor::ChiefNotebook => crate::chief::setup::notebook_chosen(state, folder),
         FolderFor::AutomationDirectory => {
             crate::automations::form::directory_chosen(state, folder);
         }
         FolderFor::EditorRoot { tile } => {
-            crate::notebook::switch_root(state, &tile, Some(folder), tx)
+            crate::notebook::switch_root(state, &tile, Some(folder), tx);
         }
+        FolderFor::ChiefNotebook { .. } => {}
     }
 }

@@ -488,10 +488,27 @@ fn recheck_models(state: &mut State, tx: &mut Tx) {
     crate::settings::rediscover_models(state, &harness, tx);
 }
 
-/// Puts the folder chosen for the Notebook in the draft.
-pub(crate) fn notebook_chosen(state: &mut State, folder: String) {
-    if let Some(d) = state.window.chief.draft.as_mut() {
-        d.notebook_root = Some(folder);
+/// Takes the setup's draft while a dialog covers the setup, which closes it.
+pub(crate) fn set_aside(state: &mut State) -> Option<Box<Draft>> {
+    state.window.chief.draft.take().map(Box::new)
+}
+
+/// Puts the folder chosen for the Notebook, if any, in the draft. A draft set aside for the
+/// chooser comes back, and the setup opens again with it.
+pub(crate) fn notebook_chosen(
+    state: &mut State,
+    set_aside: Option<Box<Draft>>,
+    folder: Option<String>,
+    tx: &mut Tx,
+) {
+    if let Some(mut draft) = set_aside {
+        draft.wants_focus = true;
+        draft.held = false;
+        state.window.chief.draft = Some(*draft);
+        super::edit(state, tx);
+    }
+    if let (Some(folder), Some(draft)) = (folder, state.window.chief.draft.as_mut()) {
+        draft.notebook_root = Some(folder);
     }
 }
 
@@ -502,7 +519,7 @@ fn choose_folder(state: &mut State, tx: &mut Tx) {
     let folder = form(state, draft, view.busy).folder;
     crate::folders::choose(
         state,
-        crate::folders::FolderFor::ChiefNotebook,
+        crate::folders::FolderFor::ChiefNotebook { draft: None },
         (!folder.is_empty()).then_some(folder),
         tx,
     );

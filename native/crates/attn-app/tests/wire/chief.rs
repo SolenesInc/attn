@@ -1656,3 +1656,54 @@ fn in_desktop_flow_chief_setup_sits_beside_the_sidebar_and_dismisses_when_settin
     assert!(!shows(&world, "crew.heading"));
     assert!(shows(&world, SETUP));
 }
+
+#[test]
+fn with_the_home_on_another_machine_the_setup_chooses_its_notebook_folder_on_the_home_and_comes_back()
+ {
+    let daemon = daemon(initial(true, chief(false), Vec::new())).relaying_to("mac", "oma");
+    daemon.on("get_recent_locations", |_| {
+        message(attn_protocol::RecentLocationsResultMessage {
+            success: true,
+            home_path: Some("/home/me".into()),
+            ..attn_protocol::RecentLocationsResultMessage::new()
+        })
+    });
+    daemon.on("browse_directory", |r| {
+        let input = r["input_path"].as_str().unwrap().to_owned();
+        let directory = input
+            .replacen('~', "/home/me", 1)
+            .trim_end_matches('/')
+            .to_owned();
+        message(attn_protocol::BrowseDirectoryResultMessage {
+            success: true,
+            input_path: input,
+            home_path: Some("/home/me".into()),
+            directory,
+            ..attn_protocol::BrowseDirectoryResultMessage::new()
+        })
+    });
+    let mut world = World::start(daemon);
+    world.settle();
+    click(&mut world, "chief-setup.folder.choose");
+    assert_eq!(world.file_dialog(), None);
+    assert_eq!(
+        named(&world, "new-session.title").as_deref(),
+        Some("Choose the Notebook folder on oma")
+    );
+    assert!(
+        world
+            .daemon
+            .sent_of("browse_directory")
+            .iter()
+            .all(|r| r["host"].is_null())
+    );
+
+    press(&mut world, Key::Enter);
+
+    assert!(named(&world, "new-session.title").is_none());
+    assert_eq!(
+        named(&world, "chief-setup.folder").as_deref(),
+        Some("/home/me/attn-notebook-work")
+    );
+    assert_eq!(checked(&world, "harness"), ["Claude Code"]);
+}

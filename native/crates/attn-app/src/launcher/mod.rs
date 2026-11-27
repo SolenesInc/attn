@@ -348,15 +348,14 @@ pub(crate) fn choose_folder(
 
 /// Closes the chooser and gives `row`'s folder to what asked for it.
 fn choose(state: &mut State, which: Which, row: Option<Row>, tx: &mut Tx) {
-    let Some(purpose) = state
+    if state
         .window
         .launching
         .launcher(which)
-        .and_then(|l| l.choosing.as_ref())
-        .map(|c| c.purpose.clone())
-    else {
+        .is_none_or(|l| l.choosing.is_none())
+    {
         return;
-    };
+    }
     let row = row.or_else(|| {
         let launcher = state.window.launching.launcher(which)?;
         launcher.rows(state).into_iter().next()
@@ -368,8 +367,7 @@ fn choose(state: &mut State, which: Which, row: Option<Row>, tx: &mut Tx) {
         }
         return;
     };
-    close(state, tx);
-    crate::folders::chosen(state, purpose, row.path, tx);
+    crate::picker::close_with(state, Some(row.path), tx);
 }
 
 impl Launcher {

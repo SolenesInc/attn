@@ -803,17 +803,26 @@ fn step_back(state: &mut State, which: Which, tx: &mut Tx) {
 }
 
 pub(crate) fn close(state: &mut State, tx: &mut Tx) {
-    let (layer, focus) = match state.window.launching.dialog.take() {
-        Some(Opened::Launcher(launcher)) => launcher.choosing.map(|c| c.back),
+    close_with(state, None, tx);
+}
+
+/// Closes the dialog. A folder chooser gives back what it covered and answers what asked it
+/// with `folder`.
+pub(crate) fn close_with(state: &mut State, folder: Option<String>, tx: &mut Tx) {
+    let chooser = match state.window.launching.dialog.take() {
+        Some(Opened::Launcher(mut launcher)) => launcher.choosing.take(),
         _ => None,
-    }
-    .unwrap_or_default();
+    };
+    let (layer, focus) = chooser.as_ref().map(|c| c.back.clone()).unwrap_or_default();
     if state.window.layer == Some(crate::shell::Layer::NewSession) {
         state.window.layer = layer;
     }
     match focus {
         Some(key) => tx.focus(key, false),
         None => refocus_inline(state, tx),
+    }
+    if let Some(chooser) = chooser {
+        crate::folders::answered(state, chooser.purpose, folder, tx);
     }
 }
 
