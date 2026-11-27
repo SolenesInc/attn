@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Home move replay can remove a newly installed root from live state",
+  "at": "2026-11-27T14:02:04.213Z",
+  "detail": "A target with no prior copy of a root can install the incoming root, stop before the applied checkpoint, then move its only copy out of live state on restart. An isolated probe reproduced the missing live root and intact backup. Use the pre-move displacement record to identify roots belonging to the target.\n"
+}
