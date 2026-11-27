@@ -73,6 +73,9 @@ func (c *Catalog) ToolMention(line string) (string, error) {
 		}
 		return "", fmt.Errorf("%q names no catalog command", line)
 	}
+	if len(cmds) == 1 && !cmds[0].IsTool() && len(cmds[0].Args) == 0 {
+		return shellCommand(line), nil
+	}
 	args, err := mentionArgs(c, cmds[0], rest)
 	if err != nil {
 		return "", fmt.Errorf("%q: %w", line, err)

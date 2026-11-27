@@ -19,6 +19,7 @@
 # in seconds.
 
 group go \.go$|^go\.(mod|sum)$
+go ./internal/catalog TestRefusalsNameCommandsByMention
 go ./internal/daemon TestEnabledSkillsRefreshWhenTheirSettingsAreSavedAndTheDaemonRestarts
 go ./internal/daemon TestARestartBringsBackEveryAgentItLostAndLeavesShellsToBeOpened
 go ./internal/daemon TestOpeningAnAgentJustAsTheDaemonRevivesItAttachesToTheRevivedAgent
