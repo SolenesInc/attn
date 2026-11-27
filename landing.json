@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "ae14efe1d0bce1e3b2c88614f43db44a2cfc1573",
+  "head": "8d263946bc10fad63283340b5494f903b429f216",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 146.931,
+    "ranOn": "8d263946bc10fad63283340b5494f903b429f216"
+  },
+  "acknowledgedFlake": {
+    "test": "go ./cmd/attnd TestHomeMoveToAMachineThatDialsTheHome",
+    "owner": "s-wrv828"
+  },
+  "recordings": [
+    {
+      "sha256": "45350773e5da04d79958e383e70c169e1cb5e289258902acfe7313fb2a982f50",
+      "ext": "png",
+      "bytes": 274364
+    },
+    {
+      "sha256": "afed5549a1920e16f72cdb097140eb0346d9e90154e4839539178d3c56940b54",
+      "ext": "png",
+      "bytes": 264919
+    },
+    {
+      "sha256": "3161e32f6a3b07e2ed7253d2a98fb73279c579c31f1aed66cc037258d47ffe1b",
+      "ext": "png",
+      "bytes": 141181
+    }
+  ]
+}
