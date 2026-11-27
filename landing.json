@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "885493bccebe2a7feb9fbd26f824ca7bf4a8ea1e",
+  "head": "2113370ce24975ca7209ee34edc6b3db99c96614",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 214.652,
+    "ranOn": "2113370ce24975ca7209ee34edc6b3db99c96614"
+  },
+  "noMediaReason": "The move's controls on Settings → Outposts rows and the rollback offer are interim; the Settings → Machines landing that replaces them (D13) carries the screenshots. App wire tests cover these controls.",
+  "recordings": []
+}
