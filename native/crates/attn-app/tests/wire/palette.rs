@@ -124,7 +124,7 @@ fn hold(world: &World, cmd: &str) -> Arc<Mutex<Vec<Request>>> {
     held
 }
 
-fn chord(action: Action) -> KeyEvent {
+pub(super) fn chord(action: Action) -> KeyEvent {
     match Keymap::from_setting(None, attn_testkit::platform()).binding(&action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
@@ -161,7 +161,7 @@ fn query(world: &World) -> String {
         .unwrap_or_default()
 }
 
-fn titles(world: &World) -> Vec<String> {
+pub(super) fn titles(world: &World) -> Vec<String> {
     world
         .screen()
         .all(Target::role("list-box-option"))

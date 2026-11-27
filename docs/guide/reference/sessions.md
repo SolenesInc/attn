@@ -131,6 +131,27 @@ every agent there with `--all`. A crew member's name resolves to the member's
 current session, and naming a member between sessions starts nothing. Attn never reloads shells. Run
 `attn agent reload --help` for the details.
 
+## Forks
+
+When a harness forks the conversation a tile shows, the tile moves to the fork,
+which is a session of its own, and the conversation you forked from keeps its
+session. In [shared Codex](using-shared-codex.md#switching-conversations),
+`/fork` does this, and the original stays open and hidden. `/new`, `/resume`
+and `/side` make no offer.
+
+A notice over the top of the fork's terminal says "Forked from" and names the
+original. **Open original beside this** opens the original in the column right
+after the fork and moves the keyboard to it. A hidden original comes back on
+screen, a closed one resumes, and one that a tile already shows gets the
+keyboard without a new tile. The × dismisses the notice in every window. On the
+fork's tile, the command palette offers the same two actions as **Open original
+beside this** and **Dismiss fork offer**.
+
+The notice shows only while no tile shows the original. If you open the
+original some other way and later close its tile, the notice comes back. Open,
+dismiss, closing the fork and a daemon restart end the offer for good. The
+ledger still has the original.
+
 ## Send files to an agent from outside Attn
 
 A program on the computer that runs Attn can send files and a message to a

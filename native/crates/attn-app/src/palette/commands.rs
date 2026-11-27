@@ -748,6 +748,9 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         if let Some(stake) = session.seed_id.as_deref().filter(|id| !id.is_empty()) {
             commands.push(stake_command(state, session, &name, stake));
         }
+        if crate::desktop::fork_offer::offered(session, &facts.desktops).is_some() {
+            commands.extend(fork_offer_commands(&session.id));
+        }
     }
     let snoozed = on_screen.filter(|s| {
         queue_on
@@ -810,6 +813,39 @@ fn stake_command(
     )
     .describe(title)
     .pin()
+}
+
+/// What the notice over a fork's terminal offers, for the keyboard.
+fn fork_offer_commands(fork: &str) -> [Command; 2] {
+    [
+        Command::new(
+            "open-fork-original",
+            "Open original beside this",
+            &[
+                "fork",
+                "branch",
+                "original",
+                "open",
+                "beside",
+                "conversation",
+            ],
+            Action::OpenForkOriginal {
+                session: fork.to_owned(),
+            },
+        )
+        .describe("The conversation this one was forked from, in the next column")
+        .pin(),
+        Command::new(
+            "dismiss-fork-offer",
+            "Dismiss fork offer",
+            &["fork", "branch", "original", "dismiss", "notice"],
+            Action::DismissForkOffer {
+                session: fork.to_owned(),
+            },
+        )
+        .describe("Stop offering to open the original, in every window")
+        .pin(),
+    ]
 }
 
 /// Pops the active tile out into a window of its own, or brings it back.

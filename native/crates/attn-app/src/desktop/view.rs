@@ -125,6 +125,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         state.terminals.annotation_layers(),
         (
             stale_builds(&facts.sessions, desk),
+            super::fork_offer::offers(&facts.sessions, &facts.desktops, &facts.harnesses),
             desktop.map(|d| {
                 super::shared_conversation::notices(&facts.sessions, &facts.desktops, &d.id)
             }),
@@ -558,6 +559,11 @@ pub(super) fn lone(
         marks: (&state.drafts, &state.readings),
         browsers: &state.browser,
         stale: &stale_builds(&state.facts.sessions, &state.window.desk),
+        forks: &super::fork_offer::offers(
+            &state.facts.sessions,
+            &state.facts.desktops,
+            &state.facts.harnesses,
+        ),
         shared: &super::shared_conversation::notices(
             &state.facts.sessions,
             &state.facts.desktops,
@@ -607,6 +613,8 @@ fn screen(
                 let dragging = desk.drag.as_ref().and_then(|d| d.dragging());
                 let unsent = desk.peeks.unsent();
                 let stale = stale_builds(&facts.sessions, desk);
+                let forks =
+                    super::fork_offer::offers(&facts.sessions, &facts.desktops, &facts.harnesses);
                 let shared = super::shared_conversation::notices(
                     &facts.sessions,
                     &facts.desktops,
@@ -651,6 +659,7 @@ fn screen(
                     marks,
                     browsers,
                     stale: &stale,
+                    forks: &forks,
                     shared: &shared,
                     t,
                     scale,
@@ -753,6 +762,8 @@ struct TileCx<'a> {
     browsers: &'a crate::browser::Browsers,
     /// Sessions whose terminal runs an older build, with the notice still up.
     stale: &'a [String],
+    /// Forks whose original no tile shows, with what each was forked from.
+    forks: &'a [(String, String)],
     /// Sessions whose conversation another terminal also has open, with where it is.
     shared: &'a [(String, String)],
     now_ms: i64,
@@ -977,7 +988,12 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 .stale
                 .contains(&pane.session_id)
                 .then(|| super::stale_build::notice(&pane.session_id, t));
-            let notices: Vec<_> = shared.into_iter().chain(stale).collect();
+            let fork = cx
+                .forks
+                .iter()
+                .find(|(s, _)| *s == pane.session_id)
+                .map(|(s, named)| super::fork_offer::notice(s, named, t));
+            let notices: Vec<_> = shared.into_iter().chain(stale).chain(fork).collect();
             let slot = if notices.is_empty() {
                 slot
             } else {

@@ -33,6 +33,8 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
             super::header_pop::pin(state, session, super::header_pop::What::Seed, tx)
         }
         OpenTile { desktop, tile } => show_leaf(state, desktop, tile, tx),
+        OpenForkOriginal { session } => super::fork_offer::open(state, session, tx),
+        DismissForkOffer { session } => super::fork_offer::dismiss(state, session),
         ClearDraggedWidths { desktop } => super::shelf::clear_dragged_widths(state, desktop, tx),
         MoveWithDelegates { desktop } => move_with_delegates(state, desktop, tx),
         SortDesktops { profile } => sort(state, profile, tx),

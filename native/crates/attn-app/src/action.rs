@@ -59,6 +59,10 @@ macro_rules! actions {
             OpenStake { session: String, seed: String },
             /// Restart an agent in its pane.
             ReloadSession { session: String },
+            /// Open the original a fork came from in the column after the fork.
+            OpenForkOriginal { session: String },
+            /// End a fork's offer to open its original, in every window.
+            DismissForkOffer { session: String },
             /// Open an agent's folder in the user's editor.
             OpenInEditor { session: String },
             /// End an agent's snooze.
@@ -129,6 +133,8 @@ macro_rules! actions {
                     Action::SwitchToProfile { .. } => "profile.switchTo",
                     Action::RenameSession { .. } => "session.rename",
                     Action::ReloadSession { .. } => "session.reload",
+                    Action::OpenForkOriginal { .. } => "session.openForkOriginal",
+                    Action::DismissForkOffer { .. } => "session.dismissForkOffer",
                     Action::OpenInEditor { .. } => "session.openInEditor",
                     Action::ShowSessionUsage { .. } => "session.showUsage",
                     Action::ShowDelegationChain { .. } => "session.showDelegationChain",
@@ -176,6 +182,8 @@ macro_rules! actions {
                     Action::SwitchToProfile { .. } => "Switch to a profile",
                     Action::RenameSession { .. } => "Rename an agent",
                     Action::ReloadSession { .. } => "Reload an agent",
+                    Action::OpenForkOriginal { .. } => "Open a fork's original beside it",
+                    Action::DismissForkOffer { .. } => "Dismiss a fork offer",
                     Action::OpenInEditor { .. } => "Open in editor",
                     Action::ShowSessionUsage { .. } => "Show an agent's usage",
                     Action::ShowDelegationChain { .. } => "Show an agent's delegation chain",

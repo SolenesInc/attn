@@ -195,6 +195,14 @@ export async function runSharedMockServer() {
       threads.set(id, thread);
       return { result: { thread: metadata(thread) }, after: () => broadcast('thread/started', { thread: metadata(thread) }) };
     },
+    'thread/fork': (conn, params) => {
+      const parent = loadedThread(params.threadId);
+      const id = `mock-${randomUUID()}`;
+      const thread = newThread({ id, cwd: parent.cwd, file: codexTranscriptPath(id, new Date()), source: 'fork', config: params.config || {}, conn });
+      threads.set(id, thread);
+      const forked = { ...metadata(thread), forkedFromId: params.threadId };
+      return { result: { thread: forked }, after: () => broadcast('thread/started', { thread: forked }) };
+    },
     'thread/resume': (conn, params) => {
       let thread = threads.get(params.threadId);
       if (thread && !thread.written) throw new Error(`no rollout found for thread id ${params.threadId}`);
@@ -517,6 +525,9 @@ export async function runSharedMockView() {
     if (command === '/new' || command === '/clear') {
       const started = await call('thread/start', { cwd: launch.cwd, model: launch.model, ephemeral: false, threadSource: 'user', config: {} });
       await switchTo(started.thread);
+    } else if (command === '/fork') {
+      const forked = await call('thread/fork', { threadId: selected, ephemeral: false, config: {} });
+      await switchTo(forked.thread);
     } else if ((command === '/resume' || command === '/agents') && argument) {
       const resumed = await call('thread/resume', { threadId: argument, excludeTurns: true });
       await switchTo(resumed.thread);

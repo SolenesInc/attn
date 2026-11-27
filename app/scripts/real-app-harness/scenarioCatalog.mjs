@@ -31,6 +31,13 @@ export const scenarioCatalog = [
     freshWorldAfter: true,
   },
   {
+    id: 'native-fork-offer',
+    runnerId: 'NATIVE-FORK-OFFER',
+    label: "A shared Codex /fork leaves a notice on the fork's tile; Open original beside this from the palette puts the original focused in the next column, and a dismissed offer stays gone after the app restarts",
+    command: ['node', 'scripts/real-app-harness/scenario-native-fork-offer.mjs'],
+    freshWorldAfter: true,
+  },
+  {
     id: 'native-codex-update',
     runnerId: 'NATIVE-CODEX-UPDATE',
     label: "The native app's Codex updates band offers a newer Codex, installs it in a tile, and reloads the tile still on the older Codex",

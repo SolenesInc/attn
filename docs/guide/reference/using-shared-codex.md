@@ -143,7 +143,7 @@ tiles**. From a terminal:
 
 ## Switching conversations
 
-`/new`, `/resume` and `/agents` change the conversation a terminal shows, and the terminal's tile shows that conversation's session at once, with the session's name and state.
+`/new`, `/fork`, `/resume` and `/agents` change the conversation a terminal shows, and the terminal's tile shows that conversation's session at once, with the session's name and state. After `/fork`, the fork's tile offers to open the original beside it, as [Forks](sessions.md#forks) describes.
 The session you left stays open and **hidden**:
 
 - The hidden session keeps its state, so a session that was waiting for you

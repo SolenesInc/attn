@@ -15,6 +15,7 @@ mod fit;
 pub(crate) mod header_pop;
 pub(crate) mod host;
 pub use attn_client::layout;
+pub(crate) mod fork_offer;
 mod overview;
 mod overview_view;
 mod peek;

@@ -57,6 +57,8 @@ func main() {
 		err = seedResume(args)
 	case "request":
 		err = request(args)
+	case "send":
+		err = sendCommand(args)
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -88,6 +90,7 @@ Commands:
   seed-continuation --seed S   (what a seed's page offers: Resume, Handover)
   seed-resume --seed S         (the seed page's Resume)
   request --json PAYLOAD --event EVENT [--timeout 30s]   (prints the EVENT reply carrying PAYLOAD's request_id)
+  send --json PAYLOAD                 (sends a command that has no reply)
   outposts [--add NAME --destination SSH_DESTINATION | --remove ID | --repair ID | --update ID] [--until STATE | --watch]
 `, wsURL())
 }
@@ -501,6 +504,17 @@ func request(args []string) error {
 	}
 	fmt.Println(string(pretty))
 	return nil
+}
+
+func sendCommand(args []string) error {
+	fs := flag.NewFlagSet("send", flag.ExitOnError)
+	raw := fs.String("json", "", "the command as JSON (required)")
+	fs.Parse(args)
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(*raw), &payload); err != nil {
+		return fmt.Errorf("--json: %w", err)
+	}
+	return send(payload)
 }
 
 type command func(initial []byte) (map[string]any, error)
