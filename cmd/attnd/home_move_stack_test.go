@@ -950,8 +950,8 @@ func TestHomeMoveSurvivesAKillAtEachStep(t *testing.T) {
 			}
 			m.Home.AwaitStopped()
 			m.Outpost.AwaitStopped()
-			m.Outpost.Start()
 			m.Home.Start()
+			m.Outpost.Start()
 			m.requireMoved(t, homeMachine, pidHome, pidOut)
 		})
 	}
