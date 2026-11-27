@@ -1,0 +1,1 @@
+Fixes a hang in the held-capture quiet-notification daemon tests: the shared helper waited for Working twice, and the daemon sometimes sends only one working frame. `workingOn` now returns the session it awaited, so the helper uses that frame instead of waiting for a second one. Test-only change.
