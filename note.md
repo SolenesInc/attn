@@ -1,0 +1,1 @@
+With the home on another machine, **Open** and **Reveal** on a seed's files now open this machine's synced copy of the Notebook instead of refusing. They say so when the copy hasn't synced yet. A seed or a review already on screen when the app's machine joins a home also stops opening file links on this machine's disk.
