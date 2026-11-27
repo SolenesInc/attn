@@ -68,6 +68,39 @@ func TestAnAsksLinksAndCodeBlocksNameTheMachineTheyAreOnAndAMisspelledMachineIsR
 	t.Logf("an ask that links fra:~/notes/plan.md: %v", err)
 }
 
+func TestALinkInAnAsksExplicitSubjectNamesItsMachineAndAMisspelledMachineThereIsRefusedNamingTheSubject(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	far, _ := connectFarOutpost(t, w, app, answerTheFarHome)
+	folder := w.Path("shop")
+	asker := protocol.SessionID(w.Spawn(app, fakeagent.Claude, folder))
+	ask := func(subject string) (protocol.Ask, error) {
+		var opened protocol.Ask
+		err := cli.RunCommand("ask", asker, command.AskArgs{Subject: subject, Markdown: "Read [the plan](notes/plan.md).\n", BaseDir: folder}, &opened)
+		return opened, err
+	}
+
+	opened, err := ask("Ship [the far plan](far:~/plan.md) after [the notes](notes.md)?")
+	if err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+	want := []protocol.AskReference{
+		{Kind: protocol.AskReferenceKindFile, Text: "far:~/plan.md", Host: protocol.Ptr(far), Path: farHome + "/plan.md", Line: 0},
+		{Kind: protocol.AskReferenceKindFile, Text: "notes.md", Path: filepath.Join(folder, "notes.md"), Line: 0},
+		{Kind: protocol.AskReferenceKindFile, Text: "notes/plan.md", Path: filepath.Join(folder, "notes/plan.md"), Line: 1},
+	}
+	requireReferences(t, "the opened ask", opened.References, want)
+	shown := testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 })
+	requireReferences(t, "the app's ask", shown.Asks[0].References, want)
+
+	_, err = ask("Ship [the far plan](fra:~/plan.md)?")
+	if err == nil || !strings.Contains(err.Error(), "the subject") || strings.Contains(err.Error(), "line ") || !strings.Contains(err.Error(), `"fra"`) || !strings.Contains(err.Error(), "home") || !strings.Contains(err.Error(), "far") {
+		t.Fatalf("an ask whose subject links fra:~/plan.md: %v, want a refusal that names the subject and the machines", err)
+	}
+	t.Logf("an ask whose subject links fra:~/plan.md: %v", err)
+}
+
 func requireReferences(t *testing.T, where string, got, want []protocol.AskReference) {
 	t.Helper()
 	gotJSON, _ := json.Marshal(got)

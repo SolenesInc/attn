@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,23 +14,34 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// askReferences resolves the places markdown names against the ask's place, with every ~ path read on its machine.
+// askReferences resolves the places the subject the agent wrote and markdown name against the ask's place, with
+// every ~ path read on its machine. A reference in the subject has line 0.
 // writtenIn is where the markdown was written; a relative link must name the same file from there as from the place.
-func (d *Daemon) askReferences(markdown string, place ask.Place, writtenIn, askID string) ([]protocol.AskReference, error) {
+func (d *Daemon) askReferences(subject, markdown string, place ask.Place, writtenIn, askID string) ([]protocol.AskReference, error) {
 	machines, err := d.machineNames()
 	if err != nil {
 		return nil, err
 	}
-	references, err := ask.References(markdown, machines, place)
+	references, err := ask.References(subject, machines, place)
+	if lineErr := (*ask.LineError)(nil); errors.As(err, &lineErr) {
+		return nil, protocol.Refuse(protocol.RefusalInvalidInput, "the subject: %s", lineErr.Message)
+	} else if err != nil {
+		return nil, err
+	}
+	for i := range references {
+		references[i].Line = 0
+	}
+	inMarkdown, err := ask.References(markdown, machines, place)
 	if err != nil {
 		return nil, err
 	}
+	references = append(references, inMarkdown...)
 	if writtenIn != place.BaseDir {
 		there, err := ask.References(markdown, machines, ask.Place{Host: place.Host, BaseDir: writtenIn})
 		if err != nil {
 			return nil, err
 		}
-		if !slices.EqualFunc(references, there, sameReference) {
+		if !slices.EqualFunc(inMarkdown, there, sameReference) {
 			return nil, protocol.Refuse(protocol.RefusalInvalidInput, "the user's view resolves the ask's links against %s, where %s was opened; name each file the amendment links by its absolute path", place.BaseDir, askID)
 		}
 	}
@@ -41,12 +53,19 @@ func (d *Daemon) askReferences(markdown string, place ask.Place, writtenIn, askI
 		host := protocol.Deref(reference.Host)
 		if _, known := homes[host]; !known {
 			if homes[host], err = d.machineHome(host); err != nil {
-				return nil, protocol.Refuse(protocol.RefusalWrongState, "line %d names %s, and %s did not say where ~ is there: %v; name the file by its absolute path", reference.Line, reference.Text, d.outpostName(host), err)
+				return nil, protocol.Refuse(protocol.RefusalWrongState, "%s names %s, and %s did not say where ~ is there: %v; name the file by its absolute path", whereInAsk(reference), reference.Text, d.outpostName(host), err)
 			}
 		}
 		references[i].Path = filepath.Join(homes[host], strings.TrimPrefix(reference.Path, "~"))
 	}
 	return references, nil
+}
+
+func whereInAsk(reference protocol.AskReference) string {
+	if reference.Line == 0 {
+		return "the subject"
+	}
+	return fmt.Sprintf("line %d", reference.Line)
 }
 
 func sameReference(a, b protocol.AskReference) bool {

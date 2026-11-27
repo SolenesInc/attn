@@ -4575,10 +4575,11 @@ enum AskReferenceKind {
   command,
 }
 
-// A place an ask's markdown names: a link's file, or the folder written after a
-// code block's language. text is the link destination or the address as
-// written; host is the machine, absent for this daemon's own; path is
-// absolute; line is the line of the markdown, or of its amendment, it is on.
+// A place an ask's subject or markdown names: a link's file, or the folder
+// written after a code block's language. text is the link destination or the
+// address as written; host is the machine, absent for this daemon's own; path
+// is absolute; line is the line of the markdown, or of its amendment, it is
+// on, and 0 for a link in the subject the agent wrote.
 model AskReference {
   kind: AskReferenceKind;
   text: string;

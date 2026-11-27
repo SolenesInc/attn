@@ -73,7 +73,12 @@ func (d *Daemon) askOpen(msg *protocol.AskOpenMessage) (protocol.Ask, error) {
 		return protocol.Ask{}, err
 	}
 	host := d.store.StoredHost(session.Host)
-	references, err := d.askReferences(msg.Markdown, ask.Place{Host: host, BaseDir: msg.BaseDir}, msg.BaseDir, "")
+	subject := ask.Subject(protocol.Deref(msg.Subject), parts)
+	writtenSubject := ""
+	if strings.TrimSpace(protocol.Deref(msg.Subject)) != "" {
+		writtenSubject = subject
+	}
+	references, err := d.askReferences(writtenSubject, msg.Markdown, ask.Place{Host: host, BaseDir: msg.BaseDir}, msg.BaseDir, "")
 	if err != nil {
 		return protocol.Ask{}, err
 	}
@@ -86,7 +91,7 @@ func (d *Daemon) askOpen(msg *protocol.AskOpenMessage) (protocol.Ask, error) {
 		ID:         id,
 		SessionID:  session.ID,
 		To:         to,
-		Subject:    ask.Subject(protocol.Deref(msg.Subject), parts),
+		Subject:    subject,
 		Markdown:   msg.Markdown,
 		BaseDir:    msg.BaseDir,
 		Host:       host,
@@ -182,7 +187,7 @@ func (d *Daemon) askAmend(msg *protocol.AskAmendMessage) (protocol.Ask, error) {
 		return protocol.Ask{}, protocol.Refuse(protocol.RefusalInvalidInput, "an ask holds at most %d KiB of markdown, its amendments included; %s holds %d bytes, and this amendment adds %d. Close it and open another ask",
 			ask.MaxMarkdownBytes>>10, shown.stored.ID, held, len(msg.Markdown))
 	}
-	references, err := d.askReferences(msg.Markdown, ask.Place{Host: shown.stored.Host, BaseDir: shown.stored.BaseDir}, msg.BaseDir, shown.stored.ID)
+	references, err := d.askReferences("", msg.Markdown, ask.Place{Host: shown.stored.Host, BaseDir: shown.stored.BaseDir}, msg.BaseDir, shown.stored.ID)
 	if err != nil {
 		return protocol.Ask{}, err
 	}
