@@ -1,0 +1,1 @@
+drive-attn: an ask's markdown links can be pressed by their destination key, and a driver must wait for a new outpost's first Notebook sync (`in_sync`) before spawning on it. Both were found by the C1 run on s-ykn8bz.
