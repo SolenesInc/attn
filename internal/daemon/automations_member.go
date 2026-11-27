@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/automation"
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
@@ -23,7 +25,11 @@ func (d *Daemon) deliverAutomationMessage(run *store.AutomationRun, req automati
 	if definition == nil || !definition.Enabled {
 		return errors.New("automation definition is disabled; refusing pending delivery")
 	}
-	member, _, err := d.crewMember(req.Member)
+	key, err := automationMemberKey(req.Member)
+	if err != nil {
+		return err
+	}
+	member, _, err := d.crewMember(key.String())
 	if err != nil {
 		return err
 	}
@@ -61,20 +67,28 @@ func (d *Daemon) addressAutomationMember(spec automation.DefinitionSpec, profile
 	if member.Retired {
 		return spec, nil, fmt.Errorf("member: %s is retired", member.Name)
 	}
-	spec.Member = member.Key.String()
+	spec.Member = crew.KeyRefPrefix + member.Key.String()
 	canonical, err := json.Marshal(spec)
 	return spec, canonical, err
 }
 
-func (d *Daemon) automationMemberView(key string) *protocol.PartyView {
-	if key == "" {
+func automationMemberKey(ref string) (who.MemberKey, error) {
+	key, keyed := strings.CutPrefix(ref, crew.KeyRefPrefix)
+	if !keyed {
+		return who.MemberKey{}, fmt.Errorf("automation member %q is not a %s<key> reference", ref, crew.KeyRefPrefix)
+	}
+	return who.ParseMemberKey(key)
+}
+
+func (d *Daemon) automationMemberView(ref string) *protocol.PartyView {
+	if ref == "" {
 		return nil
 	}
-	parsed, err := who.ParseMemberKey(key)
+	key, err := automationMemberKey(ref)
 	if err != nil {
-		d.logf("automation member %q: %v", key, err)
+		d.logf("%v", err)
 		return nil
 	}
-	view := d.partyView(who.Member(parsed))
+	view := d.partyView(who.Member(key))
 	return &view
 }

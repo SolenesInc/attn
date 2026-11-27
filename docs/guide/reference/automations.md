@@ -87,9 +87,11 @@ the ones you changed:
 
 An automation can message a [crew member](crew.md) instead of starting an
 agent, such as a member you want to check in every morning. Name the member in
-`member`, by name or key, and leave out `launch` and `location`: the member
-works on its own harness, in its own folder and on its own launch desktop.
-Attn saves the member's key, so the automation keeps reaching a renamed member.
+`member`, by name or as `member:<key>`, and leave out `launch` and `location`:
+the member works on their own harness, in their own folder and on their own
+launch desktop. Attn saves the member as `member:<key>`, which
+`attn automation show` prints, so the automation keeps reaching a renamed
+member.
 
 ```yaml
 api_version: attn.dev/automations/v1alpha1

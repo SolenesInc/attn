@@ -130,3 +130,27 @@ func TestAScheduledAutomationForAMemberMessagesItWhenDue(t *testing.T) {
 		checkMemberAutomationMessage(t, w, cli, session, runs[0].ID)
 	})
 }
+
+func TestAMemberAutomationShownAfterARenameAppliesBackToTheSameMember(t *testing.T) {
+	w := newWorld(t)
+	cli := w.Client()
+	if _, err := cli.CrewCreate("Fern", "claude"); err != nil {
+		t.Fatal(err)
+	}
+	applied := applyAutomation(t, cli, memberAutomation("Fern"))
+	if _, err := cli.CrewRename("Fern", "Ivy"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cli.CrewCreate("Fern", "claude"); err != nil {
+		t.Fatal(err)
+	}
+
+	shown, err := cli.AutomationDefinition(applied.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reapplied := applyAutomation(t, cli, shown.SpecYaml)
+	if reapplied.Member == nil || reapplied.Member.Ref != "member:fern" || reapplied.Member.Name != "Ivy" {
+		t.Errorf("applying the shown definition %q gave member %+v, want it to still message Ivy (member:fern), not the new Fern", shown.SpecYaml, reapplied.Member)
+	}
+}
