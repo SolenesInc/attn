@@ -895,12 +895,20 @@ impl Terminals {
     }
 
     /// Whether the window takes `event`, which came from link `from`: a terminal's stream comes
-    /// only from the link it attached on, and what concerns its session only from the home.
+    /// only from the link it attached on, and what concerns its session only from the home,
+    /// which owns sessions.
     fn hears(&self, from: Reach, event: &TerminalEvent) -> bool {
-        match terminal_of(event).and_then(|id| self.panes.get(id)) {
-            Some(term) => term.via == from,
-            None => from == Reach::Home || terminal_of(event).is_some(),
+        if matches!(
+            event,
+            TerminalEvent::Respawned(_)
+                | TerminalEvent::Exited(_)
+                | TerminalEvent::MessagesChanged(_)
+        ) {
+            return from == Reach::Home;
         }
+        terminal_of(event)
+            .and_then(|id| self.panes.get(id))
+            .is_none_or(|term| term.via == from)
     }
 
     fn apply(&mut self, event: TerminalEvent, received: Instant, tx: &mut Tx, home: &Commands) {

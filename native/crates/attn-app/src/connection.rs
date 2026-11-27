@@ -18,10 +18,10 @@ pub(crate) fn connecting(t: &Tokens) -> El {
 pub(crate) fn shows_desk(facts: &Facts) -> bool {
     match facts.connection {
         Connection::Connected | Connection::Reconnecting { .. } => true,
-        Connection::HomeUnreachable(_) | Connection::Connecting => {
+        Connection::HomeUnreachable(_) => {
             !facts.daemon_instance.is_empty() || crate::cold::shows(facts)
         }
-        Connection::Refused(_) => false,
+        Connection::Connecting | Connection::Refused(_) => false,
     }
 }
 

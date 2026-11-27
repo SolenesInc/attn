@@ -198,7 +198,9 @@ impl State {
     ) -> bool {
         let sent = match on {
             attn_client::Reach::Machine => self.terminals.machine.send(command),
-            attn_client::Reach::Home if crate::cold::shows(&self.facts) => {
+            attn_client::Reach::Home
+                if self.facts.connection != attn_client::Connection::Connected =>
+            {
                 Err(attn_client::NotConnected)
             }
             attn_client::Reach::Home => self.daemon.send(command),

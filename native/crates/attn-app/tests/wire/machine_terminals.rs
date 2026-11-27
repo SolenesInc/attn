@@ -181,6 +181,25 @@ fn a_terminal_on_this_machine_rides_its_own_daemon_and_a_home_terminal_rides_the
         screen.contains("from this machine") && !screen.contains("from the home"),
         "a terminal hears its stream only from the link it attached on:\n{screen}"
     );
+
+    world
+        .daemon
+        .emit(json!({"event": "runtime_respawned", "id": "rl"}));
+    world.settle();
+    assert_eq!(
+        ids(machine(&world), "attach_session"),
+        ["rl", "rl"],
+        "the home says the session started again, and the terminal attaches anew on this machine"
+    );
+    world
+        .daemon
+        .emit(json!({"event": "session_exited", "id": "rl", "session_id": "here", "exit_code": 1}));
+    world.settle();
+    let screen = world.terminal_text("rl").join("\n");
+    assert!(
+        screen.contains("[Process exited with code 1]"),
+        "the home, which owns sessions, says when this machine's terminal ends:\n{screen}"
+    );
     assert!(world.runtime_is_at_rest());
 }
 
@@ -308,6 +327,29 @@ fn before_the_home_answers_this_machines_terminals_are_live_in_one_row_the_home_
         ids(machine(&world), "attach_session"),
         ["rl"],
         "the home's desktop took over the same live terminal"
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn before_the_home_answers_a_machine_without_terminals_of_its_own_shows_only_cant_reach() {
+    let answering = Arc::new(AtomicBool::new(false));
+    let home = home(answering);
+    let machine = Daemon::of_this_machine(&home).state(InitialStateMessage {
+        protocol_version: Some(PROTOCOL_VERSION.into()),
+        daemon_instance_id: Some("laptop-daemon".into()),
+        ..InitialStateMessage::new()
+    });
+    let world = World::start_relaying(home.relaying_to(HERE, "oma"), machine, WIDE_ENOUGH_FOR_BOTH);
+
+    assert!(
+        world
+            .screen()
+            .find(Target::key("connection.home-unreachable"))
+            .is_some()
+            && world.screen().find(Target::key("sidebar")).is_none(),
+        "{}",
+        world.screen()
     );
     assert!(world.runtime_is_at_rest());
 }

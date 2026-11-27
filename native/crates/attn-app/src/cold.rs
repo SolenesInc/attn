@@ -12,10 +12,20 @@ use attn_protocol::{DesktopPane, Profile};
 /// The id the row goes by, which no desktop of the home has.
 pub(crate) const ROW: &str = "";
 
-/// Whether the window shows this machine's row: the home has not answered yet, and this
-/// machine's own daemon has.
+/// Whether the window shows this machine's row: the home is unreachable and has not answered
+/// yet, and this machine's own daemon has, with a terminal to show.
 pub(crate) fn shows(facts: &Facts) -> bool {
-    facts.daemon_instance.is_empty() && facts.machine.home.is_some() && facts.machine.connected
+    let machine = &facts.machine;
+    matches!(
+        facts.connection,
+        attn_client::Connection::HomeUnreachable(_)
+    ) && facts.daemon_instance.is_empty()
+        && machine.home.is_some()
+        && machine.connected
+        && machine
+            .sessions
+            .iter()
+            .any(|s| machine.terminals.iter().any(|b| b.session_id == s.id))
 }
 
 /// What the window reads while it shows this machine's row: the facts, with this machine's
