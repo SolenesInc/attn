@@ -1,0 +1,8 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "fix: home move CLI clippy and kill-step restart race",
+  "at": "2026-11-27T11:42:23.994Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45984632457",
+  "repairs": "2113370ce"
+}
