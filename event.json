@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Reconnecting during home move preflight can leave Settings stuck after success",
+  "at": "2026-11-27T12:40:28.595Z",
+  "detail": "The app may reconnect while the submitted move is still in its second preflight. The daemon is working, but its prior status is unchanged, so the app treats the new move as failed and ignores its eventual success. The target row then disappears and Make home stays blocked. Reconcile against authoritative operation identity or phase before and after the move journal exists.\n"
+}
