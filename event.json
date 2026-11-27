@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Launcher cannot resolve a home and outpost that share a name",
+  "at": "2026-11-27T16:06:24.472Z",
+  "detail": "A move can leave the home and an outpost with the same display name. The launcher's ambiguity choices omit the home, and choosing the outpost repopulates the same ambiguous name. A parser probe reproduced the loop. Present both candidates and complete to a unique address.\n"
+}
