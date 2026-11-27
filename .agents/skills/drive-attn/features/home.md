@@ -19,13 +19,14 @@ opens on home.
 - `critical-strip`: an unread critical notification shows as a strip at the top of the sidebar.
 - `whats-new`: the intro that opens on a new release, and the home banner that replays it.
 - `toasts`: short-lived errors and undo offers in a corner of the window. The user clicks a toast's button to run its action.
+- `view-tiles`: with the experimental setting `views_enabled`, a markdown tile whose params are `{"view": "attn"}`, `{"view": "sessions"}` or `{"view": "pull-requests"}` shows that part of home on any desktop, drawn by home's code: the brand line with Settings and the what's-new banner, the Sessions card under "All settled", or the Pull Requests card under the rate-limit notice. Its controls keep their `home.*` keys inside `tile.<tile id>`.
 
 ## How to get to it
 
 ### People
 
 - ⌘⇧H (`session.goToDashboard`, `native/crates/attn-app/src/keymap.rs`).
-- Palette (`native/crates/attn-app/src/palette/commands.rs`): `home` ("Home"), `notifications` ("Show notifications" or "Hide notifications"), `whats-new` ("What's new").
+- Palette (`native/crates/attn-app/src/palette/commands.rs`): `home` ("Home"), `notifications` ("Show notifications" or "Hide notifications"), `whats-new` ("What's new"). With `views_enabled` on and a current desktop, `view-attn`, `view-sessions` and `view-pull-requests` ("Show attn in a tile", "Show Sessions in a tile", "Show Pull requests in a tile") dock the view as `tile-view-<name>` on the current desktop, or go to the tile that already shows it.
 - Sidebar: the Home row `sidebar.home` above everything (`native/crates/attn-app/src/sidebar/mod.rs`), and `rail.home` on the collapsed rail (`native/crates/attn-app/src/sidebar/chips.rs`). The bell in the title bar, `titlebar.notifications`, named "Show Notifications", with the unread count as its value. The critical strip, `sidebar.critical`.
 - On home (`native/crates/attn-app/src/home/mod.rs`): press a session row `home.session.<session>` to open the agent. Press the snoozed group's header `home.group.snoozed.toggle` to expand the group, and `home.session.<session>.unsnooze` to end a snooze. The follow checkbox is `home.follow`. The intro banner has `home.intro-banner.replay` and `home.intro-banner.dismiss`. Home also hosts "New" (`home.new`, named "New session") ([agent-launch.md](agent-launch.md)), the settings gear `home.settings` ([settings.md](settings.md)) and the cards above.
 - The notifications panel, `notifications.panel` (`native/crates/attn-app/src/notifications/view.rs`): a press on a row's head expands the row and marks it read. Each row has action buttons, such as a retry, and the panel has "Mark all read", `notifications.mark-all`.
@@ -83,6 +84,7 @@ Preconditions:
 - **Mark all read.** Run `./attn plugin uninstall home-crash`, then install the plugin again. When the strip comes back, press the bell, then `notifications.mark-all`: every row loses "unread" and "Mark all read" is disabled. Press `Escape`: the bell's value is 0. Run `./attn plugin uninstall home-crash`.
 - **A toast.** Press `mod+shift+k`, type `Sort desktops` and press `Enter`. `bridge wait '{"target":{"key":"notice.offer"}}'` answers, named `Desktops sorted Undo`. Press it: its name ends in `✓ Done`. Undo puts the desktops back in the order they had before the sort ([desktops.md](desktops.md)). With one or two desktops, that order may already be the sorted one, so the order proves nothing there.
 - **Settings and a new agent from home.** Run `bridge press '{"target":{"key":"home.settings"}}'` and `bridge press '{"target":{"key":"home.new"}}'`: each opens its feature, whose recipe is in its own file ([settings.md](settings.md), [agent-launch.md](agent-launch.md)).
+- **Views in tiles.** Run `./attn settings set views_enabled true` and open a desktop with an agent. Press `mod+shift+k`, type `Show attn in a tile` and press `Enter`; do the same for `Show Sessions in a tile` and `Show Pull requests in a tile`. `bridge state '{"of":"desktops"}'` shows three `markdown` tiles with `{"view":…}` params beside the terminal, and `mod+alt+=` puts them all on screen in a window wide enough (about 2400 points with the sidebar). `bridge tree` holds `home.settings` inside `tile.tile-view-attn`, `home.follow` inside `tile.tile-view-sessions` and `home.pr.<id>.approve` inside `tile.tile-view-pull-requests`. Tab to each and press `space`: follow toggles, approve sends `approve_pr` (the daemon log names the PR) and Settings opens its dialog. Run `Show Sessions in a tile` again: the window's `keyboard.pane` is `tile-view-sessions` and no second tile docks.
 - **Proof.** In `$P`, keep `bridge state '{"of":"window"}'` after each way home, the `./attn` commands' output and exit codes, and `bridge tree` after each step on home. Capture `bridge shot '{"path":"<P>/home.png"}'` with the agent in a state group, `<P>/home-all-settled.png` with "All settled", `<P>/critical-strip.png` with the strip, `<P>/notifications.png` with the panel open and `<P>/whats-new.png` with the tour open, with `<P>` written out. Name each file for its way in, such as `home-key-window.json`.
 
 ## Contexts
@@ -97,7 +99,7 @@ Preconditions:
 
 ## Tests
 
-- Wire: `native/crates/attn-app/tests/wire/home.rs`, `native/crates/attn-app/tests/wire/notifications.rs`, `native/crates/attn-app/tests/wire/whats_new.rs`, `internal/daemon/notifications_wire_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/home.rs`, `native/crates/attn-app/tests/wire/notifications.rs`, `native/crates/attn-app/tests/wire/whats_new.rs`, `native/crates/attn-app/tests/wire/view_tiles.rs`, `internal/daemon/notifications_wire_test.go`, `internal/daemon/view_tiles_wire_test.go`.
 - Scenario: `native-agent-queue` (All settled and wake).
 - Kernel: `internal/store/notifications_test.go`, `internal/daemon/notifications_render_test.go`.
 
@@ -110,4 +112,6 @@ Preconditions:
 - ⌘⇧H, the Home row and the palette's Home leave the follow checkbox clear. Only settling or snoozing the last turn ticks it, so a test of "the next turn takes me there" starts from a settle.
 - A toast fades six seconds after it appears unless the pointer rests on it. Press it right away, or read it with `bridge wait` first.
 - The palette title "What's new" has an apostrophe, which breaks the single-quoted JSON as written. Typing `whats new` matches the command through its keywords.
+- A fresh instance opens What's new over everything, and the tour takes the first keys: a palette chord sent before the tour closes does nothing, and `Enter` closes the tour. Press `Escape` first.
+- The mock GitHub has no rate-limit mode, so the rate-limit notice in a Pull Requests view tile shows only in `view_tiles.rs`.
 - Working but wrong: the bell's label is "Show Notifications" while the palette says "Show notifications".
