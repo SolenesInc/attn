@@ -1,0 +1,10 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "TestAnAppWhoseHomeIsUnreachableIsToldWhyAndConnectsWhenItReturns: a copy could wake an app waiting on the dial before the bridge was recorded",
+  "at": "2026-11-27T07:21:38.297Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45952576248",
+  "severity": "p1",
+  "source": "ci",
+  "culprit": "c15c1e9524ce08ae8ef69d1638f1e11524d01900"
+}
