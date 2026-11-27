@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Remote-home terminal paths fail silently on click",
+  "at": "2026-11-27T06:38:33.290Z",
+  "detail": "Command-clicking an ordinary printed file path in a remote-home terminal gives no response, while the guide promises a named refusal. Recognize the click without opening a local file and report the remote location.\nIndependently source-confirmed at 309da596f. See the rolling review s-wbc0br for evidence.\n"
+}
