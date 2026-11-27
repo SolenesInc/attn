@@ -1387,7 +1387,7 @@ pub(crate) fn toggle_snooze(state: &mut State, tx: &mut Tx) {
         return;
     };
     let Some(holder) = holder(ask, &state.facts)
-        .filter(|s| !crate::outpost::offline(s, &state.facts.outposts))
+        .filter(|s| !crate::outpost::offline(s, &state.facts))
         .cloned()
     else {
         return;

@@ -1168,6 +1168,7 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("system::list_row::ListRow::new(label)", false),
     ("system::list_row::ListRow::note(said)", true),
     ("system::list_row::ListRow::note(keys)", false),
+    ("system::list_row::ListRow::wrapped_note(said)", true),
     ("system::list_row::ListRow::title(title)", true),
     ("system::list_row::ListRow::quiet_title(title)", true),
     ("system::list_row::ListRow::subtitle(subtitle)", true),

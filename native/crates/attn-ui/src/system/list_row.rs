@@ -179,7 +179,36 @@ impl ListRow {
         keys: Option<String>,
         t: &Tokens,
     ) -> El {
+        Self::note_of(key, said, kind, ink, keys, false, t)
+    }
+
+    /// [`Self::note`] whose words wrap onto more lines rather than end in an ellipsis.
+    pub fn wrapped_note(
+        key: impl Into<String>,
+        said: impl Into<Said>,
+        kind: Type,
+        ink: Color,
+        t: &Tokens,
+    ) -> El {
+        Self::note_of(key, said, kind, ink, None, true, t)
+    }
+
+    fn note_of(
+        key: impl Into<String>,
+        said: impl Into<Said>,
+        kind: Type,
+        ink: Color,
+        keys: Option<String>,
+        wraps: bool,
+        t: &Tokens,
+    ) -> El {
         let (key, said) = (key.into(), said.into());
+        let said_words = words(said.clone(), kind, ink).a11y_hidden();
+        let said_words = if wraps {
+            said_words.wrap().min_w(0.0)
+        } else {
+            said_words.single_line().truncate()
+        };
         let keys_key = format!("{key}.keys");
         door::gap(
             door::sides(
@@ -193,14 +222,7 @@ impl ListRow {
             ),
             Space::S6,
         )
-        .child(
-            words(said, kind, ink)
-                .a11y_hidden()
-                .single_line()
-                .truncate()
-                .shrink()
-                .grow(1.0),
-        )
+        .child(said_words.shrink().grow(1.0))
         .children(keys.map(|keys| {
             words(keys, Type::Mono, t.text_dimmed)
                 .key(keys_key)

@@ -27,8 +27,17 @@ impl Reach {
     }
 }
 
+/// How the app reaches `host`: the app's own machine over its own link, and any other as the
+/// home does.
+pub(crate) fn reach(host: Option<&str>, facts: &Facts) -> Reach {
+    if facts.machine.runs(host) && facts.machine.connected {
+        return Reach::Reachable;
+    }
+    home_reach(host, &facts.outposts)
+}
+
 /// How the home reaches `host`; a host no outpost row has is unreachable.
-pub(crate) fn reach(host: Option<&str>, outposts: &[OutpostInfo]) -> Reach {
+pub(crate) fn home_reach(host: Option<&str>, outposts: &[OutpostInfo]) -> Reach {
     let Some(host) = host.filter(|h| !h.is_empty()) else {
         return Reach::Reachable;
     };
@@ -43,19 +52,19 @@ pub(crate) fn reach(host: Option<&str>, outposts: &[OutpostInfo]) -> Reach {
     }
 }
 
-pub(crate) fn of(session: &Session, outposts: &[OutpostInfo]) -> Reach {
-    reach(session.host.as_deref(), outposts)
+pub(crate) fn of(session: &Session, facts: &Facts) -> Reach {
+    reach(session.host.as_deref(), facts)
 }
 
-/// Whether the agent runs on a machine the home cannot reach.
-pub(crate) fn offline(session: &Session, outposts: &[OutpostInfo]) -> bool {
-    of(session, outposts).offline()
+/// Whether the agent runs on a machine the app cannot reach.
+pub(crate) fn offline(session: &Session, facts: &Facts) -> bool {
+    of(session, facts).offline()
 }
 
 /// What a remote session's tile says about its machine while it is not plainly reachable.
-pub(crate) fn notice(session: &Session, outposts: &[OutpostInfo]) -> Option<String> {
-    let name = crate::desktop::host::outpost_of(session, outposts)?;
-    match of(session, outposts) {
+pub(crate) fn notice(session: &Session, facts: &Facts) -> Option<String> {
+    let name = crate::desktop::host::outpost_of(session, &facts.outposts)?;
+    match of(session, facts) {
         Reach::Unreachable => Some(format!("{name} unreachable · typing is not sent")),
         Reach::Connecting => Some(format!("Connecting to {name} · typing is not sent")),
         Reach::Stalled => Some(format!("{name} not responding")),
@@ -73,14 +82,14 @@ pub(crate) fn tile_notice(session: &Session, facts: &Facts) -> Option<String> {
     if let Connection::HomeUnreachable(away) = &facts.connection {
         return Some(format!("Lost {} · typing is not sent", away.home));
     }
-    notice(session, &facts.outposts)
+    notice(session, facts)
 }
 
 /// Why an action on `session` that needs its machine cannot run now: its machine is
 /// unreachable.
 pub(crate) fn unreachable(state: &State, session: &str) -> Option<String> {
     let session = state.facts.sessions.iter().find(|s| s.id == session)?;
-    if !offline(session, &state.facts.outposts) {
+    if !offline(session, &state.facts) {
         return None;
     }
     let name = crate::desktop::host::outpost_of(session, &state.facts.outposts)?;

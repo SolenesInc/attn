@@ -5,7 +5,7 @@
 use std::collections::{BTreeMap, HashSet};
 
 use attn_client::Facts;
-use attn_protocol::{OutpostInfo, Session};
+use attn_protocol::Session;
 use rune::Tx;
 
 use crate::State;
@@ -22,14 +22,14 @@ pub(crate) struct Group<'a> {
     pub(crate) needing_you: Vec<&'a Session>,
 }
 
-pub(crate) fn needs_you(run: &Session, outposts: &[OutpostInfo], now_ms: i64) -> bool {
+pub(crate) fn needs_you(run: &Session, facts: &Facts, now_ms: i64) -> bool {
     run.turn_owed == Some(true)
         && !is_snoozed(run.turn_snoozed_until.as_deref(), now_ms)
-        && !crate::outpost::offline(run, outposts)
+        && !crate::outpost::offline(run, facts)
 }
 
-fn phase(run: &Session, outposts: &[OutpostInfo], now_ms: i64) -> u8 {
-    if needs_you(run, outposts, now_ms) {
+fn phase(run: &Session, facts: &Facts, now_ms: i64) -> u8 {
+    if needs_you(run, facts, now_ms) {
         0
     } else if LIVE.contains(&run.state.as_str()) {
         1
@@ -41,7 +41,7 @@ fn phase(run: &Session, outposts: &[OutpostInfo], now_ms: i64) -> u8 {
 /// The automation runs among `sessions`, in desktop order, each once.
 fn groups<'a>(
     sessions: impl IntoIterator<Item = &'a Session>,
-    outposts: &[OutpostInfo],
+    facts: &Facts,
     now_ms: i64,
 ) -> Vec<Group<'a>> {
     let mut seen = HashSet::new();
@@ -68,7 +68,7 @@ fn groups<'a>(
         .into_values()
         .map(|mut group| {
             group.runs.sort_by(|a, b| {
-                let (pa, pb) = (phase(a, outposts, now_ms), phase(b, outposts, now_ms));
+                let (pa, pb) = (phase(a, facts, now_ms), phase(b, facts, now_ms));
                 let by_time = match pa {
                     0 => a.turn_opened_at.cmp(&b.turn_opened_at),
                     2 => b.state_since.cmp(&a.state_since),
@@ -80,7 +80,7 @@ fn groups<'a>(
                 .runs
                 .iter()
                 .copied()
-                .filter(|run| needs_you(run, outposts, now_ms))
+                .filter(|run| needs_you(run, facts, now_ms))
                 .collect();
             group.runs.retain(|run| {
                 run.automation
@@ -103,7 +103,7 @@ pub(crate) fn on_desktops(facts: &Facts, now_ms: i64) -> Vec<Group<'_>> {
             .into_iter()
             .filter(|(desktop, ..)| desktop.is_some())
             .flat_map(|(_, _, sessions)| sessions),
-        &facts.outposts,
+        facts,
         now_ms,
     )
 }
@@ -212,7 +212,7 @@ mod tests {
                 ..Session::default()
             },
         ];
-        let groups = groups(&sessions, &[], now());
+        let groups = groups(&sessions, &Facts::default(), now());
 
         assert_eq!(groups.len(), 1);
         assert_eq!(
@@ -240,7 +240,7 @@ mod tests {
             "2026-09-26T10:00:00Z",
         );
         let sessions = [&snoozed, &asking, &asking];
-        let groups = groups(sessions, &[], now());
+        let groups = groups(sessions, &Facts::default(), now());
 
         assert_eq!(ids(&groups[0].runs), ["asking", "snoozed"]);
         assert_eq!(ids(&groups[0].needing_you), ["asking"]);
@@ -264,7 +264,7 @@ mod tests {
             ),
             run("docs-live", "docs", "working"),
         ];
-        let groups = groups(&sessions, &[], now());
+        let groups = groups(&sessions, &Facts::default(), now());
         let mut walk = Vec::new();
         let mut current: Option<String> = None;
         for _ in 0..4 {
@@ -281,6 +281,6 @@ mod tests {
             Some("review-1")
         );
         let idle = [run("a", "docs", "idle")];
-        assert!(next_needing_you(&super::groups(&idle, &[], now()), None).is_none());
+        assert!(next_needing_you(&super::groups(&idle, &Facts::default(), now()), None).is_none());
     }
 }

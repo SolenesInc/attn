@@ -481,7 +481,7 @@ fn rail_automations_chip(
                 continue;
             }
             runs += 1;
-            if crate::automations::runs::needs_you(session, &facts.outposts, state.window.now_ms) {
+            if crate::automations::runs::needs_you(session, facts, state.window.now_ms) {
                 needing += 1;
             }
         }

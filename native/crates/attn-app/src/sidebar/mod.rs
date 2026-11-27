@@ -406,12 +406,11 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                             .children(desktop_groups(state, &lines, &marked, logos_on, &t)),
                     )
                     .children(waiting.clone().map(|waiting| {
-                        ListRow::note(
+                        ListRow::wrapped_note(
                             "sidebar.waiting-for-home",
                             waiting,
                             attn_ui::system::Type::Small,
                             t.text_secondary,
-                            None,
                             &t,
                         )
                     }))
@@ -594,7 +593,7 @@ pub(crate) fn next_automation_needing(state: &mut State, tx: &mut Tx) {
         let Some(session) = by_id.get(run.row.id.as_str()) else {
             continue;
         };
-        if crate::automations::runs::needs_you(session, &state.facts.outposts, now_ms)
+        if crate::automations::runs::needs_you(session, &state.facts, now_ms)
             && seen.insert(run.row.id.as_str())
         {
             batch.push(run.row.id.as_str());

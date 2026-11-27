@@ -536,8 +536,7 @@ impl Terminals {
                     Reach::Machine => true,
                     Reach::Home => {
                         !matches!(facts.connection, Connection::HomeUnreachable(_))
-                            && crate::outpost::reach(place.host.as_deref(), &facts.outposts)
-                                .streams()
+                            && crate::outpost::reach(place.host.as_deref(), facts).streams()
                     }
                 };
                 (

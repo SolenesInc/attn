@@ -139,8 +139,7 @@ pub(crate) fn desktop_entries(state: &State) -> Vec<DesktopEntry> {
     let active_pill =
         |key: String, name: Option<&str>, closing: bool, session: &attn_protocol::Session| {
             let selected = on_screen.as_deref() == Some(session.id.as_str());
-            let mut agent = AgentRow::of(session, &facts.harnesses, &facts.outposts, selected)
-                .asking(facts, session);
+            let mut agent = AgentRow::of(session, facts, selected).asking(facts, session);
             if let Some(name) = name.filter(|n| !n.is_empty()) {
                 agent.name = name.to_owned();
             }

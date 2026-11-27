@@ -143,7 +143,7 @@ pub fn wanting(facts: &Facts) -> Vec<&Session> {
     let crew_in_queue = setting::on(&facts.settings, QUEUE_CREW);
     Places::of(facts)
         .agents()
-        .filter(|s| !crate::outpost::offline(s, &facts.outposts))
+        .filter(|s| !crate::outpost::offline(s, facts))
         .filter(|s| {
             if queue_flow {
                 participates(s, crew_in_queue) && s.turn_owed == Some(true)
@@ -174,7 +174,7 @@ pub struct QueueActions {
 }
 
 pub fn actions(facts: &Facts, session: &Session, now_ms: i64) -> QueueActions {
-    if crate::outpost::offline(session, &facts.outposts)
+    if crate::outpost::offline(session, facts)
         || is_snoozed(session.turn_snoozed_until.as_deref(), now_ms)
     {
         return QueueActions::default();
@@ -263,7 +263,7 @@ pub fn bands(facts: &Facts, now_ms: i64) -> Bands<'_> {
                 session,
                 desktop: *desktop,
                 desktop_title: title.clone(),
-                offline: crate::outpost::offline(session, &facts.outposts),
+                offline: crate::outpost::offline(session, facts),
             };
             if session.chief_of_staff == Some(true) && bands.chief.is_none() {
                 bands.chief = Some(row.clone());

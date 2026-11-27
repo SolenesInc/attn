@@ -153,7 +153,7 @@ pub(crate) fn follow(state: &mut State) {
             .facts
             .sessions
             .iter()
-            .any(|s| s.id == menu.session && !crate::outpost::offline(s, &state.facts.outposts))
+            .any(|s| s.id == menu.session && !crate::outpost::offline(s, &state.facts))
     });
     if gone {
         state.window.snooze = None;

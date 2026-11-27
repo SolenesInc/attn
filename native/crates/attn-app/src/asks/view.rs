@@ -486,7 +486,7 @@ fn header(state: &State, item: &Item<'_>, t: &Tokens) -> El {
     let ask = item.ask;
     let snoozable = item
         .holder
-        .filter(|s| !crate::outpost::offline(s, &state.facts.outposts));
+        .filter(|s| !crate::outpost::offline(s, &state.facts));
     let snoozed = snoozable
         .is_some_and(|s| queue::is_snoozed(s.turn_snoozed_until.as_deref(), state.window.now_ms));
     let seed = ask.seed_id.as_ref().map(|seed| {
@@ -527,12 +527,7 @@ fn header(state: &State, item: &Item<'_>, t: &Tokens) -> El {
             crate::sidebar::lead(
                 state,
                 "asks.from",
-                &crate::sidebar::AgentRow::of(
-                    s,
-                    &state.facts.harnesses,
-                    &state.facts.outposts,
-                    false,
-                ),
+                &crate::sidebar::AgentRow::of(s, &state.facts, false),
                 crate::sidebar::logos(state),
                 t.bg_panel,
                 t,
@@ -576,7 +571,7 @@ fn header(state: &State, item: &Item<'_>, t: &Tokens) -> El {
 /// What the asker is doing, as the ask's header says it beside its name.
 fn asker_state(state: &State, item: &Item<'_>) -> Option<String> {
     let holder = item.holder?;
-    if crate::outpost::offline(holder, &state.facts.outposts) {
+    if crate::outpost::offline(holder, &state.facts) {
         return Some("offline".into());
     }
     if let Some(until) = item.snoozed_until {
@@ -1480,7 +1475,7 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> Block {
     let ask = item.ask;
     let snoozable = item
         .holder
-        .filter(|s| !crate::outpost::offline(s, &state.facts.outposts));
+        .filter(|s| !crate::outpost::offline(s, &state.facts));
     let snoozed = snoozable
         .is_some_and(|s| queue::is_snoozed(s.turn_snoozed_until.as_deref(), state.window.now_ms));
     let mut hints: Vec<(&[&str], &str)> = Vec::new();

@@ -466,7 +466,7 @@ fn pick(state: &mut State, row: Row, tx: &mut Tx) {
         return;
     }
     let outposts = crate::launcher::outposts(state);
-    if crate::outpost::reach(row.host.as_deref(), outposts).offline() {
+    if crate::outpost::home_reach(row.host.as_deref(), outposts).offline() {
         let machine = crate::launcher::machine_name(
             &crate::launcher::offered(state, outposts),
             row.host.as_deref(),

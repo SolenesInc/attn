@@ -246,18 +246,13 @@ impl List<'_> {
             key: format!("agent:{}", session.id),
             label: name,
             look: Look::Agent {
-                agent: Box::new(AgentRow::of(
-                    session,
-                    &state.facts.harnesses,
-                    &state.facts.outposts,
-                    false,
-                )),
+                agent: Box::new(AgentRow::of(session, &state.facts, false)),
                 role: session.delegation_role.clone(),
                 crew: !crew.is_empty() && session.chief_of_staff != Some(true),
                 status: status(
                     session,
                     snoozed,
-                    crate::outpost::offline(session, &state.facts.outposts),
+                    crate::outpost::offline(session, &state.facts),
                 ),
                 slot: desktop.map_or_else(|| "—".to_owned(), |d| slot(state, d.shortcut_slot)),
                 age: if owed {

@@ -40,16 +40,13 @@ enum Settle {
 }
 
 impl Settle {
-    fn of(
-        session: &attn_protocol::Session,
-        outposts: &[attn_protocol::OutpostInfo],
-    ) -> Option<Settle> {
+    fn of(session: &attn_protocol::Session, facts: &attn_client::Facts) -> Option<Settle> {
         let counts = session
             .auto_settle_fires_at
             .as_deref()
             .is_some_and(|at| !at.is_empty())
             || session.auto_settle_held == Some(true);
-        if crate::outpost::offline(session, outposts) {
+        if crate::outpost::offline(session, facts) {
             return counts.then_some(Settle::Frozen);
         }
         match &session.auto_settle_fires_at {
@@ -114,7 +111,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
             d.panes
                 .iter()
                 .filter_map(|p| facts.sessions.iter().find(|s| s.id == p.session_id))
-                .map(|s| crate::sidebar::AgentRow::of(s, &facts.harnesses, &facts.outposts, false))
+                .map(|s| crate::sidebar::AgentRow::of(s, facts, false))
                 .collect()
         })
         .unwrap_or_default();
@@ -429,7 +426,7 @@ fn sublines(
                         What::SeedCard => None,
                     })
                     .into_iter()
-                    .chain(crate::outpost::offline(s, &facts.outposts).then_some(Piece::Host))
+                    .chain(crate::outpost::offline(s, facts).then_some(Piece::Host))
                     .collect();
                 sub.levels = fit(&Row {
                     available,
@@ -467,7 +464,7 @@ fn settles(desktop: &Desktop, facts: &attn_client::Facts) -> Vec<(String, Settle
         .iter()
         .filter_map(|p| {
             let session = facts.sessions.iter().find(|s| s.id == p.session_id)?;
-            Some((p.pane_id.clone(), Settle::of(session, &facts.outposts)?))
+            Some((p.pane_id.clone(), Settle::of(session, facts)?))
         })
         .collect()
 }
@@ -1237,7 +1234,7 @@ fn slides(kind: &LeafKind) -> bool {
 /// The machine of the pane's session while the home cannot reach it.
 fn unreachable_host(cx: &TileCx, pane: &DesktopPane) -> Option<String> {
     let session = cx.sessions.iter().find(|s| s.id == pane.session_id)?;
-    crate::outpost::offline(session, cx.outposts)
+    crate::outpost::offline(session, cx.facts)
         .then(|| super::host::outpost_of(session, cx.outposts))
         .flatten()
 }
@@ -1249,7 +1246,7 @@ fn reach_strip(cx: &TileCx, pane: &DesktopPane) -> (Option<String>, Option<Strin
         return (None, None);
     };
     let notice = crate::outpost::tile_notice(session, cx.facts);
-    let unseen = crate::outpost::offline(session, cx.outposts)
+    let unseen = crate::outpost::offline(session, cx.facts)
         && cx.terminals.away(&pane.runtime_id) == Some(false);
     let screen_on = unseen
         .then(|| super::host::outpost_of(session, cx.outposts))
@@ -1331,7 +1328,7 @@ fn header(leaf: &Leaf, title: &str, look: &super::tile_look::Look, cx: &TileCx) 
     let header = match session {
         Some(s) => header.mark(crate::sidebar::state_mark(
             &key,
-            &crate::sidebar::AgentRow::of(s, &cx.facts.harnesses, cx.outposts, false),
+            &crate::sidebar::AgentRow::of(s, cx.facts, false),
             attn_ui::system::DotSize::Small,
             t,
         )),

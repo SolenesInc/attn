@@ -1001,3 +1001,31 @@ fn while_the_home_is_away_each_desktop_keeps_the_tile_made_active_there_through_
         "d1 keeps the tile made active there"
     );
 }
+
+#[test]
+fn before_the_home_answers_this_machines_terminal_is_not_offline() {
+    let (world, _answering, _dir) = start_cold(
+        home_state(),
+        laptop_state(vec![shell("here", None)], &[("here", "rl")]),
+    );
+    let said = |key: &str| {
+        world
+            .screen()
+            .find(Target::key(key))
+            .and_then(|n| n.name)
+            .unwrap_or_default()
+    };
+    for key in ["tile.rl.state", "sidebar.session.here.state"] {
+        assert!(
+            !said(key).contains("offline"),
+            "{key} says {:?}:\n{}",
+            said(key),
+            world.screen()
+        );
+    }
+    assert!(
+        world.screen().find(Target::key("tile.rl.state")).is_some(),
+        "{}",
+        world.screen()
+    );
+}

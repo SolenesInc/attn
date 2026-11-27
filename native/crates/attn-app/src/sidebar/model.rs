@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use attn_client::Desktop;
 use attn_client::Facts;
-use attn_protocol::{Harness, OutpostInfo, Session};
+use attn_protocol::{Harness, Session};
 use serde_json::Value;
 
 /// Desktops 1 to 9 have their own shortcut slot; the rest number on from 10.
@@ -105,12 +105,8 @@ impl Settling {
 }
 
 impl AgentRow {
-    pub fn of(
-        session: &Session,
-        harnesses: &[Harness],
-        outposts: &[OutpostInfo],
-        selected: bool,
-    ) -> AgentRow {
+    pub fn of(session: &Session, facts: &Facts, selected: bool) -> AgentRow {
+        let harnesses = &facts.harnesses;
         AgentRow {
             id: session.id.clone(),
             agent: session.agent.clone(),
@@ -126,7 +122,7 @@ impl AgentRow {
             chief: session.chief_of_staff == Some(true),
             run: crate::desktop::provenance::run(session),
             settle_run: false,
-            offline: crate::outpost::offline(session, outposts),
+            offline: crate::outpost::offline(session, facts),
             chain: None,
             unknown_because: (session.state == "unknown")
                 .then(|| unknown_reason(session.state_reason.as_deref()))
@@ -774,7 +770,7 @@ fn agent_row_for(
     on_screen: &[String],
 ) -> AgentRow {
     let selected = shown && active == Some(session.id.as_str());
-    let mut row = AgentRow::of(session, &facts.harnesses, &facts.outposts, selected)
+    let mut row = AgentRow::of(session, facts, selected)
         .asking(facts, session)
         .chained(session, facts);
     row.settle_run = row.owed && !row.offline && is_automation_session(session, by_id);
@@ -860,7 +856,7 @@ pub fn desktop_automations(
                 continue;
             }
             let row = agent_row_for(facts, &by_id, session, shown, active_session, on_screen);
-            let needs = crate::automations::runs::needs_you(session, &facts.outposts, now_ms);
+            let needs = crate::automations::runs::needs_you(session, facts, now_ms);
             if needs {
                 needing += 1;
             }

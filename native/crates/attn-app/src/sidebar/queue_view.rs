@@ -110,10 +110,10 @@ fn queue_automations(state: &State, on_screen: &[String], now_ms: i64) -> QueueA
                 session: run,
                 desktop,
                 desktop_title: String::new(),
-                offline: crate::outpost::offline(run, &state.facts.outposts),
+                offline: crate::outpost::offline(run, &state.facts),
             };
             let qa = *agent(state, on_screen, Band::Run, &qrow, now_ms);
-            let needs = crate::automations::runs::needs_you(run, &state.facts.outposts, now_ms);
+            let needs = crate::automations::runs::needs_you(run, &state.facts, now_ms);
             let snoozed = queue::is_snoozed(run.turn_snoozed_until.as_deref(), now_ms);
             let wants_attention = needs || (!snoozed && qa.agent.asks > 0);
             let live = matches!(
@@ -292,8 +292,7 @@ fn agent(
         agent: {
             let row = AgentRow::of(
                 session,
-                &state.facts.harnesses,
-                &state.facts.outposts,
+                &state.facts,
                 state.window.on_screen(&state.facts).as_deref() == Some(session.id.as_str()),
             )
             .asking(&state.facts, session)
