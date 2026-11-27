@@ -6,6 +6,82 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
 
 ---
 
+## [2026-11-27]
+
+### Added
+- **Review documents read with vim keys.** A focused review takes j/k, h/l,
+  [[/]], H/L, Ctrl-d/Ctrl-u, gg/G and V whether or not vim mode is on. The
+  arrow, Page Up/Down, Home and End keys still work. Code navigation moved
+  from f, r and h to gd, gr and K, so h and l are free to step between stops,
+  arrows and changes. Saving a note ends the selection it covers. Your saved
+  app shortcuts, and Cmd, Ctrl or Alt with an arrow, still reach the app
+  instead of being taken as reading keys.
+- **Seed tiles and the Garden read with vim keys, and you can find in a
+  seed.** A seed tile with the keyboard reads like a markdown tile, and its
+  find bar (/ in vim mode, Cmd+F always) searches the seed's plan. ]] and [[
+  stop at headings. In the Garden, j, k, gg and G walk the list and / jumps
+  to search. Ctrl-d and Ctrl-u scroll the open seed. l or Enter moves into
+  the reader, and h or Escape moves back to the list. Saved shortcuts, chords
+  and ID hints still take priority over these keys.
+- **Open the on-screen agent's stake from the command palette.** While the
+  agent on screen has a stake, the palette offers "Open <agent>'s stake". It
+  opens that seed in a tile beside the agent, or focuses the tile if it is
+  already open, and the tile gets the keyboard.
+- **Automations get their own section in the sidebar.** Desktops that only
+  hold automation runs now sit in a collapsible AUTOMATIONS section instead
+  of DESKTOPS, with finished runs folded behind a disclosure. When the
+  sidebar is collapsed they show as a single ⚡ chip. Automations that
+  delegate, such as Review main, keep their delegates in the same section.
+  The default launch desktops of automations and crew members are created on
+  first launch and removed 30 seconds after they empty. Desktops you named,
+  slotted, shared or renamed stay. An automation that runs while you are away
+  goes back to its own launch desktop, even after the old one was removed.
+
+### Changed
+- **The Garden shows your whole history, without caps.** Closed seeds page
+  in as you scroll, with exact counts and no cap banners. Open seeds are no
+  longer cut off, and a crew member's planted seeds page in the same way.
+  Fullscreen columns show how many closed seeds a plot hides and let you
+  toggle them. Closed seed IDs open on demand, and an open archived seed card
+  shows edits as they happen. When history refreshes, you keep your place.
+- **A calmer desktop sidebar.** Crew members show as compact pills, and
+  empty desktops fold away. The sidebar's chips, badges and section headings
+  now match the title bar shelf, without stacked divider lines. Dragging
+  desktops keeps folded desktops in place. The Chief's session stays
+  reachable while its settings save.
+- **Experimental agent tools: two script tools instead of three.** With
+  agent tools on, attn_read is gone. attn_record runs any script that only
+  reads or records, with no permission prompt. attn_do runs scripts that act.
+  The tool descriptions are shorter, so each turn costs fewer tokens. When an
+  agent calls a command as if it were a tool, attn names the one script tool
+  that runs it.
+
+### Fixed
+- **Agents' seed searches work on large gardens again.** A search used to
+  return each matching seed whole. On a real garden that came to more than
+  Claude Code keeps from one tool call, so the agent got nothing back.
+  Searches and similar-seed lists now return the Garden's short rows, about
+  a thirtieth of the size.
+- **Saved shortcuts win over vim keys in markdown tiles.** A key you bound
+  in Keyboard Shortcuts runs its action instead of a vim motion.
+- **Find in markdown opens collapsed sections to show a match.** A match
+  inside a closed details block is revealed before the view scrolls to it,
+  and the first result can be reached too.
+- **A new editor tile's finder keeps the keyboard.** When the daemon was
+  slow to reply, opening an editor tile left its finder open but deaf to
+  typing and Escape. Typing now goes to the finder whenever it is open.
+
+### Removed
+- **The Direct agent launches setting.** Every new or reloaded agent now
+  starts as the harness's own command in a login shell, with no attn process
+  beside it. Agents that an earlier release started through `attn -s` keep
+  running, and reloading one starts it directly. Typing `attn -s` in a shell
+  still opens the app.
+
+<!-- changelog-commits: 639d8c06c18276edfce9bd712bd394f628f49a25..fb61846e450de2bfe9b2e2ad345441f7588f8f25 -->
+
+---
+
 ## [2026-11-26]
 
 ### Added
