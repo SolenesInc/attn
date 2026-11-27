@@ -900,16 +900,6 @@ func skipUnlessAMachineCanHaveNoHost(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("only Linux publishes attn without its host")
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(home, ".local", "bin", ptyhost.BinaryName)); err == nil {
-		t.Skipf("%s has a host in ~/.local/bin, which the daemon would find", home)
-	}
-	if path, err := exec.LookPath(ptyhost.BinaryName); err == nil {
-		t.Skipf("%s is on PATH, which the daemon would find", path)
-	}
 }
 
 func attachedFormat(app *testworld.Peer, terminal string) string {

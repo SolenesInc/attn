@@ -317,17 +317,8 @@ func sharedHostBinaryCandidates() []string {
 		)
 	}
 	home, _ := os.UserHomeDir()
-	if home != "" {
-		candidates = append(candidates,
-			filepath.Join(home, ".local", "bin", ptyhost.BinaryNameForInstance(config.Instance())),
-			filepath.Join(home, ".local", "bin", ptyhost.BinaryName),
-		)
-	}
 	for _, daemonBinary := range bundledDaemonCandidates(home) {
 		candidates = append(candidates, filepath.Join(filepath.Dir(daemonBinary), ptyhost.BinaryName))
-	}
-	if path, err := exec.LookPath(ptyhost.BinaryName); err == nil {
-		candidates = append(candidates, path)
 	}
 	return candidates
 }
