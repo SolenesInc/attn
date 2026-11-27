@@ -51,6 +51,13 @@ func runDebug() {
 			return
 		}
 		runDebugJSONL(debugDiagnosticsFile, "debug input", "input", os.Args[3:])
+	case "attention":
+		setCommandPath("debug attention")
+		if hasHelpFlag(os.Args[3:]) {
+			writeDebugHelp(os.Stdout)
+			return
+		}
+		runDebugAttention(os.Args[3:])
 	case "daemon-log":
 		setCommandPath("debug daemon-log")
 		if hasHelpFlag(os.Args[3:]) {
@@ -80,6 +87,10 @@ commands:
   input [--tail N] [--grep PATTERN] [--json]
         print terminal input decisions, focus/composition state and PTY receipts;
         export with: attn debug input --tail 0 > attn-input-dump.jsonl
+  attention [--tail N] [--since DUR] [--session ID] [--json]
+        print the attention supervisor's decision log: each verdict with its
+        checkpoint, decider and reason, and what the user did next; --json
+        prints the raw lines, which hold the facts the supervisor judged
   daemon-log [--tail N] [--since DUR] [--grep PATTERN]
         print lines from the instance's daemon.log; --since takes a Go
         duration (e.g. 10m, 1h) and filters to lines timestamped within it

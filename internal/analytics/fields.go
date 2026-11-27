@@ -61,6 +61,7 @@ var SampleFields = map[string]Fields{
 
 var RunFields = Fields{
 	"started_by": Safe, "ended": Safe, "usage": Safe, "turn_after_stop": Safe, "verdict": Safe, "failure": Safe,
+	"checkpoint": Safe, "decider": Safe, "label": Safe, "follow_up": Safe,
 	"session.harness": Safe, "session.model": Safe, "session.model_requested": Safe, "session.launch": Safe,
 }
 

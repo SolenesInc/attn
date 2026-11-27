@@ -60,6 +60,18 @@ var views = []view{
 		FROM events WHERE ` + ofStream("run") + ` AND name = 'run'
 	) AS r ON q.install_id = r.install_id AND q.stream = r.stream AND q.session = r.session AND q.at = r.at`},
 
+	{"attention_verdicts", `SELECT
+		install_id, ` + outpost + `, subject AS session, at,
+		JSONExtractString(props, 'checkpoint') AS checkpoint,
+		JSONExtractString(props, 'verdict') AS verdict,
+		JSONExtractString(props, 'decider') AS decider,
+		JSONExtractString(props, 'label') AS label,
+		JSONExtractString(props, 'failure') AS failure,
+		JSONExtractInt(props, 'latency_ms') AS latency_ms,
+		JSONExtractString(props, 'follow_up') AS follow_up,
+		` + buildColumns + `
+	FROM events WHERE ` + ofStream("run") + ` AND name = 'attention_verdict'`},
+
 	{"cli_commands", `SELECT
 		install_id, ` + outpost + `, subject AS session, at,
 		name AS command,

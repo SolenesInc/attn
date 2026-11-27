@@ -106,6 +106,7 @@ type Monitor struct {
 	sentFiles            map[string]FileReport
 	editedFiles          map[string]FileReport
 	backgroundTasks      []BackgroundTask
+	backgroundReported   bool
 	launches             map[string]time.Time
 	harnessTitle         string
 	terminalTitle        string

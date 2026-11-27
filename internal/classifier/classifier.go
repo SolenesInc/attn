@@ -34,38 +34,6 @@ func BuildPrompt(text string) string {
 	return prompts.RenderText("turn-classifier", "classify", prompts.Values{"message": text})
 }
 
-const QuietStopVerdictSchema = `{"type":"object","properties":{"verdict":{"type":"string","enum":["READ","NOTHING"]}},"required":["verdict"],"additionalProperties":false}`
-
-const (
-	QuietStopRead    = "read"
-	QuietStopNothing = "nothing"
-)
-
-func BuildQuietStopPrompt(text string) string {
-	return prompts.RenderText("turn-classifier", "quiet-stop", prompts.Values{"message": text})
-}
-
-func ParseQuietStopVerdict(structuredOutput json.RawMessage, text string) (string, bool) {
-	answer := []byte(structuredOutput)
-	if len(answer) == 0 {
-		answer = []byte(strings.TrimSpace(text))
-	}
-	var parsed struct {
-		Verdict string `json:"verdict"`
-	}
-	if err := json.Unmarshal(answer, &parsed); err != nil {
-		return "", false
-	}
-	switch parsed.Verdict {
-	case "READ":
-		return QuietStopRead, true
-	case "NOTHING":
-		return QuietStopNothing, true
-	default:
-		return "", false
-	}
-}
-
 func parseVerdictToken(value string) (string, bool) {
 	match := verdictLineRegex().FindStringSubmatch(strings.TrimSpace(value))
 	if len(match) < 2 {

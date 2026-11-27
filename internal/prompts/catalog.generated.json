@@ -5599,29 +5599,6 @@
               }
             ]
           }
-        },
-        {
-          "id": "quiet-stop",
-          "delivery": "headless_prompt",
-          "description": "internal/classifier.BuildQuietStopPrompt",
-          "body": {
-            "kind": "text",
-            "id": "turn-classifier.quiet-stop",
-            "source": "content/turn-classifier/quiet-stop.md",
-            "bindings": [
-              {
-                "name": "message",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "message",
-                    "kind": "text",
-                    "description": "Message"
-                  }
-                }
-              }
-            ]
-          }
         }
       ]
     },
@@ -5968,6 +5945,35 @@
             "source": "content/skills/attn/references/wrap-up.md",
             "verbatim": true,
             "keep_final_newline": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "attention",
+      "description": "Separate model deciding whether a stopped or waiting agent's turn should open to the user.",
+      "events": [
+        {
+          "id": "supervisor",
+          "delivery": "headless_prompt",
+          "description": "internal/daemon.attentionHeadless",
+          "body": {
+            "kind": "text",
+            "id": "attention.supervisor",
+            "source": "content/attention/supervisor.md",
+            "bindings": [
+              {
+                "name": "facts",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "facts",
+                    "kind": "text",
+                    "description": "The agent's facts as JSON."
+                  }
+                }
+              }
+            ]
           }
         }
       ]
@@ -9805,5 +9811,5 @@
       ]
     }
   ],
-  "definitions_hash": "a1c5f8363e197b599a81ca40daca98c366cdc7d71559c80d5b6ccd49c0a1cc34"
+  "definitions_hash": "494ed90b5e34c642f65a6142de3e0eb8122b2476b3b5de03f9c5e6ec74344daf"
 }

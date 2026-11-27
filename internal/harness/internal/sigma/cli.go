@@ -35,7 +35,7 @@ func Facts() harness.Facts {
 		Executable:     harness.Executable{Default: defaultExecutable, Env: executableEnvVar},
 		SkillDirs:      skillDirs,
 		CacheTTL:       time.Hour,
-		Signals:        harness.Signals{Heartbeat: 500 * time.Millisecond},
+		Signals:        harness.Signals{Heartbeat: 500 * time.Millisecond, ReportsBackgroundTasks: false},
 		Recovery:       harness.ByServer,
 		ModelDiscovery: true,
 		Activity:       true,

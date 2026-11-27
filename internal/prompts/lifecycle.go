@@ -13,10 +13,13 @@ func lifecycleRecipients() []Recipient {
 				On("classify", "headless_prompt", "internal/classifier.BuildPrompt",
 					template("turn-classifier.classify", "content/turn-classifier/classify.md",
 						TextField("message", "Message"))),
-				On("quiet-stop", "headless_prompt", "internal/classifier.BuildQuietStopPrompt",
-					template("turn-classifier.quiet-stop", "content/turn-classifier/quiet-stop.md",
-						TextField("message", "Message"))),
 			}},
+
+		{ID: "attention",
+			Description: "Separate model deciding whether a stopped or waiting agent's turn should open to the user.",
+			Events: []Event{On("supervisor", "headless_prompt", "internal/daemon.attentionHeadless",
+				template("attention.supervisor", "content/attention/supervisor.md",
+					TextField("facts", "The agent's facts as JSON.")))}},
 
 		{ID: "terminal",
 			Description: "A terminal an agent opened with a command.",

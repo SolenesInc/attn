@@ -18,6 +18,7 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 		d.publishFact(FactSessionTitleChanged, string(session), nil)
 	}
 	d.reactFileReports(session, previous, view)
+	d.observeAttention(session, previous, view)
 	if view.AssistantWindow.V != previous.AssistantWindow.V {
 		d.publishFact(FactSessionAssistantWindowChanged, string(session), nil)
 	}

@@ -1,13 +1,17 @@
 package attention
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"slices"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
 
 type Facts struct {
+	Checkpoint           Checkpoint            `json:"checkpoint"`
 	State                protocol.SessionState `json:"state"`
 	InStateFor           Age                   `json:"in_state_for"`
 	RunStartedBy         RunStarter            `json:"run_started_by"`
@@ -16,7 +20,7 @@ type Facts struct {
 	ReportUnread         bool                  `json:"report_unread"`
 	UserFocusedAfterStop bool                  `json:"user_focused_after_stop"`
 	OpenTool             *Tool                 `json:"open_tool,omitempty"`
-	Background           []Task                `json:"background,omitempty"`
+	Background           Background            `json:"background"`
 	Wakes                []Wake                `json:"wakes,omitempty"`
 	Delegates            []Delegate            `json:"delegates,omitempty"`
 	Launch               Launch                `json:"launch"`
@@ -24,7 +28,71 @@ type Facts struct {
 	Stake                *Seed                 `json:"stake,omitempty"`
 	Tended               []Seed                `json:"tended,omitempty"`
 	WatchedPRs           []PR                  `json:"watched_prs,omitempty"`
+	DaemonDownFor        *Age                  `json:"daemon_down_for,omitempty"`
 	LastMessage          string                `json:"last_message,omitempty"`
+}
+
+type Checkpoint string
+
+const (
+	CheckpointStop        Checkpoint = "stop"
+	CheckpointFactChange  Checkpoint = "fact_change"
+	CheckpointElapsed20m  Checkpoint = "elapsed_20m"
+	CheckpointElapsed60m  Checkpoint = "elapsed_60m"
+	CheckpointElapsed4h   Checkpoint = "elapsed_4h"
+	CheckpointDaemonStart Checkpoint = "daemon_start"
+)
+
+func (c Checkpoint) Elapsed() bool {
+	switch c {
+	case CheckpointElapsed20m, CheckpointElapsed60m, CheckpointElapsed4h:
+		return true
+	default:
+		return false
+	}
+}
+
+type Background struct {
+	Reported bool
+	Tasks    []Task
+}
+
+func (b Background) MarshalJSON() ([]byte, error) {
+	if !b.Reported {
+		return json.Marshal("unknown")
+	}
+	return json.Marshal(append([]Task{}, b.Tasks...))
+}
+
+func (b Background) Running() bool {
+	return b.Reported && len(b.Tasks) > 0
+}
+
+func (b Background) None() bool {
+	return b.Reported && len(b.Tasks) == 0
+}
+
+func (f Facts) Fingerprint() string {
+	f.Checkpoint = ""
+	f.InStateFor = 0
+	f.SinceModelRequest = nil
+	f.DaemonDownFor = nil
+	if f.OpenTool != nil {
+		tool := *f.OpenTool
+		tool.OpenFor = 0
+		f.OpenTool = &tool
+	}
+	f.Background.Tasks = slices.Clone(f.Background.Tasks)
+	for i := range f.Background.Tasks {
+		f.Background.Tasks[i].Age = 0
+	}
+	f.Wakes = slices.Clone(f.Wakes)
+	for i := range f.Wakes {
+		f.Wakes[i].In, f.Wakes[i].Waited = nil, nil
+	}
+	encoded, _ := json.Marshal(f)
+	sum := sha256.Sum256(encoded)
+	return hex.EncodeToString(sum[:12])
 }
 
 // 99% of 4,357 assistant messages across the 300 newest real transcripts fit in 3,575 characters.
@@ -91,13 +159,14 @@ const (
 )
 
 type Wake struct {
-	Kind       WakeKind `json:"kind"`
-	Seed       string   `json:"seed,omitempty"`
-	SeedStatus string   `json:"seed_status,omitempty"`
-	TenderLive *bool    `json:"tender_live,omitempty"`
-	Subject    string   `json:"subject,omitempty"`
-	In         *Age     `json:"in,omitempty"`
-	Waited     *Age     `json:"waited,omitempty"`
+	Kind          WakeKind `json:"kind"`
+	Seed          string   `json:"seed,omitempty"`
+	SeedStatus    string   `json:"seed_status,omitempty"`
+	TenderLive    *bool    `json:"tender_live,omitempty"`
+	Subject       string   `json:"subject,omitempty"`
+	SentSinceTurn bool     `json:"sent_since_turn,omitempty"`
+	In            *Age     `json:"in,omitempty"`
+	Waited        *Age     `json:"waited,omitempty"`
 }
 
 type Delegate struct {

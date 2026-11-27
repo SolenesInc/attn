@@ -284,6 +284,8 @@ type Signals struct {
 	ReviewerDwell time.Duration
 	// ReportsTools: the harness reports its tool use, so the agent is not asked to report its pull requests.
 	ReportsTools bool
+	// ReportsBackgroundTasks: the harness's stops list the background tasks it left running.
+	ReportsBackgroundTasks bool
 	// ConfirmsFirstTurn: an automation waits for the harness's first report before it counts as delivered.
 	ConfirmsFirstTurn bool
 	// Titles is which of attn's title parsers reads the terminal's titles.

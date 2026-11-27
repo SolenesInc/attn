@@ -148,6 +148,7 @@ type View struct {
 	AssistantWindow     Value[uint64]                              `fact:"session.assistant_window.changed"`
 	ServerCompletion    Value[int64]                               `fact:"-"`
 	BackgroundTasks     Value[[]BackgroundTask]                    `fact:"-"`
+	BackgroundReported  Value[bool]                                `fact:"-"`
 }
 
 type BackgroundTask struct {
@@ -206,6 +207,7 @@ func (m *Monitor) snapshotLocked() View {
 		AssistantWindow:     Value[uint64]{m.windowRevision},
 		ServerCompletion:    Value[int64]{m.completions.applied},
 		BackgroundTasks:     Value[[]BackgroundTask]{m.backgroundTasks},
+		BackgroundReported:  Value[bool]{m.backgroundReported},
 	}
 }
 

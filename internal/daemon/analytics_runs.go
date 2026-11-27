@@ -16,9 +16,6 @@ func (h monitorHost) RunEnded(m *sessionmonitor.Monitor, run sessionmonitor.Run)
 	if err := d.appendAnalyticsAt(analytics.StreamRun, "run", string(session), run.EndedAt, d.runProps(session, run)); err != nil {
 		d.logf("analytics: %v", err)
 	}
-	if run.QuietStop && (run.TurnRequested || run.TurnAfterStop == sessionmonitor.TurnAfterStopNone) {
-		d.life.Go("quietStopVerdict", func() { d.recordQuietStopVerdict(m, session, run) })
-	}
 }
 
 type runTokens struct {

@@ -413,7 +413,7 @@ func TestEachRecordKindReadsBackAsTypedColumnsThroughItsView(t *testing.T) {
 	service := clickHouse.User(t, "SELECT, INSERT, CREATE TABLE, ALTER DELETE, ALTER UPDATE, CREATE VIEW, DROP VIEW ON *")
 	testworld.StartIngest(t, service)
 	ingest := testworld.StartIngest(t, service)
-	views := []string{"runs", "quiet_stops", "cli_commands", "process_samples", "daemon_starts", "app_actions"}
+	views := []string{"runs", "quiet_stops", "attention_verdicts", "cli_commands", "process_samples", "daemon_starts", "app_actions"}
 	grants := make([]string, len(views))
 	for i, view := range views {
 		grants[i] = "SELECT ON " + view
@@ -442,6 +442,8 @@ func TestEachRecordKindReadsBackAsTypedColumnsThroughItsView(t *testing.T) {
 		record(analytics.StreamRun, 2, "quiet_stop", "h:aaaaaaaaaaaa", "2026-11-10 10:00:00", `{"verdict":"read"}`),
 		record(analytics.StreamRun, 3, "run", "h:bbbbbbbbbbbb", "2026-11-10 11:00:00",
 			`{"started_by":"user","duration_ms":5000,"ended":"waiting_input","opened_turn":true,"quiet_stop":false,"turn_requested":false,"turn_after_stop":"owed","user_input_ms":1200,"approvals":2,"usage":"unavailable","session":{"harness":"codex","launch":"user"}}`),
+		record(analytics.StreamRun, 4, "attention_verdict", "h:aaaaaaaaaaaa", "2026-11-10 10:15:00",
+			`{"checkpoint":"stop","verdict":"open","decider":"headless/haiku","label":"unread report","latency_ms":5400,"follow_up":"typed"}`),
 		record(analytics.StreamCLI, 1, "seed show", "", "2026-11-01 23:59:59", `{"ok":true,"exit_code":0,"caller":"human"}`),
 		record(analytics.StreamCLI, 2, "seed harvest", "h:aaaaaaaaaaaa", "2026-11-10 10:01:00",
 			`{"ok":false,"exit_code":1,"error_kind":"refused","refusal":"not_tender","caller":"agent","harness":"claude"}`),
@@ -468,6 +470,10 @@ func TestEachRecordKindReadsBackAsTypedColumnsThroughItsView(t *testing.T) {
 		{
 			"SELECT session, verdict, failure, turn_after_stop, turn_requested, started_by, harness, launch FROM quiet_stops",
 			"h:aaaaaaaaaaaa\tread\t\tnone\tfalse\tring\tclaude\tdelegation",
+		},
+		{
+			"SELECT session, checkpoint, verdict, decider, label, failure, latency_ms, follow_up FROM attention_verdicts",
+			"h:aaaaaaaaaaaa\tstop\topen\theadless/haiku\tunread report\t\t5400\ttyped",
 		},
 		{
 			"SELECT session, command, error_kind, refusal, caller, harness, ok, exit_code FROM cli_commands ORDER BY at",

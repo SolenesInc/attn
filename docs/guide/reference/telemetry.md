@@ -38,7 +38,7 @@ Every record is one line of JSON:
 | `app` | Shortcuts and palette commands used, Settings sections opened, queue advances, the kind of a UI error |
 | `cli` | One record per `attn` command, named by its command path as typed (`seed check report`, or `_hook-state` for a harness hook): whether it succeeded, its exit code, what kind of error ended it (`refused`, `failed`, `usage`, `unknown_command`, `unknown_flag`, `missing_value`, `invalid_value`), why the daemon refused it (`invalid_input`, `limit`, `not_found`, `wrong_state`, `not_tender`, `conflict`, `unclassified`), whether an agent or a person ran it, and the agent's harness. A command that an agent runs, including a hook that the agent's harness runs, has the agent's hashed session as its subject, so the record matches that session's facts. A command from a person's shell has no subject. |
 | `sample` | One `daemon_start` record each time the daemon starts, and a `process` sample every 20 minutes. [Process samples](#process-samples) lists what a sample holds. Every record of one daemon run has that run's hashed run id as its subject, a random id the daemon makes at start. `daemon_start` says how the previous run ended (`previous_end`): `stopped` on purpose, with who stopped it in `stop_reason` (`stop` for `attn daemon stop`, why `attn daemon ensure` replaced it, such as `source_fingerprint_mismatch`, or `app_recovery` when the app stopped it because `attn daemon ensure` failed), `machine_restarted`, `exited_unexpectedly`, or `unknown` when there was no previous run on this data folder. `previous_run` is the previous run's subject. |
-| `run` | One record per agent run, from the moment the agent goes working to its stop, when `analytics.enabled` was on for the whole run. An approval wait does not end a run. The record says what started the run (`user`: your words; `ring` or `heartbeat`: Attn's own input; `launch`: the launch's initial prompt; `agent`: anything else, such as the agent resuming on its own; words you add while a run works do not change it), its length (`duration_ms`), the state it stopped in (`ended`), whether the stop opened a turn for you (`opened_turn`), how many approvals it waited on (`approvals`) and the session's harness, model and launch. `usage` is `known` when Attn read the transcript after the run, and the record then carries the run's `tokens` (`input`, `output`, `cache_read`, `cache_write`) and, when the models are priced, `usd`. `usage` is `unavailable` or `incomplete` when Attn could not measure the run. `quiet_stop` is true when a notification started the run and `queue_quiet_notifications` kept its stop out of your queue unless the agent asked, and `turn_requested` says whether the agent ran `attn turn open` during the run and did not withdraw it. `turn_after_stop` says what the queue holds once the run stops: `owed` when it shows the agent, including a turn that was already open, `snoozed` when your snooze will show the agent when it ends, and `none` when it does not show the agent. `user_input_ms` is how long into the run you first typed, and it is absent when you did not. The record's subject is the session's hash, and `at` is the run's end, so the `cli` records of `_hook-tool-use` between `at` minus `duration_ms` and `at` are the run's tool calls. The stream also holds one `quiet_stop` record for each quiet stop that left no turn (`turn_after_stop` is `none`) or whose agent asked for one, with the same subject and `at` as its run. See [Quiet stop verdicts](#quiet-stop-verdicts) |
+| `run` | One record per agent run, from the moment the agent goes working to its stop, when `analytics.enabled` was on for the whole run. An approval wait does not end a run. The record says what started the run (`user`: your words; `ring` or `heartbeat`: Attn's own input; `launch`: the launch's initial prompt; `agent`: anything else, such as the agent resuming on its own; words you add while a run works do not change it), its length (`duration_ms`), the state it stopped in (`ended`), whether the stop opened a turn for you (`opened_turn`), how many approvals it waited on (`approvals`) and the session's harness, model and launch. `usage` is `known` when Attn read the transcript after the run, and the record then carries the run's `tokens` (`input`, `output`, `cache_read`, `cache_write`) and, when the models are priced, `usd`. `usage` is `unavailable` or `incomplete` when Attn could not measure the run. `quiet_stop` is true when a notification started the run and `queue_quiet_notifications` kept its stop out of your queue unless the agent asked, and `turn_requested` says whether the agent ran `attn turn open` during the run and did not withdraw it. `turn_after_stop` says what the queue holds once the run stops: `owed` when it shows the agent, including a turn that was already open, `snoozed` when your snooze will show the agent when it ends, and `none` when it does not show the agent. `user_input_ms` is how long into the run you first typed, and it is absent when you did not. The record's subject is the session's hash, and `at` is the run's end, so the `cli` records of `_hook-tool-use` between `at` minus `duration_ms` and `at` are the run's tool calls. The stream also holds one `attention_verdict` record for each verdict of the attention supervisor, with the session's hash as its subject and the verdict's time as its `at`. See [Attention verdicts](#attention-verdicts) |
 | `vent` | An Attn vent you chose to send |
 
 `seq` counts records within a stream. The server uses it to store each record once.
@@ -160,26 +160,39 @@ The session title, machine, repository, worktree, stake seed and transcript
 stay on the machine. **Settings → Analytics** lists a vent record only in the
 profile the vent belongs to.
 
-### Quiet stop verdicts
+### Attention verdicts
 
-A `quiet_stop` record measures whether agents whose run a notification started leave
-results you never see. With `analytics.enabled` on, Attn makes one call per quiet
-stop to the small model that judges your sessions' states, through the session's
-harness or, for a harness with no classifier, Claude Code. The call sends the last
-message of the run, at most 4,000 characters of it, and costs about $0.0012 on
-your harness account. The message is the answer the harness reported for the run,
-or else the run's last message in the transcript. Only the verdict is recorded:
+An `attention_verdict` record measures the attention supervisor, which judges
+whether a stopped or waiting agent needs you. It runs in shadow for now: a
+verdict opens no turn, closes nothing and changes nothing you see.
 
-- `verdict` is `read` when the model says you need to read the message, `nothing`
-  when it says you don't, `no_message` when the run wrote no new message, and
-  `failed` when Attn got no answer. A failure, such as a usage limit, is never
-  recorded as `nothing`.
-- `failure` says why: `headless_tasks_off`, `message_unavailable` (the harness
-  reported no answer and the session has no transcript), `transcript`, `harness`
-  or `unusable_answer`.
+The supervisor judges an agent at a checkpoint: 15 minutes after a stop that
+opened no turn, when something that could wake the agent changes, 20 minutes,
+60 minutes and 4 hours after the agent's last model request while a background
+task runs, and when the daemon starts. Its rules decide first. When no rule
+decides, Attn makes one call to the small model that judges your sessions'
+states, through the session's harness or, for a harness with no classifier,
+Claude Code, on your harness account. The call sends what Attn knows of the
+agent at that moment and at most 4,000 characters of its last message. Attn
+writes the record 30 minutes after the verdict, once it knows what you did next:
 
-The verdict only records. It never opens a turn, settles one or changes what you
-see. The message text stays out of the record.
+- `checkpoint` is `stop`, `fact_change`, `elapsed_20m`, `elapsed_60m`,
+  `elapsed_4h` or `daemon_start`.
+- `verdict` is `open`, `quiet` or `finished`.
+- `decider` is `rule:` and the rule's name, `headless/` and the model's name,
+  or `none` when no rule decided and the model gave no answer. The verdict is
+  then `quiet`.
+- `label`, for an open or finished verdict, is the two words that say why:
+  `unread report`, `asks you`, `nothing wakes it`, `stuck wait` or
+  `finished`.
+- `failure` says why the model gave no answer: `headless_tasks_off`,
+  `harness` or `unusable_answer`.
+- `latency_ms` is how long the model took to answer, and 0 for a rule.
+- `follow_up` is `typed` when you started a run of the agent within 30 minutes,
+  `closed` when its session closed first, and `nothing` otherwise.
+
+The facts, the message and the model's reason stay out of the record. They stay
+on your machine in the decision log, which `attn debug attention` reads.
 
 ## What is sent
 

@@ -83,6 +83,7 @@ func (e harnessEvents) Turn(r harness.Reporter, at time.Time, event harness.Turn
 		monitor.RecordBracket(protocol.StateIdle)
 	case event.Turn == harness.TurnEnded:
 		if left := event.Stop.Left; left != nil {
+			monitor.RecordBackgroundReported()
 			monitor.RecordStopFacts(left.BackgroundWork, left.PendingCron)
 		}
 		if !event.Stop.Yielded {

@@ -231,6 +231,24 @@ func appendBusEventWith(x execer, e BusEvent, now time.Time) (int64, error) {
 	return res.LastInsertId()
 }
 
+func (s *Store) NewestBusEventAt() (time.Time, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.db == nil {
+		return time.Time{}, nil
+	}
+	rows, err := s.db.Query(`SELECT seq, name, subject, payload, source, created_at FROM bus_events ORDER BY seq DESC LIMIT 1`)
+	if err != nil {
+		return time.Time{}, err
+	}
+	events, err := scanBusEvents(rows)
+	if err != nil || len(events) == 0 {
+		return time.Time{}, err
+	}
+	return events[0].CreatedAt, nil
+}
+
 func (s *Store) BusEventsSince(cursor int64, limit int) ([]BusEvent, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

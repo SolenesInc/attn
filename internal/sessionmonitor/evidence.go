@@ -288,7 +288,7 @@ func (m *Monitor) HarnessStarting(agent string) {
 		return
 	}
 	m.mu.Lock()
-	m.backgroundTasks, m.launches = nil, nil
+	m.backgroundTasks, m.launches, m.backgroundReported = nil, nil, false
 	if m.policy.Signals.TurnStarts != harness.TurnStartsReported {
 		view := m.viewLocked()
 		m.mu.Unlock()

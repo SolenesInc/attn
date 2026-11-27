@@ -24,7 +24,10 @@ func (d *Daemon) attentionFacts(ctx context.Context, session *protocol.Session, 
 		RunStartedBy: attention.RunStartedByUser,
 		TurnOwed:     turn.OpenedAt.After(turn.SettledAt),
 		OpenTool:     openTool(session, since, now),
-		Background:   backgroundFacts(view.BackgroundTasks.V, now),
+		Background: attention.Background{
+			Reported: d.signalsOf(session.Agent).ReportsBackgroundTasks && view.BackgroundReported.V,
+			Tasks:    backgroundFacts(view.BackgroundTasks.V, now),
+		},
 		Launch:       attention.LaunchedByUser,
 		ResultGoesTo: attention.ResultToUser,
 		LastMessage:  d.attentionLastMessage(ctx, session.ID),
@@ -63,7 +66,7 @@ func (d *Daemon) attentionFacts(ctx context.Context, session *protocol.Session, 
 		}
 	}
 	facts.Wakes = append(facts.Wakes, d.seedWakes(ctx, session, tended, seeds)...)
-	facts.Wakes = append(facts.Wakes, d.askWakes(session.ID, now)...)
+	facts.Wakes = append(facts.Wakes, d.askWakes(session.ID, now, latest(turn.OpenedAt, turn.SettledAt))...)
 	facts.Delegates = d.attentionDelegates(ctx, session.ID)
 	facts.WatchedPRs = d.watchedPullRequests(session.ID)
 	return facts
@@ -172,7 +175,7 @@ func (d *Daemon) seedWakes(ctx context.Context, session *protocol.Session, tende
 	}
 	for _, id := range watched {
 		seed, ok := seeds.byID[id]
-		if !ok || slices.Contains(tended, id) {
+		if !ok || slices.Contains(tended, id) || garden.Closed(string(seed.Status)) {
 			continue
 		}
 		wake := attention.Wake{Kind: attention.WakeWatchedSeed, Seed: id, SeedStatus: string(seed.Status)}
@@ -199,7 +202,7 @@ func (d *Daemon) partyLive(ctx context.Context, party who.Party) bool {
 	return live
 }
 
-func (d *Daemon) askWakes(session protocol.SessionID, now time.Time) []attention.Wake {
+func (d *Daemon) askWakes(session protocol.SessionID, now, turnMoved time.Time) []attention.Wake {
 	asks, err := d.store.OpenAsksFrom(session)
 	if err != nil {
 		d.logf("attention facts: asks of %s: %v", session, err)
@@ -209,6 +212,7 @@ func (d *Daemon) askWakes(session protocol.SessionID, now time.Time) []attention
 		wake := attention.Wake{Kind: attention.WakeAsk, Subject: ask.Subject}
 		if asked := protocol.Timestamp(ask.CreatedAt).Time(); !asked.IsZero() {
 			wake.Waited = protocol.Ptr(attention.AgeOf(asked, now))
+			wake.SentSinceTurn = asked.After(turnMoved)
 		}
 		wakes = append(wakes, wake)
 	}
@@ -216,7 +220,6 @@ func (d *Daemon) askWakes(session protocol.SessionID, now time.Time) []attention
 }
 
 func (d *Daemon) attentionDelegates(ctx context.Context, session protocol.SessionID) []attention.Delegate {
-	party := d.partyOfSession(session)
 	var delegates []attention.Delegate
 	for delegate, actor := range d.gardenDispatchersBySession() {
 		dispatcher, _ := d.sessionOfActor(actor)
@@ -233,7 +236,8 @@ func (d *Daemon) attentionDelegates(ctx context.Context, session protocol.Sessio
 		}
 		if stake, ok := d.gardenDispatchCrown(delegate); ok {
 			entry.Stake = stake
-			entry.ReportsHere, _ = d.store.GardenSeedWatching(party, stake)
+			dispatch, _ := d.gardenDispatch(delegate)
+			entry.ReportsHere = d.resultRecipient(delegate, stake, dispatch) == attention.ResultToDispatcher
 		}
 		delegates = append(delegates, entry)
 	}

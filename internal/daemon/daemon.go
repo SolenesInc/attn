@@ -220,6 +220,7 @@ type Daemon struct {
 	noAgentSockets           bool
 	tenderResumes            tenderResumeLedger
 	compactions              compactionLedger
+	attention                attentionCheckpoints
 	homeReports              homeReportQueue
 	returned                 returnedInputs
 	clientCommands           map[string]registeredClientCommand
@@ -830,6 +831,7 @@ func (d *Daemon) Start() error {
 		d.startPermanentMaintenance()
 		d.resumePendingDelegations()
 		d.reviveRecoverableAgents("")
+		d.startAttentionCheckpoints()
 		d.followMovedNotebook()
 		d.fenceHeldHome()
 	})

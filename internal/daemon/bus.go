@@ -438,6 +438,7 @@ func (d *Daemon) ensureEventBus() {
 	if d.store != nil {
 		backing = d.newSQLBusStore()
 	}
+	d.attention.lastFactAt, _ = d.store.NewestBusEventAt()
 	d.eventBus = bus.New(bus.Options{
 		Store:       backing,
 		Log:         d.logf,
@@ -449,6 +450,7 @@ func (d *Daemon) ensureEventBus() {
 	d.subscribeInboxFacts()
 	d.subscribeMonitorPolicyFacts()
 	d.subscribeAskTerminalSettling()
+	d.subscribeAttentionFacts()
 	d.subscribeDocumentFacts()
 	d.subscribeSessionPullRequestFacts()
 	d.gardenSeedEventConsumerErr = d.registerGardenSeedEventConsumer()
@@ -476,6 +478,7 @@ func (d *Daemon) stopEventBus() {
 	}
 	d.unsubscribeMonitorPolicyFacts()
 	d.unsubscribeAskTerminalSettling()
+	d.unsubscribeAttentionFacts()
 	d.unsubscribeDocumentFacts()
 	d.unsubscribeSessionPullRequestFacts()
 	if d.busUnsubscribe != nil {

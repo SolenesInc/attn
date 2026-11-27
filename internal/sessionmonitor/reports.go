@@ -91,6 +91,21 @@ func (m *Monitor) RecordBackgroundLaunch(task string, at time.Time) {
 	m.launches[task] = at
 }
 
+func (m *Monitor) RecordBackgroundReported() {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	if m.backgroundReported {
+		m.mu.Unlock()
+		return
+	}
+	m.backgroundReported = true
+	view := m.viewLocked()
+	m.mu.Unlock()
+	m.publish(view)
+}
+
 func (m *Monitor) RecordBackgroundTasks(tasks []protocol.BackgroundTask, at time.Time) bool {
 	if m == nil {
 		return false

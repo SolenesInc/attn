@@ -185,8 +185,17 @@ flow (1)                  how the user works with attn and their agents:
 └─ desktop flow           the user goes to their agents on their desktops;
                           like spatial work across macOS Spaces
 attention queue           agents in order of the attention they are owed
-└─ turn (at most 1 per agent)  attention that an agent is owed; opens when the
-                               agent stops, or when it asks (attn turn open)
+├─ turn (at most 1 per agent)  attention that an agent is owed; opens when the
+│                              agent stops, or when it asks (attn turn open)
+└─ attention supervisor     looks after stopped and waiting agents for you:
+   │                        judges whether an agent's turn opens now, from facts
+   │                        and its last message, and messages the agent or its
+   │                        dispatcher first when that can settle it
+   ├─ checkpoint (0..n)     a moment the supervisor judges one agent
+   ├─ facts (1 per checkpoint)  what attn knows of the agent at that moment:
+   │                        state, waits, wakes, delegates, seeds and PR watches
+   └─ verdict (1 per checkpoint)  open, quiet or finished, and the decider
+                            (a rule or a model) that gave it
 run                       one stretch of agent work, from the moment the
                           agent goes working to its stop; an approval wait
                           does not end it

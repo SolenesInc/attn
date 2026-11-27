@@ -29,16 +29,31 @@ type attentionFacts struct {
 		OwesUserTurn bool   `json:"owes_user_turn"`
 		ReportsHere  bool   `json:"reports_here"`
 	} `json:"delegates"`
-	Background []struct {
-		ID         string `json:"id"`
-		Command    string `json:"command"`
-		WakesAgent string `json:"wakes_agent"`
-		Age        string `json:"age"`
-	} `json:"background"`
+	Background backgroundFacts `json:"background"`
+	Wakes      []struct {
+		Kind string `json:"kind"`
+		Seed string `json:"seed"`
+	} `json:"wakes"`
 	WatchedPRs []struct {
 		URL string `json:"url"`
 		CI  string `json:"ci"`
 	} `json:"watched_prs"`
+}
+
+type backgroundFacts []struct {
+	ID         string `json:"id"`
+	Command    string `json:"command"`
+	WakesAgent string `json:"wakes_agent"`
+	Age        string `json:"age"`
+}
+
+func (b *backgroundFacts) UnmarshalJSON(data []byte) error {
+	if string(data) == `"unknown"` {
+		*b = nil
+		return nil
+	}
+	type tasks backgroundFacts
+	return json.Unmarshal(data, (*tasks)(b))
 }
 
 func attentionFactsOf(t *testing.T, cli *client.Client, session string) (attentionFacts, string) {
@@ -196,4 +211,21 @@ func TestAttentionFactsCarryTheCIStateOfAWatchedPullRequest(t *testing.T) {
 			t.Errorf("the facts are %s, want the watched pull request with the CI state %q GitHub reported", raw, ci)
 		}
 	})
+}
+
+func TestAttentionFactsCountAWatchedSeedAsAWakeOnlyWhileItIsOpen(t *testing.T) {
+	w := newWorld(t)
+	cli := w.Client()
+	registerSessions(t, w, cli, "watcher", "builder")
+	seed := plantSeedAs(t, cli, "builder", "Migrate the first table")
+	if _, err := cli.SeedWatch("watcher", seed, false); err != nil {
+		t.Fatal(err)
+	}
+	if facts, raw := attentionFactsOf(t, cli, "watcher"); len(facts.Wakes) != 1 || facts.Wakes[0].Kind != "watched_seed" || facts.Wakes[0].Seed != seed {
+		t.Fatalf("while %s grows, the watcher's facts are %s, want it as the one wake", seed, raw)
+	}
+	moveDelegationSeed(t, cli, "builder", seed, "harvest", "migrated")
+	if facts, raw := attentionFactsOf(t, cli, "watcher"); len(facts.Wakes) != 0 {
+		t.Errorf("after %s was harvested, the watcher's facts are %s, want no wake", seed, raw)
+	}
 }

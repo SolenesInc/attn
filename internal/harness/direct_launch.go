@@ -89,6 +89,7 @@ func ApplyCapabilityEnv(f Facts) Facts {
 		} else {
 			f.Signals.TurnStarts = TurnStartsInferred
 			f.Signals.ReportsTools = false
+			f.Signals.ReportsBackgroundTasks = false
 		}
 	}
 	if v, ok := CapabilityEnv(f.ID, "TRANSCRIPT"); ok {
