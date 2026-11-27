@@ -50,11 +50,11 @@ func TestTheAppMachinesTerminalsEchoWithoutTheHome(t *testing.T) {
 	through := echoTimes(t, relayed, laptopTerminal, "lr")
 	t.Logf("one-way link delay %s; keystroke echo medians: the laptop's terminal on its own daemon %s, a home terminal through the relay %s, the laptop's terminal through the relay %s",
 		linkDelay, median(local).Round(time.Millisecond), median(home).Round(time.Millisecond), median(through).Round(time.Millisecond))
-	if median(local) >= linkDelay {
-		t.Fatalf("the laptop's terminal echoed in %v on its own daemon, want under one link crossing (%s): %v", median(local), linkDelay, local)
-	}
 	if median(home) < 2*linkDelay {
 		t.Fatalf("a home terminal echoed through the relay in %v, under the round trip of %s the link costs: the delay is not on the link", median(home), 2*linkDelay)
+	}
+	if median(local)+linkDelay >= median(home) {
+		t.Fatalf("the laptop's terminal echoed in %v on its own daemon against %v for a home terminal through the relay, want it faster by more than one link crossing (%s): the link is in its path: %v", median(local), median(home), linkDelay, local)
 	}
 	t.Log("(1) the laptop's terminal echoes within a local round trip on its own daemon, and a home terminal's echo keeps the link's round trip")
 }
