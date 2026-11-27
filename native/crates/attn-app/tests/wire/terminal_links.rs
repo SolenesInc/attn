@@ -329,14 +329,14 @@ fn a_markdown_link_opens_in_a_tile_for_the_terminals_agent_and_with_the_system_w
 }
 
 #[test]
-fn a_session_on_an_outpost_links_its_urls_and_its_paths_whose_click_names_the_outpost() {
+fn a_session_on_an_outpost_underlines_its_urls_and_a_click_on_a_path_names_the_outpost() {
     let mut world = World::start(in_directory("/srv/app", Some("box")));
     world.open_desktop();
     output(&world, 1, b"src/main.go:12:3 https://example.test\r\n");
     world.settle();
 
     hover(&mut world, 2, 0);
-    assert_eq!(underlines(&mut world), [(0, [0, 16])]);
+    assert_eq!(underlines(&mut world), Vec::<(u64, [u64; 2])>::new());
     hover(&mut world, 20, 0);
     assert_eq!(underlines(&mut world), [(0, [17, 37])]);
     accelerator(&mut world, true);
@@ -423,6 +423,68 @@ fn a_printed_path_in_a_terminal_of_a_home_on_another_machine_names_the_home_and_
         notice(&world).as_deref(),
         Some("/etc/hosts is on oma; opening files on another machine isn't supported yet")
     );
+    world.advance(Duration::from_secs(6));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn hovering_words_in_a_terminal_of_a_home_on_another_machine_underlines_only_its_urls() {
+    let mut world = World::start(in_directory("/srv/app", None).relaying_to("mac", "oma"));
+    world.open_desktop();
+    output(
+        &world,
+        1,
+        b"yes/no 1/3 v1.2 state.facts example.com src/main.go https://example.test
+",
+    );
+    world.settle();
+
+    for col in [2, 8, 12, 18, 30, 45] {
+        hover(&mut world, col, 0);
+        assert_eq!(
+            underlines(&mut world),
+            Vec::<(u64, [u64; 2])>::new(),
+            "column {col}"
+        );
+    }
+    hover(&mut world, 60, 0);
+    assert_eq!(underlines(&mut world), [(0, [52, 72])]);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_click_on_a_wrapped_or_home_relative_path_on_a_home_elsewhere_names_the_path_as_that_machine_has_it()
+ {
+    let mut world = World::start(in_directory("/srv/app", None).relaying_to("mac", "oma"));
+    world.open_desktop();
+    output(
+        &world,
+        1,
+        b"Read(/srv/app/AGENTS.md) ~/notes/plan.md
+",
+    );
+    world.settle();
+    let notice = |world: &World| {
+        world
+            .screen()
+            .find(Target::key("notice.text"))
+            .and_then(|n| n.name)
+    };
+
+    accelerator(&mut world, true);
+    click(&mut world, 2, 0);
+    assert_eq!(
+        notice(&world).as_deref(),
+        Some("/srv/app/AGENTS.md is on oma; opening files on another machine isn't supported yet")
+    );
+    click(&mut world, 30, 0);
+    accelerator(&mut world, false);
+    assert_eq!(
+        notice(&world).as_deref(),
+        Some("~/notes/plan.md is on oma; opening files on another machine isn't supported yet")
+    );
+    assert_eq!(opened(&mut world), Vec::<String>::new());
+    assert!(world.daemon.sent_of("open_markdown").is_empty());
     world.advance(Duration::from_secs(6));
     assert!(world.runtime_is_at_rest());
 }

@@ -138,7 +138,9 @@ impl Terminals {
         let home = home();
         let term = self.panes.get_mut(id)?;
         let cell = screen_cell(term, &metrics, at)?;
-        find(term, cell, home.as_deref()).map(|f| f.target)
+        find(term, cell, home.as_deref())
+            .map(|f| f.target)
+            .or_else(|| path_elsewhere(term, cell))
     }
 
     /// Output, a scroll or a resize moved the text: the hover reads the link under the pointer
@@ -211,16 +213,21 @@ pub(super) fn screen_cell(
     Some((term.vt.view_top() + u32::from(row), col))
 }
 
-/// The link over screen cell `cell`: an OSC 8 hyperlink first, since its label may hold spaces,
-/// then a URL, then a path that exists. A terminal on another machine can't check this disk, so
-/// there the path is the first one its cwd resolves.
-fn find(term: &mut Term, (row, col): (u32, u16), home: Option<&str>) -> Option<Found> {
+fn line_at(term: &mut Term, (row, col): (u32, u16)) -> Option<(Line, usize, u32)> {
     let (cols, rows) = term.vt.size();
     let top = term.vt.view_top();
     let vt = &mut term.vt;
     let (first, last) = links::extent(row - top, u32::from(rows), |r| vt.row_continues(top + r));
     let line = Line::over(first, last, cols, |r| vt.link_row(top + r));
     let index = line.index(row - top, col)?;
+    Some((line, index, top))
+}
+
+/// The link over screen cell `cell`: an OSC 8 hyperlink first, since its label may hold spaces,
+/// then a URL, then a path that exists on this disk, which a terminal on another machine has
+/// none of.
+fn find(term: &mut Term, cell: (u32, u16), home: Option<&str>) -> Option<Found> {
+    let (line, index, top) = line_at(term, cell)?;
     let found = |link: links::Link| Found {
         rows: line
             .rows(link.span)
@@ -232,8 +239,9 @@ fn find(term: &mut Term, (row, col): (u32, u16), home: Option<&str>) -> Option<F
     if let Some(link) = links::hyperlink_at(&line, index).or_else(|| links::url_at(&line, index)) {
         return Some(found(link));
     }
-    let away = term.place.away.is_some();
-    let home = home.filter(|_| !away);
+    if term.place.away.is_some() {
+        return None;
+    }
     let fragment = links::fragment_at(&line, index)?;
     let cwd = term.place.cwd.as_deref();
     links::path_candidates(&line, fragment)
@@ -243,7 +251,29 @@ fn find(term: &mut Term, (row, col): (u32, u16), home: Option<&str>) -> Option<F
                 return None;
             };
             *path = links::resolve(path, cwd, home)?;
-            (away || std::path::Path::new(path).exists()).then_some(link)
+            std::path::Path::new(path).exists().then_some(link)
         })
         .map(found)
+}
+
+/// The path a click at `cell` names in a terminal on another machine, whose disk this one
+/// can't check: the innermost path the text holds, against the terminal's cwd, with `~` kept
+/// as written since only that machine knows its home.
+fn path_elsewhere(term: &mut Term, cell: (u32, u16)) -> Option<Target> {
+    term.place.away.as_ref()?;
+    let (line, index, _) = line_at(term, cell)?;
+    let fragment = links::fragment_at(&line, index)?;
+    let cwd = term.place.cwd.as_deref();
+    let candidates = links::path_candidates(&line, fragment);
+    let innermost = candidates.iter().map(|c| c.span.start).max()?;
+    let mut target = candidates
+        .into_iter()
+        .find(|c| c.span.start == innermost)?
+        .target;
+    if let Target::Path { path, .. } = &mut target
+        && !path.starts_with('~')
+    {
+        *path = links::resolve(path, cwd, None).unwrap_or_else(|| path.clone());
+    }
+    Some(target)
 }
