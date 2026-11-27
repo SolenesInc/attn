@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Held-move band hides rollback refusals",
+  "at": "2026-11-27T15:05:31.641Z",
+  "detail": "Roll back from the held-move band can be refused when the target is unreachable or declines. The callback stores the refusal in Settings while the band shows only retry errors. Show the rollback refusal at the action that returned it.\n"
+}
