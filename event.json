@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: CLI clippy errors in home.rs fail CI",
+  "at": "2026-11-27T11:42:31.710Z",
+  "fixesBug": "df49e100cf296d17a90e407729ed7504cb4fe013"
+}
