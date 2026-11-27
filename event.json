@@ -1,0 +1,10 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "PTY upgrade guidance omits the shared host prerequisite for reload",
+  "at": "2026-11-27T02:07:55.908Z",
+  "detail": "The fe9dfb172 commit body, an input to upcoming release notes, offers reload before updating. On v0.15.0 with Shared terminal host off, the published binary successfully reloads onto another dedicated worker. After update the replacement worker remains alive, its old terminal refuses attach, and recovering the session can start a second agent on the same conversation. An isolated Linux upgrade probe observed worker replacement and confirmed the surviving process. Independent source review confirmed the path. Correct the release input so users close workers or enable the old shared host setting before reload and verify the terminal moved. Reproduction is attached to s-h3wzb0.\n",
+  "severity": "p1",
+  "source": "review",
+  "culprit": "fe9dfb172e695d2724dbb02e47ff2482cb45f8e2"
+}
