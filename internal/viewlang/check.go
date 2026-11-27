@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -34,6 +35,28 @@ var (
 )
 
 func opensPart(trimmed string) bool { return openerPattern.MatchString(trimmed) }
+
+// IsView says whether markdown is a view: it carries the language line, or a
+// line outside code opens one of the catalog's parts. Other markdown, such as
+// a document that uses ":::note" for its own purpose, is not.
+func IsView(markdown string) bool {
+	lines := strings.Split(strings.ReplaceAll(markdown, "\r\n", "\n"), "\n")
+	if versionPattern.MatchString(strings.TrimSpace(lines[0])) {
+		return true
+	}
+	var fence document.Fence
+	for _, line := range lines {
+		if !fence.Open() {
+			if match := openerPattern.FindStringSubmatch(strings.TrimSpace(line)); match != nil {
+				if _, known := catalog.FindPart(match[2]); known {
+					return true
+				}
+			}
+		}
+		fence.Track(line)
+	}
+	return false
+}
 
 func Check(markdown string) Checked {
 	c := &checker{prepared: map[int]out{}, storeFields: map[string]string{}}
@@ -433,6 +456,9 @@ func (c *checker) argValue(line int, part catalog.Part, arg catalog.Arg, value s
 	switch arg.Kind {
 	case catalog.ItemsArg:
 		if isDataFile(value) {
+			if !c.inFolder(line, value) {
+				return nil, false
+			}
 			return out{"file": value}, true
 		}
 		segments, ok := fieldPath(value)
@@ -456,6 +482,15 @@ func (c *checker) argValue(line int, part catalog.Part, arg catalog.Arg, value s
 		return value, true
 	case catalog.CommandArg:
 		return c.call(line, value)
+	case catalog.FileArg:
+		if !isDataFile(value) {
+			c.report(line, "Name a .json or .jsonl file in the view's folder.", "%s=%q is not a JSON or JSON Lines file", arg.Name, value)
+			return nil, false
+		}
+		if !c.inFolder(line, value) {
+			return nil, false
+		}
+		return value, true
 	case catalog.FlagArg:
 		return true, true
 	case catalog.ChoiceArg:
@@ -484,6 +519,14 @@ func count(n int, noun string) string {
 		return "1 " + noun
 	}
 	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+func (c *checker) inFolder(line int, file string) bool {
+	if path.IsAbs(file) || !filepath.IsLocal(file) {
+		c.report(line, "Put the file in the view's folder, and name it from there, such as \"rows.jsonl\" or \"data/rows.jsonl\".", "%q is outside the view's folder", file)
+		return false
+	}
+	return true
 }
 
 func isDataFile(value string) bool {

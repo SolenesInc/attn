@@ -4795,6 +4795,9 @@ type DesktopTileContentMessage struct {
 
 	// TileKind corresponds to the JSON schema field "tile_kind".
 	TileKind string `json:"tile_kind"`
+
+	// View corresponds to the JSON schema field "view".
+	View *ViewDocument `json:"view,omitempty,omitzero"`
 }
 
 type DesktopUpdateTileMessage struct {
@@ -15226,6 +15229,9 @@ type TileDocument struct {
 
 	// Version corresponds to the JSON schema field "version".
 	Version int `json:"version"`
+
+	// View corresponds to the JSON schema field "view".
+	View *ViewDocument `json:"view,omitempty,omitzero"`
 }
 
 type TileDocumentChangedMessage struct {
@@ -15695,6 +15701,23 @@ type ViewCommandCall struct {
 	Command string `json:"command"`
 }
 
+type ViewDocument struct {
+	// Language corresponds to the JSON schema field "language".
+	Language int `json:"language"`
+
+	// Parts corresponds to the JSON schema field "parts".
+	Parts []ViewPart `json:"parts"`
+
+	// Problems corresponds to the JSON schema field "problems".
+	Problems []ViewProblem `json:"problems"`
+
+	// Sources corresponds to the JSON schema field "sources".
+	Sources []ViewSource `json:"sources"`
+
+	// Values corresponds to the JSON schema field "values".
+	Values []ViewValues `json:"values"`
+}
+
 type ViewFact struct {
 	// Label corresponds to the JSON schema field "label".
 	Label string `json:"label"`
@@ -16001,6 +16024,39 @@ type ViewProblem struct {
 	Text string `json:"text"`
 }
 
+type ViewSource struct {
+	// As corresponds to the JSON schema field "as".
+	As *string `json:"as,omitempty,omitzero"`
+
+	// Data corresponds to the JSON schema field "data".
+	Data bool `json:"data"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind ViewSourceKind `json:"kind"`
+
+	// Notice corresponds to the JSON schema field "notice".
+	Notice *string `json:"notice,omitempty,omitzero"`
+
+	// State corresponds to the JSON schema field "state".
+	State ViewSourceState `json:"state"`
+}
+
+type ViewSourceKind string
+
+const ViewSourceKindAttn ViewSourceKind = "attn"
+const ViewSourceKindFile ViewSourceKind = "file"
+const ViewSourceKindRun ViewSourceKind = "run"
+const ViewSourceKindStore ViewSourceKind = "store"
+
+type ViewSourceState string
+
+const ViewSourceStateFailed ViewSourceState = "failed"
+const ViewSourceStateOk ViewSourceState = "ok"
+const ViewSourceStateUnavailable ViewSourceState = "unavailable"
+
 type ViewStoreField struct {
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
@@ -16032,6 +16088,14 @@ type ViewTemplatePiece struct {
 
 	// Text corresponds to the JSON schema field "text".
 	Text *string `json:"text,omitempty,omitzero"`
+}
+
+type ViewValues struct {
+	// Source corresponds to the JSON schema field "source".
+	Source string `json:"source"`
+
+	// Values corresponds to the JSON schema field "values".
+	Values interface{} `json:"values"`
 }
 
 type WakeTurnMessage struct {
@@ -16237,6 +16301,9 @@ type WebSocketEvent struct {
 
 	// Total corresponds to the JSON schema field "total".
 	Total *int `json:"total,omitempty,omitzero"`
+
+	// View corresponds to the JSON schema field "view".
+	View *ViewDocument `json:"view,omitempty,omitzero"`
 
 	// Warnings corresponds to the JSON schema field "warnings".
 	Warnings []DaemonWarning `json:"warnings,omitempty,omitzero"`

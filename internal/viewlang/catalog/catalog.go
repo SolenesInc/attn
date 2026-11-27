@@ -14,6 +14,7 @@ const (
 	ChoiceArg
 	DurationArg
 	KeyedFieldArg
+	FileArg
 )
 
 func (k ArgKind) Positional() bool {
@@ -141,7 +142,7 @@ var Parts = []Part{
 		{Name: "attn", Kind: ChoiceArg, Source: true, Choices: dataSetNames(), Placeholder: "data set", Doc: "one of attn's own data sets"},
 		{Name: "run", Kind: TextArg, Source: true, Placeholder: "program and arguments", Doc: "a program and its arguments that prints one JSON object. attn runs it in the view's folder, never through a shell"},
 		{Name: "every", Kind: DurationArg, Placeholder: "duration", Doc: "how often attn reruns `run`, such as 30s or 10m"},
-		{Name: "file", Kind: TextArg, Source: true, Doc: "a JSON or JSON Lines file in the view's folder"},
+		{Name: "file", Kind: FileArg, Source: true, Doc: "a JSON or JSON Lines file in the view's folder"},
 		{Name: "store", Kind: TextArg, Source: true, Doc: "the name of a store: values a kept view owns. Its body lists the store's fields, one `name: type` per line, and its values appear under the store's name. `store=\"view/set\"` shows another kept view's store and takes no body"},
 		{Name: "as", Kind: TextArg, Placeholder: "field", Doc: "the field the values appear under"},
 	}, Body: FieldsBody, Keys: "r reruns", TopOnly: true, Example: "data.md"},

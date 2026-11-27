@@ -3950,6 +3950,7 @@ model DesktopTileContentMessage {
   content: string;
   error?: string;
   review?: ReviewBundle;
+  view?: ViewDocument;
   // Rises when the document's annotation draft changed outside the app, as
   // when an agent answers a question; the app then reads the draft again.
   annotations_generation?: safeint;
@@ -4004,6 +4005,49 @@ model TileDocument {
   error?: string;
   // Present for a review document while code_review_enabled is on.
   review?: ReviewBundle;
+  // Present for a view while views_enabled is on.
+  view?: ViewDocument;
+}
+
+// A view, checked on the machine that holds its file, with the values of the
+// sources that machine reads.
+model ViewDocument {
+  language: int32;
+  parts: ViewPart[];
+  problems: ViewProblem[];
+  sources: ViewSource[];
+  values: ViewValues[];
+}
+
+// One place a view's values come from. A file's id is its path from the
+// view's folder.
+model ViewSource {
+  id: string;
+  kind: ViewSourceKind;
+  // Named by a :::data part, so its values are the view's data: at the top,
+  // or under as. A file named only as items is read for those items alone.
+  data: boolean;
+  as?: string;
+  state: ViewSourceState;
+  notice?: string;
+}
+
+enum ViewSourceKind {
+  file,
+  run,
+  attn,
+  store,
+}
+
+enum ViewSourceState {
+  ok,
+  failed,
+  unavailable,
+}
+
+model ViewValues {
+  source: string;
+  values: unknown;
 }
 
 // A review document resolved on the machine that holds its files. Line
@@ -9038,6 +9082,7 @@ model WebSocketEvent {
   tile_kind?: string;
   content?: string;
   review?: ReviewBundle;
+  view?: ViewDocument;
   runtime_id?: TerminalID;
   session_id?: SessionID;
   session?: Session;

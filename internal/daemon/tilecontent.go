@@ -166,8 +166,11 @@ func (d *Daemon) openMarkdownTile(host, path string, callerSessionID protocol.Se
 	if err != nil {
 		return "", "", nil, d.tileDocumentError(host, err)
 	}
-	if opened.Review != nil {
+	switch {
+	case opened.Review != nil:
 		problems = opened.Review.Problems
+	case opened.View != nil:
+		problems = openProblems(opened.View)
 	}
 	location, err := d.currentAgent(callerSessionID)
 	if err != nil {

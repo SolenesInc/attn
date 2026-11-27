@@ -1,0 +1,7 @@
+line 1: "../secrets.json" is outside the view's folder
+fix: Put the file in the view's folder, and name it from there, such as "rows.jsonl" or "data/rows.jsonl".
+line 4: "/tmp/clips.jsonl" is outside the view's folder
+fix: Put the file in the view's folder, and name it from there, such as "rows.jsonl" or "data/rows.jsonl".
+
+data on line 1 shows the problem of line 1
+one-by-one on line 4 shows the problem of line 4

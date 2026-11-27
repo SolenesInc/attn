@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "1143a96103db";
+pub const PROTOCOL_VERSION: &str = "ea1cb7e61aaf";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -4133,6 +4133,8 @@ pub struct DesktopTileContentMessage {
     pub review: Option<ReviewBundle>,
     pub tile_id: String,
     pub tile_kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<ViewDocument>,
 }
 
 impl DesktopTileContentMessage {
@@ -13439,6 +13441,8 @@ pub struct TileDocument {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub review: Option<ReviewBundle>,
     pub version: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<ViewDocument>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TileDocumentChangedMessage {
@@ -13867,6 +13871,18 @@ pub struct ViewCommandCall {
     pub command: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewDocument {
+    pub language: i64,
+    #[serde(deserialize_with = "null_as_default")]
+    pub parts: Vec<ViewPart>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub problems: Vec<ViewProblem>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub sources: Vec<ViewSource>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub values: Vec<ViewValues>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewFact {
     pub label: String,
     #[serde(deserialize_with = "null_as_default")]
@@ -14089,6 +14105,19 @@ pub struct ViewProblem {
     pub text: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewSource {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub r#as: Option<String>,
+    pub data: bool,
+    pub id: String,
+    pub kind: ViewSourceKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notice: Option<String>,
+    pub state: ViewSourceState,
+}
+pub type ViewSourceKind = String;
+pub type ViewSourceState = String;
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewStoreField {
     pub name: String,
     pub r#type: ViewStoreType,
@@ -14108,6 +14137,11 @@ pub struct ViewTemplatePiece {
     pub format: Option<ViewFormat>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewValues {
+    pub source: String,
+    pub values: serde_json::Value,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WakeTurnMessage {
@@ -14253,6 +14287,8 @@ pub struct WebSocketEvent {
     pub tile_kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub total: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<ViewDocument>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub warnings: Option<Vec<DaemonWarning>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

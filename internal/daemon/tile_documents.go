@@ -16,42 +16,59 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/review"
 	"github.com/victorarias/attn/internal/setting"
+	"github.com/victorarias/attn/internal/viewlang"
 )
 
+// documentKinds says which kinds of document a tile reads as more than
+// markdown, by the experimental settings that are on.
+type documentKinds struct {
+	review bool
+	view   bool
+}
+
+func (d *Daemon) documentKinds() documentKinds {
+	return documentKinds{review: d.on(setting.CodeReviewEnabled), view: d.on(setting.ViewsEnabled)}
+}
+
 type watchedTileDocument struct {
-	sig       tileContentSig
-	reviewing bool
-	stops     map[string]tileContentSig
-	version   int
+	sig     tileContentSig
+	kinds   documentKinds
+	shown   map[string]tileContentSig
+	version int
 }
 
-// watchStops follows the files a review document's stops show, so their
-// changes reach the tile as a new version of the document.
-func (doc *watchedTileDocument) watchStops(path string, reviewing bool, now time.Time) {
-	doc.reviewing, doc.stops = reviewing, nil
-	if !reviewing {
-		return
-	}
+// watchShown follows the files a document shows besides itself, a review
+// document's stops or a view's data files, so their changes reach the tile as
+// a new version of the document.
+func (doc *watchedTileDocument) watchShown(path string, kinds documentKinds, now time.Time) {
+	doc.kinds, doc.shown = kinds, nil
 	content, err := readMarkdownFile(path)
-	if err != nil || !review.IsReview(content) {
+	if err != nil {
 		return
 	}
-	doc.stops = map[string]tileContentSig{}
-	for _, file := range review.StopFiles(content) {
-		doc.stops[file] = refreshTileContentHash(file, statSig(file), now)
+	var files []string
+	switch {
+	case kinds.view && viewlang.IsView(content):
+		files = viewFiles(path, content)
+	case kinds.review && review.IsReview(content):
+		files = review.StopFiles(content)
+	}
+	doc.shown = map[string]tileContentSig{}
+	for _, file := range files {
+		doc.shown[file] = refreshTileContentHash(file, statSig(file), now)
 	}
 }
 
-func (doc *watchedTileDocument) observe(path string, reviewing bool, now time.Time) bool {
+func (doc *watchedTileDocument) observe(path string, kinds documentKinds, now time.Time) bool {
 	next, differs := observeTileContent(path, doc.sig, now)
 	doc.sig = next
-	for file, sig := range doc.stops {
-		next, stopDiffers := observeTileContent(file, sig, now)
-		doc.stops[file] = next
-		differs = differs || stopDiffers
+	for file, sig := range doc.shown {
+		next, shownDiffers := observeTileContent(file, sig, now)
+		doc.shown[file] = next
+		differs = differs || shownDiffers
 	}
-	if differs || reviewing != doc.reviewing {
-		doc.watchStops(path, reviewing, now)
+	if differs || kinds != doc.kinds {
+		doc.watchShown(path, kinds, now)
 		return true
 	}
 	return false
@@ -71,7 +88,7 @@ func newTileDocumentWatch() tileDocumentWatch {
 func (d *Daemon) watchTileDocuments(_ context.Context, msg protocol.TileDocumentsWatchMessage) (protocol.TileDocumentVersions, error) {
 	w := &d.tileDocuments
 	now := time.Now()
-	reviewing := d.on(setting.CodeReviewEnabled)
+	kinds := d.documentKinds()
 	var unlisted map[string]bool
 	answer := protocol.TileDocumentVersions{Documents: make([]protocol.TileDocumentVersion, 0, len(msg.Documents))}
 	w.mu.Lock()
@@ -86,7 +103,7 @@ func (d *Daemon) watchTileDocuments(_ context.Context, msg protocol.TileDocument
 		if doc == nil {
 			w.versions++
 			doc = &watchedTileDocument{sig: refreshTileContentHash(path, statSig(path), now), version: w.versions}
-			doc.watchStops(path, reviewing, now)
+			doc.watchShown(path, kinds, now)
 		}
 		listed[path] = doc
 		answer.Documents = append(answer.Documents, protocol.TileDocumentVersion{Path: path, Version: doc.version})
@@ -106,12 +123,12 @@ func (d *Daemon) watchTileDocuments(_ context.Context, msg protocol.TileDocument
 	return answer, nil
 }
 
-func (w *tileDocumentWatch) observe(reviewing bool, now time.Time) []protocol.TileDocumentVersion {
+func (w *tileDocumentWatch) observe(kinds documentKinds, now time.Time) []protocol.TileDocumentVersion {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	var changed []protocol.TileDocumentVersion
 	for path, doc := range w.watched {
-		if doc.observe(path, reviewing, now) {
+		if doc.observe(path, kinds, now) {
 			w.versions++
 			doc.version = w.versions
 			changed = append(changed, protocol.TileDocumentVersion{Path: path, Version: doc.version})
@@ -193,7 +210,7 @@ func (d *Daemon) runTileDocumentWatcher(done <-chan struct{}) {
 			continue
 		case <-ticker.C:
 		}
-		d.reportTileDocuments(w.observe(d.on(setting.CodeReviewEnabled), time.Now()))
+		d.reportTileDocuments(w.observe(d.documentKinds(), time.Now()))
 	}
 }
 
@@ -211,7 +228,13 @@ func (d *Daemon) readTileDocument(ctx context.Context, msg protocol.TileDocument
 		answer.Error = protocol.Ptr(err.Error())
 		return answer, nil
 	}
-	if !d.on(setting.CodeReviewEnabled) || !review.IsReview(content) {
+	kinds := d.documentKinds()
+	if kinds.view && viewlang.IsView(content) {
+		d.releaseCodeNavigation(msg.Path)
+		answer.View = readView(msg.Path, content)
+		return answer, nil
+	}
+	if !kinds.review || !review.IsReview(content) {
 		d.releaseCodeNavigation(msg.Path)
 		return answer, nil
 	}
