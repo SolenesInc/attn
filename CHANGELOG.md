@@ -6,6 +6,109 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
 
 ---
 
+## [2026-11-27]
+
+### Added
+- **Read review documents with vim keys.** A focused review takes j/k, h/l,
+  [[ and ]], H/L, Ctrl-d/Ctrl-u, gg/G and V, whether or not vim mode is on.
+  The arrow, Page, Home and End keys work too. Code navigation moves to gd,
+  gr and K, so h and l are free to step between stops, arrows and changes.
+  Saving a note ends the selection it covers. Your saved app shortcuts and
+  ⌘, Ctrl and Alt arrows still reach the app while a review has the keyboard.
+- **Read seed tiles and the Garden with vim keys, and find text in a seed.**
+  A seed tile reads with the same keys as a markdown tile. Its find bar (/ in
+  vim mode, ⌘F always) searches the seed's plan, and ]] and [[ stop at its
+  headings. In the Garden, j, k, gg and G walk the list and / goes to search.
+  In columns, l or Enter moves the keys into the seed you're reading and h or
+  Escape gives them back to the list. Saved shortcuts, chords and id labels
+  still win over the vim keys.
+- **Open the on-screen agent's stake from the command palette.** While the
+  agent on screen has a stake, the palette offers "Open <agent>'s stake". It
+  opens the seed in a tile beside the agent, or focuses the tile if it's
+  already open, and the keyboard goes to that tile.
+- **Automations get their own section in the sidebar.** The desktop an
+  automation or crew member launches on by default is now created at its
+  first launch and goes away 30 seconds after it empties and you've moved
+  on. Desktops with a custom name, a slot, or more than one user stay. In
+  both desktop and queue flow, automation runs and the agents they delegate
+  to sit together under Automations rather than among your desktops.
+  Finished runs that aren't on screen fold behind a disclosure, and the
+  collapsed rail shows them as one ⚡ chip. Next-run controls walk waiting
+  runs in the order the section lists them. A run on an outpost that's
+  offline stays listed but is skipped until it reconnects. To keep a launch
+  desktop or name it, use the automation's Launch desktop setting.
+
+### Changed
+- **The Garden holds your whole history, with no caps.** Closed seeds load
+  page by page as you scroll, so the "capped" banners are gone. Every open
+  seed is always listed, and search covers closed seeds too. A Crew member's
+  planted seeds page the same way. Fullscreen columns show how many closed
+  seeds each plot hides, with a toggle to show them. Folded plot lanes count
+  only their direct children. Your place in the history stays put when the
+  Garden refreshes.
+- **A calmer desktop sidebar.** Section and desktop headings lose their
+  divider lines. Chips, waiting badges, tile tags and crew pills now share
+  the title bar shelf's tonal style. A desktop's crew shows as compact pills,
+  and empty desktops fold away. Queue flow uses the same crew pills, gathers
+  owed turns in a waiting well, and keeps title bar controls visible when
+  fewer desktop chips need room. Dragging desktops in the sidebar keeps the
+  folded ones in place.
+- **Agent tools (experimental) come down to two script tools.**
+  `attn_record` now runs any script in which no command acts, reads
+  included, without a permission prompt. `attn_do` runs the rest, and
+  `attn_read` is gone. When an agent calls an attn command as if it were a
+  tool, the reply names the one script tool that runs it. The tool texts are
+  shorter, so every request costs fewer tokens.
+- **Agents spend fewer steps on attn's own instructions.** The review
+  guidance says where to write a review document and starts, checks and
+  opens the review in one go. An agent asked to add a crew member finds the
+  command right away.
+
+### Fixed
+- **Agents searching a large Garden get results.** Each search hit carried
+  the whole seed, so ten hits could exceed what Claude Code keeps from one
+  call, and the agent got nothing back. Hits now carry only the seed's row
+  and the snippet that matched, and are about 30 times smaller.
+- **An older CLI says when a command already ran.** When a CLI couldn't read
+  the newer daemon's answer, it failed with "receive response: missing field
+  body" after planting a seed, and a retry planted a duplicate. It now says
+  the command ran and stays done, and warns that its protocol is out of date.
+- **A new editor tile's finder keeps the keyboard.** When the daemon's reply
+  came late, the finder stayed open but no longer took typing or Escape.
+- **Saved shortcuts take precedence over vim keys in markdown tiles.** Vim
+  motions now use only keys your keymap leaves unbound.
+- **Document Find shows matches inside collapsed sections.** It opens the
+  `<details>` around a match before scrolling to it, and the first result can
+  be reached too.
+- **Closing a terminal on an outpost waits for its program to exit.** The
+  close used to report the exit while the program was still shutting down.
+
+### Removed
+- **Dedicated terminal workers.** attn runs every terminal in the shared
+  terminal host. Before updating, close any terminal still running in a
+  dedicated worker. If you're unsure where a terminal runs, close it before
+  updating. On v0.15.0 you can move an open agent session to the shared
+  terminal host by reloading it before you update: first turn on **Shared
+  terminal host** in **Settings → Agents and models**, run `attn settings get
+  pty_shared_host_active` on the machine where the session runs, and reload
+  once it prints `true`. If you already updated with a terminal still in a
+  dedicated worker, the old program may still be running. End it before you
+  recover the session, or two agents will run on the same conversation.
+- **The Shared terminal host setting.** Every new terminal starts in the
+  shared host, and a stored "off" no longer applies. On a machine without a
+  usable host, a new terminal won't start, and the error tells you how to get
+  the host: update an outpost from its home, and reinstall attn anywhere
+  else. A reload or shared Codex restart that can't reach the host is
+  refused and the running terminal keeps working.
+- **The Direct agent launches setting.** Every new or reloaded agent starts
+  as the harness's own command, with no attn process alongside it. Agents an
+  earlier release started under `attn -s` keep running after the update.
+  `attn -s` typed in a shell still opens the app.
+
+<!-- changelog-commits: 639d8c06c18276edfce9bd712bd394f628f49a25..4a8ca4b1f78d4f6126a92b6c095f441fbcbc6ea4 -->
+
+---
+
 ## [2026-11-26]
 
 ### Added
