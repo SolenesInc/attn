@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Reload can terminate a recovered worker before checking the host",
+  "at": "2026-11-27T00:08:08.043Z",
+  "detail": "Reload can terminate a recovered worker terminal before finding that the required shared host is unavailable. At 02f28f435 the isolated Linux app-protocol run showed a recovered Claude worker answer, then Reload returned the repair error and emitted SessionExited with code 1. Updating the context window cap can use the same reload path. Independently source-confirmed. Validate the destination before ending the existing runtime so an unavailable host leaves the working terminal alive. Review s-aw85bd.\n"
+}
