@@ -212,7 +212,8 @@ pub(super) fn screen_cell(
 }
 
 /// The link over screen cell `cell`: an OSC 8 hyperlink first, since its label may hold spaces,
-/// then a URL, then a path that exists.
+/// then a URL, then a path that exists. A terminal on another machine can't check this disk, so
+/// there the path is the first one its cwd resolves.
 fn find(term: &mut Term, (row, col): (u32, u16), home: Option<&str>) -> Option<Found> {
     let (cols, rows) = term.vt.size();
     let top = term.vt.view_top();
@@ -231,9 +232,8 @@ fn find(term: &mut Term, (row, col): (u32, u16), home: Option<&str>) -> Option<F
     if let Some(link) = links::hyperlink_at(&line, index).or_else(|| links::url_at(&line, index)) {
         return Some(found(link));
     }
-    if term.place.away.is_some() {
-        return None;
-    }
+    let away = term.place.away.is_some();
+    let home = home.filter(|_| !away);
     let fragment = links::fragment_at(&line, index)?;
     let cwd = term.place.cwd.as_deref();
     links::path_candidates(&line, fragment)
@@ -243,7 +243,7 @@ fn find(term: &mut Term, (row, col): (u32, u16), home: Option<&str>) -> Option<F
                 return None;
             };
             *path = links::resolve(path, cwd, home)?;
-            std::path::Path::new(path).exists().then_some(link)
+            (away || std::path::Path::new(path).exists()).then_some(link)
         })
         .map(found)
 }

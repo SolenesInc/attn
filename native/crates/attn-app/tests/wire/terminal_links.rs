@@ -329,18 +329,31 @@ fn a_markdown_link_opens_in_a_tile_for_the_terminals_agent_and_with_the_system_w
 }
 
 #[test]
-fn a_session_on_an_outpost_links_its_urls_but_not_its_paths() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("here.go"), "").unwrap();
-    let mut world = World::start(in_directory(dir.path().to_str().unwrap(), Some("box")));
+fn a_session_on_an_outpost_links_its_urls_and_its_paths_whose_click_names_the_outpost() {
+    let mut world = World::start(in_directory("/srv/app", Some("box")));
     world.open_desktop();
-    output(&world, 1, b"here.go https://example.test\r\n");
+    output(&world, 1, b"src/main.go:12:3 https://example.test\r\n");
     world.settle();
 
     hover(&mut world, 2, 0);
-    assert_eq!(underlines(&mut world), []);
-    hover(&mut world, 12, 0);
-    assert_eq!(underlines(&mut world), [(0, [8, 28])]);
+    assert_eq!(underlines(&mut world), [(0, [0, 16])]);
+    hover(&mut world, 20, 0);
+    assert_eq!(underlines(&mut world), [(0, [17, 37])]);
+    accelerator(&mut world, true);
+    click(&mut world, 2, 0);
+    accelerator(&mut world, false);
+    assert_eq!(opened(&mut world), Vec::<String>::new());
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::key("notice.text"))
+            .and_then(|n| n.name)
+            .as_deref(),
+        Some(
+            "/srv/app/src/main.go is on box; opening files on another machine isn't supported yet"
+        )
+    );
+    world.advance(Duration::from_secs(6));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -374,12 +387,12 @@ fn a_file_link_on_an_outpost_stays_shut_and_says_why() {
 }
 
 #[test]
-fn a_path_in_a_terminal_of_a_home_on_another_machine_is_not_looked_up_here_and_its_file_link_says_why()
- {
+fn a_printed_path_in_a_terminal_of_a_home_on_another_machine_names_the_home_and_opens_nothing_here()
+{
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("notes.txt"), "on this machine").unwrap();
-    let mut world =
-        World::start(in_directory(dir.path().to_str().unwrap(), None).relaying_to("mac", "oma"));
+    let directory = dir.path().to_str().unwrap();
+    let mut world = World::start(in_directory(directory, None).relaying_to("mac", "oma"));
     world.open_desktop();
     output(
         &world,
@@ -388,18 +401,26 @@ fn a_path_in_a_terminal_of_a_home_on_another_machine_is_not_looked_up_here_and_i
     );
     world.settle();
 
-    hover(&mut world, 2, 0);
-    assert_eq!(underlines(&mut world), []);
+    let notice = |world: &World| {
+        world
+            .screen()
+            .find(Target::key("notice.text"))
+            .and_then(|n| n.name)
+    };
     accelerator(&mut world, true);
+    click(&mut world, 2, 0);
+    assert_eq!(opened(&mut world), Vec::<String>::new());
+    assert_eq!(
+        notice(&world),
+        Some(format!(
+            "{directory}/notes.txt is on oma; opening files on another machine isn't supported yet"
+        ))
+    );
     click(&mut world, 11, 0);
     accelerator(&mut world, false);
     assert_eq!(opened(&mut world), Vec::<String>::new());
-    let notice = world
-        .screen()
-        .find(Target::key("notice.text"))
-        .and_then(|n| n.name);
     assert_eq!(
-        notice.as_deref(),
+        notice(&world).as_deref(),
         Some("/etc/hosts is on oma; opening files on another machine isn't supported yet")
     );
     world.advance(Duration::from_secs(6));
