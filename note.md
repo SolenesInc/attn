@@ -1,0 +1,1 @@
+attn-pty-host is now attn's only terminal runtime: the per-terminal Go worker, its migrating backend and the worker env settings are gone. Updating from 0.15.0 or earlier: close or reload open terminals first, because a terminal such a build started in a worker is not carried over (its session shows as recoverable, and the old program keeps running until it exits).
