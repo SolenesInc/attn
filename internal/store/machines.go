@@ -21,14 +21,8 @@ type Machine struct {
 	AddedAt     string
 }
 
-// MachineID is the id of this daemon's machine as its home knows it: the self row on a home, the id the home
-// gave it on an enrolled outpost.
+// MachineID is this database's own machine row: on an enrolled outpost, the id its home knows it by (AdoptMachineID).
 func (s *Store) MachineID() string { return *s.machineID.Load() }
-
-func (s *Store) SetMachineID(id string) { s.machineID.Store(&id) }
-
-// SelfMachineID is this database's own machine row.
-func (s *Store) SelfMachineID() string { return s.selfMachineID }
 
 // WireHost is a stored machine reference as the protocol carries it: absent for this daemon's own machine.
 func (s *Store) WireHost(machine string) *string {

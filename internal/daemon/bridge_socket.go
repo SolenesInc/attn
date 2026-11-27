@@ -79,7 +79,7 @@ func (d *Daemon) startBridgeSocket() error {
 func (d *Daemon) outpostServerConfig(dial string) bridge.ServerConfig {
 	r := &d.outpost
 	return bridge.ServerConfig{
-		Self: d.bridgeIdentity(), HostKeyPath: filepath.Join(d.dataRoot, "bridge_host_key"),
+		Self: d.bridgeIdentity, HostKeyPath: filepath.Join(d.dataRoot, "bridge_host_key"),
 		Logf:     d.logf,
 		Handlers: d.outpostHandlers(),
 		Admit: func(home bridge.Identity) *bridge.Refusal {
@@ -103,6 +103,9 @@ func (d *Daemon) outpostServerConfig(dial string) bridge.ServerConfig {
 					d.installEnrollmentLocked(status)
 					r.mu.Unlock()
 				}
+			}
+			if err == nil {
+				err = d.adoptMachineIDLive(status)
 			}
 			if err != nil {
 				return &bridge.Refusal{Reason: "home", Detail: err.Error()}

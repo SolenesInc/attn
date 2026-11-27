@@ -68,7 +68,7 @@ func startFarOutpostWith(t *testing.T, w *world, connected func(*bridge.Conn), h
 	served := make(chan error, 1)
 	go func() {
 		served <- bridge.Serve(ctx, o.network, bridge.ServerConfig{
-			Self:        self,
+			Self:        func() bridge.Identity { return self },
 			HostKeyPath: filepath.Join(t.TempDir(), "bridge_host_key"),
 			Handlers:    handlers,
 		}, connected)

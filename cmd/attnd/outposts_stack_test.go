@@ -398,3 +398,34 @@ func TestAShellFromBeforeTheHomeAddedItsMachineTakesInputThereWithoutTheBridge(t
 		}
 	}
 }
+
+func TestAShellFromBeforeTheHomeAddedItsMachineStaysOnItsMachineAcrossARestart(t *testing.T) {
+	ssh := testworld.NewSSH(t)
+	remote, home := testworld.NewStack(t), testworld.NewStack(t)
+	for _, s := range []*testworld.Stack{remote, home} {
+		ssh.Use(s.World)
+		s.Vars = append(s.Vars, "SHELL=/bin/bash")
+		s.Start()
+	}
+	address := bridgeAddress(t)
+	ssh.Route(address, remote)
+	direct := remote.App()
+	shell := remote.Spawn(direct, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"))
+	direct.AwaitScreen(shell, "$")
+	direct.Close()
+
+	app := enableOutposts(t, home)
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: address})
+	outpostState(app, "outpost", protocol.OutpostStateConnected)
+	remote.Stop()
+	remote.Start()
+
+	direct = remote.App()
+	for _, session := range direct.Initial.Sessions {
+		if string(session.ID) == shell && session.Host != nil {
+			t.Fatalf("the shell from before the home added this machine reads as on %q after a restart, want this machine", *session.Host)
+		}
+	}
+	direct.Type(shell, "echo after-$((3+3))\r", "keyboard")
+	direct.AwaitScreen(shell, "after-6")
+}

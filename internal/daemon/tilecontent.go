@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,14 +21,7 @@ import (
 	"github.com/victorarias/attn/internal/who"
 )
 
-const markdownTileIDPrefix = "tile-markdown-"
-
 const seedTileIDPrefix = "tile-seed-"
-
-func markdownTileIDForPath(path string) string {
-	sum := sha256.Sum256([]byte(path))
-	return markdownTileIDPrefix + hex.EncodeToString(sum[:8])
-}
 
 type tileDocument struct {
 	host string
@@ -69,7 +61,7 @@ func (d *Daemon) wireTileParams(document tileDocument) string {
 }
 
 func (d *Daemon) markdownTileID(document tileDocument) string {
-	return markdownTileIDForPath(d.machineFor(document.host).ID() + "\x00" + document.path)
+	return layouttree.MarkdownTileID(d.machineFor(document.host).ID(), document.path)
 }
 
 func seedTileIDForID(seedID string) string {

@@ -56,7 +56,7 @@ func pair(t *testing.T) *pairWorld {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	w := &pairWorld{t: t, ctx: ctx, cancel: cancel, network: memnet.Listen(), server: make(chan *bridge.Conn, 1), served: make(chan error, 1)}
-	w.cfg = bridge.ServerConfig{Self: outpost, HostKeyPath: filepath.Join(t.TempDir(), "bridge_host_key")}
+	w.cfg = bridge.ServerConfig{Self: func() bridge.Identity { return outpost }, HostKeyPath: filepath.Join(t.TempDir(), "bridge_host_key")}
 	return w
 }
 

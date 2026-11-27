@@ -29,7 +29,6 @@ type Store struct {
 	mu               sync.RWMutex
 	db               *sql.DB
 	dbPath           string
-	selfMachineID    string
 	machineID        atomic.Pointer[string]
 
 	durable bool
@@ -125,8 +124,8 @@ func newDBStore(db *sql.DB, writes *tableWrites, dbPath string, durable bool) (*
 		db.Close()
 		return nil, err
 	}
-	s := &Store{db: db, dbPath: dbPath, durable: durable, selfMachineID: machineID, settings: settings, settingCopies: copies, writes: writes, copiedSessionSeq: make(map[string]int)}
-	s.SetMachineID(machineID)
+	s := &Store{db: db, dbPath: dbPath, durable: durable, settings: settings, settingCopies: copies, writes: writes, copiedSessionSeq: make(map[string]int)}
+	s.machineID.Store(&machineID)
 	return s, nil
 }
 
@@ -142,8 +141,8 @@ func newMapBackedStore() *Store {
 		agentMetadata:    make(map[protocol.SessionID]string),
 		recentLocations:  make(map[recentLocationKey]*protocol.RecentLocation),
 	}
-	s.selfMachineID = uuid.NewString()
-	s.SetMachineID(s.selfMachineID)
+	machineID := uuid.NewString()
+	s.machineID.Store(&machineID)
 	return s
 }
 

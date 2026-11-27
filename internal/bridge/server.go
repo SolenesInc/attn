@@ -16,7 +16,7 @@ const controlChannel = "attn-control"
 
 type ServerConfig struct {
 	HostKeyPath string
-	Self        Identity
+	Self        func() Identity
 	Admit       func(Identity) *Refusal
 	Logf        func(string, ...any)
 	OnError     func(error)
@@ -113,14 +113,16 @@ func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConf
 		home.Refused.Peer = &home.Identity
 		return home.Refused
 	}
-	answer := greeting(cfg.Self)
-	answer.Refused = instanceRefusal(home.Identity, cfg.Self)
-	if answer.Refused == nil && cfg.Admit != nil {
-		answer.Refused = cfg.Admit(home.Identity)
+	refused := instanceRefusal(home.Identity, cfg.Self())
+	if refused == nil && cfg.Admit != nil {
+		refused = cfg.Admit(home.Identity)
 	}
-	if answer.Refused == nil {
-		answer.Refused = buildRefusal(cfg.Self, home.Identity)
+	self := cfg.Self()
+	if refused == nil {
+		refused = buildRefusal(self, home.Identity)
 	}
+	answer := greeting(self)
+	answer.Refused = refused
 	if err := json.NewEncoder(control).Encode(answer); err != nil {
 		return err
 	}

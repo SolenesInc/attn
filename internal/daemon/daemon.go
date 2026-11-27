@@ -94,6 +94,7 @@ const (
 
 	warnWorkerRecoveryPartial     = "worker_recovery_partial"
 	warnStaleSessionsPruned       = "stale_sessions_pruned"
+	warnMachineIDNotAdopted       = "machine_id_not_adopted"
 	warnStaleSessionMissingWorker = "stale_session_missing_worker"
 	warnGHNotInstalled            = "gh_not_installed"
 	warnGHVersionTooOld           = "gh_version_too_old"

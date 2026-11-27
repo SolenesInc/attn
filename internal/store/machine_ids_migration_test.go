@@ -310,7 +310,9 @@ func TestMachineIDsMigrationLeavesAnEnrolledOutpostReadingItsCopiesAsThisMachine
 	}
 	defer upgraded.Close()
 	dormant := upgraded.MachineID()
-	upgraded.SetMachineID("outpost-far")
+	if err := upgraded.AdoptMachineID("outpost-far"); err != nil {
+		t.Fatal(err)
+	}
 	requireEveryMachineNamed(t, upgraded)
 
 	if got := upgraded.Get("copied"); got == nil || got.Host != nil {
