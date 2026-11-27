@@ -1,0 +1,3 @@
+Claude Code's `/branch` now moves the tile at once. The branch becomes the tile's session in the same terminal, and the original closes into the Ledger with its history, so it can come back with `/resume` or Reopen. Before, attn kept showing the original until the next prompt, so a message or annotation sent to it reached the branch.
+
+This adds `fork` to Claude's SessionStart matcher only. Codex's matcher still leaves it out, because Codex `/side` fires `fork` too. Claude's in-attn `/fork` runs as a subagent and fires no SessionStart (measured with real Claude 2.1.332). The trade-off: a branch you try and abandon without prompting leaves a row in the Ledger.

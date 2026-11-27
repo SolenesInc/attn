@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "6a6c90fbb2936aa20092ae72bea6850dc1f6d216",
+  "head": "8e162bb75f4c82333fc8da54cef518eb9cca6af2",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 302.495,
+    "ranOn": "8e162bb75f4c82333fc8da54cef518eb9cca6af2"
+  },
+  "noMediaReason": "daemon-side session handover; no visual surface changed",
+  "recordings": []
+}
