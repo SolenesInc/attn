@@ -602,6 +602,7 @@ type TerminalBinding struct {
 	SessionID  protocol.SessionID
 	Copied     bool
 	AskID      string
+	MoveCheck  string
 }
 
 // OnTerminalBindings hands fn every binding after each commit that can change them, under the store
@@ -617,7 +618,7 @@ func (s *Store) announceTerminalBindingsLocked() {
 	if s.terminalBindings == nil || s.db == nil {
 		return
 	}
-	rows, err := s.db.Query(`SELECT b.terminal_id, b.session_id, COALESCE(s.copied_from, '') != '', COALESCE(b.ask_id, '') FROM terminal_bindings b
+	rows, err := s.db.Query(`SELECT b.terminal_id, b.session_id, COALESCE(s.copied_from, '') != '', COALESCE(b.ask_id, ''), COALESCE(b.move_check, '') FROM terminal_bindings b
  LEFT JOIN sessions s ON s.id = b.session_id
  LEFT JOIN desktop_panes p ON p.runtime_id = b.terminal_id
  ORDER BY COALESCE(p.created_at, ''), COALESCE(p.pane_id, ''), b.terminal_id`)
@@ -629,7 +630,7 @@ func (s *Store) announceTerminalBindingsLocked() {
 	var bindings []TerminalBinding
 	for rows.Next() {
 		var binding TerminalBinding
-		if err := rows.Scan(&binding.TerminalID, &binding.SessionID, &binding.Copied, &binding.AskID); err != nil {
+		if err := rows.Scan(&binding.TerminalID, &binding.SessionID, &binding.Copied, &binding.AskID, &binding.MoveCheck); err != nil {
 			log.Printf("[store] listing terminal bindings: %v", err)
 			return
 		}
@@ -718,7 +719,7 @@ func appendLaunchDesktopFacts(tx *sql.Tx, desktopID string) error {
 
 func bindTerminalTx(tx *sql.Tx, terminal protocol.TerminalID, session protocol.SessionID) error {
 	_, err := tx.Exec(`INSERT INTO terminal_bindings (terminal_id, session_id) VALUES (?, ?)
- ON CONFLICT(terminal_id) DO UPDATE SET session_id = excluded.session_id, ask_id = NULL`, terminal, session)
+ ON CONFLICT(terminal_id) DO UPDATE SET session_id = excluded.session_id, ask_id = NULL, move_check = NULL`, terminal, session)
 	return err
 }
 
@@ -727,8 +728,41 @@ func (s *Store) PlaceInAsk(session protocol.SessionID, terminal protocol.Termina
 	return s.profilesTx(func(tx *sql.Tx, _ string) error {
 		return expectOpenAsk(tx.Exec(`INSERT INTO terminal_bindings (terminal_id, session_id, ask_id)
  SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM asks WHERE id = ? AND `+openAsk+`)
- ON CONFLICT(terminal_id) DO UPDATE SET session_id = excluded.session_id, ask_id = excluded.ask_id`, terminal, session, askID, askID))
+ ON CONFLICT(terminal_id) DO UPDATE SET session_id = excluded.session_id, ask_id = excluded.ask_id, move_check = NULL`, terminal, session, askID, askID))
 	})
+}
+
+// PlaceInMoveCheck makes the failed home move check named check the place of session's terminal, with no pane.
+func (s *Store) PlaceInMoveCheck(session protocol.SessionID, terminal protocol.TerminalID, check string) error {
+	return s.profilesTx(func(tx *sql.Tx, _ string) error {
+		_, err := tx.Exec(`INSERT INTO terminal_bindings (terminal_id, session_id, move_check) VALUES (?, ?, ?)
+ ON CONFLICT(terminal_id) DO UPDATE SET session_id = excluded.session_id, ask_id = NULL, move_check = excluded.move_check`, terminal, session, check)
+		return err
+	})
+}
+
+// TerminalsOfMoveChecks lists the terminals that a move check holds on machine host, leaving out the copies an outpost keeps of its home's.
+func (s *Store) TerminalsOfMoveChecks(host string) ([]TerminalBinding, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return nil, nil
+	}
+	rows, err := s.db.Query(`SELECT b.terminal_id, b.session_id, b.move_check FROM terminal_bindings b JOIN sessions s ON s.id = b.session_id
+ WHERE b.move_check IS NOT NULL AND s.host = ? AND COALESCE(s.copied_from, '') = '' ORDER BY b.terminal_id`, host)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var bindings []TerminalBinding
+	for rows.Next() {
+		var binding TerminalBinding
+		if err := rows.Scan(&binding.TerminalID, &binding.SessionID, &binding.MoveCheck); err != nil {
+			return nil, err
+		}
+		bindings = append(bindings, binding)
+	}
+	return bindings, rows.Err()
 }
 
 // TerminalsOfClosedAsks lists the terminals held by an ask that is no longer open, leaving out the copies an outpost keeps of its home's.

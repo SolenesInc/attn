@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"os/user"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -793,6 +794,83 @@ func TestHomeMovePreflightRefusesNamingTheCause(t *testing.T) {
 		pair.SSH.Fail("third", "ssh: connect to host third port 22: No route to host")
 		defer pair.SSH.Restore("third")
 		requireRefusedBy(t, check(), "ssh third", "No route to host")
+	})
+}
+
+func moveCheckHolds(bindings []protocol.TerminalBinding, check string, session string) (protocol.TerminalBinding, bool) {
+	at := slices.IndexFunc(bindings, func(b protocol.TerminalBinding) bool {
+		return string(b.SessionID) == session && protocol.Deref(b.MoveCheck) == check && b.AskID == nil
+	})
+	if at < 0 {
+		return protocol.TerminalBinding{}, false
+	}
+	return bindings[at], true
+}
+
+func TestAFailedChecksFixIsTypedInAShellOnTheTargetThatTheCheckHoldsUntilItPasses(t *testing.T) {
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	outpost.Vars = append(outpost.Vars, "SHELL=/bin/bash")
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.SSH.Use(outpost.World)
+	pair.SSH.Route("oldhome", home)
+	healthyMachine(t, home)
+	healthyMachine(t, outpost)
+	pair.Start()
+	requireStdout(t, home.Attn("settings", "set", "remote_home_enabled", "true"))
+	awaitMachineNotebook(t, pair.App, pair.Host, protocol.OutpostNotebookStateInSync)
+	loginctl := filepath.Join(outpost.Dir, "machine-bin", "loginctl")
+	setLinger := func(answer string) {
+		t.Helper()
+		if err := fakeagent.WriteExecutable(loginctl, []byte("#!/bin/sh\necho "+answer+"\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	check := func() protocol.HomeMove {
+		return homeMoveJSON(t, home, "move", "outpost", "--via", "oldhome", "--check")
+	}
+	account, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	setLinger("no")
+	refused := check()
+	linger := refused.Checks[slices.IndexFunc(refused.Checks, func(c protocol.HomeMoveCheck) bool { return c.Name == "linger" })]
+	fix := "loginctl enable-linger " + account.Username
+	if linger.Ok || protocol.Deref(linger.Fix) != fix {
+		t.Fatalf("want the linger check failed with the fix %q: %s", fix, describeMove(refused))
+	}
+	for _, c := range refused.Checks {
+		if c.Ok && c.Fix != nil {
+			t.Fatalf("the passing %s check names a fix %q", c.Name, *c.Fix)
+		}
+	}
+
+	shell := home.Spawn(pair.App, fakeagent.Harness(protocol.SessionAgentShell), outpost.Path("fix"), func(m *protocol.SpawnSessionMessage) {
+		m.Host = protocol.Ptr(pair.Host)
+		m.Typed = linger.Fix
+		m.Placement = &protocol.SessionPlacement{MoveCheck: protocol.Ptr("linger")}
+	})
+	held := testworld.Await(pair.App, protocol.EventTerminalBindingsUpdated, func(m protocol.TerminalBindingsUpdatedMessage) bool {
+		_, ok := moveCheckHolds(m.TerminalBindings, "linger", shell)
+		return ok
+	})
+	binding, _ := moveCheckHolds(held.TerminalBindings, "linger", shell)
+	if pair.App.Placed(shell) {
+		t.Fatalf("the shell the linger check holds has a tile")
+	}
+	pair.App.AwaitTerminalScreen(string(binding.TerminalID), fix)
+
+	check()
+	if sessions, err := home.Client().Query(""); err != nil || !slices.ContainsFunc(sessions, func(s protocol.Session) bool { return string(s.ID) == shell }) {
+		t.Fatalf("a check run that still finds linger off ended the shell the linger check holds (%v)", err)
+	}
+	setLinger("yes")
+	if move := check(); move.Step != "checked" {
+		t.Fatalf("with linger on: %s", describeMove(move))
+	}
+	testworld.Await(pair.App, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
+		return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == shell
 	})
 }
 

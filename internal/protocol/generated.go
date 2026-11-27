@@ -6604,6 +6604,9 @@ type HomeMoveCheck struct {
 	// Detail corresponds to the JSON schema field "detail".
 	Detail *string `json:"detail,omitempty,omitzero"`
 
+	// Fix corresponds to the JSON schema field "fix".
+	Fix *string `json:"fix,omitempty,omitzero"`
+
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
 
@@ -13504,6 +13507,9 @@ type SessionPlacement struct {
 
 	// Direction corresponds to the JSON schema field "direction".
 	Direction *LayoutSplitDirection `json:"direction,omitempty,omitzero"`
+
+	// MoveCheck corresponds to the JSON schema field "move_check".
+	MoveCheck *string `json:"move_check,omitempty,omitzero"`
 }
 
 type SessionPullRequest struct {
@@ -14726,6 +14732,9 @@ type TasksChangedMessage struct {
 type TerminalBinding struct {
 	// AskID corresponds to the JSON schema field "ask_id".
 	AskID *string `json:"ask_id,omitempty,omitzero"`
+
+	// MoveCheck corresponds to the JSON schema field "move_check".
+	MoveCheck *string `json:"move_check,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID SessionID `json:"session_id"`

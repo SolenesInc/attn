@@ -2202,7 +2202,8 @@ model HomeMove {
 }
 
 // A pre-flight check of a move; detail names the cause when ok is false.
-model HomeMoveCheck { name: string; ok: boolean; detail?: string; }
+// fix: on a failed check, the command on the target that fixes it, when the daemon knows one.
+model HomeMoveCheck { name: string; ok: boolean; detail?: string; fix?: string; }
 
 // A path the new home uses in place of the old home's.
 model HomeMoveRemap { from: string; to: string; }
@@ -2579,6 +2580,10 @@ model SessionPlacement {
   // An open ask of the profile holds the shell's terminal instead of a pane.
   // Refused beside desktop_id or anchor_pane_id, and for an agent.
   ask_id?: string;
+  // The failed check of this name, of a home move to the spawn's host, holds
+  // the shell's terminal instead of a pane. Refused beside ask_id, desktop_id
+  // or anchor_pane_id, for an agent, and without a host.
+  move_check?: string;
 }
 
 model AttachSessionMessage {
@@ -4479,6 +4484,10 @@ model TerminalBinding {
   // The open ask that holds the terminal in place of a pane. It ends when the
   // ask stops being open, unless a pane takes it first.
   ask_id?: string;
+  // The failed home move check that holds the terminal in place of a pane, on
+  // the move's target. It ends when a check run of that machine finds the
+  // check passing, unless a pane takes it first.
+  move_check?: string;
 }
 
 model TerminalBindingsUpdatedMessage {

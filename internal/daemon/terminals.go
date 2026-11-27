@@ -25,7 +25,7 @@ type terminalRegistry struct {
 type terminal struct {
 	shows    harness.SessionID
 	copied   bool
-	ask      string
+	holder   terminalHolder
 	shownSeq uint64
 	lastKey  time.Time
 }
@@ -163,7 +163,7 @@ func (r *terminalRegistry) sync(bindings []store.TerminalBinding) {
 			entry.shows, entry.shownSeq = session, r.shown
 		}
 		entry.copied = binding.Copied
-		entry.ask = binding.AskID
+		entry.holder = terminalHolder{ask: binding.AskID, moveCheck: binding.MoveCheck}
 	}
 	now := time.Now()
 	for id, entry := range r.byID {
@@ -174,13 +174,13 @@ func (r *terminalRegistry) sync(bindings []store.TerminalBinding) {
 	}
 }
 
-func (r *terminalRegistry) askHolding(t harness.TerminalID) string {
+func (r *terminalRegistry) holder(t harness.TerminalID) terminalHolder {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if entry := r.byID[t]; entry != nil {
-		return entry.ask
+		return entry.holder
 	}
-	return ""
+	return terminalHolder{}
 }
 
 func (r *terminalRegistry) Showing(t harness.TerminalID) (harness.SessionID, bool) {
@@ -317,8 +317,11 @@ func (r *terminalRegistry) Bindings() []protocol.TerminalBinding {
 	bindings := make([]protocol.TerminalBinding, 0, len(r.byID))
 	for id, entry := range r.byID {
 		binding := protocol.TerminalBinding{TerminalID: id, SessionID: entry.shows}
-		if entry.ask != "" {
-			binding.AskID = protocol.Ptr(entry.ask)
+		if entry.holder.ask != "" {
+			binding.AskID = protocol.Ptr(entry.holder.ask)
+		}
+		if entry.holder.moveCheck != "" {
+			binding.MoveCheck = protocol.Ptr(entry.holder.moveCheck)
 		}
 		bindings = append(bindings, binding)
 	}
@@ -329,11 +332,11 @@ func (r *terminalRegistry) Bindings() []protocol.TerminalBinding {
 func (d *Daemon) terminalBindingsShownIn(profileID string, bindings []protocol.TerminalBinding) []protocol.TerminalBinding {
 	shown := slices.Clone(bindings)
 	for i, binding := range shown {
-		if binding.AskID == nil {
+		if binding.AskID == nil && binding.MoveCheck == nil {
 			continue
 		}
 		if session := d.store.Get(binding.SessionID); session == nil || !askShownIn(profileID, session.ProfileID) {
-			shown[i].AskID = nil
+			shown[i].AskID, shown[i].MoveCheck = nil, nil
 		}
 	}
 	return shown

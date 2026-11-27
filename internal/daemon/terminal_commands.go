@@ -160,8 +160,8 @@ func (d *Daemon) terminalAct(caller *protocol.Session, target *selectedTerminal,
 			}
 		}
 	}
-	if ask := d.terminals().askHolding(target.terminal); placed == "" && ask != "" {
-		return fmt.Errorf("terminal rule: terminal %s is in ask %s, not on a desktop", target.terminal, ask)
+	if held := d.terminals().holder(target.terminal); placed == "" && held.holds() {
+		return fmt.Errorf("terminal rule: terminal %s is %s, not on a desktop", target.terminal, held)
 	}
 	if placed == "" {
 		return fmt.Errorf("terminal rule: terminal %s has no tile", target.terminal)

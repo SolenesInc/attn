@@ -454,6 +454,7 @@ func (d *Daemon) homeMoveCommand(ctx context.Context, msg *protocol.HomeMoveMess
 		pausepoint.At(pausepoint.HomeMoveChecking)
 	}
 	plan := d.checkHomeMove(ctx, target, strings.TrimSpace(protocol.Deref(msg.Via)))
+	d.life.Go("settleMoveCheckTerminals", func() { d.settleMoveCheckTerminals(target.ID, plan.checks) })
 	info := protocol.HomeMove{Step: stepChecked, From: protocol.Ptr(d.bridgeIdentity().Name), To: protocol.Ptr(target.Name), Checks: plan.checks, Remaps: []protocol.HomeMoveRemap{}}
 	if plan.sleeps {
 		info.Sleeps = protocol.Ptr(true)
@@ -476,6 +477,14 @@ func check(name string, err error) protocol.HomeMoveCheck {
 		return protocol.HomeMoveCheck{Name: name, Ok: false, Detail: protocol.Ptr(err.Error())}
 	}
 	return protocol.HomeMoveCheck{Name: name, Ok: true}
+}
+
+func fixableCheck(name string, err error, fix string) protocol.HomeMoveCheck {
+	checked := check(name, err)
+	if err != nil {
+		checked.Fix = protocol.Ptr(fix)
+	}
+	return checked
 }
 
 func (d *Daemon) checkHomeMove(ctx context.Context, target store.Machine, via string) homeMovePlan {
@@ -917,9 +926,9 @@ func (d *Daemon) answerHomeMoveCheck(ctx context.Context, request homeMoveCheckR
 		}
 		answer.Checks = append(answer.Checks, check("ssh "+destination, err))
 	}
-	answer.Checks = append(answer.Checks, check("gh", d.runOnThisMachine(ctx, "gh", "auth", "status")))
+	answer.Checks = append(answer.Checks, d.ghCheck(ctx))
 	if runtime.GOOS == "linux" {
-		answer.Checks = append(answer.Checks, check("linger", lingerOn(ctx, d)), check("systemd", d.runOnThisMachine(ctx, "systemctl", "--user", "show-environment")))
+		answer.Checks = append(answer.Checks, d.lingerCheck(ctx), check("systemd", d.runOnThisMachine(ctx, "systemctl", "--user", "show-environment")))
 	}
 	var copyErrs []string
 	for _, folder := range request.Folders {
@@ -950,15 +959,23 @@ func (d *Daemon) runOnThisMachine(ctx context.Context, name string, args ...stri
 	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%s %s: %v: %s", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
 
-func lingerOn(ctx context.Context, d *Daemon) error {
+func (d *Daemon) ghCheck(ctx context.Context) protocol.HomeMoveCheck {
+	err := d.runOnThisMachine(ctx, "gh", "auth", "status")
+	if errors.Is(err, exec.ErrNotFound) {
+		return check("gh", err)
+	}
+	return fixableCheck("gh", err, "gh auth login")
+}
+
+func (d *Daemon) lingerCheck(ctx context.Context) protocol.HomeMoveCheck {
 	account, err := user.Current()
 	if err != nil {
-		return err
+		return check("linger", err)
 	}
 	cmd := exec.CommandContext(ctx, "loginctl", "show-user", account.Username, "--property=Linger", "--value")
 	if env := d.loginEnv.Latest(ctx); len(env) > 0 {
@@ -966,12 +983,13 @@ func lingerOn(ctx context.Context, d *Daemon) error {
 	}
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("loginctl show-user %s: %v", account.Username, err)
+		return check("linger", fmt.Errorf("loginctl show-user %s: %v", account.Username, err))
 	}
 	if strings.TrimSpace(string(out)) != "yes" {
-		return fmt.Errorf("linger is off for %s, so the home would stop when the user logs out; run loginctl enable-linger %s", account.Username, account.Username)
+		fix := "loginctl enable-linger " + account.Username
+		return fixableCheck("linger", fmt.Errorf("linger is off for %s, so the home would stop when the user logs out; run %s", account.Username, fix), fix)
 	}
-	return nil
+	return check("linger", nil)
 }
 
 func (d *Daemon) receiveHomeMoveStage(conn *bridge.Conn, incoming ssh.NewChannel) {

@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "c3936b8baffb";
+pub const PROTOCOL_VERSION: &str = "4a60248a68d6";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -5959,6 +5959,8 @@ pub struct HomeMove {
 pub struct HomeMoveCheck {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fix: Option<String>,
     pub name: String,
     pub ok: bool,
 }
@@ -11869,6 +11871,8 @@ pub struct SessionPlacement {
     pub desktop_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub direction: Option<LayoutSplitDirection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub move_check: Option<String>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SessionPullRequest {
@@ -12973,6 +12977,8 @@ impl TasksChangedMessage {
 pub struct TerminalBinding {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ask_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub move_check: Option<String>,
     pub session_id: SessionID,
     pub terminal_id: TerminalID,
 }

@@ -30,6 +30,7 @@ type launchPlacement struct {
 	reopen       bool
 	addsTerminal bool
 	askID        string
+	moveCheck    string
 	// terminal is the one the launch runs in, recorded on the pane it gets.
 	terminal harness.TerminalID
 }
@@ -50,7 +51,21 @@ func requestedLaunchPlacement(requested *protocol.SessionPlacement) *launchPlace
 		anchorPaneID: strings.TrimSpace(protocol.Deref(requested.AnchorPaneID)),
 		direction:    layoutDirection(requested.Direction),
 		askID:        strings.TrimSpace(protocol.Deref(requested.AskID)),
+		moveCheck:    strings.TrimSpace(protocol.Deref(requested.MoveCheck)),
 	}
+}
+
+func checkMoveCheckPlacement(placement *launchPlacement, isShell bool, host string) error {
+	if placement.askID != "" || placement.desktopID != "" || placement.anchorPaneID != "" {
+		return protocol.Refuse(protocol.RefusalInvalidInput, "placement rule: the %s check of a home move holds the terminal in place of a pane, so name no ask_id, desktop_id or anchor_pane_id beside move_check", placement.moveCheck)
+	}
+	if !isShell {
+		return protocol.Refuse(protocol.RefusalInvalidInput, "placement rule: a home move check holds only a shell; place an agent on a desktop")
+	}
+	if host == "" {
+		return protocol.Refuse(protocol.RefusalInvalidInput, "placement rule: a home move check holds a shell on the move's target; name that machine as the host")
+	}
+	return nil
 }
 
 func (d *Daemon) checkAskPlacement(profile profiles.Profile, placement *launchPlacement, isShell bool) error {
@@ -126,6 +141,13 @@ func (d *Daemon) placeAnsweringRequester(session *protocol.Session, placement *l
 func (d *Daemon) placeLaunchedSession(session *protocol.Session, placement *launchPlacement) placementOutcome {
 	if placement == nil {
 		return placementOutcome{}
+	}
+	if placement.moveCheck != "" {
+		err := d.store.PlaceInMoveCheck(session.ID, placement.terminal, placement.moveCheck)
+		if err != nil {
+			d.logf("%v", err)
+		}
+		return placementOutcome{err: err}
 	}
 	if placement.askID != "" {
 		err := d.store.PlaceInAsk(session.ID, placement.terminal, placement.askID)

@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"slices"
+
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/pausepoint"
@@ -51,12 +53,54 @@ func (d *Daemon) settleAskTerminals() {
 	}
 }
 
-func (d *Daemon) heldByAsks(sessionID protocol.SessionID) bool {
+// terminalHolder is what holds a terminal in place of a pane: an open ask, or a failed check of a home move to the
+// terminal's machine.
+type terminalHolder struct {
+	ask       string
+	moveCheck string
+}
+
+func (h terminalHolder) holds() bool {
+	return h.ask != "" || h.moveCheck != ""
+}
+
+func (h terminalHolder) String() string {
+	if h.ask != "" {
+		return "in ask " + h.ask
+	}
+	return "held by the " + h.moveCheck + " check of a home move"
+}
+
+func (d *Daemon) heldInPlaceOfPanes(sessionID protocol.SessionID) bool {
 	terminals := d.terminalsOf(sessionID)
 	for _, t := range terminals {
-		if d.terminals().askHolding(t) == "" {
+		if !d.terminals().holder(t).holds() {
 			return false
 		}
 	}
 	return len(terminals) > 0
+}
+
+// settleMoveCheckTerminals ends the shells that a check of a move to machine holds once a check run of that machine
+// finds the check passing.
+func (d *Daemon) settleMoveCheckTerminals(machine string, checks []protocol.HomeMoveCheck) {
+	held, err := d.store.TerminalsOfMoveChecks(machine)
+	if err != nil {
+		d.logf("home move: listing the shells the checks of %s hold: %v", machine, err)
+		return
+	}
+	for _, binding := range held {
+		if !slices.ContainsFunc(checks, func(c protocol.HomeMoveCheck) bool { return c.Ok && c.Name == binding.MoveCheck }) {
+			continue
+		}
+		if !d.closeTerminal(binding.SessionID, binding.TerminalID) {
+			continue
+		}
+		closing, err := d.beginSessionClose(binding.SessionID, store.SessionClose{By: who.Attn(), Reason: "the " + binding.MoveCheck + " check of a home move to " + machine + " that held its terminal passed"}, nil)
+		if err != nil {
+			d.logf("home move: closing shell %s, whose %s check passed: %v", binding.SessionID, binding.MoveCheck, err)
+			continue
+		}
+		d.finishSessionClose(binding.SessionID, closing)
+	}
 }

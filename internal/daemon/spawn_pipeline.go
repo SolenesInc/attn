@@ -191,9 +191,12 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 		placement.focus = policy.userStarted
 		placement.addsTerminal = addsTerminal
 	}
-	if placement != nil && placement.askID != "" {
+	switch {
+	case placement != nil && placement.moveCheck != "":
+		err = checkMoveCheckPlacement(placement, isShell, protocol.Deref(msg.Host))
+	case placement != nil && placement.askID != "":
 		err = d.checkAskPlacement(profile, placement, isShell)
-	} else {
+	default:
 		err = d.checkLaunchPlacement(profile, placement)
 	}
 	if err != nil {
