@@ -1,0 +1,10 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "CLI clippy errors in home.rs fail CI",
+  "at": "2026-11-27T11:42:28.012Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45984632457",
+  "severity": "p1",
+  "source": "ci",
+  "culprit": "2113370ce24975ca7209ee34edc6b3db99c96614"
+}
