@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: TestAnAppWhoseHomeIsUnreachableIsToldWhyAndConnectsWhenItReturns: a copy could wake an app waiting on the dial before the bridge was recorded",
+  "at": "2026-11-27T07:21:41.570Z",
+  "fixesBug": "84e89a06e09117bee7a16f6b101a4b2ea4f20632"
+}
