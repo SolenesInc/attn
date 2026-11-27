@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Unconfirmed home update reports the old build as retained",
+  "at": "2026-11-27T06:38:17.389Z",
+  "detail": "If the installation switches to the target but the bridge does not return, status incorrectly claims the home stayed on its build. Distinguish observed installation from the last verified running build and offer a recovery path.\nIndependently source-confirmed at 309da596f. See the rolling review s-wbc0br for evidence.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/home_update.go",
+    "line": 334
+  },
+  "culprit": "e3919191708af2e1728b73e370b6c4cd4d6bd989"
+}
