@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Escape cannot cancel profile cycling while the shortcut is held",
+  "at": "2026-11-27T10:06:47.768Z",
+  "detail": "At d6ac6618, start a profile cycle with Cmd+Shift+U and press Escape while the chord is still held. The app's key handler rejects modified Escape before its cancellation path, and the modal handler also rejects it. Releasing the chord then selects the highlighted profile. Independently confirmed by tracing the native event path. Handle Escape during an active held cycle before the modifier guard and cover the held modifier flags through the normal key path.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/profile_switcher.rs",
+    "line": 365
+  },
+  "culprit": "af9372ea38a233cb1216667085e36d184dc9956c"
+}
