@@ -1,0 +1,1 @@
+Repair for red main: the refusal of a join while enrolled elsewhere names attn enrollment leave by mention, and the catalog renders a mention of a CLI-only command without arguments as its shell line (TestRefusalsNameCommandsByMention, red since 71fd9530e).
