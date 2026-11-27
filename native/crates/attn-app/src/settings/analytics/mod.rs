@@ -537,7 +537,7 @@ fn open_session(state: &mut State, vent: &Vent, tx: &mut Tx) {
 
 fn open_seed(state: &mut State, seed: &str, tx: &mut Tx) {
     super::close(state, tx);
-    crate::asks::open_seed(state, seed, tx);
+    crate::garden::open_seed_or_tile(state, seed, tx);
 }
 
 fn open_transcript(state: &mut State, path: &str, tx: &mut Tx) {

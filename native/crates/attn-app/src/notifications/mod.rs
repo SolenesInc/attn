@@ -253,7 +253,7 @@ pub(crate) fn run(state: &mut State, act: Act, tx: &mut Tx) {
         }
         Act::OpenSeed(seed) => {
             close(state, tx);
-            crate::asks::open_seed(state, &seed, tx);
+            crate::garden::open_seed_or_tile(state, &seed, tx);
         }
         Act::InstallCodexUpdate => {
             if !crate::harness::codex::installing(state) {

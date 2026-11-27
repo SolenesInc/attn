@@ -135,13 +135,23 @@ Agents send you questions with `attn ask` instead of stopping to wait for you.
 Asks are on by default. Turn them off in **Settings → Agents and models → Asks**
 (`asks_enabled`); agents keep the setting they launched with.
 
-Cmd+Shift+R (Ctrl+Alt+R on Linux) opens Asks, a sheet in the middle of the
-window, where you answer them without opening the agent's terminal. It opens on
-the ask of the agent on screen, or else on the ask it showed last, and the list
-beside the ask holds the others. Escape, the same keys or a click outside the
-sheet close it. **Open agent** (`o`) and **Open in Garden** (`g`), icons at
-the top of the ask beside **Copy ask** (`c`) and **Snooze** (`s`), close the
-sheet and show the agent that asked, or the ask's seed.
+Cmd+Shift+R (Ctrl+Alt+R on Linux) opens Asks, which holds the window below
+the title bar, where you answer them without opening the agent's terminal. It
+opens on the ask of the agent on screen, or else on the ask it showed last, and
+the list beside the ask holds the others. Escape or the same keys close it.
+**Open agent** (`o`), an icon at the top of the ask beside **Copy ask** (`c`)
+and **Snooze** (`s`), closes Asks and shows the agent that asked.
+
+The seeds and markdown files an ask names open in a panel beside the question,
+so you read what the answer rests on without leaving the ask. **Show seed**
+(`g`) at the top of the ask, or a click on a seed's name, shows the seed's page
+there, and **Reveal in Garden** on that page closes Asks and opens the seed in
+the Garden. A link to a markdown file shows the file read from the machine the
+agent named, this one included; another kind of file opens in its app on this
+machine. Each one you open gets a tab: Cmd+Shift+] and Cmd+Shift+[
+(Ctrl+Shift+] and Ctrl+Shift+[ on Linux) move between the tabs, and Cmd+W
+(Ctrl+Shift+W on Linux) or the tab bar's × closes the one shown. An agent's id
+still opens its card, and a web page opens in your browser.
 
 While asks are open, the asks button in the title bar is an accent pill with
 their count. It pops when a new ask arrives and, by default, again every minute

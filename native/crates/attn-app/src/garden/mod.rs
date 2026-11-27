@@ -33,7 +33,7 @@ use crate::requests::Refused;
 use crate::shell::Drawer;
 
 pub(crate) use reading::{home_of, reads_in, tile_doc, tile_view};
-pub(crate) use tile::{Reads as TileReads, body as tile_body, climb as climb_tile};
+pub(crate) use tile::{Reads as TileReads, body as tile_body, climb as climb_tile, panel_body};
 pub(crate) use v2::overlay;
 pub(crate) use view::{frame_layer, panel};
 
@@ -389,6 +389,7 @@ fn shown_seeds(state: &State) -> HashSet<String> {
         shown.extend(living_trail(state).pop());
     }
     shown.extend(crate::desktop::seed_chip::told(state));
+    shown.extend(crate::asks::panel::shown_seed(state));
     if let Some(crate::terminal::Subject::Seed(id)) = state
         .window
         .desk
@@ -1334,6 +1335,15 @@ pub(crate) fn open_seed(state: &mut State, id: &str, tx: &mut Tx) {
         state.window.garden.board = Some(false);
     }
     open_found(state, id, tx);
+}
+
+/// Opens a seed in the garden, or in a tile when the garden's window of seeds does not hold it.
+pub(crate) fn open_seed_or_tile(state: &mut State, id: &str, tx: &mut Tx) {
+    if seeds(state).iter().any(|s| s.id == id) {
+        open_seed(state, id, tx);
+    } else {
+        open_tile(state, id, tx);
+    }
 }
 
 /// Opens seed `id` in a tile, beside `session` when one asks for it.

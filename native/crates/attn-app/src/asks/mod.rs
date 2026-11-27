@@ -2,6 +2,7 @@ mod attach;
 pub(crate) mod inline;
 mod mentions;
 pub(crate) mod motion;
+pub(crate) mod panel;
 mod saving;
 mod view;
 
@@ -67,6 +68,8 @@ pub struct Asks {
     /// tables fit that width as a document's do.
     pub(crate) widths: HashMap<String, u32>,
     pub(crate) motion: motion::Motion,
+    /// The panel beside each ask, with the seeds and files opened from it.
+    pub(crate) panels: panel::Panels,
 }
 
 #[derive(Default)]
@@ -667,17 +670,6 @@ impl<'a> Lists<'a> {
     }
 }
 
-/// Closes the sheet and opens an ask's seed in the garden, or in a tile when the garden's
-/// window of seeds does not hold it.
-pub(crate) fn open_seed(state: &mut State, id: &str, tx: &mut Tx) {
-    close(state, tx);
-    if crate::garden::seeds(state).iter().any(|s| s.id == id) {
-        crate::garden::open_seed(state, id, tx);
-        return;
-    }
-    crate::garden::open_tile(state, id, tx);
-}
-
 /// The agent an ask waits on: whoever the garden says tends its seed, its crew member's
 /// session, or the session that asked. A seed the garden does not hold is tended by the
 /// session that names it as its stake.
@@ -1058,6 +1050,7 @@ pub(crate) fn show(state: &mut State, ask: Option<&str>, tx: &mut Tx) {
     }
     state.window.asks.take_keyboard = true;
     follow(state, tx);
+    crate::garden::follow(state, tx);
 }
 
 /// Closes the sheet, keeping the ask it shows for when it opens again.
@@ -1087,6 +1080,7 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
         .asks
         .follow_ups
         .retain(|id, _| listed.contains(id));
+    state.window.asks.panels.keep(&listed);
     saving::restore(state);
     motion::sync(state, tx);
     if !is_open(state) {
@@ -1132,6 +1126,7 @@ pub(crate) fn step(state: &mut State, by: isize, tx: &mut Tx) {
     let next = next.ask.id.clone();
     state.window.asks.selected = Some(next);
     follow(state, tx);
+    crate::garden::follow(state, tx);
 }
 
 fn choose(state: &mut State, ask: &str, question: &str, kind: Kind, label: &str) {

@@ -9,7 +9,7 @@ use attn_ui::system::{
     file_chip, file_kind, file_size, icon_button, image_tile, keycaps, keys_hint, line_box,
     read_as, tag, words,
 };
-use attn_ui::{Backdrop, Frame, Tokens, glyph};
+use attn_ui::{Frame, Tokens, glyph};
 use rune::{El, Image, Key, KeyEvent, Side, SurfaceFit, Tx, col, row};
 use rune_kit::{Markdown, TextArea, TextInput};
 
@@ -25,26 +25,20 @@ pub(super) const SNOOZE: &str = "asks.snooze";
 const OPEN_SEED: &str = "asks.open-seed";
 const LIST: &str = "asks.list";
 
-/// The sheet's greatest width, its list rail's width, its reading column's measure and the
-/// widest its pictures run, as the person chose them from the asks sheet's third prototype. At
-/// `Reading::Text` the measure holds about 90 characters, as the document reader's 640 holds 91
-/// to 97. The rail, the widest picture and the body's insets need 1276 of the sheet's width.
-const SHEET_W: f32 = 1440.0;
+/// The list rail's width, the reading column's measure and the widest its pictures run, as the
+/// person chose them from the asks sheet's third prototype. At `Reading::Text` the measure holds
+/// about 90 characters, as the document reader's 640 holds 91 to 97. The rail, the widest picture
+/// and the body's insets need 1276 points, so the body's insets take 32.
 const RAIL_W: f32 = 264.0;
 const MEASURE: f32 = 620.0;
 const PICTURES: f32 = MEASURE + 360.0;
-/// Under its greatest size the sheet stays 96 points narrower than the window and 120 points
-/// shorter, centred under the title bar. Past the least size below, its margins give way to
-/// it, down to the tightest.
-const SHEET_SIDE: f32 = 48.0;
-const SHEET_ABOVE: f32 = 44.0;
-const SHEET_TIGHTEST: f32 = 16.0;
+/// The question's column beside an open panel: the measure and the body's insets.
+const QUESTION_W: f32 = MEASURE + 32.0;
 /// The narrowest sheet that sets its list beside the ask: the rail and 420 points of ask, the
 /// least the drawer it replaced read an ask in. A narrower sheet lists the asks over the ask.
 const BESIDE_LEAST: f32 = RAIL_W + 420.0;
-/// The height the sheet keeps before its margins above and below give way: at 480 the ask
-/// shows 360 points of itself beside the list, measured in a 1000 by 600 window.
-const TALL_LEAST: f32 = 480.0;
+/// The narrowest the panel reads a seed's page or a document in, the least an ask reads in.
+const PANEL_LEAST: f32 = 420.0;
 /// How many asks the list over the ask shows before it scrolls: three, and half of the next, so
 /// it reads as a list that goes on and leaves the sheet to the ask it shows.
 const SHOWN_ASKS: f32 = 3.5;
@@ -87,6 +81,26 @@ pub(super) fn remove_file_key(file: &str) -> String {
 const QUOTE: &str = "asks.quote";
 pub(super) const FOLLOW_UP: &str = "asks.follow-up.field";
 
+/// The panel's tab keys. ⌘] and ⌘[ walk tile history, so the tabs take Shift beside them.
+const NEXT_TAB: &str = "mod+shift+]";
+const PREVIOUS_TAB: &str = "mod+shift+[";
+
+/// ⌘W, where Linux leaves plain Ctrl and a letter to the shell, as it closes a tile.
+fn close_tab_chord() -> &'static str {
+    if rune::Platform::current() == rune::Platform::Mac {
+        "mod+w"
+    } else {
+        "mod+shift+w"
+    }
+}
+
+fn chord_label(spec: &str) -> String {
+    rune::Chord::parse(spec)
+        .into_iter()
+        .map(|chord| chord.label_on(rune::Platform::current()))
+        .collect()
+}
+
 fn send_chord() -> &'static str {
     if rune::Platform::current() == rune::Platform::Mac {
         "⌘↩"
@@ -125,10 +139,19 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
         .aside(replied_toggle(replied, asks.show_replied, t))
         .close(close);
     let [window_w, window_h] = state.pictures.window;
-    let under_title_bar = window_h - crate::shell::TITLE_BAR_HEIGHT;
-    let side = ((window_w - BESIDE_LEAST) / 2.0).clamp(SHEET_TIGHTEST, SHEET_SIDE);
-    let above = ((under_title_bar - TALL_LEAST) / 2.0).clamp(SHEET_TIGHTEST, SHEET_ABOVE);
-    let beside = window_w - 2.0 * side >= BESIDE_LEAST;
+    let inset = attn_ui::blocks::Surface::under_bar_inset();
+    let (wide, tall) = (
+        window_w - 2.0 * inset,
+        window_h - crate::shell::TITLE_BAR_HEIGHT - 2.0 * inset,
+    );
+    let beside_panel = shown
+        .as_deref()
+        .and_then(|id| super::panel::view(state, id, t));
+    let beside = match beside_panel {
+        Some(_) => wide >= RAIL_W + QUESTION_W + PANEL_LEAST,
+        None => wide >= BESIDE_LEAST,
+    };
+    let question_w = QUESTION_W.min((wide - PANEL_LEAST).max(wide / 2.0));
     let panel = col()
         .key(super::SHEET)
         .role("group")
@@ -161,14 +184,11 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
         .modal_tx(true, super::close)
         .on_paste_content(super::paste_on_sheet)
         .w_full()
-        .max_w(SHEET_W);
+        .h_full();
     let now_ms = state.window.now_ms;
     let (frame, panel) = match shown.and_then(|id| items.iter().position(|i| i.ask.id == id)) {
         None => {
-            let empty = rail
-                .push(empty(replied, t))
-                .fits(under_title_bar - 2.0 * above)
-                .build(t);
+            let empty = rail.push(empty(replied, t)).fits(tall).build(t);
             (frame, panel.child(empty))
         }
         Some(at) if beside => {
@@ -186,10 +206,15 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
                 .measure(MEASURE, PICTURES)
                 .push_all(article(state, item, Some(MEASURE), t))
                 .footer(footer(state, item, items.len() > 1, t))
-                .build(t)
-                .grow_from(1.0, 0.0);
-            let panes = row().w_full().h_full().child(rail).child(reading);
-            (frame.h_full(), panel.h_full().child(panes))
+                .build(t);
+            let panes = row().w_full().h_full().child(rail);
+            let panes = match beside_panel {
+                Some(beside) => panes
+                    .child(reading.grow(0.0).w(QUESTION_W).min_w(QUESTION_W))
+                    .child(beside.grow_from(1.0, 0.0)),
+                None => panes.child(reading.grow_from(1.0, 0.0)),
+            };
+            (frame, panel.h_full().child(panes))
         }
         Some(at) => {
             let item = &items[at];
@@ -206,7 +231,15 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
                 .push_all(article(state, item, None, t))
                 .footer(footer(state, item, items.len() > 1, t))
                 .build(t);
-            (frame.h_full(), panel.h_full().child(stacked))
+            let shown = match beside_panel {
+                Some(beside) => row()
+                    .w_full()
+                    .h_full()
+                    .child(stacked.grow(0.0).w(question_w).min_w(question_w))
+                    .child(beside.grow_from(1.0, 0.0)),
+                None => stacked,
+            };
+            (frame, panel.h_full().child(shown))
         }
     };
     let panel = match asks.quotable.as_deref().filter(|_| quoting) {
@@ -219,26 +252,10 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
                 .then(|| drop_overlay("asks.drop", drop_said(state), t)),
         ),
     );
-    let placed = col()
-        .pin(
-            Some(side),
-            Some(crate::shell::TITLE_BAR_HEIGHT + above),
-            Some(side),
-            Some(above),
-        )
-        .center()
-        .child(
-            frame
-                .child(ids::pointed(panel, ids::Cards::Sessions))
-                .children(header_pop::in_sheet(state, t)),
-        );
-    rune::el()
-        .key("asks.layer")
-        .absolute(0.0, 0.0)
-        .w_full()
-        .h_full()
-        .child(Backdrop::finder(t).draw("asks.scrim"))
-        .child(placed)
+    let frame = frame
+        .child(ids::pointed(panel, ids::Cards::Sessions))
+        .children(header_pop::in_sheet(state, t));
+    crate::shell::under_title_bar("asks.layer", frame, t)
 }
 
 /// Shows or hides the asks replied to in the last day, reading as pressed while they show.
@@ -494,7 +511,7 @@ fn placed_files(machines: &crate::machine::Machines, ask: &Ask) -> Vec<links::Pl
 
 fn follow_link(state: &mut State, document: &links::Document, href: &str, tx: &mut Tx) {
     match ids::subject(href) {
-        Some(Subject::Seed(seed)) => super::open_seed(state, &seed, tx),
+        Some(Subject::Seed(seed)) => super::panel::open_seed(state, &seed, tx),
         _ => links::follow(state, document, href, tx),
     }
 }
@@ -532,11 +549,11 @@ fn header(state: &State, item: &Item<'_>, t: &Tokens) -> El {
     let open_seed = ask.seed_id.clone().map(|id| {
         ask_button(
             OPEN_SEED,
-            "Open in Garden",
-            "Open the seed in the garden (g)",
+            "Show seed",
+            "Show the seed beside the ask (g)",
             &attn_ui::icon::GARDEN,
             t,
-            move |state: &mut State, tx: &mut Tx| super::open_seed(state, &id, tx),
+            move |state: &mut State, tx: &mut Tx| super::panel::open_seed(state, &id, tx),
         )
     });
     Inline::loose()
@@ -893,7 +910,7 @@ fn follows(state: &State, ask_id: &str, re: &AskThread, prose: &Prose, t: &Token
     }
 }
 
-/// Copy ask, Open agent, Snooze and Open in Garden: what to do with the ask besides answering it,
+/// Copy ask, Open agent, Snooze and Show seed: what to do with the ask besides answering it,
 /// each an icon named `said` whose help gives its key.
 fn ask_button(
     key: &str,
@@ -1524,6 +1541,22 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> Block {
     if snoozable.is_some() {
         hints.push((&["s"], if snoozed { "wake" } else { "snooze" }));
     }
+    let tabs = state
+        .window
+        .asks
+        .panels
+        .of(&ask.id)
+        .map(|panel| panel.tabs.len());
+    let tab_keys = [chord_label(NEXT_TAB), chord_label(PREVIOUS_TAB)];
+    let tab_keys: Vec<&str> = tab_keys.iter().map(String::as_str).collect();
+    let close_key = [chord_label(close_tab_chord())];
+    let close_key: Vec<&str> = close_key.iter().map(String::as_str).collect();
+    if tabs.is_some_and(|n| n > 1) {
+        hints.push((&tab_keys, "next · previous tab"));
+    }
+    if tabs.is_some() {
+        hints.push((&close_key, "close tab"));
+    }
     hints.push((&["c"], "copy"));
     hints.push((&["r"], "replied"));
     hints.push((&["esc"], "close"));
@@ -1751,6 +1784,20 @@ fn sheet_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if ev.key == Key::Tab && !(m.cmd || m.ctrl || m.alt) {
         return super::tab(state, if m.shift { -1 } else { 1 }, tx);
     }
+    let pressed = |spec: &str| {
+        rune::Chord::parse(spec)
+            .into_iter()
+            .any(|chord| chord.matches_tx_on(ev, tx, rune::Platform::current()))
+    };
+    if pressed(NEXT_TAB) {
+        return super::panel::step(state, 1, tx);
+    }
+    if pressed(PREVIOUS_TAB) {
+        return super::panel::step(state, -1, tx);
+    }
+    if pressed(close_tab_chord()) {
+        return super::panel::close_tab(state, tx);
+    }
     if tx.in_text_field() || m.cmd || m.ctrl || m.alt {
         return false;
     }
@@ -1795,7 +1842,7 @@ fn sheet_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         },
         "s" if holder.is_some() => super::toggle_snooze(state, tx),
         "g" => match ask.as_ref().and_then(|a| a.seed_id.clone()) {
-            Some(seed) => super::open_seed(state, &seed, tx),
+            Some(seed) => super::panel::open_seed(state, &seed, tx),
             None => return false,
         },
         _ => return false,

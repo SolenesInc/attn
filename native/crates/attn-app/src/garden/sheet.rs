@@ -41,13 +41,19 @@ pub(super) struct Sheet<'a> {
 #[derive(Clone)]
 pub(super) enum Go {
     Garden,
-    Tile { desktop: String, tile: String },
+    Tile {
+        desktop: String,
+        tile: String,
+    },
+    /// The panel beside the question in the full-screen Asks.
+    Panel,
 }
 
 impl Go {
     pub(super) fn to(&self, state: &mut State, id: &str, tx: &mut Tx) {
         match self {
             Go::Garden => super::drill(state, id, tx),
+            Go::Panel => crate::asks::panel::open_seed(state, id, tx),
             Go::Tile { desktop, tile } => {
                 let (desktop_id, tile_id) = (desktop.clone(), tile.clone());
                 let params = id.to_owned();

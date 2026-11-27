@@ -42,7 +42,7 @@ const COPY_INSET: f32 = 8.0;
 
 /// The widest paragraphs, lists, quotes and headings run; tables, code, diagrams and front
 /// matter take the card.
-const PROSE_MEASURE: f32 = attn_ui::blocks::DOCUMENT;
+pub(crate) const PROSE_MEASURE: f32 = attn_ui::blocks::DOCUMENT;
 /// The reader's card around `reading`, `padding` inside its border.
 pub(crate) fn card(padding: f32, reading: El, t: &Tokens) -> El {
     Surface::document(reading, padding, t)
@@ -50,7 +50,7 @@ pub(crate) fn card(padding: f32, reading: El, t: &Tokens) -> El {
 
 /// The card's padding and the text column inside it, in a document view `area` points across,
 /// for a card at most `widest` points wide.
-fn card_fit(area: Option<u32>, widest: f32) -> (f32, Option<f32>) {
+pub(crate) fn card_fit(area: Option<u32>, widest: f32) -> (f32, Option<f32>) {
     let Some(area) = area else {
         return (document_inset(0.0), None);
     };

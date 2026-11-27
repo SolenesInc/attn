@@ -237,7 +237,9 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         .flatten();
     let notebook = crate::notebook::images(state);
     let seeds = crate::garden::read_bodies(state);
+    let panel = crate::asks::panel::shown_markdown(state);
     let followed = hash(&(
+        &panel,
         &seeds,
         contents.revision,
         state.readings.reviews.widenings(),
@@ -279,6 +281,14 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
             }
         }
         state.pictures.documents = documents;
+        if let Some((host, document, source)) = &panel {
+            for path in images_in(document, source) {
+                wanted.insert(Source {
+                    reader: Reader::Tile { host: host.clone() },
+                    path,
+                });
+            }
+        }
         if let Some(ask) = shown_ask.and_then(|id| state.facts.asks.iter().find(|a| a.id == id)) {
             for path in images_of_ask(ask) {
                 wanted.insert(Source {

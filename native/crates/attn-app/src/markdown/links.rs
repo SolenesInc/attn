@@ -1,7 +1,8 @@
 //! Where a document's links go, and which of them the reader may follow: a fragment scrolls the
 //! document, a web or mail link opens in its handler, a local file opens with the system's
 //! opener when its kind is safe, and a file on another machine opens in a tile when it is markdown,
-//! as does a markdown file the daemon placed on a machine, this app's included.
+//! as does a markdown file the daemon placed on a machine, this app's included. While Asks is
+//! open, a markdown file opens in the panel beside the question instead of a tile.
 
 use std::path::Path;
 
@@ -287,7 +288,7 @@ pub(crate) fn follow(state: &mut State, document: &Document, href: &str, tx: &mu
                                 .open_uri(&attn_term::links::file_url(&path))
                                 .map_err(|why| format!("{path}: {why}")),
                             Some(_) if is_markdown(&path) => {
-                                crate::opener::open_markdown(state, path, None, None, tx);
+                                open_markdown(state, path, None, None, tx);
                                 Ok(())
                             }
                             Some(refusal) => Err(refusal),
@@ -305,7 +306,7 @@ pub(crate) fn follow(state: &mut State, document: &Document, href: &str, tx: &mu
     if let Some(placed) = document.placed(href) {
         let placed = placed.clone();
         if is_markdown(&placed.path) {
-            crate::opener::open_markdown(
+            open_markdown(
                 state,
                 placed.path,
                 placed.host,
@@ -336,10 +337,34 @@ pub(crate) fn follow(state: &mut State, document: &Document, href: &str, tx: &mu
                     .notify(format!("Could not open {url}: {why}"), tx);
             }
         }
+        (Some(Target::Local(path)), away) if is_markdown(&path) && crate::asks::is_open(state) => {
+            let host = match away {
+                Some(away) => away.host.clone(),
+                None => crate::machine::Machines::of(&state.facts).app_host(),
+            };
+            open_markdown(state, path, host, document.session.clone(), tx)
+        }
         (Some(Target::Local(path)), away) => {
             open_file(state, path, away, document.session.clone(), tx)
         }
         (None, _) => {}
+    }
+}
+
+/// Opens the markdown file at `path` on the machine `host` names: in the panel beside the
+/// question while Asks is open, else in a tile.
+fn open_markdown(
+    state: &mut State,
+    path: String,
+    host: Option<String>,
+    session: Option<String>,
+    tx: &mut Tx,
+) {
+    if crate::asks::is_open(state) {
+        let reference = crate::asks::panel::Reference::Markdown { host, path };
+        crate::asks::panel::open(state, reference, tx);
+    } else {
+        crate::opener::open_markdown(state, path, host, session, tx);
     }
 }
 

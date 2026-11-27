@@ -5,8 +5,8 @@ use attn_app::Action;
 use attn_protocol::{
     Ask, AskAnswer, AskAnswerResultMessage, AskChoice, AskDefault, AskFollowUpResultMessage,
     AskPart, AskQuestion, AskReference, AskReply, AskThread, AsksUpdatedMessage, CrewMember,
-    InitialStateMessage, OpenMarkdownResultMessage, OutpostInfo, Session,
-    SessionStateChangedMessage,
+    InitialStateMessage, OutpostInfo, Session, SessionStateChangedMessage,
+    TileDocumentReadResultMessage,
 };
 use attn_protocol::{
     GardenSeedsUpdatedMessage, PartyView, Seed, SeedDocument, SeedDocumentGetResultMessage,
@@ -415,7 +415,7 @@ fn a_drag_selects_the_subject_a_part_and_a_choice_and_the_copy_key_copies_it() {
     drag_across(&mut world, "asks.subject");
     assert_eq!(copied(&mut world).as_deref(), Some("Cache store"));
 
-    drag_across(&mut world, "asks.part.0");
+    drag_from_edge(&mut world, "asks.part.0");
     assert_eq!(
         copied(&mut world).as_deref(),
         Some("Deploys empty the cache.")
@@ -937,34 +937,6 @@ fn an_ask_about_a_seed_waits_on_the_agent_whose_stake_it_is_and_names_the_seed()
 }
 
 #[test]
-fn a_seed_the_garden_does_not_hold_opens_in_a_tile_from_the_button_and_g() {
-    let mut world = start(vec![landing()], vec![api_working()]);
-    open_sheet(&mut world);
-
-    click(&mut world, "asks.open-seed");
-    assert!(!has(&world, "asks.sheet"));
-    assert_eq!(garden_heading(&world), None);
-    let opened = world.daemon.sent_of("open_seed");
-    assert_eq!(opened.len(), 1);
-    assert_eq!(opened[0]["seed_id"], "s-cache1");
-
-    world.daemon.reply_to(
-        &opened[0],
-        serde_json::json!({
-            "event": "open_seed_result",
-            "request_id": opened[0]["request_id"],
-            "success": true,
-        }),
-    );
-    world.settle();
-    open_sheet(&mut world);
-    click(&mut world, "asks.from");
-    letter(&mut world, "g");
-    assert_eq!(world.daemon.sent_of("open_seed").len(), 2);
-    assert!(!has(&world, "asks.sheet"));
-}
-
-#[test]
 fn an_ask_about_a_seed_waits_on_whoever_the_garden_says_tends_it() {
     let delegate = Session {
         seed_id: Some("s-cache1".into()),
@@ -1097,7 +1069,7 @@ fn a_follow_up_to_a_tender_on_standby_says_whether_it_resumes_it() {
 }
 
 #[test]
-fn open_in_garden_closes_the_sheet_for_the_seed_and_the_sheet_reopens_on_the_ask() {
+fn an_asks_seed_opens_in_the_panel_beside_the_question_and_reveal_takes_it_to_the_garden() {
     let mut world = start_with_seeds(
         vec![landing()],
         vec![session("successor", "working")],
@@ -1106,20 +1078,28 @@ fn open_in_garden_closes_the_sheet_for_the_seed_and_the_sheet_reopens_on_the_ask
     open_sheet(&mut world);
 
     click(&mut world, "asks.open-seed");
-    assert!(!has(&world, "asks.sheet"));
+    assert!(has(&world, "asks.sheet"), "Asks stays open");
     assert_eq!(
-        garden_heading(&world).as_deref(),
-        Some("Cache store migration")
+        name(&world, "asks.panel.seed.head.title"),
+        "Cache store migration"
+    );
+    assert_eq!(garden_heading(&world), None, "the garden stays closed");
+    assert!(
+        world.daemon.sent_of("open_seed").is_empty(),
+        "no tile opens"
     );
     let read = world.daemon.sent_of("seed_document_get");
     assert_eq!(read.last().unwrap()["seed_id"], "s-cache1");
 
-    plain(&mut world, Key::Escape);
-    assert_eq!(garden_heading(&world), None);
-    open_sheet(&mut world);
-    assert_eq!(shown(&world).as_deref(), Some("Landing week"));
     click(&mut world, "asks.from");
     letter(&mut world, "g");
+    assert!(has(&world, "asks.panel.tab.0"));
+    assert!(
+        !has(&world, "asks.panel.tab.1"),
+        "g shows the seed's tab again"
+    );
+
+    click(&mut world, "asks.panel.seed.open-garden");
     assert!(!has(&world, "asks.sheet"));
     assert_eq!(
         garden_heading(&world).as_deref(),
@@ -1802,14 +1782,15 @@ fn the_seeds_an_ask_names_by_id_or_slug_open_from_its_words_and_code_and_unknown
 
     let in_prose = seed_links(&world)[1].1.clone();
     world.gesture(|app| app.click(Target::key(in_prose)));
+    assert!(has(&world, "asks.sheet"));
     assert_eq!(
-        garden_heading(&world).as_deref(),
-        Some("Cache store migration")
+        name(&world, "asks.panel.seed.head.title"),
+        "Cache store migration"
     );
 }
 
 #[test]
-fn a_mentioned_seed_the_garden_does_not_hold_opens_in_a_tile_and_unresolved_names_stay_text() {
+fn a_mentioned_seed_the_garden_does_not_hold_opens_in_the_panel_and_unresolved_names_stay_text() {
     let read = ask(
         "a-cache1",
         "api",
@@ -1831,9 +1812,13 @@ fn a_mentioned_seed_the_garden_does_not_hold_opens_in_a_tile_and_unresolved_name
     let names: Vec<&str> = links.iter().map(|(name, _)| name.as_str()).collect();
     assert_eq!(names, ["s-cache1", "old-work"]);
     world.gesture(|app| app.click(Target::key(links[1].1.clone())));
-    let opened = world.daemon.sent_of("open_seed");
-    assert_eq!(opened.len(), 1);
-    assert_eq!(opened[0]["seed_id"], "s-cache1");
+    assert!(
+        world.daemon.sent_of("open_seed").is_empty(),
+        "no tile opens"
+    );
+    let read = world.daemon.sent_of("seed_document_get");
+    assert_eq!(read.last().unwrap()["seed_id"], "s-cache1");
+    assert!(has(&world, "asks.panel.tab.0"));
 }
 
 #[test]
@@ -2510,8 +2495,49 @@ fn an_image_in_a_subject_prompt_or_choice_reads_as_its_alt_text_and_only_the_con
     );
 }
 
+fn reads_documents(world: &World) {
+    world.daemon.on("tile_document_read", |r| {
+        let path = r["path"].as_str().unwrap_or_default();
+        let (success, content, error) = match path.rsplit('/').next() {
+            Some("plan.md") if r["host"] == "host-1" => (true, Some("# Far plan\n"), None),
+            Some("plan.md") => (true, Some("# Home plan\n"), None),
+            _ => (false, None, Some(format!("file not found: {path}"))),
+        };
+        message(TileDocumentReadResultMessage {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            success,
+            content: content.map(str::to_owned),
+            error,
+            ..TileDocumentReadResultMessage::new()
+        })
+    });
+}
+
+fn panel_reads(world: &World) -> Vec<String> {
+    world
+        .screen()
+        .descendants(Target::key("asks.panel.document"))
+        .into_iter()
+        .filter(|n| n.role == "heading")
+        .filter_map(|n| n.name)
+        .collect()
+}
+
+fn close_tab(world: &mut World) {
+    let chord = if crate::wire::mac() {
+        "mod+w"
+    } else {
+        "mod+shift+w"
+    };
+    world.gesture(|app| app.press(chord));
+}
+
 #[test]
-fn a_file_link_in_an_ask_from_an_outpost_opens_the_file_from_that_machine() {
+fn file_links_in_an_ask_open_in_tabs_of_its_panel_read_from_the_machine_each_names() {
+    let dir = tempfile::tempdir().unwrap();
+    let folder = dir.path().to_string_lossy().into_owned();
+    let report = format!("{folder}/report.pdf");
+    std::fs::write(&report, b"%PDF-1.4").unwrap();
     let mut state = one_desktop(vec![Session {
         host: Some("host-1".into()),
         ..api_working()
@@ -2527,105 +2553,80 @@ fn a_file_link_in_an_ask_from_an_outpost_opens_the_file_from_that_machine() {
         "api",
         "Plan",
         5,
-        vec![prose("Read [the plan](notes/plan.md) first.")],
+        vec![prose(
+            "Read [the far plan](notes/plan.md), [the home plan](plan.md) and [the report](report.pdf).",
+        )],
     );
     asked.base_dir = "/far/shop".into();
     asked.host = Some("host-1".into());
-    asked.references = Some(vec![AskReference {
+    let placed = |text: &str, host: Option<&str>, path: String| AskReference {
         kind: "file".into(),
-        text: "notes/plan.md".into(),
-        host: Some("host-1".into()),
-        path: "/far/shop/notes/plan.md".into(),
+        text: text.into(),
+        host: host.map(str::to_owned),
+        path,
         line: 1,
-    }]);
+    };
+    asked.references = Some(vec![
+        placed(
+            "notes/plan.md",
+            Some("host-1"),
+            "/far/shop/notes/plan.md".into(),
+        ),
+        placed("plan.md", None, format!("{folder}/plan.md")),
+        placed("report.pdf", None, report.clone()),
+    ]);
     let mut world = start_on(state, vec![asked], &[]);
-    world.daemon.on("open_markdown", |r| {
-        message(OpenMarkdownResultMessage {
-            request_id: r["request_id"].as_str().map(str::to_owned),
-            path: r["path"].as_str().unwrap_or_default().into(),
-            success: true,
-            ..OpenMarkdownResultMessage::new()
-        })
-    });
+    reads_documents(&world);
     open_sheet(&mut world);
 
     world.gesture(|app| app.click(Target::key("notes/plan.md")));
-    let sent = world.daemon.sent_of("open_markdown");
-    assert_eq!(
-        sent.iter()
-            .map(|s| (s["path"].clone(), s["host"].clone()))
-            .collect::<Vec<_>>(),
-        [(
-            serde_json::json!("/far/shop/notes/plan.md"),
-            serde_json::json!("host-1")
-        )]
-    );
-    assert!(world.opened_links().is_empty());
-}
-
-#[test]
-fn a_placed_markdown_link_on_the_apps_machine_opens_in_a_tile_and_another_placed_file_in_its_opener()
- {
-    let dir = tempfile::tempdir().unwrap();
-    let folder = dir.path().to_string_lossy().into_owned();
-    let report = format!("{folder}/report.pdf");
-    std::fs::write(&report, b"%PDF-1.4").unwrap();
-    let mut asked = ask(
-        "a-here",
-        "api",
-        "Plan",
-        5,
-        vec![prose(
-            "Read [the plan](plan.md) and [the report](report.pdf).",
-        )],
-    );
-    asked.base_dir = folder.clone();
-    asked.references = Some(vec![
-        AskReference {
-            kind: "file".into(),
-            text: "plan.md".into(),
-            host: None,
-            path: format!("{folder}/plan.md"),
-            line: 1,
-        },
-        AskReference {
-            kind: "file".into(),
-            text: "report.pdf".into(),
-            host: None,
-            path: report.clone(),
-            line: 1,
-        },
-    ]);
-    let mut world = start(vec![asked], vec![api_working()]);
-    world.daemon.on("open_markdown", |r| {
-        message(OpenMarkdownResultMessage {
-            request_id: r["request_id"].as_str().map(str::to_owned),
-            path: r["path"].as_str().unwrap_or_default().into(),
-            success: true,
-            ..OpenMarkdownResultMessage::new()
-        })
-    });
-    open_sheet(&mut world);
-
     world.gesture(|app| app.click(Target::key("plan.md")));
-    let sent = world.daemon.sent_of("open_markdown");
+    let reads: Vec<_> = (world.daemon.sent_of("tile_document_read").iter())
+        .map(|s| (s["path"].clone(), s["host"].clone()))
+        .collect();
     assert_eq!(
-        sent.iter()
-            .map(|s| (s["path"].clone(), s["host"].clone()))
-            .collect::<Vec<_>>(),
-        [(
-            serde_json::json!(format!("{folder}/plan.md")),
-            serde_json::Value::Null
-        )]
+        reads,
+        [
+            (
+                serde_json::json!("/far/shop/notes/plan.md"),
+                serde_json::json!("host-1")
+            ),
+            (
+                serde_json::json!(format!("{folder}/plan.md")),
+                serde_json::Value::Null
+            ),
+        ]
+    );
+    assert!(has(&world, "asks.sheet"), "Asks stays open");
+    assert!(
+        world.daemon.sent_of("open_markdown").is_empty(),
+        "no tile opens"
     );
     assert!(world.opened_links().is_empty());
+    assert_eq!(name(&world, "asks.panel.tab.0"), "plan.md · far");
+    assert_eq!(name(&world, "asks.panel.tab.1"), "plan.md");
+    assert_eq!(panel_reads(&world), ["Home plan"]);
+
+    world.gesture(|app| app.press("mod+shift+["));
+    assert_eq!(panel_reads(&world), ["Far plan"]);
+    world.gesture(|app| app.press("mod+shift+]"));
+    assert_eq!(panel_reads(&world), ["Home plan"]);
+    world.gesture(|app| app.press("mod+shift+]"));
+    assert_eq!(panel_reads(&world), ["Far plan"], "the tabs go round");
+
+    close_tab(&mut world);
+    assert!(!has(&world, "asks.panel.tab.1"));
+    assert_eq!(panel_reads(&world), ["Home plan"]);
+    close_tab(&mut world);
+    assert!(!has(&world, "asks.panel"), "the last tab closes the panel");
+    assert!(has(&world, "asks.sheet"), "closing tabs leaves Asks open");
 
     world.gesture(|app| app.click(Target::key("report.pdf")));
-    assert_eq!(world.daemon.sent_of("open_markdown").len(), 1);
     let canonical = std::fs::canonicalize(&report).unwrap();
     assert_eq!(
         world.opened_links(),
-        [attn_term::links::file_url(&canonical.to_string_lossy())]
+        [attn_term::links::file_url(&canonical.to_string_lossy())],
+        "a file other than markdown keeps the system opener"
     );
 }
 
@@ -2698,8 +2699,8 @@ fn a_click_on_a_link_in_an_asks_words_still_opens_it() {
 
     world.gesture(|app| app.click(Target::key(MIGRATION_LINK)));
     assert_eq!(
-        garden_heading(&world).as_deref(),
-        Some("Cache store migration")
+        name(&world, "asks.panel.seed.head.title"),
+        "Cache store migration"
     );
 }
 
@@ -2900,7 +2901,7 @@ fn q_quotes_the_selected_passage_into_the_note_and_puts_the_keyboard_there() {
     open_sheet(&mut world);
     add_note(&mut world);
     type_into(&mut world, NOTE, "Looks fine.");
-    drag_across(&mut world, "asks.part.0");
+    drag_from_edge(&mut world, "asks.part.0");
 
     letter(&mut world, "q");
 
@@ -3282,17 +3283,12 @@ fn with_no_agent_on_screen_the_sheet_key_opens_on_the_ask_shown_last_or_the_firs
 }
 
 #[test]
-fn the_sheet_is_centred_under_the_title_bar_with_its_list_beside_the_ask_read_in_a_centred_column()
+fn asks_holds_the_window_under_the_title_bar_with_its_list_beside_the_ask_read_in_a_centred_column()
 {
     for (window, sheet, lines, words) in [
-        ((1512.0, 945.0), [48.0, 84.0, 1416.0, 817.0], 620.0, 980.0),
-        (
-            (3440.0, 1400.0),
-            [1000.0, 84.0, 1440.0, 1272.0],
-            620.0,
-            980.0,
-        ),
-        ((800.0, 600.0), [48.0, 80.0, 704.0, 480.0], 400.0, 400.0),
+        ((1512.0, 945.0), [12.0, 52.0, 1488.0, 881.0], 620.0, 980.0),
+        ((3440.0, 1400.0), [12.0, 52.0, 3416.0, 1336.0], 620.0, 980.0),
+        ((800.0, 600.0), [12.0, 52.0, 776.0, 536.0], 472.0, 472.0),
     ] {
         let mut world = start(vec![cache_store()], vec![api_working()]);
         world.resize(window);
@@ -3321,6 +3317,46 @@ fn the_sheet_is_centred_under_the_title_bar_with_its_list_beside_the_ask_read_in
         if lines < words {
             assert_eq!(middle(subject), middle(ask), "the ask's lines centred");
         }
+    }
+}
+
+#[test]
+fn an_open_panel_keeps_the_question_at_its_measure_on_the_left_and_takes_the_rest() {
+    for (window, beside_rail, question, lines) in [
+        ((1512.0, 945.0), true, 652.0, 620.0),
+        ((1000.0, 700.0), false, 556.0, 524.0),
+    ] {
+        let mut world = start_with_seeds(
+            vec![landing()],
+            vec![session("successor", "working")],
+            vec![migration(Some("successor"))],
+        );
+        world.resize(window);
+        open_sheet(&mut world);
+        click(&mut world, "asks.open-seed");
+        let sheet = world.rect("asks.sheet");
+        let panel = world.rect("asks.panel");
+        let ask = world.rect("asks.ask");
+        assert_eq!(
+            has(&world, "asks.rail") && world.rect("asks.list")[1] < ask[1],
+            !beside_rail,
+            "in a {window:?} window"
+        );
+        assert_eq!(
+            ask[2], question,
+            "the question's column in a {window:?} window"
+        );
+        assert_eq!(panel[0], ask[0] + ask[2], "the panel right of the question");
+        assert_eq!(
+            panel[0] + panel[2],
+            sheet[0] + sheet[2],
+            "the panel to the edge"
+        );
+        assert_eq!(
+            world.rect("asks.subject.block")[2],
+            lines,
+            "the question's lines"
+        );
     }
 }
 

@@ -183,7 +183,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                     &state.terminals,
                     &state.pictures,
                     &state.notebook,
-                    &seed_reads(state),
+                    &crate::garden::TileReads::of(state),
                     (&state.drafts, &state.readings),
                     &state.browser,
                     state.window.hints.shown(),
@@ -521,7 +521,7 @@ pub(super) fn lone(
         &state.window.desk,
         keys.keep.as_deref(),
     );
-    let seeds = seed_reads(state);
+    let seeds = crate::garden::TileReads::of(state);
     let terminal_colors = crate::color_scheme(&state.facts.settings)
         .colors(t.dark)
         .terminal;
@@ -1137,26 +1137,6 @@ fn browser_page(desktop: &Desktop, leaf: &Leaf) -> attn_client::TileKey {
     attn_client::TileKey {
         desktop: desktop.id.clone(),
         tile: leaf.id.clone(),
-    }
-}
-
-pub(super) fn seed_reads(state: &State) -> crate::garden::TileReads<'_> {
-    crate::garden::TileReads {
-        garden: &state.window.garden,
-        seeds: crate::garden::seeds(state),
-        terminals: &state.terminals,
-        facts: &state.facts,
-        v2: crate::garden::v2::enabled(state),
-        readings: &state.readings,
-        pictures: &state.pictures,
-        now_ms: state.window.now_ms,
-        harnesses: &state.facts.harnesses,
-        chief: crate::garden::model::has_chief(
-            &state.facts.sessions,
-            &state.facts.profiles.selected,
-        ),
-        zoom: crate::garden::zoom(state),
-        crew_back: crate::crew::back_tile(state),
     }
 }
 

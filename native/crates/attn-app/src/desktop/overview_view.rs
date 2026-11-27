@@ -364,7 +364,7 @@ fn document(state: &State, desktop: &Desktop, leaf: &str, width: f32, t: &Tokens
 }
 
 fn seed(state: &State, desktop: &Desktop, leaf: &str, params: Option<&str>, t: &Tokens) -> El {
-    let reads = super::view::seed_reads(state);
+    let reads = crate::garden::TileReads::of(state);
     let version = (
         (
             std::sync::Arc::as_ptr(&state.facts.garden) as usize,

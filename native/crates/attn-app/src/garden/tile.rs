@@ -28,6 +28,25 @@ pub(crate) struct Reads<'a> {
     pub(crate) crew_back: Option<(&'a str, &'a str)>,
 }
 
+impl<'a> Reads<'a> {
+    pub(crate) fn of(state: &'a State) -> Reads<'a> {
+        Reads {
+            garden: &state.window.garden,
+            seeds: super::seeds(state),
+            terminals: &state.terminals,
+            facts: &state.facts,
+            v2: super::v2::enabled(state),
+            readings: &state.readings,
+            pictures: &state.pictures,
+            now_ms: state.window.now_ms,
+            harnesses: &state.facts.harnesses,
+            chief: model::has_chief(&state.facts.sessions, &state.facts.profiles.selected),
+            zoom: super::zoom(state),
+            crew_back: crate::crew::back_tile(state),
+        }
+    }
+}
+
 /// The seed a tile holds, as the garden's page shows it: the garden's copy when the daemon's
 /// document has not come yet, and a way to the garden when the garden holds the seed.
 pub(crate) fn body(
@@ -38,18 +57,42 @@ pub(crate) fn body(
     drafts: Option<&crate::markdown::Drafts>,
     t: &Tokens,
 ) -> El {
-    let prefix = format!("seed-tile.{leaf}");
-    let view = super::tile_view(leaf);
+    let go = Go::Tile {
+        desktop: desktop.to_owned(),
+        tile: leaf.to_owned(),
+    };
+    page(go, id, reads, drafts, t)
+}
+
+/// Seed `id` as the panel beside an ask shows it, which a seed it links to replaces.
+pub(crate) fn panel_body(id: &str, reads: &Reads, t: &Tokens) -> El {
+    page(Go::Panel, id, reads, None, t)
+}
+
+const PANEL_VIEW: &str = "asks.panel.seed.viewport";
+
+fn page(
+    go: Go,
+    id: &str,
+    reads: &Reads,
+    drafts: Option<&crate::markdown::Drafts>,
+    t: &Tokens,
+) -> El {
+    let (prefix, view, zoom) = match &go {
+        Go::Tile { tile, .. } => (
+            format!("seed-tile.{tile}"),
+            super::tile_view(tile),
+            reads.zoom,
+        ),
+        _ => ("asks.panel.seed".to_owned(), PANEL_VIEW.to_owned(), 1.0),
+    };
     let (document, error) = super::reading(reads.garden, id);
     let held = reads.seeds.iter().find(|s| s.id == id);
     let names = model::session_names(&reads.facts.sessions, reads.harnesses);
     let sheet = Sheet {
         prefix,
         view: view.clone(),
-        go: Go::Tile {
-            desktop: desktop.to_owned(),
-            tile: leaf.to_owned(),
-        },
+        go,
         names: &names,
         garden: reads.garden,
         seeds: reads.seeds,
@@ -76,14 +119,20 @@ pub(crate) fn body(
             Room::Narrow,
             t,
         );
-        return super::zoomed(reads.zoom, note);
+        return super::zoomed(zoom, note);
     };
     let can_reveal = held.is_some()
         || document.is_some_and(|d| d.seed.profile_id == reads.facts.profiles.selected);
+    let in_panel = matches!(sheet.go, Go::Panel);
     let to_garden = can_reveal.then(|| {
         let id = id.to_owned();
         super::view::plain("Reveal in Garden")
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| super::open_seed(state, &id, tx))
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                if in_panel {
+                    crate::asks::close(state, tx);
+                }
+                super::open_seed(state, &id, tx)
+            })
             .build(t)
             .key(sheet.key("open-garden"))
             .into()
@@ -128,13 +177,16 @@ pub(crate) fn body(
             .key(sheet.key("back"))
             .label(format!("Back to {title}"))
     });
-    let to_crew = (reads.crew_back == Some((desktop, leaf))).then(|| {
-        super::view::quiet("‹ Back to Crew")
-            .on_press_tx(|state: &mut State, tx: &mut Tx| crate::crew::go_back(state, tx))
-            .build(t)
-            .key(format!("tile.{leaf}.crew-back"))
-            .label("Back to Crew")
-    });
+    let to_crew = match &sheet.go {
+        Go::Tile { desktop, tile } if reads.crew_back == Some((desktop, tile)) => Some(
+            super::view::quiet("‹ Back to Crew")
+                .on_press_tx(|state: &mut State, tx: &mut Tx| crate::crew::go_back(state, tx))
+                .build(t)
+                .key(format!("tile.{tile}.crew-back"))
+                .label("Back to Crew"),
+        ),
+        _ => None,
+    };
     let mut actions: Vec<El> = to_garden.into_iter().collect();
     actions.extend(sheet.continuation(held.map(|s| s.as_ref()), document));
     let mut page = Reader::new();
@@ -157,10 +209,7 @@ pub(crate) fn body(
         .push(sheet.log(document, error))
         .build(sheet.key("page"), Room::Narrow, t);
     let bar = super::reading::find_bar(reads.readings, &view, (id, &here.body), t);
-    super::zoomed(
-        reads.zoom,
-        super::view::scroll(&view, page, t).children(bar),
-    )
+    super::zoomed(zoom, super::view::scroll(&view, page, t).children(bar))
 }
 
 /// Escape in a seed tile that holds the keyboard climbs to its seed's plot; false when the
