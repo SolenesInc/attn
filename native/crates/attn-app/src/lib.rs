@@ -265,7 +265,11 @@ pub fn bind(
             }
             let alone = desktop::shown_alone(state);
             let on_screen = desktop::arrival::on_screen(state);
+            let moved = state.facts.machine != facts.machine;
             state.facts = facts;
+            if moved {
+                tx.invalidate_memos_by_prefix("");
+            }
             if cold::shows(&state.facts) {
                 state.window.view = shell::View::Desktop;
             }

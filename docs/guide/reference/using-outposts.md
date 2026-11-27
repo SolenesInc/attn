@@ -83,9 +83,11 @@ talks to its own daemon.
 
 That app names the home's machine where it would name This Mac: on tiles, in the
 launcher and in the file opener, and `home:` names it. Files on the home don't
-open on this machine. **Open in editor**, Cmd-clicked paths in a home shell, and
-**Open** and **Reveal** on a seed's files name the home and open nothing here; a
-markdown link opens in a tile from the home. **Move out** on a seed's file, and
+open on this machine. **Open in editor** and Cmd-clicked paths in a home shell
+name the home and open nothing here; a markdown link opens in a tile from the
+home. A seed's files are in this machine's copy of the Notebook, so **Open** and
+**Reveal** on them open that copy, and say so when the copy hasn't synced yet.
+**Move out** on a seed's file, and
 **Move into seed** or **Copy into seed** with a file you choose, move the file
 between the seed and this machine's disk. **Browse** beside a folder the home
 reads, such as the projects folder, the Notebook folder, a plugin's source, an

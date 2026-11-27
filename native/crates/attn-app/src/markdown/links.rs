@@ -236,15 +236,18 @@ pub(crate) fn follow(state: &mut State, document: &Document, href: &str, tx: &mu
     }
     if let (Some(seed_id), Some(relative_target)) = (&document.seed, document.seed_file(href)) {
         let seed_id = seed_id.clone();
+        let host = crate::machine::Machines::of(&state.facts).app_host();
+        let at = host.clone();
         return state.ask(
             |request_id| SeedArtifactTargetMessage {
                 seed_id,
                 relative_target,
                 purpose: "link".into(),
+                host,
                 request_id,
                 ..SeedArtifactTargetMessage::new()
             },
-            |state, answer: Answer, tx| {
+            move |state, answer: Answer, tx| {
                 let opened = answer
                     .outcome()
                     .and_then(|reply| {
@@ -256,7 +259,7 @@ pub(crate) fn follow(state: &mut State, document: &Document, href: &str, tx: &mu
                     })
                     .and_then(|path| {
                         let machines = crate::machine::Machines::of(&state.facts);
-                        match machines.refuse_open(&path, None) {
+                        match machines.refuse_open(&path, at.as_deref()) {
                             None => tx
                                 .open_uri(&attn_term::links::file_url(&path))
                                 .map_err(|why| format!("{path}: {why}")),

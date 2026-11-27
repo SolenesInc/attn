@@ -325,6 +325,8 @@ pub(super) enum Show {
 /// Asks the daemon where the seed keeps `target`, and has the system show it.
 fn open_kept(spot: &Spot, state: &mut State, target: &str, how: Show, tx: &mut Tx) {
     let (seed_id, relative_target) = (spot.seed().to_owned(), target.to_owned());
+    let host = crate::machine::Machines::of(&state.facts).app_host();
+    let at = host.clone();
     let home = spot.key(match how {
         Show::Open => "open",
         Show::Reveal => "reveal",
@@ -332,7 +334,7 @@ fn open_kept(spot: &Spot, state: &mut State, target: &str, how: Show, tx: &mut T
     spot.send_as(
         state,
         None,
-        |request_id| target_of(seed_id, relative_target, request_id),
+        |request_id| target_of(seed_id, relative_target, host, request_id),
         home,
         move |state, answer, tx| {
             let path = answer
@@ -341,7 +343,7 @@ fn open_kept(spot: &Spot, state: &mut State, target: &str, how: Show, tx: &mut T
                 .and_then(|r| r.result)
                 .and_then(|r| r.path);
             if let Some(path) = path {
-                show(state, &path, how, tx);
+                show(state, &path, at.as_deref(), how, tx);
             }
         },
         tx,
@@ -405,8 +407,10 @@ pub(super) fn open_evidence(state: &mut State, seed: &str, opens: &Opens, tx: &m
     match opens {
         Opens::Kept { target, how } => {
             let (seed_id, relative_target, how) = (seed.to_owned(), target.clone(), *how);
+            let host = crate::machine::Machines::of(&state.facts).app_host();
+            let at = host.clone();
             state.act(
-                |request_id| target_of(seed_id, relative_target, request_id),
+                |request_id| target_of(seed_id, relative_target, host, request_id),
                 Refused::Prefixed("Could not open the evidence"),
                 move |state, reply, tx| {
                     let path = reply
@@ -414,7 +418,7 @@ pub(super) fn open_evidence(state: &mut State, seed: &str, opens: &Opens, tx: &m
                         .and_then(|r| r.result)
                         .and_then(|r| r.path);
                     if let Some(path) = path {
-                        show(state, &path, how, tx);
+                        show(state, &path, at.as_deref(), how, tx);
                     }
                 },
                 tx,
@@ -431,22 +435,25 @@ pub(super) fn open_evidence(state: &mut State, seed: &str, opens: &Opens, tx: &m
     }
 }
 
+/// Asks where the seed's file is on the machine `host`, the app's own copy when it is set.
 fn target_of(
     seed_id: String,
     relative_target: String,
+    host: Option<String>,
     request_id: String,
 ) -> SeedArtifactTargetMessage {
     SeedArtifactTargetMessage {
         seed_id,
         relative_target,
         purpose: "artifact".into(),
+        host,
         request_id,
         ..SeedArtifactTargetMessage::new()
     }
 }
 
-fn show(state: &mut State, path: &str, how: Show, tx: &mut Tx) {
-    if let Some(refusal) = crate::machine::Machines::of(&state.facts).refuse_open(path, None) {
+fn show(state: &mut State, path: &str, host: Option<&str>, how: Show, tx: &mut Tx) {
+    if let Some(refusal) = crate::machine::Machines::of(&state.facts).refuse_open(path, host) {
         return state.window.notify(refusal, tx);
     }
     let shown = match how {

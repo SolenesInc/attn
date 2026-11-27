@@ -10589,6 +10589,23 @@ type SeedArtifact struct {
 	Size int `json:"size"`
 }
 
+type SeedArtifactPathHereMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Filename corresponds to the JSON schema field "filename".
+	Filename string `json:"filename"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host string `json:"host"`
+
+	// NotebookFolder corresponds to the JSON schema field "notebook_folder".
+	NotebookFolder string `json:"notebook_folder"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+}
+
 type SeedArtifactReference struct {
 	// Kind corresponds to the JSON schema field "kind".
 	Kind string `json:"kind"`
@@ -10656,6 +10673,9 @@ type SeedArtifactResult struct {
 type SeedArtifactTargetMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`

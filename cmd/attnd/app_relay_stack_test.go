@@ -210,7 +210,7 @@ func TestAnAppWhoseHomeIsUnreachableIsToldWhyAndConnectsWhenItReturns(t *testing
 	t.Log("(5) the laptop told its app the home was unreachable and why, closed it when the home returned, and relayed the next connection")
 }
 
-func TestAnAppOnAMachineThatDialsItsHomeMovesSeedFilesInAndOutOfItsOwnDisk(t *testing.T) {
+func TestAnAppOnAMachineThatDialsItsHomeMovesSeedFilesInAndOutOfItsOwnDiskAndOpensThemThere(t *testing.T) {
 	w := newReverseWorld(t)
 	row := w.join()
 	if health := healthOf(t, w.laptop); health["home"] == nil || health["home"] == "" || health["machine_id"] != row.ID {
@@ -240,6 +240,17 @@ func TestAnAppOnAMachineThatDialsItsHomeMovesSeedFilesInAndOutOfItsOwnDisk(t *te
 	kept := notebookPath(w.home, "seeds", seed.ID, "from-laptop.md")
 	if data, err := os.ReadFile(kept); err != nil || string(data) != "written on the laptop" {
 		t.Fatalf("the home's seed folder after the copy returned: %q, %v", data, err)
+	}
+	targetID := uuid.NewString()
+	located := testworld.Request(relayed, protocol.SeedArtifactTargetMessage{
+		Cmd: protocol.CmdSeedArtifactTarget, RequestID: targetID, SeedID: seed.ID, RelativeTarget: "from-laptop.md", Purpose: "artifact", Host: &row.ID,
+	}, protocol.EventSeedArtifactTargetResult, func(r protocol.SeedArtifactTargetResultMessage) bool { return r.RequestID == targetID })
+	if !located.Success {
+		t.Fatalf("where the seed's file is on the laptop: %s", protocol.Deref(located.Error))
+	}
+	opens := protocol.Deref(located.Result.Path)
+	if data, err := os.ReadFile(opens); !strings.HasPrefix(opens, w.laptop.Dir+string(filepath.Separator)) || err != nil || string(data) != "written on the laptop" {
+		t.Fatalf("the app on the laptop opens %s (%q, %v), want the file in the laptop's copy of the Notebook under %s", opens, data, err, w.laptop.Dir)
 	}
 	out := filepath.Join(w.laptop.Dir, "out", "from-laptop.md")
 	if err := os.MkdirAll(filepath.Dir(out), 0o700); err != nil {

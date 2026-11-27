@@ -277,12 +277,16 @@ impl Daemon {
     /// Says on `/health` that the app's machine is the outpost `machine_id`, which dials the
     /// home named `home` and relays the app to it, as a machine that joined a home does.
     pub fn relaying_to(self, machine_id: &str, home: &str) -> Daemon {
-        {
-            let mut script = self.shared.script.lock().unwrap();
-            machine_id.clone_into(&mut script.machine_id);
-            script.home = Some(home.into());
-        }
+        self.starts_relaying_to(machine_id, home);
         self
+    }
+
+    /// As `relaying_to`, from the app's next connection on: the app's machine joined a home
+    /// while the app ran.
+    pub fn starts_relaying_to(&self, machine_id: &str, home: &str) {
+        let mut script = self.shared.script.lock().unwrap();
+        machine_id.clone_into(&mut script.machine_id);
+        script.home = Some(home.into());
     }
 
     /// The token this daemon minted. The world's app presents `CLIENT_TOKEN`.

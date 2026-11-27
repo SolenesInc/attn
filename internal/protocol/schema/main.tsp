@@ -6848,6 +6848,19 @@ model SeedArtifactTargetMessage {
   "relative_target": string;
   // image | link | artifact.
   "purpose": string;
+  // The machine whose copy of the seed's files a link or artifact path names,
+  // such as the app's machine; absent for the home's machine. An image is
+  // always read on the home.
+  "host"?: string;
+}
+
+@extension("x-on", #{ machine: "host" })
+model SeedArtifactPathHereMessage {
+  cmd: "seed_artifact_path_here";
+  host: string;
+  "seed_id": string;
+  "notebook_folder": string;
+  filename: string;
 }
 
 model SeedArtifactTargetResult {

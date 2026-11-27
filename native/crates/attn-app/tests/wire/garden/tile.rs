@@ -994,3 +994,40 @@ fn a_seed_tile_opens_a_file_its_body_links_from_the_seeds_own_files() {
         vec!["file:///notebook/seeds/s-link11/report.pdf".to_owned()]
     );
 }
+
+#[test]
+fn a_seed_tile_open_before_its_machine_joins_a_home_stops_opening_file_links_here() {
+    let disk = tempfile::tempdir().unwrap();
+    let report = disk.path().canonicalize().unwrap().join("report.pdf");
+    std::fs::write(&report, "%PDF").unwrap();
+    let url = format!("file://{}", report.display());
+    let body = format!("Read [the report]({url}) first.\n");
+    let linked = move || {
+        let body = body.clone();
+        with(seed("s-link12", "Linked plan"), move |s| s.body = body)
+    };
+    let daemon = Daemon::scripted().state(InitialStateMessage {
+        profiles: Some(vec![profile()]),
+        desktops: Some(vec![desktop(
+            row(vec![pane("a"), seed_tile("s-link12")]),
+            1,
+        )]),
+        ..initial(vec![linked()], vec![session("agent", "Agent a")])
+    });
+    daemon.on("seed_document_get", move |r| {
+        document(r, linked(), Vec::new(), &[])
+    });
+    let mut world = World::start_sized(daemon, (1600.0, 900.0));
+    world.open_desktop();
+    world.settle();
+    world.gesture(|app| app.click(Target::role("link").name("the report")));
+    world.settle();
+    assert_eq!(world.opened_links(), vec![url]);
+
+    world.daemon.starts_relaying_to("mac", "oma");
+    world.reconnect();
+    world.gesture(|app| app.click(Target::role("link").name("the report")));
+    world.settle();
+
+    assert!(world.opened_links().is_empty());
+}

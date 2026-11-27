@@ -86,6 +86,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdCodeNav:                    decodeInto[CodeNavMessage],
 	CmdCodeNavSetup:               decodeInto[CodeNavSetupMessage],
 	CmdSeedArtifactTransferHere:   decodeInto[SeedArtifactTransferHereMessage],
+	CmdSeedArtifactPathHere:       decodeInto[SeedArtifactPathHereMessage],
 	CmdNotebookBacklinks:          decodeInto[NotebookBacklinksMessage],
 	CmdTaskList:                   decodeInto[TaskListMessage],
 	CmdTaskRetry:                  decodeInto[TaskRetryMessage],

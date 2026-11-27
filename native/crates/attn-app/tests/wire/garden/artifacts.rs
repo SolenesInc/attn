@@ -86,12 +86,18 @@ fn opened_on(
     });
     daemon.on("seed_artifact_target", |r: &Request| {
         let target = r["relative_target"].as_str().unwrap();
+        let notebook = match r["host"].as_str() {
+            Some("mac") => "/Users/me/attn-notebook",
+            _ => "/notebook",
+        };
+        let unsynced = r["host"].is_string() && target == "draft.pdf";
         message(SeedArtifactTargetResultMessage {
             request_id: r["request_id"].as_str().unwrap().into(),
-            success: true,
-            result: Some(SeedArtifactTargetResult {
+            success: !unsynced,
+            error: unsynced.then(|| "this outpost has not prepared its copy yet".into()),
+            result: (!unsynced).then(|| SeedArtifactTargetResult {
                 relative_target: target.into(),
-                path: Some(format!("/notebook/seeds/s-ship11/{target}")),
+                path: Some(format!("{notebook}/seeds/s-ship11/{target}")),
                 ..SeedArtifactTargetResult::default()
             }),
             ..SeedArtifactTargetResultMessage::new()
@@ -357,10 +363,10 @@ fn lists_linked_files_notebook_documents_and_pages_and_opens_each_where_it_belon
 }
 
 #[test]
-fn with_the_home_on_another_machine_files_move_in_and_out_from_this_one_and_none_opens_here() {
+fn with_the_home_on_another_machine_files_move_in_and_out_from_this_one_and_open_from_its_copy() {
     let mut world = opened_on(
         |daemon| daemon.relaying_to("mac", "oma"),
-        vec![kept("report.pdf", 1234)],
+        vec![kept("report.pdf", 1234), kept("draft.pdf", 10)],
         vec![file("docs/legacy.md"), file("/srv/notes.md")],
         &[],
         None,
@@ -368,17 +374,36 @@ fn with_the_home_on_another_machine_files_move_in_and_out_from_this_one_and_none
 
     press(&mut world, "artifact.report.pdf", "open");
     press(&mut world, "artifact.report.pdf", "reveal");
+    assert!(
+        world
+            .daemon
+            .sent_of("seed_artifact_target")
+            .iter()
+            .all(|r| r["host"] == "mac")
+    );
+    assert_eq!(
+        world.opened_links(),
+        vec!["file:///Users/me/attn-notebook/seeds/s-ship11/report.pdf".to_owned()]
+    );
+    assert_eq!(
+        world.revealed_paths(),
+        vec!["/Users/me/attn-notebook/seeds/s-ship11/report.pdf".to_owned()]
+    );
+    press(&mut world, "artifact.draft.pdf", "open");
     assert!(world.opened_links().is_empty());
-    assert!(world.revealed_paths().is_empty());
     assert_eq!(
         world
             .screen()
             .find(Target::key("notice.text"))
-            .and_then(|n| n.name)
-            .as_deref(),
-        Some(
-            "/notebook/seeds/s-ship11/report.pdf is on oma; opening files on another machine isn't supported yet"
-        )
+            .and_then(|n| n.name),
+        None
+    );
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::key("garden.artifact.draft.pdf.open"))
+            .and_then(|n| n.description),
+        None
     );
 
     press(&mut world, "artifact.report.pdf", "move-out");

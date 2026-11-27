@@ -43,6 +43,7 @@ func (d *Daemon) machineParts() map[string]machinePart {
 	runs(parts, false, d.markReviewSent)
 	runs(parts, true, d.answerCodeNav)
 	runs(parts, false, d.transferSeedArtifactHere)
+	runs(parts, true, d.seedArtifactPathHere)
 	runs(parts, false, d.startTerminal)
 	runs(parts, false, d.restartTerminal)
 	runs(parts, false, d.commitAgentLaunch)

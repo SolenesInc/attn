@@ -1083,28 +1083,16 @@ func (d *Daemon) handleSeedArtifactTarget(client *wsClient, msg *protocol.SeedAr
 		fail(err)
 		return
 	}
-	_, dir, err := d.seedArtifactDir(msg.SeedID, false)
-	if err != nil {
-		fail(err)
-		return
-	}
-	path := filepath.Join(dir, filename)
-	info, err := os.Lstat(path)
-	if err != nil {
-		fail(err)
-		return
-	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-		fail(fmt.Errorf("%q is not a regular managed artifact", filename))
-		return
-	}
 	target := &protocol.SeedArtifactTargetResult{RelativeTarget: msg.RelativeTarget}
-	switch strings.TrimSpace(msg.Purpose) {
-	case "artifact":
-		target.Path = protocol.Ptr(path)
-	case "link":
-		if _, ok := seedArtifactLinkExtensions[strings.ToLower(filepath.Ext(filename))]; !ok {
+	switch purpose := strings.TrimSpace(msg.Purpose); purpose {
+	case "artifact", "link":
+		if _, ok := seedArtifactLinkExtensions[strings.ToLower(filepath.Ext(filename))]; purpose == "link" && !ok {
 			fail(fmt.Errorf("%q is not a safe Markdown document or image target", filename))
+			return
+		}
+		path, err := d.seedArtifactPathOn(protocol.Deref(msg.Host), msg.SeedID, filename)
+		if err != nil {
+			fail(err)
 			return
 		}
 		target.Path = protocol.Ptr(path)
@@ -1112,6 +1100,16 @@ func (d *Daemon) handleSeedArtifactTarget(client *wsClient, msg *protocol.SeedAr
 		mimeType, ok := seedArtifactImageTypes[strings.ToLower(filepath.Ext(filename))]
 		if !ok {
 			fail(fmt.Errorf("%q is not a supported image artifact", filename))
+			return
+		}
+		_, dir, err := d.seedArtifactDir(msg.SeedID, false)
+		if err != nil {
+			fail(err)
+			return
+		}
+		path, info, err := managedSeedArtifact(dir, filename)
+		if err != nil {
+			fail(err)
 			return
 		}
 		file, openedInfo, openErr := openRegularNoFollow(path)
@@ -1143,6 +1141,51 @@ func (d *Daemon) handleSeedArtifactTarget(client *wsClient, msg *protocol.SeedAr
 	result.Success = true
 	result.Result = target
 	d.sendToClient(client, result)
+}
+
+// seedArtifactPathOn is where the seed's file is on the machine host: the home's own file, or
+// the file in that outpost's copy of the seed's Notebook folder.
+func (d *Daemon) seedArtifactPathOn(host, seedID, filename string) (string, error) {
+	if host == "" || host == d.store.MachineID() {
+		_, dir, err := d.seedArtifactDir(seedID, false)
+		if err != nil {
+			return "", err
+		}
+		path, _, err := managedSeedArtifact(dir, filename)
+		return path, err
+	}
+	folder, _, err := d.seedNotebookFolder(seedID)
+	if err != nil {
+		return "", err
+	}
+	return Call[string](d.life.Context(), d.router(), protocol.SeedArtifactPathHereMessage{
+		Cmd: protocol.CmdSeedArtifactPathHere, Host: host, SeedID: seedID, NotebookFolder: folder, Filename: filename,
+	})
+}
+
+func (d *Daemon) seedArtifactPathHere(_ context.Context, msg protocol.SeedArtifactPathHereMessage) (string, error) {
+	root, err := d.outpostNotebookCopy(msg.NotebookFolder)
+	if err != nil {
+		return "", err
+	}
+	_, dir, err := d.seedArtifactDirIn(root, msg.SeedID, false)
+	if err != nil {
+		return "", err
+	}
+	path, _, err := managedSeedArtifact(dir, msg.Filename)
+	return path, err
+}
+
+func managedSeedArtifact(dir, filename string) (string, os.FileInfo, error) {
+	path := filepath.Join(dir, filename)
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return "", nil, fmt.Errorf("%q is not a regular managed artifact", filename)
+	}
+	return path, info, nil
 }
 
 func (d *Daemon) handleSeedArtifactTransfer(ctx context.Context, conn net.Conn, msg *protocol.SeedArtifactTransferMessage, by who.Actor) {

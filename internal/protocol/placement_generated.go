@@ -147,6 +147,7 @@ var Placements = map[string][]Placement{
 	"review_search":                  {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"review_sent":                    {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"run_command":                    {Placement{LocatorCommand, "command"}},
+	"seed_artifact_path_here":        {Placement{LocatorMachine, "host"}},
 	"seed_artifact_transfer":         {Placement{LocatorHome, ""}},
 	"seed_artifact_transfer_here":    {Placement{LocatorMachine, "host"}},
 	"seed_authorization":             {Placement{LocatorHome, ""}},
@@ -1749,6 +1750,18 @@ func (m RunCommandMessage) Placement() Placement {
 
 func (m RunCommandMessage) Locate() string {
 	return ""
+}
+
+func (SeedArtifactPathHereMessage) CommandName() string {
+	return "seed_artifact_path_here"
+}
+
+func (m SeedArtifactPathHereMessage) Placement() Placement {
+	return Placement{LocatorMachine, "host"}
+}
+
+func (m SeedArtifactPathHereMessage) Locate() string {
+	return string(m.Host)
 }
 
 func (SeedArtifactTransferMessage) CommandName() string {

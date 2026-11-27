@@ -93,6 +93,7 @@ const (
 	CmdCodeNav                    = "code_nav"
 	CmdCodeNavSetup               = "code_nav_setup"
 	CmdSeedArtifactTransferHere   = "seed_artifact_transfer_here"
+	CmdSeedArtifactPathHere       = "seed_artifact_path_here"
 	CmdNotebookBacklinks          = "notebook_backlinks"
 	CmdTaskList                   = "task_list"
 	CmdTaskRetry                  = "task_retry"
