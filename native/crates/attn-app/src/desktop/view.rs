@@ -274,6 +274,7 @@ struct Subline {
     provenance: Option<super::provenance::Line>,
     levels: Vec<(Piece, Level)>,
     ask: Option<crate::asks::Chip>,
+    verdict: Option<super::verdict::Chip>,
     headline: Vec<(Piece, Level)>,
 }
 
@@ -359,6 +360,7 @@ fn sublines(
                 provenance: super::provenance::line(s),
                 levels: Vec::new(),
                 ask: crate::asks::chip_of(facts, s),
+                verdict: super::verdict::of(s),
                 headline: Vec::new(),
             };
             let tile_w = desk
@@ -372,6 +374,9 @@ fn sublines(
             if let Some(tile_w) = tile_w {
                 let pieces: Vec<(Piece, Widths)> = [
                     settle.map(|settle| (Piece::Settling, settling_widths(settle, keep_key))),
+                    sub.verdict
+                        .as_ref()
+                        .map(|chip| (Piece::Verdict, super::verdict::widths(chip))),
                     sub.ask
                         .as_ref()
                         .map(|chip| (Piece::Ask, crate::asks::chip_widths(chip))),
@@ -1373,6 +1378,11 @@ fn header(leaf: &Leaf, title: &str, look: &super::tile_look::Look, cx: &TileCx) 
         )),
         _ => header,
     };
+    let header = header.push_all(sub.and_then(|sub| {
+        let chip = sub.verdict.as_ref()?;
+        let icon = sub.headline_level(Piece::Verdict) == Level::Icon;
+        Some(super::verdict::view(&leaf.id, chip, icon, t))
+    }));
     let header = header.push_all(sub.zip(pane).and_then(|(sub, pane)| {
         let chip = sub.ask.as_ref()?;
         let level = match sub.headline_level(Piece::Ask) {

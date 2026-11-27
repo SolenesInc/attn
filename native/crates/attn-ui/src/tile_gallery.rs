@@ -7,8 +7,8 @@ use rune_kit::TextInput;
 
 use crate::blocks::{
     Block, Card, FloatingPanel, IdLabel, IdMark, IdPlace, Inline, Notice, Settling, SettlingChip,
-    Stack, Status, Tabs, TerminalBar, TileHeader, drag_ghost, drop_target, id_list, id_scrim,
-    lantern, name_in_place, terminal_notices, terminal_status, tip,
+    Stack, Status, Tabs, TerminalBar, TileHeader, Verdict, VerdictChip, drag_ghost, drop_target,
+    id_list, id_scrim, lantern, name_in_place, terminal_notices, terminal_status, tip,
 };
 use crate::colors::scheme_for;
 use crate::system::{
@@ -554,6 +554,16 @@ fn header_story(s: &Tiles, cx: &mut Cx<Tiles>) -> El {
             t.bg_tile,
         )
         .push(chip)
+        .push(
+            VerdictChip::new(
+                "story.agent.verdict",
+                Verdict::Open,
+                "unread report",
+                "Its 02:10 report hasn't reached you\nOpened by the supervisor",
+            )
+            .mark_only(s.smallest)
+            .build(&t),
+        )
         .subline(
             "story.agent.subline",
             vec![

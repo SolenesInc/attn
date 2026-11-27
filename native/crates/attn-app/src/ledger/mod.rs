@@ -5,6 +5,7 @@
 mod mark;
 pub(crate) mod query;
 pub(crate) mod reopen;
+mod supervisor_closes;
 mod view;
 
 use std::collections::HashMap;
@@ -23,6 +24,9 @@ use crate::shell::Layer;
 use query::{Filters, ProfileChoice, Scope, Verdict, Window};
 use reopen::Reopened;
 
+pub(crate) use supervisor_closes::{
+    follow as follow_supervisor_closes, reopen as reopen_supervisor_close,
+};
 pub(crate) use view::{refused, row_menu, view};
 
 mod conversations;

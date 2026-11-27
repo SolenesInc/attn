@@ -3,7 +3,8 @@ use rune_kit::TextInput;
 
 use crate::Tokens;
 use crate::system::{
-    DotShape, DotSize, Radius, Size, Space, Type, door, dot, focus, keys_hint, words,
+    DotShape, DotSize, IconSize, Radius, Size, Space, Type, door, dot, focus, icon, keys_hint,
+    words,
 };
 
 /// An agent's header: its headline, and the subline drawn up into the headline's foot.
@@ -377,5 +378,76 @@ impl SettlingChip {
             ),
             t,
         )
+    }
+}
+
+/// What the attention supervisor did about an agent, as its tile's headline says it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Verdict {
+    /// The supervisor opened the agent's turn.
+    Open,
+    /// The supervisor called the agent finished, so settling it closes it.
+    Finished,
+}
+
+/// The chip in an agent's headline for what the supervisor did, keyed `key`: the verdict's mark
+/// and `said`, or the mark alone where the headline is short of room, with `help` in its
+/// tooltip.
+pub struct VerdictChip {
+    key: String,
+    verdict: Verdict,
+    said: String,
+    help: String,
+    mark_only: bool,
+}
+
+impl VerdictChip {
+    pub fn new(
+        key: impl Into<String>,
+        verdict: Verdict,
+        said: impl Into<String>,
+        help: impl Into<String>,
+    ) -> VerdictChip {
+        VerdictChip {
+            key: key.into(),
+            verdict,
+            said: said.into(),
+            help: help.into(),
+            mark_only: false,
+        }
+    }
+
+    pub fn mark_only(mut self, mark_only: bool) -> Self {
+        self.mark_only = mark_only;
+        self
+    }
+
+    /// How wide the chip stands with its words, and as its mark alone.
+    pub fn widths(said: &str) -> (f32, f32) {
+        let mark = IconSize::Small.pt() + 2.0 * Space::S6.pt();
+        let words = Space::S4.pt() + crate::system::width_of(said.to_owned(), Type::Tag);
+        (mark + words, mark)
+    }
+
+    pub fn build(self, t: &Tokens) -> El {
+        let ink = t.text_secondary;
+        let mark = match self.verdict {
+            Verdict::Open => &crate::icon::EYE,
+            Verdict::Finished => &crate::icon::CHECK,
+        };
+        let face = door::gap(row().items_center(), Space::S4)
+            .child(icon(mark, IconSize::Small, ink).a11y_hidden())
+            .children((!self.mark_only).then(|| {
+                words(self.said.clone(), Type::Tag, ink)
+                    .single_line()
+                    .a11y_hidden()
+            }))
+            .key(self.key)
+            .role("status")
+            .label(self.said)
+            .help(self.help)
+            .h(Size::Small.height())
+            .border(1.0, t.border);
+        door::corner(door::inset(face, Space::S6, Space::S0), Radius::Tag)
     }
 }

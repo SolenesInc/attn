@@ -7,6 +7,7 @@ pub(super) enum Piece {
     Provenance,
     Id,
     Settling,
+    Verdict,
     Ask,
 }
 
@@ -36,10 +37,11 @@ impl Widths {
     }
 }
 
-/// The order a headline gives up room in: the settling chip turns to its mark, then the ask chip
-/// cuts its subject and turns to its mark. Neither hides.
+/// The order a headline gives up room in: the settling chip turns to its mark, then the
+/// supervisor's chip, then the ask chip cuts its subject and turns to its mark. None hides.
 pub(super) const HEADLINE_RANK: &[(Piece, Level)] = &[
     (Piece::Settling, Level::Icon),
+    (Piece::Verdict, Level::Icon),
     (Piece::Ask, Level::Short),
     (Piece::Ask, Level::Icon),
 ];

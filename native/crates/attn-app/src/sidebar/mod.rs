@@ -104,6 +104,9 @@ pub(crate) fn dispatch(state: &mut State, action: &crate::Action, tx: &mut Tx) -
         }
         Action::ReloadSession { session } => session_menu::reload_session(state, session, tx),
         Action::WakeSession { session } => actions::wake(state, session),
+        Action::ReopenSession { session } => {
+            crate::ledger::reopen_supervisor_close(state, session, tx)
+        }
         Action::SessionPriority => actions::priority_key(state, tx),
         Action::SessionSnooze => actions::snooze_key(state, tx),
         Action::SessionCancelCountdown => actions::cancel_countdown(state),

@@ -12,6 +12,7 @@ use attn_testkit::{Daemon, Request, Target, World, message};
 use rune::{Key, KeyEvent, Mods};
 
 mod conversations;
+mod supervisor_closes;
 mod worktrees;
 
 use super::queue::ago;

@@ -323,6 +323,7 @@ pub fn bind(
             palette::follow(state);
             asks::follow(state, tx);
             ledger::follow(state, was, tx);
+            ledger::follow_supervisor_closes(state, tx);
             notifications::follow(state, was, tx);
             update_run::follow(state, tx);
             outpost_updates::follow(state, tx);

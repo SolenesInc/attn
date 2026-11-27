@@ -1378,6 +1378,56 @@ fn tile_headers(dark: bool, hovered: bool) {
     snap(&mut world, name, dark);
 }
 
+/// Agent `a` with the attention supervisor's chip on its tile: the reason for a turn the
+/// supervisor opened, or, when `finished`, the finished chip and the notice offering Reopen for
+/// an agent the supervisor closed.
+fn supervisor_chip(dark: bool, finished: bool) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), Vec::new());
+    let (verdict, label, reason) = if finished {
+        ("finished", None, "Nothing is left for anyone")
+    } else {
+        (
+            "open",
+            Some("unread report"),
+            "Its 02:10 report hasn't reached you",
+        )
+    };
+    if let Some(agent) = state.sessions.iter_mut().flatten().next() {
+        agent.attention = Some(attn_protocol::SessionAttention {
+            verdict: verdict.into(),
+            decider: "rule:unread_report".into(),
+            reason: reason.into(),
+            label: label.map(str::to_owned),
+            at: "2026-11-27T21:00:00Z".into(),
+        });
+    }
+    let mut world = start(scripted().state(state));
+    write(&mut world, BOXES);
+    if finished {
+        world.daemon.emit(attn_protocol::SessionClosedMessage {
+            session_ledger_entry: SessionLedgerEntry {
+                id: "s-closed".into(),
+                label: "Finish the remaining steps".into(),
+                agent: "claude".into(),
+                profile_id: PROFILE.into(),
+                closed_at: Some("2026-11-27T21:00:00Z".into()),
+                closed_by: Some("supervisor".into()),
+                close_reason: Some("settled when finished".into()),
+                last_seen: "2026-11-27T21:00:00Z".into(),
+                ..SessionLedgerEntry::default()
+            },
+            ..attn_protocol::SessionClosedMessage::new()
+        });
+        world.settle();
+    }
+    let name = if finished {
+        "supervisor-finished-reopen"
+    } else {
+        "supervisor-opened"
+    };
+    snap(&mut world, name, dark);
+}
+
 /// Terminal `a` beside a browser tile: its address in the header's title, Reload, and the page
 /// area, which says where no engine runs pages.
 fn browser_tile(dark: bool) {
@@ -9605,6 +9655,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("tile_headers", || tile_headers(dark, false));
         scene("browser_tile", || browser_tile(dark));
         scene("tile_headers", || tile_headers(dark, true));
+        scene("supervisor_chip", || supervisor_chip(dark, false));
+        scene("supervisor_chip", || supervisor_chip(dark, true));
         scene("tile_focus", || tile_focus(dark));
         scene("shelf", || shelf(dark, false));
         scene("shelf", || shelf(dark, true));

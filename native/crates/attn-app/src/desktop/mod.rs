@@ -31,6 +31,7 @@ mod stale_build;
 mod terminal_menu;
 mod tile_look;
 pub(crate) mod usage;
+mod verdict;
 mod view;
 pub(crate) use view::ask_terminal;
 mod windows;

@@ -13,6 +13,8 @@ use crate::{State, connection};
 pub(crate) const LEADER_TIMEOUT: f64 = 0.6;
 /// How long a notice stays.
 const NOTICE_SECONDS: f64 = 6.0;
+/// How long the notice offering Reopen after the supervisor closed an agent stays.
+pub(crate) const REOPEN_NOTICE_SECONDS: f64 = 10.0;
 pub(crate) const TITLE_BAR_HEIGHT: f32 = 40.0;
 /// The title bar's tools, which the notifications panel hangs under, starting past the traffic
 /// lights.
@@ -37,6 +39,8 @@ pub(crate) struct Away {
 #[derive(Default)]
 pub struct Window {
     pub view: View,
+    /// The last close of `Facts::closes` the notice of the supervisor's closes took in.
+    pub(crate) told_closes: u64,
     pub sidebar_hidden: bool,
     /// The open drawers, oldest first: they lie side by side over the content, the oldest at the
     /// window's edge, and Escape closes the newest.
@@ -323,6 +327,7 @@ pub struct Holder {
 pub struct Notice {
     pub text: String,
     until: f64,
+    seconds: f64,
     /// The pointer rests on it, which keeps it until the pointer leaves.
     held: bool,
     offer: Option<Offer>,
@@ -484,7 +489,7 @@ impl Window {
     }
 
     pub(crate) fn notify(&mut self, text: String, tx: &mut Tx) {
-        self.show_notice(text, None, tx);
+        self.show_notice(text, None, NOTICE_SECONDS, tx);
     }
 
     /// A notice whose button runs `action`, once.
@@ -495,19 +500,32 @@ impl Window {
         action: Action,
         tx: &mut Tx,
     ) {
+        self.notify_offering_for(text, label, action, NOTICE_SECONDS, tx);
+    }
+
+    /// [`Window::notify_offering`] that stays `seconds`.
+    pub(crate) fn notify_offering_for(
+        &mut self,
+        text: String,
+        label: &'static str,
+        action: Action,
+        seconds: f64,
+        tx: &mut Tx,
+    ) {
         let offer = Offer {
             label,
             action,
             done: false,
         };
-        self.show_notice(text, Some(offer), tx);
+        self.show_notice(text, Some(offer), seconds, tx);
     }
 
-    fn show_notice(&mut self, text: String, offer: Option<Offer>, tx: &mut Tx) {
-        let until = tx.clock() + NOTICE_SECONDS;
+    fn show_notice(&mut self, text: String, offer: Option<Offer>, seconds: f64, tx: &mut Tx) {
+        let until = tx.clock() + seconds;
         self.notice = Some(Notice {
             text,
             until,
+            seconds,
             held: false,
             offer,
         });
@@ -1133,7 +1151,7 @@ fn hold_notice(state: &mut State, inside: bool, tx: &mut Tx) {
     };
     notice.held = inside;
     if !inside {
-        notice.until = tx.clock() + NOTICE_SECONDS;
+        notice.until = tx.clock() + notice.seconds;
         tx.wake_at(notice.until);
     }
 }

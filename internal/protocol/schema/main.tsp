@@ -283,6 +283,7 @@ model SessionAttention {
   verdict: "open" | "quiet" | "finished";
   decider: string;
   reason: string;
+  label?: string;               // Two words for the reason, such as "unread report", which the tile's chip shows. Absent or empty, the chip says "needs you" for open and "finished" for finished.
   at: string;
 }
 

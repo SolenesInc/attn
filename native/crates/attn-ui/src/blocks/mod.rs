@@ -124,7 +124,7 @@ pub use terminal_bar::TerminalBar;
 pub use terminal_notices::terminal_notices;
 pub use terminal_status::terminal_status;
 pub use tile_frame::{tile_area, tile_content};
-pub use tile_header::{Settling, SettlingChip, TileHeader};
+pub use tile_header::{Settling, SettlingChip, TileHeader, Verdict, VerdictChip};
 pub use tip::tip;
 pub use toolbar::Toolbar;
 pub use trail::Trail;

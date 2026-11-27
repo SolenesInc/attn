@@ -21,6 +21,13 @@ macro_rules! outline {
 
 outline!(CHEVRON_DOWN, 10.0, "1.5", r#"<path d="M2 3.5l3 3 3-3"/>"#);
 outline!(
+    EYE,
+    16.0,
+    "1.4",
+    r#"<path d="M1.6 8S4 3.6 8 3.6 14.4 8 14.4 8 12 12.4 8 12.4 1.6 8 1.6 8Z"/><circle cx="8" cy="8" r="1.9"/>"#
+);
+outline!(CHECK, 16.0, "1.6", r#"<path d="m3.2 8.4 3 3 6.6-6.8"/>"#);
+outline!(
     GARDEN,
     16.0,
     "1.4",

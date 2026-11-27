@@ -13041,6 +13041,9 @@ type SessionAttention struct {
 	// Decider corresponds to the JSON schema field "decider".
 	Decider string `json:"decider"`
 
+	// Label corresponds to the JSON schema field "label".
+	Label *string `json:"label,omitempty,omitzero"`
+
 	// Reason corresponds to the JSON schema field "reason".
 	Reason string `json:"reason"`
 

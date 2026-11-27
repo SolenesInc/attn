@@ -67,6 +67,8 @@ macro_rules! actions {
             OpenInEditor { session: String },
             /// End an agent's snooze.
             WakeSession { session: String },
+            /// Reopen an agent the attention supervisor closed, from the notice that says so.
+            ReopenSession { session: String },
             /// Store a daemon setting.
             SetSetting { key: String, value: String },
             /// Mark the active tile among several in this style from now on.
@@ -143,6 +145,7 @@ macro_rules! actions {
                     Action::ShowSessionSeeds { .. } => "session.showSeeds",
                     Action::OpenStake { .. } => "session.openStake",
                     Action::WakeSession { .. } => "session.wake",
+                    Action::ReopenSession { .. } => "session.reopen",
                     Action::SetSetting { .. } => "setting.set",
                     Action::SetTileFocus { .. } => "tileFocus.set",
                     Action::ClearDraggedWidths { .. } => "shelf.clearDraggedWidths",
@@ -192,6 +195,7 @@ macro_rules! actions {
                     Action::ShowSessionSeeds { .. } => "Show an agent's seeds",
                     Action::OpenStake { .. } => "Open an agent's stake",
                     Action::WakeSession { .. } => "Unsnooze an agent",
+                    Action::ReopenSession { .. } => "Reopen an agent the supervisor closed",
                     Action::SetSetting { .. } => "Change a setting",
                     Action::SetTileFocus { .. } => "Change the tile focus style",
                     Action::ClearDraggedWidths { .. } => "Clear dragged widths",

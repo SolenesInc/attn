@@ -1724,8 +1724,8 @@ fn every_buttons_words_read_on_its_rest_fill_in_every_scheme() {
 }
 
 #[test]
-fn every_schemes_tags_settle_chips_chosen_controls_focus_rings_and_state_marks_read() {
-    use attn_ui::blocks::{Settling, SettlingChip};
+fn every_schemes_tags_settle_and_verdict_chips_chosen_controls_focus_rings_and_state_marks_read() {
+    use attn_ui::blocks::{Settling, SettlingChip, Verdict, VerdictChip};
     use attn_ui::colors::{MARK_READS, READS, contrast as wcag, mix_srgb};
     use attn_ui::system::{Button, Look, Segment, Segmented, Tone, Trigger, tag, words};
 
@@ -1745,6 +1745,8 @@ fn every_schemes_tags_settle_chips_chosen_controls_focus_rings_and_state_marks_r
                 .build(&t, |_: &mut ()| {}),
             SettlingChip::new("settle.paused", "Paused", "Paused", Settling::Paused)
                 .build(&t, |_: &mut ()| {}),
+            VerdictChip::new("verdict.open", Verdict::Open, "unread report", "Opened").build(&t),
+            VerdictChip::new("verdict.finished", Verdict::Finished, "finished", "Settle").build(&t),
         ]);
         let chosen_btn: El = Button::new("Open")
             .look(Look::Plain)
@@ -1835,7 +1837,12 @@ fn every_schemes_tags_settle_chips_chosen_controls_focus_rings_and_state_marks_r
                 }
             }
 
-            for key in ["settle.counting", "settle.paused"] {
+            for key in [
+                "settle.counting",
+                "settle.paused",
+                "verdict.open",
+                "verdict.finished",
+            ] {
                 let el = keyed(&rt, key);
                 let fill = surface(&rt, &el, t.bg_elevated);
                 let word = rt

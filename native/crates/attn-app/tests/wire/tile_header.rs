@@ -5,8 +5,9 @@ use attn_protocol::{
     ActorView, AutomationProvenance, CommandUsage, Desktop, DesktopPane,
     GetCommandUsageResultMessage, InitialStateMessage, OutpostInfo, OutpostsUpdatedMessage,
     Profile, ProfileArrangementChangedMessage, PullRequestProvenance,
-    RecordCommandUsageResultMessage, Seed, SeedStandbyView, Session, SessionDelegationRole,
-    SessionPullRequest, SessionStateChangedMessage, SessionUsage, SessionUsageModel, StandbyTender,
+    RecordCommandUsageResultMessage, Seed, SeedStandbyView, Session, SessionAttention,
+    SessionDelegationRole, SessionPullRequest, SessionStateChangedMessage, SessionUsage,
+    SessionUsageModel, StandbyTender,
 };
 use attn_testkit::tree::{pane, row};
 use attn_testkit::{Daemon, Target, World, key_event, message};
@@ -2845,3 +2846,180 @@ fn session_ids_of_the_same_length_stand_equally_wide_in_their_headers() {
         ids[1]
     );
 }
+
+fn judged(mut session: Session, verdict: &str, label: Option<&str>, reason: &str) -> Session {
+    session.attention = Some(SessionAttention {
+        verdict: verdict.into(),
+        decider: "rule:unread_report".into(),
+        reason: reason.into(),
+        label: label.map(str::to_owned),
+        at: "2026-11-27T21:00:00Z".into(),
+    });
+    session
+}
+
+fn verdict_chip(world: &World, leaf: &str) -> Option<(String, Option<String>)> {
+    world
+        .screen()
+        .find(Target::key(format!("tile.{leaf}.verdict")))
+        .map(|n| (n.name.unwrap_or_default(), n.description))
+}
+
+fn tooltip_of(world: &mut World, key: &str) -> Option<String> {
+    rest_on(world, key);
+    world.advance(Duration::from_secs(1));
+    world
+        .runtime()
+        .help_tooltip()
+        .map(|(text, _)| text.to_owned())
+}
+
+#[test]
+fn a_turn_the_supervisor_opened_says_its_reason_on_the_tile_and_whole_in_the_tooltip() {
+    let reason = "Its 02:10 report hasn't reached you";
+    let mut world = start(
+        judged(
+            session("a", "docs", None),
+            "open",
+            Some("unread report"),
+            reason,
+        ),
+        session("b", "api", None),
+    );
+    assert_eq!(
+        verdict_chip(&world, "a"),
+        Some((
+            "unread report".to_owned(),
+            Some(format!("{reason}\nOpened by the supervisor"))
+        ))
+    );
+    assert_eq!(verdict_chip(&world, "b"), None);
+    assert_eq!(
+        tooltip_of(&mut world, "tile.a.verdict").as_deref(),
+        Some(format!("{reason}\nOpened by the supervisor").as_str())
+    );
+}
+
+#[test]
+fn a_finished_agent_says_so_on_the_tile_and_that_settling_closes_it() {
+    let mut world = start(
+        judged(
+            session("a", "docs", None),
+            "finished",
+            None,
+            "Nothing is left for anyone",
+        ),
+        session("b", "api", None),
+    );
+    assert_eq!(
+        verdict_chip(&world, "a"),
+        Some((
+            "finished".to_owned(),
+            Some("Nothing is left for anyone\nSettle closes it".to_owned())
+        ))
+    );
+    assert_eq!(
+        tooltip_of(&mut world, "tile.a.verdict").as_deref(),
+        Some("Nothing is left for anyone\nSettle closes it")
+    );
+}
+
+#[test]
+fn the_chip_follows_the_daemons_verdict_says_needs_you_without_its_words_and_goes_when_dropped() {
+    let mut world = start(session("a", "docs", None), session("b", "api", None));
+    assert_eq!(verdict_chip(&world, "a"), None);
+    changes(
+        &mut world,
+        judged(
+            session("a", "docs", None),
+            "open",
+            None,
+            "CI stopped an hour ago",
+        ),
+    );
+    assert_eq!(
+        verdict_chip(&world, "a").map(|(said, _)| said).as_deref(),
+        Some("needs you")
+    );
+    changes(
+        &mut world,
+        judged(session("a", "docs", None), "quiet", None, "CI is running"),
+    );
+    assert_eq!(
+        verdict_chip(&world, "a"),
+        None,
+        "a quiet verdict draws nothing"
+    );
+    changes(
+        &mut world,
+        judged(
+            session("a", "docs", None),
+            "finished",
+            None,
+            "Nothing is left",
+        ),
+    );
+    assert_eq!(
+        verdict_chip(&world, "a").map(|(said, _)| said).as_deref(),
+        Some("finished")
+    );
+    changes(&mut world, session("a", "docs", None));
+    assert_eq!(verdict_chip(&world, "a"), None);
+}
+
+#[test]
+fn the_supervisors_verdict_adds_nothing_to_the_sidebar() {
+    let reason = "Its 02:10 report hasn't reached you";
+    let plain = start(session("a", "docs", None), session("b", "api", None));
+    let judged = start(
+        judged(
+            session("a", "docs", None),
+            "open",
+            Some("unread report"),
+            reason,
+        ),
+        session("b", "api", None),
+    );
+    let sidebar = |world: &World| world.screen().descendants(Target::key("sidebar"));
+    assert!(!sidebar(&plain).is_empty(), "the sidebar shows");
+    assert_eq!(sidebar(&judged), sidebar(&plain));
+    let tree = judged.screen().to_string();
+    assert_eq!(
+        tree.matches(reason).count(),
+        1,
+        "only the tile's chip carries the reason: {tree}"
+    );
+}
+
+#[test]
+fn a_narrow_tile_keeps_the_supervisors_chip_as_its_mark_with_the_reason_in_its_tooltip() {
+    let reason = "Its 02:10 report hasn't reached you";
+    let mut world = start_sized_from(
+        InitialStateMessage {
+            desktops: Some(vec![desktop("a")]),
+            sessions: Some(vec![
+                judged(
+                    session("a", LONG, None),
+                    "open",
+                    Some("unread report"),
+                    reason,
+                ),
+                session("b", "api", None),
+            ]),
+            ..InitialStateMessage::new()
+        },
+        (440.0, 600.0),
+    );
+    let [_, _, w, _] = world
+        .runtime()
+        .presented("tile.a.verdict")
+        .expect("the chip is drawn")
+        .0;
+    assert!(w < 40.0, "the chip is its mark alone, {w} wide");
+    assert_eq!(
+        tooltip_of(&mut world, "tile.a.verdict").as_deref(),
+        Some(format!("{reason}\nOpened by the supervisor").as_str())
+    );
+}
+
+const LONG: &str = "attn--ds-page-blocks-delegation-appearance-landing-two · migrate-production-permissions-worktree";
