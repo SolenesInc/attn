@@ -10,6 +10,7 @@ import (
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 
+	"github.com/victorarias/attn/internal/document"
 	"github.com/victorarias/attn/internal/machinename"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -43,7 +44,7 @@ func References(markdown string, machines []machinename.Machine, place Place) ([
 			written := string(util.ResolveEntityNames(util.ResolveNumericReferences(util.UnescapePunctuations(n.Destination))))
 			reference, ok, err := fileReference(written, machines, place)
 			if err != nil {
-				refused = &LineError{Line: lineAt(nodeOffset(n, source)), Message: err.Error()}
+				refused = &document.LineError{Line: lineAt(nodeOffset(n, source)), Message: err.Error()}
 				return ast.WalkStop, nil
 			}
 			if ok {
@@ -61,7 +62,7 @@ func References(markdown string, machines []machinename.Machine, place Place) ([
 			line := lineAt(n.Info.Segment.Start)
 			address, ok, err := machinename.ReadAddress(fields[1], machines)
 			if err != nil {
-				refused = &LineError{Line: line, Message: err.Error()}
+				refused = &document.LineError{Line: line, Message: err.Error()}
 				return ast.WalkStop, nil
 			}
 			if ok {

@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/victorarias/attn/internal/document"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
@@ -106,7 +107,7 @@ func answersByKey(questions []protocol.AskQuestion, answers []protocol.AskAnswer
 func normalizeAnswer(question protocol.AskQuestion, answer protocol.AskAnswer) (protocol.AskAnswer, error) {
 	picked := make([]string, 0, len(answer.Picked))
 	for _, label := range answer.Picked {
-		canonical, ok := choiceLabel(question.Choices, label)
+		canonical, ok := document.ChoiceLabel(question.Choices, label)
 		if !ok {
 			return answer, fmt.Errorf("question %s has no choice %q", question.Key, label)
 		}

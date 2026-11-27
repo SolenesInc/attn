@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/ask"
+	"github.com/victorarias/attn/internal/document"
 	"github.com/victorarias/attn/internal/machinename"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -23,7 +24,7 @@ func (d *Daemon) askReferences(subject, markdown string, place ask.Place, writte
 		return nil, err
 	}
 	references, err := ask.References(subject, machines, place)
-	if lineErr := (*ask.LineError)(nil); errors.As(err, &lineErr) {
+	if lineErr := (*document.LineError)(nil); errors.As(err, &lineErr) {
 		return nil, protocol.Refuse(protocol.RefusalInvalidInput, "the subject: %s", lineErr.Message)
 	} else if err != nil {
 		return nil, err
