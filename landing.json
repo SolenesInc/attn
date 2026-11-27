@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "69485af6629e812d26f9935f329c011cd5d7d405",
+  "head": "af709b673d14da4d63d388c41beb24ca5e30adf7",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 308.399,
+    "ranOn": "af709b673d14da4d63d388c41beb24ca5e30adf7"
+  },
+  "acknowledgedFlake": {
+    "test": "go vet ./...",
+    "owner": "s-9sphsw"
+  },
+  "recordings": [
+    {
+      "sha256": "d93670ce32af14ddd2255b25631256bb6addb2356bd2c9685f303c55af33a449",
+      "ext": "png",
+      "bytes": 61715
+    },
+    {
+      "sha256": "884ff429a4026953d24ee888c66b8c183801832211a71d077db2308e6234a63c",
+      "ext": "png",
+      "bytes": 65464
+    }
+  ]
+}

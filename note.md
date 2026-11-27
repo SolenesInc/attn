@@ -1,0 +1,4 @@
+A fork's tile now offers its original. After shared Codex's `/fork`, the fork's tile shows "Forked from “<original>”." with **Open original beside this** and a ×, but only while no tile shows the original. The palette offers the same two actions. Open puts the original in the column right after the fork and gives it the keyboard. The × goes through the daemon, so the dismiss holds in every window and across app restarts. Sigma `/fork` and Claude `/branch` reuse this notice when their daemon children land.
+
+![Notice on the fork](https://land-feed.caketroll.cloud/m/SolenesInc/attn/d93670ce32af14ddd2255b25631256bb6addb2356bd2c9685f303c55af33a449.png)
+![Original opened beside it](https://land-feed.caketroll.cloud/m/SolenesInc/attn/884ff429a4026953d24ee888c66b8c183801832211a71d077db2308e6234a63c.png)
