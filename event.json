@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Ask-to-terminal association is published outside its profile",
+  "at": "2026-11-27T15:06:37.543Z",
+  "detail": "The initial and incremental app snapshots include the new ask-to-terminal association outside the ask's profile. Scope the association to its owning profile on both paths, consistently with the ask itself.\n"
+}
