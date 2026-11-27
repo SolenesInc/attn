@@ -5,7 +5,9 @@ use attn_protocol::{
     Ask, AskReference, AttachResultMessage, InitialStateMessage, OutpostInfo, Session,
     SessionRegisteredMessage, TerminalBinding, TerminalBindingsUpdatedMessage,
 };
+use attn_term::{FONT_SIZE, Metrics};
 use attn_testkit::{Target, World, message};
+use rune::Ime;
 
 use super::asks::{
     api_working, ask, click, has, letter, name, open_sheet, prose, question, start_on,
@@ -13,6 +15,8 @@ use super::asks::{
 use super::queue::one_desktop;
 use super::sidebar::chord;
 use super::terminal::output_frame_to;
+use super::terminal_blocks::ran;
+use super::terminal_view::{copied, copy_command_key, copy_key};
 
 const ASK: &str = "a-far";
 
@@ -174,13 +178,14 @@ fn a_command_opens_in_a_terminal_the_ask_holds_where_its_block_names_typed_and_h
 
     world.gesture(|app| app.type_text("x"));
     world.gesture(|app| app.runtime.paste("p"));
+    world.gesture(|app| app.runtime.ime(Ime::Commit("é".into())));
     world.gesture(|app| app.press("Tab"));
     world.gesture(|app| app.press("Escape"));
     world.settle();
     assert_eq!(
         typed(&world, "rt-1"),
-        "xp\t\u{1b}",
-        "keys, a paste, Tab and Escape are the shell's"
+        "xpé\t\u{1b}",
+        "keys, a paste, composed text, Tab and Escape are the shell's"
     );
     assert!(has(&world, "asks.sheet"), "Escape stays in the shell");
 
@@ -193,7 +198,7 @@ fn a_command_opens_in_a_terminal_the_ask_holds_where_its_block_names_typed_and_h
     letter(&mut world, "y");
     assert_eq!(
         typed(&world, "rt-1"),
-        "xp\t\u{1b}",
+        "xpé\t\u{1b}",
         "the question holds the keys again"
     );
 
@@ -367,5 +372,69 @@ fn only_the_shells_of_the_ask_on_screen_stream_to_the_app() {
         detached(&world),
         [first, second],
         "closing Asks lets go of the last one"
+    );
+}
+
+#[test]
+fn the_terminals_copy_keys_copy_from_a_shell_in_the_panel_and_never_reach_it() {
+    let mut world = start(far_state());
+    open_sheet(&mut world);
+    letter(&mut world, "t");
+    let session = spawns(&world)[0]["id"].as_str().unwrap().to_owned();
+    bound(&mut world, &session, "/srv/shop", "rt-1");
+    world
+        .daemon
+        .emit_frame(output_frame_to("rt-1", 1, &ran("make check", "ok\r\n")));
+    world.settle();
+
+    let (rect, _) =
+        (world.runtime().presented("terminal.rt-1")).expect("the panel draws the shell");
+    let metrics = Metrics::of(FONT_SIZE);
+    let output_line = (
+        rect[0] + 2.5 * metrics.cell_w,
+        rect[1] + 1.5 * metrics.cell_h,
+    );
+    world.gesture(|app| app.click_at(output_line));
+    world.gesture(|app| app.press(copy_key()));
+    assert_eq!(copied(&mut world).as_deref(), Some("make check\nok"));
+    world.gesture(|app| app.press(copy_command_key()));
+    assert_eq!(copied(&mut world).as_deref(), Some("make check"));
+    assert_eq!(typed(&world, "rt-1"), "", "the copy keys reach no shell");
+}
+
+#[test]
+fn a_command_whose_shell_the_home_refused_opens_a_new_one_when_pressed_again() {
+    let mut world = start(far_state());
+    world.daemon.on("spawn_session", |_| {
+        serde_json::json!({
+            "event": "command_error",
+            "cmd": "spawn_session",
+            "success": false,
+            "error": "far is offline",
+        })
+    });
+    open_sheet(&mut world);
+    letter(&mut world, "t");
+    world.settle();
+    assert_eq!(
+        name(&world, "asks.panel.note"),
+        "Could not open the terminal: far is offline"
+    );
+
+    world.gesture(|app| app.key(chord(Action::DockAsks)));
+    world.settle();
+    assert!(
+        has(&world, "asks.sheet"),
+        "the Asks chord gives the keys back to the question"
+    );
+    letter(&mut world, "t");
+    world.settle();
+    let sent = spawns(&world);
+    assert_eq!(sent.len(), 2, "pressing it again asks for a new shell");
+    assert_ne!(sent[0]["id"], sent[1]["id"]);
+    assert!(
+        !has(&world, "asks.panel.tab.1"),
+        "the refused tab gives way to the new one\n{}",
+        world.screen()
     );
 }

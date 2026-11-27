@@ -239,3 +239,33 @@ func TestShowingAShellAnAskHoldsGivesItATileBesideTheAskingAgent(t *testing.T) {
 		t.Errorf("answering ask %s closed shell %s, which its tile took first", asked.ID, shell)
 	}
 }
+
+func TestAnAppSwitchingBackToAProfileGetsTheShellsItsAsksHoldAfterTheProfilesArrangement(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	home := app.SelectedProfile()
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	asked, err := cli.AskOpen(protocol.SessionID(asker), "", cacheAsk, "", w.Path("shop"))
+	if err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+	result, _, _ := w.RequestSpawn(app, shellHarness, w.Path("shell"), func(m *protocol.SpawnSessionMessage) {
+		m.Placement = &protocol.SessionPlacement{AskID: protocol.Ptr(asked.ID)}
+	})
+	if !result.Success {
+		t.Fatalf("spawning a shell into ask %s: %s", asked.ID, protocol.Deref(result.Error))
+	}
+	holds := func(m protocol.TerminalBindingsUpdatedMessage) bool {
+		return slices.ContainsFunc(m.TerminalBindings, func(b protocol.TerminalBinding) bool {
+			return b.SessionID == result.ID && protocol.Deref(b.AskID) == asked.ID
+		})
+	}
+	testworld.Await(app, protocol.EventTerminalBindingsUpdated, holds)
+
+	id := uuid.NewString()
+	side := mustProfileRequest(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: id, Name: "Side"}, id).Profile
+	selectProfile(app, side.ID)
+	selectProfile(app, home)
+	testworld.AwaitSince(app, len(app.Log()), protocol.EventTerminalBindingsUpdated, holds)
+}

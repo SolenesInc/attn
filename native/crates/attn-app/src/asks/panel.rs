@@ -238,14 +238,25 @@ pub(crate) fn open_command(state: &mut State, ask_id: &str, n: usize, tx: &mut T
     let profile_id = state.facts.profiles.selected.clone();
     let panels = &mut state.window.asks.panels;
     let panel = panels.by_ask.entry(ask_id.to_owned()).or_default();
-    let opened = (panel.commands.get(&n))
-        .map(|session| Reference::Terminal(session.clone()))
+    let earlier = panel.commands.get(&n).cloned();
+    let opened = (earlier.clone())
+        .map(Reference::Terminal)
         .and_then(|tab| panel.tabs.iter().position(|t| *t == tab));
     panel.keys = true;
     tx.focus(TERMINAL, false);
-    if let Some(at) = opened {
-        panel.shown = at;
-        return;
+    let refused = (earlier.as_ref())
+        .and_then(|session| panels.spawns.get(session))
+        .is_some_and(|spawn| matches!(spawn, Spawn::Refused(_)));
+    match opened {
+        Some(at) if !refused => {
+            panel.shown = at;
+            return;
+        }
+        Some(at) => {
+            panel.tabs.remove(at);
+            earlier.map(|session| panels.spawns.remove(&session));
+        }
+        None => {}
     }
     let session = uuid::Uuid::new_v4().to_string();
     panel.commands.insert(n, session.clone());

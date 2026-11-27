@@ -70,13 +70,13 @@ fn heard_key(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> 
     if crate::hints::on_key(state, ev, tx) {
         return true;
     }
-    if let Some(terminal) = crate::asks::panel::keys_terminal(state) {
-        match tx.focused() {
-            None | Some(crate::asks::panel::TERMINAL) => {
-                return ask_terminal_key(state, terminal, ev, trace, tx);
-            }
-            Some(_) => crate::asks::panel::let_keys_go(state),
+    let terminal = crate::asks::panel::keys_terminal(state);
+    match (tx.focused(), &terminal) {
+        (Some(crate::asks::panel::TERMINAL), _) | (None, Some(_)) => {
+            return ask_terminal_key(state, terminal, ev, trace, tx);
         }
+        (Some(_), Some(_)) => crate::asks::panel::let_keys_go(state),
+        _ => {}
     }
     let escape = ev.key == Key::Escape;
     let disarmed = escape && crate::sidebar::crew::disarm(state);
@@ -95,10 +95,11 @@ fn heard_key(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> 
 }
 
 /// A key while the Asks panel's terminal holds the keyboard: the Asks chord hands it back to
-/// the question, the panel's own chords and send act, and every other key is the shell's.
+/// the question, the panel's own chords and send act, and every other key is the shell's, or
+/// nobody's while the shell starts or after the home refused it.
 fn ask_terminal_key(
     state: &mut State,
-    terminal: String,
+    terminal: Option<String>,
     ev: &KeyEvent,
     trace: &TraceId,
     tx: &mut Tx,
@@ -107,7 +108,15 @@ fn ask_terminal_key(
     if state.keymap.press(ev, tx, focus) == Press::Action(Action::DockAsks) {
         return crate::asks::panel::hand_back(state, tx);
     }
-    crate::asks::panel_key(state, ev, tx) || send_to_terminal(state, Some(terminal), ev, trace, tx)
+    if let Some(id) = &terminal
+        && let Some(chord) = clipboard_chord(ev)
+        && clipboard(state, id, chord, tx)
+    {
+        return true;
+    }
+    crate::asks::panel_key(state, ev, tx)
+        || terminal.is_none()
+        || send_to_terminal(state, terminal, ev, trace, tx)
 }
 
 fn route(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> bool {
@@ -427,10 +436,7 @@ fn composed(state: &mut State, ime: &Ime, tx: &mut Tx) -> bool {
     if crate::notebook::ime(state, ime, tx) {
         return true;
     }
-    if tx.focused().is_some() {
-        return false;
-    }
-    let Some(id) = state.window.typing_terminal(&state.facts) else {
+    let Some(id) = keyboard_terminal(state, tx) else {
         return false;
     };
     let now = tx.clock();
