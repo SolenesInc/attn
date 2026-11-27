@@ -1,0 +1,1 @@
+The app's terminals now attach from a list of `Drawn` terminals (runtime, session, kind) rather than desktop panes; the desktop derives that list from its panes. No behavior changes. This prepares the Asks panel (`s-20581r`) to draw a terminal no desktop pane holds.
