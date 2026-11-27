@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Offline cold launch mixes terminals from different profiles",
+  "at": "2026-11-27T07:05:52.727Z",
+  "detail": "At pinned main 54d9c6647 a cold start with home unavailable shows the machine greeting's complete terminal list in a synthetic desktop, losing profile selection. Independently confirmed by the native reviewer from cold.rs:39-69 and :81-94, the greeting projection, and the pane subscription code. This breaks profile separation in the offline UI. Scope the offline row to the last known valid profile and hold the row when profile context is unknown.\n"
+}
