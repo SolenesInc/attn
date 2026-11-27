@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Local machine-aware Markdown links open outside the app",
+  "at": "2026-11-27T16:35:39.172Z",
+  "detail": "A placed Markdown link on the app machine uses the system opener instead of its required Markdown tile. Route resolved Markdown references through the same in-app opening path for local and remote targets and keep the fallback for older asks.\n"
+}
