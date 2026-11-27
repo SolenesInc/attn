@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Home move rollback can temporarily activate two homes",
+  "at": "2026-11-27T11:04:52.386Z",
+  "detail": "Rollback on the old home can restore its active role while the new home is still running and has not received the rollback. Background jobs and relay ownership can overlap. Preserve a single active home through rollback, including while the target is unreachable.\n"
+}
