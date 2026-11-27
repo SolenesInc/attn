@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Answering an ask can leave its disconnected outpost shell open",
+  "at": "2026-11-27T15:06:23.416Z",
+  "detail": "Answering an ask while its outpost is disconnected does not preserve the request to close its shell. The shell remains open after reconnect. Record the lifecycle intent before attempting outpost I/O, and reconcile it when the outpost returns.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/ask_terminals.go",
+    "line": 45
+  },
+  "culprit": "4de696011866373c0d5e7e31fc5dc9ebd638de9d"
+}
