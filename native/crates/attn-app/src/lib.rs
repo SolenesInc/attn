@@ -347,10 +347,10 @@ pub fn bind(
 /// Keeps the terminals this window draws attached, with the keyboard's terminal focused.
 pub(crate) fn follow_terminals(state: &mut State, tx: &mut Tx) {
     let keyboard = state.window.keyboard_terminal(&state.facts);
-    let panes = desktop::terminal_panes(&state.facts, &state.window);
+    let drawn = desktop::drawn_terminals(&state.facts, &state.window);
     state
         .terminals
-        .follow(&state.facts, &panes, keyboard, tx.clock());
+        .follow(&state.facts, &drawn, keyboard, tx.clock());
     desktop::follow_overview(state);
 }
 

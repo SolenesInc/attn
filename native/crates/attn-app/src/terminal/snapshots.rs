@@ -31,12 +31,8 @@ impl Terminals {
         if self.snapshots.is_empty() {
             return;
         }
-        self.snapshots.retain(|id, _| {
-            facts
-                .desktops
-                .iter()
-                .any(|desktop| desktop.panes.iter().any(|pane| pane.runtime_id == *id))
-        });
+        self.snapshots
+            .retain(|id, _| crate::desktop::held_terminals(facts).any(|held| held.runtime == id));
     }
 
     /// Asks the daemon each of `ids` runs on for its screen, for each this window does not

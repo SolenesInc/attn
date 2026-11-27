@@ -6,7 +6,6 @@ use std::time::Instant;
 use attn_client::{
     Commands, Connection, Facts, Frame, NotConnected, Pulse, Reach, TerminalEvent, TerminalSink,
 };
-use attn_protocol::DesktopPane;
 use attn_protocol::{
     AttachResultMessage, AttachSessionMessage, DetachSessionMessage, PtyInputMessage,
     PtyResizeMessage, SetTerminalThemeMessage, TerminalFocusMessage,
@@ -353,14 +352,20 @@ fn rides(facts: &Facts, host: Option<&str>, recoverable: bool) -> Reach {
     }
 }
 
+/// A terminal a view draws: its runtime, the session it belongs to, and the kind of what
+/// holds it.
+#[derive(Clone, Copy)]
+pub(crate) struct Drawn<'f> {
+    pub(crate) runtime: &'f str,
+    pub(crate) session: &'f str,
+    pub(crate) kind: &'f str,
+}
+
 /// The link terminal `runtime` rides, by its session in the facts.
 pub(crate) fn rides_runtime(facts: &Facts, runtime: &str) -> Reach {
-    let session = facts
-        .desktops
-        .iter()
-        .flat_map(|desktop| desktop.panes.iter())
-        .find(|pane| pane.runtime_id == runtime)
-        .and_then(|pane| facts.sessions.iter().find(|s| s.id == pane.session_id));
+    let session = crate::desktop::held_terminals(facts)
+        .find(|drawn| drawn.runtime == runtime)
+        .and_then(|drawn| facts.sessions.iter().find(|s| s.id == drawn.session));
     rides(
         facts,
         session
@@ -504,22 +509,22 @@ pub fn mark(runtime_id: &str) -> u32 {
 }
 
 impl Terminals {
-    /// Keeps the terminals of `panes`, attached once drawn, and lets go of the rest.
+    /// Keeps the terminals of `drawn`, attached once drawn, and lets go of the rest.
     pub(crate) fn follow(
         &mut self,
         facts: &Facts,
-        panes: &[&DesktopPane],
+        drawn: &[Drawn<'_>],
         keyboard: Option<String>,
         now: f64,
     ) {
         self.follow_connection(facts);
         self.undrawn = true;
         let machines = crate::machine::Machines::of(facts);
-        let drawn: Vec<(String, Option<String>, bool, links::Place, Reach, bool)> = panes
+        let drawn: Vec<(String, Option<String>, bool, links::Place, Reach, bool)> = drawn
             .iter()
-            .filter(|pane| !pane.runtime_id.is_empty())
-            .map(|pane| {
-                let session = facts.sessions.iter().find(|s| s.id == pane.session_id);
+            .filter(|terminal| !terminal.runtime.is_empty())
+            .map(|terminal| {
+                let session = facts.sessions.iter().find(|s| s.id == terminal.session);
                 let recoverable = session.is_some_and(recoverable);
                 let place = links::Place {
                     cwd: session
@@ -530,7 +535,7 @@ impl Terminals {
                         .filter(|h| !h.is_empty()),
                     away: machines.away(session.and_then(|s| s.host.as_deref())),
                 };
-                let agent = (pane.kind == "agent").then(|| pane.session_id.clone());
+                let agent = (terminal.kind == "agent").then(|| terminal.session.to_owned());
                 let via = rides(facts, place.host.as_deref(), recoverable);
                 let streams = match via {
                     Reach::Machine => true,
@@ -540,7 +545,7 @@ impl Terminals {
                     }
                 };
                 (
-                    pane.runtime_id.clone(),
+                    terminal.runtime.to_owned(),
                     agent,
                     recoverable,
                     place,
@@ -581,12 +586,8 @@ impl Terminals {
                 });
             }
         }
-        self.hidden_screens.retain(|id, _| {
-            facts
-                .desktops
-                .iter()
-                .any(|desktop| desktop.panes.iter().any(|pane| pane.runtime_id == *id))
-        });
+        self.hidden_screens
+            .retain(|id, _| crate::desktop::held_terminals(facts).any(|held| held.runtime == id));
         for (id, agent, recoverable, place, via, streams) in drawn {
             let hidden_screens = &mut self.hidden_screens;
             let theme = &self.theme;

@@ -535,6 +535,34 @@ pub(crate) fn terminal_panes<'f>(
     }
 }
 
+/// The terminals this window draws, from the panes it keeps.
+pub(crate) fn drawn_terminals<'f>(
+    facts: &'f Facts,
+    window: &crate::Window,
+) -> Vec<crate::terminal::Drawn<'f>> {
+    terminal_panes(facts, window)
+        .into_iter()
+        .map(drawn)
+        .collect()
+}
+
+/// Every terminal a desktop holds, drawn in this window or not.
+pub(crate) fn held_terminals(facts: &Facts) -> impl Iterator<Item = crate::terminal::Drawn<'_>> {
+    facts
+        .desktops
+        .iter()
+        .flat_map(|desktop| desktop.panes.iter())
+        .map(drawn)
+}
+
+fn drawn(pane: &attn_protocol::DesktopPane) -> crate::terminal::Drawn<'_> {
+    crate::terminal::Drawn {
+        runtime: &pane.runtime_id,
+        session: &pane.session_id,
+        kind: &pane.kind,
+    }
+}
+
 /// The tiles this window shows: none at home, else the current desktop's columns on screen,
 /// or its one focused tile.
 pub(crate) fn on_screen_leaves(state: &crate::State) -> Vec<String> {
