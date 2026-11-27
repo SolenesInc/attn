@@ -173,6 +173,12 @@ fn describe(answer: &HomeMove) -> String {
     if answer.sleeps == Some(true) {
         let _ = writeln!(out, "  note    while {to} sleeps, the home is down");
     }
+    if answer.waits_for_target == Some(true) {
+        let _ = writeln!(
+            out,
+            "  note    this home runs no background jobs and no phone link until {to} is its outpost again; run `attn home rollback` again to stop waiting"
+        );
+    }
     if let Some(error) = answer.error.as_deref() {
         let _ = writeln!(out, "error: {error}");
     }

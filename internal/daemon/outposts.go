@@ -206,12 +206,14 @@ func (d *Daemon) updateOutpost(id string, run *outpostDial, state bridge.State, 
 		r.notifyChangedLocked()
 	}
 	r.mu.Unlock()
+	if connected {
+		d.homeReturned(id)
+	}
 	if changed {
 		d.publishFact(FactOutpostChanged, id, nil)
 	}
 	if connected {
 		d.kickOutpostInboxes(id)
-		d.homeReturned(id)
 	}
 	d.followRolledBackMove(id, err)
 }

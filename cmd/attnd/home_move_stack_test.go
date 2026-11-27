@@ -343,6 +343,7 @@ func TestARolledBackHomeShowsItsWaitAndASecondRollbackEndsIt(t *testing.T) {
 	if waiting := homeMoveJSON(t, home, "status"); waiting.Step != "rolled-back" || !protocol.Deref(waiting.WaitsForTarget) {
 		t.Fatalf("a home that rolled back while its target is away: %s", describeMove(waiting))
 	}
+	requireStdout(t, home.Attn("home", "status"), "run `attn home rollback` again to stop waiting")
 	shown := testworld.Request[protocol.PhonesUpdatedMessage](app, protocol.PhonesGetMessage{Cmd: protocol.CmdPhonesGet}, protocol.EventPhonesUpdated, nil)
 	if linkConnected(shown) || !strings.Contains(protocol.Deref(shown.Link.Error), "waits until") {
 		t.Fatalf("the phone link of a home waiting for its target: %+v", shown.Link)

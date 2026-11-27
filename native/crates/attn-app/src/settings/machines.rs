@@ -122,6 +122,9 @@ pub(super) fn follow(state: &mut State, changed: Slices, tx: &mut Tx) {
     if !changed.intersects(Slices::OUTPOSTS) {
         return;
     }
+    if waiting_move(state).is_some() {
+        read_last_move(state, tx);
+    }
     let listed = state.facts.outposts.clone();
     let machines = panel(state);
     let Some((name, destination)) = machines.submitted.clone() else {
@@ -407,7 +410,10 @@ fn settle_move(state: &mut State, latest: &HomeMove) {
         return;
     };
     let mut moving = moving;
-    if moving.move_id.is_none() && latest.step == "checking" {
+    if moving.move_id.is_none()
+        && latest.side.as_deref() == Some("from")
+        && matches!(latest.step.as_str(), "checking" | "staged" | "committing")
+    {
         moving.move_id = latest.id.clone();
     }
     let ours = moving.move_id.is_some() && latest.id == moving.move_id;
