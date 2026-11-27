@@ -77,7 +77,7 @@ func usage() {
 URL: %s (ATTN_WS_URL > ATTN_INSTANCE-derived port > dev; prod needs an explicit ATTN_WS_URL)
 
 Commands:
-  add-session --cwd D [--host OUTPOST] [--profile P] [--place] [--agent claude] [--label L] [--initial-prompt-file P] [--yolo] [--id I] [--cols 80] [--rows 24]
+  add-session --cwd D [--host OUTPOST] [--profile P] [--place] [--agent claude] [--label L] [--initial-prompt-file P] [--typed T] [--yolo] [--id I] [--cols 80] [--rows 24]
   rm-session --id I
   kill-session --id I [--reload]
   screen --id I                       (for screen, input and attach, I is a session id or a terminal id from list's terminal_bindings)
@@ -116,6 +116,7 @@ func addSession(args []string) error {
 	agent := fs.String("agent", "claude", "agent: claude | codex | shell")
 	label := fs.String("label", "", "session label (defaults to dir basename)")
 	initialPromptFile := fs.String("initial-prompt-file", "", "file containing the initial agent prompt")
+	typed := fs.String("typed", "", "text a shell holds at its first prompt, never run (agent shell only)")
 	yolo := fs.Bool("yolo", false, "launch with agent approval prompts bypassed")
 	id := fs.String("id", "", "session id (defaults to a generated one)")
 	cols := fs.Int("cols", 80, "initial PTY cols")
@@ -158,6 +159,9 @@ func addSession(args []string) error {
 			return fmt.Errorf("read initial prompt file: %w", err)
 		}
 		msg["initial_prompt"] = string(content)
+	}
+	if *typed != "" {
+		msg["typed"] = *typed
 	}
 	if *yolo {
 		msg["yolo_mode"] = true
