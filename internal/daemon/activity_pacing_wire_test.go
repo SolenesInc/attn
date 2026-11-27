@@ -64,7 +64,7 @@ func TestAWorkingSessionsActivityLineIsWrittenOnlyForNewOutputAndAtMostOncePerIn
 			m.ID = "s1"
 			m.ResumeSessionID = protocol.Ptr(transcript.ConversationID)
 		})
-		if err := cli.ObserveAgentConversation(protocol.TerminalID(w.Terminal("s1")), transcript.ConversationID, transcript.Path); err != nil {
+		if err := cli.ObserveAgentConversation(protocol.TerminalID(w.Terminal("s1")), transcript.ConversationID, transcript.Path, ""); err != nil {
 			t.Fatalf("bind the conversation: %v", err)
 		}
 		expect := func(when string, want int) []string {

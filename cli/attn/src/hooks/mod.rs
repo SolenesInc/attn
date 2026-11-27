@@ -253,6 +253,7 @@ impl Hook<'_> {
         message.id = id.to_string();
         message.resume_session_id = session.to_string();
         message.transcript_path = Some(transcript.to_string());
+        message.source = non_blank(text(input.field("source")).trim());
         let lifecycle = (self.getenv)("ATTN_RUNTIME_LIFECYCLE");
         if !lifecycle.is_empty() {
             message.lifecycle_id = Some(lifecycle);

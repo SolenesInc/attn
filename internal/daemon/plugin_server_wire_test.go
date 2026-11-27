@@ -227,7 +227,7 @@ func TestAnAppServerConversationHasOneHarnessAndProfileOwnerAcrossAliases(t *tes
 	sideApp := w.AppOn(side.ID)
 	other, _ := spawnPluginServerView(w, sideApp, alias)
 	terminal := protocol.TerminalID(sideApp.Terminal(other))
-	if err := w.Client().ObserveAgentConversation(terminal, view.ConversationID, ""); err == nil {
+	if err := w.Client().ObserveAgentConversation(terminal, view.ConversationID, "", ""); err == nil {
 		t.Fatal("a native view switched to another profile's owned conversation")
 	}
 	if owner, err := w.Client().CallerSession(terminal); err != nil || string(owner) != other {

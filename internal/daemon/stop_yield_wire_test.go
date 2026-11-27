@@ -73,7 +73,7 @@ func hookedClaudeAtWork(t *testing.T, w *world, app *testworld.Peer, cli *client
 		m.ID, m.Label = "s1", protocol.Ptr("checkout work")
 	})
 	transcript := fakeagent.WriteClaudeTranscript(t, cwd, w.Terminal("s1"))
-	if err := cli.ObserveAgentConversation(protocol.TerminalID(w.Terminal("s1")), transcript.ConversationID, transcript.Path); err != nil {
+	if err := cli.ObserveAgentConversation(protocol.TerminalID(w.Terminal("s1")), transcript.ConversationID, transcript.Path, ""); err != nil {
 		t.Fatalf("bind the conversation: %v", err)
 	}
 	transcript.Prompt(prompt)

@@ -46,7 +46,7 @@ func TestABlankCodexTileKeepsItsLaterConversationAcrossARestart(t *testing.T) {
 	if err != nil || len(transcripts) != 1 {
 		t.Fatalf("original conversation transcripts = %v, error = %v", transcripts, err)
 	}
-	if err := s.Client().ObserveAgentConversation(protocol.TerminalID(terminal), original, transcripts[0]); err != nil {
+	if err := s.Client().ObserveAgentConversation(protocol.TerminalID(terminal), original, transcripts[0], ""); err != nil {
 		t.Fatal(err)
 	}
 	mark := len(app.Log())

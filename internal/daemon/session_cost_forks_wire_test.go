@@ -44,7 +44,7 @@ func TestATakeoverKeepsUnreadForkUsageAndItsDeduplicationAcrossRestart(t *testin
 		forked.reply(forkReply)
 		w.advance(time.Second)
 		appendLegacyCostUsage(t, forked.transcript.Path, "unread-final-fork-request", "claude-opus-4-8", 7, 8)
-		if err := w.Client().ObserveAgentConversation(protocol.TerminalID(forked.self), original.transcript.ConversationID, original.transcript.Path); err != nil {
+		if err := w.Client().ObserveAgentConversation(protocol.TerminalID(forked.self), original.transcript.ConversationID, original.transcript.Path, ""); err != nil {
 			t.Fatal(err)
 		}
 		expected := claudeTokens(firstReply) + claudeTokens(forkReply) + 15

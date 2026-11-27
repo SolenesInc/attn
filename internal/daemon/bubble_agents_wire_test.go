@@ -66,7 +66,7 @@ func (w *world) bootBubbleClaude(t *testing.T, id string) *bubbleClaude {
 	}
 	agent := &bubbleClaude{t: t, id: id, self: string(term.Options.ID), cli: w.Client(), term: term, transcript: fakeagent.WriteClaudeTranscript(t, cwd, conversation)}
 	term.OnSubmit(agent.take)
-	if err := agent.cli.ObserveAgentConversation(protocol.TerminalID(agent.self), agent.transcript.ConversationID, agent.transcript.Path); err != nil {
+	if err := agent.cli.ObserveAgentConversation(protocol.TerminalID(agent.self), agent.transcript.ConversationID, agent.transcript.Path, ""); err != nil {
 		t.Fatalf("session start of %s: %v", id, err)
 	}
 	term.Heartbeat("not_busy", "Claude Code")

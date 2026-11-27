@@ -30,7 +30,7 @@ func TestASnoozeBeforeTheFirstConversationReportStillWakes(t *testing.T) {
 `, cwd)), 0600); err != nil {
 			t.Fatal(err)
 		}
-		if err := cli.ObserveAgentConversation(terminal, "first-conversation", path); err != nil {
+		if err := cli.ObserveAgentConversation(terminal, "first-conversation", path, ""); err != nil {
 			t.Fatal(err)
 		}
 		w.advance(time.Until(deadline))
@@ -51,7 +51,7 @@ func TestAClearedConversationsSnoozeStillWakes(t *testing.T) {
 			if err := os.WriteFile(path, []byte(fmt.Sprintf("{\"type\":\"session_meta\",\"payload\":{\"id\":%q,\"cwd\":%q,\"source\":\"cli\"}}\n", native, cwd)), 0600); err != nil {
 				t.Fatal(err)
 			}
-			if err := cli.ObserveAgentConversation(terminal, native, path); err != nil {
+			if err := cli.ObserveAgentConversation(terminal, native, path, ""); err != nil {
 				t.Fatal(err)
 			}
 		}

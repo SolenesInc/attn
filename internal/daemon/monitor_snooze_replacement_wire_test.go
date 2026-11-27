@@ -23,7 +23,7 @@ func TestASnoozeStillWakesAfterTakingOverALiveConversation(t *testing.T) {
 		deadline := time.Now().Add(time.Minute)
 		snoozeUntil(app, session, deadline)
 		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return snoozedUntil(s).Equal(deadline) })
-		if err := cli.ObserveAgentConversation(terminal, owner.transcript.ConversationID, owner.transcript.Path); err != nil {
+		if err := cli.ObserveAgentConversation(terminal, owner.transcript.ConversationID, owner.transcript.Path, ""); err != nil {
 			t.Fatal(err)
 		}
 		if err := cli.UpdateState(terminal, protocol.StateWaitingInput); err != nil {

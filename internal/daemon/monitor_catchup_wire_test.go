@@ -20,7 +20,7 @@ func TestAConversationReportRetriesAfterStorageRecovers(t *testing.T) {
 		transcript.Prompt("continue from the recovered transcript")
 		restore := w.RefuseDatabaseCommits()
 		defer restore()
-		if err := cli.ObserveAgentConversation(protocol.TerminalID(agent.self), transcript.ConversationID, transcript.Path); err == nil {
+		if err := cli.ObserveAgentConversation(protocol.TerminalID(agent.self), transcript.ConversationID, transcript.Path, ""); err == nil {
 			t.Fatal("unsaved conversation report returned success")
 		}
 		if err := cli.RecordPullRequestCreated(protocol.SessionID(agent.id), shopPull(1)); err == nil {
@@ -28,7 +28,7 @@ func TestAConversationReportRetriesAfterStorageRecovers(t *testing.T) {
 		}
 		restore()
 		w.advance(jobs.DefaultBackoffBase)
-		if err := cli.ObserveAgentConversation(protocol.TerminalID(agent.self), transcript.ConversationID, transcript.Path); err != nil {
+		if err := cli.ObserveAgentConversation(protocol.TerminalID(agent.self), transcript.ConversationID, transcript.Path, ""); err != nil {
 			t.Fatalf("recovered conversation report: %v", err)
 		}
 		read, err := cli.SessionTranscript(agent.id, "")

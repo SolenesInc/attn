@@ -296,6 +296,8 @@ type Signals struct {
 	ForgetsRecoveredClaim bool
 	// LaunchesWorking: the harness reports no state, so a launching session counts as working at once.
 	LaunchesWorking bool
+	// ForkStart is the SessionStart source with which the harness reports that its terminal moved to a fork of the conversation it held; empty when no source means that.
+	ForkStart string
 }
 
 // TitleKind names one of attn's terminal-title parsers; TitlesNone reads no titles.

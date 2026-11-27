@@ -221,7 +221,7 @@ func TestAnInstalledServerPluginKeepsConversationOwnershipThroughRegistrationAnd
 
 	t.Logf("reload, and a ledger resume on a server attn started after the last one let go, kept native conversation %s and target devvm", conversation)
 	terminal := s.Terminal(session)
-	if err := s.Client().ObserveAgentConversation(protocol.TerminalID(terminal), "view-moved-on", ""); err != nil {
+	if err := s.Client().ObserveAgentConversation(protocol.TerminalID(terminal), "view-moved-on", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return protocol.Deref(x.Hidden) })

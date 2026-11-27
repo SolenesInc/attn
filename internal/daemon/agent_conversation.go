@@ -27,6 +27,7 @@ func (d *Daemon) handleObserveAgentConversation(ctx context.Context, conn net.Co
 		NativeID:       strings.TrimSpace(msg.ResumeSessionID),
 		TranscriptPath: strings.TrimSpace(protocol.Deref(msg.TranscriptPath)),
 		Run:            strings.TrimSpace(protocol.Deref(msg.LifecycleID)),
+		Forked:         d.startsFork(terminal, strings.TrimSpace(protocol.Deref(msg.Source))),
 	}
 	if terminal == "" {
 		d.sendError(conn, "missing id")
@@ -36,7 +37,7 @@ func (d *Daemon) handleObserveAgentConversation(ctx context.Context, conn net.Co
 		d.sendError(conn, "missing resume_session_id")
 		return
 	}
-	if wait := d.events().Moved(harness.FromTerminal(terminal), harness.Move{Conversation: observation.NativeID, Path: observation.TranscriptPath, Run: observation.Run}); wait != nil {
+	if wait := d.events().Moved(harness.FromTerminal(terminal), harness.Move{Conversation: observation.NativeID, Path: observation.TranscriptPath, Run: observation.Run, Forked: observation.Forked}); wait != nil {
 		ctx, cancel := d.connectionContext(ctx, conn)
 		defer cancel()
 		if err := wait(ctx); err != nil {
@@ -45,6 +46,11 @@ func (d *Daemon) handleObserveAgentConversation(ctx context.Context, conn net.Co
 		}
 	}
 	d.sendOK(conn)
+}
+
+func (d *Daemon) startsFork(t protocol.TerminalID, source string) bool {
+	session := d.store.Get(d.sessionInTerminal(t))
+	return session != nil && source != "" && source == d.signalsOf(session.Agent).ForkStart
 }
 
 func refused(err error) func(context.Context) error {

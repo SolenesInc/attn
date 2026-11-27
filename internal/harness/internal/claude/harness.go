@@ -62,6 +62,7 @@ func Facts() harness.Facts {
 			Titles:          harness.TitlesClaude,
 			StopsReadable:   true,
 			StopsClassified: true,
+			ForkStart:       "fork",
 		},
 		ModelDiscovery:        true,
 		Activity:              true,

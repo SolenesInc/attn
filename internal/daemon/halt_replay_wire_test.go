@@ -25,7 +25,7 @@ func TestAHaltRecordedBeforeTheSessionStartedDoesNotEndItsTurn(t *testing.T) {
 		w.Spawn(app, fakeagent.Claude, cwd, func(m *protocol.SpawnSessionMessage) {
 			m.ID, m.Label, m.ResumeSessionID = "s1", protocol.Ptr("checkout essay"), protocol.Ptr(transcript.ConversationID)
 		})
-		if err := cli.ObserveAgentConversation(protocol.TerminalID(w.Terminal("s1")), transcript.ConversationID, transcript.Path); err != nil {
+		if err := cli.ObserveAgentConversation(protocol.TerminalID(w.Terminal("s1")), transcript.ConversationID, transcript.Path, ""); err != nil {
 			t.Fatalf("bind the conversation: %v", err)
 		}
 		transcript.Prompt("just the outline then")
@@ -61,7 +61,7 @@ func TestAHaltFromAnEarlierTurnReplayedByARestartedWatcherLeavesTheQuestionOpen(
 		})
 		terminal := protocol.TerminalID(w.Terminal("s1"))
 		bind := func() {
-			if err := cli.ObserveAgentConversation(terminal, transcript.ConversationID, transcript.Path); err != nil {
+			if err := cli.ObserveAgentConversation(terminal, transcript.ConversationID, transcript.Path, ""); err != nil {
 				t.Fatalf("bind the conversation: %v", err)
 			}
 		}

@@ -364,7 +364,7 @@ func (c *Client) RecordCompaction(id protocol.TerminalID, active bool, trigger s
 	return err
 }
 
-func (c *Client) ObserveAgentConversation(id protocol.TerminalID, nativeID string, transcriptPath string) error {
+func (c *Client) ObserveAgentConversation(id protocol.TerminalID, nativeID, transcriptPath, source string) error {
 	msg := protocol.SetSessionResumeIDMessage{
 		Cmd:             protocol.CmdSetSessionResumeID,
 		ID:              id,
@@ -372,6 +372,9 @@ func (c *Client) ObserveAgentConversation(id protocol.TerminalID, nativeID strin
 	}
 	if strings.TrimSpace(transcriptPath) != "" {
 		msg.TranscriptPath = protocol.Ptr(transcriptPath)
+	}
+	if strings.TrimSpace(source) != "" {
+		msg.Source = protocol.Ptr(source)
 	}
 	_, err := c.send(msg)
 	return err

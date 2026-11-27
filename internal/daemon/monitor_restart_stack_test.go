@@ -36,7 +36,7 @@ func TestAConversationMoveSavedJustBeforeACrashIsDecidedAfterTheRestart(t *testi
 	}
 	s.Stop()
 	s.StartCrashingAt(sessionmonitor.CrashConversationPending)
-	_ = s.Client().ObserveAgentConversation(terminal, "a-cleared-conversation", transcript)
+	_ = s.Client().ObserveAgentConversation(terminal, "a-cleared-conversation", transcript, "")
 	s.AwaitCrash()
 
 	s.Start()

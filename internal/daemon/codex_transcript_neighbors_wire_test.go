@@ -55,7 +55,7 @@ func TestAMissingBoundTranscriptNeverUsesANeighborsReply(t *testing.T) {
 		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
 			t.Fatal(err)
 		}
-		if err := cli.ObserveAgentConversation(protocol.TerminalID(w.Terminal(id)), native, path); err != nil {
+		if err := cli.ObserveAgentConversation(protocol.TerminalID(w.Terminal(id)), native, path, ""); err != nil {
 			t.Fatal(err)
 		}
 		return id, path
