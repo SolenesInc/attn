@@ -1003,21 +1003,45 @@ func placeShownSession(tx *sql.Tx, now string, profile profiles.Profile, session
 	if err != nil {
 		return profiles.Desktop{}, "", err
 	}
-	current, err := loadLaunchDesktop(tx, profile, "")
+	target, anchor, err := shownSessionPlace(tx, profile, sessionID)
 	if err != nil {
 		return profiles.Desktop{}, "", err
 	}
 	paneID := newProfileEntityID("pane")
-	desktop, err := placeSessionInTree(tx, current, SessionPlacementRequest{
-		SessionID: sessionID,
-		Title:     title,
-		Status:    profiles.PaneStatusReady,
-		Focus:     true,
+	desktop, err := placeSessionInTree(tx, target, SessionPlacementRequest{
+		SessionID:    sessionID,
+		AnchorPaneID: anchor,
+		Title:        title,
+		Status:       profiles.PaneStatusReady,
+		Focus:        true,
 	}, paneID)
 	if err != nil {
 		return profiles.Desktop{}, "", err
 	}
 	return desktop, paneID, writeCurrentDesktopArrangement(tx, now, &desktop)
+}
+
+// shownSessionPlace is where a session with no tile shows: beside the newest tile of the agent
+// whose ask holds its terminal, else beside the active tile of the profile's current desktop.
+func shownSessionPlace(tx *sql.Tx, profile profiles.Profile, sessionID protocol.SessionID) (profiles.Desktop, string, error) {
+	var asker protocol.SessionID
+	held, err := rowFound(tx.QueryRow(`SELECT a.session_id FROM terminal_bindings b JOIN asks a ON a.id = b.ask_id
+ WHERE b.session_id = ? ORDER BY b.terminal_id LIMIT 1`, sessionID), &asker)
+	if err != nil {
+		return profiles.Desktop{}, "", err
+	}
+	if held {
+		tiles, err := sessionTiles(tx, asker)
+		if err != nil {
+			return profiles.Desktop{}, "", err
+		}
+		if len(tiles) > 0 {
+			desktop, err := loadDesktop(tx, tiles[0].desktopID)
+			return desktop, tiles[0].tileID, err
+		}
+	}
+	desktop, err := loadLaunchDesktop(tx, profile, "")
+	return desktop, "", err
 }
 
 func panePersisted(tx *sql.Tx, desktopID string, pane profiles.Pane) (bool, error) {

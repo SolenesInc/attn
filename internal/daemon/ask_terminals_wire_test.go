@@ -190,3 +190,52 @@ func TestOnlyClientsOfTheAsksProfileSeeWhichAskHoldsAShell(t *testing.T) {
 		return askHolds(m.TerminalBindings, asked.ID, shell)
 	})
 }
+
+func TestShowingAShellAnAskHoldsGivesItATileBesideTheAskingAgent(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	askerDesktop, _ := placedPane(t, w, asker)
+	id := uuid.NewString()
+	elsewhere := mustProfileRequest(app, protocol.DesktopCreateMessage{Cmd: protocol.CmdDesktopCreate, RequestID: id, ProfileID: app.SelectedProfile(), Name: protocol.Ptr("Elsewhere")}, id).Desktops[0]
+	w.Spawn(app, fakeagent.Claude, w.Path("elsewhere"))
+	asked, err := cli.AskOpen(protocol.SessionID(asker), "", cacheAsk, "", w.Path("shop"))
+	if err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+	shell := protocol.SessionID(w.Spawn(app, shellHarness, w.Path("shell"), func(m *protocol.SpawnSessionMessage) {
+		m.Placement = &protocol.SessionPlacement{AskID: protocol.Ptr(asked.ID)}
+	}))
+	awaitAskHolds(app, asked.ID, shell)
+	setSetting(t, app, "phone_access_enabled", "true")
+	phone := connectPhone(t, w, "phone", app.SelectedProfile())
+	phone.hello(homegateway.APIVersion)
+	listsShell := func(sessions []homegateway.HomeGatewaySession) bool {
+		return slices.ContainsFunc(sessions, func(s homegateway.HomeGatewaySession) bool { return s.ID == string(shell) })
+	}
+	if listsShell(phone.sessions()) {
+		t.Errorf("the phone lists shell %s, which ask %s holds", shell, asked.ID)
+	}
+
+	id = uuid.NewString()
+	shown := mustProfileRequest(app, protocol.DesktopShowSessionMessage{Cmd: protocol.CmdDesktopShowSession, RequestID: id, SessionID: shell}, id)
+	var on string
+	for _, desktop := range shown.Desktops {
+		if slices.ContainsFunc(desktop.Panes, func(p protocol.DesktopPane) bool { return p.SessionID == shell }) {
+			on = desktop.ID
+		}
+	}
+	if on != askerDesktop.ID {
+		t.Errorf("showing the shell ask %s holds put it on desktop %q; want %s, beside the asking agent, not %s, the current one", asked.ID, on, askerDesktop.ID, elsewhere.ID)
+	}
+	testworld.Await(app, protocol.EventTerminalBindingsUpdated, func(m protocol.TerminalBindingsUpdatedMessage) bool {
+		return slices.ContainsFunc(m.TerminalBindings, func(b protocol.TerminalBinding) bool { return b.SessionID == shell && b.AskID == nil })
+	})
+	for !listsShell(phone.sessions()) {
+	}
+	answerCacheAsk(t, app, asked.ID)
+	if !sessionListed(t, cli, shell) {
+		t.Errorf("answering ask %s closed shell %s, which its tile took first", asked.ID, shell)
+	}
+}
