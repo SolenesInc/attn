@@ -440,13 +440,15 @@ func TestAJoinRefusedForItsBuildLeavesOnceTheHomeRemovesIt(t *testing.T) {
 		t.Fatalf("a join across builds: exit %d, %s%s", refused.Code, refused.Stdout, refused.Stderr)
 	}
 	row := outpostState(w.app, w.name, protocol.OutpostStateRefused)
+	testworld.Await(lp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["outpost_state"] == "refused" })
 	requireLines(t, "status after a join refused for its build", w.status(), "dial:       home (refused)", "enrolled to ")
 	t.Logf("join refused for its build: %s", strings.TrimSpace(refused.Stderr))
 
+	removed := lp.EventCount()
 	w.app.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: row.ID})
 	testworld.Await(w.app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
 	stopRetries := w.laptop.FireTimers(bridge.RetryTimer)
-	testworld.Await(lp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+	testworld.AwaitSince(lp, removed, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
 		return m.Settings["outpost_state"] == "off" && m.Settings["outpost_home"] == ""
 	})
 	stopRetries()

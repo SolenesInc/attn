@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -130,6 +131,8 @@ func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConf
 		return err
 	}
 	if answer.Refused != nil {
+		_ = raw.SetDeadline(time.Now().Add(AnswerWithin))
+		_, _ = io.Copy(io.Discard, control)
 		return answer.Refused
 	}
 	if err := raw.SetDeadline(time.Time{}); err != nil {
