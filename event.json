@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Unconfirmed outpost switch reports the old build as current",
+  "at": "2026-11-27T07:35:03.558Z",
+  "detail": "In e37c3a0a1 the outpost row stores the pre-switch probe as the machine's running build after a successful switch with no matching bridge return. CLI status and the banner present that build as current. This is the outpost case of existing bug 4ff0437. Keep an old build as current when replacement was refused before switching. After an unconfirmed switch, report the running build as unverified or label the old build last observed, and use matching banner text.\n"
+}
