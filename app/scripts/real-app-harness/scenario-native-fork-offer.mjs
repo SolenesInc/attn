@@ -144,7 +144,8 @@ try {
     runner.assert(placed.desktop.id === desktop.id, 'the original opens on the fork\'s desktop', { desktop: placed.desktop.id });
     runner.assert(order.indexOf(original) === order.indexOf(fork) + 1, 'the original is in the column right after the fork', { order });
     runner.assert(placed.desktop.active_pane_id === placed.pane.pane_id, 'the original is the active tile', placed.desktop);
-    await driver.state('window', { expect: { on_screen: original }, timeoutMs: 15_000 });
+    const window = await driver.state('window', { expect: { on_screen: original }, timeoutMs: 15_000 });
+    runner.assert(window?.keyboard?.pane === placed.pane.pane_id, 'the keyboard is in the original\'s tile', window?.keyboard);
     await observer.waitFor(() => session(fork) && !session(fork).fork_offer, 'Open ends the offer', 30_000);
     await driver.waitFor(notice(fork), { gone: true });
     await driver.atRest({ timeoutMs: 10_000 });

@@ -156,11 +156,6 @@ fn open_on_the_notice_asks_the_daemon_and_the_keyboard_follows_the_original_besi
 
     world.gesture(|app| app.click(Target::key("session.f.fork-offer.open")));
     arrange(&mut world, beside());
-    world.daemon.emit(SessionStateChangedMessage {
-        session: fork(None),
-        ..SessionStateChangedMessage::new()
-    });
-    world.settle();
 
     assert_eq!(sent_for(&world, "fork_offer_open"), ["f"]);
     assert_eq!(keyboard(&mut world), "p-o");

@@ -32,7 +32,7 @@ the tiles still on the old Codex.
 - **Settings → Attention queue** (`native/crates/attn-app/src/settings/hygiene.rs`): "Show hidden sessions in the queue" (`settings.switch.queue_show_hidden_sessions`, setting `queue_show_hidden_sessions`, on by default).
 - The Codex updates band at the top of the window, `codex-updates`, whose `codex-updates.text` says the stage, with Install (`.install`), Restart now (`.restart`), Retry (`.retry`) or Reload tiles (`.reload`) as each applies, and a confirmation, `shared-codex-confirm-dialog`, before a restart or a reload (`native/crates/attn-app/src/harness/codex/mod.rs`). `.dismiss-update` and `.dismiss-old-tiles` close the band. After the user closes the band, the same offer stays under the bell.
 - Palette, while each applies (`native/crates/attn-app/src/harness/codex/mod.rs`): `install-codex-update` ("Install Codex update"), `restart-shared-codex-now` ("Restart shared Codex now"), `retry-shared-codex-restart` ("Retry shared Codex restart") and `reload-old-codex-tiles` ("Reload old Codex tiles").
-- In a shared Codex terminal, `/new`, `/resume <id>` and `/agents` switch the terminal's conversation.
+- In a shared Codex terminal, `/new`, `/fork`, `/resume <id>` and `/agents` switch the terminal's conversation. `/fork` also offers to open the original beside the fork ([ledger.md](ledger.md) `fork-offer`).
 - In a shared Codex terminal, `/side` opens a side conversation, ctrl-/ switches between it and its parent, and ctrl-c closes it.
 - Where people see what agents do: a hidden session is marked `hidden` in the ledger ([ledger.md](ledger.md)) and queues without a desktop chip ([queue-flow.md](queue-flow.md)).
 - Their own shell: the verbs below.
@@ -113,11 +113,11 @@ bridge --launch ping
 
 - Wire: `native/crates/attn-app/tests/wire/shared_codex.rs` and the hidden-agent tests in `native/crates/attn-app/tests/wire/queue.rs`, `internal/daemon/codex_*_wire_test.go`, `internal/daemon/slow_launch_wire_test.go`.
 - Stack: `cmd/attnd/codex_shared_stack_test.go`.
-- Scenario: `native-codex-shared`, `native-codex-update`.
+- Scenario: `native-codex-shared`, `native-codex-update`, `native-fork-offer`.
 
 ## Gotchas
 
-- The shared mock switches only on `/resume <id>` and `/agents <id>`. A bare `/agents` prints nothing and leaves the terminal on its conversation.
+- The shared mock switches on `/new`, `/fork`, `/resume <id>` and `/agents <id>`. A bare `/agents` prints nothing and leaves the terminal on its conversation.
 - `latest` comes from the daily `codex doctor` check, so writing `$X/latest` mid-run does not change the latest version. `./attn codex update` installs the new version anyway. To make the band and palette offer an update again, lower `$X/version` instead, as the palette install step does.
 - The mock never asks Codex's folder trust question, so you cannot drive the trust answer on the baseline. It needs a real Codex.
 - The shared mock app-server imports `ws` from `app/node_modules`. In a fresh worktree run `pnpm --dir app install` first: without it the app-server exits at once, and every shared launch fails with `exited before answering`.

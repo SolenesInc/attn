@@ -58,9 +58,9 @@ launches the mock agent for `claude` and `codex`, refuses headless model
 tasks, and talks to the mock GitHub. `ATTN_TOOL_HOME` gives the instance a
 scratch harness home, so a mock conversation that a fixture makes resumable
 lands there and not in your `~/.claude` or `~/.codex`. `CODEX_HOME` and
-`SIGMA_HOME` put Codex's and Sigma's homes under it too, so a real Codex
-keeps its rollouts where attn looks for them, and a Sigma session's server
-keeps its conversations there and not in your `~/.sigma`. The file also defines
+`SIGMA_HOME` name Codex's and Sigma's homes under it, so a real Codex and a
+Sigma session's server keep their conversations there and not in `~/.codex` or
+`~/.sigma`. The file also defines
 `wsctl`, `bridge` and `DRIVE_ENV`. `DRIVE_ENV` holds the path of the file
 itself, which recipes append their variables to
 ([features/README.md](features/README.md)). Running `write-env.sh` again
@@ -138,7 +138,7 @@ prints `FAIL (2 failed, 0 warnings)` and exits 1. Everything else must pass.
 | --- | --- | --- | --- |
 | `./attn <verb>` in the instance shell | A person's own shell. Agents, for verbs that need no session | Every CLI verb, `--json` output, exit codes | The app. Verbs that act as a session, such as `seed tend`, `seed watch` and `terminal`, refuse without one |
 | Mock agent | Agents | The CLI and prompts as a session in the instance sees them | Model judgment: it does only what its fixture says |
-| `wsctl` | The daemon protocol | Sessions, desktops and tiles (`wsctl list`), spawning, terminal input and screens by session or terminal id, a seed page's Resume (`seed-continuation`, `seed-resume`), and any request answered by an event carrying its `request_id` (`request --json <payload> --event <event>`) | What the app shows |
+| `wsctl` | The daemon protocol | Sessions, desktops and tiles (`wsctl list`), spawning, terminal input and screens by session or terminal id, a seed page's Resume (`seed-continuation`, `seed-resume`), and any request answered by an event carrying its `request_id` (`request --json <payload> --event <event>`), and a command with no reply (`send --json <payload>`) | What the app shows |
 | `bridge` | People | Keys, text and presses inside the window, the app's state and accessibility tree, screenshots | The macOS menu bar |
 | Scenarios | People, as committed proof | The packaged app, through `createWindowDriver({ appPath, client })`, menus included | A quick local loop: CI runs them |
 
