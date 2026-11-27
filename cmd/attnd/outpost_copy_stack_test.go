@@ -36,6 +36,17 @@ func sessionsOn(t *testing.T, s *testworld.Stack, host string) map[protocol.Sess
 	return out
 }
 
+func everySessionOn(t *testing.T, s *testworld.Stack) map[protocol.SessionID]string {
+	t.Helper()
+	app := s.App()
+	defer app.Close()
+	out := map[protocol.SessionID]string{}
+	for _, session := range app.Initial.Sessions {
+		out[session.ID] = protocol.Deref(session.Host)
+	}
+	return out
+}
+
 func outpostLedgerRows(t *testing.T, s *testworld.Stack, all, closed bool) []string {
 	t.Helper()
 	app := s.App()
@@ -164,7 +175,7 @@ func TestOutpostCopyFollowsTheHomeForItsTerminalsOnly(t *testing.T) {
 	requireStdout(t, remote.Attn("enrollment", "leave"), "no longer enrolled")
 	remote.Start()
 	remote.App()
-	if got := sessionsOn(t, remote, ""); len(got) != 0 {
+	if got := everySessionOn(t, remote); len(got) != 0 {
 		t.Fatalf("a daemon started after an offline leave kept the copy: %v", got)
 	}
 
@@ -209,7 +220,7 @@ func TestReconnectRestoresTheCopyAfterAnOutpostLeaves(t *testing.T) {
 	testworld.Await(p, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
 	remote.AwaitStopped()
 	remote.Start()
-	if copied := sessionsOn(t, remote, ""); len(copied) != 0 {
+	if copied := everySessionOn(t, remote); len(copied) != 0 {
 		t.Fatalf("leave after Remove kept copied shells: %v", copied)
 	}
 }
