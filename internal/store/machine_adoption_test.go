@@ -38,6 +38,7 @@ func TestAMachineThatAdoptsTheIDItsHomeGaveItKeepsNoReferenceToItsOldID(t *testi
 	exec(`INSERT INTO file_activity (host, path, source, last_at) VALUES (?, '/work/notes.md', 'open', '2026-11-20T00:00:00Z')`, old)
 	exec(`INSERT INTO markdown_annotation_drafts (host, path, annotations_json, generation, updated_at) VALUES (?, '/work/notes.md', '[]', 1, '2026-11-20T00:00:00Z')`, old)
 	exec(`INSERT INTO code_nav_setups (host, repository, language, session_id) VALUES (?, '/work', 'go', 'own')`, old)
+	exec(`INSERT INTO asks (id, session_id, address, subject, markdown, base_dir, host, cwd, created_at) VALUES ('ask', 'own', 'session:own', 's', 'm', '/work', ?, '/work', '')`, old)
 	exec(`INSERT INTO delegation_operations (request_id, operation_id, request_json, state, progress, session_id, created_at, updated_at) VALUES ('r', 'o', json_object('resolved_host', ?), 'done', '', 'own', '', '')`, old)
 	exec(`INSERT INTO settings (key, value) VALUES (?, 'true'), (?, 'dismissed'), (?, 'worktree'), (?, 'kept')`,
 		"new_session_yolo_"+old, "code_review_setup_offer_"+old+"_/work", "new_session_destination_"+old+"_"+profile.ID, "new_session_destination_"+given+"_"+profile.ID)

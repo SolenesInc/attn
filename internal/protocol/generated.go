@@ -587,11 +587,17 @@ type Ask struct {
 	// CrewMember corresponds to the JSON schema field "crew_member".
 	CrewMember *string `json:"crew_member,omitempty,omitzero"`
 
+	// Cwd corresponds to the JSON schema field "cwd".
+	Cwd *string `json:"cwd,omitempty,omitzero"`
+
 	// Draft corresponds to the JSON schema field "draft".
 	Draft *AskDraft `json:"draft,omitempty,omitzero"`
 
 	// DraftFiles corresponds to the JSON schema field "draft_files".
 	DraftFiles []AskDraftFile `json:"draft_files,omitempty,omitzero"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
 
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`

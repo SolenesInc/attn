@@ -84,6 +84,8 @@ func (d *Daemon) askOpen(msg *protocol.AskOpenMessage) (protocol.Ask, error) {
 		Subject:   ask.Subject(protocol.Deref(msg.Subject), parts),
 		Markdown:  msg.Markdown,
 		BaseDir:   msg.BaseDir,
+		Host:      d.store.StoredHost(session.Host),
+		Cwd:       session.Directory,
 		CreatedAt: openedAt.UTC().Format(time.RFC3339Nano),
 	}
 	opened, err := d.describeAsk(stored, parts)
@@ -995,6 +997,8 @@ func (d *Daemon) describeAsk(a store.Ask, parts []protocol.AskPart) (shownAsk, e
 		Subject:   a.Subject,
 		Parts:     parts,
 		BaseDir:   a.BaseDir,
+		Host:      d.store.WireHost(a.Host),
+		Cwd:       optionalText(a.Cwd),
 		CreatedAt: a.CreatedAt,
 		Re:        a.Re,
 		Reply:     a.Reply,

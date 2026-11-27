@@ -4568,6 +4568,10 @@ model Ask {
   subject: string;
   parts: AskPart[];
   base_dir: string;
+  // The ask's default place: the asking session's machine, absent for this
+  // daemon's own, and its folder.
+  host?: string;
+  cwd?: string;
   created_at: string;
   re?: AskThread;
   reply?: AskReply;

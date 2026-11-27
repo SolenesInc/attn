@@ -36,6 +36,8 @@ type Ask struct {
 	Subject    string
 	Markdown   string
 	BaseDir    string
+	Host       string
+	Cwd        string
 	CreatedAt  string
 	Re         *protocol.AskThread
 	Amendments []AskAmendment
@@ -49,7 +51,7 @@ type AskAmendment struct {
 }
 
 const (
-	askedColumns = "id, session_id, address, subject, markdown, base_dir, created_at, re_ask_id, re_subject, re_answer, re_answered_at"
+	askedColumns = "id, session_id, address, subject, markdown, base_dir, host, cwd, created_at, re_ask_id, re_subject, re_answer, re_answered_at"
 	askColumns   = askedColumns + ", answered_at, answers, note, COALESCE((SELECT draft FROM ask_drafts WHERE ask_id = asks.id), '')"
 )
 
@@ -69,8 +71,8 @@ func (s *Store) AddAsk(a Ask, defaultDueAt time.Time) error {
 	if a.Re != nil {
 		re = *a.Re
 	}
-	query := "INSERT INTO asks (" + askedColumns + ", default_due_at) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ? AND closed_at = '')"
-	args := []any{a.ID, a.SessionID, a.To.String(), a.Subject, a.Markdown, a.BaseDir, a.CreatedAt,
+	query := "INSERT INTO asks (" + askedColumns + ", default_due_at) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ? AND closed_at = '')"
+	args := []any{a.ID, a.SessionID, a.To.String(), a.Subject, a.Markdown, a.BaseDir, a.Host, a.Cwd, a.CreatedAt,
 		re.AskID, protocol.Deref(re.Subject), protocol.Deref(re.Answer), protocol.Deref(re.AnsweredAt), dueAt, a.SessionID}
 	if seedID, ok := a.To.TenderOf(); ok {
 		_, seeds, found, err := readCollection(s.db, garden.Namespace, garden.CollectionSeeds)
@@ -405,7 +407,7 @@ func deleteAsks(db rowsQuerier, query string, args ...any) ([]string, error) {
 func scanAsk(row interface{ Scan(...any) error }) (Ask, error) {
 	var a Ask
 	var address, reAskID, reSubject, reAnswer, reAnsweredAt, answeredAt, answers, note, draft string
-	if err := row.Scan(&a.ID, &a.SessionID, &address, &a.Subject, &a.Markdown, &a.BaseDir, &a.CreatedAt,
+	if err := row.Scan(&a.ID, &a.SessionID, &address, &a.Subject, &a.Markdown, &a.BaseDir, &a.Host, &a.Cwd, &a.CreatedAt,
 		&reAskID, &reSubject, &reAnswer, &reAnsweredAt, &answeredAt, &answers, &note, &draft); err != nil {
 		return Ask{}, err
 	}
