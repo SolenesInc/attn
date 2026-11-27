@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "1f8588a4065fce1d52fdf835f38cad422b95e215",
+  "head": "adc5072c1a8510cc7223ac7dda94992462aa438b",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 289.919,
+    "ranOn": "adc5072c1a8510cc7223ac7dda94992462aa438b"
+  },
+  "fixesBugs": [
+    "c34c39d"
+  ],
+  "noMediaReason": "daemon state and a stack-test helper; no visual surface",
+  "recordings": []
+}
