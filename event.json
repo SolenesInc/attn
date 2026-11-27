@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Enrolled outposts lose home-local setting aliases",
+  "at": "2026-11-27T02:37:59.915Z",
+  "detail": "Saving a home-local preference then getting or listing it through an enrolled outpost loses the alias. Reads expand local to the outpost ID, while replication stores the home ID. Preserve the home alias for replicated settings, including offline reads.\nAn isolated paired CLI probe passed on 4a8ca4b1f and failed on 49dde75e0. Independently confirmed. Evidence on s-mrfj5j.\n"
+}
