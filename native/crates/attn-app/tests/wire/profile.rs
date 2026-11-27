@@ -373,13 +373,20 @@ fn letting_go_of_one_modifier_of_the_held_chord_switches() {
     hold(&mut world, chord);
     open_switcher(&mut world);
 
-    hold(
-        &mut world,
+    let still_held = if chord.cmd {
         Mods {
-            shift: false,
+            cmd: false,
             ..chord
-        },
-    );
+        }
+    } else {
+        Mods {
+            ctrl: false,
+            ..chord
+        }
+    };
+    assert_ne!(still_held, chord);
+    assert_ne!(still_held, Mods::default());
+    hold(&mut world, still_held);
 
     assert!(!switcher_open(&world));
     assert_eq!(selects(&world), ["home"]);
