@@ -112,3 +112,40 @@ func TestAnOutpostKeepsItsAskHeldShellThroughItsRestartAndTheHomeEndsIt(t *testi
 	answerCacheAsk(t, app, asked.ID)
 	awaitClosed(app, string(shell))
 }
+
+func TestAnAskAnsweredWhileItsShellsOutpostIsAwayEndsTheShellWhenTheOutpostReturns(t *testing.T) {
+	home := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	outpost := testworld.NewStack(t)
+	recovered := home.PauseEvery(pausepoint.OutpostRecoveryApplied)
+	settled := home.PassesOf(pausepoint.AskTerminalsSettled)
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	<-settled
+	recovered.Await()
+	recovered.Release()
+	app, cli := pair.App, home.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	asker := home.Spawn(app, fakeagent.Claude, home.Path("shop"))
+	asked, err := cli.AskOpen(protocol.SessionID(asker), "", cacheAsk, "", home.Path("shop"))
+	if err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+	shell := spawnInAsk(home, app, outpost.Path("far"), asked.ID, func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) })
+	awaitAskHolds(app, asked.ID, shell)
+
+	mark := len(app.Log())
+	pair.Disconnect()
+	awaitOutpostState(app, mark, pair.Host, protocol.OutpostStateLost)
+	answerCacheAsk(t, app, asked.ID)
+	<-settled
+	if !sessionListed(t, cli, shell) {
+		t.Fatalf("shell %s ended while its outpost was away", shell)
+	}
+
+	pair.Reconnect()
+	stopRetries := home.FireTimers(bridge.RetryTimer)
+	recovered.Await()
+	recovered.Release()
+	stopRetries()
+	awaitClosed(app, string(shell))
+}
