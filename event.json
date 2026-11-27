@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Explicit ask subjects bypass machine-aware link resolution",
+  "at": "2026-11-27T16:35:25.392Z",
+  "detail": "An explicit subject with a machine-addressed link is stored without the corresponding resolved reference. App and phone can lose usable link behavior and an invalid machine name escapes validation. Resolve references in the effective subject and label subject errors.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/asks.go",
+    "line": 76
+  },
+  "culprit": "3978e814d7d4a45b87b0294cbbaa93d54ada71aa"
+}
