@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Unconfirmed switch still gives contradictory build status",
+  "at": "2026-11-27T10:35:08.422Z",
+  "detail": "Existing 4ff0437 remains incomplete at 989f25174. A home or outpost can acknowledge switching and then fail to reconnect. The daemon records the switch target, Settings labels it as the running build, the connected outpost banner says the machine stayed on its build, and CLI says it could not switch. Distinguish the switch target from a confirmed running build and keep the unconfirmed reconnect outcome consistent across surfaces.\n"
+}
