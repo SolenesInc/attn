@@ -64,12 +64,13 @@ func (d *Daemon) startBridgeSocket() error {
 		Admit: func(home bridge.Identity) *bridge.Refusal {
 			before := d.settingValues()
 			r.mu.Lock()
+			tookHomeID := r.enrollment.AwaitsHomeID()
 			status, err := enrollment.RecordHome(d.dataRoot, enrollment.Home{ID: home.HomeID, DaemonID: home.DaemonID, Name: home.Name, MachineID: home.MachineID, PeerMachineID: home.PeerMachineID})
 			if err == nil {
 				d.installEnrollmentLocked(status)
 			}
 			r.mu.Unlock()
-			if err == nil && status.Adopting() {
+			if err == nil && tookHomeID {
 				err = d.adoptHomeID(status)
 			}
 			if err != nil {

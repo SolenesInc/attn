@@ -31,20 +31,17 @@ func (d *Daemon) installEnrollmentLocked(status enrollment.Status) {
 }
 
 func (d *Daemon) adoptHomeID(status enrollment.Status) error {
-	if err := d.store.AdoptCopySource(status.Replaced, status.HomeID); err != nil {
-		return fmt.Errorf("store the copies from home %s under its home id %s: %w", status.Replaced, status.HomeID, err)
-	}
-	if err := d.adoptNotebookSyncHome(status.Replaced, status.HomeID); err != nil {
-		return fmt.Errorf("key the Notebook sync state of home %s on its home id %s: %w", status.Replaced, status.HomeID, err)
-	}
-	adopted, err := enrollment.FinishAdoption(d.dataRoot)
+	copies, err := d.store.AdoptCopySource(status.HomeDaemonID, status.HomeID)
 	if err != nil {
-		return err
+		return fmt.Errorf("store the copies from home %s under its home id %s: %w", status.HomeDaemonID, status.HomeID, err)
 	}
-	d.outpost.mu.Lock()
-	d.installEnrollmentLocked(adopted)
-	d.outpost.mu.Unlock()
-	d.logf("enrollment: home %s is now %s", status.Replaced, status.HomeID)
+	notebook, err := d.adoptNotebookSyncHome(status.HomeDaemonID, status.HomeID)
+	if err != nil {
+		return fmt.Errorf("key the Notebook sync state of home %s on its home id %s: %w", status.HomeDaemonID, status.HomeID, err)
+	}
+	if copies || notebook {
+		d.logf("enrollment: state stored under home %s is now keyed on %s", status.HomeDaemonID, status.HomeID)
+	}
 	return nil
 }
 

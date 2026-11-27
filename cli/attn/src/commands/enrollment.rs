@@ -132,8 +132,6 @@ struct Record {
     #[serde(default)]
     home_daemon_id: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    replaced_daemon_id: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
     recorded_at: String,
 }
 
@@ -203,12 +201,6 @@ fn read_record(path: &str, daemon_id: &str) -> Result<Record, LoadError> {
         return Err(LoadError::Other(format!(
             "enrollment record {path} names an invalid home daemon id {}",
             quote(record.home_daemon_id.as_bytes())
-        )));
-    }
-    if !record.replaced_daemon_id.is_empty() && !valid_daemon_id(&record.replaced_daemon_id) {
-        return Err(LoadError::Other(format!(
-            "enrollment record {path} names an invalid replaced daemon id {}",
-            quote(record.replaced_daemon_id.as_bytes())
         )));
     }
     let invalid_home_id = || {
@@ -282,8 +274,6 @@ struct StatusJson<'a> {
     home_name: &'a str,
     #[serde(skip_serializing_if = "str::is_empty")]
     home_daemon_id: &'a str,
-    #[serde(skip_serializing_if = "str::is_empty")]
-    replaced_daemon_id: &'a str,
     enrollment: String,
     is_home: bool,
 }
@@ -332,7 +322,6 @@ fn status(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
             home_id: &status.record.home_id,
             home_name: &status.record.home_name,
             home_daemon_id: &status.record.home_daemon_id,
-            replaced_daemon_id: &status.record.replaced_daemon_id,
             enrollment: status.describe(),
             is_home: status.is_home(),
         });

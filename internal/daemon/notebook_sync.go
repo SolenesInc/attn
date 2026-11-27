@@ -1316,7 +1316,7 @@ func (d *Daemon) publishNotebookSyncSettings() {
 	})
 }
 
-func (d *Daemon) adoptNotebookSyncHome(from, to string) error {
+func (d *Daemon) adoptNotebookSyncHome(from, to string) (bool, error) {
 	r := &d.notebookSync
 	r.configure.Lock()
 	defer r.configure.Unlock()
@@ -1326,17 +1326,17 @@ func (d *Daemon) adoptNotebookSyncHome(from, to string) error {
 	if !r.loaded {
 		data, err := os.ReadFile(filepath.Join(d.notebookSyncDir(), "state.json"))
 		if os.IsNotExist(err) {
-			return nil
+			return false, nil
 		}
 		if err != nil {
-			return err
+			return false, err
 		}
 		if err := json.Unmarshal(data, &disk); err != nil {
-			return err
+			return false, err
 		}
 	}
 	if disk.Home != from {
-		return nil
+		return false, nil
 	}
 	disk = disk.clone()
 	disk.Home = to
@@ -1346,7 +1346,7 @@ func (d *Daemon) adoptNotebookSyncHome(from, to string) error {
 	if run := r.run; run != nil && run.home == from {
 		run.home = to
 	}
-	return d.saveNotebookSyncDiskLocked(disk)
+	return true, d.saveNotebookSyncDiskLocked(disk)
 }
 
 func (d *Daemon) dropNotebookSyncFromOtherHome(home string) error {

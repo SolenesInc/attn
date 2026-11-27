@@ -3,6 +3,7 @@ package main_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -158,8 +159,8 @@ func TestAHomeIDOutlivesTheDaemonThatRanTheHome(t *testing.T) {
 		t.Fatalf("Update to the build with home ids: %+v %+v", row, row.Update)
 	}
 	remote.RunFrom(ssh.InstallPath(remote))
-	if status := enrollmentOf(t, remote); status.Role != "outpost" || status.HomeID != id || status.Replaced != "" {
-		t.Fatalf("after its first bridge the outpost's enrollment = %+v, want outpost of home %s with no daemon id left", status, id)
+	if status := enrollmentOf(t, remote); status.Role != "outpost" || status.HomeID != id {
+		t.Fatalf("after its first bridge the outpost's enrollment = %+v, want outpost of home %s", status, id)
 	}
 	if theme := remote.App().Initial.Settings["theme"]; theme != "light" {
 		t.Fatalf("the outpost shows the home's theme as %q after its first bridge, want the copied %q", theme, "light")
@@ -234,7 +235,7 @@ func TestAHomeIDOutlivesTheDaemonThatRanTheHome(t *testing.T) {
 		t.Fatalf("the shell's pid went from %s to %s when the home moved", pid, again)
 	}
 	movedDaemon := protocol.Deref(movedApp.Initial.DaemonInstanceID)
-	if after := enrollmentRecordOf(t, remote); after.HomeDaemonID != movedDaemon || after.HomeID != enrolled.HomeID || after.Role != enrolled.Role || after.HomeName != enrolled.HomeName || after.ReplacedDaemonID != "" {
+	if after := enrollmentRecordOf(t, remote); after.HomeDaemonID != movedDaemon || after.HomeID != enrolled.HomeID || after.Role != enrolled.Role || after.HomeName != enrolled.HomeName {
 		t.Fatalf("after the move the outpost's enrollment is %+v, want %+v naming the moved home's daemon %s for the builds before home ids", after, enrolled, movedDaemon)
 	}
 
@@ -280,13 +281,20 @@ type previousBuildEnrollment struct {
 	IsHome       bool   `json:"is_home"`
 }
 
-func premigrationBackupsOf(t *testing.T, s *testworld.Stack) []string {
+func awaitTheme(p *testworld.Peer, theme string) {
+	p.T.Helper()
+	if p.Initial.Settings["theme"] != theme {
+		testworld.Await(p, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["theme"] == theme })
+	}
+}
+
+func copiesMovedAside(t *testing.T, copied string) []string {
 	t.Helper()
-	found, err := filepath.Glob(filepath.Join(s.Dir, "backups", "attn-premigration-*.db"))
+	aside, err := filepath.Glob(copied + ".before-sync-*")
 	if err != nil {
 		t.Fatal(err)
 	}
-	return found
+	return aside
 }
 
 func TestAHomeAndItsOutpostRollBackToTheBuildBeforeHomeIDsAndUpgradeAgain(t *testing.T) {
@@ -299,6 +307,9 @@ func TestAHomeAndItsOutpostRollBackToTheBuildBeforeHomeIDsAndUpgradeAgain(t *tes
 	home.InstallsOnOutposts(previous, "")
 	ssh.Use(home.World)
 	ssh.Route("outpost", remote)
+	notebookRoot := notebookPath(home)
+	writeFileAt(t, filepath.Join(notebookRoot, "index.md"), "written before home ids")
+	copied := outpostCopyPlacement(remote, "notebook", notebookRoot)
 	t.Cleanup(func() {
 		if t.Failed() {
 			remote.LogDaemonTail()
@@ -307,24 +318,49 @@ func TestAHomeAndItsOutpostRollBackToTheBuildBeforeHomeIDsAndUpgradeAgain(t *tes
 	home.StartRelease()
 	app := enableOutposts(t, home)
 	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: "outpost"})
-	if row := awaitOutpostInstall(app); row.Update.Phase != protocol.OutpostUpdatePhaseDone || row.State != protocol.OutpostStateConnected {
+	row := awaitOutpostInstall(app)
+	if row.Update.Phase != protocol.OutpostUpdatePhaseDone || row.State != protocol.OutpostStateConnected {
 		t.Fatalf("Add on the build before home ids: %+v %+v", row, row.Update)
 	}
+	host := row.ID
 	remote.RunFrom(ssh.InstallPath(remote))
-	host := outpostState(app, "outpost", protocol.OutpostStateConnected).ID
 	homeDaemon := protocol.Deref(app.Initial.DaemonInstanceID)
+	awaitOutpostNotebookInSync(t, app, host)
+	if !fileHolds(filepath.Join(copied, "index.md"), "written before home ids", false) {
+		t.Fatalf("the build before home ids did not sync the Notebook into %s", copied)
+	}
 	requireStdout(t, home.Attn("settings", "set", "theme", "light"), "light")
-	testworld.Await(remote.ReleaseApp(), protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["theme"] == "light" })
+	awaitTheme(remote.ReleaseApp(), "light")
+	shell := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
+	pidPath := filepath.Join(remote.Dir, "shell.pid")
+	app.TypeLine(shell, "echo $$ > "+pidPath+"; echo step-$((0+1))")
+	app.AwaitScreen(shell, "step-1")
+	pid := readFile(t, pidPath)
 
+	step := 1
+	keptEverything := func(label string, remoteApp *testworld.Peer) {
+		t.Helper()
+		awaitTheme(remoteApp, "light")
+		app.AwaitScreen(shell, fmt.Sprintf("step-%d", step))
+		step++
+		app.TypeLine(shell, fmt.Sprintf("echo $$ > %s; echo step-$((%d+1))", pidPath, step-1))
+		app.AwaitScreen(shell, fmt.Sprintf("step-%d", step))
+		if again := readFile(t, pidPath); !bytes.Equal(again, pid) {
+			t.Fatalf("%s: the outpost's shell pid went from %s to %s", label, pid, again)
+		}
+		name := fmt.Sprintf("step-%d.md", step)
+		writeFileAt(t, filepath.Join(notebookRoot, name), label)
+		awaitOutpostFile(t, &testworld.OutpostPair{App: app, Outpost: remote}, filepath.Join(copied, name), label, false)
+		awaitOutpostNotebookInSync(t, app, host)
+	}
 	stopBoth := func() {
 		t.Helper()
 		home.Stop()
 		requireStdout(t, remote.Attn("daemon", "stop"))
 	}
-	upgrade := func(label string) string {
+	upgrade := func(label string) {
 		t.Helper()
 		stopBoth()
-		before := map[*testworld.Stack][]string{home: premigrationBackupsOf(t, home), remote: premigrationBackupsOf(t, remote)}
 		home.RunFrom(current)
 		home.InstallsOnOutposts(current, "")
 		home.Start()
@@ -334,27 +370,27 @@ func TestAHomeAndItsOutpostRollBackToTheBuildBeforeHomeIDsAndUpgradeAgain(t *tes
 		if row := awaitOutpostInstall(app); row.Update.Phase != protocol.OutpostUpdatePhaseDone || row.State != protocol.OutpostStateConnected {
 			t.Fatalf("%s: Update to the build with home ids: %+v %+v", label, row, row.Update)
 		}
-		id := homeID(t, home)
-		if status := enrollmentOf(t, remote); status.Role != "outpost" || status.HomeID != id || status.Replaced != "" {
-			t.Fatalf("%s: the outpost's enrollment = %+v, want outpost of home %s with nothing left to adopt", label, status, id)
+		aside := copiesMovedAside(t, copied)
+		keptEverything(label, remote.App())
+		if after := copiesMovedAside(t, copied); !slices.Equal(after, aside) {
+			t.Fatalf("%s moved the outpost's Notebook copy aside: %v, before %v", label, after, aside)
 		}
-		if theme := remote.App().Initial.Settings["theme"]; theme != "light" {
-			t.Fatalf("%s: the outpost shows the home's theme as %q, want %q", label, theme, "light")
-		}
-		stopBoth()
-		for _, s := range []*testworld.Stack{home, remote} {
-			added := slices.DeleteFunc(premigrationBackupsOf(t, s), func(path string) bool { return slices.Contains(before[s], path) })
-			if len(added) != 1 {
-				t.Fatalf("%s wrote pre-migration backups %v, want one", label, added)
-			}
-			if restored := s.Attn("db", "restore", added[0]); restored.Code != 0 {
-				t.Fatalf("attn db restore %s: %+v", added[0], restored)
-			}
-		}
-		return id
 	}
 	rollBack := func(label string) {
 		t.Helper()
+		stopBoth()
+		for _, s := range []*testworld.Stack{home, remote} {
+			backups, err := filepath.Glob(filepath.Join(s.Dir, "backups", "attn-premigration-*.db"))
+			if err != nil || len(backups) != 1 {
+				t.Fatalf("%s: pre-migration backups %v %v, want the one the upgrade wrote", label, backups, err)
+			}
+			if restored := s.Attn("db", "restore", backups[0]); restored.Code != 0 {
+				t.Fatalf("attn db restore %s: %+v", backups[0], restored)
+			}
+			if err := os.Remove(backups[0]); err != nil {
+				t.Fatal(err)
+			}
+		}
 		ssh.InstallBinary(remote, previous)
 		home.RunFrom(previous)
 		home.InstallsOnOutposts(previous, "")
@@ -367,17 +403,18 @@ func TestAHomeAndItsOutpostRollBackToTheBuildBeforeHomeIDsAndUpgradeAgain(t *tes
 		if !homeStatus.IsHome || homeStatus.DaemonID != homeDaemon || outpostStatus.IsHome || outpostStatus.HomeDaemonID != homeDaemon {
 			t.Fatalf("%s: the build before home ids reads the home as %+v and the outpost as %+v, want the home and an outpost of daemon %s", label, homeStatus, outpostStatus, homeDaemon)
 		}
-		remoteApp := remote.ReleaseApp()
-		requireStdout(t, home.Attn("settings", "set", "theme", "dark"), "dark")
-		testworld.Await(remoteApp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["theme"] == "dark" })
-		requireStdout(t, home.Attn("settings", "set", "theme", "light"), "light")
-		testworld.Await(remoteApp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["theme"] == "light" })
+		keptEverything(label, remote.ReleaseApp())
 	}
 
-	id := upgrade("the first upgrade")
+	upgrade("the first upgrade")
+	id := homeID(t, home)
 	rollBack("the rollback")
-	if again := upgrade("the second upgrade"); again != id {
+	upgrade("the second upgrade")
+	if again := homeID(t, home); again != id {
 		t.Fatalf("the home took home id %s at the second upgrade, want %s", again, id)
 	}
-	t.Logf("home %s (daemon %s) and its outpost started and bridged on each build; the home kept its home id", id, homeDaemon)
+	if status := enrollmentOf(t, remote); status.Role != "outpost" || status.HomeID != id {
+		t.Fatalf("after the second upgrade the outpost's enrollment = %+v, want outpost of home %s", status, id)
+	}
+	t.Logf("home %s (daemon %s) and its outpost started and bridged on each build; the home kept its home id and the shell (pid %s) its screen; no upgrade moved the Notebook copy %s aside, the build before home ids did at the rollback: %v", id, homeDaemon, strings.TrimSpace(string(pid)), copied, copiesMovedAside(t, copied))
 }

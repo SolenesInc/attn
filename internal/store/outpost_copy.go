@@ -346,25 +346,32 @@ func (s *Store) DropCopyNotFrom(home string) error {
 }
 
 // AdoptCopySource stores the copies held under the daemon id from as copies of the home with id to.
-func (s *Store) AdoptCopySource(from, to string) error {
+func (s *Store) AdoptCopySource(from, to string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	var adopted int64
 	err := transactWritingCopies(context.Background(), s.db, func(tx *sql.Tx) error {
 		for _, update := range []string{
 			`UPDATE sessions SET copied_from = ? WHERE copied_from = ?`,
 			`UPDATE settings SET copied_from = ? WHERE copied_from = ?`,
 			`UPDATE session_runtime SET home_id = ? WHERE home_id = ?`,
 		} {
-			if _, err := tx.Exec(update, to, from); err != nil {
+			result, err := tx.Exec(update, to, from)
+			if err != nil {
 				return err
 			}
+			rows, err := result.RowsAffected()
+			if err != nil {
+				return err
+			}
+			adopted += rows
 		}
 		return nil
 	})
-	if err != nil {
-		return err
+	if err != nil || adopted == 0 {
+		return false, err
 	}
-	return s.reloadSettingsLocked()
+	return true, s.reloadSettingsLocked()
 }
 
 func deleteCopiedSessions(tx *sql.Tx, where string, args ...any) error {

@@ -208,7 +208,6 @@ func (d *Daemon) dropStaleCopy() error {
 		if err := d.adoptHomeID(status); err != nil {
 			return err
 		}
-		status = d.enrollmentStatus()
 	}
 	home := status.CopiedFrom()
 	if conn := d.homeBridge(); conn != nil && (home == "" || conn.Peer().HomeID != home) {
