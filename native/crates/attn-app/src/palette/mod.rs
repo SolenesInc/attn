@@ -41,10 +41,12 @@ fn face(query: &str) -> Face {
 
 /// The palette's search: its query, the row the keyboard is on, the command history it
 /// ranks commands by, read once each time it opens, the agent it is choosing a snooze for,
-/// and the tile it is choosing a destination desktop for.
+/// the tile it is choosing a destination desktop for, and the popped-out tile whose window
+/// opened it.
 #[derive(Default)]
 pub struct Search {
     pub(crate) query: TextEdit,
+    pub(crate) tile: Option<crate::shell::Holder>,
     highlight: Option<String>,
     history: History,
     opening: u64,
@@ -283,6 +285,7 @@ pub(crate) fn open(state: &mut State, wanted: Face, tx: &mut Tx) {
     }
     state.window.layer = Some(Layer::Palette(Palette::Search));
     state.tick(tx);
+    state.window.search.tile = state.window.forwarded.clone();
     let search = &mut state.window.search;
     search.query = at_end(match wanted {
         Face::Commands => ">".to_owned(),
@@ -316,6 +319,9 @@ fn choose_destination(state: &mut State, moving: Moving, tx: &mut Tx) {
     }
     let fresh = !is_open(state);
     state.window.layer = Some(Layer::Palette(Palette::Search));
+    if fresh {
+        state.window.search.tile = state.window.forwarded.clone();
+    }
     let search = &mut state.window.search;
     search.query = TextEdit::default();
     search.highlight = None;
@@ -336,6 +342,7 @@ fn at_end(text: String) -> TextEdit {
 
 pub(crate) fn close(state: &mut State, tx: &mut Tx) {
     state.window.layer = None;
+    state.window.search.tile = None;
     state.window.search.snoozing = None;
     state.window.search.moving = None;
     crate::picker::refocus_inline(state, tx);
@@ -759,8 +766,14 @@ fn pick(state: &mut State, row: Row, tx: &mut Tx) {
         }
         Some(Pick::Open(action)) => action,
     };
+    let tile = state.window.search.tile.take();
     close(state, tx);
-    crate::dispatch(state, action, tx);
+    match tile {
+        Some(tile) => crate::desktop::run_from(state, &tile.desktop, &tile.pane, action, tx),
+        None => {
+            crate::dispatch(state, action, tx);
+        }
+    }
 }
 
 fn record(state: &mut State, command: String, tx: &mut Tx) {

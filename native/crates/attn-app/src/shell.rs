@@ -102,6 +102,8 @@ pub struct Window {
     pub(crate) sender_pairing: crate::sender_pairing::SenderPairing,
     /// The popped-out leaf this window shows, when it is a tile window.
     pub(crate) tile: Option<crate::desktop::TileWindow>,
+    /// The popped-out tile whose window handed this window the action it is running.
+    pub(crate) forwarded: Option<Holder>,
     pub(crate) garden: crate::garden::Garden,
     pub(crate) asks: crate::asks::Asks,
     pub(crate) pull_requests: crate::home::pull_requests::PullRequests,
@@ -411,11 +413,16 @@ impl Window {
     }
 
     /// The desktop and the tile this window's keys, commands and finders act on: a tile
-    /// window's own tile, else the current desktop's acting leaf.
+    /// window's own tile, else the popped-out tile it acts for, else the current desktop's
+    /// acting leaf.
     pub(crate) fn acting<'f>(&self, facts: &'f Facts) -> Option<(&'f Desktop, String)> {
         if let Some(tile) = &self.tile {
             let desktop = facts.desktops.iter().find(|d| d.id == tile.desktop)?;
             return Some((desktop, tile.leaf.clone()));
+        }
+        if let Some(tile) = self.acting_for() {
+            let desktop = facts.desktops.iter().find(|d| d.id == tile.desktop)?;
+            return Some((desktop, tile.pane.clone()));
         }
         let desktop = facts.current_desktop()?;
         let leaf = self.desk.acting_leaf(desktop);
@@ -424,7 +431,7 @@ impl Window {
 
     /// The agent the window shows: the agent of the tile it acts on.
     pub(crate) fn on_screen(&self, facts: &Facts) -> Option<String> {
-        if self.view != View::Desktop {
+        if self.view != View::Desktop && self.acting_for().is_none() {
             return None;
         }
         let (desktop, leaf) = self.acting(facts)?;
@@ -434,6 +441,15 @@ impl Window {
             .find(|p| p.pane_id == leaf)
             .map(|p| p.session_id.clone())
             .filter(|id| !id.is_empty())
+    }
+
+    /// The popped-out tile this main window acts for: the one whose window handed it the
+    /// running action, or the one whose window opened the palette that is open.
+    fn acting_for(&self) -> Option<&Holder> {
+        let palette = (self.layer == Some(Layer::Palette(Palette::Search)))
+            .then_some(self.search.tile.as_ref())
+            .flatten();
+        self.forwarded.as_ref().or(palette)
     }
 
     pub(crate) fn shows(&self, drawer: Drawer) -> bool {

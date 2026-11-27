@@ -4,7 +4,7 @@ use attn_protocol::{
 };
 use std::time::Duration;
 
-use attn_testkit::{Target, World, message};
+use attn_testkit::{Target, World, message, tree};
 
 use super::palette::{run_command, titles};
 use super::sidebar::session;
@@ -204,4 +204,69 @@ fn dismiss_by_pointer_or_palette_asks_the_daemon_which_ends_the_offer_for_every_
     world.settle();
     assert_eq!(said(&world), None);
     assert!(world.runtime_is_at_rest());
+}
+
+fn from_popped_out_palette(world: &mut World, window: &str, query: &str) {
+    world.tile_gesture(window, |app| {
+        app.key(super::palette::chord(attn_app::Action::UiCommandPalette))
+    });
+    world.settle();
+    world.gesture(|app| app.type_text(query));
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Enter,
+            mods: rune::Mods::default(),
+        })
+    });
+}
+
+#[test]
+fn the_palette_of_a_popped_out_fork_opens_and_dismisses_that_forks_original_not_the_main_windows() {
+    let popped_fork = Session {
+        fork_offer: Some("po".into()),
+        ..session("pf", "idle")
+    };
+    let mut tiles = desktop(vec![tile_of("pf"), tile_of("f")]);
+    let mut popped = tree::pane("p-pf");
+    popped["window"] = serde_json::json!({"x": 20, "y": 20, "width": 700, "height": 500});
+    tiles.tree_json = tree::row([popped, tree::pane("p-f")]).to_string();
+    tiles.active_pane_id = "p-f".into();
+    let state = InitialStateMessage {
+        sessions: Some(vec![popped_fork, fork(Some("o")), original()]),
+        desktops: Some(vec![tiles]),
+        ..showing(vec![], "daemon-1")
+    };
+    let mut world = World::start_sized(super::palette::daemon(state, vec![]), (1600.0, 900.0));
+    world.open_desktop();
+    world.daemon.on("fork_offer_open", |r| {
+        message(ProfileActionResultMessage {
+            action: "fork_offer_open".into(),
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            ..ProfileActionResultMessage::new()
+        })
+    });
+    let window = world
+        .tile_windows()
+        .pop()
+        .expect("the popped-out fork's window")
+        .key;
+
+    from_popped_out_palette(&mut world, &window, OPEN);
+    from_popped_out_palette(&mut world, &window, DISMISS);
+
+    assert_eq!(sent_for(&world, "fork_offer_open"), ["pf"]);
+    assert_eq!(sent_for(&world, "fork_offer_dismiss"), ["pf"]);
+    assert_eq!(
+        keyboard(&mut world),
+        "p-f",
+        "the main window's tile keeps the keyboard"
+    );
+    assert!(
+        said(&world).is_some(),
+        "the main window's fork keeps its offer"
+    );
+
+    run_command(&mut world, DISMISS);
+    assert_eq!(sent_for(&world, "fork_offer_dismiss"), ["pf", "f"]);
 }

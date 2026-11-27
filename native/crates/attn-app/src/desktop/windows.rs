@@ -402,7 +402,8 @@ pub(crate) fn forward(state: &mut State, action: Action) -> bool {
     true
 }
 
-fn run_from(state: &mut State, desktop: &str, leaf: &str, action: Action, tx: &mut Tx) {
+/// Runs `action` in the main window for the popped-out `leaf` of `desktop`.
+pub(crate) fn run_from(state: &mut State, desktop: &str, leaf: &str, action: Action, tx: &mut Tx) {
     use Action::*;
     match action {
         TilePopOut | SessionClose | TerminalClose => bring_back(state, desktop, leaf, tx),
@@ -425,7 +426,13 @@ fn run_from(state: &mut State, desktop: &str, leaf: &str, action: Action, tx: &m
         | TerminalFocusDown
         | TerminalOpen => {}
         action => {
-            if crate::dispatch::run(state, action, tx) == crate::dispatch::Outcome::Ran {
+            state.window.forwarded = Some(crate::shell::Holder {
+                desktop: desktop.into(),
+                pane: leaf.into(),
+            });
+            let outcome = crate::dispatch::run(state, action, tx);
+            state.window.forwarded = None;
+            if outcome == crate::dispatch::Outcome::Ran {
                 crate::frame::raise_main();
             }
         }
