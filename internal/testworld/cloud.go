@@ -101,7 +101,8 @@ func (c *Cloud) Outage() (restore func()) { return c.proxy.outage() }
 
 func (c *Cloud) Open() int { return c.proxy.open() }
 
-// MostOpen is the most home connections that were ever open at once.
+// MostOpen is the most home links, the home's WebSocket to the Cloud Relay, that were ever open at once. A
+// registration request is no link, though it can still be closing as the link it registers for opens.
 func (c *Cloud) MostOpen() int {
 	c.proxy.mu.Lock()
 	defer c.proxy.mu.Unlock()
@@ -135,11 +136,13 @@ type cutProxy struct {
 	down    bool
 	conns   map[net.Conn]net.Conn
 	most    int
+	links   int
 	history []*proxiedConn
 }
 
 type proxiedConn struct {
 	request        string
+	link           bool
 	opened, closed time.Time
 }
 
@@ -189,10 +192,13 @@ func (p *cutProxy) serve(home net.Conn) {
 		cloud.Close()
 		return
 	}
-	carried := &proxiedConn{request: strings.TrimSpace(request), opened: time.Now()}
+	carried := &proxiedConn{request: strings.TrimSpace(request), opened: time.Now(), link: strings.Contains(request, "/home ")}
 	p.mu.Lock()
 	p.conns[home] = cloud
-	p.most = max(p.most, len(p.conns))
+	if carried.link {
+		p.links++
+		p.most = max(p.most, p.links)
+	}
 	p.history = append(p.history, carried)
 	p.mu.Unlock()
 	p.dials <- struct{}{}
@@ -206,6 +212,9 @@ func (p *cutProxy) serve(home net.Conn) {
 	_, tracked := p.conns[home]
 	delete(p.conns, home)
 	carried.closed = time.Now()
+	if carried.link {
+		p.links--
+	}
 	p.mu.Unlock()
 	if tracked {
 		p.closed <- struct{}{}
