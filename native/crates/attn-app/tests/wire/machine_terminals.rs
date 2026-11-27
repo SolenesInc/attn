@@ -359,22 +359,34 @@ fn before_the_home_answers_a_machine_without_terminals_of_its_own_shows_only_can
 }
 
 /// The home's state with this machine's agent, in rl on d1, and its shell, in r2 on d2, where no
-/// tile shows it.
+/// tile shows it, beside a document that is d2's active tile.
 fn one_hidden() -> (InitialStateMessage, InitialStateMessage) {
     let agent = Session {
         agent: "claude".into(),
         ..shell("agent", Some(HERE))
     };
-    let desktop = |id: &str, slot: i64, pane: DesktopPane| Desktop {
-        id: id.into(),
-        name: id.into(),
-        profile_id: "work".into(),
-        shortcut_slot: Some(slot),
-        order_key: slot.to_string(),
-        active_pane_id: pane.pane_id.clone(),
-        tree_json: tree::row([tree::pane(&pane.pane_id)]).to_string(),
-        panes: vec![pane],
-        ..Desktop::default()
+    let desktop = |id: &str, slot: i64, pane: DesktopPane, document: bool| {
+        let mut leaves = vec![tree::pane(&pane.pane_id)];
+        if document {
+            let mut doc = tree::tile("doc", "markdown");
+            doc["tile_params"] = json!({"path": "/tmp/there/notes.md"}).to_string().into();
+            leaves.insert(0, doc);
+        }
+        Desktop {
+            id: id.into(),
+            name: id.into(),
+            profile_id: "work".into(),
+            shortcut_slot: Some(slot),
+            order_key: slot.to_string(),
+            active_pane_id: if document {
+                "doc".into()
+            } else {
+                pane.pane_id.clone()
+            },
+            tree_json: tree::row(leaves).to_string(),
+            panes: vec![pane],
+            ..Desktop::default()
+        }
     };
     let home = InitialStateMessage {
         sessions: Some(vec![agent.clone(), shell("there", Some(HERE))]),
@@ -386,6 +398,7 @@ fn one_hidden() -> (InitialStateMessage, InitialStateMessage) {
                     kind: "agent".into(),
                     ..pane("t-agent", "rl", "agent")
                 },
+                false,
             ),
             desktop(
                 "d2",
@@ -394,6 +407,7 @@ fn one_hidden() -> (InitialStateMessage, InitialStateMessage) {
                     desktop_id: "d2".into(),
                     ..pane("t-there", "r2", "there")
                 },
+                true,
             ),
         ]),
         ..home_state()
@@ -605,6 +619,13 @@ fn a_popped_out_terminal_on_this_machine_stays_out_while_the_home_is_lost_and_th
         .expect("this machine's terminal has its window")
         .key;
     world.tile_gesture(&here_window, |app| app.click(Target::key("terminal.rl")));
+    world.close_tile_window(&here_window);
+    world.settle();
+    assert_eq!(
+        shown(&world),
+        [10.0],
+        "the away home cannot take the tile back, so its window shows again"
+    );
     reconnect_home(&mut world, &answering, true);
     assert_eq!(shown(&world), [10.0, 600.0]);
     world.tile_gesture(&here_window, |app| app.type_text("w"));
@@ -641,11 +662,38 @@ fn while_the_home_is_away_a_desktop_switch_reaches_this_machines_terminal_there(
     let before = world.daemon.sent().len();
 
     world.gesture(|app| app.key(super::sidebar::chord(attn_app::Action::DesktopSelect2)));
+    assert!(
+        world.screen().find(Target::key("terminal.r2")).is_some(),
+        "the switch shows d2, whose active tile is a document:\n{}",
+        world.screen()
+    );
+    world.gesture(|app| app.key(super::sidebar::chord(attn_app::Action::TerminalFocusRight)));
     world.gesture(|app| app.type_text("q"));
 
     assert_eq!(
         typed(machine(&world)).last(),
         Some(&("r2".to_owned(), "q".to_owned()))
+    );
+    assert_eq!(
+        ids(machine(&world), "terminal_focus")
+            .last()
+            .map(String::as_str),
+        Some("r2"),
+        "this machine's daemon hears which of its terminals has the keyboard"
+    );
+
+    world.gesture(|app| app.click(Target::key("sidebar.session.agent")));
+    world.gesture(|app| app.type_text("k"));
+    assert_eq!(
+        typed(machine(&world)).last(),
+        Some(&("rl".to_owned(), "k".to_owned()))
+    );
+    assert_eq!(
+        ids(machine(&world), "terminal_focus")
+            .last()
+            .map(String::as_str),
+        Some("rl"),
+        "an agent opened on another desktop tells this machine's daemon it has the keyboard"
     );
     assert_eq!(
         world.daemon.sent()[before..]

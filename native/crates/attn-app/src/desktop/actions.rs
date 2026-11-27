@@ -604,14 +604,12 @@ pub(crate) fn keep_away_active(state: &mut State) {
         return;
     };
     let facts = &mut state.facts;
-    let Some(at) = facts
-        .desktops
-        .iter()
-        .position(|d| d.id == desktop && d.panes.iter().any(|p| p.pane_id == leaf))
-    else {
+    let Some(at) = facts.desktops.iter().position(|d| {
+        d.id == desktop && (leaf.is_empty() || d.leaves().iter().any(|l| l.id == leaf))
+    }) else {
         return;
     };
-    if facts.desktops[at].active_pane_id != leaf {
+    if !leaf.is_empty() && facts.desktops[at].active_pane_id != leaf {
         let mut desktops = (*facts.desktops).clone();
         desktops[at] = attn_client::Desktop::from(attn_protocol::Desktop {
             active_pane_id: leaf,

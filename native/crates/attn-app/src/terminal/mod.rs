@@ -698,11 +698,15 @@ impl Terminals {
         if keyboard == self.focused {
             return;
         }
-        self.focused = keyboard.clone();
         let Some(id) = keyboard else {
+            self.focused = None;
             return;
         };
-        let via = self.panes.get(&id).map_or(Reach::Home, |t| t.via);
+        let Some(via) = self.panes.get(&id).map(|t| t.via) else {
+            self.focused = None;
+            return;
+        };
+        self.focused = Some(id.clone());
         if !self.links.up(via) {
             return;
         }

@@ -567,7 +567,37 @@ pub fn on_close(state: &mut State, _: &mut Tx) {
     }
     let (key, desktop, leaf) = (tile.key.clone(), tile.desktop.clone(), tile.leaf.clone());
     (tile.main)(Box::new(move |state: &mut State, tx: &mut Tx| {
-        bring_back(state, &desktop, &leaf, tx);
+        bring_back_or_reopen(state, &desktop, &leaf, &key, tx);
         forget(state, &key)
     }));
+}
+
+/// Brings a closed tile window's tile back to its desktop; when the daemon cannot, as while the
+/// home is away, the window shows again, so the tile is not lost from both.
+fn bring_back_or_reopen(state: &mut State, desktop: &str, leaf: &str, key: &str, tx: &mut Tx) {
+    let (desktop_id, leaf_id, key) = (desktop.to_owned(), leaf.to_owned(), key.to_owned());
+    state.ask(
+        |request_id| DesktopBringBackLeafMessage {
+            request_id,
+            desktop_id,
+            leaf_id,
+            ..DesktopBringBackLeafMessage::new()
+        },
+        move |state: &mut State, answer, tx: &mut Tx| {
+            let Err(reason) = answer.outcome() else {
+                return;
+            };
+            state
+                .window
+                .notify(format!("Could not bring the tile back: {reason}"), tx);
+            let pool = &mut state.window.desk.windows;
+            if let Some(pooled) = pool.windows.iter_mut().find(|p| p.key == key) {
+                pooled.closed = false;
+                if let Some(held) = &pooled.held {
+                    pooled.window.place(&held.frame);
+                }
+            }
+        },
+        tx,
+    );
 }
