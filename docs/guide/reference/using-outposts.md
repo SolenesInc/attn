@@ -38,7 +38,8 @@ To add an outpost:
    host-key prompts. Attn's background commands never prompt.
 2. On the home, open **Settings → Machines** and turn on **Outposts**.
 3. Under **Add a machine**, enter the **ssh destination** and click **Add**. Name is optional and defaults to the destination. The name `home`
-   is reserved.
+   is reserved, and Attn refuses a name that another machine already has,
+   ignoring case.
 
 Attn starts the daemon over ssh and keeps it running when ssh disconnects.
 The machine must have logind's `KillUserProcesses` off, or Attn refuses and
@@ -67,14 +68,16 @@ often asleep, can join the home by dialing it. Turn on the experimental setting
 3. On the machine, run `attn enrollment join <home-destination>`. It waits for
    the first dial and prints the result. Run it again to dial at once.
 
-The first connection pairs both sides. The home lists the machine under its host
-name and shows it as lost while it isn't dialing. The machine dials while its
-daemon runs. After a failed dial it waits longer each time, up to 30 seconds,
+The first connection pairs both sides. The home lists the machine under its
+short host name, or under the name you pass with `--name`, and shows it as lost
+while it isn't dialing. The machine dials while its daemon runs. After a failed dial it waits longer each time, up to 30 seconds,
 and it dials at once when it wakes from sleep. `attn enrollment status` on the
 machine shows the dial as `dialing`, `bridged` or `refused`, with the last
 error. The home refuses a dial while `remote_home_enabled` or Outposts is off
-there, while it already has the machine as an outpost it dials, and after you
-removed the machine.
+there, while it already has the machine as an outpost it dials, after you
+removed the machine, and when the machine's name is `home` or one another of
+its machines has, ignoring case. A machine on the same computer as the home has
+the home's host name, so join it with `--name`.
 
 A machine that is its own home and has open sessions refuses to join, and names
 them. Close them first. While it is enrolled, its own outposts wait. After
@@ -352,11 +355,16 @@ This Mac included. **Enter** and **Tab** on a row act on the row's machine.
 
 An address names a machine and a place on it, as ssh writes it:
 `<machine>:<rest>`. Text without a machine means the home's machine, and `home:`
-names it too: This Mac, unless the home runs on another machine. Machine names
-match whole and ignore case, so names that contain `@` or `:`, such as
-`user@host`, work as typed. An outpost's id works too. When
-two outposts share a name, the launcher lists both under that name, and the launcher puts the id of the one
-you pick into the input.
+names it too: This Mac, unless the home runs on another machine. Attn reads a
+machine's name by one rule wherever it takes one: in the launcher, in `--host`
+on `attn terminal open` and `attn delegate`, and in a bed's repository
+addresses. Machine names match whole and ignore case, so names that contain `@`
+or `:`, such as `user@host`, work as typed. An outpost's id works too. The
+home's machine is named after its short host name: `--host` and bed addresses
+take that name as well as `home`, and the launcher takes only `home`. Two
+machines that share a name from an earlier Attn are refused by name with both
+ids; the launcher lists both under that name and puts the id of the one you
+pick into the input.
 
 - With `ai-sandbox:~/projects/`, the launcher lists folders on ai-sandbox. It
   browses for anything that starts with `~` or `/`.

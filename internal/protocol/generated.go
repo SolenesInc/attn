@@ -6947,6 +6947,9 @@ type JoinHomeMessage struct {
 
 	// Destination corresponds to the JSON schema field "destination".
 	Destination string `json:"destination"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name *string `json:"name,omitempty,omitzero"`
 }
 
 type JournalAppendResult struct {

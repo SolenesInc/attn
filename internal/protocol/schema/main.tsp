@@ -2080,10 +2080,10 @@ model UpdateOutpostMessage { cmd: "update_outpost"; id: string; }
 @extension("x-on", #{ here: true })
 model DropOutpostCopyMessage { cmd: "drop_outpost_copy"; }
 
-// Sent by `attn enrollment join`: this machine joins the home at the ssh destination by dialing it. The reply
-// waits for the first dial's outcome and carries home_dial.
+// Sent by `attn enrollment join`: this machine joins the home at the ssh destination by dialing it, under name, or
+// this machine's own name when name is absent. The reply waits for the first dial's outcome and carries home_dial.
 @extension("x-on", #{ here: true })
-model JoinHomeMessage { cmd: "join_home"; destination: string; }
+model JoinHomeMessage { cmd: "join_home"; destination: string; name?: string; }
 
 // Sent by `attn enrollment status` on a machine that dials its home. The reply carries home_dial.
 @extension("x-on", #{ here: true })

@@ -598,7 +598,7 @@ func (d *Daemon) uncheckedOutpost(host string) continuationMachine {
 }
 
 func (d *Daemon) outpostUnreachableReason(host string) string {
-	if _, err := d.resolveOutpost(host); err != nil {
+	if _, err := d.machineByID(host); err != nil {
 		return err.Error()
 	}
 	return fmt.Sprintf("outpost %q is unreachable; Resume returns when it is back", d.outpostName(host))

@@ -186,8 +186,8 @@ func TestAnAppWhoseHomeIsUnreachableIsToldWhyAndConnectsWhenItReturns(t *testing
 
 	away := awaitHomeDial(t, w.laptop, "dialing")
 	told := lastHomeUnreachable(t, away)
-	if told.Home != w.name || protocol.Deref(told.Reason) == "" {
-		t.Fatalf("home_unreachable while the home is down: %+v, want home %s, state dialing and a reason", told, w.name)
+	if told.Home != w.homeName || protocol.Deref(told.Reason) == "" {
+		t.Fatalf("home_unreachable while the home is down: %+v, want home %s, state dialing and a reason", told, w.homeName)
 	}
 	t.Logf("with the home down the laptop answers its app: %+v (%s)", told, protocol.Deref(told.Reason))
 	away.Send(protocol.RetryHomeMessage{Cmd: protocol.CmdRetryHome})

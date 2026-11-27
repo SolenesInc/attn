@@ -134,7 +134,7 @@ func (d *Daemon) forwardBridgeHandler(host string) func(*bridge.Conn, ssh.NewCha
 				_ = incoming.Reject(ssh.Prohibited, "outpost bridge was replaced")
 				return
 			}
-			row, err := d.resolveOutpost(host)
+			row, err := d.machineByID(host)
 			if err != nil {
 				_ = incoming.Reject(ssh.Prohibited, err.Error())
 				return

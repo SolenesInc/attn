@@ -89,7 +89,7 @@ func (d *Daemon) acceptReverseBridge(raw net.Conn) {
 	known := false
 	recorded := make(chan struct{})
 	conn, seen, err := bridge.Dial(d.life.Context(), bridge.DialConfig{Conn: raw, Self: d.bridgeIdentity(), HandlersAfter: recorded, Recognize: func(hostKey string) (bridge.Recognized, *bridge.Refusal) {
-		found, refusal := d.recognizeReverseMachine(hostKey, header.Join != "")
+		found, refusal := d.recognizeReverseMachine(hostKey, header.Join)
 		switch {
 		case refusal != nil:
 			return bridge.Recognized{}, refusal
@@ -160,7 +160,7 @@ func readReverseHeader(raw net.Conn) (reverseHeader, error) {
 	return header, nil
 }
 
-func (d *Daemon) recognizeReverseMachine(hostKey string, joining bool) (*store.Machine, *bridge.Refusal) {
+func (d *Daemon) recognizeReverseMachine(hostKey, joining string) (*store.Machine, *bridge.Refusal) {
 	home := d.bridgeIdentity().Name
 	if status := d.enrollmentStatus(); !status.IsHome() {
 		moved := cmp.Or(status.HomeName, status.HomeID)
@@ -185,8 +185,14 @@ func (d *Daemon) recognizeReverseMachine(hostKey string, joining bool) (*store.M
 		}
 		return &row, nil
 	}
-	if !joining {
+	if joining == "" {
 		return nil, &bridge.Refusal{Reason: "removed", Detail: fmt.Sprintf("home %s has no machine with this host key: it was removed there; run attn enrollment join to join again", home)}
+	}
+	if own, err := bridge.PublicHostKey(filepath.Join(d.dataRoot, "bridge_host_key")); err == nil && own == hostKey {
+		return nil, &bridge.Refusal{Reason: "self", Detail: fmt.Sprintf("%s is this machine's own daemon; join a home on another machine", home)}
+	}
+	if err := d.refuseMachineNameTaken(joining); err != nil {
+		return nil, &bridge.Refusal{Reason: "name", Detail: fmt.Sprintf("home %s refuses the name: %v; join under another with attn enrollment join --name <name>", home, err)}
 	}
 	return nil, nil
 }
@@ -295,6 +301,7 @@ func refuseReverse(row store.Machine, action string) error {
 type homeDial struct {
 	destination string
 	joining     bool
+	name        string
 	cancel      context.CancelFunc
 	done        chan struct{}
 	retry       chan struct{}
@@ -346,7 +353,7 @@ func (d *Daemon) configureHomeDial() {
 	}
 	d.stopHomeDial(current)
 	if want != "" {
-		d.startHomeDial(want, false)
+		d.startHomeDial(want, false, "")
 	}
 }
 
@@ -371,9 +378,9 @@ func (d *Daemon) stopHomeDial(dial *homeDial) {
 	}
 }
 
-func (d *Daemon) startHomeDial(destination string, joining bool) *homeDial {
+func (d *Daemon) startHomeDial(destination string, joining bool, name string) *homeDial {
 	ctx, cancel := context.WithCancel(d.life.Context())
-	dial := &homeDial{destination: destination, joining: joining, cancel: cancel, done: make(chan struct{}), retry: make(chan struct{}, 1), outcome: make(chan error, 1)}
+	dial := &homeDial{destination: destination, joining: joining, name: name, cancel: cancel, done: make(chan struct{}), retry: make(chan struct{}, 1), outcome: make(chan error, 1)}
 	r := &d.outpost
 	r.mu.Lock()
 	r.dial = dial
@@ -443,7 +450,7 @@ func (d *Daemon) dialHomeOnce(ctx context.Context, dial *homeDial, run *outpostL
 	}
 	header := reverseHeader{}
 	if dial.joining {
-		header.Join = d.bridgeIdentity().Name
+		header.Join = dial.name
 	}
 	line, err := json.Marshal(header)
 	if err == nil {
@@ -524,9 +531,16 @@ func (d *Daemon) ownSessionsRefusal(home bridge.Identity) *bridge.Refusal {
 	return &bridge.Refusal{Reason: "sessions", Detail: fmt.Sprintf("this machine is its own home and has %d open session(s): %s; close them before it joins home %s", len(names), strings.Join(names, ", "), home.Name)}
 }
 
-func (d *Daemon) joinHome(ctx context.Context, destination string) (protocol.HomeDial, error) {
+func (d *Daemon) joinHome(ctx context.Context, destination, name string) (protocol.HomeDial, error) {
 	if err := validateOutpostDestination(destination); err != nil {
 		return protocol.HomeDial{}, err
+	}
+	if name = strings.TrimSpace(name); name == "" {
+		self, err := d.store.SelfMachine()
+		if err != nil {
+			return protocol.HomeDial{}, err
+		}
+		name = cmp.Or(self.Name, d.bridgeIdentity().Name)
 	}
 	status := d.enrollmentStatus()
 	r := &d.outpost
@@ -546,7 +560,7 @@ func (d *Daemon) joinHome(ctx context.Context, destination string) (protocol.Hom
 		return protocol.HomeDial{}, protocol.Refuse(protocol.RefusalWrongState, "this machine is its own home and has %d open session(s): %s; close them before it joins a home", len(names), strings.Join(names, ", "))
 	}
 	d.stopHomeDial(current)
-	dial := d.startHomeDial(destination, true)
+	dial := d.startHomeDial(destination, true, name)
 	var err error
 	select {
 	case err = <-dial.outcome:
@@ -567,7 +581,7 @@ func (d *Daemon) joinHome(ctx context.Context, destination string) (protocol.Hom
 // home has moved to another machine. When the dial fails, the machine dials its home where it did before.
 func (d *Daemon) pointHomeDialAt(ctx context.Context, status enrollment.Status, current *homeDial, destination string) (protocol.HomeDial, error) {
 	d.stopHomeDial(current)
-	dial := d.startHomeDial(destination, false)
+	dial := d.startHomeDial(destination, false, "")
 	var err error
 	select {
 	case err = <-dial.outcome:
@@ -577,7 +591,7 @@ func (d *Daemon) pointHomeDialAt(ctx context.Context, status enrollment.Status, 
 	if err != nil {
 		d.stopHomeDial(dial)
 		if status.Dial != "" {
-			d.startHomeDial(status.Dial, false)
+			d.startHomeDial(status.Dial, false, "")
 		}
 		return d.homeDialState(), protocol.Refuse(protocol.RefusalWrongState, "this machine is enrolled to home %s and %s did not take it: %v; to join another home, run {attn enrollment leave} first", status.HomeID, destination, err)
 	}
@@ -596,7 +610,7 @@ func (d *Daemon) homeDialState() protocol.HomeDial {
 }
 
 func (d *Daemon) handleJoinHome(ctx context.Context, conn net.Conn, msg *protocol.JoinHomeMessage) {
-	dial, err := d.joinHome(ctx, msg.Destination)
+	dial, err := d.joinHome(ctx, msg.Destination, protocol.Deref(msg.Name))
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return

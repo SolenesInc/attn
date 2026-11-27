@@ -45,7 +45,7 @@ commands:
       - {name: handover, type: bool, cli: "--handover", doc: "transfer the seed to the new agent"}
       - {name: note, type: text, cli: "-m", doc: "the handover note: the next step"}
       - {name: authorization, type: text, cli: "--authorization", doc: "how far the user lets this task go, written as instructions to the agent; saved on the seed"}
-      - {name: host, type: name, cli: "--host", doc: "the outpost to run on, by name or id; home selects the home (default: the caller's machine)"}
+      - {name: host, type: name, cli: "--host", doc: "the machine to run on, by name or id, ignoring case; home selects the home (default: the caller's machine)"}
       - {name: cwd, type: text, cli: "--cwd", placeholder: "<path>", doc: "the folder or repository on that machine (required)"}
       - {name: reuse_checkout, type: bool, cli: "--reuse-checkout", doc: "use the checkout at cwd on branch"}
       - {name: new_worktree, type: bool, cli: "--new-worktree", doc: "create a worktree"}

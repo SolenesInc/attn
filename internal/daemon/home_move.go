@@ -376,7 +376,14 @@ func (d *Daemon) homeMoveCommand(ctx context.Context, msg *protocol.HomeMoveMess
 	if !status.IsHome() {
 		return protocol.HomeMove{}, false, protocol.Refuse(protocol.RefusalWrongState, "this machine is an outpost of home %s; run {attn home move} on the machine that is the home", status.HomeID)
 	}
-	target, err := d.resolveOutpost(msg.Machine)
+	place, err := d.readMachine(msg.Machine)
+	if err != nil {
+		return protocol.HomeMove{}, false, err
+	}
+	if place.IsLocal() {
+		return protocol.HomeMove{}, false, protocol.Refuse(protocol.RefusalInvalidInput, "%s names this machine, which is already the home; name an outpost", msg.Machine)
+	}
+	target, err := d.machineByID(place.ID())
 	if err != nil {
 		return protocol.HomeMove{}, false, err
 	}

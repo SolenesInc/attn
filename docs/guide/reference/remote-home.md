@@ -75,6 +75,7 @@ attn home move oma
 attn home move --via victor@laptop oma
 ```
 
+- The machine is the outpost's name, which ignores case, or its id.
 - `--check` only runs the checks.
 - On Linux the old home becomes an outpost that the new home reaches over ssh.
   `--via` names the ssh destination by which the new home reaches it.

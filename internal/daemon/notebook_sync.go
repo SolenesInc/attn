@@ -1006,7 +1006,7 @@ func (d *Daemon) receiveNotebookSyncReport(ctx context.Context, msg protocol.Not
 	if err := json.Unmarshal([]byte(msg.Report), &report); err != nil {
 		return protocol.OutpostNotebook{}, err
 	}
-	row, err := d.resolveOutpost(origin.Host)
+	row, err := d.machineByID(origin.Host)
 	if err != nil {
 		return protocol.OutpostNotebook{}, err
 	}
@@ -1218,7 +1218,7 @@ func (d *Daemon) notebookSyncSettings() (string, string) {
 }
 
 func (d *Daemon) NotebookReady(host, profileID string) error {
-	row, err := d.resolveOutpost(host)
+	row, err := d.machineByID(host)
 	if err != nil {
 		return err
 	}
@@ -1422,7 +1422,7 @@ func (d *Daemon) waitForNotebookArtifact(ctx context.Context, origin Origin, rec
 		} else if hash, err := hashRegularFile(path); err == nil && hash == receipt.Hash {
 			return nil
 		}
-		row, err := d.resolveOutpost(origin.Host)
+		row, err := d.machineByID(origin.Host)
 		if err != nil {
 			return err
 		}
@@ -1495,7 +1495,7 @@ func (d *Daemon) callerSeedArtifactDir(ctx context.Context, seed string) (string
 		return "", err
 	}
 	if origin, remote := OriginOf(ctx); remote {
-		row, err := d.resolveOutpost(origin.Host)
+		row, err := d.machineByID(origin.Host)
 		if err != nil {
 			return "", err
 		}

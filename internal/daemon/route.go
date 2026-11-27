@@ -18,7 +18,6 @@ import (
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/setting"
-	"github.com/victorarias/attn/internal/store"
 )
 
 type machinePart struct {
@@ -238,21 +237,8 @@ func (d *Daemon) localDirectory(session *protocol.Session) string {
 	return dir
 }
 
-func (d *Daemon) resolveOutpost(host string) (store.Machine, error) {
-	rows, err := d.store.ListOutposts()
-	if err != nil {
-		return store.Machine{}, err
-	}
-	for _, row := range rows {
-		if row.ID == host || row.Name == host {
-			return row, nil
-		}
-	}
-	return store.Machine{}, fmt.Errorf("outpost %q does not exist", host)
-}
-
 func (d *Daemon) outpostConn(host string) (*bridge.Conn, string, error) {
-	row, err := d.resolveOutpost(host)
+	row, err := d.machineByID(host)
 	if err != nil {
 		return nil, host, err
 	}

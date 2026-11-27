@@ -54,8 +54,8 @@ func TestTheAppMachinesTerminalsStayUsableWhileTheHomeIsAway(t *testing.T) {
 	w.home.Stop()
 	w.laptop.AwaitTimer(bridge.RetryTimer)
 	away := awaitHomeDial(t, w.laptop, "dialing")
-	if told := lastHomeUnreachable(t, away); told.Home != w.name {
-		t.Fatalf("the relayed app was told %+v, want the home %s unreachable", told, w.name)
+	if told := lastHomeUnreachable(t, away); told.Home != w.homeName {
+		t.Fatalf("the relayed app was told %+v, want the home %s unreachable", told, w.homeName)
 	}
 	machine.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "echo away-$((2+2))\r"})
 	machine.AwaitTerminalScreen(terminal, "away-4")

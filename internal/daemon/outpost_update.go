@@ -35,7 +35,7 @@ func (d *Daemon) handleUpdateOutpost(client *wsClient, id string) {
 		d.sendCommandError(client, protocol.CmdUpdateOutpost, "outposts_enabled is off")
 		return
 	}
-	row, err := d.resolveOutpost(id)
+	row, err := d.machineByID(id)
 	if err == nil && row.Reverse() {
 		err = refuseReverse(row, "update")
 	}
@@ -61,7 +61,7 @@ func (d *Daemon) handleUpdateOutpost(client *wsClient, id string) {
 	}
 	if row.HostKey == "" {
 		d.stopOutpostDial(row.ID)
-		row, err = d.resolveOutpost(row.ID)
+		row, err = d.machineByID(row.ID)
 		if err != nil {
 			d.sendCommandError(client, protocol.CmdUpdateOutpost, err.Error())
 			return

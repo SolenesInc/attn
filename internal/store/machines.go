@@ -77,6 +77,13 @@ func (s *Store) AddReverseMachine(id, name, hostKey, daemonID string) (Machine, 
 	return row, err
 }
 
+// SelfMachine is this database's own machine row.
+func (s *Store) SelfMachine() (Machine, error) {
+	var row Machine
+	err := s.db.QueryRow(`SELECT id,name,transport,added_at FROM machines WHERE transport = 'self'`).Scan(&row.ID, &row.Name, &row.Transport, &row.AddedAt)
+	return row, err
+}
+
 func (s *Store) ListOutposts() ([]Machine, error) {
 	rows, err := s.db.Query(`SELECT id,name,transport,destination,COALESCE(host_key,''),COALESCE(daemon_id,''),COALESCE(home,''),added_at FROM machines WHERE transport != 'self' ORDER BY added_at,id`)
 	if err != nil {

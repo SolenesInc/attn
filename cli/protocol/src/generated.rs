@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "8e3aea591dd7";
+pub const PROTOCOL_VERSION: &str = "16244a76862a";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -6357,6 +6357,8 @@ impl InstallPluginMessage {
 pub struct JoinHomeMessage {
     pub cmd: String,
     pub destination: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }
 
 impl JoinHomeMessage {

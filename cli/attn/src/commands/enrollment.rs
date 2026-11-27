@@ -26,9 +26,11 @@ commands:
         shows the dial: dialing, bridged, refused with the reason, or off when
         the daemon does not answer.
 
-  join [--json] <ssh-destination>
+  join [--name <name>] [--json] <ssh-destination>
         join the home at the ssh destination by dialing it over ssh, for a
-        machine the home cannot reach, such as a laptop. The home needs
+        machine the home cannot reach, such as a laptop. The home lists the
+        machine under --name, or under its short host name, and refuses home
+        or a name another of its machines has, ignoring case. The home needs
         remote_home_enabled and outposts_enabled on. This machine needs
         remote_home_enabled on and, while it is its own home, no open session.
         Waits for the first dial and prints its outcome. Run it again to dial
@@ -529,19 +531,28 @@ fn describe_dial(dial: &HomeDial) -> String {
 fn join_home(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     let mut flags = FlagSet::new(
         "enrollment join",
-        &[Flag {
-            name: "json",
-            default: FlagDefault::Bool(false),
-            usage: "print the dial as JSON",
-        }],
+        &[
+            Flag {
+                name: "json",
+                default: FlagDefault::Bool(false),
+                usage: "print the dial as JSON",
+            },
+            Flag {
+                name: "name",
+                default: FlagDefault::String(""),
+                usage: "the name the home lists this machine under (default: its short host name)",
+            },
+        ],
     );
     parse_or_exit(run, &mut flags, args)?;
     let [destination] = flags.args() else {
-        eprintln!("usage: attn enrollment join [--json] <ssh-destination>");
+        eprintln!("usage: attn enrollment join [--name <name>] [--json] <ssh-destination>");
         return Err(Stop(2));
     };
+    let name = flags.string("name").to_string();
     let message = JoinHomeMessage {
         destination: destination.clone(),
+        name: (!name.is_empty()).then_some(name),
         ..JoinHomeMessage::new()
     };
     let answer = client(run)

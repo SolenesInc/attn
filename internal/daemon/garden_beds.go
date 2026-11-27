@@ -277,18 +277,12 @@ func (d *Daemon) resolveBedRepos(ctx context.Context, caller command.Caller, raw
 
 func (d *Daemon) resolveBedRepoPath(ctx context.Context, caller command.Caller, repo string) (garden.RepoPath, error) {
 	place := d.bedCallerPlace(ctx, caller)
-	if host, path, qualified := strings.Cut(repo, ":"); qualified && !strings.Contains(host, "/") &&
-		(filepath.IsAbs(path) || namesHome(path)) {
-		if strings.EqualFold(host, "home") {
-			place = d.here()
-		} else {
-			target, err := d.resolveOutpost(host)
-			if err != nil {
-				return garden.RepoPath{}, err
-			}
-			place = d.machineFor(target.ID)
-		}
-		repo = path
+	named, path, addressed, err := d.readAddress(repo)
+	if err != nil {
+		return garden.RepoPath{}, err
+	}
+	if addressed {
+		place, repo = named, path
 	}
 	if repo == "~" {
 		repo = "~/"

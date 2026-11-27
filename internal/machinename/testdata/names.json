@@ -1,0 +1,161 @@
+{
+  "_": "Machine names as the Go resolver (internal/machinename) and the launcher (native/crates/attn-app/src/launcher/address.rs) read them. The machine with home is the home's own. Cases with launcher false are the daemon's alone: the app does not know the home machine's own name.",
+  "machines": [
+    {
+      "id": "m-oma",
+      "name": "oma",
+      "home": true
+    },
+    {
+      "id": "o-studio",
+      "name": "Studio"
+    },
+    {
+      "id": "o-twin-a",
+      "name": "twin"
+    },
+    {
+      "id": "o-twin-b",
+      "name": "TWIN"
+    },
+    {
+      "id": "o-at",
+      "name": "victor@box:2222"
+    },
+    {
+      "id": "o-file",
+      "name": "file"
+    }
+  ],
+  "names": [
+    {
+      "text": "studio",
+      "machine": "o-studio"
+    },
+    {
+      "text": "STUDIO",
+      "machine": "o-studio"
+    },
+    {
+      "text": "Studio",
+      "machine": "o-studio"
+    },
+    {
+      "text": "o-studio",
+      "machine": "o-studio"
+    },
+    {
+      "text": "home",
+      "machine": "m-oma"
+    },
+    {
+      "text": "Home",
+      "machine": "m-oma"
+    },
+    {
+      "text": "oma",
+      "machine": "m-oma",
+      "launcher": false
+    },
+    {
+      "text": "OMA",
+      "machine": "m-oma",
+      "launcher": false
+    },
+    {
+      "text": "victor@box:2222",
+      "machine": "o-at"
+    },
+    {
+      "text": "Twin",
+      "shared": [
+        "o-twin-a",
+        "o-twin-b"
+      ]
+    },
+    {
+      "text": "o-twin-b",
+      "machine": "o-twin-b"
+    },
+    {
+      "text": "stud",
+      "unknown": true
+    },
+    {
+      "text": "studoi",
+      "unknown": true
+    }
+  ],
+  "addresses": [
+    {
+      "text": "Studio:/x",
+      "machine": "o-studio",
+      "rest": "/x"
+    },
+    {
+      "text": "studio:~/notes/plan.md",
+      "machine": "o-studio",
+      "rest": "~/notes/plan.md"
+    },
+    {
+      "text": "home:~/projects",
+      "machine": "m-oma",
+      "rest": "~/projects"
+    },
+    {
+      "text": "OMA:/srv",
+      "machine": "m-oma",
+      "rest": "/srv",
+      "launcher": false
+    },
+    {
+      "text": "o-studio:/x",
+      "machine": "o-studio",
+      "rest": "/x"
+    },
+    {
+      "text": "victor@box:2222:~/",
+      "machine": "o-at",
+      "rest": "~/"
+    },
+    {
+      "text": "twin:/x",
+      "shared": [
+        "o-twin-a",
+        "o-twin-b"
+      ]
+    },
+    {
+      "text": "studoi:~/p.md",
+      "unknown": true
+    },
+    {
+      "text": "https://example.com/a",
+      "plain": true
+    },
+    {
+      "text": "mailto:/someone",
+      "plain": true
+    },
+    {
+      "text": "file:/etc/hosts",
+      "plain": true
+    },
+    {
+      "text": "FILE:///etc/hosts",
+      "plain": true
+    },
+    {
+      "text": "attn://seed/s-1",
+      "plain": true
+    },
+    {
+      "text": "/srv/x",
+      "plain": true
+    },
+    {
+      "text": "~/notes",
+      "plain": true
+    }
+  ]
+}

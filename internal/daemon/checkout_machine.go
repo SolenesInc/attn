@@ -17,9 +17,10 @@ import (
 
 func (d *Daemon) resolveCallerHost(source protocol.SessionID, requested *string) (string, error) {
 	place := d.here()
-	if requested != nil {
-		if host := strings.TrimSpace(*requested); host != "home" {
-			place = d.machineFor(host)
+	if requested != nil && strings.TrimSpace(*requested) != "" {
+		var err error
+		if place, err = d.readMachine(*requested); err != nil {
+			return "", err
 		}
 	} else if session := d.store.Get(source); session != nil {
 		place = d.machineOnWire(session.Host)
@@ -27,7 +28,7 @@ func (d *Daemon) resolveCallerHost(source protocol.SessionID, requested *string)
 	if place.IsLocal() {
 		return place.ID(), nil
 	}
-	row, err := d.resolveOutpost(place.ID())
+	row, err := d.machineByID(place.ID())
 	if err != nil {
 		return "", err
 	}

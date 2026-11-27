@@ -6,13 +6,13 @@ Use `attn terminal` inside an attn agent to open terminals, inspect them, type i
 
 `attn terminal open` keeps the user's focus where it was. A terminal goes to the end of the desktop's row. `--down` stacks it below you, or below the terminal you most recently opened in your column. `--desktop <ref>` opens it on that desktop, and with `--down` it stacks below that desktop's active tile. attn creates a missing numbered `--desktop`. `--cwd <dir>` selects the directory on the target machine.
 
-`attn terminal open` defaults to your session's machine and directory. `--host <name|id>` selects an outpost, and `--host home` selects the home. If you change the machine and omit `--cwd`, the shell starts in that machine's home directory. Claude, Codex and shells run on outposts. An agent's attn commands reach the home. Spawning chief, crew and plugin agents on outposts is unavailable.
+`attn terminal open` defaults to your session's machine and directory. `--host <name|id>` names another machine, ignoring case, and `--host home` selects the home. A name that two machines share is refused, and the refusal lists their ids. If you change the machine and omit `--cwd`, the shell starts in that machine's home directory. Claude, Codex and shells run on outposts. An agent's attn commands reach the home. Spawning chief, crew and plugin agents on outposts is unavailable.
 
 `attn terminal open` with a command types the command once the shell shows its first OSC 133 prompt. Called as a tool, it answers at once and types the command when that prompt comes. On the CLI it waits for the prompt. Before it opens a terminal, `attn terminal open` refuses known unsupported shells. If the first prompt takes more than 30 seconds, or the terminal ends first, nothing is typed and the terminal stays open: the CLI fails and reports the terminal's id, and a tool caller gets a notice in its inbox. A tool caller gets the same notice when the daemon restarts before the first prompt. When the daemon restarts while it types the command, the notice says instead that the command may have run: read the terminal for its effects before you run it again. A healthy start takes far less: first prompts took between 9 and 176 ms across fish, zsh and bash. The 30-second limit catches a broken startup, or startup files that turned the shell integration off. To continue in that terminal after a failure, use `send`. For a shell without command marks, open without a command.
 
 An opened terminal is an ordinary interactive shell. The command enters the shell's history, so the user can recall it with ↑. The terminal records you as its parent and keeps running after your session closes. Close the terminal when its work is done.
 
-- `attn terminal open [--host <outpost|home>] [--down] [--desktop <ref>] [--cwd <dir>] [-- <command>...] [--json]`: open a shell beside you, or on a desktop or outpost
+- `attn terminal open [--host <machine|home>] [--down] [--desktop <ref>] [--cwd <dir>] [-- <command>...] [--json]`: open a shell beside you, or on a desktop or outpost
 - `attn terminal close <terminal> [--desktop <ref>] [--json]`: close a shell
 
 ## Reach

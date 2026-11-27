@@ -120,18 +120,20 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 	}
 	isShell := agent == protocol.AgentShellValue
 	if host := protocol.Deref(msg.Host); host != "" {
+		place, err := d.readMachine(host)
+		if err != nil {
+			return nil, &spawnRejection{err: err}
+		}
+		msg.Host = d.wireHost(place.ID())
+	}
+	if host := protocol.Deref(msg.Host); host != "" {
 		if (policy.launchPlacement != nil && policy.launchPlacement.kind == "crew") || d.crewMemberBoundTo(msg.ID) != "" {
 			return nil, &spawnRejection{err: fmt.Errorf("outpost limit: the chief and crew run only at the home, not on %s", host)}
 		}
 		if !d.outpostsEnabled() {
 			return nil, &spawnRejection{err: errors.New("outposts_enabled is off; remote terminals need it on")}
 		}
-		row, err := d.resolveOutpost(host)
-		if err != nil {
-			return nil, &spawnRejection{err: err}
-		}
-		msg.Host = protocol.Ptr(row.ID)
-		if _, _, err = d.outpostConn(row.ID); err != nil {
+		if _, _, err := d.outpostConn(host); err != nil {
 			return nil, &spawnRejection{err: err}
 		}
 	}

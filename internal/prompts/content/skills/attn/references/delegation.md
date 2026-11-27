@@ -72,9 +72,10 @@ For a completed design, recommend an Orchestrator when the plan needs coordinate
 
 ## Choose the machine, folder and checkout
 
-Delegation defaults to your session's machine. `--host <name|id>` selects an
-outpost, and `--host home` selects the home. An unknown or unreachable host
-fails before acceptance. A retry or home restart keeps the accepted machine and
+Delegation defaults to your session's machine. `--host <name|id>` names another
+machine, ignoring case, and `--host home` selects the home. A name that two
+machines share is refused, and the refusal lists their ids. An unknown or
+unreachable host fails before acceptance. A retry or home restart keeps the accepted machine and
 path.
 
 Every delegation, including handover, requires `--cwd`. Attn does not infer it from the source session. Outside Git, the folder is enough. Inside Git, explicitly choose one mode and its branch arguments:

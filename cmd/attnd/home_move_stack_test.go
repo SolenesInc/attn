@@ -1070,7 +1070,7 @@ func TestHomeMoveToAMachineThatDialsTheHome(t *testing.T) {
 		w.ssh.Use(third.World)
 		third.Start()
 		requireStdout(t, third.Attn("settings", "set", "remote_home_enabled", "true"), "true")
-		requireStdout(t, third.Attn("enrollment", "join", "home"), "dial:       home (bridged)")
+		requireStdout(t, third.Attn("enrollment", "join", "--name", "third", "home"), "dial:       home (bridged)")
 		thirdMachine := role(t, third).MachineID
 		awaitMachineNotebook(t, w.app, thirdMachine, protocol.OutpostNotebookStateInSync)
 		laptop := w.join().ID

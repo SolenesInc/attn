@@ -20,6 +20,7 @@ type reverseWorld struct {
 	home, laptop *testworld.Stack
 	app          *testworld.Peer
 	name         string
+	homeName     string
 	copied       <-chan struct{}
 }
 
@@ -42,11 +43,12 @@ func newReverseWorldWith(t *testing.T, prepare func(*reverseWorld), opts ...test
 	for _, s := range []*testworld.Stack{w.home, w.laptop} {
 		requireStdout(t, s.Attn("settings", "set", "remote_home_enabled", "true"), "true")
 	}
-	name, err := os.Hostname()
+	w.name = "laptop"
+	homeName, err := os.Hostname()
 	if err != nil {
 		t.Fatal(err)
 	}
-	w.name = name
+	w.homeName = homeName
 	t.Cleanup(func() {
 		if t.Failed() {
 			for _, s := range []*testworld.Stack{w.home, w.laptop} {
@@ -60,7 +62,7 @@ func newReverseWorldWith(t *testing.T, prepare func(*reverseWorld), opts ...test
 func (w *reverseWorld) join() protocol.OutpostInfo {
 	w.t.Helper()
 	mark := w.app.EventCount()
-	requireStdout(w.t, w.laptop.Attn("enrollment", "join", "home"), "dial:       home (bridged)")
+	requireStdout(w.t, w.laptop.Attn("enrollment", "join", "--name", w.name, "home"), "dial:       home (bridged)")
 	return outpostStateSince(w.app, w.name, protocol.OutpostStateConnected, mark)
 }
 
@@ -169,10 +171,25 @@ func TestAReverseOutpostDialsItsHomeAndRedialsAfterEitherRestarts(t *testing.T) 
 	w.ssh.Use(second.World)
 	second.Start()
 	requireStdout(t, second.Attn("settings", "set", "remote_home_enabled", "true"), "true")
-	requireStdout(t, second.Attn("enrollment", "join", "home"), "dial:       home (bridged)")
+	for _, taken := range []struct{ name, refusal string }{
+		{"LAPTOP", "already has the name \"laptop\""},
+		{"Home", "is reserved for the home"},
+		{"", "already has the name"},
+	} {
+		args := []string{"enrollment", "join", "home"}
+		if taken.name != "" {
+			args = []string{"enrollment", "join", "--name", taken.name, "home"}
+		}
+		refused := second.Attn(args...)
+		if refused.Code == 0 || !strings.Contains(refused.Stderr, taken.refusal) || !strings.Contains(refused.Stderr, "--name") {
+			t.Fatalf("join as %q: exit %d, %s%s; want a refusal saying %s and how to pick another name", taken.name, refused.Code, refused.Stdout, refused.Stderr, taken.refusal)
+		}
+		t.Logf("join as %q: %s", taken.name, strings.TrimSpace(refused.Stderr))
+	}
+	requireStdout(t, second.Attn("enrollment", "join", "--name", "second", "home"), "dial:       home (bridged)")
 	testworld.Await(w.app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
 		for _, r := range m.Outposts {
-			if r.ID != row.ID && r.Name == w.name && r.State == protocol.OutpostStateConnected {
+			if r.ID != row.ID && r.Name == "second" && r.State == protocol.OutpostStateConnected {
 				return true
 			}
 		}
@@ -328,7 +345,7 @@ func TestAReverseOutpostShowsItsDialAndBothWaysOutEndIt(t *testing.T) {
 
 	requireStdout(t, w.home.Attn("settings", "set", "remote_home_enabled", "true"), "true")
 	mark := w.app.EventCount()
-	requireStdout(t, w.laptop.Attn("enrollment", "join", "home"), "dial:       home")
+	requireStdout(t, w.laptop.Attn("enrollment", "join", "--name", w.name, "home"), "dial:       home")
 	stopRetries = w.laptop.FireTimers(bridge.RetryTimer)
 	outpostStateSince(w.app, w.name, protocol.OutpostStateConnected, mark)
 	stopRetries()
@@ -376,7 +393,7 @@ func TestJoinRefusesWhileTheMachineHasOpenSessionsAndLeaveBringsItsOwnHomeBack(t
 	}
 	own := string(spawned.ID)
 
-	refused := w.laptop.Attn("enrollment", "join", "home")
+	refused := w.laptop.Attn("enrollment", "join", "--name", w.name, "home")
 	if refused.Code == 0 {
 		t.Fatalf("join succeeded with an open session of the machine's own home: %s", refused.Stdout)
 	}
@@ -444,7 +461,7 @@ func TestAJoinRefusedForItsBuildLeavesOnceTheHomeRemovesIt(t *testing.T) {
 	lp := w.laptop.App()
 	var ownHome enrollmentJSON
 	w.laptop.Attn("enrollment", "status", "--json").JSON(t, &ownHome)
-	refused := w.laptop.Attn("enrollment", "join", "home")
+	refused := w.laptop.Attn("enrollment", "join", "--name", w.name, "home")
 	if refused.Code == 0 || !strings.Contains(refused.Stderr, "build") {
 		t.Fatalf("a join across builds: exit %d, %s%s", refused.Code, refused.Stdout, refused.Stderr)
 	}

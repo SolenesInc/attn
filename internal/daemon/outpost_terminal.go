@@ -44,7 +44,7 @@ func (d *Daemon) callBridgeHandler(host string, order *terminalOrder) func(*brid
 					if !d.isOutpostConn(host, conn) {
 						return nil, errOutpostBridgeReplaced
 					}
-					row, err := d.resolveOutpost(host)
+					row, err := d.machineByID(host)
 					if err != nil {
 						return nil, err
 					}
@@ -140,7 +140,7 @@ func (d *Daemon) requireLiveSessionHost(id protocol.SessionID) error {
 }
 
 func (d *Daemon) outpostName(host string) string {
-	if row, err := d.resolveOutpost(host); err == nil {
+	if row, err := d.machineByID(host); err == nil {
 		return row.Name
 	}
 	return host

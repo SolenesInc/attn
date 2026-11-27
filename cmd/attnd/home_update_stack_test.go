@@ -52,13 +52,9 @@ func newAppMachineWorld(t *testing.T, build string, arm ...func(*appMachineWorld
 			requireStdout(t, s.Attn("settings", "set", key, "true"), "true")
 		}
 	}
-	name, err := os.Hostname()
-	if err != nil {
-		t.Fatal(err)
-	}
-	w.name = name
+	w.name = "laptop"
 	mark := w.homeApp.EventCount()
-	requireStdout(t, w.laptop.Attn("enrollment", "join", "home"), "dial:       home (bridged)")
+	requireStdout(t, w.laptop.Attn("enrollment", "join", "--name", w.name, "home"), "dial:       home (bridged)")
 	if machine := w.laptop.MachineApp(); machine.Initial.Settings["self_update_enabled"] != "true" {
 		testworld.Await(machine, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["self_update_enabled"] == "true" })
 	}
@@ -333,7 +329,7 @@ func TestAnAppMachineWhoseBuildDidNotChangeStartsNoUpdateOfAHomeAhead(t *testing
 			for _, key := range []string{"remote_home_enabled", "self_update_enabled"} {
 				requireStdout(t, second.Attn("settings", "set", key, "true"), "true")
 			}
-			requireStdout(t, second.Attn("enrollment", "join", "home"), "dial:       home (bridged)")
+			requireStdout(t, second.Attn("enrollment", "join", "--name", "second", "home"), "dial:       home (bridged)")
 
 			next := tc.next(t)
 			w.installOnLaptop(next)

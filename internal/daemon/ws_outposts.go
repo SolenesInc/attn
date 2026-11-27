@@ -27,8 +27,8 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 		if name == "" {
 			name = address
 		}
-		if strings.EqualFold(name, "home") {
-			return fmt.Errorf("outpost name %q is reserved for the home", name)
+		if err := d.refuseMachineNameTaken(name); err != nil {
+			return fmt.Errorf("%w; choose another name", err)
 		}
 		if err := validateOutpostDestination(address); err != nil {
 			return err

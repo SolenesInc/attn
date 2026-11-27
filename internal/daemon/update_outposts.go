@@ -201,7 +201,7 @@ func (d *Daemon) switchOutposts(run store.UpdateRun) string {
 		if outpost.State != store.UpdateOutpostStaged && outpost.State != store.UpdateOutpostSwitching {
 			continue
 		}
-		row, err := d.resolveOutpost(outpost.ID)
+		row, err := d.machineByID(outpost.ID)
 		if err != nil {
 			d.logf("update run %s: %v", run.ID, err)
 			continue

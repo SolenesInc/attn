@@ -79,7 +79,7 @@ func GenerateSchemaImage() ([]byte, error) {
 	}
 	var image []byte
 	err = withImage(replayed, func(db *sql.DB) error {
-		if err := stampIdentity(db, imageProfileID, imageMachineID, imageTime); err != nil {
+		if err := stampIdentity(db, imageProfileID, imageMachineID, "", imageTime); err != nil {
 			return err
 		}
 		if _, err := db.Exec(`VACUUM`); err != nil {
@@ -154,7 +154,7 @@ func copyMigratedSchema(dst *sql.DB) error {
 		return fmt.Errorf("building migrated schema: %w", err)
 	}
 	return withImage(image, func(src *sql.DB) error {
-		if err := stampIdentity(src, newProfileEntityID("profile"), uuid.NewString(), time.Now()); err != nil {
+		if err := stampIdentity(src, newProfileEntityID("profile"), uuid.NewString(), shortHostname(), time.Now()); err != nil {
 			return err
 		}
 		return backup(src, dst)
@@ -180,7 +180,7 @@ func backup(src, dst *sql.DB) error {
 	})
 }
 
-func stampIdentity(db *sql.DB, profileID, machineID string, now time.Time) error {
+func stampIdentity(db *sql.DB, profileID, machineID, machineName string, now time.Time) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return err
@@ -198,12 +198,12 @@ func stampIdentity(db *sql.DB, profileID, machineID string, now time.Time) error
 		`UPDATE schema_migrations SET applied_at = :applied`,
 	}
 	if machinesTableExists(tx) {
-		statements = append(statements, `UPDATE machines SET id = :machine, added_at = :stamp WHERE transport = 'self'`)
+		statements = append(statements, `UPDATE machines SET id = :machine, name = :name, added_at = :stamp WHERE transport = 'self'`)
 	}
 	for _, statement := range statements {
 		if _, err := tx.Exec(statement,
 			sql.Named("old", seeded), sql.Named("new", profileID), sql.Named("stamp", stamp),
-			sql.Named("applied", now.UTC().Format(time.DateTime)), sql.Named("machine", machineID),
+			sql.Named("applied", now.UTC().Format(time.DateTime)), sql.Named("machine", machineID), sql.Named("name", machineName),
 		); err != nil {
 			return fmt.Errorf("giving the new database its own identity: %w", err)
 		}
