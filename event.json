@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Explicit ask subjects bypass machine-aware link resolution",
+  "at": "2026-11-27T16:35:29.733Z",
+  "detail": "An explicit subject with a machine-addressed link is stored without the corresponding resolved reference. App and phone can lose usable link behavior and an invalid machine name escapes validation. Resolve references in the effective subject and label subject errors.\n"
+}
