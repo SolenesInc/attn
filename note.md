@@ -1,0 +1,1 @@
+Fork offer docs: the Forks section and the drive-attn ledger map now say a closed original (every Claude Code `/branch`) reads "Forked from an earlier conversation.", and that Claude's background `/fork` leaves no notice. The Claude harness table records that background `/fork` fires no SessionStart (2.1.331–332). Part of plot s-01cg7v.

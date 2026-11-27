@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "ef50b9826eacbd1e426795f01b54a544c8570276",
+  "head": "962ab37bbd369e6d0e057c348bf2e17227a69081",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 1.788,
+    "ranOn": "962ab37bbd369e6d0e057c348bf2e17227a69081"
+  },
+  "noMediaReason": "docs-only wording fix; the plot's images are the planning mockups",
+  "recordings": []
+}
