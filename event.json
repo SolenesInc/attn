@@ -1,0 +1,10 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "TestJoinRefuses: copy-batch-applied armed and never reached",
+  "at": "2026-11-27T06:10:19.389Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45947035596",
+  "severity": "p1",
+  "source": "ci",
+  "culprit": "dc932349a3898fde1b3a6ff0025e86dbfffbb967"
+}
