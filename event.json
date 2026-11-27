@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Offline desktop switch can return keyboard focus to the wrong terminal",
+  "at": "2026-11-27T08:40:15.247Z",
+  "detail": "At 2af20d8e, while the home is away, select a local terminal on desktop A, switch to B, let a machine-link setting or session update arrive, and switch back. The app restores A's previous home-selected terminal as the keyboard target. An independent scratch wire probe reproduced the loss of input to the selected terminal after one settings event. Keep each desktop's local selection through machine updates until the home answers.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/desktop/actions.rs",
+    "line": 249
+  },
+  "culprit": "d15d5128748e0a31e785726660e81a5f17e34296"
+}
