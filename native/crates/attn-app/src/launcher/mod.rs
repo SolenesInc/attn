@@ -261,6 +261,7 @@ pub(crate) fn offered<'a>(state: &'a State, outposts: &'a [OutpostInfo]) -> Mach
     Machines {
         outposts,
         app: &state.facts.machine,
+        home_name: &state.facts.home_name,
     }
 }
 

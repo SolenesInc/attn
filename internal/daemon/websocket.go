@@ -555,6 +555,7 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 
 func (d *Daemon) sendInitialState(client *wsClient) {
 	state := d.currentStateProjection()
+	outposts := d.outpostsUpdatedMessage()
 	event := &protocol.InitialStateMessage{
 		TerminalBindings:       d.terminalBindingsSnapshot(client.selectedProfile()).TerminalBindings,
 		Event:                  protocol.EventInitialState,
@@ -573,7 +574,8 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Crew:                   state.Crew,
 		Asks:                   d.asksSnapshot(client.selectedProfile(), d.asks()).Asks,
 		Vents:                  d.ventsSnapshot(client.selectedProfile()).Vents,
-		Outposts:               d.outpostsUpdatedMessage().Outposts,
+		Outposts:               outposts.Outposts,
+		HomeName:               outposts.HomeName,
 		UpdateRun:              d.latestUpdateRunForApp(),
 	}
 	for _, snap := range d.profileSnapshots {

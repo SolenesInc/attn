@@ -851,7 +851,7 @@ impl Task {
             }
             "outposts_updated" => {
                 let message: OutpostsUpdatedMessage = parse(&header.event, text)?;
-                self.store.set_outposts(message.outposts);
+                self.store.set_outposts(message.outposts, message.home_name);
                 None
             }
             "phones_updated" => {

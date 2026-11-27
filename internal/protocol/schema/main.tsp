@@ -4464,6 +4464,8 @@ model InitialStateMessage {
   // Every outpost, as outposts_updated carries them, so a tile knows its
   // host's reach from the first push.
   outposts?: OutpostInfo[];
+  // The name of the home's own machine, as outposts_updated carries it.
+  home_name?: string;
   update_run?: UpdateRun;
 }
 
@@ -5255,7 +5257,8 @@ model GitHubHostsUpdatedMessage {
   github_polling_off_reason?: string;
 }
 
-model OutpostsUpdatedMessage { event: "outposts_updated"; outposts: OutpostInfo[]; }
+// home_name is the name of the home's own machine, which an address names it by as well as home.
+model OutpostsUpdatedMessage { event: "outposts_updated"; outposts: OutpostInfo[]; home_name?: string; }
 
 // What an outpost answers an app's client_hello with, instead of relaying the app to its home, while it cannot reach
 // the home. home is the home's name; state is this machine's dial: dialing, refused or off when the home dials it.

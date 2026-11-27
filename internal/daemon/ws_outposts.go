@@ -141,6 +141,12 @@ func (d *Daemon) handleOutpostCommand(client *wsClient, action, id, name, addres
 
 func (d *Daemon) outpostsUpdatedMessage() *protocol.OutpostsUpdatedMessage {
 	message := &protocol.OutpostsUpdatedMessage{Event: protocol.EventOutpostsUpdated, Outposts: []protocol.OutpostInfo{}}
+	self, err := d.store.SelfMachine()
+	if err != nil {
+		d.logf("outposts snapshot: %v", err)
+		return message
+	}
+	message.HomeName = protocol.Ptr(self.Name)
 	rows, err := d.store.ListOutposts()
 	if err != nil {
 		d.logf("outposts snapshot: %v", err)

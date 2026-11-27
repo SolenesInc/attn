@@ -1,5 +1,5 @@
 {
-  "_": "Machine names as the Go resolver (internal/machinename) and the launcher (native/crates/attn-app/src/launcher/address.rs) read them. The machine with home is the home's own. Cases with launcher false are the daemon's alone: the app does not know the home machine's own name.",
+  "_": "Machine names as the Go resolver (internal/machinename) and the launcher (native/crates/attn-app/src/launcher/address.rs) read them. The machine with home is the home's own.",
   "machines": [
     {
       "id": "m-oma",
@@ -54,13 +54,11 @@
     },
     {
       "text": "oma",
-      "machine": "m-oma",
-      "launcher": false
+      "machine": "m-oma"
     },
     {
       "text": "OMA",
-      "machine": "m-oma",
-      "launcher": false
+      "machine": "m-oma"
     },
     {
       "text": "victor@box:2222",
@@ -105,8 +103,7 @@
     {
       "text": "OMA:/srv",
       "machine": "m-oma",
-      "rest": "/srv",
-      "launcher": false
+      "rest": "/srv"
     },
     {
       "text": "o-studio:/x",

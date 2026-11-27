@@ -79,6 +79,8 @@ pub struct Facts {
     pub harnesses_loaded: bool,
     /// The machines that host remote sessions, by the id a session's `host` names.
     pub outposts: Arc<Vec<OutpostInfo>>,
+    /// The name of the home's own machine, which an address names it by as well as `home`.
+    pub home_name: String,
     /// The machine this app runs on, as its own daemon's `/health` last said.
     pub machine: AppMachine,
     /// The build the home daemon runs, which an outpost on another build is offered.
@@ -677,6 +679,7 @@ impl Store {
             }
             facts.settings = Arc::new(state.settings.unwrap_or_default());
             facts.outposts = Arc::new(state.outposts.unwrap_or_default());
+            facts.home_name = state.home_name.unwrap_or_default();
             facts.home_build = state.home_build.unwrap_or_default();
             facts.crew = Arc::new(state.crew.unwrap_or_default());
             let seeds: Vec<Arc<Seed>> = state
@@ -798,9 +801,10 @@ impl Store {
         });
     }
 
-    pub(crate) fn set_outposts(&self, outposts: Vec<OutpostInfo>) {
+    pub(crate) fn set_outposts(&self, outposts: Vec<OutpostInfo>, home_name: Option<String>) {
         self.change(|facts| {
             facts.outposts = Arc::new(outposts);
+            facts.home_name = home_name.unwrap_or_default();
             Slices::OUTPOSTS
         });
     }

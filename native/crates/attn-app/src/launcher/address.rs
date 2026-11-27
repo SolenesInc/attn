@@ -15,7 +15,7 @@ pub(crate) struct Machine {
     pub(crate) label: String,
 }
 
-/// The home's machine, which `home:` names wherever it runs.
+/// The home's machine, which `home:` and its own name name wherever it runs.
 pub(crate) fn home(machines: &Machines) -> Machine {
     Machine {
         host: None,
@@ -80,7 +80,12 @@ fn named(query: &str, machines: &Machines) -> Option<(Vec<Machine>, String)> {
             let machine = machine_for(o, outposts);
             [o.name.clone(), o.id.clone()].map(|label| (label, machine.clone()))
         })
-        .chain(std::iter::once(("home".to_owned(), home(machines))));
+        .chain(
+            ["home", machines.home_name]
+                .into_iter()
+                .filter(|label| !label.is_empty())
+                .map(|label| (label.to_owned(), home(machines))),
+        );
     let matches: Vec<(String, Machine)> = labels
         .filter(|(label, _)| lower.starts_with(&format!("{}:", label.to_lowercase())))
         .collect();
@@ -182,12 +187,6 @@ mod tests {
         unknown: bool,
         #[serde(default)]
         plain: bool,
-        #[serde(default = "read_by_the_launcher")]
-        launcher: bool,
-    }
-
-    fn read_by_the_launcher() -> bool {
-        true
     }
 
     /// The table the Go resolver runs too, so the launcher reads a machine's name by the same rule.
@@ -249,11 +248,12 @@ mod tests {
         let machines = Machines {
             outposts: &outposts,
             app: &app,
+            home_name: &home.name,
         };
-        for case in table.names.iter().filter(|c| c.launcher) {
+        for case in &table.names {
             check(case, &format!("{}:/", case.text), "/", &machines, &home.id);
         }
-        for case in table.addresses.iter().filter(|c| c.launcher) {
+        for case in &table.addresses {
             check(
                 case,
                 &case.text,

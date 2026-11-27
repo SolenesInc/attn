@@ -70,6 +70,15 @@ func TestEveryCommandThatTakesAMachineReadsItsNameByOneRule(t *testing.T) {
 	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "twin", Destination: "user@twin.example"})
 	twin := testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 2 })
 	twinID := twin.Outposts[slices.IndexFunc(twin.Outposts, func(o protocol.OutpostInfo) bool { return o.Name == "twin" })].ID
+	homeName := protocol.Deref(twin.HomeName)
+	if homeName == "" || protocol.Deref(app.Initial.HomeName) != homeName {
+		t.Fatalf("home_name: outposts_updated %q, initial_state %q, want the home's own name in both", homeName, protocol.Deref(app.Initial.HomeName))
+	}
+	if err := cli.RunCommand("terminal open", caller, map[string]any{"host": strings.ToUpper(homeName)}, &opened); err != nil {
+		t.Fatalf("terminal open --host %s: %v", strings.ToUpper(homeName), err)
+	}
+	requireSessionOn(t, cli, opened.SessionID, "")
+	t.Logf("home_name %q, which --host %s reads as the home", homeName, strings.ToUpper(homeName))
 	w.stop()
 	nameMachineAsAnOlderBuildCould(t, filepath.Join(w.Dir, "attn.db"), twinID, "Far")
 	w.start()

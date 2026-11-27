@@ -13,6 +13,8 @@ pub(crate) const THIS_MAC: &str = "This Mac";
 pub(crate) struct Machines<'a> {
     pub(crate) outposts: &'a [OutpostInfo],
     pub(crate) app: &'a AppMachine,
+    /// The name of the home's own machine, which an address names it by as well as `home`.
+    pub(crate) home_name: &'a str,
 }
 
 impl<'a> Machines<'a> {
@@ -20,6 +22,7 @@ impl<'a> Machines<'a> {
         Machines {
             outposts: &facts.outposts,
             app: &facts.machine,
+            home_name: &facts.home_name,
         }
     }
 

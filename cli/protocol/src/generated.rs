@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "16244a76862a";
+pub const PROTOCOL_VERSION: &str = "d5e8d2473da2";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -6156,6 +6156,8 @@ pub struct InitialStateMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub home_build: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub home_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outposts: Option<Vec<OutpostInfo>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profiles: Option<Vec<Profile>>,
@@ -7677,6 +7679,8 @@ pub type OutpostUpdatePhase = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OutpostsUpdatedMessage {
     pub event: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub home_name: Option<String>,
     #[serde(deserialize_with = "null_as_default")]
     pub outposts: Vec<OutpostInfo>,
 }

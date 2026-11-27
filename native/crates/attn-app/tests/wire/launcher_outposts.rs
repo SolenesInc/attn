@@ -1978,3 +1978,30 @@ fn with_the_home_on_another_machine_and_no_outposts_the_launcher_still_names_the
     );
     rest(&mut world);
 }
+
+#[test]
+fn the_homes_own_name_names_the_home_on_its_machine_and_away_from_it() {
+    for relaying in [None, Some(("mac", "oma"))] {
+        let mut world = open(Setup {
+            relaying,
+            ..Setup::default()
+        });
+        world.daemon.emit(OutpostsUpdatedMessage {
+            outposts: vec![sandbox(), field_lab()],
+            home_name: Some("oma".into()),
+            ..OutpostsUpdatedMessage::new()
+        });
+        world.settle();
+
+        type_path(&mut world, "home:~/projects/");
+        let by_home = names(&world);
+        type_path(&mut world, "OMA:~/projects/");
+        assert_eq!(names(&world), by_home, "{relaying:?}");
+        assert_eq!(
+            browses(&world).last(),
+            Some(&("~/projects/".to_owned(), String::new())),
+            "{relaying:?}"
+        );
+        rest(&mut world);
+    }
+}

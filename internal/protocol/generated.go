@@ -6772,6 +6772,9 @@ type InitialStateMessage struct {
 	// HomeBuild corresponds to the JSON schema field "home_build".
 	HomeBuild *string `json:"home_build,omitempty,omitzero"`
 
+	// HomeName corresponds to the JSON schema field "home_name".
+	HomeName *string `json:"home_name,omitempty,omitzero"`
+
 	// Outposts corresponds to the JSON schema field "outposts".
 	Outposts []OutpostInfo `json:"outposts,omitempty,omitzero"`
 
@@ -8449,6 +8452,9 @@ const OutpostUpdatePhaseVerifying OutpostUpdatePhase = "verifying"
 type OutpostsUpdatedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
+
+	// HomeName corresponds to the JSON schema field "home_name".
+	HomeName *string `json:"home_name,omitempty,omitzero"`
 
 	// Outposts corresponds to the JSON schema field "outposts".
 	Outposts []OutpostInfo `json:"outposts"`
