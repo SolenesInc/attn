@@ -1,0 +1,1 @@
+An enrolled outpost no longer recovers the home's sessions itself after a reboot. Before this, it marked its copies of the home's shells as recoverable and could start the home's agents locally. Now the home stays their only owner.
