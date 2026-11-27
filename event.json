@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Local terminal pop-outs disappear during a home outage",
+  "at": "2026-11-27T07:11:58.496Z",
+  "detail": "When the home drops after a local terminal has been popped out, the app hides its window and drops the window binding. The main window also excludes popped tiles. Preserve live local terminal windows using cached placement. The source plot already assigned this follow-up, and the rolling review independently confirmed it at 54d9c6647.\n"
+}
