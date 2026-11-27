@@ -42,12 +42,13 @@ type sinkSpec struct {
 var localFSSinks = []sinkSpec{
 	{pkgPath: "os", name: "Stat"},
 	{pkgPath: "os", name: "Lstat"},
+	{pkgPath: "os", name: "Open"},
 	{pkgSuffix: "/internal/git", name: "ReadRepoTraits"},
 	{pkgSuffix: "/internal/daemon", name: "repoTraits"},
 }
 
 var allowed = map[string]string{
-	"internal/daemon/session_transcript.go (*Daemon).inspectableTranscriptPath": "checks that the session is local or copied from the home before statting the session's transcript path",
+	"internal/daemon/session_transcript.go (*Daemon).openInspectableTranscript": "checks that the session is local or copied from the home before opening the session's transcript path",
 	"internal/daemon/terminal_machine.go (*Daemon).startTerminal":               "runs on the machine that owns the session's terminal",
 }
 

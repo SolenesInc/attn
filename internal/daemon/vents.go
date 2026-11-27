@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -250,10 +249,11 @@ func (d *Daemon) ventContext(session *protocol.Session) protocol.VentContext {
 	if seed, ok := d.gardenDispatchCrown(session.ID); ok && seed != "" {
 		context.SeedID = &seed
 	}
-	if path := d.inspectableTranscriptPath(session.ID, session.Agent); path != "" {
-		if info, err := os.Stat(path); err == nil {
-			context.Transcript = &protocol.VentTranscript{Path: path, Bytes: int(info.Size())}
+	if file := d.openInspectableTranscript(session.ID, session.Agent); file != nil {
+		if info, err := file.Stat(); err == nil {
+			context.Transcript = &protocol.VentTranscript{Path: file.Name(), Bytes: int(info.Size())}
 		}
+		file.Close()
 	}
 	ref := harness.ConversationRef{Harness: session.Agent, Session: session.ID}
 	if version := d.harnessOf(session.Agent).Conversations().Version(ref); version != "" {

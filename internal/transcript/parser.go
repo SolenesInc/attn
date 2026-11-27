@@ -73,6 +73,10 @@ func readJSONLFileReverse(path string, fn func(line []byte) bool) error {
 		return err
 	}
 	defer file.Close()
+	return readJSONLOpenFileReverse(file, fn)
+}
+
+func readJSONLOpenFileReverse(file *os.File, fn func(line []byte) bool) error {
 	info, err := file.Stat()
 	if err != nil {
 		return err
@@ -151,8 +155,17 @@ type AssistantTurn struct {
 }
 
 func ExtractLastAssistantMessage(path string, maxChars int) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	return ExtractLastAssistantMessageFrom(file, maxChars)
+}
+
+func ExtractLastAssistantMessageFrom(file *os.File, maxChars int) (string, error) {
 	var lastAssistantContent string
-	if err := readJSONLFileReverse(path, func(line []byte) bool {
+	if err := readJSONLOpenFileReverse(file, func(line []byte) bool {
 		lastAssistantContent = ExtractAssistantContent(line)
 		return lastAssistantContent != ""
 	}); err != nil {

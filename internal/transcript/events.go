@@ -114,16 +114,18 @@ func offsetAfterLastNewline(f *os.File, size int64) (int64, error) {
 }
 
 func ReadEventPage(path string, format Format, cursor string, maxEvents int) (EventPage, error) {
-	if maxEvents <= 0 {
-		maxEvents = defaultEventPageSize
-	}
-
 	f, err := os.Open(path)
 	if err != nil {
 		return EventPage{}, err
 	}
 	defer f.Close()
+	return ReadEventPageFrom(f, format, cursor, maxEvents)
+}
 
+func ReadEventPageFrom(f *os.File, format Format, cursor string, maxEvents int) (EventPage, error) {
+	if maxEvents <= 0 {
+		maxEvents = defaultEventPageSize
+	}
 	info, err := f.Stat()
 	if err != nil {
 		return EventPage{}, err

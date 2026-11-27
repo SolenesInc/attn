@@ -580,6 +580,11 @@ func TestClosingAnOutpostAgentDrainsItsFinalCostAndLeavesItsTranscriptReadable(t
 			outpost := testworld.NewStack(t, testworld.WithAgents(harness))
 			pair := testworld.PrepareOutpostPair(t, home, outpost)
 			var copied *testworld.Pause
+			resolved := outpost.PauseAt(pausepoint.TranscriptPageResolved)
+			var releasing *testworld.Pause
+			if harness == fakeagent.Codex {
+				releasing = home.PauseAt(pausepoint.SessionCloseReleasing)
+			}
 			if scenario.beforeTranscriptCopy {
 				copied = outpost.PauseAt(pausepoint.CopyBatchApplied)
 			}
@@ -610,7 +615,24 @@ func TestClosingAnOutpostAgentDrainsItsFinalCostAndLeavesItsTranscriptReadable(t
 			if closed.Usage == nil || closed.Usage.TotalTokens != 2*len(reply) {
 				t.Fatalf("final cost: %+v", closed.Usage)
 			}
-			page, err := home.Client().SessionTranscript(id, "")
+			type transcriptRead struct {
+				page *protocol.SessionTranscriptResult
+				err  error
+			}
+			read := make(chan transcriptRead, 1)
+			go func() {
+				page, err := home.Client().SessionTranscript(id, "")
+				read <- transcriptRead{page, err}
+			}()
+			resolved.Await()
+			if releasing != nil {
+				releasing.Await()
+				releasing.Release()
+				outpost.CodexServer().AwaitArchived(agent.ConversationID)
+			}
+			resolved.Release()
+			got := <-read
+			page, err := got.page, got.err
 			if err != nil {
 				t.Fatal(err)
 			}

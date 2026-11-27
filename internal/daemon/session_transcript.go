@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/activity"
 	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -80,35 +81,33 @@ func sessionTranscriptRefusal(code string) *command.Refusal {
 	return command.Refuse(code, "%s", SessionTranscriptErrorMessage(code))
 }
 
-func (d *Daemon) inspectableTranscriptPath(sessionID protocol.SessionID, agent string) string {
+func (d *Daemon) openInspectableTranscript(sessionID protocol.SessionID, agent string) *os.File {
 	if !d.sessionPlace(sessionID).IsLocal() && !d.copiedSession(sessionID) {
-		return ""
+		return nil
 	}
 	binding := d.store.GetSessionConversation(sessionID)
 	if records := d.store.SessionRuntimeRecords(sessionID); records.HomeID != "" && binding.NativeID == "" {
 		binding.NativeID, binding.TranscriptPath = records.ConversationNativeID, records.ConversationTranscriptPath
 	}
-	for _, path := range []string{binding.TranscriptPath, d.store.GetAgentDriverTranscriptPath(sessionID)} {
-		if path != "" {
-			if _, err := os.Stat(path); err == nil {
-				return path
-			}
+	for _, path := range []string{binding.TranscriptPath, d.store.GetAgentDriverTranscriptPath(sessionID), d.sessionMonitor(sessionID).LiveTranscriptPath(agent)} {
+		if path == "" {
+			continue
+		}
+		if f, err := os.Open(path); err == nil {
+			return f
 		}
 	}
-	if path := d.sessionMonitor(sessionID).LiveTranscriptPath(agent); path != "" {
-		return path
-	}
 	if _, keeps := d.keeperOf(agent); keeps && !d.conversationReady(agent, binding.NativeID) {
-		return ""
+		return nil
 	}
-	path := d.harnessOf(harness.ID(agent)).Conversations().Locate(harness.ConversationRef{Harness: harness.ID(agent), ID: binding.NativeID})
-	if path == "" {
-		return ""
+	located := d.harnessOf(harness.ID(agent)).Conversations().Locate(harness.ConversationRef{Harness: harness.ID(agent), ID: binding.NativeID})
+	if located == "" {
+		return nil
 	}
-	if _, err := os.Stat(path); err != nil {
-		return ""
+	if f, err := os.Open(located); err == nil {
+		return f
 	}
-	return path
+	return nil
 }
 
 func SessionTranscriptErrorMessage(code string) string {
@@ -131,23 +130,26 @@ func SessionTranscriptErrorMessage(code string) string {
 type fileConversations struct{ d *Daemon }
 
 func (f fileConversations) Page(_ context.Context, ref harness.ConversationRef, cursor string, limit int) (transcript.EventPage, error) {
-	path := f.d.inspectableTranscriptPath(ref.Session, string(ref.Harness))
-	if path == "" {
+	file := f.d.openInspectableTranscript(ref.Session, string(ref.Harness))
+	if file == nil {
 		return transcript.EventPage{}, harness.ErrTranscriptUnavailable
 	}
+	defer file.Close()
+	pausepoint.At(pausepoint.TranscriptPageResolved)
 	var format transcript.Format
 	if t, ok := harness.As[harness.Transcript](f.d.harnessOf(ref.Harness)); ok {
 		format = t.Format()
 	}
-	return transcript.ReadEventPage(path, format, cursor, limit)
+	return transcript.ReadEventPageFrom(file, format, cursor, limit)
 }
 
 func (f fileConversations) LastReply(_ context.Context, ref harness.ConversationRef, max int) (string, error) {
-	path := f.d.inspectableTranscriptPath(ref.Session, string(ref.Harness))
-	if path == "" {
+	file := f.d.openInspectableTranscript(ref.Session, string(ref.Harness))
+	if file == nil {
 		return "", nil
 	}
-	return transcript.ExtractLastAssistantMessage(path, max)
+	defer file.Close()
+	return transcript.ExtractLastAssistantMessageFrom(file, max)
 }
 
 func (f fileConversations) Window(_ context.Context, ref harness.ConversationRef) (harness.AssistantWindow, bool) {
@@ -197,7 +199,12 @@ func (f fileConversations) Activity(_ context.Context, ref harness.ConversationR
 }
 
 func (f fileConversations) Path(ref harness.ConversationRef) string {
-	return f.d.inspectableTranscriptPath(ref.Session, string(ref.Harness))
+	file := f.d.openInspectableTranscript(ref.Session, string(ref.Harness))
+	if file == nil {
+		return ""
+	}
+	defer file.Close()
+	return file.Name()
 }
 
 func (f fileConversations) Check(refs []harness.ConversationRef, resumable func(id string) bool) map[harness.ConversationRef]harness.Availability {

@@ -88,6 +88,7 @@ const (
 	ConversationCandidateBound     = "conversation-candidate-bound"
 	ConversationCandidateStart     = "conversation-candidate-start"
 	TranscriptUsageRead            = "transcript-usage-read"
+	TranscriptPageResolved         = "transcript-page-resolved"
 	MemberRetiredClearClose        = "member-retired-clear-close"
 	ConversationDropped            = "conversation-dropped"
 	ConversationReportReady        = "conversation-report-ready"
