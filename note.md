@@ -1,0 +1,1 @@
+The launcher now reads the home machine's own name, such as `oma:~/x`, as the home, like `--host` and bed addresses already do. `outposts_updated` and `initial_state` carry `home_name`, and the shared names table now runs every case in the launcher too.
