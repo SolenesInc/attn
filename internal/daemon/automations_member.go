@@ -62,7 +62,7 @@ func (d *Daemon) addressAutomationMember(spec automation.DefinitionSpec, profile
 		return spec, nil, err
 	}
 	if !found {
-		return spec, nil, fmt.Errorf("member: no crew member %q in this profile; {attn crew list} names the members", spec.Member)
+		return spec, nil, protocol.Refuse(protocol.RefusalNotFound, "member: no crew member %q in this profile; {attn crew list} names the members", spec.Member)
 	}
 	if member.Retired {
 		return spec, nil, fmt.Errorf("member: %s is retired", member.Name)
