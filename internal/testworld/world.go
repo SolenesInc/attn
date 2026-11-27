@@ -220,14 +220,29 @@ func (w *World) Connect(hello protocol.ClientHelloMessage, header http.Header) *
 	return p
 }
 
+// MachineApp connects as the app does to its own machine's daemon for the terminals that run there, beside the
+// connection the daemon relays to its home.
+func (w *World) MachineApp() *Peer {
+	w.T.Helper()
+	p := w.dialPath("/ws/machine", w.appHello(), nil)
+	w.peers = append(w.peers, p)
+	p.Initial = Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
+	return p
+}
+
 func (w *World) dial(hello protocol.ClientHelloMessage, header http.Header) *Peer {
+	w.T.Helper()
+	return w.dialPath("/ws", hello, header)
+}
+
+func (w *World) dialPath(path string, hello protocol.ClientHelloMessage, header http.Header) *Peer {
 	w.T.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
 	defer cancel()
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) { return w.Dial(ctx) },
 	}
-	conn, _, err := websocket.Dial(ctx, "ws://"+w.WSAddr+"/ws", &websocket.DialOptions{
+	conn, _, err := websocket.Dial(ctx, "ws://"+w.WSAddr+path, &websocket.DialOptions{
 		HTTPClient: &http.Client{Transport: transport},
 		HTTPHeader: header,
 	})

@@ -171,7 +171,11 @@ func (d *Daemon) answerAwayFromHome(w http.ResponseWriter, r *http.Request, chan
 // the relay. Only apps that connected before this machine had a home to relay to are served here.
 func (d *Daemon) sendLocalAppsToHome() {
 	var local []*wsClient
-	d.wsHub.ForEachClient(func(client *wsClient) { local = append(local, client) })
+	d.wsHub.ForEachClient(func(client *wsClient) {
+		if !client.machineLink {
+			local = append(local, client)
+		}
+	})
 	for _, client := range local {
 		if client.closeSendChannelWithStatus(websocket.StatusTryAgainLater, "this machine now relays its apps to its home") {
 			goTransport(func() {

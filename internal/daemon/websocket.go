@@ -41,6 +41,7 @@ type wsClient struct {
 	connectedAt  time.Time
 
 	relay                    *appRelay
+	machineLink              bool
 	webOrigin                string
 	browserHostAuthenticated bool
 	caller                   who.Actor
@@ -498,7 +499,8 @@ func normalizeWSHost(value string) string {
 
 func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 	relay := appRelayFrom(r.Context())
-	if relay == nil && d.relaysApps() {
+	machineLink := r.URL.Path == machineWSPath
+	if relay == nil && !machineLink && d.relaysApps() {
 		d.relayAppToHome(w, r)
 		return
 	}
@@ -522,6 +524,7 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		gone:            make(chan struct{}),
 		connectedAt:     time.Now(),
 		relay:           relay,
+		machineLink:     machineLink,
 		webOrigin:       origin,
 		caller:          appCaller(),
 		attachedStreams: make(map[protocol.TerminalID]ptybackend.Stream),
@@ -772,6 +775,12 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 			_ = client.conn.Close(websocket.StatusPolicyViolation, errMsg)
 		}
 		return
+	}
+	if client.machineLink {
+		if err := machineLinkRefusal(cmd, msg); err != nil {
+			d.sendCommandError(client, cmd, err.Error())
+			return
+		}
 	}
 	if d.isRecovering() && d.blocksDuringRecovery(cmd) {
 		d.sendCommandError(client, cmd, "daemon_recovering")

@@ -2409,6 +2409,7 @@ func setNoStoreHeaders(header http.Header) {
 func (d *Daemon) initHTTPServer() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", d.handleWS)
+	mux.HandleFunc(machineWSPath, d.handleWS)
 	mux.HandleFunc("/health", d.handleHealth)
 	mux.HandleFunc("/agents", d.handleAgents)
 	mux.Handle("/mcp", d.agentToolsHandler())
@@ -4181,6 +4182,7 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"git_commit":         buildinfo.GitCommit,
 		"daemon_instance_id": d.daemonInstanceID,
 		"machine_id":         d.store.MachineID(),
+		"relays":             d.relaysApps(),
 		"sessions":           len(sessions),
 		"prs":                len(prs),
 		"ws_clients":         d.wsHub.ClientCount(),
