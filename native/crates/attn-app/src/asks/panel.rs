@@ -34,7 +34,7 @@ pub(crate) struct Panel {
 /// A markdown file's text as its machine last answered.
 pub(crate) enum Read {
     Reading,
-    Text(String),
+    Text { text: String, revision: u64 },
     Failed(String),
 }
 
@@ -43,6 +43,7 @@ pub(crate) enum Read {
 pub(crate) struct Panels {
     by_ask: HashMap<String, Panel>,
     reads: HashMap<(Option<String>, String), Read>,
+    answers: u64,
 }
 
 impl Panels {
@@ -96,7 +97,7 @@ pub(crate) fn shown_markdown(state: &State) -> Option<(Option<String>, String, S
         return None;
     };
     match panels.reads.get(&(host.clone(), path.clone()))? {
-        Read::Text(text) => Some((host.clone(), path.clone(), text.clone())),
+        Read::Text { text, .. } => Some((host.clone(), path.clone(), text.clone())),
         Read::Reading | Read::Failed(_) => None,
     }
 }
@@ -129,7 +130,7 @@ pub(crate) fn open_seed(state: &mut State, id: &str, tx: &mut Tx) {
 fn read(state: &mut State, host: Option<String>, path: String, tx: &mut Tx) {
     let file = (host.clone(), path.clone());
     let reads = &mut state.window.asks.panels.reads;
-    if !matches!(reads.get(&file), Some(Read::Text(_))) {
+    if !matches!(reads.get(&file), Some(Read::Text { .. })) {
         reads.insert(file.clone(), Read::Reading);
     }
     state.ask(
@@ -140,13 +141,17 @@ fn read(state: &mut State, host: Option<String>, path: String, tx: &mut Tx) {
             ..TileDocumentReadMessage::new()
         },
         move |state, answer, _| {
+            let panels = &mut state.window.asks.panels;
+            panels.answers += 1;
+            let revision = panels.answers;
             let read = match answer
                 .outcome()
                 .map(|reply| reply.parse::<TileDocumentReadResultMessage>())
             {
-                Ok(Some(result)) if result.success => {
-                    Read::Text(result.content.unwrap_or_default())
-                }
+                Ok(Some(result)) if result.success => Read::Text {
+                    text: result.content.unwrap_or_default(),
+                    revision,
+                },
                 Ok(Some(result)) => Read::Failed(
                     result
                         .error
@@ -155,9 +160,8 @@ fn read(state: &mut State, host: Option<String>, path: String, tx: &mut Tx) {
                 Ok(None) => Read::Failed("the daemon did not answer".to_owned()),
                 Err(why) => Read::Failed(why),
             };
-            let reads = &mut state.window.asks.panels.reads;
-            if reads.contains_key(&file) {
-                reads.insert(file, read);
+            if panels.reads.contains_key(&file) {
+                panels.reads.insert(file, read);
             }
         },
         tx,
@@ -257,9 +261,14 @@ pub(crate) fn view(state: &State, ask: &str, t: &Tokens) -> Option<El> {
                 .reads
                 .get(&(host.clone(), path.clone()))
             {
-                Some(Read::Text(text)) => {
-                    sheet.fill(markdown(state, &machines, host.as_deref(), path, text, t))
-                }
+                Some(Read::Text { text, revision }) => sheet.fill(markdown(
+                    state,
+                    &machines,
+                    host.as_deref(),
+                    path,
+                    (text, *revision),
+                    t,
+                )),
                 Some(Read::Failed(why)) => sheet.push(
                     Prose::empty("asks.panel.note", format!("Could not read {path}: {why}"))
                         .build(t),
@@ -319,7 +328,7 @@ fn markdown(
     machines: &crate::machine::Machines,
     host: Option<&str>,
     path: &str,
-    text: &str,
+    (text, revision): (&str, u64),
     t: &Tokens,
 ) -> El {
     let kept = state.readings.kept(VIEW);
@@ -341,14 +350,7 @@ fn markdown(
         None => look,
     };
     let pictures = state.pictures.of(host);
-    let version = (
-        text.to_owned(),
-        document.path.clone(),
-        document.away.clone(),
-        kept.clone(),
-        state.pictures.revision,
-        *t,
-    );
+    let version = (revision, kept.clone(), state.pictures.revision, *t);
     let reading = memo("asks.panel.reading", version, || {
         crate::markdown::reader(text, document, pictures, kept, None, style, t)
     });

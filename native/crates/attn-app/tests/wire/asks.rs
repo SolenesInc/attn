@@ -1108,6 +1108,30 @@ fn an_asks_seed_opens_in_the_panel_beside_the_question_and_reveal_takes_it_to_th
 }
 
 #[test]
+fn a_click_on_an_ask_in_the_list_reads_the_seed_its_panel_shows() {
+    let mut world = start_with_seeds(
+        vec![landing(), cache_store()],
+        vec![session("successor", "working")],
+        vec![migration(Some("successor"))],
+    );
+    open_sheet(&mut world);
+    click(&mut world, "asks.row.a-landing");
+    click(&mut world, "asks.open-seed");
+    click(&mut world, "asks.row.a-cache1");
+    assert!(!has(&world, "asks.panel"), "the other ask has no panel");
+
+    let reads = world.daemon.sent_of("seed_document_get").len();
+    click(&mut world, "asks.row.a-landing");
+    let read = world.daemon.sent_of("seed_document_get");
+    assert!(read.len() > reads, "the panel's seed is read again");
+    assert_eq!(read.last().unwrap()["seed_id"], "s-cache1");
+    assert_eq!(
+        name(&world, "asks.panel.seed.head.title"),
+        "Cache store migration"
+    );
+}
+
+#[test]
 fn the_sheet_opens_over_the_garden_and_escape_closes_the_sheet_before_the_garden() {
     let mut world = start_with_seeds(
         vec![landing()],

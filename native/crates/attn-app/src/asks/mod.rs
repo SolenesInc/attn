@@ -1050,7 +1050,6 @@ pub(crate) fn show(state: &mut State, ask: Option<&str>, tx: &mut Tx) {
     }
     state.window.asks.take_keyboard = true;
     follow(state, tx);
-    crate::garden::follow(state, tx);
 }
 
 /// Closes the sheet, keeping the ask it shows for when it opens again.
@@ -1089,6 +1088,7 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
     let shown = state.shown_ask();
     state.window.asks.selected = shown.as_ref().map(|(id, _)| id.clone());
     mentions::follow(state, shown.as_ref().map(|(id, _)| id.as_str()), tx);
+    crate::garden::follow(state, tx);
     let take_keyboard = std::mem::take(&mut state.window.asks.take_keyboard);
     if shown == state.window.asks.focused_on && !take_keyboard {
         return;
@@ -1126,7 +1126,6 @@ pub(crate) fn step(state: &mut State, by: isize, tx: &mut Tx) {
     let next = next.ask.id.clone();
     state.window.asks.selected = Some(next);
     follow(state, tx);
-    crate::garden::follow(state, tx);
 }
 
 fn choose(state: &mut State, ask: &str, question: &str, kind: Kind, label: &str) {

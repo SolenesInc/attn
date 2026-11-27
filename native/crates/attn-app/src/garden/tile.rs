@@ -64,7 +64,7 @@ pub(crate) fn body(
     page(go, id, reads, drafts, t)
 }
 
-/// Seed `id` as the panel beside an ask shows it, which a seed it links to replaces.
+/// Seed `id` as the panel beside an ask shows it, where a seed it links to opens another tab.
 pub(crate) fn panel_body(id: &str, reads: &Reads, t: &Tokens) -> El {
     page(Go::Panel, id, reads, None, t)
 }
