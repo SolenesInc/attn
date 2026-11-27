@@ -1,0 +1,1 @@
+The wire test for the app machine's cold-start row now expects the row's name for the platform it acts as ("This Mac" on a Mac, "This machine" on Linux), matching cold.rs since dcd581bef. This turns `Native / ubuntu-24.04` "Wire suite acting as Linux" green again.
