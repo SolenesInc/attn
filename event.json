@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Home move progress band waits forever while the commit needs recovery",
+  "at": "2026-11-27T12:40:38.713Z",
+  "detail": "If the source restarts with a held committing move, it needs an explicit retry or rollback. The new global progress band says Start home indefinitely and supplies no action. Display the held recovery state and provide the finish and rollback path. The product Orchestrator already assigned this repair.\n"
+}
