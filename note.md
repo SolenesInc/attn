@@ -1,0 +1,1 @@
+With the home on another machine, the folder chooser asks only the home for folders. Before, it also asked every reachable outpost for catalogs and listings, and for the typed folder whenever the home lacked it. A new test also guards the earlier fix that stopped a session change on the app's machine from rebuilding every view.

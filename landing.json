@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "9d197102c51725083d1b72d820e11d83f50d85d6",
+  "head": "485333b988e6047c429b9b7aba1fec0e395e4348",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 84.573,
+    "ranOn": "485333b988e6047c429b9b7aba1fec0e395e4348"
+  },
+  "fixesBugs": [
+    "fcdb14e",
+    "1c07491"
+  ],
+  "noMediaReason": "Changes only which machines the folder chooser asks, plus a test; nothing on screen changes",
+  "recordings": []
+}
