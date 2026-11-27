@@ -5998,6 +5998,54 @@ fn asks_choices(dark: bool) {
     snap(&mut world, "asks-choices", dark);
 }
 
+/// The asks sheet listing every section: an agent waiting on the person, a snoozed agent's ask
+/// and an ask replied to in the last day, each section's divider beside its rows, in a window
+/// wide enough to set the list beside the ask, or so narrow it lists them over it.
+fn asks_sections(dark: bool, stacked: bool) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    let sessions = state.sessions.get_or_insert_default();
+    sessions[1].turn_owed = Some(true);
+    sessions[1].turn_opened_at = Some(minutes_ago(12));
+    sessions.push(Session {
+        turn_owed: Some(true),
+        turn_opened_at: Some(minutes_ago(30)),
+        turn_snoozed_until: Some(minutes_ago(-90)),
+        ..session("nap", "idle")
+    });
+    let ask = |id: &str, session: &str, subject: &str| Ask {
+        id: id.into(),
+        session_id: session.into(),
+        subject: subject.into(),
+        ..cache_ask(session)
+    };
+    state.asks = Some(vec![
+        ask("a-cache", "s1", "Cache store"),
+        ask("a-nap", "nap", "Ship on that date?"),
+        Ask {
+            reply: Some(attn_protocol::AskReply {
+                answered_at: minutes_ago(40),
+                ..attn_protocol::AskReply::default()
+            }),
+            ..ask("a-done", "s4", "Rename the export")
+        },
+    ]);
+    let mut world = if stacked {
+        let mut world = World::start_sized(scripted().state(state), (640.0, 720.0));
+        world.open_desktop();
+        world
+    } else {
+        start(scripted().state(state))
+    };
+    press(&mut world, Action::DockAsks);
+    click(&mut world, Target::key("asks.replied"));
+    let name = if stacked {
+        "asks-sections-stacked"
+    } else {
+        "asks-sections"
+    };
+    snap(&mut world, name, dark);
+}
+
 /// The ask of a one-choice question, its choices described and one recommended, from `session`.
 fn cache_ask(session: &str) -> Ask {
     let choice = |label: &str, description: &str| AskChoice {
@@ -9812,6 +9860,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("asks_reopened", || asks_reopened(dark));
         scene("asks_empty", || asks_empty(dark));
         scene("asks_choices", || asks_choices(dark));
+        scene("asks_sections", || asks_sections(dark, false));
+        scene("asks_sections_stacked", || asks_sections(dark, true));
         scene("asks_waiting_one", || {
             asks_waiting(dark, 1, "asks-waiting-one")
         });

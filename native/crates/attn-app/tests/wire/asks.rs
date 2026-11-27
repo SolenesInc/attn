@@ -1197,6 +1197,48 @@ fn a_snoozed_agents_ask_waits_under_snoozed_out_of_the_counts_until_the_agent_wa
 }
 
 #[test]
+fn the_asks_lists_snoozed_divider_and_rows_draw_whole_beside_the_ask_and_over_it() {
+    for window in [(1512.0, 945.0), (640.0, 720.0)] {
+        let api_snoozed = Session {
+            turn_snoozed_until: Some("2999-01-04T09:00:00Z".into()),
+            ..api_working()
+        };
+        let mut world = start(
+            vec![cache_store(), release_day()],
+            vec![api_snoozed, web_waiting()],
+        );
+        world.resize(window);
+        open_sheet(&mut world);
+        let all = world.runtime().elements();
+        let list = all
+            .iter()
+            .find(|e| e.key.as_deref() == Some("asks.list"))
+            .expect("the sheet lists its asks");
+        let cut: Vec<_> = all
+            .iter()
+            .filter(|e| {
+                std::iter::successors(e.parent, |&p| all[p].parent)
+                    .any(|p| all[p].path == list.path)
+            })
+            .filter(|e| {
+                e.text.is_some() || e.key.as_deref().is_some_and(|k| k.starts_with("asks.row."))
+            })
+            .filter(|e| {
+                e.rect
+                    .iter()
+                    .zip(&e.visible)
+                    .any(|(drawn, seen)| (drawn - seen).abs() >= 0.5)
+            })
+            .map(|e| (e.text.clone().or(e.key.clone()), e.rect, e.visible))
+            .collect();
+        assert!(
+            cut.is_empty(),
+            "in a {window:?} window the list cuts {cut:?}"
+        );
+    }
+}
+
+#[test]
 fn a_hidden_agent_holds_its_ask_so_its_snooze_takes_the_ask_out_of_the_counts() {
     let hidden = Session {
         hidden: Some(true),

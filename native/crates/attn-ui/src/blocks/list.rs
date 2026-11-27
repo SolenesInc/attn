@@ -240,18 +240,30 @@ impl List {
 
     /// The list as a column of its own as tall as its rows, up to `tallest`, past which it
     /// scrolls, as above what the rows choose between, in a band that already keeps the
-    /// sheet's sides. Its key, role and name sit on the node that scrolls.
+    /// sheet's sides. Its key, role and name sit on the node that scrolls. Bare, the node that
+    /// scrolls reaches out past the band as far as the rows' boxes and notes do, so its clip
+    /// cuts neither.
     pub fn scrolling_up_to(self, tallest: f32, t: &Tokens) -> El {
+        let card = self.card;
+        let reach = if card {
+            Space::S0
+        } else {
+            Size::Compact.inset()
+        };
         let (heading, content, semantics) = self.laid(t);
-        let rows = semantics
-            .onto(col())
-            .w_full()
+        let rows = semantics.onto(col());
+        let rows = if card {
+            rows.w_full()
+        } else {
+            door::hang(rows, reach)
+        };
+        let rows = rows
             .max_h(tallest)
             .min_w(0.0)
             .scroll(rune::ScrollSpec {
                 stick_bottom: false,
             })
-            .child(door::frame(content, Space::S8, Space::S0, Space::S8))
+            .child(door::frame(content, Space::S8, reach, Space::S8))
             .scroll_bar_styled(crate::scroll_bar(t));
         match heading {
             Some(heading) => col().w_full().min_w(0.0).child(heading).child(rows),
