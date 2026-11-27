@@ -1,0 +1,1 @@
+Follow-up to the reverse outpost (71fd9530e): only a home accepts a machine that dials it, a machine can't join itself, a dial arriving as its row is removed no longer stays bridged, `enrollment join` can redial a home whose copied `remote_home_enabled` reads off, and ssh auth or host-key refusals show as refused.
