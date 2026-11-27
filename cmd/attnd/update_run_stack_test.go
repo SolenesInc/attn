@@ -412,7 +412,7 @@ func TestDeclineStaysInItsProfileAndUpdateFromEitherFinishesEveryRequest(t *test
 		}
 	}
 
-	writeFixtureFile(t, hold, "", 0o644)
+	releaseHold(t, hold)
 	awaitRunPhase(requests.home, protocol.UpdatePhaseApplying)
 	if done := finalRun(install.restarted()); done.Phase != protocol.UpdatePhaseDone {
 		t.Fatalf("final run = %+v", done)
@@ -462,7 +462,7 @@ func TestUpdateBuildsOriginMainLeavesTheCheckoutAloneAndJoinsRequesters(t *testi
 
 	branchBefore := runGit(t, install.checkout, "rev-parse", "--abbrev-ref", "HEAD")
 	headBefore := runGit(t, install.checkout, "rev-parse", "HEAD")
-	writeFixtureFile(t, hold, "", 0o644)
+	releaseHold(t, hold)
 	run := awaitRunPhase(app, protocol.UpdatePhaseApplying)
 	if run.TargetBuild == "" {
 		t.Fatalf("applying with no target: %+v", run)
@@ -624,6 +624,13 @@ func TestABuildPastItsLimitFailsAndNamesTheLimit(t *testing.T) {
 	}
 	if mustRead(t, filepath.Join(install.tree, "bin", "attnd")) != before {
 		t.Fatal("a build past its limit changed the install")
+	}
+}
+
+func releaseHold(t *testing.T, hold string) {
+	t.Helper()
+	if err := os.WriteFile(hold, nil, 0); err != nil {
+		t.Fatal(err)
 	}
 }
 

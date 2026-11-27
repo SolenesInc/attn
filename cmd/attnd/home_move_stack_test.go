@@ -776,10 +776,10 @@ func TestHomeMovePreflightRefusesNamingTheCause(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body+"\n"), 0o700); err != nil {
+		if err := fakeagent.WriteExecutable(path, []byte("#!/bin/sh\n"+body+"\n"), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() { _ = os.WriteFile(path, healthy, 0o700) })
+		t.Cleanup(func() { _ = fakeagent.WriteExecutable(path, healthy, 0o700) })
 	}
 	t.Run("gh is not logged in on the target", func(t *testing.T) {
 		swapTool(t, "gh", "echo 'You are not logged into any GitHub hosts. To log in, run: gh auth login' >&2; exit 1")
