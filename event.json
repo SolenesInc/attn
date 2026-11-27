@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Removed reverse outpost reappears after an initial build refusal",
+  "at": "2026-11-27T04:36:04.540Z",
+  "detail": "An initially build-refused reverse outpost can reappear in the home list after a user removes it. Enrollment persisted on the fixture outpost, but its next background connection still runs the initial-join lifecycle and recreates the removed row. Correct the transition so an already-recorded enrollment follows reconnect semantics even after a build refusal. Independently confirmed and measured with fixture daemons. See review s-2ptbz8.\n"
+}
