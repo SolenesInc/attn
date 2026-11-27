@@ -1,0 +1,8 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "fix: held-capture test waits for a working frame the daemon does not always send",
+  "at": "2026-11-27T09:39:25.962Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45966402259",
+  "repairs": "6c1169491"
+}
