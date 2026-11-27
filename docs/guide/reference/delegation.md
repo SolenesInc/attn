@@ -161,7 +161,9 @@ for the first) under it. The agent names the place after the block's language,
 as in ``` ```sh studio:~/shop ```; a block that names none runs where the agent
 works. The shell opens in a tab of the panel with the command typed and not run,
 and takes the keyboard: Enter runs the command, and Cmd+Shift+R (Ctrl+Alt+R on
-Linux) gives the keyboard back to the question. While a command still runs,
+Linux) gives the keyboard back to the question. A command of several lines
+keeps its lines in a shell that takes bracketed pastes, as bash, zsh and fish do
+by default; another shell gets it on one line. While a command still runs,
 **Send** reads **Send and stop**, because the shell ends with the answer, as
 it does when you close its tab.
 **Move to desktop** keeps the shell: it moves to a tile beside the agent that

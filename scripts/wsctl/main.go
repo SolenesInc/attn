@@ -79,7 +79,7 @@ func usage() {
 URL: %s (ATTN_WS_URL > ATTN_INSTANCE-derived port > dev; prod needs an explicit ATTN_WS_URL)
 
 Commands:
-  add-session --cwd D [--host OUTPOST] [--profile P] [--place] [--agent claude] [--label L] [--initial-prompt-file P] [--typed T] [--yolo] [--id I] [--cols 80] [--rows 24]
+  add-session --cwd D [--host OUTPOST] [--profile P] [--place | --ask A] [--agent claude] [--label L] [--initial-prompt-file P] [--typed T] [--yolo] [--id I] [--cols 80] [--rows 24]
   rm-session --id I
   kill-session --id I [--reload]
   screen --id I                       (for screen, input and attach, I is a session id or a terminal id from list's terminal_bindings)
@@ -114,6 +114,7 @@ func addSession(args []string) error {
 	fs := flag.NewFlagSet("add-session", flag.ExitOnError)
 	profile := fs.String("profile", "", "owning profile id (defaults to the daemon's selected profile)")
 	place := fs.Bool("place", false, "place the session on the profile's current desktop beside its active pane")
+	ask := fs.String("ask", "", "the ask that holds the terminal, as an ask's Open in terminal places it")
 	cwd := fs.String("cwd", "", "session working directory (required)")
 	host := fs.String("host", "", "outpost name or id to run the terminal on (defaults to the home's machine)")
 	agent := fs.String("agent", "claude", "agent: claude | codex | shell")
@@ -152,6 +153,9 @@ func addSession(args []string) error {
 	}
 	if *place {
 		msg["placement"] = map[string]any{}
+	}
+	if *ask != "" {
+		msg["placement"] = map[string]any{"ask_id": *ask}
 	}
 	if *label != "" {
 		msg["label"] = *label
