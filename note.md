@@ -1,0 +1,1 @@
+Fixes the flaky `TestAForkOfferSurvivesAnAppReconnectAndEndsWithADaemonRestart`: the shared-Codex fork-offer fixture spawned a second Codex tile and never awaited its launch, so the test's daemon restart could close the app-server mid-bootstrap and the fake reported `failed to read frame header: EOF`. The fixture now awaits that launch, as the Sigma fixture already does.
