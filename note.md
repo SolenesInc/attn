@@ -1,0 +1,1 @@
+Repairs a red on main (run 45947035596): TestJoinRefusesWhileTheMachineHasOpenSessionsAndLeaveBringsItsOwnHomeBack failed at cleanup when it ended before any copy batch applied, because the passes-only pause point a reverse world arms counted as an unreached hold.
