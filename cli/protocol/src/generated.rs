@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "d1b4785cfdf6";
+pub const PROTOCOL_VERSION: &str = "8d69dfdf7a2c";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -5828,6 +5828,27 @@ impl HarnessTargetsResultMessage {
 }
 pub type HeatState = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HomeDial {
+    pub destination: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    pub state: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HomeDialStatusMessage {
+    pub cmd: String,
+}
+
+impl HomeDialStatusMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "home_dial_status".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct HomeUpdateNoticeMessage {
     pub cmd: String,
     pub host: String,
@@ -6151,6 +6172,21 @@ impl InstallPluginMessage {
     pub fn new() -> Self {
         Self {
             cmd: "install_plugin".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct JoinHomeMessage {
+    pub cmd: String,
+    pub destination: String,
+}
+
+impl JoinHomeMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "join_home".to_string(),
             ..Self::default()
         }
     }
@@ -8949,6 +8985,8 @@ pub struct Response {
     pub error_code: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_conflict: Option<DocumentConflict>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub home_dial: Option<HomeDial>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kept_conversation_forget_result: Option<KeptConversationForgetResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

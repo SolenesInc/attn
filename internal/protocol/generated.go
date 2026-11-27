@@ -6457,6 +6457,22 @@ const HeatStateCold HeatState = "cold"
 const HeatStateHot HeatState = "hot"
 const HeatStateWarm HeatState = "warm"
 
+type HomeDial struct {
+	// Destination corresponds to the JSON schema field "destination".
+	Destination string `json:"destination"`
+
+	// LastError corresponds to the JSON schema field "last_error".
+	LastError *string `json:"last_error,omitempty,omitzero"`
+
+	// State corresponds to the JSON schema field "state".
+	State string `json:"state"`
+}
+
+type HomeDialStatusMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+}
+
 type HomeUpdateNoticeMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -6769,6 +6785,14 @@ type InstallPluginMessage struct {
 
 	// Source corresponds to the JSON schema field "source".
 	Source string `json:"source"`
+}
+
+type JoinHomeMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Destination corresponds to the JSON schema field "destination".
+	Destination string `json:"destination"`
 }
 
 type JournalAppendResult struct {
@@ -9796,6 +9820,9 @@ type Response struct {
 
 	// ErrorConflict corresponds to the JSON schema field "error_conflict".
 	ErrorConflict *DocumentConflict `json:"error_conflict,omitempty,omitzero"`
+
+	// HomeDial corresponds to the JSON schema field "home_dial".
+	HomeDial *HomeDial `json:"home_dial,omitempty,omitzero"`
 
 	// KeptConversationForgetResult corresponds to the JSON schema field
 	// "kept_conversation_forget_result".

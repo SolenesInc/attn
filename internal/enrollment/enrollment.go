@@ -40,6 +40,7 @@ type Record struct {
 	HomeDaemonID  string `json:"home_daemon_id"`
 	MachineID     string `json:"machine_id,omitempty"`
 	HomeMachineID string `json:"home_machine_id,omitempty"`
+	Dial          string `json:"dial,omitempty"`
 	RecordedAt    string `json:"recorded_at,omitempty"`
 }
 
@@ -52,6 +53,7 @@ type Status struct {
 	HomeDaemonID  string `json:"home_daemon_id,omitempty"`
 	MachineID     string `json:"machine_id,omitempty"`
 	HomeMachineID string `json:"home_machine_id,omitempty"`
+	Dial          string `json:"dial,omitempty"`
 }
 
 // UnmarshalJSON reads a status printed by any build, including one from before homes had ids.
@@ -221,7 +223,7 @@ func Ensure(dataRoot, daemonID string) (Status, error) {
 }
 
 func (r Record) status(daemonID string) Status {
-	return Status{DaemonID: daemonID, Role: r.Role, HomeID: r.HomeID, HomeName: r.HomeName, HomeDaemonID: r.HomeDaemonID, MachineID: r.MachineID, HomeMachineID: r.HomeMachineID}
+	return Status{DaemonID: daemonID, Role: r.Role, HomeID: r.HomeID, HomeName: r.HomeName, HomeDaemonID: r.HomeDaemonID, MachineID: r.MachineID, HomeMachineID: r.HomeMachineID, Dial: r.Dial}
 }
 
 func Load(dataRoot string) (Status, error) {
@@ -236,9 +238,10 @@ func Load(dataRoot string) (Status, error) {
 	return record.status(daemonID), nil
 }
 
-// RecordHome enrolls this data folder to home, whose daemon is bridging now. A record from before homes had ids
+// RecordHome enrolls this data folder to home, whose daemon is bridging now, and dial is the ssh destination this
+// machine dials it by, empty when the home dials. A record from before homes had ids
 // takes the home id when home's daemon is the one it names.
-func RecordHome(dataRoot string, home Home) (Status, error) {
+func RecordHome(dataRoot string, home Home, dial string) (Status, error) {
 	if !ValidHomeID(home.ID) {
 		return Status{}, fmt.Errorf("home %s sent invalid home id %q", home.DaemonID, home.ID)
 	}
@@ -264,14 +267,45 @@ func RecordHome(dataRoot string, home Home) (Status, error) {
 			return Status{}, err
 		}
 	}
-	next := Record{Role: RoleOutpost, HomeID: home.ID, HomeName: home.Name, HomeDaemonID: home.DaemonID, MachineID: cmp.Or(home.PeerMachineID, record.MachineID), HomeMachineID: cmp.Or(home.MachineID, record.HomeMachineID)}
-	if err != nil || record.Role != next.Role || record.HomeID != next.HomeID || record.HomeName != next.HomeName || record.HomeDaemonID != next.HomeDaemonID || record.MachineID != next.MachineID || record.HomeMachineID != next.HomeMachineID {
+	next := Record{Role: RoleOutpost, HomeID: home.ID, HomeName: home.Name, HomeDaemonID: home.DaemonID, MachineID: cmp.Or(home.PeerMachineID, record.MachineID), HomeMachineID: cmp.Or(home.MachineID, record.HomeMachineID), Dial: dial}
+	if err != nil || record.Role != next.Role || record.HomeID != next.HomeID || record.HomeName != next.HomeName || record.HomeDaemonID != next.HomeDaemonID || record.MachineID != next.MachineID || record.HomeMachineID != next.HomeMachineID || record.Dial != next.Dial {
 		next.RecordedAt = nowStamp()
 		if err := writeRecord(recordPath, next); err != nil {
 			return Status{}, err
 		}
 	}
 	return next.status(daemonID), nil
+}
+
+// Leave makes this data folder its own home again, under a new home id, when it is enrolled to homeID. It writes
+// what attn enrollment leave writes.
+func Leave(dataRoot, homeID string) (Status, error) {
+	daemonID, err := ReadDaemonID(dataRoot)
+	if err != nil {
+		return Status{}, err
+	}
+	recordPath := filepath.Join(dataRoot, RecordFileName)
+	unlock, err := lockPath(recordPath)
+	if err != nil {
+		return Status{}, err
+	}
+	defer unlock()
+	record, err := readRecord(recordPath, daemonID)
+	if err != nil {
+		return Status{}, err
+	}
+	if record.Role != RoleOutpost || record.HomeID != homeID {
+		return record.status(daemonID), nil
+	}
+	ownHome, err := newID("h-")
+	if err != nil {
+		return Status{}, err
+	}
+	record = Record{Role: RoleHome, HomeID: ownHome, HomeDaemonID: daemonID, RecordedAt: nowStamp()}
+	if err := writeRecord(recordPath, record); err != nil {
+		return Status{}, err
+	}
+	return record.status(daemonID), nil
 }
 
 // RecordMachineID records the id this home's database gives its own machine.

@@ -607,8 +607,8 @@ fn the_palette_turns_to_commands_on_a_leading_angle_and_its_keys_turn_or_close_i
 
     world.gesture(|app| app.type_text(">home"));
     assert_eq!(palette_named(&world).as_deref(), Some("Commands"));
-    assert_eq!(titles(&world), ["Home"]);
-    assert!(text_of(&world, "palette.count").is_some_and(|c| c.starts_with("1 of ")));
+    assert_eq!(titles(&world), ["Home", "Turn on Remote home"]);
+    assert!(text_of(&world, "palette.count").is_some_and(|c| c.starts_with("2 of ")));
 
     press_action(&mut world, Action::UiActionMenu);
     assert_eq!(query(&world), "home");

@@ -106,7 +106,17 @@ type pipeConn struct {
 }
 
 func (c *Client) Bridge(ctx context.Context) (net.Conn, error) {
-	cmd, err := c.command(ctx, "exec "+c.binaryPath()+" _bridge")
+	return c.pipe(ctx, "exec "+c.binaryPath()+" _bridge")
+}
+
+// ReverseBridge connects to the home at the destination, which this machine dials. The home's attn is the one at
+// the install path, or else the attn on the home's PATH.
+func (c *Client) ReverseBridge(ctx context.Context) (net.Conn, error) {
+	return c.pipe(ctx, "target="+c.binaryPath()+`; [ -x "$target" ] || target=$(command -v attn) || { echo "attn is not installed on this machine" >&2; exit 127; }; exec "$target" _reverse-bridge`)
+}
+
+func (c *Client) pipe(ctx context.Context, script string) (net.Conn, error) {
+	cmd, err := c.command(ctx, script)
 	if err != nil {
 		return nil, err
 	}

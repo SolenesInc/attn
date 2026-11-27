@@ -23,6 +23,8 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdRepairOutpost:              commandMetadata(false, true),
 	protocol.CmdConnectOutpostInTerminal:   commandMetadata(true, true),
 	protocol.CmdDropOutpostCopy:            commandMetadata(false, true),
+	protocol.CmdJoinHome:                   commandMetadata(false, true),
+	protocol.CmdHomeDialStatus:             commandMetadata(false, false),
 	protocol.CmdQuickCaptureSend:           commandMetadata(false, false),
 	protocol.CmdQuickCaptureGet:            commandMetadata(false, false),
 	protocol.CmdQuickCaptureList:           commandMetadata(false, false),

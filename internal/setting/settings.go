@@ -38,6 +38,15 @@ var (
 		Since:   "2026-10-27",
 		Search:  "remote computers bridge ssh",
 	})
+	RemoteHomeEnabled = feature("remote_home_enabled", "Let a machine join this home by dialing it, and let this machine dial a home on another machine: true or false. Experimental; off by default.", Info{
+		Name:    "Remote home",
+		Summary: "Let attn on other computers dial into this home, and let this one dial a home.",
+		Group:   Connections,
+		Applies: Now,
+		Stage:   Experimental,
+		Since:   "2026-11-27",
+		Search:  "reverse outpost join dial mac home",
+	})
 	PhoneAccessEnabled = feature("phone_access_enabled", "Let paired phones reach this home's sessions: true or false. Off by default.", Info{
 		Name:    "Phone access",
 		Summary: "Let phones you pair see this home's agents.",
@@ -99,7 +108,7 @@ var (
 var (
 	NotebookSyncState            = add(&Setting{Key: "notebook_sync_state", Class: Machine, Kind: Computed, Description: "Current Notebook sync state on this machine."})
 	NotebookSyncLastError        = add(&Setting{Key: "notebook_sync_last_error", Class: Machine, Kind: Computed, Description: "Current Notebook sync error and its reason."})
-	OutpostState                 = add(&Setting{Key: "outpost_state", Class: Machine, Kind: Computed, Description: "Whether a home bridge is connected: bridged or off."})
+	OutpostState                 = add(&Setting{Key: "outpost_state", Class: Machine, Kind: Computed, Description: "Whether this machine's home bridge is connected: bridged or off. A machine that dials its home also shows dialing or refused."})
 	OutpostHome                  = add(&Setting{Key: "outpost_home", Class: Machine, Kind: Computed, Description: "Recorded home id. Release it with attn enrollment leave."})
 	UpdateInstallKind            = add(&Setting{Key: "update_install_kind", Class: Machine, Kind: Computed, Description: "How attn was installed on this machine."})
 	UpdateCurrentVersion         = add(&Setting{Key: "update_current_version", Class: Machine, Kind: Computed, Description: "The version of the running build."})

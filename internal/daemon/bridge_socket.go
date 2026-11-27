@@ -30,6 +30,7 @@ type outpostRuntime struct {
 	lastError  string
 	errorKind  string
 	listen     func(string, string) (net.Listener, error)
+	dial       *homeDial
 }
 
 func (d *Daemon) bridgeIdentity() bridge.Identity {
@@ -57,15 +58,37 @@ func (d *Daemon) startBridgeSocket() error {
 		return err
 	}
 	d.setOutpostListenerState(run, "off", nil)
-	cfg := bridge.ServerConfig{
+	cfg := d.outpostServerConfig("")
+	if !d.life.Go("outpostListener", func() {
+		defer close(run.done)
+		defer cancel()
+		if err := bridge.Serve(ctx, listener, cfg, func(conn *bridge.Conn) { d.acceptOutpostBridge(run, conn) }); err != nil && ctx.Err() == nil {
+			d.logf("bridge socket: %v", err)
+		}
+	}) {
+		_ = listener.Close()
+		cancel()
+		close(run.done)
+	}
+	return nil
+}
+
+// outpostServerConfig serves a home's bridge to this machine; dial is the destination this machine dials the home
+// by, empty when the home dials.
+func (d *Daemon) outpostServerConfig(dial string) bridge.ServerConfig {
+	r := &d.outpost
+	return bridge.ServerConfig{
 		Self: d.bridgeIdentity(), HostKeyPath: filepath.Join(d.dataRoot, "bridge_host_key"),
 		Logf:     d.logf,
 		Handlers: d.outpostHandlers(),
 		Admit: func(home bridge.Identity) *bridge.Refusal {
+			if refusal := d.ownSessionsRefusal(home); dial != "" && refusal != nil {
+				return refusal
+			}
 			before := d.settingValues()
 			r.mu.Lock()
 			tookHomeID := r.enrollment.AwaitsHomeID()
-			status, err := enrollment.RecordHome(d.dataRoot, enrollment.Home{ID: home.HomeID, DaemonID: home.DaemonID, Name: home.Name, MachineID: home.MachineID, PeerMachineID: home.PeerMachineID})
+			status, err := enrollment.RecordHome(d.dataRoot, enrollment.Home{ID: home.HomeID, DaemonID: home.DaemonID, Name: home.Name, MachineID: home.MachineID, PeerMachineID: home.PeerMachineID}, dial)
 			if err == nil {
 				d.installEnrollmentLocked(status)
 			}
@@ -82,18 +105,6 @@ func (d *Daemon) startBridgeSocket() error {
 		},
 		OnError: func(err error) { d.logf("bridge: %v", err) },
 	}
-	if !d.life.Go("outpostListener", func() {
-		defer close(run.done)
-		defer cancel()
-		if err := bridge.Serve(ctx, listener, cfg, func(conn *bridge.Conn) { d.acceptOutpostBridge(run, conn) }); err != nil && ctx.Err() == nil {
-			d.logf("bridge socket: %v", err)
-		}
-	}) {
-		_ = listener.Close()
-		cancel()
-		close(run.done)
-	}
-	return nil
 }
 
 func (d *Daemon) setOutpostListenerState(run *outpostListener, state string, err error) {
@@ -176,7 +187,7 @@ func (d *Daemon) acceptOutpostBridge(run *outpostListener, conn *bridge.Conn) {
 			case bridge.StateStalled:
 				d.updateOutpostListenerState(run, conn, "bridged", nil)
 			case bridge.StateLost:
-				d.updateOutpostListenerState(run, conn, "off", conn.Err())
+				d.updateOutpostListenerState(run, conn, d.homeLostState(), conn.Err())
 				d.forgetHomeTileDocuments(run, conn)
 			}
 		}

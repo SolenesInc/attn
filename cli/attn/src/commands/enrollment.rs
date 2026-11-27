@@ -5,7 +5,7 @@ use attn::go::flag::{Flag, FlagDefault, FlagSet};
 use attn::go::json;
 use attn::go::quote::quote;
 use attn::go::time::Time;
-use attn_protocol::DropOutpostCopyMessage;
+use attn_protocol::{DropOutpostCopyMessage, HomeDial, HomeDialStatusMessage, JoinHomeMessage};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write as _};
@@ -14,21 +14,34 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 
 const HELP: &str = r#"usage: attn enrollment <command>
 
-An outpost's data folder is enrolled to the home it first accepts a bridge
-from, and the outpost refuses bridges from any other home. A home has an id of
+An outpost's data folder is enrolled to the home it first bridges with,
+whether the home dials it or it dials the home, and the outpost refuses any
+other home. A home has an id of
 its own, apart from the id of the daemon that runs it.
 
 commands:
   status [--json]
         show this daemon's id, and whether its data folder is a home or an
-        outpost enrolled to another home.
+        outpost enrolled to another home. A machine that dials its home also
+        shows the dial: dialing, bridged, refused with the reason, or off when
+        the daemon does not answer.
+
+  join [--json] <ssh-destination>
+        join the home at the ssh destination by dialing it over ssh, for a
+        machine the home cannot reach, such as a laptop. The home needs
+        remote_home_enabled and outposts_enabled on. This machine needs
+        remote_home_enabled on and, while it is its own home, no open session.
+        Waits for the first dial and prints its outcome. Run it again to dial
+        now.
 
   leave [--home <home-id>] [--json]
         release the enrollment so the data folder is its own again. The
-        daemon closes the bridge from the old home and stops the terminals it
-        ran for it: right away when it is running, otherwise when it next
-        starts. Remove the outpost from the old home first; a home that still
-        has it pairs again on its next connection. With --home, release only
+        daemon closes the bridge from the old home, stops dialing it, and stops
+        the terminals it ran for it: right away when it is running, otherwise
+        when it next starts. When the home dials this machine, remove the
+        outpost from the old home first; a home that still has it pairs again
+        on its next connection. A home this machine dialed keeps its row, as
+        lost, until you remove it there. With --home, release only
         an enrollment to that home; an enrollment to any other home is kept
         and the result's status is "kept".
 "#;
@@ -56,6 +69,10 @@ pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
         "leave" => {
             run.path = "enrollment leave".to_string();
             leave(run, &args[1..])
+        }
+        "join" => {
+            run.path = "enrollment join".to_string();
+            join_home(run, &args[1..])
         }
         "--json" => status(run, args),
         _ => {
@@ -131,6 +148,8 @@ struct Record {
     home_name: String,
     #[serde(default)]
     home_daemon_id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    dial: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     recorded_at: String,
 }
@@ -276,6 +295,8 @@ struct StatusJson<'a> {
     home_daemon_id: &'a str,
     enrollment: String,
     is_home: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dial: Option<HomeDial>,
 }
 
 fn print_encoded<T: Serialize>(value: &T) {
@@ -315,6 +336,7 @@ fn status(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
             return Err(Stop(1));
         }
     };
+    let dial = home_dial(run, &status);
     if json_output {
         print_encoded(&StatusJson {
             daemon_id: &status.daemon_id,
@@ -324,6 +346,7 @@ fn status(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
             home_daemon_id: &status.record.home_daemon_id,
             enrollment: status.describe(),
             is_home: status.is_home(),
+            dial,
         });
         return Ok(());
     }
@@ -336,6 +359,9 @@ fn status(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
         out.push_str("home id:    ");
         out.push_str(&status.record.home_id);
         out.push('\n');
+    }
+    if let Some(dial) = &dial {
+        out.push_str(&describe_dial(dial));
     }
     if !status.is_home() {
         out.push_str(
@@ -466,6 +492,65 @@ fn write_atomic(path: &str, data: &[u8]) -> io::Result<()> {
     fs::rename(&temporary, path).inspect_err(|_| {
         let _ = fs::remove_file(&temporary);
     })
+}
+
+fn home_dial(run: &Run<'_>, status: &Status) -> Option<HomeDial> {
+    if status.record.dial.is_empty() {
+        return None;
+    }
+    let daemon = client(run);
+    let reported = daemon
+        .call(&HomeDialStatusMessage::new())
+        .and_then(|reply| reply.value::<HomeDial>("home_dial"));
+    Some(reported.unwrap_or_else(|error| HomeDial {
+        destination: status.record.dial.clone(),
+        state: "off".to_string(),
+        last_error: Some(format!("the daemon did not answer: {error}")),
+    }))
+}
+
+fn describe_dial(dial: &HomeDial) -> String {
+    let mut out = format!("dial:       {} ({})\n", dial.destination, dial.state);
+    if let Some(error) = dial.last_error.as_deref().filter(|error| !error.is_empty()) {
+        out.push_str("last error: ");
+        out.push_str(error);
+        out.push('\n');
+    }
+    out
+}
+
+fn join_home(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
+    let mut flags = FlagSet::new(
+        "enrollment join",
+        &[Flag {
+            name: "json",
+            default: FlagDefault::Bool(false),
+            usage: "print the dial as JSON",
+        }],
+    );
+    parse_or_exit(run, &mut flags, args)?;
+    let [destination] = flags.args() else {
+        eprintln!("usage: attn enrollment join [--json] <ssh-destination>");
+        return Err(Stop(2));
+    };
+    let message = JoinHomeMessage {
+        destination: destination.clone(),
+        ..JoinHomeMessage::new()
+    };
+    let answer = client(run)
+        .call(&message)
+        .and_then(|reply| reply.value::<HomeDial>("home_dial"));
+    let dial = answer.map_err(|error| {
+        run.record_send_error(&error);
+        eprintln!("enrollment join: {error}");
+        Stop(1)
+    })?;
+    if flags.bool("json") {
+        print_encoded(&dial);
+        return Ok(());
+    }
+    print_stdout(&describe_dial(&dial));
+    Ok(())
 }
 
 fn leave(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {

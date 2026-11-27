@@ -55,6 +55,18 @@ func Serve(ctx context.Context, listener net.Listener, cfg ServerConfig, onConn 
 	}
 }
 
+// ServeConn serves one bridge on raw, a connection this side dialed, until the bridge ends.
+func ServeConn(ctx context.Context, raw net.Conn, cfg ServerConfig, onConn func(*Conn)) error {
+	defer raw.Close()
+	key, err := hostKey(cfg.HostKeyPath)
+	if err != nil {
+		return err
+	}
+	stop := context.AfterFunc(ctx, func() { _ = raw.Close() })
+	defer stop()
+	return serveConn(ctx, raw, key, cfg, onConn)
+}
+
 func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConfig, onConn func(*Conn)) error {
 	if err := raw.SetDeadline(time.Now().Add(AnswerWithin)); err != nil {
 		return err
@@ -96,6 +108,10 @@ func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConf
 	}
 	if err := home.check(); err != nil {
 		return err
+	}
+	if home.Refused != nil {
+		home.Refused.Peer = &home.Identity
+		return home.Refused
 	}
 	answer := greeting(cfg.Self)
 	answer.Refused = instanceRefusal(home.Identity, cfg.Self)

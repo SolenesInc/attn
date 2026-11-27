@@ -36,6 +36,9 @@ func (d *Daemon) connectOutpostInTerminal(client *wsClient, id string) (placemen
 	if err != nil {
 		return placementOutcome{}, err
 	}
+	if row.Reverse() {
+		return placementOutcome{}, refuseReverse(row, "open ssh to")
+	}
 	if commandSession != "" {
 		session := d.store.Get(commandSession)
 		if session == nil || session.ProfileID != client.selectedProfile() {

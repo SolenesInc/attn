@@ -653,6 +653,10 @@ func (d *Daemon) Start() error {
 	if err := d.startBridgeSocket(); err != nil {
 		return fmt.Errorf("start bridge socket: %w", err)
 	}
+	if err := d.startReverseBridgeSocket(); err != nil {
+		return fmt.Errorf("start reverse bridge socket: %w", err)
+	}
+	d.configureHomeDial()
 	if d.outpostsEnabled() {
 		d.configureOutposts()
 	}
@@ -3013,6 +3017,10 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.sendError(conn, "only the attn app can start or decline an update; run `attn update request` to ask the user")
 	case protocol.CmdSessionReopen:
 		d.handleSessionReopen(conn, msg.(*protocol.SessionReopenMessage))
+	case protocol.CmdJoinHome:
+		d.handleJoinHome(ctx, conn, msg.(*protocol.JoinHomeMessage))
+	case protocol.CmdHomeDialStatus:
+		d.handleHomeDialStatus(conn)
 	case protocol.CmdDropOutpostCopy:
 		if err := d.dropStaleCopy(); err != nil {
 			d.sendError(conn, err.Error())

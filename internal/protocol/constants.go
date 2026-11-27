@@ -191,6 +191,8 @@ const (
 	CmdRepairOutpost              = "repair_outpost"
 	CmdConnectOutpostInTerminal   = "connect_outpost_in_terminal"
 	CmdDropOutpostCopy            = "drop_outpost_copy"
+	CmdJoinHome                   = "join_home"
+	CmdHomeDialStatus             = "home_dial_status"
 	CmdListPlugins                = "list_plugins"
 	CmdInstallPlugin              = "install_plugin"
 	CmdUninstallPlugin            = "uninstall_plugin"

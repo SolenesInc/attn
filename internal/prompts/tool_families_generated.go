@@ -7,6 +7,7 @@ var catalogFamilies = map[string]bool{
 	"_outpost-install": false,
 	"_outpost-switch":  false,
 	"_probe-tui":       false,
+	"_reverse-bridge":  false,
 	"_run-command":     false,
 	"_run-script":      false,
 	"_update-apply":    false,

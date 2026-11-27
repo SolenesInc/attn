@@ -94,6 +94,7 @@ var Placements = map[string][]Placement{
 	"get_repo_info":                  {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"get_screen_snapshot":            {Placement{LocatorTerminal, "id"}},
 	"get_settings":                   {Placement{LocatorHere, ""}},
+	"home_dial_status":               {Placement{LocatorHere, ""}},
 	"home_update_notice":             {Placement{LocatorMachine, "host"}},
 	"hook_compaction":                {Placement{LocatorHere, ""}},
 	"hook_notification":              {Placement{LocatorHere, ""}},
@@ -103,6 +104,7 @@ var Placements = map[string][]Placement{
 	"inject_test_session":            {Placement{LocatorHere, ""}},
 	"inspect_caller_paths":           {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"inspect_path":                   {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"join_home":                      {Placement{LocatorHere, ""}},
 	"kept_conversation_forget":       {Placement{LocatorHome, ""}},
 	"kept_conversation_keep":         {Placement{LocatorHome, ""}},
 	"kept_conversation_list":         {Placement{LocatorHome, ""}},
@@ -1062,6 +1064,18 @@ func (m GetSettingsMessage) Locate() string {
 	return ""
 }
 
+func (HomeDialStatusMessage) CommandName() string {
+	return "home_dial_status"
+}
+
+func (m HomeDialStatusMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m HomeDialStatusMessage) Locate() string {
+	return ""
+}
+
 func (HomeUpdateNoticeMessage) CommandName() string {
 	return "home_update_notice"
 }
@@ -1179,6 +1193,18 @@ func (m InspectPathMessage) Locate() string {
 	if m.Host != nil {
 		return string(*m.Host)
 	}
+	return ""
+}
+
+func (JoinHomeMessage) CommandName() string {
+	return "join_home"
+}
+
+func (m JoinHomeMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m JoinHomeMessage) Locate() string {
 	return ""
 }
 

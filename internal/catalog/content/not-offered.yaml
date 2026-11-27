@@ -8,7 +8,7 @@ commands:
   - {name: instance-env, usage: "<instance|--unset>", summary: "print shell commands for selecting an instance", offered: false, reason: *installation}
   - {name: db, usage: "<command>", summary: "database maintenance (restore from backup)", offered: false, reason: *installation}
   - {name: update, usage: "status [--json]", summary: "how attn was installed and whether an update is available", offered: false, reason: *installation}
-  - {name: enrollment, usage: "<command>", summary: "this data folder's enrollment: status, leave", offered: false, reason: *installation}
+  - {name: enrollment, usage: "<command>", summary: "this data folder's enrollment: status, join, leave", offered: false, reason: *installation}
   - {name: plugin, usage: "<command>", summary: "install, link, reload, update, list or remove plugins", offered: false, reason: *installation}
   - {name: preflight, summary: "diagnose tools, paths, routing, and launch settings", offered: false, reason: *installation}
   - {name: version, usage: "[--json]", summary: "print version, channel and commit", offered: false, reason: *installation}
@@ -31,6 +31,7 @@ commands:
   - {name: profile, summary: "the retired name of instance; says the new command", hidden: true, offered: false, reason: "The retired name of instance. It only prints the new command to run."}
   - {name: profile-env, summary: "the retired name of instance-env; says the new command", hidden: true, offered: false, reason: "The retired name of instance-env. It only prints the new command to run."}
   - {name: _bridge, summary: "carry the bridge to an outpost", hidden: true, offered: false, reason: &plumbing "attn runs it itself, to start or move its own processes."}
+  - {name: _reverse-bridge, summary: "carry the bridge from an outpost that dials this home", hidden: true, offered: false, reason: *plumbing}
   - {name: _outpost-install, summary: "install attn on an outpost", hidden: true, offered: false, reason: *plumbing}
   - {name: _outpost-switch, summary: "switch an outpost to its installed build", hidden: true, offered: false, reason: *plumbing}
   - {name: _update-apply, summary: "apply a staged update", hidden: true, offered: false, reason: *plumbing}

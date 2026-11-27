@@ -53,12 +53,13 @@ type outpostRemote interface {
 }
 
 type outpostsRuntime struct {
-	actions sync.Mutex
-	mu      sync.Mutex
-	dialers map[string]*outpostDial
-	pushes  map[string]*outpostPush
-	changed chan struct{}
-	remote  func(store.Machine) outpostRemote
+	actions  sync.Mutex
+	mu       sync.Mutex
+	dialers  map[string]*outpostDial
+	pushes   map[string]*outpostPush
+	changed  chan struct{}
+	remote   func(store.Machine) outpostRemote
+	arrivals map[string]chan reverseArrival
 }
 
 func (d *Daemon) outpostsEnabled() bool {
@@ -104,8 +105,10 @@ func (d *Daemon) configureOutposts() {
 		for _, row := range rows {
 			if enabled {
 				d.startOutpostDial(row)
-			} else if err := d.outpostSSH(row).ExitMaster(d.life.Context()); err != nil {
-				d.logf("stop outpost master %s: %v", row.Name, err)
+			} else if !row.Reverse() {
+				if err := d.outpostSSH(row).ExitMaster(d.life.Context()); err != nil {
+					d.logf("stop outpost master %s: %v", row.Name, err)
+				}
 			}
 			d.publishFact(FactOutpostChanged, row.ID, nil)
 		}
@@ -114,7 +117,11 @@ func (d *Daemon) configureOutposts() {
 
 func (d *Daemon) startOutpostDial(row store.Machine) {
 	ctx, cancel := context.WithCancel(d.life.Context())
-	run := &outpostDial{cancel: cancel, done: make(chan struct{}), state: bridge.StateConnecting, since: time.Now().UTC().Format(time.RFC3339Nano)}
+	state := bridge.StateConnecting
+	if row.Reverse() {
+		state = bridge.StateLost
+	}
+	run := &outpostDial{cancel: cancel, done: make(chan struct{}), state: state, since: time.Now().UTC().Format(time.RFC3339Nano)}
 	r := &d.outposts
 	r.mu.Lock()
 	if r.dialers == nil {
@@ -141,7 +148,11 @@ func (d *Daemon) startOutpostDial(row store.Machine) {
 		close(run.done)
 		return
 	}
-	if !d.life.Go("outpostDial:"+row.ID, func() { defer close(run.done); defer cancel(); d.dialOutpost(ctx, row, run) }) {
+	dial := d.dialOutpost
+	if row.Reverse() {
+		dial = d.awaitReverseOutpost
+	}
+	if !d.life.Go("outpostDial:"+row.ID, func() { defer close(run.done); defer cancel(); dial(ctx, row, run) }) {
 		cancel()
 		close(run.done)
 	}
@@ -260,71 +271,85 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Machine, run *outpos
 			conn, seen, err = bridge.Dial(ctx, bridge.DialConfig{Conn: pipe, Pin: pin, Self: self, Handlers: d.homeHandlers(row.ID), HandlersAfter: recorded, CheckHostKey: func(key string) *bridge.Refusal { return d.outpostConflict(row.ID, key, "") }})
 		}
 
-		if ctx.Err() != nil {
-			if push != nil {
-				d.finishOutpostPush(row.ID, push, ctx.Err())
-			}
+		floor, failed, stop := d.outpostDialed(ctx, &row, run, push, pin, conn, seen, err, recorded)
+		if stop {
+			return
+		}
+		if !failed {
+			retryDelay = bridge.ReconnectInterval
+			continue
+		}
+		delay := max(floor, retryDelay)
+		retryDelay = min(delay*2, maxOutpostRetryDelay)
+		d.logf("outpost %s retrying in %s", row.ID, delay)
+		if !waitOutpostRetry(ctx, delay) {
+			return
+		}
+	}
+}
+
+// outpostDialed settles one connection attempt to row: it pins a first contact, and either shows the failure,
+// returning the least delay before the next attempt, or runs the bridge until it ends. stop says the dialer ends.
+func (d *Daemon) outpostDialed(ctx context.Context, row *store.Machine, run *outpostDial, push *outpostPush, pin *bridge.Pin, conn *bridge.Conn, seen *bridge.Pin, err error, recorded chan struct{}) (floor time.Duration, failed, stop bool) {
+	if ctx.Err() != nil {
+		if push != nil {
+			d.finishOutpostPush(row.ID, push, ctx.Err())
+		}
+		if conn != nil {
+			_ = conn.Close()
+		}
+		return 0, false, true
+	}
+	var buildRefusal *bridge.Refusal
+	canPin := err == nil || errors.As(err, &buildRefusal) && buildRefusal.Reason == "build"
+	if canPin && pin == nil && seen != nil {
+		pinError := d.store.PinOutpost(row.ID, seen.HostKey, seen.DaemonID)
+		if pinError != nil {
+			err = pinError
+		}
+		if pinError != nil {
 			if conn != nil {
 				_ = conn.Close()
 			}
-			return
-		}
-		var buildRefusal *bridge.Refusal
-		canPin := err == nil || errors.As(err, &buildRefusal) && buildRefusal.Reason == "build"
-		if canPin && pin == nil && seen != nil {
-			pinError := d.store.PinOutpost(row.ID, seen.HostKey, seen.DaemonID)
-			if pinError != nil {
-				err = pinError
-			}
-			if pinError != nil {
-				if conn != nil {
-					_ = conn.Close()
-				}
-				if conflict := d.outpostConflict(row.ID, seen.HostKey, seen.DaemonID); conflict != nil {
-					err = conflict
-				} else {
-					err = fmt.Errorf("pin outpost %s (%s): %w", row.Name, row.Destination, err)
-				}
+			if conflict := d.outpostConflict(row.ID, seen.HostKey, seen.DaemonID); conflict != nil {
+				err = conflict
 			} else {
-				row.HostKey, row.DaemonID = seen.HostKey, seen.DaemonID
-				d.configureNotebookSync()
-				d.publishFact(FactOutpostChanged, row.ID, nil)
+				err = fmt.Errorf("pin outpost %s (%s): %w", row.Name, row.Destination, err)
 			}
+		} else {
+			row.HostKey, row.DaemonID = seen.HostKey, seen.DaemonID
+			d.configureNotebookSync()
+			d.publishFact(FactOutpostChanged, row.ID, nil)
 		}
-		if err != nil {
-			state, delay := bridge.StateLost, retryDelay
-			var refusal *bridge.Refusal
-			build := ""
-			var sshError *outpostssh.Error
-			if errors.As(err, &sshError) && sshError.Connectable() {
-				state, delay = bridge.StateRefused, bridge.RefusedRetryInterval
-			}
-			if errors.As(err, &refusal) {
-				state, delay = bridge.StateRefused, bridge.RefusedRetryInterval
-				if refusal.Peer != nil {
-					build = refusal.Peer.Build.String()
-				} else if refusal.Reason == "build" || refusal.Reason == "install" {
-					build = "nothing installed"
-				}
-			}
-			d.coalesceSnapshots(func() {
-				if push != nil {
-					d.finishOutpostPush(row.ID, push, err)
-				}
-				d.updateOutpost(row.ID, run, state, build, err)
-			})
-			delay = max(delay, retryDelay)
-			retryDelay = min(delay*2, maxOutpostRetryDelay)
-			d.logf("outpost %s %s: %v; retrying in %s", row.ID, state, err, delay)
-			if !waitOutpostRetry(ctx, delay) {
-				return
-			}
-			continue
-		}
-		retryDelay = bridge.ReconnectInterval
-		d.learnOutpostHome(&row, conn.Peer().Home)
-		d.bridgeOutpost(ctx, row.ID, run, conn, push, recorded)
 	}
+	if err != nil {
+		state := bridge.StateLost
+		var refusal *bridge.Refusal
+		build := ""
+		var sshError *outpostssh.Error
+		if errors.As(err, &sshError) && sshError.Connectable() {
+			state, floor = bridge.StateRefused, bridge.RefusedRetryInterval
+		}
+		if errors.As(err, &refusal) {
+			state, floor = bridge.StateRefused, bridge.RefusedRetryInterval
+			if refusal.Peer != nil {
+				build = refusal.Peer.Build.String()
+			} else if refusal.Reason == "build" || refusal.Reason == "install" {
+				build = "nothing installed"
+			}
+		}
+		d.coalesceSnapshots(func() {
+			if push != nil {
+				d.finishOutpostPush(row.ID, push, err)
+			}
+			d.updateOutpost(row.ID, run, state, build, err)
+		})
+		d.logf("outpost %s %s: %v", row.ID, state, err)
+		return floor, true, false
+	}
+	d.learnOutpostHome(row, conn.Peer().Home)
+	d.bridgeOutpost(ctx, row.ID, run, conn, push, recorded)
+	return 0, false, false
 }
 
 func (d *Daemon) learnOutpostHome(row *store.Machine, home string) {

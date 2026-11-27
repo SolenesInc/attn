@@ -52,6 +52,10 @@ func (d *Daemon) stageOutposts(ctx context.Context, run store.UpdateRun, target 
 			d.setUpdateOutpost(run, row, store.UpdateOutpostSkipped, "Not paired yet.")
 			continue
 		}
+		if row.Reverse() {
+			d.setUpdateOutpost(run, row, store.UpdateOutpostSkipped, "It dials this home; update attn on that machine.")
+			continue
+		}
 		d.setUpdateOutpost(run, row, store.UpdateOutpostStaging, "connecting")
 		skip, err := d.stageOutpost(ctx, run, row, target)
 		switch {

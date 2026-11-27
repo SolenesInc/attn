@@ -56,6 +56,7 @@ func topLevelCommands() []topLevelCommand {
 		{names: []string{"_outpost-switch"}, run: runOutpostSwitch},
 		{names: []string{"_update-apply"}, run: runUpdateApply, checks: checkNothing, unrecorded: true},
 		{names: []string{"_bridge"}, run: runBridge, unrecorded: true},
+		{names: []string{"_reverse-bridge"}, run: runReverseBridge, unrecorded: true},
 		{names: []string{"_probe-tui"}, run: runProbeTUI},
 		{names: []string{"_run-command"}, run: runWithoutDaemon, checks: checkNothing, unrecorded: true},
 		{names: []string{script.Command}, run: runScript, checks: checkNothing, unrecorded: true},

@@ -209,6 +209,7 @@ func (d *Daemon) dropStaleCopy() error {
 			return err
 		}
 	}
+	d.configureHomeDial()
 	home := status.CopiedFrom()
 	if conn := d.homeBridge(); conn != nil && (home == "" || conn.Peer().HomeID != home) {
 		_ = conn.Close()

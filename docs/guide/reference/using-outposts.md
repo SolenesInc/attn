@@ -1,7 +1,8 @@
 # Using outposts
 
 Outposts are experimental. An outpost is another computer running Attn, such as
-a Linux machine or a cloud VM, that your home connects to. Your home is the Attn
+a Linux machine or a cloud VM, connected to your home: the home connects to it
+over ssh, or it dials the home. Your home is the Attn
 on the Mac where you use the app. One home can connect to several outposts.
 
 Agents and shells on an outpost appear in terminal tiles beside your
@@ -45,6 +46,39 @@ Adding an outpost finishes when the two daemons pair for the first time. After s
 
 The first connection pairs the daemons. The home remembers the outpost's
 identity, and the outpost accepts only that home until you release it.
+
+## Join a home from the outpost
+
+A machine that the home can't reach with ssh, such as a laptop behind NAT or
+often asleep, can join the home by dialing it. Turn on the experimental setting
+`remote_home_enabled` (**Settings → Experimental**, or
+`attn settings set remote_home_enabled true`) on both machines, and turn on
+**Outposts** at the home.
+
+1. Install attn on the machine yourself. The home never installs or updates it.
+   The home's `attn` must be in its install folder or on the `PATH` of a
+   non-interactive ssh login.
+2. Run `ssh <home-destination>` once and answer any prompts.
+3. On the machine, run `attn enrollment join <home-destination>`. It waits for
+   the first dial and prints the result. Run it again to dial at once.
+
+The first connection pairs both sides. The home lists the machine under its host
+name and shows it as lost while it isn't dialing. The machine dials while its
+daemon runs. After a failed dial it waits longer each time, up to 30 seconds,
+and it dials at once when it wakes from sleep. `attn enrollment status` on the
+machine shows the dial as `dialing`, `bridged` or `refused`, with the last
+error. The home refuses a dial while `remote_home_enabled` or Outposts is off
+there, while it already has the machine as an outpost it dials, and after you
+removed the machine.
+
+A machine that is its own home and has open sessions refuses to join, and names
+them. Close them first. After `attn enrollment leave`, its sessions, Garden
+and settings read as they did before it joined.
+
+Attn never installs, updates or re-pairs a machine that dials the home, and
+can't connect to it in a terminal. Update attn on that machine. On its row,
+**Update to home build**, **Re-pair** and **Connect in a terminal** refuse and
+say so.
 
 ## Read and change settings
 
@@ -395,7 +429,7 @@ While a terminal is offline, an open tile keeps its last screen. If you switch d
 | connecting | The home is connecting to the outpost. |
 | connected | Each side receives the other's messages. |
 | stalled | Nothing heard for 3 seconds, usually a brief network problem. It returns to connected on its own. |
-| lost | Nothing heard for 60 seconds, or the connection dropped. Attn keeps reconnecting. |
+| lost | Nothing heard for 60 seconds, or no connection. The side that dials keeps trying. A machine that dials the home shows lost until it dials. |
 | refused | Attn won't connect until you act. The error says why. |
 
 The last error stays on the outpost's row until it connects again. On the
@@ -429,6 +463,12 @@ the home's instance, then exits that outpost's ssh master and removes the row.
 An outpost enrolled to another home keeps its enrollment and its running daemon. The same holds for an outpost for which this home's Add was refused. Remove keeps the
 binaries, their `.previous` copies, the data folder, and the Notebook folder on
 the outpost.
+
+For a machine that joined by dialing, **Remove** closes its terminals and its
+bridge and removes the row, without running ssh to it. The machine's next dial
+is refused, and it leaves the home on its own, which may be when it wakes. To
+stop dialing from the machine first, run `attn enrollment leave` there. The row
+stays at the home as lost until you remove it.
 
 With terminals, the row offers **Remove and close N terminals** or **Cancel**.
 With none, Attn removes the outpost immediately. If ssh cannot reach the

@@ -23,7 +23,7 @@ func TestHomePairingRefusesASecondHome(t *testing.T) {
 			const second = "h-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 			const firstDaemon = "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 			for range 2 {
-				if _, err := enrollment.RecordHome(root, enrollment.Home{ID: first, DaemonID: firstDaemon, Name: "first"}); err != nil {
+				if _, err := enrollment.RecordHome(root, enrollment.Home{ID: first, DaemonID: firstDaemon, Name: "first"}, ""); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -31,7 +31,7 @@ func TestHomePairingRefusesASecondHome(t *testing.T) {
 			if err != nil || status.HomeID != first || !status.IsOutpost() {
 				t.Fatalf("paired: %+v %v", status, err)
 			}
-			_, err = enrollment.RecordHome(root, enrollment.Home{ID: second, DaemonID: firstDaemon, Name: "second"})
+			_, err = enrollment.RecordHome(root, enrollment.Home{ID: second, DaemonID: firstDaemon, Name: "second"}, "")
 			if err == nil || !strings.Contains(err.Error(), first) || !strings.Contains(err.Error(), second) || !strings.Contains(err.Error(), "attn enrollment leave") {
 				t.Fatalf("second home: %v", err)
 			}

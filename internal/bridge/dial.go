@@ -34,6 +34,15 @@ type DialConfig struct {
 	CheckHostKey  func(string) *Refusal
 	Handlers      Handlers
 	HandlersAfter <-chan struct{}
+	// Recognize, for a peer that dialed in, picks the pin, the peer's machine id and the handlers by the host key the
+	// peer presents. Its refusal reaches the peer in this side's hello.
+	Recognize func(hostKey string) (Recognized, *Refusal)
+}
+
+type Recognized struct {
+	Pin       *Pin
+	MachineID string
+	Handlers  Handlers
 }
 
 func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
@@ -41,7 +50,7 @@ func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
 	deadline := stepclock.AfterFunc(AnswerTimer, AnswerWithin, func() { cancel(context.DeadlineExceeded) })
 	defer deadline.Stop()
 	defer cancel(context.Canceled)
-	ready, seen, err := handshake(handshakeCtx, cfg)
+	ready, seen, err := handshake(handshakeCtx, &cfg)
 	var refusal *Refusal
 	if err != nil && !errors.As(err, &refusal) && errors.Is(context.Cause(handshakeCtx), context.DeadlineExceeded) {
 		err = fmt.Errorf("bridge to %s: no answer within %s: %w", cfg.Conn.RemoteAddr().String(), AnswerWithin, context.DeadlineExceeded)
@@ -61,7 +70,7 @@ type authenticatedPeer struct {
 	drained   <-chan struct{}
 }
 
-func handshake(handshakeCtx context.Context, cfg DialConfig) (*authenticatedPeer, *Pin, error) {
+func handshake(handshakeCtx context.Context, cfg *DialConfig) (*authenticatedPeer, *Pin, error) {
 	raw := cfg.Conn
 	success := false
 	defer func() {
@@ -75,9 +84,16 @@ func handshake(handshakeCtx context.Context, cfg DialConfig) (*authenticatedPeer
 	stopRaw := context.AfterFunc(handshakeCtx, func() { _ = raw.Close() })
 	defer stopRaw()
 	seen := &Pin{}
-	var pinErr *Refusal
+	var pinErr, unrecognized *Refusal
 	sshConfig := &ssh.ClientConfig{User: "attn", HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
 		seen.HostKey = strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key)))
+		if cfg.Recognize != nil {
+			var recognized Recognized
+			if recognized, unrecognized = cfg.Recognize(seen.HostKey); unrecognized == nil {
+				cfg.Pin, cfg.Self.PeerMachineID, cfg.Handlers = recognized.Pin, recognized.MachineID, recognized.Handlers
+			}
+			return nil
+		}
 		if cfg.Pin == nil && cfg.CheckHostKey != nil {
 			if pinErr = cfg.CheckHostKey(seen.HostKey); pinErr != nil {
 				return pinErr
@@ -113,8 +129,12 @@ func handshake(handshakeCtx context.Context, cfg DialConfig) (*authenticatedPeer
 	}
 	go ssh.DiscardRequests(channelRequests)
 	greeting := greeting(cfg.Self)
+	greeting.Refused = unrecognized
 	if err := json.NewEncoder(control).Encode(greeting); err != nil {
 		return nil, seen, err
+	}
+	if unrecognized != nil {
+		return nil, seen, unrecognized
 	}
 	decoder := json.NewDecoder(control)
 	var answer hello

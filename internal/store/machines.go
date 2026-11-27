@@ -13,6 +13,7 @@ import (
 type Machine struct {
 	ID          string
 	Name        string
+	Transport   string
 	Destination string
 	HostKey     string
 	DaemonID    string
@@ -64,14 +65,26 @@ func machinesTableExists(db interface {
 	return db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'machines'`).Scan(&n) == nil && n == 1
 }
 
+const TransportReverse = "reverse"
+
+func (m Machine) Reverse() bool { return m.Transport == TransportReverse }
+
 func (s *Store) AddOutpost(name, destination string) (Machine, error) {
-	row := Machine{ID: uuid.NewString(), Name: name, Destination: destination, AddedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	row := Machine{ID: uuid.NewString(), Name: name, Transport: "ssh", Destination: destination, AddedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	_, err := s.db.Exec(`INSERT INTO machines (id,name,transport,destination,added_at) VALUES (?,?,'ssh',?,?)`, row.ID, row.Name, row.Destination, row.AddedAt)
 	return row, err
 }
 
+// AddReverseMachine adds a machine that dials this home, pinned to the host key and daemon id it presented.
+func (s *Store) AddReverseMachine(id, name, hostKey, daemonID string) (Machine, error) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	row := Machine{ID: id, Name: name, Transport: TransportReverse, HostKey: hostKey, DaemonID: daemonID, AddedAt: now}
+	_, err := s.db.Exec(`INSERT INTO machines (id,name,transport,host_key,daemon_id,added_at,paired_at) VALUES (?,?,'reverse',?,?,?,?)`, id, name, hostKey, daemonID, now, now)
+	return row, err
+}
+
 func (s *Store) ListOutposts() ([]Machine, error) {
-	rows, err := s.db.Query(`SELECT id,name,destination,COALESCE(host_key,''),COALESCE(daemon_id,''),COALESCE(home,''),added_at FROM machines WHERE transport != 'self' ORDER BY added_at,id`)
+	rows, err := s.db.Query(`SELECT id,name,transport,destination,COALESCE(host_key,''),COALESCE(daemon_id,''),COALESCE(home,''),added_at FROM machines WHERE transport != 'self' ORDER BY added_at,id`)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +92,7 @@ func (s *Store) ListOutposts() ([]Machine, error) {
 	out := []Machine{}
 	for rows.Next() {
 		var row Machine
-		if err := rows.Scan(&row.ID, &row.Name, &row.Destination, &row.HostKey, &row.DaemonID, &row.Home, &row.AddedAt); err != nil {
+		if err := rows.Scan(&row.ID, &row.Name, &row.Transport, &row.Destination, &row.HostKey, &row.DaemonID, &row.Home, &row.AddedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, row)

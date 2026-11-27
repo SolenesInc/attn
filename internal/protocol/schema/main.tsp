@@ -2034,6 +2034,22 @@ model UpdateOutpostMessage { cmd: "update_outpost"; id: string; }
 @extension("x-on", #{ here: true })
 model DropOutpostCopyMessage { cmd: "drop_outpost_copy"; }
 
+// Sent by `attn enrollment join`: this machine joins the home at the ssh destination by dialing it. The reply
+// waits for the first dial's outcome and carries home_dial.
+@extension("x-on", #{ here: true })
+model JoinHomeMessage { cmd: "join_home"; destination: string; }
+
+// Sent by `attn enrollment status` on a machine that dials its home. The reply carries home_dial.
+@extension("x-on", #{ here: true })
+model HomeDialStatusMessage { cmd: "home_dial_status"; }
+
+// The dial from this machine to its home. state is dialing, bridged, refused or off.
+model HomeDial {
+  destination: string;
+  state: string;
+  last_error?: string;
+}
+
 model ListPluginsMessage {
   cmd: "list_plugins";
 }
@@ -7403,6 +7419,7 @@ model Response {
   ask_amend_result?: Ask;
   session_list_result?: SessionListResult;
   session_show_result?: SessionShowResult;
+  home_dial?: HomeDial;
   update_status?: UpdateStatus;
   update_request_result?: UpdateRequestResult;
   session_reopen_result?: SessionReopenResult;

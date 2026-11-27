@@ -15,13 +15,18 @@ import (
 	"github.com/victorarias/attn/internal/outpostssh"
 )
 
-func runBridge() {
-	if err := relayBridge(context.Background()); err != nil {
+func runBridge() { relayOrExit("bridge.sock") }
+
+func runReverseBridge() { relayOrExit("reverse-bridge.sock") }
+
+func relayOrExit(socketName string) {
+	if err := relayBridge(context.Background(), socketName); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		exit(1)
 	}
 }
-func relayBridge(ctx context.Context) error {
+
+func relayBridge(ctx context.Context, socketName string) error {
 	if runtime.GOOS == "linux" {
 		enabled, err := outpostssh.KillUserProcesses(ctx)
 		if err != nil {
@@ -39,7 +44,7 @@ func relayBridge(ctx context.Context) error {
 	if _, err = daemonctl.Ensure(ctx, binary); err != nil {
 		return err
 	}
-	socket, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: filepath.Join(config.DataDir(), "bridge.sock"), Net: "unix"})
+	socket, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: filepath.Join(config.DataDir(), socketName), Net: "unix"})
 	if err != nil {
 		return err
 	}

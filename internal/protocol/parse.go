@@ -186,6 +186,8 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdRepairOutpost:              decodeInto[RepairOutpostMessage],
 	CmdConnectOutpostInTerminal:   decodeInto[ConnectOutpostInTerminalMessage],
 	CmdDropOutpostCopy:            decodeInto[DropOutpostCopyMessage],
+	CmdJoinHome:                   decodeInto[JoinHomeMessage],
+	CmdHomeDialStatus:             decodeInto[HomeDialStatusMessage],
 	CmdListPlugins:                decodeInto[ListPluginsMessage],
 	CmdInstallPlugin:              decodeInto[InstallPluginMessage],
 	CmdUninstallPlugin:            decodeInto[UninstallPluginMessage],

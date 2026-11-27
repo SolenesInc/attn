@@ -35,6 +35,9 @@ func (d *Daemon) handleUpdateOutpost(client *wsClient, id string) {
 		return
 	}
 	row, err := d.resolveOutpost(id)
+	if err == nil && row.Reverse() {
+		err = refuseReverse(row, "update")
+	}
 	if err != nil {
 		d.sendCommandError(client, protocol.CmdUpdateOutpost, err.Error())
 		return

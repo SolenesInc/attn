@@ -1079,7 +1079,7 @@ fn experimental_lists_each_feature_by_group_with_how_many_are_on_and_its_switch_
         })
         .filter_map(|n| n.name)
         .collect();
-    assert!(groups.contains(&"Connections, 1 of 2 on".to_owned()));
+    assert!(groups.contains(&"Connections, 1 of 3 on".to_owned()));
     assert!(
         world
             .screen()

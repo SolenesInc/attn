@@ -55,6 +55,9 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 	if row == nil {
 		return fmt.Errorf("outpost %q does not exist", id)
 	}
+	if action == "repair" && row.Reverse() {
+		return refuseReverse(*row, "re-pair")
+	}
 	if action == "remove" {
 		d.closeOutpostCommand(id)
 		_, _, reachable := d.outpostConn(id)
@@ -81,7 +84,10 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 	var removeError error
 	d.cancelOutpostUpdate(id)
 	d.stopOutpostDial(id)
-	if action == "remove" {
+	if action == "remove" && row.Reverse() {
+		d.forgetReverseArrivals(id)
+		err = d.store.DeleteOutpost(id)
+	} else if action == "remove" {
 		remote := d.outpostSSH(*row)
 		r.mu.Lock()
 		run := r.dialers[id]
