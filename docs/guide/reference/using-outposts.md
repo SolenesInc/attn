@@ -3,7 +3,9 @@
 Outposts are experimental. An outpost is another computer running Attn, such as
 a Linux machine or a cloud VM, connected to your home: the home connects to it
 over ssh, or it dials the home. Your home is the Attn
-on the Mac where you use the app. One home can connect to several outposts.
+on the Mac where you use the app, until you move the home to an outpost, as
+[Remote home](remote-home.md) describes. One home can connect to several
+outposts.
 
 Agents and shells on an outpost appear in terminal tiles beside your
 local terminals. The tile header shows the outpost's name under the title.

@@ -162,8 +162,9 @@ func readReverseHeader(raw net.Conn) (reverseHeader, error) {
 
 func (d *Daemon) recognizeReverseMachine(hostKey string, joining bool) (*store.Machine, *bridge.Refusal) {
 	home := d.bridgeIdentity().Name
-	if !d.enrollmentStatus().IsHome() {
-		return nil, &bridge.Refusal{Reason: "disabled", Detail: fmt.Sprintf("%s is an outpost of another home, so no machine can join it; join that home instead", home)}
+	if status := d.enrollmentStatus(); !status.IsHome() {
+		moved := cmp.Or(status.HomeName, status.HomeID)
+		return nil, &bridge.Refusal{Reason: "disabled", Detail: fmt.Sprintf("%s is an outpost of %s, so no machine can dial it as its home; on this machine, run attn enrollment join with the ssh destination of %s", home, moved, moved)}
 	}
 	if !d.on(setting.RemoteHomeEnabled) {
 		return nil, &bridge.Refusal{Reason: "disabled", Detail: fmt.Sprintf("home %s does not take machines that dial it; run attn settings set remote_home_enabled true there", home)}
@@ -537,7 +538,7 @@ func (d *Daemon) joinHome(ctx context.Context, destination string) (protocol.Hom
 		current.kick()
 		return d.homeDialState(), nil
 	case status.IsOutpost():
-		return protocol.HomeDial{}, protocol.Refuse(protocol.RefusalWrongState, "this machine is enrolled to home %s; run {attn enrollment leave} before it joins another", status.HomeID)
+		return d.pointHomeDialAt(ctx, status, current, destination)
 	case !d.on(setting.RemoteHomeEnabled):
 		return protocol.HomeDial{}, protocol.Refuse(protocol.RefusalWrongState, "remote_home_enabled is off; run {attn settings set remote_home_enabled true} before you join a home")
 	}
@@ -560,6 +561,29 @@ func (d *Daemon) joinHome(ctx context.Context, destination string) (protocol.Hom
 		state.State = "bridged"
 	}
 	return state, err
+}
+
+// pointHomeDialAt points an enrolled machine's dial at destination, which must reach the same home, as it does once the
+// home has moved to another machine. When the dial fails, the machine dials its home where it did before.
+func (d *Daemon) pointHomeDialAt(ctx context.Context, status enrollment.Status, current *homeDial, destination string) (protocol.HomeDial, error) {
+	d.stopHomeDial(current)
+	dial := d.startHomeDial(destination, false)
+	var err error
+	select {
+	case err = <-dial.outcome:
+	case <-ctx.Done():
+		err = ctx.Err()
+	}
+	if err != nil {
+		d.stopHomeDial(dial)
+		if status.Dial != "" {
+			d.startHomeDial(status.Dial, false)
+		}
+		return d.homeDialState(), protocol.Refuse(protocol.RefusalWrongState, "this machine is enrolled to home %s and %s did not take it: %v; to join another home, run {attn enrollment leave} first", status.HomeID, destination, err)
+	}
+	state := d.homeDialState()
+	state.State = "bridged"
+	return state, nil
 }
 
 func (d *Daemon) homeDialState() protocol.HomeDial {

@@ -340,6 +340,7 @@ type Daemon struct {
 	jobQueueMu           sync.RWMutex
 	jobQueue             *jobs.Runner
 	jobQueueRoleChanged  chan struct{}
+	homeMove             homeMoveRuntime
 	homeCrons            []homeCron
 	taskFailureRenderers map[string]taskFailureRenderer
 
@@ -602,6 +603,9 @@ func (d *Daemon) Start() error {
 		}
 		d.daemonInstanceID = instanceID
 	}
+	if err := d.settleHomeMoveAtStart(); err != nil {
+		return err
+	}
 	if err := d.openStore(); err != nil {
 		return err
 	}
@@ -611,6 +615,7 @@ func (d *Daemon) Start() error {
 	if err := d.ensureEnrollment(); err != nil {
 		return fmt.Errorf("ensure enrollment record: %w", err)
 	}
+	d.resumeHomeMoveAtStart()
 	d.emptyDesktops.grace = emptyDesktopGraceFromEnv()
 	d.store.OnEmptyDesktop(d.desktopEmptied)
 	d.removeLegacyStateFile()
@@ -749,7 +754,7 @@ func (d *Daemon) Start() error {
 	d.startHarnesses(d.life.Context())
 	queueStarted := make(chan error, 1)
 	if !d.life.Go("jobQueue", func() {
-		home := d.enrollmentStatus().IsHome()
+		home := d.runsHomeRole()
 		err := d.startJobQueue(home)
 		queueStarted <- err
 		if err != nil {
@@ -761,7 +766,7 @@ func (d *Daemon) Start() error {
 				d.jobQueueRef().Stop()
 				return
 			case <-d.jobQueueRoleChanged:
-				if current := d.enrollmentStatus().IsHome(); current != home {
+				if current := d.runsHomeRole(); current != home {
 					d.jobQueueRef().Stop()
 					if err := d.startJobQueue(current); err != nil {
 						d.logf("background jobs after enrollment change: %v", err)
@@ -817,6 +822,8 @@ func (d *Daemon) Start() error {
 		d.startPermanentMaintenance()
 		d.resumePendingDelegations()
 		d.reviveRecoverableAgents("")
+		d.followMovedNotebook()
+		d.fenceHeldHome()
 	})
 
 	d.signalStarted()
@@ -3024,6 +3031,12 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleJoinHome(ctx, conn, msg.(*protocol.JoinHomeMessage))
 	case protocol.CmdHomeDialStatus:
 		d.handleHomeDialStatus(conn)
+	case protocol.CmdHomeMove:
+		d.handleHomeMove(ctx, conn, msg.(*protocol.HomeMoveMessage))
+	case protocol.CmdHomeMoveStatus:
+		d.handleHomeMoveStatus(conn)
+	case protocol.CmdHomeMoveRollback:
+		d.handleHomeMoveRollback(ctx, conn)
 	case protocol.CmdDropOutpostCopy:
 		if err := d.dropStaleCopy(); err != nil {
 			d.sendError(conn, err.Error())

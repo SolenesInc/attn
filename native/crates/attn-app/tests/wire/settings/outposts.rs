@@ -807,3 +807,136 @@ fn a_connection_terminal_stays_out_of_the_queue_and_home_in_either_flow() {
         }
     }
 }
+
+fn remote_home(outposts: Vec<OutpostInfo>) -> Daemon {
+    let daemon = Daemon::scripted().state(InitialStateMessage {
+        settings: Some(
+            [
+                ("outposts_enabled".into(), "true".into()),
+                ("remote_home_enabled".into(), "true".into()),
+            ]
+            .into(),
+        ),
+        ..initial(outposts)
+    });
+    daemon.on("home_move_status", |_| {
+        json!({"event": "home_move_result", "success": true, "home_move": {"step": "none", "checks": [], "remaps": []}})
+    });
+    daemon
+}
+
+fn move_result(home_move: Value) -> Value {
+    json!({"event": "home_move_result", "success": true, "home_move": home_move})
+}
+
+#[test]
+fn move_home_here_checks_the_machine_names_what_fails_and_moves_once_the_checks_pass() {
+    let daemon = remote_home(vec![studio()]);
+    daemon.on("home_move", |_| {
+        move_result(
+            json!({"step": "refused", "to": "studio", "remaps": [], "checks": [
+                {"name": "connected", "ok": true},
+                {"name": "gh", "ok": false, "detail": "studio is not logged in to gh"},
+            ]}),
+        )
+    });
+    let mut world = World::start(daemon);
+    on_outposts(&mut world);
+    click(&mut world, &part("move"));
+    let asked = sent(&world, "home_move");
+    assert_eq!(asked.len(), 1);
+    assert_eq!(asked[0]["machine"], "outpost-1");
+    assert_eq!(asked[0]["check"], true);
+    assert_eq!(
+        named(&world, &part("move.checks.passed")).as_deref(),
+        Some("✓ 1 check passed")
+    );
+    assert_eq!(
+        named(&world, &part("move.check.gh")).as_deref(),
+        Some("✗ gh: studio is not logged in to gh")
+    );
+    assert!(disabled(&world, &part("move.go")));
+
+    world.daemon.on("home_move", |r| {
+        if r["check"] == true {
+            move_result(json!({"step": "checked", "to": "studio", "sleeps": true,
+                "checks": [{"name": "connected", "ok": true}, {"name": "gh", "ok": true}],
+                "remaps": [{"from": "/Users/me/attn-notebook", "to": "/home/me/attn-notebook"}]}))
+        } else {
+            move_result(json!({"id": "m-1", "side": "from", "step": "committed", "to": "studio", "checks": [], "remaps": []}))
+        }
+    });
+    click(&mut world, &part("move.again"));
+    assert_eq!(
+        named(&world, &part("move.checks.passed")).as_deref(),
+        Some("✓ 2 checks passed")
+    );
+    assert!(!shows(&world, &part("move.check.gh")));
+    assert_eq!(
+        named(&world, &part("move.path.0")).as_deref(),
+        Some("Notebook /Users/me/attn-notebook → /home/me/attn-notebook")
+    );
+    assert_eq!(
+        named(&world, &part("move.sleeps")).as_deref(),
+        Some("While studio sleeps, the home is down.")
+    );
+    assert_eq!(
+        named(&world, &part("move.go")).as_deref(),
+        Some("Move home to studio")
+    );
+    assert!(!disabled(&world, &part("move.go")));
+
+    click(&mut world, &part("move.go"));
+    let asked = sent(&world, "home_move");
+    assert_eq!(asked.len(), 3);
+    assert_eq!(asked[2]["machine"], "outpost-1");
+    assert_eq!(
+        asked[2].get("check"),
+        None,
+        "the move itself is not a check"
+    );
+    assert_eq!(
+        named(&world, "settings.outposts.moved").as_deref(),
+        Some("The home moved to studio.")
+    );
+    assert!(!shows(&world, &part("move.go")));
+}
+
+#[test]
+fn move_home_here_shows_only_while_remote_home_is_on_and_the_machine_is_connected() {
+    let mut world = World::start(home(vec![studio()]));
+    on_outposts(&mut world);
+    assert!(!shows(&world, &part("move")), "remote_home_enabled is off");
+
+    let mut world = World::start(remote_home(vec![refused()]));
+    on_outposts(&mut world);
+    assert!(
+        !shows(&world, &part("move")),
+        "a machine that is not connected cannot take the home"
+    );
+    list(&mut world, vec![studio()]);
+    assert!(shows(&world, &part("move")));
+}
+
+#[test]
+fn a_failed_move_says_why_and_cancel_returns_to_the_row() {
+    let daemon = remote_home(vec![studio()]);
+    daemon.on("home_move", |r| {
+        if r["check"] == true {
+            move_result(json!({"step": "checked", "to": "studio", "checks": [{"name": "connected", "ok": true}], "remaps": []}))
+        } else {
+            move_result(json!({"id": "m-1", "side": "from", "step": "aborted", "to": "studio", "error": "studio did not stage the move: disk full", "checks": [], "remaps": []}))
+        }
+    });
+    let mut world = World::start(daemon);
+    on_outposts(&mut world);
+    click(&mut world, &part("move"));
+    click(&mut world, &part("move.go"));
+    assert_eq!(
+        named(&world, &part("move.failed")).as_deref(),
+        Some("Move failed: studio did not stage the move: disk full")
+    );
+    click(&mut world, &part("move.cancel"));
+    assert!(!shows(&world, &part("move.failed")));
+    assert!(shows(&world, &part("move")));
+}

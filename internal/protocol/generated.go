@@ -6473,6 +6473,104 @@ type HomeDialStatusMessage struct {
 	Cmd string `json:"cmd"`
 }
 
+type HomeMove struct {
+	// Checks corresponds to the JSON schema field "checks".
+	Checks []HomeMoveCheck `json:"checks"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// From corresponds to the JSON schema field "from".
+	From *string `json:"from,omitempty,omitzero"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID *string `json:"id,omitempty,omitzero"`
+
+	// Remaps corresponds to the JSON schema field "remaps".
+	Remaps []HomeMoveRemap `json:"remaps"`
+
+	// Side corresponds to the JSON schema field "side".
+	Side *string `json:"side,omitempty,omitzero"`
+
+	// Sleeps corresponds to the JSON schema field "sleeps".
+	Sleeps *bool `json:"sleeps,omitempty,omitzero"`
+
+	// Step corresponds to the JSON schema field "step".
+	Step string `json:"step"`
+
+	// To corresponds to the JSON schema field "to".
+	To *string `json:"to,omitempty,omitzero"`
+}
+
+type HomeMoveCheck struct {
+	// Detail corresponds to the JSON schema field "detail".
+	Detail *string `json:"detail,omitempty,omitzero"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Ok corresponds to the JSON schema field "ok".
+	Ok bool `json:"ok"`
+}
+
+type HomeMoveMessage struct {
+	// Check corresponds to the JSON schema field "check".
+	Check *bool `json:"check,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Machine corresponds to the JSON schema field "machine".
+	Machine string `json:"machine"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Via corresponds to the JSON schema field "via".
+	Via *string `json:"via,omitempty,omitzero"`
+}
+
+type HomeMoveRemap struct {
+	// From corresponds to the JSON schema field "from".
+	From string `json:"from"`
+
+	// To corresponds to the JSON schema field "to".
+	To string `json:"to"`
+}
+
+type HomeMoveResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// HomeMove corresponds to the JSON schema field "home_move".
+	HomeMove *HomeMove `json:"home_move,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type HomeMoveRollbackMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type HomeMoveStatusMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
 type HomeUnreachableMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
@@ -9837,6 +9935,9 @@ type Response struct {
 
 	// HomeDial corresponds to the JSON schema field "home_dial".
 	HomeDial *HomeDial `json:"home_dial,omitempty,omitzero"`
+
+	// HomeMove corresponds to the JSON schema field "home_move".
+	HomeMove *HomeMove `json:"home_move,omitempty,omitzero"`
 
 	// KeptConversationForgetResult corresponds to the JSON schema field
 	// "kept_conversation_forget_result".

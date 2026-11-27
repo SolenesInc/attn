@@ -129,6 +129,9 @@ func (d *Daemon) outpostServerConfig(dial string) bridge.ServerConfig {
 			if dial != "" && home.DaemonID == d.daemonInstanceID {
 				return &bridge.Refusal{Reason: "self", Detail: fmt.Sprintf("%s is this machine's own daemon; join a home on another machine", dial)}
 			}
+			if refusal := d.homeMoveAdmit(home); refusal != nil {
+				return refusal
+			}
 			if refusal := d.ownSessionsRefusal(home); dial != "" && refusal != nil {
 				return refusal
 			}
@@ -220,6 +223,7 @@ func (d *Daemon) acceptOutpostBridge(run *outpostListener, conn *bridge.Conn) {
 	if previous != nil {
 		_ = previous.Close()
 	}
+	d.finishMoveOnBridge(conn.Peer().DaemonID)
 	d.store.StartCopyOrder()
 	d.configureNotebookSync()
 	if !d.life.Go("outpostViews", func() { d.sendOutpostViews(d.life.Context(), conn) }) {

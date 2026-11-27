@@ -185,7 +185,7 @@ func TestAReverseOutpostDialsItsHomeAndRedialsAfterEitherRestarts(t *testing.T) 
 	requireStdout(t, third.Attn("settings", "set", "remote_home_enabled", "true"), "true")
 	requireStdout(t, box.Attn("settings", "get", "remote_home_enabled"), "true")
 	intoOutpost := third.Attn("enrollment", "join", "box")
-	if intoOutpost.Code == 0 || !strings.Contains(intoOutpost.Stderr, "is an outpost of another home") {
+	if intoOutpost.Code == 0 || !strings.Contains(intoOutpost.Stderr, "so no machine can dial it as its home") {
 		t.Fatalf("join into an outpost: exit %d, %s%s", intoOutpost.Code, intoOutpost.Stdout, intoOutpost.Stderr)
 	}
 	w.ssh.Route("third", third)

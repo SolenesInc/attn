@@ -774,3 +774,62 @@ fn a_machine_behind_a_home_built_from_a_changed_worktree_says_to_build_it_there(
         None
     );
 }
+
+fn away_after_a_move(step: &'static str) -> World {
+    let daemon = Daemon::scripted();
+    daemon.on("client_hello", |_| {
+        serde_json::json!({"event": "home_unreachable", "home": "oma", "state": "dialing", "reason": "connection refused"})
+    });
+    daemon.on("home_move_status", move |_| {
+        serde_json::json!({"event": "home_move_result", "success": true, "home_move": {
+            "id": "m-1", "side": "from", "step": step, "from": "laptop", "to": "oma", "checks": [], "remaps": [],
+        }})
+    });
+    daemon.on("home_move_rollback", |_| {
+        serde_json::json!({"event": "home_move_result", "success": true, "home_move": {
+            "id": "m-1", "side": "from", "step": "rolling-back", "from": "laptop", "to": "oma", "checks": [], "remaps": [],
+        }})
+    });
+    World::start(daemon)
+}
+
+#[test]
+fn a_home_that_did_not_start_after_a_move_offers_to_roll_the_move_back() {
+    let mut world = away_after_a_move("applied");
+    let screen = world.screen();
+    let offer = screen
+        .find(Target::key("connection.home-unreachable.move"))
+        .unwrap_or_else(|| panic!("no rollback offer:\n{screen}"));
+    assert!(
+        screen
+            .descendants(Target::key("connection.home-unreachable.move"))
+            .iter()
+            .any(|node| node.name.as_deref()
+                == Some("The home moved to oma, and this machine has not reached it since. Roll back makes this machine the home again; oma sets aside what it did as the home.")),
+        "{offer:?}\n{screen}"
+    );
+    world.gesture(|app| app.click(Target::key("connection.home-unreachable.roll-back")));
+    assert_eq!(world.daemon.sent_of("home_move_rollback").len(), 1);
+    assert!(
+        world
+            .screen()
+            .find(Target::key("connection.home-unreachable.roll-back"))
+            .is_none(),
+        "a move rolling back is not offered again:\n{}",
+        world.screen()
+    );
+}
+
+#[test]
+fn a_move_the_new_home_took_over_is_not_offered_for_rollback() {
+    let world = away_after_a_move("done");
+    assert!(home_unreachable(&world).is_some(), "{}", world.screen());
+    assert!(
+        world
+            .screen()
+            .find(Target::key("connection.home-unreachable.roll-back"))
+            .is_none(),
+        "{}",
+        world.screen()
+    );
+}

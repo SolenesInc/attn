@@ -32,7 +32,8 @@ commands:
         remote_home_enabled and outposts_enabled on. This machine needs
         remote_home_enabled on and, while it is its own home, no open session.
         Waits for the first dial and prints its outcome. Run it again to dial
-        now.
+        now. On an enrolled machine, the destination must hold the same home,
+        as after the home moved: this machine then dials its home there.
 
   leave [--home <home-id>] [--json]
         release the enrollment so the data folder is its own again. The

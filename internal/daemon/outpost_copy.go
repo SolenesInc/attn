@@ -72,6 +72,14 @@ func carriesSession(rows []protocol.CopyRow) bool {
 }
 
 func (d *Daemon) outpostHandlers() bridge.Handlers {
+	handlers := d.outpostCopyHandlers()
+	for kind, handle := range d.homeMoveHandlers() {
+		handlers[kind] = handle
+	}
+	return handlers
+}
+
+func (d *Daemon) outpostCopyHandlers() bridge.Handlers {
 	order := &terminalOrder{}
 	return bridge.Handlers{
 		notebookChannel: func(conn *bridge.Conn, incoming ssh.NewChannel) {

@@ -594,6 +594,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
                 away,
                 crate::update_run::current(state),
                 state.window.notice.as_ref().map(|n| n.text.as_str()),
+                crate::settings::outposts::undoable_move(state),
             ),
         ),
     };

@@ -15,6 +15,13 @@ type Identity struct {
 	// peer's machine by.
 	MachineID     string `json:"machine_id,omitempty"`
 	PeerMachineID string `json:"peer_machine_id,omitempty"`
+	// Move is the sender's side of a move of the home that its peer may need to finish or undo.
+	Move *MoveState `json:"move,omitempty"`
+}
+
+type MoveState struct {
+	ID   string `json:"id"`
+	Step string `json:"step"`
 }
 
 type Build struct {

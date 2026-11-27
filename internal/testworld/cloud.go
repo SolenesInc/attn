@@ -100,6 +100,13 @@ func (c *Cloud) Outage() (restore func()) { return c.proxy.outage() }
 
 func (c *Cloud) Open() int { return c.proxy.open() }
 
+// MostOpen is the most home connections that were ever open at once.
+func (c *Cloud) MostOpen() int {
+	c.proxy.mu.Lock()
+	defer c.proxy.mu.Unlock()
+	return c.proxy.most
+}
+
 func (c *Cloud) Closed() <-chan struct{} { return c.proxy.closed }
 
 type cutProxy struct {
@@ -110,6 +117,7 @@ type cutProxy struct {
 	mu     sync.Mutex
 	down   bool
 	conns  map[net.Conn]net.Conn
+	most   int
 }
 
 func startCutProxy(t *testing.T, target string) *cutProxy {
@@ -149,6 +157,7 @@ func (p *cutProxy) serve(home net.Conn) {
 	}
 	p.mu.Lock()
 	p.conns[home] = cloud
+	p.most = max(p.most, len(p.conns))
 	p.mu.Unlock()
 	p.dials <- struct{}{}
 	done := make(chan struct{}, 2)

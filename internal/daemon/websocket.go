@@ -33,6 +33,7 @@ type wsClient struct {
 	controlSlots chan struct{}
 	recv         chan []byte
 	gone         chan struct{}
+	written      chan struct{}
 	writing      atomic.Bool
 	sendMu       sync.RWMutex
 	sendClosed   bool
@@ -522,6 +523,7 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		controlSlots:    make(chan struct{}, controlQueueSlots),
 		recv:            make(chan []byte, 256),
 		gone:            make(chan struct{}),
+		written:         make(chan struct{}),
 		connectedAt:     time.Now(),
 		relay:           relay,
 		machineLink:     machineLink,
@@ -610,6 +612,7 @@ func (d *Daemon) wsWritePump(client *wsClient) {
 			code, reason = websocket.StatusPolicyViolation, slowClientCloseReason
 		}
 		client.conn.Close(code, reason)
+		close(client.written)
 	}()
 
 	for message := range client.send {
@@ -1127,6 +1130,16 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdRepairOutpost:
 		m := msg.(*protocol.RepairOutpostMessage)
 		d.handleOutpostCommand(client, "repair", m.ID, "", "")
+	case protocol.CmdHomeMove:
+		m := msg.(*protocol.HomeMoveMessage)
+		d.handleHomeMoveWS(client, protocol.Deref(m.RequestID), func(ctx context.Context) (protocol.HomeMove, bool, error) { return d.homeMoveCommand(ctx, m) })
+	case protocol.CmdHomeMoveStatus:
+		d.handleHomeMoveWS(client, protocol.Deref(msg.(*protocol.HomeMoveStatusMessage).RequestID), func(context.Context) (protocol.HomeMove, bool, error) {
+			move, err := d.homeMoveStatus()
+			return move, false, err
+		})
+	case protocol.CmdHomeMoveRollback:
+		d.handleHomeMoveWS(client, protocol.Deref(msg.(*protocol.HomeMoveRollbackMessage).RequestID), d.rollbackHomeMove)
 	case protocol.CmdListPlugins:
 		d.handleListPluginsWS(client)
 	case protocol.CmdInstallPlugin:

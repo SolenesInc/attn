@@ -213,6 +213,9 @@ func (s *Store) PutDocument(schema docstore.CollectionSchema, id string, body []
 }
 
 func putDocumentWith(q execQuerier, written *documentWrites, schema docstore.CollectionSchema, table, id string, body []byte, now time.Time, expected *int64) (int64, error) {
+	if written.fenced.Load() {
+		return 0, ErrFenced
+	}
 	written.count(table, id)
 	if err := checkSeedProfileWrite(q, schema, table, id, body); err != nil {
 		return 0, err
@@ -303,6 +306,9 @@ func (s *Store) DeleteDocument(schema docstore.CollectionSchema, id string, expe
 }
 
 func deleteDocumentWith(x execQuerier, written *documentWrites, schema docstore.CollectionSchema, table, id string, expected *int64) (bool, error) {
+	if written.fenced.Load() {
+		return false, ErrFenced
+	}
 	written.count(table, id)
 	if expected != nil && *expected == docstore.ExpectAbsent {
 		return false, fmt.Errorf("store: deleting %s/%s/%s: rev %d means the document must not exist, which a delete cannot expect; pass the revision you read, or none to delete unconditionally",

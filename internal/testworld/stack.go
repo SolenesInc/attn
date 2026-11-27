@@ -105,6 +105,14 @@ func (s *Stack) StartCrashingAt(point string) {
 	s.start("ATTN_CRASH_AT=" + point)
 }
 
+// CrashWhileStartingAt starts the daemon to be killed at point before it is ready, and waits for the kill.
+func (s *Stack) CrashWhileStartingAt(point string) {
+	s.T.Helper()
+	s.pauses.Reopen()
+	s.spawnProcess("ATTN_CRASH_AT=" + point)
+	s.AwaitCrash()
+}
+
 func (s *Stack) AwaitCrash() {
 	s.T.Helper()
 	if s.daemon == nil {
@@ -183,6 +191,20 @@ func (s *Stack) launch(vars ...string) {
 
 func (s *Stack) spawn(vars ...string) {
 	s.T.Helper()
+	line := s.spawnProcess(vars...)
+	select {
+	case text := <-line:
+		if text != "ready" {
+			s.failStart(fmt.Sprintf("signalled %q instead of ready", text))
+		}
+	case <-time.After(fakeagent.HangGuard):
+		s.failStart(fmt.Sprintf("was not ready within %s", fakeagent.HangGuard))
+	}
+}
+
+// spawnProcess starts the daemon and yields the line it writes to its ready pipe, empty when it exits first.
+func (s *Stack) spawnProcess(vars ...string) <-chan string {
+	s.T.Helper()
 	if s.daemon != nil {
 		s.T.Fatal("Start: the stack's daemon is already running")
 	}
@@ -190,7 +212,6 @@ func (s *Stack) spawn(vars ...string) {
 	if err != nil {
 		s.T.Fatal(err)
 	}
-	defer ready.Close()
 	stderr, err := os.OpenFile(s.stderrPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		s.T.Fatal(err)
@@ -231,17 +252,11 @@ func (s *Stack) spawn(vars ...string) {
 
 	line := make(chan string, 1)
 	go func() {
+		defer ready.Close()
 		text, _ := bufio.NewReader(ready).ReadString('\n')
 		line <- strings.TrimSuffix(text, "\n")
 	}()
-	select {
-	case text := <-line:
-		if text != "ready" {
-			s.failStart(fmt.Sprintf("signalled %q instead of ready", text))
-		}
-	case <-time.After(fakeagent.HangGuard):
-		s.failStart(fmt.Sprintf("was not ready within %s", fakeagent.HangGuard))
-	}
+	return line
 }
 
 func (s *Stack) failStart(reason string) {

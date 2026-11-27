@@ -331,7 +331,7 @@ pub(crate) fn follow(state: &mut State, changed: Slices, tx: &mut Tx) {
     state.window.settings.autosave.sync(&settings);
     catalogs::follow(state);
     tasks::follow(state, tx);
-    outposts::follow(state, changed);
+    outposts::follow(state, changed, tx);
     phones::follow(state, changed);
 }
 

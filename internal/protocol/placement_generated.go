@@ -95,6 +95,9 @@ var Placements = map[string][]Placement{
 	"get_screen_snapshot":            {Placement{LocatorTerminal, "id"}},
 	"get_settings":                   {Placement{LocatorHere, ""}},
 	"home_dial_status":               {Placement{LocatorHere, ""}},
+	"home_move":                      {Placement{LocatorHome, ""}},
+	"home_move_rollback":             {Placement{LocatorHere, ""}},
+	"home_move_status":               {Placement{LocatorHere, ""}},
 	"home_update_notice":             {Placement{LocatorMachine, "host"}},
 	"hook_compaction":                {Placement{LocatorHere, ""}},
 	"hook_notification":              {Placement{LocatorHere, ""}},
@@ -1077,6 +1080,42 @@ func (m HomeDialStatusMessage) Placement() Placement {
 }
 
 func (m HomeDialStatusMessage) Locate() string {
+	return ""
+}
+
+func (HomeMoveMessage) CommandName() string {
+	return "home_move"
+}
+
+func (m HomeMoveMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m HomeMoveMessage) Locate() string {
+	return ""
+}
+
+func (HomeMoveRollbackMessage) CommandName() string {
+	return "home_move_rollback"
+}
+
+func (m HomeMoveRollbackMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m HomeMoveRollbackMessage) Locate() string {
+	return ""
+}
+
+func (HomeMoveStatusMessage) CommandName() string {
+	return "home_move_status"
+}
+
+func (m HomeMoveStatusMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m HomeMoveStatusMessage) Locate() string {
 	return ""
 }
 

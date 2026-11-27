@@ -7,9 +7,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/crypto/ssh"
 )
+
+// PublicHostKey is the public half of the bridge host key at path, as a peer that meets it pins it.
+func PublicHostKey(path string) (string, error) {
+	signer, err := hostKey(path)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(signer.PublicKey()))), nil
+}
 
 func hostKey(path string) (ssh.Signer, error) {
 	data, err := os.ReadFile(path)

@@ -31,6 +31,7 @@ var catalogFamilies = map[string]bool{
 	"guide":              true,
 	"handoff":            true,
 	"help":               false,
+	"home":               false,
 	"instance":           false,
 	"instance-env":       false,
 	"journal":            true,

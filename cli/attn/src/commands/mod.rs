@@ -12,6 +12,7 @@ pub mod doc;
 pub mod enrollment;
 pub mod guide;
 pub mod handoff;
+pub mod home;
 pub mod instance_env;
 pub mod instance_resolve;
 pub mod journal;

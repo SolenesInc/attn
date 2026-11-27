@@ -1,11 +1,13 @@
 //! Settings → Outposts: add an outpost by its ssh destination, and for each one its state,
-//! build, identity and Notebook sync, with Re-pair, Remove, an update to the home build and a
-//! terminal to answer an ssh refusal in.
+//! build, identity and Notebook sync, with Re-pair, Remove, an update to the home build, a
+//! terminal to answer an ssh refusal in, and a move of the home to it.
 
 use attn_client::{Connection, Reply, Slices};
 use attn_protocol::{
-    AddOutpostMessage, ConnectOutpostInTerminalMessage, OutpostInfo, OutpostNotebook,
-    ProfileActionResultMessage, RemoveOutpostMessage, RepairOutpostMessage, UpdateOutpostMessage,
+    AddOutpostMessage, ConnectOutpostInTerminalMessage, HomeMove, HomeMoveMessage,
+    HomeMoveResultMessage, HomeMoveRollbackMessage, HomeMoveStatusMessage, OutpostInfo,
+    OutpostNotebook, ProfileActionResultMessage, RemoveOutpostMessage, RepairOutpostMessage,
+    UpdateOutpostMessage,
 };
 use attn_ui::Tokens;
 use rune::{El, TextEdit, Tx};
@@ -18,6 +20,7 @@ use attn_ui::system::{Button, FieldState, ListRow, Look, Size, Tone, Type, line_
 
 use crate::State;
 use crate::action::Action;
+use crate::requests::Answer;
 
 const NOT_CONNECTED: &str = "Connect to the home daemon to change outposts.";
 const COMMANDS: &[&str] = &[
@@ -39,6 +42,25 @@ pub(crate) struct Outposts {
     terminal_error: Option<String>,
     /// Why the daemon refused the last outpost command. It outlasts the page.
     command_error: Option<String>,
+    moving: Option<Move>,
+    /// This machine's latest move, as its daemon last told it.
+    last_move: Option<HomeMove>,
+    /// The machine the home moved to from this page, until the page is left.
+    moved_to: Option<String>,
+}
+
+/// A move of the home to one machine, from its checks until it ends.
+struct Move {
+    id: String,
+    name: String,
+    step: MoveStep,
+}
+
+enum MoveStep {
+    Checking,
+    Checked(HomeMove),
+    Moving,
+    Failed(String),
 }
 
 fn panel(state: &mut State) -> &mut Outposts {
@@ -51,12 +73,17 @@ pub(super) fn arrive(state: &mut State) {
         let outposts = panel(state);
         outposts.removing = None;
         outposts.terminal_error = None;
+        outposts.moved_to = None;
     }
 }
 
 /// Clears the typed outpost once a list holds the one just added, unless the person typed
 /// another since.
-pub(super) fn follow(state: &mut State, changed: Slices) {
+pub(super) fn follow(state: &mut State, changed: Slices, tx: &mut Tx) {
+    let away = matches!(state.facts.connection, Connection::HomeUnreachable(_));
+    if changed.intersects(Slices::CONNECTION) && (remote_home(state) || away) {
+        read_last_move(state, tx);
+    }
     if !changed.intersects(Slices::OUTPOSTS) {
         return;
     }
@@ -223,6 +250,280 @@ fn connect_in_terminal(state: &mut State, id: &str, tx: &mut Tx) {
         },
         tx,
     );
+}
+
+fn remote_home(state: &State) -> bool {
+    state
+        .facts
+        .settings
+        .get("remote_home_enabled")
+        .is_some_and(|on| on == "true")
+}
+
+fn move_answer(answer: &Answer) -> Result<HomeMove, String> {
+    let result = answer
+        .parse::<HomeMoveResultMessage>()
+        .ok_or_else(|| "the daemon did not answer".to_owned())?;
+    match (result.success, result.home_move) {
+        (true, Some(home_move)) => Ok(home_move),
+        _ => Err(result.error.unwrap_or_else(|| "the move failed".to_owned())),
+    }
+}
+
+fn moving_to<'a>(state: &'a mut State, id: &str) -> Option<&'a mut Move> {
+    panel(state).moving.as_mut().filter(|m| m.id == id)
+}
+
+fn check_move(state: &mut State, id: &str, name: &str, tx: &mut Tx) {
+    panel(state).moving = Some(Move {
+        id: id.to_owned(),
+        name: name.to_owned(),
+        step: MoveStep::Checking,
+    });
+    let machine = id.to_owned();
+    let id = id.to_owned();
+    state.ask(
+        |request_id| HomeMoveMessage {
+            machine,
+            check: Some(true),
+            request_id: Some(request_id),
+            ..HomeMoveMessage::new()
+        },
+        move |state, answer, _| {
+            if let Some(moving) = moving_to(state, &id) {
+                moving.step = match move_answer(&answer) {
+                    Ok(checked) => MoveStep::Checked(checked),
+                    Err(why) => MoveStep::Failed(why),
+                };
+            }
+        },
+        tx,
+    );
+}
+
+fn start_move(state: &mut State, id: &str, tx: &mut Tx) {
+    let Some(moving) = moving_to(state, id) else {
+        return;
+    };
+    moving.step = MoveStep::Moving;
+    let machine = id.to_owned();
+    let id = id.to_owned();
+    state.ask(
+        |request_id| HomeMoveMessage {
+            machine,
+            request_id: Some(request_id),
+            ..HomeMoveMessage::new()
+        },
+        move |state, answer, _| {
+            if matches!(answer, Answer::Dropped) {
+                return;
+            }
+            match move_answer(&answer) {
+                Ok(moved) if moved.step == "committed" => settle_move(state, &moved),
+                Ok(HomeMove { error, step, .. }) => {
+                    if let Some(moving) = moving_to(state, &id) {
+                        moving.step = MoveStep::Failed(error.unwrap_or(step));
+                    }
+                }
+                Err(why) => {
+                    if let Some(moving) = moving_to(state, &id) {
+                        moving.step = MoveStep::Failed(why);
+                    }
+                }
+            }
+        },
+        tx,
+    );
+}
+
+/// Ends the move this page runs once this machine's daemon says how it ended.
+fn settle_move(state: &mut State, latest: &HomeMove) {
+    let outposts = panel(state);
+    let Some(moving) = outposts
+        .moving
+        .take_if(|m| matches!(m.step, MoveStep::Moving))
+    else {
+        return;
+    };
+    match latest.step.as_str() {
+        "committed" | "applied" | "done" => outposts.moved_to = Some(moving.name),
+        "aborted" | "rolled-back" => {
+            let why = latest.error.clone().unwrap_or_else(|| latest.step.clone());
+            outposts.moving = Some(Move {
+                step: MoveStep::Failed(why),
+                ..moving
+            });
+        }
+        _ => outposts.moving = Some(moving),
+    }
+}
+
+fn read_last_move(state: &mut State, tx: &mut Tx) {
+    state.ask_here(
+        |request_id| HomeMoveStatusMessage {
+            request_id: Some(request_id),
+            ..HomeMoveStatusMessage::new()
+        },
+        |state, answer, _| {
+            if let Ok(latest) = move_answer(&answer) {
+                settle_move(state, &latest);
+                panel(state).last_move = Some(latest);
+            }
+        },
+        tx,
+    );
+}
+
+/// The machine this one moved the home to, while that move can still be rolled back: the
+/// new home has not taken over, as this machine has not bridged to it.
+pub(crate) fn undoable_move(state: &State) -> Option<&str> {
+    let latest = state.window.settings.outposts.last_move.as_ref()?;
+    let undoable = latest.side.as_deref() == Some("from")
+        && matches!(latest.step.as_str(), "committed" | "applied");
+    undoable.then_some(latest.to.as_deref()).flatten()
+}
+
+pub(crate) fn roll_back(state: &mut State, tx: &mut Tx) {
+    state.ask_here(
+        |request_id| HomeMoveRollbackMessage {
+            request_id: Some(request_id),
+            ..HomeMoveRollbackMessage::new()
+        },
+        |state, answer, _| match move_answer(&answer) {
+            Ok(latest) => panel(state).last_move = Some(latest),
+            Err(_) if matches!(answer, Answer::Dropped) => {}
+            Err(why) => panel(state).command_error = Some(why),
+        },
+        tx,
+    );
+}
+
+/// What the row of the machine a move goes to shows under it: the checks, the paths that
+/// change and what can be done next.
+fn move_blocks(state: &State, outpost: &OutpostInfo, t: &Tokens) -> Option<(Vec<Block>, Vec<El>)> {
+    let moving = state
+        .window
+        .settings
+        .outposts
+        .moving
+        .as_ref()
+        .filter(|m| m.id == outpost.id)?;
+    let key = format!("settings.outpost.{}.move", outpost.id);
+    let part = |name: &str| format!("{key}.{name}");
+    let name = machine_name(state, outpost);
+    let online = connected(state);
+    let cancel = || {
+        action(part("cancel"), "Cancel", false, t, |state, _| {
+            panel(state).moving = None;
+        })
+    };
+    let again = || {
+        let (id, name) = (outpost.id.clone(), outpost.name.clone());
+        action(
+            part("again"),
+            "Check again",
+            !online,
+            t,
+            move |state, tx| {
+                check_move(state, &id, &name, tx);
+            },
+        )
+    };
+    Some(match &moving.step {
+        MoveStep::Checking => (
+            vec![Status::new(part("checking"), format!("Checking {name}…"), true).build(t)],
+            vec![cancel()],
+        ),
+        MoveStep::Moving => (
+            vec![Status::new(part("moving"), format!("Moving the home to {name}…"), true).build(t)],
+            vec![],
+        ),
+        MoveStep::Failed(why) => (
+            vec![Notice::error(part("failed"), format!("Move failed: {why}")).build(t)],
+            vec![again(), cancel()],
+        ),
+        MoveStep::Checked(checked) => {
+            let mut under = vec![checks(&key, checked, t)];
+            if !checked.remaps.is_empty() {
+                let facts = checked.remaps.iter().enumerate().fold(
+                    Facts::new(part("paths")),
+                    |facts, (i, remap)| {
+                        facts.code(
+                            part(&format!("path.{i}")),
+                            "Notebook",
+                            format!("{} → {}", remap.from, remap.to),
+                        )
+                    },
+                );
+                under.push(facts.build(t));
+            }
+            if checked.sleeps == Some(true) {
+                under.push(
+                    Notice::warn(
+                        part("sleeps"),
+                        format!("While {name} sleeps, the home is down."),
+                    )
+                    .build(t),
+                );
+            }
+            let ready = checked.step == "checked";
+            let id = outpost.id.clone();
+            let go = Button::new(format!("Move home to {name}"))
+                .look(Look::Primary)
+                .size(Size::Compact)
+                .disabled(!online || !ready)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| start_move(state, &id, tx))
+                .build(t)
+                .key(part("go"));
+            (under, vec![go.into(), again(), cancel()])
+        }
+    })
+}
+
+fn checks(key: &str, checked: &HomeMove, t: &Tokens) -> Block {
+    let passed = checked.checks.iter().filter(|c| c.ok).count();
+    let noun = if passed == 1 { "check" } else { "checks" };
+    let summary = format!("✓ {passed} {noun} passed");
+    let failed = checked.checks.iter().filter(|c| !c.ok).map(|c| {
+        let said = match c.detail.as_deref() {
+            Some(detail) => format!("✗ {}: {detail}", c.name),
+            None => format!("✗ {}", c.name),
+        };
+        words(said.clone(), Type::Small, t.warning)
+            .key(format!("{key}.check.{}", c.name))
+            .label(said)
+            .role("alert")
+            .wrap()
+    });
+    Block::custom(
+        format!("{key}.checks.block"),
+        Stack::tight()
+            .key(format!("{key}.checks"))
+            .role("status")
+            .child(
+                words(summary.clone(), Type::Small, t.text_tertiary)
+                    .key(format!("{key}.checks.passed"))
+                    .label(summary),
+            )
+            .children(failed),
+    )
+}
+
+/// The machine's name as this window says it: this Mac for the machine the window runs on.
+fn machine_name(state: &State, outpost: &OutpostInfo) -> String {
+    if outpost.id == state.facts.machine.id {
+        this_machine().to_owned()
+    } else {
+        outpost.name.clone()
+    }
+}
+
+pub(crate) fn this_machine() -> &'static str {
+    if rune::Platform::current() == rune::Platform::Mac {
+        "this Mac"
+    } else {
+        "this machine"
+    }
 }
 
 fn state_tone(state: &str) -> Tone {
@@ -396,6 +697,24 @@ fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> (ListRow, Vec<Block
     }));
 
     let mut actions: Vec<El> = Vec::new();
+    if let Some((blocks, moves)) = move_blocks(state, outpost, t) {
+        under.extend(blocks);
+        under.push(
+            moves
+                .into_iter()
+                .fold(Actions::new(part("move.actions")), Actions::push)
+                .build(),
+        );
+    } else if remote_home(state) && outpost.state == "connected" && page.moving.is_none() {
+        let (id, name) = (id.clone(), outpost.name.clone());
+        actions.push(action(
+            part("move"),
+            "Move home here",
+            !online,
+            t,
+            move |state, tx| check_move(state, &id, &name, tx),
+        ));
+    }
     if outpost.state == "refused" && outpost.connectable == Some(true) {
         let id = id.clone();
         actions.push(action(
@@ -579,6 +898,15 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     }
     if !connected(state) {
         shown.push(Notice::info("settings.outposts.offline", NOT_CONNECTED).build(t));
+    }
+    if let Some(to) = &page.moved_to {
+        shown.push(
+            Notice::info(
+                "settings.outposts.moved",
+                format!("The home moved to {to}."),
+            )
+            .build(t),
+        );
     }
     let listed = &state.facts.outposts;
     let list = if listed.is_empty() {

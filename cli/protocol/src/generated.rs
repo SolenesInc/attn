@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "ccf464b729bf";
+pub const PROTOCOL_VERSION: &str = "95696bb8eb66";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -5849,6 +5849,111 @@ impl HomeDialStatusMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HomeMove {
+    #[serde(deserialize_with = "null_as_default")]
+    pub checks: Vec<HomeMoveCheck>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub remaps: Vec<HomeMoveRemap>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub side: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sleeps: Option<bool>,
+    pub step: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HomeMoveCheck {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    pub name: String,
+    pub ok: bool,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HomeMoveMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check: Option<bool>,
+    pub cmd: String,
+    pub machine: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub via: Option<String>,
+}
+
+impl HomeMoveMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "home_move".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HomeMoveRemap {
+    pub from: String,
+    pub to: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HomeMoveResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub home_move: Option<HomeMove>,
+    pub request_id: String,
+    pub success: bool,
+}
+
+impl HomeMoveResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "home_move_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HomeMoveRollbackMessage {
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+}
+
+impl HomeMoveRollbackMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "home_move_rollback".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HomeMoveStatusMessage {
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+}
+
+impl HomeMoveStatusMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "home_move_status".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct HomeUnreachableMessage {
     pub event: String,
     pub home: String,
@@ -9005,6 +9110,8 @@ pub struct Response {
     pub error_conflict: Option<DocumentConflict>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub home_dial: Option<HomeDial>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub home_move: Option<HomeMove>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kept_conversation_forget_result: Option<KeptConversationForgetResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

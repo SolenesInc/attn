@@ -68,15 +68,26 @@ pub(crate) fn said(state: &State) -> Option<Banner> {
             Some(reason) => format!("Lost {}: {reason}. Reconnecting.", away.home),
             None => format!("Lost {}. Reconnecting.", away.home),
         };
-        return Some(
-            Banner::new("connection", "Home connection", BannerTone::Warn)
-                .announces("connection.home-lost", status)
-                .action(
-                    "connection.home-lost.retry",
-                    Button::new("Retry"),
-                    |state: &mut State, _: &mut rune::Tx| retry_home(state),
-                ),
-        );
+        let undoable = crate::settings::outposts::undoable_move(state);
+        let status = match undoable {
+            Some(to) => format!("{status} {}", rollback_said(to)),
+            None => status,
+        };
+        let banner = Banner::new("connection", "Home connection", BannerTone::Warn)
+            .announces("connection.home-lost", status)
+            .action(
+                "connection.home-lost.retry",
+                Button::new("Retry"),
+                |state: &mut State, _: &mut rune::Tx| retry_home(state),
+            );
+        if undoable.is_none() {
+            return Some(banner);
+        }
+        return Some(banner.action(
+            "connection.home-lost.roll-back",
+            Button::new("Roll back"),
+            crate::settings::outposts::roll_back,
+        ));
     }
     let start_failed = start_failed(state)?;
     let tone = if start_failed.is_some() {
@@ -157,6 +168,7 @@ pub(crate) fn home_unreachable(
     away: &HomeUnreachable,
     run: Option<&UpdateRun>,
     notice: Option<&str>,
+    moved_to: Option<&str>,
 ) -> El {
     let title = format!("Can’t reach {}", away.home);
     let detail = match (away.dial.as_str(), away.reason.as_deref()) {
@@ -209,6 +221,23 @@ pub(crate) fn home_unreachable(
             ));
         }
     }
+    if let Some(to) = moved_to {
+        screen = screen.child(
+            Stack::tight()
+                .key("connection.home-unreachable.move")
+                .child(words(rollback_said(to), Type::Body, t.text_secondary).wrap())
+                .child(El::from(
+                    Button::new(format!(
+                        "Roll back to {}",
+                        crate::settings::outposts::this_machine()
+                    ))
+                    .size(Size::Compact)
+                    .on_press_tx(crate::settings::outposts::roll_back)
+                    .build(t)
+                    .key("connection.home-unreachable.roll-back"),
+                )),
+        );
+    }
     if let Some(notice) = notice {
         screen = screen.child(
             words(notice.to_owned(), Type::Body, t.text_secondary)
@@ -218,6 +247,13 @@ pub(crate) fn home_unreachable(
         );
     }
     screen
+}
+
+/// What a rollback of the move to `to` does, for a machine that has not reached `to` since.
+fn rollback_said(to: &str) -> String {
+    format!(
+        "The home moved to {to}, and this machine has not reached it since. Roll back makes this machine the home again; {to} sets aside what it did as the home."
+    )
 }
 
 /// Asks the daemon on the app's port to dial its home now; it closes the connection once it

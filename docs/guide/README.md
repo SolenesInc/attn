@@ -33,6 +33,7 @@ the app still shows an older word, the page tells you which label to look for.
 | [phone-app](reference/phone-app.md) | Experimental: install the iPhone app from TestFlight and pair it with a profile |
 | [telemetry](reference/telemetry.md) | What analytics records and shares |
 | [using-outposts](reference/using-outposts.md) | Experimental: connect computers, run remote terminals, and sync profile Notebooks |
+| [remote-home](reference/remote-home.md) | Experimental: move the home to a connected outpost and back |
 | [using-shared-codex](reference/using-shared-codex.md) | Codex terminals sharing one app-server |
 | [using-claude-mod](reference/using-claude-mod.md) | Delivering messages to Claude sessions through a Claude Code mod instead of typing |
 | [writing-harness-plugins](reference/writing-harness-plugins.md) | Add your own harness with a plugin: install it, what attn asks of it, and the wire for any language |

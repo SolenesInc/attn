@@ -39,6 +39,7 @@ pub const TOP_LEVEL: &[TopLevel] = &[
     TopLevel { name: "guide", usage: "guide [<topic>]", summary: "read the user guide", hidden: false },
     TopLevel { name: "handoff", usage: "handoff -m \"<letter>\"", summary: "file this crew member's letter; its session ends", hidden: false },
     TopLevel { name: "help", usage: "help", summary: "print this list", hidden: true },
+    TopLevel { name: "home", usage: "home <command>", summary: "move the home to a connected outpost: move, status, rollback", hidden: false },
     TopLevel { name: "instance", usage: "instance <status|resolve|list>", summary: "show / resolve the active instance's resources", hidden: false },
     TopLevel { name: "instance-env", usage: "instance-env <instance|--unset>", summary: "print shell commands for selecting an instance", hidden: false },
     TopLevel { name: "journal", usage: "journal <command>", summary: "read or add to the Notebook", hidden: false },

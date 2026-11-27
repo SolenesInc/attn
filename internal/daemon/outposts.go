@@ -212,6 +212,7 @@ func (d *Daemon) updateOutpost(id string, run *outpostDial, state bridge.State, 
 	if connected {
 		d.kickOutpostInboxes(id)
 	}
+	d.followRolledBackMove(id, err)
 }
 
 func (r *outpostsRuntime) notifyChangedLocked() {
@@ -270,6 +271,7 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Machine, run *outpos
 		if err == nil {
 			self := d.bridgeIdentity()
 			self.PeerMachineID = row.ID
+			self.Move = d.bridgeMoveState()
 			conn, seen, err = bridge.Dial(ctx, bridge.DialConfig{Conn: pipe, Pin: pin, Self: self, Handlers: d.homeHandlers(row.ID), HandlersAfter: recorded, CheckHostKey: func(key string) *bridge.Refusal { return d.outpostConflict(row.ID, key, "") }})
 		}
 

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1666,20 +1667,21 @@ func connectSQLite(dbPath string) (*sql.DB, *tableWrites) {
 	writes := &tableWrites{}
 	db := sql.OpenDB(&sqliteConnector{
 		driver: &sqlite3.SQLiteDriver{ConnectHook: func(conn *sqlite3.SQLiteConn) error {
-			dirty := false
+			dirty, homeState := false, false
 			conn.RegisterCommitHook(func() int {
-				if dirty && writes.commitFault.Load() {
+				if dirty && writes.commitFault.Load() || homeState && writes.documents.fenced.Load() {
 					return 1
 				}
-				dirty = false
+				dirty, homeState = false, false
 				return 0
 			})
-			conn.RegisterRollbackHook(func() { dirty = false })
+			conn.RegisterRollbackHook(func() { dirty, homeState = false, false })
 			conn.RegisterUpdateHook(func(op int, database, table string, _ int64) {
 				if database != "main" {
 					return
 				}
 				dirty = true
+				homeState = homeState || !slices.Contains(writesAFenceAllows, table)
 				switch {
 				case table == "sessions" || table == "session_runtime":
 					writes.sessions.Add(1)

@@ -415,6 +415,20 @@ func readRecord(path, daemonID string) (Record, error) {
 	}
 }
 
+// WriteRecord replaces this data folder's record with record, as a move's commit does.
+func WriteRecord(dataRoot string, record Record) error {
+	recordPath := filepath.Join(dataRoot, RecordFileName)
+	unlock, err := lockPath(recordPath)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if record.RecordedAt == "" {
+		record.RecordedAt = nowStamp()
+	}
+	return writeRecord(recordPath, record)
+}
+
 func writeRecord(path string, record Record) error {
 	data, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {

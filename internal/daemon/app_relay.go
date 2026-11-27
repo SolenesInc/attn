@@ -149,11 +149,25 @@ func (d *Daemon) answerAwayFromHome(w http.ResponseWriter, r *http.Request, chan
 				return
 			}
 			var command struct {
-				Cmd string `json:"cmd"`
+				Cmd       string `json:"cmd"`
+				RequestID string `json:"request_id"`
 			}
-			if json.Unmarshal(data, &command) == nil && command.Cmd == protocol.CmdRetryHome {
+			if json.Unmarshal(data, &command) != nil {
+				continue
+			}
+			switch command.Cmd {
+			case protocol.CmdRetryHome:
 				close(retried)
 				return
+			case protocol.CmdHomeMoveStatus:
+				move, err := d.homeMoveStatus()
+				_ = write(homeMoveResult(command.RequestID, move, err))
+			case protocol.CmdHomeMoveRollback:
+				move, exit, err := d.rollbackHomeMove(ctx)
+				_ = write(homeMoveResult(command.RequestID, move, err))
+				if exit {
+					exitForMove()
+				}
 			}
 		}
 	})

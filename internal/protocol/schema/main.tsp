@@ -2092,6 +2092,53 @@ model HomeDialStatusMessage { cmd: "home_dial_status"; }
 @extension("x-on", #{ here: true })
 model RetryHomeMessage { cmd: "retry_home"; }
 
+// Sent by `attn home move` and by Move on a machine's row in Settings: the home checks a move of the home role to
+// the connected outpost machine (an id or a name) and, unless check is set, runs it. via is the ssh destination by
+// which that machine reaches this one, needed when this machine stays reachable over ssh. The reply carries
+// home_move; over the WebSocket it is home_move_result, naming request_id.
+@extension("x-on", #{ home: true })
+model HomeMoveMessage { cmd: "home_move"; machine: string; via?: string; check?: boolean; request_id?: string; }
+
+// Sent by `attn home status` and by the app: this machine's latest move. The reply carries home_move; over the
+// WebSocket it is home_move_result, naming request_id.
+@extension("x-on", #{ here: true })
+model HomeMoveStatusMessage { cmd: "home_move_status"; request_id?: string; }
+
+// Sent by `attn home rollback` and by Roll back in the app: this machine undoes its side of its latest move,
+// restarting when the move had changed its database. The reply carries home_move; over the WebSocket it is
+// home_move_result, naming request_id.
+@extension("x-on", #{ here: true })
+model HomeMoveRollbackMessage { cmd: "home_move_rollback"; request_id?: string; }
+
+// The answer to home_move, home_move_status or home_move_rollback sent over the WebSocket.
+model HomeMoveResultMessage {
+  event: "home_move_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  home_move?: HomeMove;
+}
+
+// One machine's side of a move of the home. step is none, refused, staged, committing, committed, applied,
+// rolling-back, rolled-back or aborted; side is from on the machine that was the home and to on the target.
+model HomeMove {
+  id?: string;
+  side?: string;
+  step: string;
+  from?: string;
+  to?: string;
+  error?: string;
+  checks: HomeMoveCheck[];
+  remaps: HomeMoveRemap[];
+  sleeps?: boolean; // The target is a Mac: while it sleeps, the home is down.
+}
+
+// A pre-flight check of a move; detail names the cause when ok is false.
+model HomeMoveCheck { name: string; ok: boolean; detail?: string; }
+
+// A path the new home uses in place of the old home's.
+model HomeMoveRemap { from: string; to: string; }
+
 // The dial from this machine to its home. state is dialing, bridged, refused or off.
 model HomeDial {
   destination: string;
@@ -7491,6 +7538,7 @@ model Response {
   session_list_result?: SessionListResult;
   session_show_result?: SessionShowResult;
   home_dial?: HomeDial;
+  home_move?: HomeMove;
   update_status?: UpdateStatus;
   update_request_result?: UpdateRequestResult;
   session_reopen_result?: SessionReopenResult;
@@ -9207,6 +9255,7 @@ alias DaemonEvent =
   | SessionStateChangedMessage
   | SessionsUpdatedMessage
   | ProfileActionResultMessage
+  | HomeMoveResultMessage
   | ProfilesChangedMessage
   | ProfileArrangementChangedMessage
   | DesktopTileContentMessage

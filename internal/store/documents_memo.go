@@ -2,6 +2,7 @@ package store
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/victorarias/attn/internal/docstore"
 )
@@ -14,6 +15,8 @@ const recentDocumentWrites = 1024
 type documentWrites struct {
 	mu      sync.Mutex
 	byTable map[string]*tableDocumentWrites
+	// fenced refuses every write to the home's state while the home moves; see Store.Fence.
+	fenced atomic.Bool
 }
 
 type tableDocumentWrites struct {

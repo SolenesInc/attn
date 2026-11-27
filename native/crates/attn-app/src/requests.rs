@@ -182,6 +182,24 @@ impl State {
         self.ask_as(id, &command, then, tx);
     }
 
+    /// As `ask`, for a command the daemon on the app's port runs itself: it is sent also while
+    /// that daemon cannot reach its home and answers the app alone.
+    pub(crate) fn ask_here<M: Serialize>(
+        &mut self,
+        build: impl FnOnce(String) -> M,
+        then: impl FnOnce(&mut State, Answer, &mut Tx) + 'static,
+        tx: &mut Tx,
+    ) {
+        let id = self.next_request_id();
+        let command = build(id.clone());
+        match self.daemon.send(&command) {
+            Ok(()) => self
+                .requests
+                .wait(id, &command, attn_client::Reach::Home, Box::new(then)),
+            Err(_) => then(self, Answer::NotSent, tx),
+        }
+    }
+
     /// An id no other request has carried, from any window or run of the app, since the daemon
     /// keeps the ids it has answered.
     pub(crate) fn next_request_id(&self) -> String {

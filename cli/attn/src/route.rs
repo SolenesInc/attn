@@ -1,6 +1,6 @@
 use crate::commands::{
     Run, Stop, activity, agent, ask, automation, browser, callout, codex, conversation, crew,
-    delegate, doc, enrollment, guide, handoff, instance_env, instance_resolve, journal, list,
+    delegate, doc, enrollment, guide, handoff, home, instance_env, instance_resolve, journal, list,
     model, nav, onboarding, open, pr, presence, print_stdout, review, seed, send, session,
     settings, skill, state, terminal, ticket, top_level, turn, vent, worktree,
 };
@@ -96,6 +96,7 @@ fn native_command(name: &str, verb: Option<&str>, argv: &[OsString]) -> Option<N
         ("worktree", _) => native(worktree::run, true),
         (codex::COMMAND, _) => native(codex::run, true),
         ("enrollment", _) => native(enrollment::run, true),
+        ("home", _) => native(home::run, true),
         ("instance", Some("resolve")) => Native {
             checks: Checks::InstanceOnly,
             arguments_from: 3,
