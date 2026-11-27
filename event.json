@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Home outage screen leaves hidden desktop controls active",
+  "at": "2026-11-27T05:36:47.918Z",
+  "detail": "During HomeUnreachable the main window can still expose the cached desktop shelf and dim its title bar for an invisible layer. Gate shelf interaction and layer dimming on what is shown. Already owned in s-p8a5f4.\nIndependently source-confirmed at dc932349a. Evidence on s-s3sc2q.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/shell.rs",
+    "line": 657
+  },
+  "culprit": "dc932349a3898fde1b3a6ff0025e86dbfffbb967"
+}
