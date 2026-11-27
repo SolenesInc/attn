@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Ask-to-terminal association is published outside its profile",
+  "at": "2026-11-27T15:06:33.608Z",
+  "detail": "The initial and incremental app snapshots include the new ask-to-terminal association outside the ask's profile. Scope the association to its owning profile on both paths, consistently with the ask itself.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/websocket.go",
+    "line": 559
+  },
+  "culprit": "4de696011866373c0d5e7e31fc5dc9ebd638de9d"
+}
