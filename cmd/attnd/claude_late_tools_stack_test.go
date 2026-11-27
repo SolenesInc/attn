@@ -187,7 +187,7 @@ func TestMailThatResumesARealClaudeWaitsForAttnsToolsWhenTheirServerComesUpLate(
 		t.Fatalf("seed tend exited %d: %s", tend.Code, tend.Stderr)
 	}
 	const note = "On approval: merge the pull request."
-	const ring = "attn agent inbox"
+	const ring = "agent_inbox()"
 	model.RunBashAfter(ring, "attn seed standby "+seed.ID+" -m \""+note+"\"")
 	if sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", tender, "wait for the review"}, Session: reviewer}); sent.Code != 0 {
 		t.Fatalf("attn agent msg exited %d: %s%s", sent.Code, sent.Stdout, sent.Stderr)
