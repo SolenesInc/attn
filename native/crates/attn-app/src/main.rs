@@ -102,6 +102,7 @@ fn main() -> ExitCode {
     ));
     let (links, _window) = attn_app::connect(
         &store,
+        attn_app::LastProfile::in_dir(&launch.instance.data_dir),
         |terminals, replies| launch.link_config(terminals, replies, performance),
         frames,
         move || waker.wake(),

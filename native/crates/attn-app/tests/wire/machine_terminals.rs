@@ -104,6 +104,61 @@ fn start(answering: bool) -> (World, Arc<AtomicBool>) {
     )
 }
 
+/// A folder of the app's data where an earlier launch, while the home answered with `state`,
+/// was scoped to the home's profile.
+fn launched_with_the_home(state: InitialStateMessage) -> tempfile::TempDir {
+    let dir = tempfile::tempdir().expect("a folder for the app's data");
+    let earlier =
+        World::start_with_data_dir(Daemon::scripted().state(state), dir.path().to_path_buf());
+    drop(earlier);
+    dir
+}
+
+/// The app launched before the home answers, on this machine whose daemon holds `here`, after
+/// a launch the home scoped to its profile in `state`.
+fn start_cold(
+    state: InitialStateMessage,
+    here: InitialStateMessage,
+) -> (World, Arc<AtomicBool>, tempfile::TempDir) {
+    let dir = launched_with_the_home(state.clone());
+    let answering = Arc::new(AtomicBool::new(false));
+    let home = Daemon::scripted();
+    let answers = answering.clone();
+    home.on("client_hello", move |_| {
+        if answers.load(Ordering::SeqCst) {
+            message(state.clone())
+        } else {
+            json!({"event": "home_unreachable", "home": "oma", "state": "dialing"})
+        }
+    });
+    let laptop = Daemon::of_this_machine(&home).state(here);
+    let world = World::start_relaying_in(
+        home.relaying_to(HERE, "oma"),
+        laptop,
+        WIDE_ENOUGH_FOR_BOTH,
+        dir.path().to_path_buf(),
+    );
+    (world, answering, dir)
+}
+
+fn laptop_state(sessions: Vec<Session>, terminals: &[(&str, &str)]) -> InitialStateMessage {
+    InitialStateMessage {
+        protocol_version: Some(PROTOCOL_VERSION.into()),
+        daemon_instance_id: Some("laptop-daemon".into()),
+        sessions: Some(sessions),
+        terminal_bindings: Some(
+            terminals
+                .iter()
+                .map(|(session, terminal)| TerminalBinding {
+                    session_id: (*session).into(),
+                    terminal_id: (*terminal).into(),
+                })
+                .collect(),
+        ),
+        ..InitialStateMessage::new()
+    }
+}
+
 fn machine(world: &World) -> &Daemon {
     world
         .machine
@@ -266,7 +321,10 @@ fn when_the_home_is_lost_this_machines_terminals_stay_live_and_the_homes_wait() 
 
 #[test]
 fn before_the_home_answers_this_machines_terminals_are_live_in_one_row_the_home_replaces() {
-    let (mut world, answering) = start(false);
+    let (mut world, answering, _dir) = start_cold(
+        home_state(),
+        laptop_state(vec![shell("here", None)], &[("here", "rl")]),
+    );
 
     let band = world
         .screen()
@@ -519,21 +577,10 @@ fn focus_right_twice_and_type(world: &mut World) {
 #[test]
 fn while_the_home_is_away_the_keyboard_moves_between_this_machines_terminals_here() {
     for mid_session in [false, true] {
-        let answering = Arc::new(AtomicBool::new(mid_session));
         let (state, here) = three_here();
-        let home = Daemon::scripted();
-        let answers = answering.clone();
-        home.on("client_hello", move |_| {
-            if answers.load(Ordering::SeqCst) {
-                message(state.clone())
-            } else {
-                json!({"event": "home_unreachable", "home": "oma", "state": "dialing"})
-            }
-        });
-        let laptop = Daemon::of_this_machine(&home).state(here);
-        let mut world =
-            World::start_relaying(home.relaying_to(HERE, "oma"), laptop, WIDE_ENOUGH_FOR_BOTH);
+        let (mut world, answering, _dir) = start_cold(state, here);
         if mid_session {
+            reconnect_home(&mut world, &answering, true);
             world.open_desktop();
             reconnect_home(&mut world, &answering, false);
         }
@@ -863,4 +910,47 @@ fn a_peek_at_this_machines_shelved_agent_reads_and_replies_on_its_own_daemon() {
         "a reply this machine's dropped link never answered says so:\n{}",
         world.screen()
     );
+}
+
+#[test]
+fn before_the_home_answers_the_row_shows_only_the_terminals_of_the_profile_the_home_last_scoped_this_app_to()
+ {
+    let in_profile = |id: &str, profile: &str| Session {
+        profile_id: profile.into(),
+        ..shell(id, None)
+    };
+    let here = laptop_state(
+        vec![in_profile("here", "work"), in_profile("elsewhere", "play")],
+        &[("here", "rl"), ("elsewhere", "rp")],
+    );
+    let (world, _answering, _dir) = start_cold(home_state(), here.clone());
+    assert_eq!(
+        (tiles(&world, "rl"), tiles(&world, "rp")),
+        (1, 0),
+        "only work's terminal shows:\n{}",
+        world.screen()
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.session.elsewhere"))
+            .is_none(),
+        "{}",
+        world.screen()
+    );
+    assert_eq!(ids(machine(&world), "attach_session"), ["rl"]);
+
+    let home = home(Arc::new(AtomicBool::new(false)));
+    let laptop = Daemon::of_this_machine(&home).state(here);
+    let first = World::start_relaying(home.relaying_to(HERE, "oma"), laptop, WIDE_ENOUGH_FOR_BOTH);
+    assert!(
+        first
+            .screen()
+            .find(Target::key("connection.home-unreachable"))
+            .is_some()
+            && first.screen().find(Target::key("sidebar")).is_none(),
+        "with no profile known, a first launch shows no terminal:\n{}",
+        first.screen()
+    );
+    assert!(machine(&first).sent_of("attach_session").is_empty());
 }

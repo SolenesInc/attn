@@ -25,9 +25,12 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let store = Store::default();
     let (host, inbox) = Headless::<State>::new();
     let (wake, updates) = (host.updates(), host.updates());
+    let config = link_config()?;
+    let data_dir = std::env::var("ATTN_DATA_DIR").map_err(|e| e.to_string())?;
     let (link, _window) = crate::connect(
         &store,
-        link_config()?,
+        crate::LastProfile::in_dir(std::path::Path::new(&data_dir)),
+        config,
         host.frames().clone(),
         move || {
             let _ = wake.send(Work::Update(Box::new(|_, _| {})));

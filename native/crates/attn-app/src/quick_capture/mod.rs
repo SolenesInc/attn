@@ -5,7 +5,7 @@
 
 mod attach;
 pub mod automation;
-mod draft;
+pub(crate) mod draft;
 mod history;
 #[cfg(target_os = "macos")]
 pub mod mac;

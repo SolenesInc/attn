@@ -162,6 +162,7 @@ impl TileRuntime {
                 attn_app::ReplyInbox::default(),
                 wall,
                 String::new(),
+                attn_app::LastProfile::default(),
                 move |update| {
                     inbox.lock().unwrap().push(update);
                     pulse.beat();

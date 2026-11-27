@@ -110,10 +110,11 @@ the home's name. The machine's terminals still take typing, and you can move
 between them; a popped-out one keeps its window. The home's tiles keep their
 last screen and say typing is not sent, and the home's popped-out tiles hide. If the app starts
 while the home is unreachable, it shows **Can't reach** with the home's name and
-the reason. When the machine has terminals of its own, they show live in one
-row, and the sidebar says what waits for the home. Until the home answers you
-can type in that row, but you can't split, move or close its tiles. Without
-terminals of its own, the app shows only **Can't reach**. Either way, the app
+the reason. When the machine has terminals of its own in the profile the app
+last showed, they show live in one row, and the sidebar says what waits for the
+home. Until the home answers you can type in that row, but you can't split,
+move or close its tiles. Without such terminals, or on the app's first launch
+with this home, the app shows only **Can't reach**. Either way, the app
 connects by itself when the home answers, and the home's desktops replace the
 row, with each terminal once. Press **R** or click **Retry** to dial at once.
 

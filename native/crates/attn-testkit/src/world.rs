@@ -231,7 +231,33 @@ impl World {
     /// The app on a machine whose daemon, `daemon`, relays it to a home elsewhere
     /// (`Daemon::relaying_to`), with `machine` serving the terminals that run on this machine.
     pub fn start_relaying(daemon: Daemon, machine: Daemon, size: (f32, f32)) -> World {
-        let mut world = World::start_sized(daemon.serving_machine(&machine), size);
+        World::relaying(daemon, machine, size, None)
+    }
+
+    /// [`World::start_relaying`] keeping the app's data under `data_dir`, so it starts with what
+    /// an earlier world on the same folder left there.
+    pub fn start_relaying_in(
+        daemon: Daemon,
+        machine: Daemon,
+        size: (f32, f32),
+        data_dir: std::path::PathBuf,
+    ) -> World {
+        World::relaying(daemon, machine, size, Some(data_dir))
+    }
+
+    fn relaying(
+        daemon: Daemon,
+        machine: Daemon,
+        size: (f32, f32),
+        data_dir: Option<std::path::PathBuf>,
+    ) -> World {
+        let mut world = World::start_with(
+            daemon.serving_machine(&machine),
+            size,
+            attn_app::whats_new::seen_prefs(),
+            INSTANCE,
+            data_dir,
+        );
         world.machine = Some(machine);
         world.settle();
         world
@@ -307,6 +333,7 @@ impl World {
             downloads: Some(files.path().join("Downloads")),
             home: Some(files.path().join("home")),
         });
+        let data_dir = custom_data_dir.unwrap_or_else(|| files.path().join("data"));
         let store = Store::default();
         let pulse = daemon.pulse();
         let inbox: Arc<Mutex<Vec<attn_app::Update>>> = Arc::default();
@@ -375,6 +402,7 @@ impl World {
                 replies.clone(),
                 wall_clock(&wall_ms),
                 instance.into(),
+                attn_app::LastProfile::in_dir(&data_dir),
                 move |update| {
                     inbox.lock().unwrap().push(update);
                     pulse.beat();
@@ -404,7 +432,6 @@ impl World {
             });
             runtime.update(move |state, _| state.open_tile_windows(opener, main));
         }
-        let data_dir = custom_data_dir.unwrap_or_else(|| files.path().join("data"));
         let capture = crate::capture::CaptureRuntime::start(
             &store,
             link.commands(),

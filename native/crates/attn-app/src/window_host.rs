@@ -212,6 +212,7 @@ impl crate::desktop::Opener for NativeOpener {
             crate::ReplyInbox::default(),
             self.wall.clone(),
             String::new(),
+            crate::LastProfile::default(),
             {
                 let handle = handle.clone();
                 move |update| handle.update(update)

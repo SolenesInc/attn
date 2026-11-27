@@ -1,10 +1,11 @@
 //! The window before the home has ever answered, on a machine whose daemon relays the app to a
-//! home elsewhere: this machine's own terminals, live in one row, which the app derives from
-//! its link to this machine's daemon. The row is no desktop: the app keeps no layout for it and
-//! sends nothing the home owns while it shows, and the home's desktops replace it once the home
-//! answers.
+//! home elsewhere: this machine's own terminals of the profile the home last scoped this app to,
+//! live in one row, which the app derives from its link to this machine's daemon. The row is no
+//! desktop: the app keeps no layout for it and sends nothing the home owns while it shows, and
+//! the home's desktops replace it once the home answers. With no profile known, it shows none.
 
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use attn_client::{Desktop, Facts};
 use attn_protocol::{DesktopPane, Profile};
@@ -12,33 +13,78 @@ use attn_protocol::{DesktopPane, Profile};
 /// The id the row goes by, which no desktop of the home has.
 pub(crate) const ROW: &str = "";
 
-/// Whether the window shows this machine's row: the home is unreachable and has not answered
-/// yet, and this machine's own daemon has, with a terminal to show.
+const LAST_PROFILE: &str = "last-profile.json";
+
+/// The profile the home last scoped this app to, kept in `last-profile.json` in the app's data
+/// folder, so a launch before the home answers shows that profile's terminals and no other's.
+#[derive(Clone, Default)]
+pub struct LastProfile(Option<Arc<Mutex<Kept>>>);
+
+struct Kept {
+    path: PathBuf,
+    id: Option<String>,
+}
+
+impl LastProfile {
+    /// The profile kept in `data_dir`, as an earlier run left it.
+    pub fn in_dir(data_dir: &Path) -> LastProfile {
+        let path = data_dir.join(LAST_PROFILE);
+        let id = std::fs::read(&path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<String>(&bytes).ok())
+            .filter(|id| !id.is_empty());
+        LastProfile(Some(Arc::new(Mutex::new(Kept { path, id }))))
+    }
+
+    /// Keeps the profile the home scoped this app to in `facts`, and returns the one kept.
+    fn follow(&self, facts: &Facts) -> Option<String> {
+        let mut kept = self.0.as_ref()?.lock().unwrap();
+        let selected = &facts.profiles.selected;
+        let scoped = facts.connection == attn_client::Connection::Connected && !selected.is_empty();
+        if scoped && kept.id.as_ref() != Some(selected) {
+            let written = serde_json::to_vec(selected)
+                .map_err(|e| e.to_string())
+                .and_then(|bytes| crate::quick_capture::draft::commit(&kept.path, &bytes));
+            if let Err(why) = written {
+                eprintln!(
+                    "attn-app: the profile this app shows was not kept for its next launch: {why}"
+                );
+            }
+            kept.id = Some(selected.clone());
+        }
+        kept.id.clone()
+    }
+}
+
+/// Whether the window shows this machine's row.
 pub(crate) fn shows(facts: &Facts) -> bool {
-    let machine = &facts.machine;
+    awaits_home(facts) && facts.desktops.len() == 1 && facts.desktops[0].id == ROW
+}
+
+/// The home is unreachable and has not answered yet, and this machine's own daemon has.
+fn awaits_home(facts: &Facts) -> bool {
     matches!(
         facts.connection,
         attn_client::Connection::HomeUnreachable(_)
     ) && facts.daemon_instance.is_empty()
-        && machine.home.is_some()
-        && machine.connected
-        && machine
-            .sessions
-            .iter()
-            .any(|s| machine.terminals.iter().any(|b| b.session_id == s.id))
+        && facts.machine.home.is_some()
+        && facts.machine.connected
 }
 
-/// What the window reads while it shows this machine's row: the facts, with this machine's
-/// sessions in place of the home's, and the row as the one desktop.
-pub(crate) fn view(mut facts: Facts) -> Facts {
-    if !shows(&facts) {
+/// What the window reads: the facts, and while the home has not answered, this machine's
+/// sessions of the profile `last` keeps in place of the home's, with the row as the one desktop,
+/// when one of them has a terminal.
+pub(crate) fn view(mut facts: Facts, last: &LastProfile) -> Facts {
+    let profile = last.follow(&facts);
+    let Some(profile) = profile.filter(|_| awaits_home(&facts)) else {
         return facts;
-    }
+    };
     let machine = facts.machine.clone();
     let here = Some(machine.id.clone());
     let sessions: Vec<_> = machine
         .sessions
         .iter()
+        .filter(|session| session.profile_id == profile)
         .cloned()
         .map(|mut session| {
             session.host.clone_from(&here);
@@ -69,6 +115,9 @@ pub(crate) fn view(mut facts: Facts) -> Facts {
             })
         })
         .collect();
+    if panes.is_empty() {
+        return facts;
+    }
     let tree = row(panes.iter().map(|p| p.pane_id.as_str()));
     let desktop = attn_protocol::Desktop {
         id: ROW.to_owned(),

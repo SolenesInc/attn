@@ -85,6 +85,7 @@ impl App {
         let address = daemon.address().to_string();
         let (link, window) = attn_app::connect(
             &Store::default(),
+            attn_app::LastProfile::default(),
             |terminals, replies| LinkConfig {
                 daemon: address,
                 reach: attn_client::Reach::Home,

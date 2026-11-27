@@ -79,6 +79,7 @@ use rune::{AppSpec, MenuItem, Platform, Shortcut, Titlebar, Tx};
 
 pub use action::{Action, Category};
 pub use calendar::{HourCycle, use_hour_cycle};
+pub use cold::LastProfile;
 pub use deep_link::open_link;
 pub use dispatch::dispatch;
 pub use editor::{EditorLaunch, record_editor_launches, take_editor_launches};
@@ -222,7 +223,9 @@ pub(crate) const PICTURE_SCALE: f32 = 2.0;
 /// Hands the window every change to a slice it reads, through `deliver`: `AppHandle::update`
 /// in the app, the world's inbox in a wire test. The window sends its commands on `daemon` and
 /// takes what the link hears about terminals from `terminals`, and answers to its requests from
-/// `replies`.
+/// `replies`. Before the home answers, the window shows this machine's terminals of the profile
+/// `last_profile` keeps.
+#[allow(clippy::too_many_arguments)]
 pub fn bind(
     store: &Store,
     (daemon, machine): (Commands, Commands),
@@ -230,6 +233,7 @@ pub fn bind(
     replies: ReplyInbox,
     wall: WallClock,
     instance: String,
+    last_profile: LastProfile,
     deliver: impl Fn(Update) + Send + Sync + 'static,
 ) -> Subscription {
     let deliver = Arc::new(deliver);
@@ -253,7 +257,7 @@ pub fn bind(
         state.requests.inbox = replies;
     }));
     store.subscribe(READS, move |facts, changed| {
-        let facts = cold::view(facts.clone());
+        let facts = cold::view(facts.clone(), &last_profile);
         let keymap = changed.intersects(Slices::SETTINGS).then(|| {
             let setting = facts.settings.get(keymap::SETTING).map(String::as_str);
             Arc::new(Keymap::from_setting(setting, Platform::current()))
@@ -358,6 +362,7 @@ pub(crate) fn follow_terminals(state: &mut State, tx: &mut Tx) {
 /// even in a covered window, which draws no frame.
 pub fn connect(
     store: &Store,
+    last_profile: LastProfile,
     config: impl FnOnce(TerminalSink, ReplySink) -> LinkConfig,
     changed: Pulse,
     wake: impl Fn() + Send + Sync + 'static,
@@ -387,6 +392,7 @@ pub fn connect(
         replies.clone(),
         wall,
         instance,
+        last_profile,
         move |update| {
             let changed = changed.clone();
             deliver(Box::new(move |state, tx| {
