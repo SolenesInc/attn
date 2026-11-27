@@ -23,6 +23,7 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
+	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
@@ -435,13 +436,20 @@ func (d *Daemon) typeAtFirstPrompt(id protocol.SessionID, text string) {
 	})
 }
 
-// A shell turns bracketed paste on at most 0.3 ms after its first prompt mark: bash 5.3 0.29 ms and zsh 5.9
-// 0.11 ms on ai-sandbox, zsh 5.9 0.05 ms in the macOS VM (30 runs each, 2026-11-27).
-const bracketedPasteGrace = 500 * time.Millisecond
+// A shell turns bracketed paste on after its first prompt mark, once its prompt is drawn: at most 0.29 ms later
+// for bash 5.3 and 0.11 ms for zsh 5.9 on ai-sandbox, 0.05 ms for zsh 5.9 in the macOS VM, 17 ms behind a git
+// status prompt and 44 ms behind a starship prompt in attn's checkout (slowest of 15 or 30 runs, 2026-11-27).
+// Starship gives a slow prompt module up to 500 ms (its command_timeout).
+const (
+	bracketedPasteGrace                     = 2 * time.Second
+	bracketedPasteGraceTimer stepclock.Name = "bracketed-paste-grace"
+)
 
 func (d *Daemon) shellReadsPastes(ctx context.Context, terminal protocol.TerminalID) bool {
-	ctx, cancel := context.WithTimeout(ctx, bracketedPasteGrace)
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	grace := d.clock.AfterFunc(bracketedPasteGraceTimer, bracketedPasteGrace, cancel)
+	defer grace.Stop()
 	result, err := Call[protocol.TerminalWaitResult](ctx, d.router(), protocol.TerminalWaitBlockMessage{Cmd: protocol.CmdTerminalWaitBlock, TerminalID: terminal, Until: protocol.TerminalWaitUntilBracketedPaste})
 	return err == nil && !protocol.Deref(result.Exited)
 }

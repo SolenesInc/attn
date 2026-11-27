@@ -162,8 +162,9 @@ as in ``` ```sh studio:~/shop ```; a block that names none runs where the agent
 works. The shell opens in a tab of the panel with the command typed and not run,
 and takes the keyboard: Enter runs the command, and Cmd+Shift+R (Ctrl+Alt+R on
 Linux) gives the keyboard back to the question. A command of several lines
-keeps its lines in a shell that takes bracketed pastes, as bash, zsh and fish do
-by default; another shell gets it on one line. While a command still runs,
+keeps its lines in a shell that has bracketed paste on, as zsh, fish and bash 5.1
+or later do by default. In any other shell its line breaks are removed and the
+lines run together, so read the command before you press Enter. While a command still runs,
 **Send** reads **Send and stop**, because the shell ends with the answer, as
 it does when you close its tab.
 **Move to desktop** keeps the shell: it moves to a tile beside the agent that

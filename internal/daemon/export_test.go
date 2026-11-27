@@ -95,6 +95,11 @@ func (w *WireDaemon) UseOutpostSSH(remote outpostRemote) {
 }
 
 const BridgeCall = bridgeCall
+
+const (
+	BracketedPasteGrace      = bracketedPasteGrace
+	BracketedPasteGraceTimer = bracketedPasteGraceTimer
+)
 const BridgeCallRecovery = bridgeCallRecovery
 const BridgeCallCopy = bridgeCallCopy
 
