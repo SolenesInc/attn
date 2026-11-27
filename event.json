@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Hover cannot reclaim local terminal resize ownership during an outage",
+  "at": "2026-11-27T07:12:29.636Z",
+  "detail": "After another client takes the size of a local terminal, hovering the app tile sends pointer activity on the home link, so the local daemon never learns that the app is active. Send terminal pointer activity on the link that carries its resize traffic. The source plot already assigned this follow-up, and the rolling review independently confirmed it at 54d9c6647.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/terminal/mod.rs",
+    "line": 1289
+  },
+  "culprit": "dcd581bef5023ea40d013be45bc5febf5685ebc1"
+}
