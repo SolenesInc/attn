@@ -1,0 +1,8 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "fix: TestRefusalsNameCommandsByMention",
+  "at": "2026-11-27T06:29:23.452Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45950421637",
+  "repairs": "71fd9530e"
+}
