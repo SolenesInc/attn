@@ -1,0 +1,8 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "fix: test git wrapper ETXTBSY read as delegation outside Git",
+  "at": "2026-11-27T09:28:12.024Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45964125852",
+  "repairs": "8c0e3d441"
+}
