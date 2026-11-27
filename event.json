@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Home move replay can remove a newly installed root from live state",
+  "at": "2026-11-27T14:01:59.977Z",
+  "detail": "A target with no prior copy of a root can install the incoming root, stop before the applied checkpoint, then move its only copy out of live state on restart. An isolated probe reproduced the missing live root and intact backup. Use the pre-move displacement record to identify roots belonging to the target.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/homemove/homemove.go",
+    "line": 249
+  },
+  "culprit": "e2f68cbf2686a5c5f4748386901b6412361bb28d"
+}
