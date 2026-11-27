@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "206459c26ea02278ef915f938b7ff2acf5dcb3ac",
+  "head": "b6978240b51f4605d7272ef9bbadd85ef281f433",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 544.214,
+    "ranOn": "9fbd1cc208a7439dae22c8140a8f3ece4f1214d9"
+  },
+  "recordings": [
+    {
+      "sha256": "8183e2bf7fcba2b85c17c8e1becc9239d7993aae29791c6e0d71ff342b3ca97d",
+      "ext": "png",
+      "bytes": 113666
+    },
+    {
+      "sha256": "bff38f2ae0ed950555a82d3484376f61a69ae4ca7472e4ac5ea62c18a234157b",
+      "ext": "png",
+      "bytes": 115672
+    },
+    {
+      "sha256": "1a91749d8a67d5d8762952f33eba07e5b4c3ef1c802fb76839acb4cbb4a5ab72",
+      "ext": "png",
+      "bytes": 211713
+    },
+    {
+      "sha256": "ed85c6c0ae1c596535d76de4cbf2973b7d70f63c0fbbd34e69c8266139943341",
+      "ext": "png",
+      "bytes": 210849
+    },
+    {
+      "sha256": "6b5e4d4c836277b2e3c188dd62d57504b989f90fd5ecec6b124c1c96ca618e1c",
+      "ext": "png",
+      "bytes": 205574
+    },
+    {
+      "sha256": "0ee08149d33c6594e0148294ff995a639f08b343c1ccbcfe305f1ca58128c2dd",
+      "ext": "png",
+      "bytes": 204257
+    }
+  ]
+}
