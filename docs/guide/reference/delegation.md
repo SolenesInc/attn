@@ -157,9 +157,10 @@ agent's id still opens its card.
 
 A shell command in an ask, a code block in `sh`, `bash`, `zsh`, `fish` or
 `shell`, shows the machine and folder it runs in, and **Open in terminal** (`t`
-for the first) under it. The agent names the place after the block's language,
-as in ``` ```sh studio:~/shop ```; a block that names none runs where the agent
-works. The shell opens in a tab of the panel with the command typed and not run,
+for the first) under it. The agent writes the place's
+[machine path](using-outposts.md#start-on-an-outpost-from-the-launcher) after
+the block's language, as in ```` ```sh studio:~/shop ````; a block that names
+none runs where the agent works. The shell opens in a tab of the panel with the command typed and not run,
 and takes the keyboard: Enter runs the command, and Cmd+Shift+R (Ctrl+Alt+R on
 Linux) gives the keyboard back to the question. A command of several lines
 keeps its lines in a shell that has bracketed paste on, as zsh, fish and bash 5.1

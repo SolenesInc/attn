@@ -18,6 +18,8 @@ Put visuals in the ask's body or in a question's context lines. The subject, a q
 
 Link a file with `[name](path)`. A relative path resolves where the ask's images do, and an absolute or `~` path is on your own machine. To link a file on another machine, write its machine path the way ssh does, `<machine>:<path>`: `[plan](studio:~/notes/plan.md)`, where `home` names the home. attn refuses a machine it does not know, and names the ones it does.
 
+Put a command the user may want to run, such as one whose output the answer rests on, in a fenced `sh` block. When it must run on another machine or in another folder, write that place's machine path after the language: ```` ```sh studio:~/shop ````. A block without one runs where you work. attn opens the command beside the question in a terminal there, typed but not run.
+
 After you ask, carry on with work that does not depend on the answer. When none is left, end your turn. Do not wait or poll. Your session stays open, so the user can find you, talk to you and run commands in your terminal: while any of your asks is open, attn refuses a standby that would close it, and a close of your own session that would leave the answer with no agent. When the user answers, attn types the answer, approvals included, as their message into the conversation of whoever tends the ask's seed by then, or into this one for an ask about no seed.
 
 ## Asking

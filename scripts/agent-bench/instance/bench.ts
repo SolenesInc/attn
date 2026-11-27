@@ -3,7 +3,7 @@ import { spawn, spawnSync } from "node:child_process"
 import { appendFileSync, constants, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
-import { ASK_TASKS } from "./asks.ts"
+import { ASK_TASKS, OUTPOST_ASK_TASKS } from "./asks.ts"
 import { GRID_PROBES, PROBES } from "./probes.ts"
 import { HARDER_TASKS, SCRIPT_TASKS, UNGROUPED_TASKS, TASKS } from "./tasks.ts"
 import { attnCalls, blockedRuns, type Call, type Check, claudeRequests, cliRuns, codexRequests, codexRuns, isCommand, metrics, type Metrics, type Records, type Requests, retryWaitMs, run, shellRuns, takesProfile, type Task, toolOutcomes, unrecorded, type World } from "./world.ts"
@@ -52,7 +52,7 @@ if (outpostToolHome && !/^\/[\w./-]+$/.test(outpostToolHome)) throw new Error(`-
 const parallel = Number(arg("parallel") ?? 2)
 const keep = flag("keep")
 
-const ALL = [...TASKS, ...HARDER_TASKS, ...UNGROUPED_TASKS, ...SCRIPT_TASKS, ...ASK_TASKS, ...PROBES]
+const ALL = [...TASKS, ...HARDER_TASKS, ...UNGROUPED_TASKS, ...SCRIPT_TASKS, ...ASK_TASKS, ...OUTPOST_ASK_TASKS, ...PROBES]
 const byId = (ids: string[]) => ids.map((id) => ALL.find((t) => t.id === id)!)
 /** The thirteen tasks of c6-final.md on the plot s-ct56cj, which the four tools are proven on. */
 const C6_FINAL = byId(["progress", "ask", "msg-delegate", "coding", "seed-lifecycle", "plot-order", "open-ask-refusal", "coding-tests", "read-agent", "close-self", "add-crew", "chief-journal", "present-change"])
@@ -97,6 +97,9 @@ for (const place of places)
   }
 const homeOnly = tasks.filter((t) => t.stage && !t.stagesOnOutposts)
 if (cells.some((c) => c.place.ssh) && homeOnly.length > 0) throw new Error(`${homeOnly.map((t) => t.id).join(", ")} stage a folder on this machine, so they run on the home only`)
+for (const t of tasks)
+  if (t.outpost && !outposts.some((o) => o.name === t.outpost)) throw new Error(`${t.id} names the outpost ${t.outpost} to the agent: pass --outpost ${t.outpost}=<ssh destination>`)
+const runsAt = (task: Task, cell: Cell) => !(task.outpost && cell.place.ssh)
 const codexDelegates = (onOutpost: boolean) => tasks.some((t) => t.id === "msg-delegate") && cells.some((c) => c.harness.agent === "codex" && Boolean(c.place.ssh) === onOutpost)
 if ((!toolHome && codexDelegates(false)) || (!outpostToolHome && codexDelegates(true)))
   throw new Error("msg-delegate saves its delegate's folder as trusted in the Codex home, so with codex it runs only with --tool-home <dir>, and on an outpost with --outpost-tool-home <dir>, never on your own ~/.codex")
@@ -787,7 +790,7 @@ try {
     await startDaemon(codeMode)
     for (const [index, task] of tasks.entries()) {
       for (const name of taskSettings) setting(name, task.settings?.[name] ?? "")
-      for (const cell of index % 2 ? [...group].reverse() : group) {
+      for (const cell of (index % 2 ? [...group].reverse() : group).filter((c) => runsAt(task, c))) {
         setting("agent_tools_enabled", cell.tools === "on" ? "true" : "false")
         setting(`default_model_${cell.harness.agent}`, cell.harness.model)
         setting(`default_effort_${cell.harness.agent}`, cell.harness.effort)

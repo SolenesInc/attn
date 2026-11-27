@@ -235,6 +235,35 @@ const askSvgGuard: Task = {
     }),
 }
 
+/** The outpost `ask-command` needs: the bench run adds it with `--outpost orders=<ssh destination>`. */
+const COMMAND_MACHINE = "orders"
+const SHELL_FENCES = new Set(["sh", "bash", "zsh", "fish", "shell"])
+
+const askCommand: Task = {
+  id: "ask-command",
+  title: "Put a choice that rests on a command the user runs on another machine to the user",
+  outpost: COMMAND_MACHINE,
+  setup: () =>
+    `The nightly export on the machine ${COMMAND_MACHINE} fails with "no space left on device" in ~/exports. We can prune exports older than 30 days or grow the volume. The user has to see what fills ~/exports on ${COMMAND_MACHINE} before choosing, and you cannot reach that machine. Get their decision.`,
+  check: (w) =>
+    judge(w, (asks) => {
+      const problems: string[] = []
+      const addressed = asks.flatMap((a) =>
+        a.fences.filter((f) => SHELL_FENCES.has(f.lang)).length === 0
+          ? []
+          : ((a.ask as Ask & { references?: { kind: string; text: string }[] }).references ?? []).filter(
+              (r) => r.kind === "command" && r.text.toLowerCase().startsWith(`${COMMAND_MACHINE}:`),
+            ),
+      )
+      if (addressed.length === 0) problems.push(`no shell block addressed to ${COMMAND_MACHINE}`)
+      if (!offers(asks, /prune|delete|older|clean/i, /grow|resize|extend|bigger|volume/i)) problems.push("no question offers both pruning and growing the volume")
+      return problems
+    }),
+}
+
 /** Decisions an agent should put to the user, none of whose prompts names attn, asks or a kind of picture: they measure
  * whether the agent reaches for an ask on its own, and whether it shows the decision with the visual that fits. */
 export const ASK_TASKS: Task[] = [askFlow, askLayout, askTradeoff, askSimpleControl, askSvgGuard]
+
+/** Ask tasks outside the `asks` group and the grid, because they need an outpost. */
+export const OUTPOST_ASK_TASKS: Task[] = [askCommand]

@@ -52,6 +52,8 @@ export type Task = {
   restore?: (attn: (args: string[], stdin?: string) => string) => void
   /** Prepares the agent's folder before the session starts and returns the folder to start it in, when not `dir`. */
   stage?: (dir: string) => string
+  /** An outpost the task names to the agent as another machine: the run must add it with `--outpost`, and the task's cells run on the home only. */
+  outpost?: string
   /** Its staged folder is `dir` and its check reads that folder through `World.sh`, so the bench can copy it to an outpost. */
   stagesOnOutposts?: boolean
   /** Prepares the world with the agent's session already at its prompt, and returns the prompt. */
