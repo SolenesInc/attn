@@ -328,10 +328,11 @@ func (d *Daemon) recordAttentionVerdict(session protocol.SessionID, at time.Time
 	if a.judged == nil {
 		a.judged = map[protocol.SessionID]judgedFacts{}
 	}
-	a.judged[session] = judgedFacts{key: key, subjects: attentionSubjects(facts)}
+	subjects := attentionSubjects(facts)
+	a.judged[session] = judgedFacts{key: key, subjects: subjects}
 	a.mu.Unlock()
 	encoded, _ := json.Marshal(facts)
-	d.appendAttentionLog(attention.LogEntry{Kind: attention.LogVerdict, At: at, Session: session, Checkpoint: facts.Checkpoint, Key: key,
+	d.appendAttentionLog(attention.LogEntry{Kind: attention.LogVerdict, At: at, Session: session, Checkpoint: facts.Checkpoint, Key: key, Subjects: subjects,
 		Verdict: verdict.Kind, Decider: verdict.Decider, Label: verdict.Label, Reason: verdict.Reason, Failure: verdict.Failure, LatencyMs: verdict.Latency.Milliseconds(), Facts: encoded})
 	d.logf("attention: session=%s checkpoint=%s %s", session, facts.Checkpoint, verdict)
 	followUp := &attentionFollowUp{verdictAt: at, checkpoint: facts.Checkpoint, verdict: verdict}

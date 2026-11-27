@@ -41,39 +41,6 @@ func (d *Daemon) appendAttentionLog(entry attention.LogEntry) {
 	}
 }
 
-type attentionLoggedFacts struct {
-	Stake *struct {
-		ID string `json:"id"`
-	} `json:"stake"`
-	Tended []struct {
-		ID string `json:"id"`
-	} `json:"tended"`
-	Wakes []struct {
-		Seed string `json:"seed"`
-	} `json:"wakes"`
-	Delegates []struct {
-		Session protocol.SessionID `json:"session"`
-		Stake   string             `json:"stake"`
-	} `json:"delegates"`
-}
-
-func (f attentionLoggedFacts) subjects() []string {
-	facts := attention.Facts{}
-	if f.Stake != nil {
-		facts.Stake = &attention.Seed{ID: f.Stake.ID}
-	}
-	for _, seed := range f.Tended {
-		facts.Tended = append(facts.Tended, attention.Seed{ID: seed.ID})
-	}
-	for _, wake := range f.Wakes {
-		facts.Wakes = append(facts.Wakes, attention.Wake{Seed: wake.Seed})
-	}
-	for _, delegate := range f.Delegates {
-		facts.Delegates = append(facts.Delegates, attention.Delegate{Session: delegate.Session, Stake: delegate.Stake})
-	}
-	return attentionSubjects(facts)
-}
-
 func (d *Daemon) loadAttentionLog() {
 	path := d.attentionLogPath()
 	if info, err := os.Stat(path); err == nil && info.Size() > attentionLogTripwire {
@@ -106,9 +73,7 @@ func (d *Daemon) loadAttentionLog() {
 		}
 		switch entry.Kind {
 		case attention.LogVerdict:
-			var facts attentionLoggedFacts
-			_ = json.Unmarshal(entry.Facts, &facts)
-			judged[entry.Session] = judgedFacts{key: entry.Key, subjects: facts.subjects()}
+			judged[entry.Session] = judgedFacts{key: entry.Key, subjects: entry.Subjects}
 			pending[verdictID{entry.Session, entry.At.UTC()}] = true
 		case attention.LogFollowUp:
 			if entry.VerdictAt != nil {

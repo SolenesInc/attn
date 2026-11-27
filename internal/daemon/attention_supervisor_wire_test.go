@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -158,7 +159,8 @@ func TestAQuietStopIsJudgedOnceFifteenMinutesLaterAndOpensNothing(t *testing.T) 
 	}
 	w.advance(time.Minute)
 	prompts := judgedSoFar(judged)
-	if len(prompts) != 1 || !strings.Contains(prompts[0], "I fixed it and landed it.") || !strings.Contains(prompts[0], `"checkpoint": "stop"`) {
+	if len(prompts) != 1 || !strings.Contains(prompts[0], "I fixed it and landed it.") || !strings.Contains(prompts[0], `"checkpoint": "stop"`) ||
+		!strings.Contains(prompts[0], `"background": []`) {
 		t.Fatalf("after 15 minutes the supervisor judged %q, want the stop once with its last message", prompts)
 	}
 	if after := queriedSession(t, w.Client(), session); protocol.Deref(after.TurnOwed) {
@@ -322,4 +324,39 @@ func TestBackgroundFactsAreUnknownWhenTheHarnessDoesNotSay(t *testing.T) {
 	if _, raw := attentionFactsOf(t, cli, delegate); !strings.Contains(raw, `"background":"unknown"`) {
 		t.Errorf("a Codex agent's facts are %s, want its background unknown", raw)
 	}
+}
+
+func TestARestartDoesNotJudgeAReportedStopAgain(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.TrustedApp(), w.Client()
+		setSetting(t, app, "queue_mode_enabled", "true")
+		registerSessions(t, w, cli, "peer")
+		claude := w.bubbleClaude(t, app, "shop")
+		if booted := queriedSession(t, cli, claude.id); protocol.Deref(booted.TurnOwed) {
+			settleFromApp(app, booted)
+		}
+		sendAgentMessage(t, cli, "peer", claude.id, "the review is in")
+		w.advance(sessionmonitor.QuietWindow)
+		pasted := claude.term.Pasted()
+		if len(pasted) != 1 {
+			t.Fatalf("attn pasted %q, want one doorbell", pasted)
+		}
+		claude.take(pasted[0])
+		readInbox(t, cli, claude.id, 0)
+		claude.reply("Read the review; nothing to change. <!-- attn:state=idle -->")
+		if stopped := queriedSession(t, cli, claude.id); protocol.Deref(stopped.TurnOwed) {
+			t.Fatalf("the doorbell's run opened a turn: %+v", stopped)
+		}
+		w.advance(attentionStopWait)
+		logged := decisionLog(t, w, claude.id)
+		if len(logged) != 1 || !strings.Contains(string(logged[0].Facts), `"background":[]`) {
+			t.Fatalf("15 minutes after the quiet stop the decision log holds %+v, want one verdict whose facts say nothing runs", logged)
+		}
+		w.restart()
+		claude.cli = w.Client()
+		w.advance(attentionStopWait)
+		if logged := decisionLog(t, w, claude.id); len(logged) != 1 {
+			t.Errorf("after a restart the decision log holds %d verdicts for the same stop, want 1: %+v", len(logged), logged)
+		}
+	})
 }

@@ -64,10 +64,6 @@ func (b Background) MarshalJSON() ([]byte, error) {
 	return json.Marshal(append([]Task{}, b.Tasks...))
 }
 
-func (b Background) Running() bool {
-	return b.Reported && len(b.Tasks) > 0
-}
-
 func (b Background) None() bool {
 	return b.Reported && len(b.Tasks) == 0
 }
@@ -77,14 +73,12 @@ func (f Facts) Fingerprint() string {
 	f.InStateFor = 0
 	f.SinceModelRequest = nil
 	f.DaemonDownFor = nil
+	f.RunStartedBy = ""
+	f.Background = Background{}
 	if f.OpenTool != nil {
 		tool := *f.OpenTool
 		tool.OpenFor = 0
 		f.OpenTool = &tool
-	}
-	f.Background.Tasks = slices.Clone(f.Background.Tasks)
-	for i := range f.Background.Tasks {
-		f.Background.Tasks[i].Age = 0
 	}
 	f.Wakes = slices.Clone(f.Wakes)
 	for i := range f.Wakes {

@@ -19,6 +19,7 @@ type LogEntry struct {
 	At         time.Time          `json:"at"`
 	Session    protocol.SessionID `json:"session"`
 	Checkpoint Checkpoint         `json:"checkpoint,omitempty"`
+	Subjects   []string           `json:"subjects,omitempty"`
 	Key        string             `json:"key,omitempty"`
 	Verdict    Kind               `json:"verdict,omitempty"`
 	Decider    string             `json:"decider,omitempty"`
