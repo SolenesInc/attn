@@ -1,0 +1,8 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "fix: TestJoinRefuses armed pause point never reached",
+  "at": "2026-11-27T06:10:15.112Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45947035596",
+  "repairs": "dc932349a"
+}
