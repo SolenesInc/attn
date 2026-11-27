@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "94d0ab684efc982fd5d35df514ce08da6f03d1eb",
+  "head": "8f13b8b0eac402b4e37a1a04f05ac43cdae7aded",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 313.574,
+    "ranOn": "34da121ae5f395aa622a397dfbef4d5b27c16901"
+  },
+  "noMediaReason": "Go-only parser refactor with no visible surface",
+  "recordings": []
+}
