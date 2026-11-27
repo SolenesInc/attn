@@ -307,7 +307,7 @@ actions! {
     ShelfSendToShelf = "shelf.sendToShelf", Panes, "Send tile to the shelf";
     TilePopOut = "tile.popOut", Panes, "Pop out or bring back tile";
     TerminalFind = "terminal.find", Panes, "Find in terminal or document";
-    TerminalLabelIds = "terminal.labelIds", Panes, "Label the ids on screen";
+    TerminalLabelIds = "terminal.labelIds", Panes, "Label ids, links and commands on screen";
 
     MarkdownSendAnnotations = "markdown.sendAnnotations", Markdown, "Send annotations to session";
     TerminalSendAnnotations = "terminal.sendAnnotations", Markdown, "Send terminal annotations to session";

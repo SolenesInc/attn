@@ -649,7 +649,8 @@ fn the_chord_labels_an_asks_sessions_and_seeds_and_a_label_opens_the_card() {
 const PLAN: &str = "plan.md";
 const NOTES: &str = "https://example.com/notes";
 
-/// An ask that names a seed, a file and a web page, and offers two commands.
+/// An ask that names a seed, a file and a web page, and offers two commands, the second in a list
+/// item.
 fn asking_references() -> World {
     let mut asked = ask(
         "a-1",
@@ -659,7 +660,7 @@ fn asking_references() -> World {
         vec![
             prose(&format!(
                 "Read [the plan]({PLAN}) and [the notes]({NOTES}) on {SEED}.\n\n\
-                 ```sh\nmake check\n```\n\n```bash\nls -la\n```\n"
+                 ```sh\nmake check\n```\n\n1. Then list it:\n\n   ```bash\n   ls -la\n   ```\n"
             )),
             question("q1", "one", "Ship it?", &["Yes", "No"]),
         ],

@@ -145,9 +145,9 @@ const SECTIONS: &[Section] = &[
         lines: &[
             line("Find in terminal or document", &[Of(Action::TerminalFind)]),
             noted(
-                "Label the ids on screen",
+                "Label ids, links and commands on screen",
                 &[Of(Action::TerminalLabelIds)],
-                |_| "Hold it, then press a label's key to open its card.".into(),
+                |_| "Hold it, then press a label's key to open what it names.".into(),
             ),
             line("New shell beside", &[Of(Action::TerminalSplitVertical)]),
             line("New shell below", &[Of(Action::TerminalSplitHorizontal)]),
