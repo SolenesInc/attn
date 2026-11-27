@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Linux home move recovery can leave the boot unit disabled",
+  "at": "2026-11-27T14:02:09.682Z",
+  "detail": "Recovery after an interruption between unit installation and enablement checks only for the file. The moved home can resume now and still fail to start at the next boot. Reconcile enablement on recovery without starting a second daemon.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/home_move_unit.go",
+    "line": 83
+  },
+  "culprit": "e2f68cbf2686a5c5f4748386901b6412361bb28d"
+}
