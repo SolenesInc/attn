@@ -22,6 +22,7 @@ Pass `--help` to any script for flags and output fields.
 | Garden push / read | `go run ./scripts/gardenpushperf` / `go run ./scripts/gardenreadperf` | Run in a production-copy instance's env with `-vars http://127.0.0.1:<port>/debug/vars`. |
 | Session facts | `go run ./scripts/sessionfactperf -vars http://127.0.0.1:<port>/debug/vars -n 10` | For before/after, profile `/debug/pprof/profile` and `/debug/pprof/allocs` (`projectSessionStateChanged`); worktree sweeps add idle noise. |
 | Shared PTY host | `bash scripts/measure-pty-host.sh <host-bin> <name>` | See `pty-host/AGENTS.md`. |
+| App over a real link to a remote home | `node app/scripts/real-app-harness/remote-home-traffic.mjs` | Bytes from `scripts/wirecount` as the daemon's ssh ProxyCommand; connect, idle, reconnect, echo under flood, Cmd+P, upload. |
 | Land / CI cost | `scripts/measure-verification-cost.py [--runs 1 land]` | Uses `/tmp/attn-verification-cost.lock`; runs in an isolated scratch clone. |
 
 ## Measuring on a copy of production
