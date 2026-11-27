@@ -1164,15 +1164,110 @@ fn a_move_held_after_its_home_restarted_as_it_committed_offers_retry_and_roll_ba
     assert!(shows(&world, "home-move.roll-back"));
 
     world.daemon.on("home_move", |_| {
+        move_result(json!({"id": "m-1", "side": "from", "step": "committing", "to": "studio", "error": "studio is unreachable", "checks": [], "remaps": []}))
+    });
+    click(&mut world, "home-move.retry");
+    assert_eq!(
+        named(&world, "home-move.text").as_deref(),
+        Some("Move to studio didn’t finish.")
+    );
+    assert_eq!(
+        named(&world, "home-move.why").as_deref(),
+        Some("studio is unreachable"),
+        "a retry that failed says why"
+    );
+
+    world.daemon.on("home_move", |_| {
         move_result(json!({"id": "m-1", "side": "from", "step": "committed", "to": "studio", "checks": [], "remaps": []}))
     });
     click(&mut world, "home-move.retry");
     let asked = sent(&world, "home_move");
-    assert_eq!(asked.len(), 3);
-    assert_eq!(asked[2]["machine"], "outpost-1");
-    assert_eq!(asked[2].get("check"), None);
+    assert_eq!(asked.len(), 4);
+    assert_eq!(asked[3]["machine"], "outpost-1");
+    assert_eq!(asked[3].get("check"), None);
     assert_eq!(
         named(&world, "home-move.step").as_deref(),
         Some("5/6 Start home on studio")
+    );
+}
+
+#[test]
+fn checking_a_machine_while_a_move_to_it_commits_points_to_the_band() {
+    let daemon = remote_home(vec![studio()]);
+    daemon.on("home_move", |_| {
+        move_result(json!({"id": "m-1", "side": "from", "step": "committing", "to": "studio", "checks": [], "remaps": []}))
+    });
+    let mut world = World::start(daemon);
+    on_studio(&mut world);
+    click(&mut world, &part("move"));
+    assert_eq!(
+        named(&world, &part("move.failed")).as_deref(),
+        Some(
+            "Move failed: the move to studio didn’t finish; retry it or roll it back from its band"
+        )
+    );
+}
+
+#[test]
+fn a_home_waiting_for_its_target_after_a_rollback_says_so_and_stops_waiting_from_its_band() {
+    let daemon = remote_home(vec![studio()]);
+    daemon.on("home_move_status", |_| {
+        move_result(json!({"id": "m-1", "side": "from", "step": "rolled-back", "to": "studio", "waits_for_target": true, "checks": [], "remaps": []}))
+    });
+    let released = json!({"id": "m-1", "side": "from", "step": "rolled-back", "to": "studio", "checks": [], "remaps": []});
+    let answer = released.clone();
+    daemon.on("home_move_rollback", move |_| move_result(answer.clone()));
+    let mut world = World::start(daemon);
+    assert_eq!(
+        named(&world, "home-move.text").as_deref(),
+        Some("Rolled back. Waiting for studio to rejoin as an outpost."),
+        "{}",
+        world.screen()
+    );
+    world
+        .daemon
+        .on("home_move_status", move |_| move_result(released.clone()));
+    click(&mut world, "home-move.stop-waiting");
+    assert_eq!(world.daemon.sent_of("home_move_rollback").len(), 1);
+    assert_eq!(
+        named(&world, "home-move.text").as_deref(),
+        Some(if attn_testkit::mac() {
+            "Rolled back. The home is on this Mac."
+        } else {
+            "Rolled back. The home is on this machine."
+        })
+    );
+}
+
+#[test]
+fn a_window_that_reconnects_while_its_move_runs_its_checks_keeps_following_the_move() {
+    let daemon = remote_home(vec![studio()]);
+    daemon.on("home_move", |r| {
+        (r["check"] == true).then(|| {
+            move_result(json!({"step": "checked", "to": "studio", "checks": [{"name": "connected", "ok": true}], "remaps": []}))
+        })
+    });
+    let mut world = World::start(daemon);
+    on_studio(&mut world);
+    click(&mut world, &part("move"));
+    click(&mut world, &part("move.go"));
+    world.daemon.on("home_move_status", |_| {
+        move_result(json!({"id": "m-2", "side": "from", "step": "checking", "to": "studio", "checks": [], "remaps": []}))
+    });
+    redial(&mut world);
+    press(&mut world, Key::Escape);
+    assert_eq!(
+        named(&world, "home-move.text").as_deref(),
+        Some("Moving home to studio"),
+        "{}",
+        world.screen()
+    );
+    world.daemon.on("home_move_status", |_| {
+        move_result(json!({"id": "m-2", "side": "from", "step": "committed", "to": "studio", "checks": [], "remaps": []}))
+    });
+    redial(&mut world);
+    assert_eq!(
+        named(&world, "home-move.text").as_deref(),
+        Some("Home moved to studio.")
     );
 }

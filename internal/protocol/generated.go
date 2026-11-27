@@ -6525,6 +6525,9 @@ type HomeMove struct {
 
 	// To corresponds to the JSON schema field "to".
 	To *string `json:"to,omitempty,omitzero"`
+
+	// WaitsForTarget corresponds to the JSON schema field "waits_for_target".
+	WaitsForTarget *bool `json:"waits_for_target,omitempty,omitzero"`
 }
 
 type HomeMoveCheck struct {

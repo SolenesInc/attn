@@ -346,6 +346,10 @@ fn check_move(state: &mut State, id: &str, name: &str, tx: &mut Tx) {
         move |state, answer, _| {
             if let Some(moving) = moving_to(state, &id) {
                 moving.step = match move_answer(&answer) {
+                    Ok(checked) if checked.step == "committing" => MoveStep::Failed(format!(
+                        "the move to {} didn’t finish; retry it or roll it back from its band",
+                        checked.to.unwrap_or_default()
+                    )),
                     Ok(checked) => MoveStep::Checked(checked),
                     Err(why) => MoveStep::Failed(why),
                 };
@@ -402,6 +406,10 @@ fn settle_move(state: &mut State, latest: &HomeMove) {
     else {
         return;
     };
+    let mut moving = moving;
+    if moving.move_id.is_none() && latest.step == "checking" {
+        moving.move_id = latest.id.clone();
+    }
     let ours = moving.move_id.is_some() && latest.id == moving.move_id;
     let why = match (ours, latest.step.as_str()) {
         (true, "committed" | "applied" | "done") => {
@@ -476,11 +484,13 @@ pub(crate) fn roll_back(state: &mut State, tx: &mut Tx) {
             Ok(latest) => {
                 let machines = panel(state);
                 machines.moving = None;
-                machines.told = Some(if latest.step == "aborted" {
-                    Told::RolledBack
-                } else {
-                    Told::RollingBack
-                });
+                machines.told = Some(
+                    if matches!(latest.step.as_str(), "aborted" | "rolled-back") {
+                        Told::RolledBack
+                    } else {
+                        Told::RollingBack
+                    },
+                );
                 machines.last_move = Some(latest);
             }
             Err(_) if matches!(answer, Answer::Dropped) => {}
@@ -496,6 +506,38 @@ fn held_move(state: &State) -> Option<&str> {
     let latest = state.window.settings.machines.last_move.as_ref()?;
     let held = latest.side.as_deref() == Some("from") && latest.step == "committing";
     held.then_some(latest.to.as_deref()).flatten()
+}
+
+/// The machine a move from this one went to, while this home rolled the move back and waits
+/// for that machine to be its outpost again.
+fn waiting_move(state: &State) -> Option<&str> {
+    let latest = state.window.settings.machines.last_move.as_ref()?;
+    let waiting = latest.side.as_deref() == Some("from")
+        && latest.step == "rolled-back"
+        && latest.waits_for_target == Some(true);
+    waiting.then_some(latest.to.as_deref()).flatten()
+}
+
+/// Why the last try of the move this window runs failed.
+fn move_failure(state: &State) -> Option<&str> {
+    match &state.window.settings.machines.moving {
+        Some(Move {
+            step: MoveStep::Failed(why),
+            ..
+        }) => Some(why),
+        _ => None,
+    }
+}
+
+fn moving_step(state: &State) -> Option<(&str, usize)> {
+    match &state.window.settings.machines.moving {
+        Some(Move {
+            name,
+            step: MoveStep::Moving(steps),
+            ..
+        }) => Some((name, *steps)),
+        _ => None,
+    }
 }
 
 /// Runs the held move again, which finishes its commit.
@@ -538,21 +580,19 @@ pub(crate) fn identity(state: &State) -> Option<String> {
     if let Some(to) = failed_move(state) {
         return Some(format!("failed:{to}"));
     }
-    let machines = &state.window.settings.machines;
-    match (&machines.moving, &machines.told) {
-        (
-            Some(Move {
-                name,
-                step: MoveStep::Moving(steps),
-                ..
-            }),
-            _,
-        ) => Some(format!("moving:{name}:{steps}")),
-        (None, _) if held_move(state).is_some() => held_move(state).map(|to| format!("held:{to}")),
-        (_, Some(Told::Moved(to))) => Some(format!("moved:{to}")),
-        (_, Some(Told::RollingBack)) => Some("rolling-back".to_owned()),
-        (_, Some(Told::RolledBack)) => Some("rolled-back".to_owned()),
-        _ => None,
+    if let Some((name, steps)) = moving_step(state) {
+        return Some(format!("moving:{name}:{steps}"));
+    }
+    if let Some(to) = held_move(state) {
+        return Some(format!("held:{to}:{}", move_failure(state).unwrap_or("")));
+    }
+    if let Some(to) = waiting_move(state) {
+        return Some(format!("waiting:{to}"));
+    }
+    match state.window.settings.machines.told.as_ref()? {
+        Told::Moved(to) => Some(format!("moved:{to}")),
+        Told::RollingBack => Some("rolling-back".to_owned()),
+        Told::RolledBack => Some("rolled-back".to_owned()),
     }
 }
 
@@ -590,13 +630,8 @@ pub(crate) fn said(state: &State) -> Option<Banner> {
             panel(state).told = None;
         })
     };
-    if let Some(Move {
-        name,
-        step: MoveStep::Moving(steps),
-        ..
-    }) = &machines.moving
-    {
-        let step = (*steps).clamp(1, STEPS);
+    if let Some((name, steps)) = moving_step(state) {
+        let step = steps.clamp(1, STEPS);
         return Some(
             Banner::new("home-move", "Home move", BannerTone::Calm)
                 .says("home-move.text", format!("Moving home to {name}"))
@@ -607,11 +642,34 @@ pub(crate) fn said(state: &State) -> Option<Banner> {
         );
     }
     if let Some(to) = held_move(state) {
+        let banner = Banner::new("home-move", "Home move", BannerTone::Bad)
+            .says("home-move.text", format!("Move to {to} didn’t finish."));
+        let banner = match move_failure(state) {
+            Some(why) => banner.note("home-move.why", why.to_owned()),
+            None => banner,
+        };
         return Some(
-            Banner::new("home-move", "Home move", BannerTone::Bad)
-                .says("home-move.text", format!("Move to {to} didn’t finish."))
+            banner
                 .action("home-move.retry", Button::new("Retry"), retry_move)
                 .action("home-move.roll-back", Button::new("Roll back"), roll_back),
+        );
+    }
+    if let Some(to) = waiting_move(state) {
+        return Some(
+            Banner::new("home-move", "Home move", BannerTone::Calm)
+                .says(
+                    "home-move.text",
+                    format!("Rolled back. Waiting for {to} to rejoin as an outpost."),
+                )
+                .note(
+                    "home-move.why",
+                    "Until then, this home runs no background jobs and no phone link.",
+                )
+                .action(
+                    "home-move.stop-waiting",
+                    Button::new("Stop waiting"),
+                    roll_back,
+                ),
         );
     }
     Some(match machines.told.as_ref()? {

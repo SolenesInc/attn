@@ -2131,8 +2131,8 @@ model HomeMoveProgressMessage {
   step: string;
 }
 
-// One machine's side of a move of the home. step is none, refused, staged, committing, committed, applied,
-// rolling-back, rolled-back or aborted; side is from on the machine that was the home and to on the target.
+// One machine's side of a move of the home. step is none, checked, refused, checking, staged, committing, committed,
+// applied, done, rolling-back, rolled-back or aborted; side is from on the machine that was the home and to on the target.
 model HomeMove {
   id?: string;
   side?: string;
@@ -2143,6 +2143,9 @@ model HomeMove {
   checks: HomeMoveCheck[];
   remaps: HomeMoveRemap[];
   sleeps?: boolean; // The target is a Mac: while it sleeps, the home is down.
+  // The home rolled the move back and runs no home role until the target is its outpost again, or a second
+  // rollback stops the wait.
+  waits_for_target?: boolean;
 }
 
 // A pre-flight check of a move; detail names the cause when ok is false.

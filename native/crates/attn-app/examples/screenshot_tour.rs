@@ -3527,7 +3527,7 @@ fn settings_machines_move(dark: bool) {
     let request_id = world.daemon.sent_of("home_move")[1]["request_id"].clone();
     world
         .daemon
-        .emit(json!({"event": "home_move_progress", "request_id": request_id, "step": "copy"}));
+        .emit(json!({"event": "home_move_progress", "request_id": request_id, "id": "m-1", "step": "copy"}));
     world.settle();
     snap(&mut world, "settings-machines-moving", dark);
     world.gesture(|app| {

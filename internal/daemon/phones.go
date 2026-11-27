@@ -49,8 +49,10 @@ func (d *Daemon) configurePhoneAccess() {
 	switch {
 	case !d.phoneAccessEnabled():
 		d.stopCloudLink("")
-	case !d.runsHomeRole():
+	case !d.enrollmentStatus().IsHome():
 		d.stopCloudLink(outpostUnlinked)
+	case d.homeMoveIdle() != "":
+		d.stopCloudLink(d.homeMoveIdle())
 	default:
 		d.startCloudLink()
 	}

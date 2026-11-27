@@ -106,6 +106,7 @@ and applies it the next time its daemon starts.
 | --- | --- |
 | checked | Every check passed. Nothing changed. |
 | refused | A check failed. Nothing changed. |
+| checking | A move runs its checks, before it writes its record. Nothing changed yet. |
 | staged | The target holds the snapshot. |
 | committing | The home asked the target to commit. |
 | committed | This machine committed. It applies the move at its next start. |
@@ -136,8 +137,10 @@ new home; a move that rolls back here removes it too.
   `attn home rollback`. The old home restarts as the home, and the other
   machine rolls back its side when the two connect. Until that machine is an
   outpost again, the old home runs no background jobs and no phone link, so two
-  machines never run the home at once. If that machine is gone for good, run
-  `attn home rollback` again to run the home without word from it. If that
+  machines never run the home at once, and the band says **Rolled back. Waiting
+  for** *machine* **to rejoin as an outpost**. If that machine is gone for good,
+  click **Stop waiting** on the band, or run `attn home rollback` again, to run
+  the home without word from it. If that
   machine did run as the home meanwhile, what it recorded as the home stays in
   its `home-move/<id>/rolled-back` folder.
 

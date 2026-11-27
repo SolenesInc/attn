@@ -32,6 +32,7 @@ import (
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/homemove"
 	"github.com/victorarias/attn/internal/outpostssh"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
@@ -45,8 +46,9 @@ const (
 )
 
 const (
-	stepChecked = "checked"
-	stepRefused = "refused"
+	stepChecked  = "checked"
+	stepChecking = "checking"
+	stepRefused  = "refused"
 )
 
 type homeMoveRuntime struct {
@@ -56,6 +58,8 @@ type homeMoveRuntime struct {
 	// yielded is a home that rolled a move back and runs no home role until the target is its outpost again, so
 	// two machines never run the home at once.
 	yielded bool
+	// checking is the move whose checks run before it writes its record.
+	checking *protocol.HomeMove
 }
 
 type homeMoveFolder struct {
@@ -104,10 +108,20 @@ type homeMovePlan struct {
 var exitForMove = func() { _ = syscall.Kill(os.Getpid(), syscall.SIGTERM) }
 
 func (d *Daemon) runsHomeRole() bool {
+	return d.enrollmentStatus().IsHome() && d.homeMoveIdle() == ""
+}
+
+// homeMoveIdle says why a move keeps this home from running its role, or is empty when none does.
+func (d *Daemon) homeMoveIdle() string {
 	d.homeMove.mu.Lock()
-	idle := d.homeMove.held || d.homeMove.yielded
-	d.homeMove.mu.Unlock()
-	return d.enrollmentStatus().IsHome() && !idle
+	defer d.homeMove.mu.Unlock()
+	switch {
+	case d.homeMove.held:
+		return "this home is moving to another machine and holds everything until the move ends"
+	case d.homeMove.yielded:
+		return "this home rolled a move back and waits until the machine it moved to is its outpost again; roll the move back again to stop waiting"
+	}
+	return ""
 }
 
 // holdForMove fences this home until the move ends: its database refuses every write, so nothing is written after
@@ -272,6 +286,9 @@ func moveInfo(record homemove.Record) protocol.HomeMove {
 	if record.Error != "" {
 		info.Error = protocol.Ptr(record.Error)
 	}
+	if record.Side == homemove.SideFrom && record.Step == homemove.StepRolledBack && !record.TargetReturned {
+		info.WaitsForTarget = protocol.Ptr(true)
+	}
 	for _, remap := range record.Notebook {
 		info.Remaps = append(info.Remaps, protocol.HomeMoveRemap{From: remap.From, To: remap.To})
 	}
@@ -312,6 +329,12 @@ func homeMoveResult(requestID string, move protocol.HomeMove, err error) protoco
 
 func (d *Daemon) homeMoveStatus() (protocol.HomeMove, error) {
 	record, found, err := homemove.Latest(d.dataRoot)
+	d.homeMove.mu.Lock()
+	checking := d.homeMove.checking
+	d.homeMove.mu.Unlock()
+	if err == nil && checking != nil && (!found || record.ID != protocol.Deref(checking.ID)) {
+		return *checking, nil
+	}
 	if err != nil || !found {
 		return protocol.HomeMove{Step: "none", Checks: []protocol.HomeMoveCheck{}, Remaps: []protocol.HomeMoveRemap{}}, err
 	}
@@ -370,6 +393,25 @@ func (d *Daemon) homeMoveCommand(ctx context.Context, msg *protocol.HomeMoveMess
 		}
 		return d.finishHomeMoveCommit(ctx, record)
 	}
+	var id string
+	if !protocol.Deref(msg.Check) {
+		if id, err = newMoveID(); err != nil {
+			return protocol.HomeMove{}, false, err
+		}
+		d.homeMove.mu.Lock()
+		d.homeMove.checking = &protocol.HomeMove{ID: protocol.Ptr(id), Side: protocol.Ptr(string(homemove.SideFrom)), Step: stepChecking, From: protocol.Ptr(d.bridgeIdentity().Name), To: protocol.Ptr(target.Name), Checks: []protocol.HomeMoveCheck{}, Remaps: []protocol.HomeMoveRemap{}}
+		d.homeMove.mu.Unlock()
+		defer func() {
+			d.homeMove.mu.Lock()
+			if d.homeMove.checking != nil && protocol.Deref(d.homeMove.checking.ID) == id {
+				d.homeMove.checking = nil
+			}
+			d.homeMove.mu.Unlock()
+		}()
+	}
+	if id != "" {
+		pausepoint.At(pausepoint.HomeMoveChecking)
+	}
 	plan := d.checkHomeMove(ctx, target, strings.TrimSpace(protocol.Deref(msg.Via)))
 	info := protocol.HomeMove{Step: stepChecked, From: protocol.Ptr(d.bridgeIdentity().Name), To: protocol.Ptr(target.Name), Checks: plan.checks, Remaps: []protocol.HomeMoveRemap{}}
 	if plan.sleeps {
@@ -385,7 +427,7 @@ func (d *Daemon) homeMoveCommand(ctx context.Context, msg *protocol.HomeMoveMess
 	if protocol.Deref(msg.Check) {
 		return info, false, nil
 	}
-	return d.runHomeMove(ctx, plan, info, began)
+	return d.runHomeMove(ctx, id, plan, info, began)
 }
 
 func check(name string, err error) protocol.HomeMoveCheck {
@@ -477,11 +519,7 @@ func newMoveID() (string, error) {
 	return "m-" + hex.EncodeToString(buf), nil
 }
 
-func (d *Daemon) runHomeMove(ctx context.Context, plan homeMovePlan, info protocol.HomeMove, began func(id, step string)) (protocol.HomeMove, bool, error) {
-	id, err := newMoveID()
-	if err != nil {
-		return info, false, err
-	}
+func (d *Daemon) runHomeMove(ctx context.Context, id string, plan homeMovePlan, info protocol.HomeMove, began func(id, step string)) (protocol.HomeMove, bool, error) {
 	status, self := d.enrollmentStatus(), d.bridgeIdentity()
 	peer := plan.conn.Peer()
 	from := homemove.Machine{ID: d.store.MachineID(), Name: self.Name, DaemonID: d.daemonInstanceID}
@@ -1230,6 +1268,8 @@ func (d *Daemon) finishMoveOnBridge(home string) {
 	if err := d.removeHomeUnit(d.life.Context()); err != nil {
 		d.logf("home move %s: remove the systemd unit that started the home: %v", record.ID, err)
 	}
+	d.logf("home move %s: done; %s runs the home", record.ID, record.To.Name)
+	pausepoint.At(pausepoint.HomeMoveFinished)
 }
 
 // homeReturned ends the wait of a home that rolled a move back once the move's target bridges as its outpost again.

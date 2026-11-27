@@ -136,6 +136,7 @@ func TestHomeMoveKeepsTerminalsAndMovesBack(t *testing.T) {
 	}
 	home.AwaitStopped()
 	outpost.AwaitStopped()
+	checking := outpost.PauseAt(pausepoint.HomeMoveChecking)
 	home.Start()
 	outpost.Start()
 	if !role(t, outpost).IsHome() || role(t, home).IsHome() {
@@ -161,19 +162,26 @@ func TestHomeMoveKeepsTerminalsAndMovesBack(t *testing.T) {
 	}
 
 	awaitMachineNotebook(t, app, homeMachine, protocol.OutpostNotebookStateInSync)
-	result := testworld.Request(app, protocol.HomeMoveMessage{Cmd: protocol.CmdHomeMove, Machine: homeMachine, Via: protocol.Ptr("outpost"), RequestID: protocol.Ptr("back")},
-		protocol.EventHomeMoveResult, func(r protocol.HomeMoveResultMessage) bool { return r.RequestID == "back" })
+	app.Send(protocol.HomeMoveMessage{Cmd: protocol.CmdHomeMove, Machine: homeMachine, Via: protocol.Ptr("outpost"), RequestID: protocol.Ptr("back")})
+	checking.Await()
+	started := homeMoveJSON(t, outpost, "status")
+	checking.Release()
+	if started.Step != "checking" || protocol.Deref(started.Side) != "from" || started.ID == nil {
+		t.Fatalf("status while the move back runs its checks: %s", describeMove(started))
+	}
+	result := testworld.Await(app, protocol.EventHomeMoveResult, func(r protocol.HomeMoveResultMessage) bool { return r.RequestID == "back" })
 	if !result.Success || result.HomeMove == nil || result.HomeMove.Step != "committed" || result.HomeMove.Error != nil {
 		t.Fatalf("move back from the app: %+v", result)
 	}
 	for _, step := range []string{"fence", "copy", "build", "commit"} {
 		progress := testworld.Await(app, protocol.EventHomeMoveProgress, func(p protocol.HomeMoveProgressMessage) bool { return p.RequestID == "back" && p.Step == step })
-		if progress.ID != protocol.Deref(result.HomeMove.ID) {
+		if progress.ID != protocol.Deref(result.HomeMove.ID) || progress.ID != protocol.Deref(started.ID) {
 			t.Fatalf("step %s names move %q; the move is %q", step, progress.ID, protocol.Deref(result.HomeMove.ID))
 		}
 	}
 	outpost.AwaitStopped()
 	home.AwaitStopped()
+	finished := outpost.PassesOf(pausepoint.HomeMoveFinished)
 	outpost.Start()
 	home.Start()
 	if !role(t, home).IsHome() || role(t, outpost).IsHome() {
@@ -184,6 +192,7 @@ func TestHomeMoveKeepsTerminalsAndMovesBack(t *testing.T) {
 	if a, b := m.echo(app, "back"); a != beforeH || b != beforeO {
 		t.Fatalf("pids after moving back: %s->%s, %s->%s", beforeH, a, beforeO, b)
 	}
+	<-finished
 	if _, err := os.Stat(unit); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("the unit that started the home is still installed once the home moved back: %v", err)
 	}
@@ -300,6 +309,48 @@ func TestHomeMoveRollbackKeepsOneHomeAtATime(t *testing.T) {
 	if most := cloud.MostOpen(); most != 1 {
 		t.Fatalf("the Cloud Relay saw %d home sockets at once while the home rolled back:\n%s", most, cloud.Connections())
 	}
+}
+
+func TestARolledBackHomeShowsItsWaitAndASecondRollbackEndsIt(t *testing.T) {
+	cloud := testworld.StartCloud(t)
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	for _, s := range []*testworld.Stack{home, outpost} {
+		s.Vars = append(s.Vars, "SHELL=/bin/bash", "ATTN_CLOUD_URL="+cloud.HomeURL)
+	}
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.SSH.Use(outpost.World)
+	pair.SSH.Route("oldhome", home)
+	healthyMachine(t, home)
+	healthyMachine(t, outpost)
+	pair.Start()
+	requireStdout(t, home.Attn("settings", "set", "remote_home_enabled", "true"))
+	setPhoneAccess(t, pair.App, true)
+	testworld.Await(pair.App, protocol.EventPhonesUpdated, linkConnected)
+	awaitMachineNotebook(t, pair.App, pair.Host, protocol.OutpostNotebookStateInSync)
+	if move := homeMoveJSON(t, home, "move", "outpost", "--via", "oldhome"); move.Step != "committed" {
+		t.Fatalf("move: %s", describeMove(move))
+	}
+	home.AwaitStopped()
+	outpost.AwaitStopped()
+	pair.SSH.Fail(pair.Destination, "ssh: connect to host outpost port 22: No route to host")
+	home.Start()
+	if back := homeMoveJSON(t, home, "rollback"); back.Step != "rolling-back" {
+		t.Fatalf("rollback: %s", describeMove(back))
+	}
+	home.AwaitStopped()
+	home.Start()
+	app := home.App()
+	if waiting := homeMoveJSON(t, home, "status"); waiting.Step != "rolled-back" || !protocol.Deref(waiting.WaitsForTarget) {
+		t.Fatalf("a home that rolled back while its target is away: %s", describeMove(waiting))
+	}
+	shown := testworld.Request[protocol.PhonesUpdatedMessage](app, protocol.PhonesGetMessage{Cmd: protocol.CmdPhonesGet}, protocol.EventPhonesUpdated, nil)
+	if linkConnected(shown) || !strings.Contains(protocol.Deref(shown.Link.Error), "waits until") {
+		t.Fatalf("the phone link of a home waiting for its target: %+v", shown.Link)
+	}
+	if released := homeMoveJSON(t, home, "rollback"); released.Step != "rolled-back" || released.WaitsForTarget != nil {
+		t.Fatalf("a second rollback: %s", describeMove(released))
+	}
+	awaitLinked(app)
 }
 
 // awaitLinked waits until the daemon behind app holds the home's Cloud Relay link.
@@ -766,7 +817,7 @@ func TestHomeMoveSurvivesAKillAtEachStep(t *testing.T) {
 				m.SSH.Fail("oldhome", "ssh: connect to host oldhome port 22: No route to host")
 				m.Home.Start()
 				m.SSH.Restore("oldhome")
-				m.Outpost.FirePending(bridge.RetryTimer)
+				redial(m.Outpost)
 				m.requireMoved(t, homeMachine, pidHome, pidOut)
 				return
 			}
@@ -784,12 +835,19 @@ func TestHomeMoveSurvivesAKillAtEachStep(t *testing.T) {
 			m.requireMoved(t, homeMachine, pidHome, pidOut)
 		})
 	}
-	applying := []string{"home-move-apply-database", "home-move-apply-enrollment", "home-move-apply-files"}
+	applying := []string{"home-move-apply-database", "home-move-apply-enrollment", "home-move-apply-files", "home-move-apply-roots"}
 	for _, point := range applying {
 		t.Run("while each machine applies: "+point, func(t *testing.T) {
 			m := newCrashingPair(t, "", "")
 			homeMachine := role(t, m.Home).MachineID
 			pidHome, pidOut := m.echo(m.App, "start")
+			attachment := filepath.Join("attachments", "only-on-the-home.txt")
+			if err := os.MkdirAll(filepath.Join(m.Home.Dir, "attachments"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(m.Home.Dir, attachment), []byte("kept"), 0o600); err != nil {
+				t.Fatal(err)
+			}
 			if move := homeMoveJSON(t, m.Home, "move", "outpost", "--via", "oldhome"); move.Step != "committed" {
 				t.Fatalf("move: %s", describeMove(move))
 			}
@@ -800,6 +858,9 @@ func TestHomeMoveSurvivesAKillAtEachStep(t *testing.T) {
 				s.Start()
 			}
 			m.requireMoved(t, homeMachine, pidHome, pidOut)
+			if data, err := os.ReadFile(filepath.Join(m.Outpost.Dir, attachment)); string(data) != "kept" {
+				t.Fatalf("an attachment the target lacked, on the new home after a retried apply: %q, %v", data, err)
+			}
 		})
 	}
 	t.Run("rollback after the new home failed to start", func(t *testing.T) {
