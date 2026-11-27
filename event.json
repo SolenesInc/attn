@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Reconnecting during home move preflight can leave Settings stuck after success",
+  "at": "2026-11-27T12:40:24.670Z",
+  "detail": "The app may reconnect while the submitted move is still in its second preflight. The daemon is working, but its prior status is unchanged, so the app treats the new move as failed and ignores its eventual success. The target row then disappears and Make home stays blocked. Reconcile against authoritative operation identity or phase before and after the move journal exists.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/settings/machines.rs",
+    "line": 394
+  },
+  "culprit": "783edab2e971d5d05a57e4846863b31e8cc3aace"
+}
