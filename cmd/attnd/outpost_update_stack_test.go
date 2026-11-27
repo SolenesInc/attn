@@ -299,7 +299,7 @@ func TestAddInstallsTheMissingHostOnAnOutpostAtTheHomeBuild(t *testing.T) {
 	awaitTerminalOwner(app, shell, "owner", ptyhost.BinaryName)
 }
 
-func TestAPairedOutpostWithoutTheHostKeepsItsLastCheckedHostAndUpdateInstallsIt(t *testing.T) {
+func TestAPairedOutpostWithoutTheHostRefusesNewTerminalsUntilUpdateInstallsIt(t *testing.T) {
 	ssh, remote, home := outpostWithMatchingBuild(t)
 	home.Start()
 	app := enableOutposts(t, home)
@@ -328,13 +328,9 @@ func TestAPairedOutpostWithoutTheHostKeepsItsLastCheckedHostAndUpdateInstallsIt(
 	}
 
 	host := row.ID
-	shell := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
-	pidPath := filepath.Join(remote.Dir, "shell.pid")
-	app.TypeLine(shell, `echo $$ > `+pidPath+`; echo "owner=$(`+terminalOwner+`)"`)
-	app.AwaitScreen(shell, "owner="+ptyhost.BinaryName)
-	before, err := os.ReadFile(pidPath)
-	if err != nil {
-		t.Fatal(err)
+	result, _, _ := home.RequestSpawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
+	if refusal := protocol.Deref(result.Error); result.Success || !strings.Contains(refusal, "Update this outpost from its home") {
+		t.Fatalf("a new terminal before the update answered %+v, want a refusal that says to update the outpost", result)
 	}
 
 	app.Send(protocol.UpdateOutpostMessage{Cmd: protocol.CmdUpdateOutpost, ID: host})
@@ -343,15 +339,8 @@ func TestAPairedOutpostWithoutTheHostKeepsItsLastCheckedHostAndUpdateInstallsIt(
 		t.Fatalf("Update: %+v %+v", row, row.Update)
 	}
 	app = home.App()
-	app.TypeLine(shell, `echo $$ > `+pidPath+`; echo "still=$(`+terminalOwner+`)"`)
-	app.AwaitScreen(shell, "still="+ptyhost.BinaryName)
-	after, err := os.ReadFile(pidPath)
-	if err != nil || string(before) != string(after) {
-		t.Fatalf("shell PID changed %s -> %s: %v", before, after, err)
-	}
 	fresh := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("fresh"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
 	awaitTerminalOwner(app, fresh, "fresh", ptyhost.BinaryName)
-	t.Logf("shell PID %s stayed on the last checked host; a new terminal started in the installed host", strings.TrimSpace(string(after)))
 }
 
 func TestAReleaseHomeDownloadsTheHostWithAttnAndInstallsNothingWithoutIt(t *testing.T) {
