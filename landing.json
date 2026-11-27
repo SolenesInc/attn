@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "ae0617984b5e9757630e22990c86938a299d7642",
+  "head": "754ebb938fdb4fcba192f4aff9b662cef285817a",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 70.839,
+    "ranOn": "754ebb938fdb4fcba192f4aff9b662cef285817a"
+  },
+  "noMediaReason": "test-only fix for a stack test race; the seed's screenshots belong to 783edab2e",
+  "recordings": []
+}
