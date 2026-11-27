@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Compact Garden rows break older standalone CLI output",
+  "at": "2026-11-27T00:06:57.406Z",
+  "detail": "An existing standalone CLI's default text output fails when decoding compact similarity and search rows after upgrading the daemon. A separately installed PATH CLI survives a bundled app upgrade. At pinned 02f28f435 the pre-change 31a822d4 CLI exited 1 with missing field body for matching seed search and for both seed and plot planting. Both writes already committed, creating duplicate risk if retried. The matching CLI and old raw JSON path worked. Independently verified in isolated CLI and daemon checks. Keep the compact MCP change and a response that pre-change text CLI can decode on the standalone CLI path. s-nbhfq2 has the reproduction and logs.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/protocol/schema/main.tsp",
+    "line": 6450
+  },
+  "culprit": "fb61846e450de2bfe9b2e2ad345441f7588f8f25"
+}
