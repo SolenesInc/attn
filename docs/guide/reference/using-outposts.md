@@ -87,8 +87,8 @@ launcher and in the file opener, and `home:` names it. Files on the home don't
 open on this machine. **Open in editor**, Cmd-clicked paths in a home shell, and
 **Open** and **Reveal** on a seed's files name the home and open nothing here; a
 markdown link opens in a tile from the home. **Move out** on a seed's file, and
-**Move in** or **Copy in** with a file you choose, move the file between the
-seed and this machine's disk.
+**Move into seed** or **Copy into seed** with a file you choose, move the file
+between the seed and this machine's disk.
 
 The home doesn't start terminals on a machine that dials it yet. The launcher
 leaves the machine out, and `attn terminal open --host` and
@@ -322,8 +322,9 @@ This Mac included. **Enter** and **Tab** on a row act on the row's machine.
 
 An address names a machine and a place on it, as ssh writes it:
 `<machine>:<rest>`. Text without a machine means the home's machine, and `home:`
-names it too: This Mac, unless the home runs on another machine. Machine names match whole and ignore case, so names that contain
-`@` or `:`, such as `user@host`, work as typed. An outpost's id works too. When
+names it too: This Mac, unless the home runs on another machine. Machine names
+match whole and ignore case, so names that contain `@` or `:`, such as
+`user@host`, work as typed. An outpost's id works too. When
 two outposts share a name, the launcher lists both under that name, and the launcher puts the id of the one
 you pick into the input.
 
