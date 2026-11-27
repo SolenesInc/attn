@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "0c9e573292003ab1060ca30fc942428a664c51ec",
+  "head": "c15c1e9524ce08ae8ef69d1638f1e11524d01900",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 128.59,
+    "ranOn": "c15c1e9524ce08ae8ef69d1638f1e11524d01900"
+  },
+  "fixesBugs": [
+    "0eca549",
+    "0178703"
+  ],
+  "noMediaReason": "the change hides popped-out tile windows while the outage screen shows, proven by the wire test a_popped_tile_hides_while_the_home_is_unreachable_and_returns_when_it_answers; the Mac recording for C5(6) follows",
+  "recordings": []
+}
