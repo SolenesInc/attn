@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Home rollback can report success while jobs and phone access remain paused",
+  "at": "2026-11-27T14:02:23.388Z",
+  "detail": "If the target stays offline during rollback, the CLI reports the rolled-back step and the app shows success while jobs and phone access remain paused awaiting a second rollback action. Expose that waiting state and its release in CLI and app status, including Phones.\n"
+}
