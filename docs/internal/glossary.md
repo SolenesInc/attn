@@ -142,6 +142,13 @@ address                 who an item is for: a session or a mailbox
    ├─ seed (at most 1)  the work the ask is about; the ask is addressed to
    │                    the seed's tender
    ├─ question (0..n)   pick one, pick any, or write an answer
+   ├─ default place (1) the asking session's machine and folder; a link in
+   │                    the ask that names no machine is there
+   ├─ reference (0..n)  a file a link names, or a folder a code block names,
+   │                    resolved to its machine when the ask opens; like a
+   │                    resolved link. Written as a machine path
+   ├─ terminal (0..n)   a shell the ask holds in place of a tile; it ends when
+   │                    the ask closes
    ├─ answer (at most 1) the user's reply, typed into the conversation of
    │                    the ask's addressee, or of the chief when no agent
    │                    holds that address, as the user's message; a seed
@@ -310,6 +317,8 @@ home                    the main daemon, which holds the user's state; like a
 │                      backend API
 └─ cloud link (at most 1)
                        the home's connection to its Cloud Relay
+machine path            `<machine>:<path>`, a path on one machine; like scp's
+                        host:path
 
 Attn Cloud              the hosted service that connects phones to homes
 └─ Cloud Relay (1 per home)
@@ -415,6 +424,7 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 - device (in the relay contract) → phone
 - driver (for an adapter) → adapter
 - has a link → server lifetime
+- address (a <machine>:<path>) → machine path
 
 ### Changes to make
 

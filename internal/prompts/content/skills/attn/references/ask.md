@@ -16,7 +16,7 @@ An ask renders markdown in the app and on the phone, including Mermaid diagrams,
 
 Put visuals in the ask's body or in a question's context lines. The subject, a question's first line, its choices and their `— why` notes take inline markdown only: links, bold, italics and `code`. Keep diagrams, images and tables out of them.
 
-Link a file with `[name](path)`. A relative path resolves where the ask's images do, and an absolute or `~` path is on your own machine. To link a file on another machine, write its address the way ssh does, `<machine>:<path>`: `[plan](studio:~/notes/plan.md)`, where `home` names the home. attn refuses a machine it does not know, and names the ones it does.
+Link a file with `[name](path)`. A relative path resolves where the ask's images do, and an absolute or `~` path is on your own machine. To link a file on another machine, write its machine path the way ssh does, `<machine>:<path>`: `[plan](studio:~/notes/plan.md)`, where `home` names the home. attn refuses a machine it does not know, and names the ones it does.
 
 After you ask, carry on with work that does not depend on the answer. When none is left, end your turn. Do not wait or poll. Your session stays open, so the user can find you, talk to you and run commands in your terminal: while any of your asks is open, attn refuses a standby that would close it, and a close of your own session that would leave the answer with no agent. When the user answers, attn types the answer, approvals included, as their message into the conversation of whoever tends the ask's seed by then, or into this one for an ask about no seed.
 

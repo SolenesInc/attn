@@ -353,13 +353,13 @@ launcher starts agents and shells on any machine.
 Recent projects from every machine share one list. Each row shows its machine,
 This Mac included. **Enter** and **Tab** on a row act on the row's machine.
 
-An address names a machine and a place on it, as ssh writes it:
+A machine path names a machine and a place on it, as ssh writes it:
 `<machine>:<rest>`. Text without a machine means the home's machine, and `home:`
 names it too: This Mac, unless the home runs on another machine. Attn reads a
 machine's name by one rule wherever it takes one: in the launcher, in `--host`
-on `attn terminal open` and `attn delegate`, and in a bed's repository
-addresses. Machine names match whole and ignore case, so names that contain `@`
-or `:`, such as `user@host`, work as typed. An outpost's id works too. The
+on `attn terminal open` and `attn delegate`, and in a bed's repository machine
+paths. Machine names match whole and ignore case, so names that contain `@` or
+`:`, such as `user@host`, work as typed. An outpost's id works too. The
 home's machine is named after its short host name, and each of these takes that
 name as well as `home`, and `home` names the home even beside an outpost that
 an earlier Attn let take that name. Two machines that share a name from an
@@ -381,7 +381,7 @@ ai-sandbox`, `ai-sandbox unreachable · folders as of 3m ago`, or
 `ai-sandbox unreachable · no folders cached for ~/projects`. When a folder you
 browse is missing on that machine, the launcher asks your other reachable
 machines and adds a row such as `~/scratch/ is on This Mac`. **Enter** on it
-changes the address to that machine.
+changes the machine path to that machine.
 
 When the launcher opens, it asks each reachable outpost for the outpost's home folder and
 the parent folders of the outpost's recent projects, so the launcher usually lists

@@ -30,14 +30,14 @@ Linux) opens it with a shell picked.
 - For an agent, Tab on a repository opens its worktree choices. Type to name a
   new worktree, or pick the main checkout or a worktree that already exists.
 - Tab on any other row, and on every row in a terminal launcher, puts the row's
-  address in the input.
+  machine path in the input.
 - Cmd+Enter (Ctrl+Enter on Linux) opens a terminal at the selected place instead
   of starting an agent.
 - Esc goes back a step, or closes the launcher.
 
 With an outpost added, the same dialog starts agents on any machine. [Start on an
 outpost from the launcher](using-outposts.md#start-on-an-outpost-from-the-launcher)
-covers addresses and what happens when a machine is unreachable.
+covers machine paths and what happens when a machine is unreachable.
 
 ## Worktrees
 

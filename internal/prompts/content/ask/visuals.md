@@ -8,4 +8,4 @@ An ask renders markdown in the app and on the phone, including Mermaid diagrams,
 
 Put visuals in the ask's body or in a question's context lines. The subject, a question's first line, its choices and their `— why` notes take inline markdown only: links, bold, italics and `code`. Keep diagrams, images and tables out of them.
 
-Link a file with `[name](path)`. A relative path resolves where the ask's images do, and an absolute or `~` path is on your own machine. To link a file on another machine, write its address the way ssh does, `<machine>:<path>`: `[plan](studio:~/notes/plan.md)`, where `home` names the home. attn refuses a machine it does not know, and names the ones it does.
+Link a file with `[name](path)`. A relative path resolves where the ask's images do, and an absolute or `~` path is on your own machine. To link a file on another machine, write its machine path the way ssh does, `<machine>:<path>`: `[plan](studio:~/notes/plan.md)`, where `home` names the home. attn refuses a machine it does not know, and names the ones it does.

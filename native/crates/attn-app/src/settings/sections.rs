@@ -135,7 +135,7 @@ pub(crate) const GROUPS: &[Group] = &[
                 Section::Machines,
                 "Machines",
                 "outposts_enabled",
-                "machines outposts this mac home move make home bridge host machine address pair re-pair remove connection build fingerprint connect other computers",
+                "machines outposts this mac home move make home bridge host machine path pair re-pair remove connection build fingerprint connect other computers",
             ),
             feature_item(
                 Section::Phones,
