@@ -316,7 +316,7 @@ func (d *Daemon) storedSettingValues() map[string]string {
 		}
 	}
 	for key, value := range d.store.CopiedSettings(status.CopiedFrom()) {
-		values[key] = value
+		values[d.wireSettingKey(key)] = value
 	}
 	return values
 }

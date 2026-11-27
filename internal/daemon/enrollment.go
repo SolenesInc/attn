@@ -9,22 +9,24 @@ import (
 func (d *Daemon) ensureEnrollment() error {
 	status, err := enrollment.Ensure(d.dataRoot, d.daemonInstanceID)
 	if err == nil && status.IsHome() {
-		status, err = enrollment.RecordMachineID(d.dataRoot, d.store.MachineID())
+		status, err = enrollment.RecordMachineID(d.dataRoot, d.store.SelfMachineID())
 	}
 	if err != nil {
 		return err
 	}
-	d.takeEnrolledMachineID(status)
 	d.outpost.mu.Lock()
-	d.outpost.enrollment = status
+	d.installEnrollmentLocked(status)
 	d.outpost.mu.Unlock()
 	d.logf("enrollment: %s (daemon %s)", status.Describe(), status.DaemonID)
 	return nil
 }
 
-func (d *Daemon) takeEnrolledMachineID(status enrollment.Status) {
+func (d *Daemon) installEnrollmentLocked(status enrollment.Status) {
+	d.outpost.enrollment = status
 	if status.IsOutpost() && status.MachineID != "" {
 		d.store.SetMachineID(status.MachineID)
+	} else {
+		d.store.SetMachineID(d.store.SelfMachineID())
 	}
 }
 
@@ -40,7 +42,7 @@ func (d *Daemon) adoptHomeID(status enrollment.Status) error {
 		return err
 	}
 	d.outpost.mu.Lock()
-	d.outpost.enrollment = adopted
+	d.installEnrollmentLocked(adopted)
 	d.outpost.mu.Unlock()
 	d.logf("enrollment: home %s is now %s", status.Replaced, status.HomeID)
 	return nil

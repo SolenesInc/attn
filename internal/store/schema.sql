@@ -46,7 +46,7 @@ CREATE UNIQUE INDEX idx_vents_one_per_turn ON vents(session_id, turn) WHERE with
 CREATE INDEX idx_vents_profile ON vents(profile_id, created_at);
 CREATE INDEX idx_worktree_sweep_log_at ON worktree_sweep_log(at DESC, id DESC);
 CREATE INDEX launch_desktops_desktop ON launch_desktops(desktop_id);
-CREATE UNIQUE INDEX machines_destination ON machines(destination) WHERE transport != 'self';
+CREATE UNIQUE INDEX machines_destination ON machines(destination) WHERE transport = 'ssh';
 CREATE UNIQUE INDEX machines_one_self ON machines(transport) WHERE transport = 'self';
 CREATE INDEX model_calls_profile_at ON model_calls(profile_id, at);
 CREATE INDEX outpost_outbox_host ON outpost_outbox (host, id);

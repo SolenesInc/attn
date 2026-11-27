@@ -7,7 +7,7 @@ var machineSettingKeyPrefixes = []string{"code_review_setup_offer_", "new_sessio
 const newSessionYoloPrefix = "new_session_yolo_"
 
 func (d *Daemon) storedSettingKey(key string) string {
-	self := d.store.MachineID()
+	self := d.settingsMachineID()
 	if key == newSessionYoloPrefix+"local" {
 		return newSessionYoloPrefix + self
 	}
@@ -20,7 +20,7 @@ func (d *Daemon) storedSettingKey(key string) string {
 }
 
 func (d *Daemon) wireSettingKey(key string) string {
-	self := d.store.MachineID()
+	self := d.settingsMachineID()
 	if key == newSessionYoloPrefix+self {
 		return newSessionYoloPrefix + "local"
 	}
@@ -30,4 +30,11 @@ func (d *Daemon) wireSettingKey(key string) string {
 		}
 	}
 	return key
+}
+
+func (d *Daemon) settingsMachineID() string {
+	if status := d.enrollmentStatus(); status.IsOutpost() && status.HomeMachineID != "" {
+		return status.HomeMachineID
+	}
+	return d.store.MachineID()
 }

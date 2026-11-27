@@ -41,19 +41,21 @@ type Record struct {
 	HomeDaemonID     string `json:"home_daemon_id"`
 	ReplacedDaemonID string `json:"replaced_daemon_id,omitempty"`
 	MachineID        string `json:"machine_id,omitempty"`
+	HomeMachineID    string `json:"home_machine_id,omitempty"`
 	RecordedAt       string `json:"recorded_at,omitempty"`
 }
 
 // Status is an enrollment as this build reads it. HomeDaemonID is set only on an outpost whose record names its
 // home by daemon id alone.
 type Status struct {
-	DaemonID     string `json:"daemon_id"`
-	Role         Role   `json:"role"`
-	HomeID       string `json:"home_id,omitempty"`
-	HomeName     string `json:"home_name,omitempty"`
-	HomeDaemonID string `json:"home_daemon_id,omitempty"`
-	Replaced     string `json:"replaced_daemon_id,omitempty"`
-	MachineID    string `json:"machine_id,omitempty"`
+	DaemonID      string `json:"daemon_id"`
+	Role          Role   `json:"role"`
+	HomeID        string `json:"home_id,omitempty"`
+	HomeName      string `json:"home_name,omitempty"`
+	HomeDaemonID  string `json:"home_daemon_id,omitempty"`
+	Replaced      string `json:"replaced_daemon_id,omitempty"`
+	MachineID     string `json:"machine_id,omitempty"`
+	HomeMachineID string `json:"home_machine_id,omitempty"`
 }
 
 // UnmarshalJSON reads a status printed by any build, including one from before homes had ids.
@@ -107,10 +109,10 @@ func (s Status) homeLabel() string {
 	return s.HomeName + " (" + id + ")"
 }
 
-// Home is a home as one of its daemons presents it, with the id it knows this machine by.
+// Home is a home as one of its daemons presents it: its own machine id, and the id it knows this machine by.
 type Home struct {
-	ID, DaemonID, Name string
-	MachineID          string
+	ID, DaemonID, Name       string
+	MachineID, PeerMachineID string
 }
 
 func (h Home) label() string {
@@ -229,7 +231,7 @@ func Ensure(dataRoot, daemonID string) (Status, error) {
 }
 
 func (r Record) status(daemonID string) Status {
-	s := Status{DaemonID: daemonID, Role: r.Role, HomeID: r.HomeID, HomeName: r.HomeName, Replaced: r.ReplacedDaemonID, MachineID: r.MachineID}
+	s := Status{DaemonID: daemonID, Role: r.Role, HomeID: r.HomeID, HomeName: r.HomeName, Replaced: r.ReplacedDaemonID, MachineID: r.MachineID, HomeMachineID: r.HomeMachineID}
 	if r.Role == RoleOutpost && r.HomeID == "" {
 		s.HomeDaemonID = r.HomeDaemonID
 	}
@@ -285,8 +287,8 @@ func RecordHome(dataRoot string, home Home) (Status, error) {
 			replaced = current.Replaced
 		}
 	}
-	next := Record{Role: RoleOutpost, HomeID: home.ID, HomeName: home.Name, HomeDaemonID: home.DaemonID, ReplacedDaemonID: replaced, MachineID: cmp.Or(home.MachineID, record.MachineID)}
-	if err != nil || record.Role != next.Role || record.HomeID != next.HomeID || record.HomeName != next.HomeName || record.HomeDaemonID != next.HomeDaemonID || record.ReplacedDaemonID != next.ReplacedDaemonID || record.MachineID != next.MachineID {
+	next := Record{Role: RoleOutpost, HomeID: home.ID, HomeName: home.Name, HomeDaemonID: home.DaemonID, ReplacedDaemonID: replaced, MachineID: cmp.Or(home.PeerMachineID, record.MachineID), HomeMachineID: cmp.Or(home.MachineID, record.HomeMachineID)}
+	if err != nil || record.Role != next.Role || record.HomeID != next.HomeID || record.HomeName != next.HomeName || record.HomeDaemonID != next.HomeDaemonID || record.ReplacedDaemonID != next.ReplacedDaemonID || record.MachineID != next.MachineID || record.HomeMachineID != next.HomeMachineID {
 		next.RecordedAt = nowStamp()
 		if err := writeRecord(recordPath, next); err != nil {
 			return Status{}, err

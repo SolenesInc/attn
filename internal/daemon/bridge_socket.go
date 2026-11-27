@@ -35,7 +35,7 @@ type outpostRuntime struct {
 func (d *Daemon) bridgeIdentity() bridge.Identity {
 	name, _ := os.Hostname()
 	home, _ := os.UserHomeDir()
-	return bridge.Identity{Name: name, Instance: config.InstanceLabel(), DaemonID: d.daemonInstanceID, Home: home, HomeID: d.enrollmentStatus().HomeID, Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
+	return bridge.Identity{Name: name, Instance: config.InstanceLabel(), DaemonID: d.daemonInstanceID, Home: home, HomeID: d.enrollmentStatus().HomeID, MachineID: d.store.MachineID(), Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
 }
 
 func (d *Daemon) startBridgeSocket() error {
@@ -64,10 +64,9 @@ func (d *Daemon) startBridgeSocket() error {
 		Admit: func(home bridge.Identity) *bridge.Refusal {
 			before := d.settingValues()
 			r.mu.Lock()
-			status, err := enrollment.RecordHome(d.dataRoot, enrollment.Home{ID: home.HomeID, DaemonID: home.DaemonID, Name: home.Name, MachineID: home.PeerMachineID})
+			status, err := enrollment.RecordHome(d.dataRoot, enrollment.Home{ID: home.HomeID, DaemonID: home.DaemonID, Name: home.Name, MachineID: home.MachineID, PeerMachineID: home.PeerMachineID})
 			if err == nil {
-				r.enrollment = status
-				d.takeEnrolledMachineID(status)
+				d.installEnrollmentLocked(status)
 			}
 			r.mu.Unlock()
 			if err == nil && status.Adopting() {

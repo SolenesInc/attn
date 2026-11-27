@@ -26,6 +26,9 @@ func (s *Store) MachineID() string { return *s.machineID.Load() }
 
 func (s *Store) SetMachineID(id string) { s.machineID.Store(&id) }
 
+// SelfMachineID is this database's own machine row.
+func (s *Store) SelfMachineID() string { return s.selfMachineID }
+
 // WireHost is a stored machine reference as the protocol carries it: absent for this daemon's own machine.
 func (s *Store) WireHost(machine string) *string {
 	if machine == "" || machine == s.MachineID() {

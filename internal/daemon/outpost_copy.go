@@ -198,7 +198,7 @@ func (d *Daemon) dropStaleCopy() error {
 	d.outpost.mu.Lock()
 	status, err := enrollment.Load(d.dataRoot)
 	if err == nil {
-		d.outpost.enrollment = status
+		d.installEnrollmentLocked(status)
 	}
 	d.outpost.mu.Unlock()
 	if err != nil {

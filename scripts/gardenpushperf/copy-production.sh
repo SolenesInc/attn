@@ -33,8 +33,8 @@ INSERT INTO settings (key, value) VALUES
   ('worktree_sweep_enabled', 'false'),
   ('outposts_enabled', 'false'),
   ('analytics.sharing_enabled', 'false');
-INSERT OR IGNORE INTO outposts (id, name, destination, added_at) VALUES
-  ('copy-source', 'copy source', 'copy-source.invalid', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'));
+INSERT OR IGNORE INTO machines (id, name, transport, destination, added_at) VALUES
+  ('copy-source', 'copy source', 'ssh', 'copy-source.invalid', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'));
 UPDATE sessions SET host = 'copy-source', copied_from = '', lifetime = 'terminal';
 DELETE FROM delegation_operations WHERE state IN ('accepted', 'preparing');
 UPDATE automation_runs SET state = 'cancelled', cancel_reason = 'copied' WHERE state = 'pending';

@@ -17,8 +17,8 @@ import (
 )
 
 type copiedSession struct {
-	Label, Directory, Agent, Host string
-	Priority                      bool
+	Label, Directory, Agent string
+	Priority                bool
 }
 
 func sessionsOn(t *testing.T, s *testworld.Stack, host string) map[protocol.SessionID]copiedSession {
@@ -28,10 +28,10 @@ func sessionsOn(t *testing.T, s *testworld.Stack, host string) map[protocol.Sess
 	app.Close()
 	out := map[protocol.SessionID]copiedSession{}
 	for _, session := range sessions {
-		if session.Host == nil || host != "" && *session.Host != host {
+		if protocol.Deref(session.Host) != host {
 			continue
 		}
-		out[session.ID] = copiedSession{Label: session.Label, Directory: session.Directory, Agent: session.Agent, Host: *session.Host, Priority: protocol.Deref(session.Priority)}
+		out[session.ID] = copiedSession{Label: session.Label, Directory: session.Directory, Agent: session.Agent, Priority: protocol.Deref(session.Priority)}
 	}
 	return out
 }
