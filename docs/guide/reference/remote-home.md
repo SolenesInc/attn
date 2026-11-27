@@ -46,12 +46,22 @@ changes on either machine until every check passes.
 The checks also list the Notebook paths that change. When the target is a Mac,
 they say that the home is down while that Mac sleeps.
 
+When attn knows the fix for a failed check, such as `loginctl enable-linger`
+for linger or `gh auth login` for gh, the check in the app offers **Open in
+terminal**. A shell opens on the target under the check, with the fix typed
+and not run, and takes the keyboard. Press Enter to run it. The Settings
+shortcut gives the keyboard back to the checks, and a click on the shell takes
+it again. When the fix's command finishes cleanly, the checks run again, and
+the shell closes once its check passes. **Close terminal** and **Cancel** end
+the shell; closing Settings keeps it under its check.
+
 ## Move from the app
 
 1. Open **Settings → Machines** at the home.
 2. Choose the machine's row and click **Make home**, or press M.
-3. Read the checks and the paths that change. If a check fails, fix its cause
-   and click **Check again**.
+3. Read the checks and the paths that change. If a check fails, fix its cause,
+   in the shell **Open in terminal** opens when the check offers one, and click
+   **Check again**.
 4. Click **Move home to** *machine*.
 
 The row lists the move's six steps, and a band over the window counts them:
@@ -59,6 +69,12 @@ stop changes, copy, build the database, switch roles, start the home on the
 new machine, and reconnect. Both daemons restart, and the app on the old home
 then reaches the new home through its own daemon. The band then says **Home
 moved to** *machine*.
+
+Automations and crew members may still launch in folders that exist only on
+the old home. Click **Ask the Chief to check paths** on the band: the Chief
+gets a message naming both homes, and checks every automation and crew launch
+folder. It points each one that doesn't exist on the new home at the matching
+folder there, or asks you.
 
 If the move stops before it commits, the band says **Move to** *machine*
 **failed.** with the reason, and the home stays where it was. If the new home

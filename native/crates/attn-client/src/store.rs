@@ -107,7 +107,8 @@ pub struct Facts {
     pub garden: Arc<Garden>,
     /// The selected profile's open asks, then the ones answered in the last day.
     pub asks: Arc<Vec<Ask>>,
-    /// The terminals those asks hold in place of a pane, as the home last bound them.
+    /// The terminals an ask or a home move's check holds in place of a pane, as the home last
+    /// bound them.
     pub held_terminals: Arc<Vec<TerminalBinding>>,
     /// What the daemon warned of at the last handshake, such as terminals it could not
     /// recover.
