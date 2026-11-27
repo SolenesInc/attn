@@ -94,7 +94,8 @@ of this machine's dialog: **Enter** chooses the highlighted folder, **Tab** open
 it, and the first row is the folder typed.
 
 Terminals start on the machine as on any outpost: name it in the launcher, or
-pass `--host` to `attn terminal open` or `attn delegate`. The app reaches the
+pass `--host` to `attn terminal open` or `attn delegate`. An `attn://spawn`
+link opened on the machine starts its agent there. The app reaches the
 machine's own terminals through the machine's daemon, not through the home, so
 they echo at local speed.
 
