@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Offline overview cannot fetch snapshots for offscreen local terminals",
+  "at": "2026-11-27T07:12:23.092Z",
+  "detail": "The overview shows no miniature or a stale miniature for an offscreen local terminal while the home is away because the app skips local snapshot queries. Use the terminal's own machine even for unattached tiles. The source plot already assigned this follow-up, and the rolling review independently confirmed it at 54d9c6647.\n"
+}
