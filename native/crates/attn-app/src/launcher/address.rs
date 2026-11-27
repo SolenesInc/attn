@@ -15,20 +15,24 @@ pub(crate) struct Machine {
     pub(crate) label: String,
 }
 
+/// What names the home's machine wherever it runs, even beside an older outpost of that name.
+const HOME: &str = "home";
+
 /// The home's machine, which `home:` and its own name name wherever it runs.
 pub(crate) fn home(machines: &Machines) -> Machine {
     Machine {
         host: None,
         name: machines.name(None),
-        label: "home".into(),
+        label: HOME.into(),
     }
 }
 
 pub(crate) fn machine_for(outpost: &OutpostInfo, outposts: &[OutpostInfo]) -> Machine {
     let lower = outpost.name.to_lowercase();
-    let shared = outposts
-        .iter()
-        .any(|o| o.id != outpost.id && o.name.to_lowercase() == lower);
+    let shared = lower == HOME
+        || outposts
+            .iter()
+            .any(|o| o.id != outpost.id && o.name.to_lowercase() == lower);
     Machine {
         host: Some(outpost.id.clone()),
         name: outpost.name.clone(),
@@ -80,8 +84,9 @@ fn named(query: &str, machines: &Machines) -> Option<(Vec<Machine>, String)> {
             let machine = machine_for(o, outposts);
             [o.name.clone(), o.id.clone()].map(|label| (label, machine.clone()))
         })
+        .filter(|(label, machine)| machine.host.is_none() || !label.eq_ignore_ascii_case(HOME))
         .chain(
-            ["home", machines.home_name]
+            [HOME, machines.home_name]
                 .into_iter()
                 .filter(|label| !label.is_empty())
                 .map(|label| (label.to_owned(), home(machines))),

@@ -97,6 +97,40 @@ func TestEveryCommandThatTakesAMachineReadsItsNameByOneRule(t *testing.T) {
 	t.Logf("seed bed add --repo far:/far/notes: %v", err)
 }
 
+func TestHomeNamesTheHomeBesideAnOlderOutpostNamedHome(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	setSetting(t, app, "garden_v2_enabled", "true")
+	setSetting(t, app, "outposts_enabled", "true")
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "legacy", Destination: "user@legacy.example"})
+	added := testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 1 })
+	legacy := added.Outposts[0].ID
+	w.stop()
+	nameMachineAsAnOlderBuildCould(t, filepath.Join(w.Dir, "attn.db"), legacy, "home")
+	w.start()
+	app, cli := w.App(), w.Client()
+	caller := protocol.SessionID(w.Spawn(app, fakeagent.Claude, w.Path("shop")))
+
+	for _, host := range []string{"home", "HOME"} {
+		var opened protocol.TerminalOpenResult
+		if err := cli.RunCommand("terminal open", caller, map[string]any{"host": host}, &opened); err != nil {
+			t.Fatalf("terminal open --host %s beside outpost %s named home: %v", host, legacy, err)
+		}
+		requireSessionOn(t, cli, opened.SessionID, "")
+		t.Logf("terminal open --host %s beside outpost %s named home started %s on the home", host, legacy, opened.SessionID)
+	}
+
+	shop := w.Path("shop")
+	var bed protocol.SeedBedResult
+	if err := cli.RunCommand("seed bed add", caller, map[string]any{"name": "Shop", "repos": []string{"Home:" + shop}}, &bed); err != nil {
+		t.Fatalf("seed bed add --repo Home:%s beside outpost %s named home: %v", shop, legacy, err)
+	}
+	if want := "home:" + shop; !slices.Equal(bed.Bed.Repos, []string{want}) {
+		t.Fatalf("seed bed add --repo Home:%s saved %v, want %s", shop, bed.Bed.Repos, want)
+	}
+	t.Logf("seed bed add --repo Home:%s saved %v", shop, bed.Bed.Repos)
+}
+
 func requireSessionOn(t *testing.T, cli *client.Client, id protocol.SessionID, host string) {
 	t.Helper()
 	sessions, err := cli.Query("")

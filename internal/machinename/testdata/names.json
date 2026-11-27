@@ -25,6 +25,10 @@
     {
       "id": "o-file",
       "name": "file"
+    },
+    {
+      "id": "o-legacy-home",
+      "name": "home"
     }
   ],
   "names": [
@@ -51,6 +55,14 @@
     {
       "text": "Home",
       "machine": "m-oma"
+    },
+    {
+      "text": "HOME",
+      "machine": "m-oma"
+    },
+    {
+      "text": "o-legacy-home",
+      "machine": "o-legacy-home"
     },
     {
       "text": "oma",
@@ -99,6 +111,16 @@
       "text": "home:~/projects",
       "machine": "m-oma",
       "rest": "~/projects"
+    },
+    {
+      "text": "HOME:/srv",
+      "machine": "m-oma",
+      "rest": "/srv"
+    },
+    {
+      "text": "o-legacy-home:~/",
+      "machine": "o-legacy-home",
+      "rest": "~/"
     },
     {
       "text": "OMA:/srv",

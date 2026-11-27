@@ -37,9 +37,13 @@ func (e *Shared) Error() string {
 	return fmt.Sprintf("%q names more than one machine: %s; name one by its id", e.Text, strings.Join(e.IDs, ", "))
 }
 
-// Read returns the machine whose name or id is text, ignoring case. `home` names the home.
+// Read returns the machine whose name or id is text, ignoring case. `home` names the home, even beside an
+// older outpost that holds the name.
 func Read(text string, machines []Machine) (Machine, error) {
 	text = strings.TrimSpace(text)
+	if home := slices.IndexFunc(machines, func(m Machine) bool { return m.Home }); home >= 0 && strings.EqualFold(text, HomeName) {
+		return machines[home], nil
+	}
 	var found []Machine
 	for _, m := range machines {
 		if holds(m, text) && !slices.ContainsFunc(found, func(f Machine) bool { return f.ID == m.ID }) {
@@ -60,7 +64,7 @@ func Read(text string, machines []Machine) (Machine, error) {
 }
 
 func holds(m Machine, text string) bool {
-	return m.ID == text || m.Name != "" && strings.EqualFold(m.Name, text) || m.Home && strings.EqualFold(HomeName, text)
+	return m.ID == text || m.Name != "" && strings.EqualFold(m.Name, text)
 }
 
 func names(machines []Machine) []string {
