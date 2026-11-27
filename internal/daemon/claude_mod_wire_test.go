@@ -46,13 +46,13 @@ func typedClaude(w *world, run *fakeagent.Run) {
 	w.advance(claudeModReachWindow)
 }
 
-func workingOn(t *testing.T, app *testworld.Peer, run *fakeagent.Run, session, prompt string) {
+func workingOn(t *testing.T, app *testworld.Peer, run *fakeagent.Run, session, prompt string) protocol.Session {
 	t.Helper()
 	run.Input(prompt)
 	if got := run.Prompted(); got != prompt {
 		t.Fatalf("the agent took %q, want %q", got, prompt)
 	}
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	return testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 }
 
 func stoppedByEsc(t *testing.T, app *testworld.Peer, run *fakeagent.Run, session string) []string {

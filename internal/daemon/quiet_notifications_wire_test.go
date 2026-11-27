@@ -497,8 +497,7 @@ func TestAHeldCaptureRepliedInsideTheEssaysRunLeavesTheNextOrdinaryReplyToQuietN
 func heldCaptureRepliedAfterTheEssaysStop(t *testing.T, w *world, app *testworld.Peer, cli *client.Client) (string, *fakeagent.Run, protocol.Session) {
 	t.Helper()
 	session, run := moddedClaude(t, w, app)
-	workingOn(t, app, run, session, "write the essay")
-	working := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	working := workingOn(t, app, run, session, "write the essay")
 
 	capture := sendQuickCapture(t, app, sessionMailbox(session), "what did the reviewer say?")
 	modEvent(t, run, fakeagent.ModEventHeld, "what did the reviewer say?")
