@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: TestRefusalsNameCommandsByMention",
+  "at": "2026-11-27T06:29:30.605Z",
+  "fixesBug": "6702dbe042cc266bde7d137062ba44bd0839a39e"
+}
