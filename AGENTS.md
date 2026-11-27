@@ -131,8 +131,9 @@ count.
 - Do not add explanatory code comments. Express intent through function and
   variable names and code structure. Rewrite code that needs a comment to be
   understood.
-- Align with the user before adding a bus event or changing an existing event's
-  name, subject, payload, semantics, or compatibility behavior.
+- Align with the user before adding a bus fact or changing an existing fact's
+  name, subject, payload, semantics, or compatibility behavior. An optional
+  field on a WebSocket message needs no alignment.
 - Product prompts address the user, never "Victor". Distinguish the agent
   changing attn from the agents it runs.
 
