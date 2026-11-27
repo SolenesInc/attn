@@ -12,7 +12,9 @@ type Cause interface {
 
 type LiveSignal struct{}
 
-type resolverObservation struct{}
+type resolverObservation struct {
+	reason string
+}
 
 type LinkTurn struct {
 	Run string
@@ -105,6 +107,9 @@ func (m *Monitor) ApplyState(change Change) bool {
 	}
 	m.mu.Lock()
 	previous := m.state.State
+	if resolver, ok := change.Cause.(resolverObservation); ok {
+		m.reason = resolver.reason
+	}
 	accepted := m.changeStateLocked(change.State, change.Cause, change.RequestStartedAt, time.Now())
 	var view View
 	var endedSnooze time.Time

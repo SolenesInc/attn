@@ -606,8 +606,9 @@ func (m *Monitor) publishResolution(current protocol.SessionState, resolution se
 	}
 	if !ResolverOwnedStates[current] || (resolution.State == current && !m.endsUnseenServerRun(completion)) {
 		m.clearDwell()
-		reasoned := m.recordStateReason(resolution) && ResolverOwnedStates[current]
 		m.mu.Lock()
+		reasoned := m.reason != string(resolution.Reason) && ResolverOwnedStates[current]
+		m.reason = string(resolution.Reason)
 		applied := m.completions.applyLocked(completion)
 		var view View
 		if reasoned || applied {
@@ -623,10 +624,9 @@ func (m *Monitor) publishResolution(current protocol.SessionState, resolution se
 		m.traceResolutionSkip(resolution, "dwell")
 		return true
 	}
-	m.recordStateReason(resolution)
 	m.ApplyState(Change{
 		State:            string(resolution.State),
-		Cause:            resolverObservation{},
+		Cause:            resolverObservation{reason: string(resolution.Reason)},
 		Origin:           Origin{Source: StateSourceResolver, Detail: resolutionDetail(resolution)},
 		ServerCompletion: completion,
 	})
