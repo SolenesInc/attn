@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Offline overview cannot fetch snapshots for offscreen local terminals",
+  "at": "2026-11-27T07:12:19.277Z",
+  "detail": "The overview shows no miniature or a stale miniature for an offscreen local terminal while the home is away because the app skips local snapshot queries. Use the terminal's own machine even for unattached tiles. The source plot already assigned this follow-up, and the rolling review independently confirmed it at 54d9c6647.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/terminal/snapshots.rs",
+    "line": 49
+  },
+  "culprit": "dcd581bef5023ea40d013be45bc5febf5685ebc1"
+}
