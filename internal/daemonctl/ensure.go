@@ -396,6 +396,9 @@ func waitForSpawnedDaemon(ctx context.Context, process daemonProcess) (bool, err
 }
 
 func startDaemon(ctx context.Context, binaryPath string) (bool, error) {
+	if unit, ok := installedHomeUnit(); ok {
+		return false, startHomeUnit(ctx, unit)
+	}
 	for {
 		process, err := spawnDaemon(binaryPath)
 		if err != nil {

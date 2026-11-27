@@ -123,12 +123,15 @@ and applies it the next time its daemon starts.
 
 A move to a Linux machine installs a systemd user unit there and starts it:
 `~/.config/systemd/user/attn.service`, or `attn-<instance>.service` for a named
-instance. The unit runs `attn daemon` with `ATTN_DATA_DIR`, `ATTN_INSTANCE`, `PATH` and
-`SSH_AUTH_SOCK` from your login environment, and restarts the daemon when it
-stops. With linger on, the home starts at boot, without the app and without an
-outpost that dials it, and its automations run. When the home moves away again,
-attn disables the unit and removes it once this machine has connected to the
-new home; a move that rolls back here removes it too.
+instance. The unit runs `attn daemon` with `ATTN_DATA_DIR`, `ATTN_INSTANCE`,
+`PATH` and `SSH_AUTH_SOCK` from your login environment, and restarts the daemon
+when it stops. From then on the home starts only through the unit: `attn daemon
+ensure` and a machine that connects to the home ask systemd to start it. A
+daemon the unit starts while another daemon of the instance runs waits for that
+one to exit, then takes over. With linger on, the home starts at boot, without
+the app and without an outpost that dials it, and its automations run. When the
+home moves away again, attn disables the unit and removes it once this machine
+has connected to the new home; a move that rolls back here removes it too.
 
 ## When a move stops
 

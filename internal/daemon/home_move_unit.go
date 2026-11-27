@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,20 +10,13 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/daemonctl"
 )
-
-// homeUnitName is the systemd user unit that starts this instance's daemon once it holds the home.
-func homeUnitName() string {
-	if instance := config.Instance(); instance != "" && instance != "default" {
-		return "attn-" + instance + ".service"
-	}
-	return "attn.service"
-}
 
 // installHomeUnit has systemd start this daemon at boot on a Linux machine that becomes the home (D8). Nothing dials
 // a home, so nothing else would start it. The unit carries the login PATH and ssh agent socket this daemon has, so
 // the home runs gh and reaches its outposts with the user's keys (F13). It restarts the daemon whenever it ends,
-// with no start limit, so the start that waits for this daemon to exit after the commit succeeds once it has.
+// and its daemon waits for this one to exit after the commit.
 func (d *Daemon) installHomeUnit(ctx context.Context, start bool) error {
 	if runtime.GOOS != "linux" {
 		return nil
@@ -33,7 +25,7 @@ func (d *Daemon) installHomeUnit(ctx context.Context, start bool) error {
 	if err != nil {
 		return err
 	}
-	dir, err := os.UserConfigDir()
+	path, err := daemonctl.HomeUnitPath()
 	if err != nil {
 		return err
 	}
@@ -52,16 +44,15 @@ func (d *Daemon) installHomeUnit(ctx context.Context, start bool) error {
 			env["SSH_AUTH_SOCK"] = socket
 		}
 	}
-	path := filepath.Join(dir, "systemd", "user", homeUnitName())
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, []byte(homeUnitText(executable, env)), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(daemonctl.HomeUnitText(executable, env)), 0o600); err != nil {
 		return err
 	}
-	calls := [][]string{{"--user", "daemon-reload"}, {"--user", "enable", homeUnitName()}}
+	calls := [][]string{{"--user", "daemon-reload"}, {"--user", "enable", daemonctl.HomeUnitName()}}
 	if start {
-		calls = append(calls, []string{"--user", "start", "--no-block", homeUnitName()})
+		calls = append(calls, []string{"--user", "start", "--no-block", daemonctl.HomeUnitName()})
 	}
 	for _, args := range calls {
 		if err := d.runOnThisMachine(ctx, "systemctl", args...); err != nil {
@@ -78,7 +69,7 @@ func (d *Daemon) keepHomeUnit(ctx context.Context) error {
 	if runtime.GOOS != "linux" {
 		return nil
 	}
-	if exec.CommandContext(ctx, "systemctl", "--user", "is-enabled", "--quiet", homeUnitName()).Run() == nil {
+	if exec.CommandContext(ctx, "systemctl", "--user", "is-enabled", "--quiet", daemonctl.HomeUnitName()).Run() == nil {
 		return nil
 	}
 	return d.installHomeUnit(ctx, false)
@@ -90,35 +81,18 @@ func (d *Daemon) removeHomeUnit(ctx context.Context) error {
 	if runtime.GOOS != "linux" {
 		return nil
 	}
-	dir, err := os.UserConfigDir()
+	path, err := daemonctl.HomeUnitPath()
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(dir, "systemd", "user", homeUnitName())
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
-	if err := d.runOnThisMachine(ctx, "systemctl", "--user", "disable", homeUnitName()); err != nil {
+	if err := d.runOnThisMachine(ctx, "systemctl", "--user", "disable", daemonctl.HomeUnitName()); err != nil {
 		return err
 	}
 	if err := os.Remove(path); err != nil {
 		return err
 	}
 	return d.runOnThisMachine(ctx, "systemctl", "--user", "daemon-reload")
-}
-
-func homeUnitText(executable string, env map[string]string) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "[Unit]\nDescription=attn home\nStartLimitIntervalSec=0\n\n[Service]\nExecStart=%s daemon\n", systemdQuote(executable))
-	for _, key := range []string{"ATTN_INSTANCE", "ATTN_DATA_DIR", "PATH", "SSH_AUTH_SOCK"} {
-		if value, ok := env[key]; ok {
-			fmt.Fprintf(&b, "Environment=%s\n", systemdQuote(key+"="+value))
-		}
-	}
-	b.WriteString("Restart=always\nRestartSec=2\n\n[Install]\nWantedBy=default.target\n")
-	return b.String()
-}
-
-func systemdQuote(value string) string {
-	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`, "%", "%%", "$", "$$").Replace(value) + `"`
 }

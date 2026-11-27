@@ -153,6 +153,7 @@ type Daemon struct {
 	diagServer              *diag.Server
 	diagListener            net.Listener
 	harnessWSListenerFD     string
+	startedByHomeUnit       bool
 	wsHub                   *wsHub
 	startedAt               time.Time
 	analyticsUpload         analyticsUpload
@@ -464,6 +465,9 @@ func (d *Daemon) setCurrentTerminalTheme(theme pty.TerminalTheme) {
 	d.terminalTheme = theme
 	d.terminalThemeMu.Unlock()
 }
+
+// StartedByHomeUnit has this daemon wait for a running daemon of its data folder to exit instead of failing.
+func (d *Daemon) StartedByHomeUnit() { d.startedByHomeUnit = true }
 
 func (d *Daemon) RecoverGUIPath() {
 	if err := pathutil.EnsureGUIPath(); err != nil {
@@ -2826,11 +2830,15 @@ func (d *Daemon) acquirePIDLock() error {
 				namedPID = pid
 			}
 		}
-		if !namesGoneProcess(namedPID) {
+		if d.startedByHomeUnit {
+			if err := d.awaitRunningDaemonExit(f, namedPID); err != nil {
+				f.Close()
+				return err
+			}
+		} else if !namesGoneProcess(namedPID) {
 			f.Close()
 			return fmt.Errorf("%w (pid %s)", ErrAlreadyRunning, namedPID)
-		}
-		if err := d.awaitPIDLockRelease(f); err != nil {
+		} else if err := d.awaitPIDLockRelease(f); err != nil {
 			return fmt.Errorf("%w: pid %s is gone, but something else held %s for %s: %v", ErrAlreadyRunning, namedPID, d.pidPath, PIDLockReleaseTripwire, err)
 		}
 	}
@@ -2848,6 +2856,19 @@ func (d *Daemon) acquirePIDLock() error {
 	d.logf("Acquired PID lock (PID %d, file %s)", pid, d.pidPath)
 
 	return nil
+}
+
+// awaitRunningDaemonExit lets the home unit's daemon take over from a daemon something else started, such as the one
+// that committed a move to this machine, once that one exits, instead of failing and having systemd restart it.
+func (d *Daemon) awaitRunningDaemonExit(f *os.File, namedPID string) error {
+	fmt.Fprintf(os.Stderr, "attn daemon: waiting for the running daemon (pid %s) to exit\n", namedPID)
+	d.logf("home unit: waiting for the running daemon (pid %s) to exit", namedPID)
+	for {
+		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX)
+		if !errors.Is(err, syscall.EINTR) {
+			return err
+		}
+	}
 }
 
 func namesGoneProcess(namedPID string) bool {

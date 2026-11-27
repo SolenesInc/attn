@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,7 +11,9 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/bridge"
@@ -55,10 +58,36 @@ func machineTools(t *testing.T, s *testworld.Stack, tools map[string]string) {
 // unit, as systemd keeps that state across daemon restarts.
 func systemctlFake(log string) string {
 	return `echo "$@" >> '` + log + `'
+if [ "$1 $2" = "--user start" ] && [ "$3" != "--no-block" ] && [ -p '` + log + `.starts' ]; then
+	echo "$3" > '` + log + `.starts'
+fi
 if [ "$1 $2 $3" = "--user is-enabled --quiet" ]; then
 	last=$(grep -E -- "^--user (enable|disable) $4$" '` + log + `' | tail -n 1)
 	[ "$last" = "--user enable $4" ]
 fi`
+}
+
+// unitStarts yields each unit that something on s asked systemd to start and waited for, so the test runs it as
+// systemd would, after that ask.
+func unitStarts(t *testing.T, s *testworld.Stack) <-chan string {
+	t.Helper()
+	fifo := filepath.Join(s.Dir, "systemctl.log.starts")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := os.OpenFile(fifo, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = reader.Close() })
+	starts := make(chan string, 16)
+	go func() {
+		lines := bufio.NewScanner(reader)
+		for lines.Scan() {
+			starts <- lines.Text()
+		}
+	}()
+	return starts
 }
 
 // forgetEnabled has systemd on s forget that attn.service is enabled, as an install stopped between writing the unit
@@ -1226,6 +1255,91 @@ func TestTheNewHomesUnitStartsItAloneAndItsAutomationsRun(t *testing.T) {
 	if len(runs) != 1 || runs[0].State != "delivered" {
 		t.Fatalf("the new home did not deliver a run of the moved automation: %+v", runs)
 	}
+}
+
+func TestTheNewHomeRunsUnderItsUnitWhateverStartsFirst(t *testing.T) {
+	moved := func(t *testing.T) (*movingPair, string, string, string) {
+		m := newMovingPair(t)
+		pidHome, pidOut := m.echo(m.App, "start")
+		awaitMachineNotebook(t, m.App, m.Host, protocol.OutpostNotebookStateInSync)
+		if move := homeMoveJSON(t, m.Home, "move", "outpost", "--via", "oldhome"); move.Step != "committed" {
+			t.Fatalf("move: %s", describeMove(move))
+		}
+		m.Home.AwaitStopped()
+		m.Outpost.AwaitStopped()
+		unit, err := os.ReadFile(homeUnit(m.Outpost))
+		if err != nil {
+			t.Fatal(err)
+		}
+		m.Outpost.Vars = append(m.Outpost.Vars, unitEnvironment(t, string(unit))...)
+		return m, pidHome, pidOut, role(t, m.Home).MachineID
+	}
+	t.Run("a reverse dial that arrives before the unit starts the home through the unit", func(t *testing.T) {
+		w := newReverseWorldWith(t, func(w *reverseWorld) {
+			healthyMachine(t, w.home)
+			healthyMachine(t, w.laptop)
+		})
+		third := testworld.NewStack(t)
+		w.ssh.Use(third.World)
+		third.Start()
+		requireStdout(t, third.Attn("settings", "set", "remote_home_enabled", "true"), "true")
+		requireStdout(t, third.Attn("enrollment", "join", "--name", "third", "home"), "dial:       home (bridged)")
+		thirdMachine := role(t, third).MachineID
+		laptop := w.join().ID
+		awaitMachineNotebook(t, w.app, laptop, protocol.OutpostNotebookStateInSync)
+		if move := homeMoveJSON(t, w.home, "move", laptop, "--via", "home"); move.Step != "committed" {
+			t.Fatalf("move: %s", describeMove(move))
+		}
+		w.home.AwaitStopped()
+		w.laptop.AwaitStopped()
+		unit, err := os.ReadFile(homeUnit(w.laptop))
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.laptop.Vars = append(w.laptop.Vars, unitEnvironment(t, string(unit))...)
+		asked := unitStarts(t, w.laptop)
+		outside := w.laptop.PassesOf(pausepoint.DaemonEnrollmentLoaded)
+		w.ssh.Route("laptop", w.laptop)
+		joined := make(chan testworld.Result, 1)
+		go func() { joined <- third.Attn("enrollment", "join", "laptop") }()
+		select {
+		case unit := <-asked:
+			if unit != "attn.service" {
+				t.Fatalf("the dial asked systemd to start %q, want attn.service", unit)
+			}
+		case <-outside:
+			_, calls := lastEnablement(w.laptop)
+			t.Fatalf("a reverse dial started the new home's daemon outside its unit; systemctl calls:\n%s", calls)
+		case <-time.After(fakeagent.HangGuard):
+			t.Fatalf("a reverse dial started no daemon on the new home within %s", fakeagent.HangGuard)
+		}
+		w.laptop.Start()
+		requireStdout(t, <-joined, "dial:       laptop (bridged)")
+		awaitConnected(t, w.laptop.App(), thirdMachine)
+	})
+	t.Run("a daemon running when the unit starts hands the home to the unit's daemon", func(t *testing.T) {
+		m, pidHome, pidOut, homeMachine := moved(t)
+		m.Home.Start()
+		m.Outpost.Start()
+		unit := m.Outpost.Launch(testworld.Invocation{Args: []string{"daemon"}})
+		t.Cleanup(unit.Kill)
+		unit.AwaitStderr("(pid ")
+		m.Outpost.Stop()
+		ensured := m.Outpost.Attn("daemon", "ensure")
+		pid, err := os.ReadFile(filepath.Join(m.Outpost.Dir, "attn.pid"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ensured.Code != 0 || strings.TrimSpace(string(pid)) != strconv.Itoa(unit.PID()) {
+			stdout, stderr := unit.Output()
+			t.Fatalf("ensure once the other daemon stopped: %+v, daemon pid %s; want the unit's daemon %d running the home\n%s%s", ensured, pid, unit.PID(), stdout, stderr)
+		}
+		app := m.Outpost.App()
+		awaitConnected(t, app, homeMachine)
+		if a, b := m.echo(app, "adopted"); a != pidHome || b != pidOut {
+			t.Fatalf("pids once the unit's daemon runs the home: %s->%s, %s->%s", pidHome, a, pidOut, b)
+		}
+	})
 }
 
 func TestAnAppAwayFromItsHomeReadsAndRollsBackThisMachinesMove(t *testing.T) {

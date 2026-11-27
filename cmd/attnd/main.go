@@ -146,6 +146,7 @@ func runDaemon() {
 		fmt.Fprintln(os.Stderr, err)
 		exit(1)
 	}
+	startedByHomeUnit := daemonctl.TakeHomeUnitStart()
 	if err := daemonctl.ExitWhenHarnessGoes(); err != nil {
 		startupSignal.Failed(err)
 		fmt.Fprintln(os.Stderr, err)
@@ -158,6 +159,9 @@ func runDaemon() {
 		exit(1)
 	}
 	d := daemon.New(socketPath)
+	if startedByHomeUnit {
+		d.StartedByHomeUnit()
+	}
 	d.RecoverGUIPath()
 	d.RemoveLegacyStateFile()
 	d.ScrubInheritedAgentSessionEnv()

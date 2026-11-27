@@ -247,6 +247,9 @@ func (r *Running) await(stream string, buf *bytes.Buffer, text string, count int
 	}
 }
 
+// PID is the process id of the running command.
+func (r *Running) PID() int { return r.process.Pid }
+
 // Kill ends the command at once, without letting it clean up, and waits for it to exit.
 func (r *Running) Kill() {
 	r.t.Helper()
