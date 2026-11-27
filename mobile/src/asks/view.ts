@@ -35,6 +35,7 @@ export type AskActions<Message> = MarkdownContext<Message> & {
   readonly changeNote: (value: string) => Message
   readonly acceptRecommended: Message
   readonly send: Message
+  readonly copy: (text: string) => Message
 }
 
 export type OpenAsk = {
@@ -298,6 +299,11 @@ export const askScreen = <Message>(
     seedMentions: createSeedMentionIndex(open.mentions),
     openMention: (id: string) => actions.openSeed(row.pairing.id, id),
     files: new Map(ask.files.map((file) => [file.text, file])),
+    commands: {
+      place: (address: string) =>
+        address ? (ask.commands.find((command) => command.text === address) ?? null) : ask.runsAt,
+      copy: actions.copy,
+    },
   }
   let index = 0
   const body = ask.tooLarge

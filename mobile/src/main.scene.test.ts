@@ -426,6 +426,8 @@ describe('the crew stays anchored at the top', () => {
               reply: null,
               tooLarge: null,
               files: [],
+              commands: [],
+              runsAt: null,
             },
           ],
         }),

@@ -219,6 +219,8 @@ export const Message = defineMessageUnion({
   RenderedDiagram: { code: Schema.String, svg: Schema.String, width: Schema.Finite },
   FailedDiagram: { code: Schema.String, message: Schema.String },
   ReleasedImages: {},
+  ClickedCopy: { text: Schema.String },
+  CopiedText: {},
   ClickedZoomImage: { url: Schema.String, alt: Schema.String },
   ClickedZoomDiagram: { svg: Schema.String },
   FollowedLink: {},
@@ -392,6 +394,16 @@ export const LoadImage = Command.define('LoadImage', {
           }),
         ),
       ),
+    ),
+})
+
+export const CopyText = Command.define('CopyText', {
+  args: { text: Schema.String },
+  messages: [Message.CopiedText],
+  execute: ({ text }) =>
+    Effect.tryPromise(() => navigator.clipboard.writeText(text)).pipe(
+      Effect.ignore,
+      Effect.as(Message.CopiedText()),
     ),
 })
 
@@ -1136,6 +1148,8 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
         : model,
     }),
     ReleasedImages: () => ({ model }),
+    ClickedCopy: ({ text }) => ({ model, commands: [CopyText({ text })] }),
+    CopiedText: () => ({ model }),
     ClickedZoomImage: ({ url, alt }) => ({
       model: modifyFields(model, { zoom: () => ({ kind: 'image' as const, url, alt }) }),
     }),
@@ -1688,6 +1702,7 @@ const askActions = (model: Model): AskActions<Message> => ({
   changeNote: (value) => Message.ChangedNote({ value }),
   acceptRecommended: Message.ClickedAcceptRecommended(),
   send: Message.ClickedSend(),
+  copy: (text) => Message.ClickedCopy({ text }),
   followLink: Message.FollowedLink(),
 })
 

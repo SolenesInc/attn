@@ -241,10 +241,19 @@ model HomeGatewayAsk {
   // The files the ask's links name, by the link destination as written. A
   // phone shows each as its machine and path, because it opens no file.
   files?: HomeGatewayAskFile[];
+  // Where each shell command block that names a place runs, by that place as
+  // written after the block's language.
+  commands?: HomeGatewayAskFile[];
+  // Where a shell command block that names no place runs.
+  runs_at?: HomeGatewayAskPlace;
 }
 
 model HomeGatewayAskFile {
   text: string;
+  machine: string;
+  path: string;
+}
+model HomeGatewayAskPlace {
   machine: string;
   path: string;
 }

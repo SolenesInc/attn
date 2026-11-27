@@ -65,6 +65,8 @@ export const PhoneAsk = Schema.Struct({
   ),
   tooLarge: Schema.NullOr(Schema.Struct({ bytes: Schema.Finite, limit: Schema.Finite })),
   files: Schema.Array(Schema.Struct({ text: Schema.String, machine: Schema.String, path: Schema.String })),
+  commands: Schema.Array(Schema.Struct({ text: Schema.String, machine: Schema.String, path: Schema.String })),
+  runsAt: Schema.NullOr(Schema.Struct({ machine: Schema.String, path: Schema.String })),
 })
 export type PhoneAsk = typeof PhoneAsk.Type
 
@@ -128,6 +130,8 @@ export const fromHomeGatewayAsk = (ask: HomeGatewayAsk): PhoneAsk => ({
       ? { bytes: ask.too_large_bytes, limit: ask.max_frame_bytes ?? 0 }
       : null,
   files: (ask.files ?? []).map(({ text, machine, path }) => ({ text, machine, path })),
+  commands: (ask.commands ?? []).map(({ text, machine, path }) => ({ text, machine, path })),
+  runsAt: ask.runs_at ? { machine: ask.runs_at.machine, path: ask.runs_at.path } : null,
 })
 
 export const questionsOf = (ask: PhoneAsk): ReadonlyArray<Question> =>

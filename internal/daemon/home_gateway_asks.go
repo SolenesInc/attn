@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/base64"
 	"fmt"
 	"slices"
@@ -109,10 +110,16 @@ func homeGatewayAsk(wire protocol.Ask, machines map[string]string) homegateway.H
 		}
 	}
 	for _, reference := range wire.References {
-		if reference.Kind == protocol.AskReferenceKindFile {
-			out.Files = append(out.Files, homegateway.HomeGatewayAskFile{Text: reference.Text, Machine: machines[protocol.Deref(reference.Host)], Path: reference.Path})
+		placed := homegateway.HomeGatewayAskFile{Text: reference.Text, Machine: machines[protocol.Deref(reference.Host)], Path: reference.Path}
+		switch reference.Kind {
+		case protocol.AskReferenceKindFile:
+			out.Files = append(out.Files, placed)
+		case protocol.AskReferenceKindCommand:
+			out.Commands = append(out.Commands, placed)
 		}
 	}
+	runsAt := cmp.Or(protocol.Deref(wire.Cwd), wire.BaseDir)
+	out.RunsAt = &homegateway.HomeGatewayAskPlace{Machine: machines[protocol.Deref(wire.Host)], Path: runsAt}
 	for _, part := range wire.Parts {
 		out.Parts = append(out.Parts, homegateway.HomeGatewayAskPart{Markdown: part.Markdown, Question: homeGatewayAskQuestion(part.Question), AmendedAt: part.AmendedAt})
 	}

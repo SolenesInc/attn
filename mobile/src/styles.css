@@ -440,6 +440,30 @@ button.row.ask {
   text-decoration: underline;
 }
 
+.md-command {
+  margin: 0 0 12px;
+}
+
+.md-command pre {
+  margin: 0;
+}
+
+.md-command-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  min-width: 0;
+}
+
+.md-command-bar code {
+  font-size: 13px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .md-table {
   overflow-x: auto;
   margin: 0 0 12px;

@@ -109,7 +109,13 @@ export type MarkdownContext<Message> = {
   readonly openMention?: (seedId: string) => Message
   readonly followLink?: Message
   readonly files?: ReadonlyMap<string, { readonly machine: string; readonly path: string }>
+  readonly commands?: {
+    readonly place: (address: string) => { readonly machine: string; readonly path: string } | null
+    readonly copy: (text: string) => Message
+  }
 }
+
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'fish', 'shell'])
 
 export const mentionText = <Message>(
   text: string,
@@ -220,6 +226,34 @@ const renderer = <Message>(
       : h.a(linkAttributes(href), children(node, true))
   }
 
+  const command = (
+    text: string,
+    address: string,
+    commands: NonNullable<MarkdownContext<Message>['commands']>,
+  ) => {
+    const place = commands.place(address)
+    return h.div(
+      [h.Class('md-command'), h.DataAttribute('testid', 'ask-command')],
+      [
+        h.pre([], [h.code([], [text])]),
+        h.div(
+          [h.Class('md-command-bar')],
+          [
+            h.button([h.Class('md-command-copy'), h.OnClick(commands.copy(text))], ['Copy']),
+            ...(place
+              ? [
+                  h.code(
+                    [h.DataAttribute('testid', 'ask-command-place')],
+                    [`${place.machine} · ${place.path}`],
+                  ),
+                ]
+              : []),
+          ],
+        ),
+      ],
+    )
+  }
+
   const render = (node: RootContent, inLink = false): Html | string => {
     switch (node.type) {
       case 'text':
@@ -237,7 +271,12 @@ const renderer = <Message>(
       case 'inlineCode':
         return h.code([], [node.value])
       case 'code':
-        return node.lang === 'mermaid' ? diagram(node.value) : h.pre([], [h.code([], [node.value])])
+        if (node.lang === 'mermaid') {
+          return diagram(node.value)
+        }
+        return context.commands && SHELLS.has(node.lang ?? '')
+          ? command(node.value, node.meta?.trim() ?? '', context.commands)
+          : h.pre([], [h.code([], [node.value])])
       case 'break':
         return h.br([])
       case 'thematicBreak':

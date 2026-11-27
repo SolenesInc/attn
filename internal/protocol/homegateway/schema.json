@@ -4,6 +4,12 @@
       "chief": {
         "type": "boolean"
       },
+      "commands": {
+        "items": {
+          "$ref": "HomeGatewayAskFile.json"
+        },
+        "type": "array"
+      },
       "created_at": {
         "format": "date-time",
         "type": "string"
@@ -36,6 +42,9 @@
       },
       "reply": {
         "$ref": "HomeGatewayAskReply.json"
+      },
+      "runs_at": {
+        "$ref": "HomeGatewayAskPlace.json"
       },
       "seed_slug": {
         "type": "string"
@@ -320,6 +329,21 @@
         "$ref": "HomeGatewayAskQuestion.json"
       }
     },
+    "type": "object"
+  },
+  "HomeGatewayAskPlace": {
+    "properties": {
+      "machine": {
+        "type": "string"
+      },
+      "path": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "machine",
+      "path"
+    ],
     "type": "object"
   },
   "HomeGatewayAskQuestion": {

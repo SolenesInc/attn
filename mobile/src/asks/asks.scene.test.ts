@@ -1,6 +1,7 @@
 import { Scene } from 'foldkit'
 import { describe, expect, it } from 'vitest'
 import {
+  CopyText,
   GetAskSeedMentions,
   GetSeed,
   LoadImage,
@@ -109,6 +110,8 @@ const ask = (
   reply: null,
   tooLarge: null,
   files: [],
+  commands: [],
+  runsAt: null,
 })
 
 const diagram = 'graph TD\n  A-->B'
@@ -175,6 +178,34 @@ describe('asks on the phone', () => {
       Scene.expect(Scene.role('button', { name: 'old-work' })).not.toExist(),
     )
   })
+  it('shows each shell command with Copy and the machine and folder it runs in, and copies its text', () => {
+    const checks = {
+      ...ask('a-checks', 1, [
+        {
+          markdown:
+            'Run the checks:\n\n```sh far:/srv/shop\nmake check\n```\n\nThen:\n\n```bash\nls -la\n```\n\n```json\n{}\n```',
+          question: null,
+        },
+        { markdown: null, question: choiceQuestion },
+      ]),
+      commands: [{ text: 'far:/srv/shop', machine: 'far', path: '/srv/shop' }],
+      runsAt: { machine: 'far', path: '/far/agent' },
+    }
+    Scene.scene(
+      { update, view },
+      Scene.given(online(personal)),
+      arrive(personal, [checks]),
+      Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
+      Scene.tap((simulation) => {
+        expect(entries('ask-command-place', simulation.html)).toEqual(['far · /srv/shop', 'far · /far/agent'])
+        expect(entries('ask-command', simulation.html)).toHaveLength(2)
+      }),
+      Scene.click(Scene.first(Scene.all.role('button', { name: 'Copy' }))),
+      Scene.Command.expectExact(CopyText({ text: 'make check' })),
+      Scene.Command.resolve(CopyText({ text: 'make check' }), Message.CopiedText()),
+    )
+  })
+
   it('shows a link to a file as the machine and the path the home placed it at, not as a link', () => {
     const planned = {
       ...ask('a-plan', 1, [

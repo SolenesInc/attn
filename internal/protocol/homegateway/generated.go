@@ -8,6 +8,9 @@ type HomeGatewayAsk struct {
 	// Chief corresponds to the JSON schema field "chief".
 	Chief *bool `json:"chief,omitempty,omitzero"`
 
+	// Commands corresponds to the JSON schema field "commands".
+	Commands []HomeGatewayAskFile `json:"commands,omitempty,omitzero"`
+
 	// CreatedAt corresponds to the JSON schema field "created_at".
 	CreatedAt time.Time `json:"created_at"`
 
@@ -31,6 +34,9 @@ type HomeGatewayAsk struct {
 
 	// Reply corresponds to the JSON schema field "reply".
 	Reply *HomeGatewayAskReply `json:"reply,omitempty,omitzero"`
+
+	// RunsAt corresponds to the JSON schema field "runs_at".
+	RunsAt *HomeGatewayAskPlace `json:"runs_at,omitempty,omitzero"`
 
 	// SeedSlug corresponds to the JSON schema field "seed_slug".
 	SeedSlug *string `json:"seed_slug,omitempty,omitzero"`
@@ -197,6 +203,14 @@ type HomeGatewayAskPart struct {
 
 	// Question corresponds to the JSON schema field "question".
 	Question *HomeGatewayAskQuestion `json:"question,omitempty,omitzero"`
+}
+
+type HomeGatewayAskPlace struct {
+	// Machine corresponds to the JSON schema field "machine".
+	Machine string `json:"machine"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
 }
 
 type HomeGatewayAskQuestion struct {
