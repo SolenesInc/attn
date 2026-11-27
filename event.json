@@ -1,0 +1,8 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "fix: shell published as working (at_prompt) in TestAShellIsWorkingOnlyWhileACommandRunsWhateverItsRuntimeClaims",
+  "at": "2026-11-27T07:53:15.697Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45956418976",
+  "repairs": "dc5989484"
+}
