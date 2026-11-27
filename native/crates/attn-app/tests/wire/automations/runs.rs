@@ -208,6 +208,60 @@ fn bar_runs() -> Vec<Session> {
 }
 
 #[test]
+fn the_waiting_pill_key_palette_and_bar_follow_the_flat_order_across_automations() {
+    let alpha = run_of("alpha", 1, "Alpha", true);
+    let beta = Session {
+        turn_opened_at: Some(ago(45)),
+        ..run_of("beta", 2, "Beta", true)
+    };
+    let zulu = Session {
+        turn_opened_at: Some(ago(60)),
+        ..run_of("zulu", 3, "Zulu", true)
+    };
+    let sessions = [&alpha, &beta, &zulu];
+    let mut world = World::start(palette::daemon(
+        queue(one_desktop(vec![alpha.clone(), beta.clone(), zulu.clone()])),
+        vec![],
+    ));
+
+    let [zulu_y, beta_y, alpha_y] =
+        ["zulu", "beta", "alpha"].map(|id| world.rect(&format!("queue-run.{id}"))[1]);
+    assert!(zulu_y < beta_y && beta_y < alpha_y);
+
+    click(&mut world, "queue.runs.needing");
+    assert_eq!(sent_ids(&world, "desktop_show_session"), ["zulu"]);
+    daemon_shows(&mut world, &sessions, "zulu");
+
+    next_run(&mut world);
+    run_command(&mut world, "Next run needing you");
+    world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+    hover(&mut world, "queue-bar.runs");
+    assert!(has(&world, &format!("{PEEK}.agent:beta.tag")));
+    assert!(!has(&world, &format!("{PEEK}.agent:alpha.tag")));
+    click(&mut world, "queue-bar.runs");
+    assert_eq!(
+        sent_ids(&world, "desktop_show_session"),
+        ["zulu", "beta", "beta", "beta"]
+    );
+
+    daemon_shows(&mut world, &sessions, "beta");
+    world.gesture(|app| {
+        app.move_to((600.0, 500.0));
+        app.key(chord(Action::SessionGoToDashboard));
+    });
+    world.advance(std::time::Duration::from_secs(1));
+    if let Some(wake_at) = world.runtime().wake_deadline() {
+        let wake_at = std::time::Duration::from_secs_f64(wake_at);
+        world.advance(wake_at.saturating_sub(world.now()));
+    }
+    assert!(
+        world.runtime_is_at_rest(),
+        "next wake: {:?}",
+        world.runtime().wake_deadline()
+    );
+}
+
+#[test]
 fn the_runs_chip_is_absent_without_runs_and_counts_them_and_walks_them_when_pressed() {
     let world = collapsed(vec![turn("a", 9)]);
     assert!(!has(&world, "queue-bar.runs"));

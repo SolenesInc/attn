@@ -97,9 +97,8 @@ fn queue_automations(state: &State, on_screen: &[String], now_ms: i64) -> QueueA
     let places = queue::Places::of(&state.facts);
     let needing: usize = groups.iter().map(|g| g.needing_you.len()).sum();
     let mut seen: HashSet<&str> = HashSet::new();
-    let mut active: Vec<(u8, Option<&str>, usize, QueueAgent)> = Vec::new();
+    let mut active: Vec<(u8, Option<&str>, QueueAgent)> = Vec::new();
     let mut finished: Vec<(&str, QueueAgent)> = Vec::new();
-    let mut order = 0usize;
 
     for group in &groups {
         for run in &group.runs {
@@ -125,28 +124,27 @@ fn queue_automations(state: &State, on_screen: &[String], now_ms: i64) -> QueueA
                     | AgentState::Recoverable
             );
             if wants_attention {
-                active.push((0, run.turn_opened_at.as_deref(), order, qa));
+                active.push((0, run.turn_opened_at.as_deref(), qa));
             } else if live {
-                active.push((1, None, order, qa));
+                active.push((1, None, qa));
             } else if qa.agent.selected || on_screen.contains(&run.id) {
-                active.push((2, None, order, qa));
+                active.push((2, None, qa));
             } else {
                 finished.push((run.state_since.as_str(), qa));
             }
-            order += 1;
         }
     }
 
-    active.sort_by(|a, b| {
-        a.0.cmp(&b.0)
-            .then_with(|| a.1.is_none().cmp(&b.1.is_none()))
-            .then_with(|| a.1.cmp(&b.1))
-            .then_with(|| a.2.cmp(&b.2))
+    active.sort_by_key(|(phase, opened_at, _)| {
+        (
+            *phase,
+            crate::automations::runs::turn_opened_order(*opened_at),
+        )
     });
     finished.sort_by(|a, b| b.0.cmp(a.0).then_with(|| a.1.agent.id.cmp(&b.1.agent.id)));
 
     QueueAutomations {
-        active: active.into_iter().map(|(_, _, _, qa)| qa).collect(),
+        active: active.into_iter().map(|(_, _, qa)| qa).collect(),
         finished: finished.into_iter().map(|(_, qa)| qa).collect(),
         needing,
     }

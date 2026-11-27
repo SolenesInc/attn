@@ -1,6 +1,6 @@
 //! Automation runs on the desktops, grouped by the automation that started them: the runs that
 //! need the user oldest first, then the ones still working, then the finished ones newest first.
-//! ⌘⇧J walks the runs that need the user, group by group, and wraps.
+//! In queue flow, ⌘⇧J walks the runs that need the user oldest first and wraps.
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -108,18 +108,23 @@ pub(crate) fn on_desktops(facts: &Facts, now_ms: i64) -> Vec<Group<'_>> {
     )
 }
 
+pub(crate) fn turn_opened_order(at: Option<&str>) -> (bool, Option<&str>) {
+    (at.is_none(), at)
+}
+
 /// The next run needing the user after `current`, its place in that batch and the batch's size.
 pub(crate) fn next_needing_you<'a>(
     groups: &[Group<'a>],
     current: Option<&str>,
 ) -> Option<(&'a Session, usize, usize)> {
-    let batch: Vec<&Session> = groups
+    let mut batch: Vec<&Session> = groups
         .iter()
         .flat_map(|g| g.needing_you.iter().copied())
         .collect();
     if batch.is_empty() {
         return None;
     }
+    batch.sort_by_key(|run| turn_opened_order(run.turn_opened_at.as_deref()));
     let at = current
         .and_then(|id| batch.iter().position(|run| run.id == id))
         .map_or(0, |i| (i + 1) % batch.len());
@@ -242,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    fn the_next_run_walks_the_batch_in_group_order_wraps_and_starts_over_from_a_run_that_no_longer_needs_you()
+    fn the_next_run_walks_the_batch_oldest_first_wraps_and_starts_over_from_a_run_that_no_longer_needs_you()
      {
         let sessions = [
             owed(
@@ -269,11 +274,11 @@ mod tests {
         }
         assert_eq!(
             walk,
-            ["docs-1 1/3", "docs-2 2/3", "review-1 3/3", "docs-1 1/3"]
+            ["review-1 1/3", "docs-1 2/3", "docs-2 3/3", "review-1 1/3"]
         );
         assert_eq!(
             next_needing_you(&groups, Some("docs-live")).map(|(r, ..)| r.id.as_str()),
-            Some("docs-1")
+            Some("review-1")
         );
         let idle = [run("a", "docs", "idle")];
         assert!(next_needing_you(&super::groups(&idle, &[], now()), None).is_none());
