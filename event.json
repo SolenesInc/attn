@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Home move can discard acknowledged target machine settings",
+  "at": "2026-11-27T11:04:58.191Z",
+  "detail": "A target machine setting accepted after staging and before restart can be replaced by the earlier saved rows when the move applies. Preserve acknowledged machine-local changes or explicitly fence such writes during the transition.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/store/home_move.go",
+    "line": 88
+  },
+  "culprit": "2113370ce24975ca7209ee34edc6b3db99c96614"
+}
