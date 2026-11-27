@@ -2507,6 +2507,7 @@ model SpawnSessionMessage {
   `model`?: string;            // Pin the launched agent's model; empty = agent default
   effort?: string;             // Pin the launched agent's reasoning effort; empty = agent default
   execution_target?: string;   // Where a new conversation runs its tools, an id from harness_targets; empty = the harness default. The harness fixes it when it creates the conversation and never runs that conversation's tools elsewhere
+  typed?: string;              // Agent "shell" only: pasted at the shell's first prompt with control characters stripped, and never submitted
 }
 
 // PTY commands and events address a terminal: their `id` is the pane's

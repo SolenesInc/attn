@@ -145,6 +145,9 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 	if isShell && strings.TrimSpace(initialPrompt) != "" {
 		return nil, &spawnRejection{err: errors.New("shell sessions do not accept an initial prompt")}
 	}
+	if !isShell && protocol.Deref(msg.Typed) != "" {
+		return nil, &spawnRejection{err: fmt.Errorf("only shells take typed text; %s sessions take an initial prompt", agent)}
+	}
 	if strings.TrimSpace(initialPrompt) != "" {
 		h, err := d.harness(agent)
 		if err == nil {
@@ -693,6 +696,9 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 	}
 	if outcome := d.commitSpawn(req, plan); outcome.err != nil {
 		return placementOutcome{}, &spawnRejection{err: outcome.err}
+	}
+	if typed := protocol.Deref(msg.Typed); typed != "" {
+		d.typeAtFirstPrompt(msg.ID, typed)
 	}
 	req.placed.session = msg.ID
 	if plan.agent != nil {

@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "c9616fd918da";
+pub const PROTOCOL_VERSION: &str = "8f1e92c44c80";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -12514,6 +12514,8 @@ pub struct SpawnSessionMessage {
     pub rows: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spawned_from: Option<SessionID>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typed: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub yolo_mode: Option<bool>,
 }

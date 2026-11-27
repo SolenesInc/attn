@@ -14203,6 +14203,9 @@ type SpawnSessionMessage struct {
 	// SpawnedFrom corresponds to the JSON schema field "spawned_from".
 	SpawnedFrom *SessionID `json:"spawned_from,omitempty,omitzero"`
 
+	// Typed corresponds to the JSON schema field "typed".
+	Typed *string `json:"typed,omitempty,omitzero"`
+
 	// YoloMode corresponds to the JSON schema field "yolo_mode".
 	YoloMode *bool `json:"yolo_mode,omitempty,omitzero"`
 }

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/command"
@@ -405,18 +406,49 @@ func terminalCommandNotice(opener protocol.SessionID, terminal protocol.Terminal
 }
 
 func (d *Daemon) typeFirstCommand(ctx context.Context, terminal protocol.TerminalID, id protocol.SessionID, line string, beforeWrite func() error) error {
-	ctx, cancel := context.WithTimeout(ctx, terminalFirstPromptTripwire)
-	defer cancel()
-	err := d.waitForTerminalFirstPrompt(ctx, terminal)
-	if err == nil && ctx.Err() == nil {
-		var state protocol.TerminalText
-		state, err = Call[protocol.TerminalText](ctx, d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: terminal, Mode: protocol.TerminalReadModeScreen})
+	return d.atFirstPrompt(ctx, terminal, id, func(ctx context.Context) error {
+		state, err := Call[protocol.TerminalText](ctx, d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: terminal, Mode: protocol.TerminalReadModeScreen})
 		if err == nil && beforeWrite != nil {
 			err = beforeWrite()
 		}
 		if err == nil {
 			err = d.typeInput(ctx, terminal, state, line+"\r")
 		}
+		return err
+	})
+}
+
+func (d *Daemon) typeAtFirstPrompt(id protocol.SessionID, text string) {
+	terminal := d.primaryTerminal(id)
+	d.life.Go("type the text of a typed shell", func() {
+		if err := d.pasteAtFirstPrompt(d.life.Context(), terminal, id, text); err != nil {
+			d.logf("typed shell: text for %s not typed: %v", terminal, err)
+		}
+	})
+}
+
+func (d *Daemon) pasteAtFirstPrompt(ctx context.Context, terminal protocol.TerminalID, id protocol.SessionID, text string) error {
+	return d.atFirstPrompt(ctx, terminal, id, func(ctx context.Context) error {
+		_, err := Call[struct{}](ctx, d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: terminal, Data: bracketedPaste(text), Source: "agent"})
+		return err
+	})
+}
+
+func bracketedPaste(text string) string {
+	return "\x1b[200~" + strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, text) + "\x1b[201~"
+}
+
+func (d *Daemon) atFirstPrompt(ctx context.Context, terminal protocol.TerminalID, id protocol.SessionID, write func(context.Context) error) error {
+	ctx, cancel := context.WithTimeout(ctx, terminalFirstPromptTripwire)
+	defer cancel()
+	err := d.waitForTerminalFirstPrompt(ctx, terminal)
+	if err == nil && ctx.Err() == nil {
+		err = write(ctx)
 	}
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return protocol.Refuse(protocol.RefusalLimit, "first prompt wait exceeded limit=%s; %s. Terminal %s stays open; nothing was typed. Use `{attn terminal send %s}` to continue", terminalFirstPromptTripwire, terminalFirstPromptReceipt, id, id)
