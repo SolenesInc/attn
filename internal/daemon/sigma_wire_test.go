@@ -483,6 +483,9 @@ func TestAForkUnderTheTilesAuthorThatItsTUINeverOpenedLeavesTheTile(t *testing.T
 	if run.ConversationID != original {
 		t.Errorf("reload opened conversation %s, want %s, which the tile still showed", run.ConversationID, original)
 	}
+	if offer := queriedSession(t, w.Client(), first).ForkOffer; offer != nil {
+		t.Errorf("a fork its TUI never opened left %s offering %s", first, *offer)
+	}
 }
 
 func TestAnIdleSigmaForkMadeWhileAttnWasCutOffMovesTheTileWhenAttnReconnects(t *testing.T) {

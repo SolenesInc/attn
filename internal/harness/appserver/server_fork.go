@@ -64,7 +64,7 @@ type serverAuthor struct {
 	ID string `json:"id"`
 }
 
-func (p *serverConnection) followShown(shown []serverShown) {
+func (p *serverConnection) followShown(c *effectrpc.Client, shown []serverShown) {
 	newest := make(map[string]string, len(shown))
 	var authors []string
 	for _, each := range shown {
@@ -74,11 +74,11 @@ func (p *serverConnection) followShown(shown []serverShown) {
 		newest[each.Author.ID] = each.Conversation
 	}
 	for _, author := range authors {
-		p.followTerminalOf(author, newest[author])
+		p.followTerminalOf(c, author, newest[author])
 	}
 }
 
-func (p *serverConnection) followTerminalOf(author, conversation string) {
+func (p *serverConnection) followTerminalOf(c *effectrpc.Client, author, conversation string) {
 	peers := p.peers()
 	for _, l := range peers {
 		authors := l.b.authors.Load()
@@ -90,12 +90,13 @@ func (p *serverConnection) followTerminalOf(author, conversation string) {
 			continue
 		}
 		session, showing := p.c.host.Sessions().Showing(terminal)
-		if !showing || p.c.host.Sessions().Conversation(session) == conversation || p.holder(conversation) != "" {
+		held := p.c.host.Sessions().Conversation(session)
+		if !showing || held == conversation || p.holder(conversation) != "" {
 			return
 		}
 		for _, owner := range peers {
 			if owner.runsHere(session) {
-				owner.move(terminal, conversation)
+				owner.move(terminal, harness.Move{Conversation: conversation, Forked: owner.forksFrom(c, conversation, held)})
 				return
 			}
 		}
@@ -117,8 +118,21 @@ func (p *serverConnection) holderWithLink(conversation string) (protocol.Session
 	return "", nil
 }
 
-func (l *Link) move(terminal harness.TerminalID, conversation string) {
-	wait := l.c.host.Events().Moved(harness.FromTerminal(terminal), harness.Move{Conversation: conversation})
+func (l *Link) forksFrom(c *effectrpc.Client, conversation, held string) bool {
+	if held == "" {
+		return false
+	}
+	listed, ok, err := l.findListedConversation(l.c.host.Life().Context(), c, conversation)
+	if err != nil {
+		l.logf("conversation %s a terminal shows could not be listed, so its move offers no original: %v", conversation, err)
+		return false
+	}
+	return ok && listed.kind() == forkConversation && listed.Fork.Of == held
+}
+
+func (l *Link) move(terminal harness.TerminalID, to harness.Move) {
+	conversation := to.Conversation
+	wait := l.c.host.Events().Moved(harness.FromTerminal(terminal), to)
 	if wait == nil {
 		return
 	}

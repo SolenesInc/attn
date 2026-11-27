@@ -388,6 +388,7 @@ type appServer struct {
 	nextCall    int
 	watchers    []*serverWatcher
 	refuseMCP   string
+	refuseList  string
 	answers     int
 	providers   []ServerProvider
 	healthRead  map[string]string
@@ -664,6 +665,9 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		}
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		if s.refuseList != "" {
+			return nil, s.refuseList
+		}
 		convs := make([]*ServerConversation, 0, len(s.convs))
 		for _, conv := range s.convs {
 			convs = append(convs, conv)
@@ -973,6 +977,17 @@ func (s *appServer) handleKit(_ *rpcPeer, method string, raw json.RawMessage) (a
 		return s.fork(raw)
 	case methodForks:
 		return s.forks(raw)
+	case methodShowAs:
+		return s.showAs(raw)
+	case methodRefuseList:
+		var refusal struct{ Code string }
+		if err := json.Unmarshal(raw, &refusal); err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		s.refuseList = refusal.Code
+		s.mu.Unlock()
+		return struct{}{}, nil
 	case methodAwaitMCP:
 		return s.awaitMCP(raw)
 	case methodRefuseMCP:

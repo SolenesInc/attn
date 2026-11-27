@@ -439,7 +439,7 @@ func (p *serverConnection) statusWatchParams() any {
 func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 	switch tree.Tag {
 	case "shown":
-		p.followShown([]serverShown{{Author: tree.Author, Conversation: tree.Conversation}})
+		p.followShown(c, []serverShown{{Author: tree.Author, Conversation: tree.Conversation}})
 		return
 	case "trees", "tree":
 	default:
@@ -451,7 +451,7 @@ func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 		for _, t := range tree.Trees {
 			p.busy[t.Conversation] = t.Status
 		}
-		p.followShown(tree.Shown)
+		p.followShown(c, tree.Shown)
 		var last map[string]*serverEnded
 		for id, l := range p.sessions() {
 			conversation := p.c.host.Sessions().Conversation(id)

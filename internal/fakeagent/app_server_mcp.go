@@ -17,6 +17,8 @@ const (
 	methodCallTool      = "call_tool"
 	methodFork          = "fork"
 	methodForks         = "forks"
+	methodShowAs        = "show_as"
+	methodRefuseList    = "refuse_list"
 	methodAwaitMCP      = "await_mcp"
 	methodRefuseMCP     = "refuse_mcp"
 	methodMCPHeader     = "mcp_header"
@@ -363,4 +365,37 @@ func (s *AppServer) Fork(conversation, id string) {
 func (s *AppServer) ForkAs(conversation, id, author string) {
 	s.t.Helper()
 	s.call(methodFork, forkParams{Conversation: conversation, ID: id, Author: author}, nil)
+}
+
+// ShowAs says a client writing as author shows conversation, as Sigma's TUI does when it opens another conversation.
+func (s *AppServer) ShowAs(conversation, author string) {
+	s.t.Helper()
+	s.call(methodShowAs, forkParams{Conversation: conversation, Author: author}, nil)
+}
+
+func (s *appServer) showAs(raw json.RawMessage) (any, error) {
+	var p forkParams
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.convs[p.Conversation] == nil {
+		return nil, errors.New("NoSuchConversation")
+	}
+	author := ServerAuthor{ID: p.Author, Name: "you"}
+	s.shown = append(s.shown, serverShown{Author: author, Conversation: p.Conversation})
+	item := map[string]any{"_tag": "shown", "author": author, "conversation": p.Conversation}
+	for other := range s.conns {
+		if other.watch != nil {
+			other.send(map[string]any{"jsonrpc": "2.0", "chunk": true, "id": *other.watch, "result": []any{item}})
+		}
+	}
+	return struct{}{}, nil
+}
+
+// RefuseConversationList makes every later conversation/list fail with tag, until a call with no tag.
+func (s *AppServer) RefuseConversationList(tag string) {
+	s.t.Helper()
+	s.call(methodRefuseList, map[string]string{"code": tag}, nil)
 }
