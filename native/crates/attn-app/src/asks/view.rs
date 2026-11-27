@@ -486,6 +486,7 @@ fn placed_files(machines: &crate::machine::Machines, ask: &Ask) -> Vec<links::Pl
         .map(|r| links::Placed {
             href: r.text.clone(),
             path: r.path.clone(),
+            host: r.host.clone(),
             away: links::Away::of(machines, r.host.as_deref()),
         })
         .collect()

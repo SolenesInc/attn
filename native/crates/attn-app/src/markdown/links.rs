@@ -1,6 +1,7 @@
 //! Where a document's links go, and which of them the reader may follow: a fragment scrolls the
 //! document, a web or mail link opens in its handler, a local file opens with the system's
-//! opener when its kind is safe, and a file on another machine opens in a tile when it is markdown.
+//! opener when its kind is safe, and a file on another machine opens in a tile when it is markdown,
+//! as does a markdown file the daemon placed on a machine, this app's included.
 
 use std::path::Path;
 
@@ -119,12 +120,13 @@ pub(crate) struct Document {
     pub(crate) placed: Vec<Placed>,
 }
 
-/// A link whose file the daemon placed: the link as written, its absolute path, and the machine
-/// it is on when that is not this app's.
+/// A link whose file the daemon placed: the link as written, its absolute path, the `host` the
+/// wire names its machine by, and that machine when it is not this app's.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Placed {
     pub(crate) href: String,
     pub(crate) path: String,
+    pub(crate) host: Option<String>,
     pub(crate) away: Option<Away>,
 }
 
@@ -302,13 +304,23 @@ pub(crate) fn follow(state: &mut State, document: &Document, href: &str, tx: &mu
     }
     if let Some(placed) = document.placed(href) {
         let placed = placed.clone();
-        open_file(
-            state,
-            placed.path,
-            placed.away.as_ref(),
-            document.session.clone(),
-            tx,
-        );
+        if is_markdown(&placed.path) {
+            crate::opener::open_markdown(
+                state,
+                placed.path,
+                placed.host,
+                document.session.clone(),
+                tx,
+            );
+        } else {
+            open_file(
+                state,
+                placed.path,
+                placed.away.as_ref(),
+                document.session.clone(),
+                tx,
+            );
+        }
         return;
     }
     let target = resolve(&document.path, href);

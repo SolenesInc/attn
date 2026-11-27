@@ -2563,6 +2563,72 @@ fn a_file_link_in_an_ask_from_an_outpost_opens_the_file_from_that_machine() {
     assert!(world.opened_links().is_empty());
 }
 
+#[test]
+fn a_placed_markdown_link_on_the_apps_machine_opens_in_a_tile_and_another_placed_file_in_its_opener()
+ {
+    let dir = tempfile::tempdir().unwrap();
+    let folder = dir.path().to_string_lossy().into_owned();
+    let report = format!("{folder}/report.pdf");
+    std::fs::write(&report, b"%PDF-1.4").unwrap();
+    let mut asked = ask(
+        "a-here",
+        "api",
+        "Plan",
+        5,
+        vec![prose(
+            "Read [the plan](plan.md) and [the report](report.pdf).",
+        )],
+    );
+    asked.base_dir = folder.clone();
+    asked.references = Some(vec![
+        AskReference {
+            kind: "file".into(),
+            text: "plan.md".into(),
+            host: None,
+            path: format!("{folder}/plan.md"),
+            line: 1,
+        },
+        AskReference {
+            kind: "file".into(),
+            text: "report.pdf".into(),
+            host: None,
+            path: report.clone(),
+            line: 1,
+        },
+    ]);
+    let mut world = start(vec![asked], vec![api_working()]);
+    world.daemon.on("open_markdown", |r| {
+        message(OpenMarkdownResultMessage {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            path: r["path"].as_str().unwrap_or_default().into(),
+            success: true,
+            ..OpenMarkdownResultMessage::new()
+        })
+    });
+    open_sheet(&mut world);
+
+    world.gesture(|app| app.click(Target::key("plan.md")));
+    let sent = world.daemon.sent_of("open_markdown");
+    assert_eq!(
+        sent.iter()
+            .map(|s| (s["path"].clone(), s["host"].clone()))
+            .collect::<Vec<_>>(),
+        [(
+            serde_json::json!(format!("{folder}/plan.md")),
+            serde_json::Value::Null
+        )]
+    );
+    assert!(world.opened_links().is_empty());
+
+    world.gesture(|app| app.click(Target::key("report.pdf")));
+    assert_eq!(world.daemon.sent_of("open_markdown").len(), 1);
+    let canonical = std::fs::canonicalize(&report).unwrap();
+    assert_eq!(
+        world.opened_links(),
+        [attn_term::links::file_url(&canonical.to_string_lossy())]
+    );
+}
+
 const NOTES: &str = "https://example.com/notes";
 const MIGRATION_LINK: &str = "attn-seed:s-cache1";
 
