@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Home rollback can report success while jobs and phone access remain paused",
+  "at": "2026-11-27T14:02:19.581Z",
+  "detail": "If the target stays offline during rollback, the CLI reports the rolled-back step and the app shows success while jobs and phone access remain paused awaiting a second rollback action. Expose that waiting state and its release in CLI and app status, including Phones.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/home_move.go",
+    "line": 313
+  },
+  "culprit": "e2f68cbf2686a5c5f4748386901b6412361bb28d"
+}
