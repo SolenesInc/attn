@@ -220,6 +220,77 @@ func TestResumeToAClosedSessionsConversationReopensItInThePane(t *testing.T) {
 	})
 }
 
+func TestBranchMovesTheTerminalToTheBranchAtOnceAndResumeTakesItBackToTheOriginal(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	first := w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+		m.Label = protocol.Ptr("checkout")
+	})
+	terminal := app.Terminal(first)
+	claude := w.Launched(first)
+	app.TypeLine(first, "add a discount field")
+	claude.Prompted()
+	added := "Added. <!-- attn:state=idle -->"
+	claude.Reply(added)
+	awaitUsageTokens(app, first, claudeTokens(added))
+	original := claude.ConversationID
+
+	heard := len(app.Log())
+	app.TypeLine(first, "/branch")
+	if got := claude.Prompted(); got != "/branch" {
+		t.Fatalf("claude received %q, want /branch", got)
+	}
+	branch := awaitSuccessor(app, first)
+	if got := app.Terminal(string(branch.ID)); got != terminal {
+		t.Errorf("the branch runs in terminal %s, want %s, the one /branch ran in", got, terminal)
+	}
+	closed := awaitClosed(app, first)
+	if !strings.Contains(protocol.Deref(closed.CloseReason), string(branch.ID)) || closed.Label != "checkout" {
+		t.Errorf("the original's ledger row = %+v, want it closed under its own name naming %s", closed, branch.ID)
+	}
+	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
+		return e.Session != nil && string(e.Session.ID) == first
+	})
+	if got, want := handoverEvents(app.Log()[heard:], first, string(branch.ID)), []string{
+		protocol.EventSessionRegistered, protocol.EventProfileArrangementChanged, protocol.EventSessionClosed, protocol.EventSessionUnregistered,
+	}; !slices.Equal(got, want) {
+		t.Errorf("the app heard /branch as %v, want %v before any prompt in the branch", got, want)
+	}
+
+	heard = len(app.Log())
+	resumeClaude(app, claude, string(branch.ID), original)
+	back := awaitSuccessor(app, string(branch.ID))
+	if string(back.ID) != first || back.Label != "checkout" {
+		t.Fatalf("/resume %s brought back %s named %q, want %s, the original", original, back.ID, back.Label, first)
+	}
+	if got := app.Terminal(first); got != terminal {
+		t.Errorf("%s came back in terminal %s, want %s", first, got, terminal)
+	}
+	awaitClosed(app, string(branch.ID))
+	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
+		return e.Session != nil && e.Session.ID == branch.ID
+	})
+	if got, want := handoverEvents(app.Log()[heard:], string(branch.ID), first), []string{
+		protocol.EventSessionRegistered, protocol.EventProfileArrangementChanged, protocol.EventSessionClosed, protocol.EventSessionUnregistered,
+	}; !slices.Equal(got, want) {
+		t.Errorf("the app heard the return to the original as %v, want %v", got, want)
+	}
+	if ids := queriedIDs(t, cli, ""); !slices.Equal(ids, []string{first}) {
+		t.Errorf("after /branch and /resume back the sessions are %v, want only %s", ids, first)
+	}
+
+	app.TypeLine(first, "now the tests")
+	if got := claude.Prompted(); got != "now the tests" || claude.ConversationID != original {
+		t.Fatalf("typing after /resume reached claude as %q in conversation %s, want it in %s", got, claude.ConversationID, original)
+	}
+	tested := "Which framework? <!-- attn:state=waiting_input -->"
+	claude.Reply(tested)
+	testworld.AwaitSession(app, first, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateWaitingInput && s.Usage != nil &&
+			s.Usage.TotalTokens == claudeTokens(added)+claudeTokens(tested)
+	})
+}
+
 func TestResumeToARecoverableSessionsConversationMovesItIntoThePane(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()

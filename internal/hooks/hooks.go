@@ -45,7 +45,7 @@ func Generate(sessionID, socketPath, wrapperPath string, env map[string]string, 
 		Hooks: map[string][]HookEntry{
 			"SessionStart": {
 				{
-					Matcher: "startup|resume|clear|compact",
+					Matcher: "startup|resume|clear|compact|fork",
 					Hooks: []Hook{
 						{
 							Type:    "command",

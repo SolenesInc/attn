@@ -228,6 +228,9 @@ func (c *claude) submit(prompt string) error {
 	if conversation, ok := strings.CutPrefix(strings.TrimSpace(prompt), "/resume "); ok {
 		return c.resume(strings.TrimSpace(conversation))
 	}
+	if strings.TrimSpace(prompt) == "/branch" {
+		return c.branch()
+	}
 	c.mod.turnStarted()
 	c.term.title(claudeBusyTitle)
 	c.reportStatus("state=working")
@@ -247,6 +250,24 @@ func (c *claude) clear() error {
 		return err
 	}
 	return c.hooks.run("SessionStart", "clear", c.hookInput("SessionStart", map[string]any{"source": "clear"}))
+}
+
+// branch moves to a new conversation holding a copy of this one's transcript, as real Claude's /branch does:
+// SessionEnd resume, then SessionStart fork.
+func (c *claude) branch() error {
+	history, err := os.ReadFile(c.transcript)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := c.hooks.run("SessionEnd", "resume", c.hookInput("SessionEnd", map[string]any{"reason": "resume"})); err != nil {
+		return err
+	}
+	c.conversation, c.resumed = uuid.NewString(), false
+	c.transcript = c.transcriptPath()
+	if err := os.WriteFile(c.transcript, history, 0o644); err != nil {
+		return err
+	}
+	return c.hooks.run("SessionStart", "fork", c.hookInput("SessionStart", map[string]any{"source": "fork"}))
 }
 
 // resume moves to another conversation as real Claude's /resume does: SessionEnd, then SessionStart
