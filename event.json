@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: App relay channel refusal misreports and misses recovery",
+  "at": "2026-11-27T05:37:00.913Z",
+  "detail": "A refused app channel on a healthy bridge is shown as dialing. When the home accepts apps again, the app is not woken to reconnect. Distinguish channel refusal and recover when the setting permits it. The implementation follow-up already owns state and wording.\nIndependently source-confirmed at dc932349a. Evidence on s-s3sc2q.\n"
+}
