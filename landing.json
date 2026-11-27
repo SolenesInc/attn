@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "a250ddba4362d4659b19dc583f60a18d64b051de",
+  "head": "e7f4824719fcbd2886ece94f04c2722d4c1bca0f",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 205.526,
+    "ranOn": "e54f0b52285f54e95142bc59c1cdb30d2aa977d2"
+  },
+  "acknowledgedFlake": {
+    "test": "go ./cmd/attnd TestHomeMoveToAMachineThatDialsTheHome",
+    "owner": "s-brnryw"
+  },
+  "noMediaReason": "Daemon and hook change; no screen changes until the app child lands. Live evidence is the C43 transcript on s-jjc34g",
+  "recordings": []
+}

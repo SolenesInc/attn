@@ -1,0 +1,3 @@
+Claude Code `/branch` now leaves a fork offer: the branch's session carries `fork_offer` naming the original, which `/branch` closed into the ledger, and `fork_offer_open` reopens the original as itself in the column after the branch, focused. The SessionStart hook now forwards its `source`, and each harness states in `Signals.ForkStart` which source means "forked from the conversation this terminal held". Claude states `fork`. Codex leaves it empty, because its `fork` means `/side`. The background `/fork` fires no SessionStart and changes nothing.
+
+Also fixes a real-Claude stack test whose mock ring trigger still said `attn agent inbox`. It failed on main too.
