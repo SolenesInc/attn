@@ -502,7 +502,7 @@ impl Terminals {
     /// The id at `at` in terminal `runtime` that no link covers, as a click with ⌘ or
     /// Ctrl finds it.
     pub(crate) fn mark_at(&mut self, runtime: &str, at: (f32, f32)) -> Option<Mark> {
-        if self.presses_link(runtime, at) {
+        if self.shows_link_at(runtime, at) {
             return None;
         }
         self.current(runtime)?;

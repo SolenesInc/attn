@@ -875,6 +875,29 @@ fn a_click_with_the_accelerator_on_a_seed_id_opens_the_seed_as_a_tile_beside_the
     rests(&mut world);
 }
 
+#[test]
+fn a_seed_id_inside_a_path_in_a_terminal_of_a_home_elsewhere_opens_the_seed_on_a_click() {
+    let reader = DesktopPane {
+        session_id: "s1".into(),
+        ..pane("t1", "r1")
+    };
+    let mut state = showing(vec![reader], "daemon-1");
+    state.sessions = Some(vec![agent("s1", "Reader")]);
+    state.seeds_total = Some(1);
+    state.seeds = Some(vec![mapped()]);
+    let daemon = ledger_daemon(state, vec![]).relaying_to("mac", "oma");
+    let mut world = World::start_sized(daemon, (1400.0, 900.0));
+    world.open_desktop();
+    write(&mut world, 1, &format!("seeds/{SEED}/notes.md"));
+
+    opens(&mut world, 8, 0);
+    let opened = world.daemon.sent_of("open_seed");
+    assert_eq!(opened.len(), 1);
+    assert_eq!(opened[0]["seed_id"], json!(SEED));
+    assert!(world.screen().find(Target::key("notice.text")).is_none());
+    rests(&mut world);
+}
+
 fn on_closed_card() -> World {
     let mut world = start(vec![], vec![mapped()], vec![mapper()]);
     write(&mut world, 1, &format!("from {MAPPER_SHORT}"));

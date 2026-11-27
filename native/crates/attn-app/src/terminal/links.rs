@@ -112,7 +112,7 @@ impl Terminals {
         at: (f32, f32),
         tx: &mut Tx,
     ) -> Result<Option<String>, String> {
-        let Some(target) = self.link_at(id, at) else {
+        let Some(target) = self.clicked_at(id, at) else {
             return Ok(None);
         };
         let away = self.panes.get(id).and_then(|t| t.place.away.as_deref());
@@ -129,11 +129,24 @@ impl Terminals {
     }
 
     pub(super) fn presses_link(&mut self, id: &str, at: (f32, f32)) -> bool {
-        self.link_at(id, at).is_some()
+        self.clicked_at(id, at).is_some()
     }
 
-    /// The link at `at` in terminal `id`, read afresh, as a press or release finds it.
-    fn link_at(&mut self, id: &str, at: (f32, f32)) -> Option<Target> {
+    /// Whether the link at `at` in terminal `id` is one its hover underlines, which an id
+    /// inside it gives way to.
+    pub(super) fn shows_link_at(&mut self, id: &str, at: (f32, f32)) -> bool {
+        let metrics = self.metrics();
+        let home = home();
+        let Some(term) = self.panes.get_mut(id) else {
+            return false;
+        };
+        screen_cell(term, &metrics, at)
+            .is_some_and(|cell| find(term, cell, home.as_deref()).is_some())
+    }
+
+    /// What a click at `at` in terminal `id` opens, read afresh: the link its hover shows, or
+    /// in a terminal on another machine the path the text names there.
+    fn clicked_at(&mut self, id: &str, at: (f32, f32)) -> Option<Target> {
         let metrics = self.metrics();
         let home = home();
         let term = self.panes.get_mut(id)?;
