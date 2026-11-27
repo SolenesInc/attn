@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "8e162bb75f4c82333fc8da54cef518eb9cca6af2",
+  "head": "e2f68cbf2686a5c5f4748386901b6412361bb28d",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 102.07,
+    "ranOn": "e2f68cbf2686a5c5f4748386901b6412361bb28d"
+  },
+  "fixesBugs": [
+    "ed63e5f",
+    "ea8ddc1",
+    "bd69279",
+    "7d13431",
+    "11ece0e",
+    "471f8c4",
+    "8943e99",
+    "667feb5"
+  ],
+  "noMediaReason": "daemon, store and CLI fixes with stack tests; no visual change",
+  "recordings": []
+}
