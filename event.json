@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Escape cannot cancel profile cycling while the shortcut is held",
+  "at": "2026-11-27T10:06:51.880Z",
+  "detail": "At d6ac6618, start a profile cycle with Cmd+Shift+U and press Escape while the chord is still held. The app's key handler rejects modified Escape before its cancellation path, and the modal handler also rejects it. Releasing the chord then selects the highlighted profile. Independently confirmed by tracing the native event path. Handle Escape during an active held cycle before the modifier guard and cover the held modifier flags through the normal key path.\n"
+}
