@@ -4235,3 +4235,47 @@ fn a_display_scale_move_leaves_a_shelved_terminal_sized_until_its_tile_returns()
     assert_eq!(shown(&world), ["a", "b"]);
     assert_fits(&world, &["r-a", "r-b"], "b back from the shelf at 1x");
 }
+
+#[test]
+fn a_popped_tile_hides_while_the_home_is_unreachable_and_returns_when_it_answers() {
+    let away = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut world = start(vec![with_document(Some(OUT))]);
+    assert!(only_window(&world).shown);
+    let answering = away.clone();
+    let desktops = vec![with_document(Some(OUT))];
+    world.daemon.on("client_hello", move |_| {
+        if answering.load(std::sync::atomic::Ordering::SeqCst) {
+            serde_json::json!({"event": "home_unreachable", "home": "oma", "state": "dialing"})
+        } else {
+            attn_testkit::message(InitialStateMessage {
+                protocol_version: Some(attn_protocol::PROTOCOL_VERSION.into()),
+                ..initial(desktops.clone())
+            })
+        }
+    });
+
+    away.store(true, std::sync::atomic::Ordering::SeqCst);
+    world.daemon.disconnect();
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("connection.home-unreachable"))
+            .is_some(),
+        "{}",
+        world.screen()
+    );
+    assert!(
+        !only_window(&world).shown,
+        "no tile window types into a home that is away"
+    );
+
+    away.store(false, std::sync::atomic::Ordering::SeqCst);
+    world.daemon.disconnect();
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    let back = only_window(&world);
+    assert!(back.shown, "{back:?}");
+    assert_eq!(back.frame, frame(OUT));
+}

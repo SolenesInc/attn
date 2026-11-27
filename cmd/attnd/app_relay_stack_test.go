@@ -116,11 +116,19 @@ func TestAnAppOnAMachineThatDialsItsHomeWorksAgainstTheHome(t *testing.T) {
 	t.Log("(3) /health, the CLI and /mcp on the laptop are answered by the laptop: the home's agent credential does not verify there")
 
 	requireStdout(t, w.home.Attn("settings", "set", "remote_home_enabled", "false"), "false")
-	told := lastHomeUnreachable(t, awaitHomeDial(t, w.laptop, "refused"))
-	if !strings.Contains(protocol.Deref(told.Reason), "does not serve apps on other machines") {
+	w.awaitCopiedSetting("remote_home_enabled", "false")
+	refused := awaitHomeDial(t, w.laptop, "refused")
+	if told := lastHomeUnreachable(t, refused); !strings.Contains(protocol.Deref(told.Reason), "does not serve apps on other machines") {
 		t.Fatalf("an app the home refuses while the machine is bridged: %+v, want refused with the home's reason", told)
 	}
-	t.Log("a home that stops serving other machines' apps refuses the relay, and the app is told so while the bridge stays up")
+	requireStdout(t, w.home.Attn("settings", "set", "remote_home_enabled", "true"), "true")
+	if closed := refused.Closed(); closed.Code != websocket.StatusTryAgainLater {
+		t.Fatalf("the refused app's connection closed with %v once the home served apps again, want %v", closed, websocket.StatusTryAgainLater)
+	}
+	if back := w.laptop.App(); protocol.Deref(back.Initial.DaemonInstanceID) != home {
+		t.Fatalf("after the home served apps again the laptop's app got initial_state from %s, want the home's %s", protocol.Deref(back.Initial.DaemonInstanceID), home)
+	}
+	t.Log("a home that stops serving other machines' apps refuses the relay and the app is told so; once it serves them again the app connects by itself")
 }
 
 func TestAnAppTheHomeDropsIsClosedOnTheMachineThatRelaysIt(t *testing.T) {

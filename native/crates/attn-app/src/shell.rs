@@ -577,10 +577,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         Connection::HomeUnreachable(away) => centered(&t, connection::home_unreachable(&t, away)),
     };
     let banner = connection::banner(state, &t, cx);
-    let bands = matches!(
-        connection,
-        Connection::Connected | Connection::Reconnecting { .. }
-    );
+    let bands = connection::shows_desktops(connection);
     let warnings = bands
         .then(|| crate::warnings::banner(state, &t, cx))
         .flatten();
@@ -630,10 +627,7 @@ const WORK_AREA_FLOOR: f32 = 125.0;
 /// The band the window drags by, over which the window's own controls sit; what it holds
 /// comes with the queue bar and the title bar controls.
 fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
-    let connected = matches!(
-        state.facts.connection,
-        Connection::Connected | Connection::Reconnecting { .. }
-    );
+    let connected = connection::shows_desktops(&state.facts.connection);
     let lights_end = cx.chrome_insets().leading;
     let lights = (lights_end > 0.0).then(|| {
         lights_end + TITLE_BAR_GAP_PAST_LIGHTS / crate::settings::text_scale(&state.facts.settings)

@@ -249,8 +249,8 @@ struct Held {
 }
 
 /// Keeps a window on each popped-out leaf of the profile's desktops, where the daemon says
-/// it is, hides the windows of leaves that came back to use them again, and shows the main
-/// window it hid once no tile window shows.
+/// it is, while the main window shows the desktops; hides the windows of leaves that came back
+/// to use them again, and shows the main window it hid once no tile window shows.
 pub(crate) fn follow(state: &mut State) {
     if state.window.tile.is_some() {
         return;
@@ -261,11 +261,12 @@ pub(crate) fn follow(state: &mut State) {
     let (Some(opener), Some(main)) = (pool.opener.clone(), pool.main.clone()) else {
         return;
     };
+    let shown = crate::connection::shows_desktops(&state.facts.connection);
     let wanted: Vec<Held> = state
         .facts
         .desktops
         .iter()
-        .filter(|d| d.profile_id == state.facts.profiles.selected)
+        .filter(|d| shown && d.profile_id == state.facts.profiles.selected)
         .filter_map(|d| Some((d, d.tree()?)))
         .flat_map(|(d, tree)| {
             tree.popped()

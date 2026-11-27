@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/setting"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -177,12 +178,21 @@ func (d *Daemon) applyOutpostCopyForLaunch(ctx context.Context, home string, row
 	if before != nil {
 		d.refreshChangedSettings(before)
 	}
+	if copiesServingApps(rows) && d.on(setting.RemoteHomeEnabled) {
+		d.wakeHomeWaiters()
+	}
 	d.replayPendingConversations()
 	d.bindMonitorTerminalsSkipping(launching)
 	for profile, agent := range released {
 		d.life.Go("linkReleasedAfterCopy", func() { d.released(agent, profile) })
 	}
 	return nil
+}
+
+func copiesServingApps(rows []protocol.CopyRow) bool {
+	return slices.ContainsFunc(rows, func(row protocol.CopyRow) bool {
+		return row.Table == protocol.CopyTableSettings && row.Key == setting.RemoteHomeEnabled.Key
+	})
 }
 
 // dropStaleCopy keeps only the copy from the home this daemon is enrolled to, and closes a bridge from any

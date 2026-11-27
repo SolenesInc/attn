@@ -96,6 +96,14 @@ fn explain(refusal: &Refusal) -> (&'static str, String) {
 /// What the app shows while the daemon on its port cannot reach the home it passes the app to:
 /// the home, why, and a way to dial it now. The link connects again by itself once the dial
 /// changes.
+/// Whether the main window shows the desktops, rather than a screen about the connection.
+pub(crate) fn shows_desktops(connection: &Connection) -> bool {
+    matches!(
+        connection,
+        Connection::Connected | Connection::Reconnecting { .. }
+    )
+}
+
 pub(crate) fn home_unreachable(t: &Tokens, away: &HomeUnreachable) -> El {
     let title = format!("Can’t reach {}", away.home);
     let detail = match (away.dial.as_str(), away.reason.as_deref()) {

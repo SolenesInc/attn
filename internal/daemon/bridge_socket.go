@@ -46,6 +46,20 @@ func (d *Daemon) homeStateChanges() <-chan struct{} {
 	return r.changed
 }
 
+func (r *outpostRuntime) wakeHomeWaitersLocked() {
+	if r.changed != nil {
+		close(r.changed)
+		r.changed = nil
+	}
+}
+
+func (d *Daemon) wakeHomeWaiters() {
+	r := &d.outpost
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.wakeHomeWaitersLocked()
+}
+
 func (d *Daemon) bridgeIdentity() bridge.Identity {
 	name, _ := os.Hostname()
 	home, _ := os.UserHomeDir()
@@ -160,9 +174,8 @@ func (d *Daemon) updateOutpostListenerState(run *outpostListener, conn *bridge.C
 	}
 	stateChanged := r.state != state
 	r.state = state
-	if (stateChanged || errorChanged || err != nil && r.lastError != before) && r.changed != nil {
-		close(r.changed)
-		r.changed = nil
+	if stateChanged || errorChanged || err != nil && r.lastError != before {
+		r.wakeHomeWaitersLocked()
 	}
 	r.mu.Unlock()
 	d.coalesceSnapshots(func() {
