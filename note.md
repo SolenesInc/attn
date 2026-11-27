@@ -1,0 +1,1 @@
+`land` now runs the CLI's `cargo fmt --check` and `cargo clippy -D warnings` (`make check-cli`) when a landing changes `cli/`, so CLI lint errors stop at the gate instead of turning CI's CLI jobs red. It costs about 22 s in a fresh worktree and 2 s warm on ai-sandbox, beside the 82 s release CLI build those landings already pay.
