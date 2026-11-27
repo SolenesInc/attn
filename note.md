@@ -1,0 +1,3 @@
+Holding the profile chord (⌘⇧U, Ctrl+Alt+U on Linux) now behaves the same from every window. Escape pressed while the modifiers are still down cancels the cycle, and letting go afterwards switches nothing. Pressed in a popped-out tile, the chord cycles the main window's switcher and switches when the modifiers are let go.
+
+Trade-off: while the chord is held, the tile keeps the keyboard and the main window comes forward only once the cycle switches. A window that becomes key mid-hold never sees the release, because winit resets a window's modifiers when it loses key status and does not resync them when another window gains it. So when the main window is hidden or behind the tile, the user cycles without seeing the highlight until they let go.
