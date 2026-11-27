@@ -437,6 +437,12 @@ model NotebookFoldersMessage {
   folders: NotebookSyncFolder[];
 }
 
+@extension("x-on", #{ here: true })
+model NotebookSyncVerdictMessage {
+  cmd: "notebook_sync_verdict";
+  notebook: OutpostNotebook;
+}
+
 model OutpostInfo {
   connectable?: boolean;
   id: string;

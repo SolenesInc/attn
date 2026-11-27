@@ -33,6 +33,7 @@ func (d *Daemon) machineParts() map[string]machinePart {
 	runs(parts, false, d.receiveNotebookSyncReport)
 	runs(parts, false, d.receiveForwardedAnalytics)
 	runs(parts, false, d.receiveNotebookFolders)
+	runs(parts, false, d.receiveNotebookSyncVerdict)
 	runs(parts, false, d.watchTileDocuments)
 	runs(parts, false, d.tileDocumentChanged)
 	runs(parts, true, d.readTileDocument)

@@ -75,6 +75,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdNotebookSyncReport:         decodeInto[NotebookSyncReportMessage],
 	CmdForwardAnalytics:           decodeInto[ForwardAnalyticsMessage],
 	CmdNotebookFolders:            decodeInto[NotebookFoldersMessage],
+	CmdNotebookSyncVerdict:        decodeInto[NotebookSyncVerdictMessage],
 	CmdTileDocumentsWatch:         decodeInto[TileDocumentsWatchMessage],
 	CmdTileDocumentChanged:        decodeInto[TileDocumentChangedMessage],
 	CmdTileDocumentRead:           decodeInto[TileDocumentReadMessage],

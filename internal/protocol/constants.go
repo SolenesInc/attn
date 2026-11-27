@@ -82,6 +82,7 @@ const (
 	CmdNotebookSyncReport         = "notebook_sync_report"
 	CmdForwardAnalytics           = "forward_analytics"
 	CmdNotebookFolders            = "notebook_folders"
+	CmdNotebookSyncVerdict        = "notebook_sync_verdict"
 	CmdTileDocumentsWatch         = "tile_documents_watch"
 	CmdTileDocumentChanged        = "tile_document_changed"
 	CmdTileDocumentRead           = "tile_document_read"

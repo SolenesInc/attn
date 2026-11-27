@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "367fd6226bee";
+pub const PROTOCOL_VERSION: &str = "db20a8d5cc9e";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -7383,6 +7383,21 @@ impl NotebookSyncReportMessage {
     pub fn new() -> Self {
         Self {
             cmd: "notebook_sync_report".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct NotebookSyncVerdictMessage {
+    pub cmd: String,
+    pub notebook: OutpostNotebook,
+}
+
+impl NotebookSyncVerdictMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "notebook_sync_verdict".to_string(),
             ..Self::default()
         }
     }

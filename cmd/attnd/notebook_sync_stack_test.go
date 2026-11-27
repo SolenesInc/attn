@@ -695,6 +695,41 @@ func TestNotebookMarkerErrorReachesHomeBeforeOutpostBridgeRegistration(t *testin
 	}
 }
 
+func awaitOutpostSyncState(t *testing.T, outpostApp *testworld.Peer, mark int, state, reason string) {
+	t.Helper()
+	shows := func(settings map[string]any) bool {
+		got, _ := settings["notebook_sync_state"].(string)
+		last, _ := settings["notebook_sync_last_error"].(string)
+		return got == state && strings.Contains(last, reason)
+	}
+	if mark == 0 && shows(outpostApp.Initial.Settings) {
+		return
+	}
+	testworld.AwaitSince(outpostApp, mark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return shows(m.Settings) })
+}
+
+func TestAnOutpostsNotebookSyncStateFollowsTheHomesVerdict(t *testing.T) {
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	writeNotebookFile(t, home, "index.md", "home index")
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	outpostApp := outpost.App()
+	awaitOutpostSyncState(t, outpostApp, 0, "in_sync", "")
+	t.Log("the outpost's setting reached the home's in_sync after the first sync")
+
+	marker := notebookPath(home, ".attn", "notebook-sync")
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	mark := len(outpostApp.Log())
+	writeNotebookFile(t, home, "unsynced.md", "the home cannot scan this while its marker is missing")
+	verdict := awaitNotebookError(t, pair, "home: ", "folder marker missing")
+	awaitOutpostSyncState(t, outpostApp, mark, "error", "folder marker missing")
+	t.Logf("the home's marker went missing; the home's row and the outpost's setting both read %q", verdict)
+
+}
+
 func TestNotebookConflictsAndMissingMarkerAreVisibleAfterReconnect(t *testing.T) {
 	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
 	writeNotebookFile(t, home, "conflict.md", "baseline")

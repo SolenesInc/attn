@@ -393,6 +393,7 @@ func (d *Daemon) bridgeOutpost(ctx context.Context, id string, run *outpostDial,
 	d.life.Go("notebookFolders:"+id, func() {
 		d.pushNotebookFolders(conn, func() { d.life.Go("notebookStream:"+id, func() { d.keepNotebookStream(conn) }) })
 	})
+	d.life.Go("notebookVerdicts:"+id, func() { d.pushNotebookVerdicts(run, conn) })
 	sending := make(chan struct{})
 	if !d.life.Go("outpostCopy:"+id, func() {
 		defer close(sending)

@@ -8095,6 +8095,14 @@ type NotebookSyncReportMessage struct {
 	Report string `json:"report"`
 }
 
+type NotebookSyncVerdictMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Notebook corresponds to the JSON schema field "notebook".
+	Notebook OutpostNotebook `json:"notebook"`
+}
+
 type Notification struct {
 	// Actions corresponds to the JSON schema field "actions".
 	Actions []NotificationAction `json:"actions,omitempty,omitzero"`

@@ -93,7 +93,6 @@ type notebookSyncRun struct {
 	snapshots map[string]map[string]notebookFolderSnapshot
 	remote    map[string]notebookSyncReport
 	conflicts map[string]map[string]struct{}
-	homeState protocol.OutpostNotebook
 	progress  *time.Timer
 	opened    uint64
 }
@@ -115,6 +114,7 @@ type notebookSyncRuntime struct {
 	error          string
 	changed        chan struct{}
 	reporting      *bridge.Conn
+	homeVerdict    protocol.OutpostNotebook
 	settingState   string
 	settingError   string
 }
@@ -954,6 +954,9 @@ func (d *Daemon) refreshNotebookRows() {
 		if run != nil {
 			run.notebook = &info
 		}
+		if changed {
+			d.outposts.notifyChangedLocked()
+		}
 		d.outposts.mu.Unlock()
 		if changed {
 			d.cancelNotebookProgress()
@@ -997,18 +1000,18 @@ func (d *Daemon) queueNotebookProgress() {
 	run.progress = timer
 }
 
-func (d *Daemon) receiveNotebookSyncReport(ctx context.Context, msg protocol.NotebookSyncReportMessage) (protocol.OutpostNotebook, error) {
+func (d *Daemon) receiveNotebookSyncReport(ctx context.Context, msg protocol.NotebookSyncReportMessage) (struct{}, error) {
 	origin, remote := OriginOf(ctx)
 	if !remote || !d.isOutpostConn(origin.Host, origin.bridge) {
-		return protocol.OutpostNotebook{}, errors.New("notebook report requires the current outpost bridge")
+		return struct{}{}, errors.New("notebook report requires the current outpost bridge")
 	}
 	var report notebookSyncReport
 	if err := json.Unmarshal([]byte(msg.Report), &report); err != nil {
-		return protocol.OutpostNotebook{}, err
+		return struct{}{}, err
 	}
 	row, err := d.machineByID(origin.Host)
 	if err != nil {
-		return protocol.OutpostNotebook{}, err
+		return struct{}{}, err
 	}
 	d.notebookSync.mu.Lock()
 	if run := d.notebookSync.run; run != nil {
@@ -1017,7 +1020,43 @@ func (d *Daemon) receiveNotebookSyncReport(ctx context.Context, msg protocol.Not
 	}
 	d.notebookSync.mu.Unlock()
 	d.refreshNotebookRows()
-	return d.notebookPeerState(row.DaemonID, row.Name), nil
+	return struct{}{}, nil
+}
+
+func (d *Daemon) pushNotebookVerdicts(run *outpostDial, conn *bridge.Conn) {
+	var sent *protocol.OutpostNotebook
+	for conn.Context().Err() == nil {
+		r := &d.outposts
+		r.mu.Lock()
+		if r.changed == nil {
+			r.changed = make(chan struct{})
+		}
+		changed, verdict := r.changed, run.notebook
+		r.mu.Unlock()
+		if verdict != nil && (sent == nil || sent.State != verdict.State || protocol.Deref(sent.Error) != protocol.Deref(verdict.Error)) {
+			err := conn.Call(conn.Context(), bridgeCall, protocol.NotebookSyncVerdictMessage{Cmd: protocol.CmdNotebookSyncVerdict, Notebook: *verdict}, nil)
+			switch {
+			case err == nil:
+				sent = verdict
+			case conn.Context().Err() == nil:
+				d.logf("Notebook verdict for %s: %v", conn.Peer().Name, err)
+			}
+		}
+		if !d.awaitNotebookBridgeWake(conn, changed, nil) {
+			return
+		}
+	}
+}
+
+func (d *Daemon) receiveNotebookSyncVerdict(_ context.Context, msg protocol.NotebookSyncVerdictMessage) (struct{}, error) {
+	if d.enrollmentStatus().IsHome() {
+		return struct{}{}, errors.New("only the home sends its Notebook sync verdict")
+	}
+	d.notebookSync.mu.Lock()
+	d.notebookSync.homeVerdict = msg.Notebook
+	d.notebookSync.mu.Unlock()
+	d.publishNotebookSyncSettings()
+	return struct{}{}, nil
 }
 
 func (d *Daemon) outpostNotebookReportLocked(home string) notebookSyncReport {
@@ -1065,17 +1104,8 @@ func (d *Daemon) sendNotebookSyncReports(conn *bridge.Conn) {
 		d.notebookSync.mu.Unlock()
 		encoded, err := json.Marshal(report)
 		if err == nil {
-			var state protocol.OutpostNotebook
-			err = conn.Call(conn.Context(), bridgeCall, protocol.NotebookSyncReportMessage{Cmd: protocol.CmdNotebookSyncReport, Report: string(encoded)}, &state)
+			err = conn.Call(conn.Context(), bridgeCall, protocol.NotebookSyncReportMessage{Cmd: protocol.CmdNotebookSyncReport, Report: string(encoded)}, nil)
 			pausepoint.Done(pausepoint.NotebookReportSent, err)
-			if err == nil {
-				d.notebookSync.mu.Lock()
-				if run := d.notebookSync.run; run != nil {
-					run.homeState = state
-				}
-				d.notebookSync.mu.Unlock()
-				d.publishNotebookSyncSettings()
-			}
 		}
 		if err != nil {
 			if conn.Context().Err() == nil {
@@ -1226,10 +1256,10 @@ func (d *Daemon) notebookSyncSettings() (string, string) {
 			return "error", run.folders[id] + ": " + reason
 		}
 	}
-	if run.homeState.State == "" {
+	if r.homeVerdict.State == "" {
 		return "first_sync", ""
 	}
-	return string(run.homeState.State), protocol.Deref(run.homeState.Error)
+	return string(r.homeVerdict.State), protocol.Deref(r.homeVerdict.Error)
 }
 
 func (d *Daemon) NotebookReady(host, profileID string) error {
