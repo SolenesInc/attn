@@ -33,6 +33,7 @@ type outpostRuntime struct {
 	listen      func(string, string) (net.Listener, error)
 	dial        *homeDial
 	changed     chan struct{}
+	servesApps  chan struct{}
 	refusedBy   *bridge.Identity
 	homeBridged chan struct{}
 }
@@ -55,11 +56,25 @@ func (r *outpostRuntime) wakeHomeWaitersLocked() {
 	}
 }
 
-func (d *Daemon) wakeHomeWaiters() {
+// homeServesAppsAgain is closed when a copy from the home says it serves apps on other machines.
+func (d *Daemon) homeServesAppsAgain() <-chan struct{} {
 	r := &d.outpost
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.wakeHomeWaitersLocked()
+	if r.servesApps == nil {
+		r.servesApps = make(chan struct{})
+	}
+	return r.servesApps
+}
+
+func (d *Daemon) homeServesApps() {
+	r := &d.outpost
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.servesApps != nil {
+		close(r.servesApps)
+		r.servesApps = nil
+	}
 }
 
 func (d *Daemon) bridgeIdentity() bridge.Identity {

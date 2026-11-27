@@ -61,16 +61,16 @@ func (d *Daemon) relayAppToHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer release()
-	changed := d.homeStateChanges()
+	changed, served := d.homeStateChanges(), d.homeServesAppsAgain()
 	home := d.homeBridge()
 	if home == nil {
-		d.answerAwayFromHome(w, r, changed, nil)
+		d.answerAwayFromHome(w, r, changed, nil, nil)
 		return
 	}
 	credentials, _ := json.Marshal(appRelayCredentials{ClientToken: d.clientToken, BrowserHostToken: config.BrowserHostToken()})
 	channel, requests, err := home.Open(r.Context(), appRelayChannel, credentials)
 	if err != nil {
-		d.answerAwayFromHome(w, r, changed, err)
+		d.answerAwayFromHome(w, r, changed, served, err)
 		return
 	}
 	defer channel.Close()
@@ -103,7 +103,7 @@ func (d *Daemon) relayAppToHome(w http.ResponseWriter, r *http.Request) {
 	<-sent
 }
 
-func (d *Daemon) answerAwayFromHome(w http.ResponseWriter, r *http.Request, changed <-chan struct{}, refused error) {
+func (d *Daemon) answerAwayFromHome(w http.ResponseWriter, r *http.Request, changed, served <-chan struct{}, refused error) {
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: localOriginPatterns})
 	if err != nil {
 		d.logf("app relay: WebSocket accept error: %v", err)
@@ -159,6 +159,7 @@ func (d *Daemon) answerAwayFromHome(w http.ResponseWriter, r *http.Request, chan
 	})
 	select {
 	case <-changed:
+	case <-served:
 	case <-retried:
 		d.redialHome()
 	case <-ctx.Done():

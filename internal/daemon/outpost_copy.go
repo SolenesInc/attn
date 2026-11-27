@@ -179,7 +179,7 @@ func (d *Daemon) applyOutpostCopyForLaunch(ctx context.Context, home string, row
 		d.refreshChangedSettings(before)
 	}
 	if copiesServingApps(rows) && d.on(setting.RemoteHomeEnabled) {
-		d.wakeHomeWaiters()
+		d.homeServesApps()
 	}
 	d.replayPendingConversations()
 	d.bindMonitorTerminalsSkipping(launching)
