@@ -355,7 +355,7 @@ fn choose(state: &mut State, which: Which, row: Option<Row>, tx: &mut Tx) {
         launcher.rows(state).into_iter().next()
     });
     let Some(row) = row else {
-        let name = machine_name(&offered(state, &outposts(state)), None);
+        let name = machine_name(&offered(state, outposts(state)), None);
         if let Some(launcher) = state.window.launching.launcher_mut(which) {
             launcher.problem = Some(format!("Choose a folder on {name}").into());
         }

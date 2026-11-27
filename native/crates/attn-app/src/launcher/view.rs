@@ -136,7 +136,7 @@ fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> El 
         _ if let Some(chooser) = &launcher.choosing => format!(
             "{} on {}",
             chooser.purpose.title(),
-            machine_name(&offered(state, &outposts), None)
+            machine_name(&offered(state, outposts), None)
         ),
         (true, _) => "New terminal".to_owned(),
         (false, Which::Dialog) => "New agent".to_owned(),
