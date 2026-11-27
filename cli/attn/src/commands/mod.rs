@@ -45,6 +45,7 @@ use attn_protocol::PROTOCOL_VERSION;
 use std::io::{self, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::path::Path;
+use std::sync::Once;
 use std::time::Duration;
 
 pub const USAGE_UNKNOWN_COMMAND: &str = "unknown_command";
@@ -65,11 +66,18 @@ pub struct Run<'a> {
 
 impl Run<'_> {
     pub fn fail_send(&mut self, label: &str, error: &SendError) -> Stop {
+        self.record_send_error(error);
+        eprintln!("{label}: {error}");
+        Stop(1)
+    }
+
+    pub fn record_send_error(&mut self, error: &SendError) {
         if let Some(refusal) = &error.refusal {
             self.refusal = Some(refusal.clone());
         }
-        eprintln!("{label}: {error}");
-        Stop(1)
+        if error.unreadable {
+            warn_if_stale(self.paths);
+        }
     }
 
     pub fn record_flag_error(&mut self, message: &str) {
@@ -134,6 +142,11 @@ pub fn working_directory() -> Result<String, io::Error> {
 const HEALTH_DEADLINE: Duration = Duration::from_millis(400);
 
 pub fn warn_if_stale(paths: &Paths<'_>) {
+    static PROBED: Once = Once::new();
+    PROBED.call_once(|| probe_protocol(paths));
+}
+
+fn probe_protocol(paths: &Paths<'_>) {
     let daemon = daemon_protocol(&paths.ws_port()).unwrap_or_default();
     let daemon = daemon.trim();
     if !daemon.is_empty() && daemon != PROTOCOL_VERSION {

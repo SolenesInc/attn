@@ -72,7 +72,7 @@ impl Codex<'_> {
     }
 
     fn failed(&self, run: &mut Run<'_>, error: &SendError) -> Stop {
-        run.refusal.clone_from(&error.refusal);
+        run.record_send_error(error);
         eprintln!("codex {}: {}", self.action, daemon_message(error));
         Stop(1)
     }
@@ -115,7 +115,7 @@ fn resolve_caller(run: &mut Run<'_>, action: &str) -> Result<String, Stop> {
         Ok(SessionLookup::Found(session)) => return Ok(session),
         Ok(SessionLookup::NotShowing(message)) => message,
         Err(error) => {
-            run.refusal.clone_from(&error.refusal);
+            run.record_send_error(&error);
             error.to_string()
         }
     };

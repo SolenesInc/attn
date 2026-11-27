@@ -412,7 +412,7 @@ fn leave(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
         daemon
             .send(&DropOutpostCopyMessage::new())
             .map_err(|error| {
-                run.refusal.clone_from(&error.refusal);
+                run.record_send_error(&error);
                 eprintln!(
                     "enrollment leave: released the enrollment, but the daemon could not stop the terminals it ran for its home: {error}"
                 );

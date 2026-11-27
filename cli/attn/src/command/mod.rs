@@ -7,10 +7,7 @@ use attn_protocol::{CommandRefusal, RunCommandMessage};
 use serde_json::{Map, Value as Json};
 use std::collections::BTreeMap;
 use std::io::Read;
-use std::sync::Once;
 use std::time::Instant;
-
-static STALE_PROTOCOL_PROBE: Once = Once::new();
 
 pub enum Cli {
     Pos,
@@ -805,7 +802,7 @@ pub fn send(
 pub fn answer(run: &Run<'_>, reply: Reply) -> Answer {
     match refusal_of(&reply) {
         Some(refusal) => {
-            STALE_PROTOCOL_PROBE.call_once(|| crate::commands::warn_if_stale(run.paths));
+            crate::commands::warn_if_stale(run.paths);
             Answer::Refused(reply, refusal)
         }
         None => Answer::Result(reply),
@@ -871,7 +868,7 @@ fn refuse(
             family.refused_line(cmd.name, &reply.optional_string("error")),
             reply.optional_string("refusal"),
         );
-        run.refusal.clone_from(&error.refusal);
+        run.record_send_error(&error);
         eprintln!("{error}");
         return family.error_exit();
     }

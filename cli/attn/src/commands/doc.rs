@@ -124,7 +124,7 @@ fn fail(verb: &str, message: impl Display) -> Stop {
 }
 
 fn fail_send(run: &mut Run<'_>, verb: &str, error: &SendError) -> Stop {
-    run.refusal.clone_from(&error.refusal);
+    run.record_send_error(error);
     fail(verb, error)
 }
 

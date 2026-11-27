@@ -22,6 +22,7 @@ pub struct SendError {
     message: String,
     pub refusal: Option<String>,
     pub unconnected: bool,
+    pub unreadable: bool,
 }
 
 impl SendError {
@@ -30,6 +31,16 @@ impl SendError {
             message,
             refusal: None,
             unconnected: false,
+            unreadable: false,
+        }
+    }
+
+    fn unreadable(error: impl fmt::Display) -> Self {
+        Self {
+            unreadable: true,
+            ..Self::plain(format!(
+                "attn ran the command, but this CLI could not read its answer ({error}). Anything the command changed stays changed, so check before you run it again."
+            ))
         }
     }
 
@@ -46,6 +57,7 @@ impl SendError {
                 refusal
             }),
             unconnected: false,
+            unreadable: false,
         }
     }
 }
@@ -146,11 +158,10 @@ pub struct Reply {
 
 impl Reply {
     pub fn raw_field(&self, path: &[&str]) -> Result<&str, SendError> {
-        let mut current = std::str::from_utf8(&self.raw)
-            .map_err(|error| SendError::plain(format!("receive response: {error}")))?;
+        let mut current = std::str::from_utf8(&self.raw).map_err(SendError::unreadable)?;
         for name in path {
-            let fields: BTreeMap<String, &RawValue> = serde_json::from_str(current)
-                .map_err(|error| SendError::plain(format!("receive response: {error}")))?;
+            let fields: BTreeMap<String, &RawValue> =
+                serde_json::from_str(current).map_err(SendError::unreadable)?;
             current = fields.get(*name).copied().map_or("null", RawValue::get);
         }
         Ok(current)
@@ -171,13 +182,11 @@ impl Reply {
     }
 
     pub fn whole<T: DeserializeOwned>(&self) -> Result<T, SendError> {
-        serde_json::from_slice(&self.raw)
-            .map_err(|error| SendError::plain(format!("receive response: {error}")))
+        serde_json::from_slice(&self.raw).map_err(SendError::unreadable)
     }
 
     pub fn value<T: DeserializeOwned>(&self, field: &str) -> Result<T, SendError> {
-        serde_json::from_str(self.raw_field(&[field])?)
-            .map_err(|error| SendError::plain(format!("receive response: {error}")))
+        serde_json::from_str(self.raw_field(&[field])?).map_err(SendError::unreadable)
     }
 
     pub fn optional_string(&self, field: &str) -> String {
@@ -411,6 +420,7 @@ fn check_reply(reply: Vec<u8>) -> Result<Vec<u8>, SendError> {
                 .unwrap_or_else(|| REFUSAL_UNCLASSIFIED.to_string()),
         ),
         unconnected: false,
+        unreadable: false,
     })
 }
 

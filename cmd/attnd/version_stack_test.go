@@ -123,6 +123,47 @@ func TestACatalogCommandRefusedByADaemonOnAnotherProtocolNamesTheStaleProtocol(t
 	}
 }
 
+func TestACommandWhoseAnswerTheCLICannotReadSaysItRanAndNamesTheStaleProtocol(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	var reported atomic.Value
+	s.ServeWS(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprintf(w, `{"protocol":%q}`, reported.Load())
+	}))
+	newerDaemon := serveOlderDaemon(t, s.Socket)
+
+	for _, tc := range []struct {
+		daemon string
+		warn   bool
+	}{
+		{daemon: "a-newer-protocol", warn: true},
+		{daemon: protocol.ProtocolVersion},
+	} {
+		reported.Store(tc.daemon)
+		for _, call := range []struct {
+			args  []string
+			reply string
+		}{
+			{[]string{"seed", "plant", "Retry uploads"}, `{"ok":true,"command_result":{"id":["s-7k3f9m"]}}`},
+			{[]string{"doc", "get", "core", "notes", "n1"}, `{"ok":true,"doc_get_result":{"found":"yes"}}`},
+		} {
+			newerDaemon.Store(call.reply)
+			got := s.Run(testworld.Invocation{Args: call.args})
+			ran := strings.Index(got.Stderr, "attn ran the command, but this CLI could not read its answer")
+			warning := strings.Index(got.Stderr, "the running attn app speaks "+tc.daemon)
+			if got.Code != 1 || ran < 0 || !strings.Contains(got.Stderr, "check before you run it again") {
+				t.Errorf("attn %s answered in a shape this CLI cannot read exited %d printing %q, want exit 1 saying the command ran and what it changed stands", strings.Join(call.args, " "), got.Code, got.Stderr)
+			}
+			if tc.warn && (warning < 0 || warning > ran) {
+				t.Errorf("attn %s against protocol %s printed %q, want the stale-protocol warning before the error", strings.Join(call.args, " "), tc.daemon, got.Stderr)
+			}
+			if !tc.warn && strings.Contains(got.Stderr, "warning") {
+				t.Errorf("attn %s against its own protocol printed %q, want no stale-protocol warning", strings.Join(call.args, " "), got.Stderr)
+			}
+		}
+	}
+}
+
 func serveOlderDaemon(t *testing.T, socket string) *atomic.Value {
 	t.Helper()
 	listener, err := net.Listen("unix", socket)
@@ -137,15 +178,9 @@ func serveOlderDaemon(t *testing.T, socket string) *atomic.Value {
 			if err != nil {
 				return
 			}
-			var request struct {
-				Cmd string `json:"cmd"`
-			}
+			var request json.RawMessage
 			if json.NewDecoder(bufio.NewReader(conn)).Decode(&request) == nil {
-				if request.Cmd == "run_command" {
-					_, _ = fmt.Fprintln(conn, reply.Load())
-				} else {
-					_, _ = fmt.Fprintf(conn, `{"ok":false,"error":"the older daemon was asked %s"}`+"\n", request.Cmd)
-				}
+				_, _ = fmt.Fprintln(conn, reply.Load())
 			}
 			_ = conn.Close()
 		}

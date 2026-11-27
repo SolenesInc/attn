@@ -91,7 +91,7 @@ pub(super) fn usage(line: &str) -> Stop {
 }
 
 pub(super) fn failed(run: &mut Run<'_>, label: &str, error: &SendError) -> Stop {
-    run.refusal.clone_from(&error.refusal);
+    run.record_send_error(error);
     eprintln!("{label}: {}", daemon_message(error));
     Stop(1)
 }
@@ -220,7 +220,7 @@ impl Capture<'_> {
         self.client
             .call_field(message, field, missing)
             .map_err(|error| {
-                run.refusal.clone_from(&error.refusal);
+                run.record_send_error(&error);
                 daemon_message(&error)
             })
     }
@@ -237,7 +237,7 @@ impl Capture<'_> {
             )
             .and_then(|reply| reply.value("session_show_result"))
             .map_err(|error| {
-                run.refusal.clone_from(&error.refusal);
+                run.record_send_error(&error);
                 format!("session {session}: {}", daemon_message(&error))
             })?;
         if shown.entry.closed_at.is_some() {
