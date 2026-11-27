@@ -1,0 +1,16 @@
+kind: removed
+area: terminals
+change: >
+  attn runs every terminal in the shared terminal host. Before updating,
+  close any terminal still running in a dedicated worker. If you're unsure
+  where a terminal runs, close it before updating.
+notes: >
+  On v0.15.0, you can move an open agent session to the shared terminal host
+  by reloading it before you update. First turn on **Shared terminal host**
+  in **Settings → Agents and models**. Run
+  `attn settings get pty_shared_host_active` on the machine where the session
+  runs. Reload the session once the command prints `true`.
+
+  If you already updated with a terminal still in a dedicated worker, the
+  old program can still be running. End it before recovering the session to
+  avoid starting two agents on the same conversation.
