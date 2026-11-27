@@ -420,15 +420,12 @@ fn location_row(
         )])),
         Kind::Machine => Some(Said::parts([
             Part::Text(format!(
-                "{} · Tab browses ",
+                "{}Tab browses ",
                 host.and_then(|h| outpost(outposts, h))
-                    .map(|o| o.state.clone())
+                    .map(|o| format!("{} · ", o.state))
                     .unwrap_or_default()
             )),
-            Part::Code(address_of(
-                &machine_of(&offered(state, outposts), host),
-                "~/",
-            )),
+            Part::Code(completion(launcher, state, r)),
         ])),
         Kind::Elsewhere => Some(Said::parts([
             Part::Text("Enter browses ".to_owned()),

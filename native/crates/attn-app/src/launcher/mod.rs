@@ -25,7 +25,9 @@ use crate::picker::{
     Agents, Choice, Direction, Memory, Offer, Spawn, TERMINAL, Which, agent_key, agents, close,
     paths, remember, remembered, spawn_then, worktree_name,
 };
-pub(crate) use address::{Address, Machine, address_of, home, machine_for, machine_prefix, parse};
+pub(crate) use address::{
+    Address, Machine, address_of, home, machine_for, machine_prefix, named_address, parse,
+};
 pub(crate) use view::{age, age_column, framed, machine_tag, quiet};
 
 const OUTPOSTS_ENABLED: &str = "outposts_enabled";
@@ -279,7 +281,7 @@ pub(crate) fn machine_of(machines: &Machines, host: Option<&str>) -> Machine {
                 name: host.to_owned(),
                 label: host.to_owned(),
             },
-            |o| machine_for(o, outposts),
+            |o| machine_for(o, machines),
         ),
     }
 }
@@ -745,24 +747,27 @@ impl Launcher {
                     _ => String::new(),
                 };
                 let needle = paths::expand(&searched, &self.home(state, None)).to_lowercase();
-                let named: Vec<&OutpostInfo> = match &address {
+                let machine_row = |name: &str, host: Option<String>| Row {
+                    kind: Kind::Machine,
+                    path: "~/".into(),
+                    name: format!("{name}:"),
+                    host,
+                    repo_root: None,
+                    last_seen: None,
+                };
+                let mut rows: Vec<Row> = match &address {
                     Address::Ambiguous { machines, .. } => machines
                         .iter()
-                        .filter_map(|m| outpost(outposts, m.host.as_deref()?))
+                        .map(|m| match &m.host {
+                            Some(host) => machine_row(&m.name, Some(host.clone())),
+                            None => machine_row(&state.facts.home_name, None),
+                        })
                         .collect(),
-                    _ => address::machines_named(&searched, outposts),
+                    _ => address::machines_named(&searched, outposts)
+                        .into_iter()
+                        .map(|o| machine_row(&o.name, Some(o.id.clone())))
+                        .collect(),
                 };
-                let mut rows: Vec<Row> = named
-                    .into_iter()
-                    .map(|o| Row {
-                        kind: Kind::Machine,
-                        path: "~/".into(),
-                        name: format!("{}:", o.name),
-                        host: Some(o.id.clone()),
-                        repo_root: None,
-                        last_seen: None,
-                    })
-                    .collect();
                 if !matches!(address, Address::Ambiguous { .. }) {
                     rows.extend(
                         recents
@@ -1740,14 +1745,13 @@ fn complete_first(state: &mut State, which: Which, row: Option<Row>, tx: &mut Tx
 
 /// What Tab writes for `row`: its folder, as an address on its machine.
 pub(crate) fn completion(launcher: &Launcher, state: &State, row: &Row) -> String {
+    let machine = machine_of(&offered(state, outposts(state)), row.host.as_deref());
     let path = match row.kind {
-        Kind::Machine | Kind::Elsewhere => row.path.clone(),
+        Kind::Machine => return named_address(&machine, &row.path),
+        Kind::Elsewhere => row.path.clone(),
         Kind::Recent | Kind::Folder => launcher.display(state, &row.path, row.host.as_deref()),
     };
-    address_of(
-        &machine_of(&offered(state, outposts(state)), row.host.as_deref()),
-        &format!("{}/", path.trim_end_matches('/')),
-    )
+    address_of(&machine, &format!("{}/", path.trim_end_matches('/')))
 }
 
 fn open_where(state: &mut State, which: Which, repo: String, host: Option<String>, tx: &mut Tx) {

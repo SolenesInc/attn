@@ -27,10 +27,12 @@ pub(crate) fn home(machines: &Machines) -> Machine {
     }
 }
 
-pub(crate) fn machine_for(outpost: &OutpostInfo, outposts: &[OutpostInfo]) -> Machine {
+pub(crate) fn machine_for(outpost: &OutpostInfo, machines: &Machines) -> Machine {
     let lower = outpost.name.to_lowercase();
     let shared = lower == HOME
-        || outposts
+        || lower == machines.home_name.to_lowercase()
+        || machines
+            .outposts
             .iter()
             .any(|o| o.id != outpost.id && o.name.to_lowercase() == lower);
     Machine {
@@ -81,7 +83,7 @@ fn named(query: &str, machines: &Machines) -> Option<(Vec<Machine>, String)> {
     let labels = outposts
         .iter()
         .flat_map(|o| {
-            let machine = machine_for(o, outposts);
+            let machine = machine_for(o, machines);
             [o.name.clone(), o.id.clone()].map(|label| (label, machine.clone()))
         })
         .filter(|(label, machine)| machine.host.is_none() || !label.eq_ignore_ascii_case(HOME))
@@ -148,6 +150,11 @@ pub(crate) fn machines_named<'a>(text: &str, outposts: &'a [OutpostInfo]) -> Vec
         .iter()
         .filter(|o| o.name.to_lowercase().starts_with(&lower))
         .collect()
+}
+
+/// `path` written as an address that names `machine`, the home's included.
+pub(crate) fn named_address(machine: &Machine, path: &str) -> String {
+    format!("{}:{path}", machine.label)
 }
 
 /// `path` written as an address on `machine`: as it is on this machine.

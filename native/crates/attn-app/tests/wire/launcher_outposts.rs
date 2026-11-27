@@ -1527,6 +1527,69 @@ fn a_name_two_machines_share_lists_both_and_browses_the_one_picked() {
 }
 
 #[test]
+fn a_name_the_home_shares_with_an_outpost_lists_both_and_browses_the_one_picked() {
+    for relaying in [None, Some(("mac", "ai-sandbox"))] {
+        let mut world = open(Setup {
+            relaying,
+            ..Setup::default()
+        });
+        world.daemon.emit(OutpostsUpdatedMessage {
+            outposts: vec![sandbox(), field_lab()],
+            home_name: Some("ai-sandbox".into()),
+            ..OutpostsUpdatedMessage::new()
+        });
+        world.settle();
+
+        type_path(&mut world, "ai-sandbox:~/");
+        assert_eq!(
+            status(&world).as_deref(),
+            Some("ai-sandbox names 2 machines · pick one below"),
+            "{relaying:?}"
+        );
+        assert_eq!(
+            names(&world),
+            ["ai-sandbox:", "ai-sandbox:"],
+            "{relaying:?}"
+        );
+        let described: Vec<Option<String>> = row_nodes(&world)
+            .into_iter()
+            .map(|n| n.description)
+            .collect();
+        assert_eq!(
+            described,
+            [
+                Some("connected · Tab browses outpost-ai:~/".to_owned()),
+                Some("Tab browses home:~/".to_owned())
+            ],
+            "{relaying:?}"
+        );
+
+        press(&mut world, Key::Tab);
+        assert_eq!(field(&world), "outpost-ai:~/", "{relaying:?}");
+        assert_eq!(status(&world), None, "{relaying:?}");
+        assert_eq!(
+            names(&world),
+            ["shop", "projects/", "scratch/"],
+            "{relaying:?}"
+        );
+
+        type_path(&mut world, "ai-sandbox:~/");
+        press(&mut world, Key::Down);
+        press(&mut world, Key::Tab);
+        assert_eq!(field(&world), "home:~/", "{relaying:?}");
+        assert_eq!(status(&world), None, "{relaying:?}");
+        let picked = names(&world);
+        assert!(
+            picked.ends_with(&["notes/".to_owned(), "projects/".to_owned()]),
+            "{relaying:?}: {picked:?}"
+        );
+        type_path(&mut world, "~/");
+        assert_eq!(names(&world), picked, "{relaying:?}");
+        rest(&mut world);
+    }
+}
+
+#[test]
 fn a_terminal_opens_at_an_address_on_its_machine() {
     let mut world = world(Setup::default());
     press_action(&mut world, &Action::SessionNewTerminal);
