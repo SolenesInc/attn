@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
 use attn_protocol::{
-    InitialStateMessage, StartUpdateResultMessage, UpdateChangedMessage, UpdateRun,
+    InitialStateMessage, StartUpdateResultMessage, UpdateChangedMessage, UpdateOutpostProgress,
+    UpdateRun,
 };
 use attn_testkit::{Daemon, Target, World, message};
 
@@ -146,4 +147,61 @@ fn an_install_attn_cannot_update_offers_no_update() {
     on_updates(&mut world);
     assert_eq!(fact(&world, "install"), "Installed as Outpost");
     assert_eq!(action(&world), None);
+}
+
+#[test]
+fn an_app_machine_lists_its_home_and_itself_with_why_and_the_one_action() {
+    let row = |role: &str,
+               build: &str,
+               reason: Option<&str>,
+               detail: Option<&str>,
+               action: Option<&str>| UpdateOutpostProgress {
+        id: role.into(),
+        name: "oma".into(),
+        role: Some(role.into()),
+        state: if reason.is_some() { "failed" } else { "done" }.into(),
+        build: Some(format!("{build} (source git:{build}, protocol p)")),
+        reason: reason.map(Into::into),
+        detail: detail.map(Into::into),
+        action: action.map(Into::into),
+    };
+    let (daemon, _) = accepting(&[
+        ("self_update_enabled", "true"),
+        ("update_install_kind", "outpost"),
+        ("update_current_version", "0.16.1"),
+    ]);
+    daemon.on("start_update", |_| ());
+    let mut world = World::start(daemon);
+    on_updates(&mut world);
+    world.daemon.emit(UpdateChangedMessage {
+        run: UpdateRun {
+            install_kind: "home".into(),
+            outposts: vec![
+                row(
+                    "home",
+                    "0.16.0",
+                    Some("unreachable"),
+                    Some("ssh: Connection timed out"),
+                    Some("Update"),
+                ),
+                row("app_machine", "0.16.1", None, None, None),
+            ],
+            ..run("failed")
+        },
+        ..UpdateChangedMessage::new()
+    });
+    world.settle();
+    assert_eq!(
+        fact(&world, "machine.home"),
+        "oma · home unreachable: ssh: Connection timed out"
+    );
+    assert_eq!(fact(&world, "machine.app_machine"), "This Mac 0.16.1");
+    assert_eq!(action(&world), None);
+    let button = world
+        .screen()
+        .find(Target::key("settings.updates.machine-action"))
+        .expect("the row's action");
+    assert!(!button.is("disabled"), "{button:?}");
+    click(&mut world, "settings.updates.machine-action");
+    assert_eq!(world.daemon.sent_of("start_update").len(), 1);
 }

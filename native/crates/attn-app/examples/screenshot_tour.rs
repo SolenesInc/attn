@@ -8564,6 +8564,7 @@ fn update_outpost(id: &str, state: &str, detail: Option<&str>) -> UpdateOutpostP
         name: id.into(),
         state: state.into(),
         detail: detail.map(Into::into),
+        ..UpdateOutpostProgress::default()
     }
 }
 
@@ -8654,6 +8655,7 @@ fn could_not_stage(hosts: &[&str]) -> UpdateRun {
                 name: (*h).into(),
                 state: "failed".into(),
                 detail: Some(NO_SPACE.into()),
+                ..UpdateOutpostProgress::default()
             })
             .collect(),
         ..UpdateRun::default()
@@ -8714,6 +8716,7 @@ fn distinct_errors(count: usize) -> Vec<UpdateOutpostProgress> {
             detail: Some(format!(
                 "ssh: connect to host ci-runner-{n:02}.example.org port 22: Connection timed out"
             )),
+            ..UpdateOutpostProgress::default()
         })
         .collect()
 }
@@ -8784,6 +8787,7 @@ fn smallest_banners(dark: bool) {
             name: format!("ci-runner-{i:02}.build-and-validation.platform.example.org"),
             state: "staging".into(),
             detail: Some((*step).into()),
+            ..UpdateOutpostProgress::default()
         })
         .collect(),
     );

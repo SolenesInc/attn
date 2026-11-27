@@ -54,6 +54,7 @@ func topLevelCommands() []topLevelCommand {
 		{names: []string{"--build-info-json"}, run: runBuildInfoJSON, checks: checkNothing, unrecorded: true},
 		{names: []string{"_outpost-install"}, run: runOutpostInstall},
 		{names: []string{"_outpost-switch"}, run: runOutpostSwitch},
+		{names: []string{"_outpost-cache-put"}, run: runOutpostCachePut},
 		{names: []string{"_update-apply"}, run: runUpdateApply, checks: checkNothing, unrecorded: true},
 		{names: []string{"_bridge"}, run: runBridge, unrecorded: true},
 		{names: []string{"_reverse-bridge"}, run: runReverseBridge, unrecorded: true},

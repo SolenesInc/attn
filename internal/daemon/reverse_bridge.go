@@ -312,7 +312,9 @@ func (d *Daemon) homeLostState() string {
 }
 
 func (d *Daemon) homeSSH(destination string) *outpostssh.Client {
-	return outpostssh.For(destination, outpostssh.ControlPath(config.InstanceLabel(), d.daemonInstanceID), config.InstanceLabel())
+	client := outpostssh.For(destination, outpostssh.ControlPath(config.InstanceLabel(), d.daemonInstanceID), config.InstanceLabel())
+	client.Home = true
+	return client
 }
 
 func (d *Daemon) configureHomeDial() {
@@ -391,6 +393,9 @@ func (d *Daemon) runHomeDial(ctx context.Context, dial *homeDial, run *outpostLi
 			delay, retryDelay = bridge.ReconnectInterval, bridge.ReconnectInterval
 		case refusal != nil, errors.As(err, &sshError) && sshError.Connectable():
 			state, delay = "refused", max(retryDelay, bridge.RefusedRetryInterval)
+			if refusal != nil && refusal.Reason == "build" && refusal.Peer != nil {
+				err = d.homeRefusedByBuild(dial.destination, *refusal.Peer, err)
+			}
 		}
 		if err != nil {
 			retryDelay = min(delay*2, maxHomeRedialDelay)
@@ -432,6 +437,7 @@ func (d *Daemon) dialHomeOnce(ctx context.Context, dial *homeDial, run *outpostL
 		dial.joining = false
 		dial.report(nil)
 		d.acceptOutpostBridge(run, conn)
+		d.homeBridged()
 	})
 }
 

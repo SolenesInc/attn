@@ -24,6 +24,16 @@ func (c *Client) binaryPath() string {
 	return `"` + strings.Replace(c.InstallPath(), "~", "$attn_root", 1) + `"`
 }
 
+// locate sets $target to the attn this client probes and installs over: the install path, or on a home whose
+// install path holds none, the attn on its PATH with its links resolved, so the files beside it are the real ones.
+func (c *Client) locate() string {
+	script := `target=` + c.binaryPath() + `; `
+	if c.Home {
+		script += `if [ ! -x "$target" ] && found=$(command -v attn); then target=$(readlink -f "$found"); fi; `
+	}
+	return script
+}
+
 func (c *Client) command(ctx context.Context, script string) (*exec.Cmd, error) {
 	if strings.ContainsAny(script+c.Instance, "'\n\r") {
 		return nil, fmt.Errorf("remote script must contain no single quotes or newlines")

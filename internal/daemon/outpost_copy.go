@@ -214,6 +214,9 @@ func (d *Daemon) dropStaleCopy() error {
 	if err != nil {
 		return err
 	}
+	if record, ok := d.readSharedBuild(); ok && record.HomeID != status.HomeID {
+		d.forgetSharedBuild()
+	}
 	if status.Adopting() {
 		if err := d.adoptHomeID(status); err != nil {
 			return err

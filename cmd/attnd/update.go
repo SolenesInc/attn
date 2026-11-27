@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
@@ -62,6 +63,11 @@ func fprintUpdateStatus(w io.Writer, status protocol.UpdateStatus) {
 	fmt.Fprintf(w, "Build:      %s, commit %s\n", status.Version, status.Commit)
 	fmt.Fprintf(w, "Available:  %s\n", updateAvailability(status))
 	fmt.Fprintf(w, "Update run: %s\n", updateRunSummary(status.Run))
+	if status.Run != nil {
+		for _, row := range status.Run.Outposts {
+			fmt.Fprintln(w, "  "+updateRowLine(row))
+		}
+	}
 	if refusal := protocol.Deref(status.Refusal); refusal != "" {
 		fmt.Fprintln(w, refusal)
 	}
@@ -75,6 +81,32 @@ func updateRunSummary(run *protocol.UpdateRun) string {
 		return string(run.Phase) + ": " + outcome
 	}
 	return string(run.Phase) + ", log at " + run.LogPath
+}
+
+// updateRowLine is one machine of a run: its role, name and state, then the build it runs, and for a failure
+// the reason, its cause and the one action.
+func updateRowLine(row protocol.UpdateOutpostProgress) string {
+	role := "outpost"
+	switch protocol.Deref(row.Role) {
+	case protocol.UpdateMachineRoleHome:
+		role = "home"
+	case protocol.UpdateMachineRoleAppMachine:
+		role = "app machine"
+	}
+	line := fmt.Sprintf("%-11s %s: %s", role, row.Name, row.State)
+	if reason := protocol.Deref(row.Reason); reason != "" {
+		line += " (" + strings.ReplaceAll(string(reason), "_", " ") + ")"
+	}
+	if detail := protocol.Deref(row.Detail); detail != "" {
+		line += ": " + detail
+	}
+	if build := protocol.Deref(row.Build); build != "" {
+		line += "; build " + build
+	}
+	if action := protocol.Deref(row.Action); action != "" {
+		line += "; " + action
+	}
+	return line
 }
 
 func runUpdateRequest() {

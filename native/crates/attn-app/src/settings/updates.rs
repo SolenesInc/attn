@@ -3,13 +3,14 @@
 
 use std::collections::BTreeMap;
 
-use attn_protocol::StartUpdateMessage;
+use attn_protocol::{StartUpdateMessage, UpdateRun};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Actions, Block, Facts, Notice};
 use attn_ui::system::{Button, Look, Said};
 use rune::Tx;
 
 use crate::State;
+use crate::update_run;
 
 const UPDATABLE_KINDS: &[&str] = &["release_app", "release_binary", "source", "named_instance"];
 
@@ -86,6 +87,49 @@ fn start(state: &mut State, tx: &mut Tx) {
     );
 }
 
+/// The rows a run this app machine keeps for its home: the home and this Mac, each with its
+/// build or why it is not on the run's, and the one action the run offers.
+fn machines(run: &UpdateRun, t: &Tokens) -> Vec<Block> {
+    let Some(says) = update_run::home_says(run) else {
+        return Vec::new();
+    };
+    let mut facts = Facts::new("settings.updates.machines");
+    for row in &run.outposts {
+        let label = match row.role.as_deref() {
+            Some("app_machine") => "This Mac".to_owned(),
+            Some("home") => format!("{} · home", row.name),
+            _ => row.name.clone(),
+        };
+        let build = row.build.as_deref().unwrap_or_default();
+        let status = match (&row.reason, &row.detail) {
+            (Some(reason), Some(detail)) => format!("{}: {detail}", reason.replace('_', " ")),
+            (Some(reason), None) => reason.replace('_', " "),
+            _ => build.split(" (").next().unwrap_or(build).to_owned(),
+        };
+        facts = facts.fact(
+            format!("settings.updates.machine.{}", row.id),
+            label,
+            status,
+        );
+    }
+    let mut blocks = vec![facts.build(t)];
+    if let Some(action) = says.action {
+        blocks.push(
+            Actions::new("settings.updates.machine-actions")
+                .push(
+                    update_run::action_button(&action)
+                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                            update_run::run_action(&action, state, tx)
+                        })
+                        .build(t)
+                        .key("settings.updates.machine-action"),
+                )
+                .build(),
+        );
+    }
+    blocks
+}
+
 pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let settings = &state.facts.settings;
     let get = |key: &str| settings.get(key).map(String::as_str).unwrap_or_default();
@@ -110,6 +154,9 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
             )
             .build(t),
     ];
+    if let Some(run) = state.facts.update_run.as_ref().as_ref() {
+        page.extend(machines(run, t));
+    }
     if updatable(settings) {
         let running = running(state);
         page.push(

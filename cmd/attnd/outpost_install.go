@@ -37,6 +37,8 @@ func runOutpostSwitch() {
 type outpostInstall struct {
 	staged, cli, host, target string
 	markRestart               bool
+	build                     bridge.Build
+	from                      outpostbuild.Source
 }
 
 func (i outpostInstall) removeStaged() {
@@ -62,7 +64,11 @@ func switchOutpostBinaries(args []string) error {
 		return err
 	}
 	if install.markRestart {
-		if err := selfupdate.WriteRestartMarker(config.DataDir(), "attn is switching to the home's new build"); err != nil {
+		reason := "attn is switching to the home's new build"
+		if install.from.MachineID != "" {
+			reason = "attn is switching to the build of " + install.from.Name
+		}
+		if err := selfupdate.WriteRestartMarker(config.DataDir(), reason); err != nil {
 			return err
 		}
 	}
@@ -75,6 +81,11 @@ func switchOutpostBinaries(args []string) error {
 	}
 	if err := replaceKeepingPrevious(install.cli, install.target); err != nil {
 		return err
+	}
+	if install.from.MachineID != "" {
+		if err := recordBuildSource(install); err != nil {
+			return err
+		}
 	}
 	fmt.Println("installed")
 	return nil
@@ -95,6 +106,8 @@ func checkedOutpostInstall(name string, args []string) (outpostInstall, error) {
 	build := flags.String("build", "", "Expected build JSON")
 	target := flags.String("target", "", "Install path")
 	markRestart := flags.Bool("mark-restart", false, "Leave the restart marker")
+	fromMachine := flags.String("from-machine", "", "Machine id of the machine pushing its own build to its home")
+	fromName := flags.String("from-name", "", "Name of the machine pushing its own build to its home")
 	var install outpostInstall
 	if err := flags.Parse(args); err != nil {
 		return install, err
@@ -114,7 +127,7 @@ func checkedOutpostInstall(name string, args []string) (outpostInstall, error) {
 	if filepath.Clean(staged) == filepath.Clean(installedDaemon) {
 		return install, fmt.Errorf("run %s from a staged binary, not the install path %s", name, installedDaemon)
 	}
-	install = outpostInstall{staged: staged, cli: *cli, host: *host, target: *target, markRestart: *markRestart}
+	install = outpostInstall{staged: staged, cli: *cli, host: *host, target: *target, markRestart: *markRestart, build: expected, from: outpostbuild.Source{MachineID: *fromMachine, Name: *fromName}}
 	fmt.Println("verifying")
 	if err := verifyStagedBinary(staged, *size, *digest); err != nil {
 		return install, err
@@ -143,6 +156,71 @@ func checkedOutpostInstall(name string, args []string) (outpostInstall, error) {
 		return install, err
 	}
 	return install, nil
+}
+
+// recordBuildSource names the pushing machine as the holder of a source build's source, so this home asks it for
+// the binaries of other platforms. A release has none to ask for: each machine downloads its own.
+func recordBuildSource(install outpostInstall) error {
+	if buildinfo.Channel != "source" {
+		return outpostbuild.ForgetSource(config.DataDir())
+	}
+	source := install.from
+	source.Build = install.build
+	return outpostbuild.WriteSource(config.DataDir(), source)
+}
+
+func runOutpostCachePut() {
+	if err := putOutpostCache(os.Args[2:], os.Stdin); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		exit(1)
+	}
+}
+
+// putOutpostCache receives one binary of a build for an outpost platform into this home's outpost build cache.
+func putOutpostCache(args []string, input io.Reader) error {
+	flags := flag.NewFlagSet("_outpost-cache-put", flag.ContinueOnError)
+	build := flags.String("build", "", "Build JSON")
+	platform := flags.String("platform", "", "Outpost platform, linux/amd64 or linux/arm64")
+	name := flags.String("name", "", "attn, attnd or "+ptyhost.BinaryName)
+	size := flags.Int64("size", 0, "Expected size")
+	digest := flags.String("sha256", "", "Expected sha256")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	var target bridge.Build
+	if err := json.Unmarshal([]byte(*build), &target); err != nil {
+		return fmt.Errorf("build: %w", err)
+	}
+	if *name != "attn" && *name != "attnd" && *name != ptyhost.BinaryName || *size <= 0 || *digest == "" || flags.NArg() != 0 {
+		return fmt.Errorf("_outpost-cache-put requires --build, --platform, --name (attn, attnd or %s), --size and --sha256", ptyhost.BinaryName)
+	}
+	if *platform != "linux/amd64" && *platform != "linux/arm64" {
+		return fmt.Errorf("outpost platform %s is unsupported; need linux/amd64 or linux/arm64", *platform)
+	}
+	dir := outpostbuild.CacheDir(filepath.Join(config.DataDir(), "outpost-builds"), target, *platform)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	part, err := os.CreateTemp(dir, ".put-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(part.Name())
+	_, copyErr := io.Copy(part, input)
+	closeErr := part.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if err := verifyStagedBinary(part.Name(), *size, *digest); err != nil {
+		return err
+	}
+	if err := os.Chmod(part.Name(), 0o755); err != nil {
+		return err
+	}
+	return os.Rename(part.Name(), filepath.Join(dir, *name))
 }
 
 func verifyStagedBinary(path string, size int64, digest string) error {

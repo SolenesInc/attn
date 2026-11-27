@@ -128,7 +128,7 @@ func (s *wireOutpostSSH) Bridge(ctx context.Context) (net.Conn, error) {
 func (s *wireOutpostSSH) Stage(context.Context, outpostbuild.Binaries, bridge.Build, func(string)) error {
 	return nil
 }
-func (s *wireOutpostSSH) Switch(context.Context, outpostbuild.Binaries, bridge.Build, bool) error {
+func (s *wireOutpostSSH) Switch(context.Context, outpostbuild.Binaries, bridge.Build, bool, *outpostssh.Pusher) error {
 	return nil
 }
 func (s *wireOutpostSSH) StopDaemon(context.Context) error              { return nil }

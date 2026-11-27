@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/outpostbuild"
+	"github.com/victorarias/attn/internal/ptyhost"
 )
 
 type stagedFile struct {
@@ -64,7 +65,7 @@ func openStagedBinaries(binaries outpostbuild.Binaries) (stagedBinaries, func(),
 }
 
 func (c *Client) locateInstall() string {
-	return `target=` + c.binaryPath() + `; install_dir="${target%/*}"; staged_host="$install_dir/.attn-pty-host-install"; staged_cli="$install_dir/.attn-cli-install"; `
+	return c.locate() + `install_dir="${target%/*}"; staged_host="$install_dir/.attn-pty-host-install"; staged_cli="$install_dir/.attn-cli-install"; `
 }
 
 func (s stagedBinaries) installArguments(build bridge.Build) (string, error) {
@@ -72,8 +73,7 @@ func (s stagedBinaries) installArguments(build bridge.Build) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	buildArg := strings.NewReplacer(`\`, `\\`, `"`, `\"`, `$`, `\$`, "`", "\\`").Replace(string(raw))
-	return ` --size ` + fmt.Sprint(s.attnd.size) + ` --sha256 ` + s.attnd.digest + ` --cli "$staged_cli" --cli-size ` + fmt.Sprint(s.attn.size) + ` --cli-sha256 ` + s.attn.digest + ` --host "$staged_host" --host-size ` + fmt.Sprint(s.host.size) + ` --host-sha256 ` + s.host.digest + ` --build "` + buildArg + `" --target "$target"`, nil
+	return ` --size ` + fmt.Sprint(s.attnd.size) + ` --sha256 ` + s.attnd.digest + ` --cli "$staged_cli" --cli-size ` + fmt.Sprint(s.attn.size) + ` --cli-sha256 ` + s.attn.digest + ` --host "$staged_host" --host-size ` + fmt.Sprint(s.host.size) + ` --host-sha256 ` + s.host.digest + ` --build ` + shellWord(string(raw)) + ` --target "$target"`, nil
 }
 
 // Stage sends the binaries and has the new attnd check them against build and
@@ -106,10 +106,14 @@ func (c *Client) Stage(ctx context.Context, binaries outpostbuild.Binaries, buil
 	})
 }
 
+// Pusher is the machine that pushes its own build to its home. The home names it as the holder of a source
+// build's source.
+type Pusher struct{ MachineID, Name string }
+
 // Switch makes binaries already staged by Stage the installed ones. The daemon
 // restarts on the next bridge dial. markRestart leaves the restart marker that
 // tells CLI callers why the daemon is down.
-func (c *Client) Switch(ctx context.Context, binaries outpostbuild.Binaries, build bridge.Build, markRestart bool) error {
+func (c *Client) Switch(ctx context.Context, binaries outpostbuild.Binaries, build bridge.Build, markRestart bool, from *Pusher) error {
 	staged, closeFiles, err := openStagedBinaries(binaries)
 	if err != nil {
 		return err
@@ -122,8 +126,40 @@ func (c *Client) Switch(ctx context.Context, binaries outpostbuild.Binaries, bui
 	if markRestart {
 		arguments += ` --mark-restart`
 	}
+	if from != nil {
+		arguments += ` --from-machine ` + shellWord(from.MachineID) + ` --from-name ` + shellWord(from.Name)
+	}
 	command := c.locateInstall() + `exec "$install_dir/.attnd-install-` + staged.attnd.digest + `" _outpost-switch` + arguments
 	return c.Stream(ctx, command, strings.NewReader(""), func(string) {})
+}
+
+// PutCache sends binaries into the outpost build cache of the home at the destination, as the binaries of build
+// for platform.
+func (c *Client) PutCache(ctx context.Context, binaries outpostbuild.Binaries, build bridge.Build, platform string) error {
+	staged, closeFiles, err := openStagedBinaries(binaries)
+	if err != nil {
+		return err
+	}
+	defer closeFiles()
+	raw, err := json.Marshal(build)
+	if err != nil {
+		return err
+	}
+	for _, file := range []struct {
+		name   string
+		staged stagedFile
+	}{{"attn", staged.attn}, {"attnd", staged.attnd}, {ptyhost.BinaryName, staged.host}} {
+		command := c.locate() + `exec "${target%/*}/attnd" _outpost-cache-put --build ` + shellWord(string(raw)) + ` --platform ` + shellWord(platform) + ` --name ` + file.name + ` --size ` + fmt.Sprint(file.staged.size) + ` --sha256 ` + file.staged.digest
+		if err := c.Stream(ctx, command, file.staged.file, func(string) {}); err != nil {
+			return fmt.Errorf("send %s to the home's build cache: %w", file.name, err)
+		}
+	}
+	return nil
+}
+
+// shellWord quotes value for the double-quoted context of a remote script, which holds no single quotes.
+func shellWord(value string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`, `$`, `\$`, "`", "\\`").Replace(value) + `"`
 }
 
 func (c *Client) Remove(ctx context.Context, home enrollment.Home) error {

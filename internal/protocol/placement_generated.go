@@ -173,6 +173,7 @@ var Placements = map[string][]Placement{
 	"start_update":                   {Placement{LocatorHere, ""}},
 	"state":                          {Placement{LocatorHere, ""}},
 	"stop":                           {Placement{LocatorHere, ""}},
+	"supply_outpost_build":           {Placement{LocatorMachine, "host"}},
 	"terminal_exited":                {Placement{LocatorHome, ""}},
 	"terminal_kill":                  {Placement{LocatorTerminal, "terminal_id"}},
 	"terminal_launch":                {Placement{LocatorTerminal, "terminal_id"}},
@@ -191,6 +192,7 @@ var Placements = map[string][]Placement{
 	"tile_documents_watch":           {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"transcript_activity":            {Placement{LocatorSession, "session_id"}},
 	"unregister":                     {Placement{LocatorHome, ""}},
+	"update_fleet":                   {Placement{LocatorHome, ""}},
 	"update_outpost":                 {Placement{LocatorHome, ""}},
 	"update_request":                 {Placement{LocatorHome, ""}},
 	"update_status":                  {Placement{LocatorHome, ""}},
@@ -2061,6 +2063,18 @@ func (m StopMessage) Locate() string {
 	return ""
 }
 
+func (SupplyOutpostBuildMessage) CommandName() string {
+	return "supply_outpost_build"
+}
+
+func (m SupplyOutpostBuildMessage) Placement() Placement {
+	return Placement{LocatorMachine, "host"}
+}
+
+func (m SupplyOutpostBuildMessage) Locate() string {
+	return string(m.Host)
+}
+
 func (TerminalExitedMessage) CommandName() string {
 	return "terminal_exited"
 }
@@ -2292,6 +2306,18 @@ func (m UnregisterMessage) Placement() Placement {
 }
 
 func (m UnregisterMessage) Locate() string {
+	return ""
+}
+
+func (UpdateFleetMessage) CommandName() string {
+	return "update_fleet"
+}
+
+func (m UpdateFleetMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m UpdateFleetMessage) Locate() string {
 	return ""
 }
 

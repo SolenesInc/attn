@@ -25,6 +25,8 @@ func (d *Daemon) machineParts() map[string]machinePart {
 	runs(parts, false, d.applyMonitorView)
 	runs(parts, false, d.adoptServerConversationHere)
 	runs(parts, false, d.receiveHomeUpdateNotice)
+	runs(parts, false, d.updateFleet)
+	runs(parts, false, d.supplyOutpostBuild)
 	runs(parts, false, d.terminalExited)
 	d.registerMonitorParts(parts)
 	runs(parts, true, d.readAttachment)

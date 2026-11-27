@@ -21,6 +21,36 @@ fn outpost(id: &str, name: &str, state: &str, detail: Option<&str>) -> UpdateOut
         name: name.into(),
         state: state.into(),
         detail: detail.map(Into::into),
+        ..UpdateOutpostProgress::default()
+    }
+}
+
+/// A row of a run this app machine keeps for its home.
+fn machine(
+    role: &str,
+    state: &str,
+    build: &str,
+    reason: Option<&str>,
+    detail: Option<&str>,
+    action: Option<&str>,
+) -> UpdateOutpostProgress {
+    UpdateOutpostProgress {
+        id: role.into(),
+        name: "oma".into(),
+        role: Some(role.into()),
+        state: state.into(),
+        build: Some(format!("{build} (source git:{build}, protocol p)")),
+        reason: reason.map(Into::into),
+        detail: detail.map(Into::into),
+        action: action.map(Into::into),
+    }
+}
+
+fn home_run(phase: &str, rows: Vec<UpdateOutpostProgress>) -> UpdateRun {
+    UpdateRun {
+        install_kind: "home".into(),
+        target_build: "0.16.1 (source git:0.16.1, protocol p)".into(),
+        ..run("h1", phase, rows)
     }
 }
 
@@ -769,4 +799,114 @@ fn desktop_chords_switch_desktops_from_every_control_of_a_banner() {
             );
         }
     }
+}
+
+#[test]
+fn an_app_machine_updating_its_home_names_the_home_and_the_build() {
+    let world = showing(home_run(
+        "staging",
+        vec![
+            machine("home", "staging", "0.16.0", None, Some("sending"), None),
+            machine("app_machine", "done", "0.16.1", None, None, None),
+        ],
+    ));
+    assert_eq!(
+        name(&world, "update-run.text").as_deref(),
+        Some("Updating oma to 0.16.1")
+    );
+}
+
+#[test]
+fn a_failed_home_update_names_the_machine_and_reason_and_update_starts_it_again() {
+    let mut world = showing(home_run(
+        "failed",
+        vec![
+            machine(
+                "home",
+                "failed",
+                "0.16.0",
+                Some("not_back"),
+                Some("switched to 0.16.1 and did not connect on it within 1m0s"),
+                Some("Update"),
+            ),
+            machine("app_machine", "done", "0.16.1", None, None, None),
+        ],
+    ));
+    assert_eq!(
+        name(&world, "update-run.text").as_deref(),
+        Some("Update failed: oma: not back.")
+    );
+    assert_eq!(
+        name(&world, "update-run.note").as_deref(),
+        Some("switched to 0.16.1 and did not connect on it within 1m0s")
+    );
+    assert!(!has(&world, "update-run.retry") && !has(&world, "update-run.without"));
+    click(&mut world, "update-run.action");
+    assert_eq!(without_outposts(&world), vec![None]);
+}
+
+#[test]
+fn an_app_machine_behind_its_home_shows_both_builds_and_copies_the_update_command() {
+    let command = "git checkout 0.16.2 && make install";
+    let mut world = showing(home_run(
+        "failed",
+        vec![
+            machine("home", "done", "0.16.2", None, None, None),
+            machine(
+                "app_machine",
+                "failed",
+                "0.16.1",
+                Some("behind"),
+                Some("oma runs a newer build"),
+                Some(command),
+            ),
+        ],
+    ));
+    assert_eq!(
+        name(&world, "update-run.text").as_deref(),
+        Some("This Mac is behind oma.")
+    );
+    assert_eq!(
+        name(&world, "update-run.note").as_deref(),
+        Some("oma 0.16.2 · this Mac 0.16.1")
+    );
+    assert_eq!(
+        name(&world, "update-run.action").as_deref(),
+        Some("Copy command")
+    );
+    click(&mut world, "update-run.action");
+    assert_eq!(
+        world.clipboard.text().map(|t| t.to_string()).as_deref(),
+        Some(command)
+    );
+    assert!(world.daemon.sent_of("start_update").is_empty());
+}
+
+#[test]
+fn an_outpost_the_home_could_not_update_keeps_the_app_machines_banner_open_and_names_it() {
+    let mut box_row = outpost(
+        "o1",
+        "box",
+        "skipped",
+        Some("Unreachable: ssh: Connection timed out"),
+    );
+    box_row.role = Some("outpost".into());
+    box_row.reason = Some("unreachable".into());
+    let world = showing(home_run(
+        "done",
+        vec![
+            machine("home", "done", "0.16.1", None, None, None),
+            machine("app_machine", "done", "0.16.1", None, None, None),
+            box_row,
+        ],
+    ));
+    assert_eq!(
+        name(&world, "update-run.text").as_deref(),
+        Some("Updated oma; box stays on its build.")
+    );
+    assert_eq!(
+        name(&world, "update-run.note").as_deref(),
+        Some("Unreachable: ssh: Connection timed out")
+    );
+    assert!(!has(&world, "update-run.countdown"));
 }

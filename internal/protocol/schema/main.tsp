@@ -823,12 +823,54 @@ enum UpdateOutpostState {
   done,
 }
 
-// detail is the step while staging, or why the outpost was skipped or failed.
+enum UpdateMachineRole {
+  home,
+  app_machine,
+  outpost,
+}
+
+// Why a machine is not on the run's build: it could not be built or
+// downloaded, or the machine holding the source is away (no_build); it could
+// not be reached (unreachable); it rejected the build (refused); it switched
+// and did not return (not_back); or it is the app machine and the user must
+// update it (behind).
+enum UpdateFailureReason {
+  no_build,
+  unreachable,
+  refused,
+  not_back,
+  behind,
+}
+
+// One machine of an update run. detail is the step while staging, or the
+// cause in words when reason is set. build is the build the machine runs, and
+// action the one thing that moves it on.
 model UpdateOutpostProgress {
   id: string;
   name: string;
+  role?: UpdateMachineRole;
   state: UpdateOutpostState;
   detail?: string;
+  build?: string;
+  reason?: UpdateFailureReason;
+  action?: string;
+}
+
+// The app machine asks its home, now on the app machine's build, to bring its
+// outposts to that build in the same run. The run gets a row for the home and
+// for the app machine.
+@extension("x-on", #{ home: true })
+model UpdateFleetMessage {
+  cmd: "update_fleet";
+}
+
+// The home asks the machine that holds its build's source to put that build's
+// binaries for an outpost platform into the home's outpost build cache.
+@extension("x-on", #{ machine: "host" })
+model SupplyOutpostBuildMessage {
+  cmd: "supply_outpost_build";
+  host: string;
+  platform: string;
 }
 
 // The home tells an outpost that an update is under way, just before it

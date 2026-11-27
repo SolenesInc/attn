@@ -36,8 +36,7 @@ func parseKillUserProcesses(value string) (bool, error) {
 	}
 }
 func (c *Client) Probe(ctx context.Context) (Probe, error) {
-	binary := c.binaryPath()
-	out, err := c.Run(ctx, `target=`+binary+`; uname -sm; if [ -x `+binary+` ]; then `+binary+` --build-info-json | tr -d "\n"; echo; `+binary+` enrollment status --json 2>/dev/null | tr -d "\n"; echo; else echo missing; echo; fi; if [ -x "${target%/*}/attn-pty-host" ]; then echo present; else echo missing; fi; busctl get-property org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager KillUserProcesses`)
+	out, err := c.Run(ctx, c.locate()+`uname -sm; if [ -x "$target" ]; then "$target" --build-info-json | tr -d "\n"; echo; "$target" enrollment status --json 2>/dev/null | tr -d "\n"; echo; else echo missing; echo; fi; if [ -x "${target%/*}/attn-pty-host" ]; then echo present; else echo missing; fi; busctl get-property org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager KillUserProcesses`)
 	if err != nil {
 		return Probe{}, err
 	}

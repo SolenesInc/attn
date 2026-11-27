@@ -27,18 +27,47 @@ func AttnBinaryAt(t testing.TB, version string) string {
 }
 
 func buildAttnAt(version, channel, releaseSource, snapshotFormat string) (string, error) {
-	if processDir == "" {
-		return "", fmt.Errorf("testworld.AttnBinaryAt builds into the process directory that testworld.Main creates; call it from TestMain")
-	}
-	dir := filepath.Join(processDir, "bin", fmt.Sprintf("attn-%x", sha256.Sum256([]byte(version+channel+releaseSource+snapshotFormat))))
 	fingerprint := "unknown"
 	if channel != "unknown" {
 		fingerprint = "git:" + version
+	}
+	return buildAttnWith(version, channel, fingerprint, releaseSource, snapshotFormat)
+}
+
+// AttnWorktreeBinary is a source build of version made from a worktree with uncommitted changes.
+func AttnWorktreeBinary(t testing.TB, version string) string {
+	t.Helper()
+	once, _ := versionedBinaries.LoadOrStore("tree-"+version, sync.OnceValues(func() (string, error) {
+		return buildAttnWith(version, "source", "tree:"+version, "", "")
+	}))
+	binary, err := once.(func() (string, error))()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return binary
+}
+
+// AttnSourceBinaryIn is a source build of commit version that records repository as its checkout, so an outpost
+// build for it runs that repository's make.
+func AttnSourceBinaryIn(t testing.TB, version, repository string) string {
+	t.Helper()
+	binary, err := buildAttnWith(version, "source", "git:"+version, "", "", " -X github.com/victorarias/attn/internal/buildinfo.RepositoryPath="+repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return binary
+}
+
+func buildAttnWith(version, channel, fingerprint, releaseSource, snapshotFormat string, extra ...string) (string, error) {
+	if processDir == "" {
+		return "", fmt.Errorf("testworld.AttnBinaryAt builds into the process directory that testworld.Main creates; call it from TestMain")
 	}
 	ldflags := "-w -X github.com/victorarias/attn/internal/buildinfo.SourceFingerprint=" + fingerprint + " -X github.com/victorarias/attn/internal/buildinfo.Version=" + version + " -X github.com/victorarias/attn/internal/buildinfo.Channel=" + channel + " -X github.com/victorarias/attn/internal/buildinfo.ReleaseSource=" + releaseSource
 	if snapshotFormat != "" {
 		ldflags += " -X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat=" + snapshotFormat
 	}
+	ldflags += strings.Join(extra, "")
+	dir := filepath.Join(processDir, "bin", fmt.Sprintf("attn-%x", sha256.Sum256([]byte(ldflags))))
 	return buildPair(dir, ldflags)
 }
 

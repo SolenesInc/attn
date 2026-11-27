@@ -2931,7 +2931,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		if place.Locator == protocol.LocatorHome {
 			status := d.enrollmentStatus()
 			if !status.IsHome() {
-				if _, asksStatus := msg.(*protocol.UpdateStatusMessage); asksStatus && d.answerUpdateStatusFromNotice(conn) {
+				if _, asksStatus := msg.(*protocol.UpdateStatusMessage); asksStatus && (d.answerUpdateStatusFromNotice(conn) || d.answerUpdateStatusAwayFromHome(ctx, conn)) {
 					return
 				}
 				if err := d.router().Forward(ctx, data, forwardRequest{Caller: caller, CallerProfile: callerProfile}, bufferedSocket{Conn: conn, reader: reader}, conn); err != nil {

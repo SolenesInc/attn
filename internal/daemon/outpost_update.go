@@ -256,7 +256,11 @@ func (d *Daemon) outpostBinaries(ctx context.Context, build bridge.Build, platfo
 			return outpostbuild.Binaries{Attn: attn, Attnd: filepath.Join(filepath.Dir(attn), "attnd"), Host: os.Getenv("ATTN_HARNESS_OUTPOST_HOST_BINARY")}, nil
 		}
 	}
-	return outpostbuild.Acquire(ctx, outpostbuild.Request{Build: build, Channel: buildinfo.Channel, Repository: buildinfo.RepositoryPath, ReleaseSource: buildinfo.ReleaseSource, Cache: filepath.Join(config.DataDir(), "outpost-builds"), Platform: platform}, phase)
+	cache := filepath.Join(config.DataDir(), "outpost-builds")
+	if source, ok := outpostbuild.SourceOf(config.DataDir(), build); ok && source.MachineID != d.store.MachineID() {
+		return d.sourceBinaries(ctx, cache, source, platform, phase)
+	}
+	return outpostbuild.Acquire(ctx, outpostbuild.Request{Build: build, Channel: buildinfo.Channel, Repository: buildinfo.RepositoryPath, ReleaseSource: buildinfo.ReleaseSource, Cache: cache, Platform: platform}, phase)
 }
 
 func (d *Daemon) installOutpost(ctx context.Context, remote outpostRemote, probe outpostssh.Probe, phase func(string)) error {
@@ -268,7 +272,7 @@ func (d *Daemon) installOutpost(ctx context.Context, remote outpostRemote, probe
 	if err := remote.Stage(ctx, binaries, self, phase); err != nil {
 		return err
 	}
-	if err := remote.Switch(ctx, binaries, self, false); err != nil {
+	if err := remote.Switch(ctx, binaries, self, false, nil); err != nil {
 		return err
 	}
 	ensureWontRestartTheDaemon := probe.Build != nil && *probe.Build == self

@@ -14211,6 +14211,17 @@ type StoredDocument struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
+type SupplyOutpostBuildMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host string `json:"host"`
+
+	// Platform corresponds to the JSON schema field "platform".
+	Platform string `json:"platform"`
+}
+
 type SupportInputTrace struct {
 	// ByteCount corresponds to the JSON schema field "byte_count".
 	ByteCount int `json:"byte_count"`
@@ -15071,6 +15082,25 @@ type UpdateChangedMessage struct {
 	Run UpdateRun `json:"run"`
 }
 
+type UpdateFailureReason string
+
+const UpdateFailureReasonBehind UpdateFailureReason = "behind"
+const UpdateFailureReasonNoBuild UpdateFailureReason = "no_build"
+const UpdateFailureReasonNotBack UpdateFailureReason = "not_back"
+const UpdateFailureReasonRefused UpdateFailureReason = "refused"
+const UpdateFailureReasonUnreachable UpdateFailureReason = "unreachable"
+
+type UpdateFleetMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+}
+
+type UpdateMachineRole string
+
+const UpdateMachineRoleAppMachine UpdateMachineRole = "app_machine"
+const UpdateMachineRoleHome UpdateMachineRole = "home"
+const UpdateMachineRoleOutpost UpdateMachineRole = "outpost"
+
 type UpdateOutpostMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -15080,6 +15110,12 @@ type UpdateOutpostMessage struct {
 }
 
 type UpdateOutpostProgress struct {
+	// Action corresponds to the JSON schema field "action".
+	Action *string `json:"action,omitempty,omitzero"`
+
+	// Build corresponds to the JSON schema field "build".
+	Build *string `json:"build,omitempty,omitzero"`
+
 	// Detail corresponds to the JSON schema field "detail".
 	Detail *string `json:"detail,omitempty,omitzero"`
 
@@ -15088,6 +15124,12 @@ type UpdateOutpostProgress struct {
 
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
+
+	// Reason corresponds to the JSON schema field "reason".
+	Reason *UpdateFailureReason `json:"reason,omitempty,omitzero"`
+
+	// Role corresponds to the JSON schema field "role".
+	Role *UpdateMachineRole `json:"role,omitempty,omitzero"`
 
 	// State corresponds to the JSON schema field "state".
 	State UpdateOutpostState `json:"state"`

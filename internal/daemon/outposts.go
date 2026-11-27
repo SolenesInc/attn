@@ -45,7 +45,7 @@ type outpostRemote interface {
 	Probe(context.Context) (outpostssh.Probe, error)
 	Bridge(context.Context) (net.Conn, error)
 	Stage(context.Context, outpostbuild.Binaries, bridge.Build, func(string)) error
-	Switch(context.Context, outpostbuild.Binaries, bridge.Build, bool) error
+	Switch(context.Context, outpostbuild.Binaries, bridge.Build, bool, *outpostssh.Pusher) error
 	StopDaemon(context.Context) error
 	Remove(context.Context, enrollment.Home) error
 	InstallPath() string

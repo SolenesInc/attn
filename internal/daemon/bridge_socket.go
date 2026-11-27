@@ -24,15 +24,17 @@ type outpostListener struct {
 }
 
 type outpostRuntime struct {
-	mu         sync.Mutex
-	enrollment enrollment.Status
-	listener   *outpostListener
-	state      string
-	lastError  string
-	errorKind  string
-	listen     func(string, string) (net.Listener, error)
-	dial       *homeDial
-	changed    chan struct{}
+	mu          sync.Mutex
+	enrollment  enrollment.Status
+	listener    *outpostListener
+	state       string
+	lastError   string
+	errorKind   string
+	listen      func(string, string) (net.Listener, error)
+	dial        *homeDial
+	changed     chan struct{}
+	refusedBy   *bridge.Identity
+	homeBridged chan struct{}
 }
 
 // homeStateChanges is closed at the next change of this machine's bridge to its home, or of the reason it gives.

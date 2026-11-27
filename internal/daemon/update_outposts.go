@@ -26,15 +26,17 @@ type homeUpdateNotice struct {
 }
 
 func (d *Daemon) setUpdateOutpost(run store.UpdateRun, row store.Machine, state, detail string) {
-	if err := d.store.SetUpdateRunOutpost(run.ID, store.UpdateRunOutpost{ID: row.ID, Name: row.Name, State: state, Detail: detail}); err != nil {
-		d.logf("update run %s: record outpost %s: %v", run.ID, row.Name, err)
-	}
-	d.publishFact(FactUpdateChanged, run.ID, nil)
+	d.setUpdateRow(run, store.UpdateRunOutpost{ID: row.ID, Name: row.Name, Role: store.UpdateRoleOutpost, State: state, Detail: detail})
 }
 
-// stageOutposts readies every outpost before the home restarts and returns the
-// failures that must stop the run.
-func (d *Daemon) stageOutposts(ctx context.Context, run store.UpdateRun, target bridge.Build, without []string) []string {
+func (d *Daemon) failUpdateOutpost(run store.UpdateRun, row store.Machine, err error) {
+	d.setUpdateRow(run, failedRow(store.UpdateRunOutpost{ID: row.ID, Name: row.Name, Role: store.UpdateRoleOutpost}, err))
+}
+
+// stageOutposts readies every outpost before the home switches and returns the
+// failures that must stop a run in which the home has not restarted yet. The
+// app machine that started the run has a row of its own.
+func (d *Daemon) stageOutposts(ctx context.Context, run store.UpdateRun, target bridge.Build, without []string, appMachine string) []string {
 	if !d.outpostsEnabled() {
 		return nil
 	}
@@ -44,6 +46,9 @@ func (d *Daemon) stageOutposts(ctx context.Context, run store.UpdateRun, target 
 	}
 	var failed []string
 	for _, row := range rows {
+		if row.ID == appMachine {
+			continue
+		}
 		if slices.Contains(without, row.ID) {
 			d.setUpdateOutpost(run, row, store.UpdateOutpostSkipped, "Left out of this update.")
 			continue
@@ -59,10 +64,10 @@ func (d *Daemon) stageOutposts(ctx context.Context, run store.UpdateRun, target 
 		d.setUpdateOutpost(run, row, store.UpdateOutpostStaging, "connecting")
 		skip, err := d.stageOutpost(ctx, run, row, target)
 		switch {
-		case skip != "":
-			d.setUpdateOutpost(run, row, store.UpdateOutpostSkipped, skip)
+		case skip != nil:
+			d.setUpdateRow(run, store.UpdateRunOutpost{ID: row.ID, Name: row.Name, Role: store.UpdateRoleOutpost, State: store.UpdateOutpostSkipped, Detail: "Unreachable: " + skip.Error(), Reason: string(protocol.UpdateFailureReasonUnreachable), Action: actionUpdate})
 		case err != nil:
-			d.setUpdateOutpost(run, row, store.UpdateOutpostFailed, err.Error())
+			d.failUpdateOutpost(run, row, err)
 			failed = append(failed, row.Name+": "+err.Error())
 		default:
 			d.setUpdateOutpost(run, row, store.UpdateOutpostStaged, "")
@@ -71,31 +76,35 @@ func (d *Daemon) stageOutposts(ctx context.Context, run store.UpdateRun, target 
 	return failed
 }
 
-func (d *Daemon) stageOutpost(ctx context.Context, run store.UpdateRun, row store.Machine, target bridge.Build) (skip string, err error) {
+// stageOutpost returns skip when the outpost cannot be reached, and err, with its reason, when it cannot be staged.
+func (d *Daemon) stageOutpost(ctx context.Context, run store.UpdateRun, row store.Machine, target bridge.Build) (skip, err error) {
 	remote := d.outpostSSH(row)
 	if err := remote.EnsureMaster(ctx); err != nil {
-		return "Unreachable: " + err.Error(), nil
+		return err, nil
 	}
 	probe, err := remote.Probe(ctx)
 	if err != nil {
 		var sshError *outpostssh.Error
 		if errors.As(err, &sshError) {
-			return "Unreachable: " + err.Error(), nil
+			return err, nil
 		}
-		return "", err
+		return nil, fault(string(protocol.UpdateFailureReasonRefused), err)
 	}
 	if err := probe.Enrollment.CheckHome(d.enrollmentHome()); err != nil {
-		return "", err
+		return nil, fault(string(protocol.UpdateFailureReasonRefused), err)
 	}
 	if probe.Build != nil && *probe.Build == target && !probe.HostMissing {
-		return "", nil
+		return nil, nil
 	}
 	phase := func(step string) { d.setUpdateOutpost(run, row, store.UpdateOutpostStaging, step) }
 	binaries, err := d.outpostBinaries(ctx, target, probe.Platform, phase)
 	if err != nil {
-		return "", err
+		return nil, fault(string(protocol.UpdateFailureReasonNoBuild), err)
 	}
-	return "", remote.Stage(ctx, binaries, target, phase)
+	if err := remote.Stage(ctx, binaries, target, phase); err != nil {
+		return nil, sshFault(err)
+	}
+	return nil, nil
 }
 
 func (d *Daemon) noticeOutposts(ctx context.Context, run store.UpdateRun, target bridge.Build) {
@@ -190,10 +199,10 @@ func (d *Daemon) switchOutposts(run store.UpdateRun) string {
 			defer wait.Done()
 			d.setUpdateOutpost(run, row, store.UpdateOutpostSwitching, "")
 			if err := d.switchOutpost(d.life.Context(), row); err != nil {
-				d.setUpdateOutpost(run, row, store.UpdateOutpostFailed, err.Error())
+				d.failUpdateOutpost(run, row, err)
 				return
 			}
-			d.setUpdateOutpost(run, row, store.UpdateOutpostDone, "")
+			d.setUpdateRow(run, store.UpdateRunOutpost{ID: row.ID, Name: row.Name, Role: store.UpdateRoleOutpost, State: store.UpdateOutpostDone, Build: d.bridgeIdentity().Build.String()})
 		}) {
 			wait.Done()
 		}
@@ -225,21 +234,21 @@ func (d *Daemon) switchOutposts(run store.UpdateRun) string {
 func (d *Daemon) switchOutpost(ctx context.Context, row store.Machine) error {
 	remote := d.outpostSSH(row)
 	if err := remote.EnsureMaster(ctx); err != nil {
-		return err
+		return fault(string(protocol.UpdateFailureReasonUnreachable), err)
 	}
 	probe, err := remote.Probe(ctx)
 	if err != nil {
-		return err
+		return sshFault(err)
 	}
 	self := d.bridgeIdentity().Build
 	if probe.Build == nil || *probe.Build != self || probe.HostMissing {
 		binaries, err := d.outpostBinaries(ctx, self, probe.Platform, func(string) {})
 		if err != nil {
-			return err
+			return fault(string(protocol.UpdateFailureReasonNoBuild), err)
 		}
-		if err := remote.Switch(ctx, binaries, self, true); err != nil {
-			return err
+		if err := remote.Switch(ctx, binaries, self, true, nil); err != nil {
+			return sshFault(err)
 		}
 	}
-	return d.reconnectOutpostOnHomeBuild(ctx, row)
+	return fault(string(protocol.UpdateFailureReasonNotBack), d.reconnectOutpostOnHomeBuild(ctx, row))
 }

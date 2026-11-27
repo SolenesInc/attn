@@ -91,6 +91,41 @@ can't connect to it in a terminal. Update attn on that machine. On its row,
 **Update to home build**, **Re-pair** and **Connect in a terminal** refuse and
 say so.
 
+## Update the home from the machine that dials it
+
+With the experimental setting `self_update_enabled` on, which the home decides
+like every feature switch, installing a new build on the machine that dials the
+home updates the home to that build. The machine does so once for each build you install, and only
+when the home still runs the build the two last shared. The machine sends the
+home's Linux `attn` and `attn-pty-host` over ssh, and the home switches to them
+and restarts. The home then updates the outposts it dials, in the same run, one
+attempt each. Running shells keep their processes.
+
+A machine built from source builds the home's binaries itself, so it needs the
+same Zig and Rust targets as a home built from source. It also sends the
+binaries each outpost of the home needs. When an outpost of the home needs a
+build for another platform and the machine that holds the source is away, the
+update of that outpost fails, names that machine and installs nothing.
+
+Once the home is back, the app shows the home's run in the banner and
+**Settings → Updates**: a row for the home, one for the machine and one for each
+outpost. While the home refuses the machine's build, the app shows **Can't
+reach** with the reason, and `attn update status` on the machine prints the
+machine's own rows. A failed row names one reason with its cause:
+
+| Reason | Meaning |
+| --- | --- |
+| no build | The build could not be made or downloaded. |
+| unreachable | ssh could not reach the home. |
+| refused | The home rejected the build, for example because its database is newer or its platform is not Linux amd64 or arm64. |
+| not back | The home switched and did not connect again on the new build. |
+| behind | The home runs a newer build. Update this machine with the command the row shows. |
+
+Every reason but not back leaves the home on its old build. A failed update
+does not try again, even when the machine reconnects. When the home runs a
+build the two never shared, nothing installs. `attn update status` on the
+machine answers while the home is unreachable.
+
 ## Read and change settings
 
 Home settings, such as model defaults and automatic settlement, apply on every

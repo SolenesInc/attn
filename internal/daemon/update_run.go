@@ -56,8 +56,20 @@ func updateRunToProtocol(run *store.UpdateRun) *protocol.UpdateRun {
 	}
 	for _, outpost := range run.Outposts {
 		progress := protocol.UpdateOutpostProgress{ID: outpost.ID, Name: outpost.Name, State: protocol.UpdateOutpostState(outpost.State)}
+		if outpost.Role != "" {
+			progress.Role = protocol.Ptr(protocol.UpdateMachineRole(outpost.Role))
+		}
 		if outpost.Detail != "" {
 			progress.Detail = protocol.Ptr(outpost.Detail)
+		}
+		if outpost.Build != "" {
+			progress.Build = protocol.Ptr(outpost.Build)
+		}
+		if outpost.Reason != "" {
+			progress.Reason = protocol.Ptr(protocol.UpdateFailureReason(outpost.Reason))
+		}
+		if outpost.Action != "" {
+			progress.Action = protocol.Ptr(outpost.Action)
 		}
 		wire.Outposts = append(wire.Outposts, progress)
 	}
@@ -206,6 +218,9 @@ func (d *Daemon) startUpdate(without []string) (*store.UpdateRun, error) {
 	if !d.on(setting.SelfUpdateEnabled) {
 		return nil, setting.SelfUpdateEnabled.Refusal()
 	}
+	if status := d.enrollmentStatus(); status.IsOutpost() && status.Dial != "" {
+		return d.startManualHomeUpdate()
+	}
 	d.updateRuns.mu.Lock()
 	defer d.updateRuns.mu.Unlock()
 	if run := d.latestUpdateRun(); run != nil && run.Open() {
@@ -329,6 +344,7 @@ func (d *Daemon) finishUpdateRun(run store.UpdateRun, phase protocol.UpdatePhase
 	for _, requester := range requesters {
 		d.tellRequester(requester, "update-run/"+run.ID+"/"+requester, "attn update finished: "+outcome)
 	}
+	pausepoint.At(pausepoint.UpdateRunFinished)
 }
 
 func (d *Daemon) failUpdateRun(run store.UpdateRun, cause string) {
@@ -378,7 +394,7 @@ func (d *Daemon) runUpdate(run store.UpdateRun, plan selfupdate.Plan, without []
 	limit := selfupdate.BuildTimeoutFromEnv()
 	staging, cancelStaging := context.WithTimeout(ctx, limit)
 	defer cancelStaging()
-	if failed := d.stageOutposts(staging, run, target, without); len(failed) > 0 {
+	if failed := d.stageOutposts(staging, run, target, without, ""); len(failed) > 0 {
 		cause := "could not stage " + strings.Join(failed, "; ") + ". attn did not restart"
 		if errors.Is(staging.Err(), context.DeadlineExceeded) {
 			cause = fmt.Sprintf("staging outposts did not finish within its %s limit (%s). attn did not restart", limit, selfupdate.BuildTimeoutEnv)
@@ -461,7 +477,11 @@ func (d *Daemon) startUpdateHelper(run store.UpdateRun, plan selfupdate.Plan, en
 func (d *Daemon) reconcileUpdateRun() {
 	_ = os.Remove(selfupdate.RestartMarkerPath(d.dataRoot))
 	run := d.latestUpdateRun()
-	if run == nil || !run.Open() {
+	if run == nil || !run.Open() || run.CreatedAt.After(d.startedAt) {
+		return
+	}
+	if run.InstallKind == installKindHome || run.InstallKind == installKindFleet {
+		d.finishUpdateRun(*run, protocol.UpdatePhaseFailed, "the update was interrupted: attn restarted before it finished")
 		return
 	}
 	running := d.bridgeIdentity().Build.String()

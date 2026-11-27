@@ -47,8 +47,7 @@ func Acquire(ctx context.Context, req Request, phase func(string)) (Binaries, er
 			return Binaries{}, err
 		}
 	}
-	identity, _ := json.Marshal(req.Build)
-	key := fmt.Sprintf("%x", sha256.Sum256(identity))
+	key := cacheKey(req.Build)
 	dir := filepath.Join(req.Cache, key, arch)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return Binaries{}, err
@@ -94,6 +93,22 @@ func Acquire(ctx context.Context, req Request, phase func(string)) (Binaries, er
 		return Binaries{}, err
 	}
 	return cached, req.prune(key, arch)
+}
+
+func cacheKey(build bridge.Build) string {
+	identity, _ := json.Marshal(build)
+	return fmt.Sprintf("%x", sha256.Sum256(identity))
+}
+
+// CacheDir is where Acquire keeps build's binaries for platform.
+func CacheDir(cache string, build bridge.Build, platform string) string {
+	return filepath.Join(cache, cacheKey(build), strings.TrimPrefix(platform, "linux/"))
+}
+
+// Cached returns build's binaries for platform when the cache holds all of them.
+func Cached(cache string, build bridge.Build, platform string) (Binaries, bool) {
+	cached := BinariesIn(CacheDir(cache, build, platform))
+	return cached, complete(cached)
 }
 
 var building sync.Map

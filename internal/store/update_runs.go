@@ -1,6 +1,7 @@
 package store
 
 import (
+	"cmp"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -35,11 +36,21 @@ const (
 	UpdateOutpostDone      = "done"
 )
 
+const (
+	UpdateRoleHome       = "home"
+	UpdateRoleAppMachine = "app_machine"
+	UpdateRoleOutpost    = "outpost"
+)
+
 type UpdateRunOutpost struct {
 	ID     string
 	Name   string
+	Role   string
 	State  string
 	Detail string
+	Build  string
+	Reason string
+	Action string
 }
 
 func (r UpdateRun) Open() bool { return r.FinishedAt.IsZero() }
@@ -106,9 +117,9 @@ func (s *Store) LatestUpdateRun() (*UpdateRun, error) {
 
 func (s *Store) SetUpdateRunOutpost(runID string, outpost UpdateRunOutpost) error {
 	_, err := s.db.Exec(
-		`INSERT INTO update_run_outposts (run_id, outpost_id, name, state, detail) VALUES (?, ?, ?, ?, ?)
-		 ON CONFLICT (run_id, outpost_id) DO UPDATE SET name = excluded.name, state = excluded.state, detail = excluded.detail`,
-		runID, outpost.ID, outpost.Name, outpost.State, outpost.Detail,
+		`INSERT INTO update_run_outposts (run_id, outpost_id, name, role, state, detail, build, reason, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT (run_id, outpost_id) DO UPDATE SET name = excluded.name, role = excluded.role, state = excluded.state, detail = excluded.detail, build = excluded.build, reason = excluded.reason, action = excluded.action`,
+		runID, outpost.ID, outpost.Name, cmp.Or(outpost.Role, UpdateRoleOutpost), outpost.State, outpost.Detail, outpost.Build, outpost.Reason, outpost.Action,
 	)
 	if err != nil {
 		return fmt.Errorf("store: set update run outpost: %w", err)
@@ -117,7 +128,8 @@ func (s *Store) SetUpdateRunOutpost(runID string, outpost UpdateRunOutpost) erro
 }
 
 func (s *Store) updateRunOutposts(runID string) ([]UpdateRunOutpost, error) {
-	rows, err := s.db.Query(`SELECT outpost_id, name, state, detail FROM update_run_outposts WHERE run_id = ? ORDER BY name, outpost_id`, runID)
+	rows, err := s.db.Query(`SELECT outpost_id, name, role, state, detail, build, reason, action FROM update_run_outposts WHERE run_id = ?
+		 ORDER BY CASE role WHEN 'home' THEN 0 WHEN 'app_machine' THEN 1 ELSE 2 END, name, outpost_id`, runID)
 	if err != nil {
 		return nil, fmt.Errorf("store: update run outposts: %w", err)
 	}
@@ -125,7 +137,7 @@ func (s *Store) updateRunOutposts(runID string) ([]UpdateRunOutpost, error) {
 	var outposts []UpdateRunOutpost
 	for rows.Next() {
 		var outpost UpdateRunOutpost
-		if err := rows.Scan(&outpost.ID, &outpost.Name, &outpost.State, &outpost.Detail); err != nil {
+		if err := rows.Scan(&outpost.ID, &outpost.Name, &outpost.Role, &outpost.State, &outpost.Detail, &outpost.Build, &outpost.Reason, &outpost.Action); err != nil {
 			return nil, err
 		}
 		outposts = append(outposts, outpost)

@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "191944d77e49";
+pub const PROTOCOL_VERSION: &str = "999053ac8fd2";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -12492,6 +12492,22 @@ pub struct StoredDocument {
     pub updated_at: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SupplyOutpostBuildMessage {
+    pub cmd: String,
+    pub host: String,
+    pub platform: String,
+}
+
+impl SupplyOutpostBuildMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "supply_outpost_build".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SupportInputTrace {
     pub byte_count: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -13324,6 +13340,22 @@ impl UpdateChangedMessage {
         }
     }
 }
+pub type UpdateFailureReason = String;
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UpdateFleetMessage {
+    pub cmd: String,
+}
+
+impl UpdateFleetMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "update_fleet".to_string(),
+            ..Self::default()
+        }
+    }
+}
+pub type UpdateMachineRole = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct UpdateOutpostMessage {
     pub cmd: String,
@@ -13342,9 +13374,17 @@ impl UpdateOutpostMessage {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct UpdateOutpostProgress {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
     pub id: String,
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<UpdateFailureReason>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<UpdateMachineRole>,
     pub state: UpdateOutpostState,
 }
 pub type UpdateOutpostState = String;

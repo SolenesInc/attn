@@ -123,6 +123,9 @@ func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConf
 	}
 	answer := greeting(self)
 	answer.Refused = refused
+	if answer.Refused != nil && answer.Refused.Peer == nil {
+		answer.Refused.Peer = &home.Identity
+	}
 	if err := json.NewEncoder(control).Encode(answer); err != nil {
 		return err
 	}

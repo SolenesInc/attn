@@ -394,6 +394,7 @@ fn update_without_it_leaves_out_only_that_failed_outpost() {
         name: name.into(),
         state: "failed".into(),
         detail: Some("denied".into()),
+        ..UpdateOutpostProgress::default()
     };
     world.daemon.emit(UpdateChangedMessage {
         run: UpdateRun {

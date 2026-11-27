@@ -32,8 +32,128 @@ pub(crate) fn failed_outposts(run: &UpdateRun) -> Vec<&UpdateOutpostProgress> {
     }
     run.outposts
         .iter()
-        .filter(|o| o.state == "failed")
+        .filter(|o| o.state == "failed" && is_outpost(o))
         .collect()
+}
+
+fn is_outpost(row: &UpdateOutpostProgress) -> bool {
+    row.role.as_deref().is_none_or(|role| role == "outpost")
+}
+
+fn row<'a>(run: &'a UpdateRun, role: &str) -> Option<&'a UpdateOutpostProgress> {
+    run.outposts
+        .iter()
+        .find(|o| o.role.as_deref() == Some(role))
+}
+
+fn version(build: &str) -> &str {
+    build.split(" (").next().unwrap_or(build)
+}
+
+/// What a row offers: Update starts one, anything else is a command the user runs.
+#[derive(Clone)]
+pub(crate) enum RowAction {
+    Update,
+    Copy(String),
+}
+
+/// The words for a run this machine keeps for its home: its head, one note and one action.
+pub(crate) struct HomeSays {
+    pub(crate) tone: BannerTone,
+    pub(crate) head: String,
+    pub(crate) note: Option<String>,
+    pub(crate) action: Option<RowAction>,
+}
+
+/// What a run this app machine keeps for its home says, or None for any other run.
+pub(crate) fn home_says(run: &UpdateRun) -> Option<HomeSays> {
+    let home = row(run, "home")?;
+    let this = row(run, "app_machine");
+    let builds = || {
+        let theirs = version(home.build.as_deref().unwrap_or_default());
+        let ours = version(this.and_then(|r| r.build.as_deref()).unwrap_or_default());
+        format!("{} {theirs} · this Mac {ours}", home.name)
+    };
+    let action = |row: &UpdateOutpostProgress| {
+        row.action.as_deref().map(|a| match a {
+            "Update" => RowAction::Update,
+            command => RowAction::Copy(command.to_owned()),
+        })
+    };
+    if is_open(run) {
+        return Some(HomeSays {
+            tone: BannerTone::Calm,
+            head: format!("Updating {} to {}", home.name, version(&run.target_build)),
+            note: None,
+            action: None,
+        });
+    }
+    if run.phase == "done" {
+        let left = run
+            .outposts
+            .iter()
+            .find(|o| is_outpost(o) && matches!(o.state.as_str(), "failed" | "skipped"));
+        return Some(match left {
+            None => HomeSays {
+                tone: BannerTone::Good,
+                head: format!("Updated {}.", home.name),
+                note: None,
+                action: None,
+            },
+            Some(outpost) => HomeSays {
+                tone: BannerTone::Warn,
+                head: format!(
+                    "Updated {}; {} stays on its build.",
+                    home.name, outpost.name
+                ),
+                note: outpost.detail.clone(),
+                action: None,
+            },
+        });
+    }
+    if let Some(this) = this.filter(|r| r.reason.is_some() || r.state == "skipped") {
+        let head = if this.reason.as_deref() == Some("behind") {
+            format!("This Mac is behind {}.", home.name)
+        } else {
+            format!("{} runs another build.", home.name)
+        };
+        return Some(HomeSays {
+            tone: BannerTone::Warn,
+            head,
+            note: Some(builds()),
+            action: action(this),
+        });
+    }
+    let failed = run.outposts.iter().find(|o| o.reason.is_some())?;
+    Some(HomeSays {
+        tone: BannerTone::Bad,
+        head: format!(
+            "Update failed: {}: {}.",
+            failed.name,
+            failed
+                .reason
+                .as_deref()
+                .unwrap_or_default()
+                .replace('_', " ")
+        ),
+        note: failed.detail.clone(),
+        action: action(failed),
+    })
+}
+
+/// Runs `action`: Update starts the home's update, Copy puts the command on the clipboard.
+pub(crate) fn run_action(action: &RowAction, state: &mut State, tx: &mut Tx) {
+    match action {
+        RowAction::Update => start(state, None, tx),
+        RowAction::Copy(command) => tx.copy(command.clone()),
+    }
+}
+
+pub(crate) fn action_button(action: &RowAction) -> Button {
+    Button::new(match action {
+        RowAction::Update => "Update",
+        RowAction::Copy(_) => "Copy command",
+    })
 }
 
 fn closes_by_itself(run: &UpdateRun) -> bool {
@@ -181,6 +301,9 @@ pub(crate) fn said(state: &State) -> Option<blocks::Banner> {
     let run = shown(state)?;
     let connected = state.facts.connection == Connection::Connected;
     let open = is_open(run);
+    if let Some(home) = home_says(run) {
+        return Some(home_banner(state, run, home, connected));
+    }
     let says = if open {
         phase_text(&run.phase).to_owned()
     } else {
@@ -222,4 +345,35 @@ pub(crate) fn said(state: &State) -> Option<blocks::Banner> {
         banner = banner.dismiss("update-run.dismiss", "Dismiss update", close);
     }
     Some(banner)
+}
+
+fn home_banner(state: &State, run: &UpdateRun, home: HomeSays, connected: bool) -> blocks::Banner {
+    let mut banner = blocks::Banner::new("update-run", "attn update", home.tone)
+        .value(run.phase.clone())
+        .says("update-run.text", home.head)
+        .on_hover(hold);
+    if is_open(run) {
+        for (id, note) in outpost_notes(&run.outposts) {
+            banner = banner.item().note(format!("update-run.outpost.{id}"), note);
+        }
+    }
+    if let Some(note) = home.note {
+        banner = banner.item().note("update-run.note", note);
+    }
+    if let Some(action) = home.action {
+        let button =
+            action_button(&action).disabled(matches!(action, RowAction::Update) && !connected);
+        banner = banner.action(
+            "update-run.action",
+            button,
+            move |state: &mut State, tx: &mut Tx| run_action(&action, state, tx),
+        );
+    }
+    if let Some(seconds) = state.window.update_run.closing.seconds(&run.id) {
+        banner = banner.countdown("update-run.countdown", seconds);
+    }
+    if !is_open(run) {
+        banner = banner.dismiss("update-run.dismiss", "Dismiss update", close);
+    }
+    banner
 }

@@ -12,6 +12,7 @@ pub struct TopLevel {
 #[rustfmt::skip]
 pub const TOP_LEVEL: &[TopLevel] = &[
     TopLevel { name: "_bridge", usage: "_bridge", summary: "carry the bridge to an outpost", hidden: true },
+    TopLevel { name: "_outpost-cache-put", usage: "_outpost-cache-put", summary: "receive an outpost build into this home's cache", hidden: true },
     TopLevel { name: "_outpost-install", usage: "_outpost-install", summary: "install attn on an outpost", hidden: true },
     TopLevel { name: "_outpost-switch", usage: "_outpost-switch", summary: "switch an outpost to its installed build", hidden: true },
     TopLevel { name: "_probe-tui", usage: "_probe-tui", summary: "draw a fake agent screen for terminal probes", hidden: true },

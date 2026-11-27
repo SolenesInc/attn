@@ -121,6 +121,8 @@ const (
 	CmdSessionList                = "session_list"
 	CmdUpdateStatus               = "update_status"
 	CmdHomeUpdateNotice           = "home_update_notice"
+	CmdUpdateFleet                = "update_fleet"
+	CmdSupplyOutpostBuild         = "supply_outpost_build"
 	CmdUpdateRequest              = "update_request"
 	CmdStartUpdate                = "start_update"
 	CmdDeclineUpdate              = "decline_update"

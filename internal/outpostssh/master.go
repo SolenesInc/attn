@@ -13,12 +13,16 @@ import (
 	"github.com/victorarias/attn/internal/bridge"
 )
 
-type Client struct{ Destination, ControlPath, Instance string }
+type Client struct {
+	Destination, ControlPath, Instance string
+	// Home is set when the machine at Destination is this machine's home, whose attn may sit anywhere on its PATH.
+	Home bool
+}
 
 const masterIDPrefixBytes = 12
 
 func For(destination, controlPath, instance string) *Client {
-	return &Client{destination, controlPath, instance}
+	return &Client{Destination: destination, ControlPath: controlPath, Instance: instance}
 }
 
 type Error struct {
