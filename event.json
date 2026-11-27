@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Release app mismatch offers no usable install action",
+  "at": "2026-11-27T06:37:04.781Z",
+  "detail": "The guide tells users to run the row's command, but a release mismatch screen presents Retry and an incomplete release download URL in the reason. Supply usable release recovery and verify the actual mismatch screen. This overlaps the existing install-action follow-up.\nIndependently source-confirmed at pinned 309da596f. Review s-tset6s.\n"
+}
