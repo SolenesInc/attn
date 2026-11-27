@@ -1901,6 +1901,51 @@ type AutomationsChangedMessage struct {
 	Event string `json:"event"`
 }
 
+type BackgroundTask struct {
+	// AgentType corresponds to the JSON schema field "agent_type".
+	AgentType *string `json:"agent_type,omitempty,omitzero"`
+
+	// Command corresponds to the JSON schema field "command".
+	Command *string `json:"command,omitempty,omitzero"`
+
+	// Description corresponds to the JSON schema field "description".
+	Description *string `json:"description,omitempty,omitzero"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID *string `json:"id,omitempty,omitzero"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind *string `json:"kind,omitempty,omitzero"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name *string `json:"name,omitempty,omitzero"`
+
+	// Server corresponds to the JSON schema field "server".
+	Server *string `json:"server,omitempty,omitzero"`
+
+	// Tool corresponds to the JSON schema field "tool".
+	Tool *string `json:"tool,omitempty,omitzero"`
+
+	// Wakes corresponds to the JSON schema field "wakes".
+	Wakes *BackgroundTaskWake `json:"wakes,omitempty,omitzero"`
+}
+
+type BackgroundTaskStartedMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID TerminalID `json:"id"`
+
+	// TaskID corresponds to the JSON schema field "task_id".
+	TaskID string `json:"task_id"`
+}
+
+type BackgroundTaskWake string
+
+const BackgroundTaskWakeEachEvent BackgroundTaskWake = "each_event"
+const BackgroundTaskWakeExit BackgroundTaskWake = "exit"
+
 type BrowseDirectoryMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -12668,6 +12713,9 @@ type Session struct {
 	// Agent corresponds to the JSON schema field "agent".
 	Agent string `json:"agent"`
 
+	// Attention corresponds to the JSON schema field "attention".
+	Attention *SessionAttention `json:"attention,omitempty,omitzero"`
+
 	// AutoSettleDismissArmed corresponds to the JSON schema field
 	// "auto_settle_dismiss_armed".
 	AutoSettleDismissArmed *bool `json:"auto_settle_dismiss_armed,omitempty,omitzero"`
@@ -12984,6 +13032,20 @@ type SessionAnnotationsSubmitResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+}
+
+type SessionAttention struct {
+	// At corresponds to the JSON schema field "at".
+	At string `json:"at"`
+
+	// Decider corresponds to the JSON schema field "decider".
+	Decider string `json:"decider"`
+
+	// Reason corresponds to the JSON schema field "reason".
+	Reason string `json:"reason"`
+
+	// Verdict corresponds to the JSON schema field "verdict".
+	Verdict interface{} `json:"verdict"`
 }
 
 type SessionCloseResultMessage struct {
@@ -14366,6 +14428,9 @@ type StateExplainResult struct {
 	// Capacity corresponds to the JSON schema field "capacity".
 	Capacity int `json:"capacity"`
 
+	// Facts corresponds to the JSON schema field "facts".
+	Facts interface{} `json:"facts,omitempty,omitzero"`
+
 	// LastModelRequestAt corresponds to the JSON schema field
 	// "last_model_request_at".
 	LastModelRequestAt *string `json:"last_model_request_at,omitempty,omitzero"`
@@ -14404,14 +14469,14 @@ type StateMessage struct {
 }
 
 type StopMessage struct {
+	// BackgroundTasks corresponds to the JSON schema field "background_tasks".
+	BackgroundTasks []BackgroundTask `json:"background_tasks,omitempty,omitzero"`
+
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
 	ID TerminalID `json:"id"`
-
-	// RunningWork corresponds to the JSON schema field "running_work".
-	RunningWork []string `json:"running_work,omitempty,omitzero"`
 
 	// ScheduledWork corresponds to the JSON schema field "scheduled_work".
 	ScheduledWork *int `json:"scheduled_work,omitempty,omitzero"`

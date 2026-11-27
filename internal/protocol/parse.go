@@ -152,6 +152,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdSeedBedSet:                 decodeInto[SeedBedSetMessage],
 	CmdStop:                       decodeInto[StopMessage],
 	CmdFilesEdited:                decodeInto[FilesEditedMessage],
+	CmdBackgroundTaskStarted:      decodeInto[BackgroundTaskStartedMessage],
 	CmdPullRequestCreated:         decodeInto[PullRequestCreatedMessage],
 	CmdQuery:                      decodeInto[QueryMessage],
 	CmdCallerSession:              decodeInto[CallerSessionMessage],

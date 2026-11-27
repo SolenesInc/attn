@@ -47,6 +47,7 @@ var Placements = map[string][]Placement{
 	"automation_schedule_preview":    {Placement{LocatorHome, ""}},
 	"automation_set_enabled":         {Placement{LocatorHome, ""}},
 	"automation_validate":            {Placement{LocatorHome, ""}},
+	"background_task_started":        {Placement{LocatorHere, ""}},
 	"browse_directory":               {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"caller_session":                 {Placement{LocatorHere, ""}},
 	"checkout_inspect":               {Placement{LocatorMachine, "host"}},
@@ -463,6 +464,18 @@ func (m AutomationValidateMessage) Placement() Placement {
 }
 
 func (m AutomationValidateMessage) Locate() string {
+	return ""
+}
+
+func (BackgroundTaskStartedMessage) CommandName() string {
+	return "background_task_started"
+}
+
+func (m BackgroundTaskStartedMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m BackgroundTaskStartedMessage) Locate() string {
 	return ""
 }
 

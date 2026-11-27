@@ -70,6 +70,10 @@ fn explain(result: &StateExplainResult) -> String {
     if let Some(request) = present(result.last_model_request_at.as_deref()) {
         let _ = writeln!(out, "model request: {}", clock(request));
     }
+    if let Some(facts) = &result.facts {
+        let facts = serde_json::to_string_pretty(facts).unwrap_or_default();
+        let _ = writeln!(out, "\nfacts the attention judge reads:\n{facts}");
+    }
     if result.observations.is_empty() {
         out.push_str("\nNo state observations recorded. The daemon has seen no state evidence\n");
         out.push_str("for this session since it started — a state shown now predates the trace.\n");

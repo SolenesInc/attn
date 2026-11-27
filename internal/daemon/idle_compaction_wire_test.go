@@ -37,7 +37,7 @@ func (a *bubbleClaude) stopWithBackgroundWork(text string) {
 	a.t.Helper()
 	synctest.Wait()
 	a.transcript.Answer(text)
-	if err := a.cli.SendStop(protocol.TerminalID(a.self), a.transcript.Path, client.StopFacts{RunningWork: []string{`background_session "./deploy.sh staging"`}}); err != nil {
+	if err := a.cli.SendStop(protocol.TerminalID(a.self), a.transcript.Path, client.StopFacts{BackgroundTasks: []protocol.BackgroundTask{{Kind: protocol.Ptr("background_session"), Description: protocol.Ptr("./deploy.sh staging")}}}); err != nil {
 		a.t.Fatalf("%s stops with background work: %v", a.id, err)
 	}
 }

@@ -25,7 +25,7 @@ func parkOnBackgroundWork(t *testing.T, w *world, cli *client.Client, run *fakea
 	t.Helper()
 	run.Stream("The deploy is running in the background.")
 	transcript := fakeagent.WriteClaudeTranscript(t, w.Path("shop"), run.ConversationID)
-	if err := cli.SendStop(protocol.TerminalID(w.Terminal(session)), transcript.Path, client.StopFacts{RunningWork: []string{`background_session "./deploy.sh staging"`}}); err != nil {
+	if err := cli.SendStop(protocol.TerminalID(w.Terminal(session)), transcript.Path, client.StopFacts{BackgroundTasks: []protocol.BackgroundTask{{Kind: protocol.Ptr("background_session"), Description: protocol.Ptr("./deploy.sh staging")}}}); err != nil {
 		t.Fatalf("stop with background work: %v", err)
 	}
 	run.ProgramStatus("state=done:app=claude-code")

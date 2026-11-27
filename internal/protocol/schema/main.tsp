@@ -271,7 +271,19 @@ model Session {
   conversation_started?: boolean; // True once the session's agent has named the transcript of its conversation: the agent has started a conversation in the session's folder. The agent may name the transcript before it writes the file, so the transcript can still be unreadable. Absent until the agent names one.
   conversation_shared_with?: SessionID[]; // The other open sessions whose live process has this session's conversation open while this one's does too. Only for a harness that lets several processes write one conversation (Claude Code), where each process keeps its own history and the transcript splits. Derived at broadcast; absent while one process holds the conversation.
   host?: string;                // The id of the outpost this terminal runs on; absent when it runs on the home's machine. Set once at spawn and never changed.
+  attention?: SessionAttention; // The attention judge's latest verdict on whether the user is needed. Absent until the judge has judged this session.
   last_seen: string;            // ISO timestamp, always set
+}
+
+// The attention judge's answer for one agent at one moment: open (the user is
+// needed now), quiet (something registered will move the agent) or finished
+// (nothing is left for anyone). decider names what produced it, such as
+// "rule:<name>" or "headless/<model>"; reason is one line for the user.
+model SessionAttention {
+  verdict: "open" | "quiet" | "finished";
+  decider: string;
+  reason: string;
+  at: string;
 }
 
 model PR {
@@ -1151,16 +1163,44 @@ model QuickCaptureUnreadMessage {
 // wakeup. The hook reports what the turn left as facts, and the daemon decides
 // what they mean, with the chief-of-staff role the hook does not know.
 //
-// running_work names each piece of work still running, as "<kind> \"<name>\"",
-// so a stop judged non-terminal names what held it. scheduled_work counts the
-// scheduled wakeups still pending. Absent, the turn left nothing.
+// background_tasks holds each piece of work still running, as the harness
+// reports it, so a stop judged non-terminal names what held it.
+// scheduled_work counts the scheduled wakeups still pending. Absent, the turn
+// left nothing.
 @extension("x-on", #{ here: true })
 model StopMessage {
   cmd: "stop";
   id: TerminalID;
   transcript_path: string;
-  running_work?: string[];
+  background_tasks?: BackgroundTask[];
   scheduled_work?: int32;
+}
+
+// One piece of work a turn left running. A field the harness does not report
+// is absent. wakes says what of the task starts the agent again: "exit" when
+// it ends, "each_event" on every event it emits.
+model BackgroundTask {
+  id?: string;
+  kind?: string;
+  description?: string;
+  command?: string;
+  agent_type?: string;
+  name?: string;
+  server?: string;
+  tool?: string;
+  wakes?: BackgroundTaskWake;
+}
+
+enum BackgroundTaskWake { Exit: "exit", EachEvent: "each_event" }
+
+// A tool call that started a background task, reported by the tool-use hook,
+// so the task's age counts from its launch, not from the first stop that
+// lists it.
+@extension("x-on", #{ here: true })
+model BackgroundTaskStartedMessage {
+  cmd: "background_task_started";
+  id: TerminalID;
+  task_id: string;
 }
 
 // Files an agent just wrote, reported by the tool-use hook after a completed
@@ -7700,6 +7740,8 @@ model StateExplainResult {
   state: string;
   state_since?: string;
   last_model_request_at?: string;
+  // facts is what the attention judge reads about this agent now, as JSON.
+  facts?: unknown;
   observations: StateExplainEntry[];
   // capacity is the ring size, so a full ring can be reported as truncated
   // rather than read as the whole history.

@@ -619,19 +619,24 @@ func (c *Client) AgentMsgStatus(messageID string, senderSessionID protocol.Sessi
 }
 
 type StopFacts struct {
-	RunningWork   []string
-	ScheduledWork int
+	BackgroundTasks []protocol.BackgroundTask
+	ScheduledWork   int
 }
 
 func (c *Client) SendStop(id protocol.TerminalID, transcriptPath string, facts StopFacts) error {
 	msg := protocol.StopMessage{
-		Cmd:            protocol.CmdStop,
-		ID:             id,
-		TranscriptPath: transcriptPath,
-		RunningWork:    facts.RunningWork,
-		ScheduledWork:  protocol.Ptr(facts.ScheduledWork),
+		Cmd:             protocol.CmdStop,
+		ID:              id,
+		TranscriptPath:  transcriptPath,
+		BackgroundTasks: facts.BackgroundTasks,
+		ScheduledWork:   protocol.Ptr(facts.ScheduledWork),
 	}
 	_, err := c.send(msg)
+	return err
+}
+
+func (c *Client) RecordBackgroundTaskStarted(id protocol.TerminalID, taskID string) error {
+	_, err := c.send(protocol.BackgroundTaskStartedMessage{Cmd: protocol.CmdBackgroundTaskStarted, ID: id, TaskID: taskID})
 	return err
 }
 

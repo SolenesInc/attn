@@ -77,6 +77,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdCrewRename:                 commandMetadata(false, true),
 	protocol.CmdStop:                       commandMetadata(false, true),
 	protocol.CmdFilesEdited:                commandMetadata(false, true),
+	protocol.CmdBackgroundTaskStarted:      commandMetadata(false, true),
 	protocol.CmdQuery:                      commandMetadata(false, true),
 	protocol.CmdCallerSession:              commandMetadata(false, true),
 	protocol.CmdSetSessionPriority:         commandMetadata(false, true),

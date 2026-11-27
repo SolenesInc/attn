@@ -158,6 +158,7 @@ const (
 	CmdCrewRename                 = "crew_rename"
 	CmdStop                       = "stop"
 	CmdFilesEdited                = "files_edited"
+	CmdBackgroundTaskStarted      = "background_task_started"
 	CmdPullRequestCreated         = "pull_request_created"
 	CmdQuery                      = "query"
 	CmdCallerSession              = "caller_session"

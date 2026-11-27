@@ -4,6 +4,7 @@ import (
 	"maps"
 	"time"
 
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionstate"
 )
 
@@ -76,6 +77,53 @@ func (m *Monitor) reportFiles(files *map[string]FileReport, paths []string, at t
 	view := m.viewLocked()
 	m.mu.Unlock()
 	return m.publishAcknowledged(view)
+}
+
+func (m *Monitor) RecordBackgroundLaunch(task string, at time.Time) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.launches == nil {
+		m.launches = make(map[string]time.Time)
+	}
+	m.launches[task] = at
+}
+
+func (m *Monitor) RecordBackgroundTasks(tasks []protocol.BackgroundTask, at time.Time) bool {
+	if m == nil {
+		return false
+	}
+	m.mu.Lock()
+	if len(tasks) == 0 && len(m.backgroundTasks) == 0 {
+		m.launches = nil
+		m.mu.Unlock()
+		return false
+	}
+	listed := make(map[string]time.Time, len(m.backgroundTasks))
+	for _, task := range m.backgroundTasks {
+		if id := protocol.Deref(task.ID); id != "" {
+			listed[id] = task.StartedAt
+		}
+	}
+	running := make([]BackgroundTask, 0, len(tasks))
+	for _, task := range tasks {
+		id := protocol.Deref(task.ID)
+		started, known := m.launches[id]
+		if !known {
+			started, known = listed[id]
+		}
+		if id == "" || !known {
+			started = at
+		}
+		running = append(running, BackgroundTask{BackgroundTask: task, StartedAt: started})
+	}
+	m.launches = nil
+	m.backgroundTasks = running
+	view := m.viewLocked()
+	m.mu.Unlock()
+	return m.publish(view)
 }
 
 func (m *Monitor) HeldExit(lifecycle string) (Exit, bool) {

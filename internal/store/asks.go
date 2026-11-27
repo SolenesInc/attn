@@ -144,6 +144,10 @@ func (s *Store) OpenAsksTo(to who.Address) ([]Ask, error) {
 	return s.queryAsks("SELECT "+askColumns+" FROM asks WHERE address = ? AND "+openAsk+" ORDER BY created_at, id", to.String())
 }
 
+func (s *Store) OpenAsksFrom(session protocol.SessionID) ([]Ask, error) {
+	return s.queryAsks("SELECT "+askColumns+" FROM asks WHERE session_id = ? AND "+openAsk+" ORDER BY created_at, id", session)
+}
+
 func (s *Store) queryAsks(query string, args ...any) ([]Ask, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

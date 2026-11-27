@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "e970ecdc43df";
+pub const PROTOCOL_VERSION: &str = "8d8101521575";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -1642,6 +1642,44 @@ impl AutomationsChangedMessage {
         }
     }
 }
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BackgroundTask {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wakes: Option<BackgroundTaskWake>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BackgroundTaskStartedMessage {
+    pub cmd: String,
+    pub id: TerminalID,
+    pub task_id: String,
+}
+
+impl BackgroundTaskStartedMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "background_task_started".to_string(),
+            ..Self::default()
+        }
+    }
+}
+pub type BackgroundTaskWake = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BrowseDirectoryMessage {
     pub cmd: String,
@@ -11198,6 +11236,8 @@ pub struct Session {
     pub activity_at: Option<String>,
     pub agent: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attention: Option<SessionAttention>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_settle_dismiss_armed: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_settle_fires_at: Option<String>,
@@ -11451,6 +11491,13 @@ impl SessionAnnotationsSubmitResultMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SessionAttention {
+    pub at: String,
+    pub decider: String,
+    pub reason: String,
+    pub verdict: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SessionCloseResultMessage {
@@ -12661,6 +12708,8 @@ pub struct StateExplainResult {
     pub agent: String,
     pub capacity: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facts: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_model_request_at: Option<String>,
     #[serde(deserialize_with = "null_as_default")]
     pub observations: Vec<StateExplainEntry>,
@@ -12693,10 +12742,10 @@ impl StateMessage {
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StopMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background_tasks: Option<Vec<BackgroundTask>>,
     pub cmd: String,
     pub id: TerminalID,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub running_work: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scheduled_work: Option<i64>,
     pub transcript_path: String,

@@ -78,6 +78,19 @@ func (r *Run) ReplyLeavingBackgroundWork(text, task string) {
 	r.call(methodReplyBg, backgroundReplyParams{Text: text, Task: task}, nil)
 }
 
+type backgroundLaunchParams struct {
+	ID          string `json:"id"`
+	Description string `json:"description"`
+	Command     string `json:"command"`
+}
+
+// LaunchBackgroundShell has the agent start a background shell through the
+// Bash tool; every later stop lists it.
+func (r *Run) LaunchBackgroundShell(id, description, command string) {
+	r.t.Helper()
+	r.call(methodLaunchBg, backgroundLaunchParams{ID: id, Description: description, Command: command}, nil)
+}
+
 func (r *Run) Stream(text string) {
 	r.t.Helper()
 	r.call(methodStream, textParams{Text: text}, nil)

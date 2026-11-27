@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/analytics"
+	"github.com/victorarias/attn/internal/attention"
 	"github.com/victorarias/attn/internal/classifier"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
@@ -15,11 +16,9 @@ import (
 )
 
 const (
-	// 99% of 4,357 assistant messages across the 300 newest real transcripts fit in 3,575 characters.
-	quietStopMessageMaxChars = 4000
-	quietStopVerdictTimeout  = 30 * time.Second
-	quietStopNoMessage       = "no_message"
-	quietStopFailed          = "failed"
+	quietStopVerdictTimeout = 30 * time.Second
+	quietStopNoMessage      = "no_message"
+	quietStopFailed         = "failed"
 )
 
 type quietStopProps struct {
@@ -41,7 +40,7 @@ func (d *Daemon) judgeQuietStop(m *sessionmonitor.Monitor, run sessionmonitor.Ru
 	if d.headlessTaskRefused("quiet stop verdict") {
 		return quietStopProps{Verdict: quietStopFailed, Failure: "headless_tasks_off"}
 	}
-	message, err := m.RunLastMessage(run, quietStopMessageMaxChars)
+	message, err := m.RunLastMessage(run, attention.LastMessageMaxChars)
 	switch {
 	case errors.Is(err, sessionmonitor.ErrRunMessageUnavailable):
 		return quietStopProps{Verdict: quietStopFailed, Failure: "message_unavailable"}

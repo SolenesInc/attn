@@ -10,9 +10,9 @@ use attn_protocol::go_values::{
     STATE_UNKNOWN, STATE_WAITING_INPUT, STATE_WORKING,
 };
 use attn_protocol::{
-    FilesEditedMessage, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage,
-    HookTurn, OpenSentFilesMessage, PullRequestCreatedMessage, SetSessionResumeIDMessage,
-    StateMessage, StopMessage,
+    BackgroundTask, BackgroundTaskStartedMessage, FilesEditedMessage, HookCompactionMessage,
+    HookNotificationMessage, HookStopFailureMessage, HookTurn, OpenSentFilesMessage,
+    PullRequestCreatedMessage, SetSessionResumeIDMessage, StateMessage, StopMessage,
 };
 use detect::Tools;
 use input::{HookInput, text};
@@ -46,8 +46,12 @@ pub struct StopFailure {
 pub trait HookHarness: Sync {
     fn tools(&self) -> &'static Tools;
 
-    fn running_work(&self, _input: &HookInput<'_>) -> Vec<String> {
+    fn running_work(&self, _input: &HookInput<'_>) -> Vec<BackgroundTask> {
         Vec::new()
+    }
+
+    fn launched_task(&self, _input: &HookInput<'_>) -> Option<String> {
+        None
     }
 
     fn scheduled_work(&self, _input: &HookInput<'_>) -> usize {
@@ -231,11 +235,11 @@ impl Hook<'_> {
         message.transcript_path = text(input.field("transcript_path"));
         let scheduled: usize = HARNESSES.iter().map(|h| h.scheduled_work(&input)).sum();
         message.scheduled_work = i64::try_from(scheduled).ok();
-        let running: Vec<String> = HARNESSES
+        let running: Vec<BackgroundTask> = HARNESSES
             .iter()
             .flat_map(|h| h.running_work(&input))
             .collect();
-        message.running_work = (!running.is_empty()).then_some(running);
+        message.background_tasks = (!running.is_empty()).then_some(running);
         self.client(&id)
             .send(&message)
             .map_err(|error| failed("sending stop", error))
@@ -388,6 +392,16 @@ impl Hook<'_> {
             client
                 .send(&message)
                 .map_err(|error| failed("updating state", error))?;
+            if let Some(task) = first(|h| h.launched_task(&input)) {
+                let mut message = BackgroundTaskStartedMessage::new();
+                message.id.clone_from(&id);
+                message.task_id = task;
+                if let Err(error) = client.send(&message) {
+                    say(&format!(
+                        "warning: could not record background task start: {error}"
+                    ));
+                }
+            }
         }
         let tool_name = text(input.field("tool_name"));
         let Some(tools) = tools_for(&tool_name) else {

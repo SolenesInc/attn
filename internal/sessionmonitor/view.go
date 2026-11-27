@@ -147,6 +147,12 @@ type View struct {
 	Live                Value[bool]                                `fact:"session.live.changed"`
 	AssistantWindow     Value[uint64]                              `fact:"session.assistant_window.changed"`
 	ServerCompletion    Value[int64]                               `fact:"-"`
+	BackgroundTasks     Value[[]BackgroundTask]                    `fact:"-"`
+}
+
+type BackgroundTask struct {
+	protocol.BackgroundTask
+	StartedAt time.Time
 }
 
 func (m *Monitor) viewLocked() View {
@@ -199,6 +205,7 @@ func (m *Monitor) snapshotLocked() View {
 		Live:                Value[bool]{live},
 		AssistantWindow:     Value[uint64]{m.windowRevision},
 		ServerCompletion:    Value[int64]{m.completions.applied},
+		BackgroundTasks:     Value[[]BackgroundTask]{m.backgroundTasks},
 	}
 }
 

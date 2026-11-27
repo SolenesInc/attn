@@ -3126,6 +3126,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleStop(conn, msg.(*protocol.StopMessage))
 	case protocol.CmdFilesEdited:
 		d.handleFilesEdited(conn, msg.(*protocol.FilesEditedMessage))
+	case protocol.CmdBackgroundTaskStarted:
+		d.handleBackgroundTaskStarted(conn, msg.(*protocol.BackgroundTaskStartedMessage))
 	case protocol.CmdPullRequestCreated:
 		d.handlePullRequestCreated(conn, msg.(*protocol.PullRequestCreatedMessage), caller)
 	case protocol.CmdQuery:
@@ -3291,6 +3293,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		Yielded:    stopIsNonTerminal(msg, relaxBackgroundWork),
 		Classifies: classifies,
 	}
+	monitor.RecordBackgroundTasks(msg.BackgroundTasks, time.Now())
 	d.events().Turn(harness.FromTerminal(msg.ID), time.Now(), harness.TurnEvent{Turn: harness.TurnEnded, Stop: stop})
 	if stop.Yielded {
 		tasks := strings.Join(runningWork(msg), ", ")

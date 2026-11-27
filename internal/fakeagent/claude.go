@@ -46,6 +46,7 @@ type claude struct {
 	picker              bool
 	terminalReadsStatus bool
 	mod                 *fakeMod
+	background          []map[string]string
 }
 
 var claudePrintFlags = flagSpec{
@@ -373,7 +374,19 @@ func (c *claude) replyLeavingBackgroundWork(text, task string) error {
 	})
 }
 
+func (c *claude) launchBackground(id, description, command string) error {
+	c.background = append(c.background, map[string]string{"id": id, "type": "shell", "status": "running", "description": description, "command": command})
+	return c.hooks.run("PostToolUse", "Bash", c.hookInput("PostToolUse", map[string]any{
+		"tool_name":     "Bash",
+		"tool_input":    map[string]any{"command": command, "description": description, "run_in_background": true},
+		"tool_response": map[string]any{"stdout": "", "stderr": "", "interrupted": false, "isImage": false, "noOutputExpected": false, "backgroundTaskId": id},
+	}))
+}
+
 func (c *claude) stopWith(input map[string]any) error {
+	if _, listed := input["background_tasks"]; !listed && len(c.background) > 0 {
+		input["background_tasks"] = c.background
+	}
 	c.term.title(claudeRestingTitle)
 	c.reportStatus("state=done")
 	err := c.hooks.run("Stop", "", c.hookInput("Stop", input))

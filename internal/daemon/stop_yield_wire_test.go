@@ -86,7 +86,7 @@ func hookedClaudeAtWork(t *testing.T, w *world, app *testworld.Peer, cli *client
 
 func yieldWithBackgroundWork(t *testing.T, w *world, cli *client.Client, transcript *fakeagent.ClaudeTranscript) {
 	t.Helper()
-	if err := cli.SendStop(protocol.TerminalID(w.Terminal("s1")), transcript.Path, client.StopFacts{RunningWork: []string{`background_session "./deploy.sh staging"`}}); err != nil {
+	if err := cli.SendStop(protocol.TerminalID(w.Terminal("s1")), transcript.Path, client.StopFacts{BackgroundTasks: []protocol.BackgroundTask{{Kind: protocol.Ptr("background_session"), Description: protocol.Ptr("./deploy.sh staging")}}}); err != nil {
 		t.Fatalf("stop with background work: %v", err)
 	}
 }

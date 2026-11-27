@@ -104,6 +104,7 @@ func (d *Daemon) stateExplainResult(ctx context.Context, session *protocol.Sessi
 	if strings.TrimSpace(protocol.Deref(session.LastModelRequestAt)) != "" {
 		result.LastModelRequestAt = protocol.Ptr(protocol.Deref(session.LastModelRequestAt))
 	}
+	result.Facts = d.attentionFacts(ctx, session, time.Now())
 	return result, nil
 }
 

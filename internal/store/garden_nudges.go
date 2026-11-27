@@ -111,6 +111,25 @@ func (s *Store) GardenSeedWatches(seedIDs ...string) ([]SeedWatch, error) {
 	return watches, rows.Err()
 }
 
+func (s *Store) GardenSeedsWatchedBy(watcher who.Party) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows, err := s.db.Query(`SELECT seed_id FROM garden_seed_watches WHERE watcher = ? ORDER BY seed_id`, watcher)
+	if err != nil {
+		return nil, fmt.Errorf("list seeds watched by %s: %w", watcher, err)
+	}
+	defer rows.Close()
+	var seeds []string
+	for rows.Next() {
+		var seed string
+		if err := rows.Scan(&seed); err != nil {
+			return nil, fmt.Errorf("scan watched seed: %w", err)
+		}
+		seeds = append(seeds, seed)
+	}
+	return seeds, rows.Err()
+}
+
 func (s *Store) HandleGardenSeedEvent(
 	eventSeq int64,
 	seedID string,

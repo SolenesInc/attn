@@ -105,6 +105,8 @@ type Monitor struct {
 	pullRequests         map[string]PullRequest
 	sentFiles            map[string]FileReport
 	editedFiles          map[string]FileReport
+	backgroundTasks      []BackgroundTask
+	launches             map[string]time.Time
 	harnessTitle         string
 	terminalTitle        string
 	exit                 *Exit

@@ -149,7 +149,7 @@ func TestAStopWithBackgroundWorkHoldsTheSessionUntilItClears(t *testing.T) {
 		app, cli := w.App(), w.Client()
 		sessionStateEvidenceAtWork(t, w, app, cli)
 
-		if err := cli.SendStop(protocol.TerminalID(w.Terminal("s1")), "", client.StopFacts{RunningWork: []string{`background_session "gh run watch 1234"`}}); err != nil {
+		if err := cli.SendStop(protocol.TerminalID(w.Terminal("s1")), "", client.StopFacts{BackgroundTasks: []protocol.BackgroundTask{{Kind: protocol.Ptr("background_session"), Description: protocol.Ptr("gh run watch 1234")}}}); err != nil {
 			t.Fatalf("stop with background work: %v", err)
 		}
 		testworld.AwaitSession(app, "s1", func(s protocol.Session) bool {

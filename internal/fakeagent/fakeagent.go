@@ -47,6 +47,7 @@ const (
 	methodInput                = "input"
 	methodReplyLate            = "reply_after_stop"
 	methodReplyBg              = "reply_leaving_background_work"
+	methodLaunchBg             = "launch_background"
 	methodStream               = "stream"
 	methodSubagent             = "subagent"
 	methodDropSubs             = "delete_subagent_transcripts"
@@ -221,6 +222,10 @@ type backgroundReplier interface {
 	replyLeavingBackgroundWork(text, task string) error
 }
 
+type backgroundLauncher interface {
+	launchBackground(id, description, command string) error
+}
+
 type halter interface {
 	halt() error
 }
@@ -351,6 +356,18 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		a.turn.Lock()
 		defer a.turn.Unlock()
 		return struct{}{}, a.conv.reply(p.Text, method == methodReplyLate)
+	case methodLaunchBg:
+		var p backgroundLaunchParams
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		launcher, ok := a.conv.(backgroundLauncher)
+		if !ok {
+			return nil, fmt.Errorf("%T does not script %s", a.conv, method)
+		}
+		a.turn.Lock()
+		defer a.turn.Unlock()
+		return struct{}{}, launcher.launchBackground(p.ID, p.Description, p.Command)
 	case methodReplyBg:
 		var p backgroundReplyParams
 		if err := json.Unmarshal(params, &p); err != nil {
