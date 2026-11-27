@@ -250,7 +250,7 @@ pub(crate) fn rows(state: &State) -> (Vec<Row>, String) {
     let mut files = rank::merged(&opener.recents, opener.root.as_deref(), &opener.index);
     files.retain(|f| {
         let host = f.host.as_deref();
-        host.is_none_or(|h| crate::launcher::outpost(&outposts, h).is_some())
+        host.is_none_or(|h| crate::launcher::outpost(outposts, h).is_some())
             && opener.scope.holds(host)
     });
     let rows = rank::ranked(&files, query)
@@ -293,7 +293,7 @@ fn step_scope(state: &mut State, forward: bool, tx: &mut Tx) {
     state.opener.scope = state
         .opener
         .scope
-        .step(&crate::launcher::outposts(state), forward);
+        .step(crate::launcher::outposts(state), forward);
     state.opener.highlighted = None;
     state.opener.browse = Browse::default();
     if paths::is_path(&state.opener.query.text) {

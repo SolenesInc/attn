@@ -55,21 +55,26 @@ func reportedCopy(t *testing.T, outpost *testworld.Stack, seed string, profile .
 
 func awaitNotebookState(t *testing.T, pair *testworld.OutpostPair, state protocol.OutpostNotebookState) protocol.OutpostNotebook {
 	t.Helper()
-	for _, row := range outpostsShownAt(pair.App, len(pair.App.Log())) {
-		if row.ID == pair.Host && row.Notebook != nil && row.Notebook.State == state {
+	return awaitMachineNotebook(t, pair.App, pair.Host, state)
+}
+
+func awaitMachineNotebook(t *testing.T, app *testworld.Peer, machine string, state protocol.OutpostNotebookState) protocol.OutpostNotebook {
+	t.Helper()
+	for _, row := range outpostsShownAt(app, len(app.Log())) {
+		if row.ID == machine && row.Notebook != nil && row.Notebook.State == state {
 			return *row.Notebook
 		}
 	}
-	message := testworld.Await(pair.App, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+	message := testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
 		for _, row := range m.Outposts {
-			if row.ID == pair.Host && row.Notebook != nil && row.Notebook.State == state {
+			if row.ID == machine && row.Notebook != nil && row.Notebook.State == state {
 				return true
 			}
 		}
 		return false
 	})
 	for _, row := range message.Outposts {
-		if row.ID == pair.Host {
+		if row.ID == machine {
 			return *row.Notebook
 		}
 	}

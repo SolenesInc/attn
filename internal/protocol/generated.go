@@ -8203,9 +8203,6 @@ type OutpostInfo struct {
 	// Destination corresponds to the JSON schema field "destination".
 	Destination string `json:"destination"`
 
-	// DialsHome corresponds to the JSON schema field "dials_home".
-	DialsHome *bool `json:"dials_home,omitempty,omitzero"`
-
 	// Home corresponds to the JSON schema field "home".
 	Home *string `json:"home,omitempty,omitzero"`
 

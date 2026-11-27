@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "1a96fc5482f6";
+pub const PROTOCOL_VERSION: &str = "2afa5e77d3ae";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -7467,8 +7467,6 @@ pub struct OutpostInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub daemon_id: Option<String>,
     pub destination: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dials_home: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub home: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -438,8 +438,6 @@ model NotebookFoldersMessage {
 
 model OutpostInfo {
   connectable?: boolean;
-  // The machine dials this home (attn enrollment join). It starts no terminals until it serves its own.
-  dials_home?: boolean;
   id: string;
   name: string;
   destination: string;

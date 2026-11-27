@@ -349,7 +349,7 @@ fn locations(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> 
         let empty = match browsed {
             None => Some("No recent project matches. Type ~/ to browse folders."),
             Some((listing, host)) => (matches!(listing, Some(Listing::Listed { .. }))
-                || !reachable(&outposts, host))
+                || !reachable(outposts, host))
             .then_some("No folders match. Enter uses the path as typed."),
         };
         children.extend(empty.map(|message| finder::empty(t, format!("{w}.empty"), message)));
@@ -421,7 +421,7 @@ fn location_row(
         Kind::Machine => Some(Said::parts([
             Part::Text(format!(
                 "{} · Tab browses ",
-                host.and_then(|h| outpost(&outposts, h))
+                host.and_then(|h| outpost(outposts, h))
                     .map(|o| o.state.clone())
                     .unwrap_or_default()
             )),
@@ -762,7 +762,7 @@ fn status_line(state: &State, launcher: &Launcher, address: &Address) -> Option<
             let (dir, _) = split_browse(path);
             let name = &machine.name;
             let listing = launcher.listing(state, host, &dir);
-            if !reachable(&outposts, host) {
+            if !reachable(outposts, host) {
                 return Some((
                     match listing {
                         Some(Listing::Listed { at_ms, .. }) => format!(

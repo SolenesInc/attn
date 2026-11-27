@@ -650,33 +650,6 @@ fn every_machines_recents_carry_their_badge_and_only_reachable_outposts_are_aske
 }
 
 #[test]
-fn a_machine_that_dials_the_home_is_not_offered_until_it_serves_its_own_terminals() {
-    let world = open(Setup {
-        outposts: vec![
-            OutpostInfo {
-                dials_home: Some(true),
-                ..sandbox()
-            },
-            field_lab(),
-        ],
-        ..Setup::default()
-    });
-
-    assert_eq!(
-        rows(&world),
-        named(&[
-            ("shop", Some("This Mac"), true),
-            ("sensor-hub", Some("field-lab"), false),
-            ("notes", Some("This Mac"), false),
-        ])
-    );
-    assert!(
-        world.daemon.sent_of("agent_catalog").is_empty(),
-        "no harness catalog is asked of a machine that dials the home"
-    );
-}
-
-#[test]
 fn an_unreachable_machines_recent_reads_relative_to_the_home_it_last_reported() {
     let world = open(Setup {
         outposts: vec![

@@ -130,9 +130,6 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 		if err != nil {
 			return nil, &spawnRejection{err: err}
 		}
-		if err := startsTerminals(row); err != nil {
-			return nil, &spawnRejection{err: err}
-		}
 		msg.Host = protocol.Ptr(row.ID)
 		if _, _, err = d.outpostConn(row.ID); err != nil {
 			return nil, &spawnRejection{err: err}

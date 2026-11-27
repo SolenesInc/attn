@@ -143,6 +143,15 @@ func awaitHomeDial(t *testing.T, s *testworld.Stack, state string) *testworld.Pe
 	}
 }
 
+func pidOf(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(data))
+}
+
 func TestAReverseOutpostDialsItsHomeAndRedialsAfterEitherRestarts(t *testing.T) {
 	w := newReverseWorld(t, testworld.WithAgents(fakeagent.Claude))
 	box := testworld.NewStack(t)
@@ -205,25 +214,35 @@ func TestAReverseOutpostDialsItsHomeAndRedialsAfterEitherRestarts(t *testing.T) 
 		t.Fatalf("connect in a terminal to a machine that dials the home: %+v", connect)
 	}
 
-	shell := fakeagent.Harness(protocol.SessionAgentShell)
-	refused, _, _ := w.home.RequestSpawn(w.app, shell, w.laptop.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &row.ID })
-	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), w.name+" dials this home, so it starts no terminals yet") {
-		t.Fatalf("a shell on the machine that dials the home: %+v, want it refused by name", refused)
-	}
+	shellHarness := fakeagent.Harness(protocol.SessionAgentShell)
+	shell := w.home.Spawn(w.app, shellHarness, w.laptop.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &row.ID })
+	boxShell := w.home.Spawn(w.app, shellHarness, box.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &boxRow.ID })
+	pidPath, boxPidPath := w.laptop.Path("shell.pid"), box.Path("shell.pid")
+	w.app.TypeLine(shell, "echo $$ > "+pidPath+"; echo laptop-$((1+1))")
+	w.app.TypeLine(boxShell, "echo $$ > "+boxPidPath+"; echo box-$((2+2))")
+	w.app.AwaitScreen(shell, "laptop-2")
+	w.app.AwaitScreen(boxShell, "box-4")
+	before := pidOf(t, pidPath)
+	t.Logf("the home bridges the machine that dialed it (%s) and the outpost it dials (%s) at once, and starts terminals on both", row.ID, boxRow.ID)
 	caller := w.home.Spawn(w.app, fakeagent.Claude, w.home.Path("caller"))
-	for _, args := range [][]string{
-		{"terminal", "open", "--host", w.name},
-		{"delegate", "--brief", "Work on the laptop", "--model", "opus", "--cwd", "~", "--host", w.name},
-	} {
-		if got := w.home.Run(testworld.Invocation{Session: caller, Args: args}); got.Code == 0 || !strings.Contains(got.Stderr, w.name+" dials this home, so it starts no terminals yet") {
-			t.Fatalf("attn %s: exited %d, stdout %q, stderr %q; want it refused by name", strings.Join(args, " "), got.Code, got.Stdout, got.Stderr)
+	run := func(args ...string) testworld.Result {
+		got := w.home.Run(testworld.Invocation{Session: caller, Args: args})
+		if got.Code != 0 {
+			t.Fatalf("attn %s: exited %d, stdout %q, stderr %q; want a terminal on %s", strings.Join(args, " "), got.Code, got.Stdout, got.Stderr, w.name)
+		}
+		return got
+	}
+	var opened protocol.TerminalOpenResult
+	run("terminal", "open", "--host", w.name, "--json").JSON(t, &opened)
+	awaitMachineNotebook(t, w.app, row.ID, protocol.OutpostNotebookStateInSync)
+	var delegation delegated
+	run("delegate", "--brief", "Work on the laptop", "--model", "opus", "--cwd", w.laptop.Path("shell"), "--host", w.name).JSON(t, &delegation)
+	for way, id := range map[string]string{"attn terminal open --host": string(opened.SessionID), "attn delegate --host": delegation.SessionID} {
+		if got := testworld.AwaitSession(w.app, id, func(protocol.Session) bool { return true }); protocol.Deref(got.Host) != row.ID {
+			t.Fatalf("%s started session %s on host %q, want the machine that dials the home %s", way, id, protocol.Deref(got.Host), row.ID)
 		}
 	}
-	boxShell := w.home.Spawn(w.app, shell, box.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &boxRow.ID })
-	boxPidPath := box.Path("shell.pid")
-	w.app.TypeLine(boxShell, "echo $$ > "+boxPidPath+"; echo box-$((2+2))")
-	w.app.AwaitScreen(boxShell, "box-4")
-	t.Logf("the home bridges the machine that dialed it (%s) and the outpost it dials (%s) at once, and starts terminals only on the second", row.ID, boxRow.ID)
+	t.Log("attn terminal open --host and attn delegate --host start terminals on the machine that dials the home")
 	requireLines(t, "status while bridged", w.status(), "dial:       home (bridged)")
 
 	w.home.Stop()
@@ -239,7 +258,12 @@ func TestAReverseOutpostDialsItsHomeAndRedialsAfterEitherRestarts(t *testing.T) 
 	outpostStateSince(w.app, w.name, protocol.OutpostStateConnected, mark)
 	stopRetries()
 	requireLines(t, "status after the home restarted", w.status(), "dial:       home (bridged)")
-	t.Log("the machine redialed after the home restarted")
+	w.app.TypeLine(shell, "echo $$ > "+pidPath+"; echo after-home-$((3+3))")
+	w.app.AwaitScreen(shell, "after-home-6")
+	if got := pidOf(t, pidPath); got != before {
+		t.Fatalf("the shell changed pid across the home's restart: %s -> %s", before, got)
+	}
+	t.Log("the machine redialed after the home restarted, with its shell alive")
 
 	mark = w.app.EventCount()
 	w.laptop.Stop()
@@ -248,9 +272,14 @@ func TestAReverseOutpostDialsItsHomeAndRedialsAfterEitherRestarts(t *testing.T) 
 	w.laptop.Start()
 	outpostStateSince(w.app, w.name, protocol.OutpostStateConnected, mark)
 	w.app = w.home.App()
+	w.app.TypeLine(shell, "echo $$ > "+pidPath+"; echo after-laptop-$((4+4))")
+	w.app.AwaitScreen(shell, "after-laptop-8")
+	if got := pidOf(t, pidPath); got != before {
+		t.Fatalf("the shell changed pid across the machine's own restart: %s -> %s", before, got)
+	}
 	w.app.TypeLine(boxShell, "echo box-still-$((5+5))")
 	w.app.AwaitScreen(boxShell, "box-still-10")
-	t.Log("the machine dialed again when its own daemon restarted; the ssh outpost stayed bridged")
+	t.Log("the machine dialed again when its own daemon restarted, with its shell alive; the ssh outpost stayed bridged")
 }
 
 func TestAReverseOutpostShowsItsDialAndBothWaysOutEndIt(t *testing.T) {

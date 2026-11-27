@@ -99,7 +99,7 @@ fn option(state: &State, r: &Row, highlighted: bool, tagged: bool, t: &Tokens) -
         .away(r.host.as_deref())
         .map(|name| format!(" on {name}"))
         .unwrap_or_default();
-    let offline = crate::outpost::reach(r.host.as_deref(), &outposts).offline();
+    let offline = crate::outpost::reach(r.host.as_deref(), outposts).offline();
     let mut line = ListRow::new(key.clone(), format!("{} {}{on}", r.title, r.detail))
         .role("option")
         .unfocusable()

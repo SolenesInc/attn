@@ -243,19 +243,13 @@ fn matching_folders<'a>(entries: &'a [DirectoryEntry], fragment: &str) -> Vec<&'
     starts.into_iter().chain(rest).collect()
 }
 
-/// The outposts a launcher offers: those attached, while the Outposts switch is on, except
-/// machines that dial the home, which start no terminals yet.
-pub(crate) fn outposts(state: &State) -> Vec<OutpostInfo> {
-    if !crate::setting::on(&state.facts.settings, OUTPOSTS_ENABLED) {
-        return Vec::new();
+/// The outposts a launcher offers: those attached, while the Outposts switch is on.
+pub(crate) fn outposts(state: &State) -> &[OutpostInfo] {
+    if crate::setting::on(&state.facts.settings, OUTPOSTS_ENABLED) {
+        &state.facts.outposts
+    } else {
+        &[]
     }
-    state
-        .facts
-        .outposts
-        .iter()
-        .filter(|o| o.dials_home != Some(true))
-        .cloned()
-        .collect()
 }
 
 pub(crate) fn outpost<'a>(outposts: &'a [OutpostInfo], host: &str) -> Option<&'a OutpostInfo> {
@@ -602,12 +596,12 @@ impl Launcher {
         let outposts = outposts(state);
         let name = machine_name(&offered(state, &outposts), host);
         if let Some(host) = host
-            && !reachable(&outposts, Some(host))
+            && !reachable(outposts, Some(host))
         {
             return Some(Problem {
                 message: format!("{name} is unreachable; this needs it now"),
                 reason: Some(unreachable_reason(
-                    outpost(&outposts, host),
+                    outpost(outposts, host),
                     state.window.now_ms,
                 )),
             });
@@ -678,7 +672,7 @@ impl Launcher {
                 if !outposts.is_empty() && matches!(listed, Some(Listing::Missing)) {
                     let mut elsewhere: Vec<(u64, Option<String>)> = std::iter::once(None)
                         .chain(outposts.iter().map(|o| Some(o.id.clone())))
-                        .filter(|h| h.as_deref() != host && reachable(&outposts, h.as_deref()))
+                        .filter(|h| h.as_deref() != host && reachable(outposts, h.as_deref()))
                         .filter_map(|h| match self.listing(state, h.as_deref(), &dir) {
                             Some(Listing::Listed { order, .. }) => Some((*order, h)),
                             _ => None,
@@ -753,9 +747,9 @@ impl Launcher {
                 let named: Vec<&OutpostInfo> = match &address {
                     Address::Ambiguous { machines, .. } => machines
                         .iter()
-                        .filter_map(|m| outpost(&outposts, m.host.as_deref()?))
+                        .filter_map(|m| outpost(outposts, m.host.as_deref()?))
                         .collect(),
-                    _ => address::machines_named(&searched, &outposts),
+                    _ => address::machines_named(&searched, outposts),
                 };
                 let mut rows: Vec<Row> = named
                     .into_iter()
@@ -850,7 +844,7 @@ impl Launcher {
     /// The outpost a start is waiting on, while it has stopped answering.
     pub(crate) fn stalled<'a>(&self, state: &'a State) -> Option<&'a OutpostInfo> {
         let host = self.starting.as_ref()?.host.as_deref()?;
-        outpost(&state.facts.outposts, host).filter(|o| self.busy && o.state == "stalled")
+        outpost(outposts(state), host).filter(|o| self.busy && o.state == "stalled")
     }
 
     /// Whether the launcher waits on a reachable outpost for the browsed folder.
@@ -860,7 +854,7 @@ impl Launcher {
         };
         self.place.is_none()
             && machine.host.is_some()
-            && reachable(&outposts(state), machine.host.as_deref())
+            && reachable(outposts(state), machine.host.as_deref())
             && matches!(
                 self.listing(state, machine.host.as_deref(), &split_browse(&path).0),
                 Some(Listing::Pending { .. })
@@ -1006,22 +1000,11 @@ pub(crate) fn opened(state: &mut State, which: Which, tx: &mut Tx) {
                 }
                 return;
             };
-            if let Some(home) = result.home_path.filter(|h| !h.is_empty()) {
-                state.window.launching.home = home;
-            }
-            let dial_home: Vec<String> = state
-                .facts
-                .outposts
-                .iter()
-                .filter(|o| o.dials_home == Some(true))
-                .map(|o| o.id.clone())
-                .collect();
             let launching = &mut state.window.launching;
-            launching.recents = result
-                .recent_locations
-                .into_iter()
-                .filter(|r| r.host.as_ref().is_none_or(|host| !dial_home.contains(host)))
-                .collect();
+            if let Some(home) = result.home_path.filter(|h| !h.is_empty()) {
+                launching.home = home;
+            }
+            launching.recents = result.recent_locations;
             let Some(launcher) = this(state, which, opening) else {
                 return;
             };
