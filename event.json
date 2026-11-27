@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Supervisor misses elapsed checks for foreground tools",
+  "at": "2026-11-27T23:33:55.138Z",
+  "detail": "At edd311a8, a foreground tool running while its agent is working, without a recorded background task or background_parked state, receives no elapsed checkpoint. The eligibility in internal/daemon/attention_checkpoints.go:118 and :186 leaves this case out. Plot s-4kr3bn D3 calls for checkpoints at 20 min, 60 min and 4 h after the last model request for agents working without new requests. Foreground waits past 20 minutes were recorded in s-45t02j/stuck_working.md. This leaves them out of shadow verdicts and the later action path. Cover foreground eligibility and rearm when a new model request arrives. Two readers confirmed the code path; they did not reproduce it live.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/attention_checkpoints.go",
+    "line": 118
+  },
+  "culprit": "d4aa68b6be106d0bd813a35260106982e1fa8d94"
+}
