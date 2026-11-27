@@ -1,0 +1,1 @@
+Test-only: TestHomeMoveSurvivesAKillAtEachStep's during-commit cases now start the old home before the new home after the move commits. The new home's ssh dial starts the old home's daemon, so starting them the other way round raced the test's own Start ("already-running" on CI under load). No product change.
