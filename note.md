@@ -1,0 +1,3 @@
+The view language now has its catalog and checker. `internal/viewlang` holds the one list of parts, data sets, formats and commands. `viewlang.Check` turns a view file into typed parts (`protocol.ViewPart`) and problems, each with a line and a fix. `make generate-types` writes the wire types, the reference for agents and the app's `ViewParts` table from the catalog. A table that misses a part does not compile. Nothing calls the checker yet. The next views child, "A view draws in a tile" (s-8n1jy7), wires it to `open` and the tile.
+
+The ask lexer in `internal/document` is shared and now takes its openers from the caller. Asks are byte-identical over 11,445 real and synthetic cases.
