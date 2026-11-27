@@ -19,6 +19,7 @@ pub mod desktop;
 mod diagnostic_report;
 mod dispatch;
 mod editor;
+mod folders;
 mod frame;
 pub mod frame_recorder;
 pub mod garden;

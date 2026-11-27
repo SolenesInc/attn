@@ -1,5 +1,8 @@
-use attn_protocol::SettingsUpdatedMessage;
-use attn_testkit::{Target, World};
+use attn_protocol::{
+    BrowseDirectoryResultMessage, DirectoryEntry, RecentLocationsResultMessage,
+    SettingsUpdatedMessage,
+};
+use attn_testkit::{Target, World, message};
 use rune::{FileDialogKind, Key, KeyEvent, Mods, PhysicalInput, PhysicalKeyCode};
 
 use super::{accepting, click, field, keeping, named, open, press, rest, retype, value, writes};
@@ -538,4 +541,114 @@ fn a_refusal_that_lands_after_the_person_went_elsewhere_leaves_the_page_where_th
         );
     }
     answered_after_going_to("settings.heading", late);
+}
+
+#[test]
+fn with_the_home_on_another_machine_browse_lists_the_homes_folders_and_saves_the_one_chosen() {
+    let (daemon, _) = accepting(&[("projects_directory", "/home/me/old")]);
+    let daemon = daemon.relaying_to("mac", "oma");
+    daemon.on("get_recent_locations", |_| {
+        message(RecentLocationsResultMessage {
+            success: true,
+            home_path: Some("/home/me".into()),
+            ..RecentLocationsResultMessage::new()
+        })
+    });
+    daemon.on("browse_directory", |r| {
+        let directory = match r["input_path"].as_str().unwrap() {
+            "~/" | "~" => "/home/me",
+            other => other.trim_end_matches('/'),
+        };
+        message(BrowseDirectoryResultMessage {
+            success: true,
+            input_path: r["input_path"].as_str().unwrap().into(),
+            home_path: Some("/home/me".into()),
+            directory: directory.into(),
+            entries: ["code", "projects"]
+                .iter()
+                .map(|name| DirectoryEntry {
+                    name: (*name).into(),
+                    path: format!("{directory}/{name}"),
+                    is_dir: true,
+                    is_repo: Some(false),
+                })
+                .collect(),
+            ..BrowseDirectoryResultMessage::new()
+        })
+    });
+    let mut world = World::start(daemon);
+    on_desktop(&mut world);
+
+    click(&mut world, "settings.browse.projects_directory");
+    assert_eq!(world.file_dialog(), None);
+    assert_eq!(
+        named(&world, "new-session.title").as_deref(),
+        Some("Select Projects Directory on oma")
+    );
+    let hosts: Vec<_> = world
+        .daemon
+        .sent_of("browse_directory")
+        .iter()
+        .map(|r| r["host"].clone())
+        .collect();
+    assert!(
+        !hosts.is_empty() && hosts.iter().all(serde_json::Value::is_null),
+        "{hosts:?}"
+    );
+    for _ in 0..3 {
+        world.gesture(|d| d.press("down"));
+    }
+    world.gesture(|d| d.press("enter"));
+
+    assert_eq!(
+        writes(&world),
+        [(
+            "projects_directory".to_owned(),
+            "/home/me/projects".to_owned()
+        )]
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("new-session.title"))
+            .is_none()
+    );
+    assert_eq!(
+        value(&world, &field("projects_directory")),
+        "/home/me/projects"
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn with_the_home_on_another_machine_escape_leaves_the_folder_chooser_for_settings_saving_nothing() {
+    let (daemon, _) = accepting(&[("projects_directory", "/home/me/projects")]);
+    let mut world = World::start(daemon.relaying_to("mac", "oma"));
+    on_desktop(&mut world);
+    assert!(world.screen().to_string().contains("\"home on oma\""));
+
+    click(&mut world, "settings.browse.projects_directory");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("new-session.title"))
+            .is_some()
+    );
+    world.gesture(|d| d.press("escape"));
+    world.gesture(|d| d.press("escape"));
+
+    assert!(
+        world
+            .screen()
+            .find(Target::key("new-session.title"))
+            .is_none()
+    );
+    assert!(writes(&world).is_empty());
+    assert!(
+        world
+            .screen()
+            .find(Target::key("settings.browse.projects_directory"))
+            .is_some()
+    );
+    rest(&mut world);
 }

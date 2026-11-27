@@ -250,7 +250,10 @@ fn default_agent(state: &State, t: &Tokens) -> Control {
         }
         let help = match status {
             Availability::Unavailable => Some(format!("{label} CLI not found in PATH")),
-            Availability::Checking => Some(format!("Checking for {label} on this machine")),
+            Availability::Checking => Some(format!(
+                "Checking for {label} on {}",
+                crate::machine::Machines::of(&state.facts).home_place()
+            )),
             Availability::Available => None,
         };
         if let Some(help) = help {

@@ -61,7 +61,12 @@ fn frame(state: &State, launcher: &Launcher, t: &Tokens) -> El {
         .on_key(move |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
             super::on_key(state, which, ev, tx)
         })
-        .child(controls(state, launcher, terminal, t))
+        .children(
+            launcher
+                .choosing
+                .is_none()
+                .then(|| controls(state, launcher, terminal, t)),
+        )
         .child(header(state, launcher, terminal, t))
         .child(body)
         .children((!notices.is_empty()).then(|| finder::notices(notices)))
@@ -128,6 +133,11 @@ fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> El 
     let w = which.key();
     let outposts = outposts(state);
     let title = match (terminal, which) {
+        _ if let Some(chooser) = &launcher.choosing => format!(
+            "{} on {}",
+            chooser.purpose.title(),
+            machine_name(&offered(state, &outposts), None)
+        ),
         (true, _) => "New terminal".to_owned(),
         (false, Which::Dialog) => "New agent".to_owned(),
         (false, Which::Inline) => format!(
@@ -137,6 +147,7 @@ fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> El 
     };
     let (edit, placeholder) = match &launcher.place {
         Some(place) => (&place.branch, "name a new worktree, or pick below"),
+        None if launcher.choosing.is_some() => (&launcher.query, "Folder"),
         None if outposts.is_empty() => (&launcher.query, "Project or path"),
         None => (&launcher.query, "Project, path, or machine:path"),
     };
@@ -663,6 +674,11 @@ fn hints(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> El {
     if launcher.stalled(state).is_some() {
         hints.push(Hint::keys("", "Esc", " keep waiting in the background").at_end());
     } else if launcher.busy {
+    } else if launcher.choosing.is_some() {
+        hints.push(Hint::keys("", "↑↓", " move"));
+        hints.push(Hint::keys("", "Enter", " choose"));
+        hints.push(Hint::keys("", "Tab", " open"));
+        hints.push(Hint::keys("", "Esc", " close").at_end());
     } else if launcher.deletion.is_some() {
         hints.push(Hint::keys("", "y", " delete"));
         hints.push(Hint::pieces(&[

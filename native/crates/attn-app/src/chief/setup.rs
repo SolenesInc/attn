@@ -6,7 +6,7 @@ use attn_ui::Tokens;
 use attn_ui::blocks::{Actions, Block, Field, Inline, Notice, Popover, Prose, Status};
 use attn_ui::frame::Frame;
 use attn_ui::system::{Button, Choice as ChoiceRow, Look, Segment, Segmented, Size, Type, words};
-use rune::{El, FileDialogOptions, Tx, el};
+use rune::{El, Tx, el};
 use rune_kit::Placement;
 use rune_kit::popover::anchored;
 
@@ -488,27 +488,24 @@ fn recheck_models(state: &mut State, tx: &mut Tx) {
     crate::settings::rediscover_models(state, &harness, tx);
 }
 
+/// Puts the folder chosen for the Notebook in the draft.
+pub(crate) fn notebook_chosen(state: &mut State, folder: String) {
+    if let Some(d) = state.window.chief.draft.as_mut() {
+        d.notebook_root = Some(folder);
+    }
+}
+
 fn choose_folder(state: &mut State, tx: &mut Tx) {
     let Some((view, draft)) = shown(state) else {
         return;
     };
     let folder = form(state, draft, view.busy).folder;
-    let options = FileDialogOptions {
-        title: "Choose the Notebook folder".into(),
-        directory: (!folder.is_empty()).then(|| folder.into()),
-        ..FileDialogOptions::default()
-    };
-    tx.open_folder(options, |state: &mut State, chosen, tx| match chosen {
-        Ok(Some(folder)) => {
-            if let Some(d) = state.window.chief.draft.as_mut() {
-                d.notebook_root = Some(folder.to_string_lossy().into_owned());
-            }
-        }
-        Ok(None) => {}
-        Err(why) => state
-            .window
-            .notify(format!("Could not ask for a folder: {why}"), tx),
-    });
+    crate::folders::choose(
+        state,
+        crate::folders::FolderFor::ChiefNotebook,
+        (!folder.is_empty()).then_some(folder),
+        tx,
+    );
 }
 
 /// Arrows walk the focused radio's group, picking as they go, and Enter on a radio saves. The

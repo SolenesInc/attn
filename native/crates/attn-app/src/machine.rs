@@ -49,6 +49,11 @@ impl<'a> Machines<'a> {
         self.away(host).unwrap_or_else(|| THIS_MAC.to_owned())
     }
 
+    /// Where the home runs, as a sentence says it: the home's machine by name, or "this machine".
+    pub(crate) fn home_place(&self) -> String {
+        self.away(None).unwrap_or_else(|| "this machine".to_owned())
+    }
+
     /// Whether more than one machine is in play, so that rows name theirs.
     pub(crate) fn several(&self) -> bool {
         !self.outposts.is_empty() || self.app.home.is_some()

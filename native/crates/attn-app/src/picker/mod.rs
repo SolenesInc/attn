@@ -501,6 +501,15 @@ pub(crate) fn new_session_at(state: &mut State, path: &str, tx: &mut Tx) {
 
 fn open_dialog(state: &mut State, direction: Direction, agent: Option<&str>, tx: &mut Tx) {
     let picker = Opened::open(Which::Dialog, None, None, direction, agent, state);
+    show_dialog(state, picker, tx);
+}
+
+/// Shows `launcher` as the dialog, as ⌘N shows a new one.
+pub(crate) fn show_launcher(state: &mut State, launcher: crate::launcher::Launcher, tx: &mut Tx) {
+    show_dialog(state, Opened::Launcher(Box::new(launcher)), tx);
+}
+
+fn show_dialog(state: &mut State, picker: Opened, tx: &mut Tx) {
     let key = picker.focus_key();
     state.window.launching.openings = picker.opening();
     state.window.launching.dialog = Some(picker);
@@ -794,11 +803,18 @@ fn step_back(state: &mut State, which: Which, tx: &mut Tx) {
 }
 
 pub(crate) fn close(state: &mut State, tx: &mut Tx) {
-    state.window.launching.dialog = None;
-    if state.window.layer == Some(crate::shell::Layer::NewSession) {
-        state.window.layer = None;
+    let (layer, focus) = match state.window.launching.dialog.take() {
+        Some(Opened::Launcher(launcher)) => launcher.choosing.map(|c| c.back),
+        _ => None,
     }
-    refocus_inline(state, tx);
+    .unwrap_or_default();
+    if state.window.layer == Some(crate::shell::Layer::NewSession) {
+        state.window.layer = layer;
+    }
+    match focus {
+        Some(key) => tx.focus(key, false),
+        None => refocus_inline(state, tx),
+    }
 }
 
 /// Gives the empty desktop's launcher the keyboard back once nothing covers it.

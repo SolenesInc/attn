@@ -159,12 +159,13 @@ pub(crate) fn agent_options(state: &State, choice: &Choice, offer: &Offer) -> Ve
             let checking = availability == agents::Availability::Checking
                 && !offer.outpost
                 && absent.is_none();
+            let home = crate::machine::Machines::of(&state.facts).home_place();
             let title = if !selectable {
-                Some(format!("{label} is not available on this machine"))
+                Some(format!("{label} is not available on {home}"))
             } else if let Some(machine) = absent {
                 Some(format!("{label} is not installed on {machine}"))
             } else {
-                checking.then(|| format!("Checking for {label} on this machine"))
+                checking.then(|| format!("Checking for {label} on {home}"))
             };
             AgentOption {
                 chosen: current == agent,

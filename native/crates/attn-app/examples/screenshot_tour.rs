@@ -2618,6 +2618,51 @@ fn remote_home_desktop(dark: bool) {
     snap(&mut world, "remote-home-desktop", dark);
 }
 
+/// Browse beside the projects folder in Settings on a machine whose home runs on oma: the
+/// launcher lists oma's folders instead of the system's dialog opening this machine's.
+fn remote_home_folder_chooser(dark: bool) {
+    let daemon = scripted().relaying_to("mac", "oma").state(initial(
+        dark,
+        document_tile("m", "/repo/plan.md"),
+        seeds(),
+    ));
+    daemon
+        .on("get_recent_locations", |_: &Request| {
+            message(RecentLocationsResultMessage {
+                success: true,
+                home_path: Some("/home/me".into()),
+                ..RecentLocationsResultMessage::new()
+            })
+        })
+        .on("browse_directory", |r: &Request| {
+            let input = r["input_path"].as_str().unwrap_or_default().to_owned();
+            message(BrowseDirectoryResultMessage {
+                success: true,
+                input_path: input,
+                home_path: Some("/home/me".into()),
+                directory: "/home/me".into(),
+                entries: ["attn-notebook", "code", "projects", "scratch"]
+                    .iter()
+                    .map(|name| DirectoryEntry {
+                        name: (*name).into(),
+                        path: format!("/home/me/{name}"),
+                        is_dir: true,
+                        is_repo: Some(false),
+                    })
+                    .collect(),
+                ..BrowseDirectoryResultMessage::new()
+            })
+        });
+    let mut world = start(daemon);
+    press(&mut world, Action::UiOpenSettings);
+    click(&mut world, Target::key("settings.nav.desktop"));
+    click(
+        &mut world,
+        Target::key("settings.browse.projects_directory"),
+    );
+    snap(&mut world, "remote-home-folder-chooser", dark);
+}
+
 /// A command that failed: the notice at the window's foot, at its end.
 fn notice_failed(dark: bool) {
     let mut world = with_document_and(dark, |daemon| {
@@ -9267,6 +9312,9 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("home_unreachable", || home_unreachable(dark));
         scene("remote_home_desktop", || remote_home_desktop(dark));
         scene("remote_home_launcher", || remote_home_launcher(dark));
+        scene("remote_home_folder_chooser", || {
+            remote_home_folder_chooser(dark)
+        });
         scene("notice_failed", || notice_failed(dark));
         scene("leader", || leader(dark));
         scene("callout", || callout(dark));

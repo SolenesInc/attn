@@ -89,7 +89,11 @@ open on this machine. **Open in editor**, Cmd-clicked paths in a home shell, and
 **Open** and **Reveal** on a seed's files name the home and open nothing here; a
 markdown link opens in a tile from the home. **Move out** on a seed's file, and
 **Move into seed** or **Copy into seed** with a file you choose, move the file
-between the seed and this machine's disk.
+between the seed and this machine's disk. **Browse** beside a folder the home
+reads, such as the projects folder, the Notebook folder, a plugin's source, an
+automation's folder or the editor tile's root, lists the home's folders in place
+of this machine's dialog: **Enter** chooses the highlighted folder, **Tab** opens
+it, and the first row is the folder typed.
 
 The home doesn't start terminals on a machine that dials it yet. The launcher
 leaves the machine out, and `attn terminal open --host` and

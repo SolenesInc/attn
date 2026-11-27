@@ -259,7 +259,14 @@ fn directory(f: &Form, t: &Tokens) -> Block {
         .action(
             Button::new("Browse")
                 .disabled(f.saving)
-                .on_press_tx(|_: &mut State, tx: &mut Tx| super::browse(tx))
+                .on_press_tx(|state: &mut State, tx: &mut Tx| {
+                    crate::folders::choose(
+                        state,
+                        crate::folders::FolderFor::AutomationDirectory,
+                        None,
+                        tx,
+                    )
+                })
                 .build(t)
                 .key(key("browse")),
         )

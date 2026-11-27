@@ -35,7 +35,14 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         .child(nav(state, t))
         .child(body(state, t));
     Dialog::new("settings", "Settings")
-        .lead("local daemon")
+        .lead(
+            crate::machine::Machines::of(&state.facts)
+                .away(None)
+                .map_or_else(
+                    || "local daemon".to_owned(),
+                    |home| format!("home on {home}"),
+                ),
+        )
         .aside(search(state, t))
         .size(DialogSize::Workspace)
         .autofocus()

@@ -13,6 +13,7 @@ mod experimental;
 mod github;
 
 pub(crate) use desktop::EDITOR;
+pub(crate) use plugins::source_chosen as plugin_source_chosen;
 mod controls;
 pub(crate) mod harnesses;
 mod hygiene;

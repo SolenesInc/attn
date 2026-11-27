@@ -3,7 +3,7 @@
 //! open edit first and stays put when that save conflicts or fails.
 
 use attn_ui::Tokens;
-use rune::{El, FileDialogOptions, Tx};
+use rune::{El, Tx};
 use rune_kit::{Select, SelectAppearance};
 
 use super::io;
@@ -111,7 +111,13 @@ fn select(
             state.notebook.revision += 1;
             state.notebook.root_picker = None;
             if label == BROWSE {
-                return browse(&tile, tx);
+                let tile = tile.clone();
+                return crate::folders::choose(
+                    state,
+                    crate::folders::FolderFor::EditorRoot { tile },
+                    None,
+                    tx,
+                );
             }
             let root = options
                 .iter()
@@ -149,28 +155,8 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     select(&state.facts, &state.notebook, acting, tile, &params).build(attn_ui::kit(t), layers);
 }
 
-fn browse(tile: &str, tx: &mut Tx) {
-    let tile = tile.to_owned();
-    let options = FileDialogOptions {
-        title: "Choose editor root".into(),
-        ..FileDialogOptions::default()
-    };
-    tx.open_folder(options, move |state: &mut State, chosen, tx| match chosen {
-        Ok(Some(folder)) => switch(
-            state,
-            &tile,
-            Some(folder.to_string_lossy().into_owned()),
-            tx,
-        ),
-        Ok(None) => {}
-        Err(why) => state
-            .window
-            .notify(format!("Could not ask for a folder: {why}"), tx),
-    });
-}
-
 /// Points the tile at `root` once its edit is saved, dropping the open file.
-fn switch(state: &mut State, tile: &str, root: Option<String>, tx: &mut Tx) {
+pub(crate) fn switch(state: &mut State, tile: &str, root: Option<String>, tx: &mut Tx) {
     let tile = tile.to_owned();
     let id = SurfaceId::Tile(tile.clone());
     io::leave_then(state, &id, tx, move |state, tx| {

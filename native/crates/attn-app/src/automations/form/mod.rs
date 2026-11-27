@@ -747,23 +747,12 @@ pub(crate) fn remove_override(state: &mut State, index: usize) {
     f.edited(|_| false);
 }
 
-pub(crate) fn browse(tx: &mut Tx) {
-    let options = rune::FileDialogOptions {
-        title: "Choose a folder".into(),
-        ..rune::FileDialogOptions::default()
-    };
-    tx.open_folder(options, |state: &mut State, chosen, tx| match chosen {
-        Ok(Some(folder)) => {
-            if let Some(f) = form_mut(state) {
-                f.directory = TextEdit::new(folder.to_string_lossy().into_owned());
-                f.check(|f| *f == Field::DirectoryPath);
-            }
-        }
-        Ok(None) => {}
-        Err(why) => state
-            .window
-            .notify(format!("Could not ask for a folder: {why}"), tx),
-    });
+/// Puts the folder chosen for the automation's directory in its field and checks it.
+pub(crate) fn directory_chosen(state: &mut State, folder: String) {
+    if let Some(f) = form_mut(state) {
+        f.directory = TextEdit::new(folder);
+        f.check(|f| *f == Field::DirectoryPath);
+    }
 }
 
 /// What follows the form as the window runs: a field checks its rule once the keyboard leaves

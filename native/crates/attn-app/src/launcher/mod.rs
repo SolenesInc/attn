@@ -19,6 +19,7 @@ use attn_protocol::{
 use rune::{Chord, Key, KeyEvent, Platform, TextEdit, Tx};
 
 use crate::State;
+use crate::folders::FolderFor;
 use crate::machine::Machines;
 use crate::picker::{
     Agents, Choice, Direction, Memory, Offer, Spawn, TERMINAL, Which, agent_key, agents, close,
@@ -37,6 +38,8 @@ const STARTING_TICK: f64 = 1.0;
 
 pub(crate) struct Launcher {
     pub(crate) which: Which,
+    /// Set while the launcher chooses a folder on the home's machine instead of starting.
+    pub(crate) choosing: Option<Chooser>,
     pub(crate) opening: u64,
     /// The desktop a start lands on: the inline launcher's own, or the one the dialog opened on.
     pub(crate) desktop: Option<String>,
@@ -317,6 +320,58 @@ fn host_of(r: &RecentLocation) -> Option<String> {
     r.host.clone().filter(|h| !h.is_empty())
 }
 
+/// A launcher choosing a folder: what for, and the layer and control it covers, given back
+/// when it closes.
+pub(crate) struct Chooser {
+    pub(crate) purpose: FolderFor,
+    pub(crate) back: (Option<crate::shell::Layer>, Option<String>),
+}
+
+/// Opens the dialog to choose a folder on the home's machine for `purpose`, browsing `start`
+/// or the home folder.
+pub(crate) fn choose_folder(
+    state: &mut State,
+    purpose: FolderFor,
+    start: Option<String>,
+    tx: &mut Tx,
+) {
+    let back = (state.window.layer, tx.focused().map(str::to_owned));
+    let mut launcher = Launcher::open(Which::Dialog, None, None, Direction::Vertical, None, state);
+    launcher.choosing = Some(Chooser { purpose, back });
+    crate::picker::show_launcher(state, launcher, tx);
+    let start = start.map_or_else(
+        || "~/".to_owned(),
+        |s| format!("{}/", s.trim_end_matches('/')),
+    );
+    set_query(state, Which::Dialog, start, tx);
+}
+
+/// Closes the chooser and gives `row`'s folder to what asked for it.
+fn choose(state: &mut State, which: Which, row: Option<Row>, tx: &mut Tx) {
+    let Some(purpose) = state
+        .window
+        .launching
+        .launcher(which)
+        .and_then(|l| l.choosing.as_ref())
+        .map(|c| c.purpose.clone())
+    else {
+        return;
+    };
+    let row = row.or_else(|| {
+        let launcher = state.window.launching.launcher(which)?;
+        launcher.rows(state).into_iter().next()
+    });
+    let Some(row) = row else {
+        let name = machine_name(&offered(state, &outposts(state)), None);
+        if let Some(launcher) = state.window.launching.launcher_mut(which) {
+            launcher.problem = Some(format!("Choose a folder on {name}").into());
+        }
+        return;
+    };
+    close(state, tx);
+    crate::folders::chosen(state, purpose, row.path, tx);
+}
+
 impl Launcher {
     pub(crate) fn open(
         which: Which,
@@ -329,6 +384,7 @@ impl Launcher {
         let desktop = desktop.or_else(|| state.facts.current_desktop().map(|d| d.id.clone()));
         Launcher {
             which,
+            choosing: None,
             opening: state.window.launching.openings() + 1,
             desktop,
             anchor,
@@ -444,6 +500,43 @@ impl Launcher {
         });
     }
 
+    /// What a chooser offers: the typed folder on the home's machine, once it is listed, then
+    /// the folders in it that match.
+    fn folders(&self, state: &State) -> Vec<Row> {
+        let Address::Browse { path, machine, .. } = self.address(state) else {
+            return Vec::new();
+        };
+        if machine.host.is_some() {
+            return Vec::new();
+        }
+        let (dir, fragment) = split_browse(&path);
+        let Some(Listing::Listed {
+            directory, entries, ..
+        }) = self.listing(state, None, &dir)
+        else {
+            return Vec::new();
+        };
+        let folder = |path: &str, name: String| Row {
+            kind: Kind::Folder,
+            path: path.to_owned(),
+            name,
+            host: None,
+            repo_root: None,
+            last_seen: None,
+        };
+        let here = fragment.is_empty().then(|| {
+            let shown = self.display(state, directory, None);
+            folder(directory, format!("Choose {}", shown.trim_end_matches('/')))
+        });
+        here.into_iter()
+            .chain(
+                matching_folders(entries, &fragment)
+                    .into_iter()
+                    .map(|e| folder(&e.path, e.name.clone())),
+            )
+            .collect()
+    }
+
     /// The harnesses on offer: this machine's, and those any outpost has installed.
     pub(crate) fn agents(&self, state: &State) -> Agents {
         Agents::from_catalog(&state.facts.harnesses)
@@ -539,6 +632,9 @@ impl Launcher {
     /// machine and those it confirmed it has, or the recents and folders of a browsed path
     /// with the machines that have it when the target does not.
     pub(crate) fn rows(&self, state: &State) -> Vec<Row> {
+        if self.choosing.is_some() {
+            return self.folders(state);
+        }
         let outposts = outposts(state);
         let mut recents: Vec<&RecentLocation> = state.window.launching.recents.iter().collect();
         recents.sort_by(|a, b| b.last_seen.cmp(&a.last_seen));
@@ -1566,6 +1662,10 @@ fn tab(state: &mut State, which: Which, tx: &mut Tx) {
     }
     let rows = launcher.rows(state);
     let row = launcher.selected(&rows).and_then(|i| rows.get(i)).cloned();
+    if launcher.choosing.is_some() {
+        complete_first(state, which, row, tx);
+        return;
+    }
     let agent = launcher.agent(state) != TERMINAL;
     if agent && let Some(root) = row.as_ref().and_then(|r| r.repo_root.clone()) {
         let host = row.as_ref().and_then(|r| r.host.clone());
@@ -1815,6 +1915,10 @@ fn launch(
         return;
     };
     if launcher.busy {
+        return;
+    }
+    if launcher.choosing.is_some() {
+        choose(state, which, row, tx);
         return;
     }
     if let Some(row) = row

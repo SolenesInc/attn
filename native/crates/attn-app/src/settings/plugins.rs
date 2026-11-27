@@ -11,7 +11,7 @@ use attn_protocol::{
 };
 use attn_ui::Tokens;
 use attn_ui::blocks::{Actions, Block, Facts, Field, Inline, List, Notice, Prose, Status};
-use rune::{El, FileDialogOptions, TextEdit, Tx};
+use rune::{El, TextEdit, Tx};
 use rune_kit::TextInput;
 
 use attn_ui::system::{
@@ -299,18 +299,9 @@ fn commit_priority(state: &mut State, name: &str, cause: Cause, tx: &mut Tx) {
     );
 }
 
-fn browse(tx: &mut Tx) {
-    let options = FileDialogOptions {
-        title: "Select Plugin Directory".into(),
-        ..FileDialogOptions::default()
-    };
-    tx.open_folder(options, |state: &mut State, chosen, tx| match chosen {
-        Ok(Some(folder)) => panel(state).source = TextEdit::new(folder.to_string_lossy()),
-        Ok(None) => {}
-        Err(why) => state
-            .window
-            .notify(format!("Could not ask for a folder: {why}"), tx),
-    });
+/// Puts the folder chosen for a plugin's source in its field.
+pub(crate) fn source_chosen(state: &mut State, folder: String) {
+    panel(state).source = TextEdit::new(folder);
 }
 
 fn priority_key(name: &str) -> String {
@@ -533,7 +524,14 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
             .action(
                 Button::new("Browse")
                     .disabled(busy)
-                    .on_press_tx(|_: &mut State, tx: &mut Tx| browse(tx))
+                    .on_press_tx(|state: &mut State, tx: &mut Tx| {
+                        crate::folders::choose(
+                            state,
+                            crate::folders::FolderFor::PluginSource,
+                            None,
+                            tx,
+                        )
+                    })
                     .build(t)
                     .key("settings.plugins.browse"),
             )

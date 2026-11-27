@@ -4,9 +4,8 @@
 use attn_ui::Tokens;
 use attn_ui::blocks::{Block, Prose, Section, SettingRow};
 use attn_ui::system::{Button, Tone, tag};
-use rune::{El, FileDialogOptions, Tx};
+use rune::{El, Tx};
 
-use super::autosave;
 use super::controls::{SettingField, setting_switch};
 use crate::{State, setting};
 
@@ -17,24 +16,16 @@ const NOTEBOOK_ROOT_EFFECTIVE: &str = "notebook.root.effective";
 const WORKTREE_SWEEP: &str = "worktree_sweep_enabled";
 const OPEN_SENT_FILES: &str = "open_sent_files_enabled";
 
-/// Asks for a folder and saves it as `key`, as typing it and leaving the field would.
-fn browse(key: &'static str, title: &'static str, tx: &mut Tx) {
-    let options = FileDialogOptions {
-        title: title.into(),
-        ..FileDialogOptions::default()
-    };
-    tx.open_folder(options, move |state: &mut State, chosen, tx| match chosen {
-        Ok(Some(folder)) => autosave::apply(state, key, &folder.to_string_lossy(), tx),
-        Ok(None) => {}
-        Err(why) => state
-            .window
-            .notify(format!("Could not ask for a folder: {why}"), tx),
-    });
-}
-
 fn browse_button(key: &'static str, title: &'static str, t: &Tokens) -> El {
     Button::new("Browse")
-        .on_press_tx(move |_: &mut State, tx: &mut Tx| browse(key, title, tx))
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            crate::folders::choose(
+                state,
+                crate::folders::FolderFor::Setting { key, title },
+                None,
+                tx,
+            )
+        })
         .build(t)
         .key(format!("settings.browse.{key}"))
         .label("Browse")
