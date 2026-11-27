@@ -292,12 +292,14 @@ attnd                   the program that runs the daemon;
 home                    the main daemon the user's app connects to
 ├─ home id (1)         names the home apart from the daemon that runs it;
 │                      outposts stay paired to it when another daemon runs the home
-├─ bridge (0..n)       a connection through the user's ssh to one outpost
+├─ bridge (0..n)       a connection through the user's ssh to one outpost; the
+│                      home dials the outpost, or the outpost dials the home
 │  ├─ state (1)
 │  │  ├─ connecting    the home is dialing the outpost
 │  │  ├─ connected     heartbeats arrive (every 0.5 s)
 │  │  ├─ stalled       no heartbeat for 3 s on an open connection; usually clears
-│  │  ├─ lost          no heartbeat for 60 s, or no connection; the home redials
+│  │  ├─ lost          no heartbeat for 60 s, or no connection; the side that
+│  │  │                dials redials
 │  │  └─ refused       ssh refused authentication or a host key, or attn
 │  │                   refused the outpost's identity or build
 │  └─ outpost (1)     a remote daemon paired to that home
