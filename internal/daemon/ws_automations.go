@@ -65,7 +65,7 @@ func (d *Daemon) handleAutomationApplyWS(client *wsClient, msg *protocol.Automat
 
 func (d *Daemon) handleAutomationValidateWS(client *wsClient, msg *protocol.AutomationValidateMessage) {
 	d.life.Go("handleAutomationValidateWS", func() {
-		result := d.actionAutomationValidate(msg)
+		result := d.actionAutomationValidate(msg, client.selectedProfile())
 		d.sendToClient(client, result)
 	})
 }

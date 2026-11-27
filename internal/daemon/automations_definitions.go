@@ -36,6 +36,9 @@ func (d *Daemon) validateAutomationSpec(raw string) (automation.DefinitionSpec, 
 	if err != nil {
 		return spec, nil, err
 	}
+	if spec.Member != "" {
+		return spec, canonical, nil
+	}
 	if _, err := d.resolveDelegationAgent("", protocol.Ptr(spec.Launch.Driver)); err != nil {
 		return spec, nil, err
 	}
@@ -109,15 +112,23 @@ func (d *Daemon) automationApplyLocked(ctx context.Context, spec automation.Defi
 			return nil, err
 		}
 	}
+	owner := profileID
+	if existing != nil {
+		owner = existing.ProfileID
+	}
+	if spec.Member != "" {
+		if launch != nil && launch.ref != nil {
+			return nil, &automationRefusal{Code: automationErrCodeValidation, Err: errors.New("an automation that messages a member opens no desktop; leave out the launch desktop")}
+		}
+		if spec, canonical, err = d.addressAutomationMember(spec, owner); err != nil {
+			return nil, &automationRefusal{Code: automationErrCodeValidation, Err: err}
+		}
+	}
 	var setting *store.LaunchDesktopSetting
 	if launch != nil {
 		setting = storeLaunchSetting(launch.setting)
 	}
 	if launch != nil && launch.ref != nil {
-		owner := profileID
-		if existing != nil {
-			owner = existing.ProfileID
-		}
 		chosen, err := d.launchDesktopFromRef(owner, spec.Name, *launch.ref, launch.name)
 		if err != nil {
 			return nil, err

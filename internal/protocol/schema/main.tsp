@@ -5444,6 +5444,8 @@ model AutomationDefinitionSummary {
   updated_at: string;
   last_run?: AutomationRunSummary;
   guard_check?: AutomationGuardCheck;
+  // The crew member the automation messages; such an automation starts no agent.
+  member?: PartyView;
 }
 
 model AutomationGuardCheck {
@@ -5473,6 +5475,8 @@ model AutomationRunSummary {
   delivered_at?: string;
   occurrence_key?: string;
   automation?: AutomationProvenance;
+  // The crew member whose mailbox received the run's message; such a run has no seed or session.
+  member?: PartyView;
 }
 
 // Per-action result messages for the automations surface (socket + WS share

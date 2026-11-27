@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "id": "automation-member-message",
+  "description": "A scheduled automation's run in a crew member's mailbox.",
+  "recipient": "automation",
+  "event": "member-message",
+  "values": {
+    "definition": "Vesta check-in",
+    "brief": "Index and triage new personal mail, then check your seeds for anything due.",
+    "input_path": "/tmp/occurrence.json"
+  }
+}

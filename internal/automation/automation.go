@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -26,9 +27,10 @@ type DefinitionSpec struct {
 	ID         int          `yaml:"id,omitempty" json:"id,omitempty"`
 	Name       string       `yaml:"name" json:"name"`
 	Trigger    TriggerSpec  `yaml:"trigger" json:"trigger"`
+	Member     string       `yaml:"member,omitempty" json:"member,omitempty"`
 	Prompt     string       `yaml:"prompt" json:"prompt"`
-	Launch     LaunchSpec   `yaml:"launch" json:"launch"`
-	Location   LocationSpec `yaml:"location" json:"location"`
+	Launch     LaunchSpec   `yaml:"launch,omitempty" json:"launch,omitzero"`
+	Location   LocationSpec `yaml:"location,omitempty" json:"location,omitzero"`
 }
 type TriggerSpec struct {
 	Type         string               `yaml:"type" json:"type"`
@@ -71,8 +73,9 @@ type Snapshot struct {
 	APIVersion         string          `json:"api_version"`
 	DefinitionRevision int             `json:"definition_revision,omitempty"`
 	Prompt             string          `json:"prompt"`
-	Launch             EffectiveLaunch `json:"launch"`
-	Location           LocationSpec    `json:"location"`
+	Member             string          `json:"member,omitempty"`
+	Launch             EffectiveLaunch `json:"launch,omitzero"`
+	Location           LocationSpec    `json:"location,omitzero"`
 	Continuity         string          `json:"continuity"`
 	CatchUp            string          `json:"catch_up,omitempty"`
 }
@@ -169,6 +172,10 @@ func ValidateDefinition(s *DefinitionSpec) error {
 	if strings.TrimSpace(s.Prompt) == "" {
 		return errors.New("prompt is required")
 	}
+	s.Member = strings.TrimSpace(s.Member)
+	if s.Member != "" {
+		return validateMemberTarget(s)
+	}
 	s.Launch.Driver = strings.TrimSpace(strings.ToLower(s.Launch.Driver))
 	if s.Launch.Driver == "" {
 		return errors.New("launch.driver is required")
@@ -243,6 +250,31 @@ func ValidateDefinition(s *DefinitionSpec) error {
 		if s.Trigger.CatchUp != "" {
 			return errors.New("manual trigger does not configure trigger.catch_up")
 		}
+	}
+	return nil
+}
+
+func validateMemberTarget(s *DefinitionSpec) error {
+	if s.Trigger.Type != "manual" && s.Trigger.Type != "scheduled" {
+		return fmt.Errorf("an automation that messages a member takes a manual or scheduled trigger, not %s", s.Trigger.Type)
+	}
+	if s.Trigger.Guard != "" {
+		return errors.New("an automation that messages a member cannot configure trigger.guard yet")
+	}
+	if s.Launch != (LaunchSpec{}) {
+		return errors.New("an automation that messages a member starts no agent, so it cannot configure launch; the member's own settings apply")
+	}
+	if !reflect.ValueOf(s.Location).IsZero() {
+		return errors.New("an automation that messages a member cannot configure location; the member works in its own folder")
+	}
+	if s.Trigger.Continuity != "" {
+		return errors.New("an automation that messages a member does not configure trigger.continuity; every run goes to the member")
+	}
+	if s.Trigger.Type == "scheduled" && s.Trigger.CatchUp != "skip" && s.Trigger.CatchUp != "latest" {
+		return errors.New("scheduled trigger requires trigger.catch_up skip or latest")
+	}
+	if s.Trigger.Type == "manual" && s.Trigger.CatchUp != "" {
+		return errors.New("manual trigger does not configure trigger.catch_up")
 	}
 	return nil
 }
@@ -460,6 +492,10 @@ func ParsePullRequestURL(raw string) (host, owner, repository string, number int
 }
 
 func Effective(spec DefinitionSpec, revision int) (Snapshot, error) {
+	continuity, catchUp := ResolvedTriggerPolicy(spec)
+	if spec.Member != "" {
+		return Snapshot{APIVersion: APIVersion, DefinitionRevision: revision, Prompt: spec.Prompt, Member: spec.Member, Continuity: continuity, CatchUp: catchUp}, nil
+	}
 	launch := EffectiveLaunch{
 		Agent:               spec.Launch.Driver,
 		Model:               spec.Launch.Model,
@@ -473,7 +509,6 @@ func Effective(spec DefinitionSpec, revision int) (Snapshot, error) {
 	if err := launch.Validate(); err != nil {
 		return Snapshot{}, err
 	}
-	continuity, catchUp := ResolvedTriggerPolicy(spec)
 	return Snapshot{APIVersion: APIVersion, DefinitionRevision: revision, Prompt: spec.Prompt, Launch: launch, Location: spec.Location, Continuity: continuity, CatchUp: catchUp}, nil
 }
 
@@ -520,7 +555,7 @@ type DeliveryIDs struct {
 type WorkRequest struct {
 	RunID, SubjectKey, ContinuityKey, Provider string
 	DefinitionID                               int
-	Prompt                                     string
+	Prompt, Member                             string
 	Context                                    json.RawMessage
 	Launch                                     EffectiveLaunch
 	Location                                   LocationSpec

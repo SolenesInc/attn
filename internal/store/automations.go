@@ -1346,6 +1346,34 @@ func (s *Store) SetAutomationRunLaunched(id string, now time.Time) error {
 	return err
 }
 
+func (s *Store) MarkAutomationRunDelivered(id string, now time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return errors.New("automation persistence unavailable")
+	}
+	stamp := formatStoredTime(now)
+	result, err := s.db.Exec(`
+		UPDATE automation_runs
+		SET state=?, last_error='', attempts=0, updated_at=?, delivered_at=?
+		WHERE id=? AND state=?
+	`, AutomationRunStateDelivered, stamp, stamp, id, AutomationRunStatePending)
+	if err != nil {
+		return err
+	}
+	if changed, err := result.RowsAffected(); err != nil || changed > 0 {
+		return err
+	}
+	var state string
+	if err := s.db.QueryRow(`SELECT state FROM automation_runs WHERE id=?`, id).Scan(&state); err != nil {
+		return err
+	}
+	if state != AutomationRunStateDelivered {
+		return fmt.Errorf("automation run %s is %s, not pending", id, state)
+	}
+	return nil
+}
+
 func (s *Store) MarkAutomationRunDeliveredWithEvent(
 	id, resolved string, event BusEvent, now time.Time,
 ) (int64, bool, error) {

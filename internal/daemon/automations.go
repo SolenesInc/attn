@@ -65,7 +65,7 @@ func (d *Daemon) automationRun(ctx context.Context, definitionID int, requestID,
 		subjectKey = pr.SubjectKey()
 	}
 	snapshotJSON, _ := json.Marshal(snapshot)
-	ids, err := d.newAutomationRunReservation(def)
+	ids, err := d.newAutomationRunReservation(snapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -110,8 +110,11 @@ func (d *Daemon) deliverClaimedAutomationRun(ctx context.Context, definitionID i
 	}
 	return d.store.GetAutomationRun(run.ID)
 }
-func (d *Daemon) newAutomationRunReservation(definition *store.AutomationDefinition) (store.AutomationRunReservation, error) {
+func (d *Daemon) newAutomationRunReservation(snapshot automation.Snapshot) (store.AutomationRunReservation, error) {
 	runID := uuid.NewString()
+	if snapshot.Member != "" {
+		return store.AutomationRunReservation{RunID: runID, OccurrenceID: uuid.NewString()}, nil
+	}
 	seedID, err := d.mintAutomationSeedID()
 	if err != nil {
 		return store.AutomationRunReservation{}, err

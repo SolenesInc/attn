@@ -2171,6 +2171,30 @@
           }
         },
         {
+          "id": "start-cause-automation",
+          "delivery": "message_fragment",
+          "description": "inboxStartCause: an unread run of an automation addressed to the recipient that started its session. Names the automation, never its message.",
+          "body": {
+            "kind": "text",
+            "id": "session.start-cause-automation",
+            "source": "content/session/start-cause-automation.md",
+            "bindings": [
+              {
+                "name": "definition",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "definition",
+                    "kind": "text",
+                    "description": "Automation name."
+                  },
+                  "quote": true
+                }
+              }
+            ]
+          }
+        },
+        {
           "id": "start-cause-more",
           "delivery": "message_fragment",
           "description": "inboxStartCause: the unread items past the listing's tripwire.",
@@ -5239,6 +5263,64 @@
                     }
                   ]
                 }
+              }
+            ]
+          }
+        },
+        {
+          "id": "member-message",
+          "delivery": "inbox_content",
+          "description": "A run of an automation addressed to a crew member, saved in the member's mailbox: names the automation, carries its configured message, then the untrusted-data contract.",
+          "body": {
+            "kind": "join",
+            "children": [
+              {
+                "kind": "text",
+                "id": "automation.member-message",
+                "source": "content/automation/member-message.md",
+                "bindings": [
+                  {
+                    "name": "definition",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "definition",
+                        "kind": "text",
+                        "description": "Automation name."
+                      },
+                      "quote": true
+                    }
+                  },
+                  {
+                    "name": "brief",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "brief",
+                        "kind": "text",
+                        "description": "Configured task or delegation brief."
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "id": "automation.data",
+                "source": "content/automation/data.md",
+                "bindings": [
+                  {
+                    "name": "input_path",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "input_path",
+                        "kind": "text",
+                        "description": "Path to untrusted occurrence data."
+                      }
+                    }
+                  }
+                ]
               }
             ]
           }
@@ -9811,5 +9893,5 @@
       ]
     }
   ],
-  "definitions_hash": "494ed90b5e34c642f65a6142de3e0eb8122b2476b3b5de03f9c5e6ec74344daf"
+  "definitions_hash": "bc08dc42c4fb98e4123e3ddf17b143b4cc5beecf198288f7cdd8f2ab4f2d59c9"
 }

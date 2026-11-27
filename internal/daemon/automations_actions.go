@@ -139,12 +139,20 @@ func (d *Daemon) actionAutomationRunsGet(msg *protocol.AutomationRunsGetMessage,
 	return result
 }
 
-func (d *Daemon) actionAutomationValidate(msg *protocol.AutomationValidateMessage) protocol.AutomationValidateResultMessage {
+func (d *Daemon) actionAutomationValidate(msg *protocol.AutomationValidateMessage, scope string) protocol.AutomationValidateResultMessage {
 	result := protocol.AutomationValidateResultMessage{
 		Event:     protocol.EventAutomationValidateResult,
 		RequestID: msg.RequestID,
 	}
-	if _, _, err := d.validateAutomationSpec(msg.DefinitionYaml); err != nil {
+	spec, _, err := d.validateAutomationSpec(msg.DefinitionYaml)
+	if err == nil && spec.Member != "" {
+		profile, profileErr := d.requestedOrRecentProfile(scope)
+		err = profileErr
+		if err == nil {
+			_, _, err = d.addressAutomationMember(spec, profile.ID)
+		}
+	}
+	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 		return result
 	}
@@ -331,7 +339,11 @@ func (d *Daemon) buildAutomationDefinitionSummary(def store.AutomationDefinition
 		}
 	}
 	summary.TriggerType = spec.Trigger.Type
-	summary.LocationType = protocol.Ptr(spec.Location.Type)
+	if member := d.automationMemberView(spec.Member); member != nil {
+		summary.Member, summary.LaunchDesktop = member, nil
+	} else {
+		summary.LocationType = protocol.Ptr(spec.Location.Type)
+	}
 	if spec.Trigger.Schedule != nil {
 		summary.ScheduleCron = protocol.Ptr(spec.Trigger.Schedule.Cron)
 		summary.ScheduleTimeZone = protocol.Ptr(spec.Trigger.Schedule.TimeZone)
@@ -377,6 +389,13 @@ func (d *Daemon) automationRunSummary(run store.AutomationRunWithOccurrenceKey) 
 		CreatedAt:     string(protocol.NewTimestamp(run.CreatedAt)),
 		UpdatedAt:     string(protocol.NewTimestamp(run.UpdatedAt)),
 		OccurrenceKey: protocol.Ptr(run.OccurrenceKey),
+	}
+	var snapshot automation.Snapshot
+	if err := json.Unmarshal([]byte(run.SnapshotJSON), &snapshot); err != nil {
+		d.logf("automation run %s snapshot: %v", run.ID, err)
+	}
+	if member := d.automationMemberView(snapshot.Member); member != nil {
+		summary.Member, summary.SeedID, summary.SessionID = member, nil, nil
 	}
 	if run.LastError != "" {
 		summary.LastError = protocol.Ptr(run.LastError)

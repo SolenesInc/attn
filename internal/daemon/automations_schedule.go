@@ -237,7 +237,7 @@ func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefiniti
 			return err
 		}
 	}
-	reservation, claimErr := d.newAutomationRunReservation(&definition)
+	reservation, claimErr := d.newAutomationRunReservation(effective)
 	if claimErr != nil {
 		return claimErr
 	}

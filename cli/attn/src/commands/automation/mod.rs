@@ -106,10 +106,16 @@ fn comment_lines(text: &str) -> String {
 }
 
 fn show_header(definition: &AutomationDefinitionSummary) -> String {
+    let target = match &definition.member {
+        Some(member) => format!("# Messages: {} ({})", member.name, member.r#ref),
+        None => format!(
+            "# Launch desktop: {}",
+            launch_desktop_text(definition.launch_desktop.as_ref())
+        ),
+    };
     let mut out = format!(
-        "# Profile: {}\n# Launch desktop: {}\n",
-        definition.profile_name.as_deref().unwrap_or(""),
-        launch_desktop_text(definition.launch_desktop.as_ref())
+        "# Profile: {}\n{target}\n",
+        definition.profile_name.as_deref().unwrap_or("")
     );
     if let Some(last) = &definition.last_run {
         let session = last.session_id.as_deref().unwrap_or("");

@@ -149,8 +149,11 @@ func (d *Daemon) automationWorkReadyOccurrence(run *store.AutomationRun) (seedEv
 }
 
 func (d *Daemon) recordAutomationRunSeedOutcome(run *store.AutomationRun, body string) error {
-	if run == nil || strings.TrimSpace(run.SeedID) == "" {
-		return errors.New("record automation outcome: seed id missing")
+	if run == nil {
+		return errors.New("record automation outcome: run missing")
+	}
+	if strings.TrimSpace(run.SeedID) == "" {
+		return nil
 	}
 	continuation, err := d.automationRunIsContinuation(run.DefinitionID, run.SeedID, run.ID)
 	if err != nil {
@@ -208,6 +211,9 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	if err != nil {
 		return err
 	}
+	if req.Member != "" {
+		return d.deliverAutomationMessage(run, req)
+	}
 	if err := d.validateAutomationContinuation(req); err != nil {
 		return err
 	}
@@ -231,9 +237,11 @@ func (d *Daemon) automationRunRequest(run *store.AutomationRun) (automation.Work
 	if err := json.Unmarshal([]byte(run.SnapshotJSON), &snapshot); err != nil {
 		return automation.WorkRequest{}, err
 	}
-	snapshot.Launch = snapshot.Launch.WithLegacyDefaults()
-	if err := snapshot.Launch.Validate(); err != nil {
-		return automation.WorkRequest{}, fmt.Errorf("invalid unattended launch contract: %w", err)
+	if snapshot.Member == "" {
+		snapshot.Launch = snapshot.Launch.WithLegacyDefaults()
+		if err := snapshot.Launch.Validate(); err != nil {
+			return automation.WorkRequest{}, fmt.Errorf("invalid unattended launch contract: %w", err)
+		}
 	}
 	occurrence, err := d.store.GetAutomationOccurrence(run.OccurrenceID)
 	if err != nil {
@@ -249,7 +257,7 @@ func (d *Daemon) automationRunRequest(run *store.AutomationRun) (automation.Work
 	case "singleton":
 		continuityKey = "singleton"
 	}
-	return automation.WorkRequest{RunID: run.ID, DefinitionID: run.DefinitionID, SubjectKey: occurrence.SubjectKey, ContinuityKey: continuityKey, Provider: occurrence.Provider, Prompt: snapshot.Prompt, Context: json.RawMessage(occurrence.PayloadJSON), Launch: snapshot.Launch, Location: snapshot.Location, IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, ProfileID: run.ProfileID}}, nil
+	return automation.WorkRequest{RunID: run.ID, DefinitionID: run.DefinitionID, SubjectKey: occurrence.SubjectKey, ContinuityKey: continuityKey, Provider: occurrence.Provider, Prompt: snapshot.Prompt, Member: snapshot.Member, Context: json.RawMessage(occurrence.PayloadJSON), Launch: snapshot.Launch, Location: snapshot.Location, IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, ProfileID: run.ProfileID}}, nil
 }
 
 func (d *Daemon) refuseDisabledAutomation(definitionID int) error {

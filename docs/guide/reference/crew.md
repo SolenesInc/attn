@@ -108,15 +108,16 @@ These start a session for a member between sessions:
   `attn crew start <member>`. `--agent <name>` picks another harness for this
   one session.
 - An agent running `attn crew start <member>`.
-- An item for the member's mailbox: a message (`attn agent msg <member>`), an
-  update on a seed it tends or on a seed under a plot it tends, or the answer
-  to one of its asks.
+- An item for the member's mailbox: a message (`attn agent msg <member>`), a
+  run of an [automation that messages the member](automations.md#message-a-crew-member),
+  an update on a seed it tends or on a seed under a plot it tends, or the
+  answer to one of its asks.
 
 The session starts on the member's launch desktop, in the member's home
 folder unless you set another one. Attn primes the session with the charter, the
 latest letter, the names of older letters and the seeds the member tends.
 The member then greets you: who it is, where things stand, and what it would
-do next. When a seed update or another agent's message started the session, its first
+do next. When a seed update, another agent's message or an automation's run started the session, its first
 message names those items instead, and its charter decides what it does next:
 act on them, record them, or file its letter. A member without a charter, one
 still onboarding, and the Chief greet you after naming them. A session started for an

@@ -65,7 +65,7 @@ a crew member that every profile has.
 
 ### Triggers
 
-- When an item arrives for a member between sessions, attn starts a session for the member before the ring, with a first prompt that names the items that started it (`internal/daemon/inbox_start_cause.go`, `crew/started-for-items.md` and `v2/started-for-items-charter.md`), within the limit of `crew.mail_start_limit` mail-started sessions per `crew.mail_start_window_seconds` (`internal/daemon/crew_start.go`, `internal/daemon/inbox_delivery.go`).
+- When an item arrives for a member between sessions, such as a message, a seed update or the run of an automation that messages the member (`internal/daemon/automations_member.go`), attn starts a session for the member before the ring, with a first prompt that names the items that started it (`internal/daemon/inbox_start_cause.go`, `crew/started-for-items.md` and `v2/started-for-items-charter.md`), within the limit of `crew.mail_start_limit` mail-started sessions per `crew.mail_start_window_seconds` (`internal/daemon/crew_start.go`, `internal/daemon/inbox_delivery.go`).
 - Every 60 seconds the daemon runs a lifecycle tick (`internal/daemon/crew_lifecycle.go`). The tick sends an idle member a cache heartbeat before the member's cache lapses, and asks the member to close once the user has been away for `crew.away_seconds`. `crew.heartbeat_enabled` turns off the heartbeat, and `crew.away_close_enabled` turns off the close request.
 
 ## Driving it

@@ -4,7 +4,8 @@ An automation is a prompt Attn starts on its own. Each time its trigger
 fires, Attn starts an agent with your prompt, the same kind of agent you
 launch yourself: you can open it, read along and steer it. Use one for work
 that recurs: a morning triage, a check after every new commit, a first review
-of every pull request you are asked to look at.
+of every pull request you are asked to look at. An automation can also
+[message a crew member](#message-a-crew-member) instead of starting an agent.
 
 ## Triggers
 
@@ -81,6 +82,44 @@ the ones you changed:
   clones.
 - **Executable override**. A specific binary of the harness, for harnesses other than Codex. Every Codex session uses the profile's shared app-server, so set `codex_executable` instead.
 - **Show definition**, on a saved automation. The read-only YAML, with **Copy**.
+
+## Message a crew member
+
+An automation can message a [crew member](crew.md) instead of starting an
+agent, such as a member you want to check in every morning. Name the member in
+`member`, by name or key, and leave out `launch` and `location`: the member
+works on its own harness, in its own folder and on its own launch desktop.
+Attn saves the member's key, so the automation keeps reaching a renamed member.
+
+```yaml
+api_version: attn.dev/automations/v1alpha1
+name: Morning check-in
+trigger:
+  type: scheduled
+  schedule:
+    cron: "30 8 * * 1-5"
+    time_zone: Europe/Lisbon
+  catch_up: latest
+member: vesta
+prompt: Triage new mail and check your seeds for anything due.
+```
+
+Such an automation takes a **Manual** or **Scheduled** trigger, without
+**Only run if** or **Agent**. **Run now** and `attn automation run <id>` work
+as for any automation.
+
+Each run puts one message in the member's mailbox. The message names the
+automation and carries your prompt and the path to the occurrence's data. The
+mailbox handles it like any mail: a member in session gets it when its turn
+ends, and a member between sessions starts a session for it, which counts
+against the [limit on sessions started for mail](crew.md#starting-a-session).
+The run is delivered once the message is in the mailbox. It has no seed and no
+agent of its own, so `attn automation runs` names the member instead, and the
+run never appears in the sidebar's **Automations** section. A run for a retired
+member fails.
+
+The drawer's form does not offer a member yet. Make and change these
+automations with `attn automation apply`.
 
 ## Runs
 

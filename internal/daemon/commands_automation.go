@@ -70,11 +70,15 @@ func (d *Daemon) runAutomationApply(_ context.Context, c command.Caller, args co
 	return d.buildAutomationDefinitionSummary(*definition, nil), nil
 }
 
-func (d *Daemon) runAutomationValidate(_ context.Context, _ command.Caller, args command.AutomationValidateArgs) (any, error) {
+func (d *Daemon) runAutomationValidate(_ context.Context, c command.Caller, args command.AutomationValidateArgs) (any, error) {
 	if args.Definition == "" {
 		return nil, command.Usage("{definition} is required")
 	}
-	result := d.actionAutomationValidate(&protocol.AutomationValidateMessage{DefinitionYaml: args.Definition})
+	scope, err := d.automationScope(c)
+	if err != nil {
+		return nil, err
+	}
+	result := d.actionAutomationValidate(&protocol.AutomationValidateMessage{DefinitionYaml: args.Definition}, scope)
 	if !result.Success {
 		return nil, automationFailed(result.Error)
 	}

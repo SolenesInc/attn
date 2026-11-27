@@ -1510,6 +1510,9 @@ type AutomationDefinitionSummary struct {
 	// LocationType corresponds to the JSON schema field "location_type".
 	LocationType *string `json:"location_type,omitempty,omitzero"`
 
+	// Member corresponds to the JSON schema field "member".
+	Member *PartyView `json:"member,omitempty,omitzero"`
+
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
 
@@ -1719,6 +1722,9 @@ type AutomationRunSummary struct {
 
 	// LastError corresponds to the JSON schema field "last_error".
 	LastError *string `json:"last_error,omitempty,omitzero"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member *PartyView `json:"member,omitempty,omitzero"`
 
 	// OccurrenceKey corresponds to the JSON schema field "occurrence_key".
 	OccurrenceKey *string `json:"occurrence_key,omitempty,omitzero"`

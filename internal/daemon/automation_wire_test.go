@@ -221,12 +221,24 @@ launch: {driver: %s}
 location: {type: directory, path: %q}
 `, driver, w.Path("corpus"))
 	}
+	member := func(trigger, extra string) string {
+		return fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nname: Member case\ntrigger: %s\nmember: chief\nprompt: Check in.\n%s", trigger, extra)
+	}
+	scheduled := "{type: scheduled, schedule: {cron: '0 9 * * *', time_zone: UTC}, catch_up: latest"
 	for _, tc := range []struct {
 		name    string
 		spec    string
 		wantErr string
 	}{
 		{"codex", valid("corpus-codex", "codex"), ""},
+		{"a member, run by hand", member("{type: manual}", ""), ""},
+		{"a member, on a schedule", member(scheduled+"}", ""), ""},
+		{"a member with a launch", member("{type: manual}", "launch: {driver: codex}\n"), "starts no agent"},
+		{"a member with a location", member("{type: manual}", fmt.Sprintf("location: {type: directory, path: %q}\n", w.Path("corpus"))), "cannot configure location"},
+		{"a member asked to review", member("{type: github_review_requested}", ""), "manual or scheduled trigger"},
+		{"a member behind a guard", member(scheduled+", guard: 'true'}", ""), "trigger.guard"},
+		{"a member on a continuing schedule", member(scheduled+", continuity: singleton}", ""), "trigger.continuity"},
+		{"a member nobody has", strings.Replace(member("{type: manual}", ""), "member: chief", "member: nobody", 1), "no crew member"},
 		{"claude", valid("corpus-claude", "claude"), ""},
 		{"a shell, which is no harness", valid("corpus-shell", "shell"), "not available"},
 		{"an unknown driver", valid("corpus-unknown", "totally-not-a-real-agent"), "not available"},

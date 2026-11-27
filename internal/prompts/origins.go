@@ -8,6 +8,8 @@ var (
 	localReview    = FlagField("local_review", "The automation permits only a local review.")
 	hasTarget      = FlagField("has_target", "A local review has structured pull request identity.")
 	inputPath      = TextField("input_path", "Path to untrusted occurrence data.")
+	automationName = TextField("definition", "Automation name.")
+	occurrenceData = Use("automation.data", "content/automation/data.md", Bind("input_path", Input(inputPath)))
 	requestID      = TextField("request_id", "The failed delegation's request id.")
 	failure        = TextField("failure", "Why the delegation failed, as the operation records it.")
 	leafIdentity   = Use("delegation.identity", "content/delegation/identity.md")
@@ -84,8 +86,10 @@ func originRecipients() []Recipient {
 					delegatedBrief(Join("", Input(brief), When(Enabled(localReview), Use("automation.local-review", "content/automation/local-review.md")))),
 					Choose(Enabled(hasTarget),
 						Join("\n\n---\n\n", Compose(), automationTarget),
-						Use("automation.data", "content/automation/data.md", Bind("input_path", Input(inputPath)))),
+						occurrenceData),
 				))),
+			On("member-message", "inbox_content", "A run of an automation addressed to a crew member, saved in the member's mailbox: names the automation, carries its configured message, then the untrusted-data contract.",
+				Join("", Use("automation.member-message", "content/automation/member-message.md", Bind("definition", Quoted(automationName)), Bind("brief", Input(brief))), occurrenceData)),
 			On("target", "message_fragment", "Authoritative pull request identity followed by the untrusted-data contract.", automationTarget),
 		}},
 		{ID: "session-instructions", Description: "Separate model answering questions about conversation evidence.", Events: []Event{

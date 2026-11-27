@@ -215,7 +215,7 @@ func (d *Daemon) claimReviewRequest(host string, client *github.Client, definiti
 	if err != nil {
 		return nil, fmt.Errorf("marshal effective definition: %w", err)
 	}
-	reservation, err := d.newAutomationRunReservation(&definition)
+	reservation, err := d.newAutomationRunReservation(effective)
 	if err != nil {
 		return nil, fmt.Errorf("reserve run: %w", err)
 	}

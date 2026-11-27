@@ -47,6 +47,8 @@ func (d *Daemon) startCauseLine(delivery store.InboxDelivery) string {
 	switch delivery.Item.Kind {
 	case inbox.SeedUpdate:
 		return mailboxItemContent(delivery, false)
+	case inbox.AutomationMessage:
+		return prompts.RenderText("session", "start-cause-automation", prompts.Values{"definition": delivery.Item.Hint})
 	case inbox.PeerMessage:
 		if delivery.Peer != nil {
 			return prompts.RenderText("session", "start-cause-message", prompts.Values{"sender": d.peerSenderName(delivery.Peer.Sender)})
