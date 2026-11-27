@@ -1,0 +1,8 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "fix: TestAnAppWhoseHomeIsUnreachableIsToldWhyAndConnectsWhenItReturns",
+  "at": "2026-11-27T07:21:34.753Z",
+  "url": "https://github.com/SolenesInc/attn/actions/runs/45952576248",
+  "repairs": "c15c1e952"
+}
