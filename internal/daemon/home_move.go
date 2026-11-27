@@ -567,7 +567,7 @@ func (d *Daemon) runHomeMove(ctx context.Context, id string, plan homeMovePlan, 
 	to := homemove.Machine{ID: plan.target.ID, Name: plan.target.Name, DaemonID: peer.DaemonID}
 	roots := homemove.MovingRoots
 	record := homemove.Record{ID: id, Side: homemove.SideFrom, HomeID: status.HomeID, From: from, To: to, Step: homemove.StepStaged, Roots: roots,
-		Enrollment: enrollment.Record{Role: enrollment.RoleOutpost, HomeID: status.HomeID, HomeName: plan.target.Name, HomeDaemonID: peer.DaemonID, MachineID: from.ID, HomeMachineID: to.ID}}
+		Enrollment: enrollment.Record{Role: enrollment.RoleOutpost, HomeID: status.HomeID, HomeName: peer.Name, HomeDaemonID: peer.DaemonID, MachineID: from.ID, HomeMachineID: to.ID}}
 	if plan.transport == store.TransportReverse {
 		record.Enrollment.Dial = plan.dial
 	}

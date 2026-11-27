@@ -1122,12 +1122,14 @@ func TestHomeMoveToAMachineThatDialsTheHome(t *testing.T) {
 		redialOnce(w.laptop, func() { w.ssh.Restore("home") })
 		w.home.AwaitStopped()
 		w.ssh.Fail("home", "ssh: connect to host home port 22: No route to host")
+		finished := w.home.PassesOf(pausepoint.HomeMoveFinished)
 		w.home.Start()
 		redialOnce(w.laptop, func() { w.ssh.Restore("home") })
 		if !role(t, w.laptop).IsHome() || role(t, w.home).IsHome() {
 			t.Fatalf("roles: old home %+v, target %+v; want the target home", role(t, w.home), role(t, w.laptop))
 		}
 		awaitConnected(t, w.laptop.App(), homeMachine)
+		<-finished
 		if done := homeMoveJSON(t, w.home, "status"); done.Step != "done" {
 			t.Fatalf("the old home's move once the new home bridged: %s", describeMove(done))
 		}
@@ -1152,7 +1154,7 @@ func TestHomeMoveToAMachineThatDialsTheHome(t *testing.T) {
 		w.laptop.Start()
 		redial(third)
 		third.AwaitTimer(bridge.RetryTimer)
-		if status := third.Attn("enrollment", "status").Stdout; !strings.Contains(status, "attn enrollment join") || !strings.Contains(status, w.name) {
+		if status := third.Attn("enrollment", "status").Stdout; !strings.Contains(status, "attn enrollment join") || !strings.Contains(status, "is an outpost of "+w.homeName) {
 			t.Fatalf("a machine dialing the old home after the move is not told where the home went:\n%s", status)
 		}
 		w.ssh.Route("laptop", w.laptop)
