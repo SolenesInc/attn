@@ -1,0 +1,1 @@
+A bridge server waits for the dialer to hang up after a refusal, so a machine that dials its home no longer loses its build refusal in the ssh process it kills; plus the build-refused join test's two waits from the Orchestrator's review.
