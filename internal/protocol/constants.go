@@ -472,6 +472,7 @@ const (
 	EventEnsureRepoResult                = "ensure_repo_result"
 	EventGetRepoInfoResult               = "get_repo_info_result"
 	EventTileAssetReadResult             = "tile_asset_read_result"
+	EventTileDocumentReadResult          = "tile_document_read_result"
 	EventReviewFileResult                = "review_file_result"
 	EventReviewSearchResult              = "review_search_result"
 	EventCodeNavResult                   = "code_nav_result"

@@ -3935,6 +3935,17 @@ model TileDocumentReadMessage {
   cmd: "tile_document_read";
   host?: string;
   path: string;
+  request_id?: string;
+}
+
+// The app reads a markdown file from the machine that holds it, for a reader
+// that is not a tile, such as the Asks panel.
+model TileDocumentReadResultMessage {
+  event: "tile_document_read_result";
+  request_id?: string;
+  success: boolean;
+  content?: string;
+  error?: string;
 }
 
 model TileDocument {

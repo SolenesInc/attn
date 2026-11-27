@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -206,6 +208,52 @@ func TestAnOutpostTileSaysWhenItsOutpostIsUnreachableAndRecoversWithTheCurrentFi
 		})
 		if back.Content != "# after the outage\n" {
 			t.Fatalf("after the outpost came back the tile shows %q, want the file's current content", back.Content)
+		}
+	})
+}
+
+func TestTheAppReadsAMarkdownFileFromTheMachineThatHoldsItWithoutATile(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		counted := &countedOutpostCalls{calls: map[string]int{}}
+		startFarOutpostWith(t, w, nil, bridge.Handlers{daemon.BridgeCall: counted.answer})
+		app := w.App()
+		setSetting(t, app, "outposts_enabled", "true")
+		app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "far", Destination: outpostAddress.String()})
+		host := testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+			return len(m.Outposts) == 1 && m.Outposts[0].State == protocol.OutpostStateConnected
+		}).Outposts[0].ID
+		here := filepath.Join(t.TempDir(), "plan.md")
+		if err := os.WriteFile(here, []byte("# home plan\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		read := func(host *string, path string) protocol.TileDocumentReadResultMessage {
+			requestID := uuid.NewString()
+			return testworld.Request(app, protocol.TileDocumentReadMessage{
+				Cmd: protocol.CmdTileDocumentRead, Host: host, Path: path, RequestID: protocol.Ptr(requestID),
+			}, protocol.EventTileDocumentReadResult, func(r protocol.TileDocumentReadResultMessage) bool {
+				return protocol.Deref(r.RequestID) == requestID
+			})
+		}
+		for _, c := range []struct {
+			name string
+			host *string
+			path string
+			want string
+		}{
+			{"the outpost's file", protocol.Ptr(host), "/far/notes.md", "# far notes\n"},
+			{"the home's file", nil, here, "# home plan\n"},
+		} {
+			got := read(c.host, c.path)
+			if !got.Success || protocol.Deref(got.Content) != c.want {
+				t.Errorf("%s read %q (success %v, error %q), want %q", c.name, protocol.Deref(got.Content), got.Success, protocol.Deref(got.Error), c.want)
+			}
+		}
+		if missing := read(nil, filepath.Join(filepath.Dir(here), "gone.md")); missing.Success || !strings.Contains(protocol.Deref(missing.Error), "file not found") {
+			t.Errorf("a missing file answered success %v, error %q; want its error", missing.Success, protocol.Deref(missing.Error))
+		}
+		if sent := counted.snapshot()[protocol.CmdTileDocumentRead]; sent != 1 {
+			t.Errorf("the home asked the outpost %d times, want once, for the outpost's file alone", sent)
 		}
 	})
 }

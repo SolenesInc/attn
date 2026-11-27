@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "e4f7a9441c75";
+pub const PROTOCOL_VERSION: &str = "367fd6226bee";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -13388,6 +13388,8 @@ pub struct TileDocumentReadMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
     pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
 }
 
 impl TileDocumentReadMessage {
@@ -13395,6 +13397,27 @@ impl TileDocumentReadMessage {
     pub fn new() -> Self {
         Self {
             cmd: "tile_document_read".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TileDocumentReadResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    pub success: bool,
+}
+
+impl TileDocumentReadResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "tile_document_read_result".to_string(),
             ..Self::default()
         }
     }

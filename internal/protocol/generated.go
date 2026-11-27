@@ -15159,6 +15159,26 @@ type TileDocumentReadMessage struct {
 
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type TileDocumentReadResultMessage struct {
+	// Content corresponds to the JSON schema field "content".
+	Content *string `json:"content,omitempty,omitzero"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type TileDocumentVersion struct {

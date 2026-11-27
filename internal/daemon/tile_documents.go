@@ -263,6 +263,23 @@ func (d *Daemon) readTileAsset(_ context.Context, msg protocol.TileAssetReadMess
 	}, nil
 }
 
+func (d *Daemon) handleTileDocumentReadWS(client *wsClient, msg *protocol.TileDocumentReadMessage) {
+	d.life.Go("handleTileDocumentReadWS", func() {
+		result := protocol.TileDocumentReadResultMessage{Event: protocol.EventTileDocumentReadResult, RequestID: msg.RequestID}
+		document, err := Call[protocol.TileDocument](d.life.Context(), d.router(), *msg)
+		switch {
+		case err != nil:
+			result.Error = protocol.Ptr(d.tileDocumentError(protocol.Deref(msg.Host), err).Error())
+		case document.Error != nil:
+			result.Error = document.Error
+		default:
+			result.Success = true
+			result.Content = protocol.Ptr(document.Content)
+		}
+		d.sendToClient(client, &result)
+	})
+}
+
 func (d *Daemon) handleTileAssetReadWS(client *wsClient, msg *protocol.TileAssetReadMessage) {
 	d.life.Go("handleTileAssetReadWS", func() {
 		result, err := Call[protocol.TileAssetReadResultMessage](d.life.Context(), d.router(), *msg)
