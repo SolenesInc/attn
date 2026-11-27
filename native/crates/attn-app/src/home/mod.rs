@@ -79,6 +79,12 @@ impl BuiltInView {
             .and_then(BuiltInView::named_by)
     }
 
+    /// The view a desktop's leaf shows, when it shows one.
+    pub(crate) fn shown_in(leaf: &attn_client::layout::Leaf) -> Option<BuiltInView> {
+        let (kind, params) = leaf.tile()?;
+        BuiltInView::shown_by(kind, Some(params))
+    }
+
     /// The id of the tile that shows this view on a desktop.
     pub(crate) fn tile_id(self) -> String {
         format!("tile-view-{}", self.name())
@@ -118,7 +124,10 @@ impl BuiltInView {
                 state.pictures.logo().map(Image::id),
             )
                 .hash(&mut hasher),
-            BuiltInView::Sessions => sessions_reads(state).hash(&mut hasher),
+            BuiltInView::Sessions => {
+                let home = model::home(&state.facts, state.window.now_ms);
+                sessions_reads(state, &home).hash(&mut hasher)
+            }
             BuiltInView::PullRequests => (
                 pull_requests::reads(state),
                 pull_requests::rate_limit_left_ms(&state.facts, state.window.now_ms)
@@ -211,13 +220,13 @@ pub(crate) fn shows_sessions(desktop: Option<&attn_client::Desktop>) -> bool {
 pub(crate) fn shown_on(
     desktop: &attn_client::Desktop,
 ) -> impl Iterator<Item = (String, BuiltInView)> + '_ {
-    desktop.leaves().into_iter().filter_map(|leaf| {
-        let (kind, params) = leaf.tile()?;
-        Some((leaf.id.clone(), BuiltInView::shown_by(kind, Some(params))?))
-    })
+    desktop
+        .leaves()
+        .into_iter()
+        .filter_map(|leaf| Some((leaf.id.clone(), BuiltInView::shown_in(leaf)?)))
 }
 
-fn sessions_reads(state: &State) -> impl Hash + '_ {
+fn sessions_reads<'a>(state: &'a State, home: &'a model::Home) -> impl Hash + 'a {
     let facts = &state.facts;
     let window = &state.window;
     (
@@ -231,7 +240,7 @@ fn sessions_reads(state: &State) -> impl Hash + '_ {
             std::sync::Arc::as_ptr(&facts.outposts) as usize,
             std::sync::Arc::as_ptr(&facts.harnesses) as usize,
         ),
-        window.now_ms,
+        home,
         window.follow_next_turn,
         window.home_snoozed_open,
     )
@@ -248,7 +257,7 @@ fn sessions(board: Board, state: &State, t: &Tokens) -> Board {
         )),
         None => board,
     };
-    let reads = (sessions_reads(state), *t);
+    let reads = (sessions_reads(state, &home), *t);
     board.card(memo("home.sessions", reads, || {
         let asks = crate::asks::Lists::of(facts, window.now_ms).live;
         sessions_card(&home, &asks, window.home_snoozed_open, t)

@@ -1444,7 +1444,8 @@ fn header(leaf: &Leaf, title: &str, look: &super::tile_look::Look, cx: &TileCx) 
                     .then(|| focus_document_button(&key, &cx.desktop.id, &leaf.id, cx)),
                 matches!(&leaf.kind, LeafKind::Tile { kind, .. } if kind == crate::browser::KIND)
                     .then(|| reload_button(&key, browser_page(cx.desktop, leaf), cx.t)),
-                is_tile.then(|| pop_out_button(&cx.desktop.id, &leaf.id, popped, Place::Tile, cx)),
+                (is_tile && crate::BuiltInView::shown_in(leaf).is_none())
+                    .then(|| pop_out_button(&cx.desktop.id, &leaf.id, popped, Place::Tile, cx)),
                 is_tile.then(|| close_tile_button(&key, &cx.desktop.id, &leaf.id, cx.t)),
             ]
             .into_iter()

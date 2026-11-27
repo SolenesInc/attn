@@ -279,6 +279,30 @@ fn following_from_a_desktop_that_shows_sessions_opens_the_next_turn() {
     assert_eq!(sent_ids(&world, "desktop_show_session"), ["other"]);
 }
 
+#[test]
+fn a_view_tile_stays_in_its_desktop() {
+    let mut state = state(
+        beside_a_terminal(),
+        vec![session("busy", "working")],
+        &VIEWS_AND_QUEUE,
+    );
+    state.desktops.as_mut().unwrap()[0].active_pane_id = tile_id(BuiltInView::Sessions);
+    let mut world = start(state);
+
+    for view in BuiltInView::ALL {
+        assert!(
+            world
+                .screen()
+                .find(Target::key(format!("tile.{}.popout", tile_id(view))))
+                .is_none(),
+            "the {view:?} tile offers no pop-out"
+        );
+    }
+    let ev = chord(Action::TilePopOut);
+    world.gesture(|app| app.key(ev));
+    assert_eq!(world.daemon.sent_of("desktop_pop_out_leaf").len(), 0);
+}
+
 fn run_palette_command(world: &mut World, text: &str) {
     let ev = chord(Action::UiCommandPalette);
     world.gesture(|app| app.key(ev));

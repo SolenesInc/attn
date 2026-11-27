@@ -105,7 +105,7 @@ var (
 	})
 	ViewsEnabled = feature("views_enabled", "Let a tile show one of attn's views, such as Sessions or Pull requests, on any desktop: true or false. Experimental; off by default.", Info{
 		Name:    "Views",
-		Summary: "Show Sessions, Pull requests and attn's own line as tiles on any desktop, from the command palette.",
+		Summary: "Show attn's brand line, Sessions or Pull requests as tiles on any desktop, from the command palette.",
 		Group:   Interface,
 		Applies: Now,
 		Stage:   Experimental,

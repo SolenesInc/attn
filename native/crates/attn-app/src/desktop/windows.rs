@@ -41,7 +41,9 @@ pub(crate) fn pops_out(state: &State, desktop: &str, leaf: &str) -> bool {
         .iter()
         .find(|d| d.id == desktop)
         .and_then(attn_client::Desktop::tree)
-        .is_some_and(|tree| matches!(tree.find_leaf(leaf), Some(Node::Leaf(_))))
+        .is_some_and(|tree| {
+            matches!(tree.find_leaf(leaf), Some(Node::Leaf(leaf)) if crate::BuiltInView::shown_in(leaf).is_none())
+        })
 }
 
 pub(crate) fn is_popped(state: &State, desktop: &str, leaf: &str) -> bool {
