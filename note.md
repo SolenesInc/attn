@@ -1,0 +1,3 @@
+Attn now judges stopped and waiting agents in shadow. Fifteen minutes after a stop that opened no turn, when a fact that could wake an agent changes, at 20 min, 60 min and 4 h of a background wait, and at daemon start, the attention supervisor runs its rules and then a headless one-shot call. It records a verdict (open, quiet or finished), its decider and a two-word label in a local decision log that `attn debug attention` reads, and in an `attention_verdict` analytics record with what the user did next. Nothing opens or closes yet; the shadow week's verdicts decide when it may.
+
+The trade-off: a restart forgets the stop's background report and run starter, so the key that keeps a stop from being judged twice names the stop by its times and leaves those facts out.
