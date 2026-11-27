@@ -1,6 +1,6 @@
 use std::collections::hash_map::Entry;
 
-use attn_client::{Commands, Facts};
+use attn_client::Facts;
 use attn_protocol::{GetScreenSnapshotMessage, GetScreenSnapshotResultMessage};
 use attn_term::{Grid, Vt};
 use attn_ui::colors::TerminalColors;
@@ -39,20 +39,18 @@ impl Terminals {
         });
     }
 
-    /// Asks the daemon for the screen of each of `ids` that this window does not draw live.
-    pub(crate) fn ask_snapshots<'a>(
-        &mut self,
-        ids: impl Iterator<Item = &'a str>,
-        daemon: &Commands,
-    ) {
+    /// Asks the daemon each of `ids` runs on for its screen, for each this window does not
+    /// draw live.
+    pub(crate) fn ask_snapshots<'a>(&mut self, ids: impl Iterator<Item = &'a str>, facts: &Facts) {
         for id in ids.filter(|id| !id.is_empty()) {
-            if !self.up.home || self.live_grid(id).is_some() {
+            let route = self.links.to(super::rides_runtime(facts, id));
+            if self.live_grid(id).is_some() {
                 continue;
             }
             let Entry::Vacant(unasked) = self.snapshots.entry(id.to_owned()) else {
                 continue;
             };
-            let asked = daemon.send(&GetScreenSnapshotMessage {
+            let asked = route.send(&GetScreenSnapshotMessage {
                 id: id.to_owned(),
                 ..GetScreenSnapshotMessage::new()
             });

@@ -357,3 +357,103 @@ fn before_the_home_answers_a_machine_without_terminals_of_its_own_shows_only_can
     );
     assert!(world.runtime_is_at_rest());
 }
+
+/// The home's state with this machine's agent, in rl on d1, and its shell, in r2 on d2, where no
+/// tile shows it.
+fn one_hidden() -> (InitialStateMessage, InitialStateMessage) {
+    let agent = Session {
+        agent: "claude".into(),
+        ..shell("agent", Some(HERE))
+    };
+    let desktop = |id: &str, slot: i64, pane: DesktopPane| Desktop {
+        id: id.into(),
+        name: id.into(),
+        profile_id: "work".into(),
+        shortcut_slot: Some(slot),
+        order_key: slot.to_string(),
+        active_pane_id: pane.pane_id.clone(),
+        tree_json: tree::row([tree::pane(&pane.pane_id)]).to_string(),
+        panes: vec![pane],
+        ..Desktop::default()
+    };
+    let home = InitialStateMessage {
+        sessions: Some(vec![agent.clone(), shell("there", Some(HERE))]),
+        desktops: Some(vec![
+            desktop(
+                "d1",
+                1,
+                DesktopPane {
+                    kind: "agent".into(),
+                    ..pane("t-agent", "rl", "agent")
+                },
+            ),
+            desktop(
+                "d2",
+                2,
+                DesktopPane {
+                    desktop_id: "d2".into(),
+                    ..pane("t-there", "r2", "there")
+                },
+            ),
+        ]),
+        ..home_state()
+    };
+    let here = InitialStateMessage {
+        protocol_version: Some(PROTOCOL_VERSION.into()),
+        daemon_instance_id: Some("laptop-daemon".into()),
+        sessions: Some(vec![
+            Session {
+                host: None,
+                ..agent
+            },
+            shell("there", None),
+        ]),
+        terminal_bindings: Some(
+            [("agent", "rl"), ("there", "r2")]
+                .map(|(session, terminal)| TerminalBinding {
+                    session_id: session.into(),
+                    terminal_id: terminal.into(),
+                })
+                .into(),
+        ),
+        ..InitialStateMessage::new()
+    };
+    (home, here)
+}
+
+#[test]
+fn every_command_for_a_terminal_on_this_machine_goes_to_its_own_daemon() {
+    let (home, here) = one_hidden();
+    let home = Daemon::scripted().state(home).relaying_to(HERE, "oma");
+    let laptop = Daemon::of_this_machine(&home).state(here);
+    let mut world = World::start_relaying(home, laptop, WIDE_ENOUGH_FOR_BOTH);
+    world.open_desktop();
+
+    let (rect, _) = world
+        .runtime()
+        .presented("terminal.rl")
+        .expect("rl is drawn");
+    world.gesture(|app| {
+        app.runtime.pointer_move(rect[0] + 20.0, rect[1] + 20.0);
+        app.runtime.pointer_move(rect[0] + 40.0, rect[1] + 20.0);
+    });
+    world.gesture(|app| app.key(super::sidebar::chord(attn_app::Action::DesktopOverview)));
+
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Down,
+            mods: rune::Mods::default(),
+        })
+    });
+    for cmd in ["terminal_pointer_activity", "get_screen_snapshot"] {
+        assert_eq!(
+            (
+                ids(machine(&world), cmd).is_empty(),
+                ids(&world.daemon, cmd)
+            ),
+            (false, Vec::<String>::new()),
+            "{cmd} goes to this machine's daemon, and none to the home"
+        );
+    }
+    assert!(ids(machine(&world), "get_screen_snapshot").contains(&"r2".to_owned()));
+}

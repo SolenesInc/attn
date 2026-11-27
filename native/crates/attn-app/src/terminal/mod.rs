@@ -3,7 +3,9 @@ use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use attn_client::{Commands, Connection, Facts, Frame, Pulse, Reach, TerminalEvent, TerminalSink};
+use attn_client::{
+    Commands, Connection, Facts, Frame, NotConnected, Pulse, Reach, TerminalEvent, TerminalSink,
+};
 use attn_protocol::DesktopPane;
 use attn_protocol::{
     AttachResultMessage, AttachSessionMessage, DetachSessionMessage, PtyInputMessage,
@@ -226,11 +228,8 @@ pub struct Terminals {
     /// shown again draws it until its attach brings the current one.
     hidden_screens: HashMap<String, Grid>,
     snapshots: HashMap<String, snapshots::Snapshot>,
-    up: Up,
+    pub(crate) links: Links,
     daemon_instance: String,
-    /// The link to this machine's own daemon, which the terminals that run here ride while the
-    /// daemon on the app's port relays the app to its home.
-    pub(crate) machine: Commands,
     machine_instance: String,
     focused: Option<String>,
     metrics: Option<Metrics>,
@@ -354,11 +353,68 @@ fn rides(facts: &Facts, host: Option<&str>, recoverable: bool) -> Reach {
     }
 }
 
-/// The commands of the link `via` names.
-fn link<'a>(via: Reach, home: &'a Commands, machine: &'a Commands) -> &'a Commands {
-    match via {
-        Reach::Home => home,
-        Reach::Machine => machine,
+/// The link terminal `runtime` rides, by its session in the facts.
+fn rides_runtime(facts: &Facts, runtime: &str) -> Reach {
+    let session = facts
+        .desktops
+        .iter()
+        .flat_map(|desktop| desktop.panes.iter())
+        .find(|pane| pane.runtime_id == runtime)
+        .and_then(|pane| facts.sessions.iter().find(|s| s.id == pane.session_id));
+    rides(
+        facts,
+        session
+            .and_then(|s| s.host.as_deref())
+            .filter(|h| !h.is_empty()),
+        session.is_some_and(recoverable),
+    )
+}
+
+/// The daemon still has the session's process to bring back, so an attach revives it.
+fn recoverable(session: &attn_protocol::Session) -> bool {
+    session.terminal_exit.is_none() && session.state == "recoverable"
+}
+
+/// The links a terminal can ride: the home's, on the app's port, and this machine's own daemon's,
+/// which the terminals that run here ride while the daemon on the app's port relays the app to its
+/// home.
+#[derive(Default)]
+pub(crate) struct Links {
+    pub(crate) home: Commands,
+    pub(crate) machine: Commands,
+    up: Up,
+}
+
+impl Links {
+    /// Where a command for a terminal that rides `via` goes: every terminal command goes through
+    /// here, so it reaches the link the terminal rides, and only while that link has its state.
+    pub(crate) fn to(&self, via: Reach) -> Route {
+        Route {
+            link: match via {
+                Reach::Home => self.home.clone(),
+                Reach::Machine => self.machine.clone(),
+            },
+            up: self.up.of(via),
+        }
+    }
+
+    fn up(&self, via: Reach) -> bool {
+        self.up.of(via)
+    }
+}
+
+/// One link, which refuses a command while it does not have its daemon's state.
+pub(crate) struct Route {
+    link: Commands,
+    up: bool,
+}
+
+impl Route {
+    pub(crate) fn send(&self, command: &impl serde::Serialize) -> Result<(), NotConnected> {
+        if !self.up {
+            return Err(NotConnected);
+        }
+        self.link.send(command)
     }
 }
 
@@ -433,7 +489,7 @@ impl Term {
 pub(crate) fn window_focused(state: &mut crate::State, focused: bool, _: &mut Tx) {
     state.terminals.window_in_front(focused);
     if focused {
-        state.terminals.window_activated(&state.daemon);
+        state.terminals.window_activated();
     }
 }
 
@@ -455,9 +511,8 @@ impl Terminals {
         panes: &[&DesktopPane],
         keyboard: Option<String>,
         now: f64,
-        daemon: &Commands,
     ) {
-        self.follow_connection(facts, daemon);
+        self.follow_connection(facts);
         self.undrawn = true;
         let machines = crate::machine::Machines::of(facts);
         let drawn: Vec<(String, Option<String>, bool, links::Place, Reach, bool)> = panes
@@ -465,8 +520,7 @@ impl Terminals {
             .filter(|pane| !pane.runtime_id.is_empty())
             .map(|pane| {
                 let session = facts.sessions.iter().find(|s| s.id == pane.session_id);
-                let recoverable =
-                    session.is_some_and(|s| s.terminal_exit.is_none() && s.state == "recoverable");
+                let recoverable = session.is_some_and(recoverable);
                 let place = links::Place {
                     cwd: session
                         .map(|s| s.directory.clone())
@@ -509,20 +563,20 @@ impl Terminals {
             self.images.forget(&id);
             self.latency.forget(&id);
             self.trace.lock().unwrap().forget(&id);
-            save_leaving_note(term.marking.as_ref(), daemon);
-            let rides = link(term.via, daemon, &self.machine);
+            save_leaving_note(term.marking.as_ref(), &self.links.to(Reach::Home));
+            let rides = &self.links.to(term.via);
             release(&id, &mut term, None, 0, rides);
             let mut screen = std::mem::take(&mut term.grid);
             screen.set_images(Vec::new(), 0);
             self.hidden_screens.insert(id.clone(), screen);
             if self.inbox.release(&id)
-                && self.up.of(term.via)
+                && self.links.up(term.via)
                 && matches!(
                     term.phase,
                     Phase::Attaching(_) | Phase::Retrying { .. } | Phase::Live
                 )
             {
-                let _ = link(term.via, daemon, &self.machine).send(&DetachSessionMessage {
+                let _ = &self.links.to(term.via).send(&DetachSessionMessage {
                     id,
                     ..DetachSessionMessage::new()
                 });
@@ -551,8 +605,8 @@ impl Terminals {
                     term.phase,
                     Phase::Attaching(_) | Phase::Retrying { .. } | Phase::Live
                 );
-                if attached && self.up.of(term.via) {
-                    let _ = link(term.via, daemon, &self.machine).send(&DetachSessionMessage {
+                if attached && self.links.up(term.via) {
+                    let _ = &self.links.to(term.via).send(&DetachSessionMessage {
                         id: id.clone(),
                         ..DetachSessionMessage::new()
                     });
@@ -569,8 +623,8 @@ impl Terminals {
             match (streams, term.phase) {
                 (true, Phase::Away) => term.phase = Phase::Waiting,
                 (false, Phase::Attaching(_) | Phase::Retrying { .. } | Phase::Live) => {
-                    if self.up.of(term.via) {
-                        let _ = link(term.via, daemon, &self.machine).send(&DetachSessionMessage {
+                    if self.links.up(term.via) {
+                        let _ = &self.links.to(term.via).send(&DetachSessionMessage {
                             id,
                             ..DetachSessionMessage::new()
                         });
@@ -583,17 +637,17 @@ impl Terminals {
             term.place = place;
             let session = agent.filter(|s| !s.is_empty());
             if term.marking.as_ref().map(|m| &m.session) != session.as_ref() {
-                save_leaving_note(term.marking.as_ref(), daemon);
+                save_leaving_note(term.marking.as_ref(), &self.links.to(Reach::Home));
                 term.marking = session.map(annotating::Marking::new);
             }
         }
-        self.attach_waiting(now, daemon);
-        self.focus(keyboard, daemon);
+        self.attach_waiting(now);
+        self.focus(keyboard);
     }
 
     /// Streams start over on a new connection, from the start when the daemon itself is new.
     /// Following the facts keeps a connection's change in order with the state it brought.
-    fn follow_connection(&mut self, facts: &Facts, daemon: &Commands) {
+    fn follow_connection(&mut self, facts: &Facts) {
         let up = Up {
             home: facts.connection == Connection::Connected,
             machine: facts.machine.connected,
@@ -605,7 +659,7 @@ impl Terminals {
                 term.watermark = None;
             }
         }
-        let was = std::mem::replace(&mut self.up, up);
+        let was = std::mem::replace(&mut self.links.up, up);
         for via in [Reach::Home, Reach::Machine] {
             if was.of(via) && !up.of(via) {
                 for term in self.panes.values_mut().filter(|t| t.via == via) {
@@ -632,7 +686,7 @@ impl Terminals {
             }
         }
         if self.inbox.is_main() {
-            send_theme(&self.theme, daemon);
+            send_theme(&self.theme, &self.links.to(Reach::Home));
         }
         self.focused = None;
     }
@@ -640,7 +694,7 @@ impl Terminals {
     /// Tells the daemon which terminal has the keyboard when that changes, and claims that
     /// terminal's PTY for this window's tile: the daemon sizes a PTY for the client that last
     /// asked.
-    pub(crate) fn focus(&mut self, keyboard: Option<String>, daemon: &Commands) {
+    pub(crate) fn focus(&mut self, keyboard: Option<String>) {
         if keyboard == self.focused {
             return;
         }
@@ -649,10 +703,10 @@ impl Terminals {
             return;
         };
         let via = self.panes.get(&id).map_or(Reach::Home, |t| t.via);
-        if !self.up.of(via) {
+        if !self.links.up(via) {
             return;
         }
-        let daemon = link(via, daemon, &self.machine);
+        let daemon = &self.links.to(via);
         let _ = daemon.send(&TerminalFocusMessage {
             id: id.clone(),
             ..TerminalFocusMessage::new()
@@ -667,9 +721,9 @@ impl Terminals {
     }
 
     /// The window came to the front: claims the PTY of the terminal with its keyboard again.
-    pub(crate) fn window_activated(&mut self, daemon: &Commands) {
+    pub(crate) fn window_activated(&mut self) {
         let keyboard = self.focused.take();
-        self.focus(keyboard, daemon);
+        self.focus(keyboard);
     }
 
     pub fn metrics(&mut self) -> Metrics {
@@ -678,14 +732,7 @@ impl Terminals {
 
     /// A terminal's tile was laid out `w`×`h` points at `scale`: the grid that fits is the size
     /// the app asks the daemon for.
-    pub(crate) fn laid_out(
-        &mut self,
-        id: &str,
-        (w, h): (f32, f32),
-        scale: f32,
-        tx: &mut Tx,
-        daemon: &Commands,
-    ) {
+    pub(crate) fn laid_out(&mut self, id: &str, (w, h): (f32, f32), scale: f32, tx: &mut Tx) {
         let metrics = self.metrics();
         let Some(term) = self.panes.get_mut(id) else {
             return;
@@ -710,11 +757,11 @@ impl Terminals {
         term.tile = Some(next);
         let now = tx.clock();
         match &mut term.phase {
-            Phase::Waiting => self.attach_waiting(now, daemon),
+            Phase::Waiting => self.attach_waiting(now),
             Phase::Live => {
                 let due = term.sent_at + RESIZE_INTERVAL;
                 if now >= due {
-                    let daemon = link(term.via, daemon, &self.machine);
+                    let daemon = &self.links.to(term.via);
                     send_resize(id, term, now, Pixels::Sent, daemon);
                 } else {
                     term.resize_due = Some(due);
@@ -730,7 +777,7 @@ impl Terminals {
 
     /// Re-fits terminals `ids` when the display scale changes without moving their view-point
     /// rects, such as dragging a window between a 1x and 2x monitor.
-    pub(crate) fn set_scale(&mut self, scale: f32, ids: &[String], daemon: &Commands) {
+    pub(crate) fn set_scale(&mut self, scale: f32, ids: &[String]) {
         let metrics = self.metrics();
         for id in ids {
             let Some(term) = self.panes.get_mut(id) else {
@@ -760,13 +807,7 @@ impl Terminals {
                 Phase::Live => {
                     term.sent_size = None;
                     let at = term.sent_at;
-                    send_resize(
-                        id,
-                        term,
-                        at,
-                        Pixels::Sent,
-                        link(term.via, daemon, &self.machine),
-                    );
+                    send_resize(id, term, at, Pixels::Sent, &self.links.to(term.via));
                 }
                 Phase::Attaching(attaching) | Phase::Retrying { attaching, .. } => {
                     attaching.relaid = true;
@@ -776,12 +817,12 @@ impl Terminals {
         }
     }
 
-    fn attach_waiting(&mut self, now: f64, home: &Commands) {
+    fn attach_waiting(&mut self, now: f64) {
         for (id, term) in &mut self.panes {
-            if term.phase != Phase::Waiting || term.tile.is_none() || !self.up.of(term.via) {
+            if term.phase != Phase::Waiting || term.tile.is_none() || !self.links.up(term.via) {
                 continue;
             }
-            let daemon = link(term.via, home, &self.machine);
+            let daemon = &self.links.to(term.via);
             let tile = term.tile.expect("checked above");
             let policy = if term.recoverable {
                 Policy::Revive
@@ -851,7 +892,7 @@ impl Terminals {
     /// Takes what the link heard since the last frame, `typing` being the terminal keys type
     /// into. Output changes nothing in the view beyond an open find bar's count: true when that
     /// count changed, or a snapshot arrived.
-    pub(crate) fn drain(&mut self, typing: Option<&str>, tx: &mut Tx, daemon: &Commands) -> bool {
+    pub(crate) fn drain(&mut self, typing: Option<&str>, tx: &mut Tx) -> bool {
         let events = self.inbox.take();
         let heard = !events.is_empty();
         let mut pictured = false;
@@ -860,7 +901,7 @@ impl Terminals {
                 continue;
             }
             pictured |= matches!(event, TerminalEvent::Snapshot(_));
-            self.apply(event, received, tx, daemon);
+            self.apply(event, received, tx);
             self.undrawn = true;
         }
         if let (true, Some(metrics)) = (heard, self.metrics) {
@@ -879,7 +920,7 @@ impl Terminals {
             }
         }
         for (id, term) in &mut self.panes {
-            let daemon = link(term.via, daemon, &self.machine);
+            let daemon = &self.links.to(term.via);
             match term.phase {
                 Phase::Live if term.resize_due.is_some_and(|due| now >= due) => {
                     send_resize(id, term, now, Pixels::Sent, daemon);
@@ -911,12 +952,11 @@ impl Terminals {
             .is_none_or(|term| term.via == from)
     }
 
-    fn apply(&mut self, event: TerminalEvent, received: Instant, tx: &mut Tx, home: &Commands) {
-        let machine = self.machine.clone();
+    fn apply(&mut self, event: TerminalEvent, received: Instant, tx: &mut Tx) {
         let via = terminal_of(&event)
             .and_then(|id| self.panes.get(id))
             .map_or(Reach::Home, |t| t.via);
-        let daemon = link(via, home, &machine);
+        let daemon = &self.links.to(via);
         match event {
             TerminalEvent::Frame(Frame::PtyOutput {
                 terminal,
@@ -958,12 +998,9 @@ impl Terminals {
                 format,
                 &pixels,
             ),
-            TerminalEvent::Placements(described) => self.placements_described(
-                &described.id,
-                described.seq,
-                &described.placements,
-                daemon,
-            ),
+            TerminalEvent::Placements(described) => {
+                self.placements_described(&described.id, described.seq, &described.placements)
+            }
             TerminalEvent::ImageResult(result) => self.image_refused(&result),
             TerminalEvent::Snapshot(result) => self.snapshot_arrived(&result),
             TerminalEvent::Attached(result) => {
@@ -973,7 +1010,7 @@ impl Terminals {
                 self.attached(*result, tx, daemon);
                 self.restored(&id, resumes, tx);
                 self.images.unanswered(&id);
-                self.ask_images(&id, daemon);
+                self.ask_images(&id);
             }
             TerminalEvent::Resized(resized) => {
                 let metrics = self.metrics();
@@ -1007,7 +1044,7 @@ impl Terminals {
     }
 
     /// The daemon replaced the terminal's stream: start the screen over from a new attach.
-    fn restart(&mut self, id: &str, policy: Option<Policy>, now: f64, daemon: &Commands) {
+    fn restart(&mut self, id: &str, policy: Option<Policy>, now: f64, daemon: &Route) {
         let Some(term) = self.panes.get_mut(id).filter(|t| t.phase != Phase::Away) else {
             return;
         };
@@ -1029,7 +1066,7 @@ impl Terminals {
         Terminals::forget_screen(term);
         term.watermark = None;
         term.stream = Stream::Attaching(Default::default());
-        if !self.up.of(term.via) {
+        if !self.links.up(term.via) {
             term.phase = Phase::Waiting;
             return;
         }
@@ -1047,7 +1084,7 @@ impl Terminals {
         });
     }
 
-    fn attached(&mut self, result: AttachResultMessage, tx: &mut Tx, daemon: &Commands) {
+    fn attached(&mut self, result: AttachResultMessage, tx: &mut Tx, daemon: &Route) {
         let metrics = self.metrics();
         let Some(term) = self.panes.get_mut(&result.id) else {
             return;
@@ -1170,7 +1207,7 @@ impl Terminals {
             let write = Write {
                 left,
                 socket_open,
-                connected: self.up.of(term.via),
+                connected: self.links.up(term.via),
                 probe: None,
             };
             self.trace
@@ -1199,14 +1236,7 @@ impl Terminals {
 
     /// Sends what the user typed or pasted to the terminal, held while it attaches, and traces
     /// what became of it.
-    pub(crate) fn input(
-        &mut self,
-        id: &str,
-        data: &[u8],
-        trace: &TraceId,
-        now: f64,
-        daemon: &Commands,
-    ) -> Typed {
+    pub(crate) fn input(&mut self, id: &str, data: &[u8], trace: &TraceId, now: f64) -> Typed {
         let Some(term) = self.panes.get_mut(id) else {
             self.trace
                 .lock()
@@ -1215,7 +1245,7 @@ impl Terminals {
             return Typed::Nowhere;
         };
         let via = term.via;
-        let daemon = link(via, daemon, &self.machine);
+        let daemon = &self.links.to(via);
         let outcome = match term.phase {
             Phase::Live => Decision::Sent,
             Phase::Waiting | Phase::Attaching(_) | Phase::Retrying { .. } => {
@@ -1233,7 +1263,7 @@ impl Terminals {
                 let write = Write {
                     left,
                     socket_open,
-                    connected: self.up.of(via),
+                    connected: self.links.up(via),
                     probe: None,
                 };
                 self.trace.lock().unwrap().sent(trace, id, write, now);
@@ -1245,7 +1275,7 @@ impl Terminals {
     }
 
     pub(crate) fn connected(&self) -> bool {
-        self.up.home
+        self.links.up(Reach::Home)
     }
 
     /// The link terminal `id` attaches on.
@@ -1276,7 +1306,6 @@ impl Terminals {
         held: bool,
         (mods, accelerator): (u8, bool),
         now: f64,
-        daemon: &Commands,
     ) -> bool {
         let pointing = self.hover(id, Some(at), accelerator);
         let metrics = self.metrics();
@@ -1286,12 +1315,18 @@ impl Terminals {
         if term.pointer.at.replace(at) == Some(at) {
             return pointing;
         }
-        if term.agent && self.up.home && now - term.pointer.active_at >= POINTER_ACTIVITY_INTERVAL {
+        if term.agent
+            && self.links.up(term.via)
+            && now - term.pointer.active_at >= POINTER_ACTIVITY_INTERVAL
+        {
             term.pointer.active_at = now;
-            let _ = daemon.send(&TerminalPointerActivityMessage {
-                id: id.into(),
-                ..TerminalPointerActivityMessage::new()
-            });
+            let _ = self
+                .links
+                .to(term.via)
+                .send(&TerminalPointerActivityMessage {
+                    id: id.into(),
+                    ..TerminalPointerActivityMessage::new()
+                });
         }
         let modes = term.vt.mouse_modes();
         let Some(cell) = cell_at(term, &metrics, at).filter(|_| term.phase != Phase::Away) else {
@@ -1306,7 +1341,7 @@ impl Terminals {
             report.as_bytes(),
             "pointer",
             None,
-            link(term.via, daemon, &self.machine),
+            &self.links.to(term.via),
         );
         term.pointer.cell = Some(cell);
         pointing
@@ -1326,7 +1361,6 @@ impl Terminals {
         button: u8,
         at: (f32, f32),
         mods: u8,
-        daemon: &Commands,
     ) -> bool {
         let metrics = self.metrics();
         let Some(term) = self.panes.get_mut(id) else {
@@ -1348,7 +1382,7 @@ impl Terminals {
             report.as_bytes(),
             "pointer",
             None,
-            link(term.via, daemon, &self.machine),
+            &self.links.to(term.via),
         );
         term.pointer.reported = Some(button);
         term.pointer.cell = Some(cell);
@@ -1357,25 +1391,19 @@ impl Terminals {
 
     /// The button held on a terminal came up at `at`, wherever that is, or was cancelled with
     /// no point.
-    pub(crate) fn pointer_released(
-        &mut self,
-        id: &str,
-        at: Option<(f32, f32)>,
-        mods: u8,
-        daemon: &Commands,
-    ) {
+    pub(crate) fn pointer_released(&mut self, id: &str, at: Option<(f32, f32)>, mods: u8) {
         let metrics = self.metrics();
         let Some(term) = self.panes.get_mut(id) else {
             return;
         };
         let cell = at.and_then(|at| cell_at(term, &metrics, at));
-        release(id, term, cell, mods, link(term.via, daemon, &self.machine));
+        release(id, term, cell, mods, &self.links.to(term.via));
     }
 
     /// The wheel turned `dy` points over `at`: true when the terminal took it, reporting it to
     /// a program that tracks the mouse, as arrow keys on the alternate screen, or else
     /// scrolling the view through the history.
-    pub(crate) fn wheel(&mut self, id: &str, dy: f32, at: (f32, f32), daemon: &Commands) -> bool {
+    pub(crate) fn wheel(&mut self, id: &str, dy: f32, at: (f32, f32)) -> bool {
         let metrics = self.metrics();
         let Some(term) = self.panes.get_mut(id) else {
             return false;
@@ -1400,7 +1428,7 @@ impl Terminals {
                 mouse::wheel(lines, cell, modes).as_bytes(),
                 source,
                 None,
-                link(term.via, daemon, &self.machine),
+                &self.links.to(term.via),
             );
         }
         true
@@ -1504,7 +1532,7 @@ impl Terminals {
 
     /// The colors every terminal draws with until its program sets its own, which the daemon
     /// also answers color queries with.
-    pub(crate) fn set_theme(&mut self, theme: TerminalColors, daemon: &Commands) {
+    pub(crate) fn set_theme(&mut self, theme: TerminalColors) {
         if theme == self.theme {
             return;
         }
@@ -1513,8 +1541,8 @@ impl Terminals {
         for term in self.panes.values_mut() {
             term.vt.set_theme(&theme);
         }
-        if self.up.home && self.inbox.is_main() {
-            send_theme(&theme, daemon);
+        if self.links.up(Reach::Home) && self.inbox.is_main() {
+            send_theme(&theme, &self.links.to(Reach::Home));
         }
     }
 
@@ -1626,7 +1654,7 @@ fn copy_writes(term: &mut Term, tx: &mut Tx) {
 
 /// Sends the replies the terminal wrote to the program's queries, less those the daemon
 /// answers itself.
-fn answer(id: &str, term: &mut Term, daemon: &Commands) {
+fn answer(id: &str, term: &mut Term, daemon: &Route) {
     let replies = responses::without_daemon_owned(&term.vt.take_responses());
     if !replies.is_empty() {
         send_input(id, &replies, "response", None, daemon);
@@ -1647,7 +1675,7 @@ fn cell_at(term: &mut Term, metrics: &Metrics, at: (f32, f32)) -> Option<(u16, u
 
 /// Sends the release a program is owed for the press it heard, at `cell` or where it last
 /// heard the pointer.
-fn release(id: &str, term: &mut Term, cell: Option<(u16, u16)>, mods: u8, daemon: &Commands) {
+fn release(id: &str, term: &mut Term, cell: Option<(u16, u16)>, mods: u8, daemon: &Route) {
     if term.pointer.reported.take().is_none() || term.phase == Phase::Away {
         return;
     }
@@ -1665,7 +1693,7 @@ fn send_input(
     data: &[u8],
     source: &'static str,
     trace: Option<&TraceId>,
-    daemon: &Commands,
+    daemon: &Route,
 ) -> bool {
     daemon
         .send(&PtyInputMessage {
@@ -1704,7 +1732,7 @@ pub(crate) fn append_capped(path: &std::path::Path, line: &str, at_ms: i64) -> s
     file.write_all(line.as_bytes())
 }
 
-fn send_attach(id: &str, term: &mut Term, attaching: Attaching, daemon: &Commands) {
+fn send_attach(id: &str, term: &mut Term, attaching: Attaching, daemon: &Route) {
     let revive = attaching.policy == Policy::Revive;
     let size = term.tile.map(|t| t.size).filter(|_| revive);
     let _ = daemon.send(&AttachSessionMessage {
@@ -1725,7 +1753,7 @@ enum Pixels {
     Left,
 }
 
-fn send_resize(id: &str, term: &mut Term, now: f64, pixels: Pixels, daemon: &Commands) {
+fn send_resize(id: &str, term: &mut Term, now: f64, pixels: Pixels, daemon: &Route) {
     term.resize_due = None;
     let Some(tile) = term.tile else {
         return;
@@ -1791,7 +1819,7 @@ fn cell_pixels(metrics: &Metrics) -> (u32, u32) {
     (metrics.cell_w as u32, metrics.cell_h as u32)
 }
 
-fn save_leaving_note(marking: Option<&annotating::Marking>, daemon: &Commands) {
+fn save_leaving_note(marking: Option<&annotating::Marking>, daemon: &Route) {
     if let Some(save) = marking.and_then(annotating::Marking::leaving) {
         let _ = daemon.send(&save);
     }
@@ -1834,7 +1862,7 @@ fn themed(mut vt: Vt, theme: &TerminalColors) -> Vt {
     vt
 }
 
-fn send_theme(theme: &TerminalColors, daemon: &Commands) {
+fn send_theme(theme: &TerminalColors, daemon: &Route) {
     let _ = daemon.send(&SetTerminalThemeMessage {
         foreground: to_hex(theme.fg),
         background: to_hex(theme.bg),

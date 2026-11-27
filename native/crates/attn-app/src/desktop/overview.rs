@@ -280,7 +280,7 @@ fn ask_snapshots(state: &mut State, desktop: &str) {
     });
     state
         .terminals
-        .ask_snapshots(runtimes.iter().map(String::as_str), &state.daemon);
+        .ask_snapshots(runtimes.iter().map(String::as_str), &state.facts);
 }
 
 /// Moves the highlight as `layout::step` moves the active tile, over the plain columns. Past the

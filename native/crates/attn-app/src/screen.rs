@@ -49,11 +49,11 @@ fn sync_terminals(rt: &mut Runtime<State>) -> TerminalColors {
     };
     let invalidate = {
         let state = rt.state_mut();
-        state.terminals.set_theme(theme, &state.daemon);
+        state.terminals.set_theme(theme);
         if pending_layout {
             false
         } else {
-            state.terminals.set_scale(scale, &refit, &state.daemon);
+            state.terminals.set_scale(scale, &refit);
             let px_per_col = state.terminals.metrics().cell_points(scale).0;
             match state.window.desk.reported_area.as_mut() {
                 Some(area) if area.px_per_col != px_per_col => {

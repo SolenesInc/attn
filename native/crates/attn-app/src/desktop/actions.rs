@@ -568,7 +568,7 @@ pub(crate) fn give_keyboard(state: &mut State, desktop: &str, leaf: &str, tx: &m
 fn hold_keyboard(state: &mut State, desktop: &str, leaf: &str) {
     state.window.hold_keyboard(desktop, leaf);
     let keyboard = state.window.keyboard_terminal(&state.facts);
-    state.terminals.focus(keyboard, &state.daemon);
+    state.terminals.focus(keyboard);
 }
 
 /// Moves the active tile to `tile_toward`, and returns that tile. Past the edge it leaves the pane,

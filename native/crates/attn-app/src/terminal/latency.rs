@@ -271,9 +271,7 @@ pub(crate) fn type_into(
             .latency
             .probe_due(terminal, &state.facts, at)
     {
-        return state
-            .terminals
-            .input(terminal, bytes, trace, at.clock, &state.daemon);
+        return state.terminals.input(terminal, bytes, trace, at.clock);
     }
     let probe = state.next_request_id();
     let input = PtyInputMessage {

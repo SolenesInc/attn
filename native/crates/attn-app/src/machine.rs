@@ -117,7 +117,7 @@ pub(crate) fn send_setting(
     command: &attn_protocol::SetSettingMessage,
 ) -> Result<(), attn_client::NotConnected> {
     match reach(&state.facts, key) {
-        Reach::Machine => state.terminals.machine.send(command),
+        Reach::Machine => state.terminals.links.machine.send(command),
         Reach::Home => state.daemon.send(command),
     }
 }

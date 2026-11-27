@@ -1816,23 +1816,17 @@ fn terminal_slot(
         .fill(attn_ui::colors::rgb(theme.bg))
         .effect(crate::terminal::mark(runtime_id))
         .on_layout_tx(move |state: &mut State, [_, _, w, h], tx: &mut Tx| {
-            state
-                .terminals
-                .laid_out(&id, (w, h), scale, tx, &state.daemon);
+            state.terminals.laid_out(&id, (w, h), scale, tx);
             tx.live_only();
         })
         .on_pointer_move_local(move |state: &mut State, p, tx: &mut Tx| {
             let mods = (report_mods(tx.mods()), accelerator(tx.mods()));
             let now = tx.clock();
             let held = tx.pointer_held();
-            let pointing_changed = state.terminals.pointer_moved(
-                &pointing,
-                (p.x, p.y),
-                held,
-                mods,
-                now,
-                &state.daemon,
-            );
+            let pointing_changed =
+                state
+                    .terminals
+                    .pointer_moved(&pointing, (p.x, p.y), held, mods, now);
             let over_mark = (tx.mods().alt && !held).then_some((p.x, p.y));
             let mark_changed = state.terminals.hover_mark(&pointing, over_mark);
             super::header_pop::pointer(state, &pointing, &moved_over, !held, tx);
@@ -1869,13 +1863,9 @@ fn terminal_slot(
                         && accelerator(tx.mods())
                         && state.terminals.presses_mark(&pressing, (d.x, d.y));
                     let reported = !opens
-                        && state.terminals.pointer_pressed(
-                            &pressing,
-                            button,
-                            (d.x, d.y),
-                            mods,
-                            &state.daemon,
-                        );
+                        && state
+                            .terminals
+                            .pointer_pressed(&pressing, button, (d.x, d.y), mods);
                     if !reported
                         && button == mouse::PRIMARY
                         && let Some(text) = state.terminals.select_press(
@@ -1895,9 +1885,7 @@ fn terminal_slot(
                 rune::Phase::Up => {
                     let at = (!d.cancelled()).then_some((d.x, d.y));
                     let mods = if d.cancelled() { 0 } else { mods };
-                    state
-                        .terminals
-                        .pointer_released(&pressing, at, mods, &state.daemon);
+                    state.terminals.pointer_released(&pressing, at, mods);
                     let at = (d.x, d.y);
                     match state.terminals.select_release(&pressing) {
                         Release::Copied(text) => tx.copy(text),
@@ -1966,9 +1954,7 @@ fn terminal_slot(
         })
         .on_wheel(move |state: &mut State, e, tx: &mut Tx| {
             tx.live_only();
-            state
-                .terminals
-                .wheel(&wheeling, e.dy, (e.x, e.y), &state.daemon)
+            state.terminals.wheel(&wheeling, e.dy, (e.x, e.y))
         });
     slot.children(caret)
 }

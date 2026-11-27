@@ -246,8 +246,9 @@ pub fn bind(
             .started_at(wall.clone());
         state.wall = wall;
         state.instance = instance;
+        state.terminals.links.home = daemon.clone();
         state.daemon = daemon;
-        state.terminals.machine = machine;
+        state.terminals.links.machine = machine;
         state.terminals.inbox = terminals;
         state.requests.inbox = replies;
     }));
@@ -340,7 +341,7 @@ pub(crate) fn follow_terminals(state: &mut State, tx: &mut Tx) {
     let panes = desktop::terminal_panes(&state.facts, &state.window);
     state
         .terminals
-        .follow(&state.facts, &panes, keyboard, tx.clock(), &state.daemon);
+        .follow(&state.facts, &panes, keyboard, tx.clock());
     desktop::follow_overview(state);
 }
 
@@ -407,7 +408,7 @@ impl Links {
 
 fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let typing = keys::keyboard_terminal(state, tx);
-    let recounted = state.terminals.drain(typing.as_deref(), tx, &state.daemon);
+    let recounted = state.terminals.drain(typing.as_deref(), tx);
     let said = state.terminals.take_said();
     let told = said.is_some();
     if let Some(said) = said {

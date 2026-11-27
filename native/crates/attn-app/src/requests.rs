@@ -197,7 +197,7 @@ impl State {
         tx: &mut Tx,
     ) -> bool {
         let sent = match on {
-            attn_client::Reach::Machine => self.terminals.machine.send(command),
+            attn_client::Reach::Machine => self.terminals.links.machine.send(command),
             attn_client::Reach::Home
                 if self.facts.connection != attn_client::Connection::Connected =>
             {

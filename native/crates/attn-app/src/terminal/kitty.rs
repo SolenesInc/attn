@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
-use attn_client::{Commands, KittyFormat};
+use attn_client::KittyFormat;
 use attn_protocol::{GetKittyImageMessage, KittyImageResultMessage, KittyPlacement};
 use attn_term::Image;
 use attn_term::kitty::{Described, Format, Picture, strip};
@@ -120,7 +120,6 @@ impl Terminals {
         id: &str,
         seq: i64,
         placements: &[KittyPlacement],
-        daemon: &Commands,
     ) {
         let Some(term) = self.panes.get_mut(id) else {
             return;
@@ -129,7 +128,7 @@ impl Terminals {
         let seq = u32::try_from(seq).unwrap_or(0);
         if term.placements.apply(seq, &described(placements), history) {
             self.undrawn = true;
-            self.ask_images(id, daemon);
+            self.ask_images(id);
             self.trim_images();
         }
     }
@@ -142,11 +141,11 @@ impl Terminals {
 
     /// Asks the daemon for each image terminal `id`'s placements show that is neither kept nor
     /// asked for already.
-    pub(super) fn ask_images(&mut self, id: &str, daemon: &Commands) {
+    pub(super) fn ask_images(&mut self, id: &str) {
         let Some(term) = self.panes.get(id) else {
             return;
         };
-        let daemon = super::link(term.via, daemon, &self.machine);
+        let daemon = self.links.to(term.via);
         for (image, generation) in term.placements.images() {
             let key = (id.to_owned(), image, generation);
             let asked = (id.to_owned(), image);
