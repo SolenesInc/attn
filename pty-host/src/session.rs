@@ -952,7 +952,7 @@ impl Session {
 
     pub fn wait_block(&self, params: &Value, cancelled: &AtomicBool) -> Result<Value, String> {
         let until = params["until"].as_str().unwrap_or_default();
-        if until != "prompt" && until != "exit" {
+        if until != "prompt" && until != "exit" && until != "bracketed_paste" {
             return Err(format!("unknown wait condition {until:?}"));
         }
         let after = params["after_block_id"].as_u64();
@@ -977,6 +977,9 @@ impl Session {
                 {
                     return Ok(json!({}));
                 }
+            }
+            if until == "bracketed_paste" && model.wire.terminal().dec_mode(2004) {
+                return Ok(json!({}));
             }
             {
                 let lifecycle = self.lifecycle.lock().expect("lifecycle mutex poisoned");

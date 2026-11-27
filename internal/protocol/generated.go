@@ -15080,6 +15080,7 @@ type TerminalWaitResult struct {
 
 type TerminalWaitUntil string
 
+const TerminalWaitUntilBracketedPaste TerminalWaitUntil = "bracketed_paste"
 const TerminalWaitUntilExit TerminalWaitUntil = "exit"
 const TerminalWaitUntilPrompt TerminalWaitUntil = "prompt"
 

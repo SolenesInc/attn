@@ -3456,7 +3456,8 @@ enum TerminalReadMode {
 }
 enum TerminalWaitUntil {
   prompt,
-  exit
+  exit,
+  bracketed_paste
 }
 model TerminalListResult {
   terminals: TerminalEntry[];

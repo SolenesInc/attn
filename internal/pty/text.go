@@ -126,7 +126,7 @@ func (s *Session) readText(mode string, lines int) (ReadTextInfo, error) {
 }
 
 func (s *Session) waitBlock(ctx context.Context, params WaitBlockParams) (WaitBlockResult, error) {
-	if params.Until != "prompt" && params.Until != "exit" {
+	if params.Until != "prompt" && params.Until != "exit" && params.Until != "bracketed_paste" {
 		return WaitBlockResult{}, fmt.Errorf("unknown wait condition %q", params.Until)
 	}
 	for {
@@ -157,6 +157,10 @@ func (s *Session) waitBlock(ctx context.Context, params WaitBlockParams) (WaitBl
 				s.replayMu.Unlock()
 				return WaitBlockResult{}, nil
 			}
+		}
+		if params.Until == "bracketed_paste" && s.ghostty.BracketedPaste() {
+			s.replayMu.Unlock()
+			return WaitBlockResult{}, nil
 		}
 		select {
 		case <-s.exited:

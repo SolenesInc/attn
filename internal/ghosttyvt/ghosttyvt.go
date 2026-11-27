@@ -182,6 +182,10 @@ static bool ghosttyvt_left_right_margin_mode(GhosttyTerminal t) {
 	return ghosttyvt_mode(t, GHOSTTY_MODE_LEFT_RIGHT_MARGIN);
 }
 
+static bool ghosttyvt_bracketed_paste(GhosttyTerminal t) {
+	return ghosttyvt_mode(t, GHOSTTY_MODE_BRACKETED_PASTE);
+}
+
 static GhosttyPoint ghosttyvt_viewport_point(uint16_t x, uint32_t y) {
 	GhosttyPoint p;
 	memset(&p, 0, sizeof(p));
@@ -487,6 +491,12 @@ func (t *Terminal) CursorVisible() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return !t.closed && bool(C.ghosttyvt_cursor_visible(t.term))
+}
+
+func (t *Terminal) BracketedPaste() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return !t.closed && bool(C.ghosttyvt_bracketed_paste(t.term))
 }
 
 func (t *Terminal) LeftRightMarginMode() bool {
